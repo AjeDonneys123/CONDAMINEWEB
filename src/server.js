@@ -52,7 +52,6 @@ const upload = multer({ storage: storage });
 
 // --- 3. SCHEMAS BDD ---
 
-// 1. Joueurs
 const PlayerSchema = new mongoose.Schema({
   firstName: String, lastName: String, classroom: String,
   validatedQuestions: [String],
@@ -63,7 +62,6 @@ const PlayerSchema = new mongoose.Schema({
 }, { minimize: false });
 const Player = mongoose.model('Player', PlayerSchema, 'players');
 
-// 2. Devoirs (Le modèle)
 const HomeworkSchema = new mongoose.Schema({
   title: String,
   classroom: String,
@@ -77,7 +75,6 @@ const HomeworkSchema = new mongoose.Schema({
 });
 const Homework = mongoose.model('Homework', HomeworkSchema, 'homeworks');
 
-// 3. Soumissions (Les copies des élèves) - NOUVEAU
 const SubmissionSchema = new mongoose.Schema({
   homeworkId: { type: mongoose.Schema.Types.ObjectId, ref: 'Homework' },
   playerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Player' },
@@ -94,7 +91,6 @@ const SubmissionSchema = new mongoose.Schema({
 });
 const Submission = mongoose.model('Submission', SubmissionSchema, 'submissions');
 
-// 4. Bugs
 const BugSchema = new mongoose.Schema({
   reporterName: String, classroom: String, description: String, gameChapter: String, date: { type: Date, default: Date.now },
 });
@@ -117,13 +113,11 @@ async function fileToPart(url) {
 
 // --- 5. ROUTES ---
 
-// Upload Fichiers
 app.post('/api/upload', upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ ok: false, error: "Pas de fichier" });
   res.json({ ok: true, imageUrl: req.file.path });
 });
 
-// Devoirs (CRUD)
 app.post('/api/homework', async (req, res) => {
     try { const hw = new Homework(req.body); await hw.save(); res.json({ ok: true }); } catch(e) { res.status(500).json({ ok: false }); }
 });
@@ -146,7 +140,7 @@ app.delete('/api/homework/:id', async (req, res) => {
 
 // === ANALYSE ET SAUVEGARDE AUTOMATIQUE DE LA COPIE ===
 app.post('/api/analyze-homework', async (req, res) => {
-    const { imageUrl, userText, homeworkInstruction, homeworkContext, teacherDocUrls, questionImage, classroom, playerId, homeworkId, levelIndex } = req.body;
+    const { imageUrl, userText, homeworkInstruction, teacherDocUrls, questionImage, classroom, playerId, homeworkId, levelIndex } = req.body;
     
     if (!geminiKey) return res.json({ feedback: "Erreur : Clé IA manquante." });
 
@@ -154,29 +148,55 @@ app.post('/api/analyze-homework', async (req, res) => {
         const genAI = new GoogleGenerativeAI(geminiKey);
         const model = genAI.getGenerativeModel({ model: MODEL_NAME, generationConfig: { responseMimeType: "application/json" } });
 
-        const prompt = `
-            RÔLE : Professeur correcteur bienveillant.
-            CONTEXTE : "${homeworkContext || ''}"
-            CONSIGNE : "${homeworkInstruction}"
-            RÉPONSE ÉLÈVE : "${userText}"
-            TACHE : Corrige la réponse. Vérifie si les documents ont été utilisés.
-            FORMAT JSON ATTENDU : { "content_feedback": "Texte HTML de correction", "grade": "Note/20", "spelling_corrections": [] }
-        `;
+        // CONSTRUCTION DU PROMPT MULTIMODAL
+        let parts = [];
 
-        let parts = [prompt];
-        if (questionImage) { const p = await fileToPart(questionImage); if(p) parts.push(p); }
-        if (teacherDocUrls) {
+        // 1. INSTRUCTION SYSTÈME
+        parts.push({ text: `
+            RÔLE : Tu es un professeur correcteur bienveillant et précis pour des élèves de niveau Collège/Lycée (${classroom || 'Niveau inconnu'}).
+            
+            TA TÂCHE :
+            1. Analyse les documents de référence fournis (s'il y en a) pour comprendre le contexte du cours.
+            2. Analyse la QUESTION posée à l'élève (qui peut être un texte, une image, ou les deux).
+            3. Analyse la RÉPONSE de l'élève (texte et/ou image).
+            4. Compare la réponse aux attentes de la question et aux documents.
+            5. Note sur 20.
+            
+            FORMAT JSON ATTENDU : { "content_feedback": "Texte HTML de correction structuré", "grade": "Note/20", "spelling_corrections": [] }
+        `});
+
+        // 2. DOCUMENTS DE RÉFÉRENCE (LE COURS)
+        if (teacherDocUrls && teacherDocUrls.length > 0) {
+            parts.push({ text: "\n--- DOCUMENTS DE RÉFÉRENCE / COURS (POUR LE CONTEXTE) ---\n" });
             for (let url of teacherDocUrls) { 
                 if(url === "BREAK") continue;
-                const p = await fileToPart(url); if(p) parts.push(p); 
+                const p = await fileToPart(url); 
+                if(p) parts.push(p); 
             }
         }
-        if (imageUrl) { const p = await fileToPart(imageUrl); if(p) parts.push(p); }
+
+        // 3. LA QUESTION (L'ÉNONCÉ)
+        parts.push({ text: "\n--- ÉNONCÉ / QUESTION POSÉE À L'ÉLÈVE ---\n" });
+        if (homeworkInstruction) parts.push({ text: `CONSIGNE TEXTUELLE : "${homeworkInstruction}"` });
+        if (questionImage) {
+            parts.push({ text: "IMAGE DE LA QUESTION :" });
+            const p = await fileToPart(questionImage);
+            if(p) parts.push(p);
+        }
+
+        // 4. LA RÉPONSE DE L'ÉLÈVE
+        parts.push({ text: "\n--- TRAVAIL DE L'ÉLÈVE ---\n" });
+        if (userText) parts.push({ text: `RÉPONSE TEXTE : "${userText}"` });
+        if (imageUrl) {
+            parts.push({ text: "IMAGE DE LA RÉPONSE DE L'ÉLÈVE :" });
+            const p = await fileToPart(imageUrl);
+            if(p) parts.push(p);
+        }
 
         const result = await model.generateContent(parts);
         const jsonResponse = JSON.parse(result.response.text());
 
-        // --- LOGIQUE DE SAUVEGARDE DE LA COPIE ---
+        // SAUVEGARDE
         if (playerId && homeworkId) {
             const newResult = {
                 levelIndex: levelIndex || 0,
@@ -186,18 +206,15 @@ app.post('/api/analyze-homework', async (req, res) => {
                 grade: jsonResponse.grade || "A valider"
             };
 
-            // On cherche si une soumission existe déjà
             const existingSub = await Submission.findOne({ homeworkId, playerId });
 
             if (existingSub) {
-                // On remplace ou on ajoute le résultat de ce niveau précis
                 const idx = existingSub.levelsResults.findIndex(r => r.levelIndex === newResult.levelIndex);
                 if (idx > -1) existingSub.levelsResults[idx] = newResult;
                 else existingSub.levelsResults.push(newResult);
                 existingSub.submittedAt = Date.now();
                 await existingSub.save();
             } else {
-                // Création d'une nouvelle copie
                 const newSub = new Submission({
                     homeworkId, playerId, classroom,
                     levelsResults: [newResult]
@@ -214,9 +231,6 @@ app.post('/api/analyze-homework', async (req, res) => {
     }
 });
 
-// === ROUTES PROF : GESTION DES COPIES ===
-
-// 1. Liste toutes les copies pour un devoir donné
 app.get('/api/submissions/:hwId', async (req, res) => {
     try {
         const subs = await Submission.find({ homeworkId: req.params.hwId }).populate('playerId');
@@ -224,7 +238,6 @@ app.get('/api/submissions/:hwId', async (req, res) => {
     } catch(e) { res.status(500).json([]); }
 });
 
-// 2. Détail d'une copie spécifique
 app.get('/api/submission-detail/:subId', async (req, res) => {
     try {
         const sub = await Submission.findById(req.params.subId).populate('playerId').populate('homeworkId');
@@ -232,7 +245,6 @@ app.get('/api/submission-detail/:subId', async (req, res) => {
     } catch(e) { res.status(500).json(null); }
 });
 
-// 3. Mise à jour manuelle par le prof (Note + Feedback)
 app.post('/api/update-correction', async (req, res) => {
     try {
         const { subId, levelsResults } = req.body;
@@ -240,8 +252,6 @@ app.post('/api/update-correction', async (req, res) => {
         res.json({ ok: true });
     } catch(e) { res.status(500).json({ ok: false }); }
 });
-
-// === AUTRES ROUTES (Identiques à ta version marchante) ===
 
 app.post('/api/register', async (req, res) => {
   try {

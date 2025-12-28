@@ -155,7 +155,6 @@ export function initProfDashboard() {
     document.getElementById("classFilter").onchange = applyFiltersAndRender;
     document.getElementById("studentSearch").oninput = applyFiltersAndRender;
 
-    // --- LOGIQUE BOUTON TEST CLASSE (AVEC FIX MONGODB) ---
     const btnTest = document.getElementById("testClassBtn");
     if(btnTest) {
         btnTest.onclick = async () => {
@@ -233,43 +232,134 @@ function renderCreateHomeworkForm(hw = null) {
     modal.querySelector("#btnSaveHw").onclick = saveForm;
 }
 
-// --- FONCTION CORRIGÉE AVEC UPLOAD DOCUMENTS ---
+// --- RENDERING AVEC DRAG & DROP & MULTIPLE UPLOAD ---
 window.renderLevelsInputs = function() {
     const container = document.getElementById("levelsContainer");
     if(!container) return;
     container.innerHTML = "";
+    
     state.tempHwLevels.forEach((lvl, idx) => {
         const div = document.createElement("div");
-        div.style.cssText = "border:1px solid #e2e8f0; padding:15px; margin-top:20px; background:#f8fafc; border-radius:10px; position:relative;";
+        div.style.cssText = "border:1px solid #e2e8f0; padding:20px; margin-top:20px; background:#f8fafc; border-radius:12px; position:relative; box-shadow:0 2px 5px rgba(0,0,0,0.05);";
+        
+        let docsHtml = "";
+        if (lvl.attachmentUrls && lvl.attachmentUrls.length > 0) {
+            docsHtml = `<div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap:10px; margin-top:10px;">`;
+            lvl.attachmentUrls.forEach((url, docIdx) => {
+                const isPdf = url.toLowerCase().endsWith('.pdf');
+                const thumbnail = isPdf 
+                    ? `<div style="width:100%; height:80px; background:#e2e8f0; display:flex; align-items:center; justify-content:center; border-radius:8px; color:#475569; font-weight:bold;">PDF</div>`
+                    : `<img src="${url}" style="width:100%; height:80px; object-fit:cover; border-radius:8px; pointer-events:none;">`; // pointer-events:none pour éviter conflit drag
+                
+                // Ajout des attributs Drag & Drop
+                docsHtml += `
+                    <div class="doc-item"
+                         draggable="true" 
+                         ondragstart="dragStart(event, ${idx}, ${docIdx})" 
+                         ondragover="allowDrop(event)" 
+                         ondrop="dropDoc(event, ${idx}, ${docIdx})"
+                         style="position:relative; border:1px solid #ccc; border-radius:8px; padding:5px; background:white; cursor:grab;">
+                        ${thumbnail}
+                        <button onclick="removeDoc(${idx}, ${docIdx})" style="position:absolute; top:-5px; right:-5px; background:red; color:white; border:none; border-radius:50%; width:20px; height:20px; font-size:12px; cursor:pointer; display:flex; align-items:center; justify-content:center; z-index:10;">X</button>
+                    </div>`;
+            });
+            docsHtml += `</div>`;
+        } else {
+            docsHtml = `<div style="padding:20px; color:#94a3b8; text-align:center; border:2px dashed #cbd5e1; border-radius:8px; margin-top:10px;">Aucun document. Ajoutez-en ci-dessous.</div>`;
+        }
+
         div.innerHTML = `
-            <button onclick="removeLevel(${idx})" style="position:absolute; top:10px; right:10px; color:red; background:none; border:none; cursor:pointer;">Suppr</button>
-            <h4 style="margin-top:0;">Page ${idx+1}</h4>
+            <button onclick="removeLevel(${idx})" style="position:absolute; top:10px; right:10px; color:#ef4444; background:white; border:1px solid #ef4444; border-radius:4px; padding:2px 8px; cursor:pointer; font-weight:bold;">Supprimer la Page</button>
+            <h4 style="margin-top:0; color:#2563eb;">Page ${idx+1}</h4>
             
-            <div style="margin-bottom:15px;">
-                <label>Texte de la Question :</label>
-                <textarea id="lvlInst-${idx}" style="width:100%; height:60px; padding:8px; border-radius:6px; border:1px solid #ccc;">${lvl.instruction || ''}</textarea>
-            </div>
-            
-            <div style="margin-bottom:15px;">
-                <label>Documents (PDF/Images) :</label>
-                <div style="display:flex; gap:10px; align-items:center;">
-                    <input type="file" onchange="uploadFileToZone(this, ${idx}, 'top')" style="font-size:12px;">
-                    <span style="font-size:0.9em; color:#64748b;">
-                        ${lvl.attachmentUrls && lvl.attachmentUrls.length > 0 ? `✅ ${lvl.attachmentUrls.length} fichier(s)` : 'Aucun document'}
-                    </span>
+            <div style="margin-bottom:20px;">
+                <label style="font-weight:bold; color:#334155;">📂 Documents de Cours (PDF / Images) :</label>
+                <div style="background:white; padding:15px; border-radius:8px; border:1px solid #e2e8f0; margin-top:5px;">
+                    ${docsHtml}
+                    <div style="margin-top:10px;">
+                        <input type="file" id="fileInput-${idx}" multiple onchange="uploadFileToZone(this, ${idx}, 'docs')" style="display:none;">
+                        <button onclick="document.getElementById('fileInput-${idx}').click()" style="background:#f1f5f9; border:1px solid #cbd5e1; padding:6px 12px; border-radius:6px; cursor:pointer;">+ Ajouter un document</button>
+                    </div>
                 </div>
             </div>
 
-            <div>
-                <label>Image de Question (Facultatif) :</label>
-                <div style="display:flex; gap:10px; align-items:center;">
-                    <input type="file" onchange="uploadFileToZone(this, ${idx}, 'bottom')" style="font-size:12px;">
-                    ${lvl.questionImage ? `<span style="color:green;">✅ Image OK</span>` : ''}
+            <hr style="border:none; border-top:1px solid #e2e8f0; margin:20px 0;">
+
+            <div style="margin-bottom:15px;">
+                <label style="font-weight:bold; color:#334155;">❓ La Question (Énoncé) :</label>
+                <div style="background:white; padding:15px; border-radius:8px; border:1px solid #e2e8f0; margin-top:5px;">
+                    <div style="margin-bottom:10px;">
+                        <label style="font-size:0.9em;">Texte de la question :</label>
+                        <textarea id="lvlInst-${idx}" style="width:100%; height:60px; padding:8px; border-radius:6px; border:1px solid #ccc; margin-top:5px;">${lvl.instruction || ''}</textarea>
+                    </div>
+                    <div>
+                        <label style="font-size:0.9em;">OU Image de la question (Facultatif) :</label>
+                        <div style="display:flex; gap:10px; align-items:center; margin-top:5px;">
+                            <input type="file" onchange="uploadFileToZone(this, ${idx}, 'questionImg')" style="font-size:12px;">
+                            ${lvl.questionImage ? `<a href="${lvl.questionImage}" target="_blank" style="color:green; font-weight:bold;">✅ Voir l'image</a>` : ''}
+                        </div>
+                    </div>
                 </div>
             </div>
         `;
         container.appendChild(div);
     });
+};
+
+// === FONCTIONS DRAG & DROP ===
+window.dragStart = function(ev, lvlIdx, docIdx) {
+    ev.dataTransfer.effectAllowed = "move";
+    ev.dataTransfer.setData("text/plain", docIdx); // On stocke l'index de départ
+    ev.target.style.opacity = '0.4';
+};
+
+window.allowDrop = function(ev) {
+    ev.preventDefault(); // Nécessaire pour autoriser le drop
+    ev.dataTransfer.dropEffect = "move";
+};
+
+window.dropDoc = function(ev, lvlIdx, targetDocIdx) {
+    ev.preventDefault();
+    const fromDocIdx = parseInt(ev.dataTransfer.getData("text/plain"));
+    
+    // Récupérer le tableau
+    const attachments = state.tempHwLevels[lvlIdx].attachmentUrls;
+    
+    // Déplacer l'élément
+    // 1. Retirer l'élément de sa position originale
+    const movedItem = attachments.splice(fromDocIdx, 1)[0];
+    // 2. L'insérer à la nouvelle position
+    attachments.splice(targetDocIdx, 0, movedItem);
+
+    // Rafraîchir
+    renderLevelsInputs();
+};
+
+// === FONCTIONS UPLOAD ===
+
+window.uploadFileToZone = async function(inputEl, lvlIdx, zoneType) {
+    if (!inputEl.files || inputEl.files.length === 0) return;
+
+    // Affiche un petit feedback de chargement
+    const btn = inputEl.nextElementSibling;
+    const originalText = btn ? btn.textContent : "";
+    if(btn) btn.textContent = "⏳ Envoi en cours...";
+
+    // Boucle pour upload multiple
+    for (const file of inputEl.files) {
+        const res = await uploadFile(file);
+        if (res.ok) {
+            if (zoneType === 'docs') {
+                if(!state.tempHwLevels[lvlIdx].attachmentUrls) state.tempHwLevels[lvlIdx].attachmentUrls = [];
+                state.tempHwLevels[lvlIdx].attachmentUrls.push(res.imageUrl);
+            } else if (zoneType === 'questionImg') {
+                state.tempHwLevels[lvlIdx].questionImage = res.imageUrl;
+            }
+        }
+    }
+    
+    // Tout fini -> Rafraîchir
+    renderLevelsInputs();
 };
 
 async function saveForm() {
@@ -295,15 +385,9 @@ window.openEditModalByIndex = function(index) {
 
 window.removeLevel = function(idx) { state.tempHwLevels.splice(idx, 1); renderLevelsInputs(); };
 
-window.uploadFileToZone = async function(inputEl, lvlIdx, zoneId) {
-    if (!inputEl.files[0]) return;
-    const res = await uploadFile(inputEl.files[0]);
-    if (res.ok) {
-        // zoneId 'top' = Documents | zoneId 'bottom' = Image Question
-        if (zoneId === 'top') state.tempHwLevels[lvlIdx].attachmentUrls.push(res.imageUrl);
-        else state.tempHwLevels[lvlIdx].questionImage = res.imageUrl;
-        renderLevelsInputs();
-    }
+window.removeDoc = function(levelIdx, docIdx) {
+    state.tempHwLevels[levelIdx].attachmentUrls.splice(docIdx, 1);
+    renderLevelsInputs();
 };
 
 window.deleteHomework = async (id) => { if(confirm("Supprimer ce devoir ?")) { await fetch(`/api/homework/${id}`, { method: 'DELETE' }); loadProfHomeworks(); } };
