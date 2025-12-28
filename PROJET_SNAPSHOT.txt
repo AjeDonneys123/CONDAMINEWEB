@@ -1,0 +1,2126 @@
+// SNAPSHOT - 28/12/2025 18:23:05
+
+
+// FILE: package.json
+{
+  "name": "5e-entraineur",
+  "version": "1.0.0",
+  "description": "Plateforme Condamine",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon --ext js,html,css,txt --watch src --watch public --watch update.txt --ignore PROJET_SNAPSHOT.txt --exec \"(lsof -t -i:3000 | xargs kill -9 2>/dev/null || true) && node apply.js && node snap.js && node src/server.js\""
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.1.0",
+    "cloudinary": "^1.41.0",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "mongoose": "^7.6.3",
+    "multer": "^1.4.5-lts.1",
+    "multer-storage-cloudinary": "^4.0.0",
+    "node-fetch": "^2.7.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
+
+// FILE: apply.js
+const fs = require('fs');
+const path = require('path');
+const inputFile = 'update.txt';
+
+console.log("▶️ DÉMARRAGE DU SCRIPT DE DEBUG...");
+
+function applyUpdate() {
+    // 1. Vérifier où le script cherche le fichier
+    const absolutePath = path.resolve(inputFile);
+    console.log(`🔎 Je cherche le fichier ici : ${absolutePath}`);
+
+    // 2. Vérifier si le fichier existe
+    if (!fs.existsSync(inputFile)) {
+        console.error("❌ ERREUR FATALE : Le fichier update.txt est INTROUVABLE !");
+        console.error("👉 Vérifie qu'il n'est pas dans un sous-dossier ou nommé 'update.txt.txt'");
+        return;
+    }
+
+    // 3. Lire le contenu
+    const content = fs.readFileSync(inputFile, 'utf8');
+    console.log(`📄 Fichier trouvé ! Taille : ${content.length} caractères.`);
+    console.log(`👀 Aperçu du début : "${content.substring(0, 50).replace(/\n/g, ' ')}..."`);
+
+    // 4. Vérifier la longueur
+    if (!content || content.trim().length < 5) {
+        console.error("⚠️  STOP : Le fichier est considéré comme VIDE ou trop court.");
+        return;
+    }
+
+    console.log("---------------------------------------------");
+    console.log("📥 TRAITEMENT EN COURS...");
+
+    const parts = content.split(/\/\/\s*FILE:\s*/);
+    let count = 0;
+
+    parts.forEach(part => {
+        if (!part.trim()) return;
+        const firstLineEnd = part.indexOf('\n');
+        if (firstLineEnd === -1) return;
+
+        let filePath = part.substring(0, firstLineEnd).trim();
+        let fileContent = part.substring(firstLineEnd).trim();
+        
+        filePath = filePath.replace(/\r/g, '');
+
+        if (filePath) {
+            const fullPath = path.join(__dirname, filePath);
+            const dir = path.dirname(fullPath);
+            try {
+                if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+                fs.writeFileSync(fullPath, fileContent);
+                console.log(`✅ ÉCRIT : ${filePath}`);
+                count++;
+            } catch (e) { console.error(`❌ Erreur : ${e.message}`); }
+        }
+    });
+
+    if (count > 0) {
+        fs.writeFileSync(inputFile, '');
+        console.log(`✨ SUCCÈS : ${count} fichiers générés.`);
+        console.log(`🗑  update.txt a été vidé.`);
+    } else {
+        console.log("⚠️  Aucune balise '// FILE:' trouvée dans le texte.");
+    }
+    console.log("---------------------------------------------");
+}
+
+applyUpdate();
+
+// FILE: snap.js
+
+const fs = require('fs');
+const path = require('path');
+const filesToInclude = ['package.json','apply.js','snap.js','src/server.js','public/index.html','public/style.css','public/js/app.js','public/js/eleve.js','public/js/prof.js','public/js/games/ZombieGame.js','public/js/games/HomeworkGame.js'];
+const outputFile = 'PROJET_SNAPSHOT.txt';
+function generateSnapshot() {
+    let combined = `// SNAPSHOT - ${new Date().toLocaleString()}\n\n`;
+    filesToInclude.forEach(file => {
+        const p = path.join(__dirname, file);
+        if (fs.existsSync(p)) combined += `\n// FILE: ${file}\n${fs.readFileSync(p, 'utf8')}\n`;
+    });
+    fs.writeFileSync(outputFile, combined);
+    console.log("📸 Snapshot généré.");
+}
+generateSnapshot();
+
+
+// FILE: src/server.js
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
+
+const fetch = require('node-fetch');
+if (!global.fetch) {
+  global.fetch = fetch;
+  global.Headers = fetch.Headers;
+  global.Request = fetch.Request;
+  global.Response = fetch.Response;
+}
+
+const express = require('express');
+const mongoose = require('mongoose');
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+const multer = require('multer');
+const cloudinary = require('cloudinary').v2;
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+
+// --- 1. INITIALISATION ---
+const app = express();
+const port = process.env.PORT || 3000;
+
+const mongoUri = process.env.MONGODB_URI;
+const geminiKey = process.env.GEMINI_API_KEY;
+const MODEL_NAME = "gemini-2.0-flash"; 
+
+if (!mongoUri) { console.error('❌ ERREUR : MONGODB_URI manquant'); process.exit(1); }
+
+app.use(express.json());
+app.use(express.static(path.join(__dirname, '..', 'public')));
+
+mongoose.connect(mongoUri)
+  .then(() => console.log('✅ MongoDB Connecté'))
+  .catch(err => console.error('❌ Erreur Mongo:', err));
+
+// --- 2. CONFIG CLOUDINARY ---
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
+
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: '5e-entraineur', 
+    allowed_formats: ['jpg', 'png', 'jpeg', 'webp', 'pdf'], 
+    resource_type: 'auto' 
+  },
+});
+const upload = multer({ storage: storage });
+
+// --- 3. SCHEMAS BDD ---
+
+// 1. Joueurs
+const PlayerSchema = new mongoose.Schema({
+  firstName: String, lastName: String, classroom: String,
+  validatedQuestions: [String],
+  validatedLevels: { type: [mongoose.Schema.Types.Mixed], default: [] },
+  spellingMistakes: { type: [{ wrong: String, correct: String, date: { type: Date, default: Date.now } }], default: [] },
+  activityLogs: { type: [{ action: String, detail: String, date: { type: Date, default: Date.now } }], default: [] },
+  created_at: { type: Date, default: Date.now },
+}, { minimize: false });
+const Player = mongoose.model('Player', PlayerSchema, 'players');
+
+// 2. Devoirs (Le modèle)
+const HomeworkSchema = new mongoose.Schema({
+  title: String,
+  classroom: String,
+  levels: [{
+      instruction: String,
+      aiPrompt: String,
+      attachmentUrls: [String],
+      questionImage: String
+  }],
+  date: { type: Date, default: Date.now }
+});
+const Homework = mongoose.model('Homework', HomeworkSchema, 'homeworks');
+
+// 3. Soumissions (Les copies des élèves) - NOUVEAU
+const SubmissionSchema = new mongoose.Schema({
+  homeworkId: { type: mongoose.Schema.Types.ObjectId, ref: 'Homework' },
+  playerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Player' },
+  classroom: String,
+  levelsResults: [{
+      levelIndex: Number,
+      userText: String,
+      userImageUrl: String,
+      aiFeedback: String,    
+      teacherFeedback: String, 
+      grade: String          
+  }],
+  submittedAt: { type: Date, default: Date.now }
+});
+const Submission = mongoose.model('Submission', SubmissionSchema, 'submissions');
+
+// 4. Bugs
+const BugSchema = new mongoose.Schema({
+  reporterName: String, classroom: String, description: String, gameChapter: String, date: { type: Date, default: Date.now },
+});
+const Bug = mongoose.model('Bug', BugSchema, 'bugs');
+
+// --- 4. UTILITAIRES ---
+function normalizeBase(str) { return (str || '').normalize('NFD').replace(/\p{Diacritic}/gu, '').trim().toLowerCase(); }
+function nameTokens(str) { return normalizeBase(str).split(/[\s-']+/).filter(t => t.length >= 2); }
+function normalizeClassroom(c) { return normalizeBase(c).replace(/(?<=\d)(e|de|d)/, '').toUpperCase(); }
+
+async function fileToPart(url) {
+    if(!url) return null;
+    try {
+        const resp = await fetch(url);
+        const buffer = await resp.arrayBuffer();
+        const mimeType = url.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg';
+        return { inlineData: { data: Buffer.from(buffer).toString('base64'), mimeType } };
+    } catch(e) { return null; }
+}
+
+// --- 5. ROUTES ---
+
+// Upload Fichiers
+app.post('/api/upload', upload.single('file'), (req, res) => {
+  if (!req.file) return res.status(400).json({ ok: false, error: "Pas de fichier" });
+  res.json({ ok: true, imageUrl: req.file.path });
+});
+
+// Devoirs (CRUD)
+app.post('/api/homework', async (req, res) => {
+    try { const hw = new Homework(req.body); await hw.save(); res.json({ ok: true }); } catch(e) { res.status(500).json({ ok: false }); }
+});
+
+app.get('/api/homework/:class', async (req, res) => {
+    try { const cls = req.params.class; const list = await Homework.find({ $or: [{ classroom: cls }, { classroom: "Toutes" }] }).sort({ date: -1 }); res.json(list); } catch(e) { res.status(500).json([]); }
+});
+
+app.get('/api/homework-all', async (req, res) => {
+    try { const list = await Homework.find().sort({ date: -1 }); res.json(list); } catch(e) { res.status(500).json([]); }
+});
+
+app.put('/api/homework/:id', async (req, res) => {
+    try { await Homework.findByIdAndUpdate(req.params.id, req.body); res.json({ ok: true }); } catch(e) { res.status(500).json({ ok: false }); }
+});
+
+app.delete('/api/homework/:id', async (req, res) => {
+    try { await Homework.findByIdAndDelete(req.params.id); res.json({ ok: true }); } catch(e) { res.status(500).json({ ok: false }); }
+});
+
+// === ANALYSE ET SAUVEGARDE AUTOMATIQUE DE LA COPIE ===
+app.post('/api/analyze-homework', async (req, res) => {
+    const { imageUrl, userText, homeworkInstruction, homeworkContext, teacherDocUrls, questionImage, classroom, playerId, homeworkId, levelIndex } = req.body;
+    
+    if (!geminiKey) return res.json({ feedback: "Erreur : Clé IA manquante." });
+
+    try {
+        const genAI = new GoogleGenerativeAI(geminiKey);
+        const model = genAI.getGenerativeModel({ model: MODEL_NAME, generationConfig: { responseMimeType: "application/json" } });
+
+        const prompt = `
+            RÔLE : Professeur correcteur bienveillant.
+            CONTEXTE : "${homeworkContext || ''}"
+            CONSIGNE : "${homeworkInstruction}"
+            RÉPONSE ÉLÈVE : "${userText}"
+            TACHE : Corrige la réponse. Vérifie si les documents ont été utilisés.
+            FORMAT JSON ATTENDU : { "content_feedback": "Texte HTML de correction", "grade": "Note/20", "spelling_corrections": [] }
+        `;
+
+        let parts = [prompt];
+        if (questionImage) { const p = await fileToPart(questionImage); if(p) parts.push(p); }
+        if (teacherDocUrls) {
+            for (let url of teacherDocUrls) { 
+                if(url === "BREAK") continue;
+                const p = await fileToPart(url); if(p) parts.push(p); 
+            }
+        }
+        if (imageUrl) { const p = await fileToPart(imageUrl); if(p) parts.push(p); }
+
+        const result = await model.generateContent(parts);
+        const jsonResponse = JSON.parse(result.response.text());
+
+        // --- LOGIQUE DE SAUVEGARDE DE LA COPIE ---
+        if (playerId && homeworkId) {
+            const newResult = {
+                levelIndex: levelIndex || 0,
+                userText: userText,
+                userImageUrl: imageUrl,
+                aiFeedback: jsonResponse.content_feedback,
+                grade: jsonResponse.grade || "A valider"
+            };
+
+            // On cherche si une soumission existe déjà
+            const existingSub = await Submission.findOne({ homeworkId, playerId });
+
+            if (existingSub) {
+                // On remplace ou on ajoute le résultat de ce niveau précis
+                const idx = existingSub.levelsResults.findIndex(r => r.levelIndex === newResult.levelIndex);
+                if (idx > -1) existingSub.levelsResults[idx] = newResult;
+                else existingSub.levelsResults.push(newResult);
+                existingSub.submittedAt = Date.now();
+                await existingSub.save();
+            } else {
+                // Création d'une nouvelle copie
+                const newSub = new Submission({
+                    homeworkId, playerId, classroom,
+                    levelsResults: [newResult]
+                });
+                await newSub.save();
+            }
+        }
+
+        res.json({ feedback: jsonResponse.content_feedback, grade: jsonResponse.grade });
+
+    } catch (error) { 
+        console.error(error);
+        res.json({ feedback: `Erreur technique : ${error.message}` }); 
+    }
+});
+
+// === ROUTES PROF : GESTION DES COPIES ===
+
+// 1. Liste toutes les copies pour un devoir donné
+app.get('/api/submissions/:hwId', async (req, res) => {
+    try {
+        const subs = await Submission.find({ homeworkId: req.params.hwId }).populate('playerId');
+        res.json(subs);
+    } catch(e) { res.status(500).json([]); }
+});
+
+// 2. Détail d'une copie spécifique
+app.get('/api/submission-detail/:subId', async (req, res) => {
+    try {
+        const sub = await Submission.findById(req.params.subId).populate('playerId').populate('homeworkId');
+        res.json(sub);
+    } catch(e) { res.status(500).json(null); }
+});
+
+// 3. Mise à jour manuelle par le prof (Note + Feedback)
+app.post('/api/update-correction', async (req, res) => {
+    try {
+        const { subId, levelsResults } = req.body;
+        await Submission.findByIdAndUpdate(subId, { levelsResults });
+        res.json({ ok: true });
+    } catch(e) { res.status(500).json({ ok: false }); }
+});
+
+// === AUTRES ROUTES (Identiques à ta version marchante) ===
+
+app.post('/api/register', async (req, res) => {
+  try {
+    const { firstName, lastName, classroom } = req.body;
+    if (!firstName || !lastName || !classroom) return res.status(400).json({ ok: false });
+    if(firstName.toLowerCase() === "eleve" && lastName.toLowerCase() === "test") {
+       let testPlayer = await Player.findOne({ firstName: "Eleve", lastName: "Test" });
+       if (!testPlayer) { testPlayer = new Player({ firstName: "Eleve", lastName: "Test", classroom: classroom }); await testPlayer.save(); }
+       else { testPlayer.classroom = classroom; await testPlayer.save(); }
+       return res.json({ ok: true, id: testPlayer._id, firstName: "Eleve", lastName: "Test", classroom: classroom });
+    }
+    const inputFirst = nameTokens(firstName); const inputLast = nameTokens(lastName); const normClass = normalizeClassroom(classroom);
+    let classes = [normClass]; if (['2C', '2D'].includes(normClass)) classes = ['2C', '2D', '2CD']; if (['6', '6D'].includes(normClass)) classes = ['6', '6D'];
+    const all = await Player.find({ classroom: { $in: classes } });
+    const found = all.find(p => { const dbFirst = nameTokens(p.firstName); const dbLast = nameTokens(p.lastName); return inputFirst.some(t => dbFirst.includes(t)) && inputLast.some(t => dbLast.includes(t)); });
+    if (!found) return res.status(404).json({ ok: false, error: "Élève introuvable." });
+    return res.json({ ok: true, id: found._id, firstName: found.firstName, lastName: found.lastName, classroom: found.classroom });
+  } catch (e) { res.status(500).json({ ok: false }); }
+});
+
+app.post('/api/verify-answer-ai', async (req, res) => {
+  const { question, userAnswer, expectedAnswer, playerId } = req.body;
+  if (geminiKey) {
+    try {
+      const genAI = new GoogleGenerativeAI(geminiKey);
+      const model = genAI.getGenerativeModel({ model: MODEL_NAME, generationConfig: { responseMimeType: "application/json" } });
+      const systemInstruction = `RÔLE : Arbitre de Jeu "Bienveillant". TACHE : Valide phonétique (demografi = correct). FORMAT JSON : { "status": "correct" | "incorrect", "feedback": "...", "corrections": [] }`;
+      const result = await model.generateContent([systemInstruction, `Q: ${question}, A attendue: ${expectedAnswer}, R élève: ${userAnswer}`]);
+      return res.json(JSON.parse(result.response.text()));
+    } catch (error) { console.error(error); }
+  }
+  res.json({ status: "incorrect", feedback: "Erreur IA" });
+});
+
+app.get('/api/players', async (req, res) => { res.json(await Player.find().sort({ lastName: 1 })); });
+app.post('/api/reset-player', async (req, res) => { await Player.findByIdAndUpdate(req.body.playerId, { validatedQuestions: [], validatedLevels: [], spellingMistakes: [], activityLogs: [] }); res.json({ok:true}); });
+app.post('/api/report-bug', async (req, res) => { const newBug = new Bug(req.body); await newBug.save(); res.json({ok:true}); });
+app.get('/api/bugs', async(req,res)=>{ res.json(await Bug.find().sort({date:-1})); });
+app.delete('/api/bugs/:id', async(req,res)=>{ await Bug.findByIdAndDelete(req.params.id); res.json({ok:true}); });
+
+app.listen(port, () => { console.log(`✅ Serveur prêt sur le port ${port}`); });
+
+// FILE: public/index.html
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Plateforme Condamine</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  
+  <header>
+    <div class="header-left">
+      <button id="backToMenuBtn" class="back-menu-btn" style="display:none;">← Menu</button>
+      <h1>Plateforme Condamine</h1>
+    </div>
+    <div class="header-right"> 
+      <button id="myMistakesBtn" style="display:none; background:#f472b6; color:white; border:none; padding:6px 12px; border-radius:5px; cursor:pointer; font-weight:bold;">📝 Fautes</button>
+      <button id="pauseReportBtn" class="pause-btn">🐞 Bug / Pause</button>
+      <button id="backToProfBtn" style="display: none; background-color: #f59e0b; border:none; padding:6px 10px; border-radius:5px; cursor:pointer; font-weight:bold;">🎓 Prof</button>
+      <div id="studentBadge" style="font-weight:bold; color:#334155;"></div>
+      <button id="logoutBtn" style="display: none; padding:6px 10px; cursor:pointer; border:1px solid #cbd5e1; background:white; border-radius:5px;">Déconnexion</button>
+    </div>
+  </header>
+
+  <main class="wrap">
+    
+    <!-- 1. CONNEXION -->
+    <section id="registerCard" class="card">
+      <h2>👋 Connexion</h2>
+      <form id="registerForm" autocomplete="on">
+        <div style="display:flex; gap:10px; margin-bottom:10px;">
+          <input id="firstName" placeholder="Prénom" required style="flex:1; padding:10px;" />
+          <input id="lastName" placeholder="Nom" required style="flex:1; padding:10px;" />
+        </div>
+        <div style="display:flex; gap:10px;">
+          <select id="classroom" style="flex:1; padding:10px;">
+              <option value="" disabled selected>Classe...</option>
+              <option value="6D">6eD</option><option value="5B">5eB</option><option value="5C">5eC</option>
+              <option value="2A">2de A</option><option value="2CD">2de CD</option>
+          </select>
+          <button id="startBtn" type="submit" style="flex:1; background:#2563eb; color:white; border:none; cursor:pointer;">Entrer</button>
+        </div>
+      </form>
+      <!-- Correction: Modale Prof dans une div simple pour éviter l'avertissement form -->
+      <div id="profPasswordModal" style="display:none; margin-top:15px; border-top:1px solid #eee; padding-top:10px;">
+           <label style="font-size:0.9em; font-weight:bold;">Accès Enseignant :</label>
+           <div style="display:flex; gap:10px; margin-top:5px;">
+               <input type="password" id="profPassword" placeholder="Mot de passe" style="padding:10px; flex:1;">
+               <button id="validateProfPasswordBtn" type="button" style="padding:10px; background:#f59e0b; color:white; border:none; cursor:pointer;">Valider</button>
+           </div>
+      </div>
+    </section>
+
+    <!-- 2. MENU CHAPITRES -->
+    <section id="chapterSelection" class="card" style="display: none;">
+      <h2>Choisis ton chapitre</h2>
+      <div class="chapter-grid">
+        <div class="chapter-box" data-chapter="ch1-zombie" data-template-id="template-zombie-game" data-game-class="ZombieGame">
+          <h3>Chapitre 1 — L’Attaque des Zombies</h3><p>🎮 <strong>Mini-jeu :</strong> Survivre à l’invasion</p><div class="chapter-levels"></div><button class="chapter-action-btn">1 JOUER</button>
+        </div>
+        <div class="chapter-box" data-chapter="ch4-redaction" data-template-id="template-redaction-game" data-game-class="RedactionGame">
+          <h3>Chapitre 4 — Atelier Rédaction</h3><p>📝 <strong>Mini-jeu :</strong> Méthode Dissertation</p><div class="chapter-levels"></div><button class="chapter-action-btn">1 JOUER</button>
+        </div>
+        <div class="chapter-box" data-chapter="ch5-devoir" data-template-id="template-homework-game" data-game-class="HomeworkGame">
+          <h3>Chapitre 5 — Devoirs Maison</h3><p>📸 <strong>Photo & IA :</strong> Envoie ton travail !</p><div class="chapter-levels"></div><button class="chapter-action-btn">VOIR LES DEVOIRS</button>
+        </div>
+        <div class="chapter-box" data-chapter="ch2-starship" data-template-id="template-starship-game" data-game-class="StarshipGame">
+          <h3>Chapitre 2 — Starship</h3><p>🚀 Espace</p><div class="chapter-levels"></div><button class="chapter-action-btn">1 JOUER</button>
+        </div>
+        <div class="chapter-box" data-chapter="ch3-jumper" data-template-id="template-jumper-game" data-game-class="JumperGame">
+          <h3>Chapitre 3 — Jumper</h3><p>🏃‍♂️ Plateforme</p><div class="chapter-levels"></div><button class="chapter-action-btn">1 JOUER</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. JEU -->
+    <section id="game" style="display: none;">
+      <div class="card quiz-container">
+        <h2 id="levelTitle" style="text-align:center;"></h2>
+        <div id="openLessonBtn" style="display:none; text-align:center; margin-bottom:10px;"><button onclick="document.getElementById('lessonModal').style.display='flex'" style="padding:5px 10px;">📚 Leçon</button></div>
+        <div id="mainProgress"><div id="mainBar"></div></div>
+        <div id="subBars"></div>
+        <div id="lives"></div>
+        <div id="gameModuleContainer"></div>
+      </div>
+    </section>
+    
+    <!-- 4. DASHBOARD PROF -->
+    <section id="profDashboard" class="card" style="margin-top: 24px; display: none;"> 
+      <div class="tabs-container">
+          <button id="tabStudents" class="tab-btn active">👥 Élèves</button>
+          <button id="tabHomeworks" class="tab-btn">📚 Devoirs</button>
+          <button id="viewBugsBtn" class="tab-btn" style="color:#7c3aed; margin-left:auto;">🐛 Bugs</button>
+      </div>
+      <div id="contentStudents" class="tab-content active">
+        <div style="margin-bottom: 15px;"><select id="classFilter" style="width:100%; padding:8px;"><option value="all">Toutes</option><option value="6D">6eD</option><option value="5B">5eB</option><option value="5C">5eC</option><option value="2A">2de A</option><option value="2CD">2de CD</option></select></div>
+        <button id="testClassBtn" style="width:100%; padding:12px; background:#3b82f6; color:white; border:none; border-radius:8px; margin-bottom:15px; font-weight:bold;">🎮 Tester classe</button>
+        <input id="studentSearch" placeholder="Rechercher..." style="width:100%; padding:10px; margin-bottom:15px;">
+        <button id="resetAllBtn" style="width:100%; padding:12px; background:#ef4444; color:white; border:none; border-radius:8px; margin-bottom:25px; font-weight:bold;">⚠️ Tout Réinitialiser</button>
+        <table id="playersTable" style="width:100%; border-collapse:collapse;"><thead style="background:#f8fafc;"><tr><th style="padding:10px;">Prénom</th><th style="padding:10px;">Classe</th><th style="padding:10px;">Progression</th><th style="padding:10px;">Actions</th></tr></thead><tbody id="playersBody"></tbody></table>
+      </div>
+      <div id="contentHomeworks" class="tab-content">
+          <button id="addHomeworkBtn" class="action-btn" style="margin-bottom:15px;">➕ Nouveau Devoir</button>
+          <table style="width:100%; text-align:left;"><tbody id="profHomeworksBody"></tbody></table>
+      </div>
+    </section>
+
+    <!-- MODALES -->
+    <div id="profBugListModal" class="modal-overlay" style="display:none;"><div class="modal-content"><button id="closeBugListBtn">Fermer</button><div id="bugsBody"></div></div></div>
+    <div id="createHomeworkModal" class="modal-overlay" style="display:none;"></div>
+    <div id="lessonModal" class="modal-overlay" style="display:none;"><div class="modal-content"><div id="lessonText"></div><button onclick="document.getElementById('lessonModal').style.display='none'">Fermer</button></div></div>
+    <div id="bugModal" class="modal-overlay" style="display:none;"><div class="modal-content"><textarea id="bugDescription"></textarea><button id="sendBugBtn">Envoyer</button><button id="resumeGameBtn">Annuler</button></div></div>
+    <div id="mistakesModal" class="modal-overlay" style="display: none;"><div class="modal-content"><button id="closeMistakesBtn">X</button><div id="mistakesList"></div></div></div>
+    <div id="overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:2000; justify-content:center; align-items:center;"><div style="background:white; padding:30px; border-radius:10px; text-align:center;"><h3>Perdu !</h3><button id="restartBtn" style="padding:10px 20px;">Recommencer</button></div></div>
+    <div id="correctionOverlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:2000; justify-content:center; align-items:center;"><div style="background:white; padding:30px; border-radius:10px; max-width:400px; text-align:center;"><h3 style="color:#ef4444;">Faux !</h3><p id="correctionText"></p><button id="closeCorrectionBtn" style="padding:10px 20px;">Continuer</button></div></div>
+
+  </main>
+
+  <!-- ======================== TEMPLATES JEUX ======================== -->
+
+  <!-- TEMPLATE HOMEWORK (LISEUSE + SPLIT BAS) -->
+<template id="template-homework-game">
+  <div class="hw-layout">
+    <!-- VUE LISTE -->
+    <div id="hw-list" class="hw-list-view">Chargement...</div>
+    
+    <!-- VUE TRAVAIL -->
+    <div id="hw-workspace" class="hw-work-view" style="display:none; flex-direction: column; height: 100%;">
+        
+        <!-- HAUT : LISEUSE DOCS (Ligne 1) -->
+        <div id="doc-viewer" class="doc-viewer-container" style="flex: 1.2; position: relative; background: #0f172a; overflow: hidden;">
+            <div id="pan-zoom-content" style="position: absolute; top: 50%; left: 50%; transform-origin: center center;">
+                <img id="current-doc-img" src="" style="display:none;">
+                <iframe id="current-doc-pdf" src="" style="display:none; width:800px; height:600px;"></iframe>
+            </div>
+            <button id="btn-prev-doc" class="nav-arrow" style="left:10px;">❮</button>
+            <button id="btn-next-doc" class="nav-arrow" style="right:10px;">❯</button>
+            <div class="doc-controls"><button class="zoom-btn" id="btn-zoom-out">➖</button><button class="zoom-btn" id="btn-zoom-in">➕</button></div>
+            <button id="btn-close-work" style="position:absolute; top:10px; left:10px; background:red; color:white; border:none; padding:5px; border-radius:4px; z-index:100;">Quitter</button>
+        </div>
+
+        <!-- BAS : ZONE INTERACTIVE (Question à gauche / Réponse à droite) -->
+        <div class="interaction-zone" style="flex: 1; display: flex; flex-direction: row; background: white; border-top: 4px solid #f59e0b;">
+            
+            <!-- GAUCHE : LA QUESTION -->
+            <div class="question-part" style="flex: 1; border-right: 2px solid #e2e8f0; display: flex; flex-direction: column; position: relative;">
+                <h4 style="margin: 5px 10px; color: #2563eb;">Question <span id="q-index">1</span></h4>
+                <div id="q-text" style="padding: 0 10px; font-size: 0.9em; font-weight: bold; margin-bottom: 5px;"></div>
+                
+                <div id="q-image-container" style="flex: 1; position: relative; overflow: hidden; background: #0f172a;">
+                    <div id="pan-zoom-question-content" style="position: absolute; top: 50%; left: 50%; transform-origin: center center;">
+                        <!-- Image injectée ici -->
+                    </div>
+                    <div class="doc-controls" style="scale: 0.7; bottom: 5px; right: 5px;">
+                        <button class="zoom-btn" id="btn-zoom-out-q">➖</button>
+                        <button class="zoom-btn" id="btn-zoom-in-q">➕</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- DROITE : LA RÉPONSE -->
+            <div class="answer-part" style="flex: 1; padding: 10px; display: flex; flex-direction: column; gap: 8px;">
+                <textarea id="hw-text" style="flex: 1; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; resize: none;" placeholder="Écris ta réponse ici..."></textarea>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <label style="color: #2563eb; cursor: pointer; font-size: 0.9em;">
+                        📎 Photo <input type="file" id="hw-file" style="display:none;">
+                        <span id="file-name" style="font-size: 0.8em; color: #64748b;"></span>
+                    </label>
+                    <button id="hw-submit" style="background: #2563eb; color: white; padding: 8px 16px; border: none; border-radius: 6px; font-weight: bold;">Envoyer à l'IA 🤖</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODALE IA -->
+        <div id="ai-feedback-modal" class="ai-modal-center" style="display:none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; border-radius: 12px; z-index: 2000; width: 80%; border: 2px solid #2563eb;">
+            <div id="ai-content"></div>
+            <div style="text-align: right; margin-top: 10px;">
+                <button id="btn-modify" style="background: #f59e0b; color: white; border: none; padding: 8px; border-radius: 4px;">Modifier</button>
+                <button id="btn-next" style="background: #16a34a; color: white; border: none; padding: 8px; border-radius: 4px;">Suivant</button>
+            </div>
+        </div>
+        <div id="ai-overlay" style="display:none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 1500;"></div>
+    </div>
+  </div>
+</template>
+
+  <!-- AUTRES TEMPLATES -->
+ <template id="template-zombie-game">
+  <div style="text-align:center;">
+    <div id="zombie-arena">
+      <img id="z-hero" src="images/hero.png" class="game-character" style="left:20px;">
+      <img id="z-zombie" src="images/zombi.png" class="game-character" style="right:20px;">
+      <div id="z-projectile"></div>
+      <div id="feedback-bubble"></div>
+    </div>
+    <div id="z-question" class="question-zone"></div>
+    
+    <!-- Zone pour l'IA (cachée si QCM) -->
+    <div id="ai-input-zone" style="display:none; gap:10px; justify-content:center; margin-top:10px;">
+      <input id="z-answer" placeholder="Ta réponse..." style="padding:10px; flex:1; max-width:300px;">
+      <button id="z-submit" style="padding:10px 20px; background:#2563eb; color:white; border:none; border-radius:5px; cursor:pointer;">Valider</button>
+    </div>
+
+    <!-- Zone pour les boutons QCM (affichée si options) -->
+    <div id="options-grid" style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:15px;">
+      <button class="option-btn"></button>
+      <button class="option-btn"></button>
+      <button class="option-btn"></button>
+      <button class="option-btn"></button>
+    </div>
+  </div>
+</template>
+  <template id="template-redaction-game"><div id="redac-q"></div><textarea id="redac-answer"></textarea><button id="redac-submit">Envoyer</button><div id="redac-loading"></div><div id="analysis-area"><div id="text-good"></div><button id="redac-continue">Continuer</button></div></template>
+  <template id="template-starship-game"><div id="starship-game-area"><div id="ship"></div><div id="question"></div></div></template>
+  <template id="template-jumper-game"><div id="jumper-area"><div id="player"></div><div id="q-text"></div><div id="options-grid"></div></div></template>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
+
+// FILE: public/style.css
+:root {
+    --primary: #2563eb;
+    --primary-dark: #1e40af;
+    --secondary: #f59e0b;
+    --success: #16a34a;
+    --danger: #dc2626;
+    --bg-page: #f1f5f9;
+    --bg-card: #ffffff;
+    --text-main: #1e293b;
+    --text-light: #64748b;
+    --border: #e2e8f0;
+    --radius: 12px;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; background-color: var(--bg-page); color: var(--text-main); padding-bottom: 60px; }
+
+/* --- HEADER --- */
+header { display: flex; justify-content: space-between; align-items: center; padding: 0 24px; background: white; height: 70px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+header h1 { font-size: 1.5rem; color: var(--primary); margin: 0; }
+.header-right { display: flex; gap: 10px; align-items: center; }
+
+/* --- BOUTONS --- */
+button { cursor: pointer; transition: 0.2s; }
+.action-btn, .chapter-action-btn { background: var(--primary); color: white; border: none; border-radius: 8px; padding: 10px 16px; font-weight: bold; width: 100%; margin-top: auto; }
+.action-btn:hover { background: var(--primary-dark); }
+.pause-btn { background: white; border: 1px solid #ccc; padding: 6px 12px; border-radius: 6px; }
+.back-menu-btn { background: white; border: 1px solid #ccc; padding: 5px 10px; border-radius: 5px; }
+
+/* --- LAYOUT GLOBAL --- */
+.wrap { max-width: 1000px; margin: 30px auto; padding: 0 20px; }
+.card { background: white; border-radius: var(--radius); padding: 30px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); margin-bottom: 30px; }
+
+/* CHAPITRES */
+.chapter-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+.chapter-box { background: white; border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; display: flex; flex-direction: column; transition: transform 0.2s; }
+.chapter-box:hover { transform: translateY(-5px); border-color: #cbd5e1; }
+
+/* BARRES DE VIE & SCORE */
+#lives { display: flex; justify-content: center; gap: 5px; font-size: 20px; margin-bottom: 10px; }
+#mainProgress { width: 100%; height: 12px; background: #e2e8f0; border-radius: 10px; overflow: hidden; margin-bottom: 10px; }
+#mainBar { height: 100%; background: var(--primary); width: 0%; transition: width 0.3s; }
+#subBars { display: flex; gap: 5px; height: 8px; margin-bottom: 20px; }
+.subProgress { flex: 1; background: #f1f5f9; border: 1px solid #ccc; border-radius: 4px; overflow: hidden; cursor: pointer; }
+.subBar { height: 100%; width: 0%; background: var(--success); }
+.completed { background: var(--success) !important; width: 100% !important; }
+
+
+/* =========================================
+   STYLE JEU DEVOIRS (HOMEWORK) - COMPLET
+   ========================================= */
+
+.hw-layout {
+    position: relative;
+    width: 100%;
+    height: 700px; /* Hauteur fixe confortable */
+    background-color: #1e293b;
+    border-radius: 12px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid #334155;
+}
+
+/* VUE LISTE (Premier plan si actif) */
+.hw-list-view {
+    padding: 20px;
+    background: white;
+    height: 100%;
+    width: 100%;
+    overflow-y: auto;
+    position: absolute; 
+    top: 0; left: 0;
+    z-index: 50;
+    display: block; /* Visible par défaut */
+}
+.hw-list-item {
+    background: white; border: 1px solid #e2e8f0; padding: 15px; border-radius: 8px;
+    cursor: pointer; margin-bottom: 10px; transition: 0.2s;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+.hw-list-item:hover { border-color: var(--primary); background: #f0f9ff; transform: translateX(5px); }
+
+/* VUE TRAVAIL (Contient Haut + Bas) */
+.hw-work-view {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: none; /* Activé par JS (flex) */
+    flex-direction: column;
+}
+
+/* --- HAUT : VISIONNEUSE (75%) --- */
+.doc-viewer-container {
+    flex: 3; /* 75% de l'espace */
+    background-color: #0f172a;
+    /* Quadrillage technique */
+    background-image: 
+        linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+    background-size: 50px 50px;
+    
+    position: relative;
+    overflow: hidden; /* Coupe ce qui dépasse */
+    border-bottom: 4px solid var(--secondary);
+    
+    /* Curseur pour le Pan */
+    cursor: grab;
+    user-select: none;
+}
+.doc-viewer-container:active { cursor: grabbing; }
+
+/* LE CONTENEUR INTERNE QUI BOUGE (Pan & Zoom) */
+#pan-zoom-content {
+    position: absolute;
+    top: 50%; left: 50%;
+    /* Le JS applique: translate(-50%, -50%) translate(x, y) scale(z) */
+    transform-origin: center center;
+    
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    
+    width: 0; height: 0; /* Point de référence central */
+    pointer-events: none;
+}
+
+/* L'IMAGE DU DOCUMENT */
+#current-doc-img {
+    /* Taille par défaut assez grande */
+    min-width: 600px;
+    max-width: 1200px;
+    height: auto;
+    
+    box-shadow: 0 0 50px rgba(0,0,0,0.8);
+    border: 3px solid white;
+    
+    pointer-events: auto; /* Permet le clic droit */
+    -webkit-user-drag: none; /* Empêche le drag natif */
+}
+
+/* LE PDF */
+#current-doc-pdf {
+    width: 800px; height: 600px;
+    background: white; border: none;
+    pointer-events: auto;
+}
+
+/* UI SUPERPOSÉE SUR LA VISIONNEUSE */
+.page-counter {
+    position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
+    background: rgba(0,0,0,0.7); color: white; padding: 4px 15px;
+    border-radius: 20px; font-weight: bold; pointer-events: none; z-index: 20;
+}
+
+.nav-arrow {
+    position: absolute; top: 50%; transform: translateY(-50%);
+    background: rgba(0,0,0,0.5); color: white; border: 1px solid rgba(255,255,255,0.3);
+    width: 50px; height: 50px; border-radius: 50%; font-size: 24px;
+    display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 20;
+}
+.nav-arrow:hover { background: rgba(255,255,255,0.8); color: black; }
+#btn-prev-doc { left: 15px; }
+#btn-next-doc { right: 15px; }
+
+.doc-controls {
+    position: absolute; bottom: 15px; right: 15px; z-index: 20;
+    display: flex; gap: 10px;
+}
+.zoom-btn {
+    width: 40px; height: 40px; border-radius: 50%;
+    background: rgba(0,0,0,0.6); color: white; border: 1px solid rgba(255,255,255,0.5);
+    font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.zoom-btn:hover { background: rgba(0,0,0,0.9); transform: scale(1.1); }
+
+/* --- BAS : INTERACTION (25%) --- */
+.interaction-zone {
+    flex: 1; /* 25% */
+    background: white;
+    display: flex;
+    flex-direction: row;
+    overflow: hidden;
+    z-index: 30;
+}
+
+/* GAUCHE : Question */
+.question-part {
+    flex: 1;
+    padding: 20px;
+    border-right: 2px solid #e2e8f0;
+    background: #f8fafc;
+    overflow-y: auto;
+}
+.question-text { font-size: 1.1em; color: var(--text-main); font-weight: 600; line-height: 1.5; }
+.question-img { max-height: 120px; width: auto; margin-top: 10px; border: 1px solid #ccc; display: block; }
+
+/* DROITE : Réponse */
+.answer-part {
+    flex: 1;
+    padding: 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.hw-textarea {
+    flex: 1; width: 100%; resize: none; padding: 12px;
+    border: 1px solid #94a3b8; border-radius: 8px; font-family: inherit; font-size: 1rem;
+}
+.action-bar { display: flex; justify-content: space-between; align-items: center; }
+
+/* --- MODALE IA --- */
+.ai-modal-center {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    background: white; width: 600px; max-width: 90%; padding: 25px;
+    border-radius: 12px; box-shadow: 0 25px 100px rgba(0,0,0,0.7);
+    z-index: 2000; border: 2px solid var(--primary); display: none; flex-direction: column;
+}
+.ai-content-box {
+    background: #f1f5f9; padding: 15px; border-radius: 8px; 
+    margin: 15px 0; max-height: 300px; overflow-y: auto; text-align: left;
+    border: 1px solid #e2e8f0;
+}
+
+/* --- DASHBOARD PROF --- */
+.tabs-container { display: flex; gap: 15px; border-bottom: 2px solid #e2e8f0; margin-bottom: 25px; }
+.tab-btn { background: none; border: none; padding: 12px 20px; font-weight: 600; color: var(--text-light); border-bottom: 3px solid transparent; }
+.tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+table { width: 100%; border-collapse: collapse; margin-top: 15px; background: white; border-radius: 8px; overflow: hidden; box-shadow: var(--shadow-sm); }
+th { background: #f8fafc; color: var(--text-light); font-weight: 600; text-align: left; padding: 12px 15px; }
+td { padding: 12px 15px; border-bottom: 1px solid #f1f5f9; color: var(--text-main); }
+
+/* --- MODALES GENERALES --- */
+.modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; display: none; align-items: center; justify-content: center; }
+.modal-content { background: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 600px; text-align: center; }
+
+/* --- JEUX AUTRES --- */
+#zombie-arena { position: relative; height: 250px; background: linear-gradient(180deg, #dbeafe 0%, #bfdbfe 100%); border-radius: 12px; border: 4px solid #60a5fa; overflow: hidden; margin-bottom: 20px; }
+.game-character { position: absolute; bottom: 10px; height: 120px; transition: right 0.1s linear; }
+#z-projectile { position: absolute; width: 24px; height: 24px; background: radial-gradient(circle, #facc15, #ca8a04); border-radius: 50%; box-shadow: 0 0 10px #facc15; z-index: 20; display: none; }
+#feedback-bubble { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); width: 80%; padding: 10px; border-radius: 10px; background: rgba(255,255,255,0.95); text-align: center; display: none; z-index: 20; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+.fb-success { border-color:#22c55e; color:#166534; background:#f0fdf4; border: 2px solid #22c55e; }
+.fb-error { border-color:#ef4444; color:#991b1b; background:#fef2f2; border: 2px solid #ef4444; }
+.fb-hint { border-color:#f59e0b; color:#854d0e; background:#fefce8; border: 2px solid #f59e0b; }
+.option-btn { width: 100%; padding: 12px; margin-bottom: 8px; border: 2px solid #e2e8f0; background: white; border-radius: 8px; font-weight: 600; color: var(--text-main); }
+.opt-correct { background: #dcfce7 !important; border-color: #22c55e !important; }
+.opt-wrong { background: #fee2e2 !important; border-color: #ef4444 !important; }
+
+#starship-game-area, #jumper-area { position: relative; height: 350px; border-radius: 12px; overflow: hidden; border: 4px solid #334155; }
+
+// FILE: public/js/app.js
+export const api = {
+    async post(url, data) { try { const r = await fetch(url, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) }); return await r.json(); } catch(e) { return {ok:false}; } },
+    async get(url) { try { const r = await fetch(url); return r.ok ? await r.json() : null; } catch(e) { return null; } },
+    async upload(file) { try { const fd = new FormData(); fd.append('file', file); const r = await fetch('/api/upload', { method: 'POST', body: fd }); return await r.json(); } catch(e) { return {ok:false}; } }
+};
+export const state = {
+    user: JSON.parse(localStorage.getItem("player") || "null"),
+    getClassKey: (c) => { 
+        if(!c) return "default"; 
+        const val = c.toUpperCase(); 
+        if (val.includes("6")) return "6e"; 
+        if (val.includes("5")) return "5e"; 
+        return "2de"; 
+    },
+    isRKeyDown: false, isTKeyDown: false, questionsData: null
+};
+import { initProfDashboard } from './prof.js';
+import { initStudentInterface } from './eleve.js';
+document.addEventListener("DOMContentLoaded", () => {
+    if (state.user) {
+        const regCard = document.getElementById("registerCard");
+        const badge = document.getElementById("studentBadge");
+        const logout = document.getElementById("logoutBtn");
+        if(regCard) regCard.style.display = "none";
+        if(badge) {
+            badge.textContent = `${state.user.firstName} ${state.user.lastName}`;
+            badge.style.display = "block";
+        }
+        if(logout) logout.style.display = "block";
+        const isProf = (state.user.firstName.toLowerCase().includes("jean") && state.user.lastName.toLowerCase().includes("vuill")) || state.user.id === "prof";
+        if (isProf) initProfDashboard(); else initStudentInterface();
+    }
+    const regForm = document.getElementById("registerForm");
+    if(regForm) regForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const f = document.getElementById("firstName").value.trim();
+        const l = document.getElementById("lastName").value.trim();
+        const c = document.getElementById("classroom").value;
+        if (f.toLowerCase().includes("jean") && l.toLowerCase().includes("vuill")) { 
+            const modal = document.getElementById("profPasswordModal");
+            if(modal) modal.style.display = "block"; 
+            return; 
+        }
+        const res = await api.post('/api/register', { firstName: f, lastName: l, classroom: c });
+        if(res.ok) { localStorage.setItem("player", JSON.stringify(res)); window.location.reload(); } else alert("Élève non trouvé.");
+    });
+    const validateBtn = document.getElementById("validateProfPasswordBtn");
+    if(validateBtn) validateBtn.addEventListener("click", () => {
+        const pass = document.getElementById("profPassword");
+        if(pass && pass.value === "Clemenceau1919") {
+            localStorage.setItem("player", JSON.stringify({ id: "prof", firstName: "Jean", lastName: "Vuillet", classroom: "Professeur" }));
+            window.location.reload();
+        } else alert("Code incorrect");
+    });
+    const logoutBtn = document.getElementById("logoutBtn");
+    if(logoutBtn) logoutBtn.onclick = () => { localStorage.removeItem("player"); window.location.reload(); };
+});
+document.addEventListener("keydown", (e) => { if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return; if (e.key?.toLowerCase() === "r") state.isRKeyDown = true; if (e.key?.toLowerCase() === "t") state.isTKeyDown = true; });
+document.addEventListener("keyup", (e) => { if (e.key?.toLowerCase() === "r") state.isRKeyDown = false; if (e.key?.toLowerCase() === "t") state.isTKeyDown = false; });
+
+// FILE: public/js/eleve.js
+import { state } from './state.js';
+import { reportBug } from './api.js';
+
+// IMPORTS JEUX
+import { ZombieGame } from './games/ZombieGame.js';
+import { RedactionGame } from './games/RedactionGame.js';
+import { HomeworkGame } from './games/HomeworkGame.js';
+import { StarshipGame } from './games/StarshipGame.js';
+import { JumperGame } from './games/JumperGame.js';
+
+const GameClasses = {
+    "ZombieGame": ZombieGame,
+    "RedactionGame": RedactionGame,
+    "HomeworkGame": HomeworkGame,
+    "StarshipGame": StarshipGame,
+    "JumperGame": JumperGame
+};
+
+export async function initStudentInterface() {
+    console.log("🚀 Init Élève");
+    
+    // UI
+    document.getElementById("chapterSelection").style.display = "block";
+    const logoutBtn = document.getElementById("logoutBtn");
+    if(logoutBtn) logoutBtn.style.display = "block";
+
+    // CHARGER QUESTIONS
+    if(state.currentPlayerData && state.currentPlayerData.classroom) {
+        const classKey = state.getClassKey(state.currentPlayerData.classroom);
+        try {
+            const res = await fetch(`questions/questions-${classKey}.json`);
+            if(res.ok) state.allQuestionsData[classKey] = await res.json();
+            // Optionnel : updateChapterUI()
+        } catch(e) { console.log("Info: Pas de JSON questions"); }
+        document.querySelectorAll(".chapter-action-btn").forEach(b => b.disabled = false);
+    }
+    
+    // NAVIGATION
+    document.getElementById("backToMenuBtn").onclick = () => window.location.reload();
+
+    // RETOUR PROF
+    if(state.currentPlayerData.firstName === "Eleve" && state.currentPlayerData.lastName === "Test") {
+        const btnProf = document.getElementById("backToProfBtn");
+        if(btnProf) {
+            btnProf.style.display = "block";
+            btnProf.onclick = () => {
+                localStorage.setItem("player", JSON.stringify({ id: "prof", firstName: "Jean", lastName: "Vuillet", classroom: "Professeur" }));
+                window.location.reload();
+            };
+        }
+    }
+    
+    // MES FAUTES
+    const btnMistakes = document.getElementById("myMistakesBtn");
+    if(btnMistakes && state.currentPlayerData.id !== "prof") {
+        btnMistakes.style.display = "block";
+        btnMistakes.onclick = loadMistakes;
+        document.getElementById("closeMistakesBtn").onclick = () => document.getElementById("mistakesModal").style.display = "none";
+    }
+
+    // BUGS
+    document.getElementById("pauseReportBtn").onclick = () => { state.isGlobalPaused = true; document.getElementById("bugModal").style.display="flex"; };
+    document.getElementById("resumeGameBtn").onclick = () => { state.isGlobalPaused = false; document.getElementById("bugModal").style.display="none"; };
+    document.getElementById("sendBugBtn").onclick = async () => {
+        await reportBug({ reporterName: state.currentPlayerData.firstName, description: document.getElementById("bugDescription").value });
+        alert("Envoyé !"); document.getElementById("bugModal").style.display="none"; state.isGlobalPaused = false;
+    };
+    
+    // CHEAT BARRE
+    const mainBar = document.getElementById("mainProgress");
+    if (mainBar) {
+        mainBar.onclick = () => {
+            if (state.isGameActive && state.isRKeyDown && state.isTKeyDown) {
+                state.general = state.levels[state.currentLevel].questions.length;
+                updateBars();
+                nextQuestion(false);
+            }
+        };
+    }
+}
+
+async function loadMistakes() {
+    const list = document.getElementById("mistakesList");
+    const modal = document.getElementById("mistakesModal");
+    list.innerHTML = "Chargement...";
+    modal.style.display = "flex";
+    try {
+        const res = await fetch(`/api/player-progress/${state.currentPlayerId}`);
+        const data = await res.json();
+        const mistakes = data.spellingMistakes || [];
+        if(mistakes.length === 0) list.innerHTML = "<p>Aucune faute !</p>";
+        else {
+            list.innerHTML = `<ul class='spelling-list'>` + mistakes.map(m => `<li class='spelling-item'><span class='wrong-word'>${m.wrong}</span> 👉 <span class='right-word'>${m.correct}</span></li>`).join('') + `</ul>`;
+        }
+    } catch(e) { list.innerHTML = "Erreur."; }
+}
+
+// LANCEUR
+document.body.addEventListener('click', async (e) => {
+    if (e.target.matches('.chapter-action-btn')) {
+        const parent = e.target.closest('.chapter-box');
+        const tmplId = parent.dataset.templateId;
+        const gameClassStr = parent.dataset.gameClass;
+        const chapterId = parent.dataset.chapter;
+
+        document.getElementById("chapterSelection").style.display = 'none';
+        document.getElementById("game").style.display = 'block';
+        document.getElementById("backToMenuBtn").style.display = 'inline-block';
+        const btnMistakes = document.getElementById("myMistakesBtn");
+        if(btnMistakes) btnMistakes.style.display = 'none';
+
+        const container = document.getElementById("gameModuleContainer");
+        container.innerHTML = "";
+        const tmpl = document.getElementById(tmplId);
+        if(tmpl) container.appendChild(tmpl.content.cloneNode(true));
+
+        state.isGameActive = true;
+        state.locked = false;
+        
+        const controller = {
+            notifyCorrectAnswer: () => { incrementProgress(1); },
+            notifyWrongAnswer: (msg) => { wrongAnswerFlow(msg); },
+            getState: () => ({ isLocked: state.locked })
+        };
+
+        const GameClass = GameClasses[gameClassStr];
+        if(GameClass) {
+            state.currentGameModuleInstance = new GameClass(container, controller);
+            
+            if (gameClassStr === "HomeworkGame") {
+                document.getElementById("levelTitle").textContent = "Devoirs Maison";
+                toggleUI(false);
+                if(state.currentGameModuleInstance.loadHomeworks) state.currentGameModuleInstance.loadHomeworks();
+            } else {
+                toggleUI(true);
+                const classKey = state.getClassKey(state.currentPlayerData.classroom);
+                const allLevels = state.allQuestionsData[classKey] || [];
+                state.levels = allLevels.filter(l => l.chapterId === chapterId);
+                
+                const validatedIds = (state.currentPlayerData.validatedLevels || []).map(v => (typeof v === 'string' ? v : v.levelId));
+                let startLvl = state.levels.findIndex(l => !validatedIds.includes(l.id));
+                if (startLvl === -1) startLvl = 0; 
+
+                if(state.levels.length > 0) setupLevel(startLvl);
+                else container.innerHTML = "<h3 style='text-align:center; margin-top:50px'>Pas de niveaux.</h3>";
+            }
+        }
+    }
+});
+
+function toggleUI(show) {
+    const disp = show ? "block" : "none";
+    const flex = show ? "flex" : "none";
+    document.getElementById("mainProgress").style.display = disp;
+    document.getElementById("subBars").style.display = flex;
+    document.getElementById("lives").style.display = flex;
+}
+
+// MOTEUR
+function setupLevel(idx) {
+    if(!state.levels[idx]) { document.getElementById("gameModuleContainer").innerHTML = "<h1>Terminé ! 🏆</h1>"; return; }
+    state.currentLevel = idx;
+    const lvl = state.levels[idx];
+    document.getElementById("levelTitle").textContent = lvl.title;
+    
+    // Leçon
+    const btnL = document.getElementById("openLessonBtn");
+    const txtL = document.getElementById("lessonText");
+    if(lvl.lesson) { btnL.style.display = "block"; txtL.innerHTML = lvl.lesson; } 
+    else { btnL.style.display = "none"; }
+
+    state.localScores = new Array(lvl.questions.length).fill(0);
+    state.general = 0; state.currentIndex = -1; state.lives = 4;
+    renderLives();
+    
+    const sub = document.getElementById("subBars"); sub.innerHTML = "";
+    lvl.questions.forEach((_, i) => {
+        const d = document.createElement("div"); d.className = "subProgress";
+        d.innerHTML = `<div class="subBar" id="subBar${i}"></div>`;
+        d.onclick = () => {
+            if (state.isGameActive && state.isRKeyDown && state.isTKeyDown) {
+                state.currentIndex = i; 
+                incrementProgress(1); // +1/3
+                loadActiveQuestion();
+            }
+        };
+        sub.appendChild(d);
+    });
+    
+    updateBars();
+    nextQuestion(false);
+}
+
+function nextQuestion(keep) {
+    state.locked = false;
+    const lvl = state.levels[state.currentLevel];
+    if(state.general >= lvl.questions.length) {
+        saveProgress("level", lvl.id, "A");
+        if(state.currentLevel < state.levels.length - 1) setTimeout(() => setupLevel(state.currentLevel + 1), 1500);
+        else document.getElementById("gameModuleContainer").innerHTML = "<h1 style='text-align:center'>Bravo ! 👑</h1>";
+        return;
+    }
+    
+    let nextIdx = -1;
+    const req = lvl.requiredPerQuestion || 3;
+    for(let i=state.currentIndex+1; i<lvl.questions.length; i++) if(state.localScores[i] < req) { nextIdx = i; break; }
+    if(nextIdx === -1) for(let i=0; i<=state.currentIndex; i++) if(state.localScores[i] < req) { nextIdx = i; break; }
+    
+    if(nextIdx !== -1) {
+        state.currentIndex = nextIdx;
+        loadActiveQuestion();
+    }
+}
+
+// FONCTION CLÉ : CHOIX MODE
+function loadActiveQuestion() {
+    if(!state.currentGameModuleInstance || !state.currentGameModuleInstance.loadQuestion) return;
+    
+    const lvl = state.levels[state.currentLevel];
+    const q = lvl.questions[state.currentIndex];
+    const score = state.localScores[state.currentIndex];
+    const req = lvl.requiredPerQuestion || 3;
+    
+    const qToSend = JSON.parse(JSON.stringify(q));
+    
+    // RÈGLE D'OR : Dernier palier = Texte
+    if (score >= req - 1) {
+        console.log("🔥 DERNIER PALIER -> MODE TEXTE");
+        delete qToSend.options; 
+    }
+    
+    state.currentGameModuleInstance.loadQuestion(qToSend);
+}
+
+function incrementProgress(val) {
+    const req = state.levels[state.currentLevel].requiredPerQuestion || 3;
+    // On met à jour le score local de la question actuelle (ex: 1/3, 2/3...)
+    state.localScores[state.currentIndex] = Math.max(0, Math.min(req, state.localScores[state.currentIndex] + val));
+    
+    updateBars();
+
+    // SI LA QUESTION EST FINIE (ex: 3/3)
+    if (state.localScores[state.currentIndex] >= req) { 
+        state.general++; 
+        // On attend la fin de l'animation de victoire avant de passer à une AUTRE question
+        setTimeout(() => nextQuestion(false), 1200); 
+    } 
+    // SI ON A JUSTE MAIS QU'IL RESTE DES PALIERS (ex: passage de 1/3 à 2/3)
+    else if (val > 0) {
+        // On recharge la MÊME question (ce qui permet de passer en mode TEXTE si score >= 2)
+        setTimeout(() => loadActiveQuestion(), 1000);
+    }
+    // SI ON A FAUX : On ne fait rien ici, wrongAnswerFlow s'en occupe
+}
+
+function updateBars() {
+    const req = state.levels[state.currentLevel].requiredPerQuestion || 3;
+    state.localScores.forEach((score, i) => {
+        const bar = document.getElementById(`subBar${i}`);
+        if(bar) { 
+            const pct = (score / req) * 100;
+            bar.style.width = pct + "%"; 
+            if(score >= req) bar.parentElement.classList.add("completed"); 
+        }
+    });
+    document.getElementById("mainBar").style.width = (state.general / state.levels[state.currentLevel].questions.length * 100) + "%";
+}
+
+function renderLives() { document.getElementById("lives").innerHTML = "❤️❤️❤️❤️".substring(0, state.lives*2); }
+
+function wrongAnswerFlow(msg) {
+    state.lives--; 
+    renderLives();
+    
+    // On recule le score de la question actuelle (pénalité)
+    const req = state.levels[state.currentLevel].requiredPerQuestion || 3;
+    state.localScores[state.currentIndex] = Math.max(0, state.localScores[state.currentIndex] - 1);
+    updateBars();
+
+    if(state.lives <= 0) {
+        document.getElementById("overlay").style.display = "flex";
+    } else { 
+        if(msg) { 
+            document.getElementById("correctionText").textContent = msg; 
+            document.getElementById("correctionOverlay").style.display = "flex"; 
+        }
+        // IMPORTANT : On recharge la question actuelle pour que l'élève réessaie
+        // sans appeler nextQuestion() !
+        setTimeout(() => loadActiveQuestion(), 1500);
+    }
+}
+
+async function saveProgress(type, val, grade) {
+    if(state.currentPlayerId && state.currentPlayerId !== "prof") {
+        try {
+            await fetch("/api/save-progress", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ playerId: state.currentPlayerId, progressType: type, value: val, grade: grade }) });
+            if(type === "level") {
+                if(!state.currentPlayerData.validatedLevels) state.currentPlayerData.validatedLevels = [];
+                state.currentPlayerData.validatedLevels.push(val);
+                localStorage.setItem("player", JSON.stringify(state.currentPlayerData));
+            }
+        } catch(e) {}
+    }
+}
+
+document.getElementById("closeCorrectionBtn").onclick = () => { document.getElementById("correctionOverlay").style.display="none"; };
+document.getElementById("restartBtn").onclick = () => { document.getElementById("overlay").style.display="none"; setupLevel(state.currentLevel); };
+
+// FILE: public/js/prof.js
+import { state } from './state.js';
+import { uploadFile, saveHomework, getHomeworks, fetchPlayers } from './api.js';
+
+// ==========================================================
+// 1. GESTION DES COPIES ÉLÈVES
+// ==========================================================
+
+// Affiche la liste des élèves pour un devoir précis
+window.viewSubmissions = async function(hwId, hwClass) {
+    const players = state.allPlayersData.filter(p => p.classroom === hwClass || hwClass === "Toutes");
+    const res = await fetch(`/api/submissions/${hwId}`);
+    const submissions = await res.json();
+
+    const modal = document.createElement('div');
+    modal.className = "modal-overlay";
+    modal.style.display = "flex";
+    modal.innerHTML = `
+        <div class="modal-content" style="width:90%; max-width:800px; max-height:85vh; overflow-y:auto;">
+            <h3>Suivi des copies : ${hwClass}</h3>
+            <table style="width:100%; border-collapse:collapse; margin-top:15px;">
+                <thead style="background:#f1f5f9;">
+                    <tr>
+                        <th style="padding:10px; text-align:left;">Élève</th>
+                        <th style="padding:10px;">Statut</th>
+                        <th style="padding:10px;">Note</th>
+                        <th style="padding:10px;">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${players.map(p => {
+                        const sub = submissions.find(s => s.playerId && s.playerId._id === p._id);
+                        return `
+                            <tr>
+                                <td style="padding:10px; border-bottom:1px solid #eee;">${p.firstName} ${p.lastName}</td>
+                                <td style="padding:10px; border-bottom:1px solid #eee; text-align:center;">
+                                    ${sub ? '✅ Rendu' : '<span style="color:#94a3b8;">⏳ Non rendu</span>'}
+                                </td>
+                                <td style="padding:10px; border-bottom:1px solid #eee; text-align:center;">
+                                    ${sub ? (sub.levelsResults[0]?.grade || 'A valider') : '-'}
+                                </td>
+                                <td style="padding:10px; border-bottom:1px solid #eee; text-align:center;">
+                                    ${sub ? `<button onclick="openStudentCopy('${sub._id}')" style="background:#2563eb; color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;">Voir la copie</button>` : '-'}
+                                </td>
+                            </tr>
+                        `;
+                    }).join('')}
+                </tbody>
+            </table>
+            <div style="margin-top:20px; text-align:right;">
+                <button onclick="this.closest('.modal-overlay').remove()" style="padding:10px 20px; cursor:pointer;">Fermer</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+};
+
+// Ouvre le détail d'une copie pour correction manuelle
+window.openStudentCopy = async function(subId) {
+    const res = await fetch(`/api/submission-detail/${subId}`);
+    const sub = await res.json();
+
+    const modal = document.createElement('div');
+    modal.className = "modal-overlay";
+    modal.style.zIndex = "2100";
+    modal.style.display = "flex";
+    modal.innerHTML = `
+        <div class="modal-content" style="width:95%; max-width:1000px; max-height:90vh; overflow-y:auto; text-align:left;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h3>Correction : ${sub.playerId.firstName} ${sub.playerId.lastName}</h3>
+                <span style="background:#e0f2fe; color:#0369a1; padding:5px 12px; border-radius:20px; font-weight:bold;">${sub.homeworkId.title}</span>
+            </div>
+            <hr>
+            <div id="copy-container">
+                ${sub.levelsResults.map((result, i) => `
+                    <div class="lvl-result-box" style="margin-bottom:30px; padding:20px; background:#f8fafc; border-radius:12px; border:1px solid #e2e8f0;">
+                        <h4 style="margin-top:0; color:#2563eb; border-bottom:2px solid #2563eb; display:inline-block;">Question ${result.levelIndex + 1}</h4>
+                        <div style="display:flex; gap:25px; margin-top:15px;">
+                            <div style="flex:1;">
+                                <strong>Réponse de l'élève :</strong>
+                                <div style="background:white; padding:15px; border-radius:8px; border:1px solid #cbd5e1; margin-top:10px; min-height:100px; white-space: pre-wrap;">${result.userText || '<i style="color:gray;">Aucun texte saisi</i>'}</div>
+                                ${result.userImageUrl ? `
+                                    <div style="margin-top:15px;">
+                                        <strong>Photo jointe :</strong><br>
+                                        <img src="${result.userImageUrl}" style="max-width:100%; border:2px solid #ccc; border-radius:8px; margin-top:5px; cursor:zoom-in;" onclick="window.open(this.src)">
+                                    </div>` : ''}
+                            </div>
+                            <div style="flex:1; background:#fff; padding:15px; border-radius:8px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);">
+                                <strong>Correction du Professeur :</strong>
+                                <textarea class="teacher-fb" style="width:100%; height:150px; margin:10px 0; padding:10px; border-radius:6px; border:1px solid #2563eb; font-family:inherit;">${result.teacherFeedback || result.aiFeedback}</textarea>
+                                <strong>Note / Appréciation :</strong>
+                                <input class="teacher-grade" value="${result.grade}" style="width:100%; padding:10px; border:1px solid #2563eb; border-radius:6px; font-weight:bold; color:#16a34a;">
+                                <small style="display:block; margin-top:5px; color:#64748b;">L'élève verra ces modifications à sa prochaine connexion.</small>
+                            </div>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+            <div style="text-align:right; position:sticky; bottom:-20px; background:white; padding:20px; border-top:1px solid #eee; margin:0 -20px -20px -20px;">
+                <button id="btnSaveCorrection" style="background:#16a34a; color:white; border:none; padding:12px 30px; border-radius:8px; cursor:pointer; font-weight:bold; font-size:1.1em;">💾 Enregistrer la correction</button>
+                <button onclick="this.closest('.modal-overlay').remove()" style="padding:12px 20px; margin-left:15px; cursor:pointer; background:none; border:1px solid #ccc; border-radius:8px;">Annuler</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+
+    // Sauvegarde de la correction
+    modal.querySelector("#btnSaveCorrection").onclick = async () => {
+        const results = sub.levelsResults.map((r, i) => ({
+            ...r,
+            teacherFeedback: modal.querySelectorAll(".teacher-fb")[i].value,
+            grade: modal.querySelectorAll(".teacher-grade")[i].value
+        }));
+
+        const saveRes = await fetch('/api/update-correction', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ subId, levelsResults: results })
+        });
+
+        if ((await saveRes.json()).ok) {
+            alert("✅ La copie a été mise à jour !");
+            modal.remove();
+        }
+    };
+};
+
+// ==========================================================
+// 2. INITIALISATION DU DASHBOARD
+// ==========================================================
+
+export function initProfDashboard() {
+    const dashboard = document.getElementById("profDashboard");
+    if(dashboard) dashboard.style.display = "block";
+    
+    fetchAndRenderPlayers();
+
+    // Onglets
+    document.getElementById("tabStudents").onclick = () => { 
+        document.getElementById("contentStudents").style.display="block"; 
+        document.getElementById("contentHomeworks").style.display="none"; 
+        document.getElementById("tabStudents").classList.add("active");
+        document.getElementById("tabHomeworks").classList.remove("active");
+    };
+    document.getElementById("tabHomeworks").onclick = () => { 
+        document.getElementById("contentStudents").style.display="none"; 
+        document.getElementById("contentHomeworks").style.display="block"; 
+        document.getElementById("tabHomeworks").classList.add("active");
+        document.getElementById("tabStudents").classList.remove("active");
+        loadProfHomeworks(); 
+    };
+
+    // Actions
+    document.getElementById("addHomeworkBtn").onclick = () => {
+        state.tempHwLevels = [{ instruction: "", aiPrompt: "", attachmentUrls: [], questionImage: null }]; 
+        state.editingHomeworkId = null; 
+        document.getElementById("createHomeworkModal").style.display = "flex";
+        renderCreateHomeworkForm();
+    };
+
+    document.getElementById("classFilter").onchange = applyFiltersAndRender;
+    document.getElementById("studentSearch").oninput = applyFiltersAndRender;
+}
+
+// ==========================================================
+// 3. LOGIQUE DES DEVOIRS (CRUD)
+// ==========================================================
+
+async function loadProfHomeworks() {
+    const tbody = document.getElementById("profHomeworksBody");
+    tbody.innerHTML = "<tr><td colspan='5'>Chargement des devoirs...</td></tr>";
+    try {
+        const list = await getHomeworks();
+        state.homeworksList = list;
+        tbody.innerHTML = list.map((h, index) => `
+            <tr>
+                <td style="padding:12px;">${new Date(h.date).toLocaleDateString()}</td>
+                <td style="padding:12px; font-weight:bold;">${h.title}</td>
+                <td style="padding:12px;"><span style="background:#e0f2fe; color:#0369a1; padding:3px 10px; border-radius:12px; font-size:12px;">${h.classroom}</span></td>
+                <td style="padding:12px;">${h.levels.length} Q</td>
+                <td style="padding:12px;">
+                    <button onclick="window.viewSubmissions('${h._id}', '${h.classroom}')" style="background:#2563eb; color:white; border:none; padding:6px 10px; border-radius:4px; margin-right:5px; cursor:pointer;">👁️ Copies</button>
+                    <button onclick="window.openEditModalByIndex(${index})" style="background:#f59e0b; color:white; border:none; padding:6px 10px; border-radius:4px; margin-right:5px; cursor:pointer;">Modif</button>
+                    <button onclick="deleteHomework('${h._id}')" style="background:none; border:none; cursor:pointer; font-size:18px;">🗑️</button>
+                </td>
+            </tr>`).join('');
+    } catch(e) { tbody.innerHTML = "<tr><td colspan='5' style='color:red'>Erreur serveur.</td></tr>"; }
+}
+
+function renderCreateHomeworkForm(hw = null) {
+    const title = hw ? hw.title : "";
+    const currentClass = hw ? hw.classroom : "Toutes";
+    const modal = document.getElementById("createHomeworkModal");
+    const opt = (val) => `<option value="${val}" ${currentClass===val?"selected":""}>${val}</option>`;
+
+    modal.innerHTML = `
+    <div class="modal-content" style="width:95%; max-width:900px; padding:25px; background:white; border-radius:15px; max-height:90vh; overflow-y:auto;">
+        <h3>${hw ? "Modifier" : "Nouveau"} Devoir</h3>
+        <div style="margin-bottom:15px;"><label>Titre :</label><input id="hwTitle" value="${title}" style="width:100%; padding:10px; border:1px solid #ccc; border-radius:6px;"></div>
+        <div style="margin-bottom:15px;"><label>Classe :</label><select id="hwClass" style="width:100%; padding:10px; border:1px solid #ccc; border-radius:6px;">${opt("Toutes")}${opt("6D")}${opt("5B")}${opt("5C")}${opt("2A")}${opt("2CD")}</select></div>
+        <div id="levelsContainer"></div>
+        <button id="btnAddLvl" style="width:100%; padding:12px; margin-top:10px; background:#f1f5f9; color:#475569; border:1px dashed #cbd5e1; border-radius:8px; cursor:pointer; font-weight:bold;">+ Ajouter une question (Page)</button>
+        <div style="margin-top:25px; text-align:right; border-top:1px solid #eee; padding-top:20px;">
+            <button onclick="document.getElementById('createHomeworkModal').style.display='none'" style="padding:10px 20px; border:none; background:none; cursor:pointer; margin-right:15px;">Annuler</button>
+            <button id="btnSaveHw" style="background:#16a34a; color:white; padding:12px 30px; border:none; border-radius:8px; cursor:pointer; font-weight:bold;">🚀 Enregistrer le devoir</button>
+        </div>
+    </div>`;
+
+    renderLevelsInputs();
+    modal.querySelector("#btnAddLvl").onclick = () => { state.tempHwLevels.push({instruction:"", aiPrompt:"", attachmentUrls:[], questionImage:null}); renderLevelsInputs(); };
+    modal.querySelector("#btnSaveHw").onclick = saveForm;
+}
+
+window.renderLevelsInputs = function() {
+    const container = document.getElementById("levelsContainer");
+    if(!container) return;
+    container.innerHTML = "";
+    state.tempHwLevels.forEach((lvl, idx) => {
+        const div = document.createElement("div");
+        div.style.cssText = "border:1px solid #e2e8f0; padding:15px; margin-top:20px; background:#f8fafc; border-radius:10px; position:relative;";
+        div.innerHTML = `
+            <button onclick="removeLevel(${idx})" style="position:absolute; top:10px; right:10px; color:red; background:none; border:none; cursor:pointer;">Suppr</button>
+            <h4 style="margin-top:0;">Page ${idx+1}</h4>
+            <div style="margin-bottom:15px;">
+                <label>Texte de la Question :</label>
+                <textarea id="lvlInst-${idx}" style="width:100%; height:60px; padding:8px; border-radius:6px; border:1px solid #ccc;">${lvl.instruction || ''}</textarea>
+            </div>
+            <div>
+                <label>Image de Question (Facultatif) :</label>
+                <div style="display:flex; gap:10px; align-items:center;">
+                    <input type="file" onchange="uploadFileToZone(this, ${idx}, 'bottom')" style="font-size:12px;">
+                    ${lvl.questionImage ? `<span style="color:green;">✅ Image OK</span>` : ''}
+                </div>
+            </div>
+        `;
+        container.appendChild(div);
+    });
+};
+
+async function saveForm() {
+    const titleVal = document.getElementById("hwTitle").value;
+    const clsVal = document.getElementById("hwClass").value;
+    state.tempHwLevels.forEach((lvl, i) => { 
+        lvl.instruction = document.getElementById(`lvlInst-${i}`).value; 
+    });
+    const res = await saveHomework({ id: state.editingHomeworkId, title: titleVal, classroom: clsVal, levels: state.tempHwLevels }, !!state.editingHomeworkId);
+    if(res.ok) {
+        document.getElementById('createHomeworkModal').style.display='none';
+        loadProfHomeworks();
+    }
+}
+
+window.openEditModalByIndex = function(index) {
+    const hw = state.homeworksList[index];
+    state.editingHomeworkId = hw._id;
+    state.tempHwLevels = JSON.parse(JSON.stringify(hw.levels));
+    document.getElementById("createHomeworkModal").style.display = "flex";
+    renderCreateHomeworkForm(hw);
+};
+
+window.removeLevel = function(idx) { state.tempHwLevels.splice(idx, 1); renderLevelsInputs(); };
+
+window.uploadFileToZone = async function(inputEl, lvlIdx, zoneId) {
+    if (!inputEl.files[0]) return;
+    const res = await uploadFile(inputEl.files[0]);
+    if (res.ok) {
+        if (zoneId === 'top') state.tempHwLevels[lvlIdx].attachmentUrls.push(res.imageUrl);
+        else state.tempHwLevels[lvlIdx].questionImage = res.imageUrl;
+        renderLevelsInputs();
+    }
+};
+
+window.deleteHomework = async (id) => { if(confirm("Supprimer ce devoir ?")) { await fetch(`/api/homework/${id}`, { method: 'DELETE' }); loadProfHomeworks(); } };
+
+// ==========================================================
+// 4. GESTION DES ÉLÈVES
+// ==========================================================
+
+async function fetchAndRenderPlayers() { 
+    state.allPlayersData = await fetchPlayers(); 
+    applyFiltersAndRender(); 
+}
+
+function applyFiltersAndRender() { 
+    const f = document.getElementById("classFilter").value; 
+    const s = document.getElementById("studentSearch").value.toLowerCase();
+    const l = state.allPlayersData.filter(p => (f==="all"||p.classroom===f) && (p.firstName.toLowerCase().includes(s) || p.lastName.toLowerCase().includes(s)));
+    document.getElementById("playersBody").innerHTML = l.map(p => `
+        <tr>
+            <td style="padding:10px;">${p.firstName} ${p.lastName}</td>
+            <td style="padding:10px;">${p.classroom}</td>
+            <td style="padding:10px; color:#64748b;">-</td>
+            <td style="padding:10px;">
+                <button onclick="resetPlayer('${p._id}')" style="background:none; border:none; color:#ef4444; cursor:pointer;">Réinitialiser</button>
+            </td>
+        </tr>`).join(''); 
+}
+
+window.resetPlayer = async (id) => { 
+    if(confirm("⚠️ Réinitialiser cet élève ? (Efface ses notes et progrès)")) { 
+        await fetch("/api/reset-player", {
+            method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({playerId:id})
+        }); 
+        fetchAndRenderPlayers(); 
+    } 
+};
+
+// FILE: public/js/games/ZombieGame.js
+import { state } from '../state.js';
+import { verifyWithAI } from '../api.js';
+
+export class ZombieGame {
+    constructor(container, controller) {
+        console.log("🧟 [ZOMBIE] Constructeur...");
+        this.c = container;
+        this.ctrl = controller;
+
+        // Elements
+        this.arena = container.querySelector("#zombie-arena");
+        this.zombie = container.querySelector("#z-zombie");
+        this.projectile = container.querySelector("#z-projectile");
+        this.qEl = container.querySelector("#z-question");
+        this.feedback = container.querySelector("#feedback-bubble");
+        
+        // Inputs
+        this.aiZone = container.querySelector("#ai-input-zone");
+        this.input = container.querySelector("#z-answer");
+        this.btnSubmit = container.querySelector("#z-submit");
+
+        // QCM
+        this.qcmZone = container.querySelector("#options-grid");
+        this.optBtns = container.querySelectorAll(".option-btn");
+
+        this.zPos = 20; 
+        this.interval = null; 
+        this.projInterval = null; 
+        this.isPaused = false;
+
+        // Listeners
+        if(this.btnSubmit) this.btnSubmit.onclick = () => this.checkAI();
+        if(this.input) this.input.onkeydown = (e) => { if(e.key==="Enter") this.checkAI(); };
+        
+        // Listeners QCM
+        this.optBtns.forEach((btn, idx) => {
+            btn.onclick = (e) => {
+                // Petit effet visuel au clic
+                e.target.style.transform = "scale(0.95)";
+                setTimeout(() => e.target.style.transform = "scale(1)", 100);
+                this.checkQCM(idx);
+            };
+        });
+    }
+
+    loadQuestion(q) {
+        console.log("🧟 [ZOMBIE] Question reçue:", q);
+        this.currentQ = q;
+        
+        if(this.qEl) this.qEl.textContent = q.q;
+        if(this.feedback) { this.feedback.style.display = "none"; this.feedback.innerHTML = ""; }
+        
+        // Reset Jeu
+        this.stop(); 
+        this.zPos = 20; 
+        if(this.zombie) { this.zombie.style.right = "20px"; this.zombie.style.display = "block"; }
+        if(this.projectile) this.projectile.style.display = "none";
+        this.isPaused = false;
+
+        // --- AFFICHAGE : LE MOMENT DE VÉRITÉ ---
+        const hasOptions = (q.options && Array.isArray(q.options) && q.options.length > 0);
+
+        if (hasOptions) {
+            console.log("👉 MODE QCM ACTIVÉ (" + q.options.length + " options)");
+            
+            // 1. On cache l'input texte
+            if(this.aiZone) this.aiZone.style.display = 'none';
+            
+            // 2. On affiche la grille de boutons
+            if(this.qcmZone) this.qcmZone.style.display = 'grid';
+
+            // 3. On remplit les boutons
+            this.optBtns.forEach((btn, i) => {
+                // Reset style
+                btn.style.background = "white";
+                btn.style.color = "#1e293b";
+                btn.style.borderColor = "#e2e8f0";
+                
+                if (q.options[i]) {
+                    btn.textContent = q.options[i];
+                    btn.style.display = "block"; // On s'assure qu'il est visible
+                } else {
+                    btn.style.display = "none"; // On cache s'il n'y a pas d'option
+                }
+            });
+
+        } else {
+            console.log("👉 MODE TEXTE (IA) ACTIVÉ");
+            
+            // 1. On cache les boutons
+            if(this.qcmZone) this.qcmZone.style.display = 'none';
+            
+            // 2. On affiche l'input
+            if(this.aiZone) this.aiZone.style.display = 'flex';
+            
+            if(this.input) {
+                this.input.value = "";
+                this.input.disabled = false;
+                setTimeout(() => this.input.focus(), 100);
+            }
+            if(this.btnSubmit) this.btnSubmit.disabled = false;
+        }
+        
+        this.start();
+    }
+
+    start() {
+        if(this.interval) clearInterval(this.interval);
+        this.interval = setInterval(() => {
+            if(state.isGlobalPaused || this.ctrl.getState().isLocked || this.isPaused) return;
+            
+            this.zPos += 1.0; 
+            if(this.zombie) this.zombie.style.right = this.zPos + "px";
+            
+            if(this.arena && this.zPos > (this.arena.offsetWidth - 80)) {
+                this.handleZombieBite();
+            }
+        }, 50);
+    }
+
+    stop() { if(this.interval) clearInterval(this.interval); }
+
+    handleZombieBite() {
+        this.stop();
+        this.ctrl.notifyWrongAnswer("Le zombie t'a mordu !");
+        this.zPos = 20;
+        if(this.zombie) this.zombie.style.right = "20px";
+        setTimeout(() => this.start(), 1000);
+    }
+
+ shootProjectile() {
+        if(this.feedback) this.feedback.style.display = "none";
+        // Sécurité si l'élément projectile a disparu du DOM
+        if(!this.projectile) { this.handleZombieHit(); return; }
+        
+        let projX = 60; 
+        this.projectile.style.left = projX + "px";
+        this.projectile.style.bottom = "45px"; 
+        this.projectile.style.display = "block";
+
+        if(this.projInterval) clearInterval(this.projInterval);
+        this.projInterval = setInterval(() => {
+            projX += 15; 
+            this.projectile.style.left = projX + "px";
+            
+            // Calcul de la position du zombie depuis la gauche
+            const arenaWidth = this.arena.offsetWidth;
+            const zombieLeftX = arenaWidth - this.zPos - 60;
+
+            if (projX >= zombieLeftX) {
+                clearInterval(this.projInterval);
+                this.projectile.style.display = "none";
+                this.handleZombieHit(); // C'est ici que notifyCorrectAnswer est appelé
+            }
+            
+            if (projX > arenaWidth) {
+                clearInterval(this.projInterval);
+                this.projectile.style.display = "none";
+            }
+        }, 20);
+    }
+
+    handleZombieHit() {
+        if(this.zombie) this.zombie.style.display = "none"; 
+        this.stop(); 
+        this.ctrl.notifyCorrectAnswer(); 
+    }
+
+    // --- CHECK QCM ---
+    checkQCM(idx) {
+        if (this.isPaused) return;
+        
+        console.log("Clic bouton index:", idx);
+        
+        const selected = this.currentQ.options[idx];
+        const correct = this.currentQ.a;
+        
+        // Vérification robuste
+        let isCorrect = false;
+        if (typeof correct === 'number') isCorrect = (idx === correct);
+        else isCorrect = (selected === correct);
+
+        const btn = this.optBtns[idx];
+
+        if (isCorrect) {
+            btn.style.background = "#dcfce7";
+            btn.style.borderColor = "#22c55e";
+            btn.style.color = "#15803d";
+            this.isPaused = true; 
+            this.shootProjectile();
+        } else {
+            btn.style.background = "#fee2e2";
+            btn.style.borderColor = "#ef4444";
+            btn.style.color = "#991b1b";
+            
+            // Reset visuel après 0.5s
+            setTimeout(() => {
+                btn.style.background = "white";
+                btn.style.borderColor = "#e2e8f0";
+                btn.style.color = "#1e293b";
+            }, 500);
+            
+            this.ctrl.notifyWrongAnswer(); 
+        }
+    }
+
+    // --- CHECK IA ---
+    async checkAI() {
+        const val = this.input.value.trim(); if(!val) return;
+        this.isPaused = true; 
+        this.input.disabled = true; this.btnSubmit.disabled = true;
+        this.showFeedback("🧠 L'IA réfléchit...", "hint");
+
+        try {
+            const res = await verifyWithAI({
+                question: this.currentQ.q, userAnswer: val, expectedAnswer: this.currentQ.a, playerId: state.currentPlayerId
+            });
+
+            let spellingHtml = "";
+            if(res.corrections && res.corrections.length > 0) {
+                spellingHtml = "<br><strong>Fautes :</strong><ul class='spelling-list'>";
+                res.corrections.forEach(c => spellingHtml += `<li><s>${c.wrong}</s> → <b>${c.correct}</b></li>`);
+                spellingHtml += "</ul>";
+            }
+
+            const btnHtml = `<div style="margin-top:10px;"><button id="btn-read-ok" style="background:#2563eb; color:white; border:none; padding:8px 16px; border-radius:4px; font-weight:bold; cursor:pointer;">OK</button></div>`;
+
+            if(res.status === "correct") {
+                const msg = spellingHtml ? "<strong>Juste !</strong> Mais..." : "<strong>Excellent !</strong>";
+                this.showModalAndListen(msg + spellingHtml, "success", btnHtml, () => {
+                    this.feedback.style.display = "none";
+                    this.shootProjectile();
+                });
+            } else {
+                this.showModalAndListen(`<strong>Non...</strong> ${res.feedback || ""}` + spellingHtml, "error", btnHtml, () => {
+                    this.feedback.style.display = "none";
+                    this.ctrl.notifyWrongAnswer(); 
+                    this.isPaused = false;
+                    this.input.disabled = false;
+                    this.btnSubmit.disabled = false;
+                    this.input.focus();
+                });
+            }
+        } catch(e) { 
+            this.showFeedback("Erreur.", "error"); 
+            this.isPaused = false; this.input.disabled = false; this.btnSubmit.disabled = false;
+        }
+    }
+
+    showModalAndListen(htmlContent, type, btnHtml, callback) {
+        if(!this.feedback) return;
+        this.feedback.innerHTML = htmlContent + btnHtml;
+        this.feedback.className = ""; this.feedback.classList.add(`fb-${type}`);
+        this.feedback.style.display = "block";
+        this.feedback.style.zIndex = "100";
+        this.feedback.style.pointerEvents = "auto";
+        setTimeout(() => {
+            const btn = this.c.querySelector("#btn-read-ok");
+            if(btn) btn.onclick = (e) => { e.stopPropagation(); callback(); };
+        }, 50);
+    }
+    
+    showFeedback(html, type) {
+        if(!this.feedback) return;
+        this.feedback.innerHTML = html;
+        this.feedback.className = ""; this.feedback.classList.add(`fb-${type}`);
+        this.feedback.style.display = "block";
+    }
+}
+
+// FILE: public/js/games/HomeworkGame.js
+import { state } from '../state.js';
+
+export class HomeworkGame {
+    constructor(container, controller) {
+        this.c = container; 
+        this.controller = controller;
+
+        console.log("📚 HomeworkGame V-Saves Loaded");
+
+        // --- UI LISEUSE (HAUT) ---
+        this.listView = this.c.querySelector("#hw-list"); 
+        this.workView = this.c.querySelector("#hw-workspace");
+        this.viewerContainer = this.c.querySelector("#doc-viewer"); 
+        this.panZoomContent = this.c.querySelector("#pan-zoom-content");
+        this.imgEl = this.c.querySelector("#current-doc-img");
+        this.pdfEl = this.c.querySelector("#current-doc-pdf");
+        this.noDocMsg = this.c.querySelector("#no-doc-msg");
+        this.counterEl = this.c.querySelector("#page-counter");
+        
+        // --- UI QUESTION (BAS GAUCHE) ---
+        this.qIndexEl = this.c.querySelector("#q-index");
+        this.qTextEl = this.c.querySelector("#q-text");
+        this.qImgZone = this.c.querySelector("#q-image-container"); 
+        this.qPanZoomContent = this.c.querySelector("#pan-zoom-question-content"); 
+        this.btnZoomInQ = this.c.querySelector("#btn-zoom-in-q");
+        this.btnZoomOutQ = this.c.querySelector("#btn-zoom-out-q");
+
+        // --- FORM & MODALE (BAS DROITE) ---
+        this.input = this.c.querySelector("#hw-text");
+        this.fileInput = this.c.querySelector("#hw-file");
+        this.fileName = this.c.querySelector("#file-name");
+        this.btnSubmit = this.c.querySelector("#hw-submit");
+        this.btnQuit = this.c.querySelector("#btn-close-work");
+        
+        this.aiModal = document.getElementById("ai-feedback-modal");
+        this.aiContent = document.getElementById("ai-content");
+        this.btnModify = document.getElementById("btn-modify");
+        this.btnNextQ = document.getElementById("btn-next");
+        this.overlay = document.getElementById("ai-overlay");
+
+        // --- ETATS ---
+        this.currentHw = null; 
+        this.currentLevelIndex = 0;
+        this.docs = []; 
+        this.docIndex = 0;
+        
+        this.view = { x: 0, y: 0, scale: 1.3 }; 
+        this.viewQ = { x: 0, y: 0, scale: 1.0 }; 
+
+        this.initEvents();
+        this.setupPanZoom(this.viewerContainer, 'doc');
+        this.setupPanZoom(this.qImgZone, 'q');
+        this.loadHomeworks();
+    }
+
+    initEvents() {
+        if(this.btnQuit) this.btnQuit.onclick = () => this.showList();
+        if(this.btnSubmit) this.btnSubmit.onclick = (e) => { e.preventDefault(); this.submit(); };
+        
+        // Navigation liseuse
+        this.c.querySelector("#btn-prev-doc").onclick = () => this.changeDoc(-1);
+        this.c.querySelector("#btn-next-doc").onclick = () => this.changeDoc(1);
+        this.c.querySelector("#btn-zoom-in").onclick = () => this.zoom(0.2, 'doc');
+        this.c.querySelector("#btn-zoom-out").onclick = () => this.zoom(-0.2, 'doc');
+        
+        // Zoom question
+        if(this.btnZoomInQ) this.btnZoomInQ.onclick = () => this.zoom(0.2, 'q');
+        if(this.btnZoomOutQ) this.btnZoomOutQ.onclick = () => this.zoom(-0.2, 'q');
+
+        if(this.btnModify) this.btnModify.onclick = () => this.closeModal();
+        if(this.btnNextQ) this.btnNextQ.onclick = () => { this.closeModal(); this.nextQuestion(); };
+        
+        if(this.fileInput) {
+            this.fileInput.onchange = () => { 
+                if(this.fileInput.files.length) this.fileName.textContent = "📸 Photo OK"; 
+            };
+        }
+    }
+
+    setupPanZoom(container, type) {
+        if(!container) return;
+        let isDown = false, startX, startY;
+
+        container.addEventListener('mousedown', (e) => {
+            if(e.target.tagName === 'BUTTON') return;
+            isDown = true;
+            container.style.cursor = 'grabbing';
+            const v = (type === 'doc') ? this.view : this.viewQ;
+            startX = e.clientX - v.x;
+            startY = e.clientY - v.y;
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!isDown) return;
+            const v = (type === 'doc') ? this.view : this.viewQ;
+            v.x = e.clientX - startX;
+            v.y = e.clientY - startY;
+            this.updateTransform(type);
+        });
+
+        window.addEventListener('mouseup', () => {
+            isDown = false;
+            container.style.cursor = 'grab';
+        });
+    }
+
+    zoom(delta, type) {
+        const v = (type === 'doc') ? this.view : this.viewQ;
+        v.scale = Math.min(Math.max(0.1, v.scale + delta), 5);
+        this.updateTransform(type);
+    }
+
+    updateTransform(type) {
+        const v = (type === 'doc') ? this.view : this.viewQ;
+        const target = (type === 'doc') ? this.panZoomContent : this.qPanZoomContent;
+        if(target) {
+            target.style.transform = `translate(-50%, -50%) translate(${v.x}px, ${v.y}px) scale(${v.scale})`;
+        }
+    }
+
+    resetView(type) {
+        if(type === 'doc') this.view = { x: 0, y: 0, scale: 1.3 };
+        else this.viewQ = { x: 0, y: 0, scale: 1.0 };
+        this.updateTransform(type);
+    }
+
+    async loadHomeworks() {
+        if(this.listView) this.listView.innerHTML = "<p>Chargement...</p>";
+        try {
+            const res = await fetch(`/api/homework/${state.currentPlayerData.classroom}`);
+            const list = await res.json();
+            if(this.listView) {
+                this.listView.innerHTML = ""; 
+                if (list.length === 0) { this.listView.innerHTML = "<p>Rien à faire.</p>"; return; }
+                list.forEach((hw) => {
+                    const div = document.createElement("div"); div.className = "hw-list-item";
+                    div.innerHTML = `<b>${hw.title}</b><br><small>${new Date(hw.date).toLocaleDateString()}</small>`;
+                    div.onclick = () => this.startHomework(hw);
+                    this.listView.appendChild(div);
+                });
+            }
+        } catch(e) { console.error(e); }
+    }
+
+    startHomework(hw) {
+        this.currentHw = hw;
+        this.currentLevelIndex = 0;
+        if(this.listView) this.listView.style.display = "none";
+        if(this.workView) this.workView.style.display = "flex";
+        this.loadLevel();
+    }
+
+    loadLevel() {
+        const levels = this.currentHw.levels || [];
+        const currentLevel = levels[this.currentLevelIndex];
+        
+        if(this.qIndexEl) this.qIndexEl.textContent = `${this.currentLevelIndex + 1}/${levels.length}`;
+        
+        // 1. Texte Consigne
+        if(this.qTextEl) {
+            if (currentLevel.instruction && currentLevel.instruction.trim() !== "") {
+                this.qTextEl.innerHTML = currentLevel.instruction.replace(/\n/g, '<br>');
+                this.qTextEl.style.display = "block";
+            } else {
+                this.qTextEl.style.display = "none";
+            }
+        }
+        
+        // 2. Image Question (Calée en haut)
+        if(this.qImgZone && this.qPanZoomContent) {
+            this.qPanZoomContent.innerHTML = "";
+            if (currentLevel.questionImage) {
+                this.qImgZone.style.display = "block";
+                const img = document.createElement('img');
+                img.src = currentLevel.questionImage;
+                img.style.display = "block";
+                img.style.webkitUserDrag = "none";
+
+                img.onload = () => {
+                    const scale = this.qImgZone.offsetWidth / img.naturalWidth;
+                    this.viewQ.scale = scale;
+                    // Formule pour caler en HAUT (compense le translate -50% du CSS)
+                    this.viewQ.y = (img.naturalHeight * scale - this.qImgZone.offsetHeight) / 2;
+                    this.viewQ.x = 0;
+                    this.updateTransform('q');
+                };
+                this.qPanZoomContent.appendChild(img);
+            } else {
+                this.qImgZone.style.display = "none";
+            }
+        }
+
+        // 3. Documents Liseuse
+        this.docs = (currentLevel.attachmentUrls || []).filter(u => u !== "BREAK");
+        this.docIndex = 0;
+        this.renderCurrentDoc();
+
+        // Reset inputs
+        if(this.input) this.input.value = "";
+        if(this.fileInput) this.fileInput.value = "";
+        if(this.fileName) this.fileName.textContent = "";
+        if(this.btnSubmit) this.btnSubmit.disabled = false;
+    }
+
+    renderCurrentDoc() {
+        this.resetView('doc'); 
+        if (this.docs.length === 0) {
+            if(this.imgEl) this.imgEl.style.display = "none";
+            if(this.pdfEl) this.pdfEl.style.display = "none";
+            if(this.noDocMsg) this.noDocMsg.style.display = "block";
+            return;
+        }
+        if(this.noDocMsg) this.noDocMsg.style.display = "none";
+        const url = this.docs[this.docIndex];
+        const isPdf = url.toLowerCase().endsWith('.pdf');
+        if (isPdf) {
+            if(this.imgEl) this.imgEl.style.display = "none";
+            if(this.pdfEl) { this.pdfEl.style.display = "block"; this.pdfEl.src = url; }
+        } else {
+            if(this.pdfEl) this.pdfEl.style.display = "none";
+            if(this.imgEl) { this.imgEl.style.display = "block"; this.imgEl.src = url; }
+        }
+        if(this.counterEl) this.counterEl.textContent = `${this.docIndex + 1} / ${this.docs.length}`;
+    }
+
+    changeDoc(dir) {
+        this.docIndex += dir;
+        this.renderCurrentDoc();
+    }
+
+    async submit() {
+        const txt = this.input ? this.input.value : "";
+        const file = (this.fileInput && this.fileInput.files) ? this.fileInput.files[0] : null;
+        if(!txt && !file) return alert("Réponse vide !");
+        
+        if(this.btnSubmit) this.btnSubmit.disabled = true;
+        if(this.aiModal) {
+            this.aiModal.style.display = "flex";
+            if(this.overlay) this.overlay.style.display = "block";
+            if(this.aiContent) this.aiContent.innerHTML = "<p style='text-align:center;'>🧠 L'IA analyse ton travail et sauvegarde ta copie...</p>";
+        }
+
+        try {
+            let imgUrl = null;
+            if(file) {
+                const fd = new FormData(); fd.append('file', file);
+                const r = await fetch('/api/upload', {method:'POST', body:fd});
+                const d = await r.json();
+                if(d.ok) imgUrl = d.imageUrl;
+            }
+            
+            const lvl = this.currentHw.levels[this.currentLevelIndex];
+            const res = await fetch('/api/analyze-homework', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    imageUrl: imgUrl, 
+                    userText: txt, 
+                    homeworkInstruction: lvl.instruction,
+                    homeworkContext: lvl.aiPrompt,
+                    questionImage: lvl.questionImage,
+                    teacherDocUrls: this.docs,
+                    classroom: state.currentPlayerData.classroom, 
+                    playerId: state.currentPlayerId,
+                    homeworkId: this.currentHw._id, // IMPORTANT pour la sauvegarde
+                    levelIndex: this.currentLevelIndex // IMPORTANT pour la sauvegarde
+                })
+            });
+            const data = await res.json();
+            if (this.aiContent) this.aiContent.innerHTML = data.feedback;
+            if (this.btnModify) this.btnModify.style.display = "inline-block";
+            if (this.btnNextQ) {
+                this.btnNextQ.style.display = "inline-block";
+                const isLast = (this.currentLevelIndex >= this.currentHw.levels.length - 1);
+                this.btnNextQ.textContent = isLast ? "Terminer 🎉" : "Suivant ➔";
+            }
+        } catch(e) {
+            console.error(e);
+            if(this.aiContent) this.aiContent.innerHTML = "Erreur technique.";
+        }
+        if(this.btnSubmit) this.btnSubmit.disabled = false;
+    }
+
+    closeModal() {
+        if(this.aiModal) this.aiModal.style.display = "none";
+        if(this.overlay) this.overlay.style.display = "none";
+    }
+
+    nextQuestion() {
+        if (this.currentLevelIndex < this.currentHw.levels.length - 1) {
+            this.currentLevelIndex++;
+            this.loadLevel();
+        } else {
+            alert("Devoir terminé ! Ta copie a été transmise.");
+            this.showList();
+        }
+    }
+    
+    showList() { 
+        if(this.workView) this.workView.style.display = "none"; 
+        if(this.listView) this.listView.style.display = "block"; 
+    }
+}
