@@ -5,7 +5,6 @@ import { uploadFile, saveHomework, getHomeworks, fetchPlayers } from './api.js';
 // 1. GESTION DES COPIES ÉLÈVES
 // ==========================================================
 
-// Affiche la liste des élèves pour un devoir précis
 window.viewSubmissions = async function(hwId, hwClass) {
     const players = state.allPlayersData.filter(p => p.classroom === hwClass || hwClass === "Toutes");
     const res = await fetch(`/api/submissions/${hwId}`);
@@ -54,7 +53,6 @@ window.viewSubmissions = async function(hwId, hwClass) {
     document.body.appendChild(modal);
 };
 
-// Ouvre le détail d'une copie pour correction manuelle
 window.openStudentCopy = async function(subId) {
     const res = await fetch(`/api/submission-detail/${subId}`);
     const sub = await res.json();
@@ -103,7 +101,6 @@ window.openStudentCopy = async function(subId) {
     `;
     document.body.appendChild(modal);
 
-    // Sauvegarde de la correction
     modal.querySelector("#btnSaveCorrection").onclick = async () => {
         const results = sub.levelsResults.map((r, i) => ({
             ...r,
@@ -134,7 +131,6 @@ export function initProfDashboard() {
     
     fetchAndRenderPlayers();
 
-    // Onglets
     document.getElementById("tabStudents").onclick = () => { 
         document.getElementById("contentStudents").style.display="block"; 
         document.getElementById("contentHomeworks").style.display="none"; 
@@ -149,7 +145,6 @@ export function initProfDashboard() {
         loadProfHomeworks(); 
     };
 
-    // Actions
     document.getElementById("addHomeworkBtn").onclick = () => {
         state.tempHwLevels = [{ instruction: "", aiPrompt: "", attachmentUrls: [], questionImage: null }]; 
         state.editingHomeworkId = null; 
@@ -159,6 +154,34 @@ export function initProfDashboard() {
 
     document.getElementById("classFilter").onchange = applyFiltersAndRender;
     document.getElementById("studentSearch").oninput = applyFiltersAndRender;
+
+    // --- LOGIQUE BOUTON TEST CLASSE (AVEC FIX MONGODB) ---
+    const btnTest = document.getElementById("testClassBtn");
+    if(btnTest) {
+        btnTest.onclick = async () => {
+            const currentFilter = document.getElementById("classFilter").value;
+            if (currentFilter === "all" || currentFilter === "") {
+                alert("⚠️ Veuillez sélectionner une classe précise dans la liste déroulante (ex: 6eD) pour la tester.");
+                return;
+            }
+            if (confirm(`Voulez-vous voir la plateforme comme un élève de ${currentFilter} ?`)) {
+                try {
+                    const res = await fetch('/api/register', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ firstName: "Eleve", lastName: "Test", classroom: currentFilter })
+                    });
+                    const data = await res.json();
+                    if (data.ok) {
+                        localStorage.setItem("player", JSON.stringify(data));
+                        window.location.reload(); 
+                    } else {
+                        alert("Erreur serveur lors de la création du compte test.");
+                    }
+                } catch(e) { alert("Erreur de connexion."); }
+            }
+        };
+    }
 }
 
 // ==========================================================
@@ -210,6 +233,7 @@ function renderCreateHomeworkForm(hw = null) {
     modal.querySelector("#btnSaveHw").onclick = saveForm;
 }
 
+// --- FONCTION CORRIGÉE AVEC UPLOAD DOCUMENTS ---
 window.renderLevelsInputs = function() {
     const container = document.getElementById("levelsContainer");
     if(!container) return;
@@ -220,10 +244,22 @@ window.renderLevelsInputs = function() {
         div.innerHTML = `
             <button onclick="removeLevel(${idx})" style="position:absolute; top:10px; right:10px; color:red; background:none; border:none; cursor:pointer;">Suppr</button>
             <h4 style="margin-top:0;">Page ${idx+1}</h4>
+            
             <div style="margin-bottom:15px;">
                 <label>Texte de la Question :</label>
                 <textarea id="lvlInst-${idx}" style="width:100%; height:60px; padding:8px; border-radius:6px; border:1px solid #ccc;">${lvl.instruction || ''}</textarea>
             </div>
+            
+            <div style="margin-bottom:15px;">
+                <label>Documents (PDF/Images) :</label>
+                <div style="display:flex; gap:10px; align-items:center;">
+                    <input type="file" onchange="uploadFileToZone(this, ${idx}, 'top')" style="font-size:12px;">
+                    <span style="font-size:0.9em; color:#64748b;">
+                        ${lvl.attachmentUrls && lvl.attachmentUrls.length > 0 ? `✅ ${lvl.attachmentUrls.length} fichier(s)` : 'Aucun document'}
+                    </span>
+                </div>
+            </div>
+
             <div>
                 <label>Image de Question (Facultatif) :</label>
                 <div style="display:flex; gap:10px; align-items:center;">
@@ -263,6 +299,7 @@ window.uploadFileToZone = async function(inputEl, lvlIdx, zoneId) {
     if (!inputEl.files[0]) return;
     const res = await uploadFile(inputEl.files[0]);
     if (res.ok) {
+        // zoneId 'top' = Documents | zoneId 'bottom' = Image Question
         if (zoneId === 'top') state.tempHwLevels[lvlIdx].attachmentUrls.push(res.imageUrl);
         else state.tempHwLevels[lvlIdx].questionImage = res.imageUrl;
         renderLevelsInputs();
@@ -270,10 +307,6 @@ window.uploadFileToZone = async function(inputEl, lvlIdx, zoneId) {
 };
 
 window.deleteHomework = async (id) => { if(confirm("Supprimer ce devoir ?")) { await fetch(`/api/homework/${id}`, { method: 'DELETE' }); loadProfHomeworks(); } };
-
-// ==========================================================
-// 4. GESTION DES ÉLÈVES
-// ==========================================================
 
 async function fetchAndRenderPlayers() { 
     state.allPlayersData = await fetchPlayers(); 
