@@ -1,13 +1,13 @@
-import { state } from '../state.js';
+// PLUS D'IMPORTS ! On utilise window.state et window.api
 
 export class HomeworkGame {
     constructor(container, controller) {
         this.c = container; 
         this.controller = controller;
 
-        console.log("📚 HomeworkGame V-Saves Loaded");
+        console.log("📚 HomeworkGame Loaded (Global Mode)");
 
-        // --- UI LISEUSE (HAUT) ---
+        // --- UI ---
         this.listView = this.c.querySelector("#hw-list"); 
         this.workView = this.c.querySelector("#hw-workspace");
         this.viewerContainer = this.c.querySelector("#doc-viewer"); 
@@ -17,7 +17,6 @@ export class HomeworkGame {
         this.noDocMsg = this.c.querySelector("#no-doc-msg");
         this.counterEl = this.c.querySelector("#page-counter");
         
-        // --- UI QUESTION (BAS GAUCHE) ---
         this.qIndexEl = this.c.querySelector("#q-index");
         this.qTextEl = this.c.querySelector("#q-text");
         this.qImgZone = this.c.querySelector("#q-image-container"); 
@@ -25,7 +24,6 @@ export class HomeworkGame {
         this.btnZoomInQ = this.c.querySelector("#btn-zoom-in-q");
         this.btnZoomOutQ = this.c.querySelector("#btn-zoom-out-q");
 
-        // --- FORM & MODALE (BAS DROITE) ---
         this.input = this.c.querySelector("#hw-text");
         this.fileInput = this.c.querySelector("#hw-file");
         this.fileName = this.c.querySelector("#file-name");
@@ -38,7 +36,6 @@ export class HomeworkGame {
         this.btnNextQ = document.getElementById("btn-next");
         this.overlay = document.getElementById("ai-overlay");
 
-        // --- ETATS ---
         this.currentHw = null; 
         this.currentLevelIndex = 0;
         this.docs = []; 
@@ -57,13 +54,11 @@ export class HomeworkGame {
         if(this.btnQuit) this.btnQuit.onclick = () => this.showList();
         if(this.btnSubmit) this.btnSubmit.onclick = (e) => { e.preventDefault(); this.submit(); };
         
-        // Navigation liseuse
         this.c.querySelector("#btn-prev-doc").onclick = () => this.changeDoc(-1);
         this.c.querySelector("#btn-next-doc").onclick = () => this.changeDoc(1);
         this.c.querySelector("#btn-zoom-in").onclick = () => this.zoom(0.2, 'doc');
         this.c.querySelector("#btn-zoom-out").onclick = () => this.zoom(-0.2, 'doc');
         
-        // Zoom question
         if(this.btnZoomInQ) this.btnZoomInQ.onclick = () => this.zoom(0.2, 'q');
         if(this.btnZoomOutQ) this.btnZoomOutQ.onclick = () => this.zoom(-0.2, 'q');
 
@@ -127,8 +122,8 @@ export class HomeworkGame {
     async loadHomeworks() {
         if(this.listView) this.listView.innerHTML = "<p>Chargement...</p>";
         try {
-            const res = await fetch(`/api/homework/${state.currentPlayerData.classroom}`);
-            const list = await res.json();
+            // CORRECTION : Utilisation de window.api et window.state
+            const list = await window.api.getHomeworks(window.state.currentPlayerData.classroom);
             if(this.listView) {
                 this.listView.innerHTML = ""; 
                 if (list.length === 0) { this.listView.innerHTML = "<p>Rien à faire.</p>"; return; }
@@ -156,7 +151,6 @@ export class HomeworkGame {
         
         if(this.qIndexEl) this.qIndexEl.textContent = `${this.currentLevelIndex + 1}/${levels.length}`;
         
-        // 1. Texte Consigne
         if(this.qTextEl) {
             if (currentLevel.instruction && currentLevel.instruction.trim() !== "") {
                 this.qTextEl.innerHTML = currentLevel.instruction.replace(/\n/g, '<br>');
@@ -166,7 +160,6 @@ export class HomeworkGame {
             }
         }
         
-        // 2. Image Question (Calée en haut)
         if(this.qImgZone && this.qPanZoomContent) {
             this.qPanZoomContent.innerHTML = "";
             if (currentLevel.questionImage) {
@@ -179,7 +172,6 @@ export class HomeworkGame {
                 img.onload = () => {
                     const scale = this.qImgZone.offsetWidth / img.naturalWidth;
                     this.viewQ.scale = scale;
-                    // Formule pour caler en HAUT (compense le translate -50% du CSS)
                     this.viewQ.y = (img.naturalHeight * scale - this.qImgZone.offsetHeight) / 2;
                     this.viewQ.x = 0;
                     this.updateTransform('q');
@@ -190,12 +182,10 @@ export class HomeworkGame {
             }
         }
 
-        // 3. Documents Liseuse
         this.docs = (currentLevel.attachmentUrls || []).filter(u => u !== "BREAK");
         this.docIndex = 0;
         this.renderCurrentDoc();
 
-        // Reset inputs
         if(this.input) this.input.value = "";
         if(this.fileInput) this.fileInput.value = "";
         if(this.fileName) this.fileName.textContent = "";
@@ -244,29 +234,25 @@ export class HomeworkGame {
             let imgUrl = null;
             if(file) {
                 const fd = new FormData(); fd.append('file', file);
-                const r = await fetch('/api/upload', {method:'POST', body:fd});
-                const d = await r.json();
-                if(d.ok) imgUrl = d.imageUrl;
+                const r = await window.api.upload(file); // CORRECTION: window.api
+                if(r.ok) imgUrl = r.imageUrl;
             }
             
             const lvl = this.currentHw.levels[this.currentLevelIndex];
-            const res = await fetch('/api/analyze-homework', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    imageUrl: imgUrl, 
-                    userText: txt, 
-                    homeworkInstruction: lvl.instruction,
-                    homeworkContext: lvl.aiPrompt,
-                    questionImage: lvl.questionImage,
-                    teacherDocUrls: this.docs,
-                    classroom: state.currentPlayerData.classroom, 
-                    playerId: state.currentPlayerId,
-                    homeworkId: this.currentHw._id, // IMPORTANT pour la sauvegarde
-                    levelIndex: this.currentLevelIndex // IMPORTANT pour la sauvegarde
-                })
+            const res = await window.api.post('/api/analyze-homework', { // CORRECTION: window.api
+                imageUrl: imgUrl, 
+                userText: txt, 
+                homeworkInstruction: lvl.instruction,
+                homeworkContext: lvl.aiPrompt,
+                questionImage: lvl.questionImage,
+                teacherDocUrls: this.docs,
+                classroom: window.state.currentPlayerData.classroom, // CORRECTION: window.state
+                playerId: window.state.currentPlayerId,
+                homeworkId: this.currentHw._id,
+                levelIndex: this.currentLevelIndex 
             });
-            const data = await res.json();
-            if (this.aiContent) this.aiContent.innerHTML = data.feedback;
+            
+            if (this.aiContent) this.aiContent.innerHTML = res.feedback;
             if (this.btnModify) this.btnModify.style.display = "inline-block";
             if (this.btnNextQ) {
                 this.btnNextQ.style.display = "inline-block";

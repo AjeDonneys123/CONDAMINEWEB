@@ -1,14 +1,44 @@
-import { state } from './state.js';
-import { uploadFile, saveHomework, getHomeworks, fetchPlayers } from './api.js';
+// --- VERSION AVANCÉE (DRAG & DROP) + ARCHITECTURE GLOBALE ---
 
-// ==========================================================
-// 1. GESTION DES COPIES ÉLÈVES
-// ==========================================================
+export function initProfDashboard() {
+    console.log("🎓 Prof Dashboard Init");
+    const dashboard = document.getElementById("profDashboard");
+    if(dashboard) dashboard.style.display = "block";
+    
+    fetchAndRenderPlayers();
 
+    document.getElementById("tabStudents").onclick = () => { 
+        document.getElementById("contentStudents").style.display="block"; 
+        document.getElementById("contentHomeworks").style.display="none"; 
+        document.getElementById("tabStudents").classList.add("active");
+        document.getElementById("tabHomeworks").classList.remove("active");
+    };
+    document.getElementById("tabHomeworks").onclick = () => { 
+        document.getElementById("contentStudents").style.display="none"; 
+        document.getElementById("contentHomeworks").style.display="block"; 
+        document.getElementById("tabHomeworks").classList.add("active");
+        document.getElementById("tabStudents").classList.remove("active");
+        loadProfHomeworks(); 
+    };
+
+    document.getElementById("addHomeworkBtn").onclick = () => {
+        window.state.tempHwLevels = [{ instruction: "", aiPrompt: "", attachmentUrls: [], questionImage: null }]; 
+        window.state.editingHomeworkId = null; 
+        document.getElementById("createHomeworkModal").style.display = "flex";
+        renderCreateHomeworkForm();
+    };
+
+    document.getElementById("classFilter").onchange = applyFiltersAndRender;
+    document.getElementById("studentSearch").oninput = applyFiltersAndRender;
+
+    setupBugListeners();
+    setupTestClassListener();
+}
+
+// --- GESTION DES COPIES (L'OEIL) ---
 window.viewSubmissions = async function(hwId, hwClass) {
-    const players = state.allPlayersData.filter(p => p.classroom === hwClass || hwClass === "Toutes");
-    const res = await fetch(`/api/submissions/${hwId}`);
-    const submissions = await res.json();
+    const players = window.state.allPlayersData.filter(p => p.classroom === hwClass || hwClass === "Toutes");
+    const submissions = await window.api.get(`/api/submissions/${hwId}`) || [];
 
     const modal = document.createElement('div');
     modal.className = "modal-overlay";
@@ -38,7 +68,7 @@ window.viewSubmissions = async function(hwId, hwClass) {
                                     ${sub ? (sub.levelsResults[0]?.grade || 'A valider') : '-'}
                                 </td>
                                 <td style="padding:10px; border-bottom:1px solid #eee; text-align:center;">
-                                    ${sub ? `<button onclick="openStudentCopy('${sub._id}')" style="background:#2563eb; color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;">Voir la copie</button>` : '-'}
+                                    ${sub ? `<button onclick="window.openStudentCopy('${sub._id}')" style="background:#2563eb; color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;">Voir la copie</button>` : '-'}
                                 </td>
                             </tr>
                         `;
@@ -54,8 +84,8 @@ window.viewSubmissions = async function(hwId, hwClass) {
 };
 
 window.openStudentCopy = async function(subId) {
-    const res = await fetch(`/api/submission-detail/${subId}`);
-    const sub = await res.json();
+    const sub = await window.api.get(`/api/submission-detail/${subId}`);
+    if(!sub) return alert("Erreur chargement copie");
 
     const modal = document.createElement('div');
     modal.className = "modal-overlay";
@@ -87,14 +117,13 @@ window.openStudentCopy = async function(subId) {
                                 <textarea class="teacher-fb" style="width:100%; height:150px; margin:10px 0; padding:10px; border-radius:6px; border:1px solid #2563eb; font-family:inherit;">${result.teacherFeedback || result.aiFeedback}</textarea>
                                 <strong>Note / Appréciation :</strong>
                                 <input class="teacher-grade" value="${result.grade}" style="width:100%; padding:10px; border:1px solid #2563eb; border-radius:6px; font-weight:bold; color:#16a34a;">
-                                <small style="display:block; margin-top:5px; color:#64748b;">L'élève verra ces modifications à sa prochaine connexion.</small>
                             </div>
                         </div>
                     </div>
                 `).join('')}
             </div>
             <div style="text-align:right; position:sticky; bottom:-20px; background:white; padding:20px; border-top:1px solid #eee; margin:0 -20px -20px -20px;">
-                <button id="btnSaveCorrection" style="background:#16a34a; color:white; border:none; padding:12px 30px; border-radius:8px; cursor:pointer; font-weight:bold; font-size:1.1em;">💾 Enregistrer la correction</button>
+                <button id="btnSaveCorrection" style="background:#16a34a; color:white; border:none; padding:12px 30px; border-radius:8px; cursor:pointer; font-weight:bold; font-size:1.1em;">💾 Enregistrer</button>
                 <button onclick="this.closest('.modal-overlay').remove()" style="padding:12px 20px; margin-left:15px; cursor:pointer; background:none; border:1px solid #ccc; border-radius:8px;">Annuler</button>
             </div>
         </div>
@@ -107,136 +136,41 @@ window.openStudentCopy = async function(subId) {
             teacherFeedback: modal.querySelectorAll(".teacher-fb")[i].value,
             grade: modal.querySelectorAll(".teacher-grade")[i].value
         }));
-
-        const saveRes = await fetch('/api/update-correction', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ subId, levelsResults: results })
-        });
-
-        if ((await saveRes.json()).ok) {
-            alert("✅ La copie a été mise à jour !");
-            modal.remove();
-        }
+        const saveRes = await window.api.post('/api/update-correction', { subId, levelsResults: results });
+        if (saveRes.ok) { alert("✅ Copie mise à jour !"); modal.remove(); }
     };
 };
 
-// ==========================================================
-// 2. INITIALISATION DU DASHBOARD
-// ==========================================================
-
-export function initProfDashboard() {
-    const dashboard = document.getElementById("profDashboard");
-    if(dashboard) dashboard.style.display = "block";
-    
-    fetchAndRenderPlayers();
-
-    document.getElementById("tabStudents").onclick = () => { 
-        document.getElementById("contentStudents").style.display="block"; 
-        document.getElementById("contentHomeworks").style.display="none"; 
-        document.getElementById("tabStudents").classList.add("active");
-        document.getElementById("tabHomeworks").classList.remove("active");
-    };
-    document.getElementById("tabHomeworks").onclick = () => { 
-        document.getElementById("contentStudents").style.display="none"; 
-        document.getElementById("contentHomeworks").style.display="block"; 
-        document.getElementById("tabHomeworks").classList.add("active");
-        document.getElementById("tabStudents").classList.remove("active");
-        loadProfHomeworks(); 
-    };
-
-    document.getElementById("addHomeworkBtn").onclick = () => {
-        state.tempHwLevels = [{ instruction: "", aiPrompt: "", attachmentUrls: [], questionImage: null }]; 
-        state.editingHomeworkId = null; 
-        document.getElementById("createHomeworkModal").style.display = "flex";
-        renderCreateHomeworkForm();
-    };
-
-    document.getElementById("classFilter").onchange = applyFiltersAndRender;
-    document.getElementById("studentSearch").oninput = applyFiltersAndRender;
-
-    // --- CORRECTION 1 : RÉPARATION BOUTON BUGS ---
-    const btnBugs = document.getElementById("viewBugsBtn");
-    if(btnBugs) {
-        btnBugs.onclick = async () => {
-            const res = await fetch('/api/bugs');
-            const bugs = await res.json();
-            const list = document.getElementById("bugsBody");
-            if(bugs.length === 0) list.innerHTML = "<p>Aucun bug signalé.</p>";
-            else {
-                list.innerHTML = bugs.map(b => `
-                   <div style="border-bottom:1px solid #ccc; padding:10px; text-align:left;">
-                       <button onclick="deleteBug('${b._id}')" style="float:right; background:none; border:none; cursor:pointer; font-size:1.2em;">🗑️</button>
-                       <strong>${b.reporterName}</strong> (${b.classroom}) <small style="color:gray;">${new Date(b.date).toLocaleDateString()}</small><br>
-                       <div style="margin-top:5px; background:#f8fafc; padding:8px; border-radius:5px;">${b.description}</div>
-                   </div>`).join('');
-            }
-            document.getElementById("profBugListModal").style.display = "flex";
-        };
-    }
-    const closeBugBtn = document.getElementById("closeBugListBtn");
-    if(closeBugBtn) closeBugBtn.onclick = () => document.getElementById("profBugListModal").style.display = "none";
-
-    // --- CORRECTION 2 : BOUTON TESTER CLASSE (SANS CONFIRMATION) ---
-    const btnTest = document.getElementById("testClassBtn");
-    if(btnTest) {
-        btnTest.onclick = async () => {
-            const currentFilter = document.getElementById("classFilter").value;
-            if (currentFilter === "all" || currentFilter === "") {
-                alert("⚠️ Veuillez sélectionner une classe précise dans la liste déroulante (ex: 6eD) pour la tester.");
-                return;
-            }
-            // SUPPRESSION DU CONFIRM -> EXECUTION DIRECTE
-            try {
-                const res = await fetch('/api/register', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ firstName: "Eleve", lastName: "Test", classroom: currentFilter })
-                });
-                const data = await res.json();
-                if (data.ok) {
-                    localStorage.setItem("player", JSON.stringify(data));
-                    window.location.reload(); 
-                } else {
-                    alert("Erreur serveur lors de la création du compte test.");
-                }
-            } catch(e) { alert("Erreur de connexion."); }
-        };
-    }
-}
-
-// Fonction globale pour supprimer un bug
-window.deleteBug = async function(id) {
-    if(confirm("Supprimer ce signalement ?")) {
-        await fetch(`/api/bugs/${id}`, { method: 'DELETE' });
-        document.getElementById("viewBugsBtn").click(); // Rafraîchir la liste
-    }
-};
-
-// ==========================================================
-// 3. LOGIQUE DES DEVOIRS (CRUD)
-// ==========================================================
+// --- GESTION DEVOIRS (CRUD + MODALE AVANCÉE) ---
 
 async function loadProfHomeworks() {
     const tbody = document.getElementById("profHomeworksBody");
-    tbody.innerHTML = "<tr><td colspan='5'>Chargement des devoirs...</td></tr>";
+    tbody.innerHTML = "<tr><td colspan='5'>Chargement...</td></tr>";
     try {
-        const list = await getHomeworks();
-        state.homeworksList = list;
+        const list = await window.api.getHomeworks();
+        window.state.homeworksList = list;
         tbody.innerHTML = list.map((h, index) => `
             <tr>
                 <td style="padding:12px;">${new Date(h.date).toLocaleDateString()}</td>
                 <td style="padding:12px; font-weight:bold;">${h.title}</td>
-                <td style="padding:12px;"><span style="background:#e0f2fe; color:#0369a1; padding:3px 10px; border-radius:12px; font-size:12px;">${h.classroom}</span></td>
+                <td style="padding:12px;">${h.classroom}</td>
                 <td style="padding:12px;">${h.levels.length} Q</td>
                 <td style="padding:12px;">
-                    <button onclick="window.viewSubmissions('${h._id}', '${h.classroom}')" style="background:#2563eb; color:white; border:none; padding:6px 10px; border-radius:4px; margin-right:5px; cursor:pointer;">👁️ Copies</button>
-                    <button onclick="window.openEditModalByIndex(${index})" style="background:#f59e0b; color:white; border:none; padding:6px 10px; border-radius:4px; margin-right:5px; cursor:pointer;">Modif</button>
-                    <button onclick="deleteHomework('${h._id}')" style="background:none; border:none; cursor:pointer; font-size:18px;">🗑️</button>
+                    <button onclick="window.viewSubmissions('${h._id}', '${h.classroom}')">👁️</button>
+                    <button onclick="window.openEditModalByIndex(${index})">✏️</button>
+                    <button onclick="deleteHomework('${h._id}')">🗑️</button>
                 </td>
             </tr>`).join('');
-    } catch(e) { tbody.innerHTML = "<tr><td colspan='5' style='color:red'>Erreur serveur.</td></tr>"; }
+    } catch(e) { tbody.innerHTML = "<tr><td colspan='5'>Erreur</td></tr>"; }
 }
+
+window.openEditModalByIndex = function(index) {
+    const hw = window.state.homeworksList[index];
+    window.state.editingHomeworkId = hw._id;
+    window.state.tempHwLevels = JSON.parse(JSON.stringify(hw.levels));
+    document.getElementById("createHomeworkModal").style.display = "flex";
+    renderCreateHomeworkForm(hw);
+};
 
 function renderCreateHomeworkForm(hw = null) {
     const title = hw ? hw.title : "";
@@ -252,26 +186,27 @@ function renderCreateHomeworkForm(hw = null) {
         <div id="levelsContainer"></div>
         <button id="btnAddLvl" style="width:100%; padding:12px; margin-top:10px; background:#f1f5f9; color:#475569; border:1px dashed #cbd5e1; border-radius:8px; cursor:pointer; font-weight:bold;">+ Ajouter une question (Page)</button>
         <div style="margin-top:25px; text-align:right; border-top:1px solid #eee; padding-top:20px;">
-            <button onclick="document.getElementById('createHomeworkModal').style.display='none'" style="padding:10px 20px; border:none; background:none; cursor:pointer; margin-right:15px;">Annuler</button>
-            <button id="btnSaveHw" style="background:#16a34a; color:white; padding:12px 30px; border:none; border-radius:8px; cursor:pointer; font-weight:bold;">🚀 Enregistrer le devoir</button>
+            <button onclick="document.getElementById('createHomeworkModal').style.display='none'" style="padding:10px; cursor:pointer;">Annuler</button>
+            <button id="btnSaveHw" style="background:#16a34a; color:white; padding:12px 30px; border:none; border-radius:8px; font-weight:bold; cursor:pointer;">Enregistrer</button>
         </div>
     </div>`;
 
     renderLevelsInputs();
-    modal.querySelector("#btnAddLvl").onclick = () => { state.tempHwLevels.push({instruction:"", aiPrompt:"", attachmentUrls:[], questionImage:null}); renderLevelsInputs(); };
+    modal.querySelector("#btnAddLvl").onclick = () => { window.state.tempHwLevels.push({instruction:"", aiPrompt:"", attachmentUrls:[], questionImage:null}); renderLevelsInputs(); };
     modal.querySelector("#btnSaveHw").onclick = saveForm;
 }
 
-// --- RENDERING AVEC DRAG & DROP & MULTIPLE UPLOAD ---
+// --- LE RETOUR DU DRAG & DROP ET DE LA ZONE BLANCHE ---
 window.renderLevelsInputs = function() {
     const container = document.getElementById("levelsContainer");
     if(!container) return;
     container.innerHTML = "";
     
-    state.tempHwLevels.forEach((lvl, idx) => {
+    window.state.tempHwLevels.forEach((lvl, idx) => {
         const div = document.createElement("div");
         div.style.cssText = "border:1px solid #e2e8f0; padding:20px; margin-top:20px; background:#f8fafc; border-radius:12px; position:relative; box-shadow:0 2px 5px rgba(0,0,0,0.05);";
         
+        // Zone Documents
         let docsHtml = "";
         if (lvl.attachmentUrls && lvl.attachmentUrls.length > 0) {
             docsHtml = `<div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap:10px; margin-top:10px;">`;
@@ -298,7 +233,7 @@ window.renderLevelsInputs = function() {
         }
 
         div.innerHTML = `
-            <button onclick="removeLevel(${idx})" style="position:absolute; top:10px; right:10px; color:#ef4444; background:white; border:1px solid #ef4444; border-radius:4px; padding:2px 8px; cursor:pointer; font-weight:bold;">Supprimer la Page</button>
+            <button onclick="removeLevel(${idx})" style="position:absolute; top:10px; right:10px; color:#ef4444; background:white; border:1px solid #ef4444; border-radius:4px; padding:2px 8px; cursor:pointer; font-weight:bold;">Supprimer Page</button>
             <h4 style="margin-top:0; color:#2563eb;">Page ${idx+1}</h4>
             
             <div style="margin-bottom:20px;">
@@ -335,43 +270,36 @@ window.renderLevelsInputs = function() {
     });
 };
 
-// === FONCTIONS DRAG & DROP ===
+// Fonctions Drag & Drop attachées à window
 window.dragStart = function(ev, lvlIdx, docIdx) {
     ev.dataTransfer.effectAllowed = "move";
     ev.dataTransfer.setData("text/plain", docIdx); 
     ev.target.style.opacity = '0.4';
 };
-
-window.allowDrop = function(ev) {
-    ev.preventDefault(); 
-    ev.dataTransfer.dropEffect = "move";
-};
-
+window.allowDrop = function(ev) { ev.preventDefault(); ev.dataTransfer.dropEffect = "move"; };
 window.dropDoc = function(ev, lvlIdx, targetDocIdx) {
     ev.preventDefault();
     const fromDocIdx = parseInt(ev.dataTransfer.getData("text/plain"));
-    const attachments = state.tempHwLevels[lvlIdx].attachmentUrls;
+    const attachments = window.state.tempHwLevels[lvlIdx].attachmentUrls;
     const movedItem = attachments.splice(fromDocIdx, 1)[0];
     attachments.splice(targetDocIdx, 0, movedItem);
     renderLevelsInputs();
 };
 
-// === FONCTIONS UPLOAD ===
+window.uploadFileToZone = async function(input, idx, type) {
+    if(!input.files.length) return;
+    // Feedback visuel
+    const btn = input.nextElementSibling;
+    if(btn) btn.textContent = "⏳ Envoi...";
 
-window.uploadFileToZone = async function(inputEl, lvlIdx, zoneType) {
-    if (!inputEl.files || inputEl.files.length === 0) return;
-
-    const btn = inputEl.nextElementSibling;
-    if(btn) btn.textContent = "⏳ Envoi en cours...";
-
-    for (const file of inputEl.files) {
-        const res = await uploadFile(file);
-        if (res.ok) {
-            if (zoneType === 'docs') {
-                if(!state.tempHwLevels[lvlIdx].attachmentUrls) state.tempHwLevels[lvlIdx].attachmentUrls = [];
-                state.tempHwLevels[lvlIdx].attachmentUrls.push(res.imageUrl);
-            } else if (zoneType === 'questionImg') {
-                state.tempHwLevels[lvlIdx].questionImage = res.imageUrl;
+    for (const file of input.files) {
+        const res = await window.api.upload(file);
+        if(res.ok) {
+            if(type==='docs') {
+               if(!window.state.tempHwLevels[idx].attachmentUrls) window.state.tempHwLevels[idx].attachmentUrls = [];
+               window.state.tempHwLevels[idx].attachmentUrls.push(res.imageUrl);
+            } else {
+               window.state.tempHwLevels[idx].questionImage = res.imageUrl;
             }
         }
     }
@@ -379,44 +307,26 @@ window.uploadFileToZone = async function(inputEl, lvlIdx, zoneType) {
 };
 
 async function saveForm() {
-    const titleVal = document.getElementById("hwTitle").value;
-    const clsVal = document.getElementById("hwClass").value;
-    state.tempHwLevels.forEach((lvl, i) => { 
-        lvl.instruction = document.getElementById(`lvlInst-${i}`).value; 
-    });
-    const res = await saveHomework({ id: state.editingHomeworkId, title: titleVal, classroom: clsVal, levels: state.tempHwLevels }, !!state.editingHomeworkId);
-    if(res.ok) {
-        document.getElementById('createHomeworkModal').style.display='none';
-        loadProfHomeworks();
-    }
+    const title = document.getElementById("hwTitle").value;
+    const cls = document.getElementById("hwClass").value;
+    window.state.tempHwLevels.forEach((lvl, i) => { lvl.instruction = document.getElementById(`lvlInst-${i}`).value; });
+    const res = await window.api.saveHomework({ id: window.state.editingHomeworkId, title: title, classroom: cls, levels: window.state.tempHwLevels }, !!window.state.editingHomeworkId);
+    if(res.ok) { document.getElementById('createHomeworkModal').style.display='none'; loadProfHomeworks(); }
 }
 
-window.openEditModalByIndex = function(index) {
-    const hw = state.homeworksList[index];
-    state.editingHomeworkId = hw._id;
-    state.tempHwLevels = JSON.parse(JSON.stringify(hw.levels));
-    document.getElementById("createHomeworkModal").style.display = "flex";
-    renderCreateHomeworkForm(hw);
-};
-
-window.removeLevel = function(idx) { state.tempHwLevels.splice(idx, 1); renderLevelsInputs(); };
-
-window.removeDoc = function(levelIdx, docIdx) {
-    state.tempHwLevels[levelIdx].attachmentUrls.splice(docIdx, 1);
-    renderLevelsInputs();
-};
-
-window.deleteHomework = async (id) => { if(confirm("Supprimer ce devoir ?")) { await fetch(`/api/homework/${id}`, { method: 'DELETE' }); loadProfHomeworks(); } };
+window.removeLevel = function(idx) { window.state.tempHwLevels.splice(idx, 1); renderLevelsInputs(); };
+window.removeDoc = function(lIdx, dIdx) { window.state.tempHwLevels[lIdx].attachmentUrls.splice(dIdx, 1); renderLevelsInputs(); };
+window.deleteHomework = async (id) => { if(confirm("Supprimer ?")) { await fetch(`/api/homework/${id}`, { method: 'DELETE' }); loadProfHomeworks(); } };
 
 async function fetchAndRenderPlayers() { 
-    state.allPlayersData = await fetchPlayers(); 
+    window.state.allPlayersData = await window.api.fetchPlayers(); 
     applyFiltersAndRender(); 
 }
 
 function applyFiltersAndRender() { 
     const f = document.getElementById("classFilter").value; 
     const s = document.getElementById("studentSearch").value.toLowerCase();
-    const l = state.allPlayersData.filter(p => (f==="all"||p.classroom===f) && (p.firstName.toLowerCase().includes(s) || p.lastName.toLowerCase().includes(s)));
+    const l = window.state.allPlayersData.filter(p => (f==="all"||p.classroom===f) && (p.firstName.toLowerCase().includes(s) || p.lastName.toLowerCase().includes(s)));
     document.getElementById("playersBody").innerHTML = l.map(p => `
         <tr>
             <td style="padding:10px;">${p.firstName} ${p.lastName}</td>
@@ -428,11 +338,25 @@ function applyFiltersAndRender() {
         </tr>`).join(''); 
 }
 
-window.resetPlayer = async (id) => { 
-    if(confirm("⚠️ Réinitialiser cet élève ? (Efface ses notes et progrès)")) { 
-        await fetch("/api/reset-player", {
-            method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({playerId:id})
-        }); 
-        fetchAndRenderPlayers(); 
-    } 
-};
+function setupBugListeners() {
+    const btn = document.getElementById("viewBugsBtn");
+    if(btn) btn.onclick = async () => {
+        const bugs = await window.api.get('/api/bugs') || [];
+        const list = document.getElementById("bugsBody");
+        list.innerHTML = bugs.length ? bugs.map(b => `<div><b>${b.reporterName}</b>: ${b.description} <button onclick="deleteBug('${b._id}')">🗑️</button></div>`).join('') : "Rien.";
+        document.getElementById("profBugListModal").style.display = "flex";
+    };
+    document.getElementById("closeBugListBtn").onclick = () => document.getElementById("profBugListModal").style.display = "none";
+}
+
+window.deleteBug = async (id) => { await fetch(`/api/bugs/${id}`, {method:'DELETE'}); document.getElementById("viewBugsBtn").click(); };
+
+function setupTestClassListener() {
+    const btn = document.getElementById("testClassBtn");
+    if(btn) btn.onclick = async () => {
+        const cls = document.getElementById("classFilter").value;
+        if(cls==="all" || !cls) return alert("Choisis une classe");
+        const res = await window.api.post('/api/register', { firstName: "Eleve", lastName: "Test", classroom: cls });
+        if(res.ok) { localStorage.setItem("player", JSON.stringify(res)); window.location.reload(); }
+    };
+}

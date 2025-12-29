@@ -1,25 +1,21 @@
-import { state } from '../state.js';
-import { verifyWithAI } from '../api.js';
+// 1. IMPORT : On importe l'objet global 'api' depuis app.js
+import { state, api } from '../app.js';
 
 export class ZombieGame {
     constructor(container, controller) {
-        console.log("🧟 [ZOMBIE] Constructeur...");
         this.c = container;
         this.ctrl = controller;
 
-        // Elements
         this.arena = container.querySelector("#zombie-arena");
         this.zombie = container.querySelector("#z-zombie");
         this.projectile = container.querySelector("#z-projectile");
         this.qEl = container.querySelector("#z-question");
         this.feedback = container.querySelector("#feedback-bubble");
         
-        // Inputs
         this.aiZone = container.querySelector("#ai-input-zone");
         this.input = container.querySelector("#z-answer");
         this.btnSubmit = container.querySelector("#z-submit");
 
-        // QCM
         this.qcmZone = container.querySelector("#options-grid");
         this.optBtns = container.querySelectorAll(".option-btn");
 
@@ -28,14 +24,11 @@ export class ZombieGame {
         this.projInterval = null; 
         this.isPaused = false;
 
-        // Listeners
         if(this.btnSubmit) this.btnSubmit.onclick = () => this.checkAI();
         if(this.input) this.input.onkeydown = (e) => { if(e.key==="Enter") this.checkAI(); };
         
-        // Listeners QCM
         this.optBtns.forEach((btn, idx) => {
             btn.onclick = (e) => {
-                // Petit effet visuel au clic
                 e.target.style.transform = "scale(0.95)";
                 setTimeout(() => e.target.style.transform = "scale(1)", 100);
                 this.checkQCM(idx);
@@ -44,55 +37,35 @@ export class ZombieGame {
     }
 
     loadQuestion(q) {
-        console.log("🧟 [ZOMBIE] Question reçue:", q);
         this.currentQ = q;
-        
         if(this.qEl) this.qEl.textContent = q.q;
         if(this.feedback) { this.feedback.style.display = "none"; this.feedback.innerHTML = ""; }
         
-        // Reset Jeu
         this.stop(); 
         this.zPos = 20; 
         if(this.zombie) { this.zombie.style.right = "20px"; this.zombie.style.display = "block"; }
         if(this.projectile) this.projectile.style.display = "none";
         this.isPaused = false;
 
-        // --- AFFICHAGE : LE MOMENT DE VÉRITÉ ---
         const hasOptions = (q.options && Array.isArray(q.options) && q.options.length > 0);
 
         if (hasOptions) {
-            console.log("👉 MODE QCM ACTIVÉ (" + q.options.length + " options)");
-            
-            // 1. On cache l'input texte
             if(this.aiZone) this.aiZone.style.display = 'none';
-            
-            // 2. On affiche la grille de boutons
             if(this.qcmZone) this.qcmZone.style.display = 'grid';
-
-            // 3. On remplit les boutons
             this.optBtns.forEach((btn, i) => {
-                // Reset style
                 btn.style.background = "white";
                 btn.style.color = "#1e293b";
                 btn.style.borderColor = "#e2e8f0";
-                
                 if (q.options[i]) {
                     btn.textContent = q.options[i];
-                    btn.style.display = "block"; // On s'assure qu'il est visible
+                    btn.style.display = "block"; 
                 } else {
-                    btn.style.display = "none"; // On cache s'il n'y a pas d'option
+                    btn.style.display = "none"; 
                 }
             });
-
         } else {
-            console.log("👉 MODE TEXTE (IA) ACTIVÉ");
-            
-            // 1. On cache les boutons
             if(this.qcmZone) this.qcmZone.style.display = 'none';
-            
-            // 2. On affiche l'input
             if(this.aiZone) this.aiZone.style.display = 'flex';
-            
             if(this.input) {
                 this.input.value = "";
                 this.input.disabled = false;
@@ -108,10 +81,8 @@ export class ZombieGame {
         if(this.interval) clearInterval(this.interval);
         this.interval = setInterval(() => {
             if(state.isGlobalPaused || this.ctrl.getState().isLocked || this.isPaused) return;
-            
             this.zPos += 1.0; 
             if(this.zombie) this.zombie.style.right = this.zPos + "px";
-            
             if(this.arena && this.zPos > (this.arena.offsetWidth - 80)) {
                 this.handleZombieBite();
             }
@@ -128,9 +99,8 @@ export class ZombieGame {
         setTimeout(() => this.start(), 1000);
     }
 
- shootProjectile() {
+    shootProjectile() {
         if(this.feedback) this.feedback.style.display = "none";
-        // Sécurité si l'élément projectile a disparu du DOM
         if(!this.projectile) { this.handleZombieHit(); return; }
         
         let projX = 60; 
@@ -142,17 +112,14 @@ export class ZombieGame {
         this.projInterval = setInterval(() => {
             projX += 15; 
             this.projectile.style.left = projX + "px";
-            
-            // Calcul de la position du zombie depuis la gauche
             const arenaWidth = this.arena.offsetWidth;
             const zombieLeftX = arenaWidth - this.zPos - 60;
 
             if (projX >= zombieLeftX) {
                 clearInterval(this.projInterval);
                 this.projectile.style.display = "none";
-                this.handleZombieHit(); // C'est ici que notifyCorrectAnswer est appelé
+                this.handleZombieHit(); 
             }
-            
             if (projX > arenaWidth) {
                 clearInterval(this.projInterval);
                 this.projectile.style.display = "none";
@@ -166,22 +133,13 @@ export class ZombieGame {
         this.ctrl.notifyCorrectAnswer(); 
     }
 
-    // --- CHECK QCM ---
     checkQCM(idx) {
         if (this.isPaused) return;
-        
-        console.log("Clic bouton index:", idx);
-        
         const selected = this.currentQ.options[idx];
         const correct = this.currentQ.a;
-        
-        // Vérification robuste
-        let isCorrect = false;
-        if (typeof correct === 'number') isCorrect = (idx === correct);
-        else isCorrect = (selected === correct);
+        let isCorrect = (typeof correct === 'number') ? (idx === correct) : (selected === correct);
 
         const btn = this.optBtns[idx];
-
         if (isCorrect) {
             btn.style.background = "#dcfce7";
             btn.style.borderColor = "#22c55e";
@@ -192,19 +150,15 @@ export class ZombieGame {
             btn.style.background = "#fee2e2";
             btn.style.borderColor = "#ef4444";
             btn.style.color = "#991b1b";
-            
-            // Reset visuel après 0.5s
             setTimeout(() => {
                 btn.style.background = "white";
                 btn.style.borderColor = "#e2e8f0";
                 btn.style.color = "#1e293b";
             }, 500);
-            
             this.ctrl.notifyWrongAnswer(); 
         }
     }
 
-    // --- CHECK IA ---
     async checkAI() {
         const val = this.input.value.trim(); if(!val) return;
         this.isPaused = true; 
@@ -212,8 +166,12 @@ export class ZombieGame {
         this.showFeedback("🧠 L'IA réfléchit...", "hint");
 
         try {
-            const res = await verifyWithAI({
-                question: this.currentQ.q, userAnswer: val, expectedAnswer: this.currentQ.a, playerId: state.currentPlayerId
+            // 2. CORRECTION : UTILISATION DE api.verifyWithAI
+            const res = await api.verifyWithAI({
+                question: this.currentQ.q, 
+                userAnswer: val, 
+                expectedAnswer: this.currentQ.a, 
+                playerId: state.currentPlayerId
             });
 
             let spellingHtml = "";

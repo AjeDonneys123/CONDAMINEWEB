@@ -1,87 +1,63 @@
-import { state } from '../state.js';
-import { verifyWithAI } from '../api.js';
+import { state, api } from '../app.js';
 
 export class RedactionGame {
     constructor(container, controller) {
         this.c = container;
         this.ctrl = controller;
-
         this.qEl = container.querySelector("#redac-q");
         this.input = container.querySelector("#redac-answer");
         this.btnSubmit = container.querySelector("#redac-submit");
         this.loading = container.querySelector("#redac-loading");
         this.analysis = container.querySelector("#analysis-area");
-        this.textGood = container.querySelector("#text-good");
-        this.btnCont = container.querySelector("#redac-continue");
-        
-        this.btnSubmit.onclick = () => this.check();
-        this.btnCont.onclick = () => this.ctrl.notifyCorrectAnswer();
-        
-        console.log("📝 Redaction Game Ready");
+        this.fbContent = container.querySelector("#text-good");
+        this.btnContinue = container.querySelector("#redac-continue");
+
+        if(this.btnSubmit) this.btnSubmit.onclick = () => this.check();
+        if(this.btnContinue) this.btnContinue.onclick = () => this.finish(true);
     }
-    
+
     loadQuestion(q) {
         this.currentQ = q;
-        this.qEl.innerHTML = q.q.replace(/\n/g, "<br>");
-        this.input.value = "";
-        
-        this.analysis.style.display = "none";
-        this.loading.style.display = "none";
-        this.btnCont.style.display = "none";
-        
-        this.input.disabled = false;
-        this.btnSubmit.style.display = "block";
-        this.btnSubmit.disabled = false;
-        this.btnSubmit.textContent = "Envoyer à l'IA 🤖";
+        if(this.qEl) this.qEl.innerHTML = `<h3>Rédaction</h3><p>${q.q}</p>`;
+        if(this.input) { this.input.value = ""; this.input.disabled = false; }
+        if(this.analysis) this.analysis.style.display = "none";
+        if(this.loading) this.loading.style.display = "none";
+        if(this.btnSubmit) this.btnSubmit.style.display = "inline-block";
     }
-    
+
     async check() {
-        const val = this.input.value.trim();
-        if(!val) return alert("Écris quelque chose !");
-        
+        const txt = this.input.value.trim();
+        if(txt.length < 5) return alert("Écris une phrase complète !");
+
         this.input.disabled = true;
-        this.btnSubmit.disabled = true;
         this.btnSubmit.style.display = "none";
+        this.loading.innerHTML = "🧠 Analyse de l'IA...";
         this.loading.style.display = "block";
-        
+
         try {
-            const res = await verifyWithAI({
-                question: this.currentQ.q, 
-                userAnswer: val, 
-                expectedAnswer: this.currentQ.a, 
-                playerId: state.currentPlayerId,
-                redactionMode: "generic" // Ou q.mode si défini dans le JSON
+            // CORRECTION : api.verifyWithAI
+            const res = await api.verifyWithAI({
+                question: this.currentQ.q,
+                userAnswer: txt,
+                expectedAnswer: "Réponse libre cohérente",
+                playerId: state.currentPlayerId
             });
-            
+
             this.loading.style.display = "none";
             this.analysis.style.display = "block";
             
-            let content = res.feedback || res.short_comment || "Pas de commentaire.";
-            if(res.grade) content = `<strong>Note: ${res.grade}</strong><br>` + content;
-            
-            this.textGood.innerHTML = content;
-            
             if(res.status === "correct") {
-                this.textGood.style.color = "#166534";
-                this.textGood.style.borderLeft = "4px solid #22c55e";
-                this.btnCont.style.display = "block";
+                this.fbContent.innerHTML = `<h4 style="color:green">Excellent !</h4><p>${res.feedback}</p>`;
+                this.btnContinue.onclick = () => this.ctrl.notifyCorrectAnswer();
             } else {
-                this.textGood.style.color = "#991b1b";
-                this.textGood.style.borderLeft = "4px solid #ef4444";
-                
-                this.input.disabled = false;
-                this.btnSubmit.style.display = "block";
-                this.btnSubmit.disabled = false;
-                this.btnSubmit.textContent = "Réessayer";
-                this.ctrl.notifyWrongAnswer();
+                this.fbContent.innerHTML = `<h4 style="color:orange">À améliorer</h4><p>${res.feedback}</p>`;
+                this.btnContinue.onclick = () => this.ctrl.notifyWrongAnswer();
             }
+
         } catch(e) {
             console.error(e);
-            this.loading.style.display = "none";
-            this.input.disabled = false;
-            this.btnSubmit.style.display = "block";
-            this.btnSubmit.disabled = false;
-            alert("Erreur de connexion IA");
+            this.loading.innerText = "Erreur IA";
+            this.btnSubmit.style.display = "inline-block";
         }
     }
 }

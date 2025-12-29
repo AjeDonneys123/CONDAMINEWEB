@@ -1,116 +1,85 @@
-import { state } from './state.js';
-import { reportBug } from './api.js';
+// --- RESTAURATION DE LA LOGIQUE JEU AVANCÉE (SUB-BARS) ---
 
-// IMPORTS JEUX
+// Imports Jeux (Modules)
 import { ZombieGame } from './games/ZombieGame.js';
 import { RedactionGame } from './games/RedactionGame.js';
 import { HomeworkGame } from './games/HomeworkGame.js';
 import { StarshipGame } from './games/StarshipGame.js';
 import { JumperGame } from './games/JumperGame.js';
 
-const GameClasses = {
-    "ZombieGame": ZombieGame,
-    "RedactionGame": RedactionGame,
-    "HomeworkGame": HomeworkGame,
-    "StarshipGame": StarshipGame,
-    "JumperGame": JumperGame
-};
+const GameClasses = { "ZombieGame": ZombieGame, "RedactionGame": RedactionGame, "HomeworkGame": HomeworkGame, "StarshipGame": StarshipGame, "JumperGame": JumperGame };
 
 export async function initStudentInterface() {
-    console.log("🚀 Init Élève");
-    
-    // UI
+    console.log("🚀 Eleve Init (Advanced)");
     document.getElementById("chapterSelection").style.display = "block";
-    const logoutBtn = document.getElementById("logoutBtn");
-    if(logoutBtn) logoutBtn.style.display = "block";
-
-    // CHARGER QUESTIONS
-    if(state.currentPlayerData && state.currentPlayerData.classroom) {
-        const classKey = state.getClassKey(state.currentPlayerData.classroom);
-        try {
-            const res = await fetch(`questions/questions-${classKey}.json`);
-            if(res.ok) state.allQuestionsData[classKey] = await res.json();
-        } catch(e) { console.log("Info: Pas de JSON questions"); }
-        document.querySelectorAll(".chapter-action-btn").forEach(b => b.disabled = false);
-    }
+    document.getElementById("logoutBtn").style.display = "block";
     
-    // NAVIGATION
+    // BACKDOOR
+    if(window.state.currentPlayerData.firstName === "Eleve" && window.state.currentPlayerData.lastName === "Test") {
+        const btn = document.getElementById("backToProfBtn");
+        btn.style.display = "block";
+        btn.onclick = () => {
+            localStorage.setItem("player", JSON.stringify({ id: "prof", firstName: "Jean", lastName: "Vuillet", classroom: "Professeur" }));
+            window.location.reload();
+        };
+    }
+
+    // QUESTIONS
+    const classKey = window.state.getClassKey(window.state.currentPlayerData.classroom);
+    try {
+        const res = await fetch(`questions/questions-${classKey}.json`);
+        if(res.ok) window.state.allQuestionsData[classKey] = await res.json();
+    } catch(e) {}
+    
+    document.querySelectorAll(".chapter-action-btn").forEach(b => b.disabled = false);
     document.getElementById("backToMenuBtn").onclick = () => window.location.reload();
-
-    // RETOUR PROF
-    if(state.currentPlayerData.firstName === "Eleve" && state.currentPlayerData.lastName === "Test") {
-        const btnProf = document.getElementById("backToProfBtn");
-        if(btnProf) {
-            btnProf.style.display = "block";
-            btnProf.onclick = () => {
-                localStorage.setItem("player", JSON.stringify({ id: "prof", firstName: "Jean", lastName: "Vuillet", classroom: "Professeur" }));
-                window.location.reload();
-            };
-        }
-    }
     
-    // MES FAUTES (CORRIGÉ)
+    // MES FAUTES
     const btnMistakes = document.getElementById("myMistakesBtn");
-    if(btnMistakes && state.currentPlayerData.id !== "prof") {
+    if(btnMistakes && window.state.currentPlayerData.id !== "prof") {
         btnMistakes.style.display = "block";
         btnMistakes.onclick = loadMistakes;
         document.getElementById("closeMistakesBtn").onclick = () => document.getElementById("mistakesModal").style.display = "none";
     }
 
-    // BUGS
-    document.getElementById("pauseReportBtn").onclick = () => { state.isGlobalPaused = true; document.getElementById("bugModal").style.display="flex"; };
-    document.getElementById("resumeGameBtn").onclick = () => { state.isGlobalPaused = false; document.getElementById("bugModal").style.display="none"; };
+    document.getElementById("pauseReportBtn").onclick = () => { window.state.isGlobalPaused = true; document.getElementById("bugModal").style.display="flex"; };
+    document.getElementById("resumeGameBtn").onclick = () => { window.state.isGlobalPaused = false; document.getElementById("bugModal").style.display="none"; };
     document.getElementById("sendBugBtn").onclick = async () => {
-        await reportBug({ reporterName: state.currentPlayerData.firstName, description: document.getElementById("bugDescription").value });
-        alert("Envoyé !"); document.getElementById("bugModal").style.display="none"; state.isGlobalPaused = false;
+        await window.api.reportBug({ reporterName: window.state.currentPlayerData.firstName, description: document.getElementById("bugDescription").value });
+        alert("Envoyé !"); document.getElementById("bugModal").style.display="none"; window.state.isGlobalPaused = false;
     };
-    
-    // CHEAT BARRE
+
     const mainBar = document.getElementById("mainProgress");
     if (mainBar) {
         mainBar.onclick = () => {
-            if (state.isGameActive && state.isRKeyDown && state.isTKeyDown) {
-                state.general = state.levels[state.currentLevel].questions.length;
-                updateBars();
-                nextQuestion(false);
+            if (window.state.isRKeyDown && window.state.isTKeyDown) {
+                window.state.general = window.state.levels[window.state.currentLevel].questions.length;
+                updateBars(); nextQuestion(false);
             }
         };
     }
 }
 
-// --- FONCTION DE CHARGEMENT DES FAUTES CORRIGÉE ---
 async function loadMistakes() {
     const list = document.getElementById("mistakesList");
     const modal = document.getElementById("mistakesModal");
     list.innerHTML = "Chargement...";
     modal.style.display = "flex";
-    
     try {
-        // On appelle la nouvelle route dédiée
-        const res = await fetch(`/api/player-data/${state.currentPlayerId}`);
+        const res = await fetch(`/api/player-data/${window.state.currentPlayerId}`);
         const data = await res.json();
         const mistakes = data.spellingMistakes || [];
-        
-        if(mistakes.length === 0) {
-            list.innerHTML = "<p>Aucune faute enregistrée ! Bravo.</p>";
-        } else {
-            // On inverse pour voir les dernières en premier
+        if(mistakes.length === 0) list.innerHTML = "<p>Aucune faute !</p>";
+        else {
             const html = mistakes.reverse().map(m => `
-                <li class='spelling-item' style="margin-bottom:10px; border-bottom:1px solid #eee; padding-bottom:5px;">
-                    <span class='wrong-word' style="color:red; text-decoration:line-through;">${m.wrong}</span> 
-                    👉 
-                    <span class='right-word' style="color:green; font-weight:bold;">${m.correct}</span>
-                </li>
-            `).join('');
-            list.innerHTML = `<ul class='spelling-list' style="list-style:none; padding:0;">${html}</ul>`;
+                <li class='spelling-item' style="margin-bottom:10px; border-bottom:1px solid #eee;">
+                    <span class='wrong-word' style="color:red; text-decoration:line-through;">${m.wrong}</span> 👉 <span class='right-word' style="color:green; font-weight:bold;">${m.correct}</span>
+                </li>`).join('');
+            list.innerHTML = `<ul style="list-style:none; padding:0;">${html}</ul>`;
         }
-    } catch(e) { 
-        console.error(e);
-        list.innerHTML = "Erreur de chargement."; 
-    }
+    } catch(e) { list.innerHTML = "Erreur."; }
 }
 
-// LANCEUR
 document.body.addEventListener('click', async (e) => {
     if (e.target.matches('.chapter-action-btn')) {
         const parent = e.target.closest('.chapter-box');
@@ -129,34 +98,34 @@ document.body.addEventListener('click', async (e) => {
         const tmpl = document.getElementById(tmplId);
         if(tmpl) container.appendChild(tmpl.content.cloneNode(true));
 
-        state.isGameActive = true;
-        state.locked = false;
+        window.state.isGameActive = true;
+        window.state.locked = false;
         
         const controller = {
-            notifyCorrectAnswer: () => { incrementProgress(1); },
-            notifyWrongAnswer: (msg) => { wrongAnswerFlow(msg); },
-            getState: () => ({ isLocked: state.locked })
+            notifyCorrectAnswer: () => incrementProgress(1),
+            notifyWrongAnswer: (msg) => wrongAnswerFlow(msg),
+            getState: () => ({ isLocked: window.state.locked })
         };
 
         const GameClass = GameClasses[gameClassStr];
         if(GameClass) {
-            state.currentGameModuleInstance = new GameClass(container, controller);
-            
+            window.state.currentGameModuleInstance = new GameClass(container, controller);
             if (gameClassStr === "HomeworkGame") {
                 document.getElementById("levelTitle").textContent = "Devoirs Maison";
                 toggleUI(false);
-                if(state.currentGameModuleInstance.loadHomeworks) state.currentGameModuleInstance.loadHomeworks();
+                if(window.state.currentGameModuleInstance.loadHomeworks) window.state.currentGameModuleInstance.loadHomeworks();
             } else {
                 toggleUI(true);
-                const classKey = state.getClassKey(state.currentPlayerData.classroom);
-                const allLevels = state.allQuestionsData[classKey] || [];
-                state.levels = allLevels.filter(l => l.chapterId === chapterId);
+                const classKey = window.state.getClassKey(window.state.currentPlayerData.classroom);
+                const allLevels = window.state.allQuestionsData[classKey] || [];
+                window.state.levels = allLevels.filter(l => l.chapterId === chapterId);
                 
-                const validatedIds = (state.currentPlayerData.validatedLevels || []).map(v => (typeof v === 'string' ? v : v.levelId));
-                let startLvl = state.levels.findIndex(l => !validatedIds.includes(l.id));
+                // Calcul niveau
+                const validatedIds = (window.state.currentPlayerData.validatedLevels || []).map(v => (typeof v === 'string' ? v : v.levelId));
+                let startLvl = window.state.levels.findIndex(l => !validatedIds.includes(l.id));
                 if (startLvl === -1) startLvl = 0; 
 
-                if(state.levels.length > 0) setupLevel(startLvl);
+                if(window.state.levels.length > 0) setupLevel(startLvl);
                 else container.innerHTML = "<h3 style='text-align:center; margin-top:50px'>Pas de niveaux.</h3>";
             }
         }
@@ -171,31 +140,33 @@ function toggleUI(show) {
     document.getElementById("lives").style.display = flex;
 }
 
-// MOTEUR
+// --- LOGIQUE BARRES ET PROGRESSION RESTAURÉE ---
 function setupLevel(idx) {
-    if(!state.levels[idx]) { document.getElementById("gameModuleContainer").innerHTML = "<h1>Terminé ! 🏆</h1>"; return; }
-    state.currentLevel = idx;
-    const lvl = state.levels[idx];
+    if(!window.state.levels[idx]) { document.getElementById("gameModuleContainer").innerHTML = "<h1>Terminé ! 🏆</h1>"; return; }
+    window.state.currentLevel = idx;
+    const lvl = window.state.levels[idx];
     document.getElementById("levelTitle").textContent = lvl.title;
     
-    // Leçon
     const btnL = document.getElementById("openLessonBtn");
     const txtL = document.getElementById("lessonText");
     if(lvl.lesson) { btnL.style.display = "block"; txtL.innerHTML = lvl.lesson; } 
     else { btnL.style.display = "none"; }
 
-    state.localScores = new Array(lvl.questions.length).fill(0);
-    state.general = 0; state.currentIndex = -1; state.lives = 4;
+    window.state.localScores = new Array(lvl.questions.length).fill(0);
+    window.state.general = 0; 
+    window.state.currentIndex = -1; 
+    window.state.lives = 4;
     renderLives();
     
+    // RESTAURATION DES PETITES BARRES
     const sub = document.getElementById("subBars"); sub.innerHTML = "";
     lvl.questions.forEach((_, i) => {
         const d = document.createElement("div"); d.className = "subProgress";
         d.innerHTML = `<div class="subBar" id="subBar${i}"></div>`;
         d.onclick = () => {
-            if (state.isGameActive && state.isRKeyDown && state.isTKeyDown) {
-                state.currentIndex = i; 
-                incrementProgress(1); // +1/3
+            if (window.state.isGameActive && window.state.isRKeyDown && window.state.isTKeyDown) {
+                window.state.currentIndex = i; 
+                incrementProgress(1);
                 loadActiveQuestion();
             }
         };
@@ -207,70 +178,62 @@ function setupLevel(idx) {
 }
 
 function nextQuestion(keep) {
-    state.locked = false;
-    const lvl = state.levels[state.currentLevel];
-    if(state.general >= lvl.questions.length) {
+    window.state.locked = false;
+    const lvl = window.state.levels[window.state.currentLevel];
+    if(window.state.general >= lvl.questions.length) {
         saveProgress("level", lvl.id, "A");
-        if(state.currentLevel < state.levels.length - 1) setTimeout(() => setupLevel(state.currentLevel + 1), 1500);
+        if(window.state.currentLevel < window.state.levels.length - 1) setTimeout(() => setupLevel(window.state.currentLevel + 1), 1500);
         else document.getElementById("gameModuleContainer").innerHTML = "<h1 style='text-align:center'>Bravo ! 👑</h1>";
         return;
     }
     
     let nextIdx = -1;
     const req = lvl.requiredPerQuestion || 3;
-    for(let i=state.currentIndex+1; i<lvl.questions.length; i++) if(state.localScores[i] < req) { nextIdx = i; break; }
-    if(nextIdx === -1) for(let i=0; i<=state.currentIndex; i++) if(state.localScores[i] < req) { nextIdx = i; break; }
+    for(let i=window.state.currentIndex+1; i<lvl.questions.length; i++) if(window.state.localScores[i] < req) { nextIdx = i; break; }
+    if(nextIdx === -1) for(let i=0; i<=window.state.currentIndex; i++) if(window.state.localScores[i] < req) { nextIdx = i; break; }
     
     if(nextIdx !== -1) {
-        state.currentIndex = nextIdx;
+        window.state.currentIndex = nextIdx;
         loadActiveQuestion();
     }
 }
 
-// FONCTION CLÉ : CHOIX MODE
 function loadActiveQuestion() {
-    if(!state.currentGameModuleInstance || !state.currentGameModuleInstance.loadQuestion) return;
+    if(!window.state.currentGameModuleInstance || !window.state.currentGameModuleInstance.loadQuestion) return;
     
-    const lvl = state.levels[state.currentLevel];
-    const q = lvl.questions[state.currentIndex];
-    const score = state.localScores[state.currentIndex];
+    const lvl = window.state.levels[window.state.currentLevel];
+    const q = lvl.questions[window.state.currentIndex];
+    const score = window.state.localScores[window.state.currentIndex];
     const req = lvl.requiredPerQuestion || 3;
     
     const qToSend = JSON.parse(JSON.stringify(q));
     
-    // RÈGLE D'OR : Dernier palier = Texte
     if (score >= req - 1) {
         console.log("🔥 DERNIER PALIER -> MODE TEXTE");
         delete qToSend.options; 
     }
     
-    state.currentGameModuleInstance.loadQuestion(qToSend);
+    window.state.currentGameModuleInstance.loadQuestion(qToSend);
 }
 
 function incrementProgress(val) {
-    const req = state.levels[state.currentLevel].requiredPerQuestion || 3;
-    // On met à jour le score local de la question actuelle (ex: 1/3, 2/3...)
-    state.localScores[state.currentIndex] = Math.max(0, Math.min(req, state.localScores[state.currentIndex] + val));
+    const req = window.state.levels[window.state.currentLevel].requiredPerQuestion || 3;
+    window.state.localScores[window.state.currentIndex] = Math.max(0, Math.min(req, window.state.localScores[window.state.currentIndex] + val));
     
     updateBars();
 
-    // SI LA QUESTION EST FINIE (ex: 3/3)
-    if (state.localScores[state.currentIndex] >= req) { 
-        state.general++; 
-        // On attend la fin de l'animation de victoire avant de passer à une AUTRE question
+    if (window.state.localScores[window.state.currentIndex] >= req) { 
+        window.state.general++; 
         setTimeout(() => nextQuestion(false), 1200); 
     } 
-    // SI ON A JUSTE MAIS QU'IL RESTE DES PALIERS (ex: passage de 1/3 à 2/3)
     else if (val > 0) {
-        // On recharge la MÊME question (ce qui permet de passer en mode TEXTE si score >= 2)
         setTimeout(() => loadActiveQuestion(), 1000);
     }
-    // SI ON A FAUX : On ne fait rien ici, wrongAnswerFlow s'en occupe
 }
 
 function updateBars() {
-    const req = state.levels[state.currentLevel].requiredPerQuestion || 3;
-    state.localScores.forEach((score, i) => {
+    const req = window.state.levels[window.state.currentLevel].requiredPerQuestion || 3;
+    window.state.localScores.forEach((score, i) => {
         const bar = document.getElementById(`subBar${i}`);
         if(bar) { 
             const pct = (score / req) * 100;
@@ -278,45 +241,42 @@ function updateBars() {
             if(score >= req) bar.parentElement.classList.add("completed"); 
         }
     });
-    document.getElementById("mainBar").style.width = (state.general / state.levels[state.currentLevel].questions.length * 100) + "%";
+    document.getElementById("mainBar").style.width = (window.state.general / window.state.levels[window.state.currentLevel].questions.length * 100) + "%";
 }
 
-function renderLives() { document.getElementById("lives").innerHTML = "❤️❤️❤️❤️".substring(0, state.lives*2); }
+function renderLives() { document.getElementById("lives").innerHTML = "❤️❤️❤️❤️".substring(0, window.state.lives*2); }
 
 function wrongAnswerFlow(msg) {
-    state.lives--; 
+    window.state.lives--; 
     renderLives();
     
-    // On recule le score de la question actuelle (pénalité)
-    const req = state.levels[state.currentLevel].requiredPerQuestion || 3;
-    state.localScores[state.currentIndex] = Math.max(0, state.localScores[state.currentIndex] - 1);
+    const req = window.state.levels[window.state.currentLevel].requiredPerQuestion || 3;
+    window.state.localScores[window.state.currentIndex] = Math.max(0, window.state.localScores[window.state.currentIndex] - 1);
     updateBars();
 
-    if(state.lives <= 0) {
+    if(window.state.lives <= 0) {
         document.getElementById("overlay").style.display = "flex";
     } else { 
         if(msg) { 
             document.getElementById("correctionText").textContent = msg; 
             document.getElementById("correctionOverlay").style.display = "flex"; 
         }
-        // IMPORTANT : On recharge la question actuelle pour que l'élève réessaie
-        // sans appeler nextQuestion() !
         setTimeout(() => loadActiveQuestion(), 1500);
     }
 }
 
 async function saveProgress(type, val, grade) {
-    if(state.currentPlayerId && state.currentPlayerId !== "prof") {
+    if(window.state.currentPlayerId && window.state.currentPlayerId !== "prof") {
         try {
-            await fetch("/api/save-progress", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ playerId: state.currentPlayerId, progressType: type, value: val, grade: grade }) });
+            await fetch("/api/save-progress", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ playerId: window.state.currentPlayerId, progressType: type, value: val, grade: grade }) });
             if(type === "level") {
-                if(!state.currentPlayerData.validatedLevels) state.currentPlayerData.validatedLevels = [];
-                state.currentPlayerData.validatedLevels.push(val);
-                localStorage.setItem("player", JSON.stringify(state.currentPlayerData));
+                if(!window.state.currentPlayerData.validatedLevels) window.state.currentPlayerData.validatedLevels = [];
+                window.state.currentPlayerData.validatedLevels.push(val);
+                localStorage.setItem("player", JSON.stringify(window.state.currentPlayerData));
             }
         } catch(e) {}
     }
 }
 
 document.getElementById("closeCorrectionBtn").onclick = () => { document.getElementById("correctionOverlay").style.display="none"; };
-document.getElementById("restartBtn").onclick = () => { document.getElementById("overlay").style.display="none"; setupLevel(state.currentLevel); };
+document.getElementById("restartBtn").onclick = () => { document.getElementById("overlay").style.display="none"; setupLevel(window.state.currentLevel); };

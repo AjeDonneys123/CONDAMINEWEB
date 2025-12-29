@@ -41,7 +41,6 @@
           <button id="startBtn" type="submit" style="flex:1; background:#2563eb; color:white; border:none; cursor:pointer;">Entrer</button>
         </div>
       </form>
-      <!-- Correction: Modale Prof dans une div simple pour éviter l'avertissement form -->
       <div id="profPasswordModal" style="display:none; margin-top:15px; border-top:1px solid #eee; padding-top:10px;">
            <label style="font-size:0.9em; font-weight:bold;">Accès Enseignant :</label>
            <div style="display:flex; gap:10px; margin-top:5px;">
@@ -96,7 +95,6 @@
         <div style="margin-bottom: 15px;"><select id="classFilter" style="width:100%; padding:8px;"><option value="all">Toutes</option><option value="6D">6eD</option><option value="5B">5eB</option><option value="5C">5eC</option><option value="2A">2de A</option><option value="2CD">2de CD</option></select></div>
         <button id="testClassBtn" style="width:100%; padding:12px; background:#3b82f6; color:white; border:none; border-radius:8px; margin-bottom:15px; font-weight:bold;">🎮 Tester classe</button>
         <input id="studentSearch" placeholder="Rechercher..." style="width:100%; padding:10px; margin-bottom:15px;">
-        <button id="resetAllBtn" style="width:100%; padding:12px; background:#ef4444; color:white; border:none; border-radius:8px; margin-bottom:25px; font-weight:bold;">⚠️ Tout Réinitialiser</button>
         <table id="playersTable" style="width:100%; border-collapse:collapse;"><thead style="background:#f8fafc;"><tr><th style="padding:10px;">Prénom</th><th style="padding:10px;">Classe</th><th style="padding:10px;">Progression</th><th style="padding:10px;">Actions</th></tr></thead><tbody id="playersBody"></tbody></table>
       </div>
       <div id="contentHomeworks" class="tab-content">
@@ -116,64 +114,48 @@
 
   </main>
 
-  <!-- ======================== TEMPLATES JEUX ======================== -->
-
-  <!-- TEMPLATE HOMEWORK (LISEUSE + SPLIT BAS) -->
-<template id="template-homework-game">
+  <!-- TEMPLATES (inchangés) -->
+  <template id="template-homework-game">
   <div class="hw-layout">
-    <!-- VUE LISTE -->
     <div id="hw-list" class="hw-list-view">Chargement...</div>
-    
-    <!-- VUE TRAVAIL -->
     <div id="hw-workspace" class="hw-work-view" style="display:none; flex-direction: column; height: 100%;">
-        
-        <!-- HAUT : LISEUSE DOCS (Ligne 1) -->
         <div id="doc-viewer" class="doc-viewer-container" style="flex: 1.2; position: relative; background: #0f172a; overflow: hidden;">
             <div id="pan-zoom-content" style="position: absolute; top: 50%; left: 50%; transform-origin: center center;">
                 <img id="current-doc-img" src="" style="display:none;">
                 <iframe id="current-doc-pdf" src="" style="display:none; width:800px; height:600px;"></iframe>
+                <div id="no-doc-msg" style="display:none; color:white; font-size:1.2em;">Aucun document</div>
             </div>
+            <div id="page-counter" class="page-counter"></div>
             <button id="btn-prev-doc" class="nav-arrow" style="left:10px;">❮</button>
             <button id="btn-next-doc" class="nav-arrow" style="right:10px;">❯</button>
             <div class="doc-controls"><button class="zoom-btn" id="btn-zoom-out">➖</button><button class="zoom-btn" id="btn-zoom-in">➕</button></div>
             <button id="btn-close-work" style="position:absolute; top:10px; left:10px; background:red; color:white; border:none; padding:5px; border-radius:4px; z-index:100;">Quitter</button>
         </div>
-
-        <!-- BAS : ZONE INTERACTIVE (Question à gauche / Réponse à droite) -->
         <div class="interaction-zone" style="flex: 1; display: flex; flex-direction: row; background: white; border-top: 4px solid #f59e0b;">
-            
-            <!-- GAUCHE : LA QUESTION -->
             <div class="question-part" style="flex: 1; border-right: 2px solid #e2e8f0; display: flex; flex-direction: column; position: relative;">
                 <h4 style="margin: 5px 10px; color: #2563eb;">Question <span id="q-index">1</span></h4>
                 <div id="q-text" style="padding: 0 10px; font-size: 0.9em; font-weight: bold; margin-bottom: 5px;"></div>
-                
-                <div id="q-image-container" style="flex: 1; position: relative; overflow: hidden; background: #0f172a;">
-                    <div id="pan-zoom-question-content" style="position: absolute; top: 50%; left: 50%; transform-origin: center center;">
-                        <!-- Image injectée ici -->
-                    </div>
+                <div id="q-image-container" style="flex: 1; position: relative; overflow: hidden; background: #0f172a; display:none;">
+                    <div id="pan-zoom-question-content" style="position: absolute; top: 50%; left: 50%; transform-origin: center center;"></div>
                     <div class="doc-controls" style="scale: 0.7; bottom: 5px; right: 5px;">
                         <button class="zoom-btn" id="btn-zoom-out-q">➖</button>
                         <button class="zoom-btn" id="btn-zoom-in-q">➕</button>
                     </div>
                 </div>
             </div>
-
-            <!-- DROITE : LA RÉPONSE -->
             <div class="answer-part" style="flex: 1; padding: 10px; display: flex; flex-direction: column; gap: 8px;">
                 <textarea id="hw-text" style="flex: 1; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; resize: none;" placeholder="Écris ta réponse ici..."></textarea>
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <label style="color: #2563eb; cursor: pointer; font-size: 0.9em;">
-                        📎 Photo <input type="file" id="hw-file" style="display:none;">
+                        📎 Photo <input type="file" id="hw-file" style="display:none;" multiple>
                         <span id="file-name" style="font-size: 0.8em; color: #64748b;"></span>
                     </label>
                     <button id="hw-submit" style="background: #2563eb; color: white; padding: 8px 16px; border: none; border-radius: 6px; font-weight: bold;">Envoyer à l'IA 🤖</button>
                 </div>
             </div>
         </div>
-
-        <!-- MODALE IA -->
-        <div id="ai-feedback-modal" class="ai-modal-center" style="display:none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; border-radius: 12px; z-index: 2000; width: 80%; border: 2px solid #2563eb;">
-            <div id="ai-content"></div>
+        <div id="ai-feedback-modal" class="ai-modal-center" style="display:none;">
+            <div id="ai-content" class="ai-content-box"></div>
             <div style="text-align: right; margin-top: 10px;">
                 <button id="btn-modify" style="background: #f59e0b; color: white; border: none; padding: 8px; border-radius: 4px;">Modifier</button>
                 <button id="btn-next" style="background: #16a34a; color: white; border: none; padding: 8px; border-radius: 4px;">Suivant</button>
@@ -182,38 +164,13 @@
         <div id="ai-overlay" style="display:none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 1500;"></div>
     </div>
   </div>
-</template>
-
-  <!-- AUTRES TEMPLATES -->
- <template id="template-zombie-game">
-  <div style="text-align:center;">
-    <div id="zombie-arena">
-      <img id="z-hero" src="images/hero.png" class="game-character" style="left:20px;">
-      <img id="z-zombie" src="images/zombi.png" class="game-character" style="right:20px;">
-      <div id="z-projectile"></div>
-      <div id="feedback-bubble"></div>
-    </div>
-    <div id="z-question" class="question-zone"></div>
-    
-    <!-- Zone pour l'IA (cachée si QCM) -->
-    <div id="ai-input-zone" style="display:none; gap:10px; justify-content:center; margin-top:10px;">
-      <input id="z-answer" placeholder="Ta réponse..." style="padding:10px; flex:1; max-width:300px;">
-      <button id="z-submit" style="padding:10px 20px; background:#2563eb; color:white; border:none; border-radius:5px; cursor:pointer;">Valider</button>
-    </div>
-
-    <!-- Zone pour les boutons QCM (affichée si options) -->
-    <div id="options-grid" style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:15px;">
-      <button class="option-btn"></button>
-      <button class="option-btn"></button>
-      <button class="option-btn"></button>
-      <button class="option-btn"></button>
-    </div>
-  </div>
-</template>
+  </template>
+  <template id="template-zombie-game"><div style="text-align:center;"><div id="zombie-arena"><img id="z-hero" src="images/hero.png" class="game-character" style="left:20px;"><img id="z-zombie" src="images/zombi.png" class="game-character" style="right:20px;"><div id="z-projectile"></div><div id="feedback-bubble"></div></div><div id="z-question" class="question-zone"></div><div id="ai-input-zone" style="display:none; gap:10px; justify-content:center; margin-top:10px;"><input id="z-answer" placeholder="Ta réponse..." style="padding:10px; flex:1; max-width:300px;"><button id="z-submit" style="padding:10px 20px; background:#2563eb; color:white; border:none; border-radius:5px; cursor:pointer;">Valider</button></div><div id="options-grid" style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:15px;"><button class="option-btn"></button><button class="option-btn"></button><button class="option-btn"></button><button class="option-btn"></button></div></div></template>
   <template id="template-redaction-game"><div id="redac-q"></div><textarea id="redac-answer"></textarea><button id="redac-submit">Envoyer</button><div id="redac-loading"></div><div id="analysis-area"><div id="text-good"></div><button id="redac-continue">Continuer</button></div></template>
   <template id="template-starship-game"><div id="starship-game-area"><div id="ship"></div><div id="question"></div></div></template>
   <template id="template-jumper-game"><div id="jumper-area"><div id="player"></div><div id="q-text"></div><div id="options-grid"></div></div></template>
 
-  <script type="module" src="js/main.js"></script>
+  <!-- ON APPELLE APP.JS DIRECTEMENT ET PLUS MAIN.JS -->
+  <script type="module" src="js/app.js"></script>
 </body>
 </html>
