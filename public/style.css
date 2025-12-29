@@ -1,3 +1,4 @@
+
 :root {
     --primary: #2563eb;
     --primary-dark: #1e40af;
@@ -124,28 +125,21 @@ button { cursor: pointer; transition: 0.2s; }
     width: 0; height: 0; /* Point de référence central */
     pointer-events: none;
 }
-/* ==================================================
-   DANS FILE: public/style.css
-   Remplacez le bloc #current-doc-img par ça :
-   ================================================== */
 
+/* L'IMAGE DU DOCUMENT - MODIFIÉ POUR FIT TO SCREEN */
 #current-doc-img {
-    /* On enlève les contraintes fixes de largeur */
     height: auto;
-    
-    /* On s'assure que l'image ne dépasse pas bêtement */
-    max-width: 10000px; /* On laisse le JS gérer le zoom */
+    /* On retire les limites pour laisser le JS calculer le bon zoom */
+    max-width: 10000px;
     max-height: 10000px;
     
     box-shadow: 0 0 50px rgba(0,0,0,0.8);
     border: 3px solid white;
     
     pointer-events: auto; 
-    -webkit-user-drag: none;
+    -webkit-user-drag: none; 
     transform-origin: center center;
 }
-/* L'IMAGE DU DOCUMENT */
-
 
 /* LE PDF */
 #current-doc-pdf {
@@ -255,3 +249,5 @@ td { padding: 12px 15px; border-bottom: 1px solid #f1f5f9; color: var(--text-mai
 .opt-wrong { background: #fee2e2 !important; border-color: #ef4444 !important; }
 
 #starship-game-area, #jumper-area { position: relative; height: 350px; border-radius: 12px; overflow: hidden; border: 4px solid #334155; }
+
+

@@ -1,3 +1,4 @@
+// ==================================================
 // PLUS D'IMPORTS ! On utilise window.state et window.api
 
 export class HomeworkGame {
@@ -5,7 +6,7 @@ export class HomeworkGame {
         this.c = container; 
         this.controller = controller;
 
-        console.log("📚 HomeworkGame Loaded (Global Mode)");
+        console.log("📚 HomeworkGame Loaded (Global Mode) with Fit-to-screen");
 
         // --- UI ---
         this.listView = this.c.querySelector("#hw-list"); 
@@ -122,7 +123,6 @@ export class HomeworkGame {
     async loadHomeworks() {
         if(this.listView) this.listView.innerHTML = "<p>Chargement...</p>";
         try {
-            // CORRECTION : Utilisation de window.api et window.state
             const list = await window.api.getHomeworks(window.state.currentPlayerData.classroom);
             if(this.listView) {
                 this.listView.innerHTML = ""; 
@@ -168,12 +168,22 @@ export class HomeworkGame {
                 img.src = currentLevel.questionImage;
                 img.style.display = "block";
                 img.style.webkitUserDrag = "none";
+                
+                // --- FIX : FIT-TO-SCREEN POUR QUESTION ---
+                img.style.maxWidth = "none";
+                img.style.maxHeight = "none";
 
                 img.onload = () => {
-                    const scale = this.qImgZone.offsetWidth / img.naturalWidth;
-                    this.viewQ.scale = scale;
-                    this.viewQ.y = (img.naturalHeight * scale - this.qImgZone.offsetHeight) / 2;
+                    const containerW = this.qImgZone.offsetWidth;
+                    const containerH = this.qImgZone.offsetHeight;
+                    const imgW = img.naturalWidth;
+                    const imgH = img.naturalHeight;
+                    // Ratio 95%
+                    const scaleW = (containerW * 0.95) / imgW;
+                    const scaleH = (containerH * 0.95) / imgH;
+                    this.viewQ.scale = Math.min(scaleW, scaleH);
                     this.viewQ.x = 0;
+                    this.viewQ.y = 0;
                     this.updateTransform('q');
                 };
                 this.qPanZoomContent.appendChild(img);
@@ -192,13 +202,7 @@ export class HomeworkGame {
         if(this.btnSubmit) this.btnSubmit.disabled = false;
     }
 
- // ==================================================
-// DANS FILE: public/js/games/HomeworkGame.js
-// Remplacez toute la fonction renderCurrentDoc() par :
-// ==================================================
-
     renderCurrentDoc() {
-        // On réinitialise la vue (x=0, y=0) mais on attend pour le scale
         this.view = { x: 0, y: 0, scale: 1 }; 
         
         if (this.docs.length === 0) {
@@ -223,21 +227,16 @@ export class HomeworkGame {
             if(this.imgEl) { 
                 this.imgEl.style.display = "block"; 
                 
-                // --- AJOUT : CALCUL AUTOMATIQUE DU ZOOM ---
+                // --- FIX : FIT-TO-SCREEN POUR DOC PRINCIPAL ---
                 this.imgEl.onload = () => {
                     const containerW = this.viewerContainer.offsetWidth;
                     const containerH = this.viewerContainer.offsetHeight;
                     const imgW = this.imgEl.naturalWidth;
                     const imgH = this.imgEl.naturalHeight;
-
-                    // On calcule le ratio pour que ça rentre en largeur ET en hauteur
-                    // Le 0.9 sert à laisser une petite marge (90% de la taille)
+                    // Ratio 90%
                     const scaleW = (containerW * 0.9) / imgW;
                     const scaleH = (containerH * 0.9) / imgH;
-                    
-                    // On prend le plus petit ratio pour être sûr que tout rentre
                     this.view.scale = Math.min(scaleW, scaleH);
-                    
                     this.updateTransform('doc');
                 };
                 
@@ -268,19 +267,19 @@ export class HomeworkGame {
             let imgUrl = null;
             if(file) {
                 const fd = new FormData(); fd.append('file', file);
-                const r = await window.api.upload(file); // CORRECTION: window.api
+                const r = await window.api.upload(file); 
                 if(r.ok) imgUrl = r.imageUrl;
             }
             
             const lvl = this.currentHw.levels[this.currentLevelIndex];
-            const res = await window.api.post('/api/analyze-homework', { // CORRECTION: window.api
+            const res = await window.api.post('/api/analyze-homework', { 
                 imageUrl: imgUrl, 
                 userText: txt, 
                 homeworkInstruction: lvl.instruction,
                 homeworkContext: lvl.aiPrompt,
                 questionImage: lvl.questionImage,
                 teacherDocUrls: this.docs,
-                classroom: window.state.currentPlayerData.classroom, // CORRECTION: window.state
+                classroom: window.state.currentPlayerData.classroom,
                 playerId: window.state.currentPlayerId,
                 homeworkId: this.currentHw._id,
                 levelIndex: this.currentLevelIndex 
