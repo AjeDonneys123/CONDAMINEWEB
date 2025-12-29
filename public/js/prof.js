@@ -155,6 +155,29 @@ export function initProfDashboard() {
     document.getElementById("classFilter").onchange = applyFiltersAndRender;
     document.getElementById("studentSearch").oninput = applyFiltersAndRender;
 
+    // --- CORRECTION 1 : RÉPARATION BOUTON BUGS ---
+    const btnBugs = document.getElementById("viewBugsBtn");
+    if(btnBugs) {
+        btnBugs.onclick = async () => {
+            const res = await fetch('/api/bugs');
+            const bugs = await res.json();
+            const list = document.getElementById("bugsBody");
+            if(bugs.length === 0) list.innerHTML = "<p>Aucun bug signalé.</p>";
+            else {
+                list.innerHTML = bugs.map(b => `
+                   <div style="border-bottom:1px solid #ccc; padding:10px; text-align:left;">
+                       <button onclick="deleteBug('${b._id}')" style="float:right; background:none; border:none; cursor:pointer; font-size:1.2em;">🗑️</button>
+                       <strong>${b.reporterName}</strong> (${b.classroom}) <small style="color:gray;">${new Date(b.date).toLocaleDateString()}</small><br>
+                       <div style="margin-top:5px; background:#f8fafc; padding:8px; border-radius:5px;">${b.description}</div>
+                   </div>`).join('');
+            }
+            document.getElementById("profBugListModal").style.display = "flex";
+        };
+    }
+    const closeBugBtn = document.getElementById("closeBugListBtn");
+    if(closeBugBtn) closeBugBtn.onclick = () => document.getElementById("profBugListModal").style.display = "none";
+
+    // --- CORRECTION 2 : BOUTON TESTER CLASSE (SANS CONFIRMATION) ---
     const btnTest = document.getElementById("testClassBtn");
     if(btnTest) {
         btnTest.onclick = async () => {
@@ -163,25 +186,32 @@ export function initProfDashboard() {
                 alert("⚠️ Veuillez sélectionner une classe précise dans la liste déroulante (ex: 6eD) pour la tester.");
                 return;
             }
-            if (confirm(`Voulez-vous voir la plateforme comme un élève de ${currentFilter} ?`)) {
-                try {
-                    const res = await fetch('/api/register', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ firstName: "Eleve", lastName: "Test", classroom: currentFilter })
-                    });
-                    const data = await res.json();
-                    if (data.ok) {
-                        localStorage.setItem("player", JSON.stringify(data));
-                        window.location.reload(); 
-                    } else {
-                        alert("Erreur serveur lors de la création du compte test.");
-                    }
-                } catch(e) { alert("Erreur de connexion."); }
-            }
+            // SUPPRESSION DU CONFIRM -> EXECUTION DIRECTE
+            try {
+                const res = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ firstName: "Eleve", lastName: "Test", classroom: currentFilter })
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    localStorage.setItem("player", JSON.stringify(data));
+                    window.location.reload(); 
+                } else {
+                    alert("Erreur serveur lors de la création du compte test.");
+                }
+            } catch(e) { alert("Erreur de connexion."); }
         };
     }
 }
+
+// Fonction globale pour supprimer un bug
+window.deleteBug = async function(id) {
+    if(confirm("Supprimer ce signalement ?")) {
+        await fetch(`/api/bugs/${id}`, { method: 'DELETE' });
+        document.getElementById("viewBugsBtn").click(); // Rafraîchir la liste
+    }
+};
 
 // ==========================================================
 // 3. LOGIQUE DES DEVOIRS (CRUD)
@@ -249,9 +279,8 @@ window.renderLevelsInputs = function() {
                 const isPdf = url.toLowerCase().endsWith('.pdf');
                 const thumbnail = isPdf 
                     ? `<div style="width:100%; height:80px; background:#e2e8f0; display:flex; align-items:center; justify-content:center; border-radius:8px; color:#475569; font-weight:bold;">PDF</div>`
-                    : `<img src="${url}" style="width:100%; height:80px; object-fit:cover; border-radius:8px; pointer-events:none;">`; // pointer-events:none pour éviter conflit drag
+                    : `<img src="${url}" style="width:100%; height:80px; object-fit:cover; border-radius:8px; pointer-events:none;">`;
                 
-                // Ajout des attributs Drag & Drop
                 docsHtml += `
                     <div class="doc-item"
                          draggable="true" 
@@ -309,29 +338,21 @@ window.renderLevelsInputs = function() {
 // === FONCTIONS DRAG & DROP ===
 window.dragStart = function(ev, lvlIdx, docIdx) {
     ev.dataTransfer.effectAllowed = "move";
-    ev.dataTransfer.setData("text/plain", docIdx); // On stocke l'index de départ
+    ev.dataTransfer.setData("text/plain", docIdx); 
     ev.target.style.opacity = '0.4';
 };
 
 window.allowDrop = function(ev) {
-    ev.preventDefault(); // Nécessaire pour autoriser le drop
+    ev.preventDefault(); 
     ev.dataTransfer.dropEffect = "move";
 };
 
 window.dropDoc = function(ev, lvlIdx, targetDocIdx) {
     ev.preventDefault();
     const fromDocIdx = parseInt(ev.dataTransfer.getData("text/plain"));
-    
-    // Récupérer le tableau
     const attachments = state.tempHwLevels[lvlIdx].attachmentUrls;
-    
-    // Déplacer l'élément
-    // 1. Retirer l'élément de sa position originale
     const movedItem = attachments.splice(fromDocIdx, 1)[0];
-    // 2. L'insérer à la nouvelle position
     attachments.splice(targetDocIdx, 0, movedItem);
-
-    // Rafraîchir
     renderLevelsInputs();
 };
 
@@ -340,12 +361,9 @@ window.dropDoc = function(ev, lvlIdx, targetDocIdx) {
 window.uploadFileToZone = async function(inputEl, lvlIdx, zoneType) {
     if (!inputEl.files || inputEl.files.length === 0) return;
 
-    // Affiche un petit feedback de chargement
     const btn = inputEl.nextElementSibling;
-    const originalText = btn ? btn.textContent : "";
     if(btn) btn.textContent = "⏳ Envoi en cours...";
 
-    // Boucle pour upload multiple
     for (const file of inputEl.files) {
         const res = await uploadFile(file);
         if (res.ok) {
@@ -357,8 +375,6 @@ window.uploadFileToZone = async function(inputEl, lvlIdx, zoneType) {
             }
         }
     }
-    
-    // Tout fini -> Rafraîchir
     renderLevelsInputs();
 };
 

@@ -272,18 +272,50 @@ app.post('/api/register', async (req, res) => {
   } catch (e) { res.status(500).json({ ok: false }); }
 });
 
+// --- ROUTE CORRIGÉE POUR L'IA (ZOMBIE GAME) AVEC SAUVEGARDE ---
 app.post('/api/verify-answer-ai', async (req, res) => {
   const { question, userAnswer, expectedAnswer, playerId } = req.body;
   if (geminiKey) {
     try {
       const genAI = new GoogleGenerativeAI(geminiKey);
       const model = genAI.getGenerativeModel({ model: MODEL_NAME, generationConfig: { responseMimeType: "application/json" } });
-      const systemInstruction = `RÔLE : Arbitre de Jeu "Bienveillant". TACHE : Valide phonétique (demografi = correct). FORMAT JSON : { "status": "correct" | "incorrect", "feedback": "...", "corrections": [] }`;
+      
+      const systemInstruction = `RÔLE : Arbitre de Jeu "Bienveillant". TACHE : Valide phonétique (demografi = correct). FORMAT JSON OBLIGATOIRE : { "status": "correct" | "incorrect", "feedback": "Court message encourageant", "corrections": [ { "wrong": "mot_mal_ecrit", "correct": "mot_bien_ecrit" } ] }`;
+      
       const result = await model.generateContent([systemInstruction, `Q: ${question}, A attendue: ${expectedAnswer}, R élève: ${userAnswer}`]);
-      return res.json(JSON.parse(result.response.text()));
+      const jsonResponse = JSON.parse(result.response.text());
+
+      // --- AJOUT IMPORTANT : ON SAUVEGARDE LES FAUTES DANS LA BDD ---
+      if (playerId && jsonResponse.corrections && jsonResponse.corrections.length > 0) {
+          try {
+              await Player.findByIdAndUpdate(playerId, {
+                  $push: {
+                      spellingMistakes: {
+                          $each: jsonResponse.corrections.map(c => ({
+                              wrong: c.wrong,
+                              correct: c.correct,
+                              date: new Date()
+                          }))
+                      }
+                  }
+              });
+              console.log("📝 Fautes sauvegardées pour " + playerId);
+          } catch (err) { console.error("Erreur sauvegarde faute:", err); }
+      }
+
+      return res.json(jsonResponse);
     } catch (error) { console.error(error); }
   }
   res.json({ status: "incorrect", feedback: "Erreur IA" });
+});
+
+// --- NOUVELLE ROUTE POUR RECUPERER LES INFOS D'UN SEUL JOUEUR ---
+app.get('/api/player-data/:id', async (req, res) => {
+    try {
+        const p = await Player.findById(req.params.id);
+        if(p) res.json(p);
+        else res.status(404).json({});
+    } catch(e) { res.status(500).json({}); }
 });
 
 app.get('/api/players', async (req, res) => { res.json(await Player.find().sort({ lastName: 1 })); });

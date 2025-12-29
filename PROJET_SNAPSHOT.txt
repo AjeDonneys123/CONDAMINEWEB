@@ -1,4 +1,4 @@
-// SNAPSHOT - 28/12/2025 18:47:03
+// SNAPSHOT - 28/12/2025 19:07:42
 
 
 // FILE: package.json
@@ -389,18 +389,50 @@ app.post('/api/register', async (req, res) => {
   } catch (e) { res.status(500).json({ ok: false }); }
 });
 
+// --- ROUTE CORRIGÉE POUR L'IA (ZOMBIE GAME) AVEC SAUVEGARDE ---
 app.post('/api/verify-answer-ai', async (req, res) => {
   const { question, userAnswer, expectedAnswer, playerId } = req.body;
   if (geminiKey) {
     try {
       const genAI = new GoogleGenerativeAI(geminiKey);
       const model = genAI.getGenerativeModel({ model: MODEL_NAME, generationConfig: { responseMimeType: "application/json" } });
-      const systemInstruction = `RÔLE : Arbitre de Jeu "Bienveillant". TACHE : Valide phonétique (demografi = correct). FORMAT JSON : { "status": "correct" | "incorrect", "feedback": "...", "corrections": [] }`;
+      
+      const systemInstruction = `RÔLE : Arbitre de Jeu "Bienveillant". TACHE : Valide phonétique (demografi = correct). FORMAT JSON OBLIGATOIRE : { "status": "correct" | "incorrect", "feedback": "Court message encourageant", "corrections": [ { "wrong": "mot_mal_ecrit", "correct": "mot_bien_ecrit" } ] }`;
+      
       const result = await model.generateContent([systemInstruction, `Q: ${question}, A attendue: ${expectedAnswer}, R élève: ${userAnswer}`]);
-      return res.json(JSON.parse(result.response.text()));
+      const jsonResponse = JSON.parse(result.response.text());
+
+      // --- AJOUT IMPORTANT : ON SAUVEGARDE LES FAUTES DANS LA BDD ---
+      if (playerId && jsonResponse.corrections && jsonResponse.corrections.length > 0) {
+          try {
+              await Player.findByIdAndUpdate(playerId, {
+                  $push: {
+                      spellingMistakes: {
+                          $each: jsonResponse.corrections.map(c => ({
+                              wrong: c.wrong,
+                              correct: c.correct,
+                              date: new Date()
+                          }))
+                      }
+                  }
+              });
+              console.log("📝 Fautes sauvegardées pour " + playerId);
+          } catch (err) { console.error("Erreur sauvegarde faute:", err); }
+      }
+
+      return res.json(jsonResponse);
     } catch (error) { console.error(error); }
   }
   res.json({ status: "incorrect", feedback: "Erreur IA" });
+});
+
+// --- NOUVELLE ROUTE POUR RECUPERER LES INFOS D'UN SEUL JOUEUR ---
+app.get('/api/player-data/:id', async (req, res) => {
+    try {
+        const p = await Player.findById(req.params.id);
+        if(p) res.json(p);
+        else res.status(404).json({});
+    } catch(e) { res.status(500).json({}); }
 });
 
 app.get('/api/players', async (req, res) => { res.json(await Player.find().sort({ lastName: 1 })); });
@@ -977,7 +1009,6 @@ export async function initStudentInterface() {
         try {
             const res = await fetch(`questions/questions-${classKey}.json`);
             if(res.ok) state.allQuestionsData[classKey] = await res.json();
-            // Optionnel : updateChapterUI()
         } catch(e) { console.log("Info: Pas de JSON questions"); }
         document.querySelectorAll(".chapter-action-btn").forEach(b => b.disabled = false);
     }
@@ -997,7 +1028,7 @@ export async function initStudentInterface() {
         }
     }
     
-    // MES FAUTES
+    // MES FAUTES (CORRIGÉ)
     const btnMistakes = document.getElementById("myMistakesBtn");
     if(btnMistakes && state.currentPlayerData.id !== "prof") {
         btnMistakes.style.display = "block";
@@ -1026,20 +1057,36 @@ export async function initStudentInterface() {
     }
 }
 
+// --- FONCTION DE CHARGEMENT DES FAUTES CORRIGÉE ---
 async function loadMistakes() {
     const list = document.getElementById("mistakesList");
     const modal = document.getElementById("mistakesModal");
     list.innerHTML = "Chargement...";
     modal.style.display = "flex";
+    
     try {
-        const res = await fetch(`/api/player-progress/${state.currentPlayerId}`);
+        // On appelle la nouvelle route dédiée
+        const res = await fetch(`/api/player-data/${state.currentPlayerId}`);
         const data = await res.json();
         const mistakes = data.spellingMistakes || [];
-        if(mistakes.length === 0) list.innerHTML = "<p>Aucune faute !</p>";
-        else {
-            list.innerHTML = `<ul class='spelling-list'>` + mistakes.map(m => `<li class='spelling-item'><span class='wrong-word'>${m.wrong}</span> 👉 <span class='right-word'>${m.correct}</span></li>`).join('') + `</ul>`;
+        
+        if(mistakes.length === 0) {
+            list.innerHTML = "<p>Aucune faute enregistrée ! Bravo.</p>";
+        } else {
+            // On inverse pour voir les dernières en premier
+            const html = mistakes.reverse().map(m => `
+                <li class='spelling-item' style="margin-bottom:10px; border-bottom:1px solid #eee; padding-bottom:5px;">
+                    <span class='wrong-word' style="color:red; text-decoration:line-through;">${m.wrong}</span> 
+                    👉 
+                    <span class='right-word' style="color:green; font-weight:bold;">${m.correct}</span>
+                </li>
+            `).join('');
+            list.innerHTML = `<ul class='spelling-list' style="list-style:none; padding:0;">${html}</ul>`;
         }
-    } catch(e) { list.innerHTML = "Erreur."; }
+    } catch(e) { 
+        console.error(e);
+        list.innerHTML = "Erreur de chargement."; 
+    }
 }
 
 // LANCEUR
@@ -1411,6 +1458,29 @@ export function initProfDashboard() {
     document.getElementById("classFilter").onchange = applyFiltersAndRender;
     document.getElementById("studentSearch").oninput = applyFiltersAndRender;
 
+    // --- CORRECTION 1 : RÉPARATION BOUTON BUGS ---
+    const btnBugs = document.getElementById("viewBugsBtn");
+    if(btnBugs) {
+        btnBugs.onclick = async () => {
+            const res = await fetch('/api/bugs');
+            const bugs = await res.json();
+            const list = document.getElementById("bugsBody");
+            if(bugs.length === 0) list.innerHTML = "<p>Aucun bug signalé.</p>";
+            else {
+                list.innerHTML = bugs.map(b => `
+                   <div style="border-bottom:1px solid #ccc; padding:10px; text-align:left;">
+                       <button onclick="deleteBug('${b._id}')" style="float:right; background:none; border:none; cursor:pointer; font-size:1.2em;">🗑️</button>
+                       <strong>${b.reporterName}</strong> (${b.classroom}) <small style="color:gray;">${new Date(b.date).toLocaleDateString()}</small><br>
+                       <div style="margin-top:5px; background:#f8fafc; padding:8px; border-radius:5px;">${b.description}</div>
+                   </div>`).join('');
+            }
+            document.getElementById("profBugListModal").style.display = "flex";
+        };
+    }
+    const closeBugBtn = document.getElementById("closeBugListBtn");
+    if(closeBugBtn) closeBugBtn.onclick = () => document.getElementById("profBugListModal").style.display = "none";
+
+    // --- CORRECTION 2 : BOUTON TESTER CLASSE (SANS CONFIRMATION) ---
     const btnTest = document.getElementById("testClassBtn");
     if(btnTest) {
         btnTest.onclick = async () => {
@@ -1419,25 +1489,32 @@ export function initProfDashboard() {
                 alert("⚠️ Veuillez sélectionner une classe précise dans la liste déroulante (ex: 6eD) pour la tester.");
                 return;
             }
-            if (confirm(`Voulez-vous voir la plateforme comme un élève de ${currentFilter} ?`)) {
-                try {
-                    const res = await fetch('/api/register', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ firstName: "Eleve", lastName: "Test", classroom: currentFilter })
-                    });
-                    const data = await res.json();
-                    if (data.ok) {
-                        localStorage.setItem("player", JSON.stringify(data));
-                        window.location.reload(); 
-                    } else {
-                        alert("Erreur serveur lors de la création du compte test.");
-                    }
-                } catch(e) { alert("Erreur de connexion."); }
-            }
+            // SUPPRESSION DU CONFIRM -> EXECUTION DIRECTE
+            try {
+                const res = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ firstName: "Eleve", lastName: "Test", classroom: currentFilter })
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    localStorage.setItem("player", JSON.stringify(data));
+                    window.location.reload(); 
+                } else {
+                    alert("Erreur serveur lors de la création du compte test.");
+                }
+            } catch(e) { alert("Erreur de connexion."); }
         };
     }
 }
+
+// Fonction globale pour supprimer un bug
+window.deleteBug = async function(id) {
+    if(confirm("Supprimer ce signalement ?")) {
+        await fetch(`/api/bugs/${id}`, { method: 'DELETE' });
+        document.getElementById("viewBugsBtn").click(); // Rafraîchir la liste
+    }
+};
 
 // ==========================================================
 // 3. LOGIQUE DES DEVOIRS (CRUD)
@@ -1505,9 +1582,8 @@ window.renderLevelsInputs = function() {
                 const isPdf = url.toLowerCase().endsWith('.pdf');
                 const thumbnail = isPdf 
                     ? `<div style="width:100%; height:80px; background:#e2e8f0; display:flex; align-items:center; justify-content:center; border-radius:8px; color:#475569; font-weight:bold;">PDF</div>`
-                    : `<img src="${url}" style="width:100%; height:80px; object-fit:cover; border-radius:8px; pointer-events:none;">`; // pointer-events:none pour éviter conflit drag
+                    : `<img src="${url}" style="width:100%; height:80px; object-fit:cover; border-radius:8px; pointer-events:none;">`;
                 
-                // Ajout des attributs Drag & Drop
                 docsHtml += `
                     <div class="doc-item"
                          draggable="true" 
@@ -1565,29 +1641,21 @@ window.renderLevelsInputs = function() {
 // === FONCTIONS DRAG & DROP ===
 window.dragStart = function(ev, lvlIdx, docIdx) {
     ev.dataTransfer.effectAllowed = "move";
-    ev.dataTransfer.setData("text/plain", docIdx); // On stocke l'index de départ
+    ev.dataTransfer.setData("text/plain", docIdx); 
     ev.target.style.opacity = '0.4';
 };
 
 window.allowDrop = function(ev) {
-    ev.preventDefault(); // Nécessaire pour autoriser le drop
+    ev.preventDefault(); 
     ev.dataTransfer.dropEffect = "move";
 };
 
 window.dropDoc = function(ev, lvlIdx, targetDocIdx) {
     ev.preventDefault();
     const fromDocIdx = parseInt(ev.dataTransfer.getData("text/plain"));
-    
-    // Récupérer le tableau
     const attachments = state.tempHwLevels[lvlIdx].attachmentUrls;
-    
-    // Déplacer l'élément
-    // 1. Retirer l'élément de sa position originale
     const movedItem = attachments.splice(fromDocIdx, 1)[0];
-    // 2. L'insérer à la nouvelle position
     attachments.splice(targetDocIdx, 0, movedItem);
-
-    // Rafraîchir
     renderLevelsInputs();
 };
 
@@ -1596,12 +1664,9 @@ window.dropDoc = function(ev, lvlIdx, targetDocIdx) {
 window.uploadFileToZone = async function(inputEl, lvlIdx, zoneType) {
     if (!inputEl.files || inputEl.files.length === 0) return;
 
-    // Affiche un petit feedback de chargement
     const btn = inputEl.nextElementSibling;
-    const originalText = btn ? btn.textContent : "";
     if(btn) btn.textContent = "⏳ Envoi en cours...";
 
-    // Boucle pour upload multiple
     for (const file of inputEl.files) {
         const res = await uploadFile(file);
         if (res.ok) {
@@ -1613,8 +1678,6 @@ window.uploadFileToZone = async function(inputEl, lvlIdx, zoneType) {
             }
         }
     }
-    
-    // Tout fini -> Rafraîchir
     renderLevelsInputs();
 };
 

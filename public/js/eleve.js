@@ -30,7 +30,6 @@ export async function initStudentInterface() {
         try {
             const res = await fetch(`questions/questions-${classKey}.json`);
             if(res.ok) state.allQuestionsData[classKey] = await res.json();
-            // Optionnel : updateChapterUI()
         } catch(e) { console.log("Info: Pas de JSON questions"); }
         document.querySelectorAll(".chapter-action-btn").forEach(b => b.disabled = false);
     }
@@ -50,7 +49,7 @@ export async function initStudentInterface() {
         }
     }
     
-    // MES FAUTES
+    // MES FAUTES (CORRIGÉ)
     const btnMistakes = document.getElementById("myMistakesBtn");
     if(btnMistakes && state.currentPlayerData.id !== "prof") {
         btnMistakes.style.display = "block";
@@ -79,20 +78,36 @@ export async function initStudentInterface() {
     }
 }
 
+// --- FONCTION DE CHARGEMENT DES FAUTES CORRIGÉE ---
 async function loadMistakes() {
     const list = document.getElementById("mistakesList");
     const modal = document.getElementById("mistakesModal");
     list.innerHTML = "Chargement...";
     modal.style.display = "flex";
+    
     try {
-        const res = await fetch(`/api/player-progress/${state.currentPlayerId}`);
+        // On appelle la nouvelle route dédiée
+        const res = await fetch(`/api/player-data/${state.currentPlayerId}`);
         const data = await res.json();
         const mistakes = data.spellingMistakes || [];
-        if(mistakes.length === 0) list.innerHTML = "<p>Aucune faute !</p>";
-        else {
-            list.innerHTML = `<ul class='spelling-list'>` + mistakes.map(m => `<li class='spelling-item'><span class='wrong-word'>${m.wrong}</span> 👉 <span class='right-word'>${m.correct}</span></li>`).join('') + `</ul>`;
+        
+        if(mistakes.length === 0) {
+            list.innerHTML = "<p>Aucune faute enregistrée ! Bravo.</p>";
+        } else {
+            // On inverse pour voir les dernières en premier
+            const html = mistakes.reverse().map(m => `
+                <li class='spelling-item' style="margin-bottom:10px; border-bottom:1px solid #eee; padding-bottom:5px;">
+                    <span class='wrong-word' style="color:red; text-decoration:line-through;">${m.wrong}</span> 
+                    👉 
+                    <span class='right-word' style="color:green; font-weight:bold;">${m.correct}</span>
+                </li>
+            `).join('');
+            list.innerHTML = `<ul class='spelling-list' style="list-style:none; padding:0;">${html}</ul>`;
         }
-    } catch(e) { list.innerHTML = "Erreur."; }
+    } catch(e) { 
+        console.error(e);
+        list.innerHTML = "Erreur de chargement."; 
+    }
 }
 
 // LANCEUR
