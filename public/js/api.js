@@ -1,1 +1,0 @@
-console.log("💀 Ce fichier (api.js) est vide. Si tout marche, tu peux le supprimer.");

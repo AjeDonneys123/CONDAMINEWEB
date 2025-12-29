@@ -124,20 +124,28 @@ button { cursor: pointer; transition: 0.2s; }
     width: 0; height: 0; /* Point de référence central */
     pointer-events: none;
 }
+/* ==================================================
+   DANS FILE: public/style.css
+   Remplacez le bloc #current-doc-img par ça :
+   ================================================== */
 
-/* L'IMAGE DU DOCUMENT */
 #current-doc-img {
-    /* Taille par défaut assez grande */
-    min-width: 600px;
-    max-width: 1200px;
+    /* On enlève les contraintes fixes de largeur */
     height: auto;
+    
+    /* On s'assure que l'image ne dépasse pas bêtement */
+    max-width: 10000px; /* On laisse le JS gérer le zoom */
+    max-height: 10000px;
     
     box-shadow: 0 0 50px rgba(0,0,0,0.8);
     border: 3px solid white;
     
-    pointer-events: auto; /* Permet le clic droit */
-    -webkit-user-drag: none; /* Empêche le drag natif */
+    pointer-events: auto; 
+    -webkit-user-drag: none;
+    transform-origin: center center;
 }
+/* L'IMAGE DU DOCUMENT */
+
 
 /* LE PDF */
 #current-doc-pdf {

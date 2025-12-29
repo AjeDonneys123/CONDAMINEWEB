@@ -192,8 +192,15 @@ export class HomeworkGame {
         if(this.btnSubmit) this.btnSubmit.disabled = false;
     }
 
+ // ==================================================
+// DANS FILE: public/js/games/HomeworkGame.js
+// Remplacez toute la fonction renderCurrentDoc() par :
+// ==================================================
+
     renderCurrentDoc() {
-        this.resetView('doc'); 
+        // On réinitialise la vue (x=0, y=0) mais on attend pour le scale
+        this.view = { x: 0, y: 0, scale: 1 }; 
+        
         if (this.docs.length === 0) {
             if(this.imgEl) this.imgEl.style.display = "none";
             if(this.pdfEl) this.pdfEl.style.display = "none";
@@ -201,14 +208,41 @@ export class HomeworkGame {
             return;
         }
         if(this.noDocMsg) this.noDocMsg.style.display = "none";
+        
         const url = this.docs[this.docIndex];
         const isPdf = url.toLowerCase().endsWith('.pdf');
+        
         if (isPdf) {
             if(this.imgEl) this.imgEl.style.display = "none";
-            if(this.pdfEl) { this.pdfEl.style.display = "block"; this.pdfEl.src = url; }
+            if(this.pdfEl) { 
+                this.pdfEl.style.display = "block"; 
+                this.pdfEl.src = url; 
+            }
         } else {
             if(this.pdfEl) this.pdfEl.style.display = "none";
-            if(this.imgEl) { this.imgEl.style.display = "block"; this.imgEl.src = url; }
+            if(this.imgEl) { 
+                this.imgEl.style.display = "block"; 
+                
+                // --- AJOUT : CALCUL AUTOMATIQUE DU ZOOM ---
+                this.imgEl.onload = () => {
+                    const containerW = this.viewerContainer.offsetWidth;
+                    const containerH = this.viewerContainer.offsetHeight;
+                    const imgW = this.imgEl.naturalWidth;
+                    const imgH = this.imgEl.naturalHeight;
+
+                    // On calcule le ratio pour que ça rentre en largeur ET en hauteur
+                    // Le 0.9 sert à laisser une petite marge (90% de la taille)
+                    const scaleW = (containerW * 0.9) / imgW;
+                    const scaleH = (containerH * 0.9) / imgH;
+                    
+                    // On prend le plus petit ratio pour être sûr que tout rentre
+                    this.view.scale = Math.min(scaleW, scaleH);
+                    
+                    this.updateTransform('doc');
+                };
+                
+                this.imgEl.src = url; 
+            }
         }
         if(this.counterEl) this.counterEl.textContent = `${this.docIndex + 1} / ${this.docs.length}`;
     }

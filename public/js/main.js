@@ -1,1 +1,0 @@
-console.log("💀 Ce fichier (main.js) ne devrait plus être chargé. Si tu vois ça, c'est qu'il reste un lien dans index.html !");

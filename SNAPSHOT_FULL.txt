@@ -1,5 +1,5 @@
 // SNAPSHOT: SNAPSHOT_FULL.txt
-// DATE: 28/12/2025 20:55:12
+// DATE: 29/12/2025 13:51:54
 // DESCRIPTION: SAUVEGARDE TOTALE
 
 // ==================================================
@@ -1750,7 +1750,7 @@
 // ==================================================
 MONGODB_URI="mongodb+srv://vuilletjean:Clemenceau1919@cluster0.ilgdlcy.mongodb.net/quizDB?retryWrites=true&w=majority&appName=Cluster0"
 PORT=3000
-GEMINI_API_KEY="AIzaSyDVu3b88p64rmyfYGQs7JOP_F2BjmzMPRA"
+GEMINI_API_KEY="AIzaSyAQ2L2I61DgDgvwAj9ANIlDMqIOO-DsUzk"
 CLOUDINARY_CLOUD_NAME=dyjscatrq
 CLOUDINARY_API_KEY=758395199188542
 CLOUDINARY_API_SECRET=DERTAAgSnLhSRM759kmyMs2MzMk
@@ -2625,20 +2625,28 @@ button { cursor: pointer; transition: 0.2s; }
     width: 0; height: 0; /* Point de référence central */
     pointer-events: none;
 }
+/* ==================================================
+   DANS FILE: public/style.css
+   Remplacez le bloc #current-doc-img par ça :
+   ================================================== */
 
-/* L'IMAGE DU DOCUMENT */
 #current-doc-img {
-    /* Taille par défaut assez grande */
-    min-width: 600px;
-    max-width: 1200px;
+    /* On enlève les contraintes fixes de largeur */
     height: auto;
+    
+    /* On s'assure que l'image ne dépasse pas bêtement */
+    max-width: 10000px; /* On laisse le JS gérer le zoom */
+    max-height: 10000px;
     
     box-shadow: 0 0 50px rgba(0,0,0,0.8);
     border: 3px solid white;
     
-    pointer-events: auto; /* Permet le clic droit */
-    -webkit-user-drag: none; /* Empêche le drag natif */
+    pointer-events: auto; 
+    -webkit-user-drag: none;
+    transform-origin: center center;
 }
+/* L'IMAGE DU DOCUMENT */
+
 
 /* LE PDF */
 #current-doc-pdf {
@@ -2748,21 +2756,6 @@ td { padding: 12px 15px; border-bottom: 1px solid #f1f5f9; color: var(--text-mai
 .opt-wrong { background: #fee2e2 !important; border-color: #ef4444 !important; }
 
 #starship-game-area, #jumper-area { position: relative; height: 350px; border-radius: 12px; overflow: hidden; border: 4px solid #334155; }
-
-// ==================================================
-// FILE: public/js/main.js
-// ==================================================
-console.log("💀 Ce fichier (main.js) ne devrait plus être chargé. Si tu vois ça, c'est qu'il reste un lien dans index.html !");
-
-// ==================================================
-// FILE: public/js/api.js
-// ==================================================
-console.log("💀 Ce fichier (api.js) est vide. Si tout marche, tu peux le supprimer.");
-
-// ==================================================
-// FILE: public/js/state.js
-// ==================================================
-console.log("💀 Ce fichier (state.js) est vide. Si tout marche, tu peux le supprimer.");
 
 // ==================================================
 // FILE: public/js/app.js
@@ -3972,8 +3965,15 @@ export class HomeworkGame {
         if(this.btnSubmit) this.btnSubmit.disabled = false;
     }
 
+ // ==================================================
+// DANS FILE: public/js/games/HomeworkGame.js
+// Remplacez toute la fonction renderCurrentDoc() par :
+// ==================================================
+
     renderCurrentDoc() {
-        this.resetView('doc'); 
+        // On réinitialise la vue (x=0, y=0) mais on attend pour le scale
+        this.view = { x: 0, y: 0, scale: 1 }; 
+        
         if (this.docs.length === 0) {
             if(this.imgEl) this.imgEl.style.display = "none";
             if(this.pdfEl) this.pdfEl.style.display = "none";
@@ -3981,14 +3981,41 @@ export class HomeworkGame {
             return;
         }
         if(this.noDocMsg) this.noDocMsg.style.display = "none";
+        
         const url = this.docs[this.docIndex];
         const isPdf = url.toLowerCase().endsWith('.pdf');
+        
         if (isPdf) {
             if(this.imgEl) this.imgEl.style.display = "none";
-            if(this.pdfEl) { this.pdfEl.style.display = "block"; this.pdfEl.src = url; }
+            if(this.pdfEl) { 
+                this.pdfEl.style.display = "block"; 
+                this.pdfEl.src = url; 
+            }
         } else {
             if(this.pdfEl) this.pdfEl.style.display = "none";
-            if(this.imgEl) { this.imgEl.style.display = "block"; this.imgEl.src = url; }
+            if(this.imgEl) { 
+                this.imgEl.style.display = "block"; 
+                
+                // --- AJOUT : CALCUL AUTOMATIQUE DU ZOOM ---
+                this.imgEl.onload = () => {
+                    const containerW = this.viewerContainer.offsetWidth;
+                    const containerH = this.viewerContainer.offsetHeight;
+                    const imgW = this.imgEl.naturalWidth;
+                    const imgH = this.imgEl.naturalHeight;
+
+                    // On calcule le ratio pour que ça rentre en largeur ET en hauteur
+                    // Le 0.9 sert à laisser une petite marge (90% de la taille)
+                    const scaleW = (containerW * 0.9) / imgW;
+                    const scaleH = (containerH * 0.9) / imgH;
+                    
+                    // On prend le plus petit ratio pour être sûr que tout rentre
+                    this.view.scale = Math.min(scaleW, scaleH);
+                    
+                    this.updateTransform('doc');
+                };
+                
+                this.imgEl.src = url; 
+            }
         }
         if(this.counterEl) this.counterEl.textContent = `${this.docIndex + 1} / ${this.docs.length}`;
     }

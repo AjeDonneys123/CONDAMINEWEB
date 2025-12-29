@@ -1,1 +1,0 @@
-console.log("💀 Ce fichier (state.js) est vide. Si tout marche, tu peux le supprimer.");
