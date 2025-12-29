@@ -1,6 +1,4 @@
-// --- RESTAURATION DE LA LOGIQUE JEU AVANCÉE (SUB-BARS) ---
-
-// Imports Jeux (Modules)
+// ==================================================
 import { ZombieGame } from './games/ZombieGame.js';
 import { RedactionGame } from './games/RedactionGame.js';
 import { HomeworkGame } from './games/HomeworkGame.js';
@@ -10,31 +8,29 @@ import { JumperGame } from './games/JumperGame.js';
 const GameClasses = { "ZombieGame": ZombieGame, "RedactionGame": RedactionGame, "HomeworkGame": HomeworkGame, "StarshipGame": StarshipGame, "JumperGame": JumperGame };
 
 export async function initStudentInterface() {
-    console.log("🚀 Eleve Init (Advanced)");
+    console.log("🚀 Eleve Init (DB Mode)");
     document.getElementById("chapterSelection").style.display = "block";
     document.getElementById("logoutBtn").style.display = "block";
     
-    // BACKDOOR
     if(window.state.currentPlayerData.firstName === "Eleve" && window.state.currentPlayerData.lastName === "Test") {
         const btn = document.getElementById("backToProfBtn");
         btn.style.display = "block";
-        btn.onclick = () => {
-            localStorage.setItem("player", JSON.stringify({ id: "prof", firstName: "Jean", lastName: "Vuillet", classroom: "Professeur" }));
-            window.location.reload();
-        };
+        btn.onclick = () => { localStorage.setItem("player", JSON.stringify({ id: "prof", firstName: "Jean", lastName: "Vuillet", classroom: "Professeur" })); window.location.reload(); };
     }
 
-    // QUESTIONS
-    const classKey = window.state.getClassKey(window.state.currentPlayerData.classroom);
+    // --- CHARGEMENT DES QUESTIONS DEPUIS LA BDD ---
+    const classKey = window.state.getClassKey(window.state.currentPlayerData.classroom); 
     try {
-        const res = await fetch(`questions/questions-${classKey}.json`);
-        if(res.ok) window.state.allQuestionsData[classKey] = await res.json();
-    } catch(e) {}
+        const res = await window.api.get(`/api/game-levels/${classKey}`);
+        if(res) {
+            window.state.allQuestionsData[classKey] = res;
+            console.log("✅ Questions chargées depuis la BDD :", res.length);
+        }
+    } catch(e) { console.error("Erreur chargement niveaux", e); }
     
     document.querySelectorAll(".chapter-action-btn").forEach(b => b.disabled = false);
     document.getElementById("backToMenuBtn").onclick = () => window.location.reload();
     
-    // MES FAUTES
     const btnMistakes = document.getElementById("myMistakesBtn");
     if(btnMistakes && window.state.currentPlayerData.id !== "prof") {
         btnMistakes.style.display = "block";
@@ -120,13 +116,12 @@ document.body.addEventListener('click', async (e) => {
                 const allLevels = window.state.allQuestionsData[classKey] || [];
                 window.state.levels = allLevels.filter(l => l.chapterId === chapterId);
                 
-                // Calcul niveau
                 const validatedIds = (window.state.currentPlayerData.validatedLevels || []).map(v => (typeof v === 'string' ? v : v.levelId));
                 let startLvl = window.state.levels.findIndex(l => !validatedIds.includes(l.id));
                 if (startLvl === -1) startLvl = 0; 
 
                 if(window.state.levels.length > 0) setupLevel(startLvl);
-                else container.innerHTML = "<h3 style='text-align:center; margin-top:50px'>Pas de niveaux.</h3>";
+                else container.innerHTML = "<h3 style='text-align:center; margin-top:50px'>Pas de niveaux (BDD vide pour cette classe/chapitre).</h3>";
             }
         }
     }
@@ -140,7 +135,6 @@ function toggleUI(show) {
     document.getElementById("lives").style.display = flex;
 }
 
-// --- LOGIQUE BARRES ET PROGRESSION RESTAURÉE ---
 function setupLevel(idx) {
     if(!window.state.levels[idx]) { document.getElementById("gameModuleContainer").innerHTML = "<h1>Terminé ! 🏆</h1>"; return; }
     window.state.currentLevel = idx;
@@ -158,7 +152,6 @@ function setupLevel(idx) {
     window.state.lives = 4;
     renderLives();
     
-    // RESTAURATION DES PETITES BARRES
     const sub = document.getElementById("subBars"); sub.innerHTML = "";
     lvl.questions.forEach((_, i) => {
         const d = document.createElement("div"); d.className = "subProgress";
@@ -181,7 +174,7 @@ function nextQuestion(keep) {
     window.state.locked = false;
     const lvl = window.state.levels[window.state.currentLevel];
     if(window.state.general >= lvl.questions.length) {
-        saveProgress("level", lvl.id, "A");
+        saveProgress("level", lvl._id, "A"); 
         if(window.state.currentLevel < window.state.levels.length - 1) setTimeout(() => setupLevel(window.state.currentLevel + 1), 1500);
         else document.getElementById("gameModuleContainer").innerHTML = "<h1 style='text-align:center'>Bravo ! 👑</h1>";
         return;
@@ -209,7 +202,6 @@ function loadActiveQuestion() {
     const qToSend = JSON.parse(JSON.stringify(q));
     
     if (score >= req - 1) {
-        console.log("🔥 DERNIER PALIER -> MODE TEXTE");
         delete qToSend.options; 
     }
     
