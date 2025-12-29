@@ -1,6 +1,6 @@
-// SNAPSHOT DU PROJET - 28/12/2025 19:43:51
-// NOTE : Ce snapshot inclut .env et la structure complète.
-
+// SNAPSHOT: SNAPSHOT_FULL.txt
+// DATE: 28/12/2025 19:49:43
+// DESCRIPTION: SAUVEGARDE TOTALE
 
 // ==================================================
 // FILE: package.json
@@ -1837,40 +1837,28 @@ applyUpdate();
 // ==================================================
 // FILE: snap.js
 // ==================================================
-// FILE: snap.js
 const fs = require('fs');
 const path = require('path');
 
-const outputFile = 'PROJET_SNAPSHOT.txt';
-
-// LISTE COMPLÈTE BASÉE SUR TA STRUCTURE (Mode "Sécurité")
-const filesToInclude = [
-    // --- 1. RACINE & CONFIG ---
+// 1. LISTE "TOTALE" (Pour sauvegarde complète)
+const fullFiles = [
     'package.json',
     'package-lock.json',
-    '.env',              // Contient tes clés (Attention !)
+    '.env',
     '.gitignore',
     'apply.js',
     'snap.js',
-    
-    // --- 2. BACKEND (Dossier src) ---
     'src/server.js',
     'src/check-models.js',
     'src/init-db.js',
-
-    // --- 3. FRONTEND (Base) ---
     'public/index.html',
     'public/style.css',
-
-    // --- 4. LOGIQUE (Structure éclatéee) ---
-    // Si ces fichiers ont été supprimés par la fusion, ils seront marqués "MANQUANT"
-    'public/js/main.js',   
-    'public/js/api.js',    
-    'public/js/state.js',  
+    'public/js/main.js',
+    'public/js/api.js',
+    'public/js/state.js',
+    'public/js/app.js',
     'public/js/eleve.js',
     'public/js/prof.js',
-
-    // --- 5. JEUX ---
     'public/js/games/ZombieGame.js',
     'public/js/games/HomeworkGame.js',
     'public/js/games/RedactionGame.js',
@@ -1878,45 +1866,53 @@ const filesToInclude = [
     'public/js/games/JumperGame.js'
 ];
 
-function generateSnapshot() {
-    console.log("---------------------------------------------");
-    console.log("📸 GÉNÉRATION DU SNAPSHOT COMPLET...");
-    
-    let combined = `// SNAPSHOT DU PROJET - ${new Date().toLocaleString()}\n`;
-    combined += `// NOTE : Ce snapshot inclut .env et la structure complète.\n\n`;
-    
-    let count = 0;
-    let missing = [];
+// 2. LISTE "CODE IMPORTANT" (Pour session IA)
+const coreFiles = [
+    'package.json',
+    'src/server.js',
+    'public/index.html',
+    'public/style.css',
+    'public/js/main.js',
+    'public/js/api.js',
+    'public/js/state.js',
+    'public/js/eleve.js',
+    'public/js/prof.js',
+    'public/js/games/ZombieGame.js',
+    'public/js/games/HomeworkGame.js',
+    'public/js/games/RedactionGame.js',
+    'public/js/games/StarshipGame.js',
+    'public/js/games/JumperGame.js'
+];
 
-    filesToInclude.forEach(file => {
+function createSnapshot(filename, fileList, description) {
+    console.log(`📸 Création de ${filename} (${description})...`);
+    let content = `// SNAPSHOT: ${filename}\n`;
+    content += `// DATE: ${new Date().toLocaleString()}\n`;
+    content += `// DESCRIPTION: ${description}\n\n`;
+
+    let count = 0;
+    fileList.forEach(file => {
         const p = path.join(__dirname, file);
         if (fs.existsSync(p)) {
-            const content = fs.readFileSync(p, 'utf8');
-            combined += `\n// ==================================================\n`;
-            combined += `// FILE: ${file}\n`;
-            combined += `// ==================================================\n`;
-            combined += `${content}\n`;
-            console.log(`✅ Ajouté : ${file}`);
+            const fileContent = fs.readFileSync(p, 'utf8');
+            content += `// ==================================================\n`;
+            // RUSE ICI : On coupe le mot FILE pour ne pas tromper apply.js
+            const marker = "// " + "FILE: "; 
+            content += `${marker}${file}\n`;
+            content += `// ==================================================\n`;
+            content += `${fileContent}\n\n`;
             count++;
-        } else {
-            console.log(`❌ MANQUANT : ${file}`);
-            missing.push(file);
         }
     });
-
-    fs.writeFileSync(outputFile, combined);
-    
-    console.log("---------------------------------------------");
-    if (missing.length > 0) {
-        console.log(`⚠️ ATTENTION : ${missing.length} fichiers introuvables :`);
-        missing.forEach(m => console.log(`   - ${m}`));
-    }
-    console.log(`✨ SNAPSHOT GÉNÉRÉ : ${count} fichiers inclus.`);
-    console.log(`📄 Fichier de sortie : ${outputFile}`);
-    console.log("---------------------------------------------");
+    fs.writeFileSync(filename, content);
+    console.log(`✅ ${filename} généré avec ${count} fichiers.`);
 }
 
-generateSnapshot();
+// Exécution
+console.log("---------------------------------------------");
+createSnapshot('SNAPSHOT_FULL.txt', fullFiles, "SAUVEGARDE TOTALE");
+createSnapshot('SNAPSHOT_CODE.txt', coreFiles, "CODE ESSENTIEL");
+console.log("---------------------------------------------");
 
 // ==================================================
 // FILE: src/server.js
@@ -3022,6 +3018,69 @@ document.addEventListener("keyup", (e) => {
     if (e.key.toLowerCase() === "r") state.isRKeyDown = false; 
     if (e.key.toLowerCase() === "t") state.isTKeyDown = false; 
 });
+
+// ==================================================
+// FILE: public/js/app.js
+// ==================================================
+export const api = {
+    async post(url, data) { try { const r = await fetch(url, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) }); return await r.json(); } catch(e) { return {ok:false}; } },
+    async get(url) { try { const r = await fetch(url); return r.ok ? await r.json() : null; } catch(e) { return null; } },
+    async upload(file) { try { const fd = new FormData(); fd.append('file', file); const r = await fetch('/api/upload', { method: 'POST', body: fd }); return await r.json(); } catch(e) { return {ok:false}; } }
+};
+export const state = {
+    user: JSON.parse(localStorage.getItem("player") || "null"),
+    getClassKey: (c) => { 
+        if(!c) return "default"; 
+        const val = c.toUpperCase(); 
+        if (val.includes("6")) return "6e"; 
+        if (val.includes("5")) return "5e"; 
+        return "2de"; 
+    },
+    isRKeyDown: false, isTKeyDown: false, questionsData: null
+};
+import { initProfDashboard } from './prof.js';
+import { initStudentInterface } from './eleve.js';
+document.addEventListener("DOMContentLoaded", () => {
+    if (state.user) {
+        const regCard = document.getElementById("registerCard");
+        const badge = document.getElementById("studentBadge");
+        const logout = document.getElementById("logoutBtn");
+        if(regCard) regCard.style.display = "none";
+        if(badge) {
+            badge.textContent = `${state.user.firstName} ${state.user.lastName}`;
+            badge.style.display = "block";
+        }
+        if(logout) logout.style.display = "block";
+        const isProf = (state.user.firstName.toLowerCase().includes("jean") && state.user.lastName.toLowerCase().includes("vuill")) || state.user.id === "prof";
+        if (isProf) initProfDashboard(); else initStudentInterface();
+    }
+    const regForm = document.getElementById("registerForm");
+    if(regForm) regForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const f = document.getElementById("firstName").value.trim();
+        const l = document.getElementById("lastName").value.trim();
+        const c = document.getElementById("classroom").value;
+        if (f.toLowerCase().includes("jean") && l.toLowerCase().includes("vuill")) { 
+            const modal = document.getElementById("profPasswordModal");
+            if(modal) modal.style.display = "block"; 
+            return; 
+        }
+        const res = await api.post('/api/register', { firstName: f, lastName: l, classroom: c });
+        if(res.ok) { localStorage.setItem("player", JSON.stringify(res)); window.location.reload(); } else alert("Élève non trouvé.");
+    });
+    const validateBtn = document.getElementById("validateProfPasswordBtn");
+    if(validateBtn) validateBtn.addEventListener("click", () => {
+        const pass = document.getElementById("profPassword");
+        if(pass && pass.value === "Clemenceau1919") {
+            localStorage.setItem("player", JSON.stringify({ id: "prof", firstName: "Jean", lastName: "Vuillet", classroom: "Professeur" }));
+            window.location.reload();
+        } else alert("Code incorrect");
+    });
+    const logoutBtn = document.getElementById("logoutBtn");
+    if(logoutBtn) logoutBtn.onclick = () => { localStorage.removeItem("player"); window.location.reload(); };
+});
+document.addEventListener("keydown", (e) => { if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return; if (e.key?.toLowerCase() === "r") state.isRKeyDown = true; if (e.key?.toLowerCase() === "t") state.isTKeyDown = true; });
+document.addEventListener("keyup", (e) => { if (e.key?.toLowerCase() === "r") state.isRKeyDown = false; if (e.key?.toLowerCase() === "t") state.isTKeyDown = false; });
 
 // ==================================================
 // FILE: public/js/eleve.js
@@ -4928,3 +4987,4 @@ export class JumperGame {
     else if (this.vx < -0.1) this.player.style.transform = "scaleX(-1)";
   }
 }
+
