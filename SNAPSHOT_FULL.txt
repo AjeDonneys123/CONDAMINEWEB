@@ -1,5 +1,5 @@
 // SNAPSHOT: SNAPSHOT_FULL.txt
-// DATE: 31/12/2025 07:41:08
+// DATE: 31/12/2025 08:49:07
 // DESCRIPTION: SAUVEGARDE TOTALE
 
 // ==================================================
@@ -1905,7 +1905,7 @@ console.log("---------------------------------------------");
 // ==================================================
 // FILE: src/server.js
 // ==================================================
-// ==================================================
+
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
 
@@ -2087,27 +2087,120 @@ app.delete('/api/homework/:id', async (req, res) => { try { await Homework.findB
 
 app.post('/api/analyze-homework', async (req, res) => {
     const { imageUrl, userText, homeworkInstruction, teacherDocUrls, questionImage, classroom, playerId, homeworkId, levelIndex } = req.body;
+    
     if (!geminiKey) return res.json({ feedback: "Erreur : Clé IA manquante." });
+
     try {
         const genAI = new GoogleGenerativeAI(geminiKey);
-        const model = genAI.getGenerativeModel({ model: MODEL_NAME, generationConfig: { responseMimeType: "application/json" } });
+        const model = genAI.getGenerativeModel({ 
+            model: MODEL_NAME, 
+            generationConfig: { responseMimeType: "application/json" } 
+        });
+
         let parts = [];
-        parts.push({ text: `RÔLE : Professeur correcteur. CIBLE: ${classroom}. NOTE SUR 20. JSON: { "content_feedback": "HTML", "grade": "xx/20" }` });
-        if (teacherDocUrls) for (let url of teacherDocUrls) { if(url!=="BREAK") { const p = await fileToPart(url); if(p) parts.push(p); } }
-        parts.push({ text: `QUESTION: "${homeworkInstruction}"` });
-        if (questionImage) { const p = await fileToPart(questionImage); if(p) parts.push(p); }
-        parts.push({ text: `REPONSE ELEVE: "${userText}"` });
-        if (imageUrl) { const p = await fileToPart(imageUrl); if(p) parts.push(p); }
+        
+        // --- PROMPT ULTRA PRÉCIS ---
+    const systemPrompt = `
+RÔLE : Tu es un professeur correcteur de français expert pour une classe de ${classroom}.
+OBJECTIF : Analyser la réponse de l'élève et corriger TRÈS précisément l'orthographe.
+
+FORMAT DU FEEDBACK (content_feedback) :
+1. Fais un commentaire pédagogique sur le fond de la réponse.
+2. Si des fautes existent, crée obligatoirement une section "### Analyse orthographique" suivie d'un tableau HTML.
+
+STRUCTURE DU TABLEAU HTML :
+- Utilise <table class="correction-table">.
+- Colonne 1 : "Mot erroné" -> place le mot dans <span class="wrong-word">...</span>.
+- Colonne 2 : "Correction" -> place le mot dans <span class="right-word">...</span>.
+- Colonne 3 : "Explication" -> courte règle de grammaire.
+
+FORMAT JSON ATTENDU :
+{
+  "content_feedback": "Le texte HTML avec le tableau ici...",
+  "grade": "xx/20",
+  "corrections": [
+    { "wrong": "mot1", "correct": "correct1" }
+  ]
+}
+`;
+
+        parts.push({ text: systemPrompt });
+
+        // Ajout des documents prof
+        if (teacherDocUrls) {
+            for (let url of teacherDocUrls) {
+                if(url !== "BREAK") {
+                    const p = await fileToPart(url);
+                    if(p) parts.push(p);
+                }
+            }
+        }
+
+        parts.push({ text: `CONSIGNE DU DEVOIR : "${homeworkInstruction}"` });
+        
+        if (questionImage) { 
+            const p = await fileToPart(questionImage); 
+            if(p) parts.push(p); 
+        }
+
+        parts.push({ text: `RÉPONSE DE L'ÉLÈVE : "${userText}"` });
+
+        if (imageUrl) { 
+            const p = await fileToPart(imageUrl); 
+            if(p) parts.push(p); 
+        }
+
         const result = await model.generateContent(parts);
         const json = JSON.parse(result.response.text());
-        if (playerId && homeworkId) {
-            const newResult = { levelIndex: levelIndex||0, userText, userImageUrl: imageUrl, aiFeedback: json.content_feedback, grade: json.grade||"A valider" };
-            const sub = await Submission.findOne({ homeworkId, playerId });
-            if (sub) { const idx = sub.levelsResults.findIndex(r => r.levelIndex === newResult.levelIndex); if (idx > -1) sub.levelsResults[idx] = newResult; else sub.levelsResults.push(newResult); sub.submittedAt = Date.now(); await sub.save(); }
-            else { await new Submission({ homeworkId, playerId, classroom, levelsResults: [newResult] }).save(); }
+
+        // --- SAUVEGARDE DES FAUTES DANS LE PROFIL ÉLÈVE ---
+        if (playerId && json.corrections && json.corrections.length > 0) {
+            await Player.findByIdAndUpdate(playerId, { 
+                $push: { 
+                    spellingMistakes: { 
+                        $each: json.corrections.map(c => ({ 
+                            wrong: c.wrong, 
+                            correct: c.correct, 
+                            date: new Date() 
+                        })) 
+                    } 
+                } 
+            });
         }
+
+        // --- SAUVEGARDE DE LA COPIE ---
+        if (playerId && homeworkId) {
+            const newResult = { 
+                levelIndex: levelIndex || 0, 
+                userText, 
+                userImageUrl: imageUrl, 
+                aiFeedback: json.content_feedback, 
+                grade: json.grade || "A valider" 
+            };
+            
+            const sub = await Submission.findOne({ homeworkId, playerId });
+            if (sub) { 
+                const idx = sub.levelsResults.findIndex(r => r.levelIndex === newResult.levelIndex); 
+                if (idx > -1) sub.levelsResults[idx] = newResult; 
+                else sub.levelsResults.push(newResult); 
+                sub.submittedAt = Date.now(); 
+                await sub.save(); 
+            } else { 
+                await new Submission({ 
+                    homeworkId, 
+                    playerId, 
+                    classroom, 
+                    levelsResults: [newResult] 
+                }).save(); 
+            }
+        }
+
         res.json({ feedback: json.content_feedback, grade: json.grade });
-    } catch (error) { res.json({ feedback: `Erreur: ${error.message}` }); }
+
+    } catch (error) { 
+        console.error("Erreur IA Homework:", error);
+        res.json({ feedback: `Désolé, l'IA a rencontré une erreur : ${error.message}` }); 
+    }
 });
 
 app.get('/api/submissions/:hwId', async (req, res) => { try { const subs = await Submission.find({ homeworkId: req.params.hwId }).populate('playerId'); res.json(subs); } catch(e) { res.status(500).json([]); } });
@@ -2647,6 +2740,42 @@ td { padding: 12px 15px; border-bottom: 1px solid #f1f5f9; color: var(--text-mai
 .opt-wrong { background: #fee2e2 !important; border-color: #ef4444 !important; }
 
 #starship-game-area, #jumper-area { position: relative; height: 350px; border-radius: 12px; overflow: hidden; border: 4px solid #334155; }
+/* Styles pour le tableau de correction de l'IA */
+.correction-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 15px;
+    font-size: 0.9em;
+    background-color: white;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+}
+
+.correction-table th {
+    background-color: #f1f5f9;
+    color: #475569;
+    padding: 10px;
+    text-align: left;
+    border-bottom: 2px solid #e2e8f0;
+}
+
+.correction-table td {
+    padding: 10px;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+/* Couleurs demandées pour les mots */
+.wrong-word {
+    color: #dc2626; /* Rouge */
+    text-decoration: line-through; /* Barré */
+    font-weight: bold;
+}
+
+.right-word {
+    color: #16a34a; /* Vert */
+    font-weight: bold;
+}
 
 
 
