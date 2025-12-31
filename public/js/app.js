@@ -1,19 +1,34 @@
+// 1. SERVICES GLOBAUX (Accessibles partout via window.api)
 window.api = {
     async post(url, data) { 
         try { 
             const r = await fetch(url, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) }); 
             return await r.json(); 
-        } catch(e) { console.error("API Post Error:", e); return {ok:false}; } 
+        } catch(e) { console.error("Erreur API Post:", e); return {ok:false}; } 
     },
     async get(url) { 
         try { 
             const r = await fetch(url); 
             return r.ok ? await r.json() : null; 
-        } catch(e) { console.error("API Get Error:", e); return null; } 
+        } catch(e) { console.error("Erreur API Get:", e); return null; } 
     },
-    async fetchPlayers() { return await this.get('/api/players') || []; }
+    async upload(file) { 
+        try { 
+            const fd = new FormData(); fd.append('file', file); 
+            const r = await fetch('/api/upload', { method: 'POST', body: fd }); 
+            return await r.json(); 
+        } catch(e) { console.error("Upload Error:", e); return {ok:false}; } 
+    },
+    // RÉPARATION ICI : Ajout des méthodes attendues par les modules
+    async getHomeworks(classroom) { 
+        const url = classroom ? `/api/homework/${classroom}` : '/api/homework-all';
+        return await this.get(url) || []; 
+    },
+    async fetchPlayers() { return await this.get('/api/players') || []; },
+    async verifyWithAI(payload) { return await this.post('/api/verify-answer-ai', payload); }
 };
 
+// 2. ÉTAT GLOBAL (window.state)
 window.state = {
     user: JSON.parse(localStorage.getItem("player") || "null"),
     getClassKey: (c) => { 
@@ -23,7 +38,10 @@ window.state = {
         if (val.includes("5")) return "5e"; 
         return "2de"; 
     },
-    currentPlayerId: null
+    isRKeyDown: false, isTKeyDown: false, isGlobalPaused: false,
+    allQuestionsData: {}, 
+    currentPlayerId: null, 
+    currentPlayerData: null
 };
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -32,6 +50,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     if (window.state.user) {
         window.state.currentPlayerId = window.state.user.id || window.state.user._id;
+        window.state.currentPlayerData = window.state.user;
+        
         document.getElementById("registerCard").style.display = "none";
         document.getElementById("logoutBtn").style.display = "block";
         const badge = document.getElementById("studentBadge");
@@ -54,12 +74,17 @@ document.addEventListener("DOMContentLoaded", async () => {
         const f = document.getElementById("firstName").value.trim();
         const l = document.getElementById("lastName").value.trim();
         const c = document.getElementById("classroom").value;
-        if (f.toLowerCase() === "jean" && l.toLowerCase().includes("vuill")) {
-            document.getElementById("profPasswordModal").style.display = "block";
-            return;
+
+        if (f.toLowerCase() === "jean" && l.toLowerCase() === "vuillet") { 
+            document.getElementById("profPasswordModal").style.display = "block"; 
+            return; 
         }
+
         const res = await window.api.post('/api/register', { firstName: f, lastName: l, classroom: c });
-        if(res.ok) { localStorage.setItem("player", JSON.stringify(res)); window.location.reload(); }
+        if(res.ok) { 
+            localStorage.setItem("player", JSON.stringify(res)); 
+            window.location.reload(); 
+        }
     };
 
     const valProfBtn = document.getElementById("validateProfPasswordBtn");
@@ -73,4 +98,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.getElementById("logoutBtn").onclick = () => { localStorage.removeItem("player"); window.location.reload(); };
 });
 
-
+document.addEventListener("keydown", (e) => { 
+    if (e.key.toLowerCase() === "r") window.state.isRKeyDown = true; 
+    if (e.key.toLowerCase() === "t") window.state.isTKeyDown = true; 
+});
+document.addEventListener("keyup", (e) => { 
+    if (e.key.toLowerCase() === "r") window.state.isRKeyDown = false; 
+    if (e.key.toLowerCase() === "t") window.state.isTKeyDown = false; 
+});
