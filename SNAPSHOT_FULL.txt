@@ -1,5 +1,5 @@
 // SNAPSHOT: SNAPSHOT_FULL.txt
-// DATE: 31/12/2025 08:49:07
+// DATE: 31/12/2025 09:40:41
 // DESCRIPTION: SAUVEGARDE TOTALE
 
 // ==================================================
@@ -1760,46 +1760,29 @@ const fs = require('fs');
 const path = require('path');
 const inputFile = 'update.txt';
 
-console.log("▶️ DÉMARRAGE DU SCRIPT DE DEBUG...");
+console.log("▶️ DÉMARRAGE DU DÉPLOIEMENT...");
 
 function applyUpdate() {
-    // 1. Vérifier où le script cherche le fichier
-    const absolutePath = path.resolve(inputFile);
-    console.log(`🔎 Je cherche le fichier ici : ${absolutePath}`);
-
-    // 2. Vérifier si le fichier existe
     if (!fs.existsSync(inputFile)) {
-        console.error("❌ ERREUR FATALE : Le fichier update.txt est INTROUVABLE !");
-        console.error("👉 Vérifie qu'il n'est pas dans un sous-dossier ou nommé 'update.txt.txt'");
+        console.log("❌ update.txt introuvable.");
         return;
     }
 
-    // 3. Lire le contenu
     const content = fs.readFileSync(inputFile, 'utf8');
-    console.log(`📄 Fichier trouvé ! Taille : ${content.length} caractères.`);
-    console.log(`👀 Aperçu du début : "${content.substring(0, 50).replace(/\n/g, ' ')}..."`);
-
-    // 4. Vérifier la longueur
-    if (!content || content.trim().length < 5) {
-        console.error("⚠️  STOP : Le fichier est considéré comme VIDE ou trop court.");
+    if (!content || content.trim().length < 10) {
+        console.log("⚠️ Le fichier update.txt est vide.");
         return;
     }
 
-    console.log("---------------------------------------------");
-    console.log("📥 TRAITEMENT EN COURS...");
-
-    const parts = content.split(/\/\/\s*FILE:\s*/);
+    // Regex robuste : cherche // FILE:nom, puis capture tout jusqu'au prochain // FILE: ou la fin
+    const regex = /\/\/\s*FILE:([^\n\r]+)[\r\n]{1,6}([\s\S]*?)(?=\/\/\s*FILE:|$)/g;
+    let match;
     let count = 0;
 
-    parts.forEach(part => {
-        if (!part.trim()) return;
-        const firstLineEnd = part.indexOf('\n');
-        if (firstLineEnd === -1) return;
-
-        let filePath = part.substring(0, firstLineEnd).trim();
-        let fileContent = part.substring(firstLineEnd).trim();
-        
-        filePath = filePath.replace(/\r/g, '');
+    console.log("---------------------------------------------");
+    while ((match = regex.exec(content)) !== null) {
+        const filePath = match[1].trim();
+        const fileContent = match[2];
 
         if (filePath) {
             const fullPath = path.join(__dirname, filePath);
@@ -1807,18 +1790,19 @@ function applyUpdate() {
             try {
                 if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
                 fs.writeFileSync(fullPath, fileContent);
-                console.log(`✅ ÉCRIT : ${filePath}`);
+                console.log(`✅ ÉCRIT : ${filePath} (${fileContent.length} octets)`);
                 count++;
-            } catch (e) { console.error(`❌ Erreur : ${e.message}`); }
+            } catch (e) {
+                console.error(`❌ Erreur sur ${filePath}: ${e.message}`);
+            }
         }
-    });
+    }
 
     if (count > 0) {
         fs.writeFileSync(inputFile, '');
-        console.log(`✨ SUCCÈS : ${count} fichiers générés.`);
-        console.log(`🗑  update.txt a été vidé.`);
+        console.log(`✨ SUCCÈS : ${count} fichiers mis à jour.`);
     } else {
-        console.log("⚠️  Aucune balise '// FILE:' trouvée dans le texte.");
+        console.log("⚠️ Aucune balise // FILE: valide trouvée. Vérifie ton format.");
     }
     console.log("---------------------------------------------");
 }
@@ -1905,10 +1889,8 @@ console.log("---------------------------------------------");
 // ==================================================
 // FILE: src/server.js
 // ==================================================
-
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
-
 const fetch = require('node-fetch');
 if (!global.fetch) {
   global.fetch = fetch;
@@ -1916,7 +1898,6 @@ if (!global.fetch) {
   global.Request = fetch.Request;
   global.Response = fetch.Response;
 }
-
 const express = require('express');
 const mongoose = require('mongoose');
 const { GoogleGenerativeAI } = require("@google/generative-ai");
@@ -1924,24 +1905,19 @@ const multer = require('multer');
 const cloudinary = require('cloudinary').v2;
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 
-// --- 1. INITIALISATION ---
 const app = express();
 const port = process.env.PORT || 3000;
-
 const mongoUri = process.env.MONGODB_URI;
 const geminiKey = process.env.GEMINI_API_KEY;
 const MODEL_NAME = "gemini-2.0-flash"; 
 
-if (!mongoUri) { console.error('❌ ERREUR : MONGODB_URI manquant'); process.exit(1); }
+if (!mongoUri) { console.error('❌ MONGODB_URI manquant'); process.exit(1); }
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
-mongoose.connect(mongoUri)
-  .then(() => console.log('✅ MongoDB Connecté'))
-  .catch(err => console.error('❌ Erreur Mongo:', err));
+mongoose.connect(mongoUri).then(() => console.log('✅ MongoDB Connecté'));
 
-// --- 2. CONFIG CLOUDINARY ---
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
@@ -1954,13 +1930,12 @@ const storage = new CloudinaryStorage({
 });
 const upload = multer({ storage: storage });
 
-// --- 3. SCHEMAS BDD ---
-
+// SCHEMAS
 const PlayerSchema = new mongoose.Schema({
   firstName: String, lastName: String, classroom: String,
   validatedQuestions: [String],
   validatedLevels: { type: [mongoose.Schema.Types.Mixed], default: [] },
-  spellingMistakes: { type: [{ wrong: String, correct: String, date: { type: Date, default: Date.now } }], default: [] },
+  spellingMistakes: { type: [{ wrong: String, correct: String, reason: String, date: { type: Date, default: Date.now } }], default: [] },
   activityLogs: { type: [{ action: String, detail: String, date: { type: Date, default: Date.now } }], default: [] },
   created_at: { type: Date, default: Date.now },
 }, { minimize: false });
@@ -1982,24 +1957,11 @@ const SubmissionSchema = new mongoose.Schema({
 });
 const Submission = mongoose.model('Submission', SubmissionSchema, 'submissions');
 
-const BugSchema = new mongoose.Schema({ reporterName: String, classroom: String, description: String, gameChapter: String, date: { type: Date, default: Date.now } });
-const Bug = mongoose.model('Bug', BugSchema, 'bugs');
-
-// --- NOUVEAU SCHEMA POUR LES JEUX (ZOMBIE, ETC) ---
 const GameLevelSchema = new mongoose.Schema({
-    chapterId: String, // ex: "ch1-zombie"
-    classroom: String, // ex: "5e"
-    title: String,     // ex: "Niveau 1 - Présent"
-    lesson: String,    // Contenu HTML de la leçon (optionnel)
-    questions: Array,  // Liste des questions JSON
-    createdAt: { type: Date, default: Date.now }
+    chapterId: String, classroom: String, title: String, lesson: String, questions: Array, createdAt: { type: Date, default: Date.now }
 });
 const GameLevel = mongoose.model('GameLevel', GameLevelSchema, 'game_levels');
 
-// --- 4. UTILITAIRES ---
-function normalizeBase(str) { return (str || '').normalize('NFD').replace(/\p{Diacritic}/gu, '').trim().toLowerCase(); }
-function nameTokens(str) { return normalizeBase(str).split(/[\s-']+/).filter(t => t.length >= 2); }
-function normalizeClassroom(c) { return normalizeBase(c).replace(/(?<=\d)(e|de|d)/, '').toUpperCase(); }
 async function fileToPart(url) {
     if(!url) return null;
     try {
@@ -2010,230 +1972,93 @@ async function fileToPart(url) {
     } catch(e) { return null; }
 }
 
-// --- 5. ROUTES ---
-
-app.post('/api/upload', upload.single('file'), (req, res) => {
-  if (!req.file) return res.status(400).json({ ok: false, error: "Pas de fichier" });
-  res.json({ ok: true, imageUrl: req.file.path });
-});
-
-// --- ROUTES GAME LEVELS (CRUD) ---
-app.get('/api/game-levels/:classroom', async (req, res) => {
-    try {
-        const lvls = await GameLevel.find({ $or: [{ classroom: req.params.classroom }, { classroom: "Toutes" }] }).sort({ title: 1 });
-        res.json(lvls);
-    } catch(e) { res.status(500).json([]); }
-});
-app.post('/api/game-levels', async (req, res) => {
-    try { const lvl = new GameLevel(req.body); await lvl.save(); res.json({ ok: true }); } catch(e) { res.status(500).json({ ok: false }); }
-});
-app.delete('/api/game-levels/:id', async (req, res) => {
-    try { await GameLevel.findByIdAndDelete(req.params.id); res.json({ ok: true }); } catch(e) { res.status(500).json({ ok: false }); }
-});
-
-// --- ROUTE GÉNÉRATION IA POUR PROFESSEUR ---
-app.post('/api/generate-game-content', async (req, res) => {
-    const { docUrl, topic, gameType } = req.body; 
-    
-    if (!geminiKey) return res.json({ error: "Clé IA manquante" });
-
+// ROUTES
+app.post('/api/analyze-homework', async (req, res) => {
+    const { imageUrl, userText, homeworkInstruction, classroom, playerId, homeworkId, levelIndex } = req.body;
     try {
         const genAI = new GoogleGenerativeAI(geminiKey);
         const model = genAI.getGenerativeModel({ model: MODEL_NAME, generationConfig: { responseMimeType: "application/json" } });
-
-        let prompt = "";
-        if (gameType === "quiz") {
-            prompt = `
-            RÔLE : Tu es un professeur expert qui crée des QCM pour des élèves.
-            SUJET : ${topic || "Le document fourni"}.
-            TACHE : Génère 5 questions QCM à choix multiple basées sur le document ou le sujet.
-            FORMAT JSON ATTENDU : Une liste d'objets :
-            [
-              { "q": "Intitulé de la question ?", "options": ["Choix A", "Choix B", "Choix C", "Choix D"], "a": 0 }
-            ]
-            IMPORTANT : "a" est l'index de la bonne réponse (0, 1, 2 ou 3).
-            `;
-        } else {
-            prompt = `
-            RÔLE : Tu es un professeur de français.
-            SUJET : ${topic || "Le document fourni"}.
-            TACHE : Génère 1 sujet de rédaction stimulant.
-            FORMAT JSON ATTENDU :
-            [
-              { "q": "Sujet de la rédaction..." }
-            ]
-            `;
-        }
-
-        let parts = [{ text: prompt }];
-        if (docUrl) {
-            const p = await fileToPart(docUrl);
-            if(p) parts.push(p);
-        }
-
-        const result = await model.generateContent(parts);
-        const jsonResponse = JSON.parse(result.response.text());
-        res.json(jsonResponse);
-
-    } catch (e) { console.error(e); res.status(500).json({ error: e.message }); }
-});
-
-
-app.post('/api/homework', async (req, res) => { try { const hw = new Homework(req.body); await hw.save(); res.json({ ok: true }); } catch(e) { res.status(500).json({ ok: false }); } });
-app.get('/api/homework/:class', async (req, res) => { try { const cls = req.params.class; const list = await Homework.find({ $or: [{ classroom: cls }, { classroom: "Toutes" }] }).sort({ date: -1 }); res.json(list); } catch(e) { res.status(500).json([]); } });
-app.get('/api/homework-all', async (req, res) => { try { const list = await Homework.find().sort({ date: -1 }); res.json(list); } catch(e) { res.status(500).json([]); } });
-app.put('/api/homework/:id', async (req, res) => { try { await Homework.findByIdAndUpdate(req.params.id, req.body); res.json({ ok: true }); } catch(e) { res.status(500).json({ ok: false }); } });
-app.delete('/api/homework/:id', async (req, res) => { try { await Homework.findByIdAndDelete(req.params.id); res.json({ ok: true }); } catch(e) { res.status(500).json({ ok: false }); } });
-
-app.post('/api/analyze-homework', async (req, res) => {
-    const { imageUrl, userText, homeworkInstruction, teacherDocUrls, questionImage, classroom, playerId, homeworkId, levelIndex } = req.body;
-    
-    if (!geminiKey) return res.json({ feedback: "Erreur : Clé IA manquante." });
-
-    try {
-        const genAI = new GoogleGenerativeAI(geminiKey);
-        const model = genAI.getGenerativeModel({ 
-            model: MODEL_NAME, 
-            generationConfig: { responseMimeType: "application/json" } 
-        });
-
-        let parts = [];
         
-        // --- PROMPT ULTRA PRÉCIS ---
-    const systemPrompt = `
-RÔLE : Tu es un professeur correcteur de français expert pour une classe de ${classroom}.
-OBJECTIF : Analyser la réponse de l'élève et corriger TRÈS précisément l'orthographe.
-
-FORMAT DU FEEDBACK (content_feedback) :
-1. Fais un commentaire pédagogique sur le fond de la réponse.
-2. Si des fautes existent, crée obligatoirement une section "### Analyse orthographique" suivie d'un tableau HTML.
-
-STRUCTURE DU TABLEAU HTML :
-- Utilise <table class="correction-table">.
-- Colonne 1 : "Mot erroné" -> place le mot dans <span class="wrong-word">...</span>.
-- Colonne 2 : "Correction" -> place le mot dans <span class="right-word">...</span>.
-- Colonne 3 : "Explication" -> courte règle de grammaire.
-
-FORMAT JSON ATTENDU :
-{
-  "content_feedback": "Le texte HTML avec le tableau ici...",
-  "grade": "xx/20",
-  "corrections": [
-    { "wrong": "mot1", "correct": "correct1" }
-  ]
-}
-`;
-
-        parts.push({ text: systemPrompt });
-
-        // Ajout des documents prof
-        if (teacherDocUrls) {
-            for (let url of teacherDocUrls) {
-                if(url !== "BREAK") {
-                    const p = await fileToPart(url);
-                    if(p) parts.push(p);
-                }
-            }
-        }
-
-        parts.push({ text: `CONSIGNE DU DEVOIR : "${homeworkInstruction}"` });
+        const systemPrompt = `RÔLE: Professeur de français. CIBLE: ${classroom}.
+        TACHE: Analyse le fond de la réponse et l'orthographe.
         
-        if (questionImage) { 
-            const p = await fileToPart(questionImage); 
-            if(p) parts.push(p); 
-        }
+        INSTRUCTIONS DE SORTIE (IMPORTANT) :
+        1. "content_feedback": Rédige un commentaire pédagogique complet en HTML. S'il y a des fautes, ajoute obligatoirement à la fin de ton commentaire un titre "Analyse Orthographique" et un tableau HTML <table class="correction-table"> avec 3 colonnes: Mot faux (rouge/barré), Correction (vert), Règle précise.
+        2. "corrections": Liste JSON des objets {wrong, correct, reason}.
+        
+        JSON: { "content_feedback": "TEXTE HTML ICI", "grade": "xx/20", "corrections": [...] }`;
 
-        parts.push({ text: `RÉPONSE DE L'ÉLÈVE : "${userText}"` });
-
-        if (imageUrl) { 
-            const p = await fileToPart(imageUrl); 
-            if(p) parts.push(p); 
-        }
-
+        let parts = [{ text: systemPrompt }, { text: `CONSIGNE: ${homeworkInstruction}` }, { text: `ÉLÈVE: ${userText}` }];
+        if (imageUrl) { const p = await fileToPart(imageUrl); if(p) parts.push(p); }
+        
         const result = await model.generateContent(parts);
         const json = JSON.parse(result.response.text());
 
-        // --- SAUVEGARDE DES FAUTES DANS LE PROFIL ÉLÈVE ---
-        if (playerId && json.corrections && json.corrections.length > 0) {
+        if (playerId && json.corrections?.length > 0) {
             await Player.findByIdAndUpdate(playerId, { 
-                $push: { 
-                    spellingMistakes: { 
-                        $each: json.corrections.map(c => ({ 
-                            wrong: c.wrong, 
-                            correct: c.correct, 
-                            date: new Date() 
-                        })) 
-                    } 
-                } 
+                $push: { spellingMistakes: { $each: json.corrections.map(c => ({ 
+                    wrong: c.wrong, correct: c.correct, reason: c.reason || "Grammaire", date: new Date() 
+                })) } } 
             });
         }
-
-        // --- SAUVEGARDE DE LA COPIE ---
+        
         if (playerId && homeworkId) {
-            const newResult = { 
-                levelIndex: levelIndex || 0, 
-                userText, 
-                userImageUrl: imageUrl, 
-                aiFeedback: json.content_feedback, 
-                grade: json.grade || "A valider" 
-            };
-            
+            const resObj = { levelIndex: levelIndex||0, userText, userImageUrl: imageUrl, aiFeedback: json.content_feedback, grade: json.grade||"A valider" };
             const sub = await Submission.findOne({ homeworkId, playerId });
             if (sub) { 
-                const idx = sub.levelsResults.findIndex(r => r.levelIndex === newResult.levelIndex); 
-                if (idx > -1) sub.levelsResults[idx] = newResult; 
-                else sub.levelsResults.push(newResult); 
-                sub.submittedAt = Date.now(); 
-                await sub.save(); 
-            } else { 
-                await new Submission({ 
-                    homeworkId, 
-                    playerId, 
-                    classroom, 
-                    levelsResults: [newResult] 
-                }).save(); 
-            }
+                const idx = sub.levelsResults.findIndex(r => r.levelIndex === resObj.levelIndex); 
+                if (idx > -1) sub.levelsResults[idx] = resObj; else sub.levelsResults.push(resObj); 
+                sub.submittedAt = Date.now(); await sub.save(); 
+            } else { await new Submission({ homeworkId, playerId, classroom, levelsResults: [resObj] }).save(); }
         }
 
         res.json({ feedback: json.content_feedback, grade: json.grade });
-
-    } catch (error) { 
-        console.error("Erreur IA Homework:", error);
-        res.json({ feedback: `Désolé, l'IA a rencontré une erreur : ${error.message}` }); 
-    }
+    } catch (e) { res.json({ feedback: "Désolé, l'IA a rencontré une erreur." }); }
 });
-
-app.get('/api/submissions/:hwId', async (req, res) => { try { const subs = await Submission.find({ homeworkId: req.params.hwId }).populate('playerId'); res.json(subs); } catch(e) { res.status(500).json([]); } });
-app.get('/api/submission-detail/:subId', async (req, res) => { try { const sub = await Submission.findById(req.params.subId).populate('playerId').populate('homeworkId'); res.json(sub); } catch(e) { res.status(500).json(null); } });
-app.post('/api/update-correction', async (req, res) => { try { const { subId, levelsResults } = req.body; await Submission.findByIdAndUpdate(subId, { levelsResults }); res.json({ ok: true }); } catch(e) { res.status(500).json({ ok: false }); } });
-app.post('/api/register', async (req, res) => { try { const { firstName, lastName, classroom } = req.body; if (!firstName || !lastName || !classroom) return res.status(400).json({ ok: false }); if(firstName.toLowerCase() === "eleve" && lastName.toLowerCase() === "test") { let testPlayer = await Player.findOne({ firstName: "Eleve", lastName: "Test" }); if (!testPlayer) { testPlayer = new Player({ firstName: "Eleve", lastName: "Test", classroom: classroom }); await testPlayer.save(); } else { testPlayer.classroom = classroom; await testPlayer.save(); } return res.json({ ok: true, id: testPlayer._id, firstName: "Eleve", lastName: "Test", classroom: classroom }); } const inputFirst = nameTokens(firstName); const inputLast = nameTokens(lastName); const normClass = normalizeClassroom(classroom); let classes = [normClass]; if (['2C', '2D'].includes(normClass)) classes = ['2C', '2D', '2CD']; if (['6', '6D'].includes(normClass)) classes = ['6', '6D']; const all = await Player.find({ classroom: { $in: classes } }); const found = all.find(p => { const dbFirst = nameTokens(p.firstName); const dbLast = nameTokens(p.lastName); return inputFirst.some(t => dbFirst.includes(t)) && inputLast.some(t => dbLast.includes(t)); }); if (!found) return res.status(404).json({ ok: false, error: "Élève introuvable." }); return res.json({ ok: true, id: found._id, firstName: found.firstName, lastName: found.lastName, classroom: found.classroom }); } catch (e) { res.status(500).json({ ok: false }); } });
 
 app.post('/api/verify-answer-ai', async (req, res) => {
   const { question, userAnswer, expectedAnswer, playerId } = req.body;
-  if (geminiKey) {
-    try {
-      const genAI = new GoogleGenerativeAI(geminiKey);
-      const model = genAI.getGenerativeModel({ model: MODEL_NAME, generationConfig: { responseMimeType: "application/json" } });
-      const systemInstruction = `RÔLE : Arbitre de Jeu. JSON: { "status": "correct"|"incorrect", "feedback": "...", "corrections": [{"wrong":"", "correct":""}] }`;
-      const result = await model.generateContent([systemInstruction, `Q: ${question}, A attendue: ${expectedAnswer}, R élève: ${userAnswer}`]);
-      const json = JSON.parse(result.response.text());
-      if (playerId && json.corrections && json.corrections.length > 0) { await Player.findByIdAndUpdate(playerId, { $push: { spellingMistakes: { $each: json.corrections.map(c => ({ wrong: c.wrong, correct: c.correct, date: new Date() })) } } }); }
-      return res.json(json);
-    } catch (error) { console.error(error); }
-  }
-  res.json({ status: "incorrect", feedback: "Erreur IA" });
+  try {
+    const genAI = new GoogleGenerativeAI(geminiKey);
+    const model = genAI.getGenerativeModel({ model: MODEL_NAME, generationConfig: { responseMimeType: "application/json" } });
+    const prompt = `Arbitre de français. Si "expectedAnswer" est un chiffre, c'est un index d'option.
+    SI FAUTES: Produit un feedback HTML incluant un tableau <table class="correction-table">.
+    JSON: { "status": "correct"|"incorrect", "feedback": "HTML ICI", "corrections": [{"wrong":"", "correct":"", "reason":""}] }`;
+    const result = await model.generateContent([prompt, `Q: ${question}, A: ${expectedAnswer}, R: ${userAnswer}`]);
+    const json = JSON.parse(result.response.text());
+    if (playerId && json.corrections?.length > 0) {
+        await Player.findByIdAndUpdate(playerId, { $push: { spellingMistakes: { $each: json.corrections.map(c => ({ ...c, date: new Date() })) } } });
+    }
+    res.json(json);
+  } catch (e) { res.json({ status: "incorrect" }); }
 });
 
-app.get('/api/player-data/:id', async (req, res) => { try { const p = await Player.findById(req.params.id); if(p) res.json(p); else res.status(404).json({}); } catch(e) { res.status(500).json({}); } });
-app.get('/api/players', async (req, res) => { res.json(await Player.find().sort({ lastName: 1 })); });
-app.post('/api/reset-player', async (req, res) => { await Player.findByIdAndUpdate(req.body.playerId, { validatedQuestions: [], validatedLevels: [], spellingMistakes: [], activityLogs: [] }); res.json({ok:true}); });
-app.post('/api/report-bug', async (req, res) => { const newBug = new Bug(req.body); await newBug.save(); res.json({ok:true}); });
-app.get('/api/bugs', async(req,res)=>{ res.json(await Bug.find().sort({date:-1})); });
-app.delete('/api/bugs/:id', async(req,res)=>{ await Bug.findByIdAndDelete(req.params.id); res.json({ok:true}); });
+app.post('/api/delete-mistake', async (req, res) => {
+    const { playerId, mistakeIndex } = req.body;
+    const p = await Player.findById(playerId);
+    if(p) { p.spellingMistakes.splice(mistakeIndex, 1); await p.save(); res.json({ok:true}); }
+    else res.status(404).json({ok:false});
+});
 
-app.listen(port, () => { console.log(`✅ Serveur prêt sur le port ${port}`); });
+app.post('/api/register', async (req, res) => { 
+    const { firstName, lastName, classroom } = req.body; 
+    let p = await Player.findOne({ firstName, lastName });
+    if (!p) p = new Player({ firstName, lastName, classroom });
+    await p.save();
+    res.json({ ok: true, id: p._id, firstName, lastName, classroom });
+});
 
-// ==================================================
+app.get('/api/homework/:class', async (req, res) => { 
+    const list = await Homework.find({ $or: [{ classroom: req.params.class }, { classroom: "Toutes" }] }).sort({ date: -1 }); 
+    res.json(list); 
+});
+
+app.get('/api/player-data/:id', async (req, res) => { res.json(await Player.findById(req.params.id)); });
+app.get('/api/game-levels/:classroom', async (req, res) => {
+    res.json(await GameLevel.find({ $or: [{ classroom: req.params.classroom }, { classroom: "Toutes" }] }).sort({ title: 1 }));
+});
+
+app.listen(port, () => console.log(`✅ Serveur prêt port ${port}`));
 
 // ==================================================
 // FILE: src/check-models.js
@@ -2911,280 +2736,158 @@ document.addEventListener("keyup", (e) => {
 // ==================================================
 // FILE: public/js/eleve.js
 // ==================================================
-// ==================================================
 import { ZombieGame } from './games/ZombieGame.js';
 import { RedactionGame } from './games/RedactionGame.js';
 import { HomeworkGame } from './games/HomeworkGame.js';
 import { StarshipGame } from './games/StarshipGame.js';
 import { JumperGame } from './games/JumperGame.js';
 
-const GameClasses = { "ZombieGame": ZombieGame, "RedactionGame": RedactionGame, "HomeworkGame": HomeworkGame, "StarshipGame": StarshipGame, "JumperGame": JumperGame };
+const GameClasses = { ZombieGame, RedactionGame, HomeworkGame, StarshipGame, JumperGame };
 
 export async function initStudentInterface() {
-    console.log("🚀 Eleve Init (DB Mode)");
+    console.log("🚀 Lancement Interface Eleve");
     document.getElementById("chapterSelection").style.display = "block";
     document.getElementById("logoutBtn").style.display = "block";
     
-    if(window.state.currentPlayerData.firstName === "Eleve" && window.state.currentPlayerData.lastName === "Test") {
-        const btn = document.getElementById("backToProfBtn");
-        btn.style.display = "block";
-        btn.onclick = () => { localStorage.setItem("player", JSON.stringify({ id: "prof", firstName: "Jean", lastName: "Vuillet", classroom: "Professeur" })); window.location.reload(); };
-    }
-
-    // --- CHARGEMENT DES QUESTIONS DEPUIS LA BDD ---
+    // Charger les questions de la classe depuis la BDD
     const classKey = window.state.getClassKey(window.state.currentPlayerData.classroom); 
-    try {
-        const res = await window.api.get(`/api/game-levels/${classKey}`);
-        if(res) {
-            window.state.allQuestionsData[classKey] = res;
-            console.log("✅ Questions chargées depuis la BDD :", res.length);
-        }
-    } catch(e) { console.error("Erreur chargement niveaux", e); }
-    
-    document.querySelectorAll(".chapter-action-btn").forEach(b => b.disabled = false);
-    document.getElementById("backToMenuBtn").onclick = () => window.location.reload();
-    
+    const res = await window.api.get(`/api/game-levels/${classKey}`);
+    if(res) window.state.allQuestionsData[classKey] = res;
+
+    // Carnet de fautes
     const btnMistakes = document.getElementById("myMistakesBtn");
-    if(btnMistakes && window.state.currentPlayerData.id !== "prof") {
-        btnMistakes.style.display = "block";
-        btnMistakes.onclick = loadMistakes;
-        document.getElementById("closeMistakesBtn").onclick = () => document.getElementById("mistakesModal").style.display = "none";
-    }
-
-    document.getElementById("pauseReportBtn").onclick = () => { window.state.isGlobalPaused = true; document.getElementById("bugModal").style.display="flex"; };
-    document.getElementById("resumeGameBtn").onclick = () => { window.state.isGlobalPaused = false; document.getElementById("bugModal").style.display="none"; };
-    document.getElementById("sendBugBtn").onclick = async () => {
-        await window.api.reportBug({ reporterName: window.state.currentPlayerData.firstName, description: document.getElementById("bugDescription").value });
-        alert("Envoyé !"); document.getElementById("bugModal").style.display="none"; window.state.isGlobalPaused = false;
-    };
-
-    const mainBar = document.getElementById("mainProgress");
-    if (mainBar) {
-        mainBar.onclick = () => {
-            if (window.state.isRKeyDown && window.state.isTKeyDown) {
-                window.state.general = window.state.levels[window.state.currentLevel].questions.length;
-                updateBars(); nextQuestion(false);
-            }
-        };
-    }
+    btnMistakes.style.display = "block";
+    btnMistakes.onclick = loadMistakes;
+    document.getElementById("closeMistakesBtn").onclick = () => document.getElementById("mistakesModal").style.display = "none";
+    
+    document.getElementById("backToMenuBtn").onclick = () => window.location.reload();
 }
 
 async function loadMistakes() {
-    const list = document.getElementById("mistakesList");
+    const listContainer = document.getElementById("mistakesList");
     const modal = document.getElementById("mistakesModal");
-    list.innerHTML = "Chargement...";
+    listContainer.innerHTML = "<p>Chargement du carnet...</p>";
     modal.style.display = "flex";
+
     try {
         const res = await fetch(`/api/player-data/${window.state.currentPlayerId}`);
         const data = await res.json();
         const mistakes = data.spellingMistakes || [];
-        if(mistakes.length === 0) list.innerHTML = "<p>Aucune faute !</p>";
-        else {
-            const html = mistakes.reverse().map(m => `
-                <li class='spelling-item' style="margin-bottom:10px; border-bottom:1px solid #eee;">
-                    <span class='wrong-word' style="color:red; text-decoration:line-through;">${m.wrong}</span> 👉 <span class='right-word' style="color:green; font-weight:bold;">${m.correct}</span>
-                </li>`).join('');
-            list.innerHTML = `<ul style="list-style:none; padding:0;">${html}</ul>`;
+
+        if (mistakes.length === 0) {
+            listContainer.innerHTML = "<div style='padding:20px; text-align:center;'>🎉 Aucune faute !</div>";
+        } else {
+            let html = `
+                <table class="correction-table" style="width:100%; border-collapse:collapse;">
+                    <thead>
+                        <tr style="border-bottom:2px solid #eee;">
+                            <th style="padding:10px; text-align:left;">Mot</th>
+                            <th style="padding:10px; text-align:left;">Correction</th>
+                            <th style="padding:10px; text-align:left;">Explication</th>
+                            <th style="padding:10px; text-align:center;"></th>
+                        </tr>
+                    </thead>
+                    <tbody>`;
+            
+            mistakes.reverse().forEach((m, index) => {
+                const realIndex = mistakes.length - 1 - index;
+                html += `
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:10px;"><span class="wrong-word">${m.wrong}</span></td>
+                        <td style="padding:10px;"><span class="right-word">${m.correct}</span></td>
+                        <td style="padding:10px; font-size:0.85em; color:#475569;">${m.reason || "Usage"}</td>
+                        <td style="padding:10px; text-align:center;">
+                            <button onclick="window.deleteMistakeFromServer(${realIndex})" style="background:#fee2e2; color:#dc2626; border:none; border-radius:50%; width:25px; height:25px; cursor:pointer;">✕</button>
+                        </td>
+                    </tr>`;
+            });
+            html += `</tbody></table>`;
+            listContainer.innerHTML = html;
         }
-    } catch(e) { list.innerHTML = "Erreur."; }
+    } catch (e) { listContainer.innerHTML = "Erreur de chargement."; }
 }
+
+window.deleteMistakeFromServer = async (idx) => {
+    if(!confirm("Supprimer cette faute ?")) return;
+    const res = await fetch('/api/delete-mistake', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ playerId: window.state.currentPlayerId, mistakeIndex: idx })
+    });
+    if(res.ok) loadMistakes();
+};
 
 document.body.addEventListener('click', async (e) => {
     if (e.target.matches('.chapter-action-btn')) {
         const parent = e.target.closest('.chapter-box');
-        const tmplId = parent.dataset.templateId;
         const gameClassStr = parent.dataset.gameClass;
         const chapterId = parent.dataset.chapter;
+        const tmplId = parent.dataset.templateId;
 
         document.getElementById("chapterSelection").style.display = 'none';
         document.getElementById("game").style.display = 'block';
         document.getElementById("backToMenuBtn").style.display = 'inline-block';
-        const btnMistakes = document.getElementById("myMistakesBtn");
-        if(btnMistakes) btnMistakes.style.display = 'none';
 
         const container = document.getElementById("gameModuleContainer");
         container.innerHTML = "";
-        const tmpl = document.getElementById(tmplId);
-        if(tmpl) container.appendChild(tmpl.content.cloneNode(true));
+        container.appendChild(document.getElementById(tmplId).content.cloneNode(true));
 
-        window.state.isGameActive = true;
-        window.state.locked = false;
-        
         const controller = {
-            notifyCorrectAnswer: () => incrementProgress(1),
-            notifyWrongAnswer: (msg) => wrongAnswerFlow(msg),
-            getState: () => ({ isLocked: window.state.locked })
+            notifyCorrectAnswer: () => window.incrementProgress(1),
+            notifyWrongAnswer: (msg) => window.wrongAnswerFlow(msg),
+            getState: () => ({ isLocked: false })
         };
 
-        const GameClass = GameClasses[gameClassStr];
-        if(GameClass) {
-            window.state.currentGameModuleInstance = new GameClass(container, controller);
-            if (gameClassStr === "HomeworkGame") {
-                document.getElementById("levelTitle").textContent = "Devoirs Maison";
-                toggleUI(false);
-                if(window.state.currentGameModuleInstance.loadHomeworks) window.state.currentGameModuleInstance.loadHomeworks();
-            } else {
-                toggleUI(true);
-                const classKey = window.state.getClassKey(window.state.currentPlayerData.classroom);
-                const allLevels = window.state.allQuestionsData[classKey] || [];
-                window.state.levels = allLevels.filter(l => l.chapterId === chapterId);
-                
-                const validatedIds = (window.state.currentPlayerData.validatedLevels || []).map(v => (typeof v === 'string' ? v : v.levelId));
-                let startLvl = window.state.levels.findIndex(l => !validatedIds.includes(l.id));
-                if (startLvl === -1) startLvl = 0; 
-
-                if(window.state.levels.length > 0) setupLevel(startLvl);
-                else container.innerHTML = "<h3 style='text-align:center; margin-top:50px'>Pas de niveaux (BDD vide pour cette classe/chapitre).</h3>";
-            }
+        window.state.currentGameModuleInstance = new GameClasses[gameClassStr](container, controller);
+        
+        if (gameClassStr === "HomeworkGame") {
+            window.state.currentGameModuleInstance.loadHomeworks();
+        } else {
+            const classKey = window.state.getClassKey(window.state.currentPlayerData.classroom);
+            window.state.levels = (window.state.allQuestionsData[classKey] || []).filter(l => l.chapterId === chapterId);
+            if(window.state.levels.length) setupLevel(0);
+            else container.innerHTML = "Pas de niveaux pour ce chapitre.";
         }
     }
 });
 
-function toggleUI(show) {
-    const disp = show ? "block" : "none";
-    const flex = show ? "flex" : "none";
-    document.getElementById("mainProgress").style.display = disp;
-    document.getElementById("subBars").style.display = flex;
-    document.getElementById("lives").style.display = flex;
-}
-
 function setupLevel(idx) {
-    if(!window.state.levels[idx]) { document.getElementById("gameModuleContainer").innerHTML = "<h1>Terminé ! 🏆</h1>"; return; }
     window.state.currentLevel = idx;
     const lvl = window.state.levels[idx];
     document.getElementById("levelTitle").textContent = lvl.title;
-    
-    const btnL = document.getElementById("openLessonBtn");
-    const txtL = document.getElementById("lessonText");
-    if(lvl.lesson) { btnL.style.display = "block"; txtL.innerHTML = lvl.lesson; } 
-    else { btnL.style.display = "none"; }
-
-    window.state.localScores = new Array(lvl.questions.length).fill(0);
-    window.state.general = 0; 
-    window.state.currentIndex = -1; 
-    window.state.lives = 4;
-    renderLives();
-    
-    const sub = document.getElementById("subBars"); sub.innerHTML = "";
-    lvl.questions.forEach((_, i) => {
-        const d = document.createElement("div"); d.className = "subProgress";
-        d.innerHTML = `<div class="subBar" id="subBar${i}"></div>`;
-        d.onclick = () => {
-            if (window.state.isGameActive && window.state.isRKeyDown && window.state.isTKeyDown) {
-                window.state.currentIndex = i; 
-                incrementProgress(1);
-                loadActiveQuestion();
-            }
-        };
-        sub.appendChild(d);
-    });
-    
-    updateBars();
-    nextQuestion(false);
-}
-
-function nextQuestion(keep) {
-    window.state.locked = false;
-    const lvl = window.state.levels[window.state.currentLevel];
-    if(window.state.general >= lvl.questions.length) {
-        saveProgress("level", lvl._id, "A"); 
-        if(window.state.currentLevel < window.state.levels.length - 1) setTimeout(() => setupLevel(window.state.currentLevel + 1), 1500);
-        else document.getElementById("gameModuleContainer").innerHTML = "<h1 style='text-align:center'>Bravo ! 👑</h1>";
-        return;
-    }
-    
-    let nextIdx = -1;
-    const req = lvl.requiredPerQuestion || 3;
-    for(let i=window.state.currentIndex+1; i<lvl.questions.length; i++) if(window.state.localScores[i] < req) { nextIdx = i; break; }
-    if(nextIdx === -1) for(let i=0; i<=window.state.currentIndex; i++) if(window.state.localScores[i] < req) { nextIdx = i; break; }
-    
-    if(nextIdx !== -1) {
-        window.state.currentIndex = nextIdx;
-        loadActiveQuestion();
-    }
+    window.state.general = 0; window.state.currentIndex = 0; window.state.lives = 4;
+    document.getElementById("lives").innerHTML = "❤️".repeat(4);
+    document.getElementById("mainBar").style.width = "0%";
+    loadActiveQuestion();
 }
 
 function loadActiveQuestion() {
-    if(!window.state.currentGameModuleInstance || !window.state.currentGameModuleInstance.loadQuestion) return;
-    
-    const lvl = window.state.levels[window.state.currentLevel];
-    const q = lvl.questions[window.state.currentIndex];
-    const score = window.state.localScores[window.state.currentIndex];
-    const req = lvl.requiredPerQuestion || 3;
-    
-    const qToSend = JSON.parse(JSON.stringify(q));
-    
-    if (score >= req - 1) {
-        delete qToSend.options; 
-    }
-    
-    window.state.currentGameModuleInstance.loadQuestion(qToSend);
+    const q = window.state.levels[window.state.currentLevel].questions[window.state.currentIndex];
+    window.state.currentGameModuleInstance.loadQuestion(q);
 }
 
-function incrementProgress(val) {
-    const req = window.state.levels[window.state.currentLevel].requiredPerQuestion || 3;
-    window.state.localScores[window.state.currentIndex] = Math.max(0, Math.min(req, window.state.localScores[window.state.currentIndex] + val));
+window.incrementProgress = (val) => {
+    window.state.general++;
+    const total = window.state.levels[window.state.currentLevel].questions.length;
+    document.getElementById("mainBar").style.width = (window.state.general / total * 100) + "%";
     
-    updateBars();
-
-    if (window.state.localScores[window.state.currentIndex] >= req) { 
-        window.state.general++; 
-        setTimeout(() => nextQuestion(false), 1200); 
-    } 
-    else if (val > 0) {
+    if(window.state.general >= total) {
+        alert("Niveau terminé !");
+        window.location.reload();
+    } else {
+        window.state.currentIndex++;
         setTimeout(() => loadActiveQuestion(), 1000);
     }
-}
+};
 
-function updateBars() {
-    const req = window.state.levels[window.state.currentLevel].requiredPerQuestion || 3;
-    window.state.localScores.forEach((score, i) => {
-        const bar = document.getElementById(`subBar${i}`);
-        if(bar) { 
-            const pct = (score / req) * 100;
-            bar.style.width = pct + "%"; 
-            if(score >= req) bar.parentElement.classList.add("completed"); 
-        }
-    });
-    document.getElementById("mainBar").style.width = (window.state.general / window.state.levels[window.state.currentLevel].questions.length * 100) + "%";
-}
-
-function renderLives() { document.getElementById("lives").innerHTML = "❤️❤️❤️❤️".substring(0, window.state.lives*2); }
-
-function wrongAnswerFlow(msg) {
-    window.state.lives--; 
-    renderLives();
-    
-    const req = window.state.levels[window.state.currentLevel].requiredPerQuestion || 3;
-    window.state.localScores[window.state.currentIndex] = Math.max(0, window.state.localScores[window.state.currentIndex] - 1);
-    updateBars();
-
+window.wrongAnswerFlow = (msg) => {
+    window.state.lives--;
+    document.getElementById("lives").innerHTML = "❤️".repeat(window.state.lives);
     if(window.state.lives <= 0) {
-        document.getElementById("overlay").style.display = "flex";
-    } else { 
-        if(msg) { 
-            document.getElementById("correctionText").textContent = msg; 
-            document.getElementById("correctionOverlay").style.display = "flex"; 
-        }
-        setTimeout(() => loadActiveQuestion(), 1500);
+        alert("Perdu ! Recommence le niveau.");
+        window.location.reload();
     }
-}
-
-async function saveProgress(type, val, grade) {
-    if(window.state.currentPlayerId && window.state.currentPlayerId !== "prof") {
-        try {
-            await fetch("/api/save-progress", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ playerId: window.state.currentPlayerId, progressType: type, value: val, grade: grade }) });
-            if(type === "level") {
-                if(!window.state.currentPlayerData.validatedLevels) window.state.currentPlayerData.validatedLevels = [];
-                window.state.currentPlayerData.validatedLevels.push(val);
-                localStorage.setItem("player", JSON.stringify(window.state.currentPlayerData));
-            }
-        } catch(e) {}
-    }
-}
-
-document.getElementById("closeCorrectionBtn").onclick = () => { document.getElementById("correctionOverlay").style.display="none"; };
-document.getElementById("restartBtn").onclick = () => { document.getElementById("overlay").style.display="none"; setupLevel(window.state.currentLevel); };
+};
 
 // ==================================================
 // FILE: public/js/prof.js

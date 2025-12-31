@@ -7,76 +7,63 @@ import { JumperGame } from './games/JumperGame.js';
 const GameClasses = { ZombieGame, RedactionGame, HomeworkGame, StarshipGame, JumperGame };
 
 export async function initStudentInterface() {
-    console.log("🚀 Lancement Interface Eleve");
+    console.log("🚀 Initialisation Interface Élève");
     document.getElementById("chapterSelection").style.display = "block";
     document.getElementById("logoutBtn").style.display = "block";
     
-    // Charger les questions de la classe depuis la BDD
+    if(window.state.currentPlayerData.firstName === "Eleve" && window.state.currentPlayerData.lastName === "Test") {
+        const btn = document.getElementById("backToProfBtn");
+        if(btn) {
+            btn.style.display = "block";
+            btn.onclick = () => { 
+                localStorage.setItem("player", JSON.stringify({ id: "prof", firstName: "Jean", lastName: "Vuillet", classroom: "Professeur" })); 
+                window.location.reload(); 
+            };
+        }
+    }
+
     const classKey = window.state.getClassKey(window.state.currentPlayerData.classroom); 
     const res = await window.api.get(`/api/game-levels/${classKey}`);
     if(res) window.state.allQuestionsData[classKey] = res;
 
-    // Carnet de fautes
-    const btnMistakes = document.getElementById("myMistakesBtn");
-    btnMistakes.style.display = "block";
-    btnMistakes.onclick = loadMistakes;
+    document.getElementById("myMistakesBtn").onclick = loadMistakes;
+    document.getElementById("myMistakesBtn").style.display = "block";
     document.getElementById("closeMistakesBtn").onclick = () => document.getElementById("mistakesModal").style.display = "none";
-    
     document.getElementById("backToMenuBtn").onclick = () => window.location.reload();
 }
 
 async function loadMistakes() {
-    const listContainer = document.getElementById("mistakesList");
-    const modal = document.getElementById("mistakesModal");
-    listContainer.innerHTML = "<p>Chargement du carnet...</p>";
-    modal.style.display = "flex";
+    const list = document.getElementById("mistakesList");
+    document.getElementById("mistakesModal").style.display = "flex";
+    list.innerHTML = "Chargement...";
+    const res = await fetch(`/api/player-data/${window.state.currentPlayerId}`);
+    const data = await res.json();
+    const mistakes = data.spellingMistakes || [];
 
-    try {
-        const res = await fetch(`/api/player-data/${window.state.currentPlayerId}`);
-        const data = await res.json();
-        const mistakes = data.spellingMistakes || [];
-
-        if (mistakes.length === 0) {
-            listContainer.innerHTML = "<div style='padding:20px; text-align:center;'>🎉 Aucune faute !</div>";
-        } else {
-            let html = `
-                <table class="correction-table" style="width:100%; border-collapse:collapse;">
-                    <thead>
-                        <tr style="border-bottom:2px solid #eee;">
-                            <th style="padding:10px; text-align:left;">Mot</th>
-                            <th style="padding:10px; text-align:left;">Correction</th>
-                            <th style="padding:10px; text-align:left;">Explication</th>
-                            <th style="padding:10px; text-align:center;"></th>
-                        </tr>
-                    </thead>
-                    <tbody>`;
-            
-            mistakes.reverse().forEach((m, index) => {
-                const realIndex = mistakes.length - 1 - index;
-                html += `
-                    <tr style="border-bottom:1px solid #f1f5f9;">
-                        <td style="padding:10px;"><span class="wrong-word">${m.wrong}</span></td>
-                        <td style="padding:10px;"><span class="right-word">${m.correct}</span></td>
-                        <td style="padding:10px; font-size:0.85em; color:#475569;">${m.reason || "Usage"}</td>
-                        <td style="padding:10px; text-align:center;">
-                            <button onclick="window.deleteMistakeFromServer(${realIndex})" style="background:#fee2e2; color:#dc2626; border:none; border-radius:50%; width:25px; height:25px; cursor:pointer;">✕</button>
-                        </td>
-                    </tr>`;
-            });
-            html += `</tbody></table>`;
-            listContainer.innerHTML = html;
-        }
-    } catch (e) { listContainer.innerHTML = "Erreur de chargement."; }
+    if(mistakes.length === 0) {
+        list.innerHTML = "<p style='text-align:center; padding:20px;'>Aucune faute enregistrée ! 🎉</p>";
+    } else {
+        let html = `<table class="correction-table">
+            <thead><tr><th>Mot</th><th>Correction</th><th>Explication</th><th></th></tr></thead>
+            <tbody>`;
+        mistakes.reverse().forEach((m, i) => {
+            const realIdx = mistakes.length - 1 - i;
+            html += `<tr>
+                <td><span class="wrong-word">${m.wrong}</span></td>
+                <td><span class="right-word">${m.correct}</span></td>
+                <td style="font-size:0.85em; color:#475569;">${m.reason || "Grammaire"}</td>
+                <td style="text-align:right;"><button onclick="window.deleteMistakeFromServer(${realIdx})" style="background:#fee2e2; color:#dc2626; border-radius:50%; width:25px; height:25px; cursor:pointer;">✕</button></td>
+            </tr>`;
+        });
+        html += `</tbody></table>`;
+        list.innerHTML = html;
+    }
 }
 
 window.deleteMistakeFromServer = async (idx) => {
     if(!confirm("Supprimer cette faute ?")) return;
-    const res = await fetch('/api/delete-mistake', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ playerId: window.state.currentPlayerId, mistakeIndex: idx })
-    });
-    if(res.ok) loadMistakes();
+    await fetch('/api/delete-mistake', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ playerId: window.state.currentPlayerId, mistakeIndex: idx }) });
+    loadMistakes();
 };
 
 document.body.addEventListener('click', async (e) => {
@@ -101,14 +88,11 @@ document.body.addEventListener('click', async (e) => {
         };
 
         window.state.currentGameModuleInstance = new GameClasses[gameClassStr](container, controller);
-        
-        if (gameClassStr === "HomeworkGame") {
-            window.state.currentGameModuleInstance.loadHomeworks();
-        } else {
+        if (gameClassStr === "HomeworkGame") window.state.currentGameModuleInstance.loadHomeworks();
+        else {
             const classKey = window.state.getClassKey(window.state.currentPlayerData.classroom);
             window.state.levels = (window.state.allQuestionsData[classKey] || []).filter(l => l.chapterId === chapterId);
             if(window.state.levels.length) setupLevel(0);
-            else container.innerHTML = "Pas de niveaux pour ce chapitre.";
         }
     }
 });
@@ -132,9 +116,8 @@ window.incrementProgress = (val) => {
     window.state.general++;
     const total = window.state.levels[window.state.currentLevel].questions.length;
     document.getElementById("mainBar").style.width = (window.state.general / total * 100) + "%";
-    
     if(window.state.general >= total) {
-        alert("Niveau terminé !");
+        alert("Bravo ! Niveau terminé !");
         window.location.reload();
     } else {
         window.state.currentIndex++;
@@ -145,8 +128,5 @@ window.incrementProgress = (val) => {
 window.wrongAnswerFlow = (msg) => {
     window.state.lives--;
     document.getElementById("lives").innerHTML = "❤️".repeat(window.state.lives);
-    if(window.state.lives <= 0) {
-        alert("Perdu ! Recommence le niveau.");
-        window.location.reload();
-    }
+    if(window.state.lives <= 0) alert("Perdu ! Recommence le niveau.");
 };
