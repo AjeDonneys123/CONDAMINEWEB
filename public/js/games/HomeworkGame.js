@@ -1,5 +1,4 @@
-// ==================================================
-// PLUS D'IMPORTS ! On utilise window.state et window.api
+
 
 export class HomeworkGame {
     constructor(container, controller) {

@@ -1,5 +1,5 @@
 // SNAPSHOT: SNAPSHOT_CODE.txt
-// DATE: 29/12/2025 15:27:19
+// DATE: 31/12/2025 07:41:08
 // DESCRIPTION: CODE ESSENTIEL
 
 // ==================================================
@@ -12,7 +12,8 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "nodemon --ext js,html,css,txt --watch src --watch public --watch update.txt --ignore PROJET_SNAPSHOT.txt --exec \"(lsof -t -i:3000 | xargs kill -9 2>/dev/null || true) && node apply.js && node snap.js && node src/server.js\""
+    "dev": "nodemon --ext js,html,css,txt --watch src --watch public --watch update.txt --ignore PROJET_SNAPSHOT.txt --exec \"(lsof -t -i:3000 | xargs kill -9 2>/dev/null || true) && node apply.js && node src/server.js\"",
+    "snap": "node snap.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.1.0",
@@ -1608,8 +1609,7 @@ export class ZombieGame {
 // ==================================================
 // FILE: public/js/games/HomeworkGame.js
 // ==================================================
-// ==================================================
-// PLUS D'IMPORTS ! On utilise window.state et window.api
+
 
 export class HomeworkGame {
     constructor(container, controller) {

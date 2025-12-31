@@ -249,5 +249,41 @@ td { padding: 12px 15px; border-bottom: 1px solid #f1f5f9; color: var(--text-mai
 .opt-wrong { background: #fee2e2 !important; border-color: #ef4444 !important; }
 
 #starship-game-area, #jumper-area { position: relative; height: 350px; border-radius: 12px; overflow: hidden; border: 4px solid #334155; }
+/* Styles pour le tableau de correction de l'IA */
+.correction-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 15px;
+    font-size: 0.9em;
+    background-color: white;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+}
+
+.correction-table th {
+    background-color: #f1f5f9;
+    color: #475569;
+    padding: 10px;
+    text-align: left;
+    border-bottom: 2px solid #e2e8f0;
+}
+
+.correction-table td {
+    padding: 10px;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+/* Couleurs demandées pour les mots */
+.wrong-word {
+    color: #dc2626; /* Rouge */
+    text-decoration: line-through; /* Barré */
+    font-weight: bold;
+}
+
+.right-word {
+    color: #16a34a; /* Vert */
+    font-weight: bold;
+}
 
 

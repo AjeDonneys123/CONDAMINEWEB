@@ -5,7 +5,6 @@ const path = require('path');
 const fullFiles = [
     'package.json',
     'package-lock.json',
-    '.env',
     '.gitignore',
     'apply.js',
     'snap.js',
@@ -34,8 +33,6 @@ const coreFiles = [
     'public/index.html',
     'public/style.css',
     'public/js/main.js',
-    'public/js/api.js',
-    'public/js/state.js',
     'public/js/eleve.js',
     'public/js/prof.js',
     'public/js/games/ZombieGame.js',

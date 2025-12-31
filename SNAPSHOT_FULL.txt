@@ -1,5 +1,5 @@
 // SNAPSHOT: SNAPSHOT_FULL.txt
-// DATE: 29/12/2025 15:27:19
+// DATE: 31/12/2025 07:41:08
 // DESCRIPTION: SAUVEGARDE TOTALE
 
 // ==================================================
@@ -12,7 +12,8 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "nodemon --ext js,html,css,txt --watch src --watch public --watch update.txt --ignore PROJET_SNAPSHOT.txt --exec \"(lsof -t -i:3000 | xargs kill -9 2>/dev/null || true) && node apply.js && node snap.js && node src/server.js\""
+    "dev": "nodemon --ext js,html,css,txt --watch src --watch public --watch update.txt --ignore PROJET_SNAPSHOT.txt --exec \"(lsof -t -i:3000 | xargs kill -9 2>/dev/null || true) && node apply.js && node src/server.js\"",
+    "snap": "node snap.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.1.0",
@@ -1746,16 +1747,6 @@
 
 
 // ==================================================
-// FILE: .env
-// ==================================================
-MONGODB_URI="mongodb+srv://vuilletjean:Clemenceau1919@cluster0.ilgdlcy.mongodb.net/quizDB?retryWrites=true&w=majority&appName=Cluster0"
-PORT=3000
-GEMINI_API_KEY="AIzaSyAQ2L2I61DgDgvwAj9ANIlDMqIOO-DsUzk"
-CLOUDINARY_CLOUD_NAME=dyjscatrq
-CLOUDINARY_API_KEY=758395199188542
-CLOUDINARY_API_SECRET=DERTAAgSnLhSRM759kmyMs2MzMk
-
-// ==================================================
 // FILE: .gitignore
 // ==================================================
 node_modules
@@ -1844,7 +1835,6 @@ const path = require('path');
 const fullFiles = [
     'package.json',
     'package-lock.json',
-    '.env',
     '.gitignore',
     'apply.js',
     'snap.js',
@@ -1873,8 +1863,6 @@ const coreFiles = [
     'public/index.html',
     'public/style.css',
     'public/js/main.js',
-    'public/js/api.js',
-    'public/js/state.js',
     'public/js/eleve.js',
     'public/js/prof.js',
     'public/js/games/ZombieGame.js',
@@ -3692,8 +3680,7 @@ export class ZombieGame {
 // ==================================================
 // FILE: public/js/games/HomeworkGame.js
 // ==================================================
-// ==================================================
-// PLUS D'IMPORTS ! On utilise window.state et window.api
+
 
 export class HomeworkGame {
     constructor(container, controller) {
