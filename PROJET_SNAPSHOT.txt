@@ -1,5 +1,5 @@
 // SNAPSHOT: PROJET_SNAPSHOT.txt
-// DATE: 31/12/2025 19:46:19
+// DATE: 01/01/2026 11:47:06
 // DESCRIPTION: CODE ESSENTIEL POUR SESSION IA
 
 // ============================================================================
@@ -20,6 +20,7 @@
 // 3. SYSTÈME DE MISE À JOUR (apply.js) :
 //    - L'utilisateur utilise un script "apply.js" qui lit "update.txt".
 //    - Tes réponses DOIVENT respecter ce format strict pour chaque fichier :
+//.   -les réponses doivent etre dans un fichier txt
 //      // FILE:nom/du/fichier.js
 //      [SAUTER 3 LIGNES VIDES]
 //      [CODE COMPLET DU FICHIER]
@@ -42,6 +43,7 @@
 // ==================================================
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
+
 const fetch = require('node-fetch');
 if (!global.fetch) {
   global.fetch = fetch;
@@ -49,6 +51,7 @@ if (!global.fetch) {
   global.Request = fetch.Request;
   global.Response = fetch.Response;
 }
+
 const express = require('express');
 const mongoose = require('mongoose');
 const { GoogleGenerativeAI } = require("@google/generative-ai");
@@ -58,6 +61,7 @@ const { CloudinaryStorage } = require('multer-storage-cloudinary');
 
 const app = express();
 const port = process.env.PORT || 3000;
+
 const mongoUri = process.env.MONGODB_URI;
 const geminiKey = process.env.GEMINI_API_KEY;
 const MODEL_NAME = "gemini-2.0-flash"; 
@@ -67,12 +71,13 @@ if (!mongoUri) { console.error('❌ MONGODB_URI manquant'); process.exit(1); }
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
-// SCHEMAS
+// --- SCHEMAS BDD ---
 const PlayerSchema = new mongoose.Schema({
   firstName: String, lastName: String, classroom: String,
   validatedQuestions: [String],
   validatedLevels: { type: [mongoose.Schema.Types.Mixed], default: [] },
   spellingMistakes: { type: [{ wrong: String, correct: String, reason: String, date: { type: Date, default: Date.now } }], default: [] },
+  activityLogs: { type: [{ action: String, detail: String, date: { type: Date, default: Date.now } }], default: [] },
   created_at: { type: Date, default: Date.now },
 }, { minimize: false });
 const Player = mongoose.model('Player', PlayerSchema, 'players');
@@ -84,11 +89,21 @@ const HomeworkSchema = new mongoose.Schema({
 });
 const Homework = mongoose.model('Homework', HomeworkSchema, 'homeworks');
 
+const SubmissionSchema = new mongoose.Schema({
+  homeworkId: { type: mongoose.Schema.Types.ObjectId, ref: 'Homework' },
+  playerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Player' },
+  classroom: String,
+  levelsResults: [{ levelIndex: Number, userText: String, aiFeedback: String, grade: String }],
+  submittedAt: { type: Date, default: Date.now }
+});
+const Submission = mongoose.model('Submission', SubmissionSchema, 'submissions');
+
 const GameLevelSchema = new mongoose.Schema({
     chapterId: String, classroom: String, title: String, lesson: String, questions: Array, createdAt: { type: Date, default: Date.now }
 });
 const GameLevel = mongoose.model('GameLevel', GameLevelSchema, 'game_levels');
 
+// --- UTILS ---
 async function fileToPart(url) {
     if(!url) return null;
     try {
@@ -99,76 +114,103 @@ async function fileToPart(url) {
     } catch(e) { return null; }
 }
 
-// ROUTES API
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: { folder: '5e-entraineur', allowed_formats: ['jpg', 'png', 'jpeg', 'webp', 'pdf'], resource_type: 'auto' },
+});
+const upload = multer({ storage: storage });
+
+// --- ROUTES API ---
+
+app.post('/api/upload', upload.single('file'), (req, res) => {
+  if (!req.file) return res.status(400).json({ ok: false });
+  res.json({ ok: true, imageUrl: req.file.path });
+});
+
 app.post('/api/analyze-homework', async (req, res) => {
-    const { userText, homeworkInstruction, classroom, playerId } = req.body;
+    const { userText, homeworkInstruction, classroom, playerId, homeworkId } = req.body;
     try {
         const genAI = new GoogleGenerativeAI(geminiKey);
         const model = genAI.getGenerativeModel({ model: MODEL_NAME, generationConfig: { responseMimeType: "application/json" } });
-        const prompt = `RÔLE: Professeur de français. SI FAUTES: tableau HTML 3 colonnes (Mot erroné, Correction, Explication précise). JSON: { "content_feedback": "HTML", "grade": "xx/20", "corrections": [{"wrong":"", "correct":"", "reason":""}] }`;
-        const result = await model.generateContent([prompt, `CONSIGNE: ${homeworkInstruction}`, `ÉLÈVE: ${userText}`]);
+        
+        const systemPrompt = `RÔLE: Professeur de français. CIBLE: ${classroom}. 
+        TACHE: Corrige la réponse de l'élève. Analyse le fond et l'orthographe.
+        IMPORTANT: Remplis le champ JSON "feedback" avec ton commentaire HTML et ton tableau de correction 3 colonnes.
+        NOTE: Calcule une note réelle sur 20.
+        JSON OBLIGATOIRE: { "feedback": "Texte HTML complet", "grade": "Note/20", "corrections": [{"wrong":"", "correct":"", "reason":""}] }`;
+
+        const result = await model.generateContent([systemPrompt, `CONSIGNE: ${homeworkInstruction}`, `ÉLÈVE: ${userText}`]);
         const json = JSON.parse(result.response.text());
+
         if (playerId && json.corrections?.length > 0) {
-            await Player.findByIdAndUpdate(playerId, { $push: { spellingMistakes: { $each: json.corrections.map(c => ({ ...c, date: new Date() })) } } });
+            await Player.findByIdAndUpdate(playerId, { 
+                $push: { spellingMistakes: { $each: json.corrections.map(c => ({ 
+                    wrong: c.wrong, correct: c.correct, reason: c.reason || "Usage", date: new Date() 
+                })) } } 
+            });
         }
-        res.json({ feedback: json.content_feedback, grade: json.grade });
-    } catch (e) { res.json({ feedback: "Erreur IA" }); }
-});
-
-app.post('/api/verify-answer-ai', async (req, res) => {
-  const { question, userAnswer, expectedAnswer, playerId } = req.body;
-  try {
-    const genAI = new GoogleGenerativeAI(geminiKey);
-    const model = genAI.getGenerativeModel({ model: MODEL_NAME, generationConfig: { responseMimeType: "application/json" } });
-    const prompt = `Arbitre de français. Si fautes, fournis une explication grammaticale précise dans "reason". JSON: { "status": "correct"|"incorrect", "feedback": "HTML", "corrections": [{"wrong":"", "correct":"", "reason":""}] }`;
-    const result = await model.generateContent([prompt, `Q: ${question}, A: ${expectedAnswer}, R: ${userAnswer}`]);
-    const json = JSON.parse(result.response.text());
-    if (playerId && json.corrections?.length > 0) {
-        await Player.findByIdAndUpdate(playerId, { $push: { spellingMistakes: { $each: json.corrections.map(c => ({ ...c, date: new Date() })) } } });
+        
+        if (playerId && homeworkId) {
+            await Submission.findOneAndUpdate(
+                { homeworkId, playerId }, 
+                { classroom, $set: { levelsResults: [{ levelIndex: 0, userText, aiFeedback: json.feedback, grade: json.grade }], submittedAt: Date.now() } }, 
+                { upsert: true }
+            );
+        }
+        res.json({ feedback: json.feedback, grade: json.grade });
+    } catch (e) { 
+        res.json({ feedback: "L'IA n'a pas pu analyser le travail.", grade: "00/20" }); 
     }
-    res.json(json);
-  } catch (e) { res.json({ status: "incorrect" }); }
-});
-
-app.post('/api/delete-mistake', async (req, res) => {
-    const { playerId, mistakeIndex } = req.body;
-    const p = await Player.findById(playerId);
-    if(p) { p.spellingMistakes.splice(mistakeIndex, 1); await p.save(); res.json({ok:true}); }
-    else res.status(404).json({ok:false});
 });
 
 app.post('/api/register', async (req, res) => { 
     const { firstName, lastName, classroom } = req.body; 
-    let p = await Player.findOne({ firstName, lastName });
-    if (!p) p = new Player({ firstName, lastName, classroom });
-    await p.save();
-    res.json({ ok: true, id: p._id, firstName, lastName, classroom });
+    try {
+        let p = await Player.findOne({ firstName, lastName });
+        if (!p) p = new Player({ firstName, lastName, classroom });
+        else p.classroom = classroom;
+        await p.save();
+        res.json({ ok: true, id: p._id, firstName: p.firstName, lastName: p.lastName, classroom: p.classroom });
+    } catch(e) { res.status(500).json({ ok: false }); }
+});
+
+app.get('/api/homework-all', async (req, res) => { 
+    try { res.json(await Homework.find().sort({ date: -1 })); } catch(e) { res.status(500).json([]); }
+});
+
+app.get('/api/homework/:class', async (req, res) => { 
+    try {
+        const cls = req.params.class;
+        const query = (cls === "Toutes" || !cls) ? {} : { $or: [{ classroom: cls }, { classroom: "Toutes" }] };
+        res.json(await Homework.find(query).sort({ date: -1 })); 
+    } catch(e) { res.status(500).json([]); }
 });
 
 app.get('/api/players', async (req, res) => { res.json(await Player.find().sort({ lastName: 1 })); });
 app.get('/api/player-data/:id', async (req, res) => { res.json(await Player.findById(req.params.id)); });
-
 app.get('/api/game-levels/:classroom', async (req, res) => {
     const query = (req.params.classroom === "Toutes") ? {} : { $or: [{ classroom: req.params.classroom }, { classroom: "Toutes" }] };
     res.json(await GameLevel.find(query).sort({ title: 1 }));
 });
-app.post('/api/game-levels', async (req, res) => {
-    const lvl = new GameLevel(req.body); await lvl.save(); res.json({ ok: true });
-});
-app.delete('/api/game-levels/:id', async (req, res) => {
-    await GameLevel.findByIdAndDelete(req.params.id); res.json({ ok: true });
-});
-
-app.get('/api/homework-all', async (req, res) => { res.json(await Homework.find().sort({ date: -1 })); });
-app.get('/api/homework/:class', async (req, res) => { 
-    const list = await Homework.find({ $or: [{ classroom: req.params.class }, { classroom: "Toutes" }] }).sort({ date: -1 }); 
-    res.json(list); 
+app.post('/api/delete-mistake', async (req, res) => {
+    const p = await Player.findById(req.body.playerId);
+    if(p) { p.spellingMistakes.splice(req.body.mistakeIndex, 1); await p.save(); res.json({ok:true}); }
+    else res.status(404).json({ok:false});
 });
 
+console.log("⏳ Initialisation MongoDB...");
 mongoose.connect(mongoUri).then(() => {
     console.log('✅ MongoDB Connecté');
     app.listen(port, () => console.log(`🚀 Serveur prêt port ${port}`));
-});
+}).catch(err => console.error(err));
+
+
+
 
 // ==================================================
 // FILE:public/index.html
@@ -236,109 +278,58 @@ mongoose.connect(mongoUri).then(() => {
 // FILE:public/style.css
 // ==================================================
 :root {
-    --primary: #2563eb;
-    --primary-dark: #1e40af;
-    --secondary: #f59e0b;
-    --success: #16a34a;
-    --danger: #dc2626;
-    --bg-page: #f1f5f9;
-    --bg-card: #ffffff;
-    --text-main: #1e293b;
-    --text-light: #64748b;
-    --border: #e2e8f0;
-    --radius: 12px;
+    --primary: #2563eb; --primary-dark: #1e40af; --secondary: #f59e0b;
+    --success: #16a34a; --danger: #dc2626; --bg-page: #f1f5f9;
+    --text-main: #1e293b; --text-light: #64748b; --border: #e2e8f0; --radius: 12px;
 }
-
 * { box-sizing: border-box; }
-body { 
-    margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; 
-    background-color: var(--bg-page); color: var(--text-main); 
-    height: 100vh; overflow: hidden; display: flex; flex-direction: column;
-}
+body { margin: 0; font-family: 'Segoe UI', sans-serif; background-color: var(--bg-page); color: var(--text-main); height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
 
-header { 
-    display: flex; justify-content: space-between; align-items: center; 
-    background: white; padding: 0 25px; height: 70px; min-height: 70px;
-    z-index: 1000; box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-}
+header { display: flex; justify-content: space-between; align-items: center; background: white; padding: 0 25px; height: 70px; min-height: 70px; z-index: 1000; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
 header h1 { font-size: 1.3rem; color: var(--primary); margin: 0; }
-.header-right { display: flex; gap: 12px; align-items: center; }
+.header-right { display: flex; gap: 15px; align-items: center; }
 
 .wrap { flex: 1; width: 100%; padding: 15px; overflow-y: auto; }
+.card { background: white; border-radius: var(--radius); padding: 25px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
 
-/* --- HOMEWORK LAYOUT --- */
-.hw-layout {
-    display: flex; flex-direction: column;
-    height: calc(100vh - 100px); 
-    background: #1e293b; border-radius: 15px; overflow: hidden; border: 2px solid #334155;
-}
-
+/* --- HOMEWORK LAYOUT (75/25) --- */
+.hw-layout { display: flex; flex-direction: column; height: calc(100vh - 100px); background: #1e293b; border-radius: 15px; overflow: hidden; border: 2px solid #334155; position: relative; }
 .hw-list-view { padding: 20px; background: white; height: 100%; overflow-y: auto; z-index: 100; }
-.hw-work-view { display: flex; flex-direction: column; height: 100%; width: 100%; }
+.hw-work-view { display: flex; flex-direction: column; height: 100%; width: 100%; position: relative; }
 
-/* Visionneuse Documents (Haut - 75%) */
 .doc-viewer-container {
     flex: 7.5; position: relative; background-color: #0f172a; overflow: hidden;
     background-image: linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px);
-    background-size: 50px 50px; border-bottom: 4px solid var(--secondary);
-    cursor: grab; user-select: none;
+    background-size: 50px 50px; border-bottom: 4px solid var(--secondary); cursor: grab;
 }
+#pan-zoom-content, #pan-zoom-question-content { position: absolute; top: 50%; left: 50%; transform-origin: center center; display: flex; justify-content: center; align-items: center; pointer-events: none; }
+#current-doc-img, #pan-zoom-question-content img { height: auto; box-shadow: 0 0 50px rgba(0,0,0,0.8); border: 3px solid white; pointer-events: auto; -webkit-user-drag: none; }
 
-#pan-zoom-content, #pan-zoom-question-content {
-    position: absolute; top: 50%; left: 50%;
-    transform-origin: center center; display: flex; justify-content: center; align-items: center;
-    width: 0; height: 0; pointer-events: none;
-}
+.interaction-zone { flex: 2.5; display: flex; background: white; min-height: 160px; border-top: 1px solid var(--border); }
+.question-part { flex: 1; padding: 12px; border-right: 2px solid var(--border); background: #f8fafc; overflow: auto; }
+.answer-part { flex: 1.2; padding: 12px; display: flex; flex-direction: column; gap: 8px; padding-bottom: 20px; }
 
-#current-doc-img, #pan-zoom-question-content img {
-    height: auto; box-shadow: 0 0 50px rgba(0,0,0,0.8); border: 3px solid white;
-    pointer-events: auto; -webkit-user-drag: none;
-}
+#q-image-container { flex: 1; position: relative; overflow: hidden; background: #0f172a; border-radius: 8px; margin-top: 5px; border: 1px solid #cbd5e1; min-height: 100px; cursor: grab; }
+#hw-answer-input { flex: 1; width: 100%; resize: none; padding: 12px; border: 2px solid #cbd5e1; border-radius: 10px; font-size: 0.95rem; }
 
-/* Onglet Question au dessus de la ligne orange */
-#hw-q-label-tab {
-    position: absolute; bottom: 0; left: 20px;
-    background: var(--secondary); color: white;
-    padding: 4px 15px; border-radius: 8px 8px 0 0;
-    font-weight: 900; font-size: 0.75rem; z-index: 15;
-    box-shadow: 0 -2px 5px rgba(0,0,0,0.2);
-}
+/* FEEDBACK IA MODAL */
+#hw-feedback-overlay { display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(8px); z-index: 9999; align-items: center; justify-content: center; padding: 20px; }
+.feedback-card { background: white; width: 100%; max-width: 800px; max-height: 90vh; border-radius: 24px; padding: 25px; display: flex; flex-direction: column; box-shadow: 0 25px 50px rgba(0,0,0,0.5); }
+.feedback-scroll-area { flex: 1; overflow-y: auto; margin: 15px 0; padding: 15px; background: #f8fafc; border-radius: 12px; border: 1px solid #edf2f7; }
 
-/* Zone Interaction (Bas - 25%) */
-.interaction-zone {
-    flex: 2.5; display: flex; background: white; min-height: 160px;
-}
-
-.question-part { 
-    flex: 1; padding: 10px 15px; border-right: 2px solid var(--border); 
-    background: #f8fafc; overflow-y: auto; display: flex; flex-direction: column; 
-}
-.answer-part { flex: 1.2; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
-
-#q-image-container { 
-    flex: 1; position: relative; overflow: hidden; background: #0f172a; 
-    border-radius: 8px; margin-top: 5px; border: 1px solid #cbd5e1;
-    cursor: grab;
-}
-
-#hw-answer-input { 
-    flex: 1; width: 100%; resize: none; padding: 12px; 
-    border: 2px solid #cbd5e1; border-radius: 10px; font-family: inherit; font-size: 0.95rem; 
-}
-
-/* UI Overlays */
-.page-counter { position: absolute; top: 15px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: white; padding: 5px 15px; border-radius: 20px; font-weight: bold; z-index: 10; pointer-events: none; }
+/* NAVIGATION UI */
+.page-counter { position: absolute; top: 15px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: white; padding: 5px 15px; border-radius: 20px; font-weight: bold; z-index: 10; }
 .nav-arrow { position: absolute; top: 50%; transform: translateY(-50%); background: rgba(0,0,0,0.5); color: white; border: none; width: 45px; height: 45px; border-radius: 50%; font-size: 20px; cursor: pointer; z-index: 10; display: flex; align-items: center; justify-content: center; }
 #btn-prev-doc { left: 10px; } #btn-next-doc { right: 10px; }
 .doc-controls { position: absolute; bottom: 15px; right: 15px; display: flex; gap: 10px; z-index: 10; }
-.zoom-btn { width: 38px; height: 38px; border-radius: 50%; background: rgba(0,0,0,0.6); color: white; border: none; cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; }
-
-/* BOUTONS GÉNÉRAUX */
+.zoom-btn { width: 38px; height: 38px; border-radius: 50%; background: rgba(0,0,0,0.6); color: white; border: none; cursor: pointer; }
 .action-btn { background: var(--primary); color: white; border: none; padding: 12px; border-radius: 8px; width: 100%; font-weight: bold; cursor: pointer; }
 .tab-btn { padding: 10px 20px; border-radius: 8px; border: none; background: #eee; cursor: pointer; font-weight: bold; }
 .tab-btn.active { background: var(--primary); color: white; }
 .wrong-word { color: var(--danger); text-decoration: line-through; font-weight: bold; }
 .right-word { color: var(--success); font-weight: bold; }
+.correction-table { width: 100%; border-collapse: collapse; margin-top: 10px; background: white; border-radius: 10px; overflow: hidden; }
+.correction-table td { padding: 8px; border-bottom: 1px solid #eee; }
 
 // ==================================================
 // FILE:public/js/app.js
@@ -622,23 +613,26 @@ export async function initEleveDashboard(container) {
         }
     }
 
-    // 2. Rétablir le bouton Fautes
+    // 2. Initialisation du carnet de fautes
     const btnMistakes = document.getElementById("myMistakesBtn");
     if(btnMistakes) {
         btnMistakes.style.display = "block";
         btnMistakes.onclick = openMistakesModal;
     }
 
-    // 3. Rétablir le bouton de fermeture de la modale rose
+    // 3. FIX FERMETURE : On attache l'événement de fermeture une seule fois ici
     const closeBtn = document.getElementById("closeMistakesBtn");
     if(closeBtn) {
-        closeBtn.onclick = () => document.getElementById("mistakesModal").style.display = "none";
+        closeBtn.onclick = () => {
+            console.log("🔒 Fermeture du carnet de fautes");
+            document.getElementById("mistakesModal").style.display = "none";
+        };
     }
 
     // 4. Rendu de la coque de navigation (Onglets)
     container.innerHTML = `
         <div class="student-shell">
-            <div class="tabs-container" style="display:flex; gap:10px; margin-bottom:25px; border-bottom:2px solid #eee; padding-bottom:10px;">
+            <div class="tabs-container">
                 <button id="tab-devoirs" class="tab-btn active">📚 Mes Devoirs</button>
                 <button id="tab-jeux" class="tab-btn">🎮 Mini-Jeux</button>
             </div>
@@ -656,7 +650,7 @@ export async function initEleveDashboard(container) {
     const switchTab = (name) => {
         tabDevoirs.classList.toggle('active', name === 'devoirs');
         tabJeux.classList.toggle('active', name === 'jeux');
-        contentArea.innerHTML = `<div style="padding:40px; text-align:center; color:#94a3b8;">Chargement du module...</div>`;
+        contentArea.innerHTML = `<div style="padding:40px; text-align:center; color:#94a3b8;">Chargement...</div>`;
 
         if (name === 'devoirs') {
             initDevoirsModule(contentArea);
@@ -674,15 +668,16 @@ export async function initEleveDashboard(container) {
 
 async function openMistakesModal() {
     const list = document.getElementById("mistakesList");
-    document.getElementById("mistakesModal").style.display = "flex";
-    list.innerHTML = "<p style='text-align:center;'>Chargement de ton carnet...</p>";
+    const modal = document.getElementById("mistakesModal");
+    modal.style.display = "flex";
+    list.innerHTML = "<p style='text-align:center; padding:20px;'>Chargement de ton carnet...</p>";
 
     try {
         const res = await window.api.get(`/api/player-data/${window.state.currentPlayerId}`);
         if(res && res.spellingMistakes) {
             const mistakes = res.spellingMistakes;
             if(mistakes.length === 0) {
-                list.innerHTML = "<p style='text-align:center; padding:20px;'>Aucune faute enregistrée ! 🎉</p>";
+                list.innerHTML = "<p style='text-align:center; padding:40px;'>Aucune faute enregistrée ! 🎉</p>";
             } else {
                 list.innerHTML = `
                     <table class="correction-table">
@@ -695,9 +690,9 @@ async function openMistakesModal() {
                                     <td><span class="wrong-word">${m.wrong}</span></td>
                                     <td><span class="right-word">${m.correct}</span></td>
                                     <td><small>${m.reason || "Usage"}</small></td>
-                                    <td>
+                                    <td style="text-align:right;">
                                         <button onclick="deleteMistakeLocally(${mistakes.length - 1 - i})" 
-                                                style="background:#fee2e2; color:red; border-radius:50%; width:24px; height:24px;">✕</button>
+                                                style="background:#fee2e2; color:red; border-radius:50%; width:28px; height:28px; display:inline-flex; align-items:center; justify-content:center; border:1px solid #f87171; cursor:pointer;">✕</button>
                                     </td>
                                 </tr>
                             `).join('')}
@@ -705,22 +700,23 @@ async function openMistakesModal() {
                     </table>`;
             }
         }
-    } catch(e) { list.innerHTML = "Erreur de chargement."; }
+    } catch(e) { 
+        console.error("Erreur chargement fautes:", e);
+        list.innerHTML = "<p style='text-align:center; color:red; padding:20px;'>Erreur lors du chargement des données.</p>"; 
+    }
 }
 
+// Fonction globale pour supprimer une faute (appelée par le onclick dans le HTML injecté)
 window.deleteMistakeLocally = async (idx) => {
     const res = await window.api.post('/api/delete-mistake', { playerId: window.state.currentPlayerId, mistakeIndex: idx });
     if(res.ok) openMistakesModal();
 };
 
-
-
-
 // ==================================================
 // FILE:public/js/eleve/devoirs.js
 // ==================================================
 export async function initDevoirsModule(container) {
-    console.log("%c📚 LISEUSE DEVOIRS V26 - LOGIQUE IA & UI FIX", "color: white; background: #2563eb; padding: 5px;");
+    console.log("%c📚 MODULE DEVOIRS V38 - FIX INTEGRAL", "color: white; background: #16a34a; padding: 5px; font-weight: bold;");
 
     container.innerHTML = `
         <div class="hw-layout">
@@ -730,40 +726,47 @@ export async function initDevoirsModule(container) {
             </div>
 
             <div id="hw-work-view" class="hw-work-view" style="display:none;">
-                <!-- HAUT (75%) -->
                 <div id="doc-viewer" class="doc-viewer-container">
                     <div id="pan-zoom-content">
                         <img id="current-doc-img" src="" style="display:none;">
                     </div>
                     <div class="page-counter" id="hw-page-counter">1 / 1</div>
-                    <button id="btn-prev-doc" class="nav-arrow">❮</button>
-                    <button id="btn-next-doc" class="nav-arrow">❯</button>
+                    <button id="btn-prev-doc" class="nav-arrow" style="left:10px;">❮</button>
+                    <button id="btn-next-doc" class="nav-arrow" style="right:10px;">❯</button>
                     <div class="doc-controls">
                         <button class="zoom-btn" id="btn-zoom-out">➖</button>
                         <button class="zoom-btn" id="btn-zoom-in">➕</button>
                     </div>
-                    <button id="btn-close-hw" style="position:absolute; top:15px; left:15px; background:var(--danger); color:white; padding:8px 15px; z-index:100; border-radius:8px;">✕ Quitter</button>
-                    
-                    <!-- LABEL QUESTION AU DESSUS DE LA LIGNE ORANGE -->
-                    <div id="hw-q-label-tab">QUESTION 1</div>
+                    <button id="btn-close-hw" style="position:absolute; top:15px; left:15px; background:var(--danger); color:white; padding:8px 15px; z-index:100; border-radius:8px; cursor:pointer;">✕ Quitter</button>
+                    <div id="hw-q-label-tab" style="position:absolute; bottom:0; left:20px; background:var(--secondary); color:white; padding:4px 15px; border-radius:8px 8px 0 0; font-weight:900; font-size:0.75rem; z-index:15;">QUESTION</div>
                 </div>
 
-                <!-- BAS (25%) -->
-                <div class="interaction-zone">
-                    <div class="question-part">
-                        <div id="hw-question-text" style="font-weight:bold; font-size:0.95rem; color:#1e293b; max-height:100%; overflow-y:auto;"></div>
-                        
-                        <div id="q-image-container" style="display:none;">
-                            <div id="pan-zoom-question-content"></div>
+                <div class="interaction-zone" style="flex: 2.5; display: flex; background: white; min-height: 160px;">
+                    <div class="question-part" style="flex: 1; padding: 10px 15px; border-right: 2px solid var(--border); background: #f8fafc; overflow: auto;">
+                        <div id="hw-question-text" style="font-weight:bold; font-size:0.9rem; color:#1e293b;"></div>
+                        <div id="q-image-container" style="display:none; position:relative; overflow:hidden; background:#0f172a; border-radius:8px; border:1px solid #ccc; height:150px; margin-top:5px; cursor:grab;">
+                            <div id="pan-zoom-question-content" style="position:absolute; top:50%; left:50%; transform-origin:center center; display:flex; justify-content:center; align-items:center;"></div>
                             <div class="doc-controls" style="transform: scale(0.65); bottom: 2px; right: 2px;">
                                 <button class="zoom-btn" id="btn-zoom-out-q">➖</button>
                                 <button class="zoom-btn" id="btn-zoom-in-q">➕</button>
                             </div>
                         </div>
                     </div>
-                    <div class="answer-part">
+                    <div class="answer-part" style="flex: 1.2; padding: 12px; display: flex; flex-direction: column; gap: 8px;">
                         <textarea id="hw-answer-input" placeholder="Écris ta réponse ici..."></textarea>
                         <button id="hw-btn-submit" class="action-btn">Envoyer mon travail à l'IA 🤖</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="hw-feedback-overlay" style="display:none; position:fixed; inset:0; background:rgba(15, 23, 42, 0.85); backdrop-filter:blur(8px); z-index:9999; align-items:center; justify-content:center; padding:20px;">
+                <div class="feedback-card" style="background:white; width:100%; max-width:800px; max-height:90vh; border-radius:24px; padding:30px; display:flex; flex-direction:column; box-shadow:0 25px 50px rgba(0,0,0,0.5);">
+                    <h2 style="color:var(--primary); text-align:center; margin:0;">Analyse de ton travail 🧠</h2>
+                    <div id="hw-ai-grade" style="text-align:center; font-size:3.5rem; font-weight:900; color:var(--success); margin:15px 0;"></div>
+                    <div class="feedback-scroll-area" id="hw-ai-content" style="flex:1; overflow-y:auto; margin:15px 0; padding:15px; background:#f8fafc; border-radius:12px; border:1px solid #edf2f7; line-height:1.6;"></div>
+                    <div style="display:flex; gap:15px;">
+                        <button id="btn-improve-hw" class="action-btn" style="flex:1; background:var(--secondary); height:55px; border-radius:15px;">✍️ Améliorer</button>
+                        <button id="btn-save-hw" class="action-btn" style="flex:1; background:var(--success); height:55px; border-radius:15px;">💾 Sauvegarder et Quitter</button>
                     </div>
                 </div>
             </div>
@@ -774,145 +777,88 @@ export async function initDevoirsModule(container) {
         listTarget: document.getElementById("hw-items-container"),
         workView: document.getElementById("hw-work-view"),
         listView: document.getElementById("hw-list-view"),
-        img: document.getElementById("current-doc-img"),
-        qText: document.getElementById("hw-question-text"),
-        qLabel: document.getElementById("hw-q-label-tab"),
-        input: document.getElementById("hw-answer-input"),
+        fbOverlay: document.getElementById("hw-feedback-overlay"),
         btnSubmit: document.getElementById("hw-btn-submit"),
+        img: document.getElementById("current-doc-img"),
         qContainer: document.getElementById("pan-zoom-question-content"),
         viewer: document.getElementById("doc-viewer"),
-        qImgZone: document.getElementById("q-image-container")
+        qZone: document.getElementById("q-image-container")
     };
 
-    let currentHw = null;
-    let docs = [];
-    let docIdx = 0;
-    let view = { x: 0, y: 0, scale: 1.0 };
-    let viewQ = { x: 0, y: 0, scale: 1.0 };
+    let currentHw = null, docs = [], docIdx = 0;
+    let view = { x: 0, y: 0, scale: 1.0 }, viewQ = { x: 0, y: 0, scale: 1.0 };
 
     const loadList = async () => {
         const hws = await window.api.getHomeworks(window.state.user.classroom);
         ui.listTarget.innerHTML = hws.length ? "" : "<p style='text-align:center; padding:40px;'>Aucun devoir disponible.</p>";
         hws.forEach(hw => {
-            const d = document.createElement("div");
-            d.className = "hw-list-item card";
+            const d = document.createElement("div"); d.className = "hw-list-item card";
             d.innerHTML = `<div><b>${hw.title}</b><br><small>Publié le ${new Date(hw.date).toLocaleDateString()}</small></div><span>➔</span>`;
-            d.onclick = () => startHw(hw);
+            d.onclick = () => { 
+                currentHw = hw; ui.listView.style.display = "none"; ui.workView.style.display = "flex"; 
+                docs = hw.levels[0].attachmentUrls || []; docIdx = 0; 
+                document.getElementById("hw-question-text").innerHTML = hw.levels[0].instruction ? hw.levels[0].instruction.replace(/\n/g, '<br>') : "";
+                ui.qContainer.innerHTML = "";
+                if(hw.levels[0].questionImage) {
+                    ui.qZone.style.display = "block";
+                    const qImg = document.createElement("img"); qImg.src = hw.levels[0].questionImage;
+                    qImg.onload = () => {
+                        const ratio = Math.min(ui.qZone.offsetWidth * 0.9 / qImg.naturalWidth, ui.qZone.offsetHeight * 0.9 / qImg.naturalHeight);
+                        viewQ = { x: 0, y: 0, scale: ratio }; updateTransform('q');
+                    };
+                    ui.qContainer.appendChild(qImg);
+                } else ui.qZone.style.display = "none";
+                renderDoc();
+            };
             ui.listTarget.appendChild(d);
         });
     };
 
-    const startHw = (hw) => {
-        currentHw = hw;
-        ui.listView.style.display = "none";
-        ui.workView.style.display = "flex";
-        const firstLvl = hw.levels[0];
-        
-        // Setup Consigne
-        ui.qText.innerHTML = firstLvl.instruction ? firstLvl.instruction.replace(/\n/g, '<br>') : "";
-        ui.qLabel.innerText = "QUESTION 1";
-
-        // Setup Image Question
-        ui.qContainer.innerHTML = "";
-        if(firstLvl.questionImage) {
-            ui.qImgZone.style.display = "block";
-            const qImg = document.createElement("img");
-            qImg.src = firstLvl.questionImage;
-            qImg.onload = () => {
-                const ratio = ui.qImgZone.offsetWidth / qImg.naturalWidth;
-                viewQ = { x: 0, y: 0, scale: ratio };
-                updateTransform('q');
-            };
-            ui.qContainer.appendChild(qImg);
-        } else {
-            ui.qImgZone.style.display = "none";
-        }
-
-        docs = firstLvl.attachmentUrls || [];
-        docIdx = 0;
-        renderDoc();
-    };
-
     function renderDoc() {
-        if (!docs.length) return;
-        ui.img.style.display = "block";
+        ui.img.style.display = "block"; ui.img.src = docs[docIdx];
         ui.img.onload = () => {
-            const ratioW = (ui.viewer.offsetWidth * 0.9) / ui.img.naturalWidth;
-            const ratioH = (ui.viewer.offsetHeight * 0.9) / ui.img.naturalHeight;
-            view = { x: 0, y: 0, scale: Math.min(ratioW, ratioH) };
-            updateTransform('doc');
+            const ratio = Math.min(ui.viewer.offsetWidth * 0.9 / ui.img.naturalWidth, ui.viewer.offsetHeight * 0.9 / ui.img.naturalHeight);
+            view = { x: 0, y: 0, scale: ratio }; updateTransform('doc');
         };
-        ui.img.src = docs[docIdx];
         document.getElementById("hw-page-counter").innerText = `${docIdx + 1} / ${docs.length}`;
     }
 
     function updateTransform(type) {
-        if(type === 'doc') {
-            document.getElementById("pan-zoom-content").style.transform = `translate(-50%, -50%) translate(${view.x}px, ${view.y}px) scale(${view.scale})`;
-        } else {
-            ui.qContainer.style.transform = `translate(-50%, -50%) translate(${viewQ.x}px, ${viewQ.y}px) scale(${viewQ.scale})`;
-        }
+        const target = type === 'doc' ? document.getElementById("pan-zoom-content") : ui.qContainer;
+        const v = type === 'doc' ? view : viewQ;
+        if(target) target.style.transform = `translate(-50%, -50%) translate(${v.x}px, ${v.y}px) scale(${v.scale})`;
     }
 
+    // --- MOTEUR PAN (DRAG) ---
+    let activeDrag = null, startX, startY;
+    const onMouseDown = (e, type) => { if(e.target.tagName === 'BUTTON') return; activeDrag = type; const v = (type === 'doc') ? view : viewQ; startX = e.clientX - v.x; startY = e.clientY - v.y; };
+    ui.viewer.onmousedown = (e) => onMouseDown(e, 'doc');
+    ui.qZone.onmousedown = (e) => onMouseDown(e, 'q');
+    window.addEventListener('mousemove', (e) => { if(!activeDrag) return; const v = (activeDrag === 'doc') ? view : viewQ; v.x = e.clientX - startX; v.y = e.clientY - startY; updateTransform(activeDrag); });
+    window.addEventListener('mouseup', () => { activeDrag = null; });
+
     // --- BUTTONS ---
-    document.getElementById("btn-prev-doc").onclick = (e) => { e.stopPropagation(); if(docIdx > 0) { docIdx--; renderDoc(); } };
-    document.getElementById("btn-next-doc").onclick = (e) => { e.stopPropagation(); if(docIdx < docs.length - 1) { docIdx++; renderDoc(); } };
-    document.getElementById("btn-zoom-in").onclick = (e) => { e.stopPropagation(); view.scale += 0.2; updateTransform('doc'); };
-    document.getElementById("btn-zoom-out").onclick = (e) => { e.stopPropagation(); view.scale -= 0.2; updateTransform('doc'); };
-    document.getElementById("btn-zoom-in-q").onclick = (e) => { e.stopPropagation(); viewQ.scale += 0.2; updateTransform('q'); };
-    document.getElementById("btn-zoom-out-q").onclick = (e) => { e.stopPropagation(); viewQ.scale -= 0.2; updateTransform('q'); };
+    document.getElementById("btn-prev-doc").onclick = () => { if(docIdx > 0) { docIdx--; renderDoc(); } };
+    document.getElementById("btn-next-doc").onclick = () => { if(docIdx < docs.length - 1) { docIdx++; renderDoc(); } };
+    document.getElementById("btn-zoom-in").onclick = () => { view.scale += 0.2; updateTransform('doc'); };
+    document.getElementById("btn-zoom-out").onclick = () => { view.scale -= 0.2; updateTransform('doc'); };
+    document.getElementById("btn-zoom-in-q").onclick = () => { viewQ.scale += 0.2; updateTransform('q'); };
+    document.getElementById("btn-zoom-out-q").onclick = () => { viewQ.scale -= 0.2; updateTransform('q'); };
     document.getElementById("btn-close-hw").onclick = () => { ui.workView.style.display = "none"; ui.listView.style.display = "block"; };
 
-    // --- MOTEUR PAN (DRAG & SLIDE) ---
-    const setupPan = (container, type) => {
-        let isDown = false, startX, startY;
-        container.addEventListener('mousedown', (e) => {
-            if(e.target.tagName === 'BUTTON') return;
-            isDown = true; container.style.cursor = "grabbing";
-            const v = (type === 'doc') ? view : viewQ;
-            startX = e.clientX - v.x; startY = e.clientY - v.y;
-        });
-        window.addEventListener('mousemove', (e) => {
-            if(!isDown) return;
-            const v = (type === 'doc') ? view : viewQ;
-            v.x = e.clientX - startX; v.y = e.clientY - startY;
-            updateTransform(type);
-        });
-        window.addEventListener('mouseup', () => { isDown = false; container.style.cursor = "grab"; });
-    };
-
-    setupPan(ui.viewer, 'doc');
-    setupPan(ui.qImgZone, 'q');
-
-    // --- LOGIQUE ENVOYER A L'IA (BOUTON BLEU) ---
+    // --- SUBMIT ---
     ui.btnSubmit.onclick = async () => {
-        const val = ui.input.value.trim();
+        const val = document.getElementById("hw-answer-input").value.trim();
         if(!val) return alert("Réponse vide !");
-
-        ui.btnSubmit.disabled = true;
-        ui.btnSubmit.innerText = "Analyse IA en cours... 🧠";
-
+        ui.btnSubmit.disabled = true; ui.btnSubmit.innerText = "Analyse IA...";
         try {
-            const res = await window.api.post('/api/analyze-homework', {
-                userText: val,
-                homeworkInstruction: currentHw.levels[0].instruction,
-                classroom: window.state.user.classroom,
-                playerId: window.state.currentPlayerId,
-                homeworkId: currentHw._id
-            });
-
-            if (res.feedback) {
-                // Affichage du résultat dans une alerte simple pour confirmation
-                alert("Correction IA reçue !\n\nNote indicative : " + (res.grade || "Non noté"));
-                // On recharge pour voir les fautes dans le carnet
-                window.location.reload();
-            }
-        } catch(e) {
-            console.error(e);
-            alert("Erreur de connexion avec l'IA.");
-            ui.btnSubmit.disabled = false;
-            ui.btnSubmit.innerText = "Envoyer mon travail à l'IA 🤖";
-        }
+            const res = await window.api.post('/api/analyze-homework', { userText: val, homeworkInstruction: currentHw.levels[0].instruction, classroom: window.state.user.classroom, playerId: window.state.currentPlayerId, homeworkId: currentHw._id });
+            document.getElementById("hw-ai-grade").innerText = res.grade || "Reçu";
+            document.getElementById("hw-ai-content").innerHTML = res.feedback;
+            ui.fbOverlay.style.display = "flex";
+            document.getElementById("btn-improve-hw").onclick = () => { ui.fbOverlay.style.display = "none"; ui.btnSubmit.disabled = false; ui.btnSubmit.innerText = "Envoyer mon travail à l'IA 🤖"; };
+            document.getElementById("btn-save-hw").onclick = () => window.location.reload();
+        } catch(e) { ui.btnSubmit.disabled = false; alert("Erreur IA"); }
     };
 
     loadList();

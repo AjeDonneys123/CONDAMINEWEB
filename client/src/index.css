@@ -1,0 +1,39 @@
+:root {
+    --primary: #2563eb;
+    --primary-dark: #1e40af;
+    --secondary: #f59e0b;
+    --success: #16a34a;
+    --danger: #dc2626;
+    --bg-page: #f1f5f9;
+    --bg-card: #ffffff;
+    --text-main: #1e293b;
+    --text-light: #64748b;
+    --border: #e2e8f0;
+    --radius: 12px;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; background-color: var(--bg-page); color: var(--text-main); padding-bottom: 60px; }
+
+/* --- HEADER --- */
+header { display: flex; justify-content: space-between; align-items: center; padding: 0 24px; background: white; height: 70px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+header h1 { font-size: 1.5rem; color: var(--primary); margin: 0; }
+.header-right { display: flex; gap: 10px; align-items: center; }
+
+/* --- BOUTONS --- */
+button { cursor: pointer; transition: 0.2s; }
+.action-btn, .chapter-action-btn { background: var(--primary); color: white; border: none; border-radius: 8px; padding: 10px 16px; font-weight: bold; width: 100%; margin-top: auto; }
+.action-btn:hover { background: var(--primary-dark); }
+.pause-btn { background: white; border: 1px solid #ccc; padding: 6px 12px; border-radius: 6px; }
+.back-menu-btn { background: white; border: 1px solid #ccc; padding: 5px 10px; border-radius: 5px; }
+
+/* --- LAYOUT GLOBAL --- */
+.wrap { max-width: 1000px; margin: 30px auto; padding: 0 20px; }
+.card { background: white; border-radius: var(--radius); padding: 30px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); margin-bottom: 30px; }
+
+/* CHAPITRES */
+.chapter-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+.chapter-box { background: white; border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; display: flex; flex-direction: column; transition: transform 0.2s; }
+.chapter-box:hover { transform: translateY(-5px); border-color: #cbd5e1; }
+
+
