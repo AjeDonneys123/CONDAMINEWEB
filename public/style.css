@@ -46,7 +46,6 @@ header h1 { font-size: 1.3rem; color: var(--primary); margin: 0; }
     background-size: 50px 50px; border-bottom: 4px solid var(--secondary);
     cursor: grab; user-select: none;
 }
-.doc-viewer-container:active { cursor: grabbing; }
 
 #pan-zoom-content, #pan-zoom-question-content {
     position: absolute; top: 50%; left: 50%;
@@ -59,16 +58,25 @@ header h1 { font-size: 1.3rem; color: var(--primary); margin: 0; }
     pointer-events: auto; -webkit-user-drag: none;
 }
 
+/* Onglet Question au dessus de la ligne orange */
+#hw-q-label-tab {
+    position: absolute; bottom: 0; left: 20px;
+    background: var(--secondary); color: white;
+    padding: 4px 15px; border-radius: 8px 8px 0 0;
+    font-weight: 900; font-size: 0.75rem; z-index: 15;
+    box-shadow: 0 -2px 5px rgba(0,0,0,0.2);
+}
+
 /* Zone Interaction (Bas - 25%) */
 .interaction-zone {
-    flex: 2.5; display: flex; background: white; min-height: 150px;
+    flex: 2.5; display: flex; background: white; min-height: 160px;
 }
 
 .question-part { 
     flex: 1; padding: 10px 15px; border-right: 2px solid var(--border); 
     background: #f8fafc; overflow-y: auto; display: flex; flex-direction: column; 
 }
-.answer-part { flex: 1.2; padding: 15px; display: flex; flex-direction: column; gap: 8px; }
+.answer-part { flex: 1.2; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
 
 #q-image-container { 
     flex: 1; position: relative; overflow: hidden; background: #0f172a; 

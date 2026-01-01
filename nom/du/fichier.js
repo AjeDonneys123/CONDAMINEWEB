@@ -1,29 +1,3 @@
-const fs = require('fs');
-const path = require('path');
-
-// ==================================================
-// CONFIGURATION DE L'INTRODUCTION POUR L'IA
-// ==================================================
-const IA_GUIDE = `
-// ============================================================================
-// MESSAGE IMPORTANT POUR LA SESSION D'IA : GUIDE DE SURVIE DU PROJET
-// ============================================================================
-// Bienvenue sur le projet "Condamine". Avant de proposer du code, lis ceci :
-//
-// 1. ARCHITECTURE : Le projet est en VANILLA JS MODULAIRE (V26+).
-//    - app.js est le routeur (Login/Aiguillage).
-//    - eleve.js et prof.js sont des orchestrateurs.
-//    - Les fonctionnalités sont isolées dans des sous-dossiers (ex: eleve/devoirs.js).
-//
-// 2. LA RÈGLE D'OR "WINDOW" : 
-//    - Pour éviter les erreurs d'importation relatives (../../) et de SyntaxError,
-//      tous les services sont globaux : window.api et window.state.
-//    - NE JAMAIS ré-importer api.js ou state.js dans les sous-modules.
-//
-// 3. SYSTÈME DE MISE À JOUR (apply.js) :
-//    - L'utilisateur utilise un script "apply.js" qui lit "update.txt".
-//    - Tes réponses DOIVENT respecter ce format strict pour chaque fichier :
-//      // FILE:nom/du/fichier.js
 //      [SAUTER 3 LIGNES VIDES]
 //      [CODE COMPLET DU FICHIER]
 //

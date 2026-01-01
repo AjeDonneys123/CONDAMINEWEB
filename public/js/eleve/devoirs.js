@@ -1,11 +1,11 @@
 export async function initDevoirsModule(container) {
-    console.log("%c📚 LISEUSE DEVOIRS V25 - CLEAN UI & PAN FIX", "color: white; background: #2563eb; padding: 5px;");
+    console.log("%c📚 LISEUSE DEVOIRS V26 - LOGIQUE IA & UI FIX", "color: white; background: #2563eb; padding: 5px;");
 
     container.innerHTML = `
         <div class="hw-layout">
             <div id="hw-list-view" class="hw-list-view">
                 <h3 style="margin-top:0; color:var(--primary);">📚 Tes Devoirs Maison</h3>
-                <div id="hw-items-container">Chargement...</div>
+                <div id="hw-items-container">Chargement de la liste...</div>
             </div>
 
             <div id="hw-work-view" class="hw-work-view" style="display:none;">
@@ -22,15 +22,17 @@ export async function initDevoirsModule(container) {
                         <button class="zoom-btn" id="btn-zoom-in">➕</button>
                     </div>
                     <button id="btn-close-hw" style="position:absolute; top:15px; left:15px; background:var(--danger); color:white; padding:8px 15px; z-index:100; border-radius:8px;">✕ Quitter</button>
+                    
+                    <!-- LABEL QUESTION AU DESSUS DE LA LIGNE ORANGE -->
+                    <div id="hw-q-label-tab">QUESTION 1</div>
                 </div>
 
                 <!-- BAS (25%) -->
                 <div class="interaction-zone">
                     <div class="question-part">
-                        <div id="hw-q-small-title" style="font-size:0.7em; color:var(--primary); font-weight:900; margin-bottom:2px;">QUESTION 1</div>
-                        <div id="hw-question-text" style="font-weight:bold; font-size:0.9rem; color:#1e293b; max-height:60px; overflow-y:auto; margin-bottom:5px;"></div>
+                        <div id="hw-question-text" style="font-weight:bold; font-size:0.95rem; color:#1e293b; max-height:100%; overflow-y:auto;"></div>
                         
-                        <div id="q-image-container">
+                        <div id="q-image-container" style="display:none;">
                             <div id="pan-zoom-question-content"></div>
                             <div class="doc-controls" style="transform: scale(0.65); bottom: 2px; right: 2px;">
                                 <button class="zoom-btn" id="btn-zoom-out-q">➖</button>
@@ -40,7 +42,7 @@ export async function initDevoirsModule(container) {
                     </div>
                     <div class="answer-part">
                         <textarea id="hw-answer-input" placeholder="Écris ta réponse ici..."></textarea>
-                        <button id="hw-btn-submit" class="action-btn">Envoyer mon travail 🤖</button>
+                        <button id="hw-btn-submit" class="action-btn">Envoyer mon travail à l'IA 🤖</button>
                     </div>
                 </div>
             </div>
@@ -53,7 +55,7 @@ export async function initDevoirsModule(container) {
         listView: document.getElementById("hw-list-view"),
         img: document.getElementById("current-doc-img"),
         qText: document.getElementById("hw-question-text"),
-        qSmallTitle: document.getElementById("hw-q-small-title"),
+        qLabel: document.getElementById("hw-q-label-tab"),
         input: document.getElementById("hw-answer-input"),
         btnSubmit: document.getElementById("hw-btn-submit"),
         qContainer: document.getElementById("pan-zoom-question-content"),
@@ -69,7 +71,7 @@ export async function initDevoirsModule(container) {
 
     const loadList = async () => {
         const hws = await window.api.getHomeworks(window.state.user.classroom);
-        ui.listTarget.innerHTML = hws.length ? "" : "<p style='text-align:center; padding:40px;'>Aucun devoir. 🌴</p>";
+        ui.listTarget.innerHTML = hws.length ? "" : "<p style='text-align:center; padding:40px;'>Aucun devoir disponible.</p>";
         hws.forEach(hw => {
             const d = document.createElement("div");
             d.className = "hw-list-item card";
@@ -85,16 +87,11 @@ export async function initDevoirsModule(container) {
         ui.workView.style.display = "flex";
         const firstLvl = hw.levels[0];
         
-        // Nettoyage UI Question
-        if (firstLvl.instruction && firstLvl.instruction.trim() !== "") {
-            ui.qText.innerHTML = firstLvl.instruction.replace(/\n/g, '<br>');
-            ui.qText.style.display = "block";
-            ui.qSmallTitle.style.display = "block";
-        } else {
-            ui.qText.style.display = "none";
-            ui.qSmallTitle.style.display = "none";
-        }
-        
+        // Setup Consigne
+        ui.qText.innerHTML = firstLvl.instruction ? firstLvl.instruction.replace(/\n/g, '<br>') : "";
+        ui.qLabel.innerText = "QUESTION 1";
+
+        // Setup Image Question
         ui.qContainer.innerHTML = "";
         if(firstLvl.questionImage) {
             ui.qImgZone.style.display = "block";
@@ -119,8 +116,8 @@ export async function initDevoirsModule(container) {
         if (!docs.length) return;
         ui.img.style.display = "block";
         ui.img.onload = () => {
-            const ratioW = (ui.viewer.offsetWidth * 0.95) / ui.img.naturalWidth;
-            const ratioH = (ui.viewer.offsetHeight * 0.95) / ui.img.naturalHeight;
+            const ratioW = (ui.viewer.offsetWidth * 0.9) / ui.img.naturalWidth;
+            const ratioH = (ui.viewer.offsetHeight * 0.9) / ui.img.naturalHeight;
             view = { x: 0, y: 0, scale: Math.min(ratioW, ratioH) };
             updateTransform('doc');
         };
@@ -136,7 +133,7 @@ export async function initDevoirsModule(container) {
         }
     }
 
-    // --- BUTTON EVENTS ---
+    // --- BUTTONS ---
     document.getElementById("btn-prev-doc").onclick = (e) => { e.stopPropagation(); if(docIdx > 0) { docIdx--; renderDoc(); } };
     document.getElementById("btn-next-doc").onclick = (e) => { e.stopPropagation(); if(docIdx < docs.length - 1) { docIdx++; renderDoc(); } };
     document.getElementById("btn-zoom-in").onclick = (e) => { e.stopPropagation(); view.scale += 0.2; updateTransform('doc'); };
@@ -145,36 +142,57 @@ export async function initDevoirsModule(container) {
     document.getElementById("btn-zoom-out-q").onclick = (e) => { e.stopPropagation(); viewQ.scale -= 0.2; updateTransform('q'); };
     document.getElementById("btn-close-hw").onclick = () => { ui.workView.style.display = "none"; ui.listView.style.display = "block"; };
 
-    // --- MOTEUR PAN (CORRIGÉ POUR ÉVITER LES CONFLITS) ---
+    // --- MOTEUR PAN (DRAG & SLIDE) ---
     const setupPan = (container, type) => {
         let isDown = false, startX, startY;
-
         container.addEventListener('mousedown', (e) => {
             if(e.target.tagName === 'BUTTON') return;
-            isDown = true; 
-            container.style.cursor = "grabbing";
+            isDown = true; container.style.cursor = "grabbing";
             const v = (type === 'doc') ? view : viewQ;
-            startX = e.clientX - v.x; 
-            startY = e.clientY - v.y;
+            startX = e.clientX - v.x; startY = e.clientY - v.y;
         });
-
-        // Utilisation de l'event global sur window pour un drag fluide
         window.addEventListener('mousemove', (e) => {
             if(!isDown) return;
             const v = (type === 'doc') ? view : viewQ;
-            v.x = e.clientX - startX; 
-            v.y = e.clientY - startY;
+            v.x = e.clientX - startX; v.y = e.clientY - startY;
             updateTransform(type);
         });
-
-        window.addEventListener('mouseup', () => {
-            isDown = false; 
-            container.style.cursor = "grab";
-        });
+        window.addEventListener('mouseup', () => { isDown = false; container.style.cursor = "grab"; });
     };
 
     setupPan(ui.viewer, 'doc');
     setupPan(ui.qImgZone, 'q');
+
+    // --- LOGIQUE ENVOYER A L'IA (BOUTON BLEU) ---
+    ui.btnSubmit.onclick = async () => {
+        const val = ui.input.value.trim();
+        if(!val) return alert("Réponse vide !");
+
+        ui.btnSubmit.disabled = true;
+        ui.btnSubmit.innerText = "Analyse IA en cours... 🧠";
+
+        try {
+            const res = await window.api.post('/api/analyze-homework', {
+                userText: val,
+                homeworkInstruction: currentHw.levels[0].instruction,
+                classroom: window.state.user.classroom,
+                playerId: window.state.currentPlayerId,
+                homeworkId: currentHw._id
+            });
+
+            if (res.feedback) {
+                // Affichage du résultat dans une alerte simple pour confirmation
+                alert("Correction IA reçue !\n\nNote indicative : " + (res.grade || "Non noté"));
+                // On recharge pour voir les fautes dans le carnet
+                window.location.reload();
+            }
+        } catch(e) {
+            console.error(e);
+            alert("Erreur de connexion avec l'IA.");
+            ui.btnSubmit.disabled = false;
+            ui.btnSubmit.innerText = "Envoyer mon travail à l'IA 🤖";
+        }
+    };
 
     loadList();
 }
