@@ -13,55 +13,92 @@
 }
 
 * { box-sizing: border-box; }
-body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; background-color: var(--bg-page); color: var(--text-main); min-height: 100vh; }
+body { 
+    margin: 0; 
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; 
+    background-color: var(--bg-page); 
+    color: var(--text-main); 
+    height: 100vh; 
+    overflow: hidden; 
+}
 
-/* HEADER ET NAVIGATION */
-header { display: flex; justify-content: space-between; align-items: center; padding: 0 24px; background: white; height: 70px; position: sticky; top: 0; z-index: 1000; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-header h1 { font-size: 1.5rem; color: var(--primary); margin: 0; }
-.header-right { display: flex; gap: 10px; align-items: center; }
+/* --- STRUCTURE --- */
+header { 
+    display: flex; justify-content: space-between; align-items: center; 
+    background: white; padding: 0 25px; height: 70px; 
+    position: fixed; top: 0; left: 0; right: 0; z-index: 1000; 
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+}
+header h1 { font-size: 1.3rem; color: var(--primary); margin: 0; }
 
-/* LAYOUT GLOBAL */
-.wrap { max-width: 1100px; margin: 30px auto; padding: 0 20px; }
-.card { background: white; border-radius: var(--radius); padding: 30px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); margin-bottom: 30px; }
+.wrap { 
+    max-width: 1200px; margin: 0 auto; padding: 20px; 
+    height: 100vh; padding-top: 80px; 
+}
 
-/* DASHBOARD PROF : ONGLETS */
-.tabs-container { display: flex; gap: 10px; margin-bottom: 25px; border-bottom: 2px solid var(--border); padding-bottom: 10px; }
-.tab-btn { background: #f1f5f9; color: var(--text-light); padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; }
+.card { background: white; border-radius: var(--radius); padding: 25px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+
+/* --- SYSTÈME DEVOIRS (HOMEWORK) --- */
+.hw-layout {
+    display: flex; flex-direction: column;
+    height: calc(100vh - 120px); /* Hauteur fixe pour forcer le split */
+    background: #1e293b; border-radius: 15px; overflow: hidden; border: 2px solid #334155;
+}
+
+.hw-list-view { padding: 20px; background: white; height: 100%; overflow-y: auto; z-index: 100; }
+.hw-work-view { display: flex; flex-direction: column; height: 100%; width: 100%; position: relative; }
+
+/* Visionneuse Documents (Haut - 65%) */
+.doc-viewer-container {
+    flex: 2; position: relative; background-color: #0f172a; overflow: hidden;
+    /* Quadrillage technique */
+    background-image: 
+        linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+    background-size: 50px 50px;
+    border-bottom: 4px solid var(--secondary);
+    cursor: grab;
+}
+.doc-viewer-container:active { cursor: grabbing; }
+
+#pan-zoom-content {
+    position: absolute; 
+    top: 50%; left: 50%; /* IMPORTANT pour le centrage */
+    transform-origin: center center; 
+    display: flex; justify-content: center; align-items: center;
+}
+
+#current-doc-img {
+    height: auto; box-shadow: 0 0 50px rgba(0,0,0,0.8); border: 3px solid white;
+    pointer-events: auto; -webkit-user-drag: none;
+}
+
+/* Zone Interaction (Bas - 35%) */
+.interaction-zone {
+    flex: 1; display: flex; background: white; min-height: 200px;
+}
+
+.question-part { flex: 1; padding: 20px; border-right: 2px solid var(--border); background: #f8fafc; overflow-y: auto; }
+.answer-part { flex: 1; padding: 20px; display: flex; flex-direction: column; gap: 10px; }
+
+#hw-answer-input { 
+    flex: 1; width: 100%; resize: none; padding: 15px; 
+    border: 2px solid #cbd5e1; border-radius: 10px; font-family: inherit; font-size: 1rem; 
+}
+
+/* UI Overlays (Boutons sur l'image) */
+.page-counter { position: absolute; top: 15px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: white; padding: 5px 15px; border-radius: 20px; font-weight: bold; z-index: 10; }
+.nav-arrow { position: absolute; top: 50%; transform: translateY(-50%); background: rgba(0,0,0,0.5); color: white; border: none; width: 45px; height: 45px; border-radius: 50%; font-size: 20px; cursor: pointer; z-index: 10; }
+#btn-prev-doc { left: 10px; } #btn-next-doc { right: 10px; }
+.doc-controls { position: absolute; bottom: 15px; right: 15px; display: flex; gap: 10px; z-index: 10; }
+.zoom-btn { width: 40px; height: 40px; border-radius: 50%; background: rgba(0,0,0,0.6); color: white; border: none; cursor: pointer; font-size: 18px; }
+
+/* BOUTONS GÉNÉRAUX */
+.action-btn { background: var(--primary); color: white; border: none; padding: 12px; border-radius: 8px; width: 100%; font-weight: bold; cursor: pointer; }
+.action-btn:hover { background: var(--primary-dark); }
+.tab-btn { padding: 10px 20px; border-radius: 8px; border: none; background: #eee; cursor: pointer; font-weight: bold; }
 .tab-btn.active { background: var(--primary); color: white; }
 
-/* TABLES */
-table { width: 100%; border-collapse: collapse; margin-top: 10px; background: white; border-radius: 8px; overflow: hidden; }
-th { background: #f8fafc; padding: 12px; text-align: left; border-bottom: 2px solid var(--border); color: var(--text-light); font-size: 0.9em; }
-td { padding: 12px; border-bottom: 1px solid #f1f5f9; }
-
-/* FORMULAIRES */
-input, select, textarea { width: 100%; padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-family: inherit; font-size: 1rem; margin-bottom: 10px; }
-input:focus { outline: none; border-color: var(--primary); }
-
-/* BOUTONS */
-button { cursor: pointer; transition: 0.2s; border: none; border-radius: 8px; font-weight: bold; font-family: inherit; }
-.action-btn, .chapter-action-btn { background: var(--primary); color: white; padding: 12px 20px; width: 100%; }
-.btn-success { background: var(--success); color: white; }
-.btn-danger { background: var(--danger); color: white; }
-.btn-test { background: #3b82f6; color: white; padding: 15px; margin-bottom: 25px; width: 100%; font-size: 1.1rem; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3); }
-
-/* MODALE CARNET DE FAUTES */
-.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 2000; display: flex; align-items: center; justify-content: center; padding: 20px; }
-.modal-content { background: white; padding: 25px; border-radius: 15px; width: 95%; max-width: 800px; max-height: 85vh; overflow-y: auto; position: relative; }
-
-/* TABLEAU DE CORRECTION */
-.correction-table { width: 100%; border-collapse: collapse; }
+/* FAUTES */
 .wrong-word { color: var(--danger); text-decoration: line-through; font-weight: bold; }
 .right-word { color: var(--success); font-weight: bold; }
-
-/* EDITEUR DE NIVEAUX (SYSTÈME ABCD CLIQUE) */
-.manual-opt-row { display: flex; align-items: center; gap: 15px; margin-bottom: 12px; padding: 12px; border: 2px solid var(--border); border-radius: 10px; cursor: pointer; transition: 0.2s; }
-.manual-opt-row.selected { border-color: var(--success); background: #f0fdf4; box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.1); }
-.manual-opt-label { font-size: 1.2rem; font-weight: 900; width: 30px; color: var(--primary); }
-.manual-opt-input { flex: 1; border: none !important; background: transparent !important; margin-bottom: 0 !important; font-weight: bold; padding: 0; }
-
-/* ZOMBIE */
-#zombie-arena { position: relative; height: 280px; background: linear-gradient(180deg, #dbeafe 0%, #bfdbfe 100%); border-radius: 15px; overflow: hidden; border: 4px solid #60a5fa; margin-bottom: 20px; }
-.game-character { position: absolute; bottom: 10px; height: 130px; }
-#z-projectile { position: absolute; width: 22px; height: 22px; background: yellow; border-radius: 50%; display: none; }
-#feedback-bubble { position: absolute; top: 15px; left: 10%; width: 80%; padding: 20px; background: white; border-radius: 15px; z-index: 100; text-align: center; border: 2px solid #eee; }
