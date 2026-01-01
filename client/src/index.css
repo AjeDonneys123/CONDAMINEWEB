@@ -17,23 +17,46 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, sans-serif; background-col
 
 /* --- HEADER --- */
 header { display: flex; justify-content: space-between; align-items: center; padding: 0 24px; background: white; height: 70px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-header h1 { font-size: 1.5rem; color: var(--primary); margin: 0; }
-.header-right { display: flex; gap: 10px; align-items: center; }
+header h1 { font-size: 1.5rem; color: var(--text-main); margin: 0; font-weight: 800; }
+.header-right { display: flex; gap: 10px; align-items: center; font-size: 0.9em; color: var(--text-light); }
 
 /* --- BOUTONS --- */
-button { cursor: pointer; transition: 0.2s; }
-.action-btn, .chapter-action-btn { background: var(--primary); color: white; border: none; border-radius: 8px; padding: 10px 16px; font-weight: bold; width: 100%; margin-top: auto; }
-.action-btn:hover { background: var(--primary-dark); }
+button { cursor: pointer; transition: 0.2s; font-family: inherit; }
+.btn-primary { background: var(--primary); color: white; border: none; border-radius: 8px; padding: 12px 20px; font-weight: bold; width: 100%; font-size: 1rem; }
+.btn-primary:hover { background: var(--primary-dark); }
 .pause-btn { background: white; border: 1px solid #ccc; padding: 6px 12px; border-radius: 6px; }
-.back-menu-btn { background: white; border: 1px solid #ccc; padding: 5px 10px; border-radius: 5px; }
 
 /* --- LAYOUT GLOBAL --- */
-.wrap { max-width: 1000px; margin: 30px auto; padding: 0 20px; }
-.card { background: white; border-radius: var(--radius); padding: 30px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); margin-bottom: 30px; }
+.wrap { max-width: 1000px; margin: 40px auto; padding: 0 20px; }
+.card { background: white; border-radius: var(--radius); padding: 40px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 30px; }
 
-/* CHAPITRES */
-.chapter-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
-.chapter-box { background: white; border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; display: flex; flex-direction: column; transition: transform 0.2s; }
-.chapter-box:hover { transform: translateY(-5px); border-color: #cbd5e1; }
+/* --- FORMULAIRES --- */
+.form-group { margin-bottom: 15px; }
+.form-label { display: block; font-size: 0.9em; color: var(--text-light); margin-bottom: 5px; font-weight: 600; }
+.form-input, .form-select { 
+    width: 100%; padding: 12px; 
+    border: 1px solid #cbd5e1; border-radius: 8px; 
+    font-size: 1rem; color: var(--text-main);
+    background-color: #fff;
+    transition: border-color 0.2s;
+}
+.form-input:focus, .form-select:focus { outline: none; border-color: var(--primary); }
+.row { display: flex; gap: 20px; }
+.col { flex: 1; }
+
+/* --- DASHBOARD TABS --- */
+.tabs-container { display: flex; gap: 15px; border-bottom: 2px solid #e2e8f0; margin-bottom: 25px; }
+.tab-btn { 
+    background: none; border: none; padding: 12px 20px; 
+    font-weight: 600; color: var(--text-light); 
+    border-bottom: 3px solid transparent; 
+}
+.tab-btn:hover { color: var(--primary); }
+.tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+/* --- TABLES --- */
+table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+th { background: #f8fafc; color: var(--text-light); font-weight: 600; text-align: left; padding: 12px 15px; }
+td { padding: 12px 15px; border-bottom: 1px solid #f1f5f9; color: var(--text-main); }
 
 
