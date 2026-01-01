@@ -31,6 +31,7 @@ const PlayerSchema = new mongoose.Schema({
   validatedQuestions: [String],
   validatedLevels: { type: [mongoose.Schema.Types.Mixed], default: [] },
   spellingMistakes: { type: [{ wrong: String, correct: String, reason: String, date: { type: Date, default: Date.now } }], default: [] },
+  activityLogs: { type: [{ action: String, detail: String, date: { type: Date, default: Date.now } }], default: [] },
   created_at: { type: Date, default: Date.now },
 }, { minimize: false });
 const Player = mongoose.model('Player', PlayerSchema, 'players');
@@ -41,6 +42,15 @@ const HomeworkSchema = new mongoose.Schema({
   date: { type: Date, default: Date.now }
 });
 const Homework = mongoose.model('Homework', HomeworkSchema, 'homeworks');
+
+const SubmissionSchema = new mongoose.Schema({
+  homeworkId: { type: mongoose.Schema.Types.ObjectId, ref: 'Homework' },
+  playerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Player' },
+  classroom: String,
+  levelsResults: [{ levelIndex: Number, userText: String, aiFeedback: String, grade: String }],
+  submittedAt: { type: Date, default: Date.now }
+});
+const Submission = mongoose.model('Submission', SubmissionSchema, 'submissions');
 
 const GameLevelSchema = new mongoose.Schema({
     chapterId: String, classroom: String, title: String, lesson: String, questions: Array, createdAt: { type: Date, default: Date.now }
@@ -59,68 +69,49 @@ async function fileToPart(url) {
 
 // ROUTES API
 app.post('/api/analyze-homework', async (req, res) => {
-    const { userText, homeworkInstruction, classroom, playerId } = req.body;
+    const { userText, homeworkInstruction, classroom, playerId, homeworkId } = req.body;
     try {
         const genAI = new GoogleGenerativeAI(geminiKey);
         const model = genAI.getGenerativeModel({ model: MODEL_NAME, generationConfig: { responseMimeType: "application/json" } });
-        const prompt = `RÔLE: Professeur de français. SI FAUTES: tableau HTML 3 colonnes (Mot erroné, Correction, Explication précise). JSON: { "content_feedback": "HTML", "grade": "xx/20", "corrections": [{"wrong":"", "correct":"", "reason":""}] }`;
+        const prompt = `RÔLE: Professeur de français. CIBLE: ${classroom}. 
+        TACHE: Corrige. Analyse le fond et la forme. 
+        IMPORTANT: Produit un texte pédagogique riche en HTML (ne renvoie pas juste le mot 'HTML').
+        SI FAUTES: Tableau HTML <table class="correction-table"> avec colonnes (Mot faux, Correction, Explication précise).
+        JSON: { "content_feedback": "Ton texte HTML ici", "grade": "Note/20", "corrections": [{"wrong":"", "correct":"", "reason":""}] }`;
         const result = await model.generateContent([prompt, `CONSIGNE: ${homeworkInstruction}`, `ÉLÈVE: ${userText}`]);
         const json = JSON.parse(result.response.text());
+
         if (playerId && json.corrections?.length > 0) {
             await Player.findByIdAndUpdate(playerId, { $push: { spellingMistakes: { $each: json.corrections.map(c => ({ ...c, date: new Date() })) } } });
         }
+        if (playerId && homeworkId) {
+            await Submission.findOneAndUpdate({ homeworkId, playerId }, { classroom, $set: { levelsResults: [{ levelIndex: 0, userText, aiFeedback: json.content_feedback, grade: json.grade }], submittedAt: Date.now() } }, { upsert: true });
+        }
         res.json({ feedback: json.content_feedback, grade: json.grade });
-    } catch (e) { res.json({ feedback: "Erreur IA" }); }
-});
-
-app.post('/api/verify-answer-ai', async (req, res) => {
-  const { question, userAnswer, expectedAnswer, playerId } = req.body;
-  try {
-    const genAI = new GoogleGenerativeAI(geminiKey);
-    const model = genAI.getGenerativeModel({ model: MODEL_NAME, generationConfig: { responseMimeType: "application/json" } });
-    const prompt = `Arbitre de français. Si fautes, fournis une explication grammaticale précise dans "reason". JSON: { "status": "correct"|"incorrect", "feedback": "HTML", "corrections": [{"wrong":"", "correct":"", "reason":""}] }`;
-    const result = await model.generateContent([prompt, `Q: ${question}, A: ${expectedAnswer}, R: ${userAnswer}`]);
-    const json = JSON.parse(result.response.text());
-    if (playerId && json.corrections?.length > 0) {
-        await Player.findByIdAndUpdate(playerId, { $push: { spellingMistakes: { $each: json.corrections.map(c => ({ ...c, date: new Date() })) } } });
-    }
-    res.json(json);
-  } catch (e) { res.json({ status: "incorrect" }); }
-});
-
-app.post('/api/delete-mistake', async (req, res) => {
-    const { playerId, mistakeIndex } = req.body;
-    const p = await Player.findById(playerId);
-    if(p) { p.spellingMistakes.splice(mistakeIndex, 1); await p.save(); res.json({ok:true}); }
-    else res.status(404).json({ok:false});
+    } catch (e) { res.json({ feedback: "Désolé, l'IA a rencontré un problème technique." }); }
 });
 
 app.post('/api/register', async (req, res) => { 
     const { firstName, lastName, classroom } = req.body; 
     let p = await Player.findOne({ firstName, lastName });
     if (!p) p = new Player({ firstName, lastName, classroom });
+    else p.classroom = classroom;
     await p.save();
-    res.json({ ok: true, id: p._id, firstName, lastName, classroom });
+    res.json({ ok: true, id: p._id, firstName: p.firstName, lastName: p.lastName, classroom: p.classroom });
 });
 
 app.get('/api/players', async (req, res) => { res.json(await Player.find().sort({ lastName: 1 })); });
 app.get('/api/player-data/:id', async (req, res) => { res.json(await Player.findById(req.params.id)); });
-
 app.get('/api/game-levels/:classroom', async (req, res) => {
     const query = (req.params.classroom === "Toutes") ? {} : { $or: [{ classroom: req.params.classroom }, { classroom: "Toutes" }] };
     res.json(await GameLevel.find(query).sort({ title: 1 }));
 });
-app.post('/api/game-levels', async (req, res) => {
-    const lvl = new GameLevel(req.body); await lvl.save(); res.json({ ok: true });
-});
-app.delete('/api/game-levels/:id', async (req, res) => {
-    await GameLevel.findByIdAndDelete(req.params.id); res.json({ ok: true });
-});
-
 app.get('/api/homework-all', async (req, res) => { res.json(await Homework.find().sort({ date: -1 })); });
-app.get('/api/homework/:class', async (req, res) => { 
-    const list = await Homework.find({ $or: [{ classroom: req.params.class }, { classroom: "Toutes" }] }).sort({ date: -1 }); 
-    res.json(list); 
+app.get('/api/homework/:class', async (req, res) => { res.json(await Homework.find({ $or: [{ classroom: req.params.class }, { classroom: "Toutes" }] }).sort({ date: -1 })); });
+app.post('/api/delete-mistake', async (req, res) => {
+    const p = await Player.findById(req.body.playerId);
+    if(p) { p.spellingMistakes.splice(req.body.mistakeIndex, 1); await p.save(); res.json({ok:true}); }
+    else res.status(404).json({ok:false});
 });
 
 mongoose.connect(mongoUri).then(() => {

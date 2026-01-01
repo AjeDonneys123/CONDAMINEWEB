@@ -17,23 +17,26 @@ export async function initEleveDashboard(container) {
         }
     }
 
-    // 2. Rétablir le bouton Fautes
+    // 2. Initialisation du carnet de fautes
     const btnMistakes = document.getElementById("myMistakesBtn");
     if(btnMistakes) {
         btnMistakes.style.display = "block";
         btnMistakes.onclick = openMistakesModal;
     }
 
-    // 3. Rétablir le bouton de fermeture de la modale rose
+    // 3. FIX FERMETURE : On attache l'événement de fermeture une seule fois ici
     const closeBtn = document.getElementById("closeMistakesBtn");
     if(closeBtn) {
-        closeBtn.onclick = () => document.getElementById("mistakesModal").style.display = "none";
+        closeBtn.onclick = () => {
+            console.log("🔒 Fermeture du carnet de fautes");
+            document.getElementById("mistakesModal").style.display = "none";
+        };
     }
 
     // 4. Rendu de la coque de navigation (Onglets)
     container.innerHTML = `
         <div class="student-shell">
-            <div class="tabs-container" style="display:flex; gap:10px; margin-bottom:25px; border-bottom:2px solid #eee; padding-bottom:10px;">
+            <div class="tabs-container">
                 <button id="tab-devoirs" class="tab-btn active">📚 Mes Devoirs</button>
                 <button id="tab-jeux" class="tab-btn">🎮 Mini-Jeux</button>
             </div>
@@ -51,7 +54,7 @@ export async function initEleveDashboard(container) {
     const switchTab = (name) => {
         tabDevoirs.classList.toggle('active', name === 'devoirs');
         tabJeux.classList.toggle('active', name === 'jeux');
-        contentArea.innerHTML = `<div style="padding:40px; text-align:center; color:#94a3b8;">Chargement du module...</div>`;
+        contentArea.innerHTML = `<div style="padding:40px; text-align:center; color:#94a3b8;">Chargement...</div>`;
 
         if (name === 'devoirs') {
             initDevoirsModule(contentArea);
@@ -69,15 +72,16 @@ export async function initEleveDashboard(container) {
 
 async function openMistakesModal() {
     const list = document.getElementById("mistakesList");
-    document.getElementById("mistakesModal").style.display = "flex";
-    list.innerHTML = "<p style='text-align:center;'>Chargement de ton carnet...</p>";
+    const modal = document.getElementById("mistakesModal");
+    modal.style.display = "flex";
+    list.innerHTML = "<p style='text-align:center; padding:20px;'>Chargement de ton carnet...</p>";
 
     try {
         const res = await window.api.get(`/api/player-data/${window.state.currentPlayerId}`);
         if(res && res.spellingMistakes) {
             const mistakes = res.spellingMistakes;
             if(mistakes.length === 0) {
-                list.innerHTML = "<p style='text-align:center; padding:20px;'>Aucune faute enregistrée ! 🎉</p>";
+                list.innerHTML = "<p style='text-align:center; padding:40px;'>Aucune faute enregistrée ! 🎉</p>";
             } else {
                 list.innerHTML = `
                     <table class="correction-table">
@@ -90,9 +94,9 @@ async function openMistakesModal() {
                                     <td><span class="wrong-word">${m.wrong}</span></td>
                                     <td><span class="right-word">${m.correct}</span></td>
                                     <td><small>${m.reason || "Usage"}</small></td>
-                                    <td>
+                                    <td style="text-align:right;">
                                         <button onclick="deleteMistakeLocally(${mistakes.length - 1 - i})" 
-                                                style="background:#fee2e2; color:red; border-radius:50%; width:24px; height:24px;">✕</button>
+                                                style="background:#fee2e2; color:red; border-radius:50%; width:28px; height:28px; display:inline-flex; align-items:center; justify-content:center; border:1px solid #f87171; cursor:pointer;">✕</button>
                                     </td>
                                 </tr>
                             `).join('')}
@@ -100,12 +104,14 @@ async function openMistakesModal() {
                     </table>`;
             }
         }
-    } catch(e) { list.innerHTML = "Erreur de chargement."; }
+    } catch(e) { 
+        console.error("Erreur chargement fautes:", e);
+        list.innerHTML = "<p style='text-align:center; color:red; padding:20px;'>Erreur lors du chargement des données.</p>"; 
+    }
 }
 
+// Fonction globale pour supprimer une faute (appelée par le onclick dans le HTML injecté)
 window.deleteMistakeLocally = async (idx) => {
     const res = await window.api.post('/api/delete-mistake', { playerId: window.state.currentPlayerId, mistakeIndex: idx });
     if(res.ok) openMistakesModal();
 };
-
-
