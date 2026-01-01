@@ -5,7 +5,9 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "nodemon --ext js,html,css,txt --watch src --watch public --watch update.txt --ignore PROJET_SNAPSHOT.txt --exec \"(lsof -t -i:3000 | xargs kill -9 2>/dev/null || true) && node apply.js && node src/server.js\"",
+    "dev": "concurrently -n \"API,WEB\" -c \"blue,magenta\" \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "nodemon --ext js,html,css,txt --watch src --watch public --watch update.txt --ignore PROJET_SNAPSHOT.txt --exec \"(lsof -t -i:3000 | xargs kill -9 2>/dev/null || true) && node apply.js && node src/server.js\"",
+    "dev:client": "npm run dev --prefix client",
     "snap": "node snap.js"
   },
   "dependencies": {
@@ -19,6 +21,7 @@
     "node-fetch": "^2.7.0"
   },
   "devDependencies": {
+    "concurrently": "^8.2.2",
     "nodemon": "^3.0.1"
   }
 }
