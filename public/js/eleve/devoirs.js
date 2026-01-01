@@ -1,16 +1,15 @@
 export async function initDevoirsModule(container) {
-    console.log("📚 Lancement de la Liseuse de Devoirs V22");
+    console.log("%c📚 LISEUSE DEVOIRS V25 - CLEAN UI & PAN FIX", "color: white; background: #2563eb; padding: 5px;");
 
     container.innerHTML = `
         <div class="hw-layout">
-            <!-- VUE 1 : LISTE -->
             <div id="hw-list-view" class="hw-list-view">
                 <h3 style="margin-top:0; color:var(--primary);">📚 Tes Devoirs Maison</h3>
                 <div id="hw-items-container">Chargement...</div>
             </div>
 
-            <!-- VUE 2 : TRAVAIL -->
             <div id="hw-work-view" class="hw-work-view" style="display:none;">
+                <!-- HAUT (75%) -->
                 <div id="doc-viewer" class="doc-viewer-container">
                     <div id="pan-zoom-content">
                         <img id="current-doc-img" src="" style="display:none;">
@@ -25,122 +24,157 @@ export async function initDevoirsModule(container) {
                     <button id="btn-close-hw" style="position:absolute; top:15px; left:15px; background:var(--danger); color:white; padding:8px 15px; z-index:100; border-radius:8px;">✕ Quitter</button>
                 </div>
 
+                <!-- BAS (25%) -->
                 <div class="interaction-zone">
                     <div class="question-part">
-                        <b style="color:var(--primary); font-size:0.8em; display:block; margin-bottom:5px;">CONSIGNE :</b>
-                        <div id="hw-question-text" style="font-weight:bold; line-height:1.4; color:#1e293b;"></div>
+                        <div id="hw-q-small-title" style="font-size:0.7em; color:var(--primary); font-weight:900; margin-bottom:2px;">QUESTION 1</div>
+                        <div id="hw-question-text" style="font-weight:bold; font-size:0.9rem; color:#1e293b; max-height:60px; overflow-y:auto; margin-bottom:5px;"></div>
+                        
+                        <div id="q-image-container">
+                            <div id="pan-zoom-question-content"></div>
+                            <div class="doc-controls" style="transform: scale(0.65); bottom: 2px; right: 2px;">
+                                <button class="zoom-btn" id="btn-zoom-out-q">➖</button>
+                                <button class="zoom-btn" id="btn-zoom-in-q">➕</button>
+                            </div>
+                        </div>
                     </div>
                     <div class="answer-part">
                         <textarea id="hw-answer-input" placeholder="Écris ta réponse ici..."></textarea>
-                        <button id="hw-btn-submit" class="action-btn">Envoyer à l'IA 🤖</button>
+                        <button id="hw-btn-submit" class="action-btn">Envoyer mon travail 🤖</button>
                     </div>
                 </div>
             </div>
         </div>
     `;
 
-    const listTarget = document.getElementById("hw-items-container");
-    const workView = document.getElementById("hw-work-view");
-    const listView = document.getElementById("hw-list-view");
+    const ui = {
+        listTarget: document.getElementById("hw-items-container"),
+        workView: document.getElementById("hw-work-view"),
+        listView: document.getElementById("hw-list-view"),
+        img: document.getElementById("current-doc-img"),
+        qText: document.getElementById("hw-question-text"),
+        qSmallTitle: document.getElementById("hw-q-small-title"),
+        input: document.getElementById("hw-answer-input"),
+        btnSubmit: document.getElementById("hw-btn-submit"),
+        qContainer: document.getElementById("pan-zoom-question-content"),
+        viewer: document.getElementById("doc-viewer"),
+        qImgZone: document.getElementById("q-image-container")
+    };
 
-    // --- VARIABLES D'ÉTAT LOCALES ---
     let currentHw = null;
     let docs = [];
     let docIdx = 0;
     let view = { x: 0, y: 0, scale: 1.0 };
+    let viewQ = { x: 0, y: 0, scale: 1.0 };
 
-    // --- CHARGEMENT ---
     const loadList = async () => {
         const hws = await window.api.getHomeworks(window.state.user.classroom);
-        listTarget.innerHTML = "";
-        if(!hws || hws.length === 0) {
-            listTarget.innerHTML = "<p style='text-align:center; padding:40px;'>Aucun devoir disponible. 🌴</p>";
-            return;
-        }
+        ui.listTarget.innerHTML = hws.length ? "" : "<p style='text-align:center; padding:40px;'>Aucun devoir. 🌴</p>";
         hws.forEach(hw => {
             const d = document.createElement("div");
-            d.className = "card";
-            d.style.cssText = "display:flex; justify-content:space-between; align-items:center; cursor:pointer; border:1px solid #eee; margin-bottom:10px; padding:15px;";
-            d.innerHTML = `<div><b>${hw.title}</b><br><small>Publié le ${new Date(hw.date).toLocaleDateString()}</small></div><span style='font-size:1.2rem;'>➔</span>`;
+            d.className = "hw-list-item card";
+            d.innerHTML = `<div><b>${hw.title}</b><br><small>Publié le ${new Date(hw.date).toLocaleDateString()}</small></div><span>➔</span>`;
             d.onclick = () => startHw(hw);
-            listTarget.appendChild(d);
+            ui.listTarget.appendChild(d);
         });
     };
 
     const startHw = (hw) => {
         currentHw = hw;
-        listView.style.display = "none";
-        workView.style.display = "flex";
-        
+        ui.listView.style.display = "none";
+        ui.workView.style.display = "flex";
         const firstLvl = hw.levels[0];
-        document.getElementById("hw-question-text").innerHTML = firstLvl.instruction.replace(/\n/g, '<br>');
+        
+        // Nettoyage UI Question
+        if (firstLvl.instruction && firstLvl.instruction.trim() !== "") {
+            ui.qText.innerHTML = firstLvl.instruction.replace(/\n/g, '<br>');
+            ui.qText.style.display = "block";
+            ui.qSmallTitle.style.display = "block";
+        } else {
+            ui.qText.style.display = "none";
+            ui.qSmallTitle.style.display = "none";
+        }
+        
+        ui.qContainer.innerHTML = "";
+        if(firstLvl.questionImage) {
+            ui.qImgZone.style.display = "block";
+            const qImg = document.createElement("img");
+            qImg.src = firstLvl.questionImage;
+            qImg.onload = () => {
+                const ratio = ui.qImgZone.offsetWidth / qImg.naturalWidth;
+                viewQ = { x: 0, y: 0, scale: ratio };
+                updateTransform('q');
+            };
+            ui.qContainer.appendChild(qImg);
+        } else {
+            ui.qImgZone.style.display = "none";
+        }
+
         docs = firstLvl.attachmentUrls || [];
         docIdx = 0;
         renderDoc();
     };
 
     function renderDoc() {
-        if (docs.length === 0) return;
-        const img = document.getElementById("current-doc-img");
-        const container = document.getElementById("doc-viewer");
-        img.style.display = "block";
-        img.onload = () => {
-            // Fit-to-screen
-            const ratioW = (container.offsetWidth * 0.95) / img.naturalWidth;
-            const ratioH = (container.offsetHeight * 0.95) / img.naturalHeight;
+        if (!docs.length) return;
+        ui.img.style.display = "block";
+        ui.img.onload = () => {
+            const ratioW = (ui.viewer.offsetWidth * 0.95) / ui.img.naturalWidth;
+            const ratioH = (ui.viewer.offsetHeight * 0.95) / ui.img.naturalHeight;
             view = { x: 0, y: 0, scale: Math.min(ratioW, ratioH) };
-            updateTransform();
+            updateTransform('doc');
         };
-        img.src = docs[docIdx];
+        ui.img.src = docs[docIdx];
         document.getElementById("hw-page-counter").innerText = `${docIdx + 1} / ${docs.length}`;
     }
 
-    function updateTransform() {
-        const content = document.getElementById("pan-zoom-content");
-        content.style.transform = `translate(-50%, -50%) translate(${view.x}px, ${view.y}px) scale(${view.scale})`;
+    function updateTransform(type) {
+        if(type === 'doc') {
+            document.getElementById("pan-zoom-content").style.transform = `translate(-50%, -50%) translate(${view.x}px, ${view.y}px) scale(${view.scale})`;
+        } else {
+            ui.qContainer.style.transform = `translate(-50%, -50%) translate(${viewQ.x}px, ${viewQ.y}px) scale(${viewQ.scale})`;
+        }
     }
 
-    // --- ÉVÉNEMENTS ---
-    document.getElementById("btn-prev-doc").onclick = () => { if(docIdx > 0) { docIdx--; renderDoc(); } };
-    document.getElementById("btn-next-doc").onclick = () => { if(docIdx < docs.length - 1) { docIdx++; renderDoc(); } };
-    document.getElementById("btn-zoom-in").onclick = () => { view.scale += 0.15; updateTransform(); };
-    document.getElementById("btn-zoom-out").onclick = () => { view.scale -= 0.15; updateTransform(); };
-    document.getElementById("btn-close-hw").onclick = () => { workView.style.display = "none"; listView.style.display = "block"; };
+    // --- BUTTON EVENTS ---
+    document.getElementById("btn-prev-doc").onclick = (e) => { e.stopPropagation(); if(docIdx > 0) { docIdx--; renderDoc(); } };
+    document.getElementById("btn-next-doc").onclick = (e) => { e.stopPropagation(); if(docIdx < docs.length - 1) { docIdx++; renderDoc(); } };
+    document.getElementById("btn-zoom-in").onclick = (e) => { e.stopPropagation(); view.scale += 0.2; updateTransform('doc'); };
+    document.getElementById("btn-zoom-out").onclick = (e) => { e.stopPropagation(); view.scale -= 0.2; updateTransform('doc'); };
+    document.getElementById("btn-zoom-in-q").onclick = (e) => { e.stopPropagation(); viewQ.scale += 0.2; updateTransform('q'); };
+    document.getElementById("btn-zoom-out-q").onclick = (e) => { e.stopPropagation(); viewQ.scale -= 0.2; updateTransform('q'); };
+    document.getElementById("btn-close-hw").onclick = () => { ui.workView.style.display = "none"; ui.listView.style.display = "block"; };
 
-    // Pan & Drag
-    let isDown = false, startX, startY;
-    const vCont = document.getElementById("doc-viewer");
-    vCont.onmousedown = (e) => {
-        if(e.target.tagName === 'BUTTON') return;
-        isDown = true; vCont.style.cursor = "grabbing";
-        startX = e.clientX - view.x; startY = e.clientY - view.y;
-    };
-    window.onmousemove = (e) => {
-        if(!isDown) return;
-        view.x = e.clientX - startX; view.y = e.clientY - startY;
-        updateTransform();
-    };
-    window.onmouseup = () => { isDown = false; vCont.style.cursor = "grab"; };
+    // --- MOTEUR PAN (CORRIGÉ POUR ÉVITER LES CONFLITS) ---
+    const setupPan = (container, type) => {
+        let isDown = false, startX, startY;
 
-    // Submit IA
-    document.getElementById("hw-btn-submit").onclick = async () => {
-        const val = document.getElementById("hw-answer-input").value.trim();
-        if(!val) return alert("Écris ta réponse !");
-        const btn = document.getElementById("hw-btn-submit");
-        btn.disabled = true; btn.innerText = "Analyse IA...";
-        
-        try {
-            const res = await window.api.post('/api/analyze-homework', {
-                userText: val,
-                homeworkInstruction: currentHw.levels[0].instruction,
-                classroom: window.state.user.classroom,
-                playerId: window.state.currentPlayerId,
-                homeworkId: currentHw._id
-            });
-            alert("Analyse terminée ! Note indicative : " + res.grade);
-            window.location.reload();
-        } catch(e) { btn.disabled = false; btn.innerText = "Envoyer à l'IA 🤖"; }
+        container.addEventListener('mousedown', (e) => {
+            if(e.target.tagName === 'BUTTON') return;
+            isDown = true; 
+            container.style.cursor = "grabbing";
+            const v = (type === 'doc') ? view : viewQ;
+            startX = e.clientX - v.x; 
+            startY = e.clientY - v.y;
+        });
+
+        // Utilisation de l'event global sur window pour un drag fluide
+        window.addEventListener('mousemove', (e) => {
+            if(!isDown) return;
+            const v = (type === 'doc') ? view : viewQ;
+            v.x = e.clientX - startX; 
+            v.y = e.clientY - startY;
+            updateTransform(type);
+        });
+
+        window.addEventListener('mouseup', () => {
+            isDown = false; 
+            container.style.cursor = "grab";
+        });
     };
+
+    setupPan(ui.viewer, 'doc');
+    setupPan(ui.qImgZone, 'q');
 
     loadList();
 }
