@@ -23,6 +23,7 @@ const IA_GUIDE = `
 // 3. SYSTÈME DE MISE À JOUR (apply.js) :
 //    - L'utilisateur utilise un script "apply.js" qui lit "update.txt".
 //    - Tes réponses DOIVENT respecter ce format strict pour chaque fichier :
+//.   -les réponses doivent etre dans un fichier txt
 //      // FILE:nom/du/fichier.js
 //      [SAUTER 3 LIGNES VIDES]
 //      [CODE COMPLET DU FICHIER]
