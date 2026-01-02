@@ -1,0 +1,23 @@
+content += `// --------------------------------------------------\n`;
+                    content += data + "\n\n";
+                } catch (e) {}
+            }
+        }
+    }
+    return content;
+}
+
+function run() {
+    console.log("🚀 [ARCHITECTE] Snapshot intelligent en cours...");
+    let output = "==================================================\n";
+    output += "ARBORESCENCE TOTALE (SANS DOUBLONS)\n";
+    output += "==================================================\n\n.\n";
+    output += buildTree(__dirname);
+    output += "\n==================================================\n";
+    output += "CONTENU DU CODE SOURCE\n";
+    output += "==================================================\n\n";
+    output += captureContent(__dirname);
+    fs.writeFileSync(OUTPUT_FILENAME, output);
+    console.log("✨ Snapshot.txt généré proprement !");
+}
+run();

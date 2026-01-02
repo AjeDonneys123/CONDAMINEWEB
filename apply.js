@@ -2,51 +2,45 @@ const fs = require('fs');
 const path = require('path');
 const inputFile = 'update.txt';
 
-console.log("▶️ DÉMARRAGE DU DÉPLOIEMENT...");
+console.log("🛠️  [WATCHER] apply.js (v4) actif. Marqueur requis : [[[ FILE: chemin ]]]");
 
 function applyUpdate() {
-    if (!fs.existsSync(inputFile)) {
-        console.log("❌ update.txt introuvable.");
-        return;
-    }
+    if (!fs.existsSync(inputFile)) return;
+    const content = fs.readFileSync(inputFile, 'utf8').trim();
+    if (content.length < 10) return;
 
-    const content = fs.readFileSync(inputFile, 'utf8');
-    if (!content || content.trim().length < 10) {
-        console.log("⚠️ Le fichier update.txt est vide.");
-        return;
-    }
-
-    // Regex robuste : cherche // FILE:nom, puis capture tout jusqu'au prochain // FILE: ou la fin
-    const regex = /\/\/\s*FILE:([^\n\r]+)[\r\n]{1,6}([\s\S]*?)(?=\/\/\s*FILE:|$)/g;
-    let match;
+    console.log("\n⚡ [MAJ] Nouveau code détecté...");
+    
+    // On découpe proprement avec le nouveau marqueur spécial
+    const parts = content.split(/\[\[\[\s*FILE\s*:\s*([^\]\s]+)\s*\]\]\]/);
     let count = 0;
 
-    console.log("---------------------------------------------");
-    while ((match = regex.exec(content)) !== null) {
-        const filePath = match[1].trim();
-        const fileContent = match[2];
+    // parts[0] est le vide avant le premier marqueur
+    // parts[1] est le chemin du fichier 1
+    // parts[2] est le contenu du fichier 1
+    for (let i = 1; i < parts.length; i += 2) {
+        const filePath = parts[i].trim();
+        const fileContent = parts[i + 1].trim();
 
         if (filePath) {
             const fullPath = path.join(__dirname, filePath);
             const dir = path.dirname(fullPath);
+            
             try {
                 if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
                 fs.writeFileSync(fullPath, fileContent);
-                console.log(`✅ ÉCRIT : ${filePath} (${fileContent.length} octets)`);
+                console.log(`   ✅ SYNCHRO : ${filePath}`);
                 count++;
             } catch (e) {
-                console.error(`❌ Erreur sur ${filePath}: ${e.message}`);
+                console.error(`   ❌ ERREUR sur ${filePath}: ${e.message}`);
             }
         }
     }
 
     if (count > 0) {
-        fs.writeFileSync(inputFile, '');
-        console.log(`✨ SUCCÈS : ${count} fichiers mis à jour.`);
-    } else {
-        console.log("⚠️ Aucune balise // FILE: valide trouvée. Vérifie ton format.");
+        fs.writeFileSync(inputFile, ''); // ON VIDE LE FICHIER SEULEMENT ICI
+        console.log(`✨ Terminé : ${count} fichiers mis à jour.\n`);
     }
-    console.log("---------------------------------------------");
 }
 
-applyUpdate();
+setInterval(applyUpdate, 1000);

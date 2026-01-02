@@ -1,106 +1,63 @@
 const fs = require('fs');
 const path = require('path');
 
-// ==================================================
-// CONFIGURATION DE L'INTRODUCTION POUR L'IA
-// ==================================================
-const IA_GUIDE = `
-// ============================================================================
-// MESSAGE IMPORTANT POUR LA SESSION D'IA : GUIDE DE SURVIE DU PROJET
-// ============================================================================
-// Bienvenue sur le projet "Condamine". Avant de proposer du code, lis ceci :
-//
-// 1. ARCHITECTURE : Le projet est en VANILLA JS MODULAIRE (V26+).
-//    - app.js est le routeur (Login/Aiguillage).
-//    - eleve.js et prof.js sont des orchestrateurs.
-//    - Les fonctionnalités sont isolées dans des sous-dossiers (ex: eleve/devoirs.js).
-//
-// 2. LA RÈGLE D'OR "WINDOW" : 
-//    - Pour éviter les erreurs d'importation relatives (../../) et de SyntaxError,
-//      tous les services sont globaux : window.api et window.state.
-//    - NE JAMAIS ré-importer api.js ou state.js dans les sous-modules.
-//
-// 3. SYSTÈME DE MISE À JOUR (apply.js) :
-//    - L'utilisateur utilise un script "apply.js" qui lit "update.txt".
-//    - Tes réponses DOIVENT respecter ce format strict pour chaque fichier :
-//.   -les réponses doivent etre dans un fichier txt
-//      // FILE:nom/du/fichier.js
-//      [SAUTER 3 LIGNES VIDES]
-//      [CODE COMPLET DU FICHIER]
-//
-// 4. INTERDICTION DE TRONQUER :
-//    - NE JAMAIS envoyer de code partiel ou utiliser "// ... reste du code".
-//    - Envoie TOUJOURS le fichier dans son intégralité absolue.
-//    - Si le fichier est trop long, sépare ta réponse en plusieurs snipettes.
-//
-// 5. POINTS TECHNIQUES CRITIQUES :
-//    - Proportions Devoirs : 75% liseuse (Haut) / 25% Interaction (Bas).
-//    - Centrage Liseuse : Utilise translate(-50%, -50%) pour l'image dans le canvas.
-//    - IA Correction : Le prompt doit exiger un tableau HTML 3 colonnes avec "reason".
-//    - Zombie Game : Le projectile doit être à bottom: 22px pour viser juste.
-// ============================================================================
-`;
-
-// 1. LISTE "TOTALE" (Pour sauvegarde complète)
-const fullFiles = [
-    'package.json',
-    '.env',
-    'apply.js',
-    'snap.js',
-    'src/server.js',
-    'public/index.html',
-    'public/style.css',
-    'public/js/app.js',
-    'public/js/prof/prof.js',
-    'public/js/prof/dashboard.js',
-    'public/js/eleve/eleve.js',
-    'public/js/eleve/devoirs.js',
-    'public/js/eleve/jeux.js',
-    'public/js/games/ZombieGame.js'
+const OUTPUT_FILENAME = 'snapshot.txt';
+const IGNORE_LIST = [
+    'node_modules', '.git', 'dist', '.vscode', '.DS_Store', 
+    'package-lock.json', 'snapshot.txt', 'PROJET_BACKUP.zip',
+    'PROJET_POUR_IA.txt', 'PROJET_SNAPSHOT.txt', 'SNAPSHOT_CODE.txt', 'SNAPSHOT_FULL.txt'
 ];
+const EXTENSIONS = ['.js', '.jsx', '.css', '.html', '.json', '.env', '.md'];
 
-// 2. LISTE "CODE IMPORTANT" (Pour session IA)
-const coreFiles = [
-    'src/server.js',
-    'public/index.html',
-    'public/style.css',
-    'public/js/app.js',
-    'public/js/prof/prof.js',
-    'public/js/prof/dashboard.js',
-    'public/js/eleve/eleve.js',
-    'public/js/eleve/devoirs.js',
-    'public/js/eleve/jeux.js',
-    'public/js/games/ZombieGame.js'
-];
-
-function createSnapshot(filename, fileList, description) {
-    console.log(`📸 Création de ${filename} (${description})...`);
-    let content = `// SNAPSHOT: ${filename}\n`;
-    content += `// DATE: ${new Date().toLocaleString()}\n`;
-    content += `// DESCRIPTION: ${description}\n`;
-    
-    // Insertion du guide pour l'IA
-    content += IA_GUIDE + `\n\n`;
-
-    let count = 0;
-    fileList.forEach(file => {
-        const p = path.join(__dirname, file);
-        if (fs.existsSync(p)) {
-            const fileContent = fs.readFileSync(p, 'utf8');
-            content += `// ==================================================\n`;
-            // Marqueur sécurisé pour apply.js
-            const marker = "// " + "FILE:"; 
-            content += `${marker}${file}\n`;
-            content += `// ==================================================\n`;
-            content += `${fileContent}\n\n`;
-            count++;
-        }
+function buildTree(dir, prefix = '') {
+    let structure = '';
+    const items = fs.readdirSync(dir).filter(item => !IGNORE_LIST.includes(item));
+    items.forEach((item, index) => {
+        const isLast = index === items.length - 1;
+        const fullPath = path.join(dir, item);
+        let isDir = false;
+        try { isDir = fs.statSync(fullPath).isDirectory(); } catch(e) {}
+        
+        structure += prefix + (isLast ? '└── ' : '├── ') + item + (isDir ? '/' : '') + '\n';
+        if (isDir) structure += buildTree(fullPath, prefix + (isLast ? '    ' : '│   '));
     });
-    fs.writeFileSync(filename, content);
-    console.log(`✅ ${filename} généré avec ${count} fichiers.`);
+    return structure;
 }
 
-// Exécution
-console.log("---------------------------------------------");
-createSnapshot('PROJET_SNAPSHOT.txt', coreFiles, "CODE ESSENTIEL POUR SESSION IA");
-console.log("---------------------------------------------");
+function captureContent(dir, baseDir = "") {
+    let content = "";
+    const items = fs.readdirSync(dir).filter(item => !IGNORE_LIST.includes(item));
+    for (const item of items) {
+        const fullPath = path.join(dir, item);
+        const relativePath = path.join(baseDir, item);
+        const stats = fs.statSync(fullPath);
+        if (stats.isDirectory()) {
+            content += captureContent(fullPath, relativePath);
+        } else {
+            const ext = path.extname(item).toLowerCase();
+            if (EXTENSIONS.includes(ext) || item === '.env') {
+                try {
+                    const data = fs.readFileSync(fullPath, 'utf8');
+                    content += "\n" + "#".repeat(60) + "\n";
+                    content += "### FICHIER: " + relativePath + "\n";
+                    content += "#".repeat(60) + "\n\n";
+                    content += data + "\n\n";
+                } catch (e) {}
+            }
+        }
+    }
+    return content;
+}
+
+function run() {
+    console.log("📸 Génération du Snapshot Propre...");
+    let output = "ARBORESCENCE\n" + "=".repeat(20) + "\n\n.\n";
+    output += buildTree(__dirname);
+    output += "\n" + "=".repeat(60) + "\n";
+    output += "CODE SOURCE COMPLET\n";
+    output += "=".repeat(60) + "\n\n";
+    output += captureContent(__dirname);
+    fs.writeFileSync(OUTPUT_FILENAME, output);
+    console.log("✅ snapshot.txt mis à jour !");
+}
+run();

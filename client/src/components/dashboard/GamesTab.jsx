@@ -6,13 +6,8 @@ export default function GamesTab() {
   const [generationMode, setGenerationMode] = useState('manual');
   const [aiLoading, setAiLoading] = useState(false);
   
-  // Données du niveau en cours de création
   const [formData, setFormData] = useState({ title: '', chapterId: 'ch1-zombie', classroom: '6e', questions: [] });
-
-  // Données de la nouvelle question (Manuel)
   const [newQ, setNewQ] = useState({ q: '', options: ['', '', '', ''], a: 0 });
-
-  // Données pour l'IA
   const [aiParams, setAiParams] = useState({ topic: '', file: null });
 
   useEffect(() => { loadLevels(); }, []);
@@ -30,21 +25,13 @@ export default function GamesTab() {
   };
 
   const addQuestion = () => {
-    // Validation assouplie : Il faut une question et au moins 2 réponses
+    // Validation souple : 2 options min
     const filledOptions = newQ.options.filter(o => o.trim() !== "");
     if (!newQ.q || filledOptions.length < 2) {
-        return alert("Il faut une question et au moins 2 options remplies !");
+        return alert("Il faut une question et au moins 2 options (A et B) !");
     }
-    
     setFormData(prev => ({ ...prev, questions: [...prev.questions, { ...newQ }] }));
-    // Reset propre
     setNewQ({ q: '', options: ['', '', '', ''], a: 0 });
-  };
-
-  const deleteLevel = async (id) => {
-      if(!confirm("Supprimer ?")) return;
-      await fetch(`/api/game-levels/${id}`, { method: 'DELETE' });
-      loadLevels();
   };
 
   const handleAiGeneration = async () => {
@@ -60,7 +47,7 @@ export default function GamesTab() {
           const qs = await res.json();
           if (Array.isArray(qs)) {
               setFormData(prev => ({ ...prev, questions: [...prev.questions, ...qs] }));
-              setGenerationMode('manual'); // On bascule pour voir le résultat
+              setGenerationMode('manual'); // Pour voir le tableau
           } else { alert("L'IA n'a pas renvoyé de questions valides."); }
       } catch(e) { alert("Erreur serveur IA (Voir logs bleus)"); }
       setAiLoading(false);
@@ -69,21 +56,19 @@ export default function GamesTab() {
   return (
     <div>
       {!isEditing ? (
-        // LISTE DES NIVEAUX
         <>
             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px'}}>
                 <h3>🎮 Studio de Jeux</h3>
                 <button className="btn-primary" style={{width:'auto', backgroundColor:'#7c3aed'}} onClick={() => setIsEditing(true)}>➕ Créer un Niveau</button>
             </div>
             {levels.map(lvl => (
-                <div key={lvl._id || Math.random()} style={{background:'white', padding:'15px', border:'1px solid #e2e8f0', borderRadius:'8px', marginBottom:'10px', display:'flex', justifyContent:'space-between'}}>
+                <div key={lvl._id} style={{background:'white', padding:'15px', border:'1px solid #e2e8f0', borderRadius:'8px', marginBottom:'10px', display:'flex', justifyContent:'space-between'}}>
                     <div><strong>{lvl.title}</strong> <small>({lvl.questions.length} questions)</small></div>
-                    <button onClick={() => deleteLevel(lvl._id)} style={{background:'#fee2e2', color:'red', border:'none', borderRadius:'5px'}}>🗑️</button>
+                    <button style={{background:'#fee2e2', color:'red', border:'none', borderRadius:'5px'}}>🗑️</button>
                 </div>
             ))}
         </>
       ) : (
-        // EDITEUR
         <div className="card" style={{border:'2px solid #7c3aed'}}>
             <div style={{display:'flex', justifyContent:'space-between', marginBottom:'15px'}}>
                 <h3>Nouveau Niveau</h3>
@@ -92,10 +77,8 @@ export default function GamesTab() {
             
             <div className="row">
                 <div className="col form-group"><label className="form-label">Titre</label><input className="form-input" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} placeholder="Titre du niveau" /></div>
-                <div className="col form-group"><label className="form-label">Jeu</label><select className="form-select" value={formData.chapterId} onChange={e => setFormData({...formData, chapterId: e.target.value})}><option value="ch1-zombie">🧟 Zombie</option><option value="ch2-starship">🚀 Starship</option></select></div>
             </div>
 
-            {/* BARRE D'OUTILS */}
             <div style={{display:'flex', gap:'10px', marginBottom:'15px', background:'#f8fafc', padding:'10px', borderRadius:'8px'}}>
                 <button onClick={() => setGenerationMode('manual')} style={{flex:1, padding:'8px', border:'none', borderRadius:'5px', background: generationMode==='manual'?'#2563eb':'#e2e8f0', color: generationMode==='manual'?'white':'#64748b', cursor:'pointer', fontWeight:'bold'}}>✍️ Manuel</button>
                 <button onClick={() => setGenerationMode('ai')} style={{flex:1, padding:'8px', border:'none', borderRadius:'5px', background: generationMode==='ai'?'#db2777':'#e2e8f0', color: generationMode==='ai'?'white':'#64748b', cursor:'pointer', fontWeight:'bold'}}>🤖 IA Générative</button>
@@ -125,7 +108,7 @@ export default function GamesTab() {
                 </div>
             )}
 
-            {/* VISUEL TABLEAU (LE RESULTAT ATTENDU) */}
+            {/* LE FAMEUX TABLEAU VISUEL */}
             <div style={{marginTop:'20px'}}>
                 <h4>Aperçu du niveau ({formData.questions.length} questions)</h4>
                 {formData.questions.length > 0 ? (
@@ -140,12 +123,13 @@ export default function GamesTab() {
                                     {q.options.map((opt, idx) => (
                                         <div key={idx} style={{
                                             padding:'8px', borderRadius:'6px', fontSize:'0.9em', textAlign:'center',
-                                            background: idx === q.a ? '#16a34a' : '#f1f5f9', // VERT si bonne réponse
+                                            background: idx === q.a ? '#16a34a' : '#f1f5f9',
                                             color: idx === q.a ? 'white' : '#64748b',
                                             fontWeight: idx === q.a ? 'bold' : 'normal',
-                                            border: idx === q.a ? 'none' : '1px solid #e2e8f0'
+                                            border: idx === q.a ? 'none' : '1px solid #e2e8f0',
+                                            opacity: opt ? 1 : 0.5
                                         }}>
-                                            {String.fromCharCode(65+idx)}. {opt || '-'}
+                                            {String.fromCharCode(65+idx)}. {opt || '(Vide)'}
                                         </div>
                                     ))}
                                 </div>
