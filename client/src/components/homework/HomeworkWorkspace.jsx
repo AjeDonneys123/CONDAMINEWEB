@@ -50,40 +50,53 @@ const HomeworkWorkspace = ({ homework, user }) => {
             body: JSON.stringify({ 
                 userText: answer, 
                 homeworkInstruction: currentPage.instruction, 
-                playerId: user.id || user._id 
+                playerId: user.id || user._id,
+                classroom: user.classroom
             })
         });
         const data = await res.json();
+        if (data.error) throw new Error(data.error);
         setAiResult(data);
-    } catch(e) { alert("Erreur IA"); }
+    } catch(e) { alert("Erreur IA : " + e.message); }
     setSubmitting(false);
   };
 
   return (
-    <div className="flex flex-col h-[90vh] bg-slate-900 rounded-[40px] overflow-hidden border-4 border-slate-800 shadow-2xl select-none">
+    <div className="flex flex-col h-[90vh] bg-slate-900 rounded-[40px] overflow-hidden border-4 border-slate-800 shadow-2xl select-none relative">
       
-      {/* VISIONNEUSE HAUT */}
+      {/* 1. VISIONNEUSE HAUT */}
       <div id="top-container" onMouseDown={(e) => handleDrag(e, viewTop, topContentRef)} className="flex-[7] relative overflow-hidden bg-[#0a0f1a] cursor-grab active:cursor-grabbing">
         <div ref={topContentRef} className="absolute top-1/2 left-1/2 pointer-events-none transition-transform duration-75">
-            {docs.length > 0 && <img src={docs[docIdx]} draggable="false" onLoad={(e) => fitImage(e.target, document.getElementById('top-container'), viewTop, topContentRef)} className="max-w-none pointer-events-auto" />}
+            {docs.length > 0 && (
+              <img src={docs[docIdx]} draggable="false" onDragStart={(e) => e.preventDefault()} onLoad={(e) => fitImage(e.target, document.getElementById('top-container'), viewTop, topContentRef)} className="max-w-none pointer-events-auto" />
+            )}
         </div>
-        <div className="absolute top-6 left-1/2 -translate-x-1/2 bg-black/80 px-6 py-2 rounded-full text-white text-xs font-black">DOCUMENT {docIdx + 1} / {docs.length}</div>
-        <div className="absolute bottom-6 right-6 flex gap-3 z-10">
+
+        {/* FLÈCHES DE NAVIGATION (FIXÉES) */}
+        <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 flex justify-between px-6 pointer-events-none z-20">
+            <button onClick={(e) => { e.stopPropagation(); if(docIdx > 0) setDocIdx(docIdx-1); }} 
+                    className={`w-16 h-16 rounded-full bg-blue-600/80 text-white font-black text-2xl shadow-xl pointer-events-auto transition-all hover:scale-110 active:scale-95 ${docIdx === 0 ? 'opacity-0' : 'opacity-100'}`}>❮</button>
+            <button onClick={(e) => { e.stopPropagation(); if(docIdx < docs.length - 1) setDocIdx(docIdx+1); }} 
+                    className={`w-16 h-16 rounded-full bg-blue-600/80 text-white font-black text-2xl shadow-xl pointer-events-auto transition-all hover:scale-110 active:scale-95 ${docIdx === docs.length - 1 ? 'opacity-0' : 'opacity-100'}`}>❯</button>
+        </div>
+
+        <div className="absolute top-6 left-1/2 -translate-x-1/2 bg-black/80 px-6 py-2 rounded-full text-white text-xs font-black z-10 border border-white/20">DOCUMENT {docIdx + 1} / {docs.length}</div>
+        
+        <div className="absolute bottom-6 right-6 flex gap-3 z-30">
             <button onClick={(e) => { e.stopPropagation(); handleZoom(-0.2, viewTop, topContentRef); }} className="w-12 h-12 bg-black/60 rounded-2xl text-white font-bold border border-white/10">➖</button>
             <button onClick={(e) => { e.stopPropagation(); handleZoom(0.2, viewTop, topContentRef); }} className="w-12 h-12 bg-black/60 rounded-2xl text-white font-bold border border-white/10">➕</button>
         </div>
       </div>
 
-      {/* ZONE BAS */}
+      {/* 2. ZONE BAS */}
       <div className="flex-[3] bg-white flex border-t-4 border-orange-500">
         <div className="w-1/3 p-4 border-r flex flex-col bg-slate-50 relative">
-            <p className="font-black text-slate-800 text-xs leading-tight mb-2 uppercase">{currentPage.instruction}</p>
+            <p className="font-black text-slate-800 text-[10px] uppercase mb-2">{currentPage.instruction}</p>
             <div id="bot-container" onMouseDown={(e) => handleDrag(e, viewBottom, bottomContentRef)} className="flex-1 relative bg-black rounded-3xl overflow-hidden cursor-grab">
                 <div ref={bottomContentRef} className="absolute top-1/2 left-1/2 pointer-events-none transition-transform duration-75">
-                    {currentPage.questionImage && <img src={currentPage.questionImage} draggable="false" onLoad={(e) => fitImage(e.target, document.getElementById('bot-container'), viewBottom, bottomContentRef)} className="max-w-none pointer-events-auto" />}
+                    {currentPage.questionImage && <img src={currentPage.questionImage} draggable="false" onDragStart={(e) => e.preventDefault()} onLoad={(e) => fitImage(e.target, document.getElementById('bot-container'), viewBottom, bottomContentRef)} className="max-w-none pointer-events-auto" />}
                 </div>
-                {/* ZOOM QUESTION RAJOUTÉ ICI */}
-                <div className="absolute bottom-2 right-2 flex gap-1 scale-75">
+                <div className="absolute bottom-2 right-2 flex gap-1 scale-75 z-20">
                     <button onClick={(e) => { e.stopPropagation(); handleZoom(-0.2, viewBottom, bottomContentRef); }} className="w-8 h-8 bg-white/20 rounded-lg text-white">➖</button>
                     <button onClick={(e) => { e.stopPropagation(); handleZoom(0.2, viewBottom, bottomContentRef); }} className="w-8 h-8 bg-white/20 rounded-lg text-white">➕</button>
                 </div>
@@ -92,8 +105,8 @@ const HomeworkWorkspace = ({ homework, user }) => {
 
         <div className="w-2/3 p-6 flex flex-col gap-4">
             <textarea value={answer} onChange={e => setAnswer(e.target.value)} className="flex-1 w-full p-5 rounded-[24px] border-2 border-slate-100 outline-none focus:border-blue-500 font-medium text-lg resize-none shadow-inner" placeholder="Écris ta réponse ici..." />
-            <button onClick={submitToIA} disabled={submitting} className="bg-blue-600 text-white px-12 py-4 rounded-2xl font-black shadow-xl hover:bg-blue-700 active:scale-95 disabled:opacity-50">
-                {submitting ? "ANALYSE..." : "ENVOYER À L'IA 🤖"}
+            <button onClick={submitToIA} disabled={submitting} className="bg-blue-600 text-white py-5 rounded-[20px] font-black shadow-xl hover:bg-blue-700 active:scale-95 disabled:opacity-50">
+                {submitting ? "ANALYSE EN COURS..." : "ENVOYER À L'IA 🤖"}
             </button>
         </div>
       </div>
@@ -109,22 +122,18 @@ const HomeworkWorkspace = ({ homework, user }) => {
 
                 <div className="space-y-6 overflow-y-auto max-h-[50vh] pr-2">
                     <div className="bg-slate-50 p-6 rounded-3xl border shadow-inner">
-                        <h3 className="font-black text-blue-600 mb-2 uppercase text-sm">📝 Avis sur le fond :</h3>
+                        <h3 className="font-black text-blue-600 mb-2 uppercase text-xs tracking-widest">📝 Avis sur le fond :</h3>
                         <div className="text-slate-700 leading-relaxed" dangerouslySetInnerHTML={{__html: aiResult.feedback_fond}} />
                     </div>
 
                     {aiResult.corrections?.length > 0 && (
                         <div className="bg-red-50 p-6 rounded-3xl border-2 border-red-100">
-                            <h3 className="font-black text-red-600 mb-4 uppercase text-sm">✍️ Corrections d'orthographe :</h3>
+                            <h3 className="font-black text-red-600 mb-4 uppercase text-xs tracking-widest">✍️ Tableau des fautes :</h3>
                             <table className="w-full text-sm">
                                 <thead><tr className="text-left text-red-400"><th>Mot faux</th><th>Correction</th><th>Règle</th></tr></thead>
-                                <tbody>
+                                <tbody className="divide-y divide-red-100">
                                     {aiResult.corrections.map((c, i) => (
-                                        <tr key={i} className="border-t border-red-100">
-                                            <td className="py-2 text-red-600 line-through">{c.wrong}</td>
-                                            <td className="py-2 text-green-600 font-bold">{c.correct}</td>
-                                            <td className="py-2 text-slate-500 italic text-xs">{c.rule}</td>
-                                        </tr>
+                                        <tr key={i}><td className="py-2 text-red-600 line-through">{c.wrong}</td><td className="py-2 text-green-600 font-bold">{c.correct}</td><td className="py-2 text-slate-500 italic text-xs">{c.rule}</td></tr>
                                     ))}
                                 </tbody>
                             </table>
@@ -133,8 +142,8 @@ const HomeworkWorkspace = ({ homework, user }) => {
                 </div>
 
                 <div className="flex gap-4 mt-8">
-                    <button onClick={() => setAiResult(null)} className="flex-1 py-5 bg-slate-100 text-slate-500 rounded-3xl font-black uppercase">✍️ Améliorer</button>
-                    <button onClick={() => window.location.reload()} className="flex-1 py-5 bg-blue-600 text-white rounded-3xl font-black uppercase">Terminer 🎉</button>
+                    <button onClick={() => setAiResult(null)} className="flex-1 py-5 bg-slate-100 text-slate-500 rounded-[20px] font-black uppercase tracking-widest">✍️ Corriger</button>
+                    <button onClick={() => window.location.reload()} className="flex-1 py-5 bg-blue-600 text-white rounded-[20px] font-black uppercase tracking-widest shadow-lg">Terminer 🎉</button>
                 </div>
             </div>
           </div>
