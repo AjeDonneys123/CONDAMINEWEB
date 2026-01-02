@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import './Homework.css'; // IMPORT DU CSS LOCAL
+import './Homework.css';
 
-export default function HomeworkWorkspace({ homework, user }) {
+export default function HomeworkWorkspace({ homework, user, onQuit }) {
   const [pageIdx, setPageIdx] = useState(0);
   const [docIdx, setDocIdx] = useState(0);
   const [answer, setAnswer] = useState('');
@@ -19,7 +19,7 @@ export default function HomeworkWorkspace({ homework, user }) {
   const fitImage = (img, containerId, viewRef, contentRef) => {
     const container = document.getElementById(containerId);
     if (!img || !container || !contentRef.current) return;
-    const scale = Math.min(container.offsetWidth / img.naturalWidth, container.offsetHeight / img.naturalHeight) * 0.95;
+    const scale = Math.min(container.offsetWidth / img.naturalWidth, container.offsetHeight / img.naturalHeight) * 0.98;
     viewRef.current = { x: 0, y: 0, scale: scale };
     contentRef.current.style.transform = `translate(-50%, -50%) translate(0px, 0px) scale(${scale})`;
   };
@@ -49,12 +49,26 @@ export default function HomeworkWorkspace({ homework, user }) {
         const res = await fetch('/api/analyze-homework', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userText: answer, homeworkInstruction: currentPage.instruction, classroom: user.classroom, playerId: user.id || user._id })
+            body: JSON.stringify({ 
+                userText: answer, 
+                homeworkInstruction: currentPage.instruction, 
+                classroom: user.classroom,
+                playerId: user.id || user._id,
+                teacherDocUrls: docs, // ENVOI DES IMAGES COURS
+                questionImage: currentPage.questionImage // ENVOI IMAGE QUESTION
+            })
         });
         const data = await res.json();
         setAiResult(data);
     } catch(e) { alert("Erreur IA"); }
     setSubmitting(false);
+  };
+
+  const nextQuestion = () => {
+      setAiResult(null);
+      setAnswer('');
+      setPageIdx(pageIdx + 1);
+      setDocIdx(0);
   };
 
   return (
@@ -79,7 +93,7 @@ export default function HomeworkWorkspace({ homework, user }) {
       {/* ZONE BAS */}
       <div className="flex-[3] bg-white flex border-t-4 border-orange-500 min-h-[250px]">
         <div className="w-1/3 p-4 border-r flex flex-col bg-slate-50 relative">
-            <p className="font-black text-slate-800 text-[10px] uppercase mb-2 line-clamp-2">{currentPage.instruction}</p>
+            <p className="font-black text-slate-800 text-[10px] uppercase mb-2 line-clamp-2">Question {pageIdx + 1} / {homework.levels.length}</p>
             <div id="bot-container" onMouseDown={(e) => handleDrag(e, viewBottom, bottomContentRef)} className="flex-1 relative bg-black rounded-3xl overflow-hidden cursor-grab">
                 <div ref={bottomContentRef} className="absolute top-1/2 left-1/2 pointer-events-none transition-transform duration-75">
                     {currentPage.questionImage && <img src={currentPage.questionImage} draggable="false" onLoad={(e) => fitImage(e.target, 'bot-container', viewBottom, bottomContentRef)} className="max-w-none draggable-img pointer-events-auto" />}
@@ -96,7 +110,7 @@ export default function HomeworkWorkspace({ homework, user }) {
         </div>
       </div>
 
-      {/* MODALE RESULTAT */}
+      {/* MODALE RESULTAT RÉPARÉE */}
       {aiResult && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 ai-modal-glass">
             <div className="bg-white w-full max-w-3xl rounded-[50px] shadow-2xl p-10 flex flex-col my-auto animate-in zoom-in duration-300">
@@ -122,7 +136,11 @@ export default function HomeworkWorkspace({ homework, user }) {
                 </div>
                 <div className="flex gap-4 mt-8">
                     <button onClick={() => setAiResult(null)} className="flex-1 py-5 bg-slate-100 text-slate-500 rounded-3xl font-black uppercase tracking-widest">✍️ Corriger</button>
-                    <button onClick={() => window.location.reload()} className="flex-1 py-5 bg-blue-600 text-white rounded-3xl font-black shadow-lg">Terminer 🎉</button>
+                    {pageIdx < homework.levels.length - 1 ? (
+                        <button onClick={nextQuestion} className="flex-1 py-5 bg-green-600 text-white rounded-3xl font-black uppercase tracking-widest shadow-lg">Question Suivante ➔</button>
+                    ) : (
+                        <button onClick={onQuit} className="flex-1 py-5 bg-blue-600 text-white rounded-3xl font-black shadow-lg">Terminer 🎉</button>
+                    )}
                 </div>
             </div>
           </div>

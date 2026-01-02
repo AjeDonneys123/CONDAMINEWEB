@@ -48,10 +48,13 @@ ARBORESCENCE
 │   │   │       │   ├── ProfHeader.jsx
 │   │   │       │   └── ProfNav.jsx
 │   │   │       ├── games/
+│   │   │       │   ├── GameStudio.css
 │   │   │       │   └── GameStudio.jsx
 │   │   │       ├── homework/
+│   │   │       │   ├── HomeworkStudio.css
 │   │   │       │   └── HomeworkStudio.jsx
 │   │   │       └── students/
+│   │   │           ├── StudentsManager.css
 │   │   │           └── StudentsManager.jsx
 │   │   ├── index.css
 │   │   ├── main.jsx
@@ -71,43 +74,22 @@ ARBORESCENCE
 │   │   ├── ship.png
 │   │   ├── zombi.png
 │   │   └── ~$che_Croissance_Demographique_5e.docx
-│   ├── index.html
-│   ├── js/
-│   │   ├── app.js
-│   │   ├── eleve/
-│   │   │   ├── devoirs/
-│   │   │   │   └── devoirs.js
-│   │   │   ├── devoirs.js
-│   │   │   ├── eleve.js
-│   │   │   ├── games/
-│   │   │   │   ├── StarshipGame.js
-│   │   │   │   └── ZombieGame.js
-│   │   │   ├── jeux/
-│   │   │   │   └── jeux.js
-│   │   │   └── jeux.js
-│   │   ├── eleve.js
-│   │   ├── games/
-│   │   │   ├── HomeworkGame.js
-│   │   │   ├── JumperGame.js
-│   │   │   ├── RedactionGame.js
-│   │   │   ├── StarshipGame.js
-│   │   │   └── ZombieGame.js
-│   │   ├── prof/
-│   │   │   ├── dashboard/
-│   │   │   │   └── dashboard.js
-│   │   │   ├── dashboard.js
-│   │   │   ├── devoirs/
-│   │   │   │   └── devoirs.js
-│   │   │   ├── jeux/
-│   │   │   │   └── jeux.js
-│   │   │   └── prof.js
-│   │   └── prof.js
 │   └── style.css
 ├── readmeForIA.txt
+├── server/
+│   ├── features/
+│   │   ├── eleve/
+│   │   │   └── eleve.routes.js
+│   │   └── prof/
+│   │       └── prof.routes.js
+│   └── models/
+│       └── Schemas.js
 ├── setup_tools.js
 ├── snap.js
 ├── src/
 │   ├── check-models.js
+│   ├── models/
+│   │   └── Schemas.js
 │   └── server.js
 ├── update.txt
 └── zip.js
@@ -1004,18 +986,46 @@ export default function ProfNav({ activeTab, onTabChange }) {
 
 
 ############################################################
+### FICHIER: client/src/features/prof/games/GameStudio.css
+############################################################
+
+.game-studio-wrapper { width: 100%; }
+.btn-launch-editor { width: 100%; padding: 1.5rem; background: #9333ea; color: white; border-radius: 30px; font-weight: 900; border-bottom: 6px solid #7e22ce; margin-bottom: 2rem; }
+.game-level-card { background: white; padding: 1.5rem; border-radius: 24px; border: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center; }
+.game-level-card p { color: #cbd5e1; font-size: 0.6rem; font-weight: 900; text-transform: uppercase; }
+.btn-edit-lvl { background: #faf5ff; color: #9333ea; padding: 0.5rem 1rem; border-radius: 12px; font-weight: bold; }
+
+.editor-view { background: white; border-radius: 40px; padding: 2rem; border: 2px solid #faf5ff; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.05); }
+.editor-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+.editor-header h3 { font-weight: 900; color: #9333ea; font-style: italic; }
+.input-group-row { display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; margin-bottom: 1.5rem; }
+.input-group-row input, .input-group-row select { padding: 1rem; border-radius: 15px; border: 2px solid #f1f5f9; outline: none; font-weight: bold; }
+
+.ai-box { background: #faf5ff; padding: 1.5rem; border-radius: 25px; margin-bottom: 1.5rem; display: flex; flex-direction: column; gap: 1rem; }
+.ai-box textarea { border-radius: 15px; border: none; padding: 1rem; height: 80px; shadow: inset 0 2px 4px rgba(0,0,0,0.05); }
+.ai-box button { background: #9333ea; color: white; padding: 0.75rem; border-radius: 15px; font-weight: 900; }
+
+.manual-q-box { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; }
+.manual-q-box input { flex: 1; padding: 0.75rem; border-radius: 12px; border: 1px solid #eee; }
+.manual-q-box button { background: #3b82f6; color: white; padding: 0.75rem 1rem; border-radius: 12px; font-weight: bold; }
+
+.btn-save-game { width: 100%; padding: 1.5rem; background: #22c55e; color: white; border-radius: 30px; font-weight: 900; border-bottom: 6px solid #15803d; }
+
+
+############################################################
 ### FICHIER: client/src/features/prof/games/GameStudio.jsx
 ############################################################
 
 import React, { useState, useEffect } from 'react';
+import './GameStudio.css';
 
 export default function GameStudio() {
   const [levels, setLevels] = useState([]);
   const [isEditing, setIsEditing] = useState(false);
-  const [loadingIA, setLoadingIA] = useState(false);
   const [formData, setFormData] = useState({ _id: null, title: '', chapterId: 'ch1-zombie', questions: [] });
   const [currentQ, setCurrentQ] = useState({ q: '', options: ['', '', '', ''], a: 0 });
   const [aiPrompt, setAiPrompt] = useState('');
+  const [loadingIA, setLoadingIA] = useState(false);
 
   const load = async () => {
     const data = await fetch('/api/game-levels/all').then(r => r.json());
@@ -1023,78 +1033,88 @@ export default function GameStudio() {
   };
   useEffect(() => { load(); }, []);
 
-  const handleAiGenerate = async () => {
-    if (!aiPrompt) return alert("Sujet requis !");
+  const handleAi = async () => {
     setLoadingIA(true);
-    try {
-        const questions = await fetch('/api/generate-game-content', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ topic: aiPrompt, numQuestions: 5 })
-        }).then(r => r.json());
-        if (Array.isArray(questions)) {
-            setFormData(prev => ({ ...prev, questions: [...prev.questions, ...questions] }));
-        }
-    } catch(e) { alert("Erreur IA"); }
+    const questions = await fetch('/api/generate-game-content', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: aiPrompt, numQuestions: 5 })
+    }).then(r => r.json());
+    if (Array.isArray(questions)) setFormData(prev => ({ ...prev, questions: [...prev.questions, ...questions] }));
     setLoadingIA(false);
   };
 
-  const handleSave = async () => {
-    await fetch('/api/game-levels', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
-    });
-    alert("Niveau sauvegardé !"); setIsEditing(false); load();
-  };
-
   return (
-    <div className="space-y-6">
+    <div className="game-studio-wrapper">
       {!isEditing ? (
         <>
           <button onClick={() => { setFormData({ _id: null, title: '', chapterId: 'ch1-zombie', questions: [] }); setIsEditing(true); }} 
-                  className="w-full bg-purple-600 text-white py-6 rounded-[30px] font-black text-xl shadow-xl border-b-8 border-purple-800 transition-all uppercase tracking-widest">
-            ➕ Créer Niveau de Jeu
-          </button>
+                  className="btn-launch-editor">➕ CRÉER UN NIVEAU DE JEU</button>
           <div className="grid gap-4">
             {levels.map(lvl => (
-              <div key={lvl._id} className="bg-white p-6 rounded-3xl border flex justify-between items-center shadow-sm">
-                <div><b className="text-lg text-slate-800">{lvl.title}</b><p className="text-xs text-slate-400 font-bold uppercase">{lvl.chapterId}</p></div>
-                <button onClick={() => { setFormData(lvl); setIsEditing(true); }} className="w-12 h-12 bg-purple-50 text-purple-600 rounded-2xl font-bold">🖋️</button>
+              <div key={lvl._id} className="game-level-card">
+                <div><b>{lvl.title}</b><p>{lvl.chapterId}</p></div>
+                <button onClick={() => { setFormData(lvl); setIsEditing(true); }} className="btn-edit-lvl">🖋️</button>
               </div>
             ))}
           </div>
         </>
       ) : (
-        <div className="bg-white rounded-[40px] border-2 border-purple-100 p-8 space-y-6 shadow-2xl">
-          <div className="flex justify-between items-center border-b pb-4">
-            <h3 className="text-2xl font-black text-purple-600 italic">Studio de Jeu</h3>
-            <button onClick={() => setIsEditing(false)} className="text-slate-400 font-bold">✕</button>
+        <div className="editor-view">
+          <div className="editor-header"><h3>Configuration Jeu</h3><button onClick={() => setIsEditing(false)}>✕</button></div>
+          <div className="input-group-row">
+            <input placeholder="Titre..." value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
+            <select value={formData.chapterId} onChange={e => setFormData({...formData, chapterId: e.target.value})}><option value="ch1-zombie">🧟 Zombie</option><option value="ch2-starship">🚀 Starship</option></select>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <input className="p-4 rounded-2xl bg-slate-50 border-none outline-none font-bold" placeholder="Titre" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
-            <select className="p-4 rounded-2xl bg-slate-50 border-none outline-none font-bold text-purple-600" value={formData.chapterId} onChange={e => setFormData({...formData, chapterId: e.target.value})}>
-                <option value="ch1-zombie">🧟 Zombie</option><option value="ch2-starship">🚀 Starship</option>
-            </select>
+          <div className="ai-box">
+              <textarea placeholder="Sujet IA..." value={aiPrompt} onChange={e => setAiPrompt(e.target.value)} />
+              <button onClick={handleAi} disabled={loadingIA}>{loadingIA ? "Attente..." : "GÉNÉRER PAR IA"}</button>
           </div>
-          <div className="bg-purple-50 p-6 rounded-[30px] border border-purple-200 space-y-4">
-              <textarea className="w-full p-4 rounded-2xl border-none outline-none h-24 shadow-inner" placeholder="Sujet IA..." value={aiPrompt} onChange={e => setAiPrompt(e.target.value)} />
-              <button onClick={handleAiGenerate} disabled={loadingIA} className="w-full bg-purple-600 text-white py-4 rounded-2xl font-black shadow-lg uppercase">{loadingIA ? "🪄 IA EN TRAVAIL..." : "GÉNÉRER PAR IA ✨"}</button>
+          <div className="manual-q-box">
+              <input placeholder="Question manuelle..." value={currentQ.q} onChange={e=>setCurrentQ({...currentQ, q: e.target.value})} />
+              <button onClick={()=>{setFormData(p=>({...p, questions: [...p.questions, currentQ]})); setCurrentQ({q:'', options:['','','',''], a:0});}}>Ajouter</button>
           </div>
-          <div className="max-h-60 overflow-y-auto space-y-2 pr-2">
-            {formData.questions.map((q, i) => (
-                <div key={i} className="p-4 bg-white rounded-2xl border flex justify-between items-center shadow-sm">
-                    <span className="font-bold text-sm truncate mr-4">{i+1}. {q.q}</span>
-                    <button onClick={()=>{const n=[...formData.questions]; n.splice(i,1); setFormData({...formData, questions:n});}} className="text-red-300">✕</button>
-                </div>
-            ))}
-          </div>
-          <button onClick={handleSave} className="w-full bg-green-500 text-white py-6 rounded-[30px] font-black text-2xl shadow-xl shadow-green-100 border-b-8 border-green-700 uppercase tracking-tighter">💾 Sauvegarder</button>
+          <button onClick={async ()=>{ await fetch('/api/game-levels', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(formData)}); setIsEditing(false); load(); }} className="btn-save-game">💾 SAUVEGARDER LE QUIZ</button>
         </div>
       )}
     </div>
   );
 }
+
+
+############################################################
+### FICHIER: client/src/features/prof/homework/HomeworkStudio.css
+############################################################
+
+.studio-container { width: 100%; }
+.btn-create-hw { width: 100%; padding: 1.5rem; background: #f97316; color: white; border-radius: 30px; font-weight: 900; font-size: 1.2rem; border-bottom: 6px solid #c2410c; margin-bottom: 2rem; }
+.hw-list-grid { display: grid; gap: 1rem; }
+.hw-admin-card { background: white; padding: 1.5rem; border-radius: 24px; border: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center; }
+.hw-admin-card p { color: #94a3b8; font-size: 0.8rem; font-weight: bold; }
+.hw-actions { display: flex; gap: 0.5rem; }
+.btn-edit, .btn-delete { width: 40px; height: 40px; border-radius: 12px; font-weight: bold; }
+.btn-edit { background: #fff7ed; color: #f97316; }
+.btn-delete { background: #fef2f2; color: #ef4444; }
+
+.edit-modal-content { background: white; border-radius: 40px; padding: 2rem; border: 2px solid #fff7ed; }
+.edit-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
+.edit-header h3 { font-weight: 900; color: #f97316; font-style: italic; }
+.edit-grid-top { display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; margin-bottom: 2rem; }
+.input-title, .select-class { padding: 1rem; border-radius: 15px; border: 2px solid #f1f5f9; font-weight: bold; outline: none; }
+
+.page-editor-card { background: #fafafa; padding: 1.5rem; border-radius: 30px; border: 1px solid #eee; margin-bottom: 1.5rem; }
+.page-header { display: flex; justify-content: space-between; font-size: 0.7rem; font-weight: 900; color: #cbd5e1; margin-bottom: 1rem; }
+.docs-preview { display: flex; flex-wrap: wrap; gap: 0.5rem; background: white; padding: 1rem; border-radius: 20px; border: 2px dashed #eee; min-height: 80px; }
+.doc-thumb { width: 50px; height: 50px; border-radius: 8px; object-fit: cover; }
+.btn-add-file { width: 50px; height: 50px; background: #eff6ff; color: #3b82f6; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; cursor: pointer; }
+
+.upload-zone-bottom { display: grid; grid-template-columns: 100px 1fr; gap: 1rem; margin-top: 1rem; }
+.q-img-box { height: 100px; background: white; border: 1px solid #eee; border-radius: 15px; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; font-size: 0.6rem; color: #cbd5e1; text-align: center; }
+.hidden-input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.upload-zone-bottom textarea { border-radius: 15px; border: 1px solid #eee; padding: 1rem; font-size: 0.9rem; resize: none; }
+
+.btn-add-page { width: 100%; padding: 1rem; border: 2px dashed #ddd; border-radius: 20px; color: #94a3b8; font-weight: bold; margin-bottom: 1.5rem; }
+.btn-save-final { width: 100%; padding: 1.5rem; background: #22c55e; color: white; border-radius: 30px; font-weight: 900; font-size: 1.2rem; border-bottom: 6px solid #15803d; }
 
 
 ############################################################
@@ -1102,11 +1122,13 @@ export default function GameStudio() {
 ############################################################
 
 import React, { useState, useEffect } from 'react';
+import './HomeworkStudio.css';
 
 export default function HomeworkStudio() {
   const [hws, setHws] = useState([]);
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({ _id: null, title: '', classroom: 'Toutes', levels: [] });
+  const [uploading, setUploading] = useState(false);
 
   const load = async () => {
     const data = await fetch('/api/homework-all').then(r => r.json());
@@ -1114,81 +1136,85 @@ export default function HomeworkStudio() {
   };
   useEffect(() => { load(); }, []);
 
-  const handleUpload = async (file, idx, type) => {
-    const fd = new FormData(); fd.append('file', file);
-    const res = await fetch('/api/upload', { method: 'POST', body: fd }).then(r => r.json());
-    if (res.ok) {
-        const n = [...formData.levels];
-        if (type === 'doc') n[idx].attachmentUrls.push(res.imageUrl);
-        else n[idx].questionImage = res.imageUrl;
-        setFormData({ ...formData, levels: n });
+  const handleUpload = async (files, idx, type) => {
+    setUploading(true);
+    const newLevels = [...formData.levels];
+    for (let file of Array.from(files)) {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/upload', { method: 'POST', body: fd }).then(r => r.json());
+      if (res.ok) {
+        if (type === 'doc') newLevels[idx].attachmentUrls.push(res.imageUrl);
+        else newLevels[idx].questionImage = res.imageUrl;
+      }
     }
+    setFormData({ ...formData, levels: newLevels });
+    setUploading(false);
   };
 
-  const handleSave = async () => {
-    const method = formData._id ? 'PUT' : 'POST';
-    const url = formData._id ? `/api/homework/${formData._id}` : '/api/homework';
-    await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formData) });
-    alert("Devoir enregistré !"); setIsEditing(false); load();
+  const save = async () => {
+    if (!formData.title) return alert("Titre requis !");
+    const res = await fetch('/api/homework', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(formData)
+    }).then(r => r.json());
+    if (res.ok) { setIsEditing(false); load(); }
   };
 
   return (
-    <div className="space-y-6">
+    <div className="studio-container">
       {!isEditing ? (
         <>
-          <button onClick={() => { setFormData({ _id: null, title: '', classroom: 'Toutes', levels: [{ instruction: '', attachmentUrls: [], aiPrompt: '', questionImage: null }] }); setIsEditing(true); }} 
-                  className="w-full bg-orange-500 text-white py-6 rounded-[30px] font-black text-xl shadow-xl border-b-8 border-orange-700 active:translate-y-1 active:border-b-0 transition-all uppercase tracking-widest">
-            ➕ Créer Devoir Maison
-          </button>
-          <div className="grid gap-4">
+          <button onClick={() => { setFormData({ _id: null, title: '', classroom: 'Toutes', levels: [{ instruction: '', attachmentUrls: [], questionImage: null }] }); setIsEditing(true); }} 
+                  className="btn-create-hw">➕ NOUVEAU DEVOIR MAISON</button>
+          <div className="hw-list-grid">
             {hws.map(h => (
-              <div key={h._id} className="bg-white p-6 rounded-3xl border flex justify-between items-center shadow-sm hover:border-orange-300 transition-all">
-                <div><b className="text-lg text-slate-800">{h.title}</b><p className="text-xs text-slate-400 font-bold uppercase">{h.classroom}</p></div>
-                <div className="flex gap-2">
-                    <button onClick={() => { setFormData(h); setIsEditing(true); }} className="w-12 h-12 bg-orange-50 text-orange-600 rounded-2xl font-bold">🖋️</button>
-                    <button onClick={async () => { if(confirm("Suppr ?")) { await fetch(`/api/homework/${h._id}`, {method:'DELETE'}); load(); }}} className="w-12 h-12 bg-red-50 text-red-500 rounded-2xl font-bold">🗑️</button>
+              <div key={h._id} className="hw-admin-card">
+                <div><b>{h.title}</b><p>{h.classroom} • {h.levels.length} Page(s)</p></div>
+                <div className="hw-actions">
+                    <button onClick={() => { setFormData(h); setIsEditing(true); }} className="btn-edit">🖋️</button>
+                    <button onClick={async () => { if(confirm("Suppr ?")) { await fetch(`/api/homework/${h._id}`, {method:'DELETE'}); load(); }}} className="btn-delete">🗑️</button>
                 </div>
               </div>
             ))}
           </div>
         </>
       ) : (
-        <div className="bg-white rounded-[40px] border-2 border-orange-100 p-8 space-y-6 shadow-2xl">
-          <div className="flex justify-between items-center border-b pb-4">
-            <h3 className="text-2xl font-black text-orange-600 italic">Édition du Devoir</h3>
-            <button onClick={() => setIsEditing(false)} className="text-slate-400 font-bold">✕</button>
+        <div className="edit-modal-content">
+          <div className="edit-header">
+            <h3>{formData._id ? 'Modifier Devoir' : 'Nouveau Devoir'}</h3>
+            <button onClick={() => setIsEditing(false)} className="btn-close">✕</button>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <input className="p-4 rounded-2xl bg-slate-50 border-none outline-none font-bold" placeholder="Titre" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
-            <select className="p-4 rounded-2xl bg-slate-50 border-none outline-none font-bold text-orange-600" value={formData.classroom} onChange={e => setFormData({...formData, classroom: e.target.value})}>
-                <option value="Toutes">Toutes les classes</option><option value="6D">6eD</option><option value="5B">5eB</option><option value="5C">5eC</option>
+          <div className="edit-grid-top">
+            <input className="input-title" placeholder="Titre du devoir..." value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
+            <select className="select-class" value={formData.classroom} onChange={e => setFormData({...formData, classroom: e.target.value})}>
+                <option value="Toutes">Toutes les classes</option><option value="6D">6eD</option><option value="5B">5eB</option><option value="5C">5eC</option><option value="2A">2A</option><option value="2CD">2CD</option>
             </select>
           </div>
-          <div className="space-y-6">
+          <div className="pages-list">
             {formData.levels.map((lvl, idx) => (
-                <div key={idx} className="p-6 bg-slate-50 rounded-[30px] border border-slate-200">
-                    <div className="flex justify-between mb-4"><h4 className="font-black text-slate-400 text-xs uppercase">Page {idx + 1}</h4><button onClick={()=>{const n=[...formData.levels]; n.splice(idx,1); setFormData({...formData, levels:n});}} className="text-red-400 text-xs font-bold uppercase hover:underline">Supprimer</button></div>
-                    <div className="flex flex-wrap gap-2 p-4 bg-white rounded-2xl border-2 border-dashed border-slate-200 min-h-[80px] mb-4">
-                        {lvl.attachmentUrls.map((url, uIdx) => (
-                            <div key={uIdx} className="relative w-14 h-14 rounded-lg overflow-hidden border">
-                                <img src={url} className="w-full h-full object-cover" />
-                                <button onClick={()=>{const n=[...formData.levels]; n[idx].attachmentUrls.splice(uIdx,1); setFormData({...formData, levels:n});}} className="absolute top-0 right-0 bg-red-500 text-white w-4 h-4 text-[8px]">✕</button>
-                            </div>
-                        ))}
-                        <label className="w-14 h-14 flex items-center justify-center bg-slate-50 rounded-lg cursor-pointer hover:bg-blue-50 text-blue-400 font-bold text-xl">+ <input type="file" className="hidden" multiple onChange={e => Array.from(e.target.files).forEach(f => handleUpload(f, idx, 'doc'))} /></label>
-                    </div>
-                    <div className="grid grid-cols-3 gap-4 bg-white p-4 rounded-2xl border">
-                        <div className="h-24 bg-slate-50 rounded-xl border flex items-center justify-center overflow-hidden relative">
-                            {lvl.questionImage ? <img src={lvl.questionImage} className="max-h-full" /> : <span className="text-[10px] text-slate-300 font-bold uppercase">Image Question</span>}
-                            <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={e => handleUpload(e.target.files[0], idx, 'qimg')} />
+                <div key={idx} className="page-editor-card">
+                    <div className="page-header"><span>PAGE {idx+1}</span><button onClick={()=>{const n=[...formData.levels]; n.splice(idx,1); setFormData({...formData, levels:n});}}>Supprimer</button></div>
+                    <div className="upload-zone-top">
+                        <p>Ligne 1 : Documents (PDF / Images)</p>
+                        <div className="docs-preview">
+                            {lvl.attachmentUrls.map((url, uIdx) => <img key={uIdx} src={url} className="doc-thumb" />)}
+                            <label className="btn-add-file">+<input type="file" multiple className="hidden" onChange={e => handleUpload(e.target.files, idx, 'doc')} /></label>
                         </div>
-                        <textarea className="col-span-2 p-3 rounded-xl bg-slate-50 border-none text-sm shadow-inner" placeholder="Consigne élève..." rows="2" value={lvl.instruction} onChange={e => { const n = [...formData.levels]; n[idx].instruction = e.target.value; setFormData({...formData, levels:n}); }} />
+                    </div>
+                    <div className="upload-zone-bottom">
+                        <div className="q-img-box">
+                            {lvl.questionImage ? <img src={lvl.questionImage} /> : <span>Image Question</span>}
+                            <input type="file" className="hidden-input" onChange={e => handleUpload(e.target.files, idx, 'qimg')} />
+                        </div>
+                        <textarea placeholder="Consigne élève..." value={lvl.instruction} onChange={e => {const n=[...formData.levels]; n[idx].instruction=e.target.value; setFormData({...formData, levels:n});}} />
                     </div>
                 </div>
             ))}
           </div>
-          <button onClick={() => setFormData({...formData, levels: [...formData.levels, { instruction:'', attachmentUrls:[], aiPrompt:'', questionImage:null }]})} className="w-full py-4 bg-slate-100 text-slate-400 rounded-2xl font-bold border-2 border-dashed hover:bg-slate-200 transition-all uppercase text-xs tracking-widest">+ AJOUTER UNE PAGE</button>
-          <button onClick={handleSave} className="w-full bg-green-500 text-white py-6 rounded-[30px] font-black text-2xl shadow-xl shadow-green-100 border-b-8 border-green-700 active:translate-y-1 active:border-b-0 transition-all uppercase tracking-tighter">💾 Sauvegarder en BDD</button>
+          <button onClick={() => setFormData({...formData, levels: [...formData.levels, {instruction:'', attachmentUrls:[], questionImage:null}]})} className="btn-add-page">+ AJOUTER UNE PAGE</button>
+          <button onClick={save} disabled={uploading} className="btn-save-final">{uploading ? "UPLOAD EN COURS..." : "💾 SAUVEGARDER LE DEVOIR"}</button>
         </div>
       )}
     </div>
@@ -1197,14 +1223,33 @@ export default function HomeworkStudio() {
 
 
 ############################################################
+### FICHIER: client/src/features/prof/students/StudentsManager.css
+############################################################
+
+.manager-container { display: flex; flex-direction: column; gap: 1.5rem; }
+.filter-bar { display: flex; gap: 1rem; background: #f8fafc; padding: 1rem; border-radius: 20px; }
+.filter-bar select { flex: 1; padding: 0.75rem; border-radius: 12px; border: none; font-weight: bold; outline: none; }
+.btn-test-class { background: #2563eb; color: white; padding: 0.75rem 2rem; border-radius: 12px; font-weight: 900; shadow: 0 4px 6px rgba(37, 99, 235, 0.2); }
+.search-input { width: 100%; padding: 1rem; border-radius: 15px; border: 2px solid #f1f5f9; outline: none; }
+.table-wrapper { border-radius: 24px; border: 1px solid #f1f5f9; overflow: hidden; background: white; }
+.students-table { width: 100%; border-collapse: collapse; }
+.students-table th { background: #f8fafc; padding: 1rem; font-size: 0.6rem; color: #94a3b8; text-transform: uppercase; font-weight: 900; }
+.students-table td { padding: 1rem; border-top: 1px solid #f8fafc; }
+.name-cell { font-weight: bold; color: #1e293b; }
+.class-cell span { background: #eff6ff; color: #3b82f6; padding: 0.25rem 0.75rem; border-radius: 8px; font-weight: 900; font-size: 0.7rem; }
+.action-cell button { color: #f87171; font-weight: bold; font-size: 0.7rem; text-transform: uppercase; }
+
+
+############################################################
 ### FICHIER: client/src/features/prof/students/StudentsManager.jsx
 ############################################################
 
 import React, { useState, useEffect } from 'react';
+import './StudentsManager.css';
 
 export default function StudentsManager() {
   const [players, setPlayers] = useState([]);
-  const [filterClass, setFilterClass] = useState('all');
+  const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
 
   const load = async () => {
@@ -1213,43 +1258,38 @@ export default function StudentsManager() {
   };
   useEffect(() => { load(); }, []);
 
-  const handleTestClass = async () => {
-    if(filterClass === 'all') return alert("Sélectionne une classe !");
+  const handleTest = async () => {
+    if(filter === 'all') return alert("Classe ?");
     const res = await fetch('/api/register', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ firstName: "Eleve", lastName: "Test", classroom: filterClass })
+        body: JSON.stringify({ firstName: "Eleve", lastName: "Test", classroom: filter })
     }).then(r => r.json());
     if (res.ok) { localStorage.setItem("player", JSON.stringify(res)); window.location.reload(); }
   };
 
-  const filtered = players.filter(p => (filterClass === 'all' || p.classroom === filterClass) && (p.firstName + p.lastName).toLowerCase().includes(search.toLowerCase()));
+  const filtered = players.filter(p => (filter === 'all' || p.classroom === filter) && (p.firstName + p.lastName).toLowerCase().includes(search.toLowerCase()));
 
   return (
-    <div className="space-y-6">
-      <div className="flex gap-4 bg-slate-50 p-4 rounded-3xl border border-slate-100">
-        <select className="flex-1 p-4 rounded-2xl border-none font-bold bg-white outline-none cursor-pointer" value={filterClass} onChange={e => setFilterClass(e.target.value)}>
+    <div className="manager-container">
+      <div className="filter-bar">
+        <select value={filter} onChange={e => setFilter(e.target.value)}>
             <option value="all">Toutes les classes</option>
-            <option value="6D">6eD</option><option value="5B">5eB</option><option value="5C">5eC</option>
-            <option value="2A">2de A</option><option value="2CD">2de CD</option>
+            <option value="6D">6eD</option><option value="5B">5eB</option><option value="5C">5eC</option><option value="2A">2A</option><option value="2CD">2CD</option>
         </select>
-        <button onClick={handleTestClass} className="bg-blue-600 text-white px-8 rounded-2xl font-black shadow-lg hover:bg-blue-700 transition-all uppercase tracking-tighter">🎮 Tester</button>
+        <button onClick={handleTest} className="btn-test-class">🎮 TESTER LA CLASSE</button>
       </div>
-      
-      <input className="w-full p-4 rounded-2xl border-2 outline-none focus:border-blue-500 font-medium" placeholder="🔍 Chercher un élève..." value={search} onChange={e => setSearch(e.target.value)} />
-
-      <div className="border border-slate-100 rounded-[32px] overflow-hidden bg-white shadow-sm">
-        <table className="w-full text-left">
-            <thead className="bg-slate-50 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b">
-                <tr><th className="p-5">Nom de l'élève</th><th className="p-5 text-center">Classe</th><th className="p-5 text-right">Actions</th></tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
+      <input className="search-input" placeholder="🔍 Chercher un élève..." value={search} onChange={e => setSearch(e.target.value)} />
+      <div className="table-wrapper">
+        <table className="students-table">
+            <thead><tr><th>Nom</th><th>Classe</th><th>Actions</th></tr></thead>
+            <tbody>
                 {filtered.map(p => (
-                    <tr key={p._id} className="hover:bg-slate-50 transition-colors">
-                        <td className="p-5 font-bold text-slate-700">{p.firstName} {p.lastName}</td>
-                        <td className="p-5 text-center"><span className="bg-blue-50 text-blue-600 px-3 py-1 rounded-full text-xs font-black">{p.classroom}</span></td>
-                        <td className="p-5 text-right">
-                            <button onClick={async () => { if(confirm("Reset ?")) { await fetch('/api/reset-player', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({playerId: p._id})}); load(); } }} className="text-red-300 hover:text-red-500 font-bold text-xs uppercase tracking-tighter">Reset</button>
+                    <tr key={p._id}>
+                        <td className="name-cell">{p.firstName} {p.lastName}</td>
+                        <td className="class-cell"><span>{p.classroom}</span></td>
+                        <td className="action-cell">
+                            <button onClick={async () => { if(confirm("Reset ?")) { await fetch('/api/reset-player', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({playerId: p._id})}); load(); } }}>Reset</button>
                         </td>
                     </tr>
                 ))}
@@ -1590,2564 +1630,6 @@ initializeDatabase();
 
 
 ############################################################
-### FICHIER: public/index.html
-############################################################
-
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Plateforme Condamine</title>
-  <link rel="stylesheet" href="style.css">
-</head>
-<body>
-  <header>
-    <div class="header-left">
-      <button id="backToMenuBtn" style="display:none; padding:8px 15px; background:white; border:1px solid #ccc; border-radius:8px;">← Menu</button>
-      <h1>Condamine</h1>
-    </div>
-    <div class="header-right"> 
-      <button id="myMistakesBtn" style="display:none; background:#f472b6; color:white; padding:8px 15px; border-radius:8px;">📝 Fautes</button>
-      <button id="backToProfBtn" style="display: none; background-color: #f59e0b; color:white; padding:8px 15px; border-radius:8px;">🎓 Prof</button>
-      <div id="studentBadge" style="font-weight:bold; display:none; color:#334155;"></div>
-      <button id="logoutBtn" style="display: none; padding:8px 15px; background:#eee; border-radius:8px;">Déconnexion</button>
-    </div>
-  </header>
-
-  <main class="wrap">
-    <div id="main-content">
-        <!-- Zone d'injection dynamique -->
-        <section id="registerCard" class="card">
-          <h2>👋 Connexion</h2>
-          <form id="registerForm">
-            <input id="firstName" placeholder="Prénom" required style="margin-bottom:10px; padding:12px; width:100%; border-radius:8px; border:1px solid #ddd;">
-            <input id="lastName" placeholder="Nom" required style="margin-bottom:10px; padding:12px; width:100%; border-radius:8px; border:1px solid #ddd;">
-            <select id="classroom" style="margin-bottom:10px; padding:12px; width:100%; border-radius:8px; border:1px solid #ddd;">
-                <option value="6D">6eD</option><option value="5B">5eB</option><option value="5C">5eC</option>
-                <option value="2A">2de A</option><option value="2CD">2de CD</option>
-            </select>
-            <button type="submit" class="action-btn" style="width:100%; padding:12px; background:#2563eb; color:white; border-radius:8px; font-weight:bold;">Entrer</button>
-          </form>
-          <div id="profPasswordModal" style="display:none; margin-top:15px; border-top:1px solid #eee; padding-top:10px;">
-               <input type="password" id="profPassword" placeholder="Mot de passe prof" style="padding:12px; margin-bottom:10px; width:100%; border-radius:8px; border:1px solid #ddd;">
-               <button id="validateProfPasswordBtn" class="action-btn" style="background:#f59e0b; width:100%; padding:12px; color:white; border-radius:8px; font-weight:bold;">Valider</button>
-          </div>
-        </section>
-    </div>
-  </main>
-
-  <div id="mistakesModal" class="modal-overlay" style="display: none;">
-      <div class="modal-content">
-          <button id="closeMistakesBtn" style="position:absolute; top:15px; right:15px;">✕</button>
-          <h3>Mon carnet de fautes</h3>
-          <div id="mistakesList"></div>
-      </div>
-  </div>
-
-  <script type="module" src="js/app.js"></script>
-</body>
-</html>
-
-
-
-
-
-############################################################
-### FICHIER: public/js/app.js
-############################################################
-
-// 1. SERVICES GLOBAUX (Accessibles partout via window.api)
-window.api = {
-    async post(url, data) { 
-        try { 
-            const r = await fetch(url, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) }); 
-            return await r.json(); 
-        } catch(e) { console.error("Erreur API Post:", e); return {ok:false}; } 
-    },
-    async get(url) { 
-        try { 
-            const r = await fetch(url); 
-            return r.ok ? await r.json() : null; 
-        } catch(e) { console.error("Erreur API Get:", e); return null; } 
-    },
-    async upload(file) { 
-        try { 
-            const fd = new FormData(); fd.append('file', file); 
-            const r = await fetch('/api/upload', { method: 'POST', body: fd }); 
-            return await r.json(); 
-        } catch(e) { console.error("Upload Error:", e); return {ok:false}; } 
-    },
-    // RÉPARATION ICI : Ajout des méthodes attendues par les modules
-    async getHomeworks(classroom) { 
-        const url = classroom ? `/api/homework/${classroom}` : '/api/homework-all';
-        return await this.get(url) || []; 
-    },
-    async fetchPlayers() { return await this.get('/api/players') || []; },
-    async verifyWithAI(payload) { return await this.post('/api/verify-answer-ai', payload); }
-};
-
-// 2. ÉTAT GLOBAL (window.state)
-window.state = {
-    user: JSON.parse(localStorage.getItem("player") || "null"),
-    getClassKey: (c) => { 
-        if(!c) return "6e"; 
-        const val = c.toUpperCase(); 
-        if (val.includes("6")) return "6e"; 
-        if (val.includes("5")) return "5e"; 
-        return "2de"; 
-    },
-    isRKeyDown: false, isTKeyDown: false, isGlobalPaused: false,
-    allQuestionsData: {}, 
-    currentPlayerId: null, 
-    currentPlayerData: null
-};
-
-document.addEventListener("DOMContentLoaded", async () => {
-    const mainContent = document.getElementById("main-content");
-    if (!mainContent) return;
-
-    if (window.state.user) {
-        window.state.currentPlayerId = window.state.user.id || window.state.user._id;
-        window.state.currentPlayerData = window.state.user;
-        
-        document.getElementById("registerCard").style.display = "none";
-        document.getElementById("logoutBtn").style.display = "block";
-        const badge = document.getElementById("studentBadge");
-        if(badge) { badge.textContent = `${window.state.user.firstName} ${window.state.user.lastName}`; badge.style.display = "block"; }
-
-        const isProf = (window.state.user.firstName.toLowerCase().includes("jean") && window.state.user.lastName.toLowerCase().includes("vuill")) || window.state.user.id === "prof";
-        
-        if (isProf) {
-            const module = await import('./prof/prof.js');
-            module.initProfDashboard(mainContent);
-        } else {
-            const module = await import('./eleve/eleve.js');
-            module.initEleveDashboard(mainContent);
-        }
-    }
-
-    const regForm = document.getElementById("registerForm");
-    if(regForm) regForm.onsubmit = async (e) => {
-        e.preventDefault();
-        const f = document.getElementById("firstName").value.trim();
-        const l = document.getElementById("lastName").value.trim();
-        const c = document.getElementById("classroom").value;
-
-        if (f.toLowerCase() === "jean" && l.toLowerCase() === "vuillet") { 
-            document.getElementById("profPasswordModal").style.display = "block"; 
-            return; 
-        }
-
-        const res = await window.api.post('/api/register', { firstName: f, lastName: l, classroom: c });
-        if(res.ok) { 
-            localStorage.setItem("player", JSON.stringify(res)); 
-            window.location.reload(); 
-        }
-    };
-
-    const valProfBtn = document.getElementById("validateProfPasswordBtn");
-    if(valProfBtn) valProfBtn.onclick = () => {
-        if(document.getElementById("profPassword").value === "Clemenceau1919") {
-            localStorage.setItem("player", JSON.stringify({ id: "prof", firstName: "Jean", lastName: "Vuillet", classroom: "Professeur" }));
-            window.location.reload();
-        }
-    };
-
-    document.getElementById("logoutBtn").onclick = () => { localStorage.removeItem("player"); window.location.reload(); };
-});
-
-document.addEventListener("keydown", (e) => { 
-    if (e.key.toLowerCase() === "r") window.state.isRKeyDown = true; 
-    if (e.key.toLowerCase() === "t") window.state.isTKeyDown = true; 
-});
-document.addEventListener("keyup", (e) => { 
-    if (e.key.toLowerCase() === "r") window.state.isRKeyDown = false; 
-    if (e.key.toLowerCase() === "t") window.state.isTKeyDown = false; 
-});
-
-
-############################################################
-### FICHIER: public/js/eleve/devoirs/devoirs.js
-############################################################
-
-export async function initDevoirsModule(container) {
-    console.log("%c📚 MODULE DEVOIRS V22 - RÉPARATION VISUELLE", "color: white; background: #2563eb; padding: 5px; font-weight: bold;");
-
-    container.innerHTML = `
-        <div class="hw-layout">
-            <div id="hw-list-view" class="hw-list-view">
-                <h3 style="margin-top:0; color:var(--primary);">📚 Mes Travaux à rendre</h3>
-                <div id="hw-items-container">Chargement...</div>
-            </div>
-
-            <div id="hw-work-view" class="hw-work-view" style="display:none;">
-                <div id="doc-viewer" class="doc-viewer-container">
-                    <div id="pan-zoom-content" style="top: 50%; left: 50%;">
-                        <img id="current-doc-img" src="" style="display:none;">
-                    </div>
-                    <div class="page-counter" id="hw-page-counter">1 / 1</div>
-                    <button id="btn-prev-doc" class="nav-arrow">❮</button>
-                    <button id="btn-next-doc" class="nav-arrow">❯</button>
-                    <div class="doc-controls">
-                        <button class="zoom-btn" id="btn-zoom-out">➖</button>
-                        <button class="zoom-btn" id="btn-zoom-in">➕</button>
-                    </div>
-                    <button id="btn-close-hw" style="position:absolute; top:15px; left:15px; background:var(--danger); color:white; padding:8px 15px; z-index:100; border-radius:8px;">✕ Quitter</button>
-                </div>
-
-                <div class="interaction-zone">
-                    <div class="question-part">
-                        <b style="color:var(--primary); font-size:0.8em; display:block; margin-bottom:5px;">CONSIGNE :</b>
-                        <div id="hw-question-text" style="font-weight:bold; line-height:1.4; color:var(--text-main);"></div>
-                    </div>
-                    <div class="answer-part">
-                        <textarea id="hw-answer-input" placeholder="Écris ta réponse ici..."></textarea>
-                        <div style="display:flex; justify-content:space-between; align-items:center;">
-                             <label style="cursor:pointer; color:var(--primary); font-size:0.9rem; font-weight:bold;">
-                                📎 Joindre une photo
-                                <input type="file" id="hw-file-input" style="display:none;">
-                             </label>
-                             <button id="hw-btn-submit" class="action-btn" style="width:auto; padding:10px 30px;">Envoyer mon travail 🤖</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
-
-    const ui = {
-        listTarget: document.getElementById("hw-items-container"),
-        workView: document.getElementById("hw-work-view"),
-        listView: document.getElementById("hw-list-view"),
-        img: document.getElementById("current-doc-img"),
-        qText: document.getElementById("hw-question-text"),
-        input: document.getElementById("hw-answer-input"),
-        btnSubmit: document.getElementById("hw-btn-submit")
-    };
-
-    let currentHw = null;
-    let docs = [];
-    let docIdx = 0;
-    let view = { x: 0, y: 0, scale: 1.0 };
-
-    const loadList = async () => {
-        const hws = await window.api.getHomeworks(window.state.user.classroom);
-        ui.listTarget.innerHTML = "";
-        if(!hws || hws.length === 0) {
-            ui.listTarget.innerHTML = "<p style='text-align:center; padding:40px; color:#94a3b8;'>Aucun devoir. 🌴</p>";
-            return;
-        }
-        hws.forEach(hw => {
-            const d = document.createElement("div");
-            d.className = "card";
-            d.style.cssText = "display:flex; justify-content:space-between; align-items:center; cursor:pointer; border:1px solid #eee; margin-bottom:10px; padding:15px;";
-            d.innerHTML = `<div><b>${hw.title}</b><br><small>Publié le ${new Date(hw.date).toLocaleDateString()}</small></div><span style='font-size:1.5rem;'>➔</span>`;
-            d.onclick = () => startHw(hw);
-            ui.listTarget.appendChild(d);
-        });
-    };
-
-    const startHw = (hw) => {
-        currentHw = hw;
-        ui.listView.style.display = "none";
-        ui.workView.style.display = "flex";
-        const firstLvl = hw.levels[0];
-        ui.qText.innerHTML = firstLvl.instruction.replace(/\n/g, '<br>');
-        docs = firstLvl.attachmentUrls || [];
-        docIdx = 0;
-        renderDoc();
-    };
-
-    function renderDoc() {
-        if (docs.length === 0) return;
-        ui.img.style.display = "block";
-        ui.img.onload = () => {
-            const container = document.getElementById("doc-viewer");
-            const ratioW = (container.offsetWidth * 0.9) / ui.img.naturalWidth;
-            const ratioH = (container.offsetHeight * 0.9) / ui.img.naturalHeight;
-            view = { x: 0, y: 0, scale: Math.min(ratioW, ratioH) };
-            updateTransform();
-        };
-        ui.img.src = docs[docIdx];
-        document.getElementById("hw-page-counter").innerText = `${docIdx + 1} / ${docs.length}`;
-    }
-
-    function updateTransform() {
-        const content = document.getElementById("pan-zoom-content");
-        if(content) content.style.transform = `translate(-50%, -50%) translate(${view.x}px, ${view.y}px) scale(${view.scale})`;
-    }
-
-    // --- EVENTS ---
-    document.getElementById("btn-prev-doc").onclick = () => { if(docIdx > 0) { docIdx--; renderDoc(); } };
-    document.getElementById("btn-next-doc").onclick = () => { if(docIdx < docs.length - 1) { docIdx++; renderDoc(); } };
-    document.getElementById("btn-zoom-in").onclick = () => { view.scale += 0.2; updateTransform(); };
-    document.getElementById("btn-zoom-out").onclick = () => { view.scale -= 0.2; updateTransform(); };
-    document.getElementById("btn-close-hw").onclick = () => { ui.workView.style.display = "none"; ui.listView.style.display = "block"; };
-
-    // Pan (Drag)
-    let isDown = false, startX, startY;
-    const vCont = document.getElementById("doc-viewer");
-    vCont.onmousedown = (e) => {
-        if(e.target.tagName === 'BUTTON') return;
-        isDown = true; vCont.style.cursor = "grabbing";
-        startX = e.clientX - view.x; startY = e.clientY - view.y;
-    };
-    window.onmousemove = (e) => {
-        if(!isDown) return;
-        view.x = e.clientX - startX; view.y = e.clientY - startY;
-        updateTransform();
-    };
-    window.onmouseup = () => { isDown = false; vCont.style.cursor = "grab"; };
-
-    loadList();
-}
-
-
-############################################################
-### FICHIER: public/js/eleve/devoirs.js
-############################################################
-
-export async function initDevoirsModule(container) {
-    console.log("%c📚 MODULE DEVOIRS V38 - FIX INTEGRAL", "color: white; background: #16a34a; padding: 5px; font-weight: bold;");
-
-    container.innerHTML = `
-        <div class="hw-layout">
-            <div id="hw-list-view" class="hw-list-view">
-                <h3 style="margin-top:0; color:var(--primary);">📚 Tes Devoirs Maison</h3>
-                <div id="hw-items-container">Chargement de la liste...</div>
-            </div>
-
-            <div id="hw-work-view" class="hw-work-view" style="display:none;">
-                <div id="doc-viewer" class="doc-viewer-container">
-                    <div id="pan-zoom-content">
-                        <img id="current-doc-img" src="" style="display:none;">
-                    </div>
-                    <div class="page-counter" id="hw-page-counter">1 / 1</div>
-                    <button id="btn-prev-doc" class="nav-arrow" style="left:10px;">❮</button>
-                    <button id="btn-next-doc" class="nav-arrow" style="right:10px;">❯</button>
-                    <div class="doc-controls">
-                        <button class="zoom-btn" id="btn-zoom-out">➖</button>
-                        <button class="zoom-btn" id="btn-zoom-in">➕</button>
-                    </div>
-                    <button id="btn-close-hw" style="position:absolute; top:15px; left:15px; background:var(--danger); color:white; padding:8px 15px; z-index:100; border-radius:8px; cursor:pointer;">✕ Quitter</button>
-                    <div id="hw-q-label-tab" style="position:absolute; bottom:0; left:20px; background:var(--secondary); color:white; padding:4px 15px; border-radius:8px 8px 0 0; font-weight:900; font-size:0.75rem; z-index:15;">QUESTION</div>
-                </div>
-
-                <div class="interaction-zone" style="flex: 2.5; display: flex; background: white; min-height: 160px;">
-                    <div class="question-part" style="flex: 1; padding: 10px 15px; border-right: 2px solid var(--border); background: #f8fafc; overflow: auto;">
-                        <div id="hw-question-text" style="font-weight:bold; font-size:0.9rem; color:#1e293b;"></div>
-                        <div id="q-image-container" style="display:none; position:relative; overflow:hidden; background:#0f172a; border-radius:8px; border:1px solid #ccc; height:150px; margin-top:5px; cursor:grab;">
-                            <div id="pan-zoom-question-content" style="position:absolute; top:50%; left:50%; transform-origin:center center; display:flex; justify-content:center; align-items:center;"></div>
-                            <div class="doc-controls" style="transform: scale(0.65); bottom: 2px; right: 2px;">
-                                <button class="zoom-btn" id="btn-zoom-out-q">➖</button>
-                                <button class="zoom-btn" id="btn-zoom-in-q">➕</button>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="answer-part" style="flex: 1.2; padding: 12px; display: flex; flex-direction: column; gap: 8px;">
-                        <textarea id="hw-answer-input" placeholder="Écris ta réponse ici..."></textarea>
-                        <button id="hw-btn-submit" class="action-btn">Envoyer mon travail à l'IA 🤖</button>
-                    </div>
-                </div>
-            </div>
-            
-            <div id="hw-feedback-overlay" style="display:none; position:fixed; inset:0; background:rgba(15, 23, 42, 0.85); backdrop-filter:blur(8px); z-index:9999; align-items:center; justify-content:center; padding:20px;">
-                <div class="feedback-card" style="background:white; width:100%; max-width:800px; max-height:90vh; border-radius:24px; padding:30px; display:flex; flex-direction:column; box-shadow:0 25px 50px rgba(0,0,0,0.5);">
-                    <h2 style="color:var(--primary); text-align:center; margin:0;">Analyse de ton travail 🧠</h2>
-                    <div id="hw-ai-grade" style="text-align:center; font-size:3.5rem; font-weight:900; color:var(--success); margin:15px 0;"></div>
-                    <div class="feedback-scroll-area" id="hw-ai-content" style="flex:1; overflow-y:auto; margin:15px 0; padding:15px; background:#f8fafc; border-radius:12px; border:1px solid #edf2f7; line-height:1.6;"></div>
-                    <div style="display:flex; gap:15px;">
-                        <button id="btn-improve-hw" class="action-btn" style="flex:1; background:var(--secondary); height:55px; border-radius:15px;">✍️ Améliorer</button>
-                        <button id="btn-save-hw" class="action-btn" style="flex:1; background:var(--success); height:55px; border-radius:15px;">💾 Sauvegarder et Quitter</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
-
-    const ui = {
-        listTarget: document.getElementById("hw-items-container"),
-        workView: document.getElementById("hw-work-view"),
-        listView: document.getElementById("hw-list-view"),
-        fbOverlay: document.getElementById("hw-feedback-overlay"),
-        btnSubmit: document.getElementById("hw-btn-submit"),
-        img: document.getElementById("current-doc-img"),
-        qContainer: document.getElementById("pan-zoom-question-content"),
-        viewer: document.getElementById("doc-viewer"),
-        qZone: document.getElementById("q-image-container")
-    };
-
-    let currentHw = null, docs = [], docIdx = 0;
-    let view = { x: 0, y: 0, scale: 1.0 }, viewQ = { x: 0, y: 0, scale: 1.0 };
-
-    const loadList = async () => {
-        const hws = await window.api.getHomeworks(window.state.user.classroom);
-        ui.listTarget.innerHTML = hws.length ? "" : "<p style='text-align:center; padding:40px;'>Aucun devoir disponible.</p>";
-        hws.forEach(hw => {
-            const d = document.createElement("div"); d.className = "hw-list-item card";
-            d.innerHTML = `<div><b>${hw.title}</b><br><small>Publié le ${new Date(hw.date).toLocaleDateString()}</small></div><span>➔</span>`;
-            d.onclick = () => { 
-                currentHw = hw; ui.listView.style.display = "none"; ui.workView.style.display = "flex"; 
-                docs = hw.levels[0].attachmentUrls || []; docIdx = 0; 
-                document.getElementById("hw-question-text").innerHTML = hw.levels[0].instruction ? hw.levels[0].instruction.replace(/\n/g, '<br>') : "";
-                ui.qContainer.innerHTML = "";
-                if(hw.levels[0].questionImage) {
-                    ui.qZone.style.display = "block";
-                    const qImg = document.createElement("img"); qImg.src = hw.levels[0].questionImage;
-                    qImg.onload = () => {
-                        const ratio = Math.min(ui.qZone.offsetWidth * 0.9 / qImg.naturalWidth, ui.qZone.offsetHeight * 0.9 / qImg.naturalHeight);
-                        viewQ = { x: 0, y: 0, scale: ratio }; updateTransform('q');
-                    };
-                    ui.qContainer.appendChild(qImg);
-                } else ui.qZone.style.display = "none";
-                renderDoc();
-            };
-            ui.listTarget.appendChild(d);
-        });
-    };
-
-    function renderDoc() {
-        ui.img.style.display = "block"; ui.img.src = docs[docIdx];
-        ui.img.onload = () => {
-            const ratio = Math.min(ui.viewer.offsetWidth * 0.9 / ui.img.naturalWidth, ui.viewer.offsetHeight * 0.9 / ui.img.naturalHeight);
-            view = { x: 0, y: 0, scale: ratio }; updateTransform('doc');
-        };
-        document.getElementById("hw-page-counter").innerText = `${docIdx + 1} / ${docs.length}`;
-    }
-
-    function updateTransform(type) {
-        const target = type === 'doc' ? document.getElementById("pan-zoom-content") : ui.qContainer;
-        const v = type === 'doc' ? view : viewQ;
-        if(target) target.style.transform = `translate(-50%, -50%) translate(${v.x}px, ${v.y}px) scale(${v.scale})`;
-    }
-
-    // --- MOTEUR PAN (DRAG) ---
-    let activeDrag = null, startX, startY;
-    const onMouseDown = (e, type) => { if(e.target.tagName === 'BUTTON') return; activeDrag = type; const v = (type === 'doc') ? view : viewQ; startX = e.clientX - v.x; startY = e.clientY - v.y; };
-    ui.viewer.onmousedown = (e) => onMouseDown(e, 'doc');
-    ui.qZone.onmousedown = (e) => onMouseDown(e, 'q');
-    window.addEventListener('mousemove', (e) => { if(!activeDrag) return; const v = (activeDrag === 'doc') ? view : viewQ; v.x = e.clientX - startX; v.y = e.clientY - startY; updateTransform(activeDrag); });
-    window.addEventListener('mouseup', () => { activeDrag = null; });
-
-    // --- BUTTONS ---
-    document.getElementById("btn-prev-doc").onclick = () => { if(docIdx > 0) { docIdx--; renderDoc(); } };
-    document.getElementById("btn-next-doc").onclick = () => { if(docIdx < docs.length - 1) { docIdx++; renderDoc(); } };
-    document.getElementById("btn-zoom-in").onclick = () => { view.scale += 0.2; updateTransform('doc'); };
-    document.getElementById("btn-zoom-out").onclick = () => { view.scale -= 0.2; updateTransform('doc'); };
-    document.getElementById("btn-zoom-in-q").onclick = () => { viewQ.scale += 0.2; updateTransform('q'); };
-    document.getElementById("btn-zoom-out-q").onclick = () => { viewQ.scale -= 0.2; updateTransform('q'); };
-    document.getElementById("btn-close-hw").onclick = () => { ui.workView.style.display = "none"; ui.listView.style.display = "block"; };
-
-    // --- SUBMIT ---
-    ui.btnSubmit.onclick = async () => {
-        const val = document.getElementById("hw-answer-input").value.trim();
-        if(!val) return alert("Réponse vide !");
-        ui.btnSubmit.disabled = true; ui.btnSubmit.innerText = "Analyse IA...";
-        try {
-            const res = await window.api.post('/api/analyze-homework', { userText: val, homeworkInstruction: currentHw.levels[0].instruction, classroom: window.state.user.classroom, playerId: window.state.currentPlayerId, homeworkId: currentHw._id });
-            document.getElementById("hw-ai-grade").innerText = res.grade || "Reçu";
-            document.getElementById("hw-ai-content").innerHTML = res.feedback;
-            ui.fbOverlay.style.display = "flex";
-            document.getElementById("btn-improve-hw").onclick = () => { ui.fbOverlay.style.display = "none"; ui.btnSubmit.disabled = false; ui.btnSubmit.innerText = "Envoyer mon travail à l'IA 🤖"; };
-            document.getElementById("btn-save-hw").onclick = () => window.location.reload();
-        } catch(e) { ui.btnSubmit.disabled = false; alert("Erreur IA"); }
-    };
-
-    loadList();
-}
-
-
-############################################################
-### FICHIER: public/js/eleve/eleve.js
-############################################################
-
-import { initDevoirsModule } from './devoirs.js';
-import { initJeuxModule } from './jeux.js';
-
-export async function initEleveDashboard(container) {
-    console.log("%c🧒 ESPACE ÉLÈVE V22 - CHARGÉ", "color: white; background: #16a34a; padding: 10px; font-weight: bold;");
-
-    // 1. Rétablir le bouton orange "🎓 Prof" pour l'élève de test
-    const user = window.state.user;
-    if(user && user.firstName === "Eleve" && user.lastName === "Test") {
-        const btnProf = document.getElementById("backToProfBtn");
-        if(btnProf) {
-            btnProf.style.display = "block";
-            btnProf.onclick = () => { 
-                localStorage.setItem("player", JSON.stringify({ id: "prof", firstName: "Jean", lastName: "Vuillet", classroom: "Professeur" })); 
-                window.location.reload(); 
-            };
-        }
-    }
-
-    // 2. Initialisation du carnet de fautes
-    const btnMistakes = document.getElementById("myMistakesBtn");
-    if(btnMistakes) {
-        btnMistakes.style.display = "block";
-        btnMistakes.onclick = openMistakesModal;
-    }
-
-    // 3. FIX FERMETURE : On attache l'événement de fermeture une seule fois ici
-    const closeBtn = document.getElementById("closeMistakesBtn");
-    if(closeBtn) {
-        closeBtn.onclick = () => {
-            console.log("🔒 Fermeture du carnet de fautes");
-            document.getElementById("mistakesModal").style.display = "none";
-        };
-    }
-
-    // 4. Rendu de la coque de navigation (Onglets)
-    container.innerHTML = `
-        <div class="student-shell">
-            <div class="tabs-container">
-                <button id="tab-devoirs" class="tab-btn active">📚 Mes Devoirs</button>
-                <button id="tab-jeux" class="tab-btn">🎮 Mini-Jeux</button>
-            </div>
-            
-            <div id="eleve-content-area" style="min-height: 400px;">
-                <!-- Les sous-modules injectent ici -->
-            </div>
-        </div>
-    `;
-
-    const tabDevoirs = document.getElementById("tab-devoirs");
-    const tabJeux = document.getElementById("tab-jeux");
-    const contentArea = document.getElementById("eleve-content-area");
-
-    const switchTab = (name) => {
-        tabDevoirs.classList.toggle('active', name === 'devoirs');
-        tabJeux.classList.toggle('active', name === 'jeux');
-        contentArea.innerHTML = `<div style="padding:40px; text-align:center; color:#94a3b8;">Chargement...</div>`;
-
-        if (name === 'devoirs') {
-            initDevoirsModule(contentArea);
-        } else {
-            initJeuxModule(contentArea);
-        }
-    };
-
-    tabDevoirs.onclick = () => switchTab('devoirs');
-    tabJeux.onclick = () => switchTab('jeux');
-
-    // Démarrage par défaut sur Devoirs
-    switchTab('devoirs');
-}
-
-async function openMistakesModal() {
-    const list = document.getElementById("mistakesList");
-    const modal = document.getElementById("mistakesModal");
-    modal.style.display = "flex";
-    list.innerHTML = "<p style='text-align:center; padding:20px;'>Chargement de ton carnet...</p>";
-
-    try {
-        const res = await window.api.get(`/api/player-data/${window.state.currentPlayerId}`);
-        if(res && res.spellingMistakes) {
-            const mistakes = res.spellingMistakes;
-            if(mistakes.length === 0) {
-                list.innerHTML = "<p style='text-align:center; padding:40px;'>Aucune faute enregistrée ! 🎉</p>";
-            } else {
-                list.innerHTML = `
-                    <table class="correction-table">
-                        <thead>
-                            <tr><th>Mot erroné</th><th>Correction</th><th>Explication</th><th></th></tr>
-                        </thead>
-                        <tbody>
-                            ${mistakes.reverse().map((m, i) => `
-                                <tr>
-                                    <td><span class="wrong-word">${m.wrong}</span></td>
-                                    <td><span class="right-word">${m.correct}</span></td>
-                                    <td><small>${m.reason || "Usage"}</small></td>
-                                    <td style="text-align:right;">
-                                        <button onclick="deleteMistakeLocally(${mistakes.length - 1 - i})" 
-                                                style="background:#fee2e2; color:red; border-radius:50%; width:28px; height:28px; display:inline-flex; align-items:center; justify-content:center; border:1px solid #f87171; cursor:pointer;">✕</button>
-                                    </td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>`;
-            }
-        }
-    } catch(e) { 
-        console.error("Erreur chargement fautes:", e);
-        list.innerHTML = "<p style='text-align:center; color:red; padding:20px;'>Erreur lors du chargement des données.</p>"; 
-    }
-}
-
-// Fonction globale pour supprimer une faute (appelée par le onclick dans le HTML injecté)
-window.deleteMistakeLocally = async (idx) => {
-    const res = await window.api.post('/api/delete-mistake', { playerId: window.state.currentPlayerId, mistakeIndex: idx });
-    if(res.ok) openMistakesModal();
-};
-
-
-############################################################
-### FICHIER: public/js/eleve/games/StarshipGame.js
-############################################################
-
-// PLUS D'IMPORTS
-
-export class StarshipGame {
-    constructor(container, controller) {
-        this.c = container;
-        this.ctrl = controller;
-        this.qEl = container.querySelector("#question");
-        this.ship = container.querySelector("#ship");
-    }
-
-    loadQuestion(q) {
-        this.currentQ = q;
-        if(this.qEl) this.qEl.textContent = q.q;
-        
-        let optsContainer = this.c.querySelector(".starship-options");
-        if(!optsContainer) {
-            optsContainer = document.createElement("div");
-            optsContainer.className = "starship-options";
-            optsContainer.style.cssText = "position:absolute; bottom:10px; width:100%; display:flex; justify-content:center; gap:10px;";
-            this.c.querySelector("#starship-game-area").appendChild(optsContainer);
-        }
-        
-        optsContainer.innerHTML = "";
-        if(q.options) {
-            q.options.forEach((opt, idx) => {
-                const btn = document.createElement("button");
-                btn.textContent = opt;
-                btn.style.cssText = "padding:10px; background:rgba(0,0,0,0.8); color:white; border:1px solid #00ff00; border-radius:5px; cursor:pointer;";
-                btn.onclick = () => this.check(idx);
-                optsContainer.appendChild(btn);
-            });
-        } else {
-            optsContainer.innerHTML = `<input id="star-input" style="padding:5px;"><button id="star-btn" style="padding:5px;">Tirer</button>`;
-            this.c.querySelector("#star-btn").onclick = () => this.checkText();
-        }
-    }
-
-    check(idx) {
-        const correct = this.currentQ.a;
-        let isCorrect = (typeof correct === 'number') ? (idx === correct) : (this.currentQ.options[idx] === correct);
-        
-        if(isCorrect) {
-            if(this.ship) this.ship.style.transform = "translateY(-50px)";
-            setTimeout(() => this.ctrl.notifyCorrectAnswer(), 300);
-        } else {
-            this.ctrl.notifyWrongAnswer();
-        }
-    }
-
-    async checkText() {
-        const val = this.c.querySelector("#star-input").value;
-        // CORRECTION : window.api et window.state
-        const res = await window.api.verifyWithAI({
-            question: this.currentQ.q,
-            userAnswer: val,
-            expectedAnswer: this.currentQ.a,
-            playerId: window.state.currentPlayerId
-        });
-        if(res.status === "correct") this.ctrl.notifyCorrectAnswer();
-        else this.ctrl.notifyWrongAnswer();
-    }
-}
-
-
-############################################################
-### FICHIER: public/js/eleve/games/ZombieGame.js
-############################################################
-
-import { state, api } from '../../../app.js';
-
-export class ZombieGame {
-    constructor(container, levels, controller) {
-        this.c = container; this.levels = levels; this.ctrl = controller;
-        this.currentQIdx = 0; this.lives = 4; this.score = 0;
-        this.c.innerHTML = `
-            <div id="zombie-arena" style="position:relative; height:250px; background:#dbeafe; overflow:hidden; border-radius:10px; border:2px solid #60a5fa;">
-                <img id="z-zombie" src="https://em-content.zobj.net/source/apple/354/zombie_1f9df.png" style="position:absolute; right:20px; bottom:10px; height:100px; transition: right 0.1s linear;">
-                <div id="z-projectile" style="position:absolute; width:20px; height:20px; background:yellow; border-radius:50%; display:none; bottom:22px;"></div>
-            </div>
-            <div id="z-question" style="text-align:center; font-weight:bold; margin:15px 0; font-size:1.2rem;"></div>
-            <div id="options-grid" style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;"></div>
-        `;
-        this.zombie = this.c.querySelector("#z-zombie");
-        this.projectile = this.c.querySelector("#z-projectile");
-        this.qEl = this.c.querySelector("#z-question");
-        this.grid = this.c.querySelector("#options-grid");
-        this.init();
-    }
-
-    init() {
-        const lvl = this.levels[0];
-        if(!lvl) return;
-        document.getElementById("levelTitle").textContent = lvl.title;
-        this.ctrl.setupUI(lvl.questions.length);
-        this.ctrl.updateLives(this.lives);
-        this.loadQuestion();
-    }
-
-    loadQuestion() {
-        const q = this.levels[0].questions[this.currentQIdx];
-        this.currentQ = q;
-        this.qEl.textContent = q.q;
-        this.grid.innerHTML = "";
-        q.options.forEach((opt, i) => {
-            const btn = document.createElement("button");
-            btn.className = "option-btn"; btn.textContent = opt;
-            btn.onclick = () => this.check(i);
-            this.grid.appendChild(btn);
-        });
-        this.zPos = 20; this.startLoop();
-    }
-
-    startLoop() {
-        if(this.int) clearInterval(this.int);
-        this.int = setInterval(() => {
-            if(state.isGlobalPaused) return;
-            this.zPos += 1.5; this.zombie.style.right = this.zPos + "px";
-            if(this.zPos > 240) { 
-                clearInterval(this.int); this.lives--; this.ctrl.updateLives(this.lives); 
-                if(this.lives <= 0) this.ctrl.gameOver(); else this.loadQuestion(); 
-            }
-        }, 50);
-    }
-
-    check(i) {
-        if(i === this.currentQ.a) { clearInterval(this.int); this.shoot(); }
-        else { this.lives--; this.ctrl.updateLives(this.lives); if(this.lives <= 0) this.ctrl.gameOver(); }
-    }
-
-    shoot() {
-        this.projectile.style.display = "block";
-        let p = 60; const pi = setInterval(() => {
-            p += 20; this.projectile.style.left = p + "px";
-            if(p > 320) { 
-                clearInterval(pi); this.projectile.style.display = "none"; 
-                this.score++; this.ctrl.updateProgress(this.score, this.levels[0].questions.length, this.currentQIdx);
-                if(this.score >= this.levels[0].questions.length) this.ctrl.levelComplete(); 
-                else { this.currentQIdx++; this.loadQuestion(); }
-            }
-        }, 20);
-    }
-}
-
-
-############################################################
-### FICHIER: public/js/eleve/jeux/jeux.js
-############################################################
-
-import { ZombieGame } from '../games/ZombieGame.js';
-
-export async function initJeuxModule(container) {
-    container.innerHTML = `
-        <div class="card">
-            <h3>🎮 Mes Mini-Jeux</h3>
-            <div class="chapter-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:20px;">
-                <div class="chapter-box card" id="launch-zombie" style="cursor:pointer; border-left:5px solid var(--primary);">
-                    <h3>🧟 Chapitre 1</h3>
-                    <p>L’Attaque des Zombies</p>
-                    <button class="action-btn">JOUER</button>
-                </div>
-            </div>
-        </div>
-    `;
-
-    document.getElementById("launch-zombie").onclick = () => startMiniGame("ZombieGame", "ch1-zombie");
-}
-
-async function startMiniGame(type, chapterId) {
-    const mainContent = document.getElementById("main-content");
-    mainContent.innerHTML = `<div class="card"><h2 id="levelTitle" style="text-align:center;">Chargement...</h2><div id="mainProgress"><div id="mainBar"></div></div><div id="subBars" style="display:flex; gap:5px; height:10px; margin-bottom:15px;"></div><div id="lives" style="text-align:center; font-size:1.5rem; margin-bottom:10px;"></div><div id="game-container"></div><button onclick="window.location.reload()" class="action-btn" style="margin-top:20px; background:#eee; color:black;">← Retour au menu</button></div>`;
-
-    const classKey = window.state.getClassKey(window.state.user.classroom);
-    const res = await window.api.get(`/api/game-levels/${classKey}`);
-    const levels = (res || []).filter(l => l.chapterId === chapterId);
-
-    const controller = {
-        setupUI: (total) => {
-            const sub = document.getElementById("subBars"); sub.innerHTML = "";
-            for(let i=0; i<total; i++) { sub.innerHTML += `<div class="subProgress"><div class="subBar" id="subBar-${i}"></div></div>`; }
-        },
-        updateProgress: (current, total, idx) => {
-            document.getElementById("mainBar").style.width = (current / total * 100) + "%";
-            const sb = document.querySelector(`#subBar-${idx}`); if(sb) sb.parentElement.classList.add("completed");
-        },
-        updateLives: (lives) => { document.getElementById("lives").innerHTML = "❤️".repeat(lives); },
-        setLesson: (html) => { /* ... */ },
-        gameOver: () => { alert("Perdu !"); window.location.reload(); },
-        levelComplete: () => { alert("👑 Gagné !"); window.location.reload(); }
-    };
-
-    if (type === "ZombieGame") new ZombieGame(document.getElementById("game-container"), levels, controller);
-}
-
-
-
-
-
-############################################################
-### FICHIER: public/js/eleve/jeux.js
-############################################################
-
-export async function initJeuxModule(container) {
-    console.log("📂 SOUS-MODULE JEUX : Lancement");
-
-    container.innerHTML = `
-        <div class="card">
-            <h3 style="margin-top:0; color:var(--success);">🎮 Mes Mini-Jeux</h3>
-            <div class="chapter-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:20px;">
-                
-                <div class="chapter-box card" id="btn-launch-zombie" style="cursor:pointer; border-left:5px solid var(--primary);">
-                    <h3 style="color:var(--primary);">🧟 Chapitre 1</h3>
-                    <p><b>L'Attaque des Zombies</b></p>
-                    <p style="font-size:0.9em; color:var(--text-light);">Survis à l'invasion en révisant ta grammaire.</p>
-                    <button class="action-btn" style="margin-top:10px;">JOUER</button>
-                </div>
-
-                <div class="chapter-box card" style="opacity:0.5; border-left:5px solid #cbd5e1;">
-                    <h3>🚀 Chapitre 2</h3>
-                    <p>Starship Grammar (Bientôt)</p>
-                    <button class="action-btn" disabled style="background:#ccc;">VERROUILLÉ</button>
-                </div>
-
-            </div>
-        </div>
-    `;
-
-    document.getElementById("btn-launch-zombie").onclick = () => {
-        alert("Lancement du Zombie (Module en attente de reconnexion)");
-    };
-}
-
-
-############################################################
-### FICHIER: public/js/eleve.js
-############################################################
-
-import { ZombieGame } from './games/ZombieGame.js';
-import { RedactionGame } from './games/RedactionGame.js';
-import { HomeworkGame } from './games/HomeworkGame.js';
-import { StarshipGame } from './games/StarshipGame.js';
-import { JumperGame } from './games/JumperGame.js';
-
-const GameClasses = { ZombieGame, RedactionGame, HomeworkGame, StarshipGame, JumperGame };
-
-export async function initStudentInterface() {
-    console.log("🚀 Initialisation Interface Élève");
-    document.getElementById("chapterSelection").style.display = "block";
-    document.getElementById("logoutBtn").style.display = "block";
-    
-    if(window.state.currentPlayerData.firstName === "Eleve" && window.state.currentPlayerData.lastName === "Test") {
-        const btn = document.getElementById("backToProfBtn");
-        if(btn) {
-            btn.style.display = "block";
-            btn.onclick = () => { 
-                localStorage.setItem("player", JSON.stringify({ id: "prof", firstName: "Jean", lastName: "Vuillet", classroom: "Professeur" })); 
-                window.location.reload(); 
-            };
-        }
-    }
-
-    const classKey = window.state.getClassKey(window.state.currentPlayerData.classroom); 
-    const res = await window.api.get(`/api/game-levels/${classKey}`);
-    if(res) window.state.allQuestionsData[classKey] = res;
-
-    document.getElementById("myMistakesBtn").onclick = loadMistakes;
-    document.getElementById("myMistakesBtn").style.display = "block";
-    document.getElementById("closeMistakesBtn").onclick = () => document.getElementById("mistakesModal").style.display = "none";
-    document.getElementById("backToMenuBtn").onclick = () => window.location.reload();
-}
-
-async function loadMistakes() {
-    const list = document.getElementById("mistakesList");
-    document.getElementById("mistakesModal").style.display = "flex";
-    list.innerHTML = "Chargement...";
-    const res = await fetch(`/api/player-data/${window.state.currentPlayerId}`);
-    const data = await res.json();
-    const mistakes = data.spellingMistakes || [];
-
-    if(mistakes.length === 0) {
-        list.innerHTML = "<p style='text-align:center; padding:20px;'>Aucune faute enregistrée ! 🎉</p>";
-    } else {
-        let html = `<table class="correction-table">
-            <thead><tr><th>Mot</th><th>Correction</th><th>Explication</th><th></th></tr></thead>
-            <tbody>`;
-        mistakes.reverse().forEach((m, i) => {
-            const realIdx = mistakes.length - 1 - i;
-            html += `<tr>
-                <td><span class="wrong-word">${m.wrong}</span></td>
-                <td><span class="right-word">${m.correct}</span></td>
-                <td style="font-size:0.85em; color:#475569;">${m.reason || "Grammaire"}</td>
-                <td style="text-align:right;"><button onclick="window.deleteMistakeFromServer(${realIdx})" style="background:#fee2e2; color:#dc2626; border-radius:50%; width:25px; height:25px; cursor:pointer;">✕</button></td>
-            </tr>`;
-        });
-        html += `</tbody></table>`;
-        list.innerHTML = html;
-    }
-}
-
-window.deleteMistakeFromServer = async (idx) => {
-    if(!confirm("Supprimer cette faute ?")) return;
-    await fetch('/api/delete-mistake', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ playerId: window.state.currentPlayerId, mistakeIndex: idx }) });
-    loadMistakes();
-};
-
-document.body.addEventListener('click', async (e) => {
-    if (e.target.matches('.chapter-action-btn')) {
-        const parent = e.target.closest('.chapter-box');
-        const gameClassStr = parent.dataset.gameClass;
-        const chapterId = parent.dataset.chapter;
-        const tmplId = parent.dataset.templateId;
-
-        document.getElementById("chapterSelection").style.display = 'none';
-        document.getElementById("game").style.display = 'block';
-        document.getElementById("backToMenuBtn").style.display = 'inline-block';
-
-        const container = document.getElementById("gameModuleContainer");
-        container.innerHTML = "";
-        container.appendChild(document.getElementById(tmplId).content.cloneNode(true));
-
-        const controller = {
-            notifyCorrectAnswer: () => window.incrementProgress(1),
-            notifyWrongAnswer: (msg) => window.wrongAnswerFlow(msg),
-            getState: () => ({ isLocked: false })
-        };
-
-        window.state.currentGameModuleInstance = new GameClasses[gameClassStr](container, controller);
-        if (gameClassStr === "HomeworkGame") window.state.currentGameModuleInstance.loadHomeworks();
-        else {
-            const classKey = window.state.getClassKey(window.state.currentPlayerData.classroom);
-            window.state.levels = (window.state.allQuestionsData[classKey] || []).filter(l => l.chapterId === chapterId);
-            if(window.state.levels.length) setupLevel(0);
-        }
-    }
-});
-
-function setupLevel(idx) {
-    window.state.currentLevel = idx;
-    const lvl = window.state.levels[idx];
-    document.getElementById("levelTitle").textContent = lvl.title;
-    window.state.general = 0; window.state.currentIndex = 0; window.state.lives = 4;
-    document.getElementById("lives").innerHTML = "❤️".repeat(4);
-    document.getElementById("mainBar").style.width = "0%";
-    loadActiveQuestion();
-}
-
-function loadActiveQuestion() {
-    const q = window.state.levels[window.state.currentLevel].questions[window.state.currentIndex];
-    window.state.currentGameModuleInstance.loadQuestion(q);
-}
-
-window.incrementProgress = (val) => {
-    window.state.general++;
-    const total = window.state.levels[window.state.currentLevel].questions.length;
-    document.getElementById("mainBar").style.width = (window.state.general / total * 100) + "%";
-    if(window.state.general >= total) {
-        alert("Bravo ! Niveau terminé !");
-        window.location.reload();
-    } else {
-        window.state.currentIndex++;
-        setTimeout(() => loadActiveQuestion(), 1000);
-    }
-};
-
-window.wrongAnswerFlow = (msg) => {
-    window.state.lives--;
-    document.getElementById("lives").innerHTML = "❤️".repeat(window.state.lives);
-    if(window.state.lives <= 0) alert("Perdu ! Recommence le niveau.");
-};
-
-
-############################################################
-### FICHIER: public/js/games/HomeworkGame.js
-############################################################
-
-
-
-export class HomeworkGame {
-    constructor(container, controller) {
-        this.c = container; 
-        this.controller = controller;
-
-        console.log("📚 HomeworkGame Loaded (Global Mode) with Fit-to-screen");
-
-        // --- UI ---
-        this.listView = this.c.querySelector("#hw-list"); 
-        this.workView = this.c.querySelector("#hw-workspace");
-        this.viewerContainer = this.c.querySelector("#doc-viewer"); 
-        this.panZoomContent = this.c.querySelector("#pan-zoom-content");
-        this.imgEl = this.c.querySelector("#current-doc-img");
-        this.pdfEl = this.c.querySelector("#current-doc-pdf");
-        this.noDocMsg = this.c.querySelector("#no-doc-msg");
-        this.counterEl = this.c.querySelector("#page-counter");
-        
-        this.qIndexEl = this.c.querySelector("#q-index");
-        this.qTextEl = this.c.querySelector("#q-text");
-        this.qImgZone = this.c.querySelector("#q-image-container"); 
-        this.qPanZoomContent = this.c.querySelector("#pan-zoom-question-content"); 
-        this.btnZoomInQ = this.c.querySelector("#btn-zoom-in-q");
-        this.btnZoomOutQ = this.c.querySelector("#btn-zoom-out-q");
-
-        this.input = this.c.querySelector("#hw-text");
-        this.fileInput = this.c.querySelector("#hw-file");
-        this.fileName = this.c.querySelector("#file-name");
-        this.btnSubmit = this.c.querySelector("#hw-submit");
-        this.btnQuit = this.c.querySelector("#btn-close-work");
-        
-        this.aiModal = document.getElementById("ai-feedback-modal");
-        this.aiContent = document.getElementById("ai-content");
-        this.btnModify = document.getElementById("btn-modify");
-        this.btnNextQ = document.getElementById("btn-next");
-        this.overlay = document.getElementById("ai-overlay");
-
-        this.currentHw = null; 
-        this.currentLevelIndex = 0;
-        this.docs = []; 
-        this.docIndex = 0;
-        
-        this.view = { x: 0, y: 0, scale: 1.3 }; 
-        this.viewQ = { x: 0, y: 0, scale: 1.0 }; 
-
-        this.initEvents();
-        this.setupPanZoom(this.viewerContainer, 'doc');
-        this.setupPanZoom(this.qImgZone, 'q');
-        this.loadHomeworks();
-    }
-
-    initEvents() {
-        if(this.btnQuit) this.btnQuit.onclick = () => this.showList();
-        if(this.btnSubmit) this.btnSubmit.onclick = (e) => { e.preventDefault(); this.submit(); };
-        
-        this.c.querySelector("#btn-prev-doc").onclick = () => this.changeDoc(-1);
-        this.c.querySelector("#btn-next-doc").onclick = () => this.changeDoc(1);
-        this.c.querySelector("#btn-zoom-in").onclick = () => this.zoom(0.2, 'doc');
-        this.c.querySelector("#btn-zoom-out").onclick = () => this.zoom(-0.2, 'doc');
-        
-        if(this.btnZoomInQ) this.btnZoomInQ.onclick = () => this.zoom(0.2, 'q');
-        if(this.btnZoomOutQ) this.btnZoomOutQ.onclick = () => this.zoom(-0.2, 'q');
-
-        if(this.btnModify) this.btnModify.onclick = () => this.closeModal();
-        if(this.btnNextQ) this.btnNextQ.onclick = () => { this.closeModal(); this.nextQuestion(); };
-        
-        if(this.fileInput) {
-            this.fileInput.onchange = () => { 
-                if(this.fileInput.files.length) this.fileName.textContent = "📸 Photo OK"; 
-            };
-        }
-    }
-
-    setupPanZoom(container, type) {
-        if(!container) return;
-        let isDown = false, startX, startY;
-
-        container.addEventListener('mousedown', (e) => {
-            if(e.target.tagName === 'BUTTON') return;
-            isDown = true;
-            container.style.cursor = 'grabbing';
-            const v = (type === 'doc') ? this.view : this.viewQ;
-            startX = e.clientX - v.x;
-            startY = e.clientY - v.y;
-        });
-
-        window.addEventListener('mousemove', (e) => {
-            if (!isDown) return;
-            const v = (type === 'doc') ? this.view : this.viewQ;
-            v.x = e.clientX - startX;
-            v.y = e.clientY - startY;
-            this.updateTransform(type);
-        });
-
-        window.addEventListener('mouseup', () => {
-            isDown = false;
-            container.style.cursor = 'grab';
-        });
-    }
-
-    zoom(delta, type) {
-        const v = (type === 'doc') ? this.view : this.viewQ;
-        v.scale = Math.min(Math.max(0.1, v.scale + delta), 5);
-        this.updateTransform(type);
-    }
-
-    updateTransform(type) {
-        const v = (type === 'doc') ? this.view : this.viewQ;
-        const target = (type === 'doc') ? this.panZoomContent : this.qPanZoomContent;
-        if(target) {
-            target.style.transform = `translate(-50%, -50%) translate(${v.x}px, ${v.y}px) scale(${v.scale})`;
-        }
-    }
-
-    resetView(type) {
-        if(type === 'doc') this.view = { x: 0, y: 0, scale: 1.3 };
-        else this.viewQ = { x: 0, y: 0, scale: 1.0 };
-        this.updateTransform(type);
-    }
-
-    async loadHomeworks() {
-        if(this.listView) this.listView.innerHTML = "<p>Chargement...</p>";
-        try {
-            const list = await window.api.getHomeworks(window.state.currentPlayerData.classroom);
-            if(this.listView) {
-                this.listView.innerHTML = ""; 
-                if (list.length === 0) { this.listView.innerHTML = "<p>Rien à faire.</p>"; return; }
-                list.forEach((hw) => {
-                    const div = document.createElement("div"); div.className = "hw-list-item";
-                    div.innerHTML = `<b>${hw.title}</b><br><small>${new Date(hw.date).toLocaleDateString()}</small>`;
-                    div.onclick = () => this.startHomework(hw);
-                    this.listView.appendChild(div);
-                });
-            }
-        } catch(e) { console.error(e); }
-    }
-
-    startHomework(hw) {
-        this.currentHw = hw;
-        this.currentLevelIndex = 0;
-        if(this.listView) this.listView.style.display = "none";
-        if(this.workView) this.workView.style.display = "flex";
-        this.loadLevel();
-    }
-
-    loadLevel() {
-        const levels = this.currentHw.levels || [];
-        const currentLevel = levels[this.currentLevelIndex];
-        
-        if(this.qIndexEl) this.qIndexEl.textContent = `${this.currentLevelIndex + 1}/${levels.length}`;
-        
-        if(this.qTextEl) {
-            if (currentLevel.instruction && currentLevel.instruction.trim() !== "") {
-                this.qTextEl.innerHTML = currentLevel.instruction.replace(/\n/g, '<br>');
-                this.qTextEl.style.display = "block";
-            } else {
-                this.qTextEl.style.display = "none";
-            }
-        }
-        
-        if(this.qImgZone && this.qPanZoomContent) {
-            this.qPanZoomContent.innerHTML = "";
-            if (currentLevel.questionImage) {
-                this.qImgZone.style.display = "block";
-                const img = document.createElement('img');
-                img.src = currentLevel.questionImage;
-                img.style.display = "block";
-                img.style.webkitUserDrag = "none";
-                
-                // --- FIX : FIT-TO-SCREEN POUR QUESTION ---
-                img.style.maxWidth = "none";
-                img.style.maxHeight = "none";
-
-                img.onload = () => {
-                    const containerW = this.qImgZone.offsetWidth;
-                    const containerH = this.qImgZone.offsetHeight;
-                    const imgW = img.naturalWidth;
-                    const imgH = img.naturalHeight;
-                    // Ratio 95%
-                    const scaleW = (containerW * 0.95) / imgW;
-                    const scaleH = (containerH * 0.95) / imgH;
-                    this.viewQ.scale = Math.min(scaleW, scaleH);
-                    this.viewQ.x = 0;
-                    this.viewQ.y = 0;
-                    this.updateTransform('q');
-                };
-                this.qPanZoomContent.appendChild(img);
-            } else {
-                this.qImgZone.style.display = "none";
-            }
-        }
-
-        this.docs = (currentLevel.attachmentUrls || []).filter(u => u !== "BREAK");
-        this.docIndex = 0;
-        this.renderCurrentDoc();
-
-        if(this.input) this.input.value = "";
-        if(this.fileInput) this.fileInput.value = "";
-        if(this.fileName) this.fileName.textContent = "";
-        if(this.btnSubmit) this.btnSubmit.disabled = false;
-    }
-
-    renderCurrentDoc() {
-        this.view = { x: 0, y: 0, scale: 1 }; 
-        
-        if (this.docs.length === 0) {
-            if(this.imgEl) this.imgEl.style.display = "none";
-            if(this.pdfEl) this.pdfEl.style.display = "none";
-            if(this.noDocMsg) this.noDocMsg.style.display = "block";
-            return;
-        }
-        if(this.noDocMsg) this.noDocMsg.style.display = "none";
-        
-        const url = this.docs[this.docIndex];
-        const isPdf = url.toLowerCase().endsWith('.pdf');
-        
-        if (isPdf) {
-            if(this.imgEl) this.imgEl.style.display = "none";
-            if(this.pdfEl) { 
-                this.pdfEl.style.display = "block"; 
-                this.pdfEl.src = url; 
-            }
-        } else {
-            if(this.pdfEl) this.pdfEl.style.display = "none";
-            if(this.imgEl) { 
-                this.imgEl.style.display = "block"; 
-                
-                // --- FIX : FIT-TO-SCREEN POUR DOC PRINCIPAL ---
-                this.imgEl.onload = () => {
-                    const containerW = this.viewerContainer.offsetWidth;
-                    const containerH = this.viewerContainer.offsetHeight;
-                    const imgW = this.imgEl.naturalWidth;
-                    const imgH = this.imgEl.naturalHeight;
-                    // Ratio 90%
-                    const scaleW = (containerW * 0.9) / imgW;
-                    const scaleH = (containerH * 0.9) / imgH;
-                    this.view.scale = Math.min(scaleW, scaleH);
-                    this.updateTransform('doc');
-                };
-                
-                this.imgEl.src = url; 
-            }
-        }
-        if(this.counterEl) this.counterEl.textContent = `${this.docIndex + 1} / ${this.docs.length}`;
-    }
-
-    changeDoc(dir) {
-        this.docIndex += dir;
-        this.renderCurrentDoc();
-    }
-
-    async submit() {
-        const txt = this.input ? this.input.value : "";
-        const file = (this.fileInput && this.fileInput.files) ? this.fileInput.files[0] : null;
-        if(!txt && !file) return alert("Réponse vide !");
-        
-        if(this.btnSubmit) this.btnSubmit.disabled = true;
-        if(this.aiModal) {
-            this.aiModal.style.display = "flex";
-            if(this.overlay) this.overlay.style.display = "block";
-            if(this.aiContent) this.aiContent.innerHTML = "<p style='text-align:center;'>🧠 L'IA analyse ton travail et sauvegarde ta copie...</p>";
-        }
-
-        try {
-            let imgUrl = null;
-            if(file) {
-                const fd = new FormData(); fd.append('file', file);
-                const r = await window.api.upload(file); 
-                if(r.ok) imgUrl = r.imageUrl;
-            }
-            
-            const lvl = this.currentHw.levels[this.currentLevelIndex];
-            const res = await window.api.post('/api/analyze-homework', { 
-                imageUrl: imgUrl, 
-                userText: txt, 
-                homeworkInstruction: lvl.instruction,
-                homeworkContext: lvl.aiPrompt,
-                questionImage: lvl.questionImage,
-                teacherDocUrls: this.docs,
-                classroom: window.state.currentPlayerData.classroom,
-                playerId: window.state.currentPlayerId,
-                homeworkId: this.currentHw._id,
-                levelIndex: this.currentLevelIndex 
-            });
-            
-            if (this.aiContent) this.aiContent.innerHTML = res.feedback;
-            if (this.btnModify) this.btnModify.style.display = "inline-block";
-            if (this.btnNextQ) {
-                this.btnNextQ.style.display = "inline-block";
-                const isLast = (this.currentLevelIndex >= this.currentHw.levels.length - 1);
-                this.btnNextQ.textContent = isLast ? "Terminer 🎉" : "Suivant ➔";
-            }
-        } catch(e) {
-            console.error(e);
-            if(this.aiContent) this.aiContent.innerHTML = "Erreur technique.";
-        }
-        if(this.btnSubmit) this.btnSubmit.disabled = false;
-    }
-
-    closeModal() {
-        if(this.aiModal) this.aiModal.style.display = "none";
-        if(this.overlay) this.overlay.style.display = "none";
-    }
-
-    nextQuestion() {
-        if (this.currentLevelIndex < this.currentHw.levels.length - 1) {
-            this.currentLevelIndex++;
-            this.loadLevel();
-        } else {
-            alert("Devoir terminé ! Ta copie a été transmise.");
-            this.showList();
-        }
-    }
-    
-    showList() { 
-        if(this.workView) this.workView.style.display = "none"; 
-        if(this.listView) this.listView.style.display = "block"; 
-    }
-}
-
-
-############################################################
-### FICHIER: public/js/games/JumperGame.js
-############################################################
-
-// PLUS D'IMPORTS
-
-export class JumperGame {
-    constructor(container, controller) {
-        this.c = container;
-        this.ctrl = controller;
-        this.qEl = container.querySelector("#q-text");
-        this.grid = container.querySelector("#options-grid");
-    }
-
-    loadQuestion(q) {
-        this.currentQ = q;
-        if(this.qEl) this.qEl.textContent = q.q;
-        
-        if(this.grid) {
-            this.grid.innerHTML = "";
-            if(q.options) {
-                q.options.forEach((opt, idx) => {
-                    const btn = document.createElement("button");
-                    btn.className = "option-btn";
-                    btn.textContent = opt;
-                    btn.onclick = () => this.check(idx);
-                    this.grid.appendChild(btn);
-                });
-            } else {
-                this.grid.innerHTML = "<p>QCM requis.</p>";
-            }
-        }
-    }
-
-    check(idx) {
-        const correct = this.currentQ.a; 
-        let isCorrect = (typeof correct === 'number') ? (idx === correct) : (this.currentQ.options[idx] === correct);
-        if(isCorrect) this.ctrl.notifyCorrectAnswer();
-        else this.ctrl.notifyWrongAnswer();
-    }
-}
-
-
-############################################################
-### FICHIER: public/js/games/RedactionGame.js
-############################################################
-
-import { state, api } from '../app.js';
-
-export class RedactionGame {
-    constructor(container, controller) {
-        this.c = container;
-        this.ctrl = controller;
-        this.qEl = container.querySelector("#redac-q");
-        this.input = container.querySelector("#redac-answer");
-        this.btnSubmit = container.querySelector("#redac-submit");
-        this.loading = container.querySelector("#redac-loading");
-        this.analysis = container.querySelector("#analysis-area");
-        this.fbContent = container.querySelector("#text-good");
-        this.btnContinue = container.querySelector("#redac-continue");
-
-        if(this.btnSubmit) this.btnSubmit.onclick = () => this.check();
-        if(this.btnContinue) this.btnContinue.onclick = () => this.finish(true);
-    }
-
-    loadQuestion(q) {
-        this.currentQ = q;
-        if(this.qEl) this.qEl.innerHTML = `<h3>Rédaction</h3><p>${q.q}</p>`;
-        if(this.input) { this.input.value = ""; this.input.disabled = false; }
-        if(this.analysis) this.analysis.style.display = "none";
-        if(this.loading) this.loading.style.display = "none";
-        if(this.btnSubmit) this.btnSubmit.style.display = "inline-block";
-    }
-
-    async check() {
-        const txt = this.input.value.trim();
-        if(txt.length < 5) return alert("Écris une phrase complète !");
-
-        this.input.disabled = true;
-        this.btnSubmit.style.display = "none";
-        this.loading.innerHTML = "🧠 Analyse de l'IA...";
-        this.loading.style.display = "block";
-
-        try {
-            // CORRECTION : api.verifyWithAI
-            const res = await api.verifyWithAI({
-                question: this.currentQ.q,
-                userAnswer: txt,
-                expectedAnswer: "Réponse libre cohérente",
-                playerId: state.currentPlayerId
-            });
-
-            this.loading.style.display = "none";
-            this.analysis.style.display = "block";
-            
-            if(res.status === "correct") {
-                this.fbContent.innerHTML = `<h4 style="color:green">Excellent !</h4><p>${res.feedback}</p>`;
-                this.btnContinue.onclick = () => this.ctrl.notifyCorrectAnswer();
-            } else {
-                this.fbContent.innerHTML = `<h4 style="color:orange">À améliorer</h4><p>${res.feedback}</p>`;
-                this.btnContinue.onclick = () => this.ctrl.notifyWrongAnswer();
-            }
-
-        } catch(e) {
-            console.error(e);
-            this.loading.innerText = "Erreur IA";
-            this.btnSubmit.style.display = "inline-block";
-        }
-    }
-}
-
-
-############################################################
-### FICHIER: public/js/games/StarshipGame.js
-############################################################
-
-// PLUS D'IMPORTS
-
-export class StarshipGame {
-    constructor(container, controller) {
-        this.c = container;
-        this.ctrl = controller;
-        this.qEl = container.querySelector("#question");
-        this.ship = container.querySelector("#ship");
-    }
-
-    loadQuestion(q) {
-        this.currentQ = q;
-        if(this.qEl) this.qEl.textContent = q.q;
-        
-        let optsContainer = this.c.querySelector(".starship-options");
-        if(!optsContainer) {
-            optsContainer = document.createElement("div");
-            optsContainer.className = "starship-options";
-            optsContainer.style.cssText = "position:absolute; bottom:10px; width:100%; display:flex; justify-content:center; gap:10px;";
-            this.c.querySelector("#starship-game-area").appendChild(optsContainer);
-        }
-        
-        optsContainer.innerHTML = "";
-        if(q.options) {
-            q.options.forEach((opt, idx) => {
-                const btn = document.createElement("button");
-                btn.textContent = opt;
-                btn.style.cssText = "padding:10px; background:rgba(0,0,0,0.8); color:white; border:1px solid #00ff00; border-radius:5px; cursor:pointer;";
-                btn.onclick = () => this.check(idx);
-                optsContainer.appendChild(btn);
-            });
-        } else {
-            optsContainer.innerHTML = `<input id="star-input" style="padding:5px;"><button id="star-btn" style="padding:5px;">Tirer</button>`;
-            this.c.querySelector("#star-btn").onclick = () => this.checkText();
-        }
-    }
-
-    check(idx) {
-        const correct = this.currentQ.a;
-        let isCorrect = (typeof correct === 'number') ? (idx === correct) : (this.currentQ.options[idx] === correct);
-        
-        if(isCorrect) {
-            if(this.ship) this.ship.style.transform = "translateY(-50px)";
-            setTimeout(() => this.ctrl.notifyCorrectAnswer(), 300);
-        } else {
-            this.ctrl.notifyWrongAnswer();
-        }
-    }
-
-    async checkText() {
-        const val = this.c.querySelector("#star-input").value;
-        // CORRECTION : window.api et window.state
-        const res = await window.api.verifyWithAI({
-            question: this.currentQ.q,
-            userAnswer: val,
-            expectedAnswer: this.currentQ.a,
-            playerId: window.state.currentPlayerId
-        });
-        if(res.status === "correct") this.ctrl.notifyCorrectAnswer();
-        else this.ctrl.notifyWrongAnswer();
-    }
-}
-
-
-############################################################
-### FICHIER: public/js/games/ZombieGame.js
-############################################################
-
-// 1. IMPORT : On importe l'objet global 'api' depuis app.js
-import { state, api } from '../app.js';
-
-export class ZombieGame {
-    constructor(container, controller) {
-        this.c = container;
-        this.ctrl = controller;
-
-        this.arena = container.querySelector("#zombie-arena");
-        this.zombie = container.querySelector("#z-zombie");
-        this.projectile = container.querySelector("#z-projectile");
-        this.qEl = container.querySelector("#z-question");
-        this.feedback = container.querySelector("#feedback-bubble");
-        
-        this.aiZone = container.querySelector("#ai-input-zone");
-        this.input = container.querySelector("#z-answer");
-        this.btnSubmit = container.querySelector("#z-submit");
-
-        this.qcmZone = container.querySelector("#options-grid");
-        this.optBtns = container.querySelectorAll(".option-btn");
-
-        this.zPos = 20; 
-        this.interval = null; 
-        this.projInterval = null; 
-        this.isPaused = false;
-
-        if(this.btnSubmit) this.btnSubmit.onclick = () => this.checkAI();
-        if(this.input) this.input.onkeydown = (e) => { if(e.key==="Enter") this.checkAI(); };
-        
-        this.optBtns.forEach((btn, idx) => {
-            btn.onclick = (e) => {
-                e.target.style.transform = "scale(0.95)";
-                setTimeout(() => e.target.style.transform = "scale(1)", 100);
-                this.checkQCM(idx);
-            };
-        });
-    }
-
-    loadQuestion(q) {
-        this.currentQ = q;
-        if(this.qEl) this.qEl.textContent = q.q;
-        if(this.feedback) { this.feedback.style.display = "none"; this.feedback.innerHTML = ""; }
-        
-        this.stop(); 
-        this.zPos = 20; 
-        if(this.zombie) { this.zombie.style.right = "20px"; this.zombie.style.display = "block"; }
-        if(this.projectile) this.projectile.style.display = "none";
-        this.isPaused = false;
-
-        const hasOptions = (q.options && Array.isArray(q.options) && q.options.length > 0);
-
-        if (hasOptions) {
-            if(this.aiZone) this.aiZone.style.display = 'none';
-            if(this.qcmZone) this.qcmZone.style.display = 'grid';
-            this.optBtns.forEach((btn, i) => {
-                btn.style.background = "white";
-                btn.style.color = "#1e293b";
-                btn.style.borderColor = "#e2e8f0";
-                if (q.options[i]) {
-                    btn.textContent = q.options[i];
-                    btn.style.display = "block"; 
-                } else {
-                    btn.style.display = "none"; 
-                }
-            });
-        } else {
-            if(this.qcmZone) this.qcmZone.style.display = 'none';
-            if(this.aiZone) this.aiZone.style.display = 'flex';
-            if(this.input) {
-                this.input.value = "";
-                this.input.disabled = false;
-                setTimeout(() => this.input.focus(), 100);
-            }
-            if(this.btnSubmit) this.btnSubmit.disabled = false;
-        }
-        
-        this.start();
-    }
-
-    start() {
-        if(this.interval) clearInterval(this.interval);
-        this.interval = setInterval(() => {
-            if(state.isGlobalPaused || this.ctrl.getState().isLocked || this.isPaused) return;
-            this.zPos += 1.0; 
-            if(this.zombie) this.zombie.style.right = this.zPos + "px";
-            if(this.arena && this.zPos > (this.arena.offsetWidth - 80)) {
-                this.handleZombieBite();
-            }
-        }, 50);
-    }
-
-    stop() { if(this.interval) clearInterval(this.interval); }
-
-    handleZombieBite() {
-        this.stop();
-        this.ctrl.notifyWrongAnswer("Le zombie t'a mordu !");
-        this.zPos = 20;
-        if(this.zombie) this.zombie.style.right = "20px";
-        setTimeout(() => this.start(), 1000);
-    }
-
-    shootProjectile() {
-        if(this.feedback) this.feedback.style.display = "none";
-        if(!this.projectile) { this.handleZombieHit(); return; }
-        
-        let projX = 60; 
-        this.projectile.style.left = projX + "px";
-        this.projectile.style.bottom = "45px"; 
-        this.projectile.style.display = "block";
-
-        if(this.projInterval) clearInterval(this.projInterval);
-        this.projInterval = setInterval(() => {
-            projX += 15; 
-            this.projectile.style.left = projX + "px";
-            const arenaWidth = this.arena.offsetWidth;
-            const zombieLeftX = arenaWidth - this.zPos - 60;
-
-            if (projX >= zombieLeftX) {
-                clearInterval(this.projInterval);
-                this.projectile.style.display = "none";
-                this.handleZombieHit(); 
-            }
-            if (projX > arenaWidth) {
-                clearInterval(this.projInterval);
-                this.projectile.style.display = "none";
-            }
-        }, 20);
-    }
-
-    handleZombieHit() {
-        if(this.zombie) this.zombie.style.display = "none"; 
-        this.stop(); 
-        this.ctrl.notifyCorrectAnswer(); 
-    }
-
-    checkQCM(idx) {
-        if (this.isPaused) return;
-        const selected = this.currentQ.options[idx];
-        const correct = this.currentQ.a;
-        let isCorrect = (typeof correct === 'number') ? (idx === correct) : (selected === correct);
-
-        const btn = this.optBtns[idx];
-        if (isCorrect) {
-            btn.style.background = "#dcfce7";
-            btn.style.borderColor = "#22c55e";
-            btn.style.color = "#15803d";
-            this.isPaused = true; 
-            this.shootProjectile();
-        } else {
-            btn.style.background = "#fee2e2";
-            btn.style.borderColor = "#ef4444";
-            btn.style.color = "#991b1b";
-            setTimeout(() => {
-                btn.style.background = "white";
-                btn.style.borderColor = "#e2e8f0";
-                btn.style.color = "#1e293b";
-            }, 500);
-            this.ctrl.notifyWrongAnswer(); 
-        }
-    }
-
-    async checkAI() {
-        const val = this.input.value.trim(); if(!val) return;
-        this.isPaused = true; 
-        this.input.disabled = true; this.btnSubmit.disabled = true;
-        this.showFeedback("🧠 L'IA réfléchit...", "hint");
-
-        try {
-            // 2. CORRECTION : UTILISATION DE api.verifyWithAI
-            const res = await api.verifyWithAI({
-                question: this.currentQ.q, 
-                userAnswer: val, 
-                expectedAnswer: this.currentQ.a, 
-                playerId: state.currentPlayerId
-            });
-
-            let spellingHtml = "";
-            if(res.corrections && res.corrections.length > 0) {
-                spellingHtml = "<br><strong>Fautes :</strong><ul class='spelling-list'>";
-                res.corrections.forEach(c => spellingHtml += `<li><s>${c.wrong}</s> → <b>${c.correct}</b></li>`);
-                spellingHtml += "</ul>";
-            }
-
-            const btnHtml = `<div style="margin-top:10px;"><button id="btn-read-ok" style="background:#2563eb; color:white; border:none; padding:8px 16px; border-radius:4px; font-weight:bold; cursor:pointer;">OK</button></div>`;
-
-            if(res.status === "correct") {
-                const msg = spellingHtml ? "<strong>Juste !</strong> Mais..." : "<strong>Excellent !</strong>";
-                this.showModalAndListen(msg + spellingHtml, "success", btnHtml, () => {
-                    this.feedback.style.display = "none";
-                    this.shootProjectile();
-                });
-            } else {
-                this.showModalAndListen(`<strong>Non...</strong> ${res.feedback || ""}` + spellingHtml, "error", btnHtml, () => {
-                    this.feedback.style.display = "none";
-                    this.ctrl.notifyWrongAnswer(); 
-                    this.isPaused = false;
-                    this.input.disabled = false;
-                    this.btnSubmit.disabled = false;
-                    this.input.focus();
-                });
-            }
-        } catch(e) { 
-            this.showFeedback("Erreur.", "error"); 
-            this.isPaused = false; this.input.disabled = false; this.btnSubmit.disabled = false;
-        }
-    }
-
-    showModalAndListen(htmlContent, type, btnHtml, callback) {
-        if(!this.feedback) return;
-        this.feedback.innerHTML = htmlContent + btnHtml;
-        this.feedback.className = ""; this.feedback.classList.add(`fb-${type}`);
-        this.feedback.style.display = "block";
-        this.feedback.style.zIndex = "100";
-        this.feedback.style.pointerEvents = "auto";
-        setTimeout(() => {
-            const btn = this.c.querySelector("#btn-read-ok");
-            if(btn) btn.onclick = (e) => { e.stopPropagation(); callback(); };
-        }, 50);
-    }
-    
-    showFeedback(html, type) {
-        if(!this.feedback) return;
-        this.feedback.innerHTML = html;
-        this.feedback.className = ""; this.feedback.classList.add(`fb-${type}`);
-        this.feedback.style.display = "block";
-    }
-}
-
-
-############################################################
-### FICHIER: public/js/prof/dashboard/dashboard.js
-############################################################
-
-export async function initDashboardModule(container) {
-    console.log("📂 Injection du Finder et du bouton bleu de test...");
-
-    container.innerHTML = `
-        <div class="card">
-            <h3>Gestion des Élèves</h3>
-            
-            <div class="prof-controls" style="display:flex; gap:15px; margin-bottom:20px; background:#f0f7ff; padding:20px; border-radius:12px; border:1px solid #2563eb; align-items: flex-end;">
-                
-                <div style="flex:1;">
-                    <label style="font-size:0.8em; font-weight:bold; color:#2563eb; display:block; margin-bottom:5px;">1. FILTRER PAR CLASSE</label>
-                    <select id="dash-class-filter" style="margin-bottom:0; padding:10px; border-radius:8px; border:1px solid #cbd5e1; width:100%;">
-                        <option value="all">Toutes les classes</option>
-                        <option value="6D">6eD</option><option value="5B">5eB</option><option value="5C">5eC</option>
-                        <option value="2A">2de A</option><option value="2CD">2de CD</option>
-                    </select>
-                </div>
-                
-                <div style="flex:2;">
-                    <label style="font-size:0.8em; font-weight:bold; color:#2563eb; display:block; margin-bottom:5px;">2. FINDER (RECHERCHE NOM)</label>
-                    <input id="dash-search" placeholder="Taper le nom d'un élève..." style="margin-bottom:0; padding:10px; border-radius:8px; border:1px solid #cbd5e1; width:100%;">
-                </div>
-
-                <div style="flex:1;">
-                    <button id="btn-tester-classe" style="width:100%; height:45px; background:#3b82f6; color:white; border-radius:8px; font-weight:bold; border:none; cursor:pointer;">
-                        🎮 Tester la classe
-                    </button>
-                </div>
-            </div>
-
-            <table class="prof-table">
-                <thead>
-                    <tr><th>Élève</th><th>Classe</th><th style="text-align:center;">Action</th></tr>
-                </thead>
-                <tbody id="dash-players-body">
-                    <tr><td colspan="3" style="text-align:center;">Chargement...</td></tr>
-                </tbody>
-            </table>
-        </div>
-    `;
-
-    const body = document.getElementById("dash-players-body");
-    const searchInput = document.getElementById("dash-search");
-    const classFilter = document.getElementById("dash-class-filter");
-    const btnTest = document.getElementById("btn-tester-classe");
-
-    // Bouton Bleu
-    btnTest.onclick = async () => {
-        const cls = classFilter.value;
-        if(cls === "all") return alert("Sélectionne une classe d'abord.");
-        const res = await window.api.post('/api/register', { firstName: "Eleve", lastName: "Test", classroom: cls });
-        if(res.ok) { 
-            localStorage.setItem("player", JSON.stringify(res)); 
-            window.location.reload(); 
-        }
-    };
-
-    // Finder
-    const render = async () => {
-        const players = await window.api.fetchPlayers();
-        const searchVal = searchInput.value.toLowerCase();
-        const classVal = classFilter.value;
-
-        const filtered = players.filter(p => {
-            const fullName = (p.firstName + " " + p.lastName).toLowerCase();
-            return fullName.includes(searchVal) && (classVal === "all" || p.classroom === classVal);
-        });
-
-        body.innerHTML = filtered.map(p => `
-            <tr>
-                <td><b>${p.firstName} ${p.lastName}</b></td>
-                <td>${p.classroom}</td>
-                <td style="text-align:center;">
-                    <button onclick="window.resetPlayerInDB('${p._id}')" style="padding:5px 10px; background:#fee2e2; color:red; border-radius:5px;">Reset</button>
-                </td>
-            </tr>
-        `).join('');
-    };
-
-    window.resetPlayerInDB = async (id) => {
-        if(!confirm("Effacer progression ?")) return;
-        const res = await window.api.post('/api/reset-player', { playerId: id });
-        if(res.ok) render();
-    };
-
-    searchInput.oninput = render;
-    classFilter.onchange = render;
-    render();
-}
-
-
-############################################################
-### FICHIER: public/js/prof/dashboard.js
-############################################################
-
-export async function initDashboardModule(container) {
-    console.log("📂 Injection Dashboard V22 (Finder + Bouton Bleu)");
-
-    container.innerHTML = `
-        <div class="card">
-            <h3>Gestion des Élèves</h3>
-            
-            <div class="prof-controls" style="display:flex; gap:15px; margin-bottom:20px; background:#f0f7ff; padding:20px; border-radius:12px; border:1px solid #2563eb; align-items: flex-end;">
-                
-                <div style="flex:1;">
-                    <label style="font-size:0.8em; font-weight:bold; color:#2563eb; display:block; margin-bottom:5px;">CLASSE :</label>
-                    <select id="dash-class-filter" style="height:45px; border-radius:8px; border:1px solid #cbd5e1; width:100%;">
-                        <option value="all">Toutes</option>
-                        <option value="6D">6eD</option><option value="5B">5eB</option><option value="5C">5eC</option>
-                        <option value="2A">2de A</option><option value="2CD">2de CD</option>
-                    </select>
-                </div>
-                
-                <div style="flex:2;">
-                    <label style="font-size:0.8em; font-weight:bold; color:#2563eb; display:block; margin-bottom:5px;">FINDER (RECHERCHE NOM) :</label>
-                    <input id="dash-search" placeholder="Taper le nom d'un élève..." style="height:45px; border-radius:8px; border:1px solid #cbd5e1; width:100%; padding:10px;">
-                </div>
-
-                <div style="flex:1;">
-                    <button id="btn-tester-classe" style="width:100%; height:45px; background:#3b82f6; color:white; border-radius:8px; font-weight:bold; border:none; cursor:pointer;">
-                        🎮 Tester la classe
-                    </button>
-                </div>
-            </div>
-
-            <table class="prof-table" style="width:100%; border-collapse:collapse;">
-                <thead>
-                    <tr style="background:#f8fafc; border-bottom:2px solid #e2e8f0;">
-                        <th style="padding:12px; text-align:left;">Élève</th>
-                        <th style="padding:12px; text-align:left;">Classe</th>
-                        <th style="padding:12px; text-align:center;">Action</th>
-                    </tr>
-                </thead>
-                <tbody id="dash-players-body">
-                    <tr><td colspan="3" style="text-align:center; padding:20px;">Chargement...</td></tr>
-                </tbody>
-            </table>
-        </div>
-    `;
-
-    const body = document.getElementById("dash-players-body");
-    const searchInput = document.getElementById("dash-search");
-    const classFilter = document.getElementById("dash-class-filter");
-    const btnTest = document.getElementById("btn-tester-classe");
-
-    // Bouton Bleu
-    btnTest.onclick = async () => {
-        const cls = classFilter.value;
-        if(cls === "all") return alert("Sélectionne une classe d'abord.");
-        const res = await window.api.post('/api/register', { firstName: "Eleve", lastName: "Test", classroom: cls });
-        if(res.ok) { 
-            localStorage.setItem("player", JSON.stringify(res)); 
-            window.location.reload(); 
-        }
-    };
-
-    // Finder
-    const render = async () => {
-        const players = await window.api.fetchPlayers();
-        const searchVal = (searchInput.value || "").toLowerCase();
-        const classVal = classFilter.value;
-
-        const filtered = players.filter(p => {
-            const fullName = (p.firstName + " " + p.lastName).toLowerCase();
-            return fullName.includes(searchVal) && (classVal === "all" || p.classroom === classVal);
-        });
-
-        body.innerHTML = filtered.map(p => `
-            <tr style="border-bottom:1px solid #f1f5f9;">
-                <td style="padding:12px;"><b>${p.firstName} ${p.lastName}</b></td>
-                <td style="padding:12px;">${p.classroom}</td>
-                <td style="text-align:center;">
-                    <button onclick="window.resetPlayerInDB('${p._id}')" style="padding:5px 10px; background:#fee2e2; color:red; border-radius:5px;">Reset</button>
-                </td>
-            </tr>
-        `).join('');
-    };
-
-    window.resetPlayerInDB = async (id) => {
-        if(!confirm("Effacer progression ?")) return;
-        const res = await window.api.post('/api/reset-player', { playerId: id });
-        if(res.ok) render();
-    };
-
-    searchInput.oninput = render;
-    classFilter.onchange = render;
-    render();
-}
-
-
-############################################################
-### FICHIER: public/js/prof/devoirs/devoirs.js
-############################################################
-
-import { state } from '../../state.js';
-import { uploadFile, saveHomework, getHomeworks } from '../../api.js';
-
-let homeworksList = [];
-
-export async function initDevoirsModule(container) {
-    console.log("📂 Module DEVOIRS PROF - Version Restaurée (Ligne 1 / Ligne 2)");
-
-    container.innerHTML = `
-        <div class="card">
-            <button id="addHomeworkBtn" class="action-btn" style="background:var(--success); margin-bottom:20px; font-size:1.1rem;">➕ Nouveau Devoir</button>
-            <table class="prof-table">
-                <thead>
-                    <tr><th>Date</th><th>Titre</th><th>Classe</th><th>Questions</th><th style="text-align:center;">Action</th></tr>
-                </thead>
-                <tbody id="profHomeworksBody">
-                    <tr><td colspan="5" style="text-align:center; padding:20px;">Chargement...</td></tr>
-                </tbody>
-            </table>
-        </div>
-    `;
-
-    document.getElementById("addHomeworkBtn").onclick = () => {
-        state.tempHwLevels = [{ instruction: "", aiPrompt: "", attachmentUrls: [], questionImage: null }];
-        state.editingHomeworkId = null;
-        renderCreateHomeworkForm();
-    };
-
-    refreshHomeworksList();
-}
-
-async function refreshHomeworksList() {
-    const tbody = document.getElementById("profHomeworksBody");
-    try {
-        homeworksList = await getHomeworks();
-        if (!homeworksList || homeworksList.length === 0) {
-            tbody.innerHTML = "<tr><td colspan='5' style='text-align:center; padding:20px;'>Aucun devoir créé.</td></tr>";
-            return;
-        }
-
-        tbody.innerHTML = homeworksList.map((h, index) => `
-            <tr>
-                <td>${new Date(h.date).toLocaleDateString()}</td>
-                <td><b>${h.title}</b></td>
-                <td><span style="background:#e0f2fe; padding:2px 8px; border-radius:10px; font-size:0.8em;">${h.classroom}</span></td>
-                <td>${h.levels.length}</td>
-                <td style="text-align:center;">
-                    <button onclick="window.openEditHw(${index})" style="background:none; border:none; font-size:1.4rem; cursor:pointer;">🖋️</button>
-                    <button onclick="window.deleteHwModule('${h._id}')" style="background:none; border:none; font-size:1.2rem; cursor:pointer; color:red; margin-left:10px;">🗑️</button>
-                </td>
-            </tr>`).join('');
-    } catch(e) { tbody.innerHTML = "<tr><td colspan='5' style='color:red'>Erreur de chargement.</td></tr>"; }
-}
-
-function renderCreateHomeworkForm(hw = null) {
-    const modal = document.getElementById("createHomeworkModal");
-    modal.style.display = "flex";
-
-    const title = hw ? hw.title : "";
-    const currentClass = hw ? hw.classroom : "Toutes";
-    const opt = (val) => `<option value="${val}" ${currentClass === val ? "selected" : ""}>${val}</option>`;
-
-    modal.innerHTML = `
-    <div class="modal-content" style="width:95%; max-width:950px; padding:25px; background:white; border-radius:15px; max-height:90vh; overflow-y:auto;">
-        <h2 style="text-align:center; margin-top:0;">${hw ? "Modifier" : "Nouveau"} Devoir</h2>
-        
-        <div style="margin-bottom:15px;"><label><b>Titre :</b></label><input id="hwTitle" value="${title}" style="width:100%; padding:10px; border:1px solid #ccc; border-radius:8px;"></div>
-        <div style="margin-bottom:20px;"><label><b>Classe :</b></label><select id="hwClass" style="width:100%; padding:10px; border:1px solid #ccc; border-radius:8px;">${opt("Toutes")}${opt("6D")}${opt("5B")}${opt("5C")}${opt("2A")}${opt("2CD")}</select></div>
-        
-        <div id="levelsContainer"></div>
-        <button id="btnAddLvl" style="width:100%; padding:12px; margin-top:10px; background:#f1f5f9; color:#2563eb; border:1px dashed #2563eb; border-radius:8px; font-weight:bold;">+ Ajouter Question (Page)</button>
-        
-        <div style="margin-top:25px; text-align:right; border-top:1px solid #eee; padding-top:20px;">
-            <button onclick="document.getElementById('createHomeworkModal').style.display='none'" style="background:#64748b; color:white; padding:10px 25px; margin-right:10px; border-radius:8px;">Annuler</button>
-            <button id="btnSaveHw" style="background:var(--success); color:white; padding:10px 40px; font-size:1.1rem; border-radius:8px;">Enregistrer</button>
-        </div>
-    </div>`;
-
-    renderLevelsInputs();
-
-    document.getElementById("btnAddLvl").onclick = () => {
-        state.tempHwLevels.push({ instruction: "", aiPrompt: "", attachmentUrls: [], questionImage: null });
-        renderLevelsInputs();
-    };
-
-    document.getElementById("btnSaveHw").onclick = saveFormAction;
-}
-
-window.renderLevelsInputs = function() {
-    const container = document.getElementById("levelsContainer");
-    if (!container) return;
-    container.innerHTML = "";
-
-    state.tempHwLevels.forEach((lvl, idx) => {
-        const div = document.createElement("div");
-        div.className = "card";
-        div.style.cssText = "border:2px solid #cbd5e1; padding:20px; margin-top:20px; background:#f8fafc; position:relative; border-radius:12px;";
-
-        div.innerHTML = `
-            <button onclick="window.removeLevelHw(${idx})" style="position:absolute; top:10px; right:10px; background:#fee2e2; color:red; border:1px solid red; padding:5px 10px; border-radius:8px;">Suppr</button>
-            <h4 style="margin-top:0; color:var(--text-main);">Question ${idx + 1}</h4>
-            
-            <!-- LIGNE 1 : DOCUMENTS -->
-            <div style="margin-bottom:25px;">
-                <p style="color:#2563eb; font-weight:bold; text-align:center; font-size:0.9em; margin-bottom:10px;">LIGNE 1 : Documents (Haut) - Glissez pour trier</p>
-                <div id="top-zone-${idx}" class="visual-list" 
-                     style="min-height:90px; border:2px dashed #cbd5e1; background:white; display:flex; flex-wrap:wrap; gap:10px; padding:15px; border-radius:8px;"
-                     ondrop="window.hwDrop(event, ${idx})" ondragover="window.allowDrop(event)">
-                    
-                    ${lvl.attachmentUrls.length === 0 ? '<span style="color:#94a3b8; width:100%; text-align:center;">Aucun document ajouté</span>' : ''}
-                    ${lvl.attachmentUrls.map((u, uIdx) => `
-                        <div draggable="true" ondragstart="window.hwDrag(event, ${idx}, ${uIdx})"
-                             style="position:relative; width:75px; height:75px; border:1px solid #ddd; background:#eee; border-radius:5px; overflow:hidden; cursor:grab;">
-                             ${u.toLowerCase().endsWith('.pdf') ? '<div style="font-size:2rem; text-align:center; padding-top:10px;">📄</div>' : `<img src="${u}" style="width:100%; height:100%; object-fit:cover;">`}
-                             <button onclick="window.hwRemoveDoc(${idx}, ${uIdx})" style="position:absolute; top:2px; right:2px; background:red; color:white; border-radius:50%; width:20px; height:20px; font-size:10px; border:none; cursor:pointer;">✕</button>
-                        </div>
-                    `).join('')}
-                </div>
-                <div style="display:flex; gap:10px; margin-top:12px;">
-                    <label class="action-btn" style="width:auto; background:#3b82f6; font-size:0.85em; padding:8px 15px; margin:0;">
-                        📁 Ajouter Fichiers
-                        <input type="file" multiple onchange="window.hwUpload(this, ${idx}, 'top')" style="display:none;">
-                    </label>
-                    <input id="url-top-${idx}" placeholder="Ou coller URL" style="margin:0; flex:1; padding:8px; border:1px solid #ccc; border-radius:5px;">
-                    <button onclick="window.hwAddUrl(${idx})" style="background:#eee; padding:0 15px; border:1px solid #ccc; border-radius:5px;">OK</button>
-                </div>
-            </div>
-
-            <hr style="border:none; border-top:1px dashed #cbd5e1; margin:25px 0;">
-
-            <!-- LIGNE 2 : QUESTION -->
-            <div>
-                <p style="color:#2563eb; font-weight:bold; text-align:center; font-size:0.9em; margin-bottom:15px;">LIGNE 2 : Question (Bas)</p>
-                <div style="display:flex; gap:20px; align-items:flex-start;">
-                    <div style="flex:1; text-align:center; background:white; border:1px solid #eee; border-radius:10px; padding:15px;">
-                        <div style="height:120px; display:flex; align-items:center; justify-content:center; background:#f8fafc; border:1px solid #eee; overflow:hidden; margin-bottom:10px; border-radius:5px;">
-                            ${lvl.questionImage ? `<img src="${lvl.questionImage}" style="max-height:100%;">` : '<span style="color:#94a3b8; font-size:0.8em;">Aucune image</span>'}
-                        </div>
-                        <label style="color:#2563eb; cursor:pointer; text-decoration:underline; font-size:0.85em; font-weight:bold;">
-                            ${lvl.questionImage ? 'Changer image' : 'Ajouter image question'}
-                            <input type="file" onchange="window.hwUpload(this, ${idx}, 'bottom')" style="display:none;">
-                        </label>
-                    </div>
-                    <div style="flex:2.5;">
-                        <label style="font-size:0.85em; font-weight:bold;">Texte de la Question :</label>
-                        <textarea id="hw-inst-${idx}" oninput="window.hwSyncData(${idx})" style="height:60px; width:100%; padding:8px; border:1px solid #ccc; border-radius:5px; margin-bottom:15px;">${lvl.instruction}</textarea>
-                        <label style="font-size:0.85em; font-weight:bold;">Consigne Secrète pour l'IA :</label>
-                        <textarea id="hw-ai-${idx}" oninput="window.hwSyncData(${idx})" style="height:60px; width:100%; padding:8px; border:1px solid #ccc; border-radius:5px; background:#f0f7ff;">${lvl.aiPrompt}</textarea>
-                    </div>
-                </div>
-            </div>
-        `;
-        container.appendChild(div);
-    });
-};
-
-// --- WINDOW HELPERS ---
-
-window.openEditHw = (idx) => {
-    const hw = homeworksList[idx];
-    state.editingHomeworkId = hw._id;
-    state.tempHwLevels = JSON.parse(JSON.stringify(hw.levels));
-    renderCreateHomeworkForm(hw);
-};
-
-window.hwSyncData = (idx) => {
-    state.tempHwLevels[idx].instruction = document.getElementById(`hw-inst-${idx}`).value;
-    state.tempHwLevels[idx].aiPrompt = document.getElementById(`hw-ai-${idx}`).value;
-};
-
-window.hwUpload = async (input, idx, zone) => {
-    for (let file of input.files) {
-        const res = await uploadFile(file);
-        if (res.ok) {
-            if (zone === 'top') state.tempHwLevels[idx].attachmentUrls.push(res.imageUrl);
-            else state.tempHwLevels[idx].questionImage = res.imageUrl;
-        }
-    }
-    renderLevelsInputs();
-};
-
-window.hwAddUrl = (idx) => {
-    const val = document.getElementById(`url-top-${idx}`).value.trim();
-    if(val) { state.tempHwLevels[idx].attachmentUrls.push(val); renderLevelsInputs(); }
-};
-
-window.hwRemoveDoc = (pIdx, dIdx) => {
-    state.tempHwLevels[pIdx].attachmentUrls.splice(dIdx, 1);
-    renderLevelsInputs();
-};
-
-window.removeLevelHw = (idx) => {
-    if(confirm("Supprimer cette page ?")) { state.tempHwLevels.splice(idx, 1); renderLevelsInputs(); }
-};
-
-window.allowDrop = (e) => e.preventDefault();
-window.hwDrag = (e, pIdx, dIdx) => { e.dataTransfer.setData("text", JSON.stringify({ pIdx, dIdx })); };
-window.hwDrop = (e, pIdx) => {
-    e.preventDefault();
-    const data = JSON.parse(e.dataTransfer.getData("text"));
-    if (data.pIdx !== pIdx) return;
-    const list = state.tempHwLevels[pIdx].attachmentUrls;
-    const item = list.splice(data.dIdx, 1)[0];
-    list.push(item);
-    renderLevelsInputs();
-};
-
-async function saveFormAction() {
-    const title = document.getElementById("hwTitle").value.trim();
-    const cls = document.getElementById("hwClass").value;
-    if(!title) return alert("Le titre est requis.");
-    const data = { id: state.editingHomeworkId, title, classroom: cls, levels: state.tempHwLevels };
-    const res = await saveHomework(data, !!state.editingHomeworkId);
-    if(res.ok) { document.getElementById("createHomeworkModal").style.display = "none"; refreshHomeworksList(); }
-}
-
-window.deleteHwModule = async (id) => {
-    if(confirm("Supprimer ce devoir ?")) { await fetch(`/api/homework/${id}`, { method: 'DELETE' }); refreshHomeworksList(); }
-};
-
-
-############################################################
-### FICHIER: public/js/prof/jeux/jeux.js
-############################################################
-
-export async function initJeuxModule(container) {
-    console.log("📂 Sous-module CRÉATEUR JEUX chargé");
-
-    container.innerHTML = `
-        <div id="game-editor-layout" style="display:flex; gap:20px;">
-            <div class="editor-sidebar" style="flex:1;">
-                <h3>📂 Niveaux en BDD</h3>
-                <div id="db-levels-list"></div>
-            </div>
-            
-            <div class="editor-main" style="flex:2;">
-                <div class="card">
-                    <h3>🛠️ Éditeur de Niveau</h3>
-                    <input id="lvl-title" placeholder="Titre (ex: Les adjectifs)">
-                    <select id="lvl-chapter">
-                        <option value="ch1-zombie">🧟 Zombie (Quiz)</option>
-                        <option value="ch2-starship">🚀 Starship</option>
-                    </select>
-                    
-                    <label><b>Aperçu des questions :</b></label>
-                    <div id="editor-visual-list" class="visual-list" style="margin-bottom:15px;"></div>
-
-                    <div class="manual-input-box">
-                        <input id="mQ" placeholder="Énoncé de la question...">
-                        <div class="abcd-grid">
-                            ${['A','B','C','D'].map((l, i) => `
-                                <div class="opt-row ${i === 0 ? 'selected' : ''}" id="row-${i}" onclick="window.setGood(${i})">
-                                    <span class="opt-letter">${l}</span>
-                                    <input id="mO${i}" placeholder="Réponse ${l}..." class="opt-field">
-                                </div>
-                            `).join('')}
-                        </div>
-                        <button id="btn-add-q" class="action-btn" style="background:var(--success); margin-top:10px;">➕ Ajouter</button>
-                    </div>
-
-                    <button id="btn-save-level" class="action-btn" style="margin-top:20px; font-size:1.1rem;">💾 ENREGISTRER LE NIVEAU</button>
-                </div>
-            </div>
-        </div>
-    `;
-
-    let questions = [];
-    let correctIdx = 0;
-
-    window.setGood = (idx) => {
-        correctIdx = idx;
-        document.querySelectorAll('.opt-row').forEach((r, i) => r.classList.toggle('selected', i === idx));
-    };
-
-    const visualList = document.getElementById("editor-visual-list");
-
-    const refreshVisual = () => {
-        if(!questions.length) { visualList.innerHTML = "<i>Aucune question.</i>"; return; }
-        visualList.innerHTML = questions.map((q, i) => `
-            <div class="visual-q">
-                <b>${i+1}. ${q.q}</b><br>
-                <small>${q.options.join(' | ')} (Correct: ${['A','B','C','D'][q.a]})</small>
-            </div>
-        `).join('');
-    };
-
-    document.getElementById("btn-add-q").onclick = () => {
-        const q = document.getElementById("mQ").value.trim();
-        const opts = [0,1,2,3].map(i => document.getElementById(`mO${i}`).value.trim()).filter(v => v !== "");
-        if(!q || opts.length < 2) return alert("Données manquantes.");
-        questions.push({ q, options: opts, a: correctIdx });
-        refreshVisual();
-        document.getElementById("mQ").value = "";
-        [0,1,2,3].forEach(i => document.getElementById(`mO${i}`).value = "");
-    };
-
-    document.getElementById("btn-save-level").onclick = async () => {
-        const title = document.getElementById("lvl-title").value.trim();
-        if(!title || !questions.length) return alert("Titre ou questions manquant.");
-        const res = await window.api.post('/api/game-levels', {
-            title, chapterId: document.getElementById("lvl-chapter").value,
-            questions, classroom: "Toutes"
-        });
-        if(res.ok) { alert("Sauvegardé !"); questions = []; refreshVisual(); loadDBLevels(); }
-    };
-
-    const loadDBLevels = async () => {
-        const lvls = await window.api.get('/api/game-levels/Toutes');
-        const cont = document.getElementById("db-levels-list");
-        cont.innerHTML = lvls.map(l => `
-            <div class="lvl-item">
-                <span><b>${l.title}</b></span>
-                <button onclick="window.delLvl('${l._id}')" style="color:red; background:none;">🗑️</button>
-            </div>
-        `).join('');
-    };
-
-    window.delLvl = async (id) => {
-        if(confirm("Supprimer ?")) { await fetch(`/api/game-levels/${id}`, {method:'DELETE'}); loadDBLevels(); }
-    };
-
-    refreshVisual();
-    loadDBLevels();
-}
-
-
-############################################################
-### FICHIER: public/js/prof/prof.js
-############################################################
-
-import { initDashboardModule } from './dashboard.js';
-
-export async function initProfDashboard(container) {
-    console.log("🎓 Chef d'orchestre PROF V22 chargé");
-
-    container.innerHTML = `
-        <div class="prof-shell">
-            <div class="tabs-container" style="display:flex; gap:10px; margin-bottom:25px; border-bottom:2px solid #eee; padding-bottom:10px;">
-                <button id="tab-dash" class="tab-btn active">👥 Élèves & Finder</button>
-                <button id="tab-hw" class="tab-btn">📚 Devoirs</button>
-                <button id="tab-game" class="tab-btn">🎮 Créateur de Jeux</button>
-            </div>
-            
-            <div id="prof-content-area" style="min-height: 400px;">
-                <!-- Injection ici -->
-            </div>
-        </div>
-    `;
-
-    const area = document.getElementById("prof-content-area");
-    const tDash = document.getElementById("tab-dash");
-    const tHw = document.getElementById("tab-hw");
-    const tGame = document.getElementById("tab-game");
-
-    const switchTab = (name) => {
-        [tDash, tHw, tGame].forEach(b => b.classList.remove('active'));
-        area.innerHTML = "<div style='padding:40px; text-align:center;'>Chargement...</div>";
-
-        if (name === 'dash') {
-            tDash.classList.add('active');
-            initDashboardModule(area);
-        } else {
-            document.getElementById(name === 'hw' ? 'tab-hw' : 'tab-game').classList.add('active');
-            area.innerHTML = "<div class='card'><h3>Bientôt disponible</h3></div>";
-        }
-    };
-
-    tDash.onclick = () => switchTab('dash');
-    tHw.onclick = () => switchTab('hw');
-    tGame.onclick = () => switchTab('game');
-
-    // Lancement par défaut
-    initDashboardModule(area);
-}
-
-
-
-
-
-############################################################
-### FICHIER: public/js/prof.js
-############################################################
-
-export async function initProfDashboard() {
-    console.log("🎓 Dashboard Enseignant - Version Intégrale");
-    const dashboard = document.getElementById("profDashboard");
-    if(dashboard) dashboard.style.display = "block";
-    
-    // On réinitialise l'interface
-    renderEditorBase();
-    setupListeners();
-    loadGameLevels();
-    fetchAndRenderPlayers();
-}
-
-function renderEditorBase() {
-    const dashboard = document.getElementById("profDashboard");
-    dashboard.innerHTML = `
-        <div class="tabs-container" style="display:flex; gap:10px; margin-bottom:20px; border-bottom:2px solid #eee; padding-bottom:10px;">
-            <button id="tabStudents" class="action-btn" style="background:#64748b;">👥 Élèves</button>
-            <button id="tabHomeworks" class="action-btn" style="background:#64748b;">📚 Devoirs</button>
-            <button id="tabGames" class="action-btn">🎮 Créateur de Jeux</button>
-        </div>
-
-        <div id="contentStudents" class="tab-content" style="display:none;">
-            <div style="margin-bottom: 15px;">
-                <select id="classFilter" style="width:100%; padding:8px;">
-                    <option value="all">Toutes les classes</option>
-                    <option value="6D">6eD</option><option value="5B">5eB</option><option value="5C">5eC</option>
-                    <option value="2A">2de A</option><option value="2CD">2de CD</option>
-                </select>
-            </div>
-            <table id="playersTable" style="width:100%; border-collapse:collapse;">
-                <thead>
-                    <tr style="background:#f8fafc;">
-                        <th style="padding:10px; text-align:left;">Prénom</th>
-                        <th style="padding:10px; text-align:left;">Classe</th>
-                        <th style="padding:10px; text-align:center;">Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="playersBody"></tbody>
-            </table>
-        </div>
-
-        <div id="contentHomeworks" class="tab-content" style="display:none;">
-            <button id="addHomeworkBtn" class="action-btn" style="margin-bottom:15px; background:var(--success);">➕ Nouveau Devoir</button>
-            <div id="homeworksListContainer">Chargement des devoirs...</div>
-        </div>
-
-        <div id="contentGames" class="tab-content">
-            <div id="editorZone" style="display:flex; gap:20px;">
-                <div style="flex:1; border-right:1px solid #eee; padding-right:15px;">
-                    <h3>📂 Mes Niveaux (BDD)</h3>
-                    <div id="levelsList" style="max-height:600px; overflow-y:auto;">Chargement...</div>
-                </div>
-
-                <div style="flex:2; background:#fff; padding:20px; border-radius:12px;">
-                    <h3 id="lvlEditorTitle">Éditeur de Niveau</h3>
-                    
-                    <div style="display:flex; gap:10px; margin-bottom:10px;">
-                        <input id="lvlTitle" placeholder="Titre (ex: Le Présent)" style="flex:2; padding:10px; border-radius:8px; border:1px solid #ccc;">
-                        <select id="lvlClass" style="flex:1; padding:10px; border-radius:8px;">
-                            <option value="6e">6e</option><option value="5e">5e</option><option value="2de">2de</option>
-                        </select>
-                    </div>
-
-                    <select id="lvlChapter" style="width:100%; padding:10px; margin-bottom:10px; border-radius:8px;">
-                        <option value="ch1-zombie">🧟 Zombie (Quiz)</option>
-                        <option value="ch2-starship">🚀 Starship (Quiz)</option>
-                        <option value="ch3-jumper">🏃 Jumper (Quiz)</option>
-                        <option value="ch4-redaction">📝 Rédaction</option>
-                    </select>
-                    
-                    <textarea id="lvlLesson" placeholder="Contenu de la leçon (optionnel)..." style="width:100%; height:60px; padding:10px; margin-bottom:15px; border-radius:8px; border:1px solid #ccc;"></textarea>
-
-                    <h4 style="margin-bottom:10px;">Questions dans ce niveau :</h4>
-                    <div id="visualQuestionsList" class="visual-questions-container">
-                        Aucune question pour l'instant.
-                    </div>
-
-                    <div id="manualInputZone" style="background:#f0f7ff; padding:15px; border-radius:12px; border:1px solid #cbd5e1; margin-top:20px;">
-                        <label><b>Nouvelle Question :</b></label>
-                        <input id="mQ" placeholder="Tape l'énoncé de la question..." style="width:100%; padding:10px; margin:5px 0 15px 0; border-radius:8px; border:1px solid #ccc;">
-                        
-                        <label><b>Options (Clique sur la lettre pour définir la réponse correcte) :</b></label>
-                        <div id="optionsPreviewContainer" style="margin-top:10px;">
-                            ${['A','B','C','D'].map((letter, i) => `
-                                <div class="manual-opt-row ${i === 0 ? 'selected' : ''}" data-index="${i}" onclick="window.selectGoodAnswer(${i})">
-                                    <span class="manual-opt-label">${letter}:</span>
-                                    <input class="manual-opt-input" id="mO${i}" placeholder="Réponse ${letter}...">
-                                </div>
-                            `).join('')}
-                        </div>
-                        <button id="btnAddQ" style="width:100%; background:var(--success); color:white; padding:12px; margin-top:10px; border-radius:8px;">➕ Ajouter la question</button>
-                    </div>
-
-                    <div style="margin-top:20px; display:flex; gap:10px;">
-                        <button id="btnSaveLvl" style="flex:2; background:var(--primary); color:white; padding:15px; font-size:1.1em; border-radius:8px;">💾 ENREGISTRER LE NIVEAU COMPLET</button>
-                        <button id="btnResetEditor" style="flex:1; background:var(--danger); color:white; border-radius:8px;">Vider l'éditeur</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
-}
-
-let currentQuestions = [];
-let selectedGoodIndex = 0;
-
-window.selectGoodAnswer = (idx) => {
-    selectedGoodIndex = idx;
-    document.querySelectorAll('.manual-opt-row').forEach((row, i) => {
-        if(i === idx) row.classList.add('selected');
-        else row.classList.remove('selected');
-    });
-};
-
-function setupListeners() {
-    const tabStudents = document.getElementById("tabStudents");
-    const tabHomeworks = document.getElementById("tabHomeworks");
-    const tabGames = document.getElementById("tabGames");
-
-    const showTab = (tabId) => {
-        document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
-        if(tabId === 'students') document.getElementById('contentStudents').style.display = 'block';
-        if(tabId === 'homeworks') document.getElementById('contentHomeworks').style.display = 'block';
-        if(tabId === 'games') document.getElementById('contentGames').style.display = 'block';
-    };
-
-    tabStudents.onclick = () => showTab('students');
-    tabHomeworks.onclick = () => { showTab('homeworks'); loadHomeworksList(); };
-    tabGames.onclick = () => showTab('games');
-
-    document.getElementById("btnAddQ").onclick = () => {
-        const q = document.getElementById("mQ").value.trim();
-        const opts = [
-            document.getElementById("mO0").value.trim(),
-            document.getElementById("mO1").value.trim(),
-            document.getElementById("mO2").value.trim(),
-            document.getElementById("mO3").value.trim()
-        ].filter(o => o !== "");
-
-        if(!q || opts.length < 2) return alert("Il faut une question et au moins 2 réponses.");
-        if(selectedGoodIndex >= opts.length) return alert("La réponse correcte sélectionnée (A, B, C ou D) doit correspondre à une case remplie !");
-
-        currentQuestions.push({ q, options: opts, a: selectedGoodIndex });
-        renderVisualQuestions();
-        
-        // Reset inputs
-        document.getElementById("mQ").value = "";
-        ['mO0','mO1','mO2','mO3'].forEach(id => document.getElementById(id).value = "");
-    };
-
-    document.getElementById("btnSaveLvl").onclick = async () => {
-        const title = document.getElementById("lvlTitle").value.trim();
-        if(!title || currentQuestions.length === 0) return alert("Titre et questions requis !");
-        
-        const data = {
-            title,
-            chapterId: document.getElementById("lvlChapter").value,
-            classroom: document.getElementById("lvlClass").value,
-            lesson: document.getElementById("lvlLesson").value,
-            questions: currentQuestions
-        };
-
-        const res = await window.api.post('/api/game-levels', data);
-        if(res.ok) { 
-            alert("Niveau sauvegardé avec succès en BDD !"); 
-            currentQuestions = []; 
-            document.getElementById("lvlTitle").value = "";
-            document.getElementById("lvlLesson").value = "";
-            renderVisualQuestions(); 
-            loadGameLevels(); 
-        }
-    };
-
-    document.getElementById("btnResetEditor").onclick = () => {
-        if(confirm("Voulez-vous vraiment vider l'éditeur ?")) {
-            currentQuestions = [];
-            renderVisualQuestions();
-        }
-    };
-
-    const classFilter = document.getElementById("classFilter");
-    if(classFilter) classFilter.onchange = fetchAndRenderPlayers;
-}
-
-function renderVisualQuestions() {
-    const cont = document.getElementById("visualQuestionsList");
-    if(currentQuestions.length === 0) { 
-        cont.innerHTML = "<p style='color:#94a3b8; font-style:italic;'>Aucune question pour l'instant.</p>"; 
-        return; 
-    }
-    
-    cont.innerHTML = currentQuestions.map((q, idx) => `
-        <div class="visual-q-item" style="border: 1px solid #e2e8f0; padding: 12px; border-radius: 8px; margin-bottom: 10px; background: white;">
-            <div style="display:flex; justify-content:space-between; align-items:start;">
-                <b style="color:var(--primary);">Question ${idx+1}: ${q.q}</b>
-                <button onclick="window.removeQuestionFromCurrent(${idx})" style="color:var(--danger); background:none; font-size:1.2rem;">🗑️</button>
-            </div>
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-top:10px;">
-                ${q.options.map((opt, i) => `
-                    <div style="padding:6px 10px; border-radius:5px; border: 1px solid ${i === q.a ? 'var(--success)' : '#eee'}; background: ${i === q.a ? '#f0fdf4' : '#fcfcfc'}; color: ${i === q.a ? 'var(--success)' : '#475569'}; font-size: 0.9em;">
-                        <b style="margin-right:5px;">${String.fromCharCode(65 + i)}:</b> ${opt} 
-                        ${i === q.a ? '✓' : ''}
-                    </div>
-                `).join('')}
-            </div>
-        </div>
-    `).join('');
-}
-
-window.removeQuestionFromCurrent = (idx) => {
-    currentQuestions.splice(idx, 1);
-    renderVisualQuestions();
-};
-
-async function loadGameLevels() {
-    const list = document.getElementById("levelsList");
-    const lvls = await window.api.get(`/api/game-levels/Toutes`) || [];
-    if(lvls.length === 0) {
-        list.innerHTML = "<p>Aucun niveau créé.</p>";
-        return;
-    }
-    list.innerHTML = lvls.map(l => `
-        <div class="level-db-card" style="padding:10px; border:1px solid #ddd; margin-bottom:8px; border-radius:8px; display:flex; justify-content:space-between; align-items:center;">
-            <div>
-                <b style="font-size:0.95em;">${l.title}</b><br>
-                <small style="color:#64748b;">${l.chapterId} • ${l.classroom} • ${l.questions.length} Q</small>
-            </div>
-            <button onclick="window.deleteLvlFromDB('${l._id}')" style="background:none; color:var(--danger); font-size:1.1rem;">🗑️</button>
-        </div>
-    `).join('');
-}
-
-window.deleteLvlFromDB = async (id) => {
-    if(confirm("Supprimer définitivement ce niveau de la base de données ?")) {
-        await fetch(`/api/game-levels/${id}`, { method: 'DELETE' });
-        loadGameLevels();
-    }
-};
-
-async function fetchAndRenderPlayers() {
-    const filter = document.getElementById("classFilter").value;
-    const players = await window.api.fetchPlayers();
-    const body = document.getElementById("playersBody");
-    const filtered = players.filter(p => filter === "all" || p.classroom === filter);
-    
-    body.innerHTML = filtered.map(p => `
-        <tr style="border-bottom:1px solid #eee;">
-            <td style="padding:10px;">${p.firstName} ${p.lastName}</td>
-            <td style="padding:10px;">${p.classroom}</td>
-            <td style="padding:10px; text-align:center;">
-                <button onclick="alert('Fonctionnalité de suivi en cours')" style="background:#e2e8f0; color:#475569; padding:5px 10px; border-radius:4px;">Suivi</button>
-            </td>
-        </tr>
-    `).join('');
-}
-
-async function loadHomeworksList() {
-    const container = document.getElementById("homeworksListContainer");
-    const hws = await window.api.getHomeworks();
-    if(hws.length === 0) {
-        container.innerHTML = "<p>Aucun devoir créé.</p>";
-        return;
-    }
-    container.innerHTML = hws.map(h => `
-        <div style="padding:10px; border:1px solid #ddd; margin-bottom:8px; border-radius:8px; display:flex; justify-content:space-between;">
-            <span><b>${h.title}</b> (${h.classroom})</span>
-            <button onclick="alert('Edition bientôt disponible')" style="color:var(--primary); background:none;">✏️</button>
-        </div>
-    `).join('');
-}
-
-
-############################################################
 ### FICHIER: public/style.css
 ############################################################
 
@@ -4204,6 +1686,136 @@ header h1 { font-size: 1.3rem; color: var(--primary); margin: 0; }
 .right-word { color: var(--success); font-weight: bold; }
 .correction-table { width: 100%; border-collapse: collapse; margin-top: 10px; background: white; border-radius: 10px; overflow: hidden; }
 .correction-table td { padding: 8px; border-bottom: 1px solid #eee; }
+
+
+############################################################
+### FICHIER: server/features/eleve/eleve.routes.js
+############################################################
+
+const express = require('express');
+const router = express.Router();
+const mongoose = require('mongoose');
+
+// --- RÉCUPÉRATION DES DEVOIRS ---
+router.get('/homework/:classroom', async (req, res) => {
+    const Homework = mongoose.model('Homework');
+    try {
+        const cls = req.params.classroom;
+        const list = await Homework.find({ $or: [{ classroom: cls }, { classroom: "Toutes" }] }).sort({ date: -1 });
+        res.json(list);
+    } catch (e) { res.status(500).json([]); }
+});
+
+// --- ANALYSE IA (RESTAURÉE) ---
+router.post('/analyze-homework', async (req, res) => {
+    const { userText, homeworkInstruction, playerId, classroom } = req.body;
+    const Player = mongoose.model('Player');
+    const geminiKey = process.env.GEMINI_API_KEY;
+    
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${geminiKey}`;
+    const prompt = `Tu es un professeur de français expert. Sujet: ${homeworkInstruction}. Réponse élève: ${userText}. Note sur 20. Réponds UNIQUEMENT un JSON : {"feedback_fond": "HTML", "grade": "xx/20", "corrections": [{"wrong":"", "correct":"", "rule":""}]}`;
+
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { response_mime_type: "application/json" } })
+        });
+        const result = await response.json();
+        const aiJson = JSON.parse(result.candidates[0].content.parts[0].text);
+
+        if (playerId && playerId !== "prof" && aiJson.corrections?.length > 0) {
+            await Player.findByIdAndUpdate(playerId, { $push: { spellingMistakes: { $each: aiJson.corrections } } });
+        }
+        res.json(aiJson);
+    } catch (e) { res.status(500).json({ error: "IA Error" }); }
+});
+
+// --- CARNET DE FAUTES ---
+router.get('/player-mistakes/:id', async (req, res) => {
+    const Player = mongoose.model('Player');
+    const p = await Player.findById(req.params.id);
+    res.json(p ? p.spellingMistakes : []);
+});
+
+module.exports = router;
+
+
+############################################################
+### FICHIER: server/features/prof/prof.routes.js
+############################################################
+
+const express = require('express');
+const router = express.Router();
+const mongoose = require('mongoose');
+const multer = require('multer');
+const cloudinary = require('cloudinary').v2;
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+
+// Config Cloudinary
+cloudinary.config({ cloud_name: process.env.CLOUDINARY_CLOUD_NAME, api_key: process.env.CLOUDINARY_API_KEY, api_secret: process.env.CLOUDINARY_API_SECRET });
+const storage = new CloudinaryStorage({ cloudinary: cloudinary, params: { folder: 'condamine-assets', allowed_formats: ['jpg', 'png', 'pdf'] } });
+const upload = multer({ storage: storage });
+
+// UPLOAD
+router.post('/upload', upload.single('file'), (req, res) => {
+    if (req.file) res.json({ ok: true, imageUrl: req.file.path });
+    else res.json({ ok: false });
+});
+
+// ELEVES
+router.get('/players', async (req, res) => {
+    const Player = mongoose.model('Player');
+    res.json(await Player.find().sort({ classroom: 1, lastName: 1 }));
+});
+
+router.post('/reset-player', async (req, res) => {
+    const Player = mongoose.model('Player');
+    await Player.findByIdAndUpdate(req.body.playerId, { spellingMistakes: [] });
+    res.json({ ok: true });
+});
+
+// DEVOIRS (ADMIN)
+router.get('/homework-all', async (req, res) => {
+    const Homework = mongoose.model('Homework');
+    res.json(await Homework.find().sort({ date: -1 }));
+});
+
+router.post('/homework', async (req, res) => {
+    const Homework = mongoose.model('Homework');
+    const { _id, ...data } = req.body;
+    if (_id) await Homework.findByIdAndUpdate(_id, data);
+    else await new Homework(data).save();
+    res.json({ ok: true });
+});
+
+module.exports = router;
+
+
+############################################################
+### FICHIER: server/models/Schemas.js
+############################################################
+
+const mongoose = require('mongoose');
+
+// On force les noms de collections 'players' et 'homeworks' pour la compatibilité BDD
+const playerSchema = new mongoose.Schema({ 
+    firstName: String, lastName: String, classroom: String, 
+    spellingMistakes: { type: [{ wrong: String, correct: String, rule: String, date: { type: Date, default: Date.now } }], default: [] } 
+});
+mongoose.model('Player', playerSchema, 'players');
+
+const homeworkSchema = new mongoose.Schema({ 
+    title: String, classroom: String, 
+    levels: [{ instruction: String, aiPrompt: String, attachmentUrls: [String], questionImage: String }], 
+    date: { type: Date, default: Date.now } 
+});
+mongoose.model('Homework', homeworkSchema, 'homeworks');
+
+const gameLevelSchema = new mongoose.Schema({ 
+    chapterId: String, title: String, questions: Array, createdAt: { type: Date, default: Date.now } 
+});
+mongoose.model('GameLevel', gameLevelSchema, 'game_levels');
 
 
 ############################################################
@@ -4455,6 +2067,26 @@ listModels();
 
 
 ############################################################
+### FICHIER: src/models/Schemas.js
+############################################################
+
+const mongoose = require('mongoose');
+
+// On définit tous les schémas ici pour qu'ils soient accessibles partout
+mongoose.model('Player', new mongoose.Schema({ 
+    firstName: String, lastName: String, classroom: String, spellingMistakes: Array 
+}), 'players');
+
+mongoose.model('Homework', new mongoose.Schema({ 
+    title: String, classroom: String, levels: Array, date: { type: Date, default: Date.now } 
+}), 'homeworks');
+
+mongoose.model('GameLevel', new mongoose.Schema({ 
+    chapterId: String, title: String, questions: Array, createdAt: { type: Date, default: Date.now } 
+}), 'game_levels');
+
+
+############################################################
 ### FICHIER: src/server.js
 ############################################################
 
@@ -4467,95 +2099,39 @@ const express = require('express');
 const mongoose = require('mongoose');
 const app = express();
 const port = process.env.PORT || 3000;
-const mongoUri = process.env.MONGODB_URI;
-const geminiKey = process.env.GEMINI_API_KEY;
 
-// --- 1. MODÈLES (DÉCLARÉS AVANT TOUT) ---
-const playerSchema = new mongoose.Schema({ 
-    firstName: String, lastName: String, classroom: String, 
-    spellingMistakes: { type: [{ wrong: String, correct: String, rule: String, date: { type: Date, default: Date.now } }], default: [] } 
-});
-const Player = mongoose.model('Player', playerSchema);
+// 1. Initialiser les Modèles
+require('../server/models/Schemas');
 
-const homeworkSchema = new mongoose.Schema({ 
-    title: String, classroom: String, levels: Array, date: { type: Date, default: Date.now } 
-});
-const Homework = mongoose.model('Homework', homeworkSchema);
-
-mongoose.connect(mongoUri).then(() => console.log('✅ MongoDB Connecté')).catch(err => console.error(err));
+// 2. Connexion BDD
+mongoose.connect(process.env.MONGODB_URI).then(() => console.log('✅ BDD Connectée')).catch(console.error);
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
-// --- 2. IA ANALYSE (RÉPARÉE POUR GEMINI 2.0) ---
-app.post('/api/analyze-homework', async (req, res) => {
-    const { userText, homeworkInstruction, classroom, playerId } = req.body;
-    console.log("🤖 [IA] Analyse en cours pour:", playerId);
+// 3. Charger les Routes Modulaires
+const eleveRoutes = require('../server/features/eleve/eleve.routes');
+const profRoutes = require('../server/features/prof/prof.routes');
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${geminiKey}`;
-    
-    const prompt = `Tu es un professeur de français. Sujet: ${homeworkInstruction}. 
-    Réponse élève: ${userText}.
-    Tâche: 
-    1. Analyse le fond (feedback_fond).
-    2. Liste les fautes d'orthographe/grammaire dans un tableau (corrections).
-    
-    RÉPONDS UNIQUEMENT EN JSON :
-    {
-      "feedback_fond": "HTML pédagogique",
-      "grade": "xx/20",
-      "corrections": [{"wrong": "...", "correct": "...", "rule": "..."}]
-    }`;
+app.use('/api', eleveRoutes);
+app.use('/api', profRoutes);
 
-    try {
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { response_mime_type: "application/json" } })
-        });
-        const result = await response.json();
-        const json = JSON.parse(result.candidates[0].content.parts[0].text);
-
-        // Sauvegarde des fautes si l'élève est identifié
-        if (playerId && playerId !== "prof" && json.corrections?.length > 0) {
-            await Player.findByIdAndUpdate(playerId, { 
-                $push: { spellingMistakes: { $each: json.corrections } } 
-            });
-        }
-        res.json(json);
-    } catch (e) {
-        console.error("💥 IA Crash:", e.message);
-        res.status(500).json({ error: "L'IA a foiré sa réponse." });
-    }
-});
-
-// --- 3. ROUTES ---
-app.get('/api/homework/:classroom', async (req, res) => {
-    const cls = req.params.classroom;
-    const list = await Homework.find({ $or: [{ classroom: cls }, { classroom: "Toutes" }] }).sort({ date: -1 });
-    res.json(list);
-});
-
-app.get('/api/player-mistakes/:id', async (req, res) => {
-    const p = await Player.findById(req.params.id);
-    res.json(p ? p.spellingMistakes : []);
-});
-
-app.post('/api/delete-mistake', async (req, res) => {
-    const { playerId, mistakeId } = req.body;
-    await Player.findByIdAndUpdate(playerId, { $pull: { spellingMistakes: { _id: mistakeId } } });
-    res.json({ ok: true });
-});
-
+// AUTH
 app.post('/api/register', async (req, res) => {
+    const Player = mongoose.model('Player');
     const { firstName, lastName, classroom, password } = req.body;
     if (firstName?.toLowerCase() === "jean" && password === "Clemenceau1919") return res.json({ ok: true, id: "prof", firstName: "Jean", lastName: "Vuillet", classroom: "Professeur" });
+    if (firstName?.toLowerCase() === "eleve" && lastName?.toLowerCase() === "test") {
+        let testP = await Player.findOne({ firstName: "Eleve", lastName: "Test", classroom });
+        if (!testP) testP = await new Player({ firstName: "Eleve", lastName: "Test", classroom }).save();
+        return res.json({ ok: true, id: testP._id, firstName: "Eleve", lastName: "Test", classroom });
+    }
     const match = await Player.findOne({ firstName, lastName, classroom });
     if (match) res.json({ ok: true, id: match._id, firstName, lastName, classroom });
     else res.status(404).json({ ok: false });
 });
 
-app.listen(port, () => console.log(`🚀 Serveur prêt port ${port}`));
+app.listen(port, () => console.log(`🚀 Serveur Feature-Based V8.1 prêt sur port ${port}`));
 
 
 ############################################################
