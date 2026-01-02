@@ -13,18 +13,21 @@ export default function StudentsTab() {
 
   useEffect(() => { load(); }, []);
 
-  const handleReset = async (id) => {
-    if(!window.confirm("Effacer la progression ?")) return;
-    const res = await api.post('/reset-player', { playerId: id });
-    if(res.ok) load();
-  };
-
   const handleTestClass = async () => {
-    if(filterClass === 'all') return alert("Choisis une classe !");
-    const res = await api.post('/register', { firstName: "Eleve", lastName: "Test", classroom: filterClass });
-    if(res.ok) {
+    if(filterClass === 'all') return alert("Sélectionne une classe pour tester !");
+    
+    // Appel à la route register qui gère maintenant le cas "Eleve Test" proprement
+    const res = await api.post('/register', { 
+        firstName: "Eleve", 
+        lastName: "Test", 
+        classroom: filterClass 
+    });
+
+    if (res.ok || res.id) {
         localStorage.setItem("player", JSON.stringify(res));
-        window.location.reload();
+        window.location.reload(); // On recharge pour que App.jsx détecte le nouvel utilisateur
+    } else {
+        alert("Erreur lors de la création du compte test.");
     }
   };
 
@@ -37,28 +40,27 @@ export default function StudentsTab() {
   return (
     <div className="space-y-6">
       <div className="flex gap-4">
-        <select className="flex-1 p-4 rounded-2xl border-2 bg-slate-50 font-bold outline-none" value={filterClass} onChange={e => setFilterClass(e.target.value)}>
+        <select className="flex-1 p-4 rounded-2xl border-2 bg-slate-50 font-bold outline-none cursor-pointer" value={filterClass} onChange={e => setFilterClass(e.target.value)}>
             <option value="all">Toutes les classes</option>
             <option value="6D">6eD</option><option value="5B">5eB</option><option value="5C">5eC</option><option value="2A">2de A</option><option value="2CD">2de CD</option>
         </select>
-        <button onClick={handleTestClass} className="bg-blue-600 text-white px-8 rounded-2xl font-black shadow-lg">🎮 TESTER CLASSE</button>
+        <button onClick={handleTestClass} className="bg-blue-600 text-white px-8 rounded-2xl font-black shadow-lg shadow-blue-100 hover:bg-blue-700 transition-all">🎮 TESTER CLASSE</button>
       </div>
       
-      <input className="w-full p-4 rounded-2xl border-2 outline-none focus:border-blue-500" placeholder="🔍 Chercher un nom..." value={search} onChange={e => setSearch(e.target.value)} />
+      <input className="w-full p-4 rounded-2xl border-2 outline-none focus:border-blue-500 font-medium" placeholder="🔍 Chercher un élève dans la liste..." value={search} onChange={e => setSearch(e.target.value)} />
 
-      <div className="border rounded-3xl overflow-hidden">
+      <div className="border border-slate-100 rounded-[32px] overflow-hidden bg-white">
         <table className="w-full text-left">
-            <thead className="bg-slate-50 text-slate-400 text-xs font-bold uppercase">
-                <tr><th className="p-4">Nom</th><th className="p-4">Classe</th><th className="p-4 text-center">Fautes</th><th className="p-4 text-right">Action</th></tr>
+            <thead className="bg-slate-50 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b">
+                <tr><th className="p-5">Nom de l'élève</th><th className="p-5 text-center">Classe</th><th className="p-5 text-right">Actions</th></tr>
             </thead>
             <tbody>
                 {filtered.map(p => (
-                    <tr key={p._id} className="border-t">
-                        <td className="p-4 font-bold">{p.firstName} {p.lastName}</td>
-                        <td className="p-4">{p.classroom}</td>
-                        <td className="p-4 text-center"><span className="bg-red-50 text-red-500 px-2 py-1 rounded-lg font-bold">{p.spellingMistakes?.length || 0}</span></td>
-                        <td className="p-4 text-right">
-                            <button onClick={() => handleReset(p._id)} className="bg-slate-100 text-slate-400 text-xs font-bold p-2 rounded-lg hover:bg-red-500 hover:text-white transition-all">RESET</button>
+                    <tr key={p._id} className="border-t border-slate-50 hover:bg-slate-50/50 transition-colors">
+                        <td className="p-5 font-bold text-slate-700">{p.firstName} {p.lastName}</td>
+                        <td className="p-5 text-center"><span className="bg-blue-50 text-blue-600 px-3 py-1 rounded-full text-xs font-black">{p.classroom}</span></td>
+                        <td className="p-5 text-right">
+                            <button onClick={async () => { if(confirm("Effacer sa progression ?")) { await api.post('/reset-player', {playerId: p._id}); load(); } }} className="text-red-300 hover:text-red-500 font-bold text-xs uppercase tracking-tighter">Reset</button>
                         </td>
                     </tr>
                 ))}
