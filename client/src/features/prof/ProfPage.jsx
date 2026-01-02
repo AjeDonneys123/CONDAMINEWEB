@@ -1,0 +1,26 @@
+import React, { useState } from 'react';
+import ProfHeader from './components/ProfHeader';
+import ProfNav from './components/ProfNav';
+import StudentsManager from './students/StudentsManager';
+import HomeworkStudio from './homework/HomeworkStudio';
+import GameStudio from './games/GameStudio';
+import './ProfPage.css';
+
+export default function ProfPage({ user, onLogout }) {
+  const [tab, setTab] = useState('students');
+
+  return (
+    <div className="prof-page-container">
+      <div className="prof-card">
+        <ProfHeader user={user} onLogout={onLogout} />
+        <ProfNav activeTab={tab} onTabChange={setTab} />
+        
+        <div className="prof-content-area">
+          {tab === 'students' && <StudentsManager />}
+          {tab === 'homework' && <HomeworkStudio />}
+          {tab === 'games' && <GameStudio />}
+        </div>
+      </div>
+    </div>
+  );
+}

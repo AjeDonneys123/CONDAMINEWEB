@@ -22,19 +22,39 @@ ARBORESCENCE
 │   │   ├── App.jsx
 │   │   ├── assets/
 │   │   │   └── react.svg
-│   │   ├── components/
-│   │   │   ├── Header.jsx
-│   │   │   ├── StudentView.jsx
-│   │   │   ├── TeacherView.jsx
-│   │   │   └── dashboard/
-│   │   │       ├── GamesTab.jsx
-│   │   │       ├── HomeworksTab.jsx
-│   │   │       └── StudentsTab.jsx
+│   │   ├── features/
+│   │   │   ├── auth/
+│   │   │   │   ├── Login.css
+│   │   │   │   └── Login.jsx
+│   │   │   ├── eleve/
+│   │   │   │   ├── ElevePage.css
+│   │   │   │   ├── ElevePage.jsx
+│   │   │   │   ├── components/
+│   │   │   │   │   ├── EleveHeader.css
+│   │   │   │   │   └── EleveHeader.jsx
+│   │   │   │   ├── games/
+│   │   │   │   │   └── GamesGrid.jsx
+│   │   │   │   ├── homework/
+│   │   │   │   │   ├── Homework.css
+│   │   │   │   │   ├── HomeworkList.jsx
+│   │   │   │   │   └── HomeworkWorkspace.jsx
+│   │   │   │   └── mistakes/
+│   │   │   │       └── MistakesBook.jsx
+│   │   │   └── prof/
+│   │   │       ├── Prof.css
+│   │   │       ├── ProfPage.css
+│   │   │       ├── ProfPage.jsx
+│   │   │       ├── components/
+│   │   │       │   ├── ProfHeader.jsx
+│   │   │       │   └── ProfNav.jsx
+│   │   │       ├── games/
+│   │   │       │   └── GameStudio.jsx
+│   │   │       ├── homework/
+│   │   │       │   └── HomeworkStudio.jsx
+│   │   │       └── students/
+│   │   │           └── StudentsManager.jsx
 │   │   ├── index.css
 │   │   ├── main.jsx
-│   │   ├── pages/
-│   │   │   ├── Dashboard.jsx
-│   │   │   └── Login.jsx
 │   │   └── services/
 │   │       └── api.js
 │   ├── tailwind.config.cjs
@@ -82,7 +102,6 @@ ARBORESCENCE
 │   │   │   │   └── jeux.js
 │   │   │   └── prof.js
 │   │   └── prof.js
-│   ├── questions/
 │   └── style.css
 ├── readmeForIA.txt
 ├── setup_tools.js
@@ -104,7 +123,7 @@ CODE SOURCE COMPLET
 
 MONGODB_URI="mongodb+srv://vuilletjean:Clemenceau1919@cluster0.ilgdlcy.mongodb.net/quizDB?retryWrites=true&w=majority"
 PORT=3000
-GEMINI_API_KEY="AIzaSyCqIIlK6ijv4l751DzEZkkdH1_72aHMR5E"
+GEMINI_API_KEY="AIzaSyAimkVwZ_NqYpcD55aLmr2Zzd0exA3c8Y8"
 CLOUDINARY_CLOUD_NAME=dyjscatrq
 CLOUDINARY_API_KEY=758395199188542
 CLOUDINARY_API_SECRET=DERTAAgSnLhSRM759kmyMs2MzMk
@@ -249,49 +268,10 @@ Currently, two official plugins are available:
 ### FICHIER: client/src/App.css
 ############################################################
 
-#root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+.app-main-container {
+    min-height: 100vh;
+    width: 100%;
 }
-
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
-}
-
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
-  }
-}
-
-.card {
-  padding: 2em;
-}
-
-.read-the-docs {
-  color: #888;
-}
-
 
 
 ############################################################
@@ -299,531 +279,400 @@ Currently, two official plugins are available:
 ############################################################
 
 import React, { useState, useEffect } from 'react';
-import Login from './pages/Login';
-import StudentView from './components/StudentView';
-import TeacherView from './components/TeacherView';
+import Login from './features/auth/Login';
+import ProfPage from './features/prof/ProfPage';
+import ElevePage from './features/eleve/ElevePage';
+import './App.css'; 
 
-function App() {
+export default function App() {
   const [user, setUser] = useState(null);
 
   useEffect(() => {
     const saved = localStorage.getItem('player');
-    if (saved) setUser(JSON.parse(saved));
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && (parsed.id || parsed._id)) setUser(parsed);
+      } catch (e) { localStorage.removeItem('player'); }
+    }
   }, []);
 
   const handleLogout = () => {
-    localStorage.removeItem('player');
+    localStorage.clear();
     setUser(null);
   };
 
-  const backToProf = () => {
+  const handleBackToProf = () => {
     const prof = { id: "prof", firstName: "Jean", lastName: "Vuillet", classroom: "Professeur" };
     localStorage.setItem('player', JSON.stringify(prof));
     setUser(prof);
   };
 
-  if (!user) return <Login onLoginSuccess={(u) => { localStorage.setItem('player', JSON.stringify(u)); setUser(u); }} />;
-
-  const isTestEleve = user.firstName === "Eleve" && user.lastName === "Test";
+  if (!user) return <Login onLoginSuccess={setUser} />;
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="bg-white shadow-sm p-4 flex justify-between items-center">
-        <div className="flex items-center gap-4">
-          <h1 className="text-xl font-bold text-blue-600">Condamine</h1>
-          {isTestEleve && (
-            <button onClick={backToProf} className="bg-orange-500 text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2 animate-bounce">
-              🎓 Retour Prof
-            </button>
-          )}
-        </div>
-        <div className="flex gap-4 items-center">
-          <span className="text-sm font-medium">{user.firstName} {user.lastName}</span>
-          <button onClick={handleLogout} className="text-slate-400 text-sm">Déconnexion</button>
-        </div>
-      </header>
-      <main className="p-4">
-        {user.id === 'prof' ? <TeacherView onLogout={handleLogout} /> : <StudentView user={user} />}
-      </main>
+    <div className="app-main-container">
+      {user.id === 'prof' ? (
+        <ProfPage user={user} onLogout={handleLogout} />
+      ) : (
+        <ElevePage 
+          user={user} 
+          onLogout={handleLogout} 
+          onBackToProf={handleBackToProf} 
+        />
+      )}
     </div>
   );
 }
-export default App;
 
 
 ############################################################
-### FICHIER: client/src/components/Header.jsx
+### FICHIER: client/src/features/auth/Login.css
 ############################################################
 
-import React from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+.login-screen {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    background-color: #f1f5f9;
+}
+.login-card {
+    background: white;
+    padding: 2.5rem;
+    border-radius: 40px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+    width: 100%;
+    max-width: 400px;
+    border-top: 8px solid #2563eb;
+}
+.login-title {
+    text-align: center;
+    font-weight: 900;
+    font-size: 1.8rem;
+    margin-bottom: 1.5rem;
+    text-transform: uppercase;
+    color: #1e293b;
+}
+.login-input {
+    width: 100%;
+    padding: 1rem;
+    border-radius: 1rem;
+    border: 2px solid #f1f5f9;
+    margin-bottom: 1rem;
+    outline: none;
+}
+.prof-border { border-color: #f59e0b; }
+.login-btn {
+    width: 100%;
+    padding: 1rem;
+    background: #2563eb;
+    color: white;
+    border-radius: 1rem;
+    font-weight: 900;
+    font-size: 1.25rem;
+    box-shadow: 0 10px 15px -3px rgba(37, 99, 235, 0.3);
+}
 
-export default function Header() {
-  const navigate = useNavigate();
-  const location = useLocation();
-  
-  // Récupération sécurisée de l'utilisateur connecté
-  const user = JSON.parse(localStorage.getItem("player") || "{}");
-  const isConnected = !!user.id;
-  
-  // Est-ce un prof ?
-  const isProf = user.id === 'prof' || (user.firstName === 'Jean' && user.lastName === 'Vuillet');
-  
-  // On affiche le bouton "Retour Prof" seulement si on est prof et PAS sur le dashboard
-  const showBackToProf = isProf && location.pathname !== '/dashboard';
 
-  const handleLogout = () => {
-    localStorage.removeItem("player");
-    navigate('/');
+############################################################
+### FICHIER: client/src/features/auth/Login.jsx
+############################################################
+
+import React, { useState } from 'react';
+import './Login.css';
+
+export default function Login({ onLoginSuccess }) {
+  const [fName, setFName] = useState('');
+  const [lName, setLName] = useState('');
+  const [password, setPassword] = useState('');
+  const isProf = fName.toLowerCase() === 'jean' && lName.toLowerCase() === 'vuillet';
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    const res = await fetch('/api/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ firstName: fName, lastName: lName, password })
+    }).then(r => r.json());
+
+    if (res.ok) {
+        localStorage.setItem('player', JSON.stringify(res));
+        onLoginSuccess(res);
+    } else alert("Accès refusé");
   };
 
   return (
-    <header>
-      <div className="header-left">
-        <h1 onClick={() => navigate('/')} style={{cursor:'pointer'}}>Plateforme Condamine</h1>
-      </div>
-      
-      <div className="header-right">
-        
-        {/* Bouton pour revenir au Dashboard Prof */}
-        {showBackToProf && (
-            <button 
-                onClick={() => navigate('/dashboard')}
-                style={{
-                    backgroundColor: '#f59e0b', 
-                    color: 'white', 
-                    border: 'none', 
-                    padding: '6px 12px', 
-                    borderRadius: '6px', 
-                    fontWeight: 'bold',
-                    marginRight: '10px'
-                }}
-            >
-                🎓 Prof
-            </button>
-        )}
-
-        <button className="pause-btn">🐞 Bug / Pause</button>
-        
-        {isConnected && (
-            <>
-                <div style={{fontWeight:'bold', color:'#334155', marginLeft: '10px'}}>
-                    {user.firstName} {user.lastName}
-                </div>
-                <button 
-                    onClick={handleLogout} 
-                    style={{
-                        marginLeft: '10px', 
-                        padding: '6px 10px', 
-                        border: '1px solid #cbd5e1', 
-                        background: 'white', 
-                        borderRadius: '5px'
-                    }}
-                >
-                    Déconnexion
-                </button>
-            </>
-        )}
-      </div>
-    </header>
+    <div className="login-screen">
+      <form onSubmit={handleLogin} className="login-card">
+        <h2 className="login-title">Condamine</h2>
+        <input className="login-input" placeholder="Prénom" value={fName} onChange={e => setFName(e.target.value)} />
+        <input className="login-input" placeholder="Nom" value={lName} onChange={e => setLName(e.target.value)} />
+        {isProf && <input type="password" placeholder="Mot de passe Maître" className="login-input prof-border" value={password} onChange={e => setPassword(e.target.value)} />}
+        <button className="login-btn">ENTRER</button>
+      </form>
+    </div>
   );
 }
 
 
+############################################################
+### FICHIER: client/src/features/eleve/ElevePage.css
+############################################################
+
+.eleve-page-container {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 2rem 1rem;
+}
+.eleve-content {
+    margin-top: 2rem;
+}
 
 
 ############################################################
-### FICHIER: client/src/components/StudentView.jsx
+### FICHIER: client/src/features/eleve/ElevePage.jsx
+############################################################
+
+import React, { useState } from 'react';
+import EleveHeader from './components/EleveHeader';
+import HomeworkList from './homework/HomeworkList';
+import MistakesBook from './mistakes/MistakesBook';
+import GamesGrid from './games/GamesGrid';
+import './ElevePage.css';
+
+export default function ElevePage({ user, onLogout, onBackToProf }) {
+  const [tab, setTab] = useState('devoirs');
+
+  return (
+    <div className="eleve-page-container">
+      <EleveHeader 
+        user={user} 
+        onLogout={onLogout} 
+        onBackToProf={onBackToProf} 
+        activeTab={tab} 
+        onTabChange={setTab} 
+      />
+      
+      <div className="eleve-content">
+        {tab === 'devoirs' && <HomeworkList user={user} />}
+        {tab === 'francais' && <MistakesBook user={user} />}
+        {tab === 'jeux' && <GamesGrid user={user} />}
+      </div>
+    </div>
+  );
+}
+
+
+############################################################
+### FICHIER: client/src/features/eleve/components/EleveHeader.css
+############################################################
+
+.header-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+.top-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: white;
+    padding: 1.5rem;
+    border-radius: 35px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+.brand-zone { display: flex; align-items: center; gap: 1rem; }
+.brand-name { color: #2563eb; font-weight: 900; font-size: 1.5rem; text-transform: uppercase; }
+
+.btn-back-prof {
+    background: #f59e0b;
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 0.75rem;
+    font-weight: 900;
+    font-size: 0.75rem;
+    animation: bounce 2s infinite;
+    box-shadow: 0 10px 15px rgba(245, 158, 11, 0.2);
+}
+
+.user-zone { display: flex; align-items: center; gap: 1rem; }
+.user-badge { font-size: 0.75rem; font-weight: 700; color: #64748b; background: #f8fafc; padding: 0.25rem 0.75rem; border-radius: 9999px; }
+.logout-link { font-size: 0.75rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; }
+.logout-link:hover { color: #ef4444; }
+
+.nav-tabs {
+    display: flex;
+    padding: 0.25rem;
+    background: #e2e8f0;
+    border-radius: 1rem;
+    width: fit-content;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
+}
+.tab-item {
+    padding: 0.75rem 2rem;
+    border-radius: 0.75rem;
+    font-weight: 900;
+    font-size: 0.875rem;
+    transition: all 0.2s;
+    color: #64748b;
+}
+.tab-devoirs-active { background: white; color: #2563eb; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+.tab-francais-active { background: white; color: #db2777; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+.tab-jeux-active { background: white; color: #16a34a; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+
+@keyframes bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-5px); }
+}
+
+
+############################################################
+### FICHIER: client/src/features/eleve/components/EleveHeader.jsx
+############################################################
+
+import React from 'react';
+import './EleveHeader.css';
+
+export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, onTabChange }) {
+  const isTestEleve = user.firstName === "Eleve" && user.lastName === "Test";
+
+  return (
+    <div className="header-wrapper">
+      <div className="top-bar">
+        <div className="brand-zone">
+          <h1 className="brand-name">Condamine</h1>
+          {isTestEleve && (
+            <button onClick={onBackToProf} className="btn-back-prof">
+              🎓 RETOUR PROF
+            </button>
+          )}
+        </div>
+        <div className="user-zone">
+            <span className="user-badge">{user.firstName} {user.lastName} ({user.classroom})</span>
+            <button onClick={onLogout} className="logout-link">Déconnexion</button>
+        </div>
+      </div>
+
+      <div className="nav-tabs">
+        <button onClick={() => onTabChange('devoirs')} className={`tab-item ${activeTab === 'devoirs' ? 'tab-devoirs-active' : ''}`}>📚 DEVOIRS</button>
+        <button onClick={() => onTabChange('francais')} className={`tab-item ${activeTab === 'francais' ? 'tab-francais-active' : ''}`}>🇫🇷 FRANÇAIS</button>
+        <button onClick={() => onTabChange('jeux')} className={`tab-item ${activeTab === 'jeux' ? 'tab-jeux-active' : ''}`}>🎮 JEUX</button>
+      </div>
+    </div>
+  );
+}
+
+
+############################################################
+### FICHIER: client/src/features/eleve/games/GamesGrid.jsx
+############################################################
+
+import React from 'react';
+
+export default function GamesGrid() {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in slide-in-from-bottom-4">
+        <div className="bg-white p-8 rounded-[40px] border-b-8 border-green-600 shadow-xl hover:-translate-y-1 transition-all">
+            <span className="text-5xl">🧟</span>
+            <h3 className="text-2xl font-black mt-4 uppercase tracking-tighter">Zombie Grammar</h3>
+            <p className="text-slate-400 mt-2 font-medium">Survis à l'invasion en corrigeant les fautes.</p>
+            <button className="mt-6 w-full py-4 bg-green-600 text-white rounded-2xl font-black shadow-lg">JOUER</button>
+        </div>
+        <div className="bg-white p-8 rounded-[40px] border-b-8 border-slate-200 opacity-40">
+            <span className="text-5xl">🚀</span>
+            <h3 className="text-2xl font-black mt-4 uppercase tracking-tighter">Starship</h3>
+            <p className="text-slate-400 mt-2 font-medium">Bientôt disponible dans ta galaxie.</p>
+            <button disabled className="mt-6 w-full py-4 bg-slate-300 text-white rounded-2xl font-black cursor-not-allowed">VERROUILLÉ</button>
+        </div>
+    </div>
+  );
+}
+
+
+############################################################
+### FICHIER: client/src/features/eleve/homework/Homework.css
+############################################################
+
+.homework-container {
+    perspective: 1200px;
+}
+
+/* Zone Noire Liseuse */
+.viewer-dark-bg {
+    background-color: #0a0f1a;
+    background-image: radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1px);
+    background-size: 30px 30px;
+}
+
+/* Images en mode "tapis" */
+.draggable-img {
+    transition: transform 0.1s ease-out;
+    filter: drop-shadow(0 20px 50px rgba(0,0,0,0.5));
+    will-change: transform;
+}
+
+/* Boutons de navigation bleus */
+.nav-arrow-btn {
+    box-shadow: 0 10px 20px rgba(37, 99, 235, 0.3);
+    border: 2px solid rgba(255,255,255,0.1);
+}
+
+/* Modale IA */
+.ai-modal-glass {
+    backdrop-filter: blur(12px);
+    background-color: rgba(15, 23, 42, 0.9);
+}
+
+
+############################################################
+### FICHIER: client/src/features/eleve/homework/HomeworkList.jsx
 ############################################################
 
 import React, { useState, useEffect } from 'react';
-import { api } from '../services/api';
+import { api } from '../../../services/api';
+import HomeworkWorkspace from './HomeworkWorkspace';
 
-const StudentView = ({ user }) => {
-  const [activeTab, setActiveTab] = useState('devoirs');
+export default function HomeworkList({ user }) {
   const [homeworks, setHomeworks] = useState([]);
+  const [selectedHw, setSelectedHw] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function load() {
+    const load = async () => {
       setLoading(true);
       const data = await api.getHomeworks(user.classroom);
       setHomeworks(data || []);
       setLoading(false);
-    }
-    load();
-  }, [user.classroom]);
+    };
+    if (!selectedHw) load();
+  }, [user.classroom, selectedHw]);
+
+  if (selectedHw) {
+    return (
+      <div className="animate-in fade-in zoom-in duration-300">
+        <button onClick={() => setSelectedHw(null)} className="mb-4 bg-white px-6 py-2 rounded-xl font-bold shadow-sm border text-slate-500 hover:text-red-500 transition-all">← QUITTER</button>
+        <HomeworkWorkspace homework={selectedHw} user={user} />
+      </div>
+    );
+  }
 
   return (
-    <div className="max-w-4xl mx-auto py-8 px-4">
-      <div className="flex p-1 bg-slate-200 rounded-2xl w-fit mb-8">
-        <button 
-          onClick={() => setActiveTab('devoirs')}
-          className={`px-8 py-3 rounded-xl font-bold transition-all ${activeTab === 'devoirs' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600'}`}
-        >📚 Mes Devoirs</button>
-        <button 
-          onClick={() => setActiveTab('jeux')}
-          className={`px-8 py-3 rounded-xl font-bold transition-all ${activeTab === 'jeux' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600'}`}
-        >🎮 Mini-Jeux</button>
-      </div>
-
-      {activeTab === 'devoirs' && (
-        <div className="space-y-4">
-          {loading ? <p className="text-center py-10">Recherche de tes devoirs...</p> : 
-           homeworks.length > 0 ? homeworks.map(hw => (
-            <div key={hw._id} className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex justify-between items-center group hover:border-blue-300 transition-all cursor-pointer">
-              <div>
-                <h3 className="text-xl font-black text-slate-800">{hw.title}</h3>
-                <p className="text-slate-400 font-medium">Classe : {hw.classroom} • {new Date(hw.date).toLocaleDateString()}</p>
-              </div>
-              <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-all">➔</div>
+    <div className="grid gap-4">
+      {loading ? (
+        <p className="text-center py-20 font-bold text-slate-300 animate-pulse text-xl uppercase">Chargement des devoirs...</p>
+      ) : homeworks.length > 0 ? (
+        homeworks.map(hw => (
+          <div key={hw._id} onClick={() => setSelectedHw(hw)} className="bg-white p-6 rounded-[32px] border border-slate-100 flex justify-between items-center group hover:border-blue-400 hover:shadow-xl transition-all cursor-pointer">
+            <div>
+              <h3 className="text-xl font-black text-slate-800">{hw.title}</h3>
+              <p className="text-slate-400 font-bold text-xs uppercase">{new Date(hw.date).toLocaleDateString()}</p>
             </div>
-          )) : (
-            <div className="bg-white p-12 rounded-3xl text-center border-4 border-dashed border-slate-100">
-              <span className="text-5xl">🎉</span>
-              <p className="mt-4 text-slate-500 font-bold">Aucun devoir en cours ! Profite bien.</p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {activeTab === 'jeux' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-white p-8 rounded-3xl shadow-sm border-b-8 border-green-500 hover:-translate-y-1 transition-all cursor-pointer">
-             <span className="text-5xl">🧟</span>
-             <h3 className="text-2xl font-black mt-4">ZOMBIE GRAMMAR</h3>
-             <p className="text-slate-500 mt-2">Défends-toi en corrigeant les fautes.</p>
-             <button className="mt-6 w-full py-4 bg-green-600 text-white rounded-2xl font-bold shadow-lg">JOUER</button>
+            <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-all font-black">➔</div>
           </div>
-          <div className="bg-white p-8 rounded-3xl shadow-sm border-b-8 border-slate-200 opacity-50">
-             <span className="text-5xl">🚀</span>
-             <h3 className="text-2xl font-black mt-4">STARSHIP</h3>
-             <p className="text-slate-500 mt-2">Arrive bientôt dans ta galaxie.</p>
-             <button disabled className="mt-6 w-full py-4 bg-slate-300 text-white rounded-2xl font-bold">VERROUILLÉ</button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
-export default StudentView;
-
-
-############################################################
-### FICHIER: client/src/components/TeacherView.jsx
-############################################################
-
-import React, { useState, useEffect } from 'react';
-import { api } from '../services/api';
-
-const TeacherView = ({ onLogout }) => {
-  const [players, setPlayers] = useState([]);
-  const [view, setView] = useState('dashboard');
-  const [classFilter, setClassFilter] = useState('all');
-  const [search, setSearch] = useState('');
-
-  const load = async () => { 
-    const data = await api.get('/players'); 
-    setPlayers(data || []); 
-  };
-  
-  useEffect(() => { load(); }, []);
-
-  const handleReset = async (id) => {
-    if(!confirm("Effacer progression de cet élève ?")) return;
-    const res = await api.post('/reset-player', { playerId: id });
-    if(res.ok) load();
-  };
-
-  const testClass = async () => {
-    if(classFilter === 'all') return alert("Sélectionne une classe pour tester");
-    const res = await api.post('/register', { firstName: "Eleve", lastName: "Test", classroom: classFilter });
-    if(res.ok) { 
-        localStorage.setItem('player', JSON.stringify(res)); 
-        window.location.reload(); 
-    }
-  };
-
-  const filtered = players.filter(p => {
-    const matchSearch = (p.firstName + ' ' + p.lastName).toLowerCase().includes(search.toLowerCase());
-    const matchClass = classFilter === 'all' || p.classroom === classFilter;
-    return matchSearch && matchClass;
-  });
-
-  return (
-    <div className="max-w-[1400px] mx-auto">
-      {/* HEADER */}
-      <div className="flex justify-between mb-6 items-center bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
-        <h2 className="text-2xl font-black text-slate-800 font-serif italic">Maître Jean Vuillet ✒️</h2>
-        <button onClick={onLogout} className="bg-slate-100 text-slate-500 px-6 py-2 rounded-xl font-bold hover:bg-red-50 hover:text-red-500 transition-all">
-          Déconnexion
-        </button>
-      </div>
-
-      <div className="flex flex-col lg:flex-row gap-6 items-start">
-        
-        {/* COLONNE GAUCHE : LISTE ET FILTRES (75%) */}
-        <div className="w-full lg:w-3/4 space-y-6">
-          
-          <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-wrap gap-4 items-center">
-            <input 
-                className="flex-1 min-w-[200px] p-4 rounded-2xl bg-slate-50 border-none focus:ring-2 focus:ring-blue-500 outline-none font-medium" 
-                placeholder="🔍 Chercher un élève..." 
-                value={search} 
-                onChange={e => setSearch(e.target.value)} 
-            />
-            <select 
-                className="p-4 rounded-2xl bg-slate-50 border-none font-bold text-blue-600 outline-none cursor-pointer" 
-                value={classFilter} 
-                onChange={e => setClassFilter(e.target.value)}
-            >
-              <option value="all">Toutes les classes</option>
-              <option value="6D">6eD</option><option value="5B">5eB</option><option value="5C">5eC</option>
-              <option value="2A">2de A</option><option value="2CD">2de CD</option>
-            </select>
-            <button 
-                onClick={testClass} 
-                className="bg-blue-600 text-white px-6 py-4 rounded-2xl font-black shadow-lg shadow-blue-200 hover:bg-blue-700 active:scale-95 transition-all"
-            >
-                🎮 TESTER LA CLASSE
-            </button>
-          </div>
-
-          <div className="bg-white rounded-3xl shadow-sm overflow-hidden border border-slate-100">
-            <table className="w-full text-left border-collapse">
-              <thead className="bg-slate-50 text-slate-400 text-xs uppercase tracking-widest font-bold">
-                <tr>
-                    <th className="p-5">Élève</th>
-                    <th className="p-5">Classe</th>
-                    <th className="p-5 text-center">Fautes</th>
-                    <th className="p-5 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {filtered.map(p => (
-                  <tr key={p._id} className="hover:bg-slate-50 transition-colors">
-                    <td className="p-5 font-bold text-slate-700">{p.firstName} {p.lastName}</td>
-                    <td className="p-5 text-slate-500 font-medium">{p.classroom}</td>
-                    <td className="p-5 text-center">
-                        <span className={`px-3 py-1 rounded-full font-bold text-sm ${p.spellingMistakes?.length > 0 ? 'bg-red-50 text-red-500' : 'bg-green-50 text-green-500'}`}>
-                            {p.spellingMistakes?.length || 0}
-                        </span>
-                    </td>
-                    <td className="p-5 text-right">
-                      <button 
-                        onClick={() => handleReset(p._id)} 
-                        className="text-xs bg-slate-100 text-slate-400 hover:bg-red-500 hover:text-white p-2 rounded-lg font-bold transition-all"
-                      >
-                        RESET
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {filtered.length === 0 && <div className="p-20 text-center text-slate-300 font-bold">Aucun élève trouvé.</div>}
-          </div>
-        </div>
-
-        {/* COLONNE DROITE : ACTIONS FIXES (25%) */}
-        <div className="w-full lg:w-1/4 sticky top-4 space-y-4">
-            <button 
-                onClick={() => setView('homework')} 
-                className="w-full bg-orange-500 text-white p-8 rounded-[32px] font-black text-xl shadow-xl shadow-orange-100 border-b-8 border-orange-700 hover:translate-y-1 hover:border-b-4 transition-all flex flex-col items-center gap-2"
-            >
-                <span className="text-4xl">📚</span>
-                CRÉER DEVOIR
-            </button>
-            
-            <button 
-                onClick={() => setView('games')} 
-                className="w-full bg-purple-600 text-white p-8 rounded-[32px] font-black text-xl shadow-xl shadow-purple-100 border-b-8 border-purple-800 hover:translate-y-1 hover:border-b-4 transition-all flex flex-col items-center gap-2"
-            >
-                <span className="text-4xl">🎮</span>
-                GÉRER JEUX
-            </button>
-
-            <div className="bg-white p-6 rounded-3xl border border-dashed border-slate-200 text-center">
-                <p className="text-slate-400 text-xs font-bold uppercase tracking-tight">Stats Globales</p>
-                <div className="text-3xl font-black text-slate-700 mt-1">{players.length}</div>
-                <p className="text-slate-400 text-xs">élèves inscrits</p>
-            </div>
-        </div>
-
-      </div>
-
-      {/* MODALES DE CRÉATION (S'affichent par-dessus) */}
-      {view !== 'dashboard' && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-white w-full max-w-4xl max-h-[90vh] rounded-[40px] shadow-2xl overflow-hidden flex flex-col">
-                <div className="p-8 border-b flex justify-between items-center">
-                    <h2 className="text-3xl font-black">{view === 'homework' ? '📚 Nouveau Devoir' : '🎮 Gestion des Niveaux'}</h2>
-                    <button onClick={() => setView('dashboard')} className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center font-bold text-2xl hover:bg-red-50 hover:text-red-500 transition-all">✕</button>
-                </div>
-                <div className="flex-1 overflow-y-auto p-8">
-                    <p className="p-20 text-center border-4 border-dashed rounded-3xl text-slate-300 font-bold text-xl italic">
-                        {view === 'homework' ? 'Le formulaire de création de devoirs arrive ici...' : 'L\'interface de gestion des jeux arrive ici...'}
-                    </p>
-                </div>
-            </div>
-        </div>
-      )}
-    </div>
-  );
-};
-export default TeacherView;
-
-
-############################################################
-### FICHIER: client/src/components/dashboard/GamesTab.jsx
-############################################################
-
-import React, { useState, useEffect } from 'react';
-
-export default function GamesTab() {
-  const [levels, setLevels] = useState([]);
-  const [isEditing, setIsEditing] = useState(false);
-  const [generationMode, setGenerationMode] = useState('manual');
-  const [aiLoading, setAiLoading] = useState(false);
-  
-  const [formData, setFormData] = useState({ title: '', chapterId: 'ch1-zombie', classroom: '6e', questions: [] });
-  const [newQ, setNewQ] = useState({ q: '', options: ['', '', '', ''], a: 0 });
-  const [aiParams, setAiParams] = useState({ topic: '', file: null });
-
-  useEffect(() => { loadLevels(); }, []);
-
-  const loadLevels = () => {
-    fetch('/api/game-levels/Toutes').then(res => res.json()).then(data => setLevels(data || [])).catch(console.error);
-  };
-
-  const handleSaveLevel = async () => {
-    if (!formData.title || formData.questions.length === 0) return alert("Ajoute au moins une question !");
-    await fetch('/api/game-levels', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(formData) });
-    alert("Niveau sauvegardé !");
-    setIsEditing(false); loadLevels(); 
-    setFormData({ title: '', chapterId: 'ch1-zombie', classroom: '6e', questions: [] });
-  };
-
-  const addQuestion = () => {
-    // Validation souple : 2 options min
-    const filledOptions = newQ.options.filter(o => o.trim() !== "");
-    if (!newQ.q || filledOptions.length < 2) {
-        return alert("Il faut une question et au moins 2 options (A et B) !");
-    }
-    setFormData(prev => ({ ...prev, questions: [...prev.questions, { ...newQ }] }));
-    setNewQ({ q: '', options: ['', '', '', ''], a: 0 });
-  };
-
-  const handleAiGeneration = async () => {
-      if (!aiParams.topic && !aiParams.file) return alert("Sujet ou image requis !");
-      setAiLoading(true);
-      let docUrl = null;
-      if (aiParams.file) {
-          const fd = new FormData(); fd.append('file', aiParams.file);
-          try { const r = await fetch('/api/upload', { method: 'POST', body: fd }); const d = await r.json(); if(d.ok) docUrl = d.imageUrl; } catch(e){}
-      }
-      try {
-          const res = await fetch('/api/generate-game-content', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ topic: aiParams.topic, docUrl }) });
-          const qs = await res.json();
-          if (Array.isArray(qs)) {
-              setFormData(prev => ({ ...prev, questions: [...prev.questions, ...qs] }));
-              setGenerationMode('manual'); // Pour voir le tableau
-          } else { alert("L'IA n'a pas renvoyé de questions valides."); }
-      } catch(e) { alert("Erreur serveur IA (Voir logs bleus)"); }
-      setAiLoading(false);
-  };
-
-  return (
-    <div>
-      {!isEditing ? (
-        <>
-            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px'}}>
-                <h3>🎮 Studio de Jeux</h3>
-                <button className="btn-primary" style={{width:'auto', backgroundColor:'#7c3aed'}} onClick={() => setIsEditing(true)}>➕ Créer un Niveau</button>
-            </div>
-            {levels.map(lvl => (
-                <div key={lvl._id} style={{background:'white', padding:'15px', border:'1px solid #e2e8f0', borderRadius:'8px', marginBottom:'10px', display:'flex', justifyContent:'space-between'}}>
-                    <div><strong>{lvl.title}</strong> <small>({lvl.questions.length} questions)</small></div>
-                    <button style={{background:'#fee2e2', color:'red', border:'none', borderRadius:'5px'}}>🗑️</button>
-                </div>
-            ))}
-        </>
+        ))
       ) : (
-        <div className="card" style={{border:'2px solid #7c3aed'}}>
-            <div style={{display:'flex', justifyContent:'space-between', marginBottom:'15px'}}>
-                <h3>Nouveau Niveau</h3>
-                <button onClick={() => setIsEditing(false)} style={{background:'none', border:'none', fontSize:'1.2em', cursor:'pointer'}}>❌</button>
-            </div>
-            
-            <div className="row">
-                <div className="col form-group"><label className="form-label">Titre</label><input className="form-input" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} placeholder="Titre du niveau" /></div>
-            </div>
-
-            <div style={{display:'flex', gap:'10px', marginBottom:'15px', background:'#f8fafc', padding:'10px', borderRadius:'8px'}}>
-                <button onClick={() => setGenerationMode('manual')} style={{flex:1, padding:'8px', border:'none', borderRadius:'5px', background: generationMode==='manual'?'#2563eb':'#e2e8f0', color: generationMode==='manual'?'white':'#64748b', cursor:'pointer', fontWeight:'bold'}}>✍️ Manuel</button>
-                <button onClick={() => setGenerationMode('ai')} style={{flex:1, padding:'8px', border:'none', borderRadius:'5px', background: generationMode==='ai'?'#db2777':'#e2e8f0', color: generationMode==='ai'?'white':'#64748b', cursor:'pointer', fontWeight:'bold'}}>🤖 IA Générative</button>
-            </div>
-
-            {generationMode === 'manual' ? (
-                <div style={{background:'#f0f9ff', padding:'15px', borderRadius:'8px', border:'1px solid #bae6fd', marginBottom:'20px'}}>
-                    <input className="form-input" placeholder="Question ?" style={{marginBottom:'10px'}} value={newQ.q} onChange={e => setNewQ({...newQ, q: e.target.value})} />
-                    <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px', marginBottom:'10px'}}>
-                        {newQ.options.map((opt, idx) => (
-                            <input key={idx} className="form-input" placeholder={`Réponse ${String.fromCharCode(65+idx)}`} value={opt} onChange={e => {const n=[...newQ.options]; n[idx]=e.target.value; setNewQ({...newQ, options:n})}} style={newQ.a===idx?{borderColor:'#16a34a', borderWidth:'3px', background:'#dcfce7'}:{}} />
-                        ))}
-                    </div>
-                    <div style={{display:'flex', gap:'10px', alignItems:'center'}}>
-                        <select className="form-select" style={{flex:1}} value={newQ.a} onChange={e=>setNewQ({...newQ, a:parseInt(e.target.value)})}>
-                            <option value={0}>Bonne réponse : A</option><option value={1}>Bonne réponse : B</option><option value={2}>Bonne réponse : C</option><option value={3}>Bonne réponse : D</option>
-                        </select>
-                        <button className="btn-primary" style={{flex:1, backgroundColor:'#16a34a'}} onClick={addQuestion}>Ajouter cette question</button>
-                    </div>
-                </div>
-            ) : (
-                <div style={{background:'#fff1f2', padding:'15px', borderRadius:'8px', border:'1px solid #fda4af', marginBottom:'20px'}}>
-                    <p style={{marginTop:0, fontWeight:'bold', color:'#9d174d'}}>Génération Automatique</p>
-                    <input type="file" style={{marginBottom:'10px'}} onChange={e => setAiParams({...aiParams, file: e.target.files[0]})} />
-                    <input className="form-input" style={{marginBottom:'10px'}} placeholder="Sujet (ex: La conjugaison)" value={aiParams.topic} onChange={e => setAiParams({...aiParams, topic: e.target.value})} />
-                    <button className="btn-primary" style={{backgroundColor:'#db2777'}} disabled={aiLoading} onClick={handleAiGeneration}>{aiLoading ? "Génération en cours..." : "Lancer l'IA"}</button>
-                </div>
-            )}
-
-            {/* LE FAMEUX TABLEAU VISUEL */}
-            <div style={{marginTop:'20px'}}>
-                <h4>Aperçu du niveau ({formData.questions.length} questions)</h4>
-                {formData.questions.length > 0 ? (
-                    <div style={{border:'1px solid #cbd5e1', borderRadius:'8px', overflow:'hidden'}}>
-                        {formData.questions.map((q, i) => (
-                            <div key={i} style={{padding:'15px', borderBottom:'1px solid #eee', background:'white'}}>
-                                <div style={{display:'flex', justifyContent:'space-between', marginBottom:'10px'}}>
-                                    <strong style={{color:'#2563eb'}}>Q{i+1}: {q.q}</strong>
-                                    <button onClick={() => {const n=[...formData.questions]; n.splice(i, 1); setFormData({...formData, questions:n})}} style={{background:'none', border:'none', color:'red', cursor:'pointer'}}>Supprimer</button>
-                                </div>
-                                <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:'5px'}}>
-                                    {q.options.map((opt, idx) => (
-                                        <div key={idx} style={{
-                                            padding:'8px', borderRadius:'6px', fontSize:'0.9em', textAlign:'center',
-                                            background: idx === q.a ? '#16a34a' : '#f1f5f9',
-                                            color: idx === q.a ? 'white' : '#64748b',
-                                            fontWeight: idx === q.a ? 'bold' : 'normal',
-                                            border: idx === q.a ? 'none' : '1px solid #e2e8f0',
-                                            opacity: opt ? 1 : 0.5
-                                        }}>
-                                            {String.fromCharCode(65+idx)}. {opt || '(Vide)'}
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                ) : <p style={{color:'#94a3b8'}}>Aucune question pour l'instant.</p>}
-            </div>
-
-            <div style={{marginTop:'20px', textAlign:'right'}}>
-                <button className="btn-primary" style={{width:'auto'}} onClick={handleSaveLevel}>💾 Sauvegarder le niveau</button>
-            </div>
-        </div>
+        <div className="p-20 text-center bg-white rounded-[40px] border-4 border-dashed border-slate-100 font-bold text-slate-300 text-xl text-center">Aucun devoir en cours ! 🎉</div>
       )}
     </div>
   );
@@ -831,57 +680,416 @@ export default function GamesTab() {
 
 
 ############################################################
-### FICHIER: client/src/components/dashboard/HomeworksTab.jsx
+### FICHIER: client/src/features/eleve/homework/HomeworkWorkspace.jsx
+############################################################
+
+import React, { useState, useEffect, useRef } from 'react';
+import './Homework.css'; // IMPORT DU CSS LOCAL
+
+export default function HomeworkWorkspace({ homework, user }) {
+  const [pageIdx, setPageIdx] = useState(0);
+  const [docIdx, setDocIdx] = useState(0);
+  const [answer, setAnswer] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [aiResult, setAiResult] = useState(null);
+
+  const viewTop = useRef({ x: 0, y: 0, scale: 1 });
+  const viewBottom = useRef({ x: 0, y: 0, scale: 1 });
+  const topContentRef = useRef(null);
+  const bottomContentRef = useRef(null);
+
+  const currentPage = homework.levels[pageIdx] || { instruction: '', attachmentUrls: [], questionImage: null };
+  const docs = currentPage.attachmentUrls || [];
+
+  const fitImage = (img, containerId, viewRef, contentRef) => {
+    const container = document.getElementById(containerId);
+    if (!img || !container || !contentRef.current) return;
+    const scale = Math.min(container.offsetWidth / img.naturalWidth, container.offsetHeight / img.naturalHeight) * 0.95;
+    viewRef.current = { x: 0, y: 0, scale: scale };
+    contentRef.current.style.transform = `translate(-50%, -50%) translate(0px, 0px) scale(${scale})`;
+  };
+
+  const handleDrag = (e, viewRef, contentRef) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const startX = e.clientX - viewRef.current.x;
+    const startY = e.clientY - viewRef.current.y;
+    const move = (m) => {
+      viewRef.current.x = m.clientX - startX; viewRef.current.y = m.clientY - startY;
+      contentRef.current.style.transform = `translate(-50%, -50%) translate(${viewRef.current.x}px, ${viewRef.current.y}px) scale(${viewRef.current.scale})`;
+    };
+    const stop = () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', stop); };
+    window.addEventListener('mousemove', move); window.addEventListener('mouseup', stop);
+  };
+
+  const handleZoom = (delta, viewRef, contentRef) => {
+      viewRef.current.scale = Math.min(Math.max(0.1, viewRef.current.scale + delta), 5);
+      contentRef.current.style.transform = `translate(-50%, -50%) translate(${viewRef.current.x}px, ${viewRef.current.y}px) scale(${viewRef.current.scale})`;
+  };
+
+  const submitToIA = async () => {
+    if (!answer.trim()) return alert("Écris ta réponse !");
+    setSubmitting(true);
+    try {
+        const res = await fetch('/api/analyze-homework', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userText: answer, homeworkInstruction: currentPage.instruction, classroom: user.classroom, playerId: user.id || user._id })
+        });
+        const data = await res.json();
+        setAiResult(data);
+    } catch(e) { alert("Erreur IA"); }
+    setSubmitting(false);
+  };
+
+  return (
+    <div className="flex flex-col h-[88vh] rounded-[40px] overflow-hidden border-4 border-slate-800 shadow-2xl select-none relative homework-container">
+      
+      {/* VISIONNEUSE HAUT */}
+      <div id="top-container" onMouseDown={(e) => handleDrag(e, viewTop, topContentRef)} className="flex-[7] relative overflow-hidden viewer-dark-bg cursor-grab active:cursor-grabbing">
+        <div ref={topContentRef} className="absolute top-1/2 left-1/2 pointer-events-none transition-transform duration-75">
+            {docs.length > 0 && <img src={docs[docIdx]} draggable="false" onLoad={(e) => fitImage(e.target, 'top-container', viewTop, topContentRef)} className="max-w-none draggable-img pointer-events-auto" />}
+        </div>
+        <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 flex justify-between px-6 pointer-events-none z-20">
+            <button onClick={(e) => { e.stopPropagation(); if(docIdx > 0) setDocIdx(docIdx-1); }} className={`w-16 h-16 rounded-full bg-blue-600 text-white font-black text-2xl nav-arrow-btn pointer-events-auto ${docIdx === 0 ? 'opacity-0' : 'opacity-100'}`}>❮</button>
+            <button onClick={(e) => { e.stopPropagation(); if(docIdx < docs.length - 1) setDocIdx(docIdx+1); }} className={`w-16 h-16 rounded-full bg-blue-600 text-white font-black text-2xl nav-arrow-btn pointer-events-auto ${docIdx === docs.length - 1 ? 'opacity-0' : 'opacity-100'}`}>❯</button>
+        </div>
+        <div className="absolute top-6 left-1/2 -translate-x-1/2 bg-black/80 px-6 py-2 rounded-full text-white text-xs font-black border border-white/20 uppercase">Document {docIdx + 1} / {docs.length}</div>
+        <div className="absolute bottom-6 right-6 flex gap-3 z-30">
+            <button onClick={(e) => { e.stopPropagation(); handleZoom(-0.2, viewTop, topContentRef); }} className="w-12 h-12 bg-black/60 rounded-2xl text-white font-bold border border-white/10 hover:bg-black">➖</button>
+            <button onClick={(e) => { e.stopPropagation(); handleZoom(0.2, viewTop, topContentRef); }} className="w-12 h-12 bg-black/60 rounded-2xl text-white font-bold border border-white/10 hover:bg-black">➕</button>
+        </div>
+      </div>
+
+      {/* ZONE BAS */}
+      <div className="flex-[3] bg-white flex border-t-4 border-orange-500 min-h-[250px]">
+        <div className="w-1/3 p-4 border-r flex flex-col bg-slate-50 relative">
+            <p className="font-black text-slate-800 text-[10px] uppercase mb-2 line-clamp-2">{currentPage.instruction}</p>
+            <div id="bot-container" onMouseDown={(e) => handleDrag(e, viewBottom, bottomContentRef)} className="flex-1 relative bg-black rounded-3xl overflow-hidden cursor-grab">
+                <div ref={bottomContentRef} className="absolute top-1/2 left-1/2 pointer-events-none transition-transform duration-75">
+                    {currentPage.questionImage && <img src={currentPage.questionImage} draggable="false" onLoad={(e) => fitImage(e.target, 'bot-container', viewBottom, bottomContentRef)} className="max-w-none draggable-img pointer-events-auto" />}
+                </div>
+                <div className="absolute bottom-2 right-2 flex gap-1 scale-75 z-20">
+                    <button onClick={(e) => { e.stopPropagation(); handleZoom(-0.2, viewBottom, bottomContentRef); }} className="w-8 h-8 bg-white/20 rounded-lg text-white">➖</button>
+                    <button onClick={(e) => { e.stopPropagation(); handleZoom(0.2, viewBottom, bottomContentRef); }} className="w-8 h-8 bg-white/20 rounded-lg text-white">➕</button>
+                </div>
+            </div>
+        </div>
+        <div className="w-2/3 p-6 flex flex-col gap-4 bg-white">
+            <textarea value={answer} onChange={e => setAnswer(e.target.value)} className="flex-1 w-full p-5 rounded-[24px] border-2 border-slate-100 outline-none focus:border-blue-500 font-medium text-lg resize-none shadow-inner bg-slate-50/50" placeholder="Écris ta réponse ici..." />
+            <button onClick={submitToIA} disabled={submitting} className="bg-blue-600 text-white py-5 rounded-[20px] font-black shadow-xl hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-50 uppercase tracking-widest">{submitting ? "Analyse en cours..." : "Envoyer à l'IA 🤖"}</button>
+        </div>
+      </div>
+
+      {/* MODALE RESULTAT */}
+      {aiResult && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 ai-modal-glass">
+            <div className="bg-white w-full max-w-3xl rounded-[50px] shadow-2xl p-10 flex flex-col my-auto animate-in zoom-in duration-300">
+                <div className="text-center mb-6">
+                    <h2 className="text-2xl font-black text-slate-800 uppercase">Analyse du Maître IA</h2>
+                    <div className="mt-4 text-4xl font-black text-blue-600 bg-blue-50 px-8 py-3 rounded-3xl border-4 border-blue-100 inline-block">{aiResult.grade}</div>
+                </div>
+                <div className="space-y-6 overflow-y-auto max-h-[50vh] pr-2 custom-scrollbar">
+                    <div className="bg-slate-50 p-6 rounded-3xl border shadow-inner text-slate-700 leading-relaxed" dangerouslySetInnerHTML={{__html: aiResult.feedback_fond}} />
+                    {aiResult.corrections?.length > 0 && (
+                        <div className="bg-red-50 p-6 rounded-3xl border-2 border-red-100">
+                            <h3 className="font-black text-red-600 mb-4 uppercase text-xs">✍️ Tableau des fautes :</h3>
+                            <table className="w-full text-sm">
+                                <thead><tr className="text-left text-red-400"><th>Mot faux</th><th>Correction</th><th>Règle</th></tr></thead>
+                                <tbody className="divide-y divide-red-100">
+                                    {aiResult.corrections.map((c, i) => (
+                                        <tr key={i}><td className="py-2 text-red-600 line-through font-bold">{c.wrong}</td><td className="py-2 text-green-600 font-black">{c.correct}</td><td className="py-2 text-slate-500 italic text-xs">{c.rule}</td></tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </div>
+                <div className="flex gap-4 mt-8">
+                    <button onClick={() => setAiResult(null)} className="flex-1 py-5 bg-slate-100 text-slate-500 rounded-3xl font-black uppercase tracking-widest">✍️ Corriger</button>
+                    <button onClick={() => window.location.reload()} className="flex-1 py-5 bg-blue-600 text-white rounded-3xl font-black shadow-lg">Terminer 🎉</button>
+                </div>
+            </div>
+          </div>
+      )}
+    </div>
+  );
+}
+
+
+############################################################
+### FICHIER: client/src/features/eleve/mistakes/MistakesBook.jsx
+############################################################
+
+import React, { useState, useEffect } from 'react';
+
+export default function MistakesBook({ user }) {
+  const [mistakes, setMistakes] = useState([]);
+
+  const load = async () => {
+    const data = await fetch(`/api/player-mistakes/${user.id || user._id}`).then(r => r.json());
+    setMistakes(data || []);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const deleteMistake = async (mId) => {
+    await fetch('/api/delete-mistake', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ playerId: user.id || user._id, mistakeId: mId })
+    });
+    load();
+  };
+
+  return (
+    <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm animate-in fade-in slide-in-from-bottom-4">
+      <h2 className="text-2xl font-black mb-6 uppercase italic tracking-tight">Mon Carnet d'Orthographe ✒️</h2>
+      <div className="space-y-3">
+        {mistakes.length > 0 ? mistakes.map((m) => (
+            <div key={m._id} className="p-5 bg-slate-50 rounded-3xl border border-slate-100 flex justify-between items-center group hover:bg-white hover:shadow-md transition-all">
+                <div className="flex-1">
+                    <div className="flex items-center gap-3">
+                        <span className="text-red-500 line-through font-bold text-lg">{m.wrong}</span>
+                        <span className="text-slate-300">➔</span>
+                        <span className="text-green-600 font-black text-lg">{m.correct}</span>
+                    </div>
+                    <p className="text-xs text-slate-500 font-medium mt-1 uppercase tracking-widest">{m.rule || "Usage courant"}</p>
+                </div>
+                <button onClick={() => deleteMistake(m._id)} className="w-10 h-10 rounded-full flex items-center justify-center text-slate-300 hover:bg-red-50 hover:text-red-500 transition-all font-bold">✕</button>
+            </div>
+        )) : <div className="text-center py-20 text-slate-300 font-black uppercase italic">Zéro faute ! Félicitations 🏆</div>}
+      </div>
+    </div>
+  );
+}
+
+
+############################################################
+### FICHIER: client/src/features/prof/Prof.css
+############################################################
+
+.prof-card-container {
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.1);
+}
+
+.tab-btn-active {
+    transform: translateY(-2px);
+}
+
+/* Tableaux Premium */
+.prof-table th {
+    letter-spacing: 0.05em;
+    color: #94a3b8;
+}
+
+.prof-table tr {
+    transition: background-color 0.2s;
+}
+
+/* Gros boutons de Studio */
+.studio-btn {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.studio-btn:hover {
+    transform: translateY(-4px) scale(1.01);
+}
+
+
+############################################################
+### FICHIER: client/src/features/prof/ProfPage.css
+############################################################
+
+.prof-page-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem 1rem;
+}
+.prof-card {
+    background: white;
+    border-radius: 50px;
+    shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    overflow: hidden;
+    border: 1px solid #f1f5f9;
+}
+.prof-content-area {
+    padding: 2rem;
+    min-height: 500px;
+}
+
+
+############################################################
+### FICHIER: client/src/features/prof/ProfPage.jsx
 ############################################################
 
 import React, { useState } from 'react';
+import ProfHeader from './components/ProfHeader';
+import ProfNav from './components/ProfNav';
+import StudentsManager from './students/StudentsManager';
+import HomeworkStudio from './homework/HomeworkStudio';
+import GameStudio from './games/GameStudio';
+import './ProfPage.css';
 
-export default function HomeworksTab() {
-  const [isCreating, setIsCreating] = useState(false);
+export default function ProfPage({ user, onLogout }) {
+  const [tab, setTab] = useState('students');
 
   return (
-    <div>
-      {!isCreating ? (
+    <div className="prof-page-container">
+      <div className="prof-card">
+        <ProfHeader user={user} onLogout={onLogout} />
+        <ProfNav activeTab={tab} onTabChange={setTab} />
+        
+        <div className="prof-content-area">
+          {tab === 'students' && <StudentsManager />}
+          {tab === 'homework' && <HomeworkStudio />}
+          {tab === 'games' && <GameStudio />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+############################################################
+### FICHIER: client/src/features/prof/components/ProfHeader.jsx
+############################################################
+
+import React from 'react';
+
+export default function ProfHeader({ user, onLogout }) {
+  return (
+    <div className="p-8 border-b flex justify-between items-center bg-slate-50">
+      <div>
+        <h2 className="text-3xl font-black text-slate-800 tracking-tighter uppercase">CHEF D'ORCHESTRE 🎓</h2>
+        <p className="text-slate-400 font-medium italic">Espace Enseignant V6.0</p>
+      </div>
+      <button onClick={onLogout} className="bg-white text-slate-400 px-6 py-2 rounded-2xl font-bold border hover:text-red-500 transition-all">Quitter</button>
+    </div>
+  );
+}
+
+
+############################################################
+### FICHIER: client/src/features/prof/components/ProfNav.jsx
+############################################################
+
+import React from 'react';
+
+export default function ProfNav({ activeTab, onTabChange }) {
+  const tabs = [
+    { id: 'students', label: '👥 ÉLÈVES', color: 'blue' },
+    { id: 'homework', label: '📚 DEVOIRS', color: 'orange' },
+    { id: 'games', label: '🎮 JEUX', color: 'purple' }
+  ];
+
+  return (
+    <div className="flex gap-2 p-4 bg-white">
+      {tabs.map(t => (
+        <button 
+          key={t.id}
+          onClick={() => onTabChange(t.id)}
+          className={`flex-1 py-5 rounded-3xl font-black text-lg transition-all ${
+            activeTab === t.id 
+            ? `bg-${t.color}-600 text-white shadow-xl shadow-${t.color}-100 scale-105` 
+            : 'text-slate-400 hover:bg-slate-50'
+          }`}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+
+############################################################
+### FICHIER: client/src/features/prof/games/GameStudio.jsx
+############################################################
+
+import React, { useState, useEffect } from 'react';
+
+export default function GameStudio() {
+  const [levels, setLevels] = useState([]);
+  const [isEditing, setIsEditing] = useState(false);
+  const [loadingIA, setLoadingIA] = useState(false);
+  const [formData, setFormData] = useState({ _id: null, title: '', chapterId: 'ch1-zombie', questions: [] });
+  const [currentQ, setCurrentQ] = useState({ q: '', options: ['', '', '', ''], a: 0 });
+  const [aiPrompt, setAiPrompt] = useState('');
+
+  const load = async () => {
+    const data = await fetch('/api/game-levels/all').then(r => r.json());
+    setLevels(data || []);
+  };
+  useEffect(() => { load(); }, []);
+
+  const handleAiGenerate = async () => {
+    if (!aiPrompt) return alert("Sujet requis !");
+    setLoadingIA(true);
+    try {
+        const questions = await fetch('/api/generate-game-content', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ topic: aiPrompt, numQuestions: 5 })
+        }).then(r => r.json());
+        if (Array.isArray(questions)) {
+            setFormData(prev => ({ ...prev, questions: [...prev.questions, ...questions] }));
+        }
+    } catch(e) { alert("Erreur IA"); }
+    setLoadingIA(false);
+  };
+
+  const handleSave = async () => {
+    await fetch('/api/game-levels', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
+    });
+    alert("Niveau sauvegardé !"); setIsEditing(false); load();
+  };
+
+  return (
+    <div className="space-y-6">
+      {!isEditing ? (
         <>
-            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px'}}>
-                <h3>📚 Gestion des Devoirs</h3>
-                <button 
-                    className="btn-primary" 
-                    style={{width:'auto'}}
-                    onClick={() => setIsCreating(true)}
-                >
-                    ➕ Nouveau Devoir
-                </button>
-            </div>
-            <div style={{padding:'20px', background:'#f8fafc', borderRadius:'8px', border:'1px dashed #cbd5e1', textAlign:'center'}}>
-                <p>Aucun devoir pour le moment.</p>
-            </div>
+          <button onClick={() => { setFormData({ _id: null, title: '', chapterId: 'ch1-zombie', questions: [] }); setIsEditing(true); }} 
+                  className="w-full bg-purple-600 text-white py-6 rounded-[30px] font-black text-xl shadow-xl border-b-8 border-purple-800 transition-all uppercase tracking-widest">
+            ➕ Créer Niveau de Jeu
+          </button>
+          <div className="grid gap-4">
+            {levels.map(lvl => (
+              <div key={lvl._id} className="bg-white p-6 rounded-3xl border flex justify-between items-center shadow-sm">
+                <div><b className="text-lg text-slate-800">{lvl.title}</b><p className="text-xs text-slate-400 font-bold uppercase">{lvl.chapterId}</p></div>
+                <button onClick={() => { setFormData(lvl); setIsEditing(true); }} className="w-12 h-12 bg-purple-50 text-purple-600 rounded-2xl font-bold">🖋️</button>
+              </div>
+            ))}
+          </div>
         </>
       ) : (
-        <div className="card" style={{border:'2px solid #2563eb'}}>
-            <h3>Nouveau Devoir</h3>
-            <div className="form-group">
-                <label className="form-label">Titre</label>
-                <input className="form-input" placeholder="Ex: Devoir sur le Passé Composé" />
-            </div>
-            <div className="form-group">
-                <label className="form-label">Classe</label>
-                <select className="form-select">
-                    <option>Toutes</option>
-                    <option>6D</option>
-                    <option>5B</option>
-                </select>
-            </div>
-            <div style={{display:'flex', gap:'10px', marginTop:'20px'}}>
-                <button className="btn-primary" style={{backgroundColor:'#16a34a'}}>Enregistrer</button>
-                <button 
-                    className="btn-primary" 
-                    style={{backgroundColor:'#94a3b8'}} 
-                    onClick={() => setIsCreating(false)}
-                >
-                    Annuler
-                </button>
-            </div>
+        <div className="bg-white rounded-[40px] border-2 border-purple-100 p-8 space-y-6 shadow-2xl">
+          <div className="flex justify-between items-center border-b pb-4">
+            <h3 className="text-2xl font-black text-purple-600 italic">Studio de Jeu</h3>
+            <button onClick={() => setIsEditing(false)} className="text-slate-400 font-bold">✕</button>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <input className="p-4 rounded-2xl bg-slate-50 border-none outline-none font-bold" placeholder="Titre" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
+            <select className="p-4 rounded-2xl bg-slate-50 border-none outline-none font-bold text-purple-600" value={formData.chapterId} onChange={e => setFormData({...formData, chapterId: e.target.value})}>
+                <option value="ch1-zombie">🧟 Zombie</option><option value="ch2-starship">🚀 Starship</option>
+            </select>
+          </div>
+          <div className="bg-purple-50 p-6 rounded-[30px] border border-purple-200 space-y-4">
+              <textarea className="w-full p-4 rounded-2xl border-none outline-none h-24 shadow-inner" placeholder="Sujet IA..." value={aiPrompt} onChange={e => setAiPrompt(e.target.value)} />
+              <button onClick={handleAiGenerate} disabled={loadingIA} className="w-full bg-purple-600 text-white py-4 rounded-2xl font-black shadow-lg uppercase">{loadingIA ? "🪄 IA EN TRAVAIL..." : "GÉNÉRER PAR IA ✨"}</button>
+          </div>
+          <div className="max-h-60 overflow-y-auto space-y-2 pr-2">
+            {formData.questions.map((q, i) => (
+                <div key={i} className="p-4 bg-white rounded-2xl border flex justify-between items-center shadow-sm">
+                    <span className="font-bold text-sm truncate mr-4">{i+1}. {q.q}</span>
+                    <button onClick={()=>{const n=[...formData.questions]; n.splice(i,1); setFormData({...formData, questions:n});}} className="text-red-300">✕</button>
+                </div>
+            ))}
+          </div>
+          <button onClick={handleSave} className="w-full bg-green-500 text-white py-6 rounded-[30px] font-black text-2xl shadow-xl shadow-green-100 border-b-8 border-green-700 uppercase tracking-tighter">💾 Sauvegarder</button>
         </div>
       )}
     </div>
@@ -889,112 +1097,168 @@ export default function HomeworksTab() {
 }
 
 
-
-
 ############################################################
-### FICHIER: client/src/components/dashboard/StudentsTab.jsx
+### FICHIER: client/src/features/prof/homework/HomeworkStudio.jsx
 ############################################################
 
 import React, { useState, useEffect } from 'react';
 
-export default function StudentsTab() {
+export default function HomeworkStudio() {
+  const [hws, setHws] = useState([]);
+  const [isEditing, setIsEditing] = useState(false);
+  const [formData, setFormData] = useState({ _id: null, title: '', classroom: 'Toutes', levels: [] });
+
+  const load = async () => {
+    const data = await fetch('/api/homework-all').then(r => r.json());
+    setHws(data || []);
+  };
+  useEffect(() => { load(); }, []);
+
+  const handleUpload = async (file, idx, type) => {
+    const fd = new FormData(); fd.append('file', file);
+    const res = await fetch('/api/upload', { method: 'POST', body: fd }).then(r => r.json());
+    if (res.ok) {
+        const n = [...formData.levels];
+        if (type === 'doc') n[idx].attachmentUrls.push(res.imageUrl);
+        else n[idx].questionImage = res.imageUrl;
+        setFormData({ ...formData, levels: n });
+    }
+  };
+
+  const handleSave = async () => {
+    const method = formData._id ? 'PUT' : 'POST';
+    const url = formData._id ? `/api/homework/${formData._id}` : '/api/homework';
+    await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formData) });
+    alert("Devoir enregistré !"); setIsEditing(false); load();
+  };
+
+  return (
+    <div className="space-y-6">
+      {!isEditing ? (
+        <>
+          <button onClick={() => { setFormData({ _id: null, title: '', classroom: 'Toutes', levels: [{ instruction: '', attachmentUrls: [], aiPrompt: '', questionImage: null }] }); setIsEditing(true); }} 
+                  className="w-full bg-orange-500 text-white py-6 rounded-[30px] font-black text-xl shadow-xl border-b-8 border-orange-700 active:translate-y-1 active:border-b-0 transition-all uppercase tracking-widest">
+            ➕ Créer Devoir Maison
+          </button>
+          <div className="grid gap-4">
+            {hws.map(h => (
+              <div key={h._id} className="bg-white p-6 rounded-3xl border flex justify-between items-center shadow-sm hover:border-orange-300 transition-all">
+                <div><b className="text-lg text-slate-800">{h.title}</b><p className="text-xs text-slate-400 font-bold uppercase">{h.classroom}</p></div>
+                <div className="flex gap-2">
+                    <button onClick={() => { setFormData(h); setIsEditing(true); }} className="w-12 h-12 bg-orange-50 text-orange-600 rounded-2xl font-bold">🖋️</button>
+                    <button onClick={async () => { if(confirm("Suppr ?")) { await fetch(`/api/homework/${h._id}`, {method:'DELETE'}); load(); }}} className="w-12 h-12 bg-red-50 text-red-500 rounded-2xl font-bold">🗑️</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      ) : (
+        <div className="bg-white rounded-[40px] border-2 border-orange-100 p-8 space-y-6 shadow-2xl">
+          <div className="flex justify-between items-center border-b pb-4">
+            <h3 className="text-2xl font-black text-orange-600 italic">Édition du Devoir</h3>
+            <button onClick={() => setIsEditing(false)} className="text-slate-400 font-bold">✕</button>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <input className="p-4 rounded-2xl bg-slate-50 border-none outline-none font-bold" placeholder="Titre" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
+            <select className="p-4 rounded-2xl bg-slate-50 border-none outline-none font-bold text-orange-600" value={formData.classroom} onChange={e => setFormData({...formData, classroom: e.target.value})}>
+                <option value="Toutes">Toutes les classes</option><option value="6D">6eD</option><option value="5B">5eB</option><option value="5C">5eC</option>
+            </select>
+          </div>
+          <div className="space-y-6">
+            {formData.levels.map((lvl, idx) => (
+                <div key={idx} className="p-6 bg-slate-50 rounded-[30px] border border-slate-200">
+                    <div className="flex justify-between mb-4"><h4 className="font-black text-slate-400 text-xs uppercase">Page {idx + 1}</h4><button onClick={()=>{const n=[...formData.levels]; n.splice(idx,1); setFormData({...formData, levels:n});}} className="text-red-400 text-xs font-bold uppercase hover:underline">Supprimer</button></div>
+                    <div className="flex flex-wrap gap-2 p-4 bg-white rounded-2xl border-2 border-dashed border-slate-200 min-h-[80px] mb-4">
+                        {lvl.attachmentUrls.map((url, uIdx) => (
+                            <div key={uIdx} className="relative w-14 h-14 rounded-lg overflow-hidden border">
+                                <img src={url} className="w-full h-full object-cover" />
+                                <button onClick={()=>{const n=[...formData.levels]; n[idx].attachmentUrls.splice(uIdx,1); setFormData({...formData, levels:n});}} className="absolute top-0 right-0 bg-red-500 text-white w-4 h-4 text-[8px]">✕</button>
+                            </div>
+                        ))}
+                        <label className="w-14 h-14 flex items-center justify-center bg-slate-50 rounded-lg cursor-pointer hover:bg-blue-50 text-blue-400 font-bold text-xl">+ <input type="file" className="hidden" multiple onChange={e => Array.from(e.target.files).forEach(f => handleUpload(f, idx, 'doc'))} /></label>
+                    </div>
+                    <div className="grid grid-cols-3 gap-4 bg-white p-4 rounded-2xl border">
+                        <div className="h-24 bg-slate-50 rounded-xl border flex items-center justify-center overflow-hidden relative">
+                            {lvl.questionImage ? <img src={lvl.questionImage} className="max-h-full" /> : <span className="text-[10px] text-slate-300 font-bold uppercase">Image Question</span>}
+                            <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={e => handleUpload(e.target.files[0], idx, 'qimg')} />
+                        </div>
+                        <textarea className="col-span-2 p-3 rounded-xl bg-slate-50 border-none text-sm shadow-inner" placeholder="Consigne élève..." rows="2" value={lvl.instruction} onChange={e => { const n = [...formData.levels]; n[idx].instruction = e.target.value; setFormData({...formData, levels:n}); }} />
+                    </div>
+                </div>
+            ))}
+          </div>
+          <button onClick={() => setFormData({...formData, levels: [...formData.levels, { instruction:'', attachmentUrls:[], aiPrompt:'', questionImage:null }]})} className="w-full py-4 bg-slate-100 text-slate-400 rounded-2xl font-bold border-2 border-dashed hover:bg-slate-200 transition-all uppercase text-xs tracking-widest">+ AJOUTER UNE PAGE</button>
+          <button onClick={handleSave} className="w-full bg-green-500 text-white py-6 rounded-[30px] font-black text-2xl shadow-xl shadow-green-100 border-b-8 border-green-700 active:translate-y-1 active:border-b-0 transition-all uppercase tracking-tighter">💾 Sauvegarder en BDD</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+############################################################
+### FICHIER: client/src/features/prof/students/StudentsManager.jsx
+############################################################
+
+import React, { useState, useEffect } from 'react';
+
+export default function StudentsManager() {
   const [players, setPlayers] = useState([]);
   const [filterClass, setFilterClass] = useState('all');
   const [search, setSearch] = useState('');
 
-  useEffect(() => {
-    fetch('/api/players').then(res => res.json()).then(setPlayers).catch(console.error);
-  }, []);
-
-  const handleReset = async (id) => {
-    if(!window.confirm("Supprimer cet élève ?")) return;
-    try {
-        await fetch(`/api/players/${id}`, { method: 'DELETE' });
-        setPlayers(prev => prev.filter(p => p._id !== id));
-    } catch(e) { alert("Erreur suppression"); }
+  const load = async () => {
+    const data = await fetch('/api/players').then(r => r.json());
+    setPlayers(data || []);
   };
+  useEffect(() => { load(); }, []);
 
   const handleTestClass = async () => {
-    const targetClass = filterClass === 'all' ? '6D' : filterClass;
-    const dummyData = { firstName: "Élève", lastName: "Test", classroom: targetClass };
-    
-    // On crée un compte temporaire
+    if(filterClass === 'all') return alert("Sélectionne une classe !");
     const res = await fetch('/api/register', {
-        method: 'POST', 
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify(dummyData)
-    });
-    const data = await res.json();
-    if(data.ok) {
-        localStorage.setItem("player", JSON.stringify(data));
-        // On force le rechargement pour passer en mode élève
-        window.location.href = '/dashboard';
-    }
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ firstName: "Eleve", lastName: "Test", classroom: filterClass })
+    }).then(r => r.json());
+    if (res.ok) { localStorage.setItem("player", JSON.stringify(res)); window.location.reload(); }
   };
 
-  const filteredPlayers = players.filter(p => {
-    const matchClass = filterClass === 'all' || p.classroom === filterClass;
-    const matchName = (p.firstName + ' ' + p.lastName).toLowerCase().includes(search.toLowerCase());
-    return matchClass && matchName;
-  });
+  const filtered = players.filter(p => (filterClass === 'all' || p.classroom === filterClass) && (p.firstName + p.lastName).toLowerCase().includes(search.toLowerCase()));
 
   return (
-    <div>
-      <div style={{display:'flex', gap:'10px', marginBottom:'15px', alignItems:'center'}}>
-        <select 
-            className="form-select" style={{flex:1}}
-            value={filterClass} onChange={(e) => setFilterClass(e.target.value)}
-        >
+    <div className="space-y-6">
+      <div className="flex gap-4 bg-slate-50 p-4 rounded-3xl border border-slate-100">
+        <select className="flex-1 p-4 rounded-2xl border-none font-bold bg-white outline-none cursor-pointer" value={filterClass} onChange={e => setFilterClass(e.target.value)}>
             <option value="all">Toutes les classes</option>
-            <option value="6D">6eD</option><option value="5B">5eB</option><option value="5C">5eC</option><option value="2A">2de A</option>
+            <option value="6D">6eD</option><option value="5B">5eB</option><option value="5C">5eC</option>
+            <option value="2A">2de A</option><option value="2CD">2de CD</option>
         </select>
-        
-        <button 
-            className="btn-primary" 
-            style={{flex:1, backgroundColor:'#3b82f6'}}
-            onClick={handleTestClass}
-        >
-            🎮 Tester la classe
-        </button>
+        <button onClick={handleTestClass} className="bg-blue-600 text-white px-8 rounded-2xl font-black shadow-lg hover:bg-blue-700 transition-all uppercase tracking-tighter">🎮 Tester</button>
       </div>
       
-      <input 
-        className="form-input" 
-        style={{marginBottom:'15px'}}
-        placeholder="Rechercher un élève..." 
-        value={search} onChange={(e) => setSearch(e.target.value)}
-      />
+      <input className="w-full p-4 rounded-2xl border-2 outline-none focus:border-blue-500 font-medium" placeholder="🔍 Chercher un élève..." value={search} onChange={e => setSearch(e.target.value)} />
 
-      <table style={{width:'100%', borderCollapse:'collapse'}}>
-        <thead style={{background:'#f8fafc'}}>
-            <tr>
-                <th style={{padding:'10px', textAlign:'left'}}>Nom</th>
-                <th style={{padding:'10px', textAlign:'left'}}>Classe</th>
-                <th style={{padding:'10px', textAlign:'center'}}>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {filteredPlayers.map(p => (
-                <tr key={p._id} style={{borderBottom:'1px solid #eee'}}>
-                    <td style={{padding:'10px'}}><strong>{p.firstName}</strong> {p.lastName}</td>
-                    <td style={{padding:'10px'}}>{p.classroom}</td>
-                    <td style={{padding:'10px', textAlign:'center'}}>
-                        <button 
-                            onClick={() => handleReset(p._id)}
-                            style={{color:'#dc2626', background:'#fee2e2', border:'none', padding:'5px 10px', borderRadius:'5px', cursor:'pointer'}}
-                        >
-                            Supprimer
-                        </button>
-                    </td>
-                </tr>
-            ))}
-        </tbody>
-      </table>
+      <div className="border border-slate-100 rounded-[32px] overflow-hidden bg-white shadow-sm">
+        <table className="w-full text-left">
+            <thead className="bg-slate-50 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b">
+                <tr><th className="p-5">Nom de l'élève</th><th className="p-5 text-center">Classe</th><th className="p-5 text-right">Actions</th></tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+                {filtered.map(p => (
+                    <tr key={p._id} className="hover:bg-slate-50 transition-colors">
+                        <td className="p-5 font-bold text-slate-700">{p.firstName} {p.lastName}</td>
+                        <td className="p-5 text-center"><span className="bg-blue-50 text-blue-600 px-3 py-1 rounded-full text-xs font-black">{p.classroom}</span></td>
+                        <td className="p-5 text-right">
+                            <button onClick={async () => { if(confirm("Reset ?")) { await fetch('/api/reset-player', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({playerId: p._id})}); load(); } }} className="text-red-300 hover:text-red-500 font-bold text-xs uppercase tracking-tighter">Reset</button>
+                        </td>
+                    </tr>
+                ))}
+            </tbody>
+        </table>
+      </div>
     </div>
   );
 }
-
-
 
 
 ############################################################
@@ -1004,6 +1268,25 @@ export default function StudentsTab() {
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --primary: #2563eb;
+  --secondary: #f59e0b;
+  --success: #16a34a;
+  --danger: #dc2626;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: #f1f5f9;
+  overflow-x: hidden;
+}
+
+/* Scrollbar personnalisée pour les zones internes */
+.custom-scrollbar::-webkit-scrollbar { width: 6px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
 
 
 ############################################################
@@ -1023,119 +1306,19 @@ ReactDOM.createRoot(document.getElementById('root')).render(
 
 
 ############################################################
-### FICHIER: client/src/pages/Dashboard.jsx
-############################################################
-
-import React, { useState } from 'react';
-import StudentsTab from '../components/dashboard/StudentsTab';
-import HomeworksTab from '../components/dashboard/HomeworksTab';
-import GamesTab from '../components/dashboard/GamesTab';
-
-export default function Dashboard() {
-  const [activeTab, setActiveTab] = useState('students');
-  const user = JSON.parse(localStorage.getItem("player") || "{}");
-  const isProf = user.id === 'prof';
-
-  if (!user.id) return <div className="card">Non connecté.</div>;
-
-  return (
-    <div className="card">
-      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px'}}>
-        <h2 style={{margin:0}}>
-            {isProf ? "🎓 Tableau de Bord" : `Espace Élève`}
-        </h2>
-        {isProf && <span style={{fontSize:'0.8em', background:'#dbeafe', color:'#1e40af', padding:'5px 10px', borderRadius:'10px'}}>Enseignant</span>}
-      </div>
-      
-      {isProf ? (
-        <>
-            <div className="tabs-container">
-            <button className={`tab-btn ${activeTab === 'students' ? 'active' : ''}`} onClick={() => setActiveTab('students')}>👥 Élèves</button>
-            <button className={`tab-btn ${activeTab === 'homeworks' ? 'active' : ''}`} onClick={() => setActiveTab('homeworks')}>📚 Devoirs</button>
-            <button className={`tab-btn ${activeTab === 'games' ? 'active' : ''}`} onClick={() => setActiveTab('games')}>🎮 Jeux</button>
-            </div>
-
-            <div className="tab-content" style={{minHeight:'300px'}}>
-                {activeTab === 'students' && <StudentsTab />}
-                {activeTab === 'homeworks' && <HomeworksTab />}
-                {activeTab === 'games' && <GamesTab />}
-            </div>
-        </>
-      ) : (
-        <p>Interface élève en construction...</p>
-      )}
-    </div>
-  );
-}
-
-
-############################################################
-### FICHIER: client/src/pages/Login.jsx
-############################################################
-
-import React, { useState } from 'react';
-import { api } from '../services/api';
-
-const Login = ({ onLoginSuccess }) => {
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [classroom, setClassroom] = useState('6D');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  const isProf = firstName.toLowerCase() === 'jean' && lastName.toLowerCase() === 'vuillet';
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
-    const res = await api.post('/register', { firstName, lastName, classroom, password });
-    if (res.ok) onLoginSuccess(res);
-    else setError(res.message || "Accès refusé");
-    setLoading(false);
-  };
-
-  return (
-    <div className="flex items-center justify-center min-h-screen bg-slate-100 p-4">
-      <div className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-md border-t-8 border-blue-600">
-        <h2 className="text-3xl font-black text-center mb-6">Condamine</h2>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <input className="w-full p-4 rounded-xl border-2" placeholder="Prénom" value={firstName} onChange={e => setFirstName(e.target.value)} required />
-          <input className="w-full p-4 rounded-xl border-2" placeholder="Nom" value={lastName} onChange={e => setLastName(e.target.value)} required />
-          
-          {isProf ? (
-            <input type="password" title="Mdp Prof" className="w-full p-4 rounded-xl border-2 border-orange-400" placeholder="Mot de passe Maître" value={password} onChange={e => setPassword(e.target.value)} required />
-          ) : (
-            <select className="w-full p-4 rounded-xl border-2" value={classroom} onChange={e => setClassroom(e.target.value)}>
-                <option value="6D">6eD</option><option value="5B">5eB</option><option value="5C">5eC</option>
-                <option value="2A">2de A</option><option value="2CD">2de CD</option>
-            </select>
-          )}
-
-          {error && <div className="p-3 bg-red-50 text-red-600 rounded-xl text-sm font-bold">{error}</div>}
-          <button type="submit" disabled={loading} className="w-full py-4 bg-blue-600 text-white rounded-xl font-bold">
-            {loading ? 'Vérification...' : 'ENTRER'}
-          </button>
-        </form>
-      </div>
-    </div>
-  );
-};
-export default Login;
-
-
-############################################################
 ### FICHIER: client/src/services/api.js
 ############################################################
 
-/**
- * SERVICE API REACT
- * Remplace window.api de la version Vanilla
- */
 const API_BASE = '/api';
 
 export const api = {
+    async get(endpoint) {
+        try {
+            const response = await fetch(`${API_BASE}${endpoint}`);
+            if (!response.ok) return null;
+            return await response.json();
+        } catch (error) { return null; }
+    },
     async post(endpoint, data) {
         try {
             const response = await fetch(`${API_BASE}${endpoint}`, {
@@ -1144,35 +1327,12 @@ export const api = {
                 body: JSON.stringify(data),
             });
             return await response.json();
-        } catch (error) {
-            console.error(`Erreur POST ${endpoint}:`, error);
-            return { ok: false, error: error.message };
-        }
+        } catch (error) { return { ok: false }; }
     },
-
-    async get(endpoint) {
-        try {
-            const response = await fetch(`${API_BASE}${endpoint}`);
-            if (!response.ok) throw new Error('Network response was not ok');
-            return await response.json();
-        } catch (error) {
-            console.error(`Erreur GET ${endpoint}:`, error);
-            return null;
-        }
-    },
-
-    // Récupérer les devoirs d'une classe
     async getHomeworks(classroom) {
         return this.get(`/homework/${classroom}`);
-    },
-
-    // Récupérer les données d'un élève (fautes, etc.)
-    async getPlayerData(id) {
-        return this.get(`/player-data/${id}`);
     }
 };
-
-
 
 
 ############################################################
@@ -4181,7 +4341,6 @@ function buildTree(dir, prefix = '') {
         const fullPath = path.join(dir, item);
         let isDir = false;
         try { isDir = fs.statSync(fullPath).isDirectory(); } catch(e) {}
-        
         structure += prefix + (isLast ? '└── ' : '├── ') + item + (isDir ? '/' : '') + '\n';
         if (isDir) structure += buildTree(fullPath, prefix + (isLast ? '    ' : '│   '));
     });
@@ -4204,8 +4363,7 @@ function captureContent(dir, baseDir = "") {
                     const data = fs.readFileSync(fullPath, 'utf8');
                     content += "\n" + "#".repeat(60) + "\n";
                     content += "### FICHIER: " + relativePath + "\n";
-                    content += "#".repeat(60) + "\n\n";
-                    content += data + "\n\n";
+                    content += "#".repeat(60) + "\n\n" + data + "\n\n";
                 } catch (e) {}
             }
         }
@@ -4214,15 +4372,11 @@ function captureContent(dir, baseDir = "") {
 }
 
 function run() {
-    console.log("📸 Génération du Snapshot Propre...");
-    let output = "ARBORESCENCE\n" + "=".repeat(20) + "\n\n.\n";
-    output += buildTree(__dirname);
-    output += "\n" + "=".repeat(60) + "\n";
-    output += "CODE SOURCE COMPLET\n";
-    output += "=".repeat(60) + "\n\n";
-    output += captureContent(__dirname);
+    console.log("📸 Génération du Snapshot Global...");
+    let output = "ARBORESCENCE\n" + "=".repeat(20) + "\n\n.\n" + buildTree(__dirname);
+    output += "\n" + "=".repeat(60) + "\nCODE SOURCE COMPLET\n" + "=".repeat(60) + "\n\n" + captureContent(__dirname);
     fs.writeFileSync(OUTPUT_FILENAME, output);
-    console.log("✅ snapshot.txt mis à jour !");
+    console.log("✅ snapshot.txt prêt !");
 }
 run();
 
@@ -4314,67 +4468,91 @@ const mongoose = require('mongoose');
 const app = express();
 const port = process.env.PORT || 3000;
 const mongoUri = process.env.MONGODB_URI;
+const geminiKey = process.env.GEMINI_API_KEY;
+
+// --- 1. MODÈLES (DÉCLARÉS AVANT TOUT) ---
+const playerSchema = new mongoose.Schema({ 
+    firstName: String, lastName: String, classroom: String, 
+    spellingMistakes: { type: [{ wrong: String, correct: String, rule: String, date: { type: Date, default: Date.now } }], default: [] } 
+});
+const Player = mongoose.model('Player', playerSchema);
+
+const homeworkSchema = new mongoose.Schema({ 
+    title: String, classroom: String, levels: Array, date: { type: Date, default: Date.now } 
+});
+const Homework = mongoose.model('Homework', homeworkSchema);
 
 mongoose.connect(mongoUri).then(() => console.log('✅ MongoDB Connecté')).catch(err => console.error(err));
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
-// MODÈLES
-const Player = mongoose.model('Player', new mongoose.Schema({ 
-    firstName: String, lastName: String, classroom: String, 
-    validatedQuestions: { type: [String], default: [] },
-    spellingMistakes: { type: Array, default: [] }
-}));
+// --- 2. IA ANALYSE (RÉPARÉE POUR GEMINI 2.0) ---
+app.post('/api/analyze-homework', async (req, res) => {
+    const { userText, homeworkInstruction, classroom, playerId } = req.body;
+    console.log("🤖 [IA] Analyse en cours pour:", playerId);
 
-const Homework = mongoose.model('Homework', new mongoose.Schema({ 
-    title: String, classroom: String, levels: Array, date: { type: Date, default: Date.now } 
-}));
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${geminiKey}`;
+    
+    const prompt = `Tu es un professeur de français. Sujet: ${homeworkInstruction}. 
+    Réponse élève: ${userText}.
+    Tâche: 
+    1. Analyse le fond (feedback_fond).
+    2. Liste les fautes d'orthographe/grammaire dans un tableau (corrections).
+    
+    RÉPONDS UNIQUEMENT EN JSON :
+    {
+      "feedback_fond": "HTML pédagogique",
+      "grade": "xx/20",
+      "corrections": [{"wrong": "...", "correct": "...", "rule": "..."}]
+    }`;
 
-const GameLevel = mongoose.model('GameLevel', new mongoose.Schema({ 
-    classroom: String, title: String, lesson: String, questions: Array, createdAt: { type: Date, default: Date.now } 
-}));
-
-// TOLÉRANCE NOM
-function isFuzzyMatch(inputStr, storedStr) {
-    if (!inputStr || !storedStr) return false;
-    const norm = (s) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[-]/g, " ").split(/\s+/).filter(w => w.length > 1);
-    const iW = norm(inputStr); const sW = norm(storedStr);
-    return iW.some(w => sW.includes(w)) || sW.some(w => iW.includes(w));
-}
-
-// --- ROUTES ---
-app.post('/api/register', async (req, res) => { 
-    const { firstName, lastName, classroom, password } = req.body; 
-    if (firstName?.toLowerCase() === "jean" && lastName?.toLowerCase() === "vuillet") {
-        if (password === "Clemenceau1919") return res.json({ ok: true, id: "prof", firstName: "Jean", lastName: "Vuillet", classroom: "Professeur" });
-        else return res.status(401).json({ ok: false, message: "Mot de passe incorrect" });
-    }
     try {
-        const allPlayers = await Player.find({ classroom });
-        const match = allPlayers.find(p => isFuzzyMatch(firstName, p.firstName) && isFuzzyMatch(lastName, p.lastName));
-        if (match) res.json({ ok: true, id: match._id, firstName: match.firstName, lastName: match.lastName, classroom: match.classroom });
-        else res.status(404).json({ ok: false, message: "Élève non trouvé." });
-    } catch (e) { res.status(500).json({ ok: false }); }
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { response_mime_type: "application/json" } })
+        });
+        const result = await response.json();
+        const json = JSON.parse(result.candidates[0].content.parts[0].text);
+
+        // Sauvegarde des fautes si l'élève est identifié
+        if (playerId && playerId !== "prof" && json.corrections?.length > 0) {
+            await Player.findByIdAndUpdate(playerId, { 
+                $push: { spellingMistakes: { $each: json.corrections } } 
+            });
+        }
+        res.json(json);
+    } catch (e) {
+        console.error("💥 IA Crash:", e.message);
+        res.status(500).json({ error: "L'IA a foiré sa réponse." });
+    }
 });
 
-app.get('/api/players', async (req, res) => {
-    try { res.json(await Player.find().sort({ classroom: 1, lastName: 1 })); } catch (e) { res.json([]); }
+// --- 3. ROUTES ---
+app.get('/api/homework/:classroom', async (req, res) => {
+    const cls = req.params.classroom;
+    const list = await Homework.find({ $or: [{ classroom: cls }, { classroom: "Toutes" }] }).sort({ date: -1 });
+    res.json(list);
 });
 
-app.post('/api/reset-player', async (req, res) => {
-    try { await Player.findByIdAndUpdate(req.body.playerId, { validatedQuestions: [], spellingMistakes: [] }); res.json({ ok: true }); } 
-    catch (e) { res.json({ ok: false }); }
+app.get('/api/player-mistakes/:id', async (req, res) => {
+    const p = await Player.findById(req.params.id);
+    res.json(p ? p.spellingMistakes : []);
 });
 
-app.post('/api/homework', async (req, res) => {
-    try { const hw = new Homework(req.body); await hw.save(); res.json({ ok: true }); } 
-    catch (e) { res.status(500).json({ ok: false }); }
+app.post('/api/delete-mistake', async (req, res) => {
+    const { playerId, mistakeId } = req.body;
+    await Player.findByIdAndUpdate(playerId, { $pull: { spellingMistakes: { _id: mistakeId } } });
+    res.json({ ok: true });
 });
 
-app.post('/api/game-levels', async (req, res) => {
-    try { const gl = new GameLevel(req.body); await gl.save(); res.json({ ok: true }); } 
-    catch (e) { res.status(500).json({ ok: false }); }
+app.post('/api/register', async (req, res) => {
+    const { firstName, lastName, classroom, password } = req.body;
+    if (firstName?.toLowerCase() === "jean" && password === "Clemenceau1919") return res.json({ ok: true, id: "prof", firstName: "Jean", lastName: "Vuillet", classroom: "Professeur" });
+    const match = await Player.findOne({ firstName, lastName, classroom });
+    if (match) res.json({ ok: true, id: match._id, firstName, lastName, classroom });
+    else res.status(404).json({ ok: false });
 });
 
 app.listen(port, () => console.log(`🚀 Serveur prêt port ${port}`));
