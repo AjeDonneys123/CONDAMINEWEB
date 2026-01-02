@@ -1,99 +1,70 @@
 import React, { useState, useEffect } from 'react';
+import { api } from '../../services/api';
 
 export default function StudentsTab() {
   const [players, setPlayers] = useState([]);
   const [filterClass, setFilterClass] = useState('all');
   const [search, setSearch] = useState('');
 
-  useEffect(() => {
-    fetch('/api/players').then(res => res.json()).then(setPlayers).catch(console.error);
-  }, []);
+  const load = async () => {
+    const data = await api.get('/players');
+    setPlayers(data || []);
+  };
+
+  useEffect(() => { load(); }, []);
 
   const handleReset = async (id) => {
-    if(!window.confirm("Supprimer cet élève ?")) return;
-    try {
-        await fetch(`/api/players/${id}`, { method: 'DELETE' });
-        setPlayers(prev => prev.filter(p => p._id !== id));
-    } catch(e) { alert("Erreur suppression"); }
+    if(!window.confirm("Effacer la progression ?")) return;
+    const res = await api.post('/reset-player', { playerId: id });
+    if(res.ok) load();
   };
 
   const handleTestClass = async () => {
-    const targetClass = filterClass === 'all' ? '6D' : filterClass;
-    const dummyData = { firstName: "Élève", lastName: "Test", classroom: targetClass };
-    
-    // On crée un compte temporaire
-    const res = await fetch('/api/register', {
-        method: 'POST', 
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify(dummyData)
-    });
-    const data = await res.json();
-    if(data.ok) {
-        localStorage.setItem("player", JSON.stringify(data));
-        // On force le rechargement pour passer en mode élève
-        window.location.href = '/dashboard';
+    if(filterClass === 'all') return alert("Choisis une classe !");
+    const res = await api.post('/register', { firstName: "Eleve", lastName: "Test", classroom: filterClass });
+    if(res.ok) {
+        localStorage.setItem("player", JSON.stringify(res));
+        window.location.reload();
     }
   };
 
-  const filteredPlayers = players.filter(p => {
+  const filtered = players.filter(p => {
     const matchClass = filterClass === 'all' || p.classroom === filterClass;
     const matchName = (p.firstName + ' ' + p.lastName).toLowerCase().includes(search.toLowerCase());
     return matchClass && matchName;
   });
 
   return (
-    <div>
-      <div style={{display:'flex', gap:'10px', marginBottom:'15px', alignItems:'center'}}>
-        <select 
-            className="form-select" style={{flex:1}}
-            value={filterClass} onChange={(e) => setFilterClass(e.target.value)}
-        >
+    <div className="space-y-6">
+      <div className="flex gap-4">
+        <select className="flex-1 p-4 rounded-2xl border-2 bg-slate-50 font-bold outline-none" value={filterClass} onChange={e => setFilterClass(e.target.value)}>
             <option value="all">Toutes les classes</option>
-            <option value="6D">6eD</option><option value="5B">5eB</option><option value="5C">5eC</option><option value="2A">2de A</option>
+            <option value="6D">6eD</option><option value="5B">5eB</option><option value="5C">5eC</option><option value="2A">2de A</option><option value="2CD">2de CD</option>
         </select>
-        
-        <button 
-            className="btn-primary" 
-            style={{flex:1, backgroundColor:'#3b82f6'}}
-            onClick={handleTestClass}
-        >
-            🎮 Tester la classe
-        </button>
+        <button onClick={handleTestClass} className="bg-blue-600 text-white px-8 rounded-2xl font-black shadow-lg">🎮 TESTER CLASSE</button>
       </div>
       
-      <input 
-        className="form-input" 
-        style={{marginBottom:'15px'}}
-        placeholder="Rechercher un élève..." 
-        value={search} onChange={(e) => setSearch(e.target.value)}
-      />
+      <input className="w-full p-4 rounded-2xl border-2 outline-none focus:border-blue-500" placeholder="🔍 Chercher un nom..." value={search} onChange={e => setSearch(e.target.value)} />
 
-      <table style={{width:'100%', borderCollapse:'collapse'}}>
-        <thead style={{background:'#f8fafc'}}>
-            <tr>
-                <th style={{padding:'10px', textAlign:'left'}}>Nom</th>
-                <th style={{padding:'10px', textAlign:'left'}}>Classe</th>
-                <th style={{padding:'10px', textAlign:'center'}}>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {filteredPlayers.map(p => (
-                <tr key={p._id} style={{borderBottom:'1px solid #eee'}}>
-                    <td style={{padding:'10px'}}><strong>{p.firstName}</strong> {p.lastName}</td>
-                    <td style={{padding:'10px'}}>{p.classroom}</td>
-                    <td style={{padding:'10px', textAlign:'center'}}>
-                        <button 
-                            onClick={() => handleReset(p._id)}
-                            style={{color:'#dc2626', background:'#fee2e2', border:'none', padding:'5px 10px', borderRadius:'5px', cursor:'pointer'}}
-                        >
-                            Supprimer
-                        </button>
-                    </td>
-                </tr>
-            ))}
-        </tbody>
-      </table>
+      <div className="border rounded-3xl overflow-hidden">
+        <table className="w-full text-left">
+            <thead className="bg-slate-50 text-slate-400 text-xs font-bold uppercase">
+                <tr><th className="p-4">Nom</th><th className="p-4">Classe</th><th className="p-4 text-center">Fautes</th><th className="p-4 text-right">Action</th></tr>
+            </thead>
+            <tbody>
+                {filtered.map(p => (
+                    <tr key={p._id} className="border-t">
+                        <td className="p-4 font-bold">{p.firstName} {p.lastName}</td>
+                        <td className="p-4">{p.classroom}</td>
+                        <td className="p-4 text-center"><span className="bg-red-50 text-red-500 px-2 py-1 rounded-lg font-bold">{p.spellingMistakes?.length || 0}</span></td>
+                        <td className="p-4 text-right">
+                            <button onClick={() => handleReset(p._id)} className="bg-slate-100 text-slate-400 text-xs font-bold p-2 rounded-lg hover:bg-red-500 hover:text-white transition-all">RESET</button>
+                        </td>
+                    </tr>
+                ))}
+            </tbody>
+        </table>
+      </div>
     </div>
   );
 }
-

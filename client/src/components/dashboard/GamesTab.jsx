@@ -1,147 +1,82 @@
 import React, { useState, useEffect } from 'react';
+import { api } from '../../services/api';
 
 export default function GamesTab() {
   const [levels, setLevels] = useState([]);
   const [isEditing, setIsEditing] = useState(false);
-  const [generationMode, setGenerationMode] = useState('manual');
-  const [aiLoading, setAiLoading] = useState(false);
-  
   const [formData, setFormData] = useState({ title: '', chapterId: 'ch1-zombie', classroom: '6e', questions: [] });
   const [newQ, setNewQ] = useState({ q: '', options: ['', '', '', ''], a: 0 });
-  const [aiParams, setAiParams] = useState({ topic: '', file: null });
 
-  useEffect(() => { loadLevels(); }, []);
-
-  const loadLevels = () => {
-    fetch('/api/game-levels/Toutes').then(res => res.json()).then(data => setLevels(data || [])).catch(console.error);
+  const load = async () => {
+    const data = await api.get('/game-levels/Toutes');
+    setLevels(data || []);
   };
 
-  const handleSaveLevel = async () => {
-    if (!formData.title || formData.questions.length === 0) return alert("Ajoute au moins une question !");
-    await fetch('/api/game-levels', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(formData) });
-    alert("Niveau sauvegardé !");
-    setIsEditing(false); loadLevels(); 
-    setFormData({ title: '', chapterId: 'ch1-zombie', classroom: '6e', questions: [] });
-  };
+  useEffect(() => { load(); }, []);
 
   const addQuestion = () => {
-    // Validation souple : 2 options min
-    const filledOptions = newQ.options.filter(o => o.trim() !== "");
-    if (!newQ.q || filledOptions.length < 2) {
-        return alert("Il faut une question et au moins 2 options (A et B) !");
-    }
+    if (!newQ.q || newQ.options.filter(o => o.trim()).length < 2) return alert("Question incomplète !");
     setFormData(prev => ({ ...prev, questions: [...prev.questions, { ...newQ }] }));
     setNewQ({ q: '', options: ['', '', '', ''], a: 0 });
   };
 
-  const handleAiGeneration = async () => {
-      if (!aiParams.topic && !aiParams.file) return alert("Sujet ou image requis !");
-      setAiLoading(true);
-      let docUrl = null;
-      if (aiParams.file) {
-          const fd = new FormData(); fd.append('file', aiParams.file);
-          try { const r = await fetch('/api/upload', { method: 'POST', body: fd }); const d = await r.json(); if(d.ok) docUrl = d.imageUrl; } catch(e){}
-      }
-      try {
-          const res = await fetch('/api/generate-game-content', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ topic: aiParams.topic, docUrl }) });
-          const qs = await res.json();
-          if (Array.isArray(qs)) {
-              setFormData(prev => ({ ...prev, questions: [...prev.questions, ...qs] }));
-              setGenerationMode('manual'); // Pour voir le tableau
-          } else { alert("L'IA n'a pas renvoyé de questions valides."); }
-      } catch(e) { alert("Erreur serveur IA (Voir logs bleus)"); }
-      setAiLoading(false);
+  const handleSave = async () => {
+    if (!formData.title || formData.questions.length === 0) return alert("Niveau vide !");
+    const res = await api.post('/game-levels', formData);
+    if(res.ok) { alert("Niveau enregistré !"); setIsEditing(false); load(); }
   };
 
   return (
-    <div>
+    <div className="space-y-6">
       {!isEditing ? (
         <>
-            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px'}}>
-                <h3>🎮 Studio de Jeux</h3>
-                <button className="btn-primary" style={{width:'auto', backgroundColor:'#7c3aed'}} onClick={() => setIsEditing(true)}>➕ Créer un Niveau</button>
-            </div>
+          <button onClick={() => setIsEditing(true)} className="w-full bg-purple-600 text-white py-4 rounded-2xl font-black shadow-lg">+ CRÉER UN NIVEAU</button>
+          <div className="grid gap-3">
             {levels.map(lvl => (
-                <div key={lvl._id} style={{background:'white', padding:'15px', border:'1px solid #e2e8f0', borderRadius:'8px', marginBottom:'10px', display:'flex', justifyContent:'space-between'}}>
-                    <div><strong>{lvl.title}</strong> <small>({lvl.questions.length} questions)</small></div>
-                    <button style={{background:'#fee2e2', color:'red', border:'none', borderRadius:'5px'}}>🗑️</button>
-                </div>
+              <div key={lvl._id} className="bg-slate-50 p-4 rounded-2xl flex justify-between items-center border">
+                <div><b className="text-purple-700">{lvl.title}</b> <small className="text-slate-400 ml-2">({lvl.questions.length} questions)</small></div>
+                <button onClick={async () => { if(confirm("Suppr ?")) { await fetch(`/api/game-levels/${lvl._id}`, {method:'DELETE'}); load(); }}} className="text-red-400">🗑️</button>
+              </div>
             ))}
+          </div>
         </>
       ) : (
-        <div className="card" style={{border:'2px solid #7c3aed'}}>
-            <div style={{display:'flex', justifyContent:'space-between', marginBottom:'15px'}}>
-                <h3>Nouveau Niveau</h3>
-                <button onClick={() => setIsEditing(false)} style={{background:'none', border:'none', fontSize:'1.2em', cursor:'pointer'}}>❌</button>
-            </div>
-            
-            <div className="row">
-                <div className="col form-group"><label className="form-label">Titre</label><input className="form-input" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} placeholder="Titre du niveau" /></div>
-            </div>
+        <div className="bg-white border-2 border-purple-200 p-6 rounded-3xl space-y-4">
+          <div className="flex gap-4">
+            <input className="flex-1 p-3 border rounded-xl" placeholder="Titre du niveau" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
+            <select className="p-3 border rounded-xl" value={formData.chapterId} onChange={e => setFormData({...formData, chapterId: e.target.value})}>
+                <option value="ch1-zombie">🧟 Zombie</option>
+                <option value="ch2-starship">🚀 Starship</option>
+            </select>
+          </div>
 
-            <div style={{display:'flex', gap:'10px', marginBottom:'15px', background:'#f8fafc', padding:'10px', borderRadius:'8px'}}>
-                <button onClick={() => setGenerationMode('manual')} style={{flex:1, padding:'8px', border:'none', borderRadius:'5px', background: generationMode==='manual'?'#2563eb':'#e2e8f0', color: generationMode==='manual'?'white':'#64748b', cursor:'pointer', fontWeight:'bold'}}>✍️ Manuel</button>
-                <button onClick={() => setGenerationMode('ai')} style={{flex:1, padding:'8px', border:'none', borderRadius:'5px', background: generationMode==='ai'?'#db2777':'#e2e8f0', color: generationMode==='ai'?'white':'#64748b', cursor:'pointer', fontWeight:'bold'}}>🤖 IA Générative</button>
-            </div>
-
-            {generationMode === 'manual' ? (
-                <div style={{background:'#f0f9ff', padding:'15px', borderRadius:'8px', border:'1px solid #bae6fd', marginBottom:'20px'}}>
-                    <input className="form-input" placeholder="Question ?" style={{marginBottom:'10px'}} value={newQ.q} onChange={e => setNewQ({...newQ, q: e.target.value})} />
-                    <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px', marginBottom:'10px'}}>
-                        {newQ.options.map((opt, idx) => (
-                            <input key={idx} className="form-input" placeholder={`Réponse ${String.fromCharCode(65+idx)}`} value={opt} onChange={e => {const n=[...newQ.options]; n[idx]=e.target.value; setNewQ({...newQ, options:n})}} style={newQ.a===idx?{borderColor:'#16a34a', borderWidth:'3px', background:'#dcfce7'}:{}} />
-                        ))}
-                    </div>
-                    <div style={{display:'flex', gap:'10px', alignItems:'center'}}>
-                        <select className="form-select" style={{flex:1}} value={newQ.a} onChange={e=>setNewQ({...newQ, a:parseInt(e.target.value)})}>
-                            <option value={0}>Bonne réponse : A</option><option value={1}>Bonne réponse : B</option><option value={2}>Bonne réponse : C</option><option value={3}>Bonne réponse : D</option>
-                        </select>
-                        <button className="btn-primary" style={{flex:1, backgroundColor:'#16a34a'}} onClick={addQuestion}>Ajouter cette question</button>
-                    </div>
+          <div className="bg-purple-50 p-6 rounded-2xl border border-purple-100">
+            <p className="font-bold text-purple-600 mb-2">Nouvelle Question :</p>
+            <input className="w-full p-3 mb-3 border rounded-xl" placeholder="Énoncé..." value={newQ.q} onChange={e => setNewQ({...newQ, q: e.target.value})} />
+            <div className="grid grid-cols-2 gap-3">
+              {newQ.options.map((opt, i) => (
+                <div key={i} className="flex items-center gap-2">
+                    <input type="radio" checked={newQ.a === i} onChange={() => setNewQ({...newQ, a: i})} />
+                    <input className="flex-1 p-2 border rounded-lg text-sm" placeholder={`Réponse ${i+1}`} value={opt} onChange={e => { const n = [...newQ.options]; n[i] = e.target.value; setNewQ({...newQ, options: n}); }} />
                 </div>
-            ) : (
-                <div style={{background:'#fff1f2', padding:'15px', borderRadius:'8px', border:'1px solid #fda4af', marginBottom:'20px'}}>
-                    <p style={{marginTop:0, fontWeight:'bold', color:'#9d174d'}}>Génération Automatique</p>
-                    <input type="file" style={{marginBottom:'10px'}} onChange={e => setAiParams({...aiParams, file: e.target.files[0]})} />
-                    <input className="form-input" style={{marginBottom:'10px'}} placeholder="Sujet (ex: La conjugaison)" value={aiParams.topic} onChange={e => setAiParams({...aiParams, topic: e.target.value})} />
-                    <button className="btn-primary" style={{backgroundColor:'#db2777'}} disabled={aiLoading} onClick={handleAiGeneration}>{aiLoading ? "Génération en cours..." : "Lancer l'IA"}</button>
-                </div>
-            )}
-
-            {/* LE FAMEUX TABLEAU VISUEL */}
-            <div style={{marginTop:'20px'}}>
-                <h4>Aperçu du niveau ({formData.questions.length} questions)</h4>
-                {formData.questions.length > 0 ? (
-                    <div style={{border:'1px solid #cbd5e1', borderRadius:'8px', overflow:'hidden'}}>
-                        {formData.questions.map((q, i) => (
-                            <div key={i} style={{padding:'15px', borderBottom:'1px solid #eee', background:'white'}}>
-                                <div style={{display:'flex', justifyContent:'space-between', marginBottom:'10px'}}>
-                                    <strong style={{color:'#2563eb'}}>Q{i+1}: {q.q}</strong>
-                                    <button onClick={() => {const n=[...formData.questions]; n.splice(i, 1); setFormData({...formData, questions:n})}} style={{background:'none', border:'none', color:'red', cursor:'pointer'}}>Supprimer</button>
-                                </div>
-                                <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:'5px'}}>
-                                    {q.options.map((opt, idx) => (
-                                        <div key={idx} style={{
-                                            padding:'8px', borderRadius:'6px', fontSize:'0.9em', textAlign:'center',
-                                            background: idx === q.a ? '#16a34a' : '#f1f5f9',
-                                            color: idx === q.a ? 'white' : '#64748b',
-                                            fontWeight: idx === q.a ? 'bold' : 'normal',
-                                            border: idx === q.a ? 'none' : '1px solid #e2e8f0',
-                                            opacity: opt ? 1 : 0.5
-                                        }}>
-                                            {String.fromCharCode(65+idx)}. {opt || '(Vide)'}
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                ) : <p style={{color:'#94a3b8'}}>Aucune question pour l'instant.</p>}
+              ))}
             </div>
+            <button onClick={addQuestion} className="mt-4 bg-purple-200 text-purple-700 px-6 py-2 rounded-xl font-bold w-full">Ajouter à la liste</button>
+          </div>
 
-            <div style={{marginTop:'20px', textAlign:'right'}}>
-                <button className="btn-primary" style={{width:'auto'}} onClick={handleSaveLevel}>💾 Sauvegarder le niveau</button>
-            </div>
+          <div className="max-h-60 overflow-y-auto border rounded-2xl divide-y">
+            {formData.questions.map((q, i) => (
+              <div key={i} className="p-3 text-sm flex justify-between">
+                <span>{i+1}. {q.q}</span>
+                <span className="text-green-600 font-bold">✓ {q.options[q.a]}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex gap-3 pt-4">
+            <button onClick={() => setIsEditing(false)} className="flex-1 py-3 bg-slate-100 rounded-xl font-bold text-slate-500">Annuler</button>
+            <button onClick={handleSave} className="flex-2 py-3 bg-green-600 text-white rounded-xl font-black shadow-lg">💾 SAUVEGARDER LE NIVEAU</button>
+          </div>
         </div>
       )}
     </div>

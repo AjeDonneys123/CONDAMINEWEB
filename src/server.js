@@ -26,10 +26,10 @@ const Homework = mongoose.model('Homework', new mongoose.Schema({
 }));
 
 const GameLevel = mongoose.model('GameLevel', new mongoose.Schema({ 
-    classroom: String, title: String, lesson: String, questions: Array, createdAt: { type: Date, default: Date.now } 
+    chapterId: String, classroom: String, title: String, lesson: String, questions: Array, createdAt: { type: Date, default: Date.now } 
 }));
 
-// TOLÉRANCE NOM
+// TOLÉRANCE NOM (FUZZY)
 function isFuzzyMatch(inputStr, storedStr) {
     if (!inputStr || !storedStr) return false;
     const norm = (s) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[-]/g, " ").split(/\s+/).filter(w => w.length > 1);
@@ -61,9 +61,9 @@ app.post('/api/reset-player', async (req, res) => {
     catch (e) { res.json({ ok: false }); }
 });
 
-app.post('/api/homework', async (req, res) => {
-    try { const hw = new Homework(req.body); await hw.save(); res.json({ ok: true }); } 
-    catch (e) { res.status(500).json({ ok: false }); }
+app.get('/api/game-levels/:classroom', async (req, res) => {
+    try { res.json(await GameLevel.find({ $or: [{ classroom: req.params.classroom }, { classroom: "Toutes" }] }).sort({ title: 1 })); } 
+    catch (e) { res.status(500).json([]); }
 });
 
 app.post('/api/game-levels', async (req, res) => {

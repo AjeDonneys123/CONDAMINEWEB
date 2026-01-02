@@ -2,15 +2,11 @@ ARBORESCENCE
 ====================
 
 .
-├── ${relativePath}\n/
-│   └──  --------------------------------------------------\n${data}\n\n`;
 ├── ${relativePath}\n`;
 ├── .env
 ├── .gitignore
 ├── Backup_Eleve.tar.gz
 ├── IAReadMe.md
-├── PROJET_POUR_IA.txt
-├── PROJET_SNAPSHOT.txt
 ├── apply.js
 ├── client/
 │   ├── .eslintrc.cjs
@@ -4172,7 +4168,8 @@ const path = require('path');
 const OUTPUT_FILENAME = 'snapshot.txt';
 const IGNORE_LIST = [
     'node_modules', '.git', 'dist', '.vscode', '.DS_Store', 
-    'package-lock.json', 'snapshot.txt', 'PROJET_BACKUP.zip'
+    'package-lock.json', 'snapshot.txt', 'PROJET_BACKUP.zip',
+    'PROJET_POUR_IA.txt', 'PROJET_SNAPSHOT.txt', 'SNAPSHOT_CODE.txt', 'SNAPSHOT_FULL.txt'
 ];
 const EXTENSIONS = ['.js', '.jsx', '.css', '.html', '.json', '.env', '.md'];
 
@@ -4182,7 +4179,9 @@ function buildTree(dir, prefix = '') {
     items.forEach((item, index) => {
         const isLast = index === items.length - 1;
         const fullPath = path.join(dir, item);
-        const isDir = fs.statSync(fullPath).isDirectory();
+        let isDir = false;
+        try { isDir = fs.statSync(fullPath).isDirectory(); } catch(e) {}
+        
         structure += prefix + (isLast ? '└── ' : '├── ') + item + (isDir ? '/' : '') + '\n';
         if (isDir) structure += buildTree(fullPath, prefix + (isLast ? '    ' : '│   '));
     });
@@ -4215,7 +4214,7 @@ function captureContent(dir, baseDir = "") {
 }
 
 function run() {
-    console.log("📸 Génération du Snapshot...");
+    console.log("📸 Génération du Snapshot Propre...");
     let output = "ARBORESCENCE\n" + "=".repeat(20) + "\n\n.\n";
     output += buildTree(__dirname);
     output += "\n" + "=".repeat(60) + "\n";
@@ -4223,7 +4222,7 @@ function run() {
     output += "=".repeat(60) + "\n\n";
     output += captureContent(__dirname);
     fs.writeFileSync(OUTPUT_FILENAME, output);
-    console.log("✅ snapshot.txt prêt !");
+    console.log("✅ snapshot.txt mis à jour !");
 }
 run();
 

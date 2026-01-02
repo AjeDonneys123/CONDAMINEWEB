@@ -17,7 +17,6 @@ function buildTree(dir, prefix = '') {
         const fullPath = path.join(dir, item);
         let isDir = false;
         try { isDir = fs.statSync(fullPath).isDirectory(); } catch(e) {}
-        
         structure += prefix + (isLast ? '└── ' : '├── ') + item + (isDir ? '/' : '') + '\n';
         if (isDir) structure += buildTree(fullPath, prefix + (isLast ? '    ' : '│   '));
     });
@@ -40,8 +39,7 @@ function captureContent(dir, baseDir = "") {
                     const data = fs.readFileSync(fullPath, 'utf8');
                     content += "\n" + "#".repeat(60) + "\n";
                     content += "### FICHIER: " + relativePath + "\n";
-                    content += "#".repeat(60) + "\n\n";
-                    content += data + "\n\n";
+                    content += "#".repeat(60) + "\n\n" + data + "\n\n";
                 } catch (e) {}
             }
         }
@@ -50,14 +48,10 @@ function captureContent(dir, baseDir = "") {
 }
 
 function run() {
-    console.log("📸 Génération du Snapshot Propre...");
-    let output = "ARBORESCENCE\n" + "=".repeat(20) + "\n\n.\n";
-    output += buildTree(__dirname);
-    output += "\n" + "=".repeat(60) + "\n";
-    output += "CODE SOURCE COMPLET\n";
-    output += "=".repeat(60) + "\n\n";
-    output += captureContent(__dirname);
+    console.log("📸 Génération du Snapshot Global...");
+    let output = "ARBORESCENCE\n" + "=".repeat(20) + "\n\n.\n" + buildTree(__dirname);
+    output += "\n" + "=".repeat(60) + "\nCODE SOURCE COMPLET\n" + "=".repeat(60) + "\n\n" + captureContent(__dirname);
     fs.writeFileSync(OUTPUT_FILENAME, output);
-    console.log("✅ snapshot.txt mis à jour !");
+    console.log("✅ snapshot.txt prêt !");
 }
 run();
