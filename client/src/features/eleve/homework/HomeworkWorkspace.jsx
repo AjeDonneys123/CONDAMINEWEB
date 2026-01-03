@@ -7,6 +7,7 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
   const [answer, setAnswer] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [aiResult, setAiResult] = useState(null);
+  const [isFinished, setIsFinished] = useState(false);
 
   const viewTop = useRef({ x: 0, y: 0, scale: 1 });
   const viewBottom = useRef({ x: 0, y: 0, scale: 1 });
@@ -37,11 +38,6 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
     window.addEventListener('mousemove', move); window.addEventListener('mouseup', stop);
   };
 
-  const handleZoom = (delta, viewRef, contentRef) => {
-      viewRef.current.scale = Math.min(Math.max(0.1, viewRef.current.scale + delta), 5);
-      contentRef.current.style.transform = `translate(-50%, -50%) translate(${viewRef.current.x}px, ${viewRef.current.y}px) scale(${viewRef.current.scale})`;
-  };
-
   const submitToIA = async () => {
     if (!answer.trim()) return alert("Écris ta réponse !");
     setSubmitting(true);
@@ -54,8 +50,8 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
                 homeworkInstruction: currentPage.instruction, 
                 classroom: user.classroom,
                 playerId: user.id || user._id,
-                teacherDocUrls: docs,
-                questionImage: currentPage.questionImage
+                homeworkId: homework._id,
+                levelIndex: pageIdx
             })
         });
         const data = await res.json();
@@ -64,101 +60,60 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
     setSubmitting(false);
   };
 
+  if (isFinished) {
+      return (
+          <div className="flex items-center justify-center min-h-[60vh]">
+              <div className="bg-white p-12 rounded-[50px] shadow-2xl text-center border-4 border-green-500 animate-in zoom-in duration-300">
+                  <span className="text-6xl">🎉</span>
+                  <h2 className="text-3xl font-black mt-4 uppercase">Travail Terminé !</h2>
+                  <p className="text-slate-400 font-bold mt-2">Tes réponses ont été envoyées au Maître.</p>
+                  <button onClick={onQuit} className="mt-8 bg-green-500 text-white px-10 py-4 rounded-3xl font-black shadow-lg shadow-green-100 hover:scale-105 transition-all">RETOURNER AUX DEVOIRS</button>
+              </div>
+          </div>
+      );
+  }
+
   return (
     <div className="flex flex-col h-[88vh] rounded-[40px] overflow-hidden border-4 border-slate-800 shadow-2xl select-none relative homework-container">
-      
-      {/* VISIONNEUSE HAUT */}
       <div id="top-container" onMouseDown={(e) => handleDrag(e, viewTop, topContentRef)} className="flex-[7] relative overflow-hidden viewer-dark-bg cursor-grab active:cursor-grabbing">
         <div ref={topContentRef} className="absolute top-1/2 left-1/2 pointer-events-none transition-transform duration-75">
             {docs.length > 0 && <img src={docs[docIdx]} draggable="false" onLoad={(e) => fitImage(e.target, 'top-container', viewTop, topContentRef)} className="max-w-none draggable-img pointer-events-auto" />}
         </div>
         <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 flex justify-between px-6 pointer-events-none z-20">
-            <button onClick={(e) => { e.stopPropagation(); if(docIdx > 0) setDocIdx(docIdx-1); }} className={`w-16 h-16 rounded-full bg-blue-600 text-white font-black text-2xl nav-arrow-btn pointer-events-auto shadow-lg hover:scale-110 ${docIdx === 0 ? 'opacity-0' : 'opacity-100'}`}>❮</button>
-            <button onClick={(e) => { e.stopPropagation(); if(docIdx < docs.length - 1) setDocIdx(docIdx+1); }} className={`w-16 h-16 rounded-full bg-blue-600 text-white font-black text-2xl nav-arrow-btn pointer-events-auto shadow-lg hover:scale-110 ${docIdx === docs.length - 1 ? 'opacity-0' : 'opacity-100'}`}>❯</button>
-        </div>
-        <div className="absolute top-6 left-1/2 -translate-x-1/2 bg-black/80 px-6 py-2 rounded-full text-white text-[10px] font-black border border-white/20 uppercase">Document {docIdx + 1} / {docs.length}</div>
-        <div className="absolute bottom-6 right-6 flex gap-3 z-30">
-            <button onClick={(e) => { e.stopPropagation(); handleZoom(-0.2, viewTop, topContentRef); }} className="w-12 h-12 bg-black/60 rounded-2xl text-white font-bold border border-white/10 hover:bg-black">➖</button>
-            <button onClick={(e) => { e.stopPropagation(); handleZoom(0.2, viewTop, topContentRef); }} className="w-12 h-12 bg-black/60 rounded-2xl text-white font-bold border border-white/10 hover:bg-black">➕</button>
+            <button onClick={() => docIdx > 0 && setDocIdx(docIdx-1)} className={`w-14 h-14 rounded-full bg-blue-600 text-white font-black text-2xl nav-arrow-btn pointer-events-auto ${docIdx === 0 ? 'opacity-0' : 'opacity-100'}`}>❮</button>
+            <button onClick={() => docIdx < docs.length - 1 && setDocIdx(docIdx+1)} className={`w-14 h-14 rounded-full bg-blue-600 text-white font-black text-2xl nav-arrow-btn pointer-events-auto ${docIdx === docs.length - 1 ? 'opacity-0' : 'opacity-100'}`}>❯</button>
         </div>
       </div>
 
-      {/* ZONE BAS (30%) */}
       <div className="flex-[3] bg-white flex border-t-4 border-orange-500 min-h-[250px]">
-        
-        {/* Zone Consigne / Image */}
         <div className="w-1/3 p-4 border-r flex flex-col bg-slate-50 relative">
-            <p className="font-black text-slate-400 text-[9px] uppercase mb-1 tracking-tighter">Question {pageIdx + 1} / {homework.levels.length}</p>
-            
-            {currentPage.questionImage ? (
-                // SI IL Y A UNE IMAGE : On affiche la consigne courte + le cadre noir
-                <>
-                    <p className="font-bold text-slate-800 text-[11px] leading-tight mb-2 line-clamp-3">{currentPage.instruction}</p>
-                    <div id="bot-container" onMouseDown={(e) => handleDrag(e, viewBottom, bottomContentRef)} className="flex-1 relative bg-black rounded-3xl overflow-hidden cursor-grab shadow-inner border border-slate-200">
-                        <div ref={bottomContentRef} className="absolute top-1/2 left-1/2 pointer-events-none transition-transform duration-75">
-                            <img src={currentPage.questionImage} draggable="false" onLoad={(e) => fitImage(e.target, 'bot-container', viewBottom, bottomContentRef)} className="max-w-none draggable-img pointer-events-auto" />
-                        </div>
-                        <div className="absolute bottom-2 right-2 flex gap-1 scale-75 z-20">
-                            <button onClick={(e) => { e.stopPropagation(); handleZoom(-0.2, viewBottom, bottomContentRef); }} className="w-8 h-8 bg-white/20 rounded-lg text-white font-black">➖</button>
-                            <button onClick={(e) => { e.stopPropagation(); handleZoom(0.2, viewBottom, bottomContentRef); }} className="w-8 h-8 bg-white/20 rounded-lg text-white font-black">➕</button>
-                        </div>
-                    </div>
-                </>
-            ) : (
-                // SI PAS D'IMAGE : La consigne texte prend tout l'espace disponible de façon élégante
-                <div className="flex-1 flex items-center justify-center bg-white rounded-3xl border-2 border-dashed border-slate-200 p-6 text-center shadow-inner overflow-y-auto custom-scrollbar">
-                    <p className="font-black text-slate-700 text-lg leading-tight italic">
-                        "{currentPage.instruction}"
-                    </p>
+            <p className="font-black text-slate-800 text-[10px] uppercase mb-2">Question {pageIdx + 1} / {homework.levels.length}</p>
+            <div id="bot-container" onMouseDown={(e) => handleDrag(e, viewBottom, bottomContentRef)} className="flex-1 relative bg-black rounded-3xl overflow-hidden cursor-grab shadow-inner">
+                <div ref={bottomContentRef} className="absolute top-1/2 left-1/2 pointer-events-none transition-transform duration-75">
+                    {currentPage.questionImage && <img src={currentPage.questionImage} draggable="false" onLoad={(e) => fitImage(e.target, 'bot-container', viewBottom, bottomContentRef)} className="max-w-none draggable-img pointer-events-auto" />}
                 </div>
-            )}
+            </div>
         </div>
-
-        {/* Saisie Réponse */}
         <div className="w-2/3 p-6 flex flex-col gap-4 bg-white">
             <textarea value={answer} onChange={e => setAnswer(e.target.value)} className="flex-1 w-full p-5 rounded-[24px] border-2 border-slate-100 outline-none focus:border-blue-500 font-medium text-lg resize-none shadow-inner bg-slate-50/50" placeholder="Écris ta réponse ici..." />
-            <button onClick={submitToIA} disabled={submitting} className="bg-blue-600 text-white py-5 rounded-[20px] font-black shadow-xl hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-50 uppercase tracking-widest">
-                {submitting ? "Analyse en cours..." : "Envoyer à l'IA 🤖"}
-            </button>
+            <button onClick={submitToIA} disabled={submitting} className="bg-blue-600 text-white py-5 rounded-[20px] font-black shadow-xl hover:bg-blue-700 active:scale-95 disabled:opacity-50 uppercase tracking-widest">{submitting ? "Analyse en cours..." : "Envoyer à l'IA 🤖"}</button>
         </div>
       </div>
 
-      {/* MODALE RESULTAT */}
       {aiResult && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 ai-modal-glass">
-            <div className="bg-white w-full max-w-3xl rounded-[50px] shadow-2xl p-10 flex flex-col my-auto animate-in zoom-in duration-300 border-4 border-blue-500">
+            <div className="bg-white w-full max-w-3xl rounded-[50px] shadow-2xl p-10 flex flex-col my-auto animate-in zoom-in duration-300">
                 <div className="text-center mb-6">
-                    <h2 className="text-2xl font-black text-slate-800 uppercase tracking-tight">Verdict du Maître IA</h2>
+                    <h2 className="text-2xl font-black text-slate-800 uppercase">Analyse du Maître IA</h2>
                     <div className="mt-4 text-4xl font-black text-blue-600 bg-blue-50 px-8 py-3 rounded-3xl border-4 border-blue-100 inline-block">{aiResult.grade}</div>
                 </div>
-
-                <div className="space-y-6 overflow-y-auto max-h-[50vh] pr-2 custom-scrollbar">
-                    <div className="bg-slate-50 p-6 rounded-3xl border shadow-inner">
-                        <h3 className="font-black text-blue-600 mb-2 uppercase text-xs tracking-widest">📝 Commentaire :</h3>
-                        <div className="text-slate-700 leading-relaxed text-lg" dangerouslySetInnerHTML={{__html: aiResult.feedback_fond}} />
-                    </div>
-
-                    {aiResult.corrections?.length > 0 && (
-                        <div className="bg-red-50 p-6 rounded-3xl border-2 border-red-100 shadow-sm">
-                            <h3 className="font-black text-red-600 mb-4 uppercase text-xs tracking-widest">✍️ Orthographe & Grammaire :</h3>
-                            <table className="w-full text-sm">
-                                <thead><tr className="text-left text-red-400 font-black"><th>FAUTE</th><th>CORRECTION</th><th>RÈGLE</th></tr></thead>
-                                <tbody className="divide-y divide-red-100">
-                                    {aiResult.corrections.map((c, i) => (
-                                        <tr key={i}><td className="py-3 text-red-600 line-through font-bold">{c.wrong}</td><td className="py-3 text-green-600 font-black">{c.correct}</td><td className="py-3 text-slate-500 italic text-xs leading-tight">{c.rule}</td></tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    )}
-                </div>
-
-                <div className="flex gap-4 mt-8">
-                    <button onClick={() => setAiResult(null)} className="flex-1 py-5 bg-slate-100 text-slate-500 rounded-3xl font-black uppercase tracking-widest shadow-md">✍️ Améliorer</button>
+                <div className="flex-1 overflow-y-auto bg-slate-50 p-8 rounded-[32px] border shadow-inner mb-8 text-lg" dangerouslySetInnerHTML={{__html: aiResult.feedback_fond}} />
+                <div className="flex gap-4">
+                    <button onClick={() => setAiResult(null)} className="flex-1 py-5 bg-slate-100 text-slate-500 rounded-3xl font-black uppercase tracking-widest">✍️ Corriger</button>
                     {pageIdx < homework.levels.length - 1 ? (
-                        <button onClick={() => { setAiResult(null); setAnswer(''); setPageIdx(pageIdx + 1); setDocIdx(0); }} className="flex-1 py-5 bg-green-500 text-white rounded-3xl font-black uppercase tracking-widest shadow-lg shadow-green-200">Suivant ➔</button>
+                        <button onClick={() => { setAiResult(null); setAnswer(''); setPageIdx(pageIdx+1); setDocIdx(0); }} className="flex-1 py-5 bg-green-500 text-white rounded-3xl font-black uppercase tracking-widest shadow-lg shadow-green-200">Suivant ➔</button>
                     ) : (
-                        <button onClick={onQuit} className="flex-1 py-5 bg-blue-600 text-white rounded-3xl font-black shadow-lg shadow-blue-200 uppercase tracking-widest">Terminer 🎉</button>
+                        <button onClick={() => setIsFinished(true)} className="flex-1 py-5 bg-blue-600 text-white rounded-3xl font-black shadow-lg shadow-blue-200 uppercase tracking-widest">Terminer 🎉</button>
                     )}
                 </div>
             </div>

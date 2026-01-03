@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import HomeworkResults from './HomeworkResults';
 import './HomeworkStudio.css';
 
 export default function HomeworkStudio() {
   const [hws, setHws] = useState([]);
   const [isEditing, setIsEditing] = useState(false);
+  const [viewingResults, setViewingResults] = useState(null); // Contient le devoir sélectionné
   const [formData, setFormData] = useState({ _id: null, title: '', classroom: 'Toutes', levels: [] });
-  const [uploading, setUploading] = useState(false);
 
   const load = async () => {
     const data = await fetch('/api/homework-all').then(r => r.json());
@@ -13,31 +14,7 @@ export default function HomeworkStudio() {
   };
   useEffect(() => { load(); }, []);
 
-  const handleUpload = async (files, idx, type) => {
-    setUploading(true);
-    const newLevels = [...formData.levels];
-    for (let file of Array.from(files)) {
-      const fd = new FormData();
-      fd.append('file', file);
-      const res = await fetch('/api/upload', { method: 'POST', body: fd }).then(r => r.json());
-      if (res.ok) {
-        if (type === 'doc') newLevels[idx].attachmentUrls.push(res.imageUrl);
-        else newLevels[idx].questionImage = res.imageUrl;
-      }
-    }
-    setFormData({ ...formData, levels: newLevels });
-    setUploading(false);
-  };
-
-  const save = async () => {
-    if (!formData.title) return alert("Titre requis !");
-    const res = await fetch('/api/homework', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(formData)
-    }).then(r => r.json());
-    if (res.ok) { setIsEditing(false); load(); }
-  };
+  if (viewingResults) return <HomeworkResults homework={viewingResults} onBack={() => setViewingResults(null)} />;
 
   return (
     <div className="studio-container">
@@ -50,6 +27,7 @@ export default function HomeworkStudio() {
               <div key={h._id} className="hw-admin-card">
                 <div><b>{h.title}</b><p>{h.classroom} • {h.levels.length} Page(s)</p></div>
                 <div className="hw-actions">
+                    <button onClick={() => setViewingResults(h)} className="btn-view-exam">👁️ EXAM</button>
                     <button onClick={() => { setFormData(h); setIsEditing(true); }} className="btn-edit">🖋️</button>
                     <button onClick={async () => { if(confirm("Suppr ?")) { await fetch(`/api/homework/${h._id}`, {method:'DELETE'}); load(); }}} className="btn-delete">🗑️</button>
                 </div>
@@ -64,34 +42,12 @@ export default function HomeworkStudio() {
             <button onClick={() => setIsEditing(false)} className="btn-close">✕</button>
           </div>
           <div className="edit-grid-top">
-            <input className="input-title" placeholder="Titre du devoir..." value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
+            <input className="input-title" placeholder="Titre..." value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
             <select className="select-class" value={formData.classroom} onChange={e => setFormData({...formData, classroom: e.target.value})}>
-                <option value="Toutes">Toutes les classes</option><option value="6D">6eD</option><option value="5B">5eB</option><option value="5C">5eC</option><option value="2A">2A</option><option value="2CD">2CD</option>
+                <option value="Toutes">Toutes les classes</option><option value="6D">6eD</option><option value="5B">5eB</option><option value="5C">5eC</option>
             </select>
           </div>
-          <div className="pages-list">
-            {formData.levels.map((lvl, idx) => (
-                <div key={idx} className="page-editor-card">
-                    <div className="page-header"><span>PAGE {idx+1}</span><button onClick={()=>{const n=[...formData.levels]; n.splice(idx,1); setFormData({...formData, levels:n});}}>Supprimer</button></div>
-                    <div className="upload-zone-top">
-                        <p>Ligne 1 : Documents (PDF / Images)</p>
-                        <div className="docs-preview">
-                            {lvl.attachmentUrls.map((url, uIdx) => <img key={uIdx} src={url} className="doc-thumb" />)}
-                            <label className="btn-add-file">+<input type="file" multiple className="hidden" onChange={e => handleUpload(e.target.files, idx, 'doc')} /></label>
-                        </div>
-                    </div>
-                    <div className="upload-zone-bottom">
-                        <div className="q-img-box">
-                            {lvl.questionImage ? <img src={lvl.questionImage} /> : <span>Image Question</span>}
-                            <input type="file" className="hidden-input" onChange={e => handleUpload(e.target.files, idx, 'qimg')} />
-                        </div>
-                        <textarea placeholder="Consigne élève..." value={lvl.instruction} onChange={e => {const n=[...formData.levels]; n[idx].instruction=e.target.value; setFormData({...formData, levels:n});}} />
-                    </div>
-                </div>
-            ))}
-          </div>
-          <button onClick={() => setFormData({...formData, levels: [...formData.levels, {instruction:'', attachmentUrls:[], questionImage:null}]})} className="btn-add-page">+ AJOUTER UNE PAGE</button>
-          <button onClick={save} disabled={uploading} className="btn-save-final">{uploading ? "UPLOAD EN COURS..." : "💾 SAUVEGARDER LE DEVOIR"}</button>
+          <button onClick={async () => { await fetch('/api/homework', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(formData)}); setIsEditing(false); load(); }} className="btn-save-final">💾 SAUVEGARDER</button>
         </div>
       )}
     </div>
