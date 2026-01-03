@@ -1,0 +1,14 @@
+.games-main-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; }
+.game-card-student { background: white; padding: 2.5rem; border-radius: 45px; display: flex; flex-direction: column; gap: 1.5rem; position: relative; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); border-bottom: 10px solid #eee; }
+.game-card-student:hover { transform: translateY(-5px); }
+
+.game-card-student.zombie { border-color: #16a34a; box-shadow: 0 20px 40px rgba(22, 163, 74, 0.1); }
+.game-card-student.starship { border-color: #e2e8f0; opacity: 0.6; }
+
+.game-card-icon { font-size: 4rem; }
+.game-card-title { font-weight: 900; font-size: 1.5rem; color: #1e293b; letter-spacing: -1px; }
+.game-card-desc { color: #94a3b8; font-weight: 600; line-height: 1.4; font-size: 0.9rem; }
+
+.btn-play-game { width: 100%; padding: 1.25rem; border-radius: 20px; border: none; font-weight: 900; font-size: 1.1rem; text-transform: uppercase; cursor: pointer; transition: 0.2s; }
+.zombie .btn-play-game { background: #16a34a; color: white; box-shadow: 0 10px 20px rgba(22, 163, 74, 0.3); }
+.btn-play-game.disabled { background: #f1f5f9; color: #cbd5e1; cursor: not-allowed; }

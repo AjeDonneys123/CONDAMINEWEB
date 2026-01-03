@@ -1,44 +1,110 @@
-.game-studio-container { width: 100%; }
-.btn-main-action { width: 100%; padding: 1.5rem; border-radius: 30px; font-weight: 900; font-size: 1.2rem; border: none; border-bottom: 6px solid; transition: all 0.2s; cursor: pointer; }
-.btn-main-action.purple { background: #9333ea; color: white; border-color: #7e22ce; }
-.btn-main-action:active { transform: translateY(4px); border-bottom-width: 0; }
+/* --- DESIGN V2 JEUX --- */
 
-.levels-grid { display: grid; gap: 1rem; margin-top: 2rem; }
-.level-card { background: white; padding: 1.5rem; border-radius: 24px; border: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
-.badge { font-size: 0.6rem; font-weight: 900; color: #94a3b8; text-transform: uppercase; background: #f8fafc; padding: 2px 8px; border-radius: 6px; margin-top: 4px; display: block; width: fit-content; }
+.studio-container { width: 100%; }
 
-.editor-modal { background: white; border-radius: 40px; padding: 2rem; border: 2px solid #faf5ff; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.1); }
-.editor-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
-.editor-header h3 { font-weight: 900; color: #9333ea; font-style: italic; margin: 0; }
+/* Gros Bouton Créer (Violet) */
+.btn-create-game-v2 { 
+    width: 100%; 
+    padding: 1.5rem; 
+    background: #9333ea; 
+    color: white; 
+    border-radius: 30px; 
+    font-weight: 900; 
+    font-size: 1.3rem; 
+    border: none; 
+    border-bottom: 8px solid #7e22ce; 
+    margin-bottom: 2rem; 
+    cursor: pointer; 
+    transition: 0.2s; 
+    text-transform: uppercase;
+    box-shadow: 0 10px 20px rgba(147, 51, 234, 0.3);
+}
+.btn-create-game-v2:active { transform: translateY(4px); border-bottom-width: 0; }
+.btn-create-game-v2:hover { transform: translateY(-2px); filter: brightness(1.1); }
 
-.config-row { display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; margin-bottom: 1.5rem; }
-.input-premium { padding: 1rem; border-radius: 15px; border: 2px solid #f1f5f9; font-weight: bold; outline: none; background: #f8fafc; }
-.purple-text { color: #9333ea; }
+/* Liste des Cartes */
+.games-list-v2 { display: grid; gap: 1rem; }
 
-.mode-switcher { display: flex; gap: 0.5rem; background: #f1f5f9; padding: 0.25rem; border-radius: 18px; margin-bottom: 1.5rem; }
-.mode-switcher button { flex: 1; padding: 0.75rem; border-radius: 15px; border: none; font-weight: 900; color: #94a3b8; }
-.mode-switcher button.active { background: white; color: #2563eb; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-.mode-switcher button.active-ai { background: #9333ea; color: white; shadow: 0 4px 6px rgba(0,0,0,0.1); }
+.game-card-v2 { 
+    background: white; 
+    padding: 1.5rem; 
+    border-radius: 24px; 
+    border: 2px solid #f3e8ff; 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+    box-shadow: 0 4px 6px -1px rgba(147, 51, 234, 0.05);
+    transition: 0.2s;
+}
+.game-card-v2:hover { border-color: #d8b4fe; transform: scale(1.01); }
 
-.ai-zone { background: #faf5ff; padding: 1.5rem; border-radius: 30px; border: 1px solid #f3e8ff; display: flex; flex-direction: column; gap: 1rem; }
-.ai-zone textarea { padding: 1rem; border-radius: 15px; border: none; height: 100px; font-weight: 600; shadow: inset 0 2px 4px rgba(0,0,0,0.05); }
-.ai-controls { display: flex; gap: 2rem; align-items: center; }
-.btn-ia-exec { flex: 1; background: #9333ea; color: white; padding: 1rem; border-radius: 15px; font-weight: 900; }
+.game-info h4 { font-size: 1.2rem; color: #1e293b; display: block; margin: 0; font-weight: 800; }
+.game-badge { 
+    background: #faf5ff; 
+    color: #9333ea; 
+    padding: 5px 12px; 
+    border-radius: 10px; 
+    font-size: 0.7rem; 
+    font-weight: 900; 
+    text-transform: uppercase; 
+    margin-top: 6px; 
+    display: inline-block; 
+    letter-spacing: 0.05em; 
+    border: 1px solid #e9d5ff;
+}
 
-.manual-zone { background: #eff6ff; padding: 1.5rem; border-radius: 30px; border: 1px solid #dbeafe; }
-.q-input { width: 100%; padding: 1rem; border-radius: 15px; border: none; margin-bottom: 1rem; font-weight: bold; shadow: inset 0 2px 4px rgba(0,0,0,0.05); }
-.options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1rem; }
-.option-field { display: flex; gap: 0.5rem; align-items: center; background: white; padding: 0.5rem 1rem; border-radius: 12px; border: 2px solid transparent; }
-.option-field.correct { border-color: #22c55e; background: #f0fdf4; }
-.option-field input[type="text"] { flex: 1; border: none; outline: none; font-size: 0.9rem; }
+.game-actions { display: flex; gap: 0.8rem; }
+.btn-icon-edit { background: #faf5ff; color: #9333ea; width: 48px; height: 48px; border-radius: 14px; border: none; font-weight: 900; font-size: 1.2rem; cursor: pointer; transition: 0.2s; }
+.btn-icon-edit:hover { background: #9333ea; color: white; }
+.btn-icon-del { background: #fef2f2; color: #ef4444; width: 48px; height: 48px; border-radius: 14px; border: none; font-weight: 900; font-size: 1.2rem; cursor: pointer; transition: 0.2s; }
+.btn-icon-del:hover { background: #ef4444; color: white; }
 
-.preview-list { display: flex; flex-direction: column; gap: 0.5rem; max-height: 300px; overflow-y: auto; margin-top: 1rem; }
-.preview-item { padding: 1rem; background: #f8fafc; border-radius: 15px; border: 1px solid #f1f5f9; cursor: pointer; }
-.preview-item.editing { border-color: #f97316; background: #fffaf5; }
-.preview-header { display: flex; gap: 0.75rem; align-items: center; }
-.num { width: 24px; height: 24px; background: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.6rem; font-weight: 900; }
-.preview-options { display: flex; gap: 1rem; margin-top: 0.5rem; margin-left: 2rem; }
-.preview-options span { font-size: 0.7rem; color: #94a3b8; }
-.preview-options span.good { color: #16a34a; font-weight: 900; }
+/* --- MODALE EDITEUR --- */
+.game-modal-overlay { position: fixed; inset: 0; z-index: 2000; background: rgba(15, 23, 42, 0.9); backdrop-filter: blur(10px); display: flex; align-items: center; justify-content: center; padding: 2rem; }
+.game-modal { background: white; width: 100%; max-width: 900px; max-height: 90vh; border-radius: 40px; display: flex; flex-direction: column; overflow: hidden; border: 4px solid #9333ea; box-shadow: 0 0 80px rgba(147, 51, 234, 0.4); }
 
-.btn-save-final { width: 100%; padding: 1.5rem; background: #22c55e; color: white; border-radius: 30px; font-weight: 900; font-size: 1.2rem; border: none; border-bottom: 6px solid #15803d; margin-top: 2rem; }
+.game-modal-header { padding: 2rem; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center; background: #faf5ff; }
+.game-modal-header h3 { font-weight: 900; color: #9333ea; margin: 0; font-size: 1.5rem; font-style: italic; text-transform: uppercase; }
+.btn-close { background: white; border: none; width: 40px; height: 40px; border-radius: 50%; font-weight: 900; cursor: pointer; color: #9333ea; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+
+.game-modal-body { flex: 1; overflow-y: auto; padding: 2.5rem; }
+
+.config-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem; margin-bottom: 2rem; }
+.input-title { padding: 1.25rem; border-radius: 18px; border: 2px solid #f3e8ff; background: #faf5ff; font-weight: 900; outline: none; font-size: 1.1rem; color: #4c1d95; width: 100%; }
+.select-chapter { padding: 1.25rem; border-radius: 18px; border: 2px solid #f3e8ff; background: #faf5ff; font-weight: 900; outline: none; color: #9333ea; width: 100%; }
+
+.tabs-mode { display: flex; background: #f1f5f9; padding: 0.4rem; border-radius: 20px; margin-bottom: 2rem; }
+.tabs-mode button { flex: 1; padding: 1rem; border-radius: 16px; border: none; font-weight: 900; color: #94a3b8; transition: 0.2s; cursor: pointer; }
+.tabs-mode button.active-manual { background: white; color: #2563eb; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+.tabs-mode button.active-ai { background: #9333ea; color: white; box-shadow: 0 4px 15px rgba(147, 51, 234, 0.4); }
+
+/* IA Box */
+.ai-box { background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%); padding: 2rem; border-radius: 30px; border: 2px solid #e9d5ff; }
+.ai-box textarea { width: 100%; height: 100px; border-radius: 18px; border: none; padding: 1.2rem; font-weight: 600; outline: none; background: white; color: #4c1d95; resize: none; margin-bottom: 1.5rem; }
+.ai-actions { display: flex; gap: 2rem; align-items: center; }
+.btn-ai-generate { flex: 1; background: #9333ea; color: white; padding: 1.25rem; border-radius: 18px; font-weight: 900; border: none; font-size: 1.1rem; cursor: pointer; transition: 0.2s; box-shadow: 0 10px 20px rgba(147, 51, 234, 0.2); }
+
+/* Manual Box */
+.manual-box { background: #eff6ff; padding: 2rem; border-radius: 30px; border: 1px solid #dbeafe; }
+.q-input { width: 100%; padding: 1.2rem; border-radius: 18px; border: none; margin-bottom: 1.5rem; font-weight: 900; outline: none; font-size: 1.1rem; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+.opts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem; }
+.opt-row { display: flex; gap: 0.5rem; align-items: center; background: white; padding: 0.8rem; border-radius: 14px; border: 2px solid transparent; cursor: pointer; transition: 0.1s; }
+.opt-row.correct { border-color: #22c55e; background: #f0fdf4; }
+.opt-row input[type="text"] { flex: 1; border: none; outline: none; font-weight: 700; background: transparent; }
+.btn-add-q { width: 100%; padding: 1.2rem; border-radius: 18px; border: none; background: #2563eb; color: white; font-weight: 900; font-size: 1rem; cursor: pointer; }
+
+/* Preview List */
+.preview-section { margin-top: 2.5rem; }
+.preview-title { font-size: 0.75rem; font-weight: 900; color: #94a3b8; text-transform: uppercase; margin-bottom: 1rem; margin-left: 1rem; letter-spacing: 1px; }
+.preview-scroll { display: flex; flex-direction: column; gap: 0.8rem; max-height: 250px; overflow-y: auto; padding-right: 5px; }
+.q-item { background: #f8fafc; padding: 1.2rem; border-radius: 20px; border: 2px solid #f1f5f9; cursor: pointer; transition: 0.2s; }
+.q-item:hover { border-color: #cbd5e1; }
+.q-item-header { display: flex; justify-content: space-between; align-items: center; }
+.q-num { width: 28px; height: 28px; background: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 900; color: #cbd5e1; border: 2px solid #f1f5f9; }
+.q-text { flex: 1; margin-left: 1rem; font-weight: 800; color: #334155; }
+.btn-del-q { width: 30px; height: 30px; border-radius: 8px; border: none; background: #fef2f2; color: #ef4444; font-weight: bold; cursor: pointer; }
+
+.modal-footer { padding: 2rem 2.5rem; background: #f8fafc; border-top: 1px solid #f1f5f9; }
+.btn-save-db { width: 100%; padding: 1.5rem; background: #16a34a; color: white; border-radius: 30px; font-weight: 900; font-size: 1.3rem; border: none; border-bottom: 8px solid #15803d; cursor: pointer; text-transform: uppercase; transition: 0.2s; }
+.btn-save-db:hover { transform: translateY(-2px); }
+.btn-save-db:active { transform: translateY(4px); border-bottom-width: 0; }
