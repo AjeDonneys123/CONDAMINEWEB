@@ -5,39 +5,85 @@
     min-height: 100vh;
     background-color: #f1f5f9;
 }
+
 .login-card {
     background: white;
-    padding: 2.5rem;
-    border-radius: 40px;
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+    padding: 3rem;
+    border-radius: 50px;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15);
     width: 100%;
-    max-width: 400px;
-    border-top: 8px solid #2563eb;
-}
-.login-title {
+    max-width: 420px;
+    border-top: 12px solid #2563eb;
     text-align: center;
+}
+
+.login-title {
     font-weight: 900;
-    font-size: 1.8rem;
-    margin-bottom: 1.5rem;
-    text-transform: uppercase;
+    font-size: 2rem;
+    margin-bottom: 2rem;
     color: #1e293b;
+    letter-spacing: -1px;
 }
-.login-input {
+
+.login-inputs {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.login-field {
     width: 100%;
-    padding: 1rem;
-    border-radius: 1rem;
-    border: 2px solid #f1f5f9;
-    margin-bottom: 1rem;
+    padding: 1.1rem;
+    border-radius: 18px;
+    border: 2px solid #e2e8f0;
+    background: #f8fafc;
+    font-size: 1rem;
+    font-weight: 700;
     outline: none;
+    transition: all 0.2s;
+    color: #334155;
 }
-.prof-border { border-color: #f59e0b; }
-.login-btn {
+
+.login-field:focus {
+    border-color: #2563eb;
+    background: white;
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
+}
+
+.prof-focus:focus {
+    border-color: #f59e0b;
+    box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.1);
+}
+
+.login-submit-btn {
     width: 100%;
-    padding: 1rem;
-    background: #2563eb;
-    color: white;
-    border-radius: 1rem;
+    padding: 1.25rem;
+    background-color: #2563eb !important; /* Bleu Roi intense */
+    color: #ffffff !important;           /* Texte blanc forcé */
+    border-radius: 20px;
     font-weight: 900;
-    font-size: 1.25rem;
-    box-shadow: 0 10px 15px -3px rgba(37, 99, 235, 0.3);
+    font-size: 1.3rem;
+    cursor: pointer;
+    border: none;
+    display: block;
+    text-transform: uppercase;
+    box-shadow: 0 10px 25px rgba(37, 99, 235, 0.4);
+    transition: all 0.2s ease-in-out;
+}
+
+.login-submit-btn:hover {
+    background-color: #1d4ed8 !important; /* Bleu encore plus sombre au survol */
+    transform: translateY(-3px);
+    box-shadow: 0 15px 30px rgba(37, 99, 235, 0.5);
+}
+
+.login-submit-btn:active {
+    transform: translateY(-1px);
+}
+
+.login-submit-btn:disabled {
+    background-color: #94a3b8 !important;
+    cursor: not-allowed;
+    transform: none;
 }

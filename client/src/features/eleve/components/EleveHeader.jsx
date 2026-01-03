@@ -9,15 +9,11 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
       <div className="top-bar">
         <div className="brand-zone">
           <h1 className="brand-name">Condamine</h1>
-          {isTestEleve && (
-            <button onClick={onBackToProf} className="btn-back-prof">
-              🎓 RETOUR PROF
-            </button>
-          )}
+          {isTestEleve && <button onClick={onBackToProf} className="btn-back-prof">🎓 RETOUR PROF</button>}
         </div>
         <div className="user-zone">
-            <span className="user-badge">{user.firstName} {user.lastName} ({user.classroom})</span>
-            <button onClick={onLogout} className="logout-link">Déconnexion</button>
+            <span className="user-badge">{user.firstName} ({user.classroom})</span>
+            <button onClick={onLogout} className="logout-link">✕</button>
         </div>
       </div>
 

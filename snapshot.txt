@@ -51,6 +51,8 @@ ARBORESCENCE
 │   │   │       │   ├── GameStudio.css
 │   │   │       │   └── GameStudio.jsx
 │   │   │       ├── homework/
+│   │   │       │   ├── HomeworkResults.css
+│   │   │       │   ├── HomeworkResults.jsx
 │   │   │       │   ├── HomeworkStudio.css
 │   │   │       │   └── HomeworkStudio.jsx
 │   │   │       └── students/
@@ -674,6 +676,7 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
   const [answer, setAnswer] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [aiResult, setAiResult] = useState(null);
+  const [isFinished, setIsFinished] = useState(false);
 
   const viewTop = useRef({ x: 0, y: 0, scale: 1 });
   const viewBottom = useRef({ x: 0, y: 0, scale: 1 });
@@ -704,11 +707,6 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
     window.addEventListener('mousemove', move); window.addEventListener('mouseup', stop);
   };
 
-  const handleZoom = (delta, viewRef, contentRef) => {
-      viewRef.current.scale = Math.min(Math.max(0.1, viewRef.current.scale + delta), 5);
-      contentRef.current.style.transform = `translate(-50%, -50%) translate(${viewRef.current.x}px, ${viewRef.current.y}px) scale(${viewRef.current.scale})`;
-  };
-
   const submitToIA = async () => {
     if (!answer.trim()) return alert("Écris ta réponse !");
     setSubmitting(true);
@@ -721,8 +719,8 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
                 homeworkInstruction: currentPage.instruction, 
                 classroom: user.classroom,
                 playerId: user.id || user._id,
-                teacherDocUrls: docs,
-                questionImage: currentPage.questionImage
+                homeworkId: homework._id,
+                levelIndex: pageIdx
             })
         });
         const data = await res.json();
@@ -731,101 +729,60 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
     setSubmitting(false);
   };
 
+  if (isFinished) {
+      return (
+          <div className="flex items-center justify-center min-h-[60vh]">
+              <div className="bg-white p-12 rounded-[50px] shadow-2xl text-center border-4 border-green-500 animate-in zoom-in duration-300">
+                  <span className="text-6xl">🎉</span>
+                  <h2 className="text-3xl font-black mt-4 uppercase">Travail Terminé !</h2>
+                  <p className="text-slate-400 font-bold mt-2">Tes réponses ont été envoyées au Maître.</p>
+                  <button onClick={onQuit} className="mt-8 bg-green-500 text-white px-10 py-4 rounded-3xl font-black shadow-lg shadow-green-100 hover:scale-105 transition-all">RETOURNER AUX DEVOIRS</button>
+              </div>
+          </div>
+      );
+  }
+
   return (
     <div className="flex flex-col h-[88vh] rounded-[40px] overflow-hidden border-4 border-slate-800 shadow-2xl select-none relative homework-container">
-      
-      {/* VISIONNEUSE HAUT */}
       <div id="top-container" onMouseDown={(e) => handleDrag(e, viewTop, topContentRef)} className="flex-[7] relative overflow-hidden viewer-dark-bg cursor-grab active:cursor-grabbing">
         <div ref={topContentRef} className="absolute top-1/2 left-1/2 pointer-events-none transition-transform duration-75">
             {docs.length > 0 && <img src={docs[docIdx]} draggable="false" onLoad={(e) => fitImage(e.target, 'top-container', viewTop, topContentRef)} className="max-w-none draggable-img pointer-events-auto" />}
         </div>
         <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 flex justify-between px-6 pointer-events-none z-20">
-            <button onClick={(e) => { e.stopPropagation(); if(docIdx > 0) setDocIdx(docIdx-1); }} className={`w-16 h-16 rounded-full bg-blue-600 text-white font-black text-2xl nav-arrow-btn pointer-events-auto shadow-lg hover:scale-110 ${docIdx === 0 ? 'opacity-0' : 'opacity-100'}`}>❮</button>
-            <button onClick={(e) => { e.stopPropagation(); if(docIdx < docs.length - 1) setDocIdx(docIdx+1); }} className={`w-16 h-16 rounded-full bg-blue-600 text-white font-black text-2xl nav-arrow-btn pointer-events-auto shadow-lg hover:scale-110 ${docIdx === docs.length - 1 ? 'opacity-0' : 'opacity-100'}`}>❯</button>
-        </div>
-        <div className="absolute top-6 left-1/2 -translate-x-1/2 bg-black/80 px-6 py-2 rounded-full text-white text-[10px] font-black border border-white/20 uppercase">Document {docIdx + 1} / {docs.length}</div>
-        <div className="absolute bottom-6 right-6 flex gap-3 z-30">
-            <button onClick={(e) => { e.stopPropagation(); handleZoom(-0.2, viewTop, topContentRef); }} className="w-12 h-12 bg-black/60 rounded-2xl text-white font-bold border border-white/10 hover:bg-black">➖</button>
-            <button onClick={(e) => { e.stopPropagation(); handleZoom(0.2, viewTop, topContentRef); }} className="w-12 h-12 bg-black/60 rounded-2xl text-white font-bold border border-white/10 hover:bg-black">➕</button>
+            <button onClick={() => docIdx > 0 && setDocIdx(docIdx-1)} className={`w-14 h-14 rounded-full bg-blue-600 text-white font-black text-2xl nav-arrow-btn pointer-events-auto ${docIdx === 0 ? 'opacity-0' : 'opacity-100'}`}>❮</button>
+            <button onClick={() => docIdx < docs.length - 1 && setDocIdx(docIdx+1)} className={`w-14 h-14 rounded-full bg-blue-600 text-white font-black text-2xl nav-arrow-btn pointer-events-auto ${docIdx === docs.length - 1 ? 'opacity-0' : 'opacity-100'}`}>❯</button>
         </div>
       </div>
 
-      {/* ZONE BAS (30%) */}
       <div className="flex-[3] bg-white flex border-t-4 border-orange-500 min-h-[250px]">
-        
-        {/* Zone Consigne / Image */}
         <div className="w-1/3 p-4 border-r flex flex-col bg-slate-50 relative">
-            <p className="font-black text-slate-400 text-[9px] uppercase mb-1 tracking-tighter">Question {pageIdx + 1} / {homework.levels.length}</p>
-            
-            {currentPage.questionImage ? (
-                // SI IL Y A UNE IMAGE : On affiche la consigne courte + le cadre noir
-                <>
-                    <p className="font-bold text-slate-800 text-[11px] leading-tight mb-2 line-clamp-3">{currentPage.instruction}</p>
-                    <div id="bot-container" onMouseDown={(e) => handleDrag(e, viewBottom, bottomContentRef)} className="flex-1 relative bg-black rounded-3xl overflow-hidden cursor-grab shadow-inner border border-slate-200">
-                        <div ref={bottomContentRef} className="absolute top-1/2 left-1/2 pointer-events-none transition-transform duration-75">
-                            <img src={currentPage.questionImage} draggable="false" onLoad={(e) => fitImage(e.target, 'bot-container', viewBottom, bottomContentRef)} className="max-w-none draggable-img pointer-events-auto" />
-                        </div>
-                        <div className="absolute bottom-2 right-2 flex gap-1 scale-75 z-20">
-                            <button onClick={(e) => { e.stopPropagation(); handleZoom(-0.2, viewBottom, bottomContentRef); }} className="w-8 h-8 bg-white/20 rounded-lg text-white font-black">➖</button>
-                            <button onClick={(e) => { e.stopPropagation(); handleZoom(0.2, viewBottom, bottomContentRef); }} className="w-8 h-8 bg-white/20 rounded-lg text-white font-black">➕</button>
-                        </div>
-                    </div>
-                </>
-            ) : (
-                // SI PAS D'IMAGE : La consigne texte prend tout l'espace disponible de façon élégante
-                <div className="flex-1 flex items-center justify-center bg-white rounded-3xl border-2 border-dashed border-slate-200 p-6 text-center shadow-inner overflow-y-auto custom-scrollbar">
-                    <p className="font-black text-slate-700 text-lg leading-tight italic">
-                        "{currentPage.instruction}"
-                    </p>
+            <p className="font-black text-slate-800 text-[10px] uppercase mb-2">Question {pageIdx + 1} / {homework.levels.length}</p>
+            <div id="bot-container" onMouseDown={(e) => handleDrag(e, viewBottom, bottomContentRef)} className="flex-1 relative bg-black rounded-3xl overflow-hidden cursor-grab shadow-inner">
+                <div ref={bottomContentRef} className="absolute top-1/2 left-1/2 pointer-events-none transition-transform duration-75">
+                    {currentPage.questionImage && <img src={currentPage.questionImage} draggable="false" onLoad={(e) => fitImage(e.target, 'bot-container', viewBottom, bottomContentRef)} className="max-w-none draggable-img pointer-events-auto" />}
                 </div>
-            )}
+            </div>
         </div>
-
-        {/* Saisie Réponse */}
         <div className="w-2/3 p-6 flex flex-col gap-4 bg-white">
             <textarea value={answer} onChange={e => setAnswer(e.target.value)} className="flex-1 w-full p-5 rounded-[24px] border-2 border-slate-100 outline-none focus:border-blue-500 font-medium text-lg resize-none shadow-inner bg-slate-50/50" placeholder="Écris ta réponse ici..." />
-            <button onClick={submitToIA} disabled={submitting} className="bg-blue-600 text-white py-5 rounded-[20px] font-black shadow-xl hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-50 uppercase tracking-widest">
-                {submitting ? "Analyse en cours..." : "Envoyer à l'IA 🤖"}
-            </button>
+            <button onClick={submitToIA} disabled={submitting} className="bg-blue-600 text-white py-5 rounded-[20px] font-black shadow-xl hover:bg-blue-700 active:scale-95 disabled:opacity-50 uppercase tracking-widest">{submitting ? "Analyse en cours..." : "Envoyer à l'IA 🤖"}</button>
         </div>
       </div>
 
-      {/* MODALE RESULTAT */}
       {aiResult && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 ai-modal-glass">
-            <div className="bg-white w-full max-w-3xl rounded-[50px] shadow-2xl p-10 flex flex-col my-auto animate-in zoom-in duration-300 border-4 border-blue-500">
+            <div className="bg-white w-full max-w-3xl rounded-[50px] shadow-2xl p-10 flex flex-col my-auto animate-in zoom-in duration-300">
                 <div className="text-center mb-6">
-                    <h2 className="text-2xl font-black text-slate-800 uppercase tracking-tight">Verdict du Maître IA</h2>
+                    <h2 className="text-2xl font-black text-slate-800 uppercase">Analyse du Maître IA</h2>
                     <div className="mt-4 text-4xl font-black text-blue-600 bg-blue-50 px-8 py-3 rounded-3xl border-4 border-blue-100 inline-block">{aiResult.grade}</div>
                 </div>
-
-                <div className="space-y-6 overflow-y-auto max-h-[50vh] pr-2 custom-scrollbar">
-                    <div className="bg-slate-50 p-6 rounded-3xl border shadow-inner">
-                        <h3 className="font-black text-blue-600 mb-2 uppercase text-xs tracking-widest">📝 Commentaire :</h3>
-                        <div className="text-slate-700 leading-relaxed text-lg" dangerouslySetInnerHTML={{__html: aiResult.feedback_fond}} />
-                    </div>
-
-                    {aiResult.corrections?.length > 0 && (
-                        <div className="bg-red-50 p-6 rounded-3xl border-2 border-red-100 shadow-sm">
-                            <h3 className="font-black text-red-600 mb-4 uppercase text-xs tracking-widest">✍️ Orthographe & Grammaire :</h3>
-                            <table className="w-full text-sm">
-                                <thead><tr className="text-left text-red-400 font-black"><th>FAUTE</th><th>CORRECTION</th><th>RÈGLE</th></tr></thead>
-                                <tbody className="divide-y divide-red-100">
-                                    {aiResult.corrections.map((c, i) => (
-                                        <tr key={i}><td className="py-3 text-red-600 line-through font-bold">{c.wrong}</td><td className="py-3 text-green-600 font-black">{c.correct}</td><td className="py-3 text-slate-500 italic text-xs leading-tight">{c.rule}</td></tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    )}
-                </div>
-
-                <div className="flex gap-4 mt-8">
-                    <button onClick={() => setAiResult(null)} className="flex-1 py-5 bg-slate-100 text-slate-500 rounded-3xl font-black uppercase tracking-widest shadow-md">✍️ Améliorer</button>
+                <div className="flex-1 overflow-y-auto bg-slate-50 p-8 rounded-[32px] border shadow-inner mb-8 text-lg" dangerouslySetInnerHTML={{__html: aiResult.feedback_fond}} />
+                <div className="flex gap-4">
+                    <button onClick={() => setAiResult(null)} className="flex-1 py-5 bg-slate-100 text-slate-500 rounded-3xl font-black uppercase tracking-widest">✍️ Corriger</button>
                     {pageIdx < homework.levels.length - 1 ? (
-                        <button onClick={() => { setAiResult(null); setAnswer(''); setPageIdx(pageIdx + 1); setDocIdx(0); }} className="flex-1 py-5 bg-green-500 text-white rounded-3xl font-black uppercase tracking-widest shadow-lg shadow-green-200">Suivant ➔</button>
+                        <button onClick={() => { setAiResult(null); setAnswer(''); setPageIdx(pageIdx+1); setDocIdx(0); }} className="flex-1 py-5 bg-green-500 text-white rounded-3xl font-black uppercase tracking-widest shadow-lg shadow-green-200">Suivant ➔</button>
                     ) : (
-                        <button onClick={onQuit} className="flex-1 py-5 bg-blue-600 text-white rounded-3xl font-black shadow-lg shadow-blue-200 uppercase tracking-widest">Terminer 🎉</button>
+                        <button onClick={() => setIsFinished(true)} className="flex-1 py-5 bg-blue-600 text-white rounded-3xl font-black shadow-lg shadow-blue-200 uppercase tracking-widest">Terminer 🎉</button>
                     )}
                 </div>
             </div>
@@ -1120,6 +1077,101 @@ export default function GameStudio() {
 
 
 ############################################################
+### FICHIER: client/src/features/prof/homework/HomeworkResults.css
+############################################################
+
+.results-container { animation: fadeIn 0.3s; }
+.btn-back { background: #f1f5f9; padding: 0.5rem 1rem; border-radius: 10px; font-weight: bold; margin-bottom: 1rem; }
+.title-exam { font-weight: 900; font-size: 1.5rem; margin-bottom: 2rem; color: #1e293b; }
+
+.exam-layout { display: grid; grid-template-columns: 250px 1fr; gap: 2rem; }
+.students-list { background: #f8fafc; border-radius: 20px; padding: 1rem; display: flex; flex-direction: column; gap: 0.5rem; height: fit-content; }
+.student-item { display: flex; justify-content: space-between; align-items: center; padding: 1rem; background: white; border-radius: 12px; border: 1px solid #e2e8f0; text-align: left; }
+.student-item.active { border-color: #2563eb; background: #eff6ff; }
+.student-item b { font-size: 0.9rem; }
+.student-item span { font-weight: 900; color: #2563eb; }
+
+.copy-card { background: white; border-radius: 30px; border: 2px solid #f1f5f9; padding: 2rem; }
+.copy-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+.grade-input { width: 80px; text-align: center; padding: 0.5rem; background: #eff6ff; border: 2px solid #2563eb; border-radius: 12px; font-weight: 900; font-size: 1.2rem; color: #2563eb; }
+
+.section-label { font-size: 0.7rem; font-weight: 900; color: #94a3b8; text-transform: uppercase; margin-bottom: 0.5rem; }
+.user-text-area { padding: 1.5rem; background: #fafafa; border-radius: 15px; border: 1px solid #eee; margin-bottom: 1.5rem; font-style: italic; line-height: 1.6; }
+.feedback-editor { width: 100%; height: 200px; padding: 1rem; border-radius: 15px; border: 1px solid #e2e8f0; font-family: inherit; font-size: 0.9rem; margin-bottom: 1.5rem; }
+.btn-save-edit { width: 100%; padding: 1rem; background: #2563eb; color: white; border-radius: 15px; font-weight: 900; }
+
+
+############################################################
+### FICHIER: client/src/features/prof/homework/HomeworkResults.jsx
+############################################################
+
+import React, { useState, useEffect } from 'react';
+import './HomeworkResults.css';
+
+export default function HomeworkResults({ homework, onBack }) {
+  const [submissions, setSubmissions] = useState([]);
+  const [selectedSub, setSelectedSub] = useState(null);
+
+  useEffect(() => {
+    fetch(`/api/submissions/${homework._id}`).then(r => r.json()).then(setSubmissions);
+  }, [homework._id]);
+
+  const handleSaveCorrection = async () => {
+    const res = await fetch(`/api/submissions/${selectedSub._id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ levelsResults: selectedSub.levelsResults })
+    }).then(r => r.json());
+    if (res.ok) alert("Correction mise à jour !");
+  };
+
+  return (
+    <div className="results-container">
+      <button onClick={onBack} className="btn-back">← Retour</button>
+      <h2 className="title-exam">Copies : {homework.title}</h2>
+
+      <div className="exam-layout">
+        {/* Liste des élèves */}
+        <div className="students-list">
+          {submissions.map(s => (
+            <button key={s._id} onClick={() => setSelectedSub(s)} className={`student-item ${selectedSub?._id === s._id ? 'active' : ''}`}>
+               <b>{s.playerId?.firstName} {s.playerId?.lastName}</b>
+               <span>{s.levelsResults[0]?.grade || "--"}</span>
+            </button>
+          ))}
+          {submissions.length === 0 && <p className="empty">Aucune copie rendue.</p>}
+        </div>
+
+        {/* Détail de la copie */}
+        <div className="copy-detail">
+          {selectedSub ? (
+            <div className="copy-card">
+               <div className="copy-header">
+                 <h3>Copie de {selectedSub.playerId?.firstName}</h3>
+                 <input className="grade-input" value={selectedSub.levelsResults[0].grade} onChange={e => {
+                   const n = {...selectedSub}; n.levelsResults[0].grade = e.target.value; setSelectedSub(n);
+                 }} />
+               </div>
+               
+               <div className="section-label">Réponse de l'élève :</div>
+               <div className="user-text-area">{selectedSub.levelsResults[0].userText}</div>
+
+               <div className="section-label">Correction (IA/Prof) :</div>
+               <textarea className="feedback-editor" value={selectedSub.levelsResults[0].aiFeedback} onChange={e => {
+                 const n = {...selectedSub}; n.levelsResults[0].aiFeedback = e.target.value; setSelectedSub(n);
+               }} />
+
+               <button onClick={handleSaveCorrection} className="btn-save-edit">💾 ENREGISTRER MA VERSION</button>
+            </div>
+          ) : <div className="placeholder-copy">Sélectionnez un élève pour voir sa copie</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+############################################################
 ### FICHIER: client/src/features/prof/homework/HomeworkStudio.css
 ############################################################
 
@@ -1159,13 +1211,14 @@ export default function GameStudio() {
 ############################################################
 
 import React, { useState, useEffect } from 'react';
+import HomeworkResults from './HomeworkResults';
 import './HomeworkStudio.css';
 
 export default function HomeworkStudio() {
   const [hws, setHws] = useState([]);
   const [isEditing, setIsEditing] = useState(false);
+  const [viewingResults, setViewingResults] = useState(null); // Contient le devoir sélectionné
   const [formData, setFormData] = useState({ _id: null, title: '', classroom: 'Toutes', levels: [] });
-  const [uploading, setUploading] = useState(false);
 
   const load = async () => {
     const data = await fetch('/api/homework-all').then(r => r.json());
@@ -1173,31 +1226,7 @@ export default function HomeworkStudio() {
   };
   useEffect(() => { load(); }, []);
 
-  const handleUpload = async (files, idx, type) => {
-    setUploading(true);
-    const newLevels = [...formData.levels];
-    for (let file of Array.from(files)) {
-      const fd = new FormData();
-      fd.append('file', file);
-      const res = await fetch('/api/upload', { method: 'POST', body: fd }).then(r => r.json());
-      if (res.ok) {
-        if (type === 'doc') newLevels[idx].attachmentUrls.push(res.imageUrl);
-        else newLevels[idx].questionImage = res.imageUrl;
-      }
-    }
-    setFormData({ ...formData, levels: newLevels });
-    setUploading(false);
-  };
-
-  const save = async () => {
-    if (!formData.title) return alert("Titre requis !");
-    const res = await fetch('/api/homework', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(formData)
-    }).then(r => r.json());
-    if (res.ok) { setIsEditing(false); load(); }
-  };
+  if (viewingResults) return <HomeworkResults homework={viewingResults} onBack={() => setViewingResults(null)} />;
 
   return (
     <div className="studio-container">
@@ -1210,6 +1239,7 @@ export default function HomeworkStudio() {
               <div key={h._id} className="hw-admin-card">
                 <div><b>{h.title}</b><p>{h.classroom} • {h.levels.length} Page(s)</p></div>
                 <div className="hw-actions">
+                    <button onClick={() => setViewingResults(h)} className="btn-view-exam">👁️ EXAM</button>
                     <button onClick={() => { setFormData(h); setIsEditing(true); }} className="btn-edit">🖋️</button>
                     <button onClick={async () => { if(confirm("Suppr ?")) { await fetch(`/api/homework/${h._id}`, {method:'DELETE'}); load(); }}} className="btn-delete">🗑️</button>
                 </div>
@@ -1224,34 +1254,12 @@ export default function HomeworkStudio() {
             <button onClick={() => setIsEditing(false)} className="btn-close">✕</button>
           </div>
           <div className="edit-grid-top">
-            <input className="input-title" placeholder="Titre du devoir..." value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
+            <input className="input-title" placeholder="Titre..." value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
             <select className="select-class" value={formData.classroom} onChange={e => setFormData({...formData, classroom: e.target.value})}>
-                <option value="Toutes">Toutes les classes</option><option value="6D">6eD</option><option value="5B">5eB</option><option value="5C">5eC</option><option value="2A">2A</option><option value="2CD">2CD</option>
+                <option value="Toutes">Toutes les classes</option><option value="6D">6eD</option><option value="5B">5eB</option><option value="5C">5eC</option>
             </select>
           </div>
-          <div className="pages-list">
-            {formData.levels.map((lvl, idx) => (
-                <div key={idx} className="page-editor-card">
-                    <div className="page-header"><span>PAGE {idx+1}</span><button onClick={()=>{const n=[...formData.levels]; n.splice(idx,1); setFormData({...formData, levels:n});}}>Supprimer</button></div>
-                    <div className="upload-zone-top">
-                        <p>Ligne 1 : Documents (PDF / Images)</p>
-                        <div className="docs-preview">
-                            {lvl.attachmentUrls.map((url, uIdx) => <img key={uIdx} src={url} className="doc-thumb" />)}
-                            <label className="btn-add-file">+<input type="file" multiple className="hidden" onChange={e => handleUpload(e.target.files, idx, 'doc')} /></label>
-                        </div>
-                    </div>
-                    <div className="upload-zone-bottom">
-                        <div className="q-img-box">
-                            {lvl.questionImage ? <img src={lvl.questionImage} /> : <span>Image Question</span>}
-                            <input type="file" className="hidden-input" onChange={e => handleUpload(e.target.files, idx, 'qimg')} />
-                        </div>
-                        <textarea placeholder="Consigne élève..." value={lvl.instruction} onChange={e => {const n=[...formData.levels]; n[idx].instruction=e.target.value; setFormData({...formData, levels:n});}} />
-                    </div>
-                </div>
-            ))}
-          </div>
-          <button onClick={() => setFormData({...formData, levels: [...formData.levels, {instruction:'', attachmentUrls:[], questionImage:null}]})} className="btn-add-page">+ AJOUTER UNE PAGE</button>
-          <button onClick={save} disabled={uploading} className="btn-save-final">{uploading ? "UPLOAD EN COURS..." : "💾 SAUVEGARDER LE DEVOIR"}</button>
+          <button onClick={async () => { await fetch('/api/homework', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(formData)}); setIsEditing(false); load(); }} className="btn-save-final">💾 SAUVEGARDER</button>
         </div>
       )}
     </div>
@@ -1733,14 +1741,13 @@ const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 
-// Helper pour convertir une URL d'image en format compris par Gemini
+// Convertit une image en format Gemini
 async function fileToPart(url) {
     if(!url) return null;
     try {
         const resp = await fetch(url);
         const buffer = await resp.arrayBuffer();
-        const mimeType = url.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg';
-        return { inlineData: { data: Buffer.from(buffer).toString('base64'), mimeType } };
+        return { inlineData: { data: Buffer.from(buffer).toString('base64'), mimeType: 'image/jpeg' } };
     } catch(e) { return null; }
 }
 
@@ -1753,57 +1760,28 @@ router.get('/homework/:classroom', async (req, res) => {
     } catch (e) { res.status(500).json([]); }
 });
 
+// --- ANALYSE IA + SAUVEGARDE COPIE (SUBMISSION) ---
 router.post('/analyze-homework', async (req, res) => {
-    const { userText, homeworkInstruction, playerId, classroom, teacherDocUrls, questionImage } = req.body;
+    const { userText, homeworkInstruction, playerId, classroom, homeworkId, levelIndex, questionImage } = req.body;
     const Player = mongoose.model('Player');
+    const Submission = mongoose.model('Submission');
     const geminiKey = process.env.GEMINI_API_KEY;
     
-    console.log("🤖 [IA] Analyse Multimodale lancée (Images + Texte)");
+    console.log(`🤖 [IA] Sauvegarde de la copie pour l'élève: ${playerId}`);
 
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${geminiKey}`;
-    
-    const prompt = `Tu es un professeur de français expert.
-    CONTEXTE : Tu corriges un élève de la classe ${classroom}.
-    CONSIGNE : ${homeworkInstruction}.
-    RÉPONSE ÉLÈVE : ${userText}.
-
-    TES SOURCES (Images jointes) : 
-    - Les documents de cours (Ligne 1).
-    - L'image spécifique de la question (Ligne 2).
-    
-    INSTRUCTIONS DE CORRECTION :
-    1. Analyse le FOND : Vérifie si la réponse est historiquement et textuellement juste par rapport aux images.
-    2. Analyse la FORME : Identifie les fautes d'orthographe, grammaire et syntaxe.
-    
-    RÈGLE CRITIQUE : 
-    - Le tableau "corrections" ne doit contenir QUE des fautes de langue (orthographe/grammaire).
-    - Les remarques sur le contenu (ex: "C'est bien Mahomet") doivent aller dans "feedback_fond".
-
+    const prompt = `Tu es un professeur de français expert. Sujet: ${homeworkInstruction}. Réponse élève: ${userText}.
+    RÈGLE : Le tableau "corrections" ne contient que l'orthographe. Les conseils de fond vont dans "feedback_fond".
     RÉPONDS UNIQUEMENT EN JSON :
     {
-      "feedback_fond": "Ton avis sur le contenu historique/pédagogique en HTML",
+      "feedback_fond": "Commentaire HTML",
       "grade": "xx/20",
-      "corrections": [
-        {"wrong": "mot faux", "correct": "mot juste", "rule": "Règle expliquée simplement"}
-      ]
+      "corrections": [{"wrong": "...", "correct": "...", "rule": "..."}]
     }`;
 
     try {
         let parts = [{ text: prompt }];
-
-        // On ajoute les documents de cours s'ils existent
-        if (teacherDocUrls && Array.isArray(teacherDocUrls)) {
-            for (let imgUrl of teacherDocUrls) {
-                const part = await fileToPart(imgUrl);
-                if (part) parts.push(part);
-            }
-        }
-
-        // On ajoute l'image de la question (Ligne 2)
-        if (questionImage) {
-            const qPart = await fileToPart(questionImage);
-            if (qPart) parts.push(qPart);
-        }
+        if (questionImage) { const p = await fileToPart(questionImage); if(p) parts.push(p); }
 
         const response = await fetch(url, {
             method: 'POST',
@@ -1817,12 +1795,42 @@ router.post('/analyze-homework', async (req, res) => {
         const result = await response.json();
         const aiJson = JSON.parse(result.candidates[0].content.parts[0].text);
 
+        // --- LOGIQUE DE SAUVEGARDE DE LA COPIE ---
+        if (playerId && homeworkId) {
+            const copyData = {
+                levelIndex,
+                userText,
+                aiFeedback: aiJson.feedback_fond,
+                grade: aiJson.grade
+            };
+
+            // On met à jour la copie globale (Submissions)
+            // On utilise l'opérateur $pull pour éviter les doublons de la même question
+            await Submission.findOneAndUpdate(
+                { homeworkId, playerId },
+                { 
+                    classroom, 
+                    submittedAt: Date.now(),
+                    $pull: { levelsResults: { levelIndex } } 
+                },
+                { upsert: true }
+            );
+            
+            // On ajoute la nouvelle correction
+            await Submission.findOneAndUpdate(
+                { homeworkId, playerId },
+                { $push: { levelsResults: copyData } }
+            );
+        }
+
+        // Sauvegarde des fautes dans le carnet rose
         if (playerId && playerId !== "prof" && aiJson.corrections?.length > 0) {
             await Player.findByIdAndUpdate(playerId, { $push: { spellingMistakes: { $each: aiJson.corrections } } });
         }
+
         res.json(aiJson);
     } catch (e) {
-        console.error("💥 Erreur IA Multimodale:", e.message);
+        console.error("💥 Erreur analyse/sauvegarde:", e.message);
         res.status(500).json({ error: "IA Error" });
     }
 });
@@ -1852,25 +1860,12 @@ cloudinary.config({ cloud_name: process.env.CLOUDINARY_CLOUD_NAME, api_key: proc
 const storage = new CloudinaryStorage({ cloudinary: cloudinary, params: { folder: 'condamine-assets', allowed_formats: ['jpg', 'png', 'pdf'] } });
 const upload = multer({ storage: storage });
 
-// UPLOAD
+// ROUTES DEVOIRS & UPLOAD
 router.post('/upload', upload.single('file'), (req, res) => {
     if (req.file) res.json({ ok: true, imageUrl: req.file.path });
     else res.json({ ok: false });
 });
 
-// ELEVES
-router.get('/players', async (req, res) => {
-    const Player = mongoose.model('Player');
-    res.json(await Player.find().sort({ classroom: 1, lastName: 1 }));
-});
-
-router.post('/reset-player', async (req, res) => {
-    const Player = mongoose.model('Player');
-    await Player.findByIdAndUpdate(req.body.playerId, { spellingMistakes: [] });
-    res.json({ ok: true });
-});
-
-// DEVOIRS (ADMIN)
 router.get('/homework-all', async (req, res) => {
     const Homework = mongoose.model('Homework');
     res.json(await Homework.find().sort({ date: -1 }));
@@ -1884,6 +1879,42 @@ router.post('/homework', async (req, res) => {
     res.json({ ok: true });
 });
 
+router.delete('/homework/:id', async (req, res) => {
+    await mongoose.model('Homework').findByIdAndDelete(req.params.id);
+    res.json({ ok: true });
+});
+
+// --- NOUVELLES ROUTES : GESTION DES COPIES (SUBMISSIONS) ---
+
+// Voir tous les élèves ayant rendu un devoir précis
+router.get('/submissions/:hwId', async (req, res) => {
+    const Submission = mongoose.model('Submission');
+    try {
+        const subs = await Submission.find({ homeworkId: req.params.hwId }).populate('playerId');
+        res.json(subs);
+    } catch (e) { res.status(500).json([]); }
+});
+
+// Mettre à jour la correction du prof (Le prof a le dernier mot)
+router.put('/submissions/:subId', async (req, res) => {
+    const Submission = mongoose.model('Submission');
+    try {
+        await Submission.findByIdAndUpdate(req.params.subId, { 
+            levelsResults: req.body.levelsResults 
+        });
+        res.json({ ok: true });
+    } catch (e) { res.status(500).json({ ok: false }); }
+});
+
+router.get('/players', async (req, res) => {
+    res.json(await mongoose.model('Player').find().sort({ classroom: 1, lastName: 1 }));
+});
+
+router.post('/reset-player', async (req, res) => {
+    await mongoose.model('Player').findByIdAndUpdate(req.body.playerId, { spellingMistakes: [] });
+    res.json({ ok: true });
+});
+
 module.exports = router;
 
 
@@ -1893,22 +1924,58 @@ module.exports = router;
 
 const mongoose = require('mongoose');
 
-// On force les noms de collections 'players' et 'homeworks' pour la compatibilité BDD
+// 1. JOUEURS (PLAYERS)
 const playerSchema = new mongoose.Schema({ 
-    firstName: String, lastName: String, classroom: String, 
-    spellingMistakes: { type: [{ wrong: String, correct: String, rule: String, date: { type: Date, default: Date.now } }], default: [] } 
+    firstName: String, 
+    lastName: String, 
+    classroom: String, 
+    spellingMistakes: { 
+        type: [{ 
+            wrong: String, 
+            correct: String, 
+            rule: String, 
+            date: { type: Date, default: Date.now } 
+        }], 
+        default: [] 
+    } 
 });
 mongoose.model('Player', playerSchema, 'players');
 
+// 2. DEVOIRS (HOMEWORKS - LA CONSIGNE)
 const homeworkSchema = new mongoose.Schema({ 
-    title: String, classroom: String, 
-    levels: [{ instruction: String, aiPrompt: String, attachmentUrls: [String], questionImage: String }], 
+    title: String, 
+    classroom: String, 
+    levels: [{ 
+        instruction: String, 
+        aiPrompt: String, 
+        attachmentUrls: [String], 
+        questionImage: String 
+    }], 
     date: { type: Date, default: Date.now } 
 });
 mongoose.model('Homework', homeworkSchema, 'homeworks');
 
+// 3. COPIES (SUBMISSIONS - LES RÉPONSES)
+const submissionSchema = new mongoose.Schema({
+    homeworkId: { type: mongoose.Schema.Types.ObjectId, ref: 'Homework' },
+    playerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Player' },
+    classroom: String,
+    levelsResults: [{
+        levelIndex: Number,
+        userText: String,
+        aiFeedback: String,
+        grade: String
+    }],
+    submittedAt: { type: Date, default: Date.now }
+});
+mongoose.model('Submission', submissionSchema, 'submissions');
+
+// 4. JEUX (GAME LEVELS)
 const gameLevelSchema = new mongoose.Schema({ 
-    chapterId: String, title: String, questions: Array, createdAt: { type: Date, default: Date.now } 
+    chapterId: String, 
+    title: String, 
+    questions: Array, 
+    createdAt: { type: Date, default: Date.now } 
 });
 mongoose.model('GameLevel', gameLevelSchema, 'game_levels');
 
