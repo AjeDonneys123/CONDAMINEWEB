@@ -8,14 +8,17 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
   const [submitting, setSubmitting] = useState(false);
   const [aiResult, setAiResult] = useState(null);
 
-  // Refs zoom
   const viewTop = useRef({ x: 0, y: 0, scale: 1 });
   const viewBot = useRef({ x: 0, y: 0, scale: 1 });
   const topRef = useRef(null);
   const botRef = useRef(null);
 
   const currentPage = homework.levels[pageIdx];
-  const docs = currentPage.attachmentUrls || [];
+  
+  // CORRECTION V8.3 : Gère les docs ressources qu'ils soient String ou Objet {url, label}
+  const rawDocs = currentPage.attachmentUrls || [];
+  const docs = rawDocs.map(d => typeof d === 'string' ? d : d.url);
+  const currentLabel = typeof rawDocs[docIdx] === 'object' ? rawDocs[docIdx].label : '';
   
   const updateTransform = (refData, refEl) => {
       if(refEl.current) {
@@ -26,7 +29,7 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
   const fitImage = (img, containerId, refData, refEl) => {
       const container = document.getElementById(containerId);
       if(!img || !container || !refEl.current) return;
-      const scale = Math.min(container.offsetWidth / img.naturalWidth, container.offsetHeight / img.naturalHeight) * 0.9;
+      const scale = Math.min(container.offsetWidth / img.naturalWidth, container.offsetHeight / img.naturalHeight);
       refData.current = { x: 0, y: 0, scale: scale };
       updateTransform(refData, refEl);
   };
@@ -73,14 +76,10 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
 
   return (
     <div className="homework-container">
-      {/* ZONE HAUT : LISEUSE */}
       <div id="top-container" className="viewer-top-area" onMouseDown={(e) => handleDrag(e, viewTop, topRef)}>
-          
-          {/* BADGE QUESTION DÉPLACÉ ICI */}
           <div className="floating-question-badge">
-              QUESTION {pageIdx+1} / {homework.levels.length}
+              QUESTION {pageIdx+1} / {homework.levels.length} {currentLabel && `| ${currentLabel}`}
           </div>
-
           {docs.length > 0 && (
               <img 
                   ref={topRef}
@@ -90,21 +89,18 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
                   onLoad={(e) => fitImage(e.target, 'top-container', viewTop, topRef)}
               />
           )}
-          
           <div className="absolute bottom-4 right-4 flex gap-2 z-10" onMouseDown={e => e.stopPropagation()}>
-              <button onClick={() => handleZoom(-0.2, viewTop, topRef)} className="w-10 h-10 bg-black/50 text-white rounded-lg font-bold border border-white/20">➖</button>
-              <button onClick={() => handleZoom(0.2, viewTop, topRef)} className="w-10 h-10 bg-black/50 text-white rounded-lg font-bold border border-white/20">➕</button>
+              <button onClick={() => handleZoom(-0.2, viewTop, topRef)} className="w-8 h-8 bg-black/50 text-white rounded font-bold">➖</button>
+              <button onClick={() => handleZoom(0.2, viewTop, topRef)} className="w-8 h-8 bg-black/50 text-white rounded font-bold">➕</button>
           </div>
-
           {docs.length > 1 && (
               <div className="absolute top-1/2 w-full flex justify-between px-4 z-10" onMouseDown={e => e.stopPropagation()}>
-                  <button onClick={() => setDocIdx(d => Math.max(0, d-1))} className="w-12 h-12 bg-black/50 text-white rounded-full font-bold">◀</button>
-                  <button onClick={() => setDocIdx(d => Math.min(docs.length-1, d+1))} className="w-12 h-12 bg-black/50 text-white rounded-full font-bold">▶</button>
+                  <button onClick={() => setDocIdx(d => Math.max(0, d-1))} className="w-10 h-10 bg-black/50 text-white rounded-full">◀</button>
+                  <button onClick={() => setDocIdx(d => Math.min(docs.length-1, d+1))} className="w-10 h-10 bg-black/50 text-white rounded-full">▶</button>
               </div>
           )}
       </div>
 
-      {/* ZONE BAS : INTERACTION */}
       <div className="interaction-bottom-area">
           <div className="question-panel">
               {currentPage.questionImage ? (
@@ -115,14 +111,10 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
                           draggable="false"
                           onLoad={(e) => fitImage(e.target, 'bot-container', viewBot, botRef)}
                       />
-                      <div className="absolute bottom-2 right-2 flex gap-1" onMouseDown={e => e.stopPropagation()}>
-                          <button onClick={() => handleZoom(-0.2, viewBot, botRef)} className="w-6 h-6 bg-white/20 text-white rounded text-xs">➖</button>
-                          <button onClick={() => handleZoom(0.2, viewBot, botRef)} className="w-6 h-6 bg-white/20 text-white rounded text-xs">➕</button>
-                      </div>
                   </div>
               ) : (
                   <div className="q-text-scroll-area custom-scrollbar">
-                      {currentPage.instruction || "Aucune consigne disponible."}
+                      {currentPage.instruction || "Consigne."}
                   </div>
               )}
           </div>
@@ -135,12 +127,11 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
                   onChange={e => setAnswer(e.target.value)}
               />
               <button onClick={submitToIA} disabled={submitting} className="btn-send-ai">
-                  {submitting ? "..." : "ENVOYER AU MAÎTRE 🤖"}
+                  {submitting ? "..." : "ENVOYER 🤖"}
               </button>
           </div>
       </div>
 
-      {/* MODALE RESULTATS */}
       {aiResult && (
           <div className="ai-modal-overlay">
               <div className="ai-modal-box animate-in zoom-in duration-300">
@@ -156,7 +147,6 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
                               {aiResult.corrections.map((c, i) => (
                                   <div key={i} className="flex justify-between py-1 border-b border-red-100 last:border-0 text-sm">
                                       <span><span className="line-through text-red-500 font-bold">{c.wrong}</span> ➔ <span className="text-green-600 font-black">{c.correct}</span></span>
-                                      <span className="text-xs text-slate-400 italic">{c.rule}</span>
                                   </div>
                               ))}
                           </div>

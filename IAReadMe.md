@@ -1,5 +1,4 @@
 # GUIDE IA - PROJET CONDAMINE
 
-- **Structure** : Regarder la section "ARBORESCENCE" au début du snapshot.
-- **Global** : Utiliser `window.api` et `window.state`.
-- **Modifications** : Toujours renvoyer le fichier COMPLET avec la balise `
+le projet utilise Gemini 2.0 FLASH
+le projet utilise le fichier update.txt tu dois générer des grands fichiers txt qui peuvent se snipette en une fois et qui obéisse a cette convention  [[[ FILE: chemin ]]] plus d informations dans apply.js

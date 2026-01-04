@@ -1,84 +1,168 @@
-.studio-container { width: 100%; }
-
-/* Bouton principal */
-.btn-create-hw-big { 
-    width: 100%; 
-    padding: 1.5rem; 
-    background: #f97316; 
-    color: white; 
-    border-radius: 30px; 
-    font-weight: 900; 
-    font-size: 1.3rem; 
-    border: none; 
-    border-bottom: 8px solid #c2410c; 
-    margin-bottom: 2rem; 
-    cursor: pointer; 
-    transition: 0.2s; 
-    text-transform: uppercase;
-    box-shadow: 0 10px 20px rgba(249, 115, 22, 0.3);
+/* --- DASHBOARD DES DEVOIRS (LISTE) --- */
+.studio-container { width: 100%; padding: 1rem; }
+/* Gros bouton de création */
+.btn-create-hw-big {
+width: 100%;
+padding: 1.5rem;
+background: #f97316;
+color: white;
+border-radius: 20px;
+font-weight: 900;
+font-size: 1.2rem;
+border: none;
+border-bottom: 5px solid #c2410c;
+cursor: pointer;
+margin-bottom: 2.5rem;
+text-transform: uppercase;
+transition: 0.2s;
 }
-.btn-create-hw-big:active { transform: translateY(4px); border-bottom-width: 0; }
-.btn-create-hw-big:hover { transform: translateY(-2px); }
-
-/* Liste des devoirs */
-.hw-admin-list { display: grid; gap: 1rem; }
-
-/* CORRECTION DU NOM DE LA CLASSE ICI (v13) */
-.hw-admin-card-v13 { 
-    background: white; 
-    padding: 1.5rem; 
-    border-radius: 24px; 
-    border: 2px solid #f1f5f9; 
-    display: flex; 
-    justify-content: space-between; 
-    align-items: center; 
-    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
-    transition: all 0.2s;
+.btn-create-hw-big:hover { transform: translateY(-2px); filter: brightness(1.1); }
+.btn-create-hw-big:active { transform: translateY(2px); border-bottom-width: 0; }
+/* Cartes de la liste */
+.hw-admin-list {
+display: flex;
+flex-direction: column;
+gap: 1rem;
 }
-.hw-admin-card-v13:hover { border-color: #fdba74; transform: translateX(5px); }
-
-.hw-title-text { font-size: 1.1rem; color: #1e293b; display: block; }
-.hw-class-badge { background: #fff7ed; color: #f97316; padding: 4px 12px; border-radius: 10px; font-size: 0.75rem; font-weight: 900; margin-top: 5px; display: inline-block; }
-
-.hw-actions-row { display: flex; gap: 0.75rem; }
-.btn-action-view { background: #eff6ff; color: #2563eb; padding: 0.75rem 1.25rem; border-radius: 14px; font-weight: 900; border: none; cursor: pointer; }
-.btn-action-edit { background: #f8fafc; color: #64748b; padding: 0.75rem 1.25rem; border-radius: 14px; font-weight: 900; border: none; cursor: pointer; }
-.btn-action-del { background: #fef2f2; color: #ef4444; padding: 0.75rem 1.25rem; border-radius: 14px; font-weight: 900; border: none; cursor: pointer; }
-
-/* MODAL EDIT */
-.hw-edit-overlay { position: fixed; inset: 0; z-index: 1000; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; padding: 2rem; }
-.hw-edit-modal { background: white; width: 100%; max-width: 950px; max-height: 90vh; border-radius: 40px; display: flex; flex-direction: column; overflow: hidden; border: 4px solid #f97316; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); }
-.hw-edit-header { padding: 2rem; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center; background: #fffaf5; }
-.hw-edit-header h3 { font-weight: 900; color: #f97316; margin: 0; font-size: 1.5rem; text-transform: uppercase; }
-.hw-close-x { background: #f1f5f9; border: none; width: 40px; height: 40px; border-radius: 50%; font-weight: 900; cursor: pointer; color: #94a3b8; }
-
-.hw-edit-body { flex: 1; overflow-y: auto; padding: 2.5rem; }
-.hw-config-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem; margin-bottom: 2.5rem; }
-.hw-input-title, .hw-select-class { padding: 1.25rem; border-radius: 18px; border: 2px solid #f1f5f9; background: #f8fafc; font-weight: 700; outline: none; font-size: 1.1rem; }
-.hw-input-title:focus, .hw-select-class:focus { border-color: #f97316; background: white; }
-
-.hw-page-card { background: white; padding: 2rem; border-radius: 30px; border: 2px solid #e2e8f0; margin-bottom: 2rem; position: relative; }
-.hw-page-header { display: flex; justify-content: space-between; font-size: 0.8rem; font-weight: 900; color: #cbd5e1; margin-bottom: 1.5rem; letter-spacing: 1px; }
-.hw-del-page { background: #fef2f2; border: none; color: #ef4444; cursor: pointer; font-weight: 900; padding: 5px 15px; border-radius: 10px; }
-
-.hw-label { font-size: 0.7rem; font-weight: 900; color: #3b82f6; text-transform: uppercase; margin-bottom: 0.8rem; letter-spacing: 0.05em; }
-.hw-docs-preview { display: flex; flex-wrap: wrap; gap: 1rem; background: #eff6ff; padding: 1rem; border-radius: 20px; border: 2px dashed #bfdbfe; min-height: 100px; }
-.hw-mini-img { width: 80px; height: 80px; border-radius: 14px; object-fit: cover; border: 2px solid white; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-.hw-add-mini { width: 80px; height: 80px; background: white; color: #3b82f6; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 2rem; cursor: pointer; transition: 0.2s; }
-.hw-add-mini:hover { transform: scale(1.05); }
-
-.hw-question-section { display: grid; grid-template-columns: 160px 1fr; gap: 1.5rem; margin-top: 2rem; border-top: 2px dashed #f1f5f9; padding-top: 2rem; }
-.hw-q-img-upload { height: 160px; background: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 20px; position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: #94a3b8; font-weight: 800; font-size: 0.7rem; transition: 0.2s; }
-.hw-q-img-upload:hover { border-color: #9333ea; color: #9333ea; background: #faf5ff; }
+.hw-admin-card-v13 {
+background: white;
+padding: 1.2rem 2rem;
+border-radius: 20px;
+border: 1px solid #e2e8f0;
+display: flex;
+justify-content: space-between;
+align-items: center;
+box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+transition: 0.2s;
+}
+.hw-admin-card-v13:hover {
+border-color: #f97316;
+transform: translateX(5px);
+}
+.hw-info {
+display: flex;
+align-items: center;
+gap: 1.5rem;
+}
+.hw-title-text {
+font-size: 1.1rem;
+font-weight: 800;
+color: #1e293b;
+}
+.hw-class-badge {
+background: #fff7ed;
+color: #f97316;
+padding: 4px 12px;
+border-radius: 8px;
+font-size: 0.75rem;
+font-weight: 900;
+}
+/* Boutons d'action de la liste */
+.hw-actions-row {
+display: flex;
+gap: 0.8rem;
+}
+.btn-action-view, .btn-action-edit, .btn-action-del {
+padding: 0.6rem 1rem;
+border-radius: 12px;
+font-weight: 900;
+font-size: 0.75rem;
+border: none;
+cursor: pointer;
+transition: 0.2s;
+}
+.btn-action-view { background: #eff6ff; color: #2563eb; }
+.btn-action-edit { background: #f8fafc; color: #64748b; }
+.btn-action-del { background: #fef2f2; color: #ef4444; }
+.btn-action-view:hover { background: #2563eb; color: white; }
+.btn-action-edit:hover { background: #64748b; color: white; }
+.btn-action-del:hover { background: #ef4444; color: white; }
+/* --- MODALE D'ÉDITION (STUDIO) --- */
+.hw-edit-overlay {
+position: fixed;
+inset: 0;
+z-index: 9999;
+background: rgba(15, 23, 42, 0.8);
+backdrop-filter: blur(8px);
+display: flex;
+align-items: center;
+justify-content: center;
+padding: 20px;
+}
+.hw-edit-modal {
+background: white;
+width: 100%;
+max-width: 1000px;
+max-height: 90vh;
+border-radius: 30px;
+display: flex;
+flex-direction: column;
+overflow: hidden;
+border: 4px solid #f97316;
+}
+.hw-edit-header {
+padding: 1.5rem;
+background: #fff7ed;
+border-bottom: 1px solid #fed7aa;
+display: flex;
+justify-content: space-between;
+align-items: center;
+}
+.hw-edit-body {
+flex: 1;
+overflow-y: auto;
+padding: 2rem;
+background: #f8fafc;
+}
+.hw-config-grid {
+display: grid;
+grid-template-columns: 2fr 1fr;
+gap: 1.5rem;
+margin-bottom: 2rem;
+}
+.hw-input-title, .hw-select-class {
+padding: 0.8rem 1.2rem;
+border-radius: 12px;
+border: 2px solid #e2e8f0;
+font-weight: 700;
+}
+/* Carte Page */
+.hw-page-card {
+background: white;
+border-radius: 20px;
+padding: 1.5rem;
+margin-bottom: 1.5rem;
+border: 1px solid #e2e8f0;
+}
+.hw-docs-preview {
+display: flex;
+flex-wrap: wrap;
+gap: 1rem;
+padding: 1rem;
+background: #f0f7ff;
+border-radius: 15px;
+border: 2px dashed #bfdbfe;
+margin-bottom: 1rem;
+}
+.hw-mini-doc-container { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.hw-mini-img-wrapper { position: relative; width: 65px; height: 65px; }
+.hw-mini-img { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; border: 2px solid white; }
+.btn-del-mini { position: absolute; top: -5px; right: -5px; background: #ef4444; color: white; border: none; width: 18px; height: 18px; border-radius: 50%; font-size: 9px; cursor: pointer; }
+/* Magie IA */
+.btn-ai-magic {
+width: 100%;
+margin-bottom: 1rem;
+padding: 1rem;
+background: linear-gradient(135deg, #7c3aed, #2563eb);
+color: white;
+border: none;
+border-radius: 15px;
+font-weight: 900;
+cursor: pointer;
+}
+.hw-question-section { display: grid; grid-template-columns: 140px 1fr; gap: 1rem; }
+.hw-q-img-upload { width: 140px; height: 140px; background: #f1f5f9; border-radius: 12px; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; }
 .hw-q-img-upload img { width: 100%; height: 100%; object-fit: cover; }
-.hw-hidden-file { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
-
-.hw-q-text { width: 100%; height: 160px; border-radius: 20px; border: 2px solid #f1f5f9; padding: 1.5rem; font-size: 1rem; font-weight: 500; resize: none; outline: none; background: #fff; transition: 0.2s; }
-.hw-q-text:focus { border-color: #9333ea; box-shadow: 0 0 0 4px #f3e8ff; }
-
-.hw-add-page-btn { width: 100%; padding: 1.5rem; border: 3px dashed #e2e8f0; border-radius: 30px; color: #94a3b8; font-weight: 900; margin-bottom: 2rem; background: white; cursor: pointer; transition: 0.2s; }
-.hw-add-page-btn:hover { border-color: #cbd5e1; color: #64748b; background: #f8fafc; }
-
-.hw-edit-footer { padding: 2rem 2.5rem; background: #f8fafc; border-top: 1px solid #f1f5f9; }
-.hw-btn-save-final { width: 100%; padding: 1.5rem; background: #16a34a; color: white; border-radius: 30px; font-weight: 900; font-size: 1.3rem; border: none; border-bottom: 8px solid #15803d; cursor: pointer; text-transform: uppercase; box-shadow: 0 10px 20px rgba(22, 163, 74, 0.2); }
-.hw-btn-save-final:active { transform: translateY(4px); border-bottom-width: 0; }
+.hw-q-text { width: 100%; height: 140px; padding: 1rem; border-radius: 12px; border: 1px solid #e2e8f0; resize: none; font-family: inherit; }
+.hw-edit-footer { padding: 1.5rem; background: white; border-top: 1px solid #e2e8f0; }
+.hw-btn-save-final { width: 100%; padding: 1rem; background: #16a34a; color: white; border: none; border-radius: 15px; font-weight: 900; cursor: pointer; }

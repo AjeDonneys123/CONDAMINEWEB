@@ -10,6 +10,9 @@
     "snap": "node snap.js",
     "zip": "node zip.js"
   },
+  "nodemonConfig": {
+    "ignore": ["history.txt", "update.txt", "client/*", "snapshot.txt"]
+  },
   "dependencies": {
     "adm-zip": "^0.5.10",
     "express": "^4.18.2",

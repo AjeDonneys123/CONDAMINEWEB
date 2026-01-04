@@ -1,47 +1,41 @@
-/* --- CORRECTION VISUELLE V3 : AÉRATION & BADGE --- */
+/* --- CONFIGURATION OPTIMALE 75/25 & MAX SPACE --- */
 
 .homework-container {
     perspective: 1200px;
     background: #0f172a;
     position: relative;
-    border-radius: 30px;
+    border-radius: 15px;
     overflow: hidden;
-    border: 4px solid #1e293b;
-    height: 88vh;
+    border: 2px solid #1e293b;
+    height: 94vh; /* Utilisation maximale de la hauteur de fenêtre */
     display: flex;
     flex-direction: column;
 }
 
-/* ZONE HAUT (LISEUSE) */
+/* ZONE 1 : LISEUSE (75%) */
 .viewer-top-area {
-    flex: 3;
+    flex: 75; 
     position: relative;
     background-color: #020617;
     background-image: radial-gradient(#334155 1px, transparent 1px);
-    background-size: 40px 40px;
+    background-size: 30px 30px;
     overflow: hidden;
     cursor: grab;
     width: 100%;
 }
-.viewer-top-area:active { cursor: grabbing; }
 
-/* Badge "QUESTION X/Y" flottant en haut */
 .floating-question-badge {
     position: absolute;
-    top: 20px;
-    left: 20px;
-    background: rgba(249, 115, 22, 0.9); /* Orange */
+    top: 5px;
+    left: 5px;
+    background: #f97316;
     color: white;
-    padding: 8px 16px;
-    border-radius: 12px;
-    font-weight: 900;
-    font-size: 0.9rem;
-    text-transform: uppercase;
-    letter-spacing: 1px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 800;
+    font-size: 0.55rem;
     z-index: 50;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-    backdrop-filter: blur(4px);
-    pointer-events: none; /* Ne gêne pas le clic */
+    pointer-events: none;
 }
 
 .main-doc-img {
@@ -49,114 +43,88 @@
     top: 50%;
     left: 50%;
     transform-origin: center center;
-    box-shadow: 0 0 50px rgba(0,0,0,0.8);
-    border: 2px solid rgba(255,255,255,0.2);
+    /* Nettoyage bordures pour maximiser l'espace */
+    box-shadow: 0 0 30px rgba(0,0,0,0.8);
     pointer-events: auto;
     user-select: none;
     -webkit-user-drag: none;
     max-width: none;
 }
 
-/* ZONE BAS (INTERACTION) */
+/* ZONE 2 : INTERACTION (25%) */
 .interaction-bottom-area {
-    flex: 1; /* Reste à 25% environ */
+    flex: 25; 
     background: white;
     display: flex;
-    border-top: 4px solid #f97316;
+    border-top: 2px solid #f97316;
     overflow: hidden;
 }
 
-/* Panneau Gauche (Question/Image) */
 .question-panel {
-    width: 40%; /* Un peu plus large pour éviter l'effet entassé */
-    padding: 1.5rem;
+    width: 30%; 
+    padding: 0.3rem;
     background: #f8fafc;
     border-right: 1px solid #e2e8f0;
     display: flex;
     flex-direction: column;
 }
 
-/* Texte de la question */
 .q-text-scroll-area {
     flex: 1;
     background: #ffffff;
     border: 1px solid #cbd5e1;
-    border-radius: 16px;
-    padding: 1.2rem;
+    border-radius: 8px;
+    padding: 0.4rem;
     overflow-y: auto;
-    
-    /* C'EST ICI LA SOLUTION POUR LES RETOURS À LA LIGNE */
-    white-space: pre-wrap; 
-    line-height: 1.8; /* Plus aéré */
-    font-size: 0.95rem;
-    color: #1e293b;
+    font-size: 0.75rem;
+    line-height: 1.2;
     font-weight: 600;
-    font-family: 'Inter', sans-serif;
-    box-shadow: inset 0 2px 6px rgba(0,0,0,0.03);
 }
 
-/* Si Image de question */
 .q-visual-frame {
     flex: 1;
     background: #000;
-    border-radius: 16px;
+    border-radius: 8px;
     position: relative;
     overflow: hidden;
-    border: 2px solid #cbd5e1;
+    border: 1px solid #cbd5e1;
     cursor: grab;
 }
-.q-visual-frame img {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    max-width: none;
-}
 
-/* Panneau Droite (Réponse) */
 .answer-panel {
-    width: 60%;
-    padding: 1.5rem;
+    width: 70%;
+    padding: 0.3rem;
     display: flex;
     flex-direction: column;
-    gap: 1rem;
-    background: white;
+    gap: 0.2rem;
 }
 
 .answer-input {
     flex: 1;
     width: 100%;
-    padding: 1.2rem;
-    border: 2px solid #e2e8f0;
-    border-radius: 20px;
-    font-size: 1.1rem;
+    padding: 0.5rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font-size: 0.85rem;
     resize: none;
     outline: none;
-    background: #fff;
-    transition: 0.2s;
-    font-family: 'Inter', sans-serif;
 }
-.answer-input:focus { border-color: #2563eb; box-shadow: 0 0 0 4px #eff6ff; }
 
+/* BOUTON ENVOYER MINI */
 .btn-send-ai {
-    padding: 1rem;
+    padding: 4px 10px;
     background: #2563eb;
     color: white;
-    font-weight: 900;
-    border-radius: 18px;
+    font-weight: 800;
+    border-radius: 4px;
     border: none;
-    border-bottom: 5px solid #1e40af;
     cursor: pointer;
-    font-size: 1rem;
+    font-size: 0.6rem;
     text-transform: uppercase;
-    letter-spacing: 1px;
-    transition: 0.2s;
+    align-self: flex-end;
 }
-.btn-send-ai:hover { transform: translateY(-2px); }
-.btn-send-ai:active { transform: translateY(2px); border-bottom-width: 0; }
 
-/* Modales */
-.ai-modal-overlay { position: fixed; inset: 0; z-index: 9999; background: rgba(15, 23, 42, 0.9); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; padding: 2rem; }
-.ai-modal-box { background: white; width: 100%; max-width: 800px; max-height: 90vh; border-radius: 40px; display: flex; flex-direction: column; border: 4px solid #2563eb; padding: 2.5rem; box-shadow: 0 25px 50px rgba(0,0,0,0.5); }
-.custom-scrollbar::-webkit-scrollbar { width: 6px; }
-.custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+.btn-send-ai:hover { background: #1e40af; }
+
+.custom-scrollbar::-webkit-scrollbar { width: 3px; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
