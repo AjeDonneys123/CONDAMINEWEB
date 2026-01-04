@@ -4,17 +4,13 @@ import './GameStudio.css';
 export default function GameStudio() {
   const [levels, setLevels] = useState([]);
   const [isEditing, setIsEditing] = useState(false);
-  const [genMode, setGenMode] = useState('manual'); // 'manual' | 'ai'
+  const [genMode, setGenMode] = useState('manual');
   const [loadingIA, setLoadingIA] = useState(false);
 
-  // État du niveau complet
   const [formData, setFormData] = useState({ _id: null, title: '', chapterId: 'ch1-zombie', questions: [] });
-  
-  // État de la question en cours
   const [currentQ, setCurrentQ] = useState({ q: '', options: ['', '', '', ''], a: 0 });
   const [editingIdx, setEditingIdx] = useState(null);
 
-  // Params IA
   const [aiPrompt, setAiPrompt] = useState('');
   const [numQuestions, setNumQuestions] = useState(5);
 
@@ -61,10 +57,7 @@ export default function GameStudio() {
         body: JSON.stringify(formData)
     }).then(r => r.json());
 
-    if (res.ok) {
-        setIsEditing(false);
-        load();
-    }
+    if (res.ok) { setIsEditing(false); load(); }
   };
 
   return (
@@ -73,7 +66,6 @@ export default function GameStudio() {
         <>
           <button onClick={() => { setFormData({ _id: null, title: '', chapterId: 'ch1-zombie', questions: [] }); setIsEditing(true); }} 
                   className="btn-create-game-v2">➕ CRÉER UN NIVEAU DE JEU</button>
-          
           <div className="games-list-v2">
             {levels.map(lvl => (
               <div key={lvl._id} className="game-card-v2">
@@ -93,7 +85,7 @@ export default function GameStudio() {
         <div className="game-modal-overlay">
           <div className="game-modal animate-in zoom-in duration-200">
             <div className="game-modal-header">
-              <h3>{formData._id ? 'MODIFIER LE NIVEAU' : 'NOUVEAU NIVEAU'}</h3>
+              <h3>{formData._id ? 'MODIFIER' : 'NOUVEAU'}</h3>
               <button onClick={() => setIsEditing(false)} className="btn-close">✕</button>
             </div>
 
@@ -108,46 +100,50 @@ export default function GameStudio() {
 
                 <div className="tabs-mode">
                     <button onClick={() => setGenMode('manual')} className={genMode === 'manual' ? 'active-manual' : ''}>✍️ MANUEL</button>
-                    <button onClick={() => setGenMode('ai')} className={genMode === 'ai' ? 'active-ai' : ''}>🤖 GÉNÉRER PAR IA</button>
+                    <button onClick={() => setGenMode('ai')} className={genMode === 'ai' ? 'active-ai' : ''}>🤖 IA GÉNÉRATEUR</button>
                 </div>
 
                 {genMode === 'ai' ? (
                     <div className="ai-box shadow-inner">
-                        <textarea placeholder="Sujet du quiz (ex: Les participes passés)..." value={aiPrompt} onChange={e => setAiPrompt(e.target.value)} />
+                        <textarea placeholder="Sujet du quiz..." value={aiPrompt} onChange={e => setAiPrompt(e.target.value)} />
                         <div className="ai-actions">
                             <label className="font-bold text-purple-700 uppercase text-xs">Questions: {numQuestions}</label>
                             <input type="range" min="1" max="20" value={numQuestions} onChange={e => setNumQuestions(e.target.value)} />
-                            <button onClick={handleAiGenerate} disabled={loadingIA} className="btn-ai-generate">
-                                {loadingIA ? "TRAVAIL EN COURS..." : "GÉNÉRER LE QUIZ ✨"}
-                            </button>
+                            <button onClick={handleAiGenerate} disabled={loadingIA} className="btn-ai-generate">{loadingIA ? "..." : "GÉNÉRER ✨"}</button>
                         </div>
                     </div>
                 ) : (
                     <div className="manual-box shadow-inner">
-                        <input className="q-input" placeholder="La question..." value={currentQ.q} onChange={e => setCurrentQ({...currentQ, q: e.target.value})} />
+                        <input className="q-input" placeholder="Question..." value={currentQ.q} onChange={e => setCurrentQ({...currentQ, q: e.target.value})} />
                         <div className="opts-grid">
                             {currentQ.options.map((opt, i) => (
-                                <div key={i} className={`opt-row ${currentQ.a === i ? 'correct' : ''}`}>
-                                    <input type="radio" checked={currentQ.a === i} onChange={() => setCurrentQ({...currentQ, a: i})} />
+                                <div key={i} className={`opt-row ${currentQ.a === i ? 'correct' : ''}`} onClick={() => setCurrentQ({...currentQ, a: i})}>
+                                    <input type="radio" checked={currentQ.a === i} readOnly />
                                     <input placeholder={`Réponse ${i+1}`} value={opt} onChange={e => { const n = [...currentQ.options]; n[i] = e.target.value; setCurrentQ({...currentQ, options: n}); }} />
                                 </div>
                             ))}
                         </div>
-                        <button onClick={addOrUpdateQuestion} className="btn-add-q">
-                            {editingIdx !== null ? '💾 METTRE À JOUR' : '➕ AJOUTER AU QUIZ'}
-                        </button>
+                        <button onClick={addOrUpdateQuestion} className="btn-add-q">{editingIdx !== null ? 'METTRE À JOUR' : 'AJOUTER'}</button>
                     </div>
                 )}
 
                 <div className="preview-section">
-                    <p className="preview-title">Liste des questions ({formData.questions.length})</p>
+                    <p className="preview-title">QUESTIONS ({formData.questions.length})</p>
                     <div className="preview-scroll custom-scrollbar">
                         {formData.questions.map((q, i) => (
                             <div key={i} onClick={() => { setCurrentQ(q); setEditingIdx(i); setGenMode('manual'); }} className={`q-item ${editingIdx === i ? 'editing' : ''}`}>
                                 <div className="q-item-header">
-                                    <span className="q-num">{i+1}</span>
-                                    <span className="q-text">{q.q}</span>
+                                    <div className="flex items-center gap-3">
+                                        <span className="q-num">{i+1}</span>
+                                        <span className="q-text">{q.q}</span>
+                                    </div>
                                     <button onClick={(e) => { e.stopPropagation(); const n = [...formData.questions]; n.splice(i, 1); setFormData({...formData, questions: n}); }} className="btn-del-q">✕</button>
+                                </div>
+                                {/* ICI : LA BOUCLE QUI AFFICHE LES RÉPONSES AVAIT DISPARU */}
+                                <div className="game-preview-options">
+                                    {q.options.map((opt, oi) => (
+                                        <span key={oi} className={oi === q.a ? 'is-good' : ''}>{opt}</span>
+                                    ))}
                                 </div>
                             </div>
                         ))}

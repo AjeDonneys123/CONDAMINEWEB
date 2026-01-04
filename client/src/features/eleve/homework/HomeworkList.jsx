@@ -17,15 +17,28 @@ export default function HomeworkList({ user }) {
     if (!selectedHw) load();
   }, [user.classroom, selectedHw]);
 
+  // MODE TRAVAIL (Quand un devoir est ouvert)
   if (selectedHw) {
     return (
       <div className="animate-in fade-in zoom-in duration-300">
-        <button onClick={() => setSelectedHw(null)} className="mb-4 bg-white px-6 py-2 rounded-xl font-bold shadow-sm border text-slate-500 hover:text-red-500 transition-all">← QUITTER</button>
-        <HomeworkWorkspace homework={selectedHw} user={user} />
+        <button 
+            onClick={() => setSelectedHw(null)} 
+            className="mb-4 bg-white px-6 py-2 rounded-xl font-bold shadow-sm border text-slate-500 hover:text-red-500 transition-all"
+        >
+            ← RETOUR LISTE
+        </button>
+        
+        {/* C'EST ICI LA CORRECTION : on passe la fonction onQuit */}
+        <HomeworkWorkspace 
+            homework={selectedHw} 
+            user={user} 
+            onQuit={() => setSelectedHw(null)} 
+        />
       </div>
     );
   }
 
+  // MODE LISTE (Affichage des devoirs)
   return (
     <div className="grid gap-4">
       {loading ? (

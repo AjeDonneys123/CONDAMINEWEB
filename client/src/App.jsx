@@ -30,7 +30,7 @@ export default function App() {
               description: bugText 
           })
       });
-      alert("Ton message a été envoyé au Maître ! 🐞");
+      alert("Message envoyé ! 🐞");
       setBugText('');
       setShowBugModal(false);
   };
@@ -40,25 +40,18 @@ export default function App() {
     setUser(null);
   };
 
-  // ARCHITECTE : On définit si on doit afficher le bouton de signalement global
-  // On le cache si l'utilisateur est le PROF (car il a son propre bouton de gestion)
-  const showGlobalBugButton = !user || user.id !== 'prof';
-
   return (
     <div className={`app-wrapper ${showBugModal ? 'app-paused' : ''}`}>
       
-      {/* BOUTON BUG GLOBAL (Caché pour le prof pour éviter le doublon) */}
-      {showGlobalBugButton && (
-        <button 
-          onClick={() => setShowBugModal(true)}
-          className="global-bug-trigger"
-          title="Signaler un problème"
-        >
-          🐞
-        </button>
-      )}
+      {/* CORRECTION : Le bouton est maintenant TOUJOURS visible, même pour le prof */}
+      <button 
+        onClick={() => setShowBugModal(true)}
+        className="global-bug-trigger"
+        title="Signaler un problème"
+      >
+        🐞
+      </button>
 
-      {/* ROUTAGE PRINCIPAL */}
       {!user ? (
         <Login onLoginSuccess={setUser} />
       ) : (
@@ -74,7 +67,6 @@ export default function App() {
         )
       )}
 
-      {/* MODALE BUG */}
       {showBugModal && (
           <div className="bug-modal-overlay">
             <div className="bug-modal-card animate-in zoom-in duration-200">
@@ -82,10 +74,10 @@ export default function App() {
                     <h2>SIGNALER UN BUG</h2>
                     <span className="bug-icon">🐞</span>
                 </div>
-                <p className="bug-modal-desc">Explique au Maître ce qui ne fonctionne pas.</p>
+                <p className="bug-modal-desc">Décris le problème rencontré.</p>
                 <textarea 
                     className="bug-textarea"
-                    placeholder="Tape ton message ici..."
+                    placeholder="Ex: L'IA ne charge pas..."
                     value={bugText}
                     onChange={e => setBugText(e.target.value)}
                     autoFocus

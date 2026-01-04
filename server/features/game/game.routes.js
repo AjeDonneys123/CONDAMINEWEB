@@ -3,61 +3,33 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const fetch = require('node-fetch');
 
-// --- IA JEUX (RESTAURÉE AVEC GEMINI 2.0) ---
+// 1. IA GENERATION DE QUIZ (C'était le 404 generate-game-content)
 router.post('/generate-game-content', async (req, res) => {
     const { topic, numQuestions } = req.body;
-    console.log(`🎮 [GAME AI] Génération de ${numQuestions} questions sur : ${topic}`);
-
     if (!process.env.GEMINI_API_KEY) return res.status(500).json({ error: "Clé IA manquante" });
 
-    // Modèle Gemini 2.0 Flash
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${process.env.GEMINI_API_KEY}`;
-    
-    const prompt = `
-    Tu es un générateur de quiz pour un jeu vidéo éducatif.
-    Sujet : "${topic}"
-    Nombre de questions : ${numQuestions}
-    
-    Format attendu (JSON strict uniquement) :
-    [
-        {
-            "q": "Texte de la question ?",
-            "options": ["Réponse A", "Réponse B", "Réponse C", "Réponse D"],
-            "a": 0  (Index de la bonne réponse : 0, 1, 2 ou 3)
-        }
-    ]
-    `;
+    const prompt = `Génère un quiz QCM de ${numQuestions || 5} questions sur : "${topic}".
+    JSON STRICT: [{"q":"Question","options":["A","B","C","D"],"a":0}] (a=index bonne réponse). PAS DE MARKDOWN.`;
 
     try {
         const r = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                contents: [{ parts: [{ text: prompt }] }], 
-                generationConfig: { response_mime_type: "application/json" } 
-            })
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { response_mime_type: "application/json" } })
         });
-
         const data = await r.json();
+        if (data.error) throw new Error(data.error.message);
         
-        if (data.error) {
-            console.error("❌ Erreur Game AI :", data.error);
-            return res.status(500).json({ error: data.error.message });
-        }
-
-        const jsonText = data.candidates[0].content.parts[0].text;
-        const questions = JSON.parse(jsonText);
-        
-        console.log(`✅ [GAME AI] ${questions.length} questions générées.`);
-        res.json(questions);
-
+        let jsonText = data.candidates[0].content.parts[0].text;
+        jsonText = jsonText.replace(/```json/g, '').replace(/```/g, '').trim();
+        res.json(JSON.parse(jsonText));
     } catch (e) { 
-        console.error("❌ Crash Game AI :", e);
-        res.status(500).json({ error: "Erreur technique IA" }); 
+        console.error("Game AI Error:", e);
+        res.status(500).json({ error: "Erreur IA Jeu" }); 
     }
 });
 
-// --- CRUD NIVEAUX ---
+// 2. CRUD NIVEAUX DE JEU (C'était le 404 game-levels/all)
 router.get('/game-levels/all', async (req, res) => {
     try { res.json(await mongoose.model('GameLevel').find({}).sort({ createdAt: -1 })); } catch(e) { res.json([]); }
 });
