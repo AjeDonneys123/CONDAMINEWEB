@@ -15,8 +15,15 @@
 │   │   │   │   │   ├── EleveHeader.css
 │   │   │   │   │   └── EleveHeader.jsx
 │   │   │   │   ├── games/
+│   │   │   │   │   ├── zombie/
+│   │   │   │   │   │   ├── zombie_core.js
+│   │   │   │   │   │   ├── zombie_style.css
+│   │   │   │   │   │   ├── ZombieGame.css
+│   │   │   │   │   │   ├── ZombieGame.js
+│   │   │   │   │   │   └── ZombieWrapper.jsx
 │   │   │   │   │   ├── GamesGrid.css
-│   │   │   │   │   └── GamesGrid.jsx
+│   │   │   │   │   ├── GamesGrid.jsx
+│   │   │   │   │   └── mainGames.js
 │   │   │   │   ├── homework/
 │   │   │   │   │   ├── Homework.css
 │   │   │   │   │   ├── HomeworkList.jsx
