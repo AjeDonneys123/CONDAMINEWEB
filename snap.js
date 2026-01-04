@@ -55,17 +55,34 @@ function captureContent(dir, baseDir = "") {
             const fullPath = path.join(dir, item);
             const relativePath = path.join(baseDir, item);
             const stats = fs.statSync(fullPath);
+
             if (stats.isDirectory()) {
                 content += captureContent(fullPath, relativePath);
             } else {
                 const ext = path.extname(item).toLowerCase();
+                
+                // Si c'est une extension valide OU le fichier .env
                 if (EXTENSIONS.includes(ext) || item === '.env') {
-                    try {
-                        const data = fs.readFileSync(fullPath, 'utf8');
-                        content += "\n" + "#".repeat(60) + "\n";
-                        content += "### FICHIER: " + relativePath + "\n";
-                        content += "#".repeat(60) + "\n\n" + data + "\n\n";
-                    } catch (e) {}
+                    content += "\n" + "#".repeat(60) + "\n";
+                    content += "### FICHIER: " + relativePath + "\n";
+                    content += "#".repeat(60) + "\n\n";
+
+                    // SÉCURITÉ : Exception pour le fichier .env
+                    if (item === '.env') {
+                        content += "### [SÉCURITÉ] CONTENU MASQUÉ ###\n";
+                        content += "# Ce fichier contient des clés API réelles.\n";
+                        content += "# Ne pas partager son contenu réel.\n";
+                        content += "MONGODB_URI=*****\n";
+                        content += "GEMINI_API_KEY=*****\n\n";
+                    } else {
+                        // Pour les autres fichiers, on lit le contenu normalement
+                        try {
+                            const data = fs.readFileSync(fullPath, 'utf8');
+                            content += data + "\n\n";
+                        } catch (e) {
+                            content += "!!! ERREUR DE LECTURE DU FICHIER !!!\n\n";
+                        }
+                    }
                 }
             }
         }
@@ -89,7 +106,6 @@ function updateProjectMap(tree) {
 
     if (startIndex === -1 || endIndex === -1) {
         console.log(`❌ Impossible de mettre à jour ${MAP_FILENAME} : Balises introuvables.`);
-        console.log(`   Assurez-vous que le fichier contient "${START_TAG}" et "${END_TAG}".`);
         return;
     }
 
@@ -106,17 +122,17 @@ function updateProjectMap(tree) {
 function run() {
     console.log("📸 Démarrage du scan...");
     
-    // 1. Générer l'arbre
+    // 1. Générer l'arbre (Pour projectMap)
     const tree = buildTree(__dirname);
     
     // 2. Mettre à jour projectMap.txt
     updateProjectMap(tree);
 
-    // 3. Générer snapshot.txt (Code complet pour backup/IA)
-    let output = "ARBORESCENCE\n" + "=".repeat(20) + "\n\n.\n" + tree;
-    output += "\n" + "=".repeat(60) + "\nCODE SOURCE COMPLET\n" + "=".repeat(60) + "\n\n" + captureContent(__dirname);
+    // 3. Générer snapshot.txt (CODE UNIQUEMENT, SANS ARBORESCENCE)
+    let output = "CODE SOURCE COMPLET\n" + "=".repeat(60) + "\n\n" + captureContent(__dirname);
+    
     fs.writeFileSync(OUTPUT_FILENAME, output);
-    console.log(`✅ ${OUTPUT_FILENAME} généré (Backup complet).`);
+    console.log(`✅ ${OUTPUT_FILENAME} généré (Code uniquement, .env masqué).`);
 }
 
 run();
