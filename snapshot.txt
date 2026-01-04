@@ -1341,30 +1341,98 @@ export class ZombieGame {
 ### FICHIER: client/src/features/eleve/games/zombie/ZombieWrapper.jsx
 ############################################################
 
-import React, { useEffect, useRef } from 'react';
-import { initZombieGame } from './zombie_core'; // Import du moteur pur
+import React, { useEffect, useRef, useState } from 'react';
+import { initZombieGame } from './zombie_core';
 import './zombie_style.css';
+import { api } from '../../../../services/api';
+
+function normalizeClass(c) {
+    if(!c) return "";
+    return c.toString().toLowerCase().replace(/e/g, '').replace(/eme/g, '').trim();
+}
 
 export default function ZombieWrapper({ user, onClose }) {
     const boxRef = useRef(null);
     const engineRef = useRef(null);
+    const [availableLevels, setAvailableLevels] = useState([]);
+    const [selectedLevel, setSelectedLevel] = useState(null);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Au montage, on donne la DIV au moteur
-        if (boxRef.current) {
-            // On passe l'élément DOM et les callbacks
-            engineRef.current = initZombieGame(boxRef.current, { user }, onClose);
+        api.get('/game-levels/all').then(data => {
+            if(data && data.length > 0) {
+                const userClass = normalizeClass(user.classroom);
+                const myLevels = data.filter(l => {
+                    const levelClass = normalizeClass(l.classroom || 'Toutes');
+                    return l.chapterId === 'ch1-zombie' && (levelClass === 'toutes' || levelClass === userClass);
+                });
+                setAvailableLevels(myLevels);
+            }
+            setLoading(false);
+        });
+    }, []);
+
+    // Gestion du lancement et de la fermeture propre
+    useEffect(() => {
+        if (selectedLevel && boxRef.current) {
+            // Callback sécurisée
+            const handleExitGame = () => {
+                if(engineRef.current) {
+                    engineRef.current.destroy();
+                    engineRef.current = null;
+                }
+                // Force le retour au dashboard
+                setSelectedLevel(null);
+            };
+
+            engineRef.current = initZombieGame(
+                boxRef.current, 
+                { level: selectedLevel, user }, 
+                handleExitGame
+            );
         }
 
-        // Au démontage (quand on quitte ou que React reload), on tue le moteur
         return () => {
             if (engineRef.current) {
                 engineRef.current.destroy();
+                engineRef.current = null;
             }
         };
-    }, []);
+    }, [selectedLevel]);
 
-    // Rendu React minimaliste : Juste une boîte noire
+    if (loading) return <div className="fixed inset-0 bg-slate-900 flex items-center justify-center text-white font-bold">Chargement...</div>;
+
+    // --- DASHBOARD ---
+    if (!selectedLevel) {
+        return (
+            <div className="fixed inset-0 bg-slate-900/95 backdrop-blur z-50 flex items-center justify-center p-4">
+                <div className="z-dashboard-container animate-in zoom-in">
+                    <div className="z-dash-header">
+                        <h1 className="z-dash-title">ZOMBIE GRAMMAR</h1>
+                        <p className="z-dash-subtitle">Choisis ta mission, {user.firstName}</p>
+                    </div>
+
+                    {availableLevels.length > 0 ? (
+                        <div className="z-levels-grid custom-scrollbar">
+                            {availableLevels.map(lvl => (
+                                <div key={lvl._id} className="z-level-card" onClick={() => setSelectedLevel(lvl)}>
+                                    <span className="z-card-icon">🧟</span>
+                                    <div className="z-card-title">{lvl.title}</div>
+                                    <div className="z-card-info">{lvl.questions.length} Questions</div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="text-center py-10 text-slate-500">Aucune mission pour {user.classroom}.</div>
+                    )}
+
+                    <button onClick={onClose} className="z-btn-back">RETOUR QG</button>
+                </div>
+            </div>
+        );
+    }
+
+    // --- JEU ---
     return (
         <div className="fixed inset-0 bg-black z-50 flex items-center justify-center p-4">
             <div id="zombie-root" ref={boxRef}></div>
@@ -1377,191 +1445,116 @@ export default function ZombieWrapper({ user, onClose }) {
 ### FICHIER: client/src/features/eleve/games/zombie/zombie_core.js
 ############################################################
 
+/* MOTEUR ZOMBIE V8 - FIX SORTIE PROPRE */
 import { GameProgression } from '../mainGames';
 
-/**
- * MOTEUR ZOMBIE V6 - ARCHITECTURE NETTOYÉE
- * Utilise mainGames.js pour la logique. Ne gère que l'affichage.
- */
 export function initZombieGame(rootElement, apiData, onExit) {
     
-    // 1. HTML (Visuel uniquement)
+    // 1. HTML
     rootElement.innerHTML = `
-        <div class="z-top-hud">
-            <div class="z-hearts" id="v-hearts">❤️❤️❤️❤️</div>
-            <div class="z-global-progress"><div class="z-global-bar-fill" id="v-bar"></div></div>
-            <div class="z-questions-tracker" id="v-tracker"></div>
-        </div>
-        <div class="z-arena">
-            <div class="sprite hero">👮‍♂️</div>
-            <div class="sprite zombie" id="v-zombie">🧟</div>
-            <div class="sprite projectile" id="v-proj">🔥</div>
-        </div>
-        <div class="z-hud-bottom">
-            <div class="z-question-box" id="v-q-text">Chargement...</div>
-            <div class="z-options-container" id="v-options"></div>
-            <div class="z-input-container" id="v-input-area">
-                <input type="text" id="v-input" placeholder="Écris la réponse..." autocomplete="off">
-                <button class="z-btn-check" id="v-btn-check">VALIDER</button>
-            </div>
-        </div>
-        <div class="z-overlay" id="v-overlay">
-            <h2 id="v-title">FIN</h2>
-            <p id="v-msg">...</p>
-            <button class="z-btn-restart" id="v-btn-action">Continuer</button>
-        </div>
+        <div class="z-top-hud"><div class="z-hearts" id="v-hearts">❤️❤️❤️❤️</div><div class="z-global-progress"><div class="z-global-bar-fill" id="v-bar"></div></div><div class="z-questions-tracker" id="v-tracker"></div></div>
+        <div class="z-arena"><div class="sprite hero">👮‍♂️</div><div class="sprite zombie" id="v-zombie">🧟</div><div class="sprite projectile" id="v-proj">🔥</div></div>
+        <div class="z-hud-bottom"><div class="z-question-box" id="v-q-text">Chargement...</div><div class="z-options-container" id="v-options"></div><div class="z-input-container" id="v-input-area"><input type="text" id="v-input" placeholder="Réponse..." autocomplete="off"><button class="z-btn-check" id="v-btn-check">VALIDER</button></div></div>
+        <div class="z-overlay" id="v-overlay"><h2 id="v-title">FIN</h2><p id="v-msg">...</p><button class="z-btn-restart" id="v-btn-action">Continuer</button></div>
         <button style="position:absolute; top:70px; right:10px; background:#ef4444; color:white; border:none; width:30px; height:30px; border-radius:50%; font-weight:bold; cursor:pointer; z-index:50;" id="v-quit">✕</button>
     `;
 
-    // 2. DOM REFS
-    const zombieEl = rootElement.querySelector('#v-zombie');
-    const projEl = rootElement.querySelector('#v-proj');
-    const qTextEl = rootElement.querySelector('#v-q-text');
-    const optionsEl = rootElement.querySelector('#v-options');
-    const inputArea = rootElement.querySelector('#v-input-area');
-    const inputEl = rootElement.querySelector('#v-input');
-    const checkBtn = rootElement.querySelector('#v-btn-check');
-    const overlayEl = rootElement.querySelector('#v-overlay');
-    const heartsEl = rootElement.querySelector('#v-hearts');
-    const trackerEl = rootElement.querySelector('#v-tracker');
-    const barEl = rootElement.querySelector('#v-bar');
-    const arenaEl = rootElement.querySelector('.z-arena');
-    const quitBtn = rootElement.querySelector('#v-quit');
-    const titleEl = rootElement.querySelector('#v-title');
-    const msgEl = rootElement.querySelector('#v-msg');
-    const actionBtn = rootElement.querySelector('#v-btn-action');
+    // 2. REFS
+    const uiRefs = {
+        zombie: rootElement.querySelector('#v-zombie'),
+        proj: rootElement.querySelector('#v-proj'),
+        qText: rootElement.querySelector('#v-q-text'),
+        options: rootElement.querySelector('#v-options'),
+        inputArea: rootElement.querySelector('#v-input-area'),
+        input: rootElement.querySelector('#v-input'),
+        checkBtn: rootElement.querySelector('#v-btn-check'),
+        overlay: rootElement.querySelector('#v-overlay'),
+        hearts: rootElement.querySelector('#v-hearts'),
+        tracker: rootElement.querySelector('#v-tracker'),
+        bar: rootElement.querySelector('#v-bar'),
+        arena: rootElement.querySelector('.z-arena'),
+        quit: rootElement.querySelector('#v-quit'),
+        title: rootElement.querySelector('#v-title'),
+        msg: rootElement.querySelector('#v-msg'),
+        action: rootElement.querySelector('#v-btn-action')
+    };
 
-    // 3. ENGINE
-    let game = null; // Instance de GameProgression
-    let currentQ = null;
+    // 3. STATE
+    let game = null;
     let currentIdx = 0;
-    
-    // État visuel
     let zX = 0;
     let isPaused = false;
     let gameLoopId = null;
     let projInterval = null;
 
-    async function init() {
-        try {
-            const res = await fetch('/api/game-levels/all');
-            const data = await res.json();
-            const zLevel = data.find(l => l.chapterId === 'ch1-zombie');
-            
-            if (zLevel && zLevel.questions.length > 0) {
-                // INSTANCIATION DU CERVEAU COMMUN
-                game = new GameProgression(zLevel.questions);
-                updateUI();
-                loadRound();
-            } else { gameOver("Aucun niveau.", true); }
-        } catch(e) { console.error(e); gameOver("Erreur connexion.", true); }
+    function init() {
+        if (apiData.level && apiData.level.questions.length > 0) {
+            game = new GameProgression(apiData.level.questions);
+            updateUI();
+            loadRound();
+        } else { gameOver("Erreur niveau.", true); }
     }
 
     function updateUI() {
         const data = game.getTrackerData();
-        trackerEl.innerHTML = '';
-        
+        uiRefs.tracker.innerHTML = '';
         data.dots.forEach((d, i) => {
             const dot = document.createElement('div');
             dot.className = `z-q-dot ${i === currentIdx ? 'active' : ''} ${d.done ? 'done' : ''}`;
-            const fill = document.createElement('div');
-            fill.className = 'z-q-dot-fill';
-            fill.style.height = `${d.pct}%`;
-            dot.appendChild(fill);
-            trackerEl.appendChild(dot);
+            const fill = document.createElement('div'); fill.className = 'z-q-dot-fill'; fill.style.height = `${d.pct}%`;
+            dot.appendChild(fill); uiRefs.tracker.appendChild(dot);
         });
-
-        barEl.style.width = `${data.globalPct}%`;
-        heartsEl.textContent = "❤️".repeat(game.getLives());
+        uiRefs.bar.style.width = `${data.globalPct}%`;
+        uiRefs.hearts.textContent = "❤️".repeat(game.getLives());
     }
 
     function loadRound() {
         const next = game.getNextActiveQuestion();
+        if (!next) { gameOver("VICTOIRE !", true); return; }
         
-        if (!next) { gameOver("VICTOIRE TOTALE !", true); return; }
-
-        currentQ = next.q;
-        currentIdx = next.idx;
-        const currentLevel = next.level;
-
-        qTextEl.textContent = currentQ.q;
-        zombieEl.innerHTML = "🧟";
-        zX = 20; 
-        zombieEl.style.right = '20px';
+        currentIdx = next.idx; const q = next.q; const lvl = next.level;
+        uiRefs.qText.textContent = q.q;
+        uiRefs.zombie.innerHTML = "🧟"; 
+        zX = 20; uiRefs.zombie.style.right = '20px';
         isPaused = false;
-
-        updateUI();
+        
+        updateUI(); 
         startLoop();
 
-        // CHOIX INTERFACE (QCM vs INPUT)
-        if (currentLevel < 2) {
-            optionsEl.style.display = 'grid';
-            inputArea.style.display = 'none';
-            optionsEl.innerHTML = '';
-            
-            currentQ.options.forEach((opt, idx) => {
-                const btn = document.createElement('button');
-                btn.className = 'z-btn';
-                btn.textContent = opt;
-                btn.onclick = () => handleAttempt(idx, btn); // idx pour QCM
-                optionsEl.appendChild(btn);
+        if (lvl < 2) {
+            uiRefs.options.style.display = 'grid'; uiRefs.inputArea.style.display = 'none'; uiRefs.options.innerHTML = '';
+            q.options.forEach((opt, idx) => {
+                const btn = document.createElement('button'); btn.className = 'z-btn'; btn.textContent = opt;
+                btn.onclick = () => handleAttempt(idx, btn); uiRefs.options.appendChild(btn);
             });
         } else {
-            optionsEl.style.display = 'none';
-            inputArea.style.display = 'flex';
-            inputEl.value = '';
-            inputEl.placeholder = "Écris la réponse...";
-            
-            // Nettoyage listeners
-            checkBtn.onclick = null;
-            inputEl.onkeydown = null;
-
-            const validate = () => handleAttempt(inputEl.value, checkBtn);
-            checkBtn.onclick = validate;
-            inputEl.onkeydown = (e) => { if(e.key === "Enter") validate(); };
-            
-            setTimeout(() => inputEl.focus(), 100);
+            uiRefs.options.style.display = 'none'; uiRefs.inputArea.style.display = 'flex';
+            uiRefs.input.value = ''; uiRefs.input.placeholder = "Réponse...";
+            uiRefs.checkBtn.onclick = null; uiRefs.input.onkeydown = null;
+            const validate = () => handleAttempt(uiRefs.input.value, uiRefs.checkBtn);
+            uiRefs.checkBtn.onclick = validate; uiRefs.input.onkeydown = (e) => { if(e.key==="Enter") validate(); };
+            setTimeout(() => uiRefs.input.focus(), 100);
         }
     }
 
-    function handleAttempt(answer, btnElement) {
+    function handleAttempt(ans, btn) {
         if (isPaused) return;
-
-        // APPEL AU CERVEAU
-        const result = game.submitAnswer(currentIdx, answer);
-
-        if (result.success) {
-            isPaused = true;
-            if(btnElement) btnElement.classList.add('correct');
-            shootAndKill();
+        const res = game.submitAnswer(currentIdx, ans);
+        if (res.success) {
+            isPaused = true; if(btn) btn.classList.add('correct'); shootAndKill();
         } else {
-            if(btnElement) {
-                btnElement.classList.add('wrong');
-                setTimeout(() => btnElement.classList.remove('wrong'), 500);
-            }
-            
-            // Punition visuelle
-            zX += 60; 
-            zombieEl.style.right = zX + 'px';
-            
-            updateUI(); // Met à jour les barres (qui descendent)
-
-            // SI ON ÉTAIT AU NIVEAU 2 ET QU'ON TOMBE À 1 -> RECHARGER UI
-            if (result.oldLevel >= 2 && result.newLevel < 2) {
-                setTimeout(loadRound, 800);
-            }
+            if(btn) { btn.classList.add('wrong'); setTimeout(() => btn.classList.remove('wrong'), 500); }
+            zX += 60; uiRefs.zombie.style.right = zX + 'px'; updateUI();
+            if(res.oldLevel >= 2 && res.newLevel < 2) setTimeout(loadRound, 800);
         }
     }
 
-    // --- PHYSIQUE (COPIER-COLLER CLASSIQUE) ---
     function startLoop() {
-        if (gameLoopId) cancelAnimationFrame(gameLoopId);
+        if(gameLoopId) cancelAnimationFrame(gameLoopId);
         function loop() {
-            if (!isPaused) {
-                zX += 1.2; 
-                zombieEl.style.right = zX + 'px';
-                const arenaW = arenaEl.offsetWidth;
-                if ((arenaW - zX) < 100) { playerHit(); return; }
+            if(!isPaused) {
+                zX += 1.2; uiRefs.zombie.style.right = zX + 'px';
+                if((uiRefs.arena.offsetWidth - zX) < 100) { playerHit(); return; }
             }
             gameLoopId = requestAnimationFrame(loop);
         }
@@ -1569,65 +1562,54 @@ export function initZombieGame(rootElement, apiData, onExit) {
     }
 
     function shootAndKill() {
-        let pX = 80;
-        projEl.style.left = pX + 'px';
-        projEl.style.display = 'block';
+        let pX = 80; uiRefs.proj.style.left = pX + 'px'; uiRefs.proj.style.display = 'block';
         if(projInterval) clearInterval(projInterval);
-        
         projInterval = setInterval(() => {
-            pX += 25;
-            projEl.style.left = pX + 'px';
-            const arenaW = arenaEl.offsetWidth;
-            if (pX >= (arenaW - zX - 50)) {
-                clearInterval(projInterval);
-                projEl.style.display = 'none';
-                zombieEl.innerHTML = "💥";
-                setTimeout(loadRound, 1000);
+            pX += 25; uiRefs.proj.style.left = pX + 'px';
+            if(pX >= (uiRefs.arena.offsetWidth - zX - 50)) {
+                clearInterval(projInterval); uiRefs.proj.style.display = 'none';
+                uiRefs.zombie.innerHTML = "💥"; setTimeout(loadRound, 1000);
             }
         }, 16);
     }
 
     function playerHit() {
-        isPaused = true;
-        // APPEL AU CERVEAU POUR LA VIE
-        const status = game.loseLife(currentIdx);
-        
-        updateUI(); // Affiche cœurs et barres
-
-        if (status.isDead) {
-            gameOver("TU ES MORT !", false);
-        } else {
-            zX = 20; zombieEl.style.right = '20px';
-            setTimeout(() => {
-                // Si on a perdu un niveau critique, on recharge
-                if (status.newLevel < 2 && optionsEl.style.display === 'none') {
-                    loadRound();
-                } else {
-                    isPaused = false; 
-                    startLoop();
-                }
-            }, 1000);
+        isPaused = true; const s = game.loseLife(currentIdx); updateUI();
+        if(s.isDead) gameOver("TU ES MORT !", false);
+        else {
+            zX = 20; uiRefs.zombie.style.right = '20px';
+            setTimeout(() => { if(s.newLevel < 2 && uiRefs.options.style.display === 'none') loadRound(); else { isPaused = false; startLoop(); } }, 1000);
         }
     }
 
+    // --- C'EST ICI LE CORRECTIF ---
     function gameOver(msg, isWin) {
         isPaused = true;
-        overlayEl.style.display = 'flex';
-        titleEl.textContent = isWin ? "BRAVO" : "PERDU";
-        msgEl.textContent = msg;
-        actionBtn.textContent = isWin ? "Quitter" : "Réessayer";
-        actionBtn.onclick = () => {
-            if (isWin) { destroy(); onExit(); }
-            else { init(); overlayEl.style.display = 'none'; }
+        uiRefs.overlay.style.display = 'flex';
+        uiRefs.title.textContent = isWin ? "BRAVO" : "PERDU";
+        uiRefs.msg.textContent = msg;
+        uiRefs.action.textContent = isWin ? "Quitter" : "Réessayer";
+        
+        uiRefs.action.onclick = () => {
+            if (isWin) {
+                // 1. On vide tout D'ABORD
+                destroy();
+                // 2. On attend un tout petit peu pour que React soit prêt à switcher
+                setTimeout(() => {
+                    onExit(); 
+                }, 50);
+            } else {
+                init(); uiRefs.overlay.style.display = 'none';
+            }
         };
     }
 
-    quitBtn.onclick = () => { destroy(); onExit(); };
+    uiRefs.quit.onclick = () => { destroy(); setTimeout(onExit, 50); };
 
     function destroy() {
         if(gameLoopId) cancelAnimationFrame(gameLoopId);
         if(projInterval) clearInterval(projInterval);
-        rootElement.innerHTML = '';
+        try { rootElement.innerHTML = ''; } catch(e) {}
     }
 
     init();
@@ -1639,184 +1621,120 @@ export function initZombieGame(rootElement, apiData, onExit) {
 ### FICHIER: client/src/features/eleve/games/zombie/zombie_style.css
 ############################################################
 
-/* --- STYLE ZOMBIE V3 (BARRES LARGES) --- */
+/* --- AJOUTS DASHBOARD ZOMBIE --- */
 
-#zombie-root {
+/* Conteneur global du menu */
+.z-dashboard-container {
     width: 100%;
-    height: 100%;
-    background-color: #1e293b;
-    position: relative;
-    overflow: hidden;
+    max-width: 900px;
+    background: #0f172a;
+    border-radius: 30px;
+    padding: 2rem;
+    border: 4px solid #1e293b;
+    box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+    color: white;
     font-family: 'Segoe UI', sans-serif;
-    border-radius: 20px;
-    user-select: none;
+    max-height: 85vh;
     display: flex;
     flex-direction: column;
 }
 
-/* --- HUD DU HAUT --- */
-.z-top-hud {
-    background: #0f172a;
-    padding: 10px 20px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+.z-dash-header {
+    text-align: center;
+    margin-bottom: 2rem;
     border-bottom: 2px solid #334155;
-    height: 70px; /* Un peu plus haut */
+    padding-bottom: 1rem;
 }
 
-.z-hearts {
-    font-size: 1.8rem; /* Coeurs plus gros */
-    letter-spacing: 5px;
+.z-dash-title {
+    font-size: 2.5rem;
+    font-weight: 900;
+    color: #22c55e; /* Vert Zombie */
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    text-shadow: 0 0 20px rgba(34, 197, 94, 0.4);
+    margin: 0;
 }
 
-.z-global-progress {
-    flex: 1;
-    margin: 0 30px;
-    height: 12px;
-    background: #334155;
-    border-radius: 6px;
-    overflow: hidden;
-    border: 1px solid rgba(255,255,255,0.1);
-}
-.z-global-bar-fill {
-    height: 100%;
-    background: linear-gradient(90deg, #f59e0b, #facc15);
-    width: 0%;
-    transition: width 0.5s;
+.z-dash-subtitle {
+    color: #94a3b8;
+    font-size: 1rem;
+    margin-top: 0.5rem;
 }
 
-/* --- MINI-BARRES (TRACKER) --- */
-.z-questions-tracker {
-    display: flex;
-    gap: 8px; /* Plus d'espace entre les barres */
+/* Grille des niveaux */
+.z-levels-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 1.5rem;
+    overflow-y: auto;
+    padding-right: 10px;
 }
 
-.z-q-dot {
-    width: 20px; /* Plus large */
-    height: 35px; /* Plus haute */
-    background: #334155;
-    border-radius: 4px;
+/* Carte de niveau */
+.z-level-card {
+    background: #1e293b;
+    border: 2px solid #334155;
+    border-radius: 20px;
+    padding: 1.5rem;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     overflow: hidden;
-    border: 1px solid rgba(255,255,255,0.1);
 }
 
-.z-q-dot-fill {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    width: 100%;
-    background: #22c55e;
-    transition: height 0.3s;
+.z-level-card:hover {
+    border-color: #22c55e;
+    transform: translateY(-5px);
+    background: #020617;
+    box-shadow: 0 10px 20px -5px rgba(34, 197, 94, 0.2);
 }
 
-/* Indicateur question active (Cadre blanc) */
-.z-q-dot.active { 
-    border: 2px solid white; 
-    transform: scale(1.1); 
-    box-shadow: 0 0 10px rgba(255,255,255,0.2);
+.z-card-icon { font-size: 2.5rem; margin-bottom: 1rem; display: block; }
+.z-card-title { font-size: 1.1rem; font-weight: 800; color: white; margin-bottom: 0.5rem; }
+.z-card-info { font-size: 0.8rem; color: #94a3b8; font-weight: 600; text-transform: uppercase; }
+
+.z-btn-back {
+    margin-top: 2rem;
+    align-self: center;
+    background: transparent;
+    color: #ef4444;
+    border: 2px solid #ef4444;
+    padding: 10px 30px;
+    border-radius: 15px;
+    font-weight: 900;
+    cursor: pointer;
+    transition: 0.2s;
 }
+.z-btn-back:hover { background: #ef4444; color: white; }
 
-/* Indicateur question validée (Fini) */
-.z-q-dot.done .z-q-dot-fill {
-    background: #3b82f6; /* Bleu */
-    height: 100% !important;
-}
-
-
-/* --- ARENE --- */
-.z-arena {
-    flex: 1;
-    position: relative;
-    background: linear-gradient(to bottom, #1e293b 80%, #475569 100%);
-    overflow: hidden;
-}
-
+/* RESTE DU STYLE JEU (inchangé mais inclus pour intégrité) */
+#zombie-root { width: 100%; height: 100%; background-color: #1e293b; position: relative; overflow: hidden; font-family: 'Segoe UI', sans-serif; border-radius: 20px; user-select: none; display: flex; flex-direction: column; }
+.z-top-hud { background: #0f172a; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #334155; height: 70px; }
+.z-hearts { font-size: 1.8rem; letter-spacing: 5px; }
+.z-global-progress { flex: 1; margin: 0 30px; height: 12px; background: #334155; border-radius: 6px; overflow: hidden; border: 1px solid rgba(255,255,255,0.1); }
+.z-global-bar-fill { height: 100%; background: linear-gradient(90deg, #f59e0b, #facc15); width: 0%; transition: width 0.5s; }
+.z-questions-tracker { display: flex; gap: 8px; }
+.z-q-dot { width: 20px; height: 35px; background: #334155; border-radius: 4px; position: relative; overflow: hidden; border: 1px solid rgba(255,255,255,0.1); }
+.z-q-dot-fill { position: absolute; bottom: 0; left: 0; width: 100%; background: #22c55e; transition: height 0.3s; }
+.z-q-dot.active { border: 2px solid white; transform: scale(1.1); box-shadow: 0 0 10px rgba(255,255,255,0.2); }
+.z-q-dot.done .z-q-dot-fill { background: #3b82f6; height: 100% !important; }
+.z-arena { flex: 1; position: relative; background: linear-gradient(to bottom, #1e293b 80%, #475569 100%); overflow: hidden; }
 .sprite { position: absolute; font-size: 4rem; z-index: 10; }
 .hero { bottom: 20px; left: 20px; }
 .zombie { bottom: 20px; right: -60px; transition: right 0.1s linear; }
 .projectile { font-size: 2rem; display: none; z-index: 5; bottom: 45px; }
-
-
-/* --- INTERFACE BAS --- */
-.z-hud-bottom {
-    height: 240px;
-    background: #f1f5f9;
-    padding: 15px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-
-.z-question-box {
-    background: white;
-    padding: 15px;
-    border-radius: 12px;
-    border-left: 6px solid #2563eb;
-    font-weight: 800;
-    color: #1e293b;
-    font-size: 1.2rem;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-}
-
-/* Mode QCM */
-.z-options-container {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-    flex: 1;
-}
-.z-btn {
-    background: white;
-    border: 2px solid #cbd5e1;
-    border-radius: 12px;
-    font-weight: 700;
-    color: #475569;
-    cursor: pointer;
-    font-size: 1.1rem;
-    transition: 0.1s;
-}
+.z-hud-bottom { height: 240px; background: #f1f5f9; padding: 15px; display: flex; flex-direction: column; gap: 10px; }
+.z-question-box { background: white; padding: 15px; border-radius: 12px; border-left: 6px solid #2563eb; font-weight: 800; color: #1e293b; font-size: 1.2rem; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+.z-options-container { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; flex: 1; }
+.z-btn { background: white; border: 2px solid #cbd5e1; border-radius: 12px; font-weight: 700; color: #475569; cursor: pointer; font-size: 1.1rem; transition: 0.1s; }
 .z-btn:active { transform: scale(0.98); }
 .z-btn.correct { background: #dcfce7; border-color: #22c55e; color: #166534; }
 .z-btn.wrong { background: #fee2e2; border-color: #ef4444; color: #991b1b; }
-
-/* Mode Écriture */
-.z-input-container {
-    display: none;
-    flex-direction: column;
-    gap: 10px;
-    flex: 1;
-    justify-content: center;
-}
-.z-input {
-    padding: 15px;
-    font-size: 1.3rem;
-    border: 3px solid #2563eb;
-    border-radius: 12px;
-    outline: none;
-    text-align: center;
-    font-weight: bold;
-    color: #1e293b;
-}
-.z-btn-check {
-    padding: 15px;
-    background: #2563eb;
-    color: white;
-    font-weight: 900;
-    border: none;
-    border-radius: 12px;
-    cursor: pointer;
-    font-size: 1.2rem;
-    text-transform: uppercase;
-}
-
-/* Overlays */
-.z-overlay {
-    position: absolute; inset: 0; background: rgba(15,23,42,0.95);
-    display: none; flex-direction: column; align-items: center; justify-content: center;
-    z-index: 100; color: white; text-align: center;
-}
+.z-input-container { display: none; flex-direction: column; gap: 10px; flex: 1; justify-content: center; }
+.z-input { padding: 15px; font-size: 1.3rem; border: 3px solid #2563eb; border-radius: 12px; outline: none; text-align: center; font-weight: bold; color: #1e293b; }
+.z-btn-check { padding: 15px; background: #2563eb; color: white; font-weight: 900; border: none; border-radius: 12px; cursor: pointer; font-size: 1.2rem; text-transform: uppercase; }
+.z-overlay { position: absolute; inset: 0; background: rgba(15,23,42,0.95); display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 100; color: white; text-align: center; }
 .z-overlay h2 { font-size: 4rem; margin: 0; }
 .z-btn-restart { margin-top: 30px; padding: 15px 50px; background: #2563eb; color: white; border: none; border-radius: 30px; font-weight: 900; font-size: 1.2rem; cursor: pointer; }
 
@@ -2386,50 +2304,60 @@ export default function ProfNav({ activeTab, onTabChange }) {
 ### FICHIER: client/src/features/prof/games/GameStudio.css
 ############################################################
 
-/* Réintégration du CSS manquant pour les options */
-
-.game-preview-options {
+/* Ajout style Upload IA */
+.ai-upload-row {
     display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    margin-top: 0.8rem;
-    margin-left: 2.5rem;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 1.5rem;
 }
 
-.game-preview-options span {
-    font-size: 0.75rem;
-    color: #94a3b8;
-    background: #f1f5f9;
-    padding: 4px 8px;
-    border-radius: 6px;
-    border: 1px solid #e2e8f0;
-}
-
-.game-preview-options span.is-good {
-    background: #dcfce7;
-    color: #16a34a;
-    border-color: #86efac;
+.btn-upload-ai {
+    background: #f3e8ff;
+    color: #9333ea;
+    padding: 10px 20px;
+    border-radius: 12px;
     font-weight: 800;
+    cursor: pointer;
+    border: 2px dashed #d8b4fe;
+    transition: 0.2s;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
-/* Le reste du CSS standard V2 */
+.btn-upload-ai:hover {
+    background: white;
+    border-color: #9333ea;
+}
+
+.file-count {
+    font-size: 0.8rem;
+    font-weight: bold;
+    color: #16a34a;
+    background: #dcfce7;
+    padding: 5px 10px;
+    border-radius: 8px;
+}
+
+/* Le reste du CSS (INCHANGÉ pour garantir la stabilité, je remets les bases) */
 .studio-container { width: 100%; }
 .btn-create-game-v2 { width: 100%; padding: 1.5rem; background: #9333ea; color: white; border-radius: 30px; font-weight: 900; font-size: 1.3rem; border: none; border-bottom: 8px solid #7e22ce; margin-bottom: 2rem; cursor: pointer; text-transform: uppercase; }
 .games-list-v2 { display: grid; gap: 1rem; }
-.game-card-v2 { background: white; padding: 1.5rem; border-radius: 24px; border: 2px solid #f3e8ff; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 6px -1px rgba(147, 51, 234, 0.05); }
+.game-card-v2 { background: white; padding: 1.5rem; border-radius: 24px; border: 2px solid #f3e8ff; display: flex; justify-content: space-between; align-items: center; }
 .game-info h4 { font-size: 1.2rem; color: #1e293b; margin: 0; font-weight: 800; }
-.game-badge { background: #faf5ff; color: #9333ea; padding: 5px 12px; border-radius: 10px; font-size: 0.7rem; font-weight: 900; text-transform: uppercase; margin-top: 6px; display: inline-block; border: 1px solid #e9d5ff; }
+.game-badge { background: #faf5ff; color: #9333ea; padding: 5px 12px; border-radius: 10px; font-size: 0.7rem; font-weight: 900; margin-right: 5px; border: 1px solid #e9d5ff; }
+.class-badge { background: #fff7ed; color: #f97316; padding: 5px 12px; border-radius: 10px; font-size: 0.7rem; font-weight: 900; border: 1px solid #ffedd5; }
 .game-actions { display: flex; gap: 0.8rem; }
 .btn-icon-edit { background: #faf5ff; color: #9333ea; width: 48px; height: 48px; border-radius: 14px; border: none; font-weight: 900; font-size: 1.2rem; cursor: pointer; }
 .btn-icon-del { background: #fef2f2; color: #ef4444; width: 48px; height: 48px; border-radius: 14px; border: none; font-weight: 900; font-size: 1.2rem; cursor: pointer; }
 .game-modal-overlay { position: fixed; inset: 0; z-index: 2000; background: rgba(15, 23, 42, 0.9); backdrop-filter: blur(10px); display: flex; align-items: center; justify-content: center; padding: 2rem; }
 .game-modal { background: white; width: 100%; max-width: 900px; max-height: 90vh; border-radius: 40px; display: flex; flex-direction: column; overflow: hidden; border: 4px solid #9333ea; }
 .game-modal-header { padding: 2rem; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center; background: #faf5ff; }
-.game-modal-header h3 { font-weight: 900; color: #9333ea; margin: 0; font-size: 1.5rem; font-style: italic; text-transform: uppercase; }
-.btn-close { background: white; border: none; width: 40px; height: 40px; border-radius: 50%; font-weight: 900; cursor: pointer; color: #9333ea; }
 .game-modal-body { flex: 1; overflow-y: auto; padding: 2.5rem; }
-.config-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem; margin-bottom: 2rem; }
-.input-title, .select-chapter { padding: 1.25rem; border-radius: 18px; border: 2px solid #f3e8ff; background: #faf5ff; font-weight: 900; outline: none; font-size: 1.1rem; width: 100%; }
+.config-grid { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 1rem; margin-bottom: 2rem; }
+.input-title, .select-chapter, .select-class { padding: 1.2rem; border-radius: 18px; border: 2px solid #f3e8ff; background: #faf5ff; font-weight: 900; outline: none; font-size: 1rem; width: 100%; color: #4c1d95; }
 .tabs-mode { display: flex; background: #f1f5f9; padding: 0.4rem; border-radius: 20px; margin-bottom: 2rem; }
 .tabs-mode button { flex: 1; padding: 1rem; border-radius: 16px; border: none; font-weight: 900; color: #94a3b8; cursor: pointer; }
 .tabs-mode button.active-manual { background: white; color: #2563eb; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
@@ -2439,21 +2367,19 @@ export default function ProfNav({ activeTab, onTabChange }) {
 .ai-actions { display: flex; gap: 2rem; align-items: center; }
 .btn-ai-generate { flex: 1; background: #9333ea; color: white; padding: 1.25rem; border-radius: 18px; font-weight: 900; border: none; cursor: pointer; }
 .manual-box { background: #eff6ff; padding: 2rem; border-radius: 30px; border: 1px solid #dbeafe; }
-.q-input { width: 100%; padding: 1.2rem; border-radius: 18px; border: none; margin-bottom: 1.5rem; font-weight: 900; outline: none; font-size: 1.1rem; }
+.q-input { width: 100%; padding: 1.2rem; border-radius: 18px; border: none; margin-bottom: 1.5rem; font-weight: 900; outline: none; }
 .opts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem; }
 .opt-row { display: flex; gap: 0.5rem; align-items: center; background: white; padding: 0.8rem; border-radius: 14px; border: 2px solid transparent; cursor: pointer; }
 .opt-row.correct { border-color: #22c55e; background: #f0fdf4; }
-.opt-row input[type="text"] { flex: 1; border: none; outline: none; font-weight: 700; background: transparent; }
-.btn-add-q { width: 100%; padding: 1.2rem; border-radius: 18px; border: none; background: #2563eb; color: white; font-weight: 900; font-size: 1rem; cursor: pointer; }
-.preview-section { margin-top: 2.5rem; }
-.preview-title { font-size: 0.75rem; font-weight: 900; color: #94a3b8; text-transform: uppercase; margin-bottom: 1rem; margin-left: 1rem; }
-.preview-scroll { display: flex; flex-direction: column; gap: 0.8rem; max-height: 250px; overflow-y: auto; padding-right: 5px; }
-.q-item { background: #f8fafc; padding: 1.2rem; border-radius: 20px; border: 2px solid #f1f5f9; cursor: pointer; }
-.q-item-header { display: flex; justify-content: space-between; align-items: center; }
-.q-num { width: 28px; height: 28px; background: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 900; color: #cbd5e1; border: 2px solid #f1f5f9; }
-.q-text { flex: 1; margin-left: 1rem; font-weight: 800; color: #334155; }
-.btn-del-q { width: 30px; height: 30px; border-radius: 8px; border: none; background: #fef2f2; color: #ef4444; font-weight: bold; cursor: pointer; }
-.modal-footer { padding: 2rem 2.5rem; background: #f8fafc; border-top: 1px solid #f1f5f9; }
+.opt-row input { flex: 1; border: none; outline: none; font-weight: 700; background: transparent; }
+.btn-add-q { width: 100%; padding: 1.2rem; background: #2563eb; color: white; border-radius: 18px; font-weight: 900; border: none; cursor: pointer; }
+.preview-section { margin-top: 2rem; }
+.preview-scroll { display: flex; flex-direction: column; gap: 0.8rem; max-height: 250px; overflow-y: auto; }
+.q-item { background: #f8fafc; padding: 1rem; border-radius: 20px; border: 2px solid #f1f5f9; cursor: pointer; }
+.game-preview-options { display: flex; gap: 0.5rem; margin-top: 0.5rem; margin-left: 2rem; }
+.game-preview-options span { font-size: 0.7rem; padding: 4px 8px; background: #fff; border-radius: 6px; color: #94a3b8; border: 1px solid #e2e8f0; }
+.game-preview-options span.is-good { background: #dcfce7; color: #166534; border-color: #86efac; font-weight: 800; }
+.modal-footer { padding: 2rem; background: #f8fafc; border-top: 1px solid #f1f5f9; }
 .btn-save-db { width: 100%; padding: 1.5rem; background: #16a34a; color: white; border-radius: 30px; font-weight: 900; font-size: 1.3rem; border: none; border-bottom: 8px solid #15803d; cursor: pointer; text-transform: uppercase; }
 
 
@@ -2461,6 +2387,7 @@ export default function ProfNav({ activeTab, onTabChange }) {
 ### FICHIER: client/src/features/prof/games/GameStudio.jsx
 ############################################################
 
+/* STUDIO JEUX - FIX AFFICHAGE 4 OPTIONS FIXES */
 import React, { useState, useEffect } from 'react';
 import './GameStudio.css';
 
@@ -2470,42 +2397,59 @@ export default function GameStudio() {
   const [genMode, setGenMode] = useState('manual');
   const [loadingIA, setLoadingIA] = useState(false);
 
-  const [formData, setFormData] = useState({ _id: null, title: '', chapterId: 'ch1-zombie', questions: [] });
+  const defaultForm = { _id: null, title: '', chapterId: 'ch1-zombie', classroom: 'Toutes', questions: [] };
+  const [formData, setFormData] = useState(defaultForm);
+  
+  // On s'assure que currentQ a toujours 4 slots vides au départ
   const [currentQ, setCurrentQ] = useState({ q: '', options: ['', '', '', ''], a: 0 });
   const [editingIdx, setEditingIdx] = useState(null);
 
   const [aiPrompt, setAiPrompt] = useState('');
   const [numQuestions, setNumQuestions] = useState(5);
+  const [aiImages, setAiImages] = useState([]);
 
   const load = async () => {
-    const data = await fetch('/api/game-levels/all').then(r => r.json());
-    setLevels(data || []);
+    try {
+        const res = await fetch('/api/game-levels/all');
+        const data = await res.json();
+        setLevels(data || []);
+    } catch (e) { console.error(e); }
   };
   useEffect(() => { load(); }, []);
 
   const handleAiGenerate = async () => {
-    if(!aiPrompt) return alert("Saisis un sujet !");
+    if(!aiPrompt && aiImages.length === 0) return alert("Sujet ou Image requis !");
     setLoadingIA(true);
     try {
-        const questions = await fetch('/api/generate-game-content', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ topic: aiPrompt, numQuestions })
-        }).then(r => r.json());
+        const fd = new FormData();
+        fd.append('topic', aiPrompt || "Analyse");
+        fd.append('numQuestions', numQuestions);
+        for (let i = 0; i < aiImages.length; i++) fd.append('images', aiImages[i]);
+
+        const res = await fetch('/api/generate-game-content', { method: 'POST', body: fd });
+        const questions = await res.json();
 
         if (Array.isArray(questions)) {
             setFormData(prev => ({ ...prev, questions: [...prev.questions, ...questions] }));
             setGenMode('manual');
-        }
-    } catch (e) { alert("Erreur IA"); }
+            setAiImages([]); setAiPrompt('');
+            alert(`✨ ${questions.length} questions générées !`);
+        } else { alert("Erreur IA: " + (questions.error || "Format invalide")); }
+    } catch (e) { alert("Erreur Réseau"); }
     setLoadingIA(false);
   };
 
   const addOrUpdateQuestion = () => {
     if (!currentQ.q) return;
+    
+    // Sécurité : on force 4 options avant de sauvegarder
+    const safeQ = { ...currentQ };
+    while(safeQ.options.length < 4) safeQ.options.push("");
+    safeQ.options = safeQ.options.slice(0, 4);
+
     const newQuestions = [...formData.questions];
-    if (editingIdx !== null) newQuestions[editingIdx] = currentQ;
-    else newQuestions.push(currentQ);
+    if (editingIdx !== null) newQuestions[editingIdx] = safeQ;
+    else newQuestions.push(safeQ);
     
     setFormData({ ...formData, questions: newQuestions });
     setCurrentQ({ q: '', options: ['', '', '', ''], a: 0 });
@@ -2513,32 +2457,36 @@ export default function GameStudio() {
   };
 
   const handleSaveLevel = async () => {
-    if (!formData.title || formData.questions.length === 0) return alert("Titre et questions requis !");
+    if (!formData.title || formData.questions.length === 0) return alert("Titre requis !");
     const res = await fetch('/api/game-levels', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
     }).then(r => r.json());
-
     if (res.ok) { setIsEditing(false); load(); }
   };
+
+  // UI Helpers
+  const handleEdit = (lvl) => { setFormData(lvl); setIsEditing(true); };
+  const handleDelete = async (id) => { if(confirm("Supprimer ?")) { await fetch(`/api/game-levels/${id}`, {method:'DELETE'}); load(); }};
 
   return (
     <div className="studio-container">
       {!isEditing ? (
         <>
-          <button onClick={() => { setFormData({ _id: null, title: '', chapterId: 'ch1-zombie', questions: [] }); setIsEditing(true); }} 
-                  className="btn-create-game-v2">➕ CRÉER UN NIVEAU DE JEU</button>
+          <button onClick={() => { setFormData(defaultForm); setIsEditing(true); }} className="btn-create-game-v2">➕ CRÉER UN NIVEAU DE JEU</button>
           <div className="games-list-v2">
             {levels.map(lvl => (
               <div key={lvl._id} className="game-card-v2">
                 <div className="game-info">
                     <h4>{lvl.title}</h4>
                     <span className="game-badge">{lvl.chapterId === 'ch1-zombie' ? '🧟 ZOMBIE' : '🚀 STARSHIP'}</span>
+                    <span className="class-badge" style={{marginLeft:'5px'}}>{lvl.classroom || 'Toutes'}</span>
+                    <span style={{fontSize:'0.7rem', color:'#cbd5e1', marginLeft:'10px'}}>({lvl.questions.length} Q)</span>
                 </div>
                 <div className="game-actions">
-                    <button onClick={() => { setFormData(lvl); setIsEditing(true); }} className="btn-icon-edit">🖋️</button>
-                    <button onClick={async () => { if(confirm("Supprimer ?")) { await fetch(`/api/game-levels/${lvl._id}`, {method:'DELETE'}); load(); }}} className="btn-icon-del">🗑️</button>
+                    <button onClick={() => handleEdit(lvl)} className="btn-icon-edit">🖋️</button>
+                    <button onClick={() => handleDelete(lvl._id)} className="btn-icon-del">🗑️</button>
                 </div>
               </div>
             ))}
@@ -2554,10 +2502,13 @@ export default function GameStudio() {
 
             <div className="game-modal-body custom-scrollbar">
                 <div className="config-grid">
-                    <input className="input-title" placeholder="Titre du niveau..." value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
+                    <input className="input-title" placeholder="Titre..." value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
                     <select className="select-chapter" value={formData.chapterId} onChange={e => setFormData({...formData, chapterId: e.target.value})}>
                         <option value="ch1-zombie">🧟 Mode Zombie</option>
                         <option value="ch2-starship">🚀 Mode Starship</option>
+                    </select>
+                    <select className="select-class" value={formData.classroom} onChange={e => setFormData({...formData, classroom: e.target.value})}>
+                        <option value="Toutes">Toutes les classes</option><option value="6D">6eD</option><option value="5B">5eB</option><option value="5C">5eC</option><option value="2A">2nde A</option><option value="2CD">2nde CD</option>
                     </select>
                 </div>
 
@@ -2568,7 +2519,11 @@ export default function GameStudio() {
 
                 {genMode === 'ai' ? (
                     <div className="ai-box shadow-inner">
-                        <textarea placeholder="Sujet du quiz..." value={aiPrompt} onChange={e => setAiPrompt(e.target.value)} />
+                        <textarea placeholder="Sujet..." value={aiPrompt} onChange={e => setAiPrompt(e.target.value)} />
+                        <div className="ai-upload-row">
+                            <label className="btn-upload-ai">📷 Photos <input type="file" multiple accept="image/*" hidden onChange={e => setAiImages(Array.from(e.target.files))} /></label>
+                            {aiImages.length > 0 && <span className="file-count">✅ {aiImages.length}</span>}
+                        </div>
                         <div className="ai-actions">
                             <label className="font-bold text-purple-700 uppercase text-xs">Questions: {numQuestions}</label>
                             <input type="range" min="1" max="20" value={numQuestions} onChange={e => setNumQuestions(e.target.value)} />
@@ -2578,11 +2533,23 @@ export default function GameStudio() {
                 ) : (
                     <div className="manual-box shadow-inner">
                         <input className="q-input" placeholder="Question..." value={currentQ.q} onChange={e => setCurrentQ({...currentQ, q: e.target.value})} />
+                        
                         <div className="opts-grid">
-                            {currentQ.options.map((opt, i) => (
-                                <div key={i} className={`opt-row ${currentQ.a === i ? 'correct' : ''}`} onClick={() => setCurrentQ({...currentQ, a: i})}>
-                                    <input type="radio" checked={currentQ.a === i} readOnly />
-                                    <input placeholder={`Réponse ${i+1}`} value={opt} onChange={e => { const n = [...currentQ.options]; n[i] = e.target.value; setCurrentQ({...currentQ, options: n}); }} />
+                            {/* --- ICI LE FIX FRONTEND : ON FORCE 4 ENTRÉES --- */}
+                            {[0, 1, 2, 3].map((idx) => (
+                                <div key={idx} className={`opt-row ${currentQ.a === idx ? 'correct' : ''}`} onClick={() => setCurrentQ({...currentQ, a: idx})}>
+                                    <input type="radio" checked={currentQ.a === idx} readOnly />
+                                    <input 
+                                        placeholder={`Réponse ${String.fromCharCode(65+idx)}`} 
+                                        value={currentQ.options[idx] || ''} 
+                                        onChange={e => { 
+                                            const n = [...currentQ.options];
+                                            // On s'assure que le tableau est assez grand
+                                            while(n.length < 4) n.push("");
+                                            n[idx] = e.target.value; 
+                                            setCurrentQ({...currentQ, options: n}); 
+                                        }} 
+                                    />
                                 </div>
                             ))}
                         </div>
@@ -2596,27 +2563,19 @@ export default function GameStudio() {
                         {formData.questions.map((q, i) => (
                             <div key={i} onClick={() => { setCurrentQ(q); setEditingIdx(i); setGenMode('manual'); }} className={`q-item ${editingIdx === i ? 'editing' : ''}`}>
                                 <div className="q-item-header">
-                                    <div className="flex items-center gap-3">
-                                        <span className="q-num">{i+1}</span>
-                                        <span className="q-text">{q.q}</span>
-                                    </div>
+                                    <div className="flex items-center gap-3"><span className="q-num">{i+1}</span><span className="q-text">{q.q}</span></div>
                                     <button onClick={(e) => { e.stopPropagation(); const n = [...formData.questions]; n.splice(i, 1); setFormData({...formData, questions: n}); }} className="btn-del-q">✕</button>
                                 </div>
-                                {/* ICI : LA BOUCLE QUI AFFICHE LES RÉPONSES AVAIT DISPARU */}
                                 <div className="game-preview-options">
-                                    {q.options.map((opt, oi) => (
-                                        <span key={oi} className={oi === q.a ? 'is-good' : ''}>{opt}</span>
-                                    ))}
+                                    {/* On affiche seulement les 4 premières */}
+                                    {q.options.slice(0, 4).map((opt, oi) => <span key={oi} className={oi === q.a ? 'is-good' : ''}>{opt || "?"}</span>)}
                                 </div>
                             </div>
                         ))}
                     </div>
                 </div>
             </div>
-
-            <div className="modal-footer">
-                <button onClick={handleSaveLevel} className="btn-save-db">💾 SAUVEGARDER</button>
-            </div>
+            <div className="modal-footer"><button onClick={handleSaveLevel} className="btn-save-db">💾 SAUVEGARDER</button></div>
           </div>
         </div>
       )}
@@ -3809,42 +3768,87 @@ module.exports = router;
 ### FICHIER: server/features/game/game.routes.js
 ############################################################
 
+/* 🎮 HUB JEUX - CORRECTION IA (FORCE 4 OPTIONS) */
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 const fetch = require('node-fetch');
+const multer = require('multer');
 
-// 1. IA GENERATION DE QUIZ (C'était le 404 generate-game-content)
-router.post('/generate-game-content', async (req, res) => {
+// Config Upload (Mémoire)
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+
+// 1. GÉNÉRATION IA (IMAGE + TEXTE)
+router.post('/generate-game-content', upload.array('images', 3), async (req, res) => {
     const { topic, numQuestions } = req.body;
+    const files = req.files || [];
+
+    console.log(`🎮 [GAME AI] Génération sur "${topic}" (${files.length} imgs)`);
+
     if (!process.env.GEMINI_API_KEY) return res.status(500).json({ error: "Clé IA manquante" });
 
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${process.env.GEMINI_API_KEY}`;
-    const prompt = `Génère un quiz QCM de ${numQuestions || 5} questions sur : "${topic}".
-    JSON STRICT: [{"q":"Question","options":["A","B","C","D"],"a":0}] (a=index bonne réponse). PAS DE MARKDOWN.`;
+    
+    // Prompt Renforcé : "STRICTEMENT 4 OPTIONS"
+    const textPrompt = `
+    Agis comme un moteur de jeu vidéo éducatif.
+    Sujet : "${topic}" ${files.length > 0 ? "+ Analyse des images fournies" : ""}.
+    Tâche : Générer un quiz QCM de ${numQuestions || 5} questions.
+    
+    RÈGLES ABSOLUES :
+    1. Réponds UNIQUEMENT un JSON brut.
+    2. CHAQUE question doit avoir EXACTEMENT 4 options (ni 3, ni 5).
+    3. Format : [{"q":"Question...","options":["A","B","C","D"],"a":0}]
+    4. 'a' est l'index de la bonne réponse (0, 1, 2 ou 3).
+    `;
+
+    const parts = [{ text: textPrompt }];
+    files.forEach(f => parts.push({ inline_data: { mime_type: f.mimetype, data: f.buffer.toString('base64') } }));
 
     try {
         const r = await fetch(url, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { response_mime_type: "application/json" } })
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contents: [{ parts: parts }] })
         });
+
         const data = await r.json();
         if (data.error) throw new Error(data.error.message);
-        
+
         let jsonText = data.candidates[0].content.parts[0].text;
         jsonText = jsonText.replace(/```json/g, '').replace(/```/g, '').trim();
-        res.json(JSON.parse(jsonText));
+        
+        let questions = JSON.parse(jsonText);
+
+        // --- NETTOYAGE DE SÉCURITÉ ---
+        // Si l'IA a mis 5 options, on coupe à 4 et on vérifie que la réponse est valide.
+        questions = questions.map(q => {
+            // Force 4 options max
+            if (q.options.length > 4) q.options = q.options.slice(0, 4);
+            // Si pas assez, on comble
+            while (q.options.length < 4) q.options.push("-");
+            
+            // Si la bonne réponse était l'option 5 (index 4), on la ramène à 0 pour éviter le crash
+            if (q.a >= 4) q.a = 0;
+            
+            return q;
+        });
+
+        console.log(`✅ [GAME AI] ${questions.length} questions générées (Nettoyées).`);
+        res.json(questions);
+
     } catch (e) { 
-        console.error("Game AI Error:", e);
-        res.status(500).json({ error: "Erreur IA Jeu" }); 
+        console.error("❌ Erreur Game AI :", e);
+        res.status(500).json({ error: "L'IA a échoué. Réessaie." }); 
     }
 });
 
-// 2. CRUD NIVEAUX DE JEU (C'était le 404 game-levels/all)
+// 2. LECTURE
 router.get('/game-levels/all', async (req, res) => {
-    try { res.json(await mongoose.model('GameLevel').find({}).sort({ createdAt: -1 })); } catch(e) { res.json([]); }
+    try { res.json(await mongoose.model('GameLevel').find({}).sort({ createdAt: -1 })); } catch(e) { res.status(500).json([]); }
 });
 
+// 3. SAUVEGARDE
 router.post('/game-levels', async (req, res) => {
     try {
         const { _id, ...data } = req.body;
@@ -3854,9 +3858,9 @@ router.post('/game-levels', async (req, res) => {
     } catch(e) { res.status(500).json({error: e.message}); }
 });
 
+// 4. SUPPRESSION
 router.delete('/game-levels/:id', async (req, res) => {
-    await mongoose.model('GameLevel').findByIdAndDelete(req.params.id);
-    res.json({ ok: true });
+    try { await mongoose.model('GameLevel').findByIdAndDelete(req.params.id); res.json({ ok: true }); } catch (e) { res.status(500).json({ ok: false }); }
 });
 
 module.exports = router;
@@ -3990,18 +3994,18 @@ mongoose.model('Submission', new mongoose.Schema({
     submittedAt: { type: Date, default: Date.now }
 }), 'submissions');
 
-// 4. BUGS (NOUVEAU)
+// 4. BUGS
 mongoose.model('Bug', new mongoose.Schema({
-    reporter: String,
-    classroom: String,
-    description: String,
-    status: { type: String, default: 'ouvert' },
-    date: { type: Date, default: Date.now }
+    reporter: String, classroom: String, description: String, status: { type: String, default: 'ouvert' }, date: { type: Date, default: Date.now }
 }), 'bugs');
 
-// 5. JEUX
+// 5. JEUX (AJOUT DU CHAMP CLASSROOM)
 mongoose.model('GameLevel', new mongoose.Schema({ 
-    chapterId: String, title: String, questions: Array, createdAt: { type: Date, default: Date.now } 
+    chapterId: String, 
+    title: String, 
+    classroom: { type: String, default: 'Toutes' }, // <--- NOUVEAU CHAMP
+    questions: Array, 
+    createdAt: { type: Date, default: Date.now } 
 }), 'game_levels');
 
 

@@ -95,14 +95,19 @@
 ├── init-db.js
 ├── package.json
 ├── projectMap.txt
-└── snap.js
+├── snap.js
+└── test.txt
 
 @@@     FIN DE L ARBORESCENCE  @@@
 
 
+==Global instructions==
 
-
-
+le projet utilise Gemini 2.0 FLASH
+le projet utilise le fichier update.txt tu dois générer 
+des grands fichiers txt qui peuvent se snipette en une fois 
+et qui obéisse a cette convention 
+[[[ FILE: chemin ]]] plus d informations dans apply.js
 ==Project MAP==
 REMARQUE IMPORTANTE : SI UN PROGRAMME DE L ARBORESCENCE QUI SEMBLE IMPORTANT 
 EST ABSCENT DE CETTE LISTE LE DEMMANDER  DES QUE TU RECOIS CE PROMPT
