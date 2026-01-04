@@ -1,74 +1,77 @@
-/* --- CORRECTION LAYOUT (3 Colonnes) --- */
-
-.studio-container { width: 100%; }
-
-.btn-create-game-v2 { 
-    width: 100%; padding: 1.5rem; background: #9333ea; color: white; border-radius: 30px; font-weight: 900; font-size: 1.3rem; border: none; border-bottom: 8px solid #7e22ce; margin-bottom: 2rem; cursor: pointer; text-transform: uppercase; transition: 0.2s;
+/* Ajout style Upload IA */
+.ai-upload-row {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 1.5rem;
 }
-.btn-create-game-v2:hover { transform: translateY(-2px); }
 
-/* Liste */
+.btn-upload-ai {
+    background: #f3e8ff;
+    color: #9333ea;
+    padding: 10px 20px;
+    border-radius: 12px;
+    font-weight: 800;
+    cursor: pointer;
+    border: 2px dashed #d8b4fe;
+    transition: 0.2s;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-upload-ai:hover {
+    background: white;
+    border-color: #9333ea;
+}
+
+.file-count {
+    font-size: 0.8rem;
+    font-weight: bold;
+    color: #16a34a;
+    background: #dcfce7;
+    padding: 5px 10px;
+    border-radius: 8px;
+}
+
+/* Le reste du CSS (INCHANGÉ pour garantir la stabilité, je remets les bases) */
+.studio-container { width: 100%; }
+.btn-create-game-v2 { width: 100%; padding: 1.5rem; background: #9333ea; color: white; border-radius: 30px; font-weight: 900; font-size: 1.3rem; border: none; border-bottom: 8px solid #7e22ce; margin-bottom: 2rem; cursor: pointer; text-transform: uppercase; }
 .games-list-v2 { display: grid; gap: 1rem; }
 .game-card-v2 { background: white; padding: 1.5rem; border-radius: 24px; border: 2px solid #f3e8ff; display: flex; justify-content: space-between; align-items: center; }
 .game-info h4 { font-size: 1.2rem; color: #1e293b; margin: 0; font-weight: 800; }
-.game-badge { background: #faf5ff; color: #9333ea; padding: 5px 12px; border-radius: 10px; font-size: 0.7rem; font-weight: 900; text-transform: uppercase; margin-top: 6px; display: inline-block; border: 1px solid #e9d5ff; margin-right: 5px;}
-.class-badge { background: #fff7ed; color: #f97316; padding: 5px 12px; border-radius: 10px; font-size: 0.7rem; font-weight: 900; text-transform: uppercase; border: 1px solid #ffedd5; }
-
+.game-badge { background: #faf5ff; color: #9333ea; padding: 5px 12px; border-radius: 10px; font-size: 0.7rem; font-weight: 900; margin-right: 5px; border: 1px solid #e9d5ff; }
+.class-badge { background: #fff7ed; color: #f97316; padding: 5px 12px; border-radius: 10px; font-size: 0.7rem; font-weight: 900; border: 1px solid #ffedd5; }
 .game-actions { display: flex; gap: 0.8rem; }
-.btn-icon-edit, .btn-icon-del { width: 48px; height: 48px; border-radius: 14px; border: none; font-weight: 900; font-size: 1.2rem; cursor: pointer; }
-.btn-icon-edit { background: #faf5ff; color: #9333ea; }
-.btn-icon-del { background: #fef2f2; color: #ef4444; }
-
-/* MODALE */
+.btn-icon-edit { background: #faf5ff; color: #9333ea; width: 48px; height: 48px; border-radius: 14px; border: none; font-weight: 900; font-size: 1.2rem; cursor: pointer; }
+.btn-icon-del { background: #fef2f2; color: #ef4444; width: 48px; height: 48px; border-radius: 14px; border: none; font-weight: 900; font-size: 1.2rem; cursor: pointer; }
 .game-modal-overlay { position: fixed; inset: 0; z-index: 2000; background: rgba(15, 23, 42, 0.9); backdrop-filter: blur(10px); display: flex; align-items: center; justify-content: center; padding: 2rem; }
 .game-modal { background: white; width: 100%; max-width: 900px; max-height: 90vh; border-radius: 40px; display: flex; flex-direction: column; overflow: hidden; border: 4px solid #9333ea; }
 .game-modal-header { padding: 2rem; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center; background: #faf5ff; }
 .game-modal-body { flex: 1; overflow-y: auto; padding: 2.5rem; }
-
-/* GRILLE CONFIGURATION (C'était cassé ici) */
-.config-grid { 
-    display: grid; 
-    grid-template-columns: 2fr 1fr 1fr; /* 3 Colonnes : Titre | Mode | Classe */
-    gap: 1rem; 
-    margin-bottom: 2rem; 
-}
-
-.input-title, .select-chapter, .select-class { 
-    padding: 1.2rem; 
-    border-radius: 18px; 
-    border: 2px solid #f3e8ff; 
-    background: #faf5ff; 
-    font-weight: 900; 
-    outline: none; 
-    font-size: 1rem; 
-    width: 100%; 
-    color: #4c1d95;
-}
-
-/* Le reste du CSS (IA, Preview...) */
+.config-grid { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 1rem; margin-bottom: 2rem; }
+.input-title, .select-chapter, .select-class { padding: 1.2rem; border-radius: 18px; border: 2px solid #f3e8ff; background: #faf5ff; font-weight: 900; outline: none; font-size: 1rem; width: 100%; color: #4c1d95; }
 .tabs-mode { display: flex; background: #f1f5f9; padding: 0.4rem; border-radius: 20px; margin-bottom: 2rem; }
 .tabs-mode button { flex: 1; padding: 1rem; border-radius: 16px; border: none; font-weight: 900; color: #94a3b8; cursor: pointer; }
 .tabs-mode button.active-manual { background: white; color: #2563eb; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
 .tabs-mode button.active-ai { background: #9333ea; color: white; box-shadow: 0 4px 15px rgba(147, 51, 234, 0.4); }
-
 .ai-box { background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%); padding: 2rem; border-radius: 30px; border: 2px solid #e9d5ff; }
 .ai-box textarea { width: 100%; height: 100px; border-radius: 18px; border: none; padding: 1.2rem; font-weight: 600; outline: none; background: white; resize: none; margin-bottom: 1.5rem; }
-.btn-ai-generate { width: 100%; background: #9333ea; color: white; padding: 1.2rem; border-radius: 18px; font-weight: 900; border: none; cursor: pointer; }
-
+.ai-actions { display: flex; gap: 2rem; align-items: center; }
+.btn-ai-generate { flex: 1; background: #9333ea; color: white; padding: 1.25rem; border-radius: 18px; font-weight: 900; border: none; cursor: pointer; }
 .manual-box { background: #eff6ff; padding: 2rem; border-radius: 30px; border: 1px solid #dbeafe; }
 .q-input { width: 100%; padding: 1.2rem; border-radius: 18px; border: none; margin-bottom: 1.5rem; font-weight: 900; outline: none; }
 .opts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem; }
 .opt-row { display: flex; gap: 0.5rem; align-items: center; background: white; padding: 0.8rem; border-radius: 14px; border: 2px solid transparent; cursor: pointer; }
 .opt-row.correct { border-color: #22c55e; background: #f0fdf4; }
-.opt-row input { flex: 1; border: none; outline: none; background: transparent; font-weight: 700; }
+.opt-row input { flex: 1; border: none; outline: none; font-weight: 700; background: transparent; }
 .btn-add-q { width: 100%; padding: 1.2rem; background: #2563eb; color: white; border-radius: 18px; font-weight: 900; border: none; cursor: pointer; }
-
 .preview-section { margin-top: 2rem; }
 .preview-scroll { display: flex; flex-direction: column; gap: 0.8rem; max-height: 250px; overflow-y: auto; }
 .q-item { background: #f8fafc; padding: 1rem; border-radius: 20px; border: 2px solid #f1f5f9; cursor: pointer; }
 .game-preview-options { display: flex; gap: 0.5rem; margin-top: 0.5rem; margin-left: 2rem; }
 .game-preview-options span { font-size: 0.7rem; padding: 4px 8px; background: #fff; border-radius: 6px; color: #94a3b8; border: 1px solid #e2e8f0; }
 .game-preview-options span.is-good { background: #dcfce7; color: #166534; border-color: #86efac; font-weight: 800; }
-
 .modal-footer { padding: 2rem; background: #f8fafc; border-top: 1px solid #f1f5f9; }
 .btn-save-db { width: 100%; padding: 1.5rem; background: #16a34a; color: white; border-radius: 30px; font-weight: 900; font-size: 1.3rem; border: none; border-bottom: 8px solid #15803d; cursor: pointer; text-transform: uppercase; }
