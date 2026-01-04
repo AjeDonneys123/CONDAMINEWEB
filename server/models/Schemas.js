@@ -20,16 +20,16 @@ mongoose.model('Submission', new mongoose.Schema({
     submittedAt: { type: Date, default: Date.now }
 }), 'submissions');
 
-// 4. BUGS (NOUVEAU)
+// 4. BUGS
 mongoose.model('Bug', new mongoose.Schema({
-    reporter: String,
-    classroom: String,
-    description: String,
-    status: { type: String, default: 'ouvert' },
-    date: { type: Date, default: Date.now }
+    reporter: String, classroom: String, description: String, status: { type: String, default: 'ouvert' }, date: { type: Date, default: Date.now }
 }), 'bugs');
 
-// 5. JEUX
+// 5. JEUX (AJOUT DU CHAMP CLASSROOM)
 mongoose.model('GameLevel', new mongoose.Schema({ 
-    chapterId: String, title: String, questions: Array, createdAt: { type: Date, default: Date.now } 
+    chapterId: String, 
+    title: String, 
+    classroom: { type: String, default: 'Toutes' }, // <--- NOUVEAU CHAMP
+    questions: Array, 
+    createdAt: { type: Date, default: Date.now } 
 }), 'game_levels');
