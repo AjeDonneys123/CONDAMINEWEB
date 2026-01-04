@@ -1,57 +1,101 @@
+/* Style Header Élève V3 - Plus moderne */
 .header-wrapper {
     display: flex;
     flex-direction: column;
     gap: 1.5rem;
+    margin-bottom: 2rem;
 }
+
 .top-bar {
     display: flex;
     justify-content: space-between;
     align-items: center;
     background: white;
-    padding: 1.5rem;
-    border-radius: 35px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    padding: 1rem 2rem;
+    border-radius: 25px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.03);
+    border: 1px solid #f1f5f9;
 }
-.brand-zone { display: flex; align-items: center; gap: 1rem; }
-.brand-name { color: #2563eb; font-weight: 900; font-size: 1.5rem; text-transform: uppercase; }
 
-.btn-back-prof {
-    background: #f59e0b;
-    color: white;
-    padding: 0.5rem 1rem;
-    border-radius: 0.75rem;
+.brand-name {
+    color: #2563eb;
     font-weight: 900;
-    font-size: 0.75rem;
-    animation: bounce 2s infinite;
-    box-shadow: 0 10px 15px rgba(245, 158, 11, 0.2);
+    font-size: 1.5rem;
+    text-transform: uppercase;
+    letter-spacing: -1px;
 }
 
-.user-zone { display: flex; align-items: center; gap: 1rem; }
-.user-badge { font-size: 0.75rem; font-weight: 700; color: #64748b; background: #f8fafc; padding: 0.25rem 0.75rem; border-radius: 9999px; }
-.logout-link { font-size: 0.75rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; }
+.user-zone {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.user-badge {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #475569;
+    background: #f8fafc;
+    padding: 0.5rem 1rem;
+    border-radius: 9999px;
+    border: 1px solid #e2e8f0;
+}
+
+.logout-link {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #94a3b8;
+    cursor: pointer;
+    background: none;
+    border: none;
+    transition: 0.2s;
+}
 .logout-link:hover { color: #ef4444; }
 
+/* Onglets de navigation */
 .nav-tabs {
     display: flex;
-    padding: 0.25rem;
-    background: #e2e8f0;
-    border-radius: 1rem;
+    padding: 0.4rem;
+    background: white;
+    border-radius: 20px;
     width: fit-content;
-    box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.03);
+    border: 1px solid #f1f5f9;
+    gap: 0.5rem;
 }
+
 .tab-item {
-    padding: 0.75rem 2rem;
-    border-radius: 0.75rem;
-    font-weight: 900;
-    font-size: 0.875rem;
+    padding: 0.8rem 2rem;
+    border-radius: 16px;
+    font-weight: 800;
+    font-size: 0.9rem;
     transition: all 0.2s;
+    color: #94a3b8;
+    background: transparent;
+    border: 2px solid transparent;
+    cursor: pointer;
+}
+
+.tab-item:hover {
+    background: #f8fafc;
     color: #64748b;
 }
-.tab-devoirs-active { background: white; color: #2563eb; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-.tab-francais-active { background: white; color: #db2777; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-.tab-jeux-active { background: white; color: #16a34a; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
 
-@keyframes bounce {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-5px); }
+/* États actifs colorés */
+.tab-devoirs-active {
+    background: #eff6ff !important;
+    color: #2563eb !important;
+    border-color: #dbeafe !important;
+}
+
+.tab-francais-active {
+    background: #fdf2f8 !important;
+    color: #db2777 !important;
+    border-color: #fce7f3 !important;
+}
+
+.tab-jeux-active {
+    background: #f0fdf4 !important;
+    color: #16a34a !important;
+    border-color: #dcfce7 !important;
 }

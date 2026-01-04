@@ -3,32 +3,33 @@
     position: relative;
 }
 
-/* Bouton Flottant Global */
+/* --- CORRECTION POSITION BOUTON BUG --- */
+/* On le met en BAS à droite pour ne pas gêner le menu */
 .global-bug-trigger {
     position: fixed;
-    top: 20px;
-    right: 20px;
+    bottom: 30px; /* En bas */
+    right: 30px;  /* À droite */
     z-index: 9999;
-    width: 50px;
-    height: 50px;
+    width: 60px;
+    height: 60px;
     background: white;
-    border: 3px solid #7c3aed;
-    border-radius: 15px;
-    font-size: 24px;
+    border: 4px solid #7c3aed;
+    border-radius: 50%; /* Tout rond */
+    font-size: 30px;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    box-shadow: 0 10px 15px -3px rgba(124, 58, 237, 0.3);
-    transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    box-shadow: 0 10px 25px rgba(124, 58, 237, 0.4);
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
 .global-bug-trigger:hover {
-    transform: scale(1.1) rotate(10deg);
+    transform: scale(1.15) rotate(15deg);
     background: #f5f3ff;
 }
 
-/* Modale de Bug */
+/* Modale de Bug (Reste inchangée mais centrée) */
 .bug-modal-overlay {
     position: fixed;
     inset: 0;
@@ -49,65 +50,15 @@
     padding: 2.5rem;
     box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
     border: 6px solid #7c3aed;
+    animation: modalPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-.bug-modal-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 0.5rem;
-}
+@keyframes modalPop { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
-.bug-modal-header h2 {
-    font-weight: 900;
-    color: #7c3aed;
-    font-size: 1.4rem;
-    margin: 0;
-}
-
-.bug-icon { font-size: 2rem; }
-
-.bug-modal-desc {
-    color: #94a3b8;
-    font-size: 0.85rem;
-    font-weight: 600;
-    margin-bottom: 1.5rem;
-}
-
-.bug-textarea {
-    width: 100%;
-    height: 150px;
-    background: #f8fafc;
-    border-radius: 25px;
-    padding: 1.5rem;
-    border: none;
-    outline: none;
-    font-family: inherit;
-    font-weight: 600;
-    box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
-    resize: none;
-}
-
-.bug-modal-actions {
-    display: flex;
-    gap: 1rem;
-    margin-top: 1.5rem;
-}
-
-.btn-bug-cancel {
-    flex: 1;
-    font-weight: 800;
-    color: #94a3b8;
-    text-transform: uppercase;
-    font-size: 0.75rem;
-}
-
-.btn-bug-send {
-    flex: 2;
-    background: #7c3aed;
-    color: white;
-    padding: 1rem;
-    border-radius: 20px;
-    font-weight: 900;
-    box-shadow: 0 10px 15px rgba(124, 58, 237, 0.3);
-}
+.bug-modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
+.bug-modal-header h2 { font-weight: 900; color: #7c3aed; font-size: 1.4rem; margin: 0; }
+.bug-modal-desc { color: #94a3b8; font-size: 0.85rem; font-weight: 600; margin-bottom: 1.5rem; }
+.bug-textarea { width: 100%; height: 150px; background: #f8fafc; border-radius: 25px; padding: 1.5rem; border: none; outline: none; font-family: inherit; font-weight: 600; box-shadow: inset 0 2px 4px rgba(0,0,0,0.05); resize: none; margin-bottom: 1.5rem; }
+.bug-modal-actions { display: flex; gap: 1rem; }
+.btn-bug-cancel { flex: 1; font-weight: 800; color: #94a3b8; text-transform: uppercase; font-size: 0.75rem; background: none; border: none; cursor: pointer; }
+.btn-bug-send { flex: 2; background: #7c3aed; color: white; padding: 1rem; border-radius: 20px; font-weight: 900; box-shadow: 0 10px 15px rgba(124, 58, 237, 0.3); border: none; cursor: pointer; }

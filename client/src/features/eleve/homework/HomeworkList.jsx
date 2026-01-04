@@ -17,28 +17,15 @@ export default function HomeworkList({ user }) {
     if (!selectedHw) load();
   }, [user.classroom, selectedHw]);
 
-  // MODE TRAVAIL (Quand un devoir est ouvert)
   if (selectedHw) {
     return (
       <div className="animate-in fade-in zoom-in duration-300">
-        <button 
-            onClick={() => setSelectedHw(null)} 
-            className="mb-4 bg-white px-6 py-2 rounded-xl font-bold shadow-sm border text-slate-500 hover:text-red-500 transition-all"
-        >
-            ← RETOUR LISTE
-        </button>
-        
-        {/* C'EST ICI LA CORRECTION : on passe la fonction onQuit */}
-        <HomeworkWorkspace 
-            homework={selectedHw} 
-            user={user} 
-            onQuit={() => setSelectedHw(null)} 
-        />
+        <button onClick={() => setSelectedHw(null)} className="mb-4 bg-white px-6 py-2 rounded-xl font-bold shadow-sm border text-slate-500 hover:text-red-500 transition-all">← RETOUR</button>
+        <HomeworkWorkspace homework={selectedHw} user={user} onQuit={() => setSelectedHw(null)} />
       </div>
     );
   }
 
-  // MODE LISTE (Affichage des devoirs)
   return (
     <div className="grid gap-4">
       {loading ? (
@@ -54,7 +41,12 @@ export default function HomeworkList({ user }) {
           </div>
         ))
       ) : (
-        <div className="p-20 text-center bg-white rounded-[40px] border-4 border-dashed border-slate-100 font-bold text-slate-300 text-xl text-center">Aucun devoir en cours ! 🎉</div>
+        /* CORRECTION VISUELLE : CONTENEUR CENTRÉ POUR LE MESSAGE */
+        <div className="p-12 text-center bg-white rounded-[30px] border-4 border-dashed border-slate-200">
+            <span className="text-4xl mb-4 block">🎉</span>
+            <p className="font-bold text-slate-400 text-lg">Aucun devoir en cours !</p>
+            <p className="text-xs text-slate-300 mt-2 font-medium">Profite de ta pause.</p>
+        </div>
       )}
     </div>
   );
