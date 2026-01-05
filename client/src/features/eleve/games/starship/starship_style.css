@@ -1,6 +1,4 @@
-/* --- STYLE STARSHIP V5 (INPUT FIX) --- */
-
-/* ... (Le début du fichier reste inchangé, on cible la correction) ... */
+/* --- STYLE STARSHIP V6 (FIX INPUT & HITBOX) --- */
 
 #starship-root {
     width: 100%; height: 100%; background-color: #020617; position: relative; overflow: hidden; font-family: 'Segoe UI', sans-serif; border-radius: 20px; user-select: none; display: flex; flex-direction: column; color: white;
@@ -21,7 +19,7 @@
 .s-missile { position: absolute; width: 6px; height: 20px; background: #facc15; border-radius: 3px; box-shadow: 0 0 10px #facc15; z-index: 11; }
 .s-boss { position: absolute; top: -100px; left: 50%; transform: translateX(-50%); font-size: 6rem; z-index: 14; filter: drop-shadow(0 0 20px rgba(255,0,0,0.5)); }
 
-/* INPUT ZONE FIX (CONTRASTE FORCE) */
+/* INPUT ZONE FIX (SÉLECTEUR #ID AU LIEU DE .CLASSE) */
 .s-input-layer {
     position: absolute;
     bottom: 30px;
@@ -33,7 +31,7 @@
     gap: 10px;
 }
 
-.s-input {
+#s-input {
     padding: 15px;
     font-size: 1.3rem;
     border: 4px solid #3b82f6;
@@ -41,13 +39,19 @@
     width: 350px;
     text-align: center;
     
-    /* LE FIX EST ICI : FOND BLANC / TEXTE NOIR */
+    /* FIX : FOND BLANC PUR / TEXTE NOIR PROFOND */
     background-color: #ffffff !important; 
     color: #000000 !important;
     
     font-weight: 900;
     outline: none;
     box-shadow: 0 0 30px rgba(59, 130, 246, 0.5);
+}
+
+/* On ajoute un style au placeholder pour qu'il soit gris et lisible */
+#s-input::placeholder {
+    color: #94a3b8;
+    opacity: 1;
 }
 
 .s-btn-check { padding: 15px 30px; background: #3b82f6; color: white; font-weight: 900; border: none; border-radius: 12px; cursor: pointer; font-size: 1.1rem; }

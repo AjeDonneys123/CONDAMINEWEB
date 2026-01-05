@@ -20,7 +20,7 @@ export default function HomeworkList({ user }) {
   if (selectedHw) {
     return (
       <div className="animate-in fade-in zoom-in duration-300">
-        <button onClick={() => setSelectedHw(null)} className="mb-4 bg-white px-6 py-2 rounded-xl font-bold shadow-sm border text-slate-500 hover:text-red-500 transition-all">← RETOUR</button>
+        <button onClick={() => setSelectedHw(null)} className="mb-4 bg-white px-6 py-2 rounded-xl font-bold shadow-sm border text-pink-500 border-pink-100 hover:bg-pink-50 transition-all">← RETOUR</button>
         <HomeworkWorkspace homework={selectedHw} user={user} onQuit={() => setSelectedHw(null)} />
       </div>
     );
@@ -29,23 +29,22 @@ export default function HomeworkList({ user }) {
   return (
     <div className="grid gap-4">
       {loading ? (
-        <p className="text-center py-20 font-bold text-slate-300 animate-pulse text-xl uppercase">Chargement des devoirs...</p>
+        <p className="text-center py-20 font-bold text-pink-300 animate-pulse text-xl uppercase">Chargement des devoirs...</p>
       ) : homeworks.length > 0 ? (
         homeworks.map(hw => (
-          <div key={hw._id} onClick={() => setSelectedHw(hw)} className="bg-white p-6 rounded-[32px] border border-slate-100 flex justify-between items-center group hover:border-blue-400 hover:shadow-xl transition-all cursor-pointer">
+          <div key={hw._id} onClick={() => setSelectedHw(hw)} className="bg-white p-6 rounded-[32px] border-2 border-transparent flex justify-between items-center group hover:border-pink-400 hover:shadow-xl transition-all cursor-pointer shadow-sm">
             <div>
               <h3 className="text-xl font-black text-slate-800">{hw.title}</h3>
-              <p className="text-slate-400 font-bold text-xs uppercase">{new Date(hw.date).toLocaleDateString()}</p>
+              <p className="text-pink-400 font-bold text-xs uppercase">{new Date(hw.date).toLocaleDateString()}</p>
             </div>
-            <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-all font-black">➔</div>
+            <div className="w-12 h-12 bg-pink-50 text-pink-400 rounded-2xl flex items-center justify-center group-hover:bg-pink-600 group-hover:text-white transition-all font-black">➔</div>
           </div>
         ))
       ) : (
-        /* CORRECTION VISUELLE : CONTENEUR CENTRÉ POUR LE MESSAGE */
-        <div className="p-12 text-center bg-white rounded-[30px] border-4 border-dashed border-slate-200">
-            <span className="text-4xl mb-4 block">🎉</span>
-            <p className="font-bold text-slate-400 text-lg">Aucun devoir en cours !</p>
-            <p className="text-xs text-slate-300 mt-2 font-medium">Profite de ta pause.</p>
+        <div className="p-12 text-center bg-white rounded-[30px] border-4 border-dashed border-pink-100">
+            <span className="text-4xl mb-4 block">🌸</span>
+            <p className="font-bold text-pink-400 text-lg">Aucun devoir en cours !</p>
+            <p className="text-xs text-pink-300 mt-2 font-medium">C'est le moment de se détendre.</p>
         </div>
       )}
     </div>

@@ -1,4 +1,4 @@
-/* Style Header Élève V3 - Plus moderne */
+/* Style Header Élève V4 - PINK EDITION */
 .header-wrapper {
     display: flex;
     flex-direction: column;
@@ -13,16 +13,34 @@
     background: white;
     padding: 1rem 2rem;
     border-radius: 25px;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.03);
-    border: 1px solid #f1f5f9;
+    box-shadow: 0 4px 15px rgba(219, 39, 119, 0.05);
+    border: 2px solid #fce7f3;
 }
 
 .brand-name {
-    color: #2563eb;
+    color: #db2777; /* Rose Magenta */
     font-weight: 900;
     font-size: 1.5rem;
     text-transform: uppercase;
     letter-spacing: -1px;
+}
+
+.btn-back-prof {
+    margin-left: 15px;
+    background: #fdf2f8;
+    color: #db2777;
+    border: 1px solid #fbcfe8;
+    padding: 5px 12px;
+    border-radius: 12px;
+    font-weight: 800;
+    font-size: 0.7rem;
+    cursor: pointer;
+    transition: 0.2s;
+}
+
+.btn-back-prof:hover {
+    background: #db2777;
+    color: white;
 }
 
 .user-zone {
@@ -34,23 +52,23 @@
 .user-badge {
     font-size: 0.8rem;
     font-weight: 700;
-    color: #475569;
-    background: #f8fafc;
+    color: #9d174d;
+    background: #fce7f3;
     padding: 0.5rem 1rem;
     border-radius: 9999px;
-    border: 1px solid #e2e8f0;
+    border: 1px solid #fbcfe8;
 }
 
 .logout-link {
-    font-size: 0.8rem;
+    font-size: 1.2rem;
     font-weight: 700;
-    color: #94a3b8;
+    color: #f472b6;
     cursor: pointer;
     background: none;
     border: none;
     transition: 0.2s;
 }
-.logout-link:hover { color: #ef4444; }
+.logout-link:hover { color: #be185d; transform: scale(1.2); }
 
 /* Onglets de navigation */
 .nav-tabs {
@@ -59,8 +77,8 @@
     background: white;
     border-radius: 20px;
     width: fit-content;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.03);
-    border: 1px solid #f1f5f9;
+    box-shadow: 0 4px 15px rgba(219, 39, 119, 0.05);
+    border: 2px solid #fce7f3;
     gap: 0.5rem;
 }
 
@@ -70,32 +88,20 @@
     font-weight: 800;
     font-size: 0.9rem;
     transition: all 0.2s;
-    color: #94a3b8;
+    color: #f472b6;
     background: transparent;
     border: 2px solid transparent;
     cursor: pointer;
 }
 
 .tab-item:hover {
-    background: #f8fafc;
-    color: #64748b;
+    background: #fdf2f8;
+    color: #db2777;
 }
 
-/* États actifs colorés */
-.tab-devoirs-active {
-    background: #eff6ff !important;
-    color: #2563eb !important;
-    border-color: #dbeafe !important;
-}
-
-.tab-francais-active {
-    background: #fdf2f8 !important;
-    color: #db2777 !important;
-    border-color: #fce7f3 !important;
-}
-
-.tab-jeux-active {
-    background: #f0fdf4 !important;
-    color: #16a34a !important;
-    border-color: #dcfce7 !important;
+/* État actif forcé sur le Rose pour le thème */
+.tab-devoirs-active, .tab-francais-active, .tab-jeux-active {
+    background: #db2777 !important;
+    color: white !important;
+    box-shadow: 0 4px 12px rgba(219, 39, 119, 0.3);
 }
