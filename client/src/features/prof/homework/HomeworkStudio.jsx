@@ -6,9 +6,12 @@ export default function HomeworkStudio() {
   const [hws, setHws] = useState([]);
   const [isEditing, setIsEditing] = useState(false);
   const [viewingResults, setViewingResults] = useState(null);
-  const [formData, setFormData] = useState({ _id: null, title: '', classroom: 'Toutes', levels: [] });
   
-  // États Smart Wizard
+  // Données
+  const [formData, setFormData] = useState({ _id: null, title: '', classroom: 'Toutes', levels: [] });
+  const [uploading, setUploading] = useState(false);
+
+  // États Wizard IA
   const [showSmartWizard, setShowSmartWizard] = useState(false);
   const [qFile, setQFile] = useState(null);
   const [docFiles, setDocFiles] = useState([]);
@@ -20,10 +23,10 @@ export default function HomeworkStudio() {
   };
   useEffect(() => { load(); }, []);
 
+  // --- LOGIQUE WIZARD (Génération Auto) ---
   const handleSmartGenerate = async () => {
       if(!qFile) return alert("Il faut l'image des questions !");
       setSmartLoading(true);
-
       const fd = new FormData();
       fd.append('questionImg', qFile);
       for (let i = 0; i < docFiles.length; i++) fd.append('docImgs', docFiles[i]);
@@ -31,9 +34,10 @@ export default function HomeworkStudio() {
       try {
           const res = await fetch('/api/smart-generate', { method: 'POST', body: fd });
           const data = await res.json();
-          
           if (data.levels) {
-              setFormData({ ...formData, title: "Nouveau Devoir (IA)", levels: data.levels });
+              // On ajoute le champ aiCorrectionHint vide par défaut sur les niveaux générés
+              const enhancedLevels = data.levels.map(l => ({ ...l, aiCorrectionHint: '' }));
+              setFormData({ ...formData, title: "Nouveau Devoir (IA)", levels: enhancedLevels });
               setShowSmartWizard(false);
               setIsEditing(true);
           } else { alert("Erreur génération."); }
@@ -41,10 +45,9 @@ export default function HomeworkStudio() {
       setSmartLoading(false);
   };
 
+  // --- LOGIQUE MANUELLE ---
   const handleUpload = async (files, idx, type) => {
-    // ... (Logique upload conservée, simplifiée ici pour la lecture)
-    // Pour gagner de la place, je garde la logique existante implicitement
-    // Si tu as besoin du code complet d'upload ici, dis-le moi, mais le focus est sur le SELECT.
+    setUploading(true);
     const newLevels = [...formData.levels];
     for (let file of Array.from(files)) {
       const fd = new FormData();
@@ -56,10 +59,33 @@ export default function HomeworkStudio() {
             newLevels[idx].attachmentUrls.push(res.imageUrl);
         } else {
             newLevels[idx].questionImage = res.imageUrl;
+            newLevels[idx].instruction = ""; 
         }
       }
     }
     setFormData({ ...formData, levels: newLevels });
+    setUploading(false);
+  };
+
+  const handleOCR = async (idx) => {
+      const level = formData.levels[idx];
+      if(!level.questionImage) return alert("Pas d'image !");
+      setUploading(true);
+      try {
+          const res = await fetch('/api/extract-text', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({ imageUrl: level.questionImage })
+          }).then(r => r.json());
+          
+          if(res.text) {
+              const newLevels = [...formData.levels];
+              newLevels[idx].instruction = res.text;
+              newLevels[idx].questionImage = null;
+              setFormData({ ...formData, levels: newLevels });
+          }
+      } catch(e) { alert("Erreur OCR"); }
+      setUploading(false);
   };
 
   const save = async () => {
@@ -72,30 +98,39 @@ export default function HomeworkStudio() {
     if (res.ok) { setIsEditing(false); load(); }
   };
 
+  if (viewingResults) return <HomeworkResults homework={viewingResults} onBack={() => setViewingResults(null)} />;
+
   if (showSmartWizard) return (
-      // ... (Code Wizard inchangé, je le raccourcis pour le focus)
       <div className="fixed inset-0 bg-slate-900/90 z-50 flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-lg p-8 rounded-3xl text-center">
-              <h2 className="text-2xl font-black mb-4">Mode Rapide IA</h2>
-              <input type="file" onChange={e => setQFile(e.target.files[0])} className="mb-4 block w-full" />
-              <input type="file" multiple onChange={e => setDocFiles(Array.from(e.target.files))} className="mb-4 block w-full" />
-              <div className="flex gap-2">
-                  <button onClick={() => setShowSmartWizard(false)} className="flex-1 py-3 bg-gray-200 rounded-xl font-bold">Annuler</button>
-                  <button onClick={handleSmartGenerate} disabled={smartLoading} className="flex-1 py-3 bg-purple-600 text-white rounded-xl font-bold">{smartLoading ? "..." : "Générer"}</button>
+          <div className="bg-white w-full max-w-2xl p-8 rounded-[40px] shadow-2xl border-4 border-purple-500 animate-in zoom-in">
+              <h2 className="text-3xl font-black text-purple-600 mb-6 text-center uppercase">✨ Générateur Magique</h2>
+              <div className="space-y-6 mb-8">
+                  <div className="p-6 bg-purple-50 rounded-2xl border-2 border-dashed border-purple-200 text-center relative hover:bg-white transition-colors">
+                      <p className="font-bold text-purple-800 text-lg">1. Photo des Questions</p>
+                      <input type="file" onChange={e => setQFile(e.target.files[0])} className="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" />
+                  </div>
+                  <div className="p-6 bg-orange-50 rounded-2xl border-2 border-dashed border-orange-200 text-center relative hover:bg-white transition-colors">
+                      <p className="font-bold text-orange-800 text-lg">2. Photos des Documents</p>
+                      <input type="file" multiple onChange={e => setDocFiles(Array.from(e.target.files))} className="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" />
+                  </div>
+              </div>
+              <div className="flex gap-4">
+                  <button onClick={() => setShowSmartWizard(false)} className="flex-1 py-4 font-bold text-slate-400 bg-slate-100 rounded-xl">ANNULER</button>
+                  <button onClick={handleSmartGenerate} disabled={smartLoading} className="flex-[2] py-4 bg-purple-600 text-white rounded-xl font-black shadow-lg">
+                      {smartLoading ? "Analyse..." : "GÉNÉRER 🚀"}
+                  </button>
               </div>
           </div>
       </div>
   );
-
-  if (viewingResults) return <HomeworkResults homework={viewingResults} onBack={() => setViewingResults(null)} />;
 
   return (
     <div className="studio-container">
       {!isEditing ? (
         <>
           <div className="flex gap-4 mb-8">
-              <button onClick={() => { setFormData({ _id: null, title: '', classroom: 'Toutes', levels: [] }); setIsEditing(true); }} className="btn-create-hw-big" style={{background:'#f97316'}}>✍️ MANUEL</button>
-              <button onClick={() => setShowSmartWizard(true)} className="btn-create-hw-big" style={{background:'#9333ea', borderBottomColor:'#7e22ce'}}>✨ IA AUTO</button>
+              <button onClick={() => { setFormData({ _id: null, title: '', classroom: 'Toutes', levels: [] }); setIsEditing(true); }} className="flex-1 py-8 bg-orange-500 text-white rounded-[30px] font-black text-2xl shadow-xl border-b-8 border-orange-700">✍️ MANUEL</button>
+              <button onClick={() => setShowSmartWizard(true)} className="flex-1 py-8 bg-purple-600 text-white rounded-[30px] font-black text-2xl shadow-xl border-b-8 border-purple-800">✨ IA AUTO</button>
           </div>
           <div className="hw-admin-list">
             {hws.map(h => (
@@ -112,48 +147,69 @@ export default function HomeworkStudio() {
         </>
       ) : (
         <div className="hw-edit-overlay">
-          <div className="hw-edit-modal shadow-2xl animate-in zoom-in duration-200">
+          <div className="hw-edit-modal animate-in zoom-in">
             <div className="hw-edit-header">
-              <h3>{formData._id ? 'MODIFIER' : 'NOUVEAU DEVOIR'}</h3>
+              <h3>{formData._id ? 'MODIFIER' : 'CRÉER'}</h3>
               <button onClick={() => setIsEditing(false)} className="hw-close-x">✕</button>
             </div>
-            <div className="hw-edit-body scroll-custom">
+            <div className="hw-edit-body custom-scrollbar">
                 <div className="hw-config-grid">
                     <input className="hw-input-title" placeholder="Titre..." value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
-                    
-                    {/* C'EST ICI QUE C'ÉTAIT INCOMPLET */}
                     <select className="hw-select-class" value={formData.classroom} onChange={e => setFormData({...formData, classroom: e.target.value})}>
-                        <option value="Toutes">Toutes les classes</option>
-                        <option value="6D">6eD</option>
-                        <option value="5B">5eB</option>
-                        <option value="5C">5eC</option>
-                        <option value="2A">2nde A</option>
-                        <option value="2CD">2nde CD</option>
+                        <option value="Toutes">Toutes</option><option value="6D">6eD</option><option value="5B">5eB</option><option value="5C">5eC</option><option value="2A">2A</option><option value="2CD">2CD</option>
                     </select>
-
                 </div>
                 
                 <div className="hw-pages-container">
                     {formData.levels.map((lvl, idx) => (
                         <div key={idx} className="hw-page-card">
-                            <div className="hw-page-header"><span>PAGE {idx+1}</span><button className="hw-del-page" onClick={()=>{const n=[...formData.levels]; n.splice(idx,1); setFormData({...formData, levels:n});}}>✕</button></div>
-                            <div className="hw-upload-section">
-                                <p className="hw-label">DOCUMENTS (HAUT)</p>
-                                <div className="hw-docs-preview">
-                                    {lvl.attachmentUrls && lvl.attachmentUrls.map((u, i) => <img key={i} src={u} className="hw-mini-img" />)}
-                                    <label className="hw-add-mini">+<input type="file" multiple className="hidden" onChange={e => handleUpload(e.target.files, idx, 'doc')} /></label>
-                                </div>
+                            <div className="hw-page-header">
+                                <span>PAGE {idx+1}</span>
+                                <button className="hw-del-page" onClick={()=>{const n=[...formData.levels]; n.splice(idx,1); setFormData({...formData, levels:n});}}>Supprimer</button>
                             </div>
+                            
+                            <p className="hw-label">DOCUMENTS</p>
+                            <div className="hw-docs-preview">
+                                {lvl.attachmentUrls && lvl.attachmentUrls.map((u, i) => <img key={i} src={u} className="hw-mini-img" />)}
+                                <label className="hw-add-mini">+<input type="file" multiple className="hidden" onChange={e => handleUpload(e.target.files, idx, 'doc')} /></label>
+                            </div>
+                            
                             <div className="hw-question-section">
-                                <textarea className="hw-q-text" placeholder="Consigne..." value={lvl.instruction} onChange={e => {const n=[...formData.levels]; n[idx].instruction=e.target.value; setFormData({...formData, levels:n});}} />
+                                <div className="hw-left-col">
+                                    <p className="hw-label">IMAGE QUESTION</p>
+                                    <div className="hw-q-img-upload">
+                                        {lvl.questionImage ? <img src={lvl.questionImage} /> : <span>📷 Ajouter</span>}
+                                        <input type="file" className="hw-hidden-file" onChange={e => handleUpload(e.target.files, idx, 'qimg')} />
+                                    </div>
+                                    {lvl.questionImage && <button onClick={() => handleOCR(idx)} className="btn-ocr-trigger">⚡ EXTRAIRE</button>}
+                                </div>
+                                <div className="hw-right-col">
+                                    <p className="hw-label">CONSIGNE ÉLÈVE (TEXTE)</p>
+                                    <textarea className="hw-q-text" placeholder="Écris la consigne..." value={lvl.instruction} onChange={e => {const n=[...formData.levels]; n[idx].instruction=e.target.value; setFormData({...formData, levels:n});}} />
+                                    
+                                    {/* NOUVEAU : CHAMP DE CORRECTION IA */}
+                                    <div className="hw-ai-hint-box">
+                                        <p className="hw-label-ai">🤖 INSTRUCTIONS POUR L'IA (SECRET)</p>
+                                        <textarea 
+                                            className="hw-ai-hint-text" 
+                                            placeholder="Ex: Sois sévère sur la conjugaison. Accepte les réponses courtes..." 
+                                            value={lvl.aiCorrectionHint || ''} 
+                                            onChange={e => {
+                                                const n=[...formData.levels]; 
+                                                n[idx].aiCorrectionHint=e.target.value; 
+                                                setFormData({...formData, levels:n});
+                                            }} 
+                                        />
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     ))}
                 </div>
-                <button onClick={() => setFormData({...formData, levels: [...formData.levels, {instruction:'', attachmentUrls:[], questionImage:null}]})} className="hw-add-page-btn">+ PAGE</button>
+                <button onClick={() => setFormData({...formData, levels: [...formData.levels, {instruction:'', attachmentUrls:[], questionImage:null, aiCorrectionHint:''}]})} className="hw-add-page-btn">+ AJOUTER UNE PAGE</button>
             </div>
             <div className="hw-edit-footer">
-                <button onClick={save} className="hw-btn-save-final">💾 SAUVEGARDER</button>
+                <button onClick={save} disabled={uploading} className="hw-btn-save-final">{uploading ? "..." : "💾 SAUVEGARDER"}</button>
             </div>
           </div>
         </div>

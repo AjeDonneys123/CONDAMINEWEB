@@ -1,4 +1,4 @@
-/* --- CSS CORRIGÉ POUR LA MODALE DE RÉSULTATS --- */
+/* --- CSS DE SÉCURITÉ POUR LA LISIBILITÉ --- */
 
 .homework-container {
     perspective: 1200px;
@@ -12,25 +12,12 @@
     flex-direction: column;
 }
 
-/* ... (Les styles de la liseuse et du bas restent identiques, on ne touche qu'à la modale en bas) ... */
-.viewer-top-area { flex: 75; position: relative; background: #020617; overflow: hidden; cursor: grab; width: 100%; }
-.main-doc-img { position: absolute; top: 50%; left: 50%; transform-origin: center center; box-shadow: 0 0 30px rgba(0,0,0,0.8); pointer-events: auto; user-select: none; max-width: none; }
-.interaction-bottom-area { flex: 25; background: white; display: flex; border-top: 2px solid #f97316; overflow: hidden; }
-.question-panel { width: 30%; padding: 0.3rem; background: #f8fafc; border-right: 1px solid #e2e8f0; display: flex; flex-direction: column; }
-.answer-panel { width: 70%; padding: 0.3rem; display: flex; flex-direction: column; gap: 0.2rem; }
-.answer-input { flex: 1; width: 100%; padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.85rem; resize: none; outline: none; }
-.btn-send-ai { padding: 4px 10px; background: #2563eb; color: white; font-weight: 800; border-radius: 4px; border: none; cursor: pointer; font-size: 0.6rem; text-transform: uppercase; align-self: flex-end; }
-.q-text-scroll-area { flex: 1; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 0.4rem; overflow-y: auto; font-size: 0.75rem; font-weight: 600; }
-.q-visual-frame { flex: 1; background: #000; border-radius: 8px; position: relative; overflow: hidden; border: 1px solid #cbd5e1; cursor: grab; }
-.floating-question-badge { position: absolute; top: 5px; left: 5px; background: #f97316; color: white; padding: 2px 6px; border-radius: 4px; font-weight: 800; font-size: 0.55rem; z-index: 50; pointer-events: none; }
-
-/* --- MODALE IA (CORRECTION VISIBILITÉ) --- */
-
+/* MODALE RÉSULTATS (STYLE FORCÉ) */
 .ai-modal-overlay {
     position: fixed;
     inset: 0;
     z-index: 9999;
-    background: rgba(15, 23, 42, 0.85); /* Fond sombre derrière la modale */
+    background: rgba(15, 23, 42, 0.9);
     backdrop-filter: blur(5px);
     display: flex;
     align-items: center;
@@ -39,85 +26,56 @@
 }
 
 .ai-modal-box {
-    background-color: #ffffff !important; /* FORCE LE FOND BLANC */
+    background-color: #ffffff !important; /* BLANC */
     width: 100%;
     max-width: 800px;
-    max-height: 85vh;
+    max-height: 90vh;
     border-radius: 30px;
     display: flex;
     flex-direction: column;
-    border: 4px solid #2563eb; /* Bordure bleue */
+    border: 4px solid #2563eb;
     padding: 2rem;
-    box-shadow: 0 25px 50px rgba(0,0,0,0.6);
-    color: #1e293b; /* Texte de base sombre */
+    box-shadow: 0 50px 100px -20px rgba(0,0,0,0.8);
+    color: #1e293b !important; /* TEXTE FONCÉ */
 }
 
-/* Zone du commentaire (Feedback) */
+.grade-display { text-align: center; margin-bottom: 1rem; }
+.grade-value { font-size: 3rem; font-weight: 900; color: #2563eb; }
+
+/* Zone de texte commentaire */
 .ai-feedback-content {
-    background-color: #f8fafc; /* Gris très clair pour le texte */
-    border: 1px solid #e2e8f0;
-    border-radius: 15px;
+    background: #f1f5f9; /* Gris très clair */
     padding: 1.5rem;
+    border-radius: 15px;
+    border: 1px solid #e2e8f0;
     font-size: 1rem;
     line-height: 1.6;
-    color: #334155; /* Gris foncé très lisible */
-    margin-bottom: 1.5rem;
-    box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
+    color: #0f172a !important; /* NOIR */
+    font-weight: 500;
 }
 
-/* Note */
-.grade-display {
-    text-align: center;
-    margin-bottom: 1rem;
-}
-.grade-value {
-    font-size: 3.5rem;
-    font-weight: 900;
-    color: #2563eb;
-    text-shadow: 2px 2px 0px #dbeafe;
-}
-
-/* Liste des corrections */
-.corrections-container {
-    background-color: #fff1f2; /* Fond rouge très pâle */
-    border: 1px solid #fecaca;
-    border-radius: 15px;
-    padding: 1rem;
-    margin-top: 1rem;
-}
-
-.correction-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.5rem 0;
-    border-bottom: 1px solid #ffe4e6;
-    font-size: 0.9rem;
-}
-.correction-row:last-child { border-bottom: none; }
-
-.wrong-word { color: #dc2626; text-decoration: line-through; font-weight: bold; margin-right: 8px; }
+.corrections-container { margin-top: 1rem; background: #fff1f2; border: 1px solid #fecaca; border-radius: 15px; padding: 1rem; }
+.correction-row { display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid #ffe4e6; color: #334155; }
+.wrong-word { color: #dc2626; text-decoration: line-through; margin-right: 10px; font-weight: bold; }
 .right-word { color: #16a34a; font-weight: 900; }
-.grammar-rule { font-style: italic; color: #64748b; font-size: 0.8rem; }
 
-/* Boutons de la modale */
-.ai-modal-actions {
-    display: flex;
-    gap: 1rem;
-    margin-top: 1.5rem;
-}
-.btn-action-modal {
-    flex: 1;
-    padding: 1rem;
-    border-radius: 12px;
-    font-weight: 800;
-    font-size: 1rem;
-    cursor: pointer;
-    text-transform: uppercase;
-    border: none;
-    transition: 0.2s;
-}
-.btn-improve { background: #f1f5f9; color: #64748b; border: 2px solid #e2e8f0; }
-.btn-improve:hover { background: #e2e8f0; color: #475569; }
-.btn-next { background: #2563eb; color: white; box-shadow: 0 4px 6px rgba(37, 99, 235, 0.2); }
-.btn-next:hover { background: #1d4ed8; transform: translateY(-2px); }
+.ai-modal-actions { display: flex; gap: 1rem; margin-top: 2rem; }
+.btn-action-modal { flex: 1; padding: 1rem; border-radius: 15px; font-weight: 900; font-size: 1rem; cursor: pointer; border: none; text-transform: uppercase; }
+.btn-improve { background: #e2e8f0; color: #64748b; }
+.btn-next { background: #2563eb; color: white; box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3); }
+
+/* --- RESTE DU STYLE (Liseuse, etc.) --- */
+.viewer-top-area { flex: 75; position: relative; background: #020617; overflow: hidden; cursor: grab; width: 100%; }
+.main-doc-img { position: absolute; top: 50%; left: 50%; transform-origin: center center; box-shadow: 0 0 30px rgba(0,0,0,0.8); pointer-events: auto; user-select: none; max-width: none; }
+.interaction-bottom-area { flex: 25; background: white; display: flex; border-top: 2px solid #f97316; overflow: hidden; }
+.question-panel { width: 30%; padding: 0.3rem; background: #f8fafc; border-right: 1px solid #e2e8f0; display: flex; flex-direction: column; }
+.answer-panel { width: 70%; padding: 0.3rem; display: flex; flex-direction: column; gap: 0.2rem; }
+.answer-input { flex: 1; width: 100%; padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.85rem; resize: none; outline: none; }
+.btn-send-ai { padding: 4px 10px; background: #2563eb; color: white; font-weight: 800; border-radius: 4px; border: none; cursor: pointer; font-size: 0.6rem; text-transform: uppercase; align-self: flex-end; }
+.q-text-scroll-area { flex: 1; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 0.4rem; overflow-y: auto; font-size: 0.75rem; font-weight: 600; white-space: pre-wrap; }
+.q-visual-frame { flex: 1; background: #000; border-radius: 8px; position: relative; overflow: hidden; border: 1px solid #cbd5e1; cursor: grab; }
+.floating-question-badge { position: absolute; top: 5px; left: 5px; background: #f97316; color: white; padding: 2px 6px; border-radius: 4px; font-weight: 800; font-size: 0.55rem; z-index: 50; pointer-events: none; }
+.zoom-controls-floating { position: absolute; bottom: 20px; right: 20px; display: flex; gap: 10px; z-index: 100; }
+.zoom-btn-glass { width: 40px; height: 40px; background: rgba(0, 0, 0, 0.6); border: 1px solid rgba(255, 255, 255, 0.3); color: white; border-radius: 10px; font-size: 1.2rem; cursor: pointer; }
+.nav-arrows-container { position: absolute; top: 50%; left: 0; right: 0; transform: translateY(-50%); display: flex; justify-content: space-between; padding: 0 20px; z-index: 50; pointer-events: none; }
+.nav-arrow-btn { pointer-events: auto; width: 50px; height: 50px; background: rgba(255, 255, 255, 0.2); backdrop-filter: blur(10px); border: 2px solid rgba(255, 255, 255, 0.5); border-radius: 50%; color: white; font-size: 1.5rem; font-weight: 900; cursor: pointer; display: flex; align-items: center; justify-content: center; }

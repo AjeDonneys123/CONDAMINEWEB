@@ -15,6 +15,10 @@
 │   │   │   │   │   ├── EleveHeader.css
 │   │   │   │   │   └── EleveHeader.jsx
 │   │   │   │   ├── games/
+│   │   │   │   │   ├── starship/
+│   │   │   │   │   │   ├── starship_core.js
+│   │   │   │   │   │   ├── starship_style.css
+│   │   │   │   │   │   └── StarshipWrapper.jsx
 │   │   │   │   │   ├── zombie/
 │   │   │   │   │   │   ├── zombie_core.js
 │   │   │   │   │   │   ├── zombie_style.css
@@ -93,6 +97,7 @@
 ├── apply.js
 ├── IAReadMe.md
 ├── init-db.js
+├── LOCKED_FILES.md
 ├── package.json
 ├── projectMap.txt
 ├── snap.js

@@ -1,0 +1,56 @@
+/* --- STYLE STARSHIP V5 (INPUT FIX) --- */
+
+/* ... (Le début du fichier reste inchangé, on cible la correction) ... */
+
+#starship-root {
+    width: 100%; height: 100%; background-color: #020617; position: relative; overflow: hidden; font-family: 'Segoe UI', sans-serif; border-radius: 20px; user-select: none; display: flex; flex-direction: column; color: white;
+}
+.s-top-hud { background: rgba(15, 23, 42, 0.9); padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #1e293b; height: 70px; z-index: 20; }
+.s-hearts { font-size: 1.5rem; letter-spacing: 5px; }
+.s-global-progress { flex: 1; margin: 0 30px; height: 12px; background: #1e293b; border-radius: 6px; overflow: hidden; border: 1px solid rgba(255,255,255,0.2); }
+.s-global-bar-fill { height: 100%; background: linear-gradient(90deg, #3b82f6, #60a5fa); width: 0%; transition: width 0.5s; }
+.s-questions-tracker { display: flex; gap: 8px; }
+.s-q-dot { width: 20px; height: 35px; background: #1e293b; border-radius: 4px; position: relative; overflow: hidden; border: 1px solid rgba(255,255,255,0.2); }
+.s-q-dot-fill { position: absolute; bottom: 0; left: 0; width: 100%; background: #22c55e; transition: height 0.3s; }
+.s-q-dot.active { border: 2px solid white; transform: scale(1.1); box-shadow: 0 0 10px #3b82f6; }
+.s-q-dot.done .s-q-dot-fill { background: #3b82f6; height: 100% !important; }
+.s-arena { flex: 1; position: relative; background-image: radial-gradient(white, rgba(255,255,255,.2) 2px, transparent 3px), radial-gradient(white, rgba(255,255,255,.15) 1px, transparent 2px); background-size: 550px 550px, 350px 350px; overflow: hidden; }
+.s-question-display { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(15, 23, 42, 0.9); padding: 15px 30px; border-radius: 15px; border: 2px solid #3b82f6; text-align: center; font-weight: 800; font-size: 1.1rem; width: 80%; z-index: 10; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+.s-ship { position: absolute; bottom: 20px; width: 60px; height: 60px; font-size: 3rem; display: flex; align-items: center; justify-content: center; z-index: 15; transition: transform 0.1s; }
+.s-target { position: absolute; padding: 8px 12px; background: rgba(255, 255, 255, 0.95); color: #0f172a; border-radius: 8px; font-weight: 700; font-size: 0.85rem; border: 2px solid #cbd5e1; white-space: nowrap; z-index: 12; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+.s-missile { position: absolute; width: 6px; height: 20px; background: #facc15; border-radius: 3px; box-shadow: 0 0 10px #facc15; z-index: 11; }
+.s-boss { position: absolute; top: -100px; left: 50%; transform: translateX(-50%); font-size: 6rem; z-index: 14; filter: drop-shadow(0 0 20px rgba(255,0,0,0.5)); }
+
+/* INPUT ZONE FIX (CONTRASTE FORCE) */
+.s-input-layer {
+    position: absolute;
+    bottom: 30px;
+    left: 0; right: 0;
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 30;
+    gap: 10px;
+}
+
+.s-input {
+    padding: 15px;
+    font-size: 1.3rem;
+    border: 4px solid #3b82f6;
+    border-radius: 15px;
+    width: 350px;
+    text-align: center;
+    
+    /* LE FIX EST ICI : FOND BLANC / TEXTE NOIR */
+    background-color: #ffffff !important; 
+    color: #000000 !important;
+    
+    font-weight: 900;
+    outline: none;
+    box-shadow: 0 0 30px rgba(59, 130, 246, 0.5);
+}
+
+.s-btn-check { padding: 15px 30px; background: #3b82f6; color: white; font-weight: 900; border: none; border-radius: 12px; cursor: pointer; font-size: 1.1rem; }
+.s-overlay { position: absolute; inset: 0; background: rgba(2,6,23,0.95); display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 100; text-align: center; }
+.s-overlay h2 { font-size: 4rem; margin: 0; color: #3b82f6; }
+.s-btn-restart { margin-top: 30px; padding: 15px 50px; background: #3b82f6; color: white; border: none; border-radius: 30px; font-weight: 900; font-size: 1.2rem; cursor: pointer; }

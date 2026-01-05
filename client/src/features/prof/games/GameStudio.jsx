@@ -1,4 +1,3 @@
-/* STUDIO JEUX - FIX AFFICHAGE 4 OPTIONS FIXES */
 import React, { useState, useEffect } from 'react';
 import './GameStudio.css';
 
@@ -8,10 +7,11 @@ export default function GameStudio() {
   const [genMode, setGenMode] = useState('manual');
   const [loadingIA, setLoadingIA] = useState(false);
 
-  const defaultForm = { _id: null, title: '', chapterId: 'ch1-zombie', classroom: 'Toutes', questions: [] };
+  // SUPPRESSION DU CHAPITRE DANS LE FORMULAIRE VISIBLE
+  // On garde chapterId en 'generic' en interne pour la BDD
+  const defaultForm = { _id: null, title: '', chapterId: 'generic', classroom: 'Toutes', questions: [] };
   const [formData, setFormData] = useState(defaultForm);
   
-  // On s'assure que currentQ a toujours 4 slots vides au départ
   const [currentQ, setCurrentQ] = useState({ q: '', options: ['', '', '', ''], a: 0 });
   const [editingIdx, setEditingIdx] = useState(null);
 
@@ -53,7 +53,6 @@ export default function GameStudio() {
   const addOrUpdateQuestion = () => {
     if (!currentQ.q) return;
     
-    // Sécurité : on force 4 options avant de sauvegarder
     const safeQ = { ...currentQ };
     while(safeQ.options.length < 4) safeQ.options.push("");
     safeQ.options = safeQ.options.slice(0, 4);
@@ -77,7 +76,6 @@ export default function GameStudio() {
     if (res.ok) { setIsEditing(false); load(); }
   };
 
-  // UI Helpers
   const handleEdit = (lvl) => { setFormData(lvl); setIsEditing(true); };
   const handleDelete = async (id) => { if(confirm("Supprimer ?")) { await fetch(`/api/game-levels/${id}`, {method:'DELETE'}); load(); }};
 
@@ -85,14 +83,14 @@ export default function GameStudio() {
     <div className="studio-container">
       {!isEditing ? (
         <>
-          <button onClick={() => { setFormData(defaultForm); setIsEditing(true); }} className="btn-create-game-v2">➕ CRÉER UN NIVEAU DE JEU</button>
+          <button onClick={() => { setFormData(defaultForm); setIsEditing(true); }} className="btn-create-game-v2">➕ CRÉER UN QUIZ</button>
           <div className="games-list-v2">
             {levels.map(lvl => (
               <div key={lvl._id} className="game-card-v2">
                 <div className="game-info">
                     <h4>{lvl.title}</h4>
-                    <span className="game-badge">{lvl.chapterId === 'ch1-zombie' ? '🧟 ZOMBIE' : '🚀 STARSHIP'}</span>
-                    <span className="class-badge" style={{marginLeft:'5px'}}>{lvl.classroom || 'Toutes'}</span>
+                    {/* On n'affiche plus le badge Zombie/Starship ici car ça n'a plus de sens */}
+                    <span className="class-badge" style={{marginLeft:'0'}}>{lvl.classroom || 'Toutes'}</span>
                     <span style={{fontSize:'0.7rem', color:'#cbd5e1', marginLeft:'10px'}}>({lvl.questions.length} Q)</span>
                 </div>
                 <div className="game-actions">
@@ -107,19 +105,19 @@ export default function GameStudio() {
         <div className="game-modal-overlay">
           <div className="game-modal animate-in zoom-in duration-200">
             <div className="game-modal-header">
-              <h3>{formData._id ? 'MODIFIER' : 'NOUVEAU'}</h3>
+              <h3>{formData._id ? 'MODIFIER' : 'NOUVEAU QUIZ'}</h3>
               <button onClick={() => setIsEditing(false)} className="btn-close">✕</button>
             </div>
 
             <div className="game-modal-body custom-scrollbar">
+                {/* GRILLE 2 COLONNES (Titre | Classe) - On a viré le selecteur de jeu */}
                 <div className="config-grid">
-                    <input className="input-title" placeholder="Titre..." value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
-                    <select className="select-chapter" value={formData.chapterId} onChange={e => setFormData({...formData, chapterId: e.target.value})}>
-                        <option value="ch1-zombie">🧟 Mode Zombie</option>
-                        <option value="ch2-starship">🚀 Mode Starship</option>
-                    </select>
+                    <input className="input-title" placeholder="Titre du Quiz..." value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
+                    
                     <select className="select-class" value={formData.classroom} onChange={e => setFormData({...formData, classroom: e.target.value})}>
-                        <option value="Toutes">Toutes les classes</option><option value="6D">6eD</option><option value="5B">5eB</option><option value="5C">5eC</option><option value="2A">2nde A</option><option value="2CD">2nde CD</option>
+                        <option value="Toutes">Toutes les classes</option>
+                        <option value="6D">6eD</option><option value="5B">5eB</option><option value="5C">5eC</option>
+                        <option value="2A">2nde A</option><option value="2CD">2nde CD</option>
                     </select>
                 </div>
 
@@ -146,7 +144,6 @@ export default function GameStudio() {
                         <input className="q-input" placeholder="Question..." value={currentQ.q} onChange={e => setCurrentQ({...currentQ, q: e.target.value})} />
                         
                         <div className="opts-grid">
-                            {/* --- ICI LE FIX FRONTEND : ON FORCE 4 ENTRÉES --- */}
                             {[0, 1, 2, 3].map((idx) => (
                                 <div key={idx} className={`opt-row ${currentQ.a === idx ? 'correct' : ''}`} onClick={() => setCurrentQ({...currentQ, a: idx})}>
                                     <input type="radio" checked={currentQ.a === idx} readOnly />
@@ -155,7 +152,6 @@ export default function GameStudio() {
                                         value={currentQ.options[idx] || ''} 
                                         onChange={e => { 
                                             const n = [...currentQ.options];
-                                            // On s'assure que le tableau est assez grand
                                             while(n.length < 4) n.push("");
                                             n[idx] = e.target.value; 
                                             setCurrentQ({...currentQ, options: n}); 
@@ -178,7 +174,6 @@ export default function GameStudio() {
                                     <button onClick={(e) => { e.stopPropagation(); const n = [...formData.questions]; n.splice(i, 1); setFormData({...formData, questions: n}); }} className="btn-del-q">✕</button>
                                 </div>
                                 <div className="game-preview-options">
-                                    {/* On affiche seulement les 4 premières */}
                                     {q.options.slice(0, 4).map((opt, oi) => <span key={oi} className={oi === q.a ? 'is-good' : ''}>{opt || "?"}</span>)}
                                 </div>
                             </div>

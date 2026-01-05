@@ -1,36 +1,94 @@
-import React, { useState } from 'react';
+/* HUB DE JEUX V2 - LISTE QUIZ PUIS CHOIX DU JEU */
+import React, { useState, useEffect } from 'react';
 import ZombieWrapper from './zombie/ZombieWrapper';
+import StarshipWrapper from './starship/StarshipWrapper';
+import { api } from '../../../services/api';
+import './GamesGrid.css';
+
+function normalizeClass(c) {
+    if(!c) return "";
+    return c.toString().toLowerCase().replace(/e/g, '').replace(/eme/g, '').trim();
+}
 
 export default function GamesGrid({ user }) {
-  const [activeGame, setActiveGame] = useState(null);
+  const [quizzes, setQuizzes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  
+  // États de navigation
+  const [selectedQuiz, setSelectedQuiz] = useState(null); // Le quiz choisi
+  const [activeGame, setActiveGame] = useState(null);     // Le mode de jeu ('zombie' ou 'starship')
 
-  if (activeGame === 'zombie') {
-      return <ZombieWrapper user={user} onClose={() => setActiveGame(null)} />;
+  // 1. Chargement des Quiz (ex-niveaux)
+  useEffect(() => {
+    api.get('/game-levels/all').then(data => {
+        if(data && data.length > 0) {
+            const userClass = normalizeClass(user.classroom);
+            // On affiche TOUS les niveaux dispos pour la classe (peu importe le "chapterId" d'origine)
+            const myQuizzes = data.filter(l => {
+                const levelClass = normalizeClass(l.classroom || 'Toutes');
+                return (levelClass === 'toutes' || levelClass === userClass);
+            });
+            setQuizzes(myQuizzes);
+        }
+        setLoading(false);
+    });
+  }, []);
+
+  // 2. Lancement du jeu
+  const launchGame = (mode) => {
+      setActiveGame(mode);
+  };
+
+  const closeGame = () => {
+      setActiveGame(null);
+      setSelectedQuiz(null); // Retour liste
+  };
+
+  // --- RENDU JEU ACTIF ---
+  if (activeGame === 'zombie' && selectedQuiz) return <ZombieWrapper user={user} level={selectedQuiz} onClose={closeGame} />;
+  if (activeGame === 'starship' && selectedQuiz) return <StarshipWrapper user={user} level={selectedQuiz} onClose={closeGame} />;
+
+  // --- RENDU SÉLECTEUR DE JEU (MODALE) ---
+  if (selectedQuiz) {
+      return (
+          <div className="game-selector-overlay animate-in fade-in">
+              <div className="selector-card">
+                  <h2 className="text-2xl font-black text-slate-700 text-center mb-6">CHOISIS TON JEU 🕹️</h2>
+                  <div className="selector-grid">
+                      <button onClick={() => launchGame('zombie')} className="game-choice-btn zombie-btn">
+                          <span className="text-5xl mb-2">🧟</span>
+                          <span>ZOMBIE</span>
+                      </button>
+                      <button onClick={() => launchGame('starship')} className="game-choice-btn starship-btn">
+                          <span className="text-5xl mb-2">🚀</span>
+                          <span>STARSHIP</span>
+                      </button>
+                  </div>
+                  <button onClick={() => setSelectedQuiz(null)} className="mt-6 text-slate-400 font-bold hover:text-red-500">Annuler</button>
+              </div>
+          </div>
+      );
   }
 
+  // --- RENDU LISTE DES QUIZ ---
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in slide-in-from-bottom-4">
-        
-        {/* CARTE ZOMBIE */}
-        <div className="bg-white p-8 rounded-[40px] border-b-8 border-green-600 shadow-xl hover:-translate-y-1 transition-all">
-            <span className="text-5xl">🧟</span>
-            <h3 className="text-2xl font-black mt-4 uppercase tracking-tighter">Zombie Grammar</h3>
-            <p className="text-slate-400 mt-2 font-medium">Survis à l'invasion en corrigeant les fautes.</p>
-            <button 
-                onClick={() => setActiveGame('zombie')} 
-                className="mt-6 w-full py-4 bg-green-600 text-white rounded-2xl font-black shadow-lg hover:bg-green-700 transition-all"
-            >
-                JOUER
-            </button>
-        </div>
-
-        {/* CARTE STARSHIP (Locked) */}
-        <div className="bg-white p-8 rounded-[40px] border-b-8 border-slate-200 opacity-40">
-            <span className="text-5xl">🚀</span>
-            <h3 className="text-2xl font-black mt-4 uppercase tracking-tighter">Starship</h3>
-            <p className="text-slate-400 mt-2 font-medium">Bientôt disponible dans ta galaxie.</p>
-            <button disabled className="mt-6 w-full py-4 bg-slate-300 text-white rounded-2xl font-black cursor-not-allowed">VERROUILLÉ</button>
-        </div>
+    <div className="games-hub-container">
+        {loading ? <p className="text-center">Chargement...</p> : (
+            <div className="quizzes-grid">
+                {quizzes.length > 0 ? quizzes.map(q => (
+                    <div key={q._id} onClick={() => setSelectedQuiz(q)} className="quiz-card">
+                        <div className="quiz-icon">🎓</div>
+                        <div className="quiz-info">
+                            <h3>{q.title}</h3>
+                            <p>{q.questions.length} questions</p>
+                        </div>
+                        <div className="quiz-play">▶</div>
+                    </div>
+                )) : (
+                    <div className="empty-state">Aucun quiz disponible pour ta classe.</div>
+                )}
+            </div>
+        )}
     </div>
   );
 }

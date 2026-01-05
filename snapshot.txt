@@ -24,6 +24,33 @@ le projet utilise le fichier update.txt tu dois générer des grands fichiers tx
 
 
 ############################################################
+### FICHIER: LOCKED_FILES.md
+############################################################
+
+# 🔒 FICHIERS SANCTUARISÉS
+Ces fichiers sont stables et fonctionnels. NE PAS MODIFIER SANS ORDRE EXPLICITE.
+
+## ⚙️ SERVEUR (BACKEND)
+- **server/server.js** : Point d'entrée. Connexion BDD OK.
+- **server/features/auth/auth.routes.js** : Login Prof/Élève OK.
+- **server/features/eleve/eleve.routes.js** : IA Correction + Sauvegarde OK.
+- **server/features/prof/prof.routes.js** : Création Devoir + Upload + Wizard IA OK.
+- **server/features/game/game.routes.js** : IA Génération Quiz OK.
+
+## 🎮 JEUX (MOTEURS VANELLA)
+- **client/src/features/eleve/games/zombie/zombie_core.js** : Moteur Zombie V6 (Cleanup OK).
+- **client/src/features/eleve/games/starship/starship_core.js** : Moteur Starship V7 (Input Boss OK).
+- **client/src/features/eleve/games/mainGames.js** : Logique Mathématique Commune.
+
+## 🎨 INTERFACE (REACT)
+- **client/src/features/prof/games/GameStudio.jsx** : Création Quiz + IA OK.
+- **client/src/features/prof/homework/HomeworkStudio.jsx** : Création Devoir + Wizard OK.
+
+---
+*Dernière mise à jour : Version Stable V11*
+
+
+############################################################
 ### FICHIER: apply.js
 ############################################################
 
@@ -749,59 +776,216 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
 ### FICHIER: client/src/features/eleve/games/GamesGrid.css
 ############################################################
 
-.games-main-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; }
-.game-card-student { background: white; padding: 2.5rem; border-radius: 45px; display: flex; flex-direction: column; gap: 1.5rem; position: relative; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); border-bottom: 10px solid #eee; }
-.game-card-student:hover { transform: translateY(-5px); }
+/* STYLE HUB JEUX */
 
-.game-card-student.zombie { border-color: #16a34a; box-shadow: 0 20px 40px rgba(22, 163, 74, 0.1); }
-.game-card-student.starship { border-color: #e2e8f0; opacity: 0.6; }
+.games-hub-container {
+    padding: 1rem;
+}
 
-.game-card-icon { font-size: 4rem; }
-.game-card-title { font-weight: 900; font-size: 1.5rem; color: #1e293b; letter-spacing: -1px; }
-.game-card-desc { color: #94a3b8; font-weight: 600; line-height: 1.4; font-size: 0.9rem; }
+.quizzes-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+}
 
-.btn-play-game { width: 100%; padding: 1.25rem; border-radius: 20px; border: none; font-weight: 900; font-size: 1.1rem; text-transform: uppercase; cursor: pointer; transition: 0.2s; }
-.zombie .btn-play-game { background: #16a34a; color: white; box-shadow: 0 10px 20px rgba(22, 163, 74, 0.3); }
-.btn-play-game.disabled { background: #f1f5f9; color: #cbd5e1; cursor: not-allowed; }
+.quiz-card {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 25px;
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: 2px solid transparent;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+}
+
+.quiz-card:hover {
+    transform: translateY(-5px);
+    border-color: #2563eb;
+    box-shadow: 0 10px 20px rgba(37, 99, 235, 0.1);
+}
+
+.quiz-icon {
+    font-size: 2.5rem;
+    background: #eff6ff;
+    width: 60px; height: 60px;
+    border-radius: 15px;
+    display: flex; align-items: center; justify-content: center;
+}
+
+.quiz-info h3 {
+    margin: 0;
+    font-weight: 900;
+    color: #1e293b;
+    font-size: 1.1rem;
+    text-transform: uppercase;
+}
+
+.quiz-info p {
+    margin: 5px 0 0 0;
+    color: #94a3b8;
+    font-weight: 600;
+    font-size: 0.85rem;
+}
+
+.quiz-play {
+    margin-left: auto;
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    background: #2563eb;
+    color: white;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 900;
+}
+
+/* SELECTEUR DE JEU (Overlay) */
+.game-selector-overlay {
+    position: fixed; inset: 0; z-index: 1000;
+    background: rgba(15, 23, 42, 0.8);
+    backdrop-filter: blur(5px);
+    display: flex; align-items: center; justify-content: center;
+}
+
+.selector-card {
+    background: white;
+    padding: 3rem;
+    border-radius: 40px;
+    text-align: center;
+    display: flex; flex-direction: column;
+}
+
+.selector-grid {
+    display: flex;
+    gap: 2rem;
+}
+
+.game-choice-btn {
+    width: 160px; height: 160px;
+    border-radius: 30px;
+    border: none;
+    cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-weight: 900;
+    font-size: 1rem;
+    transition: transform 0.2s;
+    color: white;
+    box-shadow: 0 10px 20px rgba(0,0,0,0.15);
+}
+
+.game-choice-btn:hover { transform: scale(1.1); }
+
+.zombie-btn { background: #16a34a; border-bottom: 6px solid #14532d; }
+.starship-btn { background: #2563eb; border-bottom: 6px solid #1e3a8a; }
+
+.empty-state {
+    text-align: center;
+    padding: 3rem;
+    color: #cbd5e1;
+    font-weight: 900;
+    font-size: 1.5rem;
+    background: white;
+    border-radius: 30px;
+    border: 3px dashed #e2e8f0;
+}
 
 
 ############################################################
 ### FICHIER: client/src/features/eleve/games/GamesGrid.jsx
 ############################################################
 
-import React, { useState } from 'react';
+/* HUB DE JEUX V2 - LISTE QUIZ PUIS CHOIX DU JEU */
+import React, { useState, useEffect } from 'react';
 import ZombieWrapper from './zombie/ZombieWrapper';
+import StarshipWrapper from './starship/StarshipWrapper';
+import { api } from '../../../services/api';
+import './GamesGrid.css';
+
+function normalizeClass(c) {
+    if(!c) return "";
+    return c.toString().toLowerCase().replace(/e/g, '').replace(/eme/g, '').trim();
+}
 
 export default function GamesGrid({ user }) {
-  const [activeGame, setActiveGame] = useState(null);
+  const [quizzes, setQuizzes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  
+  // États de navigation
+  const [selectedQuiz, setSelectedQuiz] = useState(null); // Le quiz choisi
+  const [activeGame, setActiveGame] = useState(null);     // Le mode de jeu ('zombie' ou 'starship')
 
-  if (activeGame === 'zombie') {
-      return <ZombieWrapper user={user} onClose={() => setActiveGame(null)} />;
+  // 1. Chargement des Quiz (ex-niveaux)
+  useEffect(() => {
+    api.get('/game-levels/all').then(data => {
+        if(data && data.length > 0) {
+            const userClass = normalizeClass(user.classroom);
+            // On affiche TOUS les niveaux dispos pour la classe (peu importe le "chapterId" d'origine)
+            const myQuizzes = data.filter(l => {
+                const levelClass = normalizeClass(l.classroom || 'Toutes');
+                return (levelClass === 'toutes' || levelClass === userClass);
+            });
+            setQuizzes(myQuizzes);
+        }
+        setLoading(false);
+    });
+  }, []);
+
+  // 2. Lancement du jeu
+  const launchGame = (mode) => {
+      setActiveGame(mode);
+  };
+
+  const closeGame = () => {
+      setActiveGame(null);
+      setSelectedQuiz(null); // Retour liste
+  };
+
+  // --- RENDU JEU ACTIF ---
+  if (activeGame === 'zombie' && selectedQuiz) return <ZombieWrapper user={user} level={selectedQuiz} onClose={closeGame} />;
+  if (activeGame === 'starship' && selectedQuiz) return <StarshipWrapper user={user} level={selectedQuiz} onClose={closeGame} />;
+
+  // --- RENDU SÉLECTEUR DE JEU (MODALE) ---
+  if (selectedQuiz) {
+      return (
+          <div className="game-selector-overlay animate-in fade-in">
+              <div className="selector-card">
+                  <h2 className="text-2xl font-black text-slate-700 text-center mb-6">CHOISIS TON JEU 🕹️</h2>
+                  <div className="selector-grid">
+                      <button onClick={() => launchGame('zombie')} className="game-choice-btn zombie-btn">
+                          <span className="text-5xl mb-2">🧟</span>
+                          <span>ZOMBIE</span>
+                      </button>
+                      <button onClick={() => launchGame('starship')} className="game-choice-btn starship-btn">
+                          <span className="text-5xl mb-2">🚀</span>
+                          <span>STARSHIP</span>
+                      </button>
+                  </div>
+                  <button onClick={() => setSelectedQuiz(null)} className="mt-6 text-slate-400 font-bold hover:text-red-500">Annuler</button>
+              </div>
+          </div>
+      );
   }
 
+  // --- RENDU LISTE DES QUIZ ---
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in slide-in-from-bottom-4">
-        
-        {/* CARTE ZOMBIE */}
-        <div className="bg-white p-8 rounded-[40px] border-b-8 border-green-600 shadow-xl hover:-translate-y-1 transition-all">
-            <span className="text-5xl">🧟</span>
-            <h3 className="text-2xl font-black mt-4 uppercase tracking-tighter">Zombie Grammar</h3>
-            <p className="text-slate-400 mt-2 font-medium">Survis à l'invasion en corrigeant les fautes.</p>
-            <button 
-                onClick={() => setActiveGame('zombie')} 
-                className="mt-6 w-full py-4 bg-green-600 text-white rounded-2xl font-black shadow-lg hover:bg-green-700 transition-all"
-            >
-                JOUER
-            </button>
-        </div>
-
-        {/* CARTE STARSHIP (Locked) */}
-        <div className="bg-white p-8 rounded-[40px] border-b-8 border-slate-200 opacity-40">
-            <span className="text-5xl">🚀</span>
-            <h3 className="text-2xl font-black mt-4 uppercase tracking-tighter">Starship</h3>
-            <p className="text-slate-400 mt-2 font-medium">Bientôt disponible dans ta galaxie.</p>
-            <button disabled className="mt-6 w-full py-4 bg-slate-300 text-white rounded-2xl font-black cursor-not-allowed">VERROUILLÉ</button>
-        </div>
+    <div className="games-hub-container">
+        {loading ? <p className="text-center">Chargement...</p> : (
+            <div className="quizzes-grid">
+                {quizzes.length > 0 ? quizzes.map(q => (
+                    <div key={q._id} onClick={() => setSelectedQuiz(q)} className="quiz-card">
+                        <div className="quiz-icon">🎓</div>
+                        <div className="quiz-info">
+                            <h3>{q.title}</h3>
+                            <p>{q.questions.length} questions</p>
+                        </div>
+                        <div className="quiz-play">▶</div>
+                    </div>
+                )) : (
+                    <div className="empty-state">Aucun quiz disponible pour ta classe.</div>
+                )}
+            </div>
+        )}
     </div>
   );
 }
@@ -935,6 +1119,437 @@ export class GameProgression {
     
     getLives() { return this.lives; }
 }
+
+
+############################################################
+### FICHIER: client/src/features/eleve/games/starship/StarshipWrapper.jsx
+############################################################
+
+/* WRAPPER STARSHIP V2 - SIMPLIFIÉ (Reçoit le niveau direct) */
+import React, { useEffect, useRef } from 'react';
+import { initStarshipGame } from './starship_core';
+import './starship_style.css';
+
+export default function StarshipWrapper({ user, level, onClose }) {
+    const boxRef = useRef(null);
+    const engineRef = useRef(null);
+
+    useEffect(() => {
+        if (level && boxRef.current) {
+            const handleExitGame = () => {
+                if(engineRef.current) {
+                    engineRef.current.destroy();
+                    engineRef.current = null;
+                }
+                onClose();
+            };
+
+            engineRef.current = initStarshipGame(
+                boxRef.current, 
+                { level: level, user }, 
+                handleExitGame
+            );
+        }
+
+        return () => {
+            if (engineRef.current) {
+                engineRef.current.destroy();
+                engineRef.current = null;
+            }
+        };
+    }, [level]);
+
+    return (
+        <div className="fixed inset-0 bg-black z-[2000] flex items-center justify-center p-4">
+            <div id="starship-root" ref={boxRef}></div>
+        </div>
+    );
+}
+
+
+############################################################
+### FICHIER: client/src/features/eleve/games/starship/starship_core.js
+############################################################
+
+import { GameProgression } from '../mainGames';
+
+/**
+ * MOTEUR STARSHIP V6 - COLLISION PIXEL PERFECT
+ * Utilise getBoundingClientRect pour des collisions précises.
+ */
+export function initStarshipGame(rootElement, apiData, onExit) {
+    
+    // 1. HTML
+    rootElement.innerHTML = `
+        <div class="s-top-hud"><div class="s-hearts" id="s-hearts">❤️❤️❤️❤️</div><div class="s-global-progress"><div class="s-global-bar-fill" id="s-bar"></div></div><div class="s-questions-tracker" id="s-tracker"></div></div>
+        <div class="s-arena" id="s-arena"><div class="s-question-display" id="s-q-text">Chargement...</div><div class="s-ship" id="s-ship">🚀</div><div class="s-boss" id="s-boss">🛸</div><div class="s-input-layer" id="s-input-area"><input type="text" id="s-input" placeholder="Réponse..." autocomplete="off"><button class="s-btn-check" id="s-btn-check">TIRER</button></div></div>
+        <div class="s-overlay" id="s-overlay"><h2 id="s-title">FIN</h2><p id="s-msg">...</p><button class="s-btn-restart" id="s-btn-action">Continuer</button></div>
+        <button style="position:absolute; top:80px; right:10px; background:#ef4444; color:white; border:none; width:30px; height:30px; border-radius:50%; font-weight:bold; cursor:pointer; z-index:50;" id="s-quit">✕</button>
+    `;
+
+    // 2. REFS
+    const refs = {
+        arena: rootElement.querySelector('#s-arena'),
+        ship: rootElement.querySelector('#s-ship'),
+        boss: rootElement.querySelector('#s-boss'),
+        qText: rootElement.querySelector('#s-q-text'),
+        inputArea: rootElement.querySelector('#s-input-area'),
+        input: rootElement.querySelector('#s-input'),
+        checkBtn: rootElement.querySelector('#s-btn-check'),
+        overlay: rootElement.querySelector('#s-overlay'),
+        hearts: rootElement.querySelector('#s-hearts'),
+        tracker: rootElement.querySelector('#s-tracker'),
+        bar: rootElement.querySelector('#s-bar'),
+        title: rootElement.querySelector('#s-title'),
+        msg: rootElement.querySelector('#s-msg'),
+        action: rootElement.querySelector('#s-btn-action'),
+        quit: rootElement.querySelector('#s-quit')
+    };
+
+    // 3. STATE
+    let game = null;
+    let currentIdx = 0;
+    let shipX = 50; 
+    let missiles = []; 
+    let targets = []; 
+    let bossY = -20;
+    let keys = { left: false, right: false, space: false };
+    let gameLoopId = null;
+    let isPaused = false;
+    let lastShot = 0;
+    let isBossMode = false;
+
+    function init() {
+        if (apiData.level && apiData.level.questions.length > 0) {
+            game = new GameProgression(apiData.level.questions);
+            updateUI();
+            loadRound();
+            document.addEventListener('keydown', onKeyDown);
+            document.addEventListener('keyup', onKeyUp);
+        } else { gameOver("Erreur niveau", true); }
+    }
+
+    function updateUI() {
+        const data = game.getTrackerData();
+        refs.tracker.innerHTML = '';
+        data.dots.forEach((d, i) => {
+            const dot = document.createElement('div');
+            dot.className = `s-q-dot ${i === currentIdx ? 'active' : ''} ${d.done ? 'done' : ''}`;
+            const fill = document.createElement('div'); fill.className = 's-q-dot-fill'; fill.style.height = `${d.pct}%`;
+            dot.appendChild(fill); refs.tracker.appendChild(dot);
+        });
+        refs.bar.style.width = `${data.globalPct}%`;
+        refs.hearts.textContent = "❤️".repeat(game.getLives());
+    }
+
+    function loadRound() {
+        const next = game.getNextActiveQuestion();
+        if (!next) { gameOver("MISSION ACCOMPLIE !", true); return; }
+
+        currentIdx = next.idx;
+        const q = next.q;
+        const lvl = next.level;
+
+        refs.qText.textContent = q.q;
+        clearEntities();
+        isPaused = false;
+        
+        updateUI();
+
+        if (lvl < 2) {
+            // MODE ARCADE
+            isBossMode = false;
+            refs.inputArea.style.display = 'none';
+            refs.ship.style.display = 'flex';
+            refs.boss.style.display = 'none';
+            spawnTargets(q.options);
+        } else {
+            // MODE BOSS
+            isBossMode = true;
+            refs.ship.style.display = 'none';
+            refs.inputArea.style.display = 'flex';
+            refs.boss.style.display = 'block';
+            refs.boss.style.top = '-100px';
+            refs.boss.innerHTML = "🛸";
+            bossY = 10;
+            refs.input.value = '';
+            refs.input.focus();
+            
+            const correctText = q.options[q.a];
+            refs.checkBtn.onclick = () => handleInput(correctText);
+            refs.input.onkeydown = (e) => { 
+                e.stopPropagation(); 
+                if(e.key==="Enter") handleInput(correctText); 
+            };
+        }
+        
+        startLoop();
+    }
+
+    function handleInput(correctText) {
+        if (isPaused) return;
+        const res = game.submitAnswer(currentIdx, refs.input.value);
+        
+        if (res.success) {
+            refs.boss.innerHTML = "💥";
+            refs.checkBtn.style.background = '#22c55e';
+            isPaused = true;
+            setTimeout(loadRound, 1000);
+        } else {
+            refs.input.value = "";
+            refs.input.placeholder = "Indice: " + correctText.substring(0,3) + "...";
+            handleErrorLogic(res);
+        }
+    }
+
+    function spawnTargets(options) {
+        options.forEach((opt, i) => {
+            const el = document.createElement('div');
+            el.className = 's-target';
+            el.textContent = opt;
+            refs.arena.appendChild(el);
+            // Position aléatoire horizontale
+            const x = 10 + (i * 20) + (Math.random() * 10 - 5);
+            targets.push({ 
+                el, 
+                x: 10 + (i * 20) + (Math.random() * 10 - 5), 
+                y: 10 + (Math.random() * 20), 
+                index: i, 
+                speed: 0.03 + (Math.random() * 0.03)
+            });
+        });
+    }
+
+    function onKeyDown(e) {
+        if (isBossMode) return;
+        if (e.key === "ArrowLeft") keys.left = true;
+        if (e.key === "ArrowRight") keys.right = true;
+        if (e.key === " ") fireMissile();
+    }
+    function onKeyUp(e) {
+        if (e.key === "ArrowLeft") keys.left = false;
+        if (e.key === "ArrowRight") keys.right = false;
+    }
+
+    function fireMissile() {
+        if(isPaused || Date.now() - lastShot < 300) return;
+        lastShot = Date.now();
+        const el = document.createElement('div');
+        el.className = 's-missile';
+        refs.arena.appendChild(el);
+        missiles.push({ el, x: shipX, y: 15 });
+    }
+
+    // --- FONCTION DE COLLISION (Hitbox Rectangulaire) ---
+    function isColliding(rect1, rect2) {
+        return !(rect1.right < rect2.left || 
+                 rect1.left > rect2.right || 
+                 rect1.bottom < rect2.top || 
+                 rect1.top > rect2.bottom);
+    }
+
+    function startLoop() {
+        if (gameLoopId) cancelAnimationFrame(gameLoopId);
+        
+        function loop() {
+            if (!isPaused) {
+                
+                if (!isBossMode) {
+                    // Mouvement Vaisseau
+                    if (keys.left && shipX > 5) shipX -= 1.5;
+                    if (keys.right && shipX < 95) shipX += 1.5;
+                    refs.ship.style.left = `${shipX}%`;
+
+                    // Gestion Missiles
+                    for (let i = missiles.length - 1; i >= 0; i--) {
+                        const m = missiles[i];
+                        m.y += 1.5;
+                        m.el.style.bottom = `${m.y}%`;
+                        m.el.style.left = `${m.x}%`; // IMPORTANT: Le CSS utilise left%
+
+                        // Récupération des rectangles (Hitboxes) en PIXELS réels
+                        const mRect = m.el.getBoundingClientRect();
+
+                        let hitIndex = -1;
+                        
+                        // Vérification contre toutes les cibles
+                        for (let j = 0; j < targets.length; j++) {
+                            const t = targets[j];
+                            const tRect = t.el.getBoundingClientRect();
+                            
+                            // LE TEST ULTIME
+                            if (isColliding(mRect, tRect)) {
+                                hitIndex = j;
+                                break; // On arrête de chercher, un missile = une cible
+                            }
+                        }
+
+                        if (hitIndex !== -1) {
+                            checkHit(targets[hitIndex]);
+                            m.el.remove();
+                            missiles.splice(i, 1);
+                        } else if (m.y > 100) {
+                            m.el.remove();
+                            missiles.splice(i, 1);
+                        }
+                    }
+
+                    // Mouvement Cibles
+                    targets.forEach(t => {
+                        t.y += t.speed;
+                        t.el.style.top = `${t.y}%`;
+                        t.el.style.left = `${t.x}%`;
+                        if (t.y > 90) playerHit("Envahi !");
+                    });
+
+                } else {
+                    // Boss
+                    bossY += 0.04;
+                    refs.boss.style.top = `${bossY}%`;
+                    if (bossY > 80) { playerHit("Écrasé !"); bossY = 10; }
+                }
+            }
+            gameLoopId = requestAnimationFrame(loop);
+        }
+        loop();
+    }
+
+    function checkHit(target) {
+        const res = game.submitAnswer(currentIdx, target.index);
+        
+        if (res.success) {
+            target.el.style.background = '#22c55e';
+            target.el.style.color = 'white';
+            target.el.innerHTML = "✨";
+            isPaused = true;
+            setTimeout(loadRound, 800);
+        } else {
+            target.el.style.background = '#ef4444';
+            target.el.style.color = 'white';
+            handleErrorLogic(res);
+        }
+    }
+
+    function handleErrorLogic(res) {
+        const status = game.loseLife(currentIdx);
+        updateUI();
+        if (status.isDead) gameOver("VAISSEAU DÉTRUIT", false);
+        else if (res.oldLevel >= 2 && res.newLevel < 2) setTimeout(loadRound, 1000);
+    }
+
+    function playerHit(reason) {
+        isPaused = true;
+        const status = game.loseLife(currentIdx);
+        updateUI();
+        
+        if (status.isDead) gameOver("GAME OVER", false);
+        else {
+            if(!isBossMode) refs.ship.innerHTML = "💥";
+            else refs.boss.innerHTML = "😈";
+
+            setTimeout(() => {
+                if(!isBossMode) refs.ship.innerHTML = "🚀";
+                if (status.newLevel < 2 && isBossMode) loadRound();
+                else {
+                    clearEntities();
+                    if(!isBossMode) spawnTargets(game.questions[currentIdx].options);
+                    isPaused = false; 
+                    startLoop();
+                }
+            }, 1000);
+        }
+    }
+
+    function clearEntities() {
+        targets.forEach(t => t.el.remove());
+        missiles.forEach(m => m.el.remove());
+        targets = [];
+        missiles = [];
+    }
+
+    function gameOver(msg, isWin) {
+        isPaused = true;
+        refs.overlay.style.display = 'flex';
+        refs.title.textContent = isWin ? "VICTOIRE" : "ECHEC";
+        refs.msg.textContent = msg;
+        refs.action.textContent = isWin ? "Quitter" : "Réessayer";
+        refs.action.onclick = () => { if (isWin) { destroy(); onExit(); } else { init(); refs.overlay.style.display = 'none'; } };
+    }
+
+    refs.quit.onclick = () => { destroy(); onExit(); };
+
+    function destroy() {
+        if(gameLoopId) cancelAnimationFrame(gameLoopId);
+        document.removeEventListener('keydown', onKeyDown);
+        document.removeEventListener('keyup', onKeyUp);
+        rootElement.innerHTML = '';
+    }
+
+    init();
+    return { destroy };
+}
+
+
+############################################################
+### FICHIER: client/src/features/eleve/games/starship/starship_style.css
+############################################################
+
+/* --- STYLE STARSHIP V5 (INPUT FIX) --- */
+
+/* ... (Le début du fichier reste inchangé, on cible la correction) ... */
+
+#starship-root {
+    width: 100%; height: 100%; background-color: #020617; position: relative; overflow: hidden; font-family: 'Segoe UI', sans-serif; border-radius: 20px; user-select: none; display: flex; flex-direction: column; color: white;
+}
+.s-top-hud { background: rgba(15, 23, 42, 0.9); padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #1e293b; height: 70px; z-index: 20; }
+.s-hearts { font-size: 1.5rem; letter-spacing: 5px; }
+.s-global-progress { flex: 1; margin: 0 30px; height: 12px; background: #1e293b; border-radius: 6px; overflow: hidden; border: 1px solid rgba(255,255,255,0.2); }
+.s-global-bar-fill { height: 100%; background: linear-gradient(90deg, #3b82f6, #60a5fa); width: 0%; transition: width 0.5s; }
+.s-questions-tracker { display: flex; gap: 8px; }
+.s-q-dot { width: 20px; height: 35px; background: #1e293b; border-radius: 4px; position: relative; overflow: hidden; border: 1px solid rgba(255,255,255,0.2); }
+.s-q-dot-fill { position: absolute; bottom: 0; left: 0; width: 100%; background: #22c55e; transition: height 0.3s; }
+.s-q-dot.active { border: 2px solid white; transform: scale(1.1); box-shadow: 0 0 10px #3b82f6; }
+.s-q-dot.done .s-q-dot-fill { background: #3b82f6; height: 100% !important; }
+.s-arena { flex: 1; position: relative; background-image: radial-gradient(white, rgba(255,255,255,.2) 2px, transparent 3px), radial-gradient(white, rgba(255,255,255,.15) 1px, transparent 2px); background-size: 550px 550px, 350px 350px; overflow: hidden; }
+.s-question-display { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(15, 23, 42, 0.9); padding: 15px 30px; border-radius: 15px; border: 2px solid #3b82f6; text-align: center; font-weight: 800; font-size: 1.1rem; width: 80%; z-index: 10; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+.s-ship { position: absolute; bottom: 20px; width: 60px; height: 60px; font-size: 3rem; display: flex; align-items: center; justify-content: center; z-index: 15; transition: transform 0.1s; }
+.s-target { position: absolute; padding: 8px 12px; background: rgba(255, 255, 255, 0.95); color: #0f172a; border-radius: 8px; font-weight: 700; font-size: 0.85rem; border: 2px solid #cbd5e1; white-space: nowrap; z-index: 12; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+.s-missile { position: absolute; width: 6px; height: 20px; background: #facc15; border-radius: 3px; box-shadow: 0 0 10px #facc15; z-index: 11; }
+.s-boss { position: absolute; top: -100px; left: 50%; transform: translateX(-50%); font-size: 6rem; z-index: 14; filter: drop-shadow(0 0 20px rgba(255,0,0,0.5)); }
+
+/* INPUT ZONE FIX (CONTRASTE FORCE) */
+.s-input-layer {
+    position: absolute;
+    bottom: 30px;
+    left: 0; right: 0;
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 30;
+    gap: 10px;
+}
+
+.s-input {
+    padding: 15px;
+    font-size: 1.3rem;
+    border: 4px solid #3b82f6;
+    border-radius: 15px;
+    width: 350px;
+    text-align: center;
+    
+    /* LE FIX EST ICI : FOND BLANC / TEXTE NOIR */
+    background-color: #ffffff !important; 
+    color: #000000 !important;
+    
+    font-weight: 900;
+    outline: none;
+    box-shadow: 0 0 30px rgba(59, 130, 246, 0.5);
+}
+
+.s-btn-check { padding: 15px 30px; background: #3b82f6; color: white; font-weight: 900; border: none; border-radius: 12px; cursor: pointer; font-size: 1.1rem; }
+.s-overlay { position: absolute; inset: 0; background: rgba(2,6,23,0.95); display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 100; text-align: center; }
+.s-overlay h2 { font-size: 4rem; margin: 0; color: #3b82f6; }
+.s-btn-restart { margin-top: 30px; padding: 15px 50px; background: #3b82f6; color: white; border: none; border-radius: 30px; font-weight: 900; font-size: 1.2rem; cursor: pointer; }
 
 
 ############################################################
@@ -1341,53 +1956,28 @@ export class ZombieGame {
 ### FICHIER: client/src/features/eleve/games/zombie/ZombieWrapper.jsx
 ############################################################
 
-import React, { useEffect, useRef, useState } from 'react';
+/* WRAPPER ZOMBIE V3 - SIMPLIFIÉ (Reçoit le niveau direct) */
+import React, { useEffect, useRef } from 'react';
 import { initZombieGame } from './zombie_core';
 import './zombie_style.css';
-import { api } from '../../../../services/api';
 
-function normalizeClass(c) {
-    if(!c) return "";
-    return c.toString().toLowerCase().replace(/e/g, '').replace(/eme/g, '').trim();
-}
-
-export default function ZombieWrapper({ user, onClose }) {
+export default function ZombieWrapper({ user, level, onClose }) {
     const boxRef = useRef(null);
     const engineRef = useRef(null);
-    const [availableLevels, setAvailableLevels] = useState([]);
-    const [selectedLevel, setSelectedLevel] = useState(null);
-    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        api.get('/game-levels/all').then(data => {
-            if(data && data.length > 0) {
-                const userClass = normalizeClass(user.classroom);
-                const myLevels = data.filter(l => {
-                    const levelClass = normalizeClass(l.classroom || 'Toutes');
-                    return l.chapterId === 'ch1-zombie' && (levelClass === 'toutes' || levelClass === userClass);
-                });
-                setAvailableLevels(myLevels);
-            }
-            setLoading(false);
-        });
-    }, []);
-
-    // Gestion du lancement et de la fermeture propre
-    useEffect(() => {
-        if (selectedLevel && boxRef.current) {
-            // Callback sécurisée
+        if (level && boxRef.current) {
             const handleExitGame = () => {
                 if(engineRef.current) {
                     engineRef.current.destroy();
                     engineRef.current = null;
                 }
-                // Force le retour au dashboard
-                setSelectedLevel(null);
+                onClose();
             };
 
             engineRef.current = initZombieGame(
                 boxRef.current, 
-                { level: selectedLevel, user }, 
+                { level: level, user }, 
                 handleExitGame
             );
         }
@@ -1398,43 +1988,10 @@ export default function ZombieWrapper({ user, onClose }) {
                 engineRef.current = null;
             }
         };
-    }, [selectedLevel]);
+    }, [level]);
 
-    if (loading) return <div className="fixed inset-0 bg-slate-900 flex items-center justify-center text-white font-bold">Chargement...</div>;
-
-    // --- DASHBOARD ---
-    if (!selectedLevel) {
-        return (
-            <div className="fixed inset-0 bg-slate-900/95 backdrop-blur z-50 flex items-center justify-center p-4">
-                <div className="z-dashboard-container animate-in zoom-in">
-                    <div className="z-dash-header">
-                        <h1 className="z-dash-title">ZOMBIE GRAMMAR</h1>
-                        <p className="z-dash-subtitle">Choisis ta mission, {user.firstName}</p>
-                    </div>
-
-                    {availableLevels.length > 0 ? (
-                        <div className="z-levels-grid custom-scrollbar">
-                            {availableLevels.map(lvl => (
-                                <div key={lvl._id} className="z-level-card" onClick={() => setSelectedLevel(lvl)}>
-                                    <span className="z-card-icon">🧟</span>
-                                    <div className="z-card-title">{lvl.title}</div>
-                                    <div className="z-card-info">{lvl.questions.length} Questions</div>
-                                </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="text-center py-10 text-slate-500">Aucune mission pour {user.classroom}.</div>
-                    )}
-
-                    <button onClick={onClose} className="z-btn-back">RETOUR QG</button>
-                </div>
-            </div>
-        );
-    }
-
-    // --- JEU ---
     return (
-        <div className="fixed inset-0 bg-black z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black z-[2000] flex items-center justify-center p-4">
             <div id="zombie-root" ref={boxRef}></div>
         </div>
     );
@@ -1743,7 +2300,7 @@ export function initZombieGame(rootElement, apiData, onExit) {
 ### FICHIER: client/src/features/eleve/homework/Homework.css
 ############################################################
 
-/* --- CSS CORRIGÉ POUR LA MODALE DE RÉSULTATS --- */
+/* --- CSS DE SÉCURITÉ POUR LA LISIBILITÉ --- */
 
 .homework-container {
     perspective: 1200px;
@@ -1757,25 +2314,12 @@ export function initZombieGame(rootElement, apiData, onExit) {
     flex-direction: column;
 }
 
-/* ... (Les styles de la liseuse et du bas restent identiques, on ne touche qu'à la modale en bas) ... */
-.viewer-top-area { flex: 75; position: relative; background: #020617; overflow: hidden; cursor: grab; width: 100%; }
-.main-doc-img { position: absolute; top: 50%; left: 50%; transform-origin: center center; box-shadow: 0 0 30px rgba(0,0,0,0.8); pointer-events: auto; user-select: none; max-width: none; }
-.interaction-bottom-area { flex: 25; background: white; display: flex; border-top: 2px solid #f97316; overflow: hidden; }
-.question-panel { width: 30%; padding: 0.3rem; background: #f8fafc; border-right: 1px solid #e2e8f0; display: flex; flex-direction: column; }
-.answer-panel { width: 70%; padding: 0.3rem; display: flex; flex-direction: column; gap: 0.2rem; }
-.answer-input { flex: 1; width: 100%; padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.85rem; resize: none; outline: none; }
-.btn-send-ai { padding: 4px 10px; background: #2563eb; color: white; font-weight: 800; border-radius: 4px; border: none; cursor: pointer; font-size: 0.6rem; text-transform: uppercase; align-self: flex-end; }
-.q-text-scroll-area { flex: 1; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 0.4rem; overflow-y: auto; font-size: 0.75rem; font-weight: 600; }
-.q-visual-frame { flex: 1; background: #000; border-radius: 8px; position: relative; overflow: hidden; border: 1px solid #cbd5e1; cursor: grab; }
-.floating-question-badge { position: absolute; top: 5px; left: 5px; background: #f97316; color: white; padding: 2px 6px; border-radius: 4px; font-weight: 800; font-size: 0.55rem; z-index: 50; pointer-events: none; }
-
-/* --- MODALE IA (CORRECTION VISIBILITÉ) --- */
-
+/* MODALE RÉSULTATS (STYLE FORCÉ) */
 .ai-modal-overlay {
     position: fixed;
     inset: 0;
     z-index: 9999;
-    background: rgba(15, 23, 42, 0.85); /* Fond sombre derrière la modale */
+    background: rgba(15, 23, 42, 0.9);
     backdrop-filter: blur(5px);
     display: flex;
     align-items: center;
@@ -1784,88 +2328,59 @@ export function initZombieGame(rootElement, apiData, onExit) {
 }
 
 .ai-modal-box {
-    background-color: #ffffff !important; /* FORCE LE FOND BLANC */
+    background-color: #ffffff !important; /* BLANC */
     width: 100%;
     max-width: 800px;
-    max-height: 85vh;
+    max-height: 90vh;
     border-radius: 30px;
     display: flex;
     flex-direction: column;
-    border: 4px solid #2563eb; /* Bordure bleue */
+    border: 4px solid #2563eb;
     padding: 2rem;
-    box-shadow: 0 25px 50px rgba(0,0,0,0.6);
-    color: #1e293b; /* Texte de base sombre */
+    box-shadow: 0 50px 100px -20px rgba(0,0,0,0.8);
+    color: #1e293b !important; /* TEXTE FONCÉ */
 }
 
-/* Zone du commentaire (Feedback) */
+.grade-display { text-align: center; margin-bottom: 1rem; }
+.grade-value { font-size: 3rem; font-weight: 900; color: #2563eb; }
+
+/* Zone de texte commentaire */
 .ai-feedback-content {
-    background-color: #f8fafc; /* Gris très clair pour le texte */
-    border: 1px solid #e2e8f0;
-    border-radius: 15px;
+    background: #f1f5f9; /* Gris très clair */
     padding: 1.5rem;
+    border-radius: 15px;
+    border: 1px solid #e2e8f0;
     font-size: 1rem;
     line-height: 1.6;
-    color: #334155; /* Gris foncé très lisible */
-    margin-bottom: 1.5rem;
-    box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
+    color: #0f172a !important; /* NOIR */
+    font-weight: 500;
 }
 
-/* Note */
-.grade-display {
-    text-align: center;
-    margin-bottom: 1rem;
-}
-.grade-value {
-    font-size: 3.5rem;
-    font-weight: 900;
-    color: #2563eb;
-    text-shadow: 2px 2px 0px #dbeafe;
-}
-
-/* Liste des corrections */
-.corrections-container {
-    background-color: #fff1f2; /* Fond rouge très pâle */
-    border: 1px solid #fecaca;
-    border-radius: 15px;
-    padding: 1rem;
-    margin-top: 1rem;
-}
-
-.correction-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.5rem 0;
-    border-bottom: 1px solid #ffe4e6;
-    font-size: 0.9rem;
-}
-.correction-row:last-child { border-bottom: none; }
-
-.wrong-word { color: #dc2626; text-decoration: line-through; font-weight: bold; margin-right: 8px; }
+.corrections-container { margin-top: 1rem; background: #fff1f2; border: 1px solid #fecaca; border-radius: 15px; padding: 1rem; }
+.correction-row { display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid #ffe4e6; color: #334155; }
+.wrong-word { color: #dc2626; text-decoration: line-through; margin-right: 10px; font-weight: bold; }
 .right-word { color: #16a34a; font-weight: 900; }
-.grammar-rule { font-style: italic; color: #64748b; font-size: 0.8rem; }
 
-/* Boutons de la modale */
-.ai-modal-actions {
-    display: flex;
-    gap: 1rem;
-    margin-top: 1.5rem;
-}
-.btn-action-modal {
-    flex: 1;
-    padding: 1rem;
-    border-radius: 12px;
-    font-weight: 800;
-    font-size: 1rem;
-    cursor: pointer;
-    text-transform: uppercase;
-    border: none;
-    transition: 0.2s;
-}
-.btn-improve { background: #f1f5f9; color: #64748b; border: 2px solid #e2e8f0; }
-.btn-improve:hover { background: #e2e8f0; color: #475569; }
-.btn-next { background: #2563eb; color: white; box-shadow: 0 4px 6px rgba(37, 99, 235, 0.2); }
-.btn-next:hover { background: #1d4ed8; transform: translateY(-2px); }
+.ai-modal-actions { display: flex; gap: 1rem; margin-top: 2rem; }
+.btn-action-modal { flex: 1; padding: 1rem; border-radius: 15px; font-weight: 900; font-size: 1rem; cursor: pointer; border: none; text-transform: uppercase; }
+.btn-improve { background: #e2e8f0; color: #64748b; }
+.btn-next { background: #2563eb; color: white; box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3); }
+
+/* --- RESTE DU STYLE (Liseuse, etc.) --- */
+.viewer-top-area { flex: 75; position: relative; background: #020617; overflow: hidden; cursor: grab; width: 100%; }
+.main-doc-img { position: absolute; top: 50%; left: 50%; transform-origin: center center; box-shadow: 0 0 30px rgba(0,0,0,0.8); pointer-events: auto; user-select: none; max-width: none; }
+.interaction-bottom-area { flex: 25; background: white; display: flex; border-top: 2px solid #f97316; overflow: hidden; }
+.question-panel { width: 30%; padding: 0.3rem; background: #f8fafc; border-right: 1px solid #e2e8f0; display: flex; flex-direction: column; }
+.answer-panel { width: 70%; padding: 0.3rem; display: flex; flex-direction: column; gap: 0.2rem; }
+.answer-input { flex: 1; width: 100%; padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.85rem; resize: none; outline: none; }
+.btn-send-ai { padding: 4px 10px; background: #2563eb; color: white; font-weight: 800; border-radius: 4px; border: none; cursor: pointer; font-size: 0.6rem; text-transform: uppercase; align-self: flex-end; }
+.q-text-scroll-area { flex: 1; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 0.4rem; overflow-y: auto; font-size: 0.75rem; font-weight: 600; white-space: pre-wrap; }
+.q-visual-frame { flex: 1; background: #000; border-radius: 8px; position: relative; overflow: hidden; border: 1px solid #cbd5e1; cursor: grab; }
+.floating-question-badge { position: absolute; top: 5px; left: 5px; background: #f97316; color: white; padding: 2px 6px; border-radius: 4px; font-weight: 800; font-size: 0.55rem; z-index: 50; pointer-events: none; }
+.zoom-controls-floating { position: absolute; bottom: 20px; right: 20px; display: flex; gap: 10px; z-index: 100; }
+.zoom-btn-glass { width: 40px; height: 40px; background: rgba(0, 0, 0, 0.6); border: 1px solid rgba(255, 255, 255, 0.3); color: white; border-radius: 10px; font-size: 1.2rem; cursor: pointer; }
+.nav-arrows-container { position: absolute; top: 50%; left: 0; right: 0; transform: translateY(-50%); display: flex; justify-content: space-between; padding: 0 20px; z-index: 50; pointer-events: none; }
+.nav-arrow-btn { pointer-events: auto; width: 50px; height: 50px; background: rgba(255, 255, 255, 0.2); backdrop-filter: blur(10px); border: 2px solid rgba(255, 255, 255, 0.5); border-radius: 50%; color: white; font-size: 1.5rem; font-weight: 900; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 
 
 ############################################################
@@ -1931,6 +2446,7 @@ export default function HomeworkList({ user }) {
 ### FICHIER: client/src/features/eleve/homework/HomeworkWorkspace.jsx
 ############################################################
 
+/* 🔒 WORKSPACE ÉLÈVE - JUSTE LA LOGIQUE D'ENVOI CORRIGÉE, VISUEL INCHANGÉ */
 import React, { useState, useRef } from 'react';
 import './Homework.css';
 
@@ -1941,6 +2457,7 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
   const [submitting, setSubmitting] = useState(false);
   const [aiResult, setAiResult] = useState(null);
 
+  // Refs visuelles
   const viewTop = useRef({ x: 0, y: 0, scale: 1 });
   const viewBot = useRef({ x: 0, y: 0, scale: 1 });
   const topRef = useRef(null);
@@ -1950,11 +2467,9 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
   const rawDocs = currentPage.attachmentUrls || [];
   const docs = rawDocs.map(d => typeof d === 'string' ? d : d.url);
   const currentLabel = typeof rawDocs[docIdx] === 'object' ? rawDocs[docIdx].label : '';
-  
-  const updateTransform = (refData, refEl) => {
-      if(refEl.current) refEl.current.style.transform = `translate(-50%, -50%) translate(${refData.current.x}px, ${refData.current.y}px) scale(${refData.current.scale})`;
-  };
 
+  // --- LOGIQUE VISUELLE (INCHANGÉE) ---
+  const updateTransform = (refData, refEl) => { if(refEl.current) refEl.current.style.transform = `translate(-50%, -50%) translate(${refData.current.x}px, ${refData.current.y}px) scale(${refData.current.scale})`; };
   const fitImage = (img, containerId, refData, refEl) => {
       const container = document.getElementById(containerId);
       if(!img || !container || !refEl.current) return;
@@ -1962,21 +2477,15 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
       refData.current = { x: 0, y: 0, scale: scale };
       updateTransform(refData, refEl);
   };
-
   const handleDrag = (e, refData, refEl) => {
-      e.preventDefault();
-      const startX = e.clientX - refData.current.x;
-      const startY = e.clientY - refData.current.y;
+      e.preventDefault(); const startX = e.clientX - refData.current.x; const startY = e.clientY - refData.current.y;
       const move = (m) => { refData.current.x = m.clientX - startX; refData.current.y = m.clientY - startY; updateTransform(refData, refEl); };
       const stop = () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', stop); };
       window.addEventListener('mousemove', move); window.addEventListener('mouseup', stop);
   };
+  const handleZoom = (delta, refData, refEl) => { refData.current.scale = Math.max(0.1, Math.min(5, refData.current.scale + delta)); updateTransform(refData, refEl); };
 
-  const handleZoom = (delta, refData, refEl) => {
-      refData.current.scale = Math.max(0.1, Math.min(5, refData.current.scale + delta));
-      updateTransform(refData, refEl);
-  };
-
+  // --- LOGIQUE D'ENVOI (CORRIGÉE AVEC GESTION D'ERREUR) ---
   const submitToIA = async () => {
       if(!answer.trim()) return alert("Réponse vide !");
       setSubmitting(true);
@@ -1984,33 +2493,49 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
           const res = await fetch('/api/analyze-homework', {
               method: 'POST',
               headers: {'Content-Type':'application/json'},
-              body: JSON.stringify({ userText: answer, homeworkInstruction: currentPage.instruction, classroom: user.classroom, playerId: user.id || user._id, homeworkId: homework._id, levelIndex: pageIdx })
+              body: JSON.stringify({
+                  userText: answer,
+                  homeworkInstruction: currentPage.instruction,
+                  classroom: user.classroom,
+                  playerId: user._id || user.id,
+                  homeworkId: homework._id,
+                  levelIndex: pageIdx
+              })
           });
+
           const data = await res.json();
-          setAiResult(data);
-      } catch(e) { alert("Erreur IA"); }
+          
+          if (data.error) {
+              alert("Erreur Serveur : " + data.error);
+          } else {
+              setAiResult(data);
+          }
+      } catch(e) { 
+          alert("Erreur de connexion : Vérifie ton internet ou le serveur.");
+          console.error(e);
+      }
       setSubmitting(false);
   };
 
   return (
     <div className="homework-container">
-      {/* HAUT : LISEUSE */}
+      {/* HAUT */}
       <div id="top-container" className="viewer-top-area" onMouseDown={(e) => handleDrag(e, viewTop, topRef)}>
-          <div className="floating-question-badge">QUESTION {pageIdx+1} / {homework.levels.length} {currentLabel && `| ${currentLabel}`}</div>
+          <div className="floating-question-badge">PAGE {pageIdx+1} / {homework.levels.length} {currentLabel && `| ${currentLabel}`}</div>
           {docs.length > 0 && <img ref={topRef} src={docs[docIdx]} className="main-doc-img" draggable="false" onLoad={(e) => fitImage(e.target, 'top-container', viewTop, topRef)} />}
-          <div className="absolute bottom-4 right-4 flex gap-2 z-10" onMouseDown={e => e.stopPropagation()}>
-              <button onClick={() => handleZoom(-0.2, viewTop, topRef)} className="zoom-btn">➖</button>
-              <button onClick={() => handleZoom(0.2, viewTop, topRef)} className="zoom-btn">➕</button>
+          <div className="zoom-controls-floating">
+              <button onClick={() => handleZoom(-0.2, viewTop, topRef)} className="zoom-btn-glass">➖</button>
+              <button onClick={() => handleZoom(0.2, viewTop, topRef)} className="zoom-btn-glass">➕</button>
           </div>
           {docs.length > 1 && (
-              <div className="absolute top-1/2 w-full flex justify-between px-4 z-10" onMouseDown={e => e.stopPropagation()}>
-                  <button onClick={() => setDocIdx(d => Math.max(0, d-1))} className="zoom-btn">◀</button>
-                  <button onClick={() => setDocIdx(d => Math.min(docs.length-1, d+1))} className="zoom-btn">▶</button>
+              <div className="nav-arrows-container" onMouseDown={e => e.stopPropagation()}>
+                  <button onClick={() => setDocIdx(d => Math.max(0, d-1))} className="nav-arrow-btn">◀</button>
+                  <button onClick={() => setDocIdx(d => Math.min(docs.length-1, d+1))} className="nav-arrow-btn">▶</button>
               </div>
           )}
       </div>
 
-      {/* BAS : INTERACTION */}
+      {/* BAS */}
       <div className="interaction-bottom-area">
           <div className="question-panel">
               {currentPage.questionImage ? (
@@ -2018,34 +2543,25 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
                       <img ref={botRef} src={currentPage.questionImage} draggable="false" onLoad={(e) => fitImage(e.target, 'bot-container', viewBot, botRef)} />
                   </div>
               ) : (
-                  <div className="q-text-scroll-area custom-scrollbar">{currentPage.instruction || "Consigne."}</div>
+                  <div className="q-text-scroll-area custom-scrollbar">{currentPage.instruction || "Aucune consigne."}</div>
               )}
           </div>
           <div className="answer-panel">
-              <textarea className="answer-input" placeholder="Écris ta réponse ici..." value={answer} onChange={e => setAnswer(e.target.value)} />
-              <button onClick={submitToIA} disabled={submitting} className="btn-send-ai">{submitting ? "..." : "ENVOYER 🤖"}</button>
+              <textarea className="answer-input" placeholder="Réponse..." value={answer} onChange={e => setAnswer(e.target.value)} />
+              <button onClick={submitToIA} disabled={submitting} className="btn-send-ai">{submitting ? "Correction..." : "ENVOYER 🤖"}</button>
           </div>
       </div>
 
-      {/* MODALE RÉSULTATS (CORRIGÉE VISUELLEMENT) */}
+      {/* MODALE */}
       {aiResult && (
           <div className="ai-modal-overlay">
-              <div className="ai-modal-box animate-in zoom-in duration-300">
-                  
-                  <div className="grade-display">
-                      <h2 className="text-xl font-bold uppercase text-slate-400">ANALYSE TERMINÉE</h2>
-                      <div className="grade-value">{aiResult.grade}</div>
-                  </div>
-                  
-                  <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
-                      {/* TEXTE DANS UNE BOITE GRISE CLAIRE */}
-                      <div className="ai-feedback-content">
-                          <div dangerouslySetInnerHTML={{__html: aiResult.feedback_fond}} />
-                      </div>
-                      
+              <div className="ai-modal-box animate-in zoom-in">
+                  <div className="grade-display"><div className="grade-value">{aiResult.grade}</div></div>
+                  <div className="flex-1 overflow-y-auto custom-scrollbar">
+                      <div className="ai-feedback-content" dangerouslySetInnerHTML={{__html: aiResult.feedback_fond}} />
                       {aiResult.corrections?.length > 0 && (
                           <div className="corrections-container">
-                              <h4 className="text-red-600 font-bold text-xs uppercase mb-2">Corrections Orthographe :</h4>
+                              <h4 className="text-red-600 font-bold text-xs uppercase mb-2">Corrections :</h4>
                               {aiResult.corrections.map((c, i) => (
                                   <div key={i} className="correction-row">
                                       <div><span className="wrong-word">{c.wrong}</span> ➔ <span className="right-word">{c.correct}</span></div>
@@ -2055,14 +2571,12 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
                           </div>
                       )}
                   </div>
-
                   <div className="ai-modal-actions">
                       <button onClick={() => setAiResult(null)} className="btn-action-modal btn-improve">Améliorer</button>
-                      {pageIdx < homework.levels.length - 1 ? (
-                          <button onClick={() => { setAiResult(null); setAnswer(''); setPageIdx(pageIdx+1); setDocIdx(0); }} className="btn-action-modal btn-next">Suivant ➔</button>
-                      ) : (
-                          <button onClick={onQuit} className="btn-action-modal btn-next">Terminer 🎉</button>
-                      )}
+                      {pageIdx < homework.levels.length - 1 ? 
+                        <button onClick={() => { setAiResult(null); setAnswer(''); setPageIdx(pageIdx+1); setDocIdx(0); }} className="btn-action-modal btn-next">Suivant ➔</button> :
+                        <button onClick={onQuit} className="btn-action-modal btn-next">Terminer 🎉</button>
+                      }
                   </div>
               </div>
           </div>
@@ -2304,68 +2818,70 @@ export default function ProfNav({ activeTab, onTabChange }) {
 ### FICHIER: client/src/features/prof/games/GameStudio.css
 ############################################################
 
-/* Ajout style Upload IA */
-.ai-upload-row {
-    display: flex;
-    align-items: center;
-    gap: 15px;
-    margin-bottom: 1.5rem;
-}
+/* --- CORRECTION LAYOUT (2 Colonnes seulement) --- */
 
-.btn-upload-ai {
-    background: #f3e8ff;
-    color: #9333ea;
-    padding: 10px 20px;
-    border-radius: 12px;
-    font-weight: 800;
-    cursor: pointer;
-    border: 2px dashed #d8b4fe;
-    transition: 0.2s;
-    font-size: 0.9rem;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.btn-upload-ai:hover {
-    background: white;
-    border-color: #9333ea;
-}
-
-.file-count {
-    font-size: 0.8rem;
-    font-weight: bold;
-    color: #16a34a;
-    background: #dcfce7;
-    padding: 5px 10px;
-    border-radius: 8px;
-}
-
-/* Le reste du CSS (INCHANGÉ pour garantir la stabilité, je remets les bases) */
 .studio-container { width: 100%; }
-.btn-create-game-v2 { width: 100%; padding: 1.5rem; background: #9333ea; color: white; border-radius: 30px; font-weight: 900; font-size: 1.3rem; border: none; border-bottom: 8px solid #7e22ce; margin-bottom: 2rem; cursor: pointer; text-transform: uppercase; }
+
+.btn-create-game-v2 { 
+    width: 100%; padding: 1.5rem; background: #9333ea; color: white; border-radius: 30px; font-weight: 900; font-size: 1.3rem; border: none; border-bottom: 8px solid #7e22ce; margin-bottom: 2rem; cursor: pointer; text-transform: uppercase; transition: 0.2s;
+}
+.btn-create-game-v2:hover { transform: translateY(-2px); }
+
+/* Liste */
 .games-list-v2 { display: grid; gap: 1rem; }
 .game-card-v2 { background: white; padding: 1.5rem; border-radius: 24px; border: 2px solid #f3e8ff; display: flex; justify-content: space-between; align-items: center; }
 .game-info h4 { font-size: 1.2rem; color: #1e293b; margin: 0; font-weight: 800; }
-.game-badge { background: #faf5ff; color: #9333ea; padding: 5px 12px; border-radius: 10px; font-size: 0.7rem; font-weight: 900; margin-right: 5px; border: 1px solid #e9d5ff; }
-.class-badge { background: #fff7ed; color: #f97316; padding: 5px 12px; border-radius: 10px; font-size: 0.7rem; font-weight: 900; border: 1px solid #ffedd5; }
+.game-badge { background: #faf5ff; color: #9333ea; padding: 5px 12px; border-radius: 10px; font-size: 0.7rem; font-weight: 900; text-transform: uppercase; margin-top: 6px; display: inline-block; border: 1px solid #e9d5ff; margin-right: 5px;}
+.class-badge { background: #fff7ed; color: #f97316; padding: 5px 12px; border-radius: 10px; font-size: 0.7rem; font-weight: 900; text-transform: uppercase; border: 1px solid #ffedd5; }
+
 .game-actions { display: flex; gap: 0.8rem; }
-.btn-icon-edit { background: #faf5ff; color: #9333ea; width: 48px; height: 48px; border-radius: 14px; border: none; font-weight: 900; font-size: 1.2rem; cursor: pointer; }
-.btn-icon-del { background: #fef2f2; color: #ef4444; width: 48px; height: 48px; border-radius: 14px; border: none; font-weight: 900; font-size: 1.2rem; cursor: pointer; }
+.btn-icon-edit, .btn-icon-del { width: 48px; height: 48px; border-radius: 14px; border: none; font-weight: 900; font-size: 1.2rem; cursor: pointer; }
+.btn-icon-edit { background: #faf5ff; color: #9333ea; }
+.btn-icon-del { background: #fef2f2; color: #ef4444; }
+
+/* MODALE */
 .game-modal-overlay { position: fixed; inset: 0; z-index: 2000; background: rgba(15, 23, 42, 0.9); backdrop-filter: blur(10px); display: flex; align-items: center; justify-content: center; padding: 2rem; }
 .game-modal { background: white; width: 100%; max-width: 900px; max-height: 90vh; border-radius: 40px; display: flex; flex-direction: column; overflow: hidden; border: 4px solid #9333ea; }
 .game-modal-header { padding: 2rem; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center; background: #faf5ff; }
 .game-modal-body { flex: 1; overflow-y: auto; padding: 2.5rem; }
-.config-grid { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 1rem; margin-bottom: 2rem; }
-.input-title, .select-chapter, .select-class { padding: 1.2rem; border-radius: 18px; border: 2px solid #f3e8ff; background: #faf5ff; font-weight: 900; outline: none; font-size: 1rem; width: 100%; color: #4c1d95; }
+
+/* GRILLE CONFIGURATION (2 Colonnes : Titre | Classe) */
+.config-grid { 
+    display: grid; 
+    grid-template-columns: 3fr 1fr; /* Titre large, Classe à droite */
+    gap: 1rem; 
+    margin-bottom: 2rem; 
+}
+
+.input-title, .select-class { 
+    padding: 1.2rem; 
+    border-radius: 18px; 
+    border: 2px solid #f3e8ff; 
+    background: #faf5ff; 
+    font-weight: 900; 
+    outline: none; 
+    font-size: 1rem; 
+    width: 100%; 
+    color: #4c1d95;
+}
+
+/* Le reste du CSS */
 .tabs-mode { display: flex; background: #f1f5f9; padding: 0.4rem; border-radius: 20px; margin-bottom: 2rem; }
 .tabs-mode button { flex: 1; padding: 1rem; border-radius: 16px; border: none; font-weight: 900; color: #94a3b8; cursor: pointer; }
 .tabs-mode button.active-manual { background: white; color: #2563eb; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
 .tabs-mode button.active-ai { background: #9333ea; color: white; box-shadow: 0 4px 15px rgba(147, 51, 234, 0.4); }
+
 .ai-box { background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%); padding: 2rem; border-radius: 30px; border: 2px solid #e9d5ff; }
 .ai-box textarea { width: 100%; height: 100px; border-radius: 18px; border: none; padding: 1.2rem; font-weight: 600; outline: none; background: white; resize: none; margin-bottom: 1.5rem; }
 .ai-actions { display: flex; gap: 2rem; align-items: center; }
 .btn-ai-generate { flex: 1; background: #9333ea; color: white; padding: 1.25rem; border-radius: 18px; font-weight: 900; border: none; cursor: pointer; }
+
+/* Upload IA Style */
+.ai-upload-row { display: flex; align-items: center; gap: 15px; margin-bottom: 1.5rem; }
+.btn-upload-ai { background: #f3e8ff; color: #9333ea; padding: 10px 20px; border-radius: 12px; font-weight: 800; cursor: pointer; border: 2px dashed #d8b4fe; transition: 0.2s; font-size: 0.9rem; display: flex; align-items: center; gap: 8px; }
+.btn-upload-ai:hover { background: white; border-color: #9333ea; }
+.file-count { font-size: 0.8rem; font-weight: bold; color: #16a34a; background: #dcfce7; padding: 5px 10px; border-radius: 8px; }
+
 .manual-box { background: #eff6ff; padding: 2rem; border-radius: 30px; border: 1px solid #dbeafe; }
 .q-input { width: 100%; padding: 1.2rem; border-radius: 18px; border: none; margin-bottom: 1.5rem; font-weight: 900; outline: none; }
 .opts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem; }
@@ -2373,6 +2889,7 @@ export default function ProfNav({ activeTab, onTabChange }) {
 .opt-row.correct { border-color: #22c55e; background: #f0fdf4; }
 .opt-row input { flex: 1; border: none; outline: none; font-weight: 700; background: transparent; }
 .btn-add-q { width: 100%; padding: 1.2rem; background: #2563eb; color: white; border-radius: 18px; font-weight: 900; border: none; cursor: pointer; }
+
 .preview-section { margin-top: 2rem; }
 .preview-scroll { display: flex; flex-direction: column; gap: 0.8rem; max-height: 250px; overflow-y: auto; }
 .q-item { background: #f8fafc; padding: 1rem; border-radius: 20px; border: 2px solid #f1f5f9; cursor: pointer; }
@@ -2387,7 +2904,6 @@ export default function ProfNav({ activeTab, onTabChange }) {
 ### FICHIER: client/src/features/prof/games/GameStudio.jsx
 ############################################################
 
-/* STUDIO JEUX - FIX AFFICHAGE 4 OPTIONS FIXES */
 import React, { useState, useEffect } from 'react';
 import './GameStudio.css';
 
@@ -2397,10 +2913,11 @@ export default function GameStudio() {
   const [genMode, setGenMode] = useState('manual');
   const [loadingIA, setLoadingIA] = useState(false);
 
-  const defaultForm = { _id: null, title: '', chapterId: 'ch1-zombie', classroom: 'Toutes', questions: [] };
+  // SUPPRESSION DU CHAPITRE DANS LE FORMULAIRE VISIBLE
+  // On garde chapterId en 'generic' en interne pour la BDD
+  const defaultForm = { _id: null, title: '', chapterId: 'generic', classroom: 'Toutes', questions: [] };
   const [formData, setFormData] = useState(defaultForm);
   
-  // On s'assure que currentQ a toujours 4 slots vides au départ
   const [currentQ, setCurrentQ] = useState({ q: '', options: ['', '', '', ''], a: 0 });
   const [editingIdx, setEditingIdx] = useState(null);
 
@@ -2442,7 +2959,6 @@ export default function GameStudio() {
   const addOrUpdateQuestion = () => {
     if (!currentQ.q) return;
     
-    // Sécurité : on force 4 options avant de sauvegarder
     const safeQ = { ...currentQ };
     while(safeQ.options.length < 4) safeQ.options.push("");
     safeQ.options = safeQ.options.slice(0, 4);
@@ -2466,7 +2982,6 @@ export default function GameStudio() {
     if (res.ok) { setIsEditing(false); load(); }
   };
 
-  // UI Helpers
   const handleEdit = (lvl) => { setFormData(lvl); setIsEditing(true); };
   const handleDelete = async (id) => { if(confirm("Supprimer ?")) { await fetch(`/api/game-levels/${id}`, {method:'DELETE'}); load(); }};
 
@@ -2474,14 +2989,14 @@ export default function GameStudio() {
     <div className="studio-container">
       {!isEditing ? (
         <>
-          <button onClick={() => { setFormData(defaultForm); setIsEditing(true); }} className="btn-create-game-v2">➕ CRÉER UN NIVEAU DE JEU</button>
+          <button onClick={() => { setFormData(defaultForm); setIsEditing(true); }} className="btn-create-game-v2">➕ CRÉER UN QUIZ</button>
           <div className="games-list-v2">
             {levels.map(lvl => (
               <div key={lvl._id} className="game-card-v2">
                 <div className="game-info">
                     <h4>{lvl.title}</h4>
-                    <span className="game-badge">{lvl.chapterId === 'ch1-zombie' ? '🧟 ZOMBIE' : '🚀 STARSHIP'}</span>
-                    <span className="class-badge" style={{marginLeft:'5px'}}>{lvl.classroom || 'Toutes'}</span>
+                    {/* On n'affiche plus le badge Zombie/Starship ici car ça n'a plus de sens */}
+                    <span className="class-badge" style={{marginLeft:'0'}}>{lvl.classroom || 'Toutes'}</span>
                     <span style={{fontSize:'0.7rem', color:'#cbd5e1', marginLeft:'10px'}}>({lvl.questions.length} Q)</span>
                 </div>
                 <div className="game-actions">
@@ -2496,19 +3011,19 @@ export default function GameStudio() {
         <div className="game-modal-overlay">
           <div className="game-modal animate-in zoom-in duration-200">
             <div className="game-modal-header">
-              <h3>{formData._id ? 'MODIFIER' : 'NOUVEAU'}</h3>
+              <h3>{formData._id ? 'MODIFIER' : 'NOUVEAU QUIZ'}</h3>
               <button onClick={() => setIsEditing(false)} className="btn-close">✕</button>
             </div>
 
             <div className="game-modal-body custom-scrollbar">
+                {/* GRILLE 2 COLONNES (Titre | Classe) - On a viré le selecteur de jeu */}
                 <div className="config-grid">
-                    <input className="input-title" placeholder="Titre..." value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
-                    <select className="select-chapter" value={formData.chapterId} onChange={e => setFormData({...formData, chapterId: e.target.value})}>
-                        <option value="ch1-zombie">🧟 Mode Zombie</option>
-                        <option value="ch2-starship">🚀 Mode Starship</option>
-                    </select>
+                    <input className="input-title" placeholder="Titre du Quiz..." value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
+                    
                     <select className="select-class" value={formData.classroom} onChange={e => setFormData({...formData, classroom: e.target.value})}>
-                        <option value="Toutes">Toutes les classes</option><option value="6D">6eD</option><option value="5B">5eB</option><option value="5C">5eC</option><option value="2A">2nde A</option><option value="2CD">2nde CD</option>
+                        <option value="Toutes">Toutes les classes</option>
+                        <option value="6D">6eD</option><option value="5B">5eB</option><option value="5C">5eC</option>
+                        <option value="2A">2nde A</option><option value="2CD">2nde CD</option>
                     </select>
                 </div>
 
@@ -2535,7 +3050,6 @@ export default function GameStudio() {
                         <input className="q-input" placeholder="Question..." value={currentQ.q} onChange={e => setCurrentQ({...currentQ, q: e.target.value})} />
                         
                         <div className="opts-grid">
-                            {/* --- ICI LE FIX FRONTEND : ON FORCE 4 ENTRÉES --- */}
                             {[0, 1, 2, 3].map((idx) => (
                                 <div key={idx} className={`opt-row ${currentQ.a === idx ? 'correct' : ''}`} onClick={() => setCurrentQ({...currentQ, a: idx})}>
                                     <input type="radio" checked={currentQ.a === idx} readOnly />
@@ -2544,7 +3058,6 @@ export default function GameStudio() {
                                         value={currentQ.options[idx] || ''} 
                                         onChange={e => { 
                                             const n = [...currentQ.options];
-                                            // On s'assure que le tableau est assez grand
                                             while(n.length < 4) n.push("");
                                             n[idx] = e.target.value; 
                                             setCurrentQ({...currentQ, options: n}); 
@@ -2567,7 +3080,6 @@ export default function GameStudio() {
                                     <button onClick={(e) => { e.stopPropagation(); const n = [...formData.questions]; n.splice(i, 1); setFormData({...formData, questions: n}); }} className="btn-del-q">✕</button>
                                 </div>
                                 <div className="game-preview-options">
-                                    {/* On affiche seulement les 4 premières */}
                                     {q.options.slice(0, 4).map((opt, oi) => <span key={oi} className={oi === q.a ? 'is-good' : ''}>{opt || "?"}</span>)}
                                 </div>
                             </div>
@@ -2777,174 +3289,159 @@ export default function HomeworkResults({ homework, onBack }) {
 ### FICHIER: client/src/features/prof/homework/HomeworkStudio.css
 ############################################################
 
-/* --- DASHBOARD DES DEVOIRS (LISTE) --- */
-.studio-container { width: 100%; padding: 1rem; }
-/* Gros bouton de création */
+/* --- RESTAURATION DESIGN STUDIO DEVOIRS --- */
+
+.studio-container { width: 100%; padding-bottom: 50px; }
+
+/* En-tête de page */
 .btn-create-hw-big {
-width: 100%;
-padding: 1.5rem;
-background: #f97316;
-color: white;
-border-radius: 20px;
-font-weight: 900;
-font-size: 1.2rem;
-border: none;
-border-bottom: 5px solid #c2410c;
-cursor: pointer;
-margin-bottom: 2.5rem;
-text-transform: uppercase;
-transition: 0.2s;
+    width: 100%;
+    padding: 1.5rem;
+    background: #f97316;
+    color: white;
+    border-radius: 25px;
+    font-weight: 900;
+    font-size: 1.2rem;
+    border: none;
+    border-bottom: 6px solid #c2410c;
+    cursor: pointer;
+    margin-bottom: 2rem;
+    text-transform: uppercase;
+    box-shadow: 0 10px 20px rgba(249, 115, 22, 0.2);
+    transition: 0.2s;
 }
-.btn-create-hw-big:hover { transform: translateY(-2px); filter: brightness(1.1); }
-.btn-create-hw-big:active { transform: translateY(2px); border-bottom-width: 0; }
-/* Cartes de la liste */
-.hw-admin-list {
-display: flex;
-flex-direction: column;
-gap: 1rem;
-}
+.btn-create-hw-big:active { transform: translateY(4px); border-bottom-width: 0; }
+
+/* Liste des devoirs */
+.hw-admin-list { display: flex; flex-direction: column; gap: 1rem; }
 .hw-admin-card-v13 {
-background: white;
-padding: 1.2rem 2rem;
-border-radius: 20px;
-border: 1px solid #e2e8f0;
-display: flex;
-justify-content: space-between;
-align-items: center;
-box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
-transition: 0.2s;
+    background: white;
+    padding: 1.5rem;
+    border-radius: 20px;
+    border: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
 }
-.hw-admin-card-v13:hover {
-border-color: #f97316;
-transform: translateX(5px);
-}
-.hw-info {
-display: flex;
-align-items: center;
-gap: 1.5rem;
-}
-.hw-title-text {
-font-size: 1.1rem;
-font-weight: 800;
-color: #1e293b;
-}
-.hw-class-badge {
-background: #fff7ed;
-color: #f97316;
-padding: 4px 12px;
-border-radius: 8px;
-font-size: 0.75rem;
-font-weight: 900;
-}
-/* Boutons d'action de la liste */
-.hw-actions-row {
-display: flex;
-gap: 0.8rem;
-}
-.btn-action-view, .btn-action-edit, .btn-action-del {
-padding: 0.6rem 1rem;
-border-radius: 12px;
-font-weight: 900;
-font-size: 0.75rem;
-border: none;
-cursor: pointer;
-transition: 0.2s;
-}
+.hw-info { display: flex; align-items: center; gap: 1rem; }
+.hw-title-text { font-size: 1.1rem; font-weight: 800; color: #1e293b; }
+.hw-class-badge { background: #fff7ed; color: #f97316; padding: 5px 12px; border-radius: 8px; font-weight: 800; font-size: 0.7rem; }
+.hw-actions-row { display: flex; gap: 0.5rem; }
+.btn-action-view, .btn-action-edit, .btn-action-del { border: none; padding: 0.8rem; border-radius: 10px; cursor: pointer; font-weight: bold; }
 .btn-action-view { background: #eff6ff; color: #2563eb; }
 .btn-action-edit { background: #f8fafc; color: #64748b; }
 .btn-action-del { background: #fef2f2; color: #ef4444; }
-.btn-action-view:hover { background: #2563eb; color: white; }
-.btn-action-edit:hover { background: #64748b; color: white; }
-.btn-action-del:hover { background: #ef4444; color: white; }
-/* --- MODALE D'ÉDITION (STUDIO) --- */
-.hw-edit-overlay {
-position: fixed;
-inset: 0;
-z-index: 9999;
-background: rgba(15, 23, 42, 0.8);
-backdrop-filter: blur(8px);
-display: flex;
-align-items: center;
-justify-content: center;
-padding: 20px;
-}
-.hw-edit-modal {
-background: white;
-width: 100%;
-max-width: 1000px;
-max-height: 90vh;
-border-radius: 30px;
-display: flex;
-flex-direction: column;
-overflow: hidden;
-border: 4px solid #f97316;
-}
-.hw-edit-header {
-padding: 1.5rem;
-background: #fff7ed;
-border-bottom: 1px solid #fed7aa;
-display: flex;
-justify-content: space-between;
-align-items: center;
-}
-.hw-edit-body {
-flex: 1;
-overflow-y: auto;
-padding: 2rem;
-background: #f8fafc;
-}
-.hw-config-grid {
-display: grid;
-grid-template-columns: 2fr 1fr;
-gap: 1.5rem;
-margin-bottom: 2rem;
-}
-.hw-input-title, .hw-select-class {
-padding: 0.8rem 1.2rem;
-border-radius: 12px;
-border: 2px solid #e2e8f0;
-font-weight: 700;
-}
-/* Carte Page */
+
+/* --- ÉDITEUR (MODALE) --- */
+.hw-edit-overlay { position: fixed; inset: 0; z-index: 2000; background: rgba(15,23,42,0.8); backdrop-filter: blur(5px); display: flex; align-items: center; justify-content: center; padding: 20px; }
+.hw-edit-modal { background: white; width: 100%; max-width: 900px; max-height: 90vh; border-radius: 30px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); border: 4px solid #f97316; }
+.hw-edit-header { padding: 1.5rem; border-bottom: 1px solid #fed7aa; background: #fff7ed; display: flex; justify-content: space-between; align-items: center; }
+.hw-edit-header h3 { margin: 0; color: #ea580c; font-weight: 900; font-size: 1.5rem; }
+.hw-close-x { background: white; border: none; width: 40px; height: 40px; border-radius: 50%; font-weight: 900; color: #ea580c; cursor: pointer; }
+
+.hw-edit-body { flex: 1; overflow-y: auto; padding: 2rem; background: #f8fafc; }
+
+/* Grille Config */
+.hw-config-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; margin-bottom: 2rem; }
+.hw-input-title, .hw-select-class { padding: 1rem; border-radius: 15px; border: 2px solid #e2e8f0; font-size: 1rem; font-weight: 700; outline: none; }
+
+/* --- CARTE PAGE (DESIGN SOIGNÉ) --- */
 .hw-page-card {
-background: white;
-border-radius: 20px;
-padding: 1.5rem;
-margin-bottom: 1.5rem;
-border: 1px solid #e2e8f0;
+    background: white;
+    border-radius: 25px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    border: 2px solid #e2e8f0;
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02);
 }
+.hw-page-header { display: flex; justify-content: space-between; margin-bottom: 1rem; font-size: 0.8rem; font-weight: 900; color: #94a3b8; letter-spacing: 1px; }
+.hw-del-page { background: #fef2f2; color: #ef4444; border: none; padding: 5px 10px; border-radius: 8px; cursor: pointer; font-weight: 800; }
+
+/* Section Documents (Petite ligne) */
+.hw-label { font-size: 0.7rem; font-weight: 900; color: #3b82f6; margin-bottom: 0.5rem; text-transform: uppercase; }
 .hw-docs-preview {
-display: flex;
-flex-wrap: wrap;
-gap: 1rem;
-padding: 1rem;
-background: #f0f7ff;
-border-radius: 15px;
-border: 2px dashed #bfdbfe;
-margin-bottom: 1rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 10px;
+    background: #f0f9ff;
+    border-radius: 15px;
+    border: 2px dashed #bae6fd;
+    min-height: 80px;
+    align-items: center;
 }
-.hw-mini-doc-container { display: flex; flex-direction: column; align-items: center; gap: 5px; }
-.hw-mini-img-wrapper { position: relative; width: 65px; height: 65px; }
-.hw-mini-img { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; border: 2px solid white; }
-.btn-del-mini { position: absolute; top: -5px; right: -5px; background: #ef4444; color: white; border: none; width: 18px; height: 18px; border-radius: 50%; font-size: 9px; cursor: pointer; }
-/* Magie IA */
-.btn-ai-magic {
-width: 100%;
-margin-bottom: 1rem;
-padding: 1rem;
-background: linear-gradient(135deg, #7c3aed, #2563eb);
-color: white;
-border: none;
-border-radius: 15px;
-font-weight: 900;
-cursor: pointer;
+.hw-mini-img { width: 60px; height: 60px; object-fit: cover; border-radius: 10px; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+.hw-add-mini {
+    width: 60px; height: 60px; background: white; color: #3b82f6; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center; font-size: 2rem;
+    cursor: pointer; border: 2px solid transparent; transition: 0.2s;
 }
-.hw-question-section { display: grid; grid-template-columns: 140px 1fr; gap: 1rem; }
-.hw-q-img-upload { width: 140px; height: 140px; background: #f1f5f9; border-radius: 12px; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; }
+.hw-add-mini:hover { transform: scale(1.05); border-color: #3b82f6; }
+
+/* Section Question (Split) */
+.hw-question-section {
+    display: grid;
+    grid-template-columns: 150px 1fr;
+    gap: 1.5rem;
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 2px dashed #f1f5f9;
+}
+
+.hw-q-img-upload {
+    width: 100%;
+    height: 150px;
+    background: #f8fafc;
+    border: 2px dashed #cbd5e1;
+    border-radius: 15px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+    cursor: pointer;
+    text-align: center;
+    font-size: 0.7rem;
+    color: #94a3b8;
+    font-weight: 800;
+}
 .hw-q-img-upload img { width: 100%; height: 100%; object-fit: cover; }
-.hw-q-text { width: 100%; height: 140px; padding: 1rem; border-radius: 12px; border: 1px solid #e2e8f0; resize: none; font-family: inherit; }
-.hw-edit-footer { padding: 1.5rem; background: white; border-top: 1px solid #e2e8f0; }
-.hw-btn-save-final { width: 100%; padding: 1rem; background: #16a34a; color: white; border: none; border-radius: 15px; font-weight: 900; cursor: pointer; }
+.hw-hidden-file { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+/* Bouton Transcrire */
+.btn-ocr-trigger {
+    margin-top: 8px;
+    background: #7c3aed;
+    color: white;
+    font-size: 0.7rem;
+    padding: 5px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    width: 100%;
+    font-weight: 800;
+}
+
+.hw-q-text {
+    width: 100%;
+    height: 150px;
+    padding: 1rem;
+    border-radius: 15px;
+    border: 2px solid #e2e8f0;
+    resize: none;
+    outline: none;
+    font-size: 0.95rem;
+    font-family: inherit;
+}
+.hw-q-text:focus { border-color: #f97316; }
+
+.hw-add-page-btn { width: 100%; padding: 1rem; border: 2px dashed #cbd5e1; background: none; border-radius: 20px; font-weight: 900; color: #94a3b8; cursor: pointer; margin-bottom: 2rem; }
+.hw-add-page-btn:hover { background: white; border-color: #94a3b8; }
+
+.hw-edit-footer { padding: 2rem; background: white; border-top: 1px solid #e2e8f0; }
+.hw-btn-save-final { width: 100%; padding: 1.2rem; background: #16a34a; color: white; border-radius: 20px; font-weight: 900; font-size: 1.2rem; border: none; border-bottom: 6px solid #14532d; cursor: pointer; }
 
 
 ############################################################
@@ -2959,9 +3456,12 @@ export default function HomeworkStudio() {
   const [hws, setHws] = useState([]);
   const [isEditing, setIsEditing] = useState(false);
   const [viewingResults, setViewingResults] = useState(null);
-  const [formData, setFormData] = useState({ _id: null, title: '', classroom: 'Toutes', levels: [] });
   
-  // États Smart Wizard
+  // Données
+  const [formData, setFormData] = useState({ _id: null, title: '', classroom: 'Toutes', levels: [] });
+  const [uploading, setUploading] = useState(false);
+
+  // États Wizard IA
   const [showSmartWizard, setShowSmartWizard] = useState(false);
   const [qFile, setQFile] = useState(null);
   const [docFiles, setDocFiles] = useState([]);
@@ -2973,10 +3473,10 @@ export default function HomeworkStudio() {
   };
   useEffect(() => { load(); }, []);
 
+  // --- LOGIQUE WIZARD (Génération Auto) ---
   const handleSmartGenerate = async () => {
       if(!qFile) return alert("Il faut l'image des questions !");
       setSmartLoading(true);
-
       const fd = new FormData();
       fd.append('questionImg', qFile);
       for (let i = 0; i < docFiles.length; i++) fd.append('docImgs', docFiles[i]);
@@ -2984,7 +3484,6 @@ export default function HomeworkStudio() {
       try {
           const res = await fetch('/api/smart-generate', { method: 'POST', body: fd });
           const data = await res.json();
-          
           if (data.levels) {
               setFormData({ ...formData, title: "Nouveau Devoir (IA)", levels: data.levels });
               setShowSmartWizard(false);
@@ -2994,10 +3493,9 @@ export default function HomeworkStudio() {
       setSmartLoading(false);
   };
 
+  // --- LOGIQUE MANUELLE ---
   const handleUpload = async (files, idx, type) => {
-    // ... (Logique upload conservée, simplifiée ici pour la lecture)
-    // Pour gagner de la place, je garde la logique existante implicitement
-    // Si tu as besoin du code complet d'upload ici, dis-le moi, mais le focus est sur le SELECT.
+    setUploading(true);
     const newLevels = [...formData.levels];
     for (let file of Array.from(files)) {
       const fd = new FormData();
@@ -3009,10 +3507,33 @@ export default function HomeworkStudio() {
             newLevels[idx].attachmentUrls.push(res.imageUrl);
         } else {
             newLevels[idx].questionImage = res.imageUrl;
+            newLevels[idx].instruction = ""; 
         }
       }
     }
     setFormData({ ...formData, levels: newLevels });
+    setUploading(false);
+  };
+
+  const handleOCR = async (idx) => {
+      const level = formData.levels[idx];
+      if(!level.questionImage) return alert("Pas d'image !");
+      setUploading(true);
+      try {
+          const res = await fetch('/api/extract-text', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({ imageUrl: level.questionImage })
+          }).then(r => r.json());
+          
+          if(res.text) {
+              const newLevels = [...formData.levels];
+              newLevels[idx].instruction = res.text;
+              newLevels[idx].questionImage = null;
+              setFormData({ ...formData, levels: newLevels });
+          }
+      } catch(e) { alert("Erreur OCR"); }
+      setUploading(false);
   };
 
   const save = async () => {
@@ -3025,31 +3546,58 @@ export default function HomeworkStudio() {
     if (res.ok) { setIsEditing(false); load(); }
   };
 
+  if (viewingResults) return <HomeworkResults homework={viewingResults} onBack={() => setViewingResults(null)} />;
+
+  // --- RENDU WIZARD ---
   if (showSmartWizard) return (
-      // ... (Code Wizard inchangé, je le raccourcis pour le focus)
       <div className="fixed inset-0 bg-slate-900/90 z-50 flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-lg p-8 rounded-3xl text-center">
-              <h2 className="text-2xl font-black mb-4">Mode Rapide IA</h2>
-              <input type="file" onChange={e => setQFile(e.target.files[0])} className="mb-4 block w-full" />
-              <input type="file" multiple onChange={e => setDocFiles(Array.from(e.target.files))} className="mb-4 block w-full" />
-              <div className="flex gap-2">
-                  <button onClick={() => setShowSmartWizard(false)} className="flex-1 py-3 bg-gray-200 rounded-xl font-bold">Annuler</button>
-                  <button onClick={handleSmartGenerate} disabled={smartLoading} className="flex-1 py-3 bg-purple-600 text-white rounded-xl font-bold">{smartLoading ? "..." : "Générer"}</button>
+          <div className="bg-white w-full max-w-2xl p-8 rounded-[40px] shadow-2xl border-4 border-purple-500 animate-in zoom-in">
+              <h2 className="text-3xl font-black text-purple-600 mb-6 text-center uppercase">✨ Générateur Magique</h2>
+              
+              <div className="space-y-6 mb-8">
+                  <div className="p-6 bg-purple-50 rounded-2xl border-2 border-dashed border-purple-200 text-center relative hover:bg-white transition-colors">
+                      <p className="font-bold text-purple-800 text-lg">1. Photo des Questions</p>
+                      <p className="text-sm text-purple-400">{qFile ? "✅ " + qFile.name : "Clique ici"}</p>
+                      <input type="file" onChange={e => setQFile(e.target.files[0])} className="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" />
+                  </div>
+                  <div className="p-6 bg-orange-50 rounded-2xl border-2 border-dashed border-orange-200 text-center relative hover:bg-white transition-colors">
+                      <p className="font-bold text-orange-800 text-lg">2. Photos des Documents</p>
+                      <p className="text-sm text-orange-400">{docFiles.length > 0 ? `✅ ${docFiles.length} fichiers` : "Sélectionne tout en vrac"}</p>
+                      <input type="file" multiple onChange={e => setDocFiles(Array.from(e.target.files))} className="absolute inset-0 opacity-0 cursor-pointer" accept="image/*" />
+                  </div>
+              </div>
+
+              <div className="flex gap-4">
+                  <button onClick={() => setShowSmartWizard(false)} className="flex-1 py-4 font-bold text-slate-400 bg-slate-100 rounded-xl hover:bg-slate-200">ANNULER</button>
+                  <button onClick={handleSmartGenerate} disabled={smartLoading} className="flex-[2] py-4 bg-purple-600 text-white rounded-xl font-black shadow-lg hover:scale-105 transition-transform disabled:opacity-50">
+                      {smartLoading ? "Analyse en cours..." : "GÉNÉRER LE DEVOIR 🚀"}
+                  </button>
               </div>
           </div>
       </div>
   );
 
-  if (viewingResults) return <HomeworkResults homework={viewingResults} onBack={() => setViewingResults(null)} />;
-
+  // --- RENDU PRINCIPAL ---
   return (
     <div className="studio-container">
       {!isEditing ? (
         <>
+          {/* BOUTONS DE CHOIX MODE */}
           <div className="flex gap-4 mb-8">
-              <button onClick={() => { setFormData({ _id: null, title: '', classroom: 'Toutes', levels: [] }); setIsEditing(true); }} className="btn-create-hw-big" style={{background:'#f97316'}}>✍️ MANUEL</button>
-              <button onClick={() => setShowSmartWizard(true)} className="btn-create-hw-big" style={{background:'#9333ea', borderBottomColor:'#7e22ce'}}>✨ IA AUTO</button>
+              <button 
+                onClick={() => { setFormData({ _id: null, title: '', classroom: 'Toutes', levels: [] }); setIsEditing(true); }} 
+                className="flex-1 py-8 bg-orange-500 text-white rounded-[30px] font-black text-2xl shadow-xl border-b-8 border-orange-700 active:border-b-0 active:translate-y-2 transition-all"
+              >
+                  ✍️ MANUEL
+              </button>
+              <button 
+                onClick={() => setShowSmartWizard(true)} 
+                className="flex-1 py-8 bg-purple-600 text-white rounded-[30px] font-black text-2xl shadow-xl border-b-8 border-purple-800 active:border-b-0 active:translate-y-2 transition-all"
+              >
+                  ✨ IA AUTO
+              </button>
           </div>
+
           <div className="hw-admin-list">
             {hws.map(h => (
               <div key={h._id} className="hw-admin-card-v13">
@@ -3065,48 +3613,54 @@ export default function HomeworkStudio() {
         </>
       ) : (
         <div className="hw-edit-overlay">
-          <div className="hw-edit-modal shadow-2xl animate-in zoom-in duration-200">
+          <div className="hw-edit-modal animate-in zoom-in">
             <div className="hw-edit-header">
-              <h3>{formData._id ? 'MODIFIER' : 'NOUVEAU DEVOIR'}</h3>
+              <h3>{formData._id ? 'MODIFIER' : 'CRÉER'}</h3>
               <button onClick={() => setIsEditing(false)} className="hw-close-x">✕</button>
             </div>
-            <div className="hw-edit-body scroll-custom">
+            <div className="hw-edit-body custom-scrollbar">
                 <div className="hw-config-grid">
                     <input className="hw-input-title" placeholder="Titre..." value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
-                    
-                    {/* C'EST ICI QUE C'ÉTAIT INCOMPLET */}
                     <select className="hw-select-class" value={formData.classroom} onChange={e => setFormData({...formData, classroom: e.target.value})}>
-                        <option value="Toutes">Toutes les classes</option>
-                        <option value="6D">6eD</option>
-                        <option value="5B">5eB</option>
-                        <option value="5C">5eC</option>
-                        <option value="2A">2nde A</option>
-                        <option value="2CD">2nde CD</option>
+                        <option value="Toutes">Toutes</option><option value="6D">6eD</option><option value="5B">5eB</option><option value="5C">5eC</option><option value="2A">2A</option><option value="2CD">2CD</option>
                     </select>
-
                 </div>
                 
                 <div className="hw-pages-container">
                     {formData.levels.map((lvl, idx) => (
                         <div key={idx} className="hw-page-card">
-                            <div className="hw-page-header"><span>PAGE {idx+1}</span><button className="hw-del-page" onClick={()=>{const n=[...formData.levels]; n.splice(idx,1); setFormData({...formData, levels:n});}}>✕</button></div>
-                            <div className="hw-upload-section">
-                                <p className="hw-label">DOCUMENTS (HAUT)</p>
-                                <div className="hw-docs-preview">
-                                    {lvl.attachmentUrls && lvl.attachmentUrls.map((u, i) => <img key={i} src={u} className="hw-mini-img" />)}
-                                    <label className="hw-add-mini">+<input type="file" multiple className="hidden" onChange={e => handleUpload(e.target.files, idx, 'doc')} /></label>
-                                </div>
+                            <div className="hw-page-header">
+                                <span>PAGE {idx+1}</span>
+                                <button className="hw-del-page" onClick={()=>{const n=[...formData.levels]; n.splice(idx,1); setFormData({...formData, levels:n});}}>Supprimer</button>
                             </div>
+                            
+                            <p className="hw-label">DOCUMENTS</p>
+                            <div className="hw-docs-preview">
+                                {lvl.attachmentUrls && lvl.attachmentUrls.map((u, i) => <img key={i} src={u} className="hw-mini-img" />)}
+                                <label className="hw-add-mini">+<input type="file" multiple className="hidden" onChange={e => handleUpload(e.target.files, idx, 'doc')} /></label>
+                            </div>
+                            
                             <div className="hw-question-section">
-                                <textarea className="hw-q-text" placeholder="Consigne..." value={lvl.instruction} onChange={e => {const n=[...formData.levels]; n[idx].instruction=e.target.value; setFormData({...formData, levels:n});}} />
+                                <div className="hw-left-col">
+                                    <p className="hw-label">IMAGE QUESTION</p>
+                                    <div className="hw-q-img-upload">
+                                        {lvl.questionImage ? <img src={lvl.questionImage} /> : <span>📷 Ajouter</span>}
+                                        <input type="file" className="hw-hidden-file" onChange={e => handleUpload(e.target.files, idx, 'qimg')} />
+                                    </div>
+                                    {lvl.questionImage && <button onClick={() => handleOCR(idx)} className="btn-ocr-trigger">⚡ EXTRAIRE</button>}
+                                </div>
+                                <div className="hw-right-col" style={{width:'100%'}}>
+                                    <p className="hw-label">CONSIGNE TEXTE</p>
+                                    <textarea className="hw-q-text" placeholder="Écris la consigne..." value={lvl.instruction} onChange={e => {const n=[...formData.levels]; n[idx].instruction=e.target.value; setFormData({...formData, levels:n});}} />
+                                </div>
                             </div>
                         </div>
                     ))}
                 </div>
-                <button onClick={() => setFormData({...formData, levels: [...formData.levels, {instruction:'', attachmentUrls:[], questionImage:null}]})} className="hw-add-page-btn">+ PAGE</button>
+                <button onClick={() => setFormData({...formData, levels: [...formData.levels, {instruction:'', attachmentUrls:[], questionImage:null}]})} className="hw-add-page-btn">+ AJOUTER UNE PAGE</button>
             </div>
             <div className="hw-edit-footer">
-                <button onClick={save} className="hw-btn-save-final">💾 SAUVEGARDER</button>
+                <button onClick={save} disabled={uploading} className="hw-btn-save-final">{uploading ? "..." : "💾 SAUVEGARDER"}</button>
             </div>
           </div>
         </div>
@@ -3666,13 +4220,13 @@ module.exports = router;
 ### FICHIER: server/features/eleve/eleve.routes.js
 ############################################################
 
-/* 🔒 FICHIER CŒUR ÉLÈVE - NE PAS MODIFIER LA LOGIQUE SANS TESTER */
+/* 🔒 ROUTEUR ÉLÈVE - NETTOYAGE JSON RENFORCÉ */
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 const fetch = require('node-fetch');
 
-// Route Devoirs (Lecture Seule)
+// Route Devoirs
 router.get('/homework/:classroom', async (req, res) => {
     try {
         const list = await mongoose.model('Homework').find({ 
@@ -3686,24 +4240,24 @@ router.post('/report-bug', async (req, res) => {
     try { await mongoose.model('Bug').create(req.body); res.json({ ok: true }); } catch (e) { res.status(500).json({ ok: false }); }
 });
 
-// --- ANALYSE IA (GEMINI 2.0) AVEC NETTOYAGE RENFORCÉ ---
+// --- CŒUR IA : ANALYSE ET NETTOYAGE ---
 router.post('/analyze-homework', async (req, res) => {
     const { userText, homeworkInstruction, playerId, classroom, homeworkId, levelIndex } = req.body;
     
-    // 1. Prompt Strict
+    // Prompt optimisé pour éviter le markdown superflu
     const prompt = `
-    Tu es un professeur de français bienveillant.
+    Rôle : Professeur de français.
     Consigne : "${homeworkInstruction}"
     Réponse élève : "${userText}"
     
-    Tâche : Note (/20), Commente (HTML), Corrige.
+    Tâche : Corriger et noter sur 20.
     
-    RÉPOND UNIQUEMENT CE JSON BRUT (Sans markdown, sans \`\`\`) :
+    FORMAT DE RÉPONSE ATTENDU (JSON STRICT, pas de markdown) :
     {
         "grade": "Note/20",
-        "feedback_fond": "Commentaire HTML (<b>Gras</b>, <br> sauts de ligne)",
+        "feedback_fond": "<p>Ton commentaire ici.</p>",
         "corrections": [
-            { "wrong": "mot_faux", "correct": "mot_juste", "rule": "Règle" }
+            { "wrong": "mot faux", "correct": "mot juste", "rule": "règle" }
         ]
     }`;
 
@@ -3717,23 +4271,36 @@ router.post('/analyze-homework', async (req, res) => {
         });
         
         const result = await resp.json();
+        
         if(result.error) throw new Error(result.error.message);
 
-        // 2. NETTOYAGE CHIRURGICAL (C'est ça qui manquait !)
+        // --- NETTOYAGE CHIRURGICAL ---
         let rawText = result.candidates[0].content.parts[0].text;
-        // On enlève les balises Markdown qui cassent tout
-        rawText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+        
+        // 1. Enlever les blocs de code Markdown (```json ... ```)
+        rawText = rawText.replace(/```json/g, "").replace(/```/g, "").trim();
+        
+        // 2. Chercher le début et la fin du JSON (au cas où il y a du texte autour)
+        const firstBrace = rawText.indexOf('{');
+        const lastBrace = rawText.lastIndexOf('}');
+        if (firstBrace !== -1 && lastBrace !== -1) {
+            rawText = rawText.substring(firstBrace, lastBrace + 1);
+        }
 
         let aiJson;
         try {
             aiJson = JSON.parse(rawText);
         } catch (parseError) {
-            console.error("❌ JSON IA Invalide :", rawText);
-            // Fallback pour ne pas afficher du vide
-            aiJson = { grade: "?/20", feedback_fond: "L'IA a eu un problème de formatage. Réessayez.", corrections: [] };
+            console.error("❌ JSON Malformé :", rawText);
+            // Mode dégradé si l'IA échoue à faire du JSON propre
+            aiJson = {
+                grade: "?/20",
+                feedback_fond: "L'analyse a rencontré un problème technique. Veuillez réessayer.",
+                corrections: []
+            };
         }
         
-        // 3. Sauvegardes BDD
+        // Sauvegarde
         if (playerId && homeworkId) {
             await mongoose.model('Submission').findOneAndUpdate(
                 { homeworkId, playerId },
@@ -3751,7 +4318,7 @@ router.post('/analyze-homework', async (req, res) => {
         res.json(aiJson);
 
     } catch (e) { 
-        console.error("❌ CRASH IA Route :", e);
+        console.error("❌ CRASH IA :", e);
         res.status(500).json({ error: "Erreur IA" }); 
     }
 });

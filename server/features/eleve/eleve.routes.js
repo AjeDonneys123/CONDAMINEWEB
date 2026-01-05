@@ -1,10 +1,10 @@
-/* 🔒 FICHIER CŒUR ÉLÈVE - NE PAS MODIFIER LA LOGIQUE SANS TESTER */
+/* 🔒 ROUTEUR ÉLÈVE - IA AVEC CONSIGNES PROFESSEUR */
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 const fetch = require('node-fetch');
 
-// Route Devoirs (Lecture Seule)
+// Route Devoirs
 router.get('/homework/:classroom', async (req, res) => {
     try {
         const list = await mongoose.model('Homework').find({ 
@@ -18,24 +18,39 @@ router.post('/report-bug', async (req, res) => {
     try { await mongoose.model('Bug').create(req.body); res.json({ ok: true }); } catch (e) { res.status(500).json({ ok: false }); }
 });
 
-// --- ANALYSE IA (GEMINI 2.0) AVEC NETTOYAGE RENFORCÉ ---
+// --- CŒUR IA : ANALYSE ET NETTOYAGE ---
 router.post('/analyze-homework', async (req, res) => {
     const { userText, homeworkInstruction, playerId, classroom, homeworkId, levelIndex } = req.body;
     
-    // 1. Prompt Strict
+    let profHint = "";
+    
+    // 1. On va chercher les consignes spécifiques du prof en BDD
+    try {
+        const hw = await mongoose.model('Homework').findById(homeworkId);
+        if (hw && hw.levels && hw.levels[levelIndex]) {
+            profHint = hw.levels[levelIndex].aiCorrectionHint || "";
+        }
+    } catch (err) {
+        console.error("⚠️ Impossible de lire les hints prof:", err);
+    }
+
+    // 2. Construction du Prompt intégrant les consignes prof
     const prompt = `
-    Tu es un professeur de français bienveillant.
-    Consigne : "${homeworkInstruction}"
-    Réponse élève : "${userText}"
+    Rôle : Professeur de français.
+    Consigne de l'exercice : "${homeworkInstruction}"
+    Réponse de l'élève : "${userText}"
     
-    Tâche : Note (/20), Commente (HTML), Corrige.
+    ${profHint ? `IMPORTANT - DIRECTIVES DU PROFESSEUR POUR LA CORRECTION :
+    "${profHint}"` : ""}
     
-    RÉPOND UNIQUEMENT CE JSON BRUT (Sans markdown, sans \`\`\`) :
+    Tâche : Corriger avec bienveillance, expliquer les fautes et noter sur 20.
+    
+    FORMAT DE RÉPONSE ATTENDU (JSON STRICT, pas de markdown) :
     {
         "grade": "Note/20",
-        "feedback_fond": "Commentaire HTML (<b>Gras</b>, <br> sauts de ligne)",
+        "feedback_fond": "<p>Ton commentaire ici (HTML simple).</p>",
         "corrections": [
-            { "wrong": "mot_faux", "correct": "mot_juste", "rule": "Règle" }
+            { "wrong": "mot faux", "correct": "mot juste", "rule": "règle d'orthographe ou grammaire" }
         ]
     }`;
 
@@ -45,35 +60,44 @@ router.post('/analyze-homework', async (req, res) => {
         const resp = await fetch(url, { 
             method: 'POST', 
             headers: { 'Content-Type': 'application/json' }, 
-            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { response_mime_type: "application/json" } }) 
+            body: JSON.stringify({ 
+                contents: [{ parts: [{ text: prompt }] }], 
+                generationConfig: { response_mime_type: "application/json" } 
+            }) 
         });
         
         const result = await resp.json();
         if(result.error) throw new Error(result.error.message);
 
-        // 2. NETTOYAGE CHIRURGICAL (C'est ça qui manquait !)
         let rawText = result.candidates[0].content.parts[0].text;
-        // On enlève les balises Markdown qui cassent tout
-        rawText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+        
+        // Nettoyage Markdown
+        rawText = rawText.replace(/```json/g, "").replace(/```/g, "").trim();
+        const firstBrace = rawText.indexOf('{');
+        const lastBrace = rawText.lastIndexOf('}');
+        if (firstBrace !== -1 && lastBrace !== -1) rawText = rawText.substring(firstBrace, lastBrace + 1);
 
         let aiJson;
         try {
             aiJson = JSON.parse(rawText);
         } catch (parseError) {
-            console.error("❌ JSON IA Invalide :", rawText);
-            // Fallback pour ne pas afficher du vide
-            aiJson = { grade: "?/20", feedback_fond: "L'IA a eu un problème de formatage. Réessayez.", corrections: [] };
+            aiJson = { grade: "?/20", feedback_fond: "Erreur analyse.", corrections: [] };
         }
         
-        // 3. Sauvegardes BDD
+        // Sauvegarde Submission
         if (playerId && homeworkId) {
             await mongoose.model('Submission').findOneAndUpdate(
                 { homeworkId, playerId },
-                { classroom, submittedAt: Date.now(), $push: { levelsResults: { levelIndex, userText, aiFeedback: aiJson.feedback_fond, grade: aiJson.grade } } },
+                { 
+                    classroom, 
+                    submittedAt: Date.now(), 
+                    $push: { levelsResults: { levelIndex, userText, aiFeedback: aiJson.feedback_fond, grade: aiJson.grade } } 
+                },
                 { upsert: true }
             );
         }
 
+        // Sauvegarde Fautes
         if (aiJson.corrections && aiJson.corrections.length > 0 && playerId) {
             await mongoose.model('Player').findByIdAndUpdate(playerId, {
                 $push: { spellingMistakes: { $each: aiJson.corrections } }
@@ -83,7 +107,7 @@ router.post('/analyze-homework', async (req, res) => {
         res.json(aiJson);
 
     } catch (e) { 
-        console.error("❌ CRASH IA Route :", e);
+        console.error("❌ CRASH IA :", e);
         res.status(500).json({ error: "Erreur IA" }); 
     }
 });

@@ -1,9 +1,9 @@
-/* WRAPPER ZOMBIE V3 - SIMPLIFIÉ (Reçoit le niveau direct) */
+/* WRAPPER STARSHIP V2 - SIMPLIFIÉ (Reçoit le niveau direct) */
 import React, { useEffect, useRef } from 'react';
-import { initZombieGame } from './zombie_core';
-import './zombie_style.css';
+import { initStarshipGame } from './starship_core';
+import './starship_style.css';
 
-export default function ZombieWrapper({ user, level, onClose }) {
+export default function StarshipWrapper({ user, level, onClose }) {
     const boxRef = useRef(null);
     const engineRef = useRef(null);
 
@@ -17,7 +17,7 @@ export default function ZombieWrapper({ user, level, onClose }) {
                 onClose();
             };
 
-            engineRef.current = initZombieGame(
+            engineRef.current = initStarshipGame(
                 boxRef.current, 
                 { level: level, user }, 
                 handleExitGame
@@ -34,7 +34,7 @@ export default function ZombieWrapper({ user, level, onClose }) {
 
     return (
         <div className="fixed inset-0 bg-black z-[2000] flex items-center justify-center p-4">
-            <div id="zombie-root" ref={boxRef}></div>
+            <div id="starship-root" ref={boxRef}></div>
         </div>
     );
 }
