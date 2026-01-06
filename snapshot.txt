@@ -644,10 +644,15 @@ export default function ElevePage({ user, onLogout, onBackToProf, onOpenBug, act
 ### FICHIER: client/src/features/eleve/components/DashboardFolder.jsx
 ############################################################
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 export default function DashboardFolder({ items, chapters, type, onSelect }) {
   const [openChaps, setOpenChaps] = useState({});
+  const [allPlayers, setAllPlayers] = useState([]);
+
+  useEffect(() => {
+    fetch('/api/players').then(r => r.json()).then(data => setAllPlayers(data || []));
+  }, []);
 
   const getSubjectStyle = (sub) => {
     if (sub === 'H') return { code: 'H', label: 'Histoire', color: '#ef4444', text: 'text-red-600', bg: 'bg-red-50', icon: '🏰' };
@@ -658,12 +663,9 @@ export default function DashboardFolder({ items, chapters, type, onSelect }) {
 
   const renderSection = (subCode, isArchived) => {
     const info = getSubjectStyle(subCode);
-    
-    // On utilise strictement le champ .subject de la base de données
-    const myChapters = chapters.filter(c => c.isArchived === isArchived && c.subject === subCode);
-
+    const myChapters = (chapters || []).filter(c => c.isArchived === isArchived && c.subject === subCode);
     const chapsWithItems = myChapters.filter(chap => 
-        items.some(it => it.chapterId?.toString() === chap._id?.toString())
+        (items || []).some(it => it.chapterId?.toString() === chap._id?.toString())
     );
 
     if (chapsWithItems.length === 0) return null;
@@ -675,7 +677,7 @@ export default function DashboardFolder({ items, chapters, type, onSelect }) {
         </h3>
         <div className="space-y-4">
           {chapsWithItems.map(chap => {
-            const chapItems = items.filter(it => it.chapterId?.toString() === chap._id?.toString());
+            const chapItems = (items || []).filter(it => it.chapterId?.toString() === chap._id?.toString());
             const isOpen = openChaps[chap._id];
 
             return (
@@ -689,16 +691,31 @@ export default function DashboardFolder({ items, chapters, type, onSelect }) {
                 </button>
                 {isOpen && (
                   <div className="p-4 bg-slate-50/50 space-y-2">
-                    {chapItems.map(it => (
-                      <div 
-                        key={it._id} 
-                        onClick={() => onSelect(it)}
-                        className="bg-white p-5 rounded-2xl flex justify-between items-center cursor-pointer border border-transparent hover:border-pink-300 shadow-sm transition-all"
-                      >
-                        <span className="font-bold text-slate-600">{type === 'game' ? '🕹️ ' : ''}{item.title}</span>
-                        <span className="text-pink-400 font-black">➔</span>
-                      </div>
-                    ))}
+                    {chapItems.map(it => {
+                      // Détection des noms d'élèves ciblés
+                      let targetLabel = "";
+                      if (it.targetPlayerIds && it.targetPlayerIds.length > 0) {
+                          const names = it.targetPlayerIds.map(id => {
+                              const p = allPlayers.find(x => x._id === id);
+                              return p ? p.firstName : "...";
+                          });
+                          targetLabel = ` pour ${names.join(', ')}`;
+                      }
+
+                      return (
+                        <div 
+                          key={it._id} 
+                          onClick={() => onSelect(it)}
+                          className="bg-white p-5 rounded-2xl flex justify-between items-center cursor-pointer border border-transparent hover:border-pink-300 shadow-sm transition-all"
+                        >
+                          <div className="flex flex-col">
+                            <span className="font-bold text-slate-600">{type === 'game' ? '🕹️ ' : '📄 '}{it.title}</span>
+                            {targetLabel && <span className="text-[9px] font-black text-orange-400 uppercase">{targetLabel}</span>}
+                          </div>
+                          <span className="text-pink-400 font-black">➔</span>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -712,8 +729,7 @@ export default function DashboardFolder({ items, chapters, type, onSelect }) {
   return (
     <div className="max-w-2xl mx-auto">
       {['H', 'G', 'E'].map(s => renderSection(s, false))}
-
-      {chapters.some(c => c.isArchived) && (
+      {(chapters || []).some(c => c.isArchived) && (
           <div className="mt-20 pt-10 border-t-4 border-dashed border-pink-100 opacity-50">
               <h2 className="text-center font-black text-pink-300 uppercase tracking-widest text-xl mb-10">📂 Archives des dossiers passés</h2>
               {['H', 'G', 'E'].map(s => renderSection(s, true))}
@@ -2484,16 +2500,15 @@ export default function HomeworkList({ user }) {
         ]);
         
         const myId = user.id || user._id;
-        const userClass = user.classroom.toString().trim(); // ex: "6D"
-        const userGrade = userClass.substring(0, 2).toLowerCase(); // ex: "6e"
+        const userClass = user.classroom?.toString().trim() || ""; 
+        const userGrade = userClass.substring(0, 2).toLowerCase(); 
 
-        // FILTRAGE ROBUSTE
         const filteredHw = (hwData || []).filter(h => {
-            // 1. Match par classe (ex: "6D")
             const classMatch = h.classroom === 'Toutes' || h.classroom === userClass;
-            // 2. Match par niveau (ex: "6e")
-            const gradeMatch = h.targetGrade === 'Tous' || userGrade.includes(h.targetGrade.toLowerCase());
-            // 3. Match par élève précis
+            
+            const hGrade = h.targetGrade || 'Tous';
+            const gradeMatch = hGrade === 'Tous' || userGrade.includes(hGrade.toLowerCase());
+            
             const playerMatch = (!h.targetPlayerIds || h.targetPlayerIds.length === 0) || h.targetPlayerIds.includes(myId);
 
             return (classMatch || gradeMatch) && playerMatch;
@@ -2501,7 +2516,7 @@ export default function HomeworkList({ user }) {
 
         setHomeworks(filteredHw);
         setChapters((chapData || []).filter(c => c.classroom === userClass));
-      } catch(e) { console.error(e); }
+      } catch(e) { console.error("Erreur HomeworkList:", e); }
       setLoading(false);
     };
     if (!selectedHw) load();
@@ -2786,7 +2801,6 @@ import React, { useState } from 'react';
 import ProfHeader from './components/ProfHeader';
 import ProfNav from './components/ProfNav';
 import StudentsManager from './students/StudentsManager';
-import ChapterManager from './chapters/ChapterManager';
 import ActivityStudio from './activities/ActivityStudio';
 import './ProfPage.css';
 
@@ -2801,7 +2815,6 @@ export default function ProfPage({ user, onLogout }) {
         
         <div className="prof-content-area">
           {tab === 'students' && <StudentsManager />}
-          {tab === 'chapters' && <ChapterManager />}
           {tab === 'activities' && <ActivityStudio />}
         </div>
       </div>
@@ -2828,113 +2841,85 @@ export default function ProfPage({ user, onLogout }) {
 import React, { useState, useEffect } from 'react';
 import HomeworkStudio from '../homework/HomeworkStudio';
 import GameStudio from '../games/GameStudio';
+import ProfStudioFolder from '../components/ProfStudioFolder';
+import HomeworkResults from '../homework/HomeworkResults';
 
 export default function ActivityStudio() {
     const [activities, setActivities] = useState([]);
     const [chapters, setChapters] = useState([]);
     const [classFilter, setClassFilter] = useState('6D');
-    const [tab, setTab] = useState('homework');
-    const [editingItem, setEditingItem] = useState(null);
+    const [editingItem, setEditingItem] = useState(null); 
+    const [viewingResults, setViewingResults] = useState(null);
 
     const load = async () => {
         try {
+            const fetchJSON = (url) => fetch(url).then(r => r.ok ? r.json() : []);
             const [hwRes, gmRes, cpRes] = await Promise.all([
-                fetch('/api/homework-all').then(r => r.json()),
-                fetch('/api/game-levels/all').then(r => r.json()),
-                fetch('/api/chapters-all').then(r => r.json())
+                fetchJSON('/api/homework-all'),
+                fetchJSON('/api/game-levels/all'),
+                fetchJSON('/api/chapters-all')
             ]);
             const all = [
-                ...(Array.isArray(hwRes) ? hwRes : []).map(x => ({ ...x, actType: 'homework' })),
-                ...(Array.isArray(gmRes) ? gmRes : []).map(x => ({ ...x, actType: 'game' }))
+                ...(hwRes || []).map(x => ({ ...x, actType: 'homework' })),
+                ...(gmRes || []).map(x => ({ ...x, actType: 'game' }))
             ];
             setActivities(all);
-            setChapters(Array.isArray(cpRes) ? cpRes : []);
-        } catch (e) { console.error("Erreur chargement activités", e); }
+            setChapters(cpRes || []);
+        } catch (e) { console.error("Erreur ActivityStudio:", e); }
     };
 
     useEffect(() => { load(); }, []);
 
-    const moveItem = async (itemId, chapterId, type) => {
-        await fetch('/api/move-item', { 
-            method: 'POST', 
-            headers: {'Content-Type':'application/json'}, 
-            body: JSON.stringify({ itemId, chapterId: chapterId === 'none' ? null : chapterId, type }) 
-        });
-        load();
-    };
-
-    // On ne propose que les chapitres non archivés de la classe sélectionnée
-    const activeChapters = chapters.filter(c => c.classroom === classFilter && !c.isArchived);
+    if (viewingResults) return <HomeworkResults homework={viewingResults} onBack={() => setViewingResults(null)} />;
 
     if (editingItem) {
+        const activeChaps = chapters.filter(c => c.classroom === classFilter && !c.isArchived);
         if (editingItem.type === 'homework') {
-            return <HomeworkStudio 
-                initialData={editingItem.data} 
-                chapters={activeChapters} 
-                onClose={() => { setEditingItem(null); load(); }} 
-            />;
+            return <HomeworkStudio initialData={editingItem.data} chapters={activeChaps} onClose={() => { setEditingItem(null); load(); }} />;
         }
-        return <GameStudio 
-            initialData={editingItem.data} 
-            chapters={activeChapters} 
-            onClose={() => { setEditingItem(null); load(); }} 
-        />;
+        return <GameStudio initialData={editingItem.data} chapters={activeChaps} classFilter={classFilter} onClose={() => { setEditingItem(null); load(); }} />;
     }
-
-    const filtered = activities.filter(a => a.actType === tab && (a.classroom === classFilter || a.classroom === 'Toutes'));
 
     return (
         <div className="p-4 animate-in fade-in">
-            <div className="flex justify-between items-center mb-8 bg-white p-6 rounded-[35px] border-2 border-orange-50 shadow-sm">
-                <div className="flex gap-2">
-                    <button onClick={() => setTab('homework')} className={`px-8 py-3 rounded-xl font-black ${tab === 'homework' ? 'bg-orange-500 text-white shadow-md' : 'text-slate-400'}`}>📚 DEVOIRS</button>
-                    <button onClick={() => setTab('game')} className={`px-8 py-3 rounded-xl font-black ${tab === 'game' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-400'}`}>🎮 JEUX</button>
+            <div className="flex justify-between items-center mb-8 bg-white p-6 rounded-[35px] border-2 border-slate-50 shadow-sm">
+                <div className="flex gap-4">
+                    <button onClick={() => setEditingItem({ type: 'homework', data: null })} className="bg-orange-500 text-white px-6 py-3 rounded-2xl font-black text-xs shadow-lg">+ NOUVEAU DEVOIR</button>
+                    <button onClick={() => setEditingItem({ type: 'game', data: null })} className="bg-purple-600 text-white px-6 py-3 rounded-2xl font-black text-xs shadow-lg">+ NOUVEAU JEU</button>
                 </div>
-                <select className="bg-slate-100 p-3 rounded-xl font-black text-slate-600 outline-none" value={classFilter} onChange={e => setClassFilter(e.target.value)}>
+                <select className="bg-slate-100 p-3 rounded-xl font-black text-slate-600 outline-none border-none" value={classFilter} onChange={e => setClassFilter(e.target.value)}>
                     <option value="6D">6eD</option><option value="5B">5eB</option><option value="5C">5eC</option><option value="2A">2A</option><option value="2CD">2CD</option>
                 </select>
             </div>
-
-            <button 
-                onClick={() => setEditingItem({ type: tab, data: null })}
-                className={`w-full mb-10 p-8 rounded-[40px] font-black text-2xl text-white shadow-xl hover:scale-[1.01] active:scale-95 transition-all ${tab === 'game' ? 'bg-purple-600' : 'bg-orange-500'}`}
-            >
-                + CRÉER UN {tab === 'game' ? 'QUIZ' : 'DEVOIR'}
-            </button>
-
-            <div className="space-y-4">
-                {filtered.length > 0 ? filtered.map(act => (
-                    <div key={act._id} className="bg-white p-6 rounded-[35px] border-2 border-slate-50 flex justify-between items-center shadow-sm">
-                        <div className="flex items-center gap-6">
-                            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-2xl ${tab === 'game' ? 'bg-purple-50 text-purple-500' : 'bg-orange-50 text-orange-500'}`}>
-                                {tab === 'game' ? '🕹️' : '📄'}
-                            </div>
-                            <div>
-                                <b className="text-slate-800 text-lg font-black block">{act.title}</b>
-                                <div className="flex items-center gap-2 mt-2">
-                                    <span className="text-[10px] font-black text-slate-300 uppercase">Dossier :</span>
-                                    <select 
-                                        className="text-[10px] font-black uppercase text-blue-500 bg-blue-50 px-3 py-1 rounded-full border-none outline-none"
-                                        value={act.chapterId || 'none'}
-                                        onChange={(e) => moveItem(act._id, e.target.value, act.actType)}
-                                    >
-                                        <option value="none">-- Aucun dossier --</option>
-                                        {activeChapters.map(c => <option key={c._id} value={c._id}>{c.title || `Dossier ${c.subject}`}</option>)}
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="flex gap-2">
-                             <button onClick={() => setEditingItem({ type: tab, data: act })} className="px-6 py-3 bg-slate-50 text-slate-400 rounded-2xl font-black text-xs uppercase hover:bg-slate-100">Modifier</button>
-                             <button onClick={async () => { if(confirm("Supprimer ?")) { await fetch(tab==='game'?`/api/game-levels/${act._id}`:`/api/homework/${act._id}`, {method:'DELETE'}); load(); }}} className="text-red-400 font-bold p-2 text-xl">✕</button>
-                        </div>
-                    </div>
-                )) : (
-                    <div className="py-20 text-center border-4 border-dashed border-slate-100 rounded-[50px]">
-                        <p className="font-black text-slate-200 text-xl uppercase">Aucun contenu trouvé</p>
-                    </div>
-                )}
-            </div>
+            <ProfStudioFolder 
+                chapters={chapters.filter(c => c.classroom === classFilter)}
+                items={activities.filter(a => a.classroom === classFilter || a.classroom === 'Toutes')}
+                classFilter={classFilter}
+                onArchive={async (id, state) => {
+                    await fetch('/api/chapters', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({_id:id, isArchived:state})});
+                    load();
+                }}
+                onRename={async (id, title) => {
+                    await fetch('/api/chapters', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({_id:id, title})});
+                    load();
+                }}
+                onEditItem={(it) => setEditingItem({ type: it.actType, data: it })}
+                onDeleteItem={async (id, type) => {
+                    if(!confirm("Supprimer ?")) return;
+                    await fetch(type === 'game' ? `/api/game-levels/${id}` : `/api/homework/${id}`, { method: 'DELETE' });
+                    load();
+                }}
+                onDeleteChapter={async (id) => {
+                    if(!confirm("Supprimer le dossier ?")) return;
+                    await fetch(`/api/chapters/${id}`, { method: 'DELETE' });
+                    load();
+                }}
+                onCreateChapter={async (subject) => {
+                    await fetch('/api/chapters', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ title: 'Nouveau Dossier', subject, classroom: classFilter }) });
+                    load();
+                }}
+                onViewResults={(hw) => setViewingResults(hw)}
+            />
         </div>
     );
 }
@@ -2948,35 +2933,28 @@ import React, { useState, useEffect } from 'react';
 
 export default function ChapterManager() {
     const [chapters, setChapters] = useState([]);
+    const [activities, setActivities] = useState([]);
+    const [openChaps, setOpenChaps] = useState({});
     const [classFilter, setClassFilter] = useState('6D');
     const [editingId, setEditingId] = useState(null);
     const [tempTitle, setTempTitle] = useState('');
 
     const load = async () => {
         try {
-            const res = await fetch('/api/chapters-all');
-            const data = await res.json();
-            setChapters(Array.isArray(data) ? data : []);
-        } catch (e) { 
-            console.error("Erreur chargement", e); 
-            setChapters([]);
-        }
+            const [chapRes, hwRes, gmRes] = await Promise.all([
+                fetch('/api/chapters-all').then(r => r.json()),
+                fetch('/api/homework-all').then(r => r.json()),
+                fetch('/api/game-levels/all').then(r => r.json())
+            ]);
+            setChapters(Array.isArray(chapRes) ? chapRes : []);
+            setActivities([
+                ...(hwRes || []).map(x => ({ ...x, actType: 'homework' })),
+                ...(gmRes || []).map(x => ({ ...x, actType: 'game' }))
+            ]);
+        } catch (e) { console.error(e); }
     };
     
-    useEffect(() => { load(); }, []);
-
-    const createChapter = async (subjectCode) => {
-        await fetch('/api/chapters', { 
-            method: 'POST', 
-            headers: {'Content-Type':'application/json'}, 
-            body: JSON.stringify({ 
-                title: '', 
-                subject: subjectCode,
-                classroom: classFilter 
-            }) 
-        });
-        load();
-    };
+    useEffect(() => { load(); }, [classFilter]);
 
     const updateChapter = async (id, payload) => {
         await fetch('/api/chapters', { 
@@ -2987,10 +2965,8 @@ export default function ChapterManager() {
         load();
     };
 
-    const deleteChapter = async (id) => {
-        if (!window.confirm("Supprimer ce dossier ?")) return;
-        await fetch('/api/chapters/' + id, { method: 'DELETE' });
-        load();
+    const toggleChap = (id) => {
+        setOpenChaps(prev => ({ ...prev, [id]: !prev[id] }));
     };
 
     const getStyle = (sub) => {
@@ -3003,19 +2979,20 @@ export default function ChapterManager() {
 
     const myChapters = chapters.filter(c => c.classroom === classFilter);
 
-    const renderArchiveCol = (subCode, label) => {
+    const renderArchiveCol = (subCode) => {
         const info = getStyle(subCode);
         const list = myChapters.filter(c => c.isArchived && c.subject === subCode);
         return (
-            <div className="bg-slate-800/50 border-2 border-dashed border-slate-700 p-4 rounded-[30px] min-h-[140px]">
-                <h4 className={`text-center font-black text-[9px] uppercase mb-4 ${info.color}`}>{label}</h4>
+            <div className="bg-slate-800/60 p-4 rounded-[25px] border border-slate-700 min-h-[120px]">
+                <h4 className={`text-center font-black text-[9px] uppercase mb-4 ${info.color}`}>{info.label}</h4>
                 <div className="space-y-2">
                     {list.map(chap => (
-                        <div key={chap._id} className="bg-slate-700/50 p-3 rounded-xl flex justify-between items-center border border-slate-600">
-                            <span className="text-white font-black text-[10px] truncate">{chap.title || "Sans titre"}</span>
-                            <button onClick={() => updateChapter(chap._id, {isArchived: false})} className="text-white font-bold">⬆️</button>
+                        <div key={chap._id} className="bg-slate-700/50 p-2 rounded-xl flex justify-between items-center border border-slate-600/50">
+                            <span className="text-white font-bold text-[10px] truncate pr-2">{chap.title || "Sans titre"}</span>
+                            <button onClick={() => updateChapter(chap._id, {isArchived: false})} className="text-white hover:text-green-400 transition-colors">⬆️</button>
                         </div>
                     ))}
+                    {list.length === 0 && <p className="text-[8px] text-slate-600 text-center uppercase font-bold py-4">Aucun</p>}
                 </div>
             </div>
         );
@@ -3024,61 +3001,65 @@ export default function ChapterManager() {
     return (
         <div className="p-4">
             {/* HEADER */}
-            <div className="flex justify-between items-center mb-8 bg-white p-6 rounded-[35px] border-2 border-orange-50 shadow-sm">
-                <h2 className="font-black text-slate-800 uppercase tracking-widest text-xs">Gestion des dossiers</h2>
+            <div className="flex justify-between items-center mb-6 bg-white p-6 rounded-[35px] border-2 border-orange-50 shadow-sm">
+                <h2 className="font-black text-slate-800 uppercase text-xs tracking-widest">Gestionnaire de Dossiers</h2>
                 <select className="bg-slate-100 p-3 rounded-xl font-black outline-none border-none" value={classFilter} onChange={e => setClassFilter(e.target.value)}>
                     <option value="6D">6eD</option><option value="5B">5eB</option><option value="5C">5eC</option><option value="2A">2A</option><option value="2CD">2CD</option>
                 </select>
             </div>
 
-            {/* ARCHIVES */}
-            <div className="mb-12 bg-slate-900 p-8 rounded-[55px] border-8 border-slate-800 shadow-2xl">
+            {/* SECTION ARCHIVES : PLACÉE AU DESSUS */}
+            <div className="mb-10 bg-slate-900 p-8 rounded-[50px] border-4 border-slate-800 shadow-2xl">
+                <p className="text-center text-slate-400 font-black text-[10px] uppercase mb-8 tracking-[0.3em]">📂 Zone d'Archives (Masqué aux élèves)</p>
                 <div className="grid grid-cols-3 gap-6">
-                    {renderArchiveCol('H', 'Histoire')}
-                    {renderArchiveCol('G', 'Géographie')}
-                    {renderArchiveCol('E', 'EMC')}
+                    {renderArchiveCol('H')}
+                    {renderArchiveCol('G')}
+                    {renderArchiveCol('E')}
                 </div>
-            </div>
-
-            {/* CREATION */}
-            <div className="grid grid-cols-3 gap-6 mb-12">
-                {['H', 'G', 'E'].map(s => {
-                    const info = getStyle(s);
-                    return (
-                        <button key={s} onClick={() => createChapter(s)} className={`p-8 bg-white border-4 border-dashed rounded-[40px] font-black uppercase text-xs transition-all active:scale-95 ${info.color} ${info.border}`}>
-                            + Dossier {info.label}
-                        </button>
-                    );
-                })}
             </div>
 
             {/* LISTE ACTIVE */}
             <div className="space-y-4">
+                <p className="text-[11px] font-black text-slate-400 uppercase ml-6 mb-4 tracking-wider">Dossiers Actifs</p>
                 {myChapters.filter(c => !c.isArchived).map(chap => {
                     const info = getStyle(chap.subject);
+                    const isOpen = !!openChaps[chap._id];
+                    const chapItems = activities.filter(a => String(a.chapterId) === String(chap._id));
+
                     return (
-                        <div key={chap._id} className={`p-6 bg-white rounded-[35px] border-2 ${info.border} flex justify-between items-center shadow-sm`}>
-                            <div className="flex items-center gap-6 flex-1">
-                                <span className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-xl ${info.bg} ${info.color}`}>{info.code}</span>
-                                {editingId === chap._id ? (
-                                    <input 
-                                        autoFocus
-                                        className="text-2xl font-black border-b-4 border-orange-500 outline-none w-full bg-transparent"
-                                        value={tempTitle}
-                                        onChange={e => setTempTitle(e.target.value)}
-                                        onBlur={() => { updateChapter(chap._id, {title: tempTitle}); setEditingId(null); }}
-                                        onKeyDown={e => e.key === 'Enter' && e.target.blur()}
-                                    />
-                                ) : (
-                                    <span className="text-2xl font-black text-slate-700 cursor-pointer flex-1" onClick={() => { setEditingId(chap._id); setTempTitle(chap.title); }}>
-                                        {chap.title || <span className="text-slate-200 italic font-medium">Cliquer pour nommer...</span>}
-                                    </span>
-                                )}
+                        <div key={chap._id} className={`bg-white rounded-[35px] border-2 ${info.border} overflow-hidden shadow-sm`}>
+                            <div className="p-4 flex justify-between items-center">
+                                <div className="flex items-center gap-6 flex-1">
+                                    <span className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-xl ${info.bg} ${info.color}`}>{info.code}</span>
+                                    <span onClick={() => toggleChap(chap._id)} className={`text-2xl cursor-pointer transition-all ${isOpen ? 'rotate-180 text-blue-600' : 'text-slate-200'}`}>▼</span>
+                                    {editingId === chap._id ? (
+                                        <input 
+                                            autoFocus
+                                            className="text-2xl font-black border-b-4 border-orange-500 outline-none w-full bg-transparent"
+                                            value={tempTitle}
+                                            onChange={e => setTempTitle(e.target.value)}
+                                            onBlur={() => { updateChapter(chap._id, {title: tempTitle}); setEditingId(null); }}
+                                        />
+                                    ) : (
+                                        <span className="text-2xl font-black text-slate-700 cursor-pointer" onClick={() => toggleChap(chap._id)}>
+                                            {chap.title || "Nommer le dossier..."}
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="flex gap-2">
+                                    <button onClick={() => {setEditingId(chap._id); setTempTitle(chap.title);}} className="p-2 opacity-40 hover:opacity-100">✏️</button>
+                                    <button onClick={() => updateChapter(chap._id, {isArchived: true})} className="px-5 py-3 bg-slate-50 rounded-2xl font-black text-[10px] uppercase text-slate-400 hover:bg-slate-800 hover:text-white transition-all">Archiver</button>
+                                </div>
                             </div>
-                            <div className="flex gap-4">
-                                <button onClick={() => updateChapter(chap._id, {isArchived: true})} className="px-5 py-3 bg-slate-50 rounded-2xl font-black text-[10px] uppercase text-slate-400 hover:bg-slate-800 hover:text-white transition-all">📦 Archiver</button>
-                                <button onClick={() => deleteChapter(chap._id)} className="p-3 text-red-300 font-black hover:scale-110">✕</button>
-                            </div>
+                            {isOpen && (
+                                <div className="p-6 bg-slate-50 border-t-2 border-dashed border-slate-100">
+                                    {chapItems.length > 0 ? chapItems.map(it => (
+                                        <div key={it._id} className="bg-white p-3 rounded-xl mb-2 flex justify-between items-center shadow-sm">
+                                            <span className="font-bold text-slate-600">{it.actType === 'game' ? '🕹️' : '📄'} {it.title}</span>
+                                        </div>
+                                    )) : <p className="text-center text-slate-300 italic text-sm">Aucun contenu</p>}
+                                </div>
+                            )}
                         </div>
                     );
                 })}
@@ -3157,7 +3138,6 @@ import React from 'react';
 export default function ProfNav({ activeTab, onTabChange }) {
   const tabs = [
     { id: 'students', label: '👥 ÉLÈVES', style: 'bg-blue-600' },
-    { id: 'chapters', label: '📂 CHAPITRES', style: 'bg-orange-500' },
     { id: 'activities', label: '⚡ ACTIVITÉS', style: 'bg-purple-600' }
   ];
 
@@ -3185,125 +3165,132 @@ export default function ProfNav({ activeTab, onTabChange }) {
 ### FICHIER: client/src/features/prof/components/ProfStudioFolder.jsx
 ############################################################
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 export default function ProfStudioFolder({ 
-    type, items, chapters, classFilter, 
-    onMoveItem, onArchive, onRename, onEditItem, onViewResults, onDeleteItem, onDeleteChapter, onCreateChapter 
+    items, chapters, classFilter, 
+    onArchive, onRename, onEditItem, onViewResults, onDeleteItem, onDeleteChapter, onCreateChapter 
 }) {
-    const [editingChap, setEditingChap] = useState({ id: null, title: '' });
+    const [openChaps, setOpenChaps] = useState({});
+    const [allPlayers, setAllPlayers] = useState([]);
+    const [editingChapTitle, setEditingChapTitle] = useState({ id: null, val: '' });
 
-    const getSubjectInfo = (t) => {
-        const clean = (t || "").trim().toUpperCase();
-        const f = clean[0];
-        if (f === 'H') return { code: 'H', label: 'Histoire', style: 'subject-H', text: 'text-H', icon: '🏰', bg: 'bg-H' };
-        if (f === 'G') return { code: 'G', label: 'Géographie', style: 'subject-G', text: 'text-G', icon: '🌍', bg: 'bg-G' };
-        if (f === 'E') return { code: 'E', label: 'EMC', style: 'subject-E', text: 'text-E', icon: '⚖️', bg: 'bg-E' };
-        return { code: 'A', label: 'Autre', style: 'subject-A', text: 'text-slate-500', icon: '📁', bg: 'bg-slate-100' };
+    useEffect(() => {
+        fetch('/api/players').then(r => r.ok ? r.json() : []).then(data => setAllPlayers(data)).catch(() => []);
+    }, []);
+
+    const getSubjectInfo = (sub) => {
+        const s = (sub || "").toUpperCase();
+        if (s === 'H') return { code: 'H', label: 'Histoire', color: 'text-red-500', border: 'border-red-500', bg: 'bg-red-50' };
+        if (s === 'G') return { code: 'G', label: 'Géographie', color: 'text-blue-500', border: 'border-blue-500', bg: 'bg-blue-50' };
+        if (s === 'E') return { code: 'E', label: 'EMC', color: 'text-green-500', border: 'border-green-500', bg: 'bg-green-50' };
+        return { code: '?', label: 'Autre', color: 'text-slate-400', border: 'border-slate-300', bg: 'bg-slate-50' };
     };
 
-    const renderChapter = (chap, info) => {
-        const chapItems = items.filter(it => it.chapterId?.toString() === chap._id?.toString());
-        const isBeingEdited = editingChap.id === chap._id;
+    const toggleChap = (id) => {
+        setOpenChaps(prev => ({ ...prev, [id]: !prev[id] }));
+    };
+
+    const renderArchiveSection = () => {
+        const archived = chapters.filter(c => c.isArchived);
+        if (archived.length === 0) return null;
 
         return (
-            <div key={chap._id} className={`p-8 rounded-[50px] border-2 bg-white ${info.style} shadow-sm transition-all`}
-                onDragOver={e => e.preventDefault()}
-                onDrop={e => {
-                    const itemId = e.dataTransfer.getData("itemId");
-                    const chapId = e.dataTransfer.getData("chapterId");
-                    if(itemId) onMoveItem(itemId, chap._id);
-                    if(chapId && chapId !== chap._id) onArchive(chapId, false);
-                }}
-            >
-                <div className="flex items-center gap-4 mb-6" draggable onDragStart={e => e.dataTransfer.setData("chapterId", chap._id)}>
-                    <span className="text-xl opacity-20 cursor-grab">⠿</span>
-                    <input 
-                        className={`text-2xl font-black bg-transparent outline-none w-full ${info.text}`}
-                        value={isBeingEdited ? editingChap.title : chap.title}
-                        onFocus={() => setEditingChap({ id: chap._id, title: chap.title })}
-                        onChange={(e) => setEditingChap({ ...editingChap, title: e.target.value })}
-                        onBlur={() => { if(editingChap.title !== chap.title) onRename(chap._id, editingChap.title); setEditingChap({ id: null, title: '' }); }}
-                        onKeyDown={(e) => e.key === 'Enter' && e.target.blur()}
-                    />
-                    <div className="flex gap-2">
-                        <button onClick={() => onArchive(chap._id, true)} className="p-2 bg-slate-50 rounded-full hover:bg-slate-200">📁</button>
-                        <button onClick={() => onDeleteChapter(chap._id)} className="p-2 text-red-300 hover:text-red-500">✕</button>
-                    </div>
-                </div>
-
-                <div className="space-y-3">
-                    {chapItems.map(it => (
-                        <div key={it._id} draggable onDragStart={e => { e.stopPropagation(); e.dataTransfer.setData("itemId", it._id); }}
-                            className="bg-slate-50 p-5 rounded-[25px] border border-slate-100 flex justify-between items-center cursor-grab hover:bg-white hover:border-slate-300 transition-all shadow-sm"
-                        >
-                            <b className="text-slate-700 text-sm font-bold">{it.title}</b>
-                            <div className="flex gap-2">
-                                {onViewResults && <button onClick={() => onViewResults(it)} className="px-4 py-2 bg-blue-500 text-white rounded-xl font-bold text-[10px]">RÉSULTATS</button>}
-                                <button onClick={() => onEditItem(it)} className="px-4 py-2 bg-white text-slate-500 border rounded-xl font-bold text-[10px]">ÉDITER</button>
-                                <button onClick={() => onDeleteItem(it._id)} className="text-red-300 font-black px-2">✕</button>
-                            </div>
-                        </div>
-                    ))}
-                    {chapItems.length === 0 && <div className="py-8 border-4 border-dashed border-slate-50 rounded-[35px] text-center text-slate-200 font-black text-xs uppercase">Dossier Vide</div>}
-                </div>
-            </div>
-        );
-    };
-
-    return (
-        <div className="studio-folder-root">
-            {/* SUPER ARCHIVES */}
-            <div className="mb-12 p-10 bg-slate-100 rounded-[55px] border-4 border-dashed border-slate-200"
-                onDragOver={e => e.preventDefault()}
-                onDrop={e => {
-                    const chapId = e.dataTransfer.getData("chapterId");
-                    if(chapId) onArchive(chapId, true);
-                }}
-            >
-                <p className="text-center text-slate-400 font-black text-[10px] uppercase mb-8 tracking-[0.3em]">📁 ARCHIVES - CHAPITRES TERMINÉS ({classFilter})</p>
-                <div className="archive-grid-3">
+            <div className="mb-10 p-8 bg-slate-900 rounded-[50px] border-4 border-slate-800 shadow-2xl">
+                <p className="text-center text-slate-400 font-black text-[10px] uppercase mb-8 tracking-[0.3em]">📂 Archives Classées</p>
+                <div className="grid grid-cols-3 gap-6">
                     {['H', 'G', 'E'].map(sub => {
                         const info = getSubjectInfo(sub);
-                        const list = chapters.filter(c => c.isArchived && getSubjectInfo(c.title).code === sub);
+                        const list = archived.filter(c => c.subject === sub);
                         return (
-                            <div key={sub} className="archive-col">
-                                <h4 className={`archive-col-title ${info.text} font-black text-[10px] mb-4 uppercase text-center`}>{info.label}</h4>
+                            <div key={sub} className="bg-slate-800/40 p-5 rounded-[35px] border border-slate-700 min-h-[100px]">
+                                <h4 className={`text-center font-black text-[10px] uppercase mb-4 ${info.color}`}>{info.label}</h4>
                                 <div className="space-y-2">
-                                    {list.map(chap => (
-                                        <div key={chap._id} draggable onDragStart={e => e.dataTransfer.setData("chapterId", chap._id)}
-                                            className={`${info.bg} p-3 rounded-xl border ${info.style} text-[10px] font-black flex justify-between items-center cursor-grab hover:bg-white`}
-                                        >
-                                            <span>{chap.title}</span>
-                                            <button onClick={() => onArchive(chap._id, false)}>⬆️</button>
+                                    {list.map(c => (
+                                        <div key={c._id} className="bg-slate-700/40 p-3 rounded-2xl flex justify-between items-center shadow-sm border border-slate-600/30">
+                                            <span className="text-[10px] font-bold text-slate-300 truncate pr-2">{c.title}</span>
+                                            <button onClick={() => onArchive(c._id, false)} className="text-blue-400 hover:scale-125 transition-all font-bold">⬆️</button>
                                         </div>
                                     ))}
+                                    {list.length === 0 && <p className="text-center text-[9px] text-slate-600 font-bold uppercase py-2">Vide</p>}
                                 </div>
                             </div>
                         );
                     })}
                 </div>
             </div>
+        );
+    };
 
-            {/* SECTIONS ACTIVES H / G / E */}
-            {['H', 'G', 'E'].map(sub => {
-                const info = getSubjectInfo(sub);
-                return (
-                    <div key={sub} className="mb-12">
-                        <div className="flex justify-between items-center px-6 mb-6">
-                            <h2 className={`subject-section-title ${info.text} font-black text-xl flex items-center gap-3`}>
-                                <span>{info.icon}</span> {info.label}
-                            </h2>
-                            <button onClick={() => onCreateChapter(sub)} className={`px-5 py-2 rounded-2xl font-black text-[10px] text-white shadow-md hover:scale-105 transition-all ${sub === 'H' ? 'bg-red-500' : sub === 'G' ? 'bg-blue-500' : 'bg-green-500'}`}>
-                                + CHAPITRE {info.label}
-                            </button>
+    return (
+        <div className="max-w-4xl mx-auto">
+            {/* 1. ARCHIVES EN HAUT */}
+            {renderArchiveSection()}
+
+            {/* 2. BOUTONS CREATION */}
+            <div className="grid grid-cols-3 gap-6 mb-10">
+                {['H', 'G', 'E'].map(s => (
+                    <button key={s} onClick={() => onCreateChapter(s)} className={`p-6 bg-white border-4 border-dashed rounded-[40px] font-black uppercase text-[10px] hover:bg-slate-50 transition-all ${getSubjectInfo(s).color} ${getSubjectInfo(s).border}`}>
+                        + Dossier {getSubjectInfo(s).label}
+                    </button>
+                ))}
+            </div>
+
+            {/* 3. LISTE ACTIVE */}
+            <div className="space-y-4">
+                {chapters.filter(c => !c.isArchived).map(chap => {
+                    const info = getSubjectInfo(chap.subject);
+                    const isOpen = !!openChaps[chap._id];
+                    const chapItems = (items || []).filter(it => String(it.chapterId) === String(chap._id));
+
+                    return (
+                        <div key={chap._id} className={`bg-white rounded-[40px] border-2 shadow-sm mb-4 overflow-hidden transition-all ${info.border}`}>
+                            <div className="flex items-center p-3 gap-4">
+                                <div className="flex items-center gap-6 flex-1">
+                                    <span className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-xl ${info.bg} ${info.color}`}>{info.code}</span>
+                                    <span onClick={() => toggleChap(chap._id)} className={`text-2xl cursor-pointer transition-transform ${isOpen ? 'rotate-180 text-blue-600' : 'text-slate-200'}`}>▼</span>
+                                    {editingChapTitle.id === chap._id ? (
+                                        <input 
+                                            autoFocus
+                                            className="text-2xl font-black outline-none border-b-2 border-orange-400 w-full bg-transparent"
+                                            value={editingChapTitle.val}
+                                            onChange={e => setEditingChapTitle({...editingChapTitle, val: e.target.value})}
+                                            onBlur={() => { onRename(chap._id, editingChapTitle.val); setEditingChapTitle({id:null, val:''}); }}
+                                        />
+                                    ) : (
+                                        <span className="text-2xl font-black text-slate-700 cursor-pointer hover:text-blue-600" onClick={() => toggleChap(chap._id)}>
+                                            {chap.title || "Sans titre"}
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="flex items-center gap-2 pr-4">
+                                    <button onClick={() => setEditingChapTitle({id: chap._id, val: chap.title})} className="p-2 opacity-40 hover:opacity-100">✏️</button>
+                                    <button onClick={() => onArchive(chap._id, true)} className="bg-slate-50 px-4 py-2 rounded-xl text-[10px] font-black text-slate-400 uppercase hover:bg-slate-800 hover:text-white transition-all">Archiver</button>
+                                </div>
+                            </div>
+                            {isOpen && (
+                                <div className="p-5 bg-slate-50/50 border-t-2 border-dashed border-slate-100">
+                                    <div className="space-y-2">
+                                        {chapItems.map(it => (
+                                            <div key={it._id} className="bg-white p-4 rounded-2xl border border-slate-100 flex justify-between items-center shadow-sm mb-2">
+                                                <div className="flex items-center gap-4">
+                                                    <span className="text-2xl">{it.actType === 'game' ? '🕹️' : '📄'}</span>
+                                                    <b className="text-slate-700 text-sm">{it.title}</b>
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    {it.actType === 'homework' && <button onClick={() => onViewResults(it)} className="px-4 py-2 bg-blue-500 text-white rounded-xl font-bold text-[10px] uppercase shadow-sm">Copies</button>}
+                                                    <button onClick={() => onEditItem(it)} className="px-4 py-2 bg-white text-slate-400 border rounded-xl font-bold text-[10px] uppercase hover:bg-slate-50">Modifier</button>
+                                                    <button onClick={() => onDeleteItem(it._id, it.actType)} className="p-2 text-red-300">✕</button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
-                        <div className="space-y-8">
-                            {chapters.filter(c => !c.isArchived && getSubjectInfo(c.title).code === sub).map(chap => renderChapter(chap, info))}
-                        </div>
-                    </div>
-                );
-            })}
+                    );
+                })}
+            </div>
         </div>
     );
 }
@@ -3385,10 +3372,13 @@ export default function ProfStudioFolder({
 ############################################################
 
 import React, { useState } from 'react';
+import './GameStudio.css';
 
-export default function GameStudio({ initialData, chapters, onClose }) {
+export default function GameStudio({ initialData, chapters, classFilter, onClose }) {
+  const defaultChapter = (chapters && chapters.length > 0) ? chapters[0]._id : 'none';
+
   const [formData, setFormData] = useState(initialData || { 
-      title: '', chapterId: 'none', classroom: '6D', targetGrade: 'Tous', questions: [] 
+      title: '', chapterId: defaultChapter, classroom: classFilter || '6D', targetGrade: 'Tous', questions: [] 
   });
   const [currentQ, setCurrentQ] = useState({ q: '', options: ['', '', '', ''], a: 0 });
   const [aiPrompt, setAiPrompt] = useState('');
@@ -3417,7 +3407,7 @@ export default function GameStudio({ initialData, chapters, onClose }) {
   return (
     <div className="fixed inset-0 z-[6000] bg-slate-50 flex flex-col animate-in zoom-in">
         <div className="p-8 bg-purple-600 text-white flex justify-between items-center shadow-xl">
-            <input className="text-3xl font-black bg-transparent outline-none w-full" value={formData.title} onChange={e=>setFormData({...formData, title:e.target.value})} placeholder="TITRE DU QUIZ" />
+            <input className="text-3xl font-black bg-transparent outline-none w-full placeholder:text-purple-300" value={formData.title} onChange={e=>setFormData({...formData, title:e.target.value})} placeholder="TITRE DU QUIZ" />
             <button onClick={onClose} className="text-3xl font-black">✕</button>
         </div>
 
@@ -3426,7 +3416,7 @@ export default function GameStudio({ initialData, chapters, onClose }) {
                 <div className="grid grid-cols-2 gap-6">
                     <div className="assign-card"><label>DOSSIER</label>
                         <select className="w-full font-bold outline-none" value={formData.chapterId} onChange={e=>setFormData({...formData, chapterId: e.target.value})}>
-                            <option value="none">-- Aucun --</option>
+                            <option value="none">-- Aucun dossier --</option>
                             {chapters.map(c => <option key={c._id} value={c._id}>{c.title || `Dossier ${c.subject}`}</option>)}
                         </select>
                     </div>
@@ -3442,6 +3432,7 @@ export default function GameStudio({ initialData, chapters, onClose }) {
                     <button onClick={()=>setGenMode('ai')} className={`flex-1 p-4 rounded-2xl font-black ${genMode==='ai'?'bg-purple-600 text-white shadow-lg':'bg-white text-slate-400'}`}>🤖 IA GÉNÉRATEUR</button>
                 </div>
 
+                {/* RESTAURATION : Div pour écrire les questions manuellement */}
                 {genMode === 'manual' ? (
                     <div className="p-10 bg-white rounded-[50px] border shadow-sm">
                         <input className="w-full p-4 mb-6 border-b-2 font-black text-xl outline-none" placeholder="Question..." value={currentQ.q} onChange={e=>setCurrentQ({...currentQ, q:e.target.value})} />
@@ -3457,23 +3448,36 @@ export default function GameStudio({ initialData, chapters, onClose }) {
                     </div>
                 ) : (
                     <div className="p-10 bg-purple-50 rounded-[50px] border-4 border-dashed border-purple-200">
-                        <textarea className="w-full p-6 h-32 rounded-3xl border-none shadow-inner mb-4" placeholder="Sujet du Quiz (ex: La préhistoire en France)..." value={aiPrompt} onChange={e=>setAiPrompt(e.target.value)} />
-                        <button onClick={handleAiGen} disabled={loadingIA} className="w-full p-6 bg-purple-600 text-white font-black text-xl rounded-3xl">{loadingIA?'MAGIE IA...':'GÉNÉRER LE QUIZ ✨'}</button>
+                        <textarea className="w-full p-6 h-32 rounded-3xl border-none shadow-inner mb-4" placeholder="Sujet du Quiz..." value={aiPrompt} onChange={e=>setAiPrompt(e.target.value)} />
+                        <button onClick={handleAiGen} disabled={loadingIA} className="w-full p-6 bg-purple-600 text-white font-black text-xl rounded-3xl">{loadingIA?'GÉNÉRATION...':'GÉNÉRER LE QUIZ ✨'}</button>
                     </div>
                 )}
 
                 <div className="space-y-4">
                     {formData.questions.map((q, i) => (
-                        <div key={i} className="p-6 bg-white border rounded-[30px] flex justify-between items-center shadow-sm">
-                            <b>{i+1}. {q.q}</b>
-                            <button onClick={()=>{const n=[...formData.questions]; n.splice(i,1); setFormData({...formData, questions:n});}} className="text-red-400 font-black p-2">✕</button>
+                        <div key={i} className="p-6 bg-white border rounded-[30px] shadow-sm">
+                            <div className="flex justify-between items-center mb-4">
+                                <b className="text-slate-700">{i+1}. {q.q}</b>
+                                <button onClick={()=>{const n=[...formData.questions]; n.splice(i,1); setFormData({...formData, questions:n});}} className="text-red-400 font-black p-2 hover:scale-110">✕</button>
+                            </div>
+                            <div className="game-preview-options">
+                                {q.options.map((opt, optIdx) => (
+                                    <span key={optIdx} className={optIdx === q.a ? 'is-good' : ''}>
+                                        {optIdx === q.a ? '✅ ' : ''}{opt}
+                                    </span>
+                                ))}
+                            </div>
                         </div>
                     ))}
                 </div>
             </div>
         </div>
 
-        <div className="p-8 bg-white border-t"><button onClick={save} className="w-full p-8 bg-purple-600 text-white font-black text-3xl rounded-[40px] shadow-2xl">💾 ENREGISTRER LE QUIZ</button></div>
+        <div className="p-8 bg-white border-t">
+            <button onClick={save} className="w-full p-8 bg-purple-600 text-white font-black text-3xl rounded-[40px] shadow-2xl hover:scale-[1.01] active:scale-95 transition-all">
+                💾 ENREGISTRER LE QUIZ
+            </button>
+        </div>
     </div>
   );
 }
@@ -3775,6 +3779,7 @@ export default function HomeworkResults({ homework, onBack }) {
 ############################################################
 
 import React, { useState, useEffect } from 'react';
+import './HomeworkStudio.css';
 
 export default function HomeworkStudio({ initialData, chapters, onClose }) {
   const [players, setPlayers] = useState([]);
@@ -3787,12 +3792,30 @@ export default function HomeworkStudio({ initialData, chapters, onClose }) {
   
   const [formData, setFormData] = useState(initialData || { 
       title: '', targetGrade: 'Tous', classroom: '6D', targetPlayerIds: [], 
-      chapterId: 'none', levels: [{ instruction: '', attachmentUrls: [], questionImage: null, aiCorrectionHint: '' }] 
+      chapterId: (chapters && chapters.length > 0) ? chapters[0]._id : 'none',
+      levels: [{ instruction: '', attachmentUrls: [], questionImage: null, aiCorrectionHint: '' }] 
   });
 
   useEffect(() => {
-    fetch('/api/players').then(r => r.json()).then(data => setPlayers(Array.isArray(data) ? data : []));
+    fetch('/api/players').then(r => r.json()).then(data => setPlayers(data || []));
   }, []);
+
+  const handleSmartGenerate = async () => {
+    if (!qFile) return alert("Photo de la question requise");
+    setSmartLoading(true);
+    const fd = new FormData();
+    fd.append('questionImg', qFile);
+    docFiles.forEach(f => fd.append('docImgs', f));
+
+    try {
+        const res = await fetch('/api/smart-generate', { method: 'POST', body: fd }).then(r => r.json());
+        if (res.levels) {
+            setFormData({ ...formData, levels: res.levels });
+            setShowSmartWizard(false);
+        }
+    } catch (e) { alert("Erreur IA"); }
+    setSmartLoading(false);
+  };
 
   const handleUpload = async (files, idx, type) => {
     setUploading(true);
@@ -3809,30 +3832,6 @@ export default function HomeworkStudio({ initialData, chapters, onClose }) {
     setUploading(false);
   };
 
-  const handleOCR = async (idx) => {
-      const img = formData.levels[idx].questionImage; if(!img) return;
-      setUploading(true);
-      const res = await fetch('/api/extract-text', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ imageUrl: img }) }).then(r => r.json());
-      if(res.text) {
-          const n = [...formData.levels]; n[idx].instruction = res.text; n[idx].questionImage = null;
-          setFormData({...formData, levels: n});
-      }
-      setUploading(false);
-  };
-
-  const handleSmartGenerate = async () => {
-      if(!qFile) return alert("Photo des questions requise");
-      setSmartLoading(true);
-      const fd = new FormData(); fd.append('questionImg', qFile);
-      docFiles.forEach(f => fd.append('docImgs', f));
-      const res = await fetch('/api/smart-generate', { method: 'POST', body: fd }).then(r => r.json());
-      if (res.levels) {
-          setFormData({ ...formData, levels: res.levels });
-          setShowSmartWizard(false);
-      }
-      setSmartLoading(false);
-  };
-
   const save = async () => {
     if (!formData.title) return alert("Titre requis");
     await fetch('/api/homework', {
@@ -3843,94 +3842,97 @@ export default function HomeworkStudio({ initialData, chapters, onClose }) {
     onClose();
   };
 
+  const filteredPlayers = players.filter(p => (p.firstName + " " + p.lastName).toLowerCase().includes(stdSearch.toLowerCase()));
+
   return (
     <div className="fixed inset-0 z-[6000] bg-slate-50 flex flex-col animate-in slide-in-from-bottom-4">
-        {/* HEADER */}
-        <div className="p-6 bg-orange-500 text-white flex justify-between items-center shadow-lg">
+        <div className="p-6 bg-orange-500 text-white flex justify-between items-center">
             <input className="text-2xl font-black bg-transparent outline-none w-full placeholder:text-orange-200" value={formData.title} onChange={e=>setFormData({...formData, title:e.target.value})} placeholder="NOM DU DEVOIR" />
             <div className="flex gap-4">
-                <button onClick={() => setShowSmartWizard(true)} className="bg-white/20 px-4 py-2 rounded-xl font-black text-xs uppercase hover:bg-white/30">✨ IA Auto</button>
+                <button onClick={() => setShowSmartWizard(true)} className="bg-white/20 px-4 py-2 rounded-xl font-black text-xs uppercase">✨ SMART GENERATE</button>
                 <button onClick={onClose} className="w-10 h-10 bg-black/10 rounded-full font-black">✕</button>
             </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
             <div className="max-w-5xl mx-auto space-y-8">
-                {/* CONFIG */}
                 <div className="grid grid-cols-3 gap-6">
-                    <div className="assign-card"><label>1. DOSSIER</label>
-                        <select className="w-full font-bold outline-none" value={formData.chapterId} onChange={e=>setFormData({...formData, chapterId: e.target.value})}>
+                    <div className="assign-card"><label>DOSSIER</label>
+                        <select className="w-full font-bold" value={formData.chapterId} onChange={e=>setFormData({...formData, chapterId: e.target.value})}>
                             <option value="none">-- Aucun --</option>
-                            {chapters.map(c => <option key={c._id} value={c._id}>{c.title || `Dossier ${c.subject}`}</option>)}
+                            {chapters.map(c => <option key={c._id} value={c._id}>{c.title}</option>)}
                         </select>
                     </div>
-                    <div className="assign-card"><label>2. CLASSE</label>
-                        <select className="w-full font-bold outline-none" value={formData.classroom} onChange={e=>setFormData({...formData, classroom: e.target.value})}>
-                            <option value="6D">6eD</option><option value="5B">5eB</option><option value="5C">5eC</option><option value="2A">2A</option><option value="2CD">2CD</option>
+                    <div className="assign-card"><label>CLASSE</label>
+                        <select className="w-full font-bold" value={formData.classroom} onChange={e=>setFormData({...formData, classroom: e.target.value})}>
+                            <option value="6D">6eD</option><option value="5B">5eB</option><option value="5C">5eC</option>
                         </select>
                     </div>
-                    <div className="assign-card relative"><label>3. FINDER ÉLÈVES</label>
-                        <input className="w-full outline-none bg-transparent" placeholder="Chercher..." value={stdSearch} onChange={e=>setStdSearch(e.target.value)} />
+                    <div className="assign-card relative"><label>CIBLER ÉLÈVES (OPTIONNEL)</label>
+                        <input className="w-full outline-none" placeholder="Chercher..." value={stdSearch} onChange={e=>setStdSearch(e.target.value)} />
                         {stdSearch && (
-                            <div className="absolute top-full left-0 right-0 bg-white shadow-2xl z-50 rounded-xl max-h-40 overflow-auto border">
-                                {players.filter(p => (p.firstName+p.lastName).toLowerCase().includes(stdSearch.toLowerCase())).map(p => (
-                                    <div key={p._id} onClick={()=>{ if(!formData.targetPlayerIds.includes(p._id)) setFormData({...formData, targetPlayerIds:[...formData.targetPlayerIds, p._id]}); setStdSearch(''); }} className="p-3 border-b cursor-pointer hover:bg-orange-50 font-bold">{p.firstName} {p.lastName}</div>
+                            <div className="absolute top-full left-0 right-0 bg-white shadow-xl z-50 rounded-xl max-h-40 overflow-auto border">
+                                {filteredPlayers.map(p => (
+                                    <div key={p._id} onClick={()=>{ setFormData({...formData, targetPlayerIds:[...formData.targetPlayerIds, p._id]}); setStdSearch(''); }} className="p-3 hover:bg-orange-50 cursor-pointer font-bold">{p.firstName} {p.lastName}</div>
                                 ))}
                             </div>
                         )}
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {formData.targetPlayerIds.map(id => (
+                            <span key={id} className="bg-orange-100 text-orange-600 px-2 py-1 rounded-lg text-[10px] font-bold">{players.find(x => x._id === id)?.firstName}</span>
+                          ))}
+                        </div>
                     </div>
                 </div>
 
-                {/* PAGES */}
                 {formData.levels.map((lvl, idx) => (
-                    <div key={idx} className="bg-white p-10 rounded-[50px] border shadow-sm relative">
+                    <div key={idx} className="bg-white p-10 rounded-[50px] border shadow-sm">
                         <h4 className="font-black text-slate-300 uppercase mb-6">Page {idx+1}</h4>
                         <div className="grid grid-cols-2 gap-10">
                             <div>
-                                <p className="font-black text-[10px] text-blue-500 mb-4 uppercase tracking-widest">Documents (+)</p>
+                                <label className="text-[10px] font-black uppercase text-blue-500">Documents</label>
                                 <div className="flex flex-wrap gap-2 p-4 bg-slate-50 rounded-3xl border-2 border-dashed">
-                                    {lvl.attachmentUrls?.map((u, i) => <img key={i} src={u} className="w-16 h-16 object-cover rounded-xl shadow-sm" />)}
-                                    <label className="w-16 h-16 bg-white flex items-center justify-center text-2xl text-slate-300 cursor-pointer rounded-xl border">+</label>
+                                    {lvl.attachmentUrls?.map((u, i) => <img key={i} src={u} className="w-16 h-16 object-cover rounded-xl" />)}
+                                    <label className="w-16 h-16 bg-white flex items-center justify-center rounded-xl border cursor-pointer">+</label>
                                     <input type="file" multiple className="hidden" onChange={e => handleUpload(e.target.files, idx, 'doc')} />
                                 </div>
                             </div>
                             <div>
-                                <p className="font-black text-[10px] text-orange-500 mb-4 uppercase tracking-widest">Question (Photo)</p>
+                                <label className="text-[10px] font-black uppercase text-orange-500">Photo Question</label>
                                 <div className="h-32 bg-slate-50 rounded-3xl border-2 border-dashed flex items-center justify-center relative overflow-hidden">
                                     {lvl.questionImage ? <img src={lvl.questionImage} className="h-full w-full object-contain" /> : <span>PHOTO</span>}
-                                    <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={e => handleUpload(e.target.files, idx, 'qimg')} />
+                                    <input type="file" className="absolute inset-0 opacity-0" onChange={e => handleUpload(e.target.files, idx, 'qimg')} />
                                 </div>
-                                {lvl.questionImage && <button onClick={() => handleOCR(idx)} className="w-full mt-2 p-2 bg-purple-600 text-white rounded-xl font-black text-[10px]">⚡ OCR IA</button>}
                             </div>
                         </div>
-                        <textarea className="w-full p-6 mt-6 rounded-3xl h-32 border" value={lvl.instruction} onChange={e=>{const n=[...formData.levels]; n[idx].instruction=e.target.value; setFormData({...formData, levels:n});}} placeholder="Consigne..." />
+                        <div className="mt-8 space-y-4">
+                            <textarea className="w-full p-6 rounded-3xl h-24 border" value={lvl.instruction} onChange={e=>{const n=[...formData.levels]; n[idx].instruction=e.target.value; setFormData({...formData, levels:n});}} placeholder="Consigne manuelle..." />
+                            <textarea className="w-full p-6 rounded-3xl h-24 border bg-purple-50" value={lvl.aiCorrectionHint} onChange={e=>{const n=[...formData.levels]; n[idx].aiCorrectionHint=e.target.value; setFormData({...formData, levels:n});}} placeholder="Indices IA (ex: Réponse attendue...)" />
+                        </div>
                     </div>
                 ))}
             </div>
         </div>
 
         <div className="p-8 bg-white border-t">
-            <button onClick={save} disabled={uploading} className="w-full p-6 bg-orange-500 text-white font-black text-2xl rounded-3xl shadow-xl">
-                {uploading ? 'UPLOAD...' : '💾 ENREGISTRER LE DEVOIR'}
-            </button>
+            <button onClick={save} disabled={uploading} className="w-full p-6 bg-orange-500 text-white font-black text-2xl rounded-3xl shadow-xl">SAUVEGARDER</button>
         </div>
 
-        {/* WIZARD IA MODAL */}
         {showSmartWizard && (
           <div className="fixed inset-0 bg-slate-900/95 z-[7000] flex items-center justify-center p-6">
-              <div className="bg-white p-12 rounded-[60px] max-w-2xl w-full border-[10px] border-purple-500 shadow-2xl">
-                  <h2 className="text-3xl font-black text-purple-600 mb-8 text-center uppercase">Wizard IA ✨</h2>
+              <div className="bg-white p-12 rounded-[60px] max-w-2xl w-full border-[10px] border-purple-500">
+                  <h2 className="text-3xl font-black text-purple-600 mb-8 text-center uppercase">Smart Generate ✨</h2>
                   <div className="space-y-6 mb-10">
                       <div className="p-10 bg-purple-50 rounded-[40px] border-4 border-dashed relative">
-                          <p className="font-black text-purple-800 text-center">{qFile ? "✅ Photo Reçue" : "1. PHOTO DES QUESTIONS"}</p>
+                          <p className="font-black text-purple-800 text-center">{qFile ? "✅ Photo Question OK" : "1. PHOTO DE LA QUESTION"}</p>
                           <input type="file" className="absolute inset-0 opacity-0" onChange={e => setQFile(e.target.files[0])} />
                       </div>
                       <div className="p-10 bg-orange-50 rounded-[40px] border-4 border-dashed relative">
-                          <p className="font-black text-orange-800 text-center">{docFiles.length > 0 ? `✅ ${docFiles.length} Docs` : "2. PHOTOS DES DOCUMENTS"}</p>
+                          <p className="font-black text-orange-800 text-center">{docFiles.length > 0 ? `✅ ${docFiles.length} Docs OK` : "2. PHOTOS DES DOCUMENTS"}</p>
                           <input type="file" multiple className="absolute inset-0 opacity-0" onChange={e => setDocFiles(Array.from(e.target.files))} />
                       </div>
                   </div>
-                  <button onClick={handleSmartGenerate} disabled={smartLoading} className="w-full p-6 bg-purple-600 text-white font-black text-xl rounded-3xl">{smartLoading ? 'ANALYSE IA...' : 'GÉNÉRER 🚀'}</button>
+                  <button onClick={handleSmartGenerate} disabled={smartLoading} className="w-full p-6 bg-purple-600 text-white font-black text-xl rounded-3xl">{smartLoading ? 'ANALYSE...' : 'GÉNÉRER LE DEVOIR 🚀'}</button>
                   <button onClick={()=>setShowSmartWizard(false)} className="w-full mt-4 text-slate-400 font-bold">Annuler</button>
               </div>
           </div>
@@ -4620,49 +4622,70 @@ module.exports = router;
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
+const multer = require('multer');
+const cloudinary = require('cloudinary').v2;
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+const fetch = require('node-fetch');
 
-// --- CHAPITRES AVEC AUTO-REPARATION ---
-router.get('/chapters-all', async (req, res) => {
+// Config Cloudinary
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME || 'dcjt0dfsc',
+    api_key: process.env.CLOUDINARY_API_KEY || '252514332881269',
+    api_secret: process.env.CLOUDINARY_API_SECRET || 'n8W3iO0H_Xp7F-u0XQz_D_kIu0o'
+});
+
+const storage = new CloudinaryStorage({
+    cloudinary: cloudinary,
+    params: { folder: 'condamine', allowed_formats: ['jpg', 'png', 'jpeg'] }
+});
+const upload = multer({ storage: storage });
+
+// --- ÉLÈVES (Route indispensable pour le finder et l'affichage) ---
+router.get('/players', async (req, res) => {
     try {
-        const Chapter = mongoose.model('Chapter');
-        let chapters = await Chapter.find({});
+        const players = await mongoose.model('Player').find({});
+        res.json(players);
+    } catch (e) { 
+        console.error("Erreur GET /players:", e);
+        res.status(500).json([]); 
+    }
+});
 
-        // LOGIQUE D'AUTO-REPARATION POUR LES ANCIENS DOSSIERS
-        let hasFixed = false;
-        for (let chap of chapters) {
-            if (!chap.subject) {
-                if (chap.title.includes('H')) chap.subject = 'H';
-                else if (chap.title.includes('G')) chap.subject = 'G';
-                else if (chap.title.includes('E')) chap.subject = 'E';
-                else chap.subject = 'H'; // Par défaut
-                await chap.save();
-                hasFixed = true;
-            }
-        }
-        if(hasFixed) chapters = await Chapter.find({}); // Recharger si modifs
-
-        res.json(chapters);
-    } catch (e) { res.status(500).json([]); }
+// --- DOSSIERS ---
+router.get('/chapters-all', async (req, res) => {
+    try { res.json(await mongoose.model('Chapter').find({})); } catch (e) { res.status(500).json([]); }
 });
 
 router.post('/chapters', async (req, res) => {
     try {
         const { _id, ...data } = req.body;
-        const Chapter = mongoose.model('Chapter');
-        if (_id) {
-            await Chapter.findByIdAndUpdate(_id, data);
-        } else {
-            // Création forcée
-            const newChap = new Chapter(data);
-            await newChap.save();
-        }
+        if (_id) await mongoose.model('Chapter').findByIdAndUpdate(_id, data);
+        else await mongoose.model('Chapter').create(data);
         res.json({ ok: true });
-    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+    } catch (e) { res.status(500).json({ ok: false }); }
 });
 
 router.delete('/chapters/:id', async (req, res) => {
     try {
         await mongoose.model('Chapter').findByIdAndDelete(req.params.id);
+        res.json({ ok: true });
+    } catch (e) { res.status(500).json({ ok: false }); }
+});
+
+// --- ACTIVITÉS ---
+router.get('/homework-all', async (req, res) => {
+    try { res.json(await mongoose.model('Homework').find({}).sort({ date: -1 })); } catch (e) { res.status(500).json([]); }
+});
+
+router.get('/game-levels/all', async (req, res) => {
+    try { res.json(await mongoose.model('GameLevel').find({})); } catch (e) { res.status(500).json([]); }
+});
+
+router.post('/homework', async (req, res) => {
+    try {
+        const { _id, ...data } = req.body;
+        if (_id) await mongoose.model('Homework').findByIdAndUpdate(_id, data);
+        else await mongoose.model('Homework').create(data);
         res.json({ ok: true });
     } catch (e) { res.status(500).json({ ok: false }); }
 });

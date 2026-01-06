@@ -102,13 +102,13 @@
 ├── .env
 ├── .gitignore
 ├── apply.js
+├── coucou.txt
 ├── IAReadMe.md
 ├── init-db.js
 ├── LOCKED_FILES.md
 ├── package.json
 ├── projectMap.txt
-├── snap.js
-└── test.txt
+└── snap.js
 
 @@@     FIN DE L ARBORESCENCE  @@@
 
