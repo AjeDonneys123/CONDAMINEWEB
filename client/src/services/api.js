@@ -18,7 +18,11 @@ export const api = {
             return await response.json();
         } catch (error) { return { ok: false }; }
     },
+    // FIX : Utilise la nouvelle route avec préfixe
     async getHomeworks(classroom) {
-        return this.get(`/homework/${classroom}`);
+        return this.get(`/homework/by-class/${classroom}`);
+    },
+    async getSingleHomework(id) {
+        return this.get(`/homework/single/${id}`);
     }
 };

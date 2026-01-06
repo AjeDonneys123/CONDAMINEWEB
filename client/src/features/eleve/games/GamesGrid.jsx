@@ -1,94 +1,86 @@
-/* HUB DE JEUX V2 - LISTE QUIZ PUIS CHOIX DU JEU */
 import React, { useState, useEffect } from 'react';
 import ZombieWrapper from './zombie/ZombieWrapper';
 import StarshipWrapper from './starship/StarshipWrapper';
+import DashboardFolder from '../components/DashboardFolder';
 import { api } from '../../../services/api';
-import './GamesGrid.css';
-
-function normalizeClass(c) {
-    if(!c) return "";
-    return c.toString().toLowerCase().replace(/e/g, '').replace(/eme/g, '').trim();
-}
 
 export default function GamesGrid({ user }) {
   const [quizzes, setQuizzes] = useState([]);
+  const [chapters, setChapters] = useState([]);
   const [loading, setLoading] = useState(true);
-  
-  // États de navigation
-  const [selectedQuiz, setSelectedQuiz] = useState(null); // Le quiz choisi
-  const [activeGame, setActiveGame] = useState(null);     // Le mode de jeu ('zombie' ou 'starship')
+  const [selectedQuiz, setSelectedQuiz] = useState(null);
+  const [activeGame, setActiveGame] = useState(null);
 
-  // 1. Chargement des Quiz (ex-niveaux)
   useEffect(() => {
-    api.get('/game-levels/all').then(data => {
-        if(data && data.length > 0) {
-            const userClass = normalizeClass(user.classroom);
-            // On affiche TOUS les niveaux dispos pour la classe (peu importe le "chapterId" d'origine)
-            const myQuizzes = data.filter(l => {
-                const levelClass = normalizeClass(l.classroom || 'Toutes');
-                return (levelClass === 'toutes' || levelClass === userClass);
+    const load = async () => {
+        setLoading(true);
+        try {
+            const [lvlData, chapData] = await Promise.all([
+                api.get('/game-levels/all'),
+                fetch('/api/chapters-all').then(r => r.json())
+            ]);
+
+            const userClass = user.classroom.toString().trim(); // ex: "5B"
+            const userGrade = userClass.substring(0, 2); // ex: "5e" (si le format est 5eB) ou "5"
+            
+            // FILTRAGE ROBUSTE DES JEUX
+            const filteredQuizzes = (lvlData || []).filter(l => {
+                const matchClass = l.classroom === 'Toutes' || l.classroom === userClass;
+                const matchGrade = l.targetGrade === 'Tous' || userClass.includes(l.targetGrade);
+                return matchClass || matchGrade;
             });
-            setQuizzes(myQuizzes);
-        }
+
+            setQuizzes(filteredQuizzes);
+            
+            // FILTRAGE DES CHAPITRES (doivent appartenir à la classe)
+            setChapters((chapData || []).filter(c => c.classroom === userClass));
+            
+        } catch (e) { console.error(e); }
         setLoading(false);
-    });
-  }, []);
+    }
+    load();
+  }, [user.classroom]);
 
-  // 2. Lancement du jeu
-  const launchGame = (mode) => {
-      setActiveGame(mode);
-  };
+  if (activeGame && selectedQuiz) {
+      const close = () => { setActiveGame(null); setSelectedQuiz(null); };
+      if (activeGame === 'zombie') return <ZombieWrapper user={user} level={selectedQuiz} onClose={close} />;
+      if (activeGame === 'starship') return <StarshipWrapper user={user} level={selectedQuiz} onClose={close} />;
+  }
 
-  const closeGame = () => {
-      setActiveGame(null);
-      setSelectedQuiz(null); // Retour liste
-  };
-
-  // --- RENDU JEU ACTIF ---
-  if (activeGame === 'zombie' && selectedQuiz) return <ZombieWrapper user={user} level={selectedQuiz} onClose={closeGame} />;
-  if (activeGame === 'starship' && selectedQuiz) return <StarshipWrapper user={user} level={selectedQuiz} onClose={closeGame} />;
-
-  // --- RENDU SÉLECTEUR DE JEU (MODALE) ---
   if (selectedQuiz) {
       return (
           <div className="game-selector-overlay animate-in fade-in">
               <div className="selector-card">
-                  <h2 className="text-2xl font-black text-slate-700 text-center mb-6">CHOISIS TON JEU 🕹️</h2>
+                  <h2 className="text-2xl font-black text-slate-700 mb-6 uppercase text-center">🕹️ {selectedQuiz.title}</h2>
                   <div className="selector-grid">
-                      <button onClick={() => launchGame('zombie')} className="game-choice-btn zombie-btn">
-                          <span className="text-5xl mb-2">🧟</span>
+                      <button onClick={() => setActiveGame('zombie')} className="game-choice-btn zombie-btn">
+                          <span className="text-4xl mb-2">🧟</span>
                           <span>ZOMBIE</span>
                       </button>
-                      <button onClick={() => launchGame('starship')} className="game-choice-btn starship-btn">
-                          <span className="text-5xl mb-2">🚀</span>
+                      <button onClick={() => setActiveGame('starship')} className="game-choice-btn starship-btn">
+                          <span className="text-4xl mb-2">🚀</span>
                           <span>STARSHIP</span>
                       </button>
                   </div>
-                  <button onClick={() => setSelectedQuiz(null)} className="mt-6 text-slate-400 font-bold hover:text-red-500">Annuler</button>
+                  <button onClick={() => setSelectedQuiz(null)} className="mt-8 font-black text-slate-400 hover:text-red-500 transition-colors uppercase text-xs tracking-widest">Retour au menu</button>
               </div>
           </div>
       );
   }
 
-  // --- RENDU LISTE DES QUIZ ---
   return (
-    <div className="games-hub-container">
-        {loading ? <p className="text-center">Chargement...</p> : (
-            <div className="quizzes-grid">
-                {quizzes.length > 0 ? quizzes.map(q => (
-                    <div key={q._id} onClick={() => setSelectedQuiz(q)} className="quiz-card">
-                        <div className="quiz-icon">🎓</div>
-                        <div className="quiz-info">
-                            <h3>{q.title}</h3>
-                            <p>{q.questions.length} questions</p>
-                        </div>
-                        <div className="quiz-play">▶</div>
-                    </div>
-                )) : (
-                    <div className="empty-state">Aucun quiz disponible pour ta classe.</div>
-                )}
-            </div>
-        )}
+    <div className="animate-in fade-in">
+      {loading ? (
+        <p className="text-center py-20 font-black text-purple-300 animate-pulse uppercase tracking-widest">Recherche des jeux...</p>
+      ) : (
+        <DashboardFolder 
+          items={quizzes} 
+          chapters={chapters} 
+          type="game" 
+          onSelect={setSelectedQuiz} 
+          userClass={user.classroom} 
+        />
+      )}
     </div>
   );
 }

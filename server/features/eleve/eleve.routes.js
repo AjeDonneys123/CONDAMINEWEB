@@ -1,120 +1,15 @@
-/* 🔒 ROUTEUR ÉLÈVE - IA AVEC CONSIGNES PROFESSEUR */
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
-const fetch = require('node-fetch');
 
-// Route Devoirs
-router.get('/homework/:classroom', async (req, res) => {
+// FIX 404 : On change le préfixe pour ne pas confondre ID et Classe
+router.get('/homework/by-class/:classroom', async (req, res) => {
     try {
         const list = await mongoose.model('Homework').find({ 
             $or: [{ classroom: req.params.classroom }, { classroom: "Toutes" }] 
         }).sort({ date: -1 });
         res.json(list);
     } catch(e) { res.status(500).json([]); }
-});
-
-router.post('/report-bug', async (req, res) => {
-    try { await mongoose.model('Bug').create(req.body); res.json({ ok: true }); } catch (e) { res.status(500).json({ ok: false }); }
-});
-
-// --- CŒUR IA : ANALYSE ET NETTOYAGE ---
-router.post('/analyze-homework', async (req, res) => {
-    const { userText, homeworkInstruction, playerId, classroom, homeworkId, levelIndex } = req.body;
-    
-    let profHint = "";
-    
-    // 1. On va chercher les consignes spécifiques du prof en BDD
-    try {
-        const hw = await mongoose.model('Homework').findById(homeworkId);
-        if (hw && hw.levels && hw.levels[levelIndex]) {
-            profHint = hw.levels[levelIndex].aiCorrectionHint || "";
-        }
-    } catch (err) {
-        console.error("⚠️ Impossible de lire les hints prof:", err);
-    }
-
-    // 2. Construction du Prompt intégrant les consignes prof
-    const prompt = `
-    Rôle : Professeur de français.
-    Consigne de l'exercice : "${homeworkInstruction}"
-    Réponse de l'élève : "${userText}"
-    
-    ${profHint ? `IMPORTANT - DIRECTIVES DU PROFESSEUR POUR LA CORRECTION :
-    "${profHint}"` : ""}
-    
-    Tâche : Corriger avec bienveillance, expliquer les fautes et noter sur 20.
-    
-    FORMAT DE RÉPONSE ATTENDU (JSON STRICT, pas de markdown) :
-    {
-        "grade": "Note/20",
-        "feedback_fond": "<p>Ton commentaire ici (HTML simple).</p>",
-        "corrections": [
-            { "wrong": "mot faux", "correct": "mot juste", "rule": "règle d'orthographe ou grammaire" }
-        ]
-    }`;
-
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${process.env.GEMINI_API_KEY}`;
-
-    try {
-        const resp = await fetch(url, { 
-            method: 'POST', 
-            headers: { 'Content-Type': 'application/json' }, 
-            body: JSON.stringify({ 
-                contents: [{ parts: [{ text: prompt }] }], 
-                generationConfig: { response_mime_type: "application/json" } 
-            }) 
-        });
-        
-        const result = await resp.json();
-        if(result.error) throw new Error(result.error.message);
-
-        let rawText = result.candidates[0].content.parts[0].text;
-        
-        // Nettoyage Markdown
-        rawText = rawText.replace(/```json/g, "").replace(/```/g, "").trim();
-        const firstBrace = rawText.indexOf('{');
-        const lastBrace = rawText.lastIndexOf('}');
-        if (firstBrace !== -1 && lastBrace !== -1) rawText = rawText.substring(firstBrace, lastBrace + 1);
-
-        let aiJson;
-        try {
-            aiJson = JSON.parse(rawText);
-        } catch (parseError) {
-            aiJson = { grade: "?/20", feedback_fond: "Erreur analyse.", corrections: [] };
-        }
-        
-        // Sauvegarde Submission
-        if (playerId && homeworkId) {
-            await mongoose.model('Submission').findOneAndUpdate(
-                { homeworkId, playerId },
-                { 
-                    classroom, 
-                    submittedAt: Date.now(), 
-                    $push: { levelsResults: { levelIndex, userText, aiFeedback: aiJson.feedback_fond, grade: aiJson.grade } } 
-                },
-                { upsert: true }
-            );
-        }
-
-        // Sauvegarde Fautes
-        if (aiJson.corrections && aiJson.corrections.length > 0 && playerId) {
-            await mongoose.model('Player').findByIdAndUpdate(playerId, {
-                $push: { spellingMistakes: { $each: aiJson.corrections } }
-            });
-        }
-
-        res.json(aiJson);
-
-    } catch (e) { 
-        console.error("❌ CRASH IA :", e);
-        res.status(500).json({ error: "Erreur IA" }); 
-    }
-});
-
-router.get('/player-mistakes/:id', async (req, res) => {
-    const p = await mongoose.model('Player').findById(req.params.id);
-    res.json(p ? p.spellingMistakes : []);
 });
 
 module.exports = router;

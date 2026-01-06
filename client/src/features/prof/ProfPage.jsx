@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import ProfHeader from './components/ProfHeader';
 import ProfNav from './components/ProfNav';
 import StudentsManager from './students/StudentsManager';
-import HomeworkStudio from './homework/HomeworkStudio';
-import GameStudio from './games/GameStudio';
+import ChapterManager from './chapters/ChapterManager';
+import ActivityStudio from './activities/ActivityStudio';
 import './ProfPage.css';
 
 export default function ProfPage({ user, onLogout }) {
@@ -17,8 +17,8 @@ export default function ProfPage({ user, onLogout }) {
         
         <div className="prof-content-area">
           {tab === 'students' && <StudentsManager />}
-          {tab === 'homework' && <HomeworkStudio />}
-          {tab === 'games' && <GameStudio />}
+          {tab === 'chapters' && <ChapterManager />}
+          {tab === 'activities' && <ActivityStudio />}
         </div>
       </div>
     </div>
