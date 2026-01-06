@@ -12,6 +12,7 @@
 │   │   │   │   └── Login.jsx
 │   │   │   ├── eleve/
 │   │   │   │   ├── components/
+│   │   │   │   │   ├── DashboardFolder.jsx
 │   │   │   │   │   ├── EleveHeader.css
 │   │   │   │   │   └── EleveHeader.jsx
 │   │   │   │   ├── games/
@@ -37,9 +38,15 @@
 │   │   │   │   ├── ElevePage.css
 │   │   │   │   └── ElevePage.jsx
 │   │   │   └── prof/
+│   │   │       ├── activities/
+│   │   │       │   ├── ActivityStudio.css
+│   │   │       │   └── ActivityStudio.jsx
+│   │   │       ├── chapters/
+│   │   │       │   └── ChapterManager.jsx
 │   │   │       ├── components/
 │   │   │       │   ├── ProfHeader.jsx
-│   │   │       │   └── ProfNav.jsx
+│   │   │       │   ├── ProfNav.jsx
+│   │   │       │   └── ProfStudioFolder.jsx
 │   │   │       ├── games/
 │   │   │       │   ├── GameStudio.css
 │   │   │       │   └── GameStudio.jsx
@@ -108,11 +115,25 @@
 
 ==Global instructions==
 
+
 le projet utilise Gemini 2.0 FLASH
-le projet utilise le fichier update.txt tu dois générer 
-des grands fichiers txt qui peuvent se snipette en une fois 
-et qui obéisse a cette convention 
-[[[ FILE: chemin ]]] plus d informations dans apply.js
+le projet utilise le fichier update.txt 
+
+!!!! IMPORTANT
+tes réponses seront toujours formulé ainsi  
+Introduction : Un bref résumé de ce qui va être modifié.
+Les fichiers :**"INSTRUCTION TECHNIQUE OBLIGATOIRE :
+ suivre cet ordre précis :
+Ouvre d'abord le bloc de code Markdown avec ```javascript
+Avant chaque fichier écris la balise [[[ FILE : chemin ]]] .
+Interdiction formelle de couper un fichier si trop long  met ``` a la fin du dernier fichier qui rentre
+quand tu a fini d écrire le dernier fichier
+Ferme le bloc avec ```
+
+Interdiction formelle d'écrire la balise [[[ FILE ]]] en dehors d'une boîte de code (snipette)."**
+Conclusion : Une explication technique des changements effectués pour ton suivi.
+
+
 ==Project MAP==
 REMARQUE IMPORTANTE : SI UN PROGRAMME DE L ARBORESCENCE QUI SEMBLE IMPORTANT 
 EST ABSCENT DE CETTE LISTE LE DEMMANDER  DES QUE TU RECOIS CE PROMPT

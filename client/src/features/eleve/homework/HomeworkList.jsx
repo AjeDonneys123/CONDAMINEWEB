@@ -19,16 +19,15 @@ export default function HomeworkList({ user }) {
         ]);
         
         const myId = user.id || user._id;
-        const userClass = user.classroom.toString().trim(); // ex: "6D"
-        const userGrade = userClass.substring(0, 2).toLowerCase(); // ex: "6e"
+        const userClass = user.classroom?.toString().trim() || ""; 
+        const userGrade = userClass.substring(0, 2).toLowerCase(); 
 
-        // FILTRAGE ROBUSTE
         const filteredHw = (hwData || []).filter(h => {
-            // 1. Match par classe (ex: "6D")
             const classMatch = h.classroom === 'Toutes' || h.classroom === userClass;
-            // 2. Match par niveau (ex: "6e")
-            const gradeMatch = h.targetGrade === 'Tous' || userGrade.includes(h.targetGrade.toLowerCase());
-            // 3. Match par élève précis
+            
+            const hGrade = h.targetGrade || 'Tous';
+            const gradeMatch = hGrade === 'Tous' || userGrade.includes(hGrade.toLowerCase());
+            
             const playerMatch = (!h.targetPlayerIds || h.targetPlayerIds.length === 0) || h.targetPlayerIds.includes(myId);
 
             return (classMatch || gradeMatch) && playerMatch;
@@ -36,7 +35,7 @@ export default function HomeworkList({ user }) {
 
         setHomeworks(filteredHw);
         setChapters((chapData || []).filter(c => c.classroom === userClass));
-      } catch(e) { console.error(e); }
+      } catch(e) { console.error("Erreur HomeworkList:", e); }
       setLoading(false);
     };
     if (!selectedHw) load();

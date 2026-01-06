@@ -1,7 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 export default function DashboardFolder({ items, chapters, type, onSelect }) {
   const [openChaps, setOpenChaps] = useState({});
+  const [allPlayers, setAllPlayers] = useState([]);
+
+  useEffect(() => {
+    fetch('/api/players').then(r => r.json()).then(data => setAllPlayers(data || []));
+  }, []);
 
   const getSubjectStyle = (sub) => {
     if (sub === 'H') return { code: 'H', label: 'Histoire', color: '#ef4444', text: 'text-red-600', bg: 'bg-red-50', icon: '🏰' };
@@ -12,12 +17,9 @@ export default function DashboardFolder({ items, chapters, type, onSelect }) {
 
   const renderSection = (subCode, isArchived) => {
     const info = getSubjectStyle(subCode);
-    
-    // On utilise strictement le champ .subject de la base de données
-    const myChapters = chapters.filter(c => c.isArchived === isArchived && c.subject === subCode);
-
+    const myChapters = (chapters || []).filter(c => c.isArchived === isArchived && c.subject === subCode);
     const chapsWithItems = myChapters.filter(chap => 
-        items.some(it => it.chapterId?.toString() === chap._id?.toString())
+        (items || []).some(it => it.chapterId?.toString() === chap._id?.toString())
     );
 
     if (chapsWithItems.length === 0) return null;
@@ -29,7 +31,7 @@ export default function DashboardFolder({ items, chapters, type, onSelect }) {
         </h3>
         <div className="space-y-4">
           {chapsWithItems.map(chap => {
-            const chapItems = items.filter(it => it.chapterId?.toString() === chap._id?.toString());
+            const chapItems = (items || []).filter(it => it.chapterId?.toString() === chap._id?.toString());
             const isOpen = openChaps[chap._id];
 
             return (
@@ -43,16 +45,31 @@ export default function DashboardFolder({ items, chapters, type, onSelect }) {
                 </button>
                 {isOpen && (
                   <div className="p-4 bg-slate-50/50 space-y-2">
-                    {chapItems.map(it => (
-                      <div 
-                        key={it._id} 
-                        onClick={() => onSelect(it)}
-                        className="bg-white p-5 rounded-2xl flex justify-between items-center cursor-pointer border border-transparent hover:border-pink-300 shadow-sm transition-all"
-                      >
-                        <span className="font-bold text-slate-600">{type === 'game' ? '🕹️ ' : ''}{item.title}</span>
-                        <span className="text-pink-400 font-black">➔</span>
-                      </div>
-                    ))}
+                    {chapItems.map(it => {
+                      // Détection des noms d'élèves ciblés
+                      let targetLabel = "";
+                      if (it.targetPlayerIds && it.targetPlayerIds.length > 0) {
+                          const names = it.targetPlayerIds.map(id => {
+                              const p = allPlayers.find(x => x._id === id);
+                              return p ? p.firstName : "...";
+                          });
+                          targetLabel = ` pour ${names.join(', ')}`;
+                      }
+
+                      return (
+                        <div 
+                          key={it._id} 
+                          onClick={() => onSelect(it)}
+                          className="bg-white p-5 rounded-2xl flex justify-between items-center cursor-pointer border border-transparent hover:border-pink-300 shadow-sm transition-all"
+                        >
+                          <div className="flex flex-col">
+                            <span className="font-bold text-slate-600">{type === 'game' ? '🕹️ ' : '📄 '}{it.title}</span>
+                            {targetLabel && <span className="text-[9px] font-black text-orange-400 uppercase">{targetLabel}</span>}
+                          </div>
+                          <span className="text-pink-400 font-black">➔</span>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -66,8 +83,7 @@ export default function DashboardFolder({ items, chapters, type, onSelect }) {
   return (
     <div className="max-w-2xl mx-auto">
       {['H', 'G', 'E'].map(s => renderSection(s, false))}
-
-      {chapters.some(c => c.isArchived) && (
+      {(chapters || []).some(c => c.isArchived) && (
           <div className="mt-20 pt-10 border-t-4 border-dashed border-pink-100 opacity-50">
               <h2 className="text-center font-black text-pink-300 uppercase tracking-widest text-xl mb-10">📂 Archives des dossiers passés</h2>
               {['H', 'G', 'E'].map(s => renderSection(s, true))}
