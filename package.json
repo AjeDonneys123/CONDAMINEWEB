@@ -9,9 +9,6 @@
     "dev": "node apply.js & npm run start & npm run client",
     "snap": "node snap.js"
   },
-  "nodemonConfig": {
-    "ignore": ["history.txt", "update.txt", "client/*", "snapshot.txt"]
-  },
   "dependencies": {
     "adm-zip": "^0.5.14",
     "express": "^4.19.2",

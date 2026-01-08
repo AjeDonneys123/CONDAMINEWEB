@@ -2,11 +2,12 @@ const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
 const express = require('express');
 const mongoose = require('mongoose');
+const fs = require('fs');
 const app = express();
 const port = process.env.PORT || 3000;
 
 console.log("------------------------------------------------");
-console.log("🚀 DEMARRAGE DU SERVEUR CONDAMINE (DEPLOYMENT MODE)");
+console.log("🚀 DEMARRAGE DU SERVEUR CONDAMINE (ROOT-PATH MODE)");
 
 // 1. Connexion BDD
 mongoose.connect(process.env.MONGODB_URI)
@@ -31,25 +32,28 @@ app.use('/api', require('./features/prof/prof.routes'));
 app.use('/api', require('./features/game/game.routes'));
 app.use('/api', require('./features/prof/automation.routes'));
 
-// 5. GESTION DU FRONTEND
-// Render compile le client dans client/dist
-const distPath = path.resolve(__dirname, '..', 'client', 'dist');
-console.log("📁 Chemin statique recherché :", distPath);
+// 5. GESTION DU FRONTEND (PRODUCTION)
+// process.cwd() pointe vers la racine du projet (/opt/render/project/src)
+const distPath = path.join(process.cwd(), 'client', 'dist');
+
+// Log de debug pour voir ce qui se passe sur Render
+console.log("🔍 Vérification du dossier Frontend...");
+if (fs.existsSync(distPath)) {
+    console.log("✅ Dossier 'dist' trouvé à :", distPath);
+} else {
+    console.error("❌ Dossier 'dist' INTROUVABLE à :", distPath);
+}
 
 app.use(express.static(distPath));
 
-// Fallback pour les routes React (SPA)
+// Fallback pour React
 app.get('*', (req, res) => {
-    // Si c'est une requête API qui arrive ici, c'est une 404 API
-    if (req.path.startsWith('/api')) {
-        return res.status(404).json({ error: "Route API inconnue" });
-    }
-    // Sinon on envoie le fichier index.html du build
+    if (req.path.startsWith('/api')) return res.status(404).json({ error: "API non trouvée" });
+    
     const indexPath = path.join(distPath, 'index.html');
     res.sendFile(indexPath, (err) => {
         if (err) {
-            console.error("❌ Erreur SendFile :", err.message);
-            res.status(500).send(`Erreur de déploiement : Le fichier index.html est introuvable à l'adresse : ${indexPath}. Vérifiez les logs de build sur Render.`);
+            res.status(500).send(`Erreur de déploiement : Fichiers statiques non trouvés.`);
         }
     });
 });
