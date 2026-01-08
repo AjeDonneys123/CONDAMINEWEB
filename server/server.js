@@ -6,7 +6,7 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 console.log("------------------------------------------------");
-console.log("🚑 DÉMARRAGE DU SERVEUR CONDAMINE...");
+console.log("🚀 DEMARRAGE DU SERVEUR CONDAMINE (MODE PROD)");
 
 // 1. Connexion BDD
 mongoose.connect(process.env.MONGODB_URI)
@@ -15,32 +15,37 @@ mongoose.connect(process.env.MONGODB_URI)
 
 // 2. Middlewares
 app.use(express.json());
-app.use(express.static(path.join(__dirname, '..', 'public')));
 
-// 3. Modèles (Chargement individuel pour plus de sécurité)
+// 3. Modèles
 require('./models/Player');
 require('./models/Chapter');
 require('./models/Homework');
 require('./models/GameLevel');
 require('./models/Bug');
 require('./models/Submission');
-console.log("✅ Modèles chargés.");
 
-// 4. Montage des Routes
-// On utilise une route de secours pour tester la connexion
-app.get('/api/hello', (req, res) => res.json({ ok: true, message: "Le serveur répond !" }));
+// 4. Routes API
+app.use('/api', require('./features/auth/auth.routes'));
+app.use('/api', require('./features/eleve/eleve.routes'));
+app.use('/api', require('./features/prof/prof.routes'));
+app.use('/api', require('./features/game/game.routes'));
+app.use('/api', require('./features/prof/automation.routes'));
 
-try {
-    app.use('/api', require('./features/auth/auth.routes'));
-    app.use('/api', require('./features/eleve/eleve.routes'));
-    app.use('/api', require('./features/prof/prof.routes'));
-    app.use('/api', require('./features/game/game.routes'));
-    app.use('/api', require('./features/prof/automation.routes'));
-    console.log("✅ Toutes les routes API sont branchées.");
-} catch (e) {
-    console.error("❌ ERREUR BRANCHEMENT :", e.message);
-}
+// 5. GESTION DU FRONTEND EN PRODUCTION
+// On sert les fichiers statiques du dossier 'client/dist'
+const distPath = path.join(__dirname, '..', 'client', 'dist');
+app.use(express.static(distPath));
+
+// Pour toute route non-API (ex: /dashboard), on renvoie l'index.html de React
+app.get('*', (req, res) => {
+    if (req.path.startsWith('/api')) return; // Sécurité pour les erreurs 404 API
+    res.sendFile(path.join(distPath, 'index.html'), (err) => {
+        if (err) {
+            res.status(500).send("Le Frontend n'est pas encore compilé. Lancez 'npm run build'.");
+        }
+    });
+});
 
 app.listen(port, () => {
-    console.log(`🚀 SERVEUR PRÊT SUR : http://localhost:${port}`);
+    console.log(`🚀 SERVEUR PRÊT SUR LE PORT ${port}`);
 });
