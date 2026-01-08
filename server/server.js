@@ -6,7 +6,7 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 console.log("------------------------------------------------");
-console.log("🚀 DEMARRAGE DU SERVEUR CONDAMINE (MODE PROD)");
+console.log("🚀 DEMARRAGE DU SERVEUR CONDAMINE (DEPLOYMENT MODE)");
 
 // 1. Connexion BDD
 mongoose.connect(process.env.MONGODB_URI)
@@ -31,17 +31,25 @@ app.use('/api', require('./features/prof/prof.routes'));
 app.use('/api', require('./features/game/game.routes'));
 app.use('/api', require('./features/prof/automation.routes'));
 
-// 5. GESTION DU FRONTEND EN PRODUCTION
-// On sert les fichiers statiques du dossier 'client/dist'
-const distPath = path.join(__dirname, '..', 'client', 'dist');
+// 5. GESTION DU FRONTEND
+// Render compile le client dans client/dist
+const distPath = path.resolve(__dirname, '..', 'client', 'dist');
+console.log("📁 Chemin statique recherché :", distPath);
+
 app.use(express.static(distPath));
 
-// Pour toute route non-API (ex: /dashboard), on renvoie l'index.html de React
+// Fallback pour les routes React (SPA)
 app.get('*', (req, res) => {
-    if (req.path.startsWith('/api')) return; // Sécurité pour les erreurs 404 API
-    res.sendFile(path.join(distPath, 'index.html'), (err) => {
+    // Si c'est une requête API qui arrive ici, c'est une 404 API
+    if (req.path.startsWith('/api')) {
+        return res.status(404).json({ error: "Route API inconnue" });
+    }
+    // Sinon on envoie le fichier index.html du build
+    const indexPath = path.join(distPath, 'index.html');
+    res.sendFile(indexPath, (err) => {
         if (err) {
-            res.status(500).send("Le Frontend n'est pas encore compilé. Lancez 'npm run build'.");
+            console.error("❌ Erreur SendFile :", err.message);
+            res.status(500).send(`Erreur de déploiement : Le fichier index.html est introuvable à l'adresse : ${indexPath}. Vérifiez les logs de build sur Render.`);
         }
     });
 });
