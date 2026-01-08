@@ -32,28 +32,23 @@ app.use('/api', require('./features/prof/prof.routes'));
 app.use('/api', require('./features/game/game.routes'));
 app.use('/api', require('./features/prof/automation.routes'));
 
-// 5. GESTION DU FRONTEND (STRICT RENDER MODE)
-// En production sur Render, le serveur s'exécute depuis la racine
-const possiblePaths = [
-    path.join(process.cwd(), 'client', 'dist'),
-    path.join(__dirname, '..', 'client', 'dist'),
-    path.resolve(__dirname, '../../client/dist')
-];
+// 5. GESTION DU FRONTEND (PRODUCTION)
+// Sur Render, process.cwd() est /opt/render/project/src
+const distPath = path.join(process.cwd(), 'client', 'dist');
 
-let distPath = possiblePaths.find(p => fs.existsSync(p));
-
-if (distPath) {
-    console.log("✅ Dossier statique trouvé à :", distPath);
+if (fs.existsSync(distPath)) {
+    console.log("✅ Dossier 'dist' trouvé à :", distPath);
     app.use(express.static(distPath));
+    // Route fallback pour React
     app.get('*', (req, res) => {
         if (req.path.startsWith('/api')) return res.status(404).json({ error: "API 404" });
         res.sendFile(path.join(distPath, 'index.html'));
     });
 } else {
-    console.error("❌ ERREUR CRITIQUE : Aucun dossier 'dist' trouvé.");
-    console.log("Chemins testés :", possiblePaths);
+    console.error("❌ ERREUR CRITIQUE : Dossier 'dist' introuvable.");
+    console.log("Chemin vérifié :", distPath);
     app.get('*', (req, res) => {
-        res.status(500).send("Fichiers statiques introuvables. Vérifiez le build sur Render.");
+        res.status(500).send(`Erreur de déploiement : le dossier de build est absent. Chemin : ${distPath}`);
     });
 }
 

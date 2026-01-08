@@ -5,7 +5,7 @@
     "start": "node server/server.js",
     "client": "npm run dev --prefix client",
     "apply": "node apply.js",
-    "build": "npm install && cd client && npm install && npm run build",
+    "build": "npm install && npm install --prefix client && npm run build --prefix client",
     "dev": "node apply.js & npm run start & npm run client",
     "snap": "node snap.js"
   },

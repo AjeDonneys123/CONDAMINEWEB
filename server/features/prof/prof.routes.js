@@ -2,30 +2,34 @@ const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 
-// Route Players : Toujours renvoyer un tableau JSON
+// --- RÉCUPÉRATION DES ÉLÈVES (Indispensable pour localhost) ---
 router.get('/players', async (req, res) => {
     try {
         const Player = mongoose.model('Player');
         const players = await Player.find({}).sort({ classroom: 1, lastName: 1 });
-        return res.json(players || []);
+        console.log(`👥 [DB] ${players.length} élèves récupérés.`);
+        res.json(players || []);
     } catch (e) {
-        console.error("Erreur API /players:", e);
-        return res.status(500).json([]);
+        console.error("❌ [DB ERR] Impossible de charger les élèves:", e.message);
+        res.status(500).json([]);
     }
 });
 
 router.get('/chapters-all', async (req, res) => {
+    try { res.json(await mongoose.model('Chapter').find({})); } catch (e) { res.status(500).json([]); }
+});
+
+router.post('/chapters', async (req, res) => {
     try {
-        const chapters = await mongoose.model('Chapter').find({});
-        res.json(chapters || []);
-    } catch (e) { res.json([]); }
+        const { _id, ...data } = req.body;
+        if (_id) await mongoose.model('Chapter').findByIdAndUpdate(_id, data);
+        else await mongoose.model('Chapter').create(data);
+        res.json({ ok: true });
+    } catch (e) { res.status(500).json({ ok: false }); }
 });
 
 router.get('/homework-all', async (req, res) => {
-    try {
-        const hw = await mongoose.model('Homework').find({}).sort({ date: -1 });
-        res.json(hw || []);
-    } catch (e) { res.json([]); }
+    try { res.json(await mongoose.model('Homework').find({}).sort({ date: -1 })); } catch (e) { res.status(500).json([]); }
 });
 
 module.exports = router;
