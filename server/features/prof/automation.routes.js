@@ -4,7 +4,6 @@ const mongoose = require('mongoose');
 const fetch = require('node-fetch');
 const { google } = require('googleapis');
 
-// Configuration OAuth2 sécurisée pour Prod et Dev
 const oauth2Client = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET
@@ -12,44 +11,48 @@ const oauth2Client = new google.auth.OAuth2(
 oauth2Client.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
 const drive = google.drive({ version: 'v3', auth: oauth2Client });
 
-// --- PROXY IMAGE (Fix affichage Render) ---
-router.get('/view-thumbnail/:fileId', async (req, res) => {
+// --- RÉCUPÉRER LES COPIES D'UN ÉLÈVE (FIX ROBUSTE) ---
+router.get('/scans/player/:playerId', async (req, res) => {
     try {
-        const file = await drive.files.get({ fileId: req.params.fileId, fields: 'thumbnailLink' });
-        if (!file.data.thumbnailLink) return res.status(404).send("Pas de miniature");
-        
-        const response = await fetch(file.data.thumbnailLink.replace(/=s\d+/, '=s800'));
-        const buffer = await response.buffer();
-        res.set('Content-Type', 'image/jpeg');
-        res.send(buffer);
+        const Submission = mongoose.model('Submission');
+        const { playerId } = req.params;
+
+        // On vérifie que l'ID est valide pour MongoDB
+        if (!mongoose.Types.ObjectId.isValid(playerId)) {
+            return res.status(400).json({ error: "ID Élève invalide" });
+        }
+
+        const data = await Submission.find({ playerId: playerId }).sort({ createdAt: -1 });
+        console.log(`📂 [API] ${data.length} archives trouvées pour l'élève ${playerId}`);
+        res.json(data || []);
     } catch (e) {
-        console.error("❌ [PROXY ERR]", e.message);
-        res.status(500).send("Erreur Proxy");
+        console.error("❌ Erreur /scans/player :", e.message);
+        res.status(500).json([]);
     }
 });
 
-router.get('/google/drive/list', async (req, res) => {
-    try {
-        const rootId = process.env.GOOGLE_DRIVE_FOLDER_ID;
-        if(!rootId) throw new Error("ID Dossier manquant dans les variables d'environnement");
-        
-        const driveRes = await drive.files.list({
-            q: `'${rootId}' in parents and trashed = false`,
-            fields: 'files(id, name, thumbnailLink, mimeType)',
-            pageSize: 50
-        });
-        res.json({ ok: true, files: driveRes.data.files || [] });
-    } catch (e) {
-        res.status(500).json({ ok: false, error: e.message });
-    }
-});
-
+// --- LISTE GLOBALE ---
 router.get('/scans', async (req, res) => {
     try {
         const Submission = mongoose.model('Submission');
         const data = await Submission.find({}).populate('playerId').sort({ createdAt: -1 });
         res.json(data || []);
-    } catch (e) { res.json([]); }
+    } catch (e) { res.status(500).json([]); }
+});
+
+// --- PROXY IMAGE DRIVE ---
+router.get('/view-copy/:driveFileId', async (req, res) => {
+    try {
+        const fileMetadata = await drive.files.get({ fileId: req.params.driveFileId, fields: 'thumbnailLink' });
+        if (fileMetadata.data.thumbnailLink) {
+            const response = await fetch(fileMetadata.data.thumbnailLink.replace(/=s\d+/, '=s1600'));
+            const buffer = await response.buffer();
+            res.set('Content-Type', 'image/jpeg');
+            return res.send(buffer);
+        }
+        const response = await drive.files.get({ fileId: req.params.driveFileId, alt: 'media' }, { responseType: 'stream' });
+        response.data.pipe(res);
+    } catch (e) { res.status(404).send("Image introuvable"); }
 });
 
 module.exports = router;
