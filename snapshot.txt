@@ -24,6 +24,61 @@ le projet utilise le fichier update.txt tu dois générer des grands fichiers tx
 
 
 ############################################################
+### FICHIER: INSTRUCTIONS_OAUTH.md
+############################################################
+
+// Cause principale
+// - redirect_uri_mismatch : l'URI de callback utilisée par ton serveur doit être exactement listée
+//   dans la Google Cloud Console (APIs & Services → Credentials → OAuth 2.0 Client ID → Authorized redirect URIs).
+// - Même si la redirection est correcte, le token que tu obtiendras appartient toujours au compte
+//   avec lequel tu t'es connecté lors du consent (vuillet433@gmail.com si tu as choisi ton perso).
+// - Pour obtenir l'accès aux photos du compte condamine (compte scolaire), il faut soit que
+//   la personne admin/ayant accès à condamine donne le consent en se connectant, soit utiliser
+//   une solution d'administration (service account + domain-wide delegation) fournie par l'admin.
+
+// Options concrètes (choisis une)
+1) Corriger le redirect URI + autoriser avec le compte ciblé (simple si tu peux te connecter au compte condamine)
+   - Dans Google Cloud Console -> Credentials -> edit OAuth client -> ajouter :
+     http://localhost:3000/api/google/oauth/callback
+   - Ouvre : http://localhost:3000/api/google/oauth
+   - Connecte-toi avec le compte condamine et accepte. (Le callback écrira le refresh token dans .env)
+   - Si tu n'as pas accès au compte condamine, demande à l'admin du collège de le faire.
+
+2) Faire autoriser le compte condamine par l'admin (si tu ne peux pas t'y connecter)
+   - Demander à l'administrateur GSuite/Workspace de :
+     a) Ouvrir le lien http://<ta-machine>:3000/api/google/oauth (ou sur leur machine)
+     b) Se connecter au compte condamine et donner le consent.
+   - L'admin peut ensuite te transmettre (sûrement hors-chat : e.g. via messagerie interne) soit :
+     - le refresh token, que tu colles toi‑même dans `.env`, ou
+     - exécuter le flow sur la machine serveur et le token sera écrit automatiquement dans `.env`.
+
+3) Domain-wide delegation (solution « admin-friendly » et scalable)
+   - L'admin crée un Service Account dans Google Cloud Console, active domain-wide delegation et
+     délègue les scopes nécessaires (photoslibrary.readonly n'est PAS toujours supporté par DWD ;
+     Drive scopes le sont). Attention : Google Photos API n'autorise généralement pas l'accès
+     via service accounts pour comptes utilisateur normaux sauf configuration particulière.
+   - Avantage : pas besoin du refresh token d'un utilisateur. Complexe à configurer côté admin.
+
+4) Récupérer les photos via Drive (si les images sont déjà synchronisées dans Drive)
+   - Si les images du compte condamine sont déjà présentes dans Google Drive (ou peuvent être placées là),
+     l'admin peut autoriser Drive API (plus simple pour service accounts/domain delegation).
+   - Dans ce cas ton système peut utiliser la Drive API pour copier les fichiers.
+
+5) Alternative non-technique (si urgent)
+   - Demander à l'admin du collège d’exporter (ou partager) le dossier Photos/Drive et de
+     te donner un lien partagé ou une archive. Tu peux ensuite importer dans ton Drive via ton outil.
+
+//// Étapes rapides pour résoudre l'erreur redirect_uri_mismatch (si tu veux tester localement toi-même)
+// 1) Ouvre Google Cloud Console -> APIs & Services -> Credentials -> OAuth 2.0 Client IDs.
+// 2) Clique sur ton client OAuth -> Authorized redirect URIs -> Add URI:
+//      http://localhost:3000/api/google/oauth/callback
+//    (La valeur doit être strictement identique à celle utilisée par l'app: schéma, host, port, path)
+// 3) Sauvegarde, puis relance : http://localhost:3000/api/google/oauth
+// 4) Si tu veux le token pour le compte condamine et que tu n'y as pas accès, demande à l'admin
+//    d'exécuter le même flow (ou de te fournir le refresh token en dehors de ce chat).
+
+
+############################################################
 ### FICHIER: LOCKED_FILES.md
 ############################################################
 
@@ -2802,6 +2857,7 @@ import ProfHeader from './components/ProfHeader';
 import ProfNav from './components/ProfNav';
 import StudentsManager from './students/StudentsManager';
 import ActivityStudio from './activities/ActivityStudio';
+import ScansStudio from './scans/ScansStudio';
 import './ProfPage.css';
 
 export default function ProfPage({ user, onLogout }) {
@@ -2816,6 +2872,7 @@ export default function ProfPage({ user, onLogout }) {
         <div className="prof-content-area">
           {tab === 'students' && <StudentsManager />}
           {tab === 'activities' && <ActivityStudio />}
+          {tab === 'scans' && <ScansStudio />}
         </div>
       </div>
     </div>
@@ -3138,7 +3195,8 @@ import React from 'react';
 export default function ProfNav({ activeTab, onTabChange }) {
   const tabs = [
     { id: 'students', label: '👥 ÉLÈVES', style: 'bg-blue-600' },
-    { id: 'activities', label: '⚡ ACTIVITÉS', style: 'bg-purple-600' }
+    { id: 'activities', label: '⚡ ACTIVITÉS', style: 'bg-purple-600' },
+    { id: 'scans', label: '📤 SCANS IA', style: 'bg-emerald-600' }
   ];
 
   return (
@@ -3943,6 +4001,132 @@ export default function HomeworkStudio({ initialData, chapters, onClose }) {
 
 
 ############################################################
+### FICHIER: client/src/features/prof/scans/ScansStudio.jsx
+############################################################
+
+import React, { useState, useEffect } from 'react';
+
+export default function ScansStudio() {
+    const [diag, setDiag] = useState(null);
+    const [loading, setLoading] = useState(false);
+    const [scans, setScans] = useState([]);
+    const [photos, setPhotos] = useState([]);
+    const [loadingPhotos, setLoadingPhotos] = useState(false);
+    const [logs, setLogs] = useState([]);
+
+    const runDiagnostic = async () => {
+        setLoading(true);
+        try {
+            const res = await fetch('/api/test-google').then(r => r.json());
+            setDiag(res);
+        } catch (e) {
+            setDiag({ ok: false, message: "Erreur de communication avec le serveur." });
+        }
+        setLoading(false);
+    };
+
+    const loadScans = async () => {
+        try {
+            const res = await fetch('/api/scans').then(r => r.json());
+            setScans(Array.isArray(res) ? res : []);
+        } catch (e) { setScans([]); }
+    };
+
+    useEffect(() => { loadScans(); }, []);
+
+    return (
+        <div className="p-6 space-y-8 animate-in fade-in">
+            <div className="bg-white p-8 rounded-[40px] shadow-xl border-2 border-slate-50">
+                <div className="flex justify-between items-center">
+                    <div>
+                        <h2 className="text-2xl font-black uppercase text-slate-800">Diagnostic Google</h2>
+                        <p className="text-slate-400 font-bold">Vérifie si le pont entre le site et tes photos est ouvert.</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <button 
+                            onClick={runDiagnostic} 
+                            className="bg-indigo-600 text-white px-6 py-3 rounded-2xl font-black hover:bg-indigo-700"
+                        >
+                            LANCER LE DIAGNOSTIC
+                        </button>
+                        <button
+                            onClick={async () => {
+                                setLoadingPhotos(true);
+                                try {
+                                    const res = await fetch('/api/google/drive/list').then(r => r.json());
+                                    if (res && res.ok) {
+                                        const items = Array.isArray(res.files) ? res.files.map(f => ({
+                                            id: f.id,
+                                            thumbnail: f.thumbnailLink,
+                                            name: f.name,
+                                            webView: f.webViewLink,
+                                            createdTime: f.createdTime
+                                        })) : [];
+                                        setPhotos(items);
+                                    } else {
+                                        setPhotos([]);
+                                        console.error('Erreur liste Drive:', res && res.message);
+                                    }
+                                } catch (e) {
+                                    console.error('Erreur fetch drive list', e);
+                                    setPhotos([]);
+                                }
+                                setLoadingPhotos(false);
+                            }}
+                            disabled={loadingPhotos}
+                            className="bg-emerald-600 text-white px-6 py-3 rounded-2xl font-black hover:bg-emerald-700"
+                        >
+                            {loadingPhotos ? 'SCANNING...' : 'LANCER LE SCAN'}
+                        </button>
+                    </div>
+                </div>
+                {diag && (
+                    <div className={`mt-6 p-6 rounded-3xl border-2 ${diag.ok ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-red-50 border-red-100 text-red-700'}`}>
+                        <b>{diag.ok ? '✅ CONNEXION RÉUSSIE' : '❌ ÉCHEC'}</b>
+                        <p className="font-mono mt-2 text-sm">{diag.message}</p>
+                    </div>
+                )}
+            </div>
+
+            {photos.length > 0 && (
+                <div className="bg-white p-6 rounded-[30px] border mt-6">
+                    <div className="flex items-center justify-between">
+                        <b className="text-lg">Résultats du Scan ({photos.length})</b>
+                        <span className="text-sm text-slate-400">Cliquez sur une vignette pour ouvrir</span>
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-3 md:grid-cols-6 gap-3">
+                        {photos.map(p => (
+                            <div key={p.id} className="w-full h-28 bg-slate-100 rounded overflow-hidden flex items-center justify-center cursor-pointer" onClick={() => window.open(p.webView, '_blank')}>
+                                {p.thumbnail ? (
+                                    // thumbnailLink may be a small image URL
+                                    <img src={p.thumbnail} alt={p.name} className="object-cover w-full h-full" />
+                                ) : (
+                                    <div className="text-xs text-slate-500 p-2">{p.name}</div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {scans.map(s => (
+                    <div key={s._id} className="bg-white p-4 rounded-[30px] border shadow-sm flex items-center gap-4">
+                        <div className="w-12 h-12 bg-indigo-50 rounded-xl flex items-center justify-center text-xl text-indigo-500 font-black">📄</div>
+                        <div>
+                            <b className="text-slate-700">{s.playerId?.firstName || "Inconnu"}</b>
+                            <span className="block text-[10px] text-slate-300 font-bold uppercase">{new Date(s.createdAt).toLocaleDateString()}</span>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+
+############################################################
 ### FICHIER: client/src/features/prof/students/StudentsManager.css
 ############################################################
 
@@ -4069,32 +4253,52 @@ ReactDOM.createRoot(document.getElementById('root')).render(
 ### FICHIER: client/src/services/api.js
 ############################################################
 
+/**
+ * 📞 SERVICE API CENTRALISÉ
+ * Gère la communication robuste avec le serveur.
+ * Évite les erreurs de parsing JSON sur les 404.
+ */
+
 const API_BASE = '/api';
 
+const handleResponse = async (response) => {
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Erreur serveur : ${response.status}`);
+    }
+    return response.json();
+};
+
 export const api = {
+    // Méthodes génériques
     async get(endpoint) {
-        try {
-            const response = await fetch(`${API_BASE}${endpoint}`);
-            if (!response.ok) return null;
-            return await response.json();
-        } catch (error) { return null; }
+        const response = await fetch(`${API_BASE}${endpoint}`);
+        return handleResponse(response);
     },
+
     async post(endpoint, data) {
-        try {
-            const response = await fetch(`${API_BASE}${endpoint}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data),
-            });
-            return await response.json();
-        } catch (error) { return { ok: false }; }
+        const response = await fetch(`${API_BASE}${endpoint}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        return handleResponse(response);
     },
-    // FIX : Utilise la nouvelle route avec préfixe
+
+    async delete(endpoint) {
+        const response = await fetch(`${API_BASE}${endpoint}`, {
+            method: 'DELETE'
+        });
+        return handleResponse(response);
+    },
+
+    // Raccourcis spécifiques
     async getHomeworks(classroom) {
         return this.get(`/homework/by-class/${classroom}`);
     },
-    async getSingleHomework(id) {
-        return this.get(`/homework/single/${id}`);
+
+    async getPlayers() {
+        return this.get('/players');
     }
 };
 
@@ -4336,14 +4540,9 @@ initializeDatabase();
     "apply": "node apply.js",
     "dev": "node apply.js & npm run start & npm run client",
     "stop": "killall -9 node",
-    "snap": "node snap.js",
-    "zip": "node zip.js"
-  },
-  "nodemonConfig": {
-    "ignore": ["history.txt", "update.txt", "client/*", "snapshot.txt"]
+    "snap": "node snap.js"
   },
   "dependencies": {
-    "adm-zip": "^0.5.10",
     "express": "^4.18.2",
     "dotenv": "^16.0.3",
     "mongoose": "7.8.2",
@@ -4351,7 +4550,9 @@ initializeDatabase();
     "node-fetch": "2",
     "multer": "^1.4.5-lts.1",
     "cloudinary": "^1.41.0",
-    "multer-storage-cloudinary": "^4.0.0"
+    "multer-storage-cloudinary": "^4.0.0",
+    "googleapis": "^126.0.0",
+    "nodemailer": "^6.9.7"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
@@ -4616,116 +4817,284 @@ module.exports = router;
 
 
 ############################################################
+### FICHIER: server/features/prof/automation.routes.js
+############################################################
+
+const express = require('express');
+const router = express.Router();
+const mongoose = require('mongoose');
+const fetch = require('node-fetch');
+const { google } = require('googleapis');
+
+const oauth2Client = new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET
+);
+oauth2Client.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
+
+/**
+ * 🛠️ DIAGNOSTIC INTELLIGENT
+ * Analyse pourquoi Photos échoue alors que Drive est OK.
+ */
+router.get('/test-google', async (req, res) => {
+    let results = { drive: "❌", photos: "❌", gmail: "✅ (Scope présent)" };
+    try {
+        const tokenInfo = await oauth2Client.getAccessToken();
+        const token = tokenInfo.token;
+        
+        if (!token) return res.json({ ok: false, message: "Impossible de générer un jeton. Vérifie ton Refresh Token." });
+
+        // 1. Test Drive (doit être OK d'après tes tests)
+        const drive = google.drive({ version: 'v3', auth: oauth2Client });
+        try {
+            await drive.files.list({ pageSize: 1 });
+            results.drive = "✅ OK";
+        } catch (e) { results.drive = `❌ Erreur: ${e.message}`; }
+
+        // 2. Test Photos avec analyse d'erreur
+        const photosRes = await fetch('https://photoslibrary.googleapis.com/v1/mediaItems:search', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pageSize: 1 })
+        });
+        const photosData = await photosRes.json();
+        
+        if (!photosData.error) {
+            results.photos = "✅ OK";
+        } else {
+            const err = photosData.error;
+            if (err.status === "PERMISSION_DENIED") {
+                results.photos = "❌ ACCÈS REFUSÉ : Vérifie que 'Photos Library API' est activée dans la Console Google Cloud (Bibliothèque).";
+            } else if (err.code === 403) {
+                results.photos = "❌ BLOCAGE : Ton établissement @condamine interdit peut-être l'usage de Google Photos.";
+            } else {
+                results.photos = `❌ Erreur Google: ${err.message}`;
+            }
+        }
+
+        res.json({ 
+            ok: results.photos === "✅ OK", 
+            message: `Drive: ${results.drive} | Photos: ${results.photos} | Gmail: ${results.gmail}` 
+        });
+    } catch (e) {
+        console.error("Crash Diagnostic:", e);
+        res.status(500).json({ ok: false, message: "Erreur technique serveur: " + e.message });
+    }
+});
+
+// Liste les fichiers images dans un dossier Google Drive (folderId en query ou GOOGLE_DRIVE_FOLDER_ID)
+router.get('/google/drive/list', async (req, res) => {
+    console.log('🔍 [DRIVE] Requête reçue sur /api/google/drive/list');
+    const { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN, GOOGLE_DRIVE_FOLDER_ID } = process.env;
+    const folderId = req.query.folderId || GOOGLE_DRIVE_FOLDER_ID;
+
+    if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !GOOGLE_REFRESH_TOKEN) {
+        return res.json({ ok: false, message: 'Identifiants Google manquants dans le fichier .env' });
+    }
+    if (!folderId) return res.json({ ok: false, message: 'Aucun folderId fourni ni configuré (GOOGLE_DRIVE_FOLDER_ID).' });
+
+    try {
+        const oauth2Client = new google.auth.OAuth2(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET);
+        oauth2Client.setCredentials({ refresh_token: GOOGLE_REFRESH_TOKEN });
+
+        const tokenInfo = await oauth2Client.getAccessToken();
+        const accessToken = tokenInfo && tokenInfo.token ? tokenInfo.token : null;
+        if (!accessToken) return res.json({ ok: false, message: 'Impossible d\'obtenir access token depuis le refresh token.' });
+
+        const drive = google.drive({ version: 'v3', auth: oauth2Client });
+
+        const q = `'${folderId}' in parents and trashed = false and (mimeType contains 'image/' or mimeType='application/octet-stream')`;
+        const resp = await drive.files.list({
+            q,
+            fields: 'files(id,name,mimeType,webViewLink,thumbnailLink,modifiedTime,createdTime,size)',
+            pageSize: 1000
+        });
+
+        const files = resp.data.files || [];
+        res.json({ ok: true, count: files.length, files });
+    } catch (e) {
+        console.error('❌ Erreur Drive list :', e.message || e);
+        res.json({ ok: false, message: 'Erreur Drive: ' + (e.message || e) });
+    }
+});
+
+// Récupération des archives
+router.get('/scans', async (req, res) => {
+    try {
+        const Submission = mongoose.model('Submission');
+        const data = await Submission.find({}).populate('playerId').sort({ createdAt: -1 });
+        res.json(data || []);
+    } catch (e) { res.json([]); }
+});
+    // Importe des fichiers Drive en tant que Submissions (évite les doublons)
+    router.post('/scans/import-drive', async (req, res) => {
+        console.log('🔁 [IMPORT] Requête reçue sur /api/scans/import-drive');
+        const files = req.body.files || [];
+        if (!Array.isArray(files) || files.length === 0) return res.json({ ok: false, message: 'Aucun fichier fourni.' });
+
+        try {
+            const Submission = mongoose.model('Submission');
+            const results = [];
+            for (const f of files) {
+                if (!f.id) { results.push({ ok: false, reason: 'missing id', file: f }); continue; }
+                const existing = await Submission.findOne({ driveFileId: f.id });
+                if (existing) { results.push({ ok: false, reason: 'already_exists', id: existing._id, fileId: f.id }); continue; }
+
+                const s = new Submission({ driveFileId: f.id, originalTranscription: '', correctedTranscription: '', feedback: '', grade: '' });
+                await s.save();
+                results.push({ ok: true, id: s._id, fileId: f.id });
+            }
+
+            res.json({ ok: true, imported: results.filter(r => r.ok).length, results });
+        } catch (e) {
+            console.error('Erreur import-drive:', e.message || e);
+            res.json({ ok: false, message: e.message || e });
+        }
+    });
+
+module.exports = router;
+
+
+############################################################
 ### FICHIER: server/features/prof/prof.routes.js
 ############################################################
 
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
-const multer = require('multer');
-const cloudinary = require('cloudinary').v2;
-const { CloudinaryStorage } = require('multer-storage-cloudinary');
-const fetch = require('node-fetch');
 
-// Config Cloudinary
-cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME || 'dcjt0dfsc',
-    api_key: process.env.CLOUDINARY_API_KEY || '252514332881269',
-    api_secret: process.env.CLOUDINARY_API_SECRET || 'n8W3iO0H_Xp7F-u0XQz_D_kIu0o'
-});
-
-const storage = new CloudinaryStorage({
-    cloudinary: cloudinary,
-    params: { folder: 'condamine', allowed_formats: ['jpg', 'png', 'jpeg'] }
-});
-const upload = multer({ storage: storage });
-
-// --- ÉLÈVES (Route indispensable pour le finder et l'affichage) ---
-router.get('/players', async (req, res) => {
+// On s'assure que ces routes renvoient TOUJOURS du JSON, même vide.
+router.get('/chapters-all', async (req, res) => {
     try {
-        const players = await mongoose.model('Player').find({});
-        res.json(players);
+        const chapters = await mongoose.model('Chapter').find({});
+        res.json(chapters || []);
     } catch (e) { 
-        console.error("Erreur GET /players:", e);
-        res.status(500).json([]); 
+        res.json([]); 
     }
 });
 
-// --- DOSSIERS ---
-router.get('/chapters-all', async (req, res) => {
-    try { res.json(await mongoose.model('Chapter').find({})); } catch (e) { res.status(500).json([]); }
-});
-
-router.post('/chapters', async (req, res) => {
-    try {
-        const { _id, ...data } = req.body;
-        if (_id) await mongoose.model('Chapter').findByIdAndUpdate(_id, data);
-        else await mongoose.model('Chapter').create(data);
-        res.json({ ok: true });
-    } catch (e) { res.status(500).json({ ok: false }); }
-});
-
-router.delete('/chapters/:id', async (req, res) => {
-    try {
-        await mongoose.model('Chapter').findByIdAndDelete(req.params.id);
-        res.json({ ok: true });
-    } catch (e) { res.status(500).json({ ok: false }); }
-});
-
-// --- ACTIVITÉS ---
 router.get('/homework-all', async (req, res) => {
-    try { res.json(await mongoose.model('Homework').find({}).sort({ date: -1 })); } catch (e) { res.status(500).json([]); }
-});
-
-router.get('/game-levels/all', async (req, res) => {
-    try { res.json(await mongoose.model('GameLevel').find({})); } catch (e) { res.status(500).json([]); }
-});
-
-router.post('/homework', async (req, res) => {
     try {
-        const { _id, ...data } = req.body;
-        if (_id) await mongoose.model('Homework').findByIdAndUpdate(_id, data);
-        else await mongoose.model('Homework').create(data);
-        res.json({ ok: true });
-    } catch (e) { res.status(500).json({ ok: false }); }
+        const list = await mongoose.model('Homework').find({}).sort({ date: -1 });
+        res.json(list || []);
+    } catch (e) { 
+        res.json([]); 
+    }
+});
+
+router.get('/players', async (req, res) => {
+    try {
+        const players = await mongoose.model('Player').find({});
+        res.json(players || []);
+    } catch (e) { 
+        res.json([]); 
+    }
 });
 
 module.exports = router;
 
 
 ############################################################
-### FICHIER: server/models/Schemas.js
+### FICHIER: server/models/Bug.js
 ############################################################
 
 const mongoose = require('mongoose');
 
-// 1. JOUEURS
-mongoose.model('Player', new mongoose.Schema({ 
-    firstName: String, lastName: String, classroom: String, 
-    spellingMistakes: { type: Array, default: [] } 
-}), 'players');
+const BugSchema = new mongoose.Schema({
+    reporter: String,
+    classroom: String,
+    description: String,
+    createdAt: { type: Date, default: Date.now }
+});
 
-// 2. CHAPITRES (STRICT)
+module.exports = mongoose.model('Bug', BugSchema);
+
+
+############################################################
+### FICHIER: server/models/Chapter.js
+############################################################
+
+const mongoose = require('mongoose');
+
 const ChapterSchema = new mongoose.Schema({
     title: { type: String, default: '' },
     subject: { type: String, required: true }, // H, G ou E
     isArchived: { type: Boolean, default: false },
     classroom: { type: String, required: true }
 });
-mongoose.model('Chapter', ChapterSchema, 'chapters');
 
-// 3. DEVOIRS
-mongoose.model('Homework', new mongoose.Schema({ 
-    title: String, classroom: String, targetGrade: String, targetPlayerIds: [String],
-    chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter' },
-    levels: Array, date: { type: Date, default: Date.now } 
-}), 'homeworks');
+module.exports = mongoose.model('Chapter', ChapterSchema);
 
-// 4. JEUX
-mongoose.model('GameLevel', new mongoose.Schema({ 
+
+############################################################
+### FICHIER: server/models/GameLevel.js
+############################################################
+
+const mongoose = require('mongoose');
+
+const GameLevelSchema = new mongoose.Schema({
     chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter' },
-    title: String, targetGrade: String, classroom: String, questions: Array
-}), 'game_levels');
+    title: String,
+    targetGrade: String,
+    classroom: String,
+    questions: Array
+});
+
+module.exports = mongoose.model('GameLevel', GameLevelSchema);
+
+
+############################################################
+### FICHIER: server/models/Homework.js
+############################################################
+
+const mongoose = require('mongoose');
+
+const HomeworkSchema = new mongoose.Schema({
+    title: String,
+    classroom: String,
+    targetGrade: String,
+    targetPlayerIds: [String],
+    chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter' },
+    levels: Array,
+    date: { type: Date, default: Date.now }
+});
+
+module.exports = mongoose.model('Homework', HomeworkSchema);
+
+
+############################################################
+### FICHIER: server/models/Player.js
+############################################################
+
+const mongoose = require('mongoose');
+
+const PlayerSchema = new mongoose.Schema({
+    firstName: String,
+    lastName: String,
+    classroom: String,
+    spellingMistakes: { type: Array, default: [] }
+});
+
+module.exports = mongoose.model('Player', PlayerSchema);
+
+
+############################################################
+### FICHIER: server/models/Submission.js
+############################################################
+
+const mongoose = require('mongoose');
+
+const SubmissionSchema = new mongoose.Schema({
+    playerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Player' },
+    driveFileId: String, 
+    originalTranscription: String,
+    correctedTranscription: String,
+    feedback: String,
+    grade: String,
+    createdAt: { type: Date, default: Date.now }
+});
+
+module.exports = mongoose.model('Submission', SubmissionSchema);
 
 
 ############################################################
@@ -4740,39 +5109,36 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 console.log("------------------------------------------------");
-console.log("🚑 SYNC SERVEUR EN COURS...");
+console.log("🚑 DÉMARRAGE DU SERVEUR CONDAMINE...");
 
 // 1. Connexion BDD
 mongoose.connect(process.env.MONGODB_URI)
     .then(() => console.log('✅ BDD Connectée.'))
-    .catch(err => console.error("❌ CRITIQUE : Erreur MongoDB :", err));
+    .catch(err => console.error("❌ Erreur MongoDB :", err));
 
 // 2. Middlewares
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
-// 3. Chargement des Modèles
-try {
-    require('./models/Schemas');
-    console.log("✅ Modèles chargés.");
-} catch(e) {
-    console.error("❌ Erreur Modèles :", e);
-}
+// 3. Modèles
+require('./models/Player');
+require('./models/Chapter');
+require('./models/Homework');
+require('./models/GameLevel');
+require('./models/Bug');
+require('./models/Submission');
 
-// 4. Chargement des Routes (L'ordre est important)
-try {
-    // Note : toutes les routes prof, élèves et auth sont montées sur /api
-    app.use('/api', require('./features/auth/auth.routes'));
-    app.use('/api', require('./features/eleve/eleve.routes'));
-    app.use('/api', require('./features/prof/prof.routes'));
-    app.use('/api', require('./features/game/game.routes'));
-    console.log("✅ Routes API opérationnelles.");
-} catch (e) {
-    console.error("❌ CRITIQUE : Erreur chargement routes :", e);
-}
+// 4. Montage des Routes API (Ordre Strict)
+// Chaque route doit être préfixée par /api
+app.use('/api', require('./features/auth/auth.routes'));
+app.use('/api', require('./features/eleve/eleve.routes'));
+app.use('/api', require('./features/prof/prof.routes'));
+app.use('/api', require('./features/game/game.routes'));
+app.use('/api', require('./features/prof/automation.routes')); // <--- Branchement crucial
 
-// 5. Démarrage
-app.listen(port, () => console.log(`🚀 SERVEUR PRÊT SUR LE PORT ${port}`));
+app.listen(port, () => {
+    console.log(`🚀 SERVEUR PRÊT : http://localhost:${port}`);
+});
 
 
 ############################################################

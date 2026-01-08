@@ -3,7 +3,8 @@ import React from 'react';
 export default function ProfNav({ activeTab, onTabChange }) {
   const tabs = [
     { id: 'students', label: '👥 ÉLÈVES', style: 'bg-blue-600' },
-    { id: 'activities', label: '⚡ ACTIVITÉS', style: 'bg-purple-600' }
+    { id: 'activities', label: '⚡ ACTIVITÉS', style: 'bg-purple-600' },
+    { id: 'scans', label: '📤 SCANS IA', style: 'bg-emerald-600' }
   ];
 
   return (

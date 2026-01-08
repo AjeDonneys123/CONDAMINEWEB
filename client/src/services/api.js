@@ -1,28 +1,48 @@
+/**
+ * 📞 SERVICE API CENTRALISÉ
+ * Gère la communication robuste avec le serveur.
+ * Évite les erreurs de parsing JSON sur les 404.
+ */
+
 const API_BASE = '/api';
 
+const handleResponse = async (response) => {
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Erreur serveur : ${response.status}`);
+    }
+    return response.json();
+};
+
 export const api = {
+    // Méthodes génériques
     async get(endpoint) {
-        try {
-            const response = await fetch(`${API_BASE}${endpoint}`);
-            if (!response.ok) return null;
-            return await response.json();
-        } catch (error) { return null; }
+        const response = await fetch(`${API_BASE}${endpoint}`);
+        return handleResponse(response);
     },
+
     async post(endpoint, data) {
-        try {
-            const response = await fetch(`${API_BASE}${endpoint}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data),
-            });
-            return await response.json();
-        } catch (error) { return { ok: false }; }
+        const response = await fetch(`${API_BASE}${endpoint}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        return handleResponse(response);
     },
-    // FIX : Utilise la nouvelle route avec préfixe
+
+    async delete(endpoint) {
+        const response = await fetch(`${API_BASE}${endpoint}`, {
+            method: 'DELETE'
+        });
+        return handleResponse(response);
+    },
+
+    // Raccourcis spécifiques
     async getHomeworks(classroom) {
         return this.get(`/homework/by-class/${classroom}`);
     },
-    async getSingleHomework(id) {
-        return this.get(`/homework/single/${id}`);
+
+    async getPlayers() {
+        return this.get('/players');
     }
 };

@@ -3,6 +3,7 @@ import ProfHeader from './components/ProfHeader';
 import ProfNav from './components/ProfNav';
 import StudentsManager from './students/StudentsManager';
 import ActivityStudio from './activities/ActivityStudio';
+import ScansStudio from './scans/ScansStudio';
 import './ProfPage.css';
 
 export default function ProfPage({ user, onLogout }) {
@@ -17,6 +18,7 @@ export default function ProfPage({ user, onLogout }) {
         <div className="prof-content-area">
           {tab === 'students' && <StudentsManager />}
           {tab === 'activities' && <ActivityStudio />}
+          {tab === 'scans' && <ScansStudio />}
         </div>
       </div>
     </div>
