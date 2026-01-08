@@ -4,100 +4,72 @@ export default function ScansStudio() {
     const [loading, setLoading] = useState(false);
     const [photos, setPhotos] = useState([]); 
     const [status, setStatus] = useState("");
-    const [selectedPhoto, setSelectedPhoto] = useState(null);
+    const [hwTitle, setHwTitle] = useState("Trimestre 2");
 
-    const runDriveScan = async () => {
+    const loadList = async () => {
         setLoading(true);
+        setStatus("Interrogation du serveur...");
         try {
             const res = await fetch('/api/google/drive/list').then(r => r.json());
             if (res.ok) {
-                const images = (res.files || []).filter(f => 
-                    f.mimeType.includes('image') || f.name.toLowerCase().endsWith('.heic')
-                );
+                const images = (res.files || []).filter(f => f.mimeType.includes('image') || f.name.toLowerCase().endsWith('.heic'));
                 setPhotos(images);
+                setStatus(images.length > 0 ? "" : "Dossier vide à la racine.");
+            } else {
+                // Affiche l'erreur précise renvoyée par le serveur
+                setStatus("ERREUR : " + (res.error || "Problème inconnu"));
             }
-        } catch (err) { setStatus("Erreur."); }
+        } catch (e) { 
+            setStatus("SERVEUR HORS-LIGNE."); 
+        }
         setLoading(false);
     };
 
-    useEffect(() => { runDriveScan(); }, []);
+    useEffect(() => { loadList(); }, []);
 
-    // --- FONCTION DE SUPPRESSION ---
-    const deleteFile = async (e, fileId) => {
-        e.stopPropagation(); // Empêche d'ouvrir la modale
-        if (!window.confirm("Supprimer définitivement cette copie de Google Drive ?")) return;
-
+    const runInit = async () => {
+        setLoading(true);
+        setStatus("Construction des dossiers...");
         try {
-            const res = await fetch(`/api/google/drive/${fileId}`, { method: 'DELETE' }).then(r => r.json());
-            if (res.ok) {
-                // Mise à jour immédiate de l'interface
-                setPhotos(photos.filter(p => p.id !== fileId));
-            } else {
-                alert("Erreur lors de la suppression.");
-            }
-        } catch (err) {
-            alert("Erreur réseau.");
-        }
+            const res = await fetch('/api/init-drive-structure', { method: 'POST' }).then(r => r.json());
+            if (res.ok) alert(res.message);
+            else setStatus("ERREUR INIT : " + res.error);
+        } catch (e) { setStatus("ERREUR RESEAU."); }
+        setLoading(false);
     };
 
     return (
         <div className="p-6 space-y-8 animate-in fade-in">
             <div className="bg-white p-8 rounded-[40px] shadow-2xl border-b-8 border-indigo-600 flex justify-between items-center">
-                <div>
-                    <h2 className="text-3xl font-black uppercase text-slate-800 tracking-tighter">Scanner Intelligent</h2>
-                    <p className="text-slate-400 font-bold">Gère tes archives Drive en direct.</p>
-                </div>
-                <button onClick={runDriveScan} className="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black shadow-lg">RAFRAÎCHIR</button>
-            </div>
-
-            {photos.length > 0 && (
-                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
-                    {photos.map(p => (
-                        <div key={p.id} className="group relative bg-white p-3 rounded-[35px] border-2 border-slate-100 shadow-sm hover:border-indigo-400 transition-all cursor-pointer" onClick={() => setSelectedPhoto(p)}>
-                            <div className="aspect-[3/4] rounded-[25px] overflow-hidden bg-slate-100 relative">
-                                <img 
-                                    src={`/api/view-thumbnail/${p.id}`} 
-                                    className="w-full h-full object-cover" 
-                                    alt={p.name}
-                                />
-                                <div className="absolute inset-0 bg-indigo-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                    <span className="bg-white text-indigo-900 px-4 py-2 rounded-full text-xs font-black uppercase shadow-lg">Voir</span>
-                                </div>
-                            </div>
-                            
-                            {/* BOUTON SUPPRIMER (X) */}
-                            <div className="mt-3 flex justify-between items-center px-2">
-                                <p className="text-[9px] font-bold text-slate-400 truncate w-32">{p.name}</p>
-                                <button 
-                                    onClick={(e) => deleteFile(e, p.id)}
-                                    className="w-8 h-8 bg-red-50 text-red-500 rounded-full flex items-center justify-center font-black hover:bg-red-500 hover:text-white transition-all shadow-sm"
-                                >
-                                    ✕
-                                </button>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            )}
-
-            {selectedPhoto && (
-                <div className="fixed inset-0 z-[9999] bg-slate-900/95 backdrop-blur-md flex flex-col items-center justify-center p-4" onClick={() => setSelectedPhoto(null)}>
-                    <img 
-                        src={`/api/view-thumbnail/${selectedPhoto.id}`} 
-                        className="max-w-full max-h-[85vh] rounded-xl shadow-2xl border-4 border-white/20" 
-                        onClick={(e) => e.stopPropagation()}
-                    />
-                    <div className="mt-6 flex gap-4" onClick={(e) => e.stopPropagation()}>
-                        <button className="bg-emerald-500 text-white px-10 py-4 rounded-2xl font-black uppercase shadow-lg">Lancer la correction IA ✨</button>
-                        <button 
-                            onClick={(e) => { deleteFile(e, selectedPhoto.id); setSelectedPhoto(null); }}
-                            className="bg-red-500 text-white px-10 py-4 rounded-2xl font-black uppercase shadow-lg"
-                        >
-                            Supprimer 🗑️
-                        </button>
+                <div className="flex-1">
+                    <div className="flex items-center gap-3">
+                        <h2 className="text-3xl font-black uppercase text-slate-800">Scanner Intelligent</h2>
+                        <button onClick={runInit} className="ml-4 bg-slate-800 text-white px-4 py-2 rounded-xl font-black text-[10px] uppercase hover:bg-black transition-all">🏗️ Créer Dossiers 1D/6D/2A</button>
                     </div>
+                    <input className="mt-2 bg-slate-100 p-2 rounded-lg font-bold text-indigo-600 outline-none border-none w-1/2" value={hwTitle} onChange={e => setHwTitle(e.target.value)} />
+                </div>
+                <button 
+                    onClick={loadList} 
+                    disabled={loading}
+                    className="bg-slate-100 text-slate-700 px-8 py-4 rounded-2xl font-black uppercase text-xs hover:bg-slate-200"
+                >
+                    Actualiser
+                </button>
+            </div>
+            
+            {status && (
+                <div className={`p-5 text-center font-black rounded-3xl shadow-lg uppercase ${status.includes('ERREUR') ? 'bg-red-500 text-white' : 'bg-yellow-400 text-black animate-pulse'}`}>
+                    {status}
                 </div>
             )}
+
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
+                {photos.map(p => (
+                    <div key={p.id} className="bg-white p-2 rounded-[35px] border-2 border-slate-100 aspect-[3/4] overflow-hidden shadow-sm">
+                        <img src={`/api/view-thumbnail/${p.id}`} className="w-full h-full object-cover rounded-[20px]" />
+                    </div>
+                ))}
+            </div>
         </div>
     );
 }

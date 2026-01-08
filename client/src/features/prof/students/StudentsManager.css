@@ -1,12 +1,69 @@
 .manager-container { display: flex; flex-direction: column; gap: 1.5rem; }
-.filter-bar { display: flex; gap: 1rem; background: #f8fafc; padding: 1rem; border-radius: 20px; }
-.filter-bar select { flex: 1; padding: 0.75rem; border-radius: 12px; border: none; font-weight: bold; outline: none; }
-.btn-test-class { background: #2563eb; color: white; padding: 0.75rem 2rem; border-radius: 12px; font-weight: 900; shadow: 0 4px 6px rgba(37, 99, 235, 0.2); }
-.search-input { width: 100%; padding: 1rem; border-radius: 15px; border: 2px solid #f1f5f9; outline: none; }
-.table-wrapper { border-radius: 24px; border: 1px solid #f1f5f9; overflow: hidden; background: white; }
+.filter-bar { display: flex; justify-content: space-between; align-items: center; background: #f8fafc; padding: 1rem; border-radius: 25px; border: 1px solid #f1f5f9; }
+.stats-badge { background: #2563eb; color: white; padding: 0.5rem 1rem; border-radius: 12px; font-weight: 900; font-size: 0.8rem; }
+
+/* Conteneur pour positionner le point rouge */
+.archive-btn-container {
+    position: relative;
+    display: inline-block;
+}
+
+.btn-archive-view { 
+    background: #f1f5f9; 
+    color: #475569; 
+    padding: 0.6rem 1.2rem; 
+    border-radius: 12px; 
+    font-weight: 800; 
+    font-size: 0.7rem; 
+    text-transform: uppercase; 
+    border: 2px solid transparent; 
+    transition: 0.2s; 
+    cursor: pointer;
+}
+
+.btn-archive-view:hover { 
+    background: white; 
+    border-color: #2563eb; 
+    color: #2563eb; 
+}
+
+/* LE POINT ROUGE */
+.notification-dot {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    width: 12px;
+    height: 12px;
+    background-color: #ef4444; /* Rouge vif */
+    border: 2px solid white;
+    border-radius: 50%;
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
+    animation: pulse-red 2s infinite;
+}
+
+@keyframes pulse-red {
+    0% { transform: scale(0.95); opacity: 0.9; }
+    50% { transform: scale(1.1); opacity: 1; }
+    100% { transform: scale(0.95); opacity: 0.9; }
+}
+
+.btn-test { 
+    background: #eff6ff; 
+    color: #2563eb; 
+    padding: 0.5rem 1.2rem; 
+    border-radius: 12px; 
+    font-weight: 900; 
+    font-size: 0.7rem; 
+    text-transform: uppercase;
+    border: none;
+    cursor: pointer;
+}
+
+.student-row-ui td { 
+    vertical-align: middle; 
+    padding: 1.2rem 1rem !important; 
+    border-bottom: 1px solid #f8fafc;
+}
+
 .students-table { width: 100%; border-collapse: collapse; }
-.students-table th { background: #f8fafc; padding: 1rem; font-size: 0.6rem; color: #94a3b8; text-transform: uppercase; font-weight: 900; }
-.students-table td { padding: 1rem; border-top: 1px solid #f8fafc; }
-.name-cell { font-weight: bold; color: #1e293b; }
-.class-cell span { background: #eff6ff; color: #3b82f6; padding: 0.25rem 0.75rem; border-radius: 8px; font-weight: 900; font-size: 0.7rem; }
-.action-cell button { color: #f87171; font-weight: bold; font-size: 0.7rem; text-transform: uppercase; }
+.students-table th { text-align: left; padding: 1rem; color: #94a3b8; font-size: 0.7rem; text-transform: uppercase; font-weight: 900; }

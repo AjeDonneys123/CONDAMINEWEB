@@ -11,45 +11,31 @@ const oauth2Client = new google.auth.OAuth2(
 oauth2Client.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
 const drive = google.drive({ version: 'v3', auth: oauth2Client });
 
-// --- SUPPRESSION PHYSIQUE SUR GOOGLE DRIVE ---
-router.delete('/google/drive/:fileId', async (req, res) => {
+// --- ROUTE DE TEST ---
+router.get('/google/drive/list', async (req, res) => {
+    console.log("🔍 [DRIVE] Appel de la liste reçu.");
     try {
-        const { fileId } = req.params;
-        console.log(`🗑️ [DRIVE] Suppression du fichier : ${fileId}`);
-        
-        await drive.files.delete({
-            fileId: fileId
-        });
+        const rootId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+        if (!rootId) throw new Error("ID Dossier manquant dans .env");
 
-        res.json({ ok: true, message: "Fichier supprimé de Google Drive." });
+        const driveRes = await drive.files.list({
+            q: `'${rootId}' in parents and trashed = false`,
+            fields: 'files(id, name, thumbnailLink, mimeType)',
+            pageSize: 50
+        });
+        res.json({ ok: true, files: driveRes.data.files || [] });
     } catch (e) {
-        console.error("❌ [DRIVE ERR] Impossible de supprimer :", e.message);
+        console.error("❌ Erreur Drive:", e.message);
         res.status(500).json({ ok: false, error: e.message });
     }
 });
 
-// Proxy de Miniature
-router.get('/view-thumbnail/:fileId', async (req, res) => {
+// Diagnostic rapide
+router.get('/test-google', async (req, res) => {
     try {
-        const file = await drive.files.get({ fileId: req.params.fileId, fields: 'thumbnailLink' });
-        if (!file.data.thumbnailLink) return res.status(404).send("Pas de miniature");
-        const response = await fetch(file.data.thumbnailLink.replace(/=s\d+/, '=s800'));
-        const buffer = await response.buffer();
-        res.set('Content-Type', 'image/jpeg');
-        res.send(buffer);
-    } catch (e) { res.status(500).send("Erreur"); }
+        const token = await oauth2Client.getAccessToken();
+        res.json({ ok: !!token.token, message: token.token ? "Google Connecté ✅" : "Erreur Jeton" });
+    } catch (e) { res.json({ ok: false, message: e.message }); }
 });
 
-router.get('/google/drive/list', async (req, res) => {
-    try {
-        const driveRes = await drive.files.list({
-            q: `'${process.env.GOOGLE_DRIVE_FOLDER_ID}' in parents and trashed = false`,
-            fields: 'files(id, name, mimeType)',
-            pageSize: 50
-        });
-        res.json({ ok: true, files: driveRes.data.files });
-    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
-});
-
-// ... (Reste des routes scans/view-copy inchangé)
 module.exports = router;
