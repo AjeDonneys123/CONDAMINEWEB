@@ -30,7 +30,10 @@ router.post('/transcribe-audio', upload.single('file'), async (req, res) => {
 
         const text = aiRes.candidates?.[0]?.content?.parts?.[0]?.text || "";
         res.json({ ok: true, text: text.trim() });
-    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+    } catch (e) { 
+        console.error("Erreur Transcription:", e.message);
+        res.status(500).json({ ok: false, error: "L'IA n'a pas pu transcrire l'audio." }); 
+    }
 });
 
 // --- MOTEUR IA V4 ---
@@ -44,12 +47,12 @@ async function analyzeCopyWithFullContext(fileId, context) {
           CONTEXTE SUJET/DOCS : ${context.questionsText || "Se référer aux images jointes"}
           
           RÉPONDS UNIQUEMENT EN JSON :
-          {"studentName": "Prénom", "originalText": "Transcription brute", "correctedHtml": "Html avec <s class='text-red-500'>faux</s> et <b class='text-green-600'>juste</b>", "grade": "X/20", "feedback": "Commentaire"}` 
+          {"studentName": "Prénom", "originalText": "Transcription brute", "correctedHtml": "Html avec <s class='text-red-500'>faux</s> et <b class='text-green-600'>juste</b>", "grade": "X/20", "feedback": "Commentaire détaillé"}` 
         },
         { inline_data: { mime_type: "image/jpeg", data: studentImgBase64 } }
     ];
 
-    if (context.questionsUrls && context.questionsUrls.length > 0) {
+    if (context.questionsUrls && Array.isArray(context.questionsUrls)) {
         for (const url of context.questionsUrls) {
             try {
                 const qRes = await fetch(url).then(r => r.buffer());
@@ -72,14 +75,20 @@ router.post('/process-copy-v4', async (req, res) => {
     try {
         const { fileId, context } = req.body;
         const result = await analyzeCopyWithFullContext(fileId, context);
+        
+        // Tentative d'identification élève
+        const Player = mongoose.model('Player');
+        const student = await Player.findOne({ firstName: new RegExp(result.studentName, 'i') });
+
         await mongoose.model('Submission').create({
+            playerId: student ? student._id : null,
             driveFileId: fileId,
             originalTranscription: result.originalText,
             correctedTranscription: result.correctedHtml,
             feedback: result.feedback,
             grade: result.grade
         });
-        res.json({ ok: true });
+        res.json({ ok: true, student: result.studentName });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
