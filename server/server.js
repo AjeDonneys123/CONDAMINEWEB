@@ -7,16 +7,14 @@ const fs = require('fs');
 const app = express();
 const port = process.env.PORT || 3000;
 
-// 1. Connexion BDD
 mongoose.connect(process.env.MONGODB_URI)
     .then(() => console.log('✅ BDD Connectée.'))
     .catch(err => console.error("❌ Erreur MongoDB :", err));
 
-// 2. MIDDLEWARES - ON AUGMENTE LA LIMITE POUR LES PHOTOS BASE64
+// --- FIX ERREUR 500 : ON AUTORISE LES GROSSES PHOTOS (50MB) ---
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// 3. Modèles
 require('./models/Player');
 require('./models/Chapter');
 require('./models/Homework');
@@ -26,14 +24,12 @@ require('./models/Submission');
 require('./models/TeacherStyle');
 require('./models/ScanSession');
 
-// 4. Routes API
 app.use('/api', require('./features/auth/auth.routes'));
 app.use('/api', require('./features/eleve/eleve.routes'));
 app.use('/api', require('./features/prof/prof.routes'));
 app.use('/api', require('./features/game/game.routes'));
 app.use('/api', require('./features/prof/automation.routes'));
 
-// 5. Gestion du Frontend
 const distPath = path.join(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
