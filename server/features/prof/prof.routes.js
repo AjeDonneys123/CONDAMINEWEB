@@ -1,31 +1,41 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
+const multer = require('multer');
+const cloudinary = require('cloudinary').v2;
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
 
-// --- RÉCUPÉRATION DES ÉLÈVES (Indispensable pour localhost) ---
+// Configuration Cloudinary
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME || 'dcjt0dfsc',
+    api_key: process.env.CLOUDINARY_API_KEY || '252514332881269',
+    api_secret: process.env.CLOUDINARY_API_SECRET || 'n8W3iO0H_Xp7F-u0XQz_D_kIu0o'
+});
+
+const storage = new CloudinaryStorage({
+    cloudinary: cloudinary,
+    params: { folder: 'condamine', allowed_formats: ['jpg', 'png', 'jpeg'] }
+});
+const upload = multer({ storage: storage });
+
+// --- ROUTE UNIFIÉE D'UPLOAD (Indispensable pour Scans et Devoirs) ---
+router.post('/upload', upload.single('file'), (req, res) => {
+    if (req.file) {
+        res.json({ ok: true, imageUrl: req.file.path });
+    } else {
+        res.status(500).json({ ok: false, error: "Upload échoué" });
+    }
+});
+
 router.get('/players', async (req, res) => {
     try {
-        const Player = mongoose.model('Player');
-        const players = await Player.find({}).sort({ classroom: 1, lastName: 1 });
-        console.log(`👥 [DB] ${players.length} élèves récupérés.`);
+        const players = await mongoose.model('Player').find({}).sort({ classroom: 1, lastName: 1 });
         res.json(players || []);
-    } catch (e) {
-        console.error("❌ [DB ERR] Impossible de charger les élèves:", e.message);
-        res.status(500).json([]);
-    }
+    } catch (e) { res.status(500).json([]); }
 });
 
 router.get('/chapters-all', async (req, res) => {
     try { res.json(await mongoose.model('Chapter').find({})); } catch (e) { res.status(500).json([]); }
-});
-
-router.post('/chapters', async (req, res) => {
-    try {
-        const { _id, ...data } = req.body;
-        if (_id) await mongoose.model('Chapter').findByIdAndUpdate(_id, data);
-        else await mongoose.model('Chapter').create(data);
-        res.json({ ok: true });
-    } catch (e) { res.status(500).json({ ok: false }); }
 });
 
 router.get('/homework-all', async (req, res) => {
