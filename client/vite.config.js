@@ -1,12 +1,35 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import basicSsl from '@vitejs/plugin-basic-ssl'
+import os from 'os'
 
-// https://vitejs.dev/config/
+const getLocalIp = () => {
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name]) {
+      if (iface.family === 'IPv4' && !iface.internal) {
+        if (iface.address.startsWith('192.168') || iface.address.startsWith('172.20')) {
+          return iface.address;
+        }
+      }
+    }
+  }
+  return 'localhost';
+};
+
+const currentIp = getLocalIp();
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    basicSsl() 
+  ],
   server: {
+    host: '0.0.0.0', 
+    port: 5173,
+    https: true,
+    // On désactive les options HMR complexes qui peuvent bloquer Safari mobile en local
     proxy: {
-      // Redirige tous les appels /api vers le serveur Node (port 3000)
       '/api': {
         target: 'http://localhost:3000',
         changeOrigin: true,
@@ -15,4 +38,3 @@ export default defineConfig({
     }
   }
 })
-

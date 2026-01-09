@@ -11,32 +11,36 @@ const oauth2Client = new google.auth.OAuth2(process.env.GOOGLE_CLIENT_ID, proces
 oauth2Client.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
 const drive = google.drive({ version: 'v3', auth: oauth2Client });
 
-// --- TRANSCRIPTION AUDIO ---
+// --- TRANSCRIPTION AUDIO (STRICTE) ---
 router.post('/transcribe-audio', upload.single('file'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ ok: false, error: "Audio manquant" });
         const base64Audio = req.file.buffer.toString('base64');
+        
         const payload = {
             contents: [{ parts: [
-                { text: "Transcris ce message vocal d'instructions pédagogiques. Réponds uniquement avec le texte." },
+                { text: "Tu es un outil de transcription. Écris UNIQUEMENT ce que tu entends, mot pour mot. Ne réponds pas à l'utilisateur, ne dis pas 'Ok', ne dis pas 'Voici le texte'. Si tu n'entends rien, renvoie un texte vide." },
                 { inline_data: { mime_type: "audio/webm", data: base64Audio } }
             ]}]
         };
+
         const aiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${process.env.GEMINI_API_KEY}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         }).then(r => r.json());
 
-        const text = aiRes.candidates?.[0]?.content?.parts?.[0]?.text || "";
-        res.json({ ok: true, text: text.trim() });
+        let text = aiRes.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        // Nettoyage manuel au cas où Gemini est bavard
+        text = text.replace(/Voici la transcription/gi, "").replace(/D'accord/gi, "").trim();
+
+        res.json({ ok: true, text });
     } catch (e) { 
-        console.error("Erreur Transcription:", e.message);
-        res.status(500).json({ ok: false, error: "L'IA n'a pas pu transcrire l'audio." }); 
+        res.status(500).json({ ok: false, error: "Échec transcription" }); 
     }
 });
 
-// --- MOTEUR IA V4 ---
+// --- MOTEUR IA V4 : MULTI-PAGES ---
 async function analyzeCopyWithFullContext(fileId, context) {
     const imgRes = await drive.files.get({ fileId, alt: 'media' }, { responseType: 'arraybuffer' });
     const studentImgBase64 = Buffer.from(imgRes.data).toString('base64');
@@ -46,8 +50,8 @@ async function analyzeCopyWithFullContext(fileId, context) {
           CONSIGNES DU MAÎTRE : "${context.teacherPrompt}"
           CONTEXTE SUJET/DOCS : ${context.questionsText || "Se référer aux images jointes"}
           
-          RÉPONDS UNIQUEMENT EN JSON :
-          {"studentName": "Prénom", "originalText": "Transcription brute", "correctedHtml": "Html avec <s class='text-red-500'>faux</s> et <b class='text-green-600'>juste</b>", "grade": "X/20", "feedback": "Commentaire détaillé"}` 
+          RÉPONDS UNIQUEMENT AU FORMAT JSON :
+          {"studentName": "Prénom", "originalText": "Transcription brute", "correctedHtml": "Html avec couleurs", "grade": "X/20", "feedback": "Commentaire détaillé"}` 
         },
         { inline_data: { mime_type: "image/jpeg", data: studentImgBase64 } }
     ];
@@ -75,20 +79,14 @@ router.post('/process-copy-v4', async (req, res) => {
     try {
         const { fileId, context } = req.body;
         const result = await analyzeCopyWithFullContext(fileId, context);
-        
-        // Tentative d'identification élève
-        const Player = mongoose.model('Player');
-        const student = await Player.findOne({ firstName: new RegExp(result.studentName, 'i') });
-
         await mongoose.model('Submission').create({
-            playerId: student ? student._id : null,
             driveFileId: fileId,
             originalTranscription: result.originalText,
             correctedTranscription: result.correctedHtml,
             feedback: result.feedback,
             grade: result.grade
         });
-        res.json({ ok: true, student: result.studentName });
+        res.json({ ok: true });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 

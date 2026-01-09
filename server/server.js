@@ -32,24 +32,20 @@ app.use('/api', require('./features/prof/prof.routes'));
 app.use('/api', require('./features/game/game.routes'));
 app.use('/api', require('./features/prof/automation.routes'));
 
-// 5. GESTION DU FRONTEND (PRODUCTION)
-// Sur Render, process.cwd() est /opt/render/project/src
+// 5. GESTION DU FRONTEND
 const distPath = path.join(process.cwd(), 'client', 'dist');
 
 if (fs.existsSync(distPath)) {
-    console.log("✅ Dossier 'dist' trouvé à :", distPath);
+    console.log("✅ Mode Production : Dossier 'dist' servi.");
     app.use(express.static(distPath));
-    // Route fallback pour React
     app.get('*', (req, res) => {
         if (req.path.startsWith('/api')) return res.status(404).json({ error: "API 404" });
         res.sendFile(path.join(distPath, 'index.html'));
     });
 } else {
-    console.error("❌ ERREUR CRITIQUE : Dossier 'dist' introuvable.");
-    console.log("Chemin vérifié :", distPath);
-    app.get('*', (req, res) => {
-        res.status(500).send(`Erreur de déploiement : le dossier de build est absent. Chemin : ${distPath}`);
-    });
+    // En développement (Mac), c'est normal que dist n'existe pas.
+    console.log("ℹ️  Mode Développement : Le serveur API est prêt.");
+    app.get('/', (req, res) => res.send("Serveur API Condamine actif. Le Frontend est géré par Vite."));
 }
 
 app.listen(port, () => console.log(`🚀 SERVEUR PRÊT : http://localhost:${port}`));
