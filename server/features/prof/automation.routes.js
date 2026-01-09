@@ -1,99 +1,93 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
-const multer = require('multer');
-const fetch = require('node-fetch');
-const { google } = require('googleapis');
+const DriveService = require('../../services/drive.service');
 
-const upload = multer({ storage: multer.memoryStorage() });
+// Helper : Date format JJ-MM-26
+const getSuffix = () => {
+    const now = new Date();
+    const jj = String(now.getDate()).padStart(2, '0');
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    return `${jj}-${mm}-26`;
+};
 
-const oauth2Client = new google.auth.OAuth2(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET);
-oauth2Client.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
-const drive = google.drive({ version: 'v3', auth: oauth2Client });
-
-// --- TRANSCRIPTION AUDIO (STRICTE) ---
-router.post('/transcribe-audio', upload.single('file'), async (req, res) => {
+router.get('/scan-sessions', async (req, res) => {
     try {
-        if (!req.file) return res.status(400).json({ ok: false, error: "Audio manquant" });
-        const base64Audio = req.file.buffer.toString('base64');
-        
-        const payload = {
-            contents: [{ parts: [
-                { text: "Tu es un outil de transcription. Écris UNIQUEMENT ce que tu entends, mot pour mot. Ne réponds pas à l'utilisateur, ne dis pas 'Ok', ne dis pas 'Voici le texte'. Si tu n'entends rien, renvoie un texte vide." },
-                { inline_data: { mime_type: "audio/webm", data: base64Audio } }
-            ]}]
-        };
-
-        const aiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${process.env.GEMINI_API_KEY}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        }).then(r => r.json());
-
-        let text = aiRes.candidates?.[0]?.content?.parts?.[0]?.text || "";
-        // Nettoyage manuel au cas où Gemini est bavard
-        text = text.replace(/Voici la transcription/gi, "").replace(/D'accord/gi, "").trim();
-
-        res.json({ ok: true, text });
-    } catch (e) { 
-        res.status(500).json({ ok: false, error: "Échec transcription" }); 
-    }
+        const data = await mongoose.model('ScanSession').find({}).sort({ createdAt: -1 });
+        res.json(data);
+    } catch(e) { res.status(500).json([]); }
 });
 
-// --- MOTEUR IA V4 : MULTI-PAGES ---
-async function analyzeCopyWithFullContext(fileId, context) {
-    const imgRes = await drive.files.get({ fileId, alt: 'media' }, { responseType: 'arraybuffer' });
-    const studentImgBase64 = Buffer.from(imgRes.data).toString('base64');
-    
-    const parts = [
-        { text: `Agis comme un professeur expert. Analyse cette copie d'élève.
-          CONSIGNES DU MAÎTRE : "${context.teacherPrompt}"
-          CONTEXTE SUJET/DOCS : ${context.questionsText || "Se référer aux images jointes"}
-          
-          RÉPONDS UNIQUEMENT AU FORMAT JSON :
-          {"studentName": "Prénom", "originalText": "Transcription brute", "correctedHtml": "Html avec couleurs", "grade": "X/20", "feedback": "Commentaire détaillé"}` 
-        },
-        { inline_data: { mime_type: "image/jpeg", data: studentImgBase64 } }
-    ];
-
-    if (context.questionsUrls && Array.isArray(context.questionsUrls)) {
-        for (const url of context.questionsUrls) {
-            try {
-                const qRes = await fetch(url).then(r => r.buffer());
-                parts.push({ inline_data: { mime_type: "image/jpeg", data: qRes.toString('base64') } });
-            } catch (e) { console.error("Doc sujet invalide"); }
-        }
-    }
-
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${process.env.GEMINI_API_KEY}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts }] })
-    }).then(r => r.json());
-
-    const jsonText = res.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
-    return JSON.parse(jsonText.replace(/```json/g, '').replace(/```/g, '').trim());
-}
-
-router.post('/process-copy-v4', async (req, res) => {
+router.post('/scan-sessions', async (req, res) => {
     try {
-        const { fileId, context } = req.body;
-        const result = await analyzeCopyWithFullContext(fileId, context);
-        await mongoose.model('Submission').create({
-            driveFileId: fileId,
-            originalTranscription: result.originalText,
-            correctedTranscription: result.correctedHtml,
-            feedback: result.feedback,
-            grade: result.grade
+        const { classroom, title } = req.body;
+        const finalTitle = title ? `${title}_${getSuffix()}` : getSuffix();
+        const rootName = (classroom === '1D' || classroom === '1BFI') ? '1BFI' : classroom;
+        
+        const rootId = await DriveService.getOrCreateFolder(rootName);
+        const prodId = await DriveService.getOrCreateFolder("PRODUCTIONS", rootId);
+        const hwId = await DriveService.getOrCreateFolder(finalTitle, prodId);
+
+        const newSession = await mongoose.model('ScanSession').create({ 
+            title: finalTitle, classroom, driveFolderId: hwId 
+        });
+        res.json(newSession);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.patch('/scan-sessions/:id/rename', async (req, res) => {
+    try {
+        const { newPrefix } = req.body;
+        const session = await mongoose.model('ScanSession').findById(req.params.id);
+        const suffix = session.title.split('_').pop();
+        const newTitle = newPrefix ? `${newPrefix}_${suffix}` : suffix;
+        if (session.driveFolderId) await DriveService.renameFolder(session.driveFolderId, newTitle);
+        session.title = newTitle; await session.save();
+        res.json(session);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/scan-sessions/:id', async (req, res) => {
+    try {
+        const session = await mongoose.model('ScanSession').findById(req.params.id);
+        if (session?.driveFolderId) await DriveService.deleteFolder(session.driveFolderId);
+        await mongoose.model('ScanSession').findByIdAndDelete(req.params.id);
+        res.json({ ok: true });
+    } catch (e) { res.status(500).json({ ok: false }); }
+});
+
+router.post('/scan-upload-photo', async (req, res) => {
+    try {
+        const { sessionId, type, imageBase64 } = req.body;
+        const session = await mongoose.model('ScanSession').findById(sessionId);
+        const result = await DriveService.uploadImage(session.driveFolderId, `${type}_${Date.now()}.jpg`, imageBase64);
+        if (result && result.id) {
+            const field = type === 'quest' ? { $push: { questionUrls: result.id } } : { $push: { copyUrls: result.id } };
+            const updated = await mongoose.model('ScanSession').findByIdAndUpdate(sessionId, field, { new: true });
+            return res.json(updated);
+        }
+        res.status(500).json({ error: "Echec Drive" });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.patch('/scan-sessions/:id/instructions', async (req, res) => {
+    try {
+        await mongoose.model('ScanSession').findByIdAndUpdate(req.params.id, { 
+            teacherInstruction: req.body.text 
         });
         res.json({ ok: true });
-    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+    } catch (e) { res.status(500).json({ ok: false }); }
 });
 
-router.get('/scans', async (req, res) => {
+router.get('/player-productions/:playerId', async (req, res) => {
     try {
-        const data = await mongoose.model('Submission').find({}).populate('playerId').sort({ createdAt: -1 });
-        res.json(data || []);
+        const player = await mongoose.model('Player').findById(req.params.playerId);
+        const root = (player.classroom === '1D' || player.classroom === '1BFI') ? '1BFI' : player.classroom;
+        const rootId = await DriveService.getOrCreateFolder(root);
+        const prodId = await DriveService.getOrCreateFolder("PRODUCTIONS", rootId);
+        const stdId = await DriveService.getOrCreateFolder(`${player.firstName} ${player.lastName}`, prodId);
+        const files = await DriveService.listFilesInFolder(stdId);
+        res.json(files);
     } catch (e) { res.status(500).json([]); }
 });
 

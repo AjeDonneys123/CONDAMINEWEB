@@ -271,7 +271,7 @@ Currently, two official plugins are available:
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --host",
     "build": "vite build",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"
@@ -279,7 +279,8 @@ Currently, two official plugins are available:
   "dependencies": {
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-router-dom": "^7.11.0"
+    "react-router-dom": "^7.11.0",
+    "@vitejs/plugin-basic-ssl": "1.1.0"
   },
   "devDependencies": {
     "@types/react": "^18.2.15",
@@ -295,7 +296,6 @@ Currently, two official plugins are available:
     "vite": "^4.4.5"
   }
 }
-
 
 
 ############################################################
@@ -667,27 +667,24 @@ import EleveHeader from './components/EleveHeader';
 import HomeworkList from './homework/HomeworkList';
 import MistakesBook from './mistakes/MistakesBook';
 import GamesGrid from './games/GamesGrid';
-import './ElevePage.css';
+import ProductionsList from './productions/ProductionsList'; // <--- NOUVEAU
 
-export default function ElevePage({ user, onLogout, onBackToProf, onOpenBug, activeTab, onTabChange }) {
+export default function ElevePage({ user, onLogout, onBackToProf, onOpenBug }) {
   const [tab, setTab] = useState('devoirs');
 
   return (
     <div className="eleve-page-wrapper">
         <div className="eleve-page-container">
           <EleveHeader 
-            user={user} 
-            onLogout={onLogout} 
-            onBackToProf={onBackToProf} 
-            onOpenBug={onOpenBug}
-            activeTab={tab} 
-            onTabChange={setTab} 
+            user={user} onLogout={onLogout} onBackToProf={onBackToProf} onOpenBug={onOpenBug}
+            activeTab={tab} onTabChange={setTab} 
           />
           
           <div className="mt-8">
             {tab === 'devoirs' && <HomeworkList user={user} />}
             {tab === 'francais' && <MistakesBook user={user} />}
             {tab === 'jeux' && <GamesGrid user={user} />}
+            {tab === 'productions' && <ProductionsList user={user} />}
           </div>
         </div>
     </div>
@@ -2795,6 +2792,49 @@ export default function MistakesBook({ user }) {
 
 
 ############################################################
+### FICHIER: client/src/features/eleve/productions/ProductionsList.jsx
+############################################################
+
+import React, { useState, useEffect } from 'react';
+
+export default function ProductionsList({ user }) {
+    const [submissions, setSubmissions] = useState([]);
+
+    useEffect(() => {
+        fetch(`/api/player-submissions/${user.id || user._id}`)
+            .then(r => r.json())
+            .then(data => setSubmissions(data || []));
+    }, []);
+
+    return (
+        <div className="max-w-2xl mx-auto space-y-4 animate-in fade-in">
+            <h2 className="font-black text-pink-500 uppercase tracking-widest text-center mb-8">Mes Travaux Corrigés ✍️</h2>
+            {submissions.map(sub => (
+                <a 
+                    key={sub._id} 
+                    href={sub.driveLink} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="block bg-white p-6 rounded-[35px] border-2 border-pink-50 hover:border-pink-300 transition-all shadow-sm"
+                >
+                    <div className="flex justify-between items-center">
+                        <div>
+                            <b className="text-slate-700 text-lg block">{sub.homeworkTitle || "Devoir Scanner"}</b>
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Correction du {new Date(sub.createdAt).toLocaleDateString()}</span>
+                        </div>
+                        <span className="text-pink-400 font-black text-2xl">➔</span>
+                    </div>
+                </a>
+            ))}
+            {submissions.length === 0 && (
+                <div className="text-center py-20 text-slate-300 font-black uppercase">Aucune copie corrigée pour le moment</div>
+            )}
+        </div>
+    );
+}
+
+
+############################################################
 ### FICHIER: client/src/features/prof/Prof.css
 ############################################################
 
@@ -2990,133 +3030,47 @@ import React, { useState, useEffect } from 'react';
 
 export default function ChapterManager() {
     const [chapters, setChapters] = useState([]);
-    const [activities, setActivities] = useState([]);
-    const [openChaps, setOpenChaps] = useState({});
     const [classFilter, setClassFilter] = useState('6D');
     const [editingId, setEditingId] = useState(null);
     const [tempTitle, setTempTitle] = useState('');
 
     const load = async () => {
         try {
-            const [chapRes, hwRes, gmRes] = await Promise.all([
-                fetch('/api/chapters-all').then(r => r.json()),
-                fetch('/api/homework-all').then(r => r.json()),
-                fetch('/api/game-levels/all').then(r => r.json())
-            ]);
-            setChapters(Array.isArray(chapRes) ? chapRes : []);
-            setActivities([
-                ...(hwRes || []).map(x => ({ ...x, actType: 'homework' })),
-                ...(gmRes || []).map(x => ({ ...x, actType: 'game' }))
-            ]);
+            const res = await fetch('/api/chapters-all');
+            const data = await res.json();
+            setChapters(Array.isArray(data) ? data : []);
         } catch (e) { console.error(e); }
     };
     
-    useEffect(() => { load(); }, [classFilter]);
-
-    const updateChapter = async (id, payload) => {
-        await fetch('/api/chapters', { 
-            method: 'POST', 
-            headers: {'Content-Type':'application/json'}, 
-            body: JSON.stringify({ _id: id, ...payload }) 
-        });
-        load();
-    };
-
-    const toggleChap = (id) => {
-        setOpenChaps(prev => ({ ...prev, [id]: !prev[id] }));
-    };
+    useEffect(() => { load(); }, []);
 
     const getStyle = (sub) => {
         const s = (sub || "").toUpperCase();
-        if (s === 'H') return { code: 'H', color: 'text-red-500', border: 'border-red-500', bg: 'bg-red-50', label: 'Histoire' };
-        if (s === 'G') return { code: 'G', label: 'Géographie', color: 'text-blue-500', border: 'border-blue-500', bg: 'bg-blue-50', label: 'Géographie' };
-        if (s === 'E') return { code: 'E', label: 'EMC', color: 'text-green-500', border: 'border-green-500', bg: 'bg-green-50', label: 'EMC' };
-        return { code: '?', color: 'text-slate-400', border: 'border-slate-300', bg: 'bg-slate-100', label: 'Inconnu' };
+        if (s === 'H') return { code: 'H', label: 'Histoire', color: 'text-red-500', border: 'border-red-500', bg: 'bg-red-50' };
+        if (s === 'G') return { code: 'G', label: 'Géographie', color: 'text-blue-500', border: 'border-blue-500', bg: 'bg-blue-50' };
+        if (s === 'E') return { code: 'E', label: 'EMC', color: 'text-green-500', border: 'border-green-500', bg: 'bg-green-50' };
+        return { code: '?', label: 'Inconnu', color: 'text-slate-400', border: 'border-slate-300', bg: 'bg-slate-100' };
     };
 
     const myChapters = chapters.filter(c => c.classroom === classFilter);
 
-    const renderArchiveCol = (subCode) => {
-        const info = getStyle(subCode);
-        const list = myChapters.filter(c => c.isArchived && c.subject === subCode);
-        return (
-            <div className="bg-slate-800/60 p-4 rounded-[25px] border border-slate-700 min-h-[120px]">
-                <h4 className={`text-center font-black text-[9px] uppercase mb-4 ${info.color}`}>{info.label}</h4>
-                <div className="space-y-2">
-                    {list.map(chap => (
-                        <div key={chap._id} className="bg-slate-700/50 p-2 rounded-xl flex justify-between items-center border border-slate-600/50">
-                            <span className="text-white font-bold text-[10px] truncate pr-2">{chap.title || "Sans titre"}</span>
-                            <button onClick={() => updateChapter(chap._id, {isArchived: false})} className="text-white hover:text-green-400 transition-colors">⬆️</button>
-                        </div>
-                    ))}
-                    {list.length === 0 && <p className="text-[8px] text-slate-600 text-center uppercase font-bold py-4">Aucun</p>}
-                </div>
-            </div>
-        );
-    };
-
     return (
         <div className="p-4">
-            {/* HEADER */}
-            <div className="flex justify-between items-center mb-6 bg-white p-6 rounded-[35px] border-2 border-orange-50 shadow-sm">
-                <h2 className="font-black text-slate-800 uppercase text-xs tracking-widest">Gestionnaire de Dossiers</h2>
+            <div className="flex justify-between items-center mb-8 bg-white p-6 rounded-[35px] border-2 border-orange-50 shadow-sm">
+                <h2 className="font-black text-slate-800 uppercase text-xs">Dossiers</h2>
                 <select className="bg-slate-100 p-3 rounded-xl font-black outline-none border-none" value={classFilter} onChange={e => setClassFilter(e.target.value)}>
                     <option value="6D">6eD</option><option value="5B">5eB</option><option value="5C">5eC</option><option value="2A">2A</option><option value="2CD">2CD</option>
                 </select>
             </div>
-
-            {/* SECTION ARCHIVES : PLACÉE AU DESSUS */}
-            <div className="mb-10 bg-slate-900 p-8 rounded-[50px] border-4 border-slate-800 shadow-2xl">
-                <p className="text-center text-slate-400 font-black text-[10px] uppercase mb-8 tracking-[0.3em]">📂 Zone d'Archives (Masqué aux élèves)</p>
-                <div className="grid grid-cols-3 gap-6">
-                    {renderArchiveCol('H')}
-                    {renderArchiveCol('G')}
-                    {renderArchiveCol('E')}
-                </div>
-            </div>
-
-            {/* LISTE ACTIVE */}
             <div className="space-y-4">
-                <p className="text-[11px] font-black text-slate-400 uppercase ml-6 mb-4 tracking-wider">Dossiers Actifs</p>
                 {myChapters.filter(c => !c.isArchived).map(chap => {
                     const info = getStyle(chap.subject);
-                    const isOpen = !!openChaps[chap._id];
-                    const chapItems = activities.filter(a => String(a.chapterId) === String(chap._id));
-
                     return (
-                        <div key={chap._id} className={`bg-white rounded-[35px] border-2 ${info.border} overflow-hidden shadow-sm`}>
-                            <div className="p-4 flex justify-between items-center">
-                                <div className="flex items-center gap-6 flex-1">
-                                    <span className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-xl ${info.bg} ${info.color}`}>{info.code}</span>
-                                    <span onClick={() => toggleChap(chap._id)} className={`text-2xl cursor-pointer transition-all ${isOpen ? 'rotate-180 text-blue-600' : 'text-slate-200'}`}>▼</span>
-                                    {editingId === chap._id ? (
-                                        <input 
-                                            autoFocus
-                                            className="text-2xl font-black border-b-4 border-orange-500 outline-none w-full bg-transparent"
-                                            value={tempTitle}
-                                            onChange={e => setTempTitle(e.target.value)}
-                                            onBlur={() => { updateChapter(chap._id, {title: tempTitle}); setEditingId(null); }}
-                                        />
-                                    ) : (
-                                        <span className="text-2xl font-black text-slate-700 cursor-pointer" onClick={() => toggleChap(chap._id)}>
-                                            {chap.title || "Nommer le dossier..."}
-                                        </span>
-                                    )}
-                                </div>
-                                <div className="flex gap-2">
-                                    <button onClick={() => {setEditingId(chap._id); setTempTitle(chap.title);}} className="p-2 opacity-40 hover:opacity-100">✏️</button>
-                                    <button onClick={() => updateChapter(chap._id, {isArchived: true})} className="px-5 py-3 bg-slate-50 rounded-2xl font-black text-[10px] uppercase text-slate-400 hover:bg-slate-800 hover:text-white transition-all">Archiver</button>
-                                </div>
+                        <div key={chap._id} className={`p-6 bg-white rounded-[35px] border-2 ${info.border} flex justify-between items-center shadow-sm`}>
+                            <div className="flex items-center gap-6">
+                                <span className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-xl ${info.bg} ${info.color}`}>{info.code}</span>
+                                <span className="text-2xl font-black text-slate-700">{chap.title || "Sans titre"}</span>
                             </div>
-                            {isOpen && (
-                                <div className="p-6 bg-slate-50 border-t-2 border-dashed border-slate-100">
-                                    {chapItems.length > 0 ? chapItems.map(it => (
-                                        <div key={it._id} className="bg-white p-3 rounded-xl mb-2 flex justify-between items-center shadow-sm">
-                                            <span className="font-bold text-slate-600">{it.actType === 'game' ? '🕹️' : '📄'} {it.title}</span>
-                                        </div>
-                                    )) : <p className="text-center text-slate-300 italic text-sm">Aucun contenu</p>}
-                                </div>
-                            )}
                         </div>
                     );
                 })}
@@ -4004,120 +3958,70 @@ export default function HomeworkStudio({ initialData, chapters, onClose }) {
 ### FICHIER: client/src/features/prof/scans/ScansStudio.jsx
 ############################################################
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 export default function ScansStudio() {
-    const [diag, setDiag] = useState(null);
+    const [sessions, setSessions] = useState([]);
+    const [openId, setOpenId] = useState(null);
+    const [newTitle, setNewTitle] = useState("");
+    const [newClass, setNewClass] = useState("6D");
     const [loading, setLoading] = useState(false);
-    const [scans, setScans] = useState([]);
-    const [photos, setPhotos] = useState([]);
-    const [loadingPhotos, setLoadingPhotos] = useState(false);
-    const [logs, setLogs] = useState([]);
 
-    const runDiagnostic = async () => {
+    const load = async () => {
+        const res = await fetch('/api/scan-sessions').then(r => r.json());
+        setSessions(Array.isArray(res) ? res : []);
+    };
+    useEffect(() => { load(); }, []);
+
+    // Fonction pour forcer la création de tous les dossiers
+    const initAllDriveFolders = async () => {
+        if(!confirm("Voulez-vous vérifier et créer les dossiers PRODUCTIONS pour toutes les classes ?")) return;
         setLoading(true);
-        try {
-            const res = await fetch('/api/test-google').then(r => r.json());
-            setDiag(res);
-        } catch (e) {
-            setDiag({ ok: false, message: "Erreur de communication avec le serveur." });
-        }
+        await fetch('/api/init-all-folders');
+        alert("Dossiers Drive synchronisés !");
         setLoading(false);
     };
 
-    const loadScans = async () => {
-        try {
-            const res = await fetch('/api/scans').then(r => r.json());
-            setScans(Array.isArray(res) ? res : []);
-        } catch (e) { setScans([]); }
+    const createSession = async () => {
+        if(!newTitle) return;
+        setLoading(true);
+        await fetch('/api/scan-sessions', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ title: newTitle, classroom: newClass })
+        });
+        setNewTitle(""); load(); setLoading(false);
     };
 
-    useEffect(() => { loadScans(); }, []);
-
     return (
-        <div className="p-6 space-y-8 animate-in fade-in">
-            <div className="bg-white p-8 rounded-[40px] shadow-xl border-2 border-slate-50">
+        <div className="p-6 max-w-4xl mx-auto space-y-6">
+            <div className="bg-white p-8 rounded-[40px] border-4 border-indigo-500 shadow-xl space-y-4">
                 <div className="flex justify-between items-center">
-                    <div>
-                        <h2 className="text-2xl font-black uppercase text-slate-800">Diagnostic Google</h2>
-                        <p className="text-slate-400 font-bold">Vérifie si le pont entre le site et tes photos est ouvert.</p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                        <button 
-                            onClick={runDiagnostic} 
-                            className="bg-indigo-600 text-white px-6 py-3 rounded-2xl font-black hover:bg-indigo-700"
-                        >
-                            LANCER LE DIAGNOSTIC
-                        </button>
-                        <button
-                            onClick={async () => {
-                                setLoadingPhotos(true);
-                                try {
-                                    const res = await fetch('/api/google/drive/list').then(r => r.json());
-                                    if (res && res.ok) {
-                                        const items = Array.isArray(res.files) ? res.files.map(f => ({
-                                            id: f.id,
-                                            thumbnail: f.thumbnailLink,
-                                            name: f.name,
-                                            webView: f.webViewLink,
-                                            createdTime: f.createdTime
-                                        })) : [];
-                                        setPhotos(items);
-                                    } else {
-                                        setPhotos([]);
-                                        console.error('Erreur liste Drive:', res && res.message);
-                                    }
-                                } catch (e) {
-                                    console.error('Erreur fetch drive list', e);
-                                    setPhotos([]);
-                                }
-                                setLoadingPhotos(false);
-                            }}
-                            disabled={loadingPhotos}
-                            className="bg-emerald-600 text-white px-6 py-3 rounded-2xl font-black hover:bg-emerald-700"
-                        >
-                            {loadingPhotos ? 'SCANNING...' : 'LANCER LE SCAN'}
-                        </button>
-                    </div>
+                    <h2 className="font-black text-indigo-600 uppercase tracking-widest text-xs">Nouveau Devoir</h2>
+                    <button onClick={initAllDriveFolders} className="text-[9px] font-black text-slate-400 border px-3 py-1 rounded-lg hover:bg-slate-50">🔄 SYNCHRO DRIVE</button>
                 </div>
-                {diag && (
-                    <div className={`mt-6 p-6 rounded-3xl border-2 ${diag.ok ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-red-50 border-red-100 text-red-700'}`}>
-                        <b>{diag.ok ? '✅ CONNEXION RÉUSSIE' : '❌ ÉCHEC'}</b>
-                        <p className="font-mono mt-2 text-sm">{diag.message}</p>
-                    </div>
-                )}
+                <div className="grid grid-cols-2 gap-4">
+                    <input className="p-4 bg-slate-50 rounded-2xl outline-none font-bold" placeholder="Titre (ex: Géo T2)" value={newTitle} onChange={e=>setNewTitle(e.target.value)} />
+                    <select className="p-4 bg-slate-50 rounded-2xl font-black text-indigo-600 outline-none" value={newClass} onChange={e=>setNewClass(e.target.value)}>
+                        <option value="6D">6eD</option>
+                        <option value="5B">5eB</option>
+                        <option value="5C">5eC</option>
+                        <option value="2A">2de A</option>
+                        <option value="1D">1ere BFI</option>
+                    </select>
+                </div>
+                <button onClick={createSession} disabled={loading} className="w-full p-4 bg-indigo-600 text-white rounded-2xl font-black shadow-lg">CRÉER LE DOSSIER DEVOIR 📂</button>
             </div>
 
-            {photos.length > 0 && (
-                <div className="bg-white p-6 rounded-[30px] border mt-6">
-                    <div className="flex items-center justify-between">
-                        <b className="text-lg">Résultats du Scan ({photos.length})</b>
-                        <span className="text-sm text-slate-400">Cliquez sur une vignette pour ouvrir</span>
-                    </div>
-
-                    <div className="mt-4 grid grid-cols-3 md:grid-cols-6 gap-3">
-                        {photos.map(p => (
-                            <div key={p.id} className="w-full h-28 bg-slate-100 rounded overflow-hidden flex items-center justify-center cursor-pointer" onClick={() => window.open(p.webView, '_blank')}>
-                                {p.thumbnail ? (
-                                    // thumbnailLink may be a small image URL
-                                    <img src={p.thumbnail} alt={p.name} className="object-cover w-full h-full" />
-                                ) : (
-                                    <div className="text-xs text-slate-500 p-2">{p.name}</div>
-                                )}
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {scans.map(s => (
-                    <div key={s._id} className="bg-white p-4 rounded-[30px] border shadow-sm flex items-center gap-4">
-                        <div className="w-12 h-12 bg-indigo-50 rounded-xl flex items-center justify-center text-xl text-indigo-500 font-black">📄</div>
-                        <div>
-                            <b className="text-slate-700">{s.playerId?.firstName || "Inconnu"}</b>
-                            <span className="block text-[10px] text-slate-300 font-bold uppercase">{new Date(s.createdAt).toLocaleDateString()}</span>
+            <div className="space-y-4">
+                {sessions.map(s => (
+                    <div key={s._id} className={`bg-white rounded-[40px] border-2 transition-all overflow-hidden relative ${openId === s._id ? 'border-indigo-500 shadow-xl' : 'border-slate-100'}`}>
+                        <button onClick={async (e) => {e.stopPropagation(); if(confirm("Supprimer ?")) { await fetch(`/api/scan-sessions/${s._id}`, {method:'DELETE'}); load(); }}} className="absolute top-5 right-5 text-red-200 hover:text-red-500 font-bold px-4">✕</button>
+                        <div className="p-5 flex items-center gap-4 cursor-pointer" onClick={() => setOpenId(openId === s._id ? null : s._id)}>
+                            <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center font-black text-indigo-600 text-xs">{s.classroom === '1D' ? '1BFI' : s.classroom}</div>
+                            <b className="text-xl text-slate-700">{s.title}</b>
                         </div>
+                        {openId === s._id && <PilotArea session={s} />}
                     </div>
                 ))}
             </div>
@@ -4125,23 +4029,82 @@ export default function ScansStudio() {
     );
 }
 
+// ... Reste du fichier PilotArea inchangé
+
 
 ############################################################
 ### FICHIER: client/src/features/prof/students/StudentsManager.css
 ############################################################
 
 .manager-container { display: flex; flex-direction: column; gap: 1.5rem; }
-.filter-bar { display: flex; gap: 1rem; background: #f8fafc; padding: 1rem; border-radius: 20px; }
-.filter-bar select { flex: 1; padding: 0.75rem; border-radius: 12px; border: none; font-weight: bold; outline: none; }
-.btn-test-class { background: #2563eb; color: white; padding: 0.75rem 2rem; border-radius: 12px; font-weight: 900; shadow: 0 4px 6px rgba(37, 99, 235, 0.2); }
-.search-input { width: 100%; padding: 1rem; border-radius: 15px; border: 2px solid #f1f5f9; outline: none; }
-.table-wrapper { border-radius: 24px; border: 1px solid #f1f5f9; overflow: hidden; background: white; }
+.filter-bar { display: flex; justify-content: space-between; align-items: center; background: #f8fafc; padding: 1rem; border-radius: 25px; border: 1px solid #f1f5f9; }
+.stats-badge { background: #2563eb; color: white; padding: 0.5rem 1rem; border-radius: 12px; font-weight: 900; font-size: 0.8rem; }
+
+/* Conteneur pour positionner le point rouge */
+.archive-btn-container {
+    position: relative;
+    display: inline-block;
+}
+
+.btn-archive-view { 
+    background: #f1f5f9; 
+    color: #475569; 
+    padding: 0.6rem 1.2rem; 
+    border-radius: 12px; 
+    font-weight: 800; 
+    font-size: 0.7rem; 
+    text-transform: uppercase; 
+    border: 2px solid transparent; 
+    transition: 0.2s; 
+    cursor: pointer;
+}
+
+.btn-archive-view:hover { 
+    background: white; 
+    border-color: #2563eb; 
+    color: #2563eb; 
+}
+
+/* LE POINT ROUGE */
+.notification-dot {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    width: 12px;
+    height: 12px;
+    background-color: #ef4444; /* Rouge vif */
+    border: 2px solid white;
+    border-radius: 50%;
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
+    animation: pulse-red 2s infinite;
+}
+
+@keyframes pulse-red {
+    0% { transform: scale(0.95); opacity: 0.9; }
+    50% { transform: scale(1.1); opacity: 1; }
+    100% { transform: scale(0.95); opacity: 0.9; }
+}
+
+.btn-test { 
+    background: #eff6ff; 
+    color: #2563eb; 
+    padding: 0.5rem 1.2rem; 
+    border-radius: 12px; 
+    font-weight: 900; 
+    font-size: 0.7rem; 
+    text-transform: uppercase;
+    border: none;
+    cursor: pointer;
+}
+
+.student-row-ui td { 
+    vertical-align: middle; 
+    padding: 1.2rem 1rem !important; 
+    border-bottom: 1px solid #f8fafc;
+}
+
 .students-table { width: 100%; border-collapse: collapse; }
-.students-table th { background: #f8fafc; padding: 1rem; font-size: 0.6rem; color: #94a3b8; text-transform: uppercase; font-weight: 900; }
-.students-table td { padding: 1rem; border-top: 1px solid #f8fafc; }
-.name-cell { font-weight: bold; color: #1e293b; }
-.class-cell span { background: #eff6ff; color: #3b82f6; padding: 0.25rem 0.75rem; border-radius: 8px; font-weight: 900; font-size: 0.7rem; }
-.action-cell button { color: #f87171; font-weight: bold; font-size: 0.7rem; text-transform: uppercase; }
+.students-table th { text-align: left; padding: 1rem; color: #94a3b8; font-size: 0.7rem; text-transform: uppercase; font-weight: 900; }
 
 
 ############################################################
@@ -4153,53 +4116,148 @@ import './StudentsManager.css';
 
 export default function StudentsManager() {
   const [players, setPlayers] = useState([]);
+  const [idsWithScans, setIdsWithScans] = useState(new Set());
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
+  const [selectedPlayerScans, setSelectedPlayerScans] = useState(null);
+  const [activeScan, setActiveScan] = useState(null);
 
-  const load = async () => {
-    const data = await fetch('/api/players').then(r => r.json());
-    setPlayers(data || []);
-  };
-  useEffect(() => { load(); }, []);
-
-  const handleTest = async () => {
-    if(filter === 'all') return alert("Classe ?");
-    const res = await fetch('/api/register', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ firstName: "Eleve", lastName: "Test", classroom: filter })
-    }).then(r => r.json());
-    if (res.ok) { localStorage.setItem("player", JSON.stringify(res)); window.location.reload(); }
+  const loadData = async () => {
+    try {
+        const playersRes = await fetch('/api/players').then(r => r.ok ? r.json() : []);
+        // CORRECTION : On pointe sur /api/scan-sessions pour éviter le 404
+        const sessionsRes = await fetch('/api/scan-sessions').then(r => r.ok ? r.json() : []);
+        
+        setPlayers(Array.isArray(playersRes) ? playersRes : []);
+        // On réinitialise les pastilles de notification pour l'instant
+        setIdsWithScans(new Set());
+    } catch (e) { console.error("Erreur StudentsManager:", e); }
   };
 
-  const filtered = players.filter(p => (filter === 'all' || p.classroom === filter) && (p.firstName + p.lastName).toLowerCase().includes(search.toLowerCase()));
+  useEffect(() => { loadData(); }, []);
+
+  const viewStudentArchives = async (player) => {
+      // On suppose qu'une route existe pour récupérer les copies d'un élève
+      const scans = await fetch(`/api/scans/player/${player._id}`).then(r => r.ok ? r.json() : []);
+      setSelectedPlayerScans({ player, scans: Array.isArray(scans) ? scans : [] });
+  };
+
+  const filtered = players.filter(p => 
+    (filter === 'all' || p.classroom === filter) && 
+    ((p.firstName || "") + " " + (p.lastName || "")).toLowerCase().includes(search.toLowerCase())
+  );
 
   return (
     <div className="manager-container">
       <div className="filter-bar">
-        <select value={filter} onChange={e => setFilter(e.target.value)}>
+        <select value={filter} onChange={e => setFilter(e.target.value)} className="p-2 rounded-xl border">
             <option value="all">Toutes les classes</option>
-            <option value="6D">6eD</option><option value="5B">5eB</option><option value="5C">5eC</option><option value="2A">2A</option><option value="2CD">2CD</option>
+            <option value="6D">6eD</option>
+            <option value="5B">5eB</option>
+            <option value="5C">5eC</option>
+            <option value="2A">2de A</option>
         </select>
-        <button onClick={handleTest} className="btn-test-class">🎮 TESTER LA CLASSE</button>
+        <div className="stats-badge font-black">{filtered.length} ÉLÈVES</div>
       </div>
-      <input className="search-input" placeholder="🔍 Chercher un élève..." value={search} onChange={e => setSearch(e.target.value)} />
-      <div className="table-wrapper">
-        <table className="students-table">
-            <thead><tr><th>Nom</th><th>Classe</th><th>Actions</th></tr></thead>
+
+      <input 
+        className="w-full p-4 mb-4 rounded-2xl border outline-none focus:border-indigo-500" 
+        placeholder="🔍 Chercher un élève..." 
+        value={search} 
+        onChange={e => setSearch(e.target.value)} 
+      />
+
+      <div className="table-wrapper bg-white rounded-[30px] overflow-hidden border">
+        <table className="students-table w-full">
+            <thead>
+                <tr className="bg-slate-50 text-left">
+                    <th className="p-4 pl-8">Élève</th>
+                    <th className="p-4">Classe</th>
+                    <th className="p-4 text-center">Copies</th>
+                    <th className="p-4 text-right pr-8">Action</th>
+                </tr>
+            </thead>
             <tbody>
                 {filtered.map(p => (
-                    <tr key={p._id}>
-                        <td className="name-cell">{p.firstName} {p.lastName}</td>
-                        <td className="class-cell"><span>{p.classroom}</span></td>
-                        <td className="action-cell">
-                            <button onClick={async () => { if(confirm("Reset ?")) { await fetch('/api/reset-player', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({playerId: p._id})}); load(); } }}>Reset</button>
+                    <tr key={p._id} className="border-b hover:bg-slate-50 transition-colors">
+                        <td className="p-4 pl-8 font-bold text-slate-700">{p.firstName} {p.lastName}</td>
+                        <td className="p-4 text-xs uppercase font-black text-slate-400">{p.classroom}</td>
+                        <td className="p-4 text-center relative">
+                            <button 
+                                onClick={() => viewStudentArchives(p)} 
+                                className="px-4 py-2 bg-slate-100 rounded-xl text-[10px] font-black uppercase hover:bg-indigo-50 hover:text-indigo-600 transition-all"
+                            >
+                                Voir
+                            </button>
+                        </td>
+                        <td className="p-4 text-right pr-8">
+                            <button 
+                                className="text-indigo-600 font-bold hover:underline" 
+                                onClick={() => { 
+                                    localStorage.setItem("player", JSON.stringify({...p, id: p._id})); 
+                                    window.location.reload(); 
+                                }}
+                            >
+                                Tester ➔
+                            </button>
                         </td>
                     </tr>
                 ))}
             </tbody>
         </table>
       </div>
+
+      {/* MODALE ARCHIVES ÉLÈVE */}
+      {selectedPlayerScans && (
+          <div className="fixed inset-0 z-[7000] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-6">
+              <div className="bg-white w-full max-w-2xl rounded-[40px] shadow-2xl flex flex-col max-h-[85vh]">
+                  <div className="p-8 border-b flex justify-between items-center bg-slate-50 rounded-t-[40px]">
+                      <h2 className="text-2xl font-black uppercase">Archives : {selectedPlayerScans.player.firstName}</h2>
+                      <button onClick={() => setSelectedPlayerScans(null)} className="text-2xl font-black">✕</button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-8 space-y-4">
+                      {selectedPlayerScans.scans.map(s => (
+                          <div key={s._id} onClick={() => setActiveScan(s)} className="p-6 bg-slate-50 rounded-3xl border-2 border-transparent hover:border-indigo-500 hover:bg-white cursor-pointer flex justify-between items-center transition-all shadow-sm">
+                              <div>
+                                  <b className="text-slate-700 block text-lg font-black">Correction du {new Date(s.createdAt).toLocaleDateString()}</b>
+                                  <span className="bg-emerald-100 text-emerald-600 px-3 py-1 rounded-lg text-xs font-black">Résultat : {s.grade}</span>
+                              </div>
+                              <span className="text-blue-500 font-black">VOIR ➔</span>
+                          </div>
+                      ))}
+                      {selectedPlayerScans.scans.length === 0 && (
+                          <p className="text-center py-10 text-slate-400 font-bold">Aucune copie trouvée.</p>
+                      )}
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* VISUALISEUR DE COPIE */}
+      {activeScan && (
+          <div className="fixed inset-0 z-[8000] bg-slate-900/95 flex items-center justify-center p-4 backdrop-blur-md">
+              <div className="bg-white w-full max-w-6xl h-[90vh] rounded-[60px] flex flex-col overflow-hidden shadow-2xl">
+                  <div className="p-6 border-b flex justify-between items-center bg-slate-50">
+                      <b className="text-xl uppercase text-slate-800">Visualisation de la copie</b>
+                      <button onClick={() => setActiveScan(null)} className="w-12 h-12 bg-slate-200 rounded-full text-xl font-black hover:bg-red-500 hover:text-white transition-all">✕</button>
+                  </div>
+                  <div className="flex-1 flex overflow-hidden">
+                      <div className="flex-1 bg-slate-200 overflow-auto p-4 flex justify-center items-start">
+                          <img src={`/api/view-copy/${activeScan.driveFileId}`} className="max-w-full shadow-2xl rounded-xl border-4 border-white" alt="Copie" />
+                      </div>
+                      <div className="flex-1 p-10 overflow-y-auto bg-white border-l">
+                          <div className="mb-6">
+                              <span className="bg-indigo-600 text-white px-6 py-2 rounded-xl font-black text-2xl">{activeScan.grade}</span>
+                          </div>
+                          <div 
+                            className="text-lg leading-relaxed text-slate-700 whitespace-pre-wrap font-medium" 
+                            dangerouslySetInnerHTML={{ __html: activeScan.correctedTranscription }} 
+                          />
+                      </div>
+                  </div>
+              </div>
+          </div>
+      )}
     </div>
   );
 }
@@ -4310,14 +4368,15 @@ export const api = {
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
   server: {
+    host: '0.0.0.0', 
+    port: 5173,
+    https: false,
     proxy: {
-      // Redirige tous les appels /api vers le serveur Node (port 3000)
       '/api': {
-        target: 'http://localhost:3000',
+        target: 'http://127.0.0.1:3000',
         changeOrigin: true,
         secure: false,
       }
@@ -4326,204 +4385,69 @@ export default defineConfig({
 })
 
 
-
-
 ############################################################
 ### FICHIER: init-db.js
 ############################################################
 
 const mongoose = require('mongoose');
-const path = require('path');
-
-// --- CHARGEMENT DU .ENV (Méthode robuste) ---
-// 1. Essaie de charger depuis l'emplacement par défaut
 require('dotenv').config();
 
-// 2. Si pas trouvé, essaie de remonter d'un cran (cas où le script est dans src/)
-if (!process.env.MONGODB_URI) {
-  require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
-}
-
-// 3. Si toujours pas trouvé, essaie le dossier courant explicitement
-if (!process.env.MONGODB_URI) {
-  require('dotenv').config({ path: path.resolve(__dirname, '.env') });
-}
-
-const mongoUri = process.env.MONGODB_URI;
-
-// Vérification immédiate
-if (!mongoUri) {
-  console.error('❌ ERREUR CRITIQUE : MONGODB_URI est introuvable.');
-  console.error('   Assure-toi que le fichier .env est bien à la racine du projet.');
-  process.exit(1);
-}
-
-// ==========================================================
-// SCHÉMA COMPLET (Avec validatedLevels en Mixed)
-// ==========================================================
 const PlayerSchema = new mongoose.Schema({
   firstName: String,
   lastName: String,
   classroom: String,
+  email: String,
   validatedQuestions: [String],
-  // On utilise Mixed pour accepter les anciens (strings) et nouveaux (objets) formats sans planter
   validatedLevels: { type: [mongoose.Schema.Types.Mixed], default: [] },
+  spellingMistakes: { type: Array, default: [] },
   created_at: { type: Date, default: Date.now },
-}, { minimize: false });
+});
 
 const Player = mongoose.model('Player', PlayerSchema, 'players');
 
-// Liste des élèves (Avec les comptes de test)
 const players = [
-    // === 6eD ===
-    { firstName: 'Gael', lastName: 'Barbier Durango', classroom: '6D', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Juan Martin', lastName: 'Benalcázar Luna', classroom: '6D', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Julian Alejandro', lastName: 'Bolaños Mejia', classroom: '6D', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Cristobal Martín', lastName: 'Buendía Intriago', classroom: '6D', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Giselle Israela', lastName: 'Burgos Arcos', classroom: '6D', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Valeria Micaela', lastName: 'Capelo Carrillo', classroom: '6D', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Nicolás Xavier', lastName: 'Cazar Pesántez', classroom: '6D', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Nicolas', lastName: 'Cevallos Moscoso', classroom: '6D', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Danilo Emilio', lastName: 'Cisneros Cobo', classroom: '6D', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Domenica Monserrate', lastName: 'Erazo García', classroom: '6D', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Antonio', lastName: 'Guaman Guerra', classroom: '6D', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Francisco', lastName: 'Lascano Noboa', classroom: '6D', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Ariana Milena', lastName: 'León Álvarez', classroom: '6D', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Luciana Valentina', lastName: 'Loza Riofrío', classroom: '6D', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Sara Martina', lastName: 'Molina Fernández', classroom: '6D', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Sophie Doménica', lastName: 'Montesdeoca Burbano', classroom: '6D', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Olivia Estefania', lastName: 'Ordoñez Arroyo', classroom: '6D', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Zoé Antonella', lastName: 'Ortiz Arroba', classroom: '6D', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Julia', lastName: 'Puente Porras', classroom: '6D', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Alina Rafaela', lastName: 'Santamaria Paredes', classroom: '6D', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Juan Manuel', lastName: 'Suarez Escobar', classroom: '6D', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Santiago Andrés', lastName: 'Subía Torres', classroom: '6D', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Eva Maria', lastName: 'Villacreses Arboleda', classroom: '6D', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Rafael Modesto', lastName: 'Zúñiga Salgado', classroom: '6D', validatedQuestions: [], validatedLevels: [] },
-
-    // === 5eB ===
-    { firstName: 'William Wladimir', lastName: 'Acosta Acuña', classroom: '5B', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Lucciana Isabella', lastName: 'Alarcón Córdova', classroom: '5B', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Juan Martín', lastName: 'Arellano Izurieta', classroom: '5B', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'David', lastName: 'Cabrera Svistoonoff', classroom: '5B', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Romina Fabiana', lastName: 'Cajas Calderon', classroom: '5B', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Ariana Micaela', lastName: 'Carrera Alarcón', classroom: '5B', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'David Fernando', lastName: 'Fárez Figueroa', classroom: '5B', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Juan Andrés', lastName: 'Gómez Aveiga', classroom: '5B', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Thiago', lastName: 'Irazábal Sevilla', classroom: '5B', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Aleksey Victor', lastName: 'Irribarra Telishevskiy', classroom: '5B', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Samantha Valentina', lastName: 'Jaramillo Beltrán', classroom: '5B', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Esteban Martin', lastName: 'Lima Vaca', classroom: '5B', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Amelia Fabiana', lastName: 'Merino Martínez', classroom: '5B', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Maxime Arnaud Marie', lastName: 'Michel Rodriguez', classroom: '5B', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Anahi Aracely', lastName: 'Morales Cuaichar', classroom: '5B', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Rafaela', lastName: 'Parra Quezada', classroom: '5B', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Pedro Sebastian', lastName: 'Patiño Guerrero', classroom: '5B', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Diego Julián', lastName: 'Pazmiño Rojas', classroom: '5B', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Sebastian Alejandro', lastName: 'Pilicita Paucarima', classroom: '5B', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Sara', lastName: 'Regalado Moya', classroom: '5B', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Barbara', lastName: 'Salvador Mendez', classroom: '5B', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Noelia Isabel', lastName: 'Taco Menéndez', classroom: '5B', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Doménica Cristina', lastName: 'Uquillas Mera', classroom: '5B', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Christian', lastName: 'Vargas Vinces', classroom: '5B', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Ariana Victoria', lastName: 'Vinueza Ortega', classroom: '5B', validatedQuestions: [], validatedLevels: [] },
-    
-    // === 5eC ===
-    { firstName: 'Emilio José', lastName: 'Arguello Estevez', classroom: '5C', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Sofía Isabella', lastName: 'Bravo Carrillo', classroom: '5C', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Paula Valentina', lastName: 'Cartuche López', classroom: '5C', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Isabella Victoria', lastName: 'Chávez Freire', classroom: '5C', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Antonela', lastName: 'Garcia Yandún', classroom: '5C', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Josué Rafael', lastName: 'González Alcívar', classroom: '5C', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Isabel Maria', lastName: 'Guerrero Durango', classroom: '5C', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Paula Rafaela', lastName: 'Guerrero Lozada', classroom: '5C', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Nicolas Aleph', lastName: 'Herrera Zambonino', classroom: '5C', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Karol Rafaela', lastName: 'Jativa Araujo', classroom: '5C', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Abigail Desirée', lastName: 'Jimbo Gavilanes', classroom: '5C', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Salvador', lastName: 'Maldonado Carcelén', classroom: '5C', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Ian Fernando', lastName: 'Mediavilla Amores', classroom: '5C', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Bruno André', lastName: 'Miño Yépez', classroom: '5C', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Guillermo Joaquin', lastName: 'Molina Alcivar', classroom: '5C', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'María Victoria', lastName: 'Moya Camacho', classroom: '5C', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Camilo Rafael', lastName: 'Ruiz Menéndez', classroom: '5C', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Ariana Valentina', lastName: 'Sanguña Lincango', classroom: '5C', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Mai', lastName: 'Segovia Moran', classroom: '5C', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Amina', lastName: 'Strzoda Coudour', classroom: '5C', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Isabella', lastName: 'Terán Camacho', classroom: '5C', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Emilia Joaquina', lastName: 'Vásconez Barreno', classroom: '5C', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Emilio Cayetano', lastName: 'Verdu Moscoso', classroom: '5C', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Jérémie', lastName: 'Wattel Páez', classroom: '5C', validatedQuestions: [], validatedLevels: [] },
-
-    // === 2de A ===
-    { firstName: 'Juan Martín', lastName: 'Abad Barrera', classroom: '2A', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Sofía Rafaela', lastName: 'Arízaga Carrillo', classroom: '2A', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Isabella', lastName: 'Benavides Moscoso', classroom: '2A', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Amaru Joaquin Fernando', lastName: 'Caprace Lima', classroom: '2A', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Luisa Antonia', lastName: 'Cueva Marchán', classroom: '2A', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Salvatore Miguel', lastName: 'Defina Dávila', classroom: '2A', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'María Daniela', lastName: 'Erazo García', classroom: '2A', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Alejandro Renan', lastName: 'Escobar Castro', classroom: '2A', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Sebastian Alejandro', lastName: 'Gallardo Buitron', classroom: '2A', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Julián Esteban', lastName: 'León Mazón', classroom: '2A', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Renata', lastName: 'López Ballesteros', classroom: '2A', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Ana Rafaela', lastName: 'Lopez Mejia', classroom: '2A', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Mattis Raphaël', lastName: 'Mejia Zenni', classroom: '2A', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Clémentine Audrey', lastName: 'Nedelec Félix', classroom: '2A', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Juan Manuel', lastName: 'Nieto Estrella', classroom: '2A', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Camila Helena', lastName: 'Ortiz Betancourt', classroom: '2A', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Pedro Facundo', lastName: 'Riofrío Dressendörfer', classroom: '2A', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Daniela', lastName: 'Ruiz Turín', classroom: '2A', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Aurora Catalina', lastName: 'Sánchez Echeverría', classroom: '2A', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Florencia Alegría', lastName: 'Sánchez Porras', classroom: '2A', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Benjamin', lastName: 'Vásconez Galefski', classroom: '2A', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Juan Andrés', lastName: 'Velez Palacios', classroom: '2A', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Ariana Valentina', lastName: 'Vivero Villacis', classroom: '2A', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Joaquín Ignacio', lastName: 'Zambrano Alvarado', classroom: '2A', validatedQuestions: [], validatedLevels: [] },
-
-    // === 2de CD ===
-    { firstName: 'Felipe Andrés', lastName: 'Carrera Alarcón', classroom: '2CD', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Nico Cruz', lastName: 'Hamilton Perez', classroom: '2CD', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Viktor Octavio', lastName: 'Orellana Alonso', classroom: '2CD', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Emilio', lastName: 'Ortiz Cerda', classroom: '2CD', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Emilio', lastName: 'Perez Coral', classroom: '2CD', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'María Caridad', lastName: 'Poveda Zavala', classroom: '2CD', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Carolina Alelí', lastName: 'Ruiz Dueñas', classroom: '2CD', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Cristián Alejandro', lastName: 'Salinas Villarreal', classroom: '2CD', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Doménica Renata', lastName: 'Santacruz Granda', classroom: '2CD', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Josué Mathieu', lastName: 'Santorum Carrión', classroom: '2CD', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Sofía Monserrat', lastName: 'Tingo Chacasaguay', classroom: '2CD', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Leonardo', lastName: 'Vargas Vinces', classroom: '2CD', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Antonio Salvador', lastName: 'Zuñiga Salgado', classroom: '2CD', validatedQuestions: [], validatedLevels: [] },
-
-    // === ÉLÈVES DE TEST (POUR LE PROF) ===
-    { firstName: 'Eleve', lastName: 'Test', classroom: '6D', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Eleve', lastName: 'Test', classroom: '5B', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Eleve', lastName: 'Test', classroom: '5C', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Eleve', lastName: 'Test', classroom: '2A', validatedQuestions: [], validatedLevels: [] },
-    { firstName: 'Eleve', lastName: 'Test', classroom: '2CD', validatedQuestions: [], validatedLevels: [] }
+    // === 1D BFI (SÉCURISÉ) ===
+    { firstName: 'Amaia Carolina', lastName: 'Arguello Zambrano', classroom: '1D', email: 'arguello.amaia@condamine.edu.ec' },
+    { firstName: 'Ezequiel', lastName: 'Benitez Valarezo', classroom: '1D', email: 'benitez.ezequiel@condamine.edu.ec' },
+    { firstName: 'Emilia Anahi', lastName: 'Conrado Guerrón', classroom: '1D', email: 'conrado.emilia@condamine.edu.ec' },
+    { firstName: 'Isabel Cristina', lastName: 'Dávila Pérez', classroom: '1D', email: 'davila.isabel@condamine.edu.ec' },
+    { firstName: 'Anna Victoria', lastName: 'Fernández Enríquez', classroom: '1D', email: 'fernandez.anna@condamine.edu.ec' },
+    { firstName: 'Doménica Elizabeth', lastName: 'Gallardo Gallardo', classroom: '1D', email: 'gallardo.domenica@condamine.edu.ec' },
+    { firstName: 'Adrián Felipe', lastName: 'Guzmán Espinosa', classroom: '1D', email: 'guzman.adrian@condamine.edu.ec' },
+    { firstName: 'Marcela Ranné', lastName: 'Herrera Sempértegui', classroom: '1D', email: 'herrera.marcela@condamine.edu.ec' },
+    { firstName: 'Batia Tatiana', lastName: 'Jácome Pástor', classroom: '1D', email: 'jacome.batia@condamine.edu.ec' },
+    { firstName: 'Fabien', lastName: 'Lhomme Santiago', classroom: '1D', email: 'lhomme.santiago@condamine.edu.ec' },
+    { firstName: 'Juan Xavier', lastName: 'Molina Alcivar', classroom: '1D', email: 'molina.juan@condamine.edu.ec' },
+    { firstName: 'Franca', lastName: 'Navarro Gallegos', classroom: '1D', email: 'navarro.franca@condamine.edu.ec' },
+    { firstName: 'Eduardo', lastName: 'Ojeda Rivera', classroom: '1D', email: 'ojeda.eduardo@condamine.edu.ec' },
+    { firstName: 'Isabella Romina', lastName: 'Quelal Espinosa', classroom: '1D', email: 'quelal.isabella@condamine.edu.ec' },
+    { firstName: 'Xander', lastName: 'Vancraeynest Martinez', classroom: '1D', email: 'vancraeynest.xander@condamine.edu.ec' },
+    { firstName: 'Francisca Leonor', lastName: 'Yánez Tinoco', classroom: '1D', email: 'yanez.francisca@condamine.edu.ec' },
+    { firstName: 'Eleve', lastName: 'Test', classroom: '1D' },
+    // Garder Gael et tests
+    { firstName: 'Gael', lastName: 'Barbier Durango', classroom: '6D' },
+    { firstName: 'Eleve', lastName: 'Test', classroom: '6D' },
+    { firstName: 'Eleve', lastName: 'Test', classroom: '2A' },
+    { firstName: 'Eleve', lastName: 'Test', classroom: '5B' },
+    { firstName: 'Eleve', lastName: 'Test', classroom: '5C' }
 ];
 
 async function initializeDatabase() {
   try {
-    console.log('Connexion à la base de données...');
-    await mongoose.connect(mongoUri);
-    console.log('✅ Connexion réussie !');
-
-    console.log('Suppression des anciens élèves (y compris les erreurs de format)...');
-    await Player.deleteMany({});
-    
-    console.log('Ajout des élèves avec la structure correcte...');
-    await Player.insertMany(players);
-    console.log(`✅ Base de données initialisée avec ${players.length} élèves !`);
-
-  } catch (err) {
-    console.error('❌ Erreur lors de l\'initialisation :', err);
-  } finally {
-    await mongoose.disconnect();
-    console.log('Déconnexion.');
-  }
+    await mongoose.connect(process.env.MONGODB_URI);
+    console.log('✅ BDD Connectée.');
+    // On met à jour ou on insère (évite les doublons)
+    for (const p of players) {
+        await Player.findOneAndUpdate(
+            { firstName: p.firstName, lastName: p.lastName, classroom: p.classroom },
+            p,
+            { upsert: true }
+        );
+    }
+    console.log('✅ Liste des élèves synchronisée (1D BFI incluse).');
+  } catch (err) { console.error(err); } 
+  finally { mongoose.disconnect(); }
 }
-
 initializeDatabase();
 
 
@@ -4535,19 +4459,20 @@ initializeDatabase();
   "name": "condamine-project",
   "version": "1.0.0",
   "scripts": {
-    "start": "nodemon server/server.js",
+    "start": "node server/server.js",
     "client": "npm run dev --prefix client",
     "apply": "node apply.js",
+    "build": "npm install && npm install --prefix client && npm run build --prefix client",
     "dev": "node apply.js & npm run start & npm run client",
-    "stop": "killall -9 node",
     "snap": "node snap.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "dotenv": "^16.0.3",
+    "adm-zip": "^0.5.14",
+    "express": "^4.19.2",
+    "dotenv": "^16.4.5",
     "mongoose": "7.8.2",
-    "@google/generative-ai": "0.1.3",
-    "node-fetch": "2",
+    "@google/generative-ai": "^0.1.3",
+    "node-fetch": "^2.7.0",
     "multer": "^1.4.5-lts.1",
     "cloudinary": "^1.41.0",
     "multer-storage-cloudinary": "^4.0.0",
@@ -4555,7 +4480,7 @@ initializeDatabase();
     "nodemailer": "^6.9.7"
   },
   "devDependencies": {
-    "nodemon": "^3.0.1"
+    "nodemon": "^3.1.0"
   }
 }
 
@@ -4701,14 +4626,29 @@ const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 
-// FIX 404 : On change le préfixe pour ne pas confondre ID et Classe
+// --- RÉCUPÉRER LES DEVOIRS PAR CLASSE ---
 router.get('/homework/by-class/:classroom', async (req, res) => {
     try {
-        const list = await mongoose.model('Homework').find({ 
+        const Homework = mongoose.model('Homework');
+        const list = await Homework.find({ 
             $or: [{ classroom: req.params.classroom }, { classroom: "Toutes" }] 
         }).sort({ date: -1 });
-        res.json(list);
-    } catch(e) { res.status(500).json([]); }
+        res.json(list || []);
+    } catch(e) { 
+        console.error("Erreur devoirs classe:", e.message);
+        res.status(500).json([]); 
+    }
+});
+
+// --- RÉCUPÉRER LES FAUTES D'UN ÉLÈVE ---
+router.get('/player-mistakes/:id', async (req, res) => {
+    try {
+        const Player = mongoose.model('Player');
+        const player = await Player.findById(req.params.id);
+        res.json(player ? player.spellingMistakes : []);
+    } catch(e) { 
+        res.status(500).json([]); 
+    }
 });
 
 module.exports = router;
@@ -4823,134 +4763,55 @@ module.exports = router;
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
-const fetch = require('node-fetch');
-const { google } = require('googleapis');
+const DriveService = require('../../services/drive.service');
 
-const oauth2Client = new google.auth.OAuth2(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET
-);
-oauth2Client.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
+// --- ROUTE DE MAINTENANCE : CRÉER TOUS LES DOSSIERS PRODUCTIONS ---
+router.get('/init-all-folders', async (req, res) => {
+    const classes = ['6D', '5B', '5C', '2A', '2CD', '1D']; // 1D correspond à 1ere BFI
+    const results = [];
 
-/**
- * 🛠️ DIAGNOSTIC INTELLIGENT
- * Analyse pourquoi Photos échoue alors que Drive est OK.
- */
-router.get('/test-google', async (req, res) => {
-    let results = { drive: "❌", photos: "❌", gmail: "✅ (Scope présent)" };
+    for (const code of classes) {
+        // Pour la 1D, on utilise le nom "1ere BFI" sur le Drive comme demandé
+        const folderName = (code === '1D') ? "1ere BFI" : code;
+        console.log(`🛠️ Initialisation Drive pour : ${folderName}`);
+        const status = await DriveService.initClassStructure(folderName);
+        results.push({ class: folderName, status: status ? '✅ OK' : '❌ Erreur' });
+    }
+
+    res.json({ message: "Initialisation terminée", details: results });
+});
+
+// --- RESTE DES ROUTES EXISTANTES ---
+router.get('/scan-sessions', async (req, res) => {
+    const sessions = await mongoose.model('ScanSession').find({}).sort({ createdAt: -1 });
+    res.json(sessions);
+});
+
+router.post('/scan-sessions', async (req, res) => {
     try {
-        const tokenInfo = await oauth2Client.getAccessToken();
-        const token = tokenInfo.token;
+        const { title, classroom } = req.body;
+        const ScanSession = mongoose.model('ScanSession');
         
-        if (!token) return res.json({ ok: false, message: "Impossible de générer un jeton. Vérifie ton Refresh Token." });
+        // On s'assure que la structure existe au moment de créer un devoir
+        const folderName = (classroom === '1D') ? "1ere BFI" : classroom;
+        const { productionsId } = await DriveService.initClassStructure(folderName);
+        const homeworkFolderId = await DriveService.getOrCreateFolder(title, productionsId);
 
-        // 1. Test Drive (doit être OK d'après tes tests)
-        const drive = google.drive({ version: 'v3', auth: oauth2Client });
-        try {
-            await drive.files.list({ pageSize: 1 });
-            results.drive = "✅ OK";
-        } catch (e) { results.drive = `❌ Erreur: ${e.message}`; }
-
-        // 2. Test Photos avec analyse d'erreur
-        const photosRes = await fetch('https://photoslibrary.googleapis.com/v1/mediaItems:search', {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ pageSize: 1 })
-        });
-        const photosData = await photosRes.json();
-        
-        if (!photosData.error) {
-            results.photos = "✅ OK";
-        } else {
-            const err = photosData.error;
-            if (err.status === "PERMISSION_DENIED") {
-                results.photos = "❌ ACCÈS REFUSÉ : Vérifie que 'Photos Library API' est activée dans la Console Google Cloud (Bibliothèque).";
-            } else if (err.code === 403) {
-                results.photos = "❌ BLOCAGE : Ton établissement @condamine interdit peut-être l'usage de Google Photos.";
-            } else {
-                results.photos = `❌ Erreur Google: ${err.message}`;
-            }
-        }
-
-        res.json({ 
-            ok: results.photos === "✅ OK", 
-            message: `Drive: ${results.drive} | Photos: ${results.photos} | Gmail: ${results.gmail}` 
-        });
-    } catch (e) {
-        console.error("Crash Diagnostic:", e);
-        res.status(500).json({ ok: false, message: "Erreur technique serveur: " + e.message });
-    }
-});
-
-// Liste les fichiers images dans un dossier Google Drive (folderId en query ou GOOGLE_DRIVE_FOLDER_ID)
-router.get('/google/drive/list', async (req, res) => {
-    console.log('🔍 [DRIVE] Requête reçue sur /api/google/drive/list');
-    const { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN, GOOGLE_DRIVE_FOLDER_ID } = process.env;
-    const folderId = req.query.folderId || GOOGLE_DRIVE_FOLDER_ID;
-
-    if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !GOOGLE_REFRESH_TOKEN) {
-        return res.json({ ok: false, message: 'Identifiants Google manquants dans le fichier .env' });
-    }
-    if (!folderId) return res.json({ ok: false, message: 'Aucun folderId fourni ni configuré (GOOGLE_DRIVE_FOLDER_ID).' });
-
-    try {
-        const oauth2Client = new google.auth.OAuth2(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET);
-        oauth2Client.setCredentials({ refresh_token: GOOGLE_REFRESH_TOKEN });
-
-        const tokenInfo = await oauth2Client.getAccessToken();
-        const accessToken = tokenInfo && tokenInfo.token ? tokenInfo.token : null;
-        if (!accessToken) return res.json({ ok: false, message: 'Impossible d\'obtenir access token depuis le refresh token.' });
-
-        const drive = google.drive({ version: 'v3', auth: oauth2Client });
-
-        const q = `'${folderId}' in parents and trashed = false and (mimeType contains 'image/' or mimeType='application/octet-stream')`;
-        const resp = await drive.files.list({
-            q,
-            fields: 'files(id,name,mimeType,webViewLink,thumbnailLink,modifiedTime,createdTime,size)',
-            pageSize: 1000
+        const newSession = await ScanSession.create({
+            title,
+            classroom,
+            driveFolderId: homeworkFolderId,
+            createdAt: Date.now()
         });
 
-        const files = resp.data.files || [];
-        res.json({ ok: true, count: files.length, files });
-    } catch (e) {
-        console.error('❌ Erreur Drive list :', e.message || e);
-        res.json({ ok: false, message: 'Erreur Drive: ' + (e.message || e) });
-    }
+        res.json(newSession);
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Récupération des archives
-router.get('/scans', async (req, res) => {
-    try {
-        const Submission = mongoose.model('Submission');
-        const data = await Submission.find({}).populate('playerId').sort({ createdAt: -1 });
-        res.json(data || []);
-    } catch (e) { res.json([]); }
+router.delete('/scan-sessions/:id', async (req, res) => {
+    await mongoose.model('ScanSession').findByIdAndDelete(req.params.id);
+    res.json({ ok: true });
 });
-    // Importe des fichiers Drive en tant que Submissions (évite les doublons)
-    router.post('/scans/import-drive', async (req, res) => {
-        console.log('🔁 [IMPORT] Requête reçue sur /api/scans/import-drive');
-        const files = req.body.files || [];
-        if (!Array.isArray(files) || files.length === 0) return res.json({ ok: false, message: 'Aucun fichier fourni.' });
-
-        try {
-            const Submission = mongoose.model('Submission');
-            const results = [];
-            for (const f of files) {
-                if (!f.id) { results.push({ ok: false, reason: 'missing id', file: f }); continue; }
-                const existing = await Submission.findOne({ driveFileId: f.id });
-                if (existing) { results.push({ ok: false, reason: 'already_exists', id: existing._id, fileId: f.id }); continue; }
-
-                const s = new Submission({ driveFileId: f.id, originalTranscription: '', correctedTranscription: '', feedback: '', grade: '' });
-                await s.save();
-                results.push({ ok: true, id: s._id, fileId: f.id });
-            }
-
-            res.json({ ok: true, imported: results.filter(r => r.ok).length, results });
-        } catch (e) {
-            console.error('Erreur import-drive:', e.message || e);
-            res.json({ ok: false, message: e.message || e });
-        }
-    });
 
 module.exports = router;
 
@@ -4962,33 +4823,45 @@ module.exports = router;
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
+const multer = require('multer');
+const cloudinary = require('cloudinary').v2;
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
 
-// On s'assure que ces routes renvoient TOUJOURS du JSON, même vide.
-router.get('/chapters-all', async (req, res) => {
-    try {
-        const chapters = await mongoose.model('Chapter').find({});
-        res.json(chapters || []);
-    } catch (e) { 
-        res.json([]); 
-    }
+// Configuration Cloudinary
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME || 'dcjt0dfsc',
+    api_key: process.env.CLOUDINARY_API_KEY || '252514332881269',
+    api_secret: process.env.CLOUDINARY_API_SECRET || 'n8W3iO0H_Xp7F-u0XQz_D_kIu0o'
 });
 
-router.get('/homework-all', async (req, res) => {
-    try {
-        const list = await mongoose.model('Homework').find({}).sort({ date: -1 });
-        res.json(list || []);
-    } catch (e) { 
-        res.json([]); 
+const storage = new CloudinaryStorage({
+    cloudinary: cloudinary,
+    params: { folder: 'condamine', allowed_formats: ['jpg', 'png', 'jpeg'] }
+});
+const upload = multer({ storage: storage });
+
+// --- ROUTE UNIFIÉE D'UPLOAD (Indispensable pour Scans et Devoirs) ---
+router.post('/upload', upload.single('file'), (req, res) => {
+    if (req.file) {
+        res.json({ ok: true, imageUrl: req.file.path });
+    } else {
+        res.status(500).json({ ok: false, error: "Upload échoué" });
     }
 });
 
 router.get('/players', async (req, res) => {
     try {
-        const players = await mongoose.model('Player').find({});
+        const players = await mongoose.model('Player').find({}).sort({ classroom: 1, lastName: 1 });
         res.json(players || []);
-    } catch (e) { 
-        res.json([]); 
-    }
+    } catch (e) { res.status(500).json([]); }
+});
+
+router.get('/chapters-all', async (req, res) => {
+    try { res.json(await mongoose.model('Chapter').find({})); } catch (e) { res.status(500).json([]); }
+});
+
+router.get('/homework-all', async (req, res) => {
+    try { res.json(await mongoose.model('Homework').find({}).sort({ date: -1 })); } catch (e) { res.status(500).json([]); }
 });
 
 module.exports = router;
@@ -5079,12 +4952,32 @@ module.exports = mongoose.model('Player', PlayerSchema);
 
 
 ############################################################
+### FICHIER: server/models/ScanSession.js
+############################################################
+
+const mongoose = require('mongoose');
+
+const ScanSessionSchema = new mongoose.Schema({
+    title: { type: String, required: true },
+    classroom: { type: String, required: true },
+    driveFolderId: String,       // Dossier du Devoir
+    productionsFolderId: String, // Dossier "Productions" de la classe
+    teacherInstruction: String, 
+    teacherAudioUrl: String, 
+    createdAt: { type: Date, default: Date.now }
+});
+
+module.exports = mongoose.model('ScanSession', ScanSessionSchema);
+
+
+############################################################
 ### FICHIER: server/models/Submission.js
 ############################################################
 
 const mongoose = require('mongoose');
 
 const SubmissionSchema = new mongoose.Schema({
+    // Lien formel avec l'élève (permet le filtrage)
     playerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Player' },
     driveFileId: String, 
     originalTranscription: String,
@@ -5098,6 +4991,37 @@ module.exports = mongoose.model('Submission', SubmissionSchema);
 
 
 ############################################################
+### FICHIER: server/models/TeacherStyle.js
+############################################################
+
+const mongoose = require('mongoose');
+
+const TeacherStyleSchema = new mongoose.Schema({
+    teacherId: { type: String, default: "jean_vuillet" },
+    pedagogicalMemory: { 
+        type: String, 
+        default: `Tu es un professeur expert au Lycée La Condamine. 
+        
+        RÈGLES DE NOTATION :
+        1. Si l'élève est en 6ème ou 5ème : 
+           - Note avec les lettres : A+ (Excellent), A (Acquis), B (En cours d'acquisition), C (Insuffisant).
+           - Tu DOIS identifier la compétence évaluée parmi :
+             * Se repérer dans l'espace
+             * Se repérer dans le temps
+             * Analyser un document (Texte, Image, carte, graphique)
+             * Mémoriser un cours et des définitions
+             * Pratiquer différents langages (rédaction et production de cartes et croquis)
+        2. Pour les autres classes (Lycée) : Utilise la notation chiffrée classique sur 20.
+        
+        CONSIGNES : Sois bienveillant, souligne les erreurs d'orthographe et propose des axes d'amélioration précis.`
+    },
+    updatedAt: { type: Date, default: Date.now }
+});
+
+module.exports = mongoose.model('TeacherStyle', TeacherStyleSchema);
+
+
+############################################################
 ### FICHIER: server/server.js
 ############################################################
 
@@ -5105,40 +5029,107 @@ const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
 const express = require('express');
 const mongoose = require('mongoose');
+const fs = require('fs');
+
 const app = express();
 const port = process.env.PORT || 3000;
-
-console.log("------------------------------------------------");
-console.log("🚑 DÉMARRAGE DU SERVEUR CONDAMINE...");
 
 // 1. Connexion BDD
 mongoose.connect(process.env.MONGODB_URI)
     .then(() => console.log('✅ BDD Connectée.'))
     .catch(err => console.error("❌ Erreur MongoDB :", err));
 
-// 2. Middlewares
+// 2. Middlewares de base
 app.use(express.json());
-app.use(express.static(path.join(__dirname, '..', 'public')));
 
-// 3. Modèles
+// 3. Import des Modèles (Doivent être chargés avant les routes)
 require('./models/Player');
 require('./models/Chapter');
 require('./models/Homework');
 require('./models/GameLevel');
 require('./models/Bug');
 require('./models/Submission');
+require('./models/TeacherStyle');
+require('./models/ScanSession');
 
-// 4. Montage des Routes API (Ordre Strict)
-// Chaque route doit être préfixée par /api
+// 4. Déclaration des Routes API (AVANT le frontend)
 app.use('/api', require('./features/auth/auth.routes'));
 app.use('/api', require('./features/eleve/eleve.routes'));
 app.use('/api', require('./features/prof/prof.routes'));
 app.use('/api', require('./features/game/game.routes'));
-app.use('/api', require('./features/prof/automation.routes')); // <--- Branchement crucial
+app.use('/api', require('./features/prof/automation.routes'));
+
+// 5. Route de test immédiate
+app.get('/api/scans-ping', (req, res) => res.json({ status: "ok", message: "API accessible" }));
+
+// 6. Gestion du Frontend (APRÈS les routes API)
+const distPath = path.join(process.cwd(), 'client', 'dist');
+if (fs.existsSync(distPath)) {
+    console.log("📦 Mode Production : Dossier 'dist' détecté.");
+    app.use(express.static(distPath));
+    app.get('*', (req, res) => {
+        // Si la requête commence par /api mais n'a pas été captée avant, c'est une 404
+        if (req.path.startsWith('/api')) return res.status(404).json({ error: "Route API introuvable" });
+        res.sendFile(path.join(distPath, 'index.html'));
+    });
+} else {
+    console.log("⚠️ Mode Développement : Le serveur API répond uniquement sur /api");
+    app.get('/', (req, res) => res.send("Serveur API Condamine actif. Utilisez le port 5173 pour le frontend."));
+}
 
 app.listen(port, () => {
-    console.log(`🚀 SERVEUR PRÊT : http://localhost:${port}`);
+    console.log(`🚀 SERVEUR NODE PRÊT : http://127.0.0.1:${port}`);
 });
+
+
+############################################################
+### FICHIER: server/services/drive.service.js
+############################################################
+
+const { google } = require('googleapis');
+
+const auth = new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    process.env.GOOGLE_REDIRECT_URI
+);
+auth.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
+const drive = google.drive({ version: 'v3', auth });
+
+const DriveService = {
+    getOrCreateFolder: async (name, parentId = null) => {
+        try {
+            let query = `name = '${name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
+            if (parentId) query += ` and '${parentId}' in parents`;
+
+            const res = await drive.files.list({ q: query, fields: 'files(id, name)' });
+            if (res.data.files.length > 0) return res.data.files[0].id;
+
+            const fileMetadata = {
+                name: name,
+                mimeType: 'application/vnd.google-apps.folder',
+                parents: parentId ? [parentId] : []
+            };
+            const folder = await drive.files.create({ resource: fileMetadata, fields: 'id' });
+            return folder.data.id;
+        } catch (e) {
+            console.error(`❌ Erreur Dossier ${name}:`, e.message);
+            return null;
+        }
+    },
+
+    // Crée la structure : [Nom Classe] > PRODUCTIONS
+    initClassStructure: async (className) => {
+        const classId = await DriveService.getOrCreateFolder(className);
+        if (classId) {
+            const productionsId = await DriveService.getOrCreateFolder("PRODUCTIONS", classId);
+            return { classId, productionsId };
+        }
+        return null;
+    }
+};
+
+module.exports = DriveService;
 
 
 ############################################################
