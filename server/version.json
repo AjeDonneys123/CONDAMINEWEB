@@ -1,5 +1,5 @@
 {
-  "build": 24,
-  "message": "Renommage 'Devoir' -> 'Production' + Fix interface blanche",
-  "timestamp": "10/01/2026 12:18:00"
+  "build": 25,
+  "message": "Standardisation 'Production' + Filtrage de classe intelligent + Correction visibilité",
+  "timestamp": "10/01/2026 12:35:00"
 }
