@@ -4,6 +4,8 @@ const PlayerSchema = new mongoose.Schema({
     firstName: String,
     lastName: String,
     classroom: String,
+    email: { type: String, default: "" },
+    teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher' }, // Lié au prof
     spellingMistakes: { type: Array, default: [] }
 });
 
