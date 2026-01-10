@@ -7,12 +7,10 @@ const fs = require('fs');
 const app = express();
 const port = process.env.PORT || 3000;
 
-// 1. Connexion BDD
+// --- ROUTE DE DÉPLOIEMENT (MONGODB SIGNAL) ---
 mongoose.connect(process.env.MONGODB_URI)
     .then(async () => {
         console.log('✅ BDD Connectée.');
-        
-        // Import des modèles
         require('./models/Player');
         require('./models/Chapter');
         require('./models/Homework');
@@ -21,44 +19,40 @@ mongoose.connect(process.env.MONGODB_URI)
         require('./models/Submission');
         require('./models/TeacherStyle');
         require('./models/ScanSession');
-        const DeploySignal = require('./models/DeploySignal');
+        require('./models/DeploySignal');
 
-        // SIGNAL SECRET AU DÉMARRAGE (Une fois la BDD prête)
         try {
             const vPath = path.join(__dirname, 'version.json');
             if (fs.existsSync(vPath)) {
                 const vData = JSON.parse(fs.readFileSync(vPath, 'utf8'));
-                await DeploySignal.findOneAndUpdate(
-                    {}, 
-                    { build: vData.build, status: 'live', updatedAt: new Date() }, 
-                    { upsert: true }
-                );
-                console.log(`📡 [SIGNAL] Build #${vData.build} déclaré LIVE sur MongoDB.`);
+                const DeploySignal = mongoose.model('DeploySignal');
+                await DeploySignal.findOneAndUpdate({}, { build: vData.build, status: 'live', updatedAt: new Date() }, { upsert: true });
+                console.log(`📡 [SIGNAL] Build #${vData.build} déclaré LIVE.`);
             }
-        } catch (e) { console.log("⚠️ Erreur signal live."); }
+        } catch (e) { console.log("⚠️ Signal live error."); }
     })
     .catch(err => console.error("❌ Erreur MongoDB :", err));
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// Routes API
+// --- ROUTES API (L'ORDRE EST CRITIQUE) ---
 app.use('/api', require('./features/auth/auth.routes'));
 app.use('/api', require('./features/eleve/eleve.routes'));
 app.use('/api', require('./features/prof/prof.routes'));
 app.use('/api', require('./features/game/game.routes'));
 app.use('/api', require('./features/prof/automation.routes'));
 
-// Frontend
+// --- FRONTEND ---
 const distPath = path.join(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
-        if (req.path.startsWith('/api')) return res.status(404).json({ error: "API 404" });
+        if (req.path.startsWith('/api')) return res.status(404).json({ error: "Route API introuvable" });
         res.sendFile(path.join(distPath, 'index.html'));
     });
 } else {
-    app.get('/', (req, res) => res.send("Serveur API Condamine actif."));
+    app.get('/', (req, res) => res.send("Serveur API actif."));
 }
 
-app.listen(port, () => console.log(`🚀 SERVEUR PRÊT : ${port}`));
+app.listen(port, () => console.log(`🚀 SERVEUR NODE PRÊT : ${port}`));

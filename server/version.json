@@ -1,5 +1,5 @@
 {
-  "build": 27,
-  "message": "Fix 404 API Routes + Stable 1Travaux Sync + Individual Deletion",
-  "timestamp": "10/01/2026 12:48:00"
+  "build": 28,
+  "message": "Fix Server Crash + Intégration HUD Console (Logs sur l'écran)",
+  "timestamp": "10/01/2026 12:55:00"
 }
