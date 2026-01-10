@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "scripts": {
     "start": "node server/server.js",
-    "server-dev": "nodemon server/server.js",
+    "server-dev": "nodemon --ignore 'server/version.json' --ignore 'update.txt' --ignore 'history.txt' server/server.js",
     "client": "npm run dev --prefix client",
     "apply": "node apply.js",
     "git-auto": "node git-auto.js",
