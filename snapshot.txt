@@ -1,6 +1,4 @@
-STRUCTURE DU PROJET
-============================================================
-@@@     ARBORESSENCE  @@@
+STRUCTURE
 ├── client/
 │   ├── public/
 │   │   └── vite.svg
@@ -127,21 +125,15 @@ STRUCTURE DU PROJET
 ├── INSTRUCTIONS_OAUTH.md
 ├── LOCKED_FILES.md
 ├── package.json
-├── projectMap.txt
 └── snap.js
-@@@     FIN DE L ARBORESCENCE  @@@
 
-CODE SOURCE COMPLET
-============================================================
 
+CODE
 
 ############################################################
 ### FICHIER: .env
 ############################################################
 
-### [SÉCURITÉ] CONTENU MASQUÉ ###
-# Ce fichier contient des clés API réelles.
-# Ne pas partager son contenu réel.
 MONGODB_URI=*****
 GEMINI_API_KEY=*****
 
@@ -154,7 +146,6 @@ GEMINI_API_KEY=*****
 
 le projet utilise Gemini 2.0 FLASH
 le projet utilise le fichier update.txt tu dois générer des grands fichiers txt qui peuvent se snipette en une fois et qui obéisse a cette convention  [[[ FILE: chemin ]]] plus d informations dans apply.js
-
 
 ############################################################
 ### FICHIER: INSTRUCTIONS_OAUTH.md
@@ -210,7 +201,6 @@ le projet utilise le fichier update.txt tu dois générer des grands fichiers tx
 // 4) Si tu veux le token pour le compte condamine et que tu n'y as pas accès, demande à l'admin
 //    d'exécuter le même flow (ou de te fournir le refresh token en dehors de ce chat).
 
-
 ############################################################
 ### FICHIER: LOCKED_FILES.md
 ############################################################
@@ -236,7 +226,6 @@ Ces fichiers sont stables et fonctionnels. NE PAS MODIFIER SANS ORDRE EXPLICITE.
 
 ---
 *Dernière mise à jour : Version Stable V11*
-
 
 ############################################################
 ### FICHIER: apply.js
@@ -358,7 +347,6 @@ function applyUpdate() {
 // Watcher toutes les secondes
 setInterval(applyUpdate, 1000);
 
-
 ############################################################
 ### FICHIER: client/README.md
 ############################################################
@@ -371,7 +359,6 @@ Currently, two official plugins are available:
 
 - [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
 - [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
 
 
 ############################################################
@@ -391,7 +378,6 @@ Currently, two official plugins are available:
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
-
 
 
 ############################################################
@@ -429,7 +415,6 @@ Currently, two official plugins are available:
     "vite": "^4.4.5"
   }
 }
-
 
 ############################################################
 ### FICHIER: client/src/App.css
@@ -500,7 +485,6 @@ Currently, two official plugins are available:
 .btn-bug-cancel { flex: 1; font-weight: 800; color: #94a3b8; text-transform: uppercase; font-size: 0.75rem; background: none; border: none; cursor: pointer; }
 .btn-bug-send { flex: 2; background: #7c3aed; color: white; padding: 1rem; border-radius: 20px; font-weight: 900; box-shadow: 0 10px 15px rgba(124, 58, 237, 0.3); border: none; cursor: pointer; }
 
-
 ############################################################
 ### FICHIER: client/src/App.jsx
 ############################################################
@@ -566,7 +550,6 @@ export default function App() {
     </div>
   );
 }
-
 
 ############################################################
 ### FICHIER: client/src/features/auth/Login.css
@@ -662,7 +645,6 @@ export default function App() {
     transform: none;
 }
 
-
 ############################################################
 ### FICHIER: client/src/features/auth/Login.jsx
 ############################################################
@@ -730,7 +712,6 @@ export default function Login({ onLoginSuccess }) {
   );
 }
 
-
 ############################################################
 ### FICHIER: client/src/features/eleve/ElevePage.css
 ############################################################
@@ -756,7 +737,6 @@ export default function Login({ onLoginSuccess }) {
     from { opacity: 0; transform: translateY(10px); }
     to { opacity: 1; transform: translateY(0); }
 }
-
 
 ############################################################
 ### FICHIER: client/src/features/eleve/ElevePage.jsx
@@ -790,7 +770,6 @@ export default function ElevePage({ user, onLogout, onBackToProf, onOpenBug }) {
     </div>
   );
 }
-
 
 ############################################################
 ### FICHIER: client/src/features/eleve/components/DashboardFolder.jsx
@@ -890,7 +869,6 @@ export default function DashboardFolder({ items, chapters, type, onSelect }) {
     </div>
   );
 }
-
 
 ############################################################
 ### FICHIER: client/src/features/eleve/components/EleveHeader.css
@@ -1004,7 +982,6 @@ export default function DashboardFolder({ items, chapters, type, onSelect }) {
     box-shadow: 0 4px 12px rgba(219, 39, 119, 0.3);
 }
 
-
 ############################################################
 ### FICHIER: client/src/features/eleve/components/EleveHeader.jsx
 ############################################################
@@ -1036,7 +1013,6 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
     </div>
   );
 }
-
 
 ############################################################
 ### FICHIER: client/src/features/eleve/games/GamesGrid.css
@@ -1138,7 +1114,6 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
     color: white;
 }
 
-
 ############################################################
 ### FICHIER: client/src/features/eleve/games/GamesGrid.jsx
 ############################################################
@@ -1229,7 +1204,6 @@ export default function GamesGrid({ user }) {
     </div>
   );
 }
-
 
 ############################################################
 ### FICHIER: client/src/features/eleve/games/mainGames.js
@@ -1360,7 +1334,6 @@ export class GameProgression {
     getLives() { return this.lives; }
 }
 
-
 ############################################################
 ### FICHIER: client/src/features/eleve/games/starship/StarshipWrapper.jsx
 ############################################################
@@ -1405,7 +1378,6 @@ export default function StarshipWrapper({ user, level, onClose }) {
         </div>
     );
 }
-
 
 ############################################################
 ### FICHIER: client/src/features/eleve/games/starship/starship_core.js
@@ -1729,7 +1701,6 @@ export function initStarshipGame(rootElement, apiData, onExit) {
     return { destroy };
 }
 
-
 ############################################################
 ### FICHIER: client/src/features/eleve/games/starship/starship_style.css
 ############################################################
@@ -1794,7 +1765,6 @@ export function initStarshipGame(rootElement, apiData, onExit) {
 .s-overlay { position: absolute; inset: 0; background: rgba(2,6,23,0.95); display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 100; text-align: center; }
 .s-overlay h2 { font-size: 4rem; margin: 0; color: #3b82f6; }
 .s-btn-restart { margin-top: 30px; padding: 15px 50px; background: #3b82f6; color: white; border: none; border-radius: 30px; font-weight: 900; font-size: 1.2rem; cursor: pointer; }
-
 
 ############################################################
 ### FICHIER: client/src/features/eleve/games/zombie/ZombieGame.css
@@ -1934,7 +1904,6 @@ export function initStarshipGame(rootElement, apiData, onExit) {
 .fb-error { border-color: #ef4444 !important; color: #991b1b; }
 
 @keyframes popIn { from { transform: translate(-50%, -50%) scale(0.8); opacity:0; } to { transform: translate(-50%, -50%) scale(1); opacity:1; } }
-
 
 ############################################################
 ### FICHIER: client/src/features/eleve/games/zombie/ZombieGame.js
@@ -2195,7 +2164,6 @@ export class ZombieGame {
     }
 }
 
-
 ############################################################
 ### FICHIER: client/src/features/eleve/games/zombie/ZombieWrapper.jsx
 ############################################################
@@ -2240,7 +2208,6 @@ export default function ZombieWrapper({ user, level, onClose }) {
         </div>
     );
 }
-
 
 ############################################################
 ### FICHIER: client/src/features/eleve/games/zombie/zombie_core.js
@@ -2417,7 +2384,6 @@ export function initZombieGame(rootElement, apiData, onExit) {
     return { destroy };
 }
 
-
 ############################################################
 ### FICHIER: client/src/features/eleve/games/zombie/zombie_style.css
 ############################################################
@@ -2539,7 +2505,6 @@ export function initZombieGame(rootElement, apiData, onExit) {
 .z-overlay h2 { font-size: 4rem; margin: 0; }
 .z-btn-restart { margin-top: 30px; padding: 15px 50px; background: #2563eb; color: white; border: none; border-radius: 30px; font-weight: 900; font-size: 1.2rem; cursor: pointer; }
 
-
 ############################################################
 ### FICHIER: client/src/features/eleve/homework/Homework.css
 ############################################################
@@ -2626,7 +2591,6 @@ export function initZombieGame(rootElement, apiData, onExit) {
 .nav-arrows-container { position: absolute; top: 50%; left: 0; right: 0; transform: translateY(-50%); display: flex; justify-content: space-between; padding: 0 20px; z-index: 50; pointer-events: none; }
 .nav-arrow-btn { pointer-events: auto; width: 50px; height: 50px; background: rgba(255, 255, 255, 0.2); backdrop-filter: blur(10px); border: 2px solid rgba(255, 255, 255, 0.5); border-radius: 50%; color: white; font-size: 1.5rem; font-weight: 900; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 
-
 ############################################################
 ### FICHIER: client/src/features/eleve/homework/HomeworkList.jsx
 ############################################################
@@ -2697,7 +2661,6 @@ export default function HomeworkList({ user }) {
     </div>
   );
 }
-
 
 ############################################################
 ### FICHIER: client/src/features/eleve/homework/HomeworkWorkspace.jsx
@@ -2842,7 +2805,6 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
   );
 }
 
-
 ############################################################
 ### FICHIER: client/src/features/eleve/mistakes/MistakesBook.jsx
 ############################################################
@@ -2890,7 +2852,6 @@ export default function MistakesBook({ user }) {
   );
 }
 
-
 ############################################################
 ### FICHIER: client/src/features/eleve/productions/ProductionsList.jsx
 ############################################################
@@ -2933,7 +2894,6 @@ export default function ProductionsList({ user }) {
     );
 }
 
-
 ############################################################
 ### FICHIER: client/src/features/prof/Prof.css
 ############################################################
@@ -2964,7 +2924,6 @@ export default function ProductionsList({ user }) {
 .studio-btn:hover {
     transform: translateY(-4px) scale(1.01);
 }
-
 
 ############################################################
 ### FICHIER: client/src/features/prof/ProfPage.css
@@ -3000,7 +2959,6 @@ export default function ProductionsList({ user }) {
     }
 }
 
-
 ############################################################
 ### FICHIER: client/src/features/prof/ProfPage.jsx
 ############################################################
@@ -3032,7 +2990,6 @@ export default function ProfPage({ user, onLogout }) {
   );
 }
 
-
 ############################################################
 ### FICHIER: client/src/features/prof/activities/ActivityStudio.css
 ############################################################
@@ -3042,7 +2999,6 @@ export default function ProfPage({ user, onLogout }) {
 .subject-H { border-left: 10px solid #ef4444; }
 .subject-G { border-left: 10px solid #3b82f6; }
 .subject-E { border-left: 10px solid #22c55e; }
-
 
 ############################################################
 ### FICHIER: client/src/features/prof/activities/ActivityStudio.jsx
@@ -3134,7 +3090,6 @@ export default function ActivityStudio() {
     );
 }
 
-
 ############################################################
 ### FICHIER: client/src/features/prof/chapters/ChapterManager.jsx
 ############################################################
@@ -3191,7 +3146,6 @@ export default function ChapterManager() {
         </div>
     );
 }
-
 
 ############################################################
 ### FICHIER: client/src/features/prof/components/ProfHeader.jsx
@@ -3252,7 +3206,6 @@ export default function ProfHeader({ user, onLogout }) {
   );
 }
 
-
 ############################################################
 ### FICHIER: client/src/features/prof/components/ProfNav.jsx
 ############################################################
@@ -3286,7 +3239,6 @@ export default function ProfNav({ activeTab, onTabChange }) {
     </div>
   );
 }
-
 
 ############################################################
 ### FICHIER: client/src/features/prof/components/ProfStudioFolder.jsx
@@ -3422,7 +3374,6 @@ export default function ProfStudioFolder({
     );
 }
 
-
 ############################################################
 ### FICHIER: client/src/features/prof/games/GameStudio.css
 ############################################################
@@ -3492,7 +3443,6 @@ export default function ProfStudioFolder({
     margin-bottom: 1.2rem;
     letter-spacing: 2px;
 }
-
 
 ############################################################
 ### FICHIER: client/src/features/prof/games/GameStudio.jsx
@@ -3609,7 +3559,6 @@ export default function GameStudio({ initialData, chapters, classFilter, onClose
   );
 }
 
-
 ############################################################
 ### FICHIER: client/src/features/prof/homework/HomeworkResults.css
 ############################################################
@@ -3659,7 +3608,6 @@ export default function GameStudio({ initialData, chapters, classFilter, onClose
 
 .empty-placeholder { padding: 5rem; text-align: center; color: #cbd5e1; background: #f8fafc; border-radius: 40px; border: 3px border-dashed #eee; }
 .icon-large { font-size: 4rem; display: block; margin-bottom: 1rem; opacity: 0.3; }
-
 
 ############################################################
 ### FICHIER: client/src/features/prof/homework/HomeworkResults.jsx
@@ -3798,7 +3746,6 @@ export default function HomeworkResults({ homework, onBack }) {
   );
 }
 
-
 ############################################################
 ### FICHIER: client/src/features/prof/homework/HomeworkStudio.css
 ############################################################
@@ -3899,7 +3846,6 @@ export default function HomeworkResults({ homework, onBack }) {
     box-shadow: 0 10px 20px rgba(249, 115, 22, 0.2);
     cursor: pointer;
 }
-
 
 ############################################################
 ### FICHIER: client/src/features/prof/homework/HomeworkStudio.jsx
@@ -4067,7 +4013,6 @@ export default function HomeworkStudio({ initialData, chapters, onClose }) {
     </div>
   );
 }
-
 
 ############################################################
 ### FICHIER: client/src/features/prof/scans/ScansStudio.jsx
@@ -4290,7 +4235,6 @@ function PilotArea({ currentSession, tab, onClose, onRefresh }) {
     );
 }
 
-
 ############################################################
 ### FICHIER: client/src/features/prof/students/StudentsManager.css
 ############################################################
@@ -4364,7 +4308,6 @@ function PilotArea({ currentSession, tab, onClose, onRefresh }) {
 
 .students-table { width: 100%; border-collapse: collapse; }
 .students-table th { text-align: left; padding: 1rem; color: #94a3b8; font-size: 0.7rem; text-transform: uppercase; font-weight: 900; }
-
 
 ############################################################
 ### FICHIER: client/src/features/prof/students/StudentsManager.jsx
@@ -4468,7 +4411,6 @@ export default function StudentsManager() {
   );
 }
 
-
 ############################################################
 ### FICHIER: client/src/index.css
 ############################################################
@@ -4496,7 +4438,6 @@ body {
 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
 
-
 ############################################################
 ### FICHIER: client/src/main.jsx
 ############################################################
@@ -4511,7 +4452,6 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <App />
   </React.StrictMode>,
 )
-
 
 ############################################################
 ### FICHIER: client/src/services/api.js
@@ -4566,7 +4506,6 @@ export const api = {
     }
 };
 
-
 ############################################################
 ### FICHIER: client/vite.config.js
 ############################################################
@@ -4589,7 +4528,6 @@ export default defineConfig({
     }
   }
 })
-
 
 ############################################################
 ### FICHIER: git-auto.js
@@ -4680,7 +4618,6 @@ async function start() {
 
 start().catch(err => console.error("❌ Erreur Git-Auto:", err));
 
-
 ############################################################
 ### FICHIER: init-db.js
 ############################################################
@@ -4746,7 +4683,6 @@ async function initializeDatabase() {
 }
 initializeDatabase();
 
-
 ############################################################
 ### FICHIER: package.json
 ############################################################
@@ -4781,7 +4717,6 @@ initializeDatabase();
     "nodemon": "^3.1.0"
   }
 }
-
 
 ############################################################
 ### FICHIER: public/style.css
@@ -4840,7 +4775,6 @@ header h1 { font-size: 1.3rem; color: var(--primary); margin: 0; }
 .right-word { color: var(--success); font-weight: bold; }
 .correction-table { width: 100%; border-collapse: collapse; margin-top: 10px; background: white; border-radius: 10px; overflow: hidden; }
 .correction-table td { padding: 8px; border-bottom: 1px solid #eee; }
-
 
 ############################################################
 ### FICHIER: server/features/auth/auth.routes.js
@@ -4915,7 +4849,6 @@ router.post('/register', async (req, res) => {
 
 module.exports = router;
 
-
 ############################################################
 ### FICHIER: server/features/eleve/eleve.routes.js
 ############################################################
@@ -4950,7 +4883,6 @@ router.get('/player-mistakes/:id', async (req, res) => {
 });
 
 module.exports = router;
-
 
 ############################################################
 ### FICHIER: server/features/game/game.routes.js
@@ -5052,7 +4984,6 @@ router.delete('/game-levels/:id', async (req, res) => {
 });
 
 module.exports = router;
-
 
 ############################################################
 ### FICHIER: server/features/prof/automation.routes.js
@@ -5192,7 +5123,6 @@ router.get('/player-productions/:playerId', async (req, res) => {
 
 module.exports = router;
 
-
 ############################################################
 ### FICHIER: server/features/prof/prof.routes.js
 ############################################################
@@ -5243,7 +5173,6 @@ router.get('/homework-all', async (req, res) => {
 
 module.exports = router;
 
-
 ############################################################
 ### FICHIER: server/models/Bug.js
 ############################################################
@@ -5258,7 +5187,6 @@ const BugSchema = new mongoose.Schema({
 });
 
 module.exports = mongoose.model('Bug', BugSchema);
-
 
 ############################################################
 ### FICHIER: server/models/Chapter.js
@@ -5275,7 +5203,6 @@ const ChapterSchema = new mongoose.Schema({
 
 module.exports = mongoose.model('Chapter', ChapterSchema);
 
-
 ############################################################
 ### FICHIER: server/models/DeploySignal.js
 ############################################################
@@ -5290,7 +5217,6 @@ const DeploySignalSchema = new mongoose.Schema({
 
 // On force le nom 'deploysignals' (sans majuscule, au pluriel)
 module.exports = mongoose.models.DeploySignal || mongoose.model('DeploySignal', DeploySignalSchema, 'deploysignals');
-
 
 ############################################################
 ### FICHIER: server/models/GameLevel.js
@@ -5307,7 +5233,6 @@ const GameLevelSchema = new mongoose.Schema({
 });
 
 module.exports = mongoose.model('GameLevel', GameLevelSchema);
-
 
 ############################################################
 ### FICHIER: server/models/Homework.js
@@ -5327,7 +5252,6 @@ const HomeworkSchema = new mongoose.Schema({
 
 module.exports = mongoose.model('Homework', HomeworkSchema);
 
-
 ############################################################
 ### FICHIER: server/models/Player.js
 ############################################################
@@ -5342,7 +5266,6 @@ const PlayerSchema = new mongoose.Schema({
 });
 
 module.exports = mongoose.model('Player', PlayerSchema);
-
 
 ############################################################
 ### FICHIER: server/models/ScanSession.js
@@ -5362,7 +5285,6 @@ const ScanSessionSchema = new mongoose.Schema({
 
 module.exports = mongoose.models.ScanSession || mongoose.model('ScanSession', ScanSessionSchema);
 
-
 ############################################################
 ### FICHIER: server/models/Submission.js
 ############################################################
@@ -5381,7 +5303,6 @@ const SubmissionSchema = new mongoose.Schema({
 });
 
 module.exports = mongoose.model('Submission', SubmissionSchema);
-
 
 ############################################################
 ### FICHIER: server/models/TeacherStyle.js
@@ -5412,7 +5333,6 @@ const TeacherStyleSchema = new mongoose.Schema({
 });
 
 module.exports = mongoose.model('TeacherStyle', TeacherStyleSchema);
-
 
 ############################################################
 ### FICHIER: server/server.js
@@ -5482,7 +5402,6 @@ if (fs.existsSync(distPath)) {
 }
 
 app.listen(port, () => console.log(`🚀 SERVEUR PRÊT : ${port}`));
-
 
 ############################################################
 ### FICHIER: server/services/drive.service.js
@@ -5582,16 +5501,14 @@ const DriveService = {
 
 module.exports = DriveService;
 
-
 ############################################################
 ### FICHIER: server/version.json
 ############################################################
 
 {
-  "build": 17,
-  "timestamp": "10/01/2026 11:24:32"
+  "build": 18,
+  "timestamp": "10/01/2026 11:35:40"
 }
-
 
 ############################################################
 ### FICHIER: snap.js
@@ -5599,6 +5516,7 @@ module.exports = DriveService;
 
 const fs = require('fs');
 const path = require('path');
+require('dotenv').config();
 
 const OUTPUT_FILENAME = 'snapshot.txt';
 const MAP_FILENAME = 'projectMap.txt';
@@ -5606,24 +5524,17 @@ const MAP_FILENAME = 'projectMap.txt';
 const IGNORE_LIST = [
     'node_modules', '.git', 'dist', '.vscode', '.DS_Store', 
     'package-lock.json', 'snapshot.txt', 'PROJET_BACKUP.zip',
-    'PROJET_POUR_IA.txt', 'PROJET_SNAPSHOT.txt', 'SNAPSHOT_CODE.txt', 'SNAPSHOT_FULL.txt',
-    'history.txt', 'update.txt'
+    'history.txt', 'update.txt', 'projectMap.txt'
 ];
 const EXTENSIONS = ['.js', '.jsx', '.css', '.html', '.json', '.env', '.md'];
 
-// Balises pour la structure
-const START_TAG = "@@@     ARBORESSENCE  @@@";
-const END_TAG = "@@@     FIN DE L ARBORESCENCE  @@@";
-
 /**
- * Génère l'arborescence visuelle du projet
+ * 1. Génère l'arborescence standard
  */
 function buildTree(dir, prefix = '') {
     let structure = '';
     try {
         const items = fs.readdirSync(dir).filter(item => !IGNORE_LIST.includes(item));
-        
-        // On trie : Dossiers d'abord, puis fichiers
         items.sort((a, b) => {
             const aIsDir = fs.statSync(path.join(dir, a)).isDirectory();
             const bIsDir = fs.statSync(path.join(dir, b)).isDirectory();
@@ -5631,26 +5542,20 @@ function buildTree(dir, prefix = '') {
             if (!aIsDir && bIsDir) return 1;
             return a.localeCompare(b);
         });
-
         items.forEach((item, index) => {
             const isLast = index === items.length - 1;
             const fullPath = path.join(dir, item);
             let isDir = false;
             try { isDir = fs.statSync(fullPath).isDirectory(); } catch(e) {}
-            
             structure += prefix + (isLast ? '└── ' : '├── ') + item + (isDir ? '/' : '') + '\n';
-            if (isDir) {
-                structure += buildTree(fullPath, prefix + (isLast ? '    ' : '│   '));
-            }
+            if (isDir) structure += buildTree(fullPath, prefix + (isLast ? '    ' : '│   '));
         });
-    } catch (e) {
-        structure += prefix + "!!! Erreur de lecture !!!\n";
-    }
+    } catch (e) { structure += prefix + "!!! Erreur !!!\n"; }
     return structure;
 }
 
 /**
- * Capture le contenu de tous les fichiers sources
+ * 2. Capture le contenu des fichiers
  */
 function captureContent(dir, baseDir = "") {
     let content = "";
@@ -5660,30 +5565,18 @@ function captureContent(dir, baseDir = "") {
             const fullPath = path.join(dir, item);
             const relativePath = path.join(baseDir, item);
             const stats = fs.statSync(fullPath);
-
             if (stats.isDirectory()) {
                 content += captureContent(fullPath, relativePath);
             } else {
                 const ext = path.extname(item).toLowerCase();
-                
                 if (EXTENSIONS.includes(ext) || item === '.env') {
-                    content += "\n" + "#".repeat(60) + "\n";
-                    content += "### FICHIER: " + relativePath + "\n";
-                    content += "#".repeat(60) + "\n\n";
-
+                    content += "\n############################################################\n";
+                    content += `### FICHIER: ${relativePath}\n`;
+                    content += "############################################################\n\n";
                     if (item === '.env') {
-                        content += "### [SÉCURITÉ] CONTENU MASQUÉ ###\n";
-                        content += "# Ce fichier contient des clés API réelles.\n";
-                        content += "# Ne pas partager son contenu réel.\n";
-                        content += "MONGODB_URI=*****\n";
-                        content += "GEMINI_API_KEY=*****\n\n";
+                        content += "MONGODB_URI=*****\nGEMINI_API_KEY=*****\n\n";
                     } else {
-                        try {
-                            const data = fs.readFileSync(fullPath, 'utf8');
-                            content += data + "\n\n";
-                        } catch (e) {
-                            content += "!!! ERREUR DE LECTURE DU FICHIER !!!\n\n";
-                        }
+                        content += fs.readFileSync(fullPath, 'utf8') + "\n";
                     }
                 }
             }
@@ -5693,54 +5586,56 @@ function captureContent(dir, baseDir = "") {
 }
 
 /**
- * Met à jour le fichier projectMap.txt séparément
+ * 3. Demande à l'IA de générer la Project Map enrichie
  */
-function updateProjectMap(tree) {
-    if (!fs.existsSync(MAP_FILENAME)) {
-        fs.writeFileSync(MAP_FILENAME, `${START_TAG}\n${tree}\n${END_TAG}\n\n==Project MAP==\n(Généré automatiquement)`);
-        return;
-    }
+async function generateAIPage(snapshotContent) {
+    console.log("🧠 [IA] Analyse du projet pour enrichir la map...");
+    const fetch = (await import('node-fetch')).default;
 
-    let content = fs.readFileSync(MAP_FILENAME, 'utf8');
-    const startIndex = content.indexOf(START_TAG);
-    const endIndex = content.indexOf(END_TAG);
+    const prompt = `
+    Tu es un architecte logiciel expert. Voici le code source complet de mon projet.
+    
+    TON TRAVAIL :
+    1. Produis une arborescence ASCII (style tree).
+    2. SOUS CHAQUE FICHIER dans l'arbre, ajoute exactement 2 lignes de résumé commençant par ">" expliquant son rôle technique et fonctionnel.
+    3. En dessous de l'arbre, fais une section "INDEX DÉTAILLÉ" listant chaque fichier avec une explication plus longue (4-5 lignes).
 
-    if (startIndex !== -1 && endIndex !== -1) {
-        const before = content.substring(0, startIndex + START_TAG.length);
-        const after = content.substring(endIndex);
-        const newContent = before + "\n" + tree + after;
-        fs.writeFileSync(MAP_FILENAME, newContent);
+    CODE SOURCE :
+    ${snapshotContent}
+    `;
+
+    try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${process.env.GEMINI_API_KEY}`;
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+        });
+        const data = await response.json();
+        return data.candidates[0].content.parts[0].text;
+    } catch (e) {
+        console.error("❌ Erreur Gemini:", e.message);
+        return "Erreur lors de la génération de la map par l'IA.";
     }
 }
 
 /**
- * Exécute le scan complet
+ * 4. Lancement
  */
-function run() {
-    console.log("📸 Démarrage du snapshot complet...");
-    
-    // 1. Générer l'arborescence
+async function run() {
+    console.log("📸 [1/3] Création du snapshot local...");
     const tree = buildTree(__dirname);
-    
-    // 2. Mettre à jour la map séparée
-    updateProjectMap(tree);
+    const code = captureContent(__dirname);
+    const fullSnapshot = `STRUCTURE\n${tree}\n\nCODE\n${code}`;
+    fs.writeFileSync(OUTPUT_FILENAME, fullSnapshot);
 
-    // 3. Construire le contenu final pour snapshot.txt
-    let output = "STRUCTURE DU PROJET\n";
-    output += "=".repeat(60) + "\n";
-    output += START_TAG + "\n";
-    output += tree;
-    output += END_TAG + "\n\n";
-    
-    output += "CODE SOURCE COMPLET\n";
-    output += "=".repeat(60) + "\n\n";
-    output += captureContent(__dirname);
-    
-    // 4. Écrire le fichier final
-    fs.writeFileSync(OUTPUT_FILENAME, output);
-    
-    console.log(`✅ ${OUTPUT_FILENAME} généré avec l'arborescence en haut.`);
+    console.log("🌐 [2/3] Envoi à l'IA pour documentation...");
+    const aiMap = await generateAIPage(fullSnapshot);
+
+    console.log("📝 [3/3] Écriture de projectMap.txt...");
+    fs.writeFileSync(MAP_FILENAME, aiMap);
+
+    console.log(`✅ Terminé ! snapshot.txt est prêt et projectMap.txt a été enrichi par l'IA.`);
 }
 
 run();
-
