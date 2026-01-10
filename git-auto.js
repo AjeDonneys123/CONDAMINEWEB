@@ -18,7 +18,6 @@ async function start() {
     console.log("🚀 [GIT-AUTO] Build System V8 (Messages explicites) prêt.");
 
     let isLocked = false;
-    let timeout = null;
 
     function checkDatabaseSignal(targetBuild) {
         const interval = setInterval(async () => {
@@ -42,16 +41,16 @@ async function start() {
         isLocked = true;
 
         let v = { build: 0, message: "Mise à jour automatique" };
-        try { v = JSON.parse(fs.readFileSync(versionPath, 'utf8')); } catch (e) {}
+        try { 
+            v = JSON.parse(fs.readFileSync(versionPath, 'utf8')); 
+        } catch (e) {}
         
-        // On n'incrémente plus ici, on laisse l'IA le faire dans le fichier version.json
         const commitMessage = `Build #${v.build} : ${v.message}`;
-
         console.log(`\n📦 [GIT] ${commitMessage}`);
 
         exec(`git add . && git commit -m "${commitMessage}" && git push`, (err) => {
             if (err) { console.log("ℹ️ Rien à pousser."); isLocked = false; return; }
-            console.log(`✅ GitHub OK. Déploiement du Build #${v.build} sur Render...`);
+            console.log(`✅ GitHub OK. Déploiement en cours...`);
             
             DeploySignal.findOneAndUpdate({}, { status: 'deploying', build: v.build - 1 }, { upsert: true })
                 .then(() => checkDatabaseSignal(v.build));
@@ -65,8 +64,7 @@ async function start() {
 
     watcher.on('all', (event, filePath) => {
         if (isLocked) return;
-        clearTimeout(timeout);
-        timeout = setTimeout(runGit, 10000); 
+        setTimeout(runGit, 10000); // 10s de silence avant commit
     });
 }
 
