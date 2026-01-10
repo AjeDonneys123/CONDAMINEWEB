@@ -14,13 +14,13 @@ async function start() {
     
     const DeploySignal = mongoose.model('DeploySignal', new mongoose.Schema({ build: Number, status: String, updatedAt: Date }), 'deploysignals');
 
-    console.log("🚀 [GIT-AUTO] Build System V7 (MongoDB Signal) actif.");
+    console.log("🚀 [GIT-AUTO] Build System V7 (Full Auto) actif.");
 
     let isLocked = false;
     let timeout = null;
 
     function checkDatabaseSignal(targetBuild) {
-        console.log(`\n⏳ Build #${targetBuild} envoyé. Attente du signal secret depuis Render...`);
+        console.log(`\n⏳ Build #${targetBuild} envoyé. En attente du signal LIVE de Render...`);
         
         const interval = setInterval(async () => {
             try {
@@ -28,15 +28,15 @@ async function start() {
                 if (signal && signal.build === targetBuild && signal.status === 'live') {
                     clearInterval(interval);
                     console.log("\n" + "=".repeat(60));
-                    console.log(`✨ [DÉPLOIEMENT RÉUSSI] Ton site est EN LIGNE !`);
+                    console.log(`✨ [DÉPLOIEMENT TERMINÉ] Ton site est en ligne !`);
                     console.log(`🌍 Version validée : #${targetBuild}`);
                     console.log("=".repeat(60) + "\n");
                     isLocked = false;
                 } else {
-                    process.stdout.write(`\r📡 MongoDB : Render installe la version #${targetBuild}... `);
+                    process.stdout.write(`.`); 
                 }
             } catch (e) {
-                process.stdout.write(`\r📡 MongoDB : Connexion... `);
+                process.stdout.write(`?`);
             }
         }, 4000);
     }
@@ -52,10 +52,15 @@ async function start() {
         v.timestamp = new Date().toLocaleString('fr-FR');
         fs.writeFileSync(versionPath, JSON.stringify(v, null, 2));
 
-        console.log(`\n📦 [GIT] Lancement du Build #${v.build}...`);
+        console.log(`\n📦 [GIT] Auto-Commit Build #${v.build}...`);
+
         exec(`git add . && git commit -m "Auto-Deploy #${v.build}" && git push`, (err) => {
-            if (err) { isLocked = false; return; }
-            console.log(`✅ Push réussi. Build #${v.build} en route.`);
+            if (err) {
+                console.log("ℹ️ Rien à pousser.");
+                isLocked = false;
+                return;
+            }
+            console.log(`✅ GitHub synchronisé.`);
             DeploySignal.findOneAndUpdate({}, { status: 'deploying', build: v.build }, { upsert: true })
                 .then(() => checkDatabaseSignal(v.build));
         });
@@ -70,8 +75,9 @@ async function start() {
     watcher.on('all', (event, filePath) => {
         if (isLocked || filePath.includes('version.json')) return;
         clearTimeout(timeout);
+        // On attend 10 secondes de calme (IA qui finit d'écrire) avant de commit
         timeout = setTimeout(runGit, 10000); 
     });
 }
 
-start().catch(err => console.error(err));
+start().catch(err => console.error("❌ Erreur Git-Auto:", err));

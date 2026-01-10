@@ -5,34 +5,40 @@ const DriveService = require('../../services/drive.service');
 
 const getSuffix = () => {
     const now = new Date();
-    const jj = String(now.getDate()).padStart(2, '0');
-    const mm = String(now.getMonth() + 1).padStart(2, '0');
-    return `${jj}-${mm}-26`;
+    return `${String(now.getDate()).padStart(2, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-26`;
 };
 
-// --- VOIR LES TRAVAUX D'UN ÉLÈVE ---
-router.get('/player-productions/:playerId', async (req, res) => {
+// --- SUPPRESSION SESSION (DEVOIR COMPLET) ---
+router.delete('/scan-sessions/:id', async (req, res) => {
     try {
-        const Player = mongoose.model('Player');
-        const player = await Player.findById(req.params.playerId);
-        if (!player) return res.status(404).json({ error: "Élève non trouvé" });
-        const rootName = (player.classroom === '1D' || player.classroom === '1BFI') ? '1BFI' : player.classroom;
-        const rootId = await DriveService.getOrCreateFolder(rootName);
-        const prodId = await DriveService.getOrCreateFolder("PRODUCTIONS", rootId);
-        const stdFolderId = await DriveService.getOrCreateFolder(`${player.firstName} ${player.lastName}`, prodId);
-        const files = await DriveService.listFilesInFolder(stdFolderId);
-        res.json(files || []);
-    } catch (e) { res.status(500).json([]); }
+        const ScanSession = mongoose.model('ScanSession');
+        const session = await ScanSession.findById(req.params.id);
+        
+        if (session && session.driveFolderId) {
+            // On tente la suppression Drive mais on n'attend pas de succès critique
+            await DriveService.deleteFile(session.driveFolderId);
+        }
+        
+        // Suppression BDD systématique
+        await ScanSession.findByIdAndDelete(req.params.id);
+        console.log(`✅ [BDD] Session ${req.params.id} supprimée.`);
+        res.json({ ok: true });
+    } catch (e) {
+        console.error("❌ Erreur suppression session:", e.message);
+        res.status(500).json({ ok: false, error: e.message });
+    }
 });
 
-// --- SUPPRIMER UNE PHOTO INDIVIDUELLE ---
+// --- SUPPRESSION PHOTO INDIVIDUELLE ---
 router.post('/scan-delete-photo', async (req, res) => {
     try {
         const { sessionId, type, url } = req.body;
+        // Extraction ID Drive
         const idMatch = url.match(/id=([-\w]{25,})/) || url.match(/\/d\/([-\w]{25,})/);
         if (idMatch) {
-            await DriveService.deleteFile(idMatch[1]).catch(() => {});
+            await DriveService.deleteFile(idMatch[1]);
         }
+
         const field = type === 'quest' ? { questionUrls: url } : { copyUrls: url };
         const updated = await mongoose.model('ScanSession').findByIdAndUpdate(
             sessionId, { $pull: field }, { new: true }
@@ -41,36 +47,22 @@ router.post('/scan-delete-photo', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// --- UPLOAD PHOTO VERS DRIVE ---
-router.post('/scan-upload-photo', async (req, res) => {
-    try {
-        const { sessionId, type, imageBase64 } = req.body;
-        const session = await mongoose.model('ScanSession').findById(sessionId);
-        const result = await DriveService.uploadImage(session.driveFolderId, `${type}_${Date.now()}.jpg`, imageBase64);
-        if (result && result.id) {
-            const field = type === 'quest' ? { $push: { questionUrls: result.id } } : { $push: { copyUrls: result.id } };
-            const updated = await mongoose.model('ScanSession').findByIdAndUpdate(sessionId, field, { new: true });
-            return res.json(updated);
-        }
-        res.status(500).json({ error: "Echec Drive" });
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// --- LISTE SESSIONS ---
+// --- LISTE ---
 router.get('/scan-sessions', async (req, res) => {
     try {
         const data = await mongoose.model('ScanSession').find({}).sort({ createdAt: -1 });
-        res.json(data);
+        res.json(data || []);
     } catch(e) { res.json([]); }
 });
 
-// --- CRÉATION SESSION ---
+// --- CRÉATION ---
 router.post('/scan-sessions', async (req, res) => {
     try {
         const { classroom, title } = req.body;
-        const finalTitle = title ? `${title.trim()}_${getSuffix()}` : getSuffix();
-        const rootName = (classroom === '1D' || classroom === '1BFI') ? '1BFI' : classroom;
-        const rootId = await DriveService.getOrCreateFolder(rootName);
+        const dateStr = getSuffix();
+        const finalTitle = title ? `${title.trim()}_${dateStr}` : dateStr;
+        const root = (classroom === '1D' || classroom === '1BFI') ? '1BFI' : classroom;
+        const rootId = await DriveService.getOrCreateFolder(root);
         const prodId = await DriveService.getOrCreateFolder("PRODUCTIONS", rootId);
         const hwId = await DriveService.getOrCreateFolder(finalTitle, prodId);
         const newSession = await mongoose.model('ScanSession').create({ 
@@ -85,8 +77,7 @@ router.patch('/scan-sessions/:id/rename', async (req, res) => {
     try {
         const { newPrefix } = req.body;
         const session = await mongoose.model('ScanSession').findById(req.params.id);
-        const parts = session.title.split('_');
-        const suffix = parts[parts.length - 1];
+        const suffix = session.title.split('_').pop();
         const newTitle = newPrefix ? `${newPrefix}_${suffix}` : suffix;
         if (session.driveFolderId) await DriveService.renameFolder(session.driveFolderId, newTitle);
         session.title = newTitle; await session.save();
@@ -94,19 +85,22 @@ router.patch('/scan-sessions/:id/rename', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// --- SUPPRESSION SESSION ---
-router.delete('/scan-sessions/:id', async (req, res) => {
+// --- UPLOAD ---
+router.post('/scan-upload-photo', async (req, res) => {
     try {
-        const session = await mongoose.model('ScanSession').findById(req.params.id);
-        if (session && session.driveFolderId) {
-            await DriveService.deleteFile(session.driveFolderId).catch(() => {});
+        const { sessionId, type, imageBase64 } = req.body;
+        const session = await mongoose.model('ScanSession').findById(sessionId);
+        const result = await DriveService.uploadImage(session.driveFolderId, `${type}_${Date.now()}.jpg`, imageBase64);
+        if (result && result.id) {
+            const field = type === 'quest' ? { $push: { questionUrls: result.id } } : { $push: { copyUrls: result.id } };
+            const updated = await mongoose.model('ScanSession').findByIdAndUpdate(sessionId, field, { new: true });
+            return res.json(updated);
         }
-        await mongoose.model('ScanSession').findByIdAndDelete(req.params.id);
-        res.json({ ok: true });
-    } catch (e) { res.status(500).json({ ok: false }); }
+        res.status(500).json({ error: "Echec Drive" });
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// --- CONSIGNES ---
+// --- CONSIGNES IA ---
 router.patch('/scan-sessions/:id/instructions', async (req, res) => {
     try {
         await mongoose.model('ScanSession').findByIdAndUpdate(req.params.id, { 
@@ -114,6 +108,19 @@ router.patch('/scan-sessions/:id/instructions', async (req, res) => {
         });
         res.json({ ok: true });
     } catch (e) { res.status(500).json({ ok: false }); }
+});
+
+// --- VOIR PRODUCTIONS ÉLÈVE ---
+router.get('/player-productions/:playerId', async (req, res) => {
+    try {
+        const player = await mongoose.model('Player').findById(req.params.playerId);
+        const root = (player.classroom === '1D' || player.classroom === '1BFI') ? '1BFI' : player.classroom;
+        const rootId = await DriveService.getOrCreateFolder(root);
+        const prodId = await DriveService.getOrCreateFolder("PRODUCTIONS", rootId);
+        const stdId = await DriveService.getOrCreateFolder(`${player.firstName} ${player.lastName}`, prodId);
+        const files = await DriveService.listFilesInFolder(stdId);
+        res.json(files);
+    } catch (e) { res.status(500).json([]); }
 });
 
 module.exports = router;

@@ -7,12 +7,12 @@ const auth = new google.auth.OAuth2(
     process.env.GOOGLE_REDIRECT_URI
 );
 auth.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
-
 const drive = google.drive({ version: 'v3', auth });
 
 const DriveService = {
     makePublic: async (fileId) => {
         try {
+            if (!fileId) return false;
             await drive.permissions.create({
                 fileId: fileId,
                 resource: { role: 'reader', type: 'anyone' }
@@ -23,12 +23,11 @@ const DriveService = {
 
     getOrCreateFolder: async (name, parentId = null) => {
         try {
-            let q = `name = '${name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
-            if (parentId) q += ` and '${parentId}' in parents`;
-            const res = await drive.files.list({ q: q, fields: 'files(id, name)' });
-            if (res.data.files && res.data.files.length > 0) {
-                return res.data.files[0].id;
-            }
+            let query = `name = '${name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
+            if (parentId) query += ` and '${parentId}' in parents`;
+            const res = await drive.files.list({ q: query, fields: 'files(id, name)' });
+            if (res.data.files && res.data.files.length > 0) return res.data.files[0].id;
+
             const folder = await drive.files.create({
                 resource: { name, mimeType: 'application/vnd.google-apps.folder', parents: parentId ? [parentId] : [] },
                 fields: 'id'
@@ -38,9 +37,36 @@ const DriveService = {
         } catch (e) { return null; }
     },
 
+    // SUPPRESSION SÉCURISÉE : NE CRASH JAMAIS
+    deleteFile: async (fileId) => {
+        try {
+            if (!fileId) return true;
+            await drive.files.delete({ fileId: fileId });
+            console.log(`📡 [DRIVE] Supprimé avec succès : ${fileId}`);
+            return true;
+        } catch (e) {
+            // Si le fichier n'existe déjà plus sur Drive (404), c'est une réussite pour nous
+            if (e.code === 404 || (e.response && e.response.status === 404)) {
+                console.log(`📡 [DRIVE] Fichier ${fileId} déjà absent de Google Drive.`);
+                return true;
+            }
+            console.error("❌ [DRIVE ERROR] Echec suppression physique:", e.message);
+            return false; // On renvoie false mais on ne jette pas d'erreur fatale
+        }
+    },
+
+    renameFolder: async (fileId, newName) => {
+        try {
+            if (!fileId) return false;
+            await drive.files.update({ fileId, resource: { name: newName } });
+            return true;
+        } catch (e) { return false; }
+    },
+
     uploadImage: async (folderId, fileName, base64Data) => {
         try {
-            const buffer = Buffer.from(base64Data.split(',')[1], 'base64');
+            const base64Image = base64Data.split(';base64,').pop();
+            const buffer = Buffer.from(base64Image, 'base64');
             const media = { mimeType: 'image/jpeg', body: Readable.from(buffer) };
             const file = await drive.files.create({
                 resource: { name: fileName, parents: [folderId] },
@@ -52,38 +78,14 @@ const DriveService = {
         } catch (e) { return null; }
     },
 
-    renameFolder: async (id, name) => {
+    listFilesInFolder: async (folderId) => {
         try {
-            return await drive.files.update({ fileId: id, resource: { name } });
-        } catch (e) {
-            console.error("⚠️ Impossible de renommer sur Drive (Dossier introuvable)");
-            return null;
-        }
-    },
-
-    deleteFolder: async (id) => {
-        try {
-            if (!id) return false;
-            await drive.files.delete({ fileId: id });
-            return true;
-        } catch (e) {
-            // SI LE FICHIER N'EXISTE PAS (404), ON NE CRASH PAS
-            if (e.code === 404) {
-                console.log(`ℹ️ [DRIVE] Le dossier ${id} était déjà supprimé.`);
-                return true;
-            }
-            console.error("❌ Drive Delete Error:", e.message);
-            return false;
-        }
-    },
-
-    listFilesInFolder: async (id) => {
-        try {
-            const res = await drive.files.list({ 
-                q: `'${id}' in parents and trashed = false`, 
-                fields: 'files(id, name, webViewLink, thumbnailLink)' 
+            if (!folderId) return [];
+            const res = await drive.files.list({
+                q: `'${folderId}' in parents and trashed = false`,
+                fields: 'files(id, name, webViewLink, thumbnailLink)'
             });
-            return res.data.files;
+            return res.data.files || [];
         } catch (e) { return []; }
     }
 };
