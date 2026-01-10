@@ -12,16 +12,19 @@ const IGNORE_LIST = [
 ];
 const EXTENSIONS = ['.js', '.jsx', '.css', '.html', '.json', '.env', '.md'];
 
-// Balises exactes pour projectMap.txt
+// Balises pour la structure
 const START_TAG = "@@@     ARBORESSENCE  @@@";
 const END_TAG = "@@@     FIN DE L ARBORESCENCE  @@@";
 
+/**
+ * Génère l'arborescence visuelle du projet
+ */
 function buildTree(dir, prefix = '') {
     let structure = '';
     try {
         const items = fs.readdirSync(dir).filter(item => !IGNORE_LIST.includes(item));
         
-        // On trie : Dossiers d'abord, puis fichiers .
+        // On trie : Dossiers d'abord, puis fichiers
         items.sort((a, b) => {
             const aIsDir = fs.statSync(path.join(dir, a)).isDirectory();
             const bIsDir = fs.statSync(path.join(dir, b)).isDirectory();
@@ -47,6 +50,9 @@ function buildTree(dir, prefix = '') {
     return structure;
 }
 
+/**
+ * Capture le contenu de tous les fichiers sources
+ */
 function captureContent(dir, baseDir = "") {
     let content = "";
     try {
@@ -61,13 +67,11 @@ function captureContent(dir, baseDir = "") {
             } else {
                 const ext = path.extname(item).toLowerCase();
                 
-                // Si c'est une extension valide OU le fichier .env
                 if (EXTENSIONS.includes(ext) || item === '.env') {
                     content += "\n" + "#".repeat(60) + "\n";
                     content += "### FICHIER: " + relativePath + "\n";
                     content += "#".repeat(60) + "\n\n";
 
-                    // SÉCURITÉ : Exception pour le fichier .env
                     if (item === '.env') {
                         content += "### [SÉCURITÉ] CONTENU MASQUÉ ###\n";
                         content += "# Ce fichier contient des clés API réelles.\n";
@@ -75,7 +79,6 @@ function captureContent(dir, baseDir = "") {
                         content += "MONGODB_URI=*****\n";
                         content += "GEMINI_API_KEY=*****\n\n";
                     } else {
-                        // Pour les autres fichiers, on lit le contenu normalement
                         try {
                             const data = fs.readFileSync(fullPath, 'utf8');
                             content += data + "\n\n";
@@ -90,49 +93,54 @@ function captureContent(dir, baseDir = "") {
     return content;
 }
 
+/**
+ * Met à jour le fichier projectMap.txt séparément
+ */
 function updateProjectMap(tree) {
     if (!fs.existsSync(MAP_FILENAME)) {
-        console.log(`⚠️ ${MAP_FILENAME} n'existe pas. Création...`);
         fs.writeFileSync(MAP_FILENAME, `${START_TAG}\n${tree}\n${END_TAG}\n\n==Project MAP==\n(Généré automatiquement)`);
-        console.log(`✅ ${MAP_FILENAME} créé.`);
         return;
     }
 
     let content = fs.readFileSync(MAP_FILENAME, 'utf8');
-    
-    // Recherche des balises
     const startIndex = content.indexOf(START_TAG);
     const endIndex = content.indexOf(END_TAG);
 
-    if (startIndex === -1 || endIndex === -1) {
-        console.log(`❌ Impossible de mettre à jour ${MAP_FILENAME} : Balises introuvables.`);
-        return;
+    if (startIndex !== -1 && endIndex !== -1) {
+        const before = content.substring(0, startIndex + START_TAG.length);
+        const after = content.substring(endIndex);
+        const newContent = before + "\n" + tree + after;
+        fs.writeFileSync(MAP_FILENAME, newContent);
     }
-
-    // Remplacement du contenu entre les balises
-    const before = content.substring(0, startIndex + START_TAG.length);
-    const after = content.substring(endIndex);
-    
-    const newContent = before + "\n\n" + tree + "\n" + after;
-    
-    fs.writeFileSync(MAP_FILENAME, newContent);
-    console.log(`✅ Arborescence injectée dans ${MAP_FILENAME} !`);
 }
 
+/**
+ * Exécute le scan complet
+ */
 function run() {
-    console.log("📸 Démarrage du scan...");
+    console.log("📸 Démarrage du snapshot complet...");
     
-    // 1. Générer l'arbre (Pour projectMap)
+    // 1. Générer l'arborescence
     const tree = buildTree(__dirname);
     
-    // 2. Mettre à jour projectMap.txt
+    // 2. Mettre à jour la map séparée
     updateProjectMap(tree);
 
-    // 3. Générer snapshot.txt (CODE UNIQUEMENT, SANS ARBORESCENCE)
-    let output = "CODE SOURCE COMPLET\n" + "=".repeat(60) + "\n\n" + captureContent(__dirname);
+    // 3. Construire le contenu final pour snapshot.txt
+    let output = "STRUCTURE DU PROJET\n";
+    output += "=".repeat(60) + "\n";
+    output += START_TAG + "\n";
+    output += tree;
+    output += END_TAG + "\n\n";
     
+    output += "CODE SOURCE COMPLET\n";
+    output += "=".repeat(60) + "\n\n";
+    output += captureContent(__dirname);
+    
+    // 4. Écrire le fichier final
     fs.writeFileSync(OUTPUT_FILENAME, output);
-    console.log(`✅ ${OUTPUT_FILENAME} généré (Code uniquement, .env masqué).`);
+    
+    console.log(`✅ ${OUTPUT_FILENAME} généré avec l'arborescence en haut.`);
 }
 
 run();
