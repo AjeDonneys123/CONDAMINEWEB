@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Login from './features/auth/Login';
 import ProfPage from './features/prof/ProfPage';
 import ElevePage from './features/eleve/ElevePage';
+import ConsoleHUD from './features/prof/components/ConsoleHUD'; // <--- NOUVEAU
 import './App.css';
 
 export default function App() {
@@ -10,9 +11,9 @@ export default function App() {
   useEffect(() => {
     window.onerror = async (msg, url, line, col, error) => {
         if (!user || user.id !== 'prof') return;
+        console.error(`BUG DÉTECTÉ: ${msg}`); // Sera capté par le HUD
         
-        console.log("🤖 L'IA analyse l'erreur pour vous proposer un fix...");
-        const res = await fetch('/api/auto-repair', {
+        await fetch('/api/auto-repair', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
@@ -21,12 +22,6 @@ export default function App() {
                 context: `URL: ${url}, Ligne: ${line}`
             })
         });
-        const data = await res.json();
-        if (data.suggestion) {
-            console.log("================ SCRIBE IA : SUGGESTION DE FIX ================");
-            console.log(data.suggestion);
-            console.log("==============================================================");
-        }
     };
   }, [user]);
 
@@ -51,7 +46,10 @@ export default function App() {
         <Login onLoginSuccess={setUser} />
       ) : (
         user.id === 'prof' ? (
-          <ProfPage user={user} onLogout={handleLogout} />
+          <>
+            <ProfPage user={user} onLogout={handleLogout} />
+            <ConsoleHUD /> {/* <--- AFFICHAGE DES ERREURS ICI */}
+          </>
         ) : (
           <ElevePage user={user} onLogout={handleLogout} onBackToProf={() => setUser({ id: "prof", firstName: "Jean", lastName: "Vuillet", classroom: "Professeur" })} />
         )
