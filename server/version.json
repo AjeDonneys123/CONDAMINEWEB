@@ -1,5 +1,5 @@
 {
-  "build": 37,
-  "message": "Reset Racine Drive sur Mi Unidad + Reconstruction arborescence CondaClasse",
-  "timestamp": "10/01/2026 13:55:00"
+  "build": 38,
+  "message": "Création automatique des dossiers élèves dans CondaClasse/[Classe]/",
+  "timestamp": "10/01/2026 14:00:00"
 }
