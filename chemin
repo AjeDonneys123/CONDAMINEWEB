@@ -1,0 +1,29 @@
+pour que apply.js l'applique.
+            
+            RÉPONDS UNIQUEMENT AVEC LE BLOC DE CODE CORRECTIF.
+        `;
+
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${process.env.GEMINI_API_KEY}`;
+        
+        const aiRes = await fetch(geminiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+        }).then(r => r.json());
+
+        const fix = aiRes.candidates?.[0]?.content?.parts?.[0]?.text;
+        
+        if (fix) {
+            // On écrit le fix dans update.txt (via le système de fichiers du serveur)
+            const fs = require('fs');
+            const path = require('path');
+            fs.appendFileSync(path.join(process.cwd(), 'update.txt'), `\n\n${fix}\n`);
+            console.log("✅ [IA DEBUG] Correctif injecté dans update.txt !");
+        }
+
+        res.json({ ok: true, message: "Analyse en cours..." });
+    } catch (e) {
+        res.status(500).json({ ok: false });
+    }
+});
+// (Fin du fichier automation.routes.js)
