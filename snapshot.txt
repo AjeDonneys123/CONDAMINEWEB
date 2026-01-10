@@ -1,3 +1,136 @@
+STRUCTURE DU PROJET
+============================================================
+@@@     ARBORESSENCE  @@@
+├── client/
+│   ├── public/
+│   │   └── vite.svg
+│   ├── src/
+│   │   ├── assets/
+│   │   │   └── react.svg
+│   │   ├── features/
+│   │   │   ├── auth/
+│   │   │   │   ├── Login.css
+│   │   │   │   └── Login.jsx
+│   │   │   ├── eleve/
+│   │   │   │   ├── components/
+│   │   │   │   │   ├── DashboardFolder.jsx
+│   │   │   │   │   ├── EleveHeader.css
+│   │   │   │   │   └── EleveHeader.jsx
+│   │   │   │   ├── games/
+│   │   │   │   │   ├── starship/
+│   │   │   │   │   │   ├── starship_core.js
+│   │   │   │   │   │   ├── starship_style.css
+│   │   │   │   │   │   └── StarshipWrapper.jsx
+│   │   │   │   │   ├── zombie/
+│   │   │   │   │   │   ├── zombie_core.js
+│   │   │   │   │   │   ├── zombie_style.css
+│   │   │   │   │   │   ├── ZombieGame.css
+│   │   │   │   │   │   ├── ZombieGame.js
+│   │   │   │   │   │   └── ZombieWrapper.jsx
+│   │   │   │   │   ├── GamesGrid.css
+│   │   │   │   │   ├── GamesGrid.jsx
+│   │   │   │   │   └── mainGames.js
+│   │   │   │   ├── homework/
+│   │   │   │   │   ├── Homework.css
+│   │   │   │   │   ├── HomeworkList.jsx
+│   │   │   │   │   └── HomeworkWorkspace.jsx
+│   │   │   │   ├── mistakes/
+│   │   │   │   │   └── MistakesBook.jsx
+│   │   │   │   ├── productions/
+│   │   │   │   │   └── ProductionsList.jsx
+│   │   │   │   ├── ElevePage.css
+│   │   │   │   └── ElevePage.jsx
+│   │   │   └── prof/
+│   │   │       ├── activities/
+│   │   │       │   ├── ActivityStudio.css
+│   │   │       │   └── ActivityStudio.jsx
+│   │   │       ├── chapters/
+│   │   │       │   └── ChapterManager.jsx
+│   │   │       ├── components/
+│   │   │       │   ├── ProfHeader.jsx
+│   │   │       │   ├── ProfNav.jsx
+│   │   │       │   └── ProfStudioFolder.jsx
+│   │   │       ├── games/
+│   │   │       │   ├── GameStudio.css
+│   │   │       │   └── GameStudio.jsx
+│   │   │       ├── homework/
+│   │   │       │   ├── HomeworkResults.css
+│   │   │       │   ├── HomeworkResults.jsx
+│   │   │       │   ├── HomeworkStudio.css
+│   │   │       │   └── HomeworkStudio.jsx
+│   │   │       ├── scans/
+│   │   │       │   └── ScansStudio.jsx
+│   │   │       ├── students/
+│   │   │       │   ├── StudentsManager.css
+│   │   │       │   └── StudentsManager.jsx
+│   │   │       ├── Prof.css
+│   │   │       ├── ProfPage.css
+│   │   │       └── ProfPage.jsx
+│   │   ├── services/
+│   │   │   └── api.js
+│   │   ├── App.css
+│   │   ├── App.jsx
+│   │   ├── index.css
+│   │   └── main.jsx
+│   ├── .eslintrc.cjs
+│   ├── .gitignore
+│   ├── index.html
+│   ├── package.json
+│   ├── postcss.config.cjs
+│   ├── README.md
+│   ├── tailwind.config.cjs
+│   └── vite.config.js
+├── public/
+│   ├── images/
+│   │   ├── ~$che_Croissance_Demographique_5e.docx
+│   │   ├── Fiche_Croissance_Demographique_5e.docx
+│   │   ├── hero.png
+│   │   ├── jetpack.png
+│   │   ├── jumper.png
+│   │   ├── projectile.png
+│   │   ├── ship.png
+│   │   └── zombi.png
+│   └── style.css
+├── server/
+│   ├── features/
+│   │   ├── auth/
+│   │   │   └── auth.routes.js
+│   │   ├── eleve/
+│   │   │   └── eleve.routes.js
+│   │   ├── game/
+│   │   │   └── game.routes.js
+│   │   └── prof/
+│   │       ├── automation.routes.js
+│   │       └── prof.routes.js
+│   ├── models/
+│   │   ├── Bug.js
+│   │   ├── Chapter.js
+│   │   ├── DeploySignal.js
+│   │   ├── GameLevel.js
+│   │   ├── Homework.js
+│   │   ├── Player.js
+│   │   ├── ScanSession.js
+│   │   ├── Submission.js
+│   │   └── TeacherStyle.js
+│   ├── services/
+│   │   └── drive.service.js
+│   ├── server.js
+│   └── version.json
+├── .env
+├── .gitignore
+├── apply.js
+├── chemin
+├── coucou.txt
+├── git-auto.js
+├── IAReadMe.md
+├── init-db.js
+├── INSTRUCTIONS_OAUTH.md
+├── LOCKED_FILES.md
+├── package.json
+├── projectMap.txt
+└── snap.js
+@@@     FIN DE L ARBORESCENCE  @@@
+
 CODE SOURCE COMPLET
 ============================================================
 
@@ -380,8 +513,29 @@ import './App.css';
 
 export default function App() {
   const [user, setUser] = useState(null);
-  const [showBugModal, setShowBugModal] = useState(false);
-  const [bugText, setBugText] = useState('');
+
+  useEffect(() => {
+    window.onerror = async (msg, url, line, col, error) => {
+        if (!user || user.id !== 'prof') return;
+        
+        console.log("🤖 L'IA analyse l'erreur pour vous proposer un fix...");
+        const res = await fetch('/api/auto-repair', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                error: msg,
+                stack: error?.stack,
+                context: `URL: ${url}, Ligne: ${line}`
+            })
+        });
+        const data = await res.json();
+        if (data.suggestion) {
+            console.log("================ SCRIBE IA : SUGGESTION DE FIX ================");
+            console.log(data.suggestion);
+            console.log("==============================================================");
+        }
+    };
+  }, [user]);
 
   useEffect(() => {
     const saved = localStorage.getItem('player');
@@ -393,75 +547,21 @@ export default function App() {
     }
   }, []);
 
-  const handleReportBug = async () => {
-      if(!bugText) return;
-      await fetch('/api/report-bug', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ 
-              reporter: user ? user.firstName : "Visiteur (Login)", 
-              classroom: user ? user.classroom : "Inconnue", 
-              description: bugText 
-          })
-      });
-      alert("Message envoyé ! 🐞");
-      setBugText('');
-      setShowBugModal(false);
-  };
-
   const handleLogout = () => {
     localStorage.clear();
     setUser(null);
   };
 
   return (
-    <div className={`app-wrapper ${showBugModal ? 'app-paused' : ''}`}>
-      
-      {/* CORRECTION : Le bouton est maintenant TOUJOURS visible, même pour le prof */}
-      <button 
-        onClick={() => setShowBugModal(true)}
-        className="global-bug-trigger"
-        title="Signaler un problème"
-      >
-        🐞
-      </button>
-
+    <div className="app-wrapper">
       {!user ? (
         <Login onLoginSuccess={setUser} />
       ) : (
         user.id === 'prof' ? (
           <ProfPage user={user} onLogout={handleLogout} />
         ) : (
-          <ElevePage 
-            user={user} 
-            onLogout={handleLogout} 
-            onBackToProf={() => setUser({ id: "prof", firstName: "Jean", lastName: "Vuillet", classroom: "Professeur" })}
-            onOpenBug={() => setShowBugModal(true)}
-          />
+          <ElevePage user={user} onLogout={handleLogout} onBackToProf={() => setUser({ id: "prof", firstName: "Jean", lastName: "Vuillet", classroom: "Professeur" })} />
         )
-      )}
-
-      {showBugModal && (
-          <div className="bug-modal-overlay">
-            <div className="bug-modal-card animate-in zoom-in duration-200">
-                <div className="bug-modal-header">
-                    <h2>SIGNALER UN BUG</h2>
-                    <span className="bug-icon">🐞</span>
-                </div>
-                <p className="bug-modal-desc">Décris le problème rencontré.</p>
-                <textarea 
-                    className="bug-textarea"
-                    placeholder="Ex: L'IA ne charge pas..."
-                    value={bugText}
-                    onChange={e => setBugText(e.target.value)}
-                    autoFocus
-                />
-                <div className="bug-modal-actions">
-                    <button onClick={() => setShowBugModal(false)} className="btn-bug-cancel">ANNULER</button>
-                    <button onClick={handleReportBug} className="btn-bug-send">ENVOYER</button>
-                </div>
-            </div>
-          </div>
       )}
     </div>
   );
@@ -2873,18 +2973,31 @@ export default function ProductionsList({ user }) {
 .prof-page-container {
     max-width: 1200px;
     margin: 0 auto;
-    padding: 2rem 1rem;
+    padding: 1rem; /* Réduit pour mobile */
 }
+
 .prof-card {
     background: white;
-    border-radius: 50px;
-    shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    border-radius: 30px; /* Moins agressif sur mobile */
     overflow: hidden;
     border: 1px solid #f1f5f9;
+    min-height: 90vh;
 }
-.prof-content-area {
-    padding: 2rem;
-    min-height: 500px;
+
+/* HEADER MOBILE */
+@media (max-width: 640px) {
+    .prof-page-container { padding: 0.5rem; }
+    .prof-card { border-radius: 20px; }
+    
+    /* On cache le sous-titre "Espace Enseignant" pour gagner de la place */
+    .prof-page-container p.text-slate-400 { display: none; }
+    
+    /* On réduit le titre principal */
+    .prof-page-container h2 { 
+        font-size: 1.2rem !important; 
+        line-height: 1;
+        margin-bottom: 0.5rem;
+    }
 }
 
 
@@ -3148,24 +3261,26 @@ import React from 'react';
 
 export default function ProfNav({ activeTab, onTabChange }) {
   const tabs = [
-    { id: 'students', label: '👥 ÉLÈVES', style: 'bg-blue-600' },
-    { id: 'activities', label: '⚡ ACTIVITÉS', style: 'bg-purple-600' },
-    { id: 'scans', label: '📤 SCANS IA', style: 'bg-emerald-600' }
+    { id: 'students', label: '👥 ÉLÈVES', style: 'bg-blue-600', short: '👥' },
+    { id: 'activities', label: '⚡ ACTIVITÉS', style: 'bg-purple-600', short: '⚡' },
+    { id: 'scans', label: '📤 SCANS IA', style: 'bg-emerald-600', short: '📤' }
   ];
 
   return (
-    <div className="flex gap-4 p-6 bg-white border-b border-slate-100">
+    <div className="flex gap-2 p-3 bg-white border-b border-slate-100 sm:p-6 sm:gap-4">
       {tabs.map(t => (
         <button 
           key={t.id}
           onClick={() => onTabChange(t.id)}
-          className={`flex-1 py-4 rounded-2xl font-black text-lg transition-all duration-200 ${
+          className={`flex-1 py-3 px-1 sm:py-4 rounded-2xl font-black text-xs sm:text-lg transition-all duration-200 ${
             activeTab === t.id 
-            ? `${t.style} shadow-lg scale-105 text-white` 
-            : 'bg-slate-50 text-slate-400 hover:bg-slate-100'
+            ? `${t.style} shadow-lg text-white scale-105` 
+            : 'bg-slate-50 text-slate-400'
           }`}
         >
-          {t.label}
+          {/* Affiche le texte court sur mobile, long sur PC */}
+          <span className="hidden sm:inline">{t.label}</span>
+          <span className="sm:hidden">{t.label.split(' ')[1]}</span>
         </button>
       ))}
     </div>
@@ -3963,73 +4078,217 @@ import React, { useState, useEffect, useRef } from 'react';
 export default function ScansStudio() {
     const [sessions, setSessions] = useState([]);
     const [openId, setOpenId] = useState(null);
+    const [activeTab, setActiveTab] = useState('scan');
+    const [selectedClass, setSelectedClass] = useState("6D");
     const [newTitle, setNewTitle] = useState("");
-    const [newClass, setNewClass] = useState("6D");
     const [loading, setLoading] = useState(false);
 
+    const classes = ["6D", "5B", "5C", "2A", "2CD", "1BFI"];
+
     const load = async () => {
-        const res = await fetch('/api/scan-sessions').then(r => r.json());
-        setSessions(Array.isArray(res) ? res : []);
+        try {
+            const res = await fetch('/api/scan-sessions');
+            const data = await res.json();
+            if (Array.isArray(data)) setSessions(data);
+        } catch (e) { console.error("Erreur API"); }
     };
+
     useEffect(() => { load(); }, []);
 
-    // Fonction pour forcer la création de tous les dossiers
-    const initAllDriveFolders = async () => {
-        if(!confirm("Voulez-vous vérifier et créer les dossiers PRODUCTIONS pour toutes les classes ?")) return;
+    const createSession = async () => {
         setLoading(true);
-        await fetch('/api/init-all-folders');
-        alert("Dossiers Drive synchronisés !");
+        try {
+            const res = await fetch('/api/scan-sessions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title: newTitle, classroom: selectedClass })
+            });
+            if (res.ok) { setNewTitle(""); await load(); }
+        } catch (e) { console.error(e); }
         setLoading(false);
     };
 
-    const createSession = async () => {
-        if(!newTitle) return;
-        setLoading(true);
-        await fetch('/api/scan-sessions', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ title: newTitle, classroom: newClass })
+    const handleRename = async (id, oldTitle, newPrefix) => {
+        const parts = oldTitle.split('_');
+        const oldP = parts.length > 1 ? parts.slice(0, -1).join('_') : "";
+        if (newPrefix === oldP) return;
+        await fetch(`/api/scan-sessions/${id}/rename`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ newPrefix })
         });
-        setNewTitle(""); load(); setLoading(false);
+        load();
     };
 
+    const filteredSessions = sessions.filter(s => s.classroom === selectedClass);
+
     return (
-        <div className="p-6 max-w-4xl mx-auto space-y-6">
-            <div className="bg-white p-8 rounded-[40px] border-4 border-indigo-500 shadow-xl space-y-4">
-                <div className="flex justify-between items-center">
-                    <h2 className="font-black text-indigo-600 uppercase tracking-widest text-xs">Nouveau Devoir</h2>
-                    <button onClick={initAllDriveFolders} className="text-[9px] font-black text-slate-400 border px-3 py-1 rounded-lg hover:bg-slate-50">🔄 SYNCHRO DRIVE</button>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                    <input className="p-4 bg-slate-50 rounded-2xl outline-none font-bold" placeholder="Titre (ex: Géo T2)" value={newTitle} onChange={e=>setNewTitle(e.target.value)} />
-                    <select className="p-4 bg-slate-50 rounded-2xl font-black text-indigo-600 outline-none" value={newClass} onChange={e=>setNewClass(e.target.value)}>
-                        <option value="6D">6eD</option>
-                        <option value="5B">5eB</option>
-                        <option value="5C">5eC</option>
-                        <option value="2A">2de A</option>
-                        <option value="1D">1ere BFI</option>
-                    </select>
-                </div>
-                <button onClick={createSession} disabled={loading} className="w-full p-4 bg-indigo-600 text-white rounded-2xl font-black shadow-lg">CRÉER LE DOSSIER DEVOIR 📂</button>
+        <div className="p-2 space-y-4 max-w-5xl mx-auto sm:p-6">
+            {/* SÉLECTION CLASSE */}
+            <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
+                {classes.map(c => (
+                    <button key={c} onClick={() => setSelectedClass(c)} className={`px-6 py-3 rounded-2xl font-black text-xs transition-all flex-shrink-0 ${selectedClass === c ? 'bg-indigo-600 text-white shadow-lg scale-105' : 'bg-white text-slate-400 border border-slate-100'}`}>
+                        {c}
+                    </button>
+                ))}
             </div>
 
-            <div className="space-y-4">
-                {sessions.map(s => (
-                    <div key={s._id} className={`bg-white rounded-[40px] border-2 transition-all overflow-hidden relative ${openId === s._id ? 'border-indigo-500 shadow-xl' : 'border-slate-100'}`}>
-                        <button onClick={async (e) => {e.stopPropagation(); if(confirm("Supprimer ?")) { await fetch(`/api/scan-sessions/${s._id}`, {method:'DELETE'}); load(); }}} className="absolute top-5 right-5 text-red-200 hover:text-red-500 font-bold px-4">✕</button>
-                        <div className="p-5 flex items-center gap-4 cursor-pointer" onClick={() => setOpenId(openId === s._id ? null : s._id)}>
-                            <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center font-black text-indigo-600 text-xs">{s.classroom === '1D' ? '1BFI' : s.classroom}</div>
-                            <b className="text-xl text-slate-700">{s.title}</b>
+            {/* CRÉATION */}
+            <div className="bg-white p-4 rounded-[30px] border-2 border-indigo-100 shadow-sm flex items-center gap-3">
+                <input className="flex-1 p-3 bg-slate-50 rounded-2xl outline-none font-bold" placeholder={`Nom du devoir pour ${selectedClass}...`} value={newTitle} onChange={e=>setNewTitle(e.target.value)} />
+                <button onClick={createSession} disabled={loading} className="p-3 bg-indigo-600 text-white rounded-2xl font-black px-6 shadow-lg uppercase text-xs">{loading ? '...' : 'Créer'}</button>
+            </div>
+
+            {/* LISTE DES BANDEAUX */}
+            <div className="space-y-2">
+                {filteredSessions.map(s => {
+                    const prefix = s.title.includes('_') ? s.title.split('_').slice(0, -1).join('_') : "";
+                    const datePart = s.title.split('_').pop();
+                    const isLocalOpen = openId === s._id;
+                    const copyCount = s.copyUrls?.length || 0;
+
+                    return (
+                        <div key={s._id} className={`bg-white rounded-[25px] border-2 transition-all ${isLocalOpen ? 'border-indigo-500 shadow-xl' : 'border-slate-50 shadow-sm'}`}>
+                            <div className="p-2 flex flex-col lg:flex-row lg:items-center justify-between gap-2">
+                                <div className="flex items-center gap-3 px-2 flex-1 cursor-pointer" onClick={() => setOpenId(isLocalOpen ? null : s._id)}>
+                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs transition-all ${isLocalOpen ? 'bg-indigo-600 text-white rotate-180' : 'bg-indigo-50 text-indigo-400'}`}>
+                                        {isLocalOpen ? '➔' : '▼'}
+                                    </div>
+                                    <input className="text-sm sm:text-lg font-bold text-slate-700 bg-transparent border-none outline-none w-full" defaultValue={prefix} placeholder={datePart} onBlur={(e) => handleRename(s._id, s.title, e.target.value)} onClick={e => e.stopPropagation()} />
+                                </div>
+
+                                <div className="flex items-center justify-around sm:justify-end gap-1 px-2 pb-1 lg:pb-0">
+                                    <button onClick={() => { setOpenId(s._id); setActiveTab('quest'); }} className={`px-3 py-2 rounded-xl font-black text-[8px] uppercase transition-all ${isLocalOpen && activeTab==='quest' ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-50 text-slate-400'}`}>❓ Q.</button>
+                                    <button onClick={() => { setOpenId(s._id); setActiveTab('scan'); }} className={`px-3 py-2 rounded-xl font-black text-[8px] uppercase transition-all ${isLocalOpen && activeTab==='scan' ? 'bg-indigo-600 text-white shadow-md' : 'bg-indigo-50 text-indigo-600'}`}>📄 Scan</button>
+                                    <button onClick={() => { setOpenId(s._id); setActiveTab('docs'); }} className={`px-3 py-2 rounded-xl font-black text-[8px] uppercase transition-all flex items-center gap-1 ${isLocalOpen && activeTab==='docs' ? 'bg-indigo-600 text-white shadow-md' : 'bg-emerald-50 text-emerald-600'}`}>📂 Copies <span className="bg-emerald-600 text-white px-1.5 rounded-md">{copyCount}</span></button>
+                                    <button onClick={() => { setOpenId(s._id); setActiveTab('ia'); }} className={`px-3 py-2 rounded-xl font-black text-[8px] uppercase transition-all ${isLocalOpen && activeTab==='ia' ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-50 text-slate-400'}`}>🤖 IA</button>
+                                    <button onClick={async (e) => { e.stopPropagation(); if(confirm("Supprimer ?")) { await fetch(`/api/scan-sessions/${s._id}`, {method:'DELETE'}); load(); } }} className="text-slate-200 hover:text-red-400 font-bold px-2 ml-1 text-lg">✕</button>
+                                </div>
+                            </div>
+                            {isLocalOpen && (
+                                <div className="p-4 bg-slate-50/50 border-t-2 border-dashed border-slate-100">
+                                    <PilotArea currentSession={s} tab={activeTab} onClose={() => setOpenId(null)} onRefresh={load} />
+                                </div>
+                            )}
                         </div>
-                        {openId === s._id && <PilotArea session={s} />}
-                    </div>
-                ))}
+                    );
+                })}
             </div>
         </div>
     );
 }
 
-// ... Reste du fichier PilotArea inchangé
+function PilotArea({ currentSession, tab, onClose, onRefresh }) {
+    const [session, setSession] = useState(currentSession);
+    const [localPreviews, setLocalPreviews] = useState([]);
+    const videoRef = useRef(null);
+
+    const getImgSrc = (url) => {
+        if (!url || url.startsWith('data:')) return url;
+        const match = url.match(/[-\w]{25,}/);
+        return match ? `https://drive.google.com/thumbnail?id=${match[0]}&sz=w600` : url;
+    };
+
+    const startCamera = async () => {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }).catch(() => navigator.mediaDevices.getUserMedia({ video: true }));
+        if (videoRef.current) videoRef.current.srcObject = stream;
+    };
+
+    useEffect(() => {
+        if (tab === 'quest' || tab === 'scan') startCamera();
+        return () => videoRef.current?.srcObject?.getTracks().forEach(t => t.stop());
+    }, [tab]);
+
+    const takePhoto = async () => {
+        if (!videoRef.current) return;
+        const canvas = document.createElement('canvas');
+        canvas.width = videoRef.current.videoWidth; canvas.height = videoRef.current.videoHeight;
+        canvas.getContext('2d').drawImage(videoRef.current, 0, 0);
+        const data = canvas.toDataURL('image/jpeg', 0.6);
+        const tempId = Date.now();
+        setLocalPreviews(p => [...p, { id: tempId, src: data, type: tab }]);
+        
+        const res = await fetch('/api/scan-upload-photo', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId: session._id, type: tab === 'quest'?'quest':'copy', imageBase64: data })
+        });
+        const updated = await res.json();
+        if (updated._id) { 
+            setSession(updated); 
+            onRefresh(); 
+            setTimeout(() => setLocalPreviews(p => p.filter(x => x.id !== tempId)), 1000); 
+        }
+    };
+
+    // --- SUPPRESSION OPTIMISTE (INSTANTANÉE) ---
+    const deletePhoto = async (url, type) => {
+        if(!confirm("Supprimer cette photo ?")) return;
+
+        // Mise à jour immédiate de l'écran
+        const field = type === 'quest' ? 'questionUrls' : 'copyUrls';
+        const optimisticSession = { ...session, [field]: session[field].filter(u => u !== url) };
+        setSession(optimisticSession);
+
+        // Appel API en arrière-plan
+        try {
+            const res = await fetch('/api/scan-delete-photo', { 
+                method: 'POST', 
+                headers: {'Content-Type':'application/json'}, 
+                body: JSON.stringify({ sessionId: session._id, type, url }) 
+            });
+            const updated = await res.json();
+            if(updated._id) {
+                setSession(updated); // Recalage propre avec les données serveur
+                onRefresh();
+            }
+        } catch (e) {
+            alert("Erreur de synchronisation, rafraîchis la page.");
+            onRefresh(); // En cas d'erreur on recharge tout
+        }
+    };
+
+    return (
+        <div className="space-y-4">
+            {(tab === 'quest' || tab === 'scan') && (
+                <div className="space-y-4">
+                    <div className="relative aspect-[3/4] max-w-sm mx-auto bg-black rounded-[30px] overflow-hidden shadow-2xl border-4 border-white">
+                        <video ref={videoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
+                        <button onClick={takePhoto} className="absolute bottom-6 left-1/2 -translate-x-1/2 w-16 h-16 bg-white rounded-full border-8 border-white/30 shadow-2xl active:scale-90 z-20"></button>
+                    </div>
+                    <div className="flex gap-2 overflow-x-auto py-2">
+                        {localPreviews.filter(p => p.type === (tab==='quest'?'quest':'scan')).map(p => (
+                            <img key={p.id} src={p.src} className="h-24 w-16 object-cover rounded-xl border-2 border-indigo-400 animate-pulse" />
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {tab === 'docs' && (
+                <div className="space-y-4">
+                    <h4 className="font-black text-emerald-600 text-[10px] uppercase tracking-widest px-2">Copies Scannées ({session.copyUrls?.length || 0})</h4>
+                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+                        {session.copyUrls?.map((url, i) => (
+                            <div key={i} className="relative aspect-[3/4]">
+                                <img src={getImgSrc(url)} className="w-full h-full object-cover rounded-2xl border-2 border-white shadow-md bg-slate-100" alt="copy" />
+                                <button onClick={() => deletePhoto(url, 'copy')} className="absolute -top-2 -right-2 bg-red-500 text-white w-6 h-6 rounded-full text-xs font-bold shadow-md">✕</button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {tab === 'ia' && (
+                <textarea className="w-full p-6 h-40 bg-white rounded-[25px] border-2 border-indigo-100 outline-none font-medium shadow-inner" defaultValue={session.teacherInstruction} onBlur={async (e) => { await fetch(`/api/scan-sessions/${session._id}/instructions`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ text: e.target.value }) }); }} placeholder="Consignes IA..." />
+            )}
+
+            <div className="flex flex-col gap-2 pt-4">
+                <button className="w-full py-5 bg-indigo-600 text-white rounded-[25px] font-black text-base shadow-xl">🚀 CORRIGER LE DEVOIR</button>
+                <button onClick={onClose} className="w-full py-3 bg-white text-slate-300 rounded-xl font-bold text-[10px] uppercase tracking-widest">Fermer le volet</button>
+            </div>
+        </div>
+    );
+}
 
 
 ############################################################
@@ -4116,90 +4375,57 @@ import './StudentsManager.css';
 
 export default function StudentsManager() {
   const [players, setPlayers] = useState([]);
-  const [idsWithScans, setIdsWithScans] = useState(new Set());
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
-  const [selectedPlayerScans, setSelectedPlayerScans] = useState(null);
-  const [activeScan, setActiveScan] = useState(null);
+  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [loadingFiles, setLoadingFiles] = useState(false);
 
-  const loadData = async () => {
-    try {
-        const playersRes = await fetch('/api/players').then(r => r.ok ? r.json() : []);
-        // CORRECTION : On pointe sur /api/scan-sessions pour éviter le 404
-        const sessionsRes = await fetch('/api/scan-sessions').then(r => r.ok ? r.json() : []);
-        
-        setPlayers(Array.isArray(playersRes) ? playersRes : []);
-        // On réinitialise les pastilles de notification pour l'instant
-        setIdsWithScans(new Set());
-    } catch (e) { console.error("Erreur StudentsManager:", e); }
+  useEffect(() => {
+    fetch('/api/players').then(r => r.json()).then(setPlayers);
+  }, []);
+
+  const viewWork = async (player) => {
+      setLoadingFiles(true);
+      try {
+          const res = await fetch(`/api/player-productions/${player._id}`);
+          const files = await res.json();
+          setSelectedStudent({ player, files: Array.isArray(files) ? files : [] });
+      } catch(e) { console.error(e); }
+      setLoadingFiles(false);
   };
 
-  useEffect(() => { loadData(); }, []);
-
-  const viewStudentArchives = async (player) => {
-      // On suppose qu'une route existe pour récupérer les copies d'un élève
-      const scans = await fetch(`/api/scans/player/${player._id}`).then(r => r.ok ? r.json() : []);
-      setSelectedPlayerScans({ player, scans: Array.isArray(scans) ? scans : [] });
-  };
-
-  const filtered = players.filter(p => 
-    (filter === 'all' || p.classroom === filter) && 
+  const filtered = players.filter(p =>
+    (filter === 'all' || p.classroom === filter) &&
     ((p.firstName || "") + " " + (p.lastName || "")).toLowerCase().includes(search.toLowerCase())
   );
 
   return (
     <div className="manager-container">
-      <div className="filter-bar">
-        <select value={filter} onChange={e => setFilter(e.target.value)} className="p-2 rounded-xl border">
+      <div className="filter-bar flex justify-between items-center bg-white p-4 rounded-[25px] border shadow-sm">
+        <select value={filter} onChange={e => setFilter(e.target.value)} className="p-2 rounded-xl border font-bold text-indigo-600 outline-none">
             <option value="all">Toutes les classes</option>
-            <option value="6D">6eD</option>
-            <option value="5B">5eB</option>
-            <option value="5C">5eC</option>
-            <option value="2A">2de A</option>
+            <option value="6D">6eD</option><option value="5B">5eB</option><option value="5C">5eC</option>
+            <option value="2A">2de A</option><option value="1D">1ere BFI</option>
         </select>
-        <div className="stats-badge font-black">{filtered.length} ÉLÈVES</div>
+        <div className="stats-badge bg-indigo-600 text-white px-4 py-2 rounded-xl font-black">{filtered.length} ÉLÈVES</div>
       </div>
 
-      <input 
-        className="w-full p-4 mb-4 rounded-2xl border outline-none focus:border-indigo-500" 
-        placeholder="🔍 Chercher un élève..." 
-        value={search} 
-        onChange={e => setSearch(e.target.value)} 
-      />
-
-      <div className="table-wrapper bg-white rounded-[30px] overflow-hidden border">
-        <table className="students-table w-full">
+      <div className="table-wrapper bg-white rounded-[30px] overflow-hidden border mt-4 shadow-sm">
+        <table className="students-table w-full text-left border-collapse">
             <thead>
-                <tr className="bg-slate-50 text-left">
-                    <th className="p-4 pl-8">Élève</th>
-                    <th className="p-4">Classe</th>
-                    <th className="p-4 text-center">Copies</th>
-                    <th className="p-4 text-right pr-8">Action</th>
+                <tr className="bg-slate-50 text-[10px] uppercase text-slate-400 font-black tracking-widest">
+                    <th className="p-5 pl-8">Élève</th>
+                    <th className="p-5">Classe</th>
+                    <th className="p-5 text-right pr-8">Dossier Personnel</th>
                 </tr>
             </thead>
             <tbody>
                 {filtered.map(p => (
                     <tr key={p._id} className="border-b hover:bg-slate-50 transition-colors">
-                        <td className="p-4 pl-8 font-bold text-slate-700">{p.firstName} {p.lastName}</td>
-                        <td className="p-4 text-xs uppercase font-black text-slate-400">{p.classroom}</td>
-                        <td className="p-4 text-center relative">
-                            <button 
-                                onClick={() => viewStudentArchives(p)} 
-                                className="px-4 py-2 bg-slate-100 rounded-xl text-[10px] font-black uppercase hover:bg-indigo-50 hover:text-indigo-600 transition-all"
-                            >
-                                Voir
-                            </button>
-                        </td>
-                        <td className="p-4 text-right pr-8">
-                            <button 
-                                className="text-indigo-600 font-bold hover:underline" 
-                                onClick={() => { 
-                                    localStorage.setItem("player", JSON.stringify({...p, id: p._id})); 
-                                    window.location.reload(); 
-                                }}
-                            >
-                                Tester ➔
-                            </button>
+                        <td className="p-5 pl-8 font-bold text-slate-700">{p.firstName} {p.lastName}</td>
+                        <td className="p-5 text-xs font-black text-slate-400">{p.classroom === '1D' ? '1BFI' : p.classroom}</td>
+                        <td className="p-5 text-right pr-8">
+                            <button onClick={() => viewWork(p)} className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase hover:bg-indigo-600 hover:text-white transition-all shadow-sm">📂 Ouvrir</button>
                         </td>
                     </tr>
                 ))}
@@ -4207,53 +4433,33 @@ export default function StudentsManager() {
         </table>
       </div>
 
-      {/* MODALE ARCHIVES ÉLÈVE */}
-      {selectedPlayerScans && (
+      {/* MODALE DES TRAVAUX DE L'ÉLÈVE */}
+      {selectedStudent && (
           <div className="fixed inset-0 z-[7000] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-6">
               <div className="bg-white w-full max-w-2xl rounded-[40px] shadow-2xl flex flex-col max-h-[85vh]">
                   <div className="p-8 border-b flex justify-between items-center bg-slate-50 rounded-t-[40px]">
-                      <h2 className="text-2xl font-black uppercase">Archives : {selectedPlayerScans.player.firstName}</h2>
-                      <button onClick={() => setSelectedPlayerScans(null)} className="text-2xl font-black">✕</button>
+                      <div className="flex flex-col">
+                        <h2 className="text-xl font-black uppercase text-indigo-600">{selectedStudent.player.firstName}</h2>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Dossier PRODUCTIONS / {selectedStudent.player.firstName} {selectedStudent.player.lastName}</span>
+                      </div>
+                      <button onClick={() => setSelectedStudent(null)} className="text-2xl font-black text-slate-300 hover:text-red-500">✕</button>
                   </div>
-                  <div className="flex-1 overflow-y-auto p-8 space-y-4">
-                      {selectedPlayerScans.scans.map(s => (
-                          <div key={s._id} onClick={() => setActiveScan(s)} className="p-6 bg-slate-50 rounded-3xl border-2 border-transparent hover:border-indigo-500 hover:bg-white cursor-pointer flex justify-between items-center transition-all shadow-sm">
-                              <div>
-                                  <b className="text-slate-700 block text-lg font-black">Correction du {new Date(s.createdAt).toLocaleDateString()}</b>
-                                  <span className="bg-emerald-100 text-emerald-600 px-3 py-1 rounded-lg text-xs font-black">Résultat : {s.grade}</span>
+                  <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
+                      {selectedStudent.files.map(f => (
+                          <div key={f.id} className="p-4 bg-slate-50 rounded-2xl flex items-center justify-between group hover:bg-white transition-all border border-transparent hover:border-indigo-100 shadow-sm">
+                              <div className="flex items-center gap-4">
+                                  <img src={f.thumbnailLink} className="h-14 w-11 object-cover rounded-lg border bg-white shadow-sm" alt="prev" />
+                                  <b className="text-slate-600 text-sm">{f.name}</b>
                               </div>
-                              <span className="text-blue-500 font-black">VOIR ➔</span>
+                              <a href={f.webViewLink} target="_blank" rel="noreferrer" className="bg-white px-4 py-2 rounded-xl text-indigo-500 font-black text-[10px] uppercase border shadow-sm hover:bg-indigo-50 transition-all">Voir sur Drive ➔</a>
                           </div>
                       ))}
-                      {selectedPlayerScans.scans.length === 0 && (
-                          <p className="text-center py-10 text-slate-400 font-bold">Aucune copie trouvée.</p>
+                      {selectedStudent.files.length === 0 && (
+                        <div className="text-center py-20">
+                            <span className="text-4xl block mb-2">📁</span>
+                            <p className="text-slate-400 font-bold italic">Aucune copie trouvée dans le dossier Drive de cet élève.</p>
+                        </div>
                       )}
-                  </div>
-              </div>
-          </div>
-      )}
-
-      {/* VISUALISEUR DE COPIE */}
-      {activeScan && (
-          <div className="fixed inset-0 z-[8000] bg-slate-900/95 flex items-center justify-center p-4 backdrop-blur-md">
-              <div className="bg-white w-full max-w-6xl h-[90vh] rounded-[60px] flex flex-col overflow-hidden shadow-2xl">
-                  <div className="p-6 border-b flex justify-between items-center bg-slate-50">
-                      <b className="text-xl uppercase text-slate-800">Visualisation de la copie</b>
-                      <button onClick={() => setActiveScan(null)} className="w-12 h-12 bg-slate-200 rounded-full text-xl font-black hover:bg-red-500 hover:text-white transition-all">✕</button>
-                  </div>
-                  <div className="flex-1 flex overflow-hidden">
-                      <div className="flex-1 bg-slate-200 overflow-auto p-4 flex justify-center items-start">
-                          <img src={`/api/view-copy/${activeScan.driveFileId}`} className="max-w-full shadow-2xl rounded-xl border-4 border-white" alt="Copie" />
-                      </div>
-                      <div className="flex-1 p-10 overflow-y-auto bg-white border-l">
-                          <div className="mb-6">
-                              <span className="bg-indigo-600 text-white px-6 py-2 rounded-xl font-black text-2xl">{activeScan.grade}</span>
-                          </div>
-                          <div 
-                            className="text-lg leading-relaxed text-slate-700 whitespace-pre-wrap font-medium" 
-                            dangerouslySetInnerHTML={{ __html: activeScan.correctedTranscription }} 
-                          />
-                      </div>
                   </div>
               </div>
           </div>
@@ -4386,6 +4592,96 @@ export default defineConfig({
 
 
 ############################################################
+### FICHIER: git-auto.js
+############################################################
+
+const { exec } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+const mongoose = require('mongoose');
+require('dotenv').config();
+
+async function start() {
+    const chokidar = await import('chokidar');
+    const versionPath = path.join(__dirname, 'server', 'version.json');
+    
+    if (mongoose.connection.readyState === 0) {
+        await mongoose.connect(process.env.MONGODB_URI);
+    }
+    
+    // On utilise le même modèle que le serveur
+    const SignalSchema = new mongoose.Schema({ build: Number, status: String, updatedAt: Date });
+    const DeploySignal = mongoose.model('DeploySignal', SignalSchema, 'deploysignals');
+
+    console.log("🚀 [GIT-AUTO] Build System V7.2 (Radar MongoDB) actif.");
+
+    let isLocked = false;
+    let timeout = null;
+
+    function checkDatabaseSignal(targetBuild) {
+        console.log(`\n⏳ Build #${targetBuild} envoyé. Surveillance du signal secret...`);
+        
+        const interval = setInterval(async () => {
+            try {
+                const signal = await DeploySignal.findOne({});
+                if (signal) {
+                    if (signal.build === targetBuild && signal.status === 'live') {
+                        clearInterval(interval);
+                        console.log("\n" + "=".repeat(60));
+                        console.log(`✨ [DÉPLOIEMENT TERMINÉ] Build #${targetBuild} est LIVE !`);
+                        console.log(`⏰ Heure : ${new Date().toLocaleTimeString()}`);
+                        console.log("=".repeat(60) + "\n");
+                        isLocked = false;
+                    } else {
+                        // RADAR : Affiche la version vue en temps réel
+                        process.stdout.write(`\r📡 MongoDB : Vu #${signal.build} (${signal.status}) | Attente #${targetBuild}... `);
+                    }
+                }
+            } catch (e) {
+                process.stdout.write(`\r📡 MongoDB : En attente de connexion... `);
+            }
+        }, 4000);
+    }
+
+    function runGit() {
+        if (isLocked) return;
+        isLocked = true;
+
+        let v = { build: 0 };
+        try { v = JSON.parse(fs.readFileSync(versionPath, 'utf8')); } catch (e) { v = { build: 0 }; }
+        
+        v.build++;
+        v.timestamp = new Date().toLocaleString('fr-FR');
+        fs.writeFileSync(versionPath, JSON.stringify(v, null, 2));
+
+        console.log(`\n📦 [GIT] Commit Build #${v.build}...`);
+
+        exec(`git add . && git commit -m "Auto-Deploy #${v.build}" && git push`, (err) => {
+            if (err) { console.log("ℹ️ Rien à pousser."); isLocked = false; return; }
+            console.log(`✅ GitHub OK. Render va déployer le Build #${v.build}.`);
+            
+            // On prévient la DB qu'on attend le nouveau build
+            DeploySignal.findOneAndUpdate({}, { status: 'deploying', build: v.build - 1 }, { upsert: true })
+                .then(() => checkDatabaseSignal(v.build));
+        });
+    }
+
+    const watcher = chokidar.watch('.', {
+        ignored: ['node_modules', '.git', 'update.txt', 'history.txt', 'client/dist', 'package-lock.json', 'snapshot.txt', 'server/version.json'],
+        persistent: true, ignoreInitial: true
+    });
+
+    watcher.on('all', (event, filePath) => {
+        if (isLocked) return;
+        clearTimeout(timeout);
+        timeout = setTimeout(runGit, 10000); 
+    });
+}
+
+start().catch(err => console.error("❌ Erreur Git-Auto:", err));
+
+
+############################################################
 ### FICHIER: init-db.js
 ############################################################
 
@@ -4460,13 +4756,15 @@ initializeDatabase();
   "version": "1.0.0",
   "scripts": {
     "start": "node server/server.js",
+    "server-dev": "nodemon --ignore 'server/version.json' --ignore 'update.txt' --ignore 'history.txt' server/server.js",
     "client": "npm run dev --prefix client",
     "apply": "node apply.js",
+    "git-auto": "node git-auto.js",
     "build": "npm install && npm install --prefix client && npm run build --prefix client",
-    "dev": "node apply.js & npm run start & npm run client",
-    "snap": "node snap.js"
+    "dev": "node apply.js & node git-auto.js & npm run server-dev & npm run client"
   },
   "dependencies": {
+    "chokidar": "^3.6.0",
     "adm-zip": "^0.5.14",
     "express": "^4.19.2",
     "dotenv": "^16.4.5",
@@ -4764,53 +5062,132 @@ const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 const DriveService = require('../../services/drive.service');
+const fetch = require('node-fetch');
 
-// --- ROUTE DE MAINTENANCE : CRÉER TOUS LES DOSSIERS PRODUCTIONS ---
-router.get('/init-all-folders', async (req, res) => {
-    const classes = ['6D', '5B', '5C', '2A', '2CD', '1D']; // 1D correspond à 1ere BFI
-    const results = [];
+const getSuffix = () => {
+    const now = new Date();
+    const jj = String(now.getDate()).padStart(2, '0');
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    return `${jj}-${mm}-26`;
+};
 
-    for (const code of classes) {
-        // Pour la 1D, on utilise le nom "1ere BFI" sur le Drive comme demandé
-        const folderName = (code === '1D') ? "1ere BFI" : code;
-        console.log(`🛠️ Initialisation Drive pour : ${folderName}`);
-        const status = await DriveService.initClassStructure(folderName);
-        results.push({ class: folderName, status: status ? '✅ OK' : '❌ Erreur' });
+// --- NOUVEAU MODE : SUGGESTION DE RÉPARATION ---
+router.post('/auto-repair', async (req, res) => {
+    try {
+        const { error, stack, context } = req.body;
+        console.log(`🔍 [IA ADVISOR] Analyse d'une erreur pour suggestion...`);
+
+        const prompt = `
+            ERREUR DÉTECTÉE SUR LE SITE :
+            Message : "${error}"
+            Stack : "${stack}"
+            Contexte : ${context}
+
+            MISSION : 
+            1. Explique simplement la cause.
+            2. Donne le bloc de code correctif.
+            Réponds de façon concise.
+        `;
+
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${process.env.GEMINI_API_KEY}`;
+        const aiRes = await fetch(geminiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+        }).then(r => r.json());
+
+        const suggestion = aiRes.candidates?.[0]?.content?.parts?.[0]?.text || "Aucune suggestion trouvée.";
+        
+        // On renvoie juste la réponse à la console du navigateur
+        res.json({ ok: true, suggestion });
+    } catch (e) {
+        res.status(500).json({ ok: false });
     }
-
-    res.json({ message: "Initialisation terminée", details: results });
 });
 
-// --- RESTE DES ROUTES EXISTANTES ---
+// --- RESTAURATION DE TOUTES LES ROUTES (FIX 404) ---
+
 router.get('/scan-sessions', async (req, res) => {
-    const sessions = await mongoose.model('ScanSession').find({}).sort({ createdAt: -1 });
-    res.json(sessions);
+    try {
+        const data = await mongoose.model('ScanSession').find({}).sort({ createdAt: -1 });
+        res.json(data || []);
+    } catch(e) { res.json([]); }
 });
 
 router.post('/scan-sessions', async (req, res) => {
     try {
-        const { title, classroom } = req.body;
-        const ScanSession = mongoose.model('ScanSession');
-        
-        // On s'assure que la structure existe au moment de créer un devoir
-        const folderName = (classroom === '1D') ? "1ere BFI" : classroom;
-        const { productionsId } = await DriveService.initClassStructure(folderName);
-        const homeworkFolderId = await DriveService.getOrCreateFolder(title, productionsId);
-
-        const newSession = await ScanSession.create({
-            title,
-            classroom,
-            driveFolderId: homeworkFolderId,
-            createdAt: Date.now()
-        });
-
+        const { classroom, title } = req.body;
+        const finalTitle = title ? `${title.trim()}_${getSuffix()}` : getSuffix();
+        const rootId = await DriveService.getOrCreateFolder(classroom === '1D' ? '1BFI' : classroom);
+        const prodId = await DriveService.getOrCreateFolder("PRODUCTIONS", rootId);
+        const hwId = await DriveService.getOrCreateFolder(finalTitle, prodId);
+        const newSession = await mongoose.model('ScanSession').create({ title: finalTitle, classroom, driveFolderId: hwId });
         res.json(newSession);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+router.patch('/scan-sessions/:id/rename', async (req, res) => {
+    try {
+        const { newPrefix } = req.body;
+        const session = await mongoose.model('ScanSession').findById(req.params.id);
+        const parts = session.title.split('_');
+        const suffix = parts[parts.length - 1];
+        const newTitle = newPrefix ? `${newPrefix.trim()}_${suffix}` : suffix;
+        if (session.driveFolderId) await DriveService.renameFolder(session.driveFolderId, newTitle);
+        session.title = newTitle; await session.save();
+        res.json(session);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.delete('/scan-sessions/:id', async (req, res) => {
-    await mongoose.model('ScanSession').findByIdAndDelete(req.params.id);
+    try {
+        const session = await mongoose.model('ScanSession').findById(req.params.id);
+        if (session?.driveFolderId) await DriveService.deleteFile(session.driveFolderId);
+        await mongoose.model('ScanSession').findByIdAndDelete(req.params.id);
+        res.json({ ok: true });
+    } catch (e) { res.status(500).json({ ok: false }); }
+});
+
+router.post('/scan-upload-photo', async (req, res) => {
+    try {
+        const { sessionId, type, imageBase64 } = req.body;
+        const session = await mongoose.model('ScanSession').findById(sessionId);
+        const result = await DriveService.uploadImage(session.driveFolderId, `${type}_${Date.now()}.jpg`, imageBase64);
+        if (result && result.id) {
+            const field = type === 'quest' ? { $push: { questionUrls: result.id } } : { $push: { copyUrls: result.id } };
+            const updated = await mongoose.model('ScanSession').findByIdAndUpdate(sessionId, field, { new: true });
+            return res.json(updated);
+        }
+        res.status(500).json({ error: "Echec Drive" });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/scan-delete-photo', async (req, res) => {
+    try {
+        const { sessionId, type, url } = req.body;
+        const idMatch = url.match(/id=([-\w]{25,})/) || url.match(/\/d\/([-\w]{25,})/);
+        if (idMatch) await DriveService.deleteFile(idMatch[1]).catch(() => {});
+        const field = type === 'quest' ? { questionUrls: url } : { copyUrls: url };
+        const updated = await mongoose.model('ScanSession').findByIdAndUpdate(sessionId, { $pull: field }, { new: true });
+        res.json(updated);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.patch('/scan-sessions/:id/instructions', async (req, res) => {
+    await mongoose.model('ScanSession').findByIdAndUpdate(req.params.id, { teacherInstruction: req.body.text });
     res.json({ ok: true });
+});
+
+router.get('/player-productions/:playerId', async (req, res) => {
+    try {
+        const player = await mongoose.model('Player').findById(req.params.playerId);
+        const root = (player.classroom === '1D' || player.classroom === '1BFI') ? '1BFI' : player.classroom;
+        const rootId = await DriveService.getOrCreateFolder(root);
+        const prodId = await DriveService.getOrCreateFolder("PRODUCTIONS", rootId);
+        const stdId = await DriveService.getOrCreateFolder(`${player.firstName} ${player.lastName}`, prodId);
+        const files = await DriveService.listFilesInFolder(stdId);
+        res.json(files || []);
+    } catch (e) { res.status(500).json([]); }
 });
 
 module.exports = router;
@@ -4900,6 +5277,22 @@ module.exports = mongoose.model('Chapter', ChapterSchema);
 
 
 ############################################################
+### FICHIER: server/models/DeploySignal.js
+############################################################
+
+const mongoose = require('mongoose');
+
+const DeploySignalSchema = new mongoose.Schema({
+    build: { type: Number, required: true },
+    status: { type: String, default: 'deploying' },
+    updatedAt: { type: Date, default: Date.now }
+});
+
+// On force le nom 'deploysignals' (sans majuscule, au pluriel)
+module.exports = mongoose.models.DeploySignal || mongoose.model('DeploySignal', DeploySignalSchema, 'deploysignals');
+
+
+############################################################
 ### FICHIER: server/models/GameLevel.js
 ############################################################
 
@@ -4958,16 +5351,16 @@ module.exports = mongoose.model('Player', PlayerSchema);
 const mongoose = require('mongoose');
 
 const ScanSessionSchema = new mongoose.Schema({
-    title: { type: String, required: true },
+    title: { type: String, default: "" }, 
     classroom: { type: String, required: true },
-    driveFolderId: String,       // Dossier du Devoir
-    productionsFolderId: String, // Dossier "Productions" de la classe
-    teacherInstruction: String, 
-    teacherAudioUrl: String, 
+    driveFolderId: String,
+    questionUrls: { type: [String], default: [] }, // Photos du sujet
+    copyUrls: { type: [String], default: [] },     // Photos des copies
+    teacherInstruction: { type: String, default: "" }, 
     createdAt: { type: Date, default: Date.now }
 });
 
-module.exports = mongoose.model('ScanSession', ScanSessionSchema);
+module.exports = mongoose.models.ScanSession || mongoose.model('ScanSession', ScanSessionSchema);
 
 
 ############################################################
@@ -5036,50 +5429,59 @@ const port = process.env.PORT || 3000;
 
 // 1. Connexion BDD
 mongoose.connect(process.env.MONGODB_URI)
-    .then(() => console.log('✅ BDD Connectée.'))
+    .then(async () => {
+        console.log('✅ BDD Connectée.');
+        
+        // Import des modèles
+        require('./models/Player');
+        require('./models/Chapter');
+        require('./models/Homework');
+        require('./models/GameLevel');
+        require('./models/Bug');
+        require('./models/Submission');
+        require('./models/TeacherStyle');
+        require('./models/ScanSession');
+        const DeploySignal = require('./models/DeploySignal');
+
+        // SIGNAL SECRET AU DÉMARRAGE (Une fois la BDD prête)
+        try {
+            const vPath = path.join(__dirname, 'version.json');
+            if (fs.existsSync(vPath)) {
+                const vData = JSON.parse(fs.readFileSync(vPath, 'utf8'));
+                await DeploySignal.findOneAndUpdate(
+                    {}, 
+                    { build: vData.build, status: 'live', updatedAt: new Date() }, 
+                    { upsert: true }
+                );
+                console.log(`📡 [SIGNAL] Build #${vData.build} déclaré LIVE sur MongoDB.`);
+            }
+        } catch (e) { console.log("⚠️ Erreur signal live."); }
+    })
     .catch(err => console.error("❌ Erreur MongoDB :", err));
 
-// 2. Middlewares de base
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// 3. Import des Modèles (Doivent être chargés avant les routes)
-require('./models/Player');
-require('./models/Chapter');
-require('./models/Homework');
-require('./models/GameLevel');
-require('./models/Bug');
-require('./models/Submission');
-require('./models/TeacherStyle');
-require('./models/ScanSession');
-
-// 4. Déclaration des Routes API (AVANT le frontend)
+// Routes API
 app.use('/api', require('./features/auth/auth.routes'));
 app.use('/api', require('./features/eleve/eleve.routes'));
 app.use('/api', require('./features/prof/prof.routes'));
 app.use('/api', require('./features/game/game.routes'));
 app.use('/api', require('./features/prof/automation.routes'));
 
-// 5. Route de test immédiate
-app.get('/api/scans-ping', (req, res) => res.json({ status: "ok", message: "API accessible" }));
-
-// 6. Gestion du Frontend (APRÈS les routes API)
+// Frontend
 const distPath = path.join(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) {
-    console.log("📦 Mode Production : Dossier 'dist' détecté.");
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
-        // Si la requête commence par /api mais n'a pas été captée avant, c'est une 404
-        if (req.path.startsWith('/api')) return res.status(404).json({ error: "Route API introuvable" });
+        if (req.path.startsWith('/api')) return res.status(404).json({ error: "API 404" });
         res.sendFile(path.join(distPath, 'index.html'));
     });
 } else {
-    console.log("⚠️ Mode Développement : Le serveur API répond uniquement sur /api");
-    app.get('/', (req, res) => res.send("Serveur API Condamine actif. Utilisez le port 5173 pour le frontend."));
+    app.get('/', (req, res) => res.send("Serveur API Condamine actif."));
 }
 
-app.listen(port, () => {
-    console.log(`🚀 SERVEUR NODE PRÊT : http://127.0.0.1:${port}`);
-});
+app.listen(port, () => console.log(`🚀 SERVEUR PRÊT : ${port}`));
 
 
 ############################################################
@@ -5087,6 +5489,7 @@ app.listen(port, () => {
 ############################################################
 
 const { google } = require('googleapis');
+const { Readable } = require('stream');
 
 const auth = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
@@ -5097,39 +5500,97 @@ auth.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
 const drive = google.drive({ version: 'v3', auth });
 
 const DriveService = {
+    makePublic: async (fileId) => {
+        try {
+            if (!fileId) return false;
+            await drive.permissions.create({
+                fileId: fileId,
+                resource: { role: 'reader', type: 'anyone' }
+            });
+            return true;
+        } catch (e) { return false; }
+    },
+
     getOrCreateFolder: async (name, parentId = null) => {
         try {
             let query = `name = '${name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
             if (parentId) query += ` and '${parentId}' in parents`;
-
             const res = await drive.files.list({ q: query, fields: 'files(id, name)' });
-            if (res.data.files.length > 0) return res.data.files[0].id;
+            if (res.data.files && res.data.files.length > 0) return res.data.files[0].id;
 
-            const fileMetadata = {
-                name: name,
-                mimeType: 'application/vnd.google-apps.folder',
-                parents: parentId ? [parentId] : []
-            };
-            const folder = await drive.files.create({ resource: fileMetadata, fields: 'id' });
+            const folder = await drive.files.create({
+                resource: { name, mimeType: 'application/vnd.google-apps.folder', parents: parentId ? [parentId] : [] },
+                fields: 'id'
+            });
+            await DriveService.makePublic(folder.data.id);
             return folder.data.id;
+        } catch (e) { return null; }
+    },
+
+    // SUPPRESSION SÉCURISÉE : NE CRASH JAMAIS
+    deleteFile: async (fileId) => {
+        try {
+            if (!fileId) return true;
+            await drive.files.delete({ fileId: fileId });
+            console.log(`📡 [DRIVE] Supprimé avec succès : ${fileId}`);
+            return true;
         } catch (e) {
-            console.error(`❌ Erreur Dossier ${name}:`, e.message);
-            return null;
+            // Si le fichier n'existe déjà plus sur Drive (404), c'est une réussite pour nous
+            if (e.code === 404 || (e.response && e.response.status === 404)) {
+                console.log(`📡 [DRIVE] Fichier ${fileId} déjà absent de Google Drive.`);
+                return true;
+            }
+            console.error("❌ [DRIVE ERROR] Echec suppression physique:", e.message);
+            return false; // On renvoie false mais on ne jette pas d'erreur fatale
         }
     },
 
-    // Crée la structure : [Nom Classe] > PRODUCTIONS
-    initClassStructure: async (className) => {
-        const classId = await DriveService.getOrCreateFolder(className);
-        if (classId) {
-            const productionsId = await DriveService.getOrCreateFolder("PRODUCTIONS", classId);
-            return { classId, productionsId };
-        }
-        return null;
+    renameFolder: async (fileId, newName) => {
+        try {
+            if (!fileId) return false;
+            await drive.files.update({ fileId, resource: { name: newName } });
+            return true;
+        } catch (e) { return false; }
+    },
+
+    uploadImage: async (folderId, fileName, base64Data) => {
+        try {
+            const base64Image = base64Data.split(';base64,').pop();
+            const buffer = Buffer.from(base64Image, 'base64');
+            const media = { mimeType: 'image/jpeg', body: Readable.from(buffer) };
+            const file = await drive.files.create({
+                resource: { name: fileName, parents: [folderId] },
+                media: media, 
+                fields: 'id, webViewLink'
+            });
+            await DriveService.makePublic(file.data.id);
+            return { id: file.data.id, link: file.data.webViewLink };
+        } catch (e) { return null; }
+    },
+
+    listFilesInFolder: async (folderId) => {
+        try {
+            if (!folderId) return [];
+            const res = await drive.files.list({
+                q: `'${folderId}' in parents and trashed = false`,
+                fields: 'files(id, name, webViewLink, thumbnailLink)'
+            });
+            return res.data.files || [];
+        } catch (e) { return []; }
     }
 };
 
 module.exports = DriveService;
+
+
+############################################################
+### FICHIER: server/version.json
+############################################################
+
+{
+  "build": 17,
+  "timestamp": "10/01/2026 11:24:32"
+}
 
 
 ############################################################
@@ -5150,10 +5611,13 @@ const IGNORE_LIST = [
 ];
 const EXTENSIONS = ['.js', '.jsx', '.css', '.html', '.json', '.env', '.md'];
 
-// Balises exactes pour projectMap.txt
+// Balises pour la structure
 const START_TAG = "@@@     ARBORESSENCE  @@@";
 const END_TAG = "@@@     FIN DE L ARBORESCENCE  @@@";
 
+/**
+ * Génère l'arborescence visuelle du projet
+ */
 function buildTree(dir, prefix = '') {
     let structure = '';
     try {
@@ -5185,6 +5649,9 @@ function buildTree(dir, prefix = '') {
     return structure;
 }
 
+/**
+ * Capture le contenu de tous les fichiers sources
+ */
 function captureContent(dir, baseDir = "") {
     let content = "";
     try {
@@ -5199,13 +5666,11 @@ function captureContent(dir, baseDir = "") {
             } else {
                 const ext = path.extname(item).toLowerCase();
                 
-                // Si c'est une extension valide OU le fichier .env
                 if (EXTENSIONS.includes(ext) || item === '.env') {
                     content += "\n" + "#".repeat(60) + "\n";
                     content += "### FICHIER: " + relativePath + "\n";
                     content += "#".repeat(60) + "\n\n";
 
-                    // SÉCURITÉ : Exception pour le fichier .env
                     if (item === '.env') {
                         content += "### [SÉCURITÉ] CONTENU MASQUÉ ###\n";
                         content += "# Ce fichier contient des clés API réelles.\n";
@@ -5213,7 +5678,6 @@ function captureContent(dir, baseDir = "") {
                         content += "MONGODB_URI=*****\n";
                         content += "GEMINI_API_KEY=*****\n\n";
                     } else {
-                        // Pour les autres fichiers, on lit le contenu normalement
                         try {
                             const data = fs.readFileSync(fullPath, 'utf8');
                             content += data + "\n\n";
@@ -5228,49 +5692,54 @@ function captureContent(dir, baseDir = "") {
     return content;
 }
 
+/**
+ * Met à jour le fichier projectMap.txt séparément
+ */
 function updateProjectMap(tree) {
     if (!fs.existsSync(MAP_FILENAME)) {
-        console.log(`⚠️ ${MAP_FILENAME} n'existe pas. Création...`);
         fs.writeFileSync(MAP_FILENAME, `${START_TAG}\n${tree}\n${END_TAG}\n\n==Project MAP==\n(Généré automatiquement)`);
-        console.log(`✅ ${MAP_FILENAME} créé.`);
         return;
     }
 
     let content = fs.readFileSync(MAP_FILENAME, 'utf8');
-    
-    // Recherche des balises
     const startIndex = content.indexOf(START_TAG);
     const endIndex = content.indexOf(END_TAG);
 
-    if (startIndex === -1 || endIndex === -1) {
-        console.log(`❌ Impossible de mettre à jour ${MAP_FILENAME} : Balises introuvables.`);
-        return;
+    if (startIndex !== -1 && endIndex !== -1) {
+        const before = content.substring(0, startIndex + START_TAG.length);
+        const after = content.substring(endIndex);
+        const newContent = before + "\n" + tree + after;
+        fs.writeFileSync(MAP_FILENAME, newContent);
     }
-
-    // Remplacement du contenu entre les balises
-    const before = content.substring(0, startIndex + START_TAG.length);
-    const after = content.substring(endIndex);
-    
-    const newContent = before + "\n\n" + tree + "\n" + after;
-    
-    fs.writeFileSync(MAP_FILENAME, newContent);
-    console.log(`✅ Arborescence injectée dans ${MAP_FILENAME} !`);
 }
 
+/**
+ * Exécute le scan complet
+ */
 function run() {
-    console.log("📸 Démarrage du scan...");
+    console.log("📸 Démarrage du snapshot complet...");
     
-    // 1. Générer l'arbre (Pour projectMap)
+    // 1. Générer l'arborescence
     const tree = buildTree(__dirname);
     
-    // 2. Mettre à jour projectMap.txt
+    // 2. Mettre à jour la map séparée
     updateProjectMap(tree);
 
-    // 3. Générer snapshot.txt (CODE UNIQUEMENT, SANS ARBORESCENCE)
-    let output = "CODE SOURCE COMPLET\n" + "=".repeat(60) + "\n\n" + captureContent(__dirname);
+    // 3. Construire le contenu final pour snapshot.txt
+    let output = "STRUCTURE DU PROJET\n";
+    output += "=".repeat(60) + "\n";
+    output += START_TAG + "\n";
+    output += tree;
+    output += END_TAG + "\n\n";
     
+    output += "CODE SOURCE COMPLET\n";
+    output += "=".repeat(60) + "\n\n";
+    output += captureContent(__dirname);
+    
+    // 4. Écrire le fichier final
     fs.writeFileSync(OUTPUT_FILENAME, output);
-    console.log(`✅ ${OUTPUT_FILENAME} généré (Code uniquement, .env masqué).`);
+    
+    console.log(`✅ ${OUTPUT_FILENAME} généré avec l'arborescence en haut.`);
 }
 
 run();

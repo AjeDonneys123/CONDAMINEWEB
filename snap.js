@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+require('dotenv').config();
 
 const OUTPUT_FILENAME = 'snapshot.txt';
 const MAP_FILENAME = 'projectMap.txt';
@@ -7,24 +8,17 @@ const MAP_FILENAME = 'projectMap.txt';
 const IGNORE_LIST = [
     'node_modules', '.git', 'dist', '.vscode', '.DS_Store', 
     'package-lock.json', 'snapshot.txt', 'PROJET_BACKUP.zip',
-    'PROJET_POUR_IA.txt', 'PROJET_SNAPSHOT.txt', 'SNAPSHOT_CODE.txt', 'SNAPSHOT_FULL.txt',
-    'history.txt', 'update.txt'
+    'history.txt', 'update.txt', 'projectMap.txt'
 ];
 const EXTENSIONS = ['.js', '.jsx', '.css', '.html', '.json', '.env', '.md'];
 
-// Balises pour la structure
-const START_TAG = "@@@     ARBORESSENCE  @@@";
-const END_TAG = "@@@     FIN DE L ARBORESCENCE  @@@";
-
 /**
- * Génère l'arborescence visuelle du projet
+ * 1. Génère l'arborescence standard
  */
 function buildTree(dir, prefix = '') {
     let structure = '';
     try {
         const items = fs.readdirSync(dir).filter(item => !IGNORE_LIST.includes(item));
-        
-        // On trie : Dossiers d'abord, puis fichiers
         items.sort((a, b) => {
             const aIsDir = fs.statSync(path.join(dir, a)).isDirectory();
             const bIsDir = fs.statSync(path.join(dir, b)).isDirectory();
@@ -32,26 +26,20 @@ function buildTree(dir, prefix = '') {
             if (!aIsDir && bIsDir) return 1;
             return a.localeCompare(b);
         });
-
         items.forEach((item, index) => {
             const isLast = index === items.length - 1;
             const fullPath = path.join(dir, item);
             let isDir = false;
             try { isDir = fs.statSync(fullPath).isDirectory(); } catch(e) {}
-            
             structure += prefix + (isLast ? '└── ' : '├── ') + item + (isDir ? '/' : '') + '\n';
-            if (isDir) {
-                structure += buildTree(fullPath, prefix + (isLast ? '    ' : '│   '));
-            }
+            if (isDir) structure += buildTree(fullPath, prefix + (isLast ? '    ' : '│   '));
         });
-    } catch (e) {
-        structure += prefix + "!!! Erreur de lecture !!!\n";
-    }
+    } catch (e) { structure += prefix + "!!! Erreur !!!\n"; }
     return structure;
 }
 
 /**
- * Capture le contenu de tous les fichiers sources
+ * 2. Capture le contenu des fichiers
  */
 function captureContent(dir, baseDir = "") {
     let content = "";
@@ -61,30 +49,18 @@ function captureContent(dir, baseDir = "") {
             const fullPath = path.join(dir, item);
             const relativePath = path.join(baseDir, item);
             const stats = fs.statSync(fullPath);
-
             if (stats.isDirectory()) {
                 content += captureContent(fullPath, relativePath);
             } else {
                 const ext = path.extname(item).toLowerCase();
-                
                 if (EXTENSIONS.includes(ext) || item === '.env') {
-                    content += "\n" + "#".repeat(60) + "\n";
-                    content += "### FICHIER: " + relativePath + "\n";
-                    content += "#".repeat(60) + "\n\n";
-
+                    content += "\n############################################################\n";
+                    content += `### FICHIER: ${relativePath}\n`;
+                    content += "############################################################\n\n";
                     if (item === '.env') {
-                        content += "### [SÉCURITÉ] CONTENU MASQUÉ ###\n";
-                        content += "# Ce fichier contient des clés API réelles.\n";
-                        content += "# Ne pas partager son contenu réel.\n";
-                        content += "MONGODB_URI=*****\n";
-                        content += "GEMINI_API_KEY=*****\n\n";
+                        content += "MONGODB_URI=*****\nGEMINI_API_KEY=*****\n\n";
                     } else {
-                        try {
-                            const data = fs.readFileSync(fullPath, 'utf8');
-                            content += data + "\n\n";
-                        } catch (e) {
-                            content += "!!! ERREUR DE LECTURE DU FICHIER !!!\n\n";
-                        }
+                        content += fs.readFileSync(fullPath, 'utf8') + "\n";
                     }
                 }
             }
@@ -94,53 +70,56 @@ function captureContent(dir, baseDir = "") {
 }
 
 /**
- * Met à jour le fichier projectMap.txt séparément
+ * 3. Demande à l'IA de générer la Project Map enrichie
  */
-function updateProjectMap(tree) {
-    if (!fs.existsSync(MAP_FILENAME)) {
-        fs.writeFileSync(MAP_FILENAME, `${START_TAG}\n${tree}\n${END_TAG}\n\n==Project MAP==\n(Généré automatiquement)`);
-        return;
-    }
+async function generateAIPage(snapshotContent) {
+    console.log("🧠 [IA] Analyse du projet pour enrichir la map...");
+    const fetch = (await import('node-fetch')).default;
 
-    let content = fs.readFileSync(MAP_FILENAME, 'utf8');
-    const startIndex = content.indexOf(START_TAG);
-    const endIndex = content.indexOf(END_TAG);
+    const prompt = `
+    Tu es un architecte logiciel expert. Voici le code source complet de mon projet.
+    
+    TON TRAVAIL :
+    1. Produis une arborescence ASCII (style tree).
+    2. SOUS CHAQUE FICHIER dans l'arbre, ajoute exactement 2 lignes de résumé commençant par ">" expliquant son rôle technique et fonctionnel.
+    3. En dessous de l'arbre, fais une section "INDEX DÉTAILLÉ" listant chaque fichier avec une explication plus longue (4-5 lignes).
 
-    if (startIndex !== -1 && endIndex !== -1) {
-        const before = content.substring(0, startIndex + START_TAG.length);
-        const after = content.substring(endIndex);
-        const newContent = before + "\n" + tree + after;
-        fs.writeFileSync(MAP_FILENAME, newContent);
+    CODE SOURCE :
+    ${snapshotContent}
+    `;
+
+    try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${process.env.GEMINI_API_KEY}`;
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+        });
+        const data = await response.json();
+        return data.candidates[0].content.parts[0].text;
+    } catch (e) {
+        console.error("❌ Erreur Gemini:", e.message);
+        return "Erreur lors de la génération de la map par l'IA.";
     }
 }
 
 /**
- * Exécute le scan complet
+ * 4. Lancement
  */
-function run() {
-    console.log("📸 Démarrage du snapshot complet...");
-    
-    // 1. Générer l'arborescence
+async function run() {
+    console.log("📸 [1/3] Création du snapshot local...");
     const tree = buildTree(__dirname);
-    
-    // 2. Mettre à jour la map séparée
-    updateProjectMap(tree);
+    const code = captureContent(__dirname);
+    const fullSnapshot = `STRUCTURE\n${tree}\n\nCODE\n${code}`;
+    fs.writeFileSync(OUTPUT_FILENAME, fullSnapshot);
 
-    // 3. Construire le contenu final pour snapshot.txt
-    let output = "STRUCTURE DU PROJET\n";
-    output += "=".repeat(60) + "\n";
-    output += START_TAG + "\n";
-    output += tree;
-    output += END_TAG + "\n\n";
-    
-    output += "CODE SOURCE COMPLET\n";
-    output += "=".repeat(60) + "\n\n";
-    output += captureContent(__dirname);
-    
-    // 4. Écrire le fichier final
-    fs.writeFileSync(OUTPUT_FILENAME, output);
-    
-    console.log(`✅ ${OUTPUT_FILENAME} généré avec l'arborescence en haut.`);
+    console.log("🌐 [2/3] Envoi à l'IA pour documentation...");
+    const aiMap = await generateAIPage(fullSnapshot);
+
+    console.log("📝 [3/3] Écriture de projectMap.txt...");
+    fs.writeFileSync(MAP_FILENAME, aiMap);
+
+    console.log(`✅ Terminé ! snapshot.txt est prêt et projectMap.txt a été enrichi par l'IA.`);
 }
 
 run();
