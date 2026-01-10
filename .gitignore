@@ -1,2 +1,7 @@
 node_modules
 .env
+update.txt
+history.txt
+client/dist
+.DS_Store
+package-lock.json
