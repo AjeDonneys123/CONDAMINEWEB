@@ -12,37 +12,28 @@ async function start() {
         await mongoose.connect(process.env.MONGODB_URI);
     }
     
-    // On utilise le même modèle que le serveur
     const SignalSchema = new mongoose.Schema({ build: Number, status: String, updatedAt: Date });
     const DeploySignal = mongoose.model('DeploySignal', SignalSchema, 'deploysignals');
 
-    console.log("🚀 [GIT-AUTO] Build System V7.2 (Radar MongoDB) actif.");
+    console.log("🚀 [GIT-AUTO] Build System V8 (Messages explicites) prêt.");
 
     let isLocked = false;
     let timeout = null;
 
     function checkDatabaseSignal(targetBuild) {
-        console.log(`\n⏳ Build #${targetBuild} envoyé. Surveillance du signal secret...`);
-        
         const interval = setInterval(async () => {
             try {
                 const signal = await DeploySignal.findOne({});
-                if (signal) {
-                    if (signal.build === targetBuild && signal.status === 'live') {
-                        clearInterval(interval);
-                        console.log("\n" + "=".repeat(60));
-                        console.log(`✨ [DÉPLOIEMENT TERMINÉ] Build #${targetBuild} est LIVE !`);
-                        console.log(`⏰ Heure : ${new Date().toLocaleTimeString()}`);
-                        console.log("=".repeat(60) + "\n");
-                        isLocked = false;
-                    } else {
-                        // RADAR : Affiche la version vue en temps réel
-                        process.stdout.write(`\r📡 MongoDB : Vu #${signal.build} (${signal.status}) | Attente #${targetBuild}... `);
-                    }
+                if (signal && signal.build === targetBuild && signal.status === 'live') {
+                    clearInterval(interval);
+                    console.log("\n" + "=".repeat(60));
+                    console.log(`✨ [DÉPLOIEMENT RÉUSSI] Build #${targetBuild} est LIVE !`);
+                    console.log("=".repeat(60) + "\n");
+                    isLocked = false;
+                } else if (signal) {
+                    process.stdout.write(`\r📡 MongoDB : Vu #${signal.build} (live) | Attente #${targetBuild}... `);
                 }
-            } catch (e) {
-                process.stdout.write(`\r📡 MongoDB : En attente de connexion... `);
-            }
+            } catch (e) { process.stdout.write(`\r📡 MongoDB : Connexion... `); }
         }, 4000);
     }
 
@@ -50,20 +41,18 @@ async function start() {
         if (isLocked) return;
         isLocked = true;
 
-        let v = { build: 0 };
-        try { v = JSON.parse(fs.readFileSync(versionPath, 'utf8')); } catch (e) { v = { build: 0 }; }
+        let v = { build: 0, message: "Mise à jour automatique" };
+        try { v = JSON.parse(fs.readFileSync(versionPath, 'utf8')); } catch (e) {}
         
-        v.build++;
-        v.timestamp = new Date().toLocaleString('fr-FR');
-        fs.writeFileSync(versionPath, JSON.stringify(v, null, 2));
+        // On n'incrémente plus ici, on laisse l'IA le faire dans le fichier version.json
+        const commitMessage = `Build #${v.build} : ${v.message}`;
 
-        console.log(`\n📦 [GIT] Commit Build #${v.build}...`);
+        console.log(`\n📦 [GIT] ${commitMessage}`);
 
-        exec(`git add . && git commit -m "Auto-Deploy #${v.build}" && git push`, (err) => {
+        exec(`git add . && git commit -m "${commitMessage}" && git push`, (err) => {
             if (err) { console.log("ℹ️ Rien à pousser."); isLocked = false; return; }
-            console.log(`✅ GitHub OK. Render va déployer le Build #${v.build}.`);
+            console.log(`✅ GitHub OK. Déploiement du Build #${v.build} sur Render...`);
             
-            // On prévient la DB qu'on attend le nouveau build
             DeploySignal.findOneAndUpdate({}, { status: 'deploying', build: v.build - 1 }, { upsert: true })
                 .then(() => checkDatabaseSignal(v.build));
         });

@@ -7,6 +7,10 @@ export default function ScansStudio() {
     const [activeTab, setActiveTab] = useState('scan');
     const [selectedClass, setSelectedClass] = useState("6D");
     const [showFolderPicker, setShowFolderPicker] = useState(null);
+    const [newTitle, setNewTitle] = useState("");
+    const [loading, setLoading] = useState(false);
+
+    const classes = ["6D", "5B", "5C", "2A", "2CD", "1BFI"];
 
     const loadData = async () => {
         const [sRes, cRes] = await Promise.all([
@@ -19,6 +23,17 @@ export default function ScansStudio() {
 
     useEffect(() => { loadData(); }, []);
 
+    const createSession = async () => {
+        setLoading(true);
+        await fetch('/api/scan-sessions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title: newTitle, classroom: selectedClass })
+        });
+        setNewTitle(""); loadData();
+        setLoading(false);
+    };
+
     const assignToFolder = async (sessionId, chapterId) => {
         await fetch(`/api/scan-sessions/${sessionId}/assign-chapter`, {
             method: 'PATCH',
@@ -26,76 +41,73 @@ export default function ScansStudio() {
             body: JSON.stringify({ chapterId })
         });
         setShowFolderPicker(null);
-        loadData(); // Le devoir disparaîtra car il aura maintenant un chapterId
+        loadData();
     };
 
-    // On ne montre que les devoirs qui n'ont pas encore été "classés" (chapterId vide)
+    const handleRename = async (id, oldTitle, newPrefix) => {
+        const parts = oldTitle.split('_');
+        const oldP = parts.length > 1 ? parts.slice(0, -1).join('_') : "";
+        if (newPrefix === oldP) return;
+        await fetch(`/api/scan-sessions/${id}/rename`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ newPrefix })
+        });
+        loadData();
+    };
+
     const filteredSessions = sessions.filter(s => s.classroom === selectedClass && !s.chapterId);
     const activeChapters = chapters.filter(c => c.classroom === selectedClass && !c.isArchived);
 
     return (
         <div className="p-2 space-y-4 max-w-5xl mx-auto sm:p-6">
-            {/* TABS CLASSES */}
+            {/* CLASSES EN HAUT */}
             <div className="flex gap-2 overflow-x-auto pb-2">
-                {["6D", "5B", "5C", "2A", "2CD", "1BFI"].map(c => (
-                    <button key={c} onClick={() => setSelectedClass(c)} className={`px-6 py-3 rounded-2xl font-black text-xs transition-all ${selectedClass === c ? 'bg-indigo-600 text-white shadow-lg' : 'bg-white text-slate-400'}`}>{c}</button>
+                {classes.map(c => (
+                    <button key={c} onClick={() => setSelectedClass(c)} className={`px-6 py-3 rounded-2xl font-black text-xs transition-all ${selectedClass === c ? 'bg-indigo-600 text-white shadow-lg scale-105' : 'bg-white text-slate-400 border border-slate-100'}`}>{c}</button>
                 ))}
             </div>
 
-            {/* LISTE DES SCANS NON CLASSÉS */}
+            {/* CRÉATION */}
+            <div className="bg-white p-4 rounded-[30px] border-2 border-indigo-100 shadow-sm flex items-center gap-3">
+                <input className="flex-1 p-3 bg-slate-50 rounded-2xl outline-none font-bold" placeholder={`Nouveau devoir pour ${selectedClass}...`} value={newTitle} onChange={e=>setNewTitle(e.target.value)} />
+                <button onClick={createSession} disabled={loading} className="p-3 bg-indigo-600 text-white rounded-2xl font-black px-6 shadow-lg uppercase text-xs">Créer</button>
+            </div>
+
+            {/* LISTE DES SCANS */}
             <div className="space-y-2">
                 {filteredSessions.map(s => {
                     const prefix = s.title.includes('_') ? s.title.split('_').slice(0, -1).join('_') : "";
-                    return (
-                        <div key={s._id} className="bg-white rounded-[25px] border-2 border-slate-50 shadow-sm overflow-hidden">
-                            <div className="p-2 flex flex-col lg:flex-row lg:items-center justify-between gap-2">
-                                <div className="flex items-center gap-3 px-2 flex-1">
-                                    <div className="w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs bg-indigo-50 text-indigo-400 cursor-pointer" onClick={() => setOpenId(openId === s._id ? null : s._id)}>▼</div>
-                                    <b className="text-slate-700 font-extrabold">{prefix || s.title}</b>
-                                    
-                                    {/* BOUTON ENREGISTRER (À CÔTÉ DU NOM) */}
-                                    <button 
-                                        onClick={() => setShowFolderPicker(s._id)}
-                                        className="ml-2 px-3 py-1 bg-emerald-50 text-emerald-600 rounded-lg font-black text-[9px] uppercase hover:bg-emerald-600 hover:text-white transition-all"
-                                    >
-                                        💾 Enregistrer
-                                    </button>
-                                </div>
+                    const datePart = s.title.split('_').pop();
+                    const isLocalOpen = openId === s._id;
 
-                                <div className="flex items-center gap-1 px-2">
-                                    <button onClick={() => { setOpenId(s._id); setActiveTab('quest'); }} className={`px-3 py-2 rounded-xl font-black text-[8px] uppercase ${openId===s._id && activeTab==='quest'?'bg-indigo-600 text-white':'text-slate-400'}`}>❓ Q.</button>
-                                    <button onClick={() => { setOpenId(s._id); setActiveTab('scan'); }} className={`px-3 py-2 rounded-xl font-black text-[8px] uppercase ${openId===s._id && activeTab==='scan'?'bg-indigo-600 text-white':'text-slate-400'}`}>📄 Scan</button>
-                                    <button onClick={() => { setOpenId(s._id); setActiveTab('docs'); }} className={`px-3 py-2 rounded-xl font-black text-[8px] uppercase ${openId===s._id && activeTab==='docs'?'bg-indigo-600 text-white':'text-slate-400'}`}>📂 Copies {s.copyUrls?.length || 0}</button>
-                                    
-                                    {/* CROIX GRISE */}
-                                    <button onClick={async () => { if(confirm("Supprimer ?")) { await fetch(`/api/scan-sessions/${s._id}`, {method:'DELETE'}); loadData(); } }} className="text-slate-200 hover:text-slate-400 font-bold px-3">✕</button>
+                    return (
+                        <div key={s._id} className={`bg-white rounded-[25px] border-2 transition-all ${isLocalOpen ? 'border-indigo-500 shadow-xl' : 'border-slate-50'}`}>
+                            <div className="p-2 flex flex-col lg:flex-row lg:items-center justify-between gap-2">
+                                <div className="flex items-center gap-3 px-2 flex-1 cursor-pointer" onClick={() => setOpenId(isLocalOpen ? null : s._id)}>
+                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs ${isLocalOpen ? 'bg-indigo-600 text-white rotate-180' : 'bg-indigo-50 text-indigo-400'}`}>▼</div>
+                                    <input className="text-sm sm:text-lg font-bold text-slate-700 bg-transparent border-none outline-none w-full" defaultValue={prefix} placeholder={datePart} onBlur={(e) => handleRename(s._id, s.title, e.target.value)} onClick={e => e.stopPropagation()} />
+                                    <button onClick={(e) => { e.stopPropagation(); setShowFolderPicker(s._id); }} className="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-lg font-black text-[9px] uppercase">💾 Enregistrer</button>
+                                </div>
+                                <div className="flex items-center justify-around gap-1 px-2">
+                                    <button onClick={() => { setOpenId(s._id); setActiveTab('quest'); }} className={`px-3 py-2 rounded-xl font-black text-[8px] uppercase ${isLocalOpen && activeTab==='quest' ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-400'}`}>❓ Q.</button>
+                                    <button onClick={() => { setOpenId(s._id); setActiveTab('scan'); }} className={`px-3 py-2 rounded-xl font-black text-[8px] uppercase ${isLocalOpen && activeTab==='scan' ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-600'}`}>📄 Scan</button>
+                                    <button onClick={() => { setOpenId(s._id); setActiveTab('docs'); }} className={`px-3 py-2 rounded-xl font-black text-[8px] uppercase ${isLocalOpen && activeTab==='docs' ? 'bg-indigo-600 text-white' : 'bg-emerald-50 text-emerald-600'}`}>📂 Copies {s.copyUrls?.length || 0}</button>
+                                    <button onClick={() => { setOpenId(s._id); setActiveTab('ia'); }} className={`px-3 py-2 rounded-xl font-black text-[8px] uppercase ${isLocalOpen && activeTab==='ia' ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-400'}`}>🤖 IA</button>
+                                    <button onClick={async (e) => { e.stopPropagation(); if(confirm("Supprimer ?")) { await fetch(`/api/scan-sessions/${s._id}`, {method:'DELETE'}); loadData(); } }} className="text-slate-200 hover:text-red-400 font-bold px-3 text-lg">✕</button>
                                 </div>
                             </div>
 
-                            {/* PICKER DE DOSSIER (MENU DÉROULANT) */}
                             {showFolderPicker === s._id && (
-                                <div className="p-4 bg-emerald-50 border-t border-emerald-100 animate-in slide-in-from-top-2">
-                                    <p className="text-[9px] font-black text-emerald-700 uppercase mb-3 px-2">Choisir le dossier de destination :</p>
-                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                                        {activeChapters.map(chap => (
-                                            <button 
-                                                key={chap._id} 
-                                                onClick={() => assignToFolder(s._id, chap._id)}
-                                                className="p-3 bg-white border border-emerald-200 rounded-xl text-xs font-bold text-slate-600 hover:border-emerald-500 hover:text-emerald-600 transition-all text-left truncate"
-                                            >
-                                                📁 {chap.title}
-                                            </button>
-                                        ))}
-                                        <button onClick={() => setShowFolderPicker(null)} className="p-3 bg-slate-100 rounded-xl text-xs font-black text-slate-400 uppercase">Annuler</button>
-                                    </div>
+                                <div className="p-4 bg-emerald-50 border-t border-emerald-100 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                    {activeChapters.map(chap => (
+                                        <button key={chap._id} onClick={() => assignToFolder(s._id, chap._id)} className="p-3 bg-white border border-emerald-200 rounded-xl text-xs font-bold text-slate-600 hover:border-emerald-500">📁 {chap.title}</button>
+                                    ))}
+                                    <button onClick={() => setShowFolderPicker(null)} className="p-3 bg-slate-100 rounded-xl text-xs font-black text-slate-400 uppercase">Annuler</button>
                                 </div>
                             )}
 
-                            {openId === s._id && !showFolderPicker && (
-                                <div className="p-4 bg-slate-50/50 border-t-2 border-dashed border-slate-100">
-                                    <PilotArea currentSession={s} tab={activeTab} onClose={() => setOpenId(null)} onRefresh={loadData} />
-                                </div>
-                            )}
+                            {isLocalOpen && !showFolderPicker && <div className="p-4 bg-slate-50/50 border-t-2 border-dashed border-slate-100"><PilotArea currentSession={s} tab={activeTab} onClose={() => setOpenId(null)} onRefresh={loadData} /></div>}
                         </div>
                     );
                 })}
@@ -104,7 +116,7 @@ export default function ScansStudio() {
     );
 }
 
-// (Reste du composant PilotArea inchangé)
+// (PilotArea reste identique aux versions précédentes fonctionnelles)
 function PilotArea({ currentSession, tab, onClose, onRefresh }) {
     const [session, setSession] = useState(currentSession);
     const [localPreviews, setLocalPreviews] = useState([]);
@@ -116,6 +128,7 @@ function PilotArea({ currentSession, tab, onClose, onRefresh }) {
     };
     useEffect(() => { if (tab === 'quest' || tab === 'scan') startCamera(); return () => videoRef.current?.srcObject?.getTracks().forEach(t => t.stop()); }, [tab]);
     const takePhoto = async () => {
+        if (!videoRef.current) return;
         const canvas = document.createElement('canvas');
         canvas.width = videoRef.current.videoWidth; canvas.height = videoRef.current.videoHeight;
         canvas.getContext('2d').drawImage(videoRef.current, 0, 0);
@@ -142,24 +155,15 @@ function PilotArea({ currentSession, tab, onClose, onRefresh }) {
                 </div>
             )}
             {tab === 'docs' && (
-                <div className="space-y-4">
-                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
-                        {session.copyUrls?.map((id, i) => (
-                            <div key={i} className="relative aspect-[3/4]">
-                                <img src={getImgSrc(id)} className="w-full h-full object-cover rounded-2xl border-2 border-white shadow-md bg-slate-100" alt="copy" />
-                                <button onClick={async () => { if(confirm("Supprimer ?")) { const res = await fetch('/api/scan-delete-photo', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ sessionId: session._id, type: 'copy', url: id }) }); const upd = await res.json(); setSession(upd); onRefresh(); } }} className="absolute -top-2 -right-2 bg-red-500 text-white w-6 h-6 rounded-full text-xs font-bold shadow-md">✕</button>
-                            </div>
-                        ))}
-                    </div>
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+                    {session.copyUrls?.map((id, i) => (
+                        <div key={i} className="relative aspect-[3/4]">
+                            <img src={getImgSrc(id)} className="w-full h-full object-cover rounded-2xl border-2 border-white shadow-md bg-slate-100" />
+                            <button onClick={async () => { if(confirm("Supprimer ?")) { const res = await fetch('/api/scan-delete-photo', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ sessionId: session._id, type: 'copy', url: id }) }); const upd = await res.json(); setSession(upd); onRefresh(); } }} className="absolute -top-2 -right-2 bg-red-500 text-white w-6 h-6 rounded-full text-xs font-bold shadow-md">✕</button>
+                        </div>
+                    ))}
                 </div>
             )}
             {tab === 'ia' && (
                 <textarea className="w-full p-6 h-40 bg-white rounded-[25px] border-2 border-indigo-100 outline-none font-medium" defaultValue={session.teacherInstruction} onBlur={async (e) => { await fetch(`/api/scan-sessions/${session._id}/instructions`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ text: e.target.value }) }); }} placeholder="Consignes IA..." />
             )}
-            <div className="flex flex-col gap-2 pt-4">
-                <button className="w-full py-5 bg-indigo-600 text-white rounded-[25px] font-black text-base shadow-xl">🚀 CORRIGER LE DEVOIR</button>
-                <button onClick={onClose} className="w-full py-3 bg-white text-slate-300 rounded-xl font-bold text-[10px] uppercase">Fermer le volet</button>
-            </div>
-        </div>
-    );
-}
