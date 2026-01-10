@@ -21,7 +21,7 @@ function buildTree(dir, prefix = '') {
     try {
         const items = fs.readdirSync(dir).filter(item => !IGNORE_LIST.includes(item));
         
-        // On trie : Dossiers d'abord, puis fichiers
+        // On trie : Dossiers d'abord, puis fichiers .
         items.sort((a, b) => {
             const aIsDir = fs.statSync(path.join(dir, a)).isDirectory();
             const bIsDir = fs.statSync(path.join(dir, b)).isDirectory();

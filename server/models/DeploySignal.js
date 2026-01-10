@@ -6,4 +6,4 @@ const DeploySignalSchema = new mongoose.Schema({
     updatedAt: { type: Date, default: Date.now }
 });
 
-module.exports = mongoose.model('DeploySignal', DeploySignalSchema);
+module.exports = mongoose.models.DeploySignal || mongoose.model('DeploySignal', DeploySignalSchema);

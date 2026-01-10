@@ -1,47 +1,73 @@
-// ... (garder le début du fichier avec auth et drive)
+const { google } = require('googleapis');
+const { Readable } = require('stream');
+
+const auth = new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    process.env.GOOGLE_REDIRECT_URI
+);
+auth.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
+
+const drive = google.drive({ version: 'v3', auth });
 
 const DriveService = {
-    // ... (garder les fonctions existantes : getOrCreateFolder, renameFolder, deleteFolder, uploadImage, makePublic)
-
-    // NOUVELLE FONCTION POUR LE RAPPORT TXT
-    uploadRawFile: async (folderId, fileName, media) => {
+    makePublic: async (fileId) => {
         try {
+            await drive.permissions.create({
+                fileId: fileId,
+                resource: { role: 'reader', type: 'anyone' }
+            });
+            return true;
+        } catch (e) { return false; }
+    },
+
+    getOrCreateFolder: async (name, parentId = null) => {
+        try {
+            let q = `name = '${name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
+            if (parentId) q += ` and '${parentId}' in parents`;
+            const res = await drive.files.list({ q, fields: 'files(id, name)' });
+            if (res.data.files && res.data.files.length > 0) {
+                return res.data.files[0].id;
+            }
+            const folder = await drive.files.create({
+                resource: { name, mimeType: 'application/vnd.google-apps.folder', parents: parentId ? [parentId] : [] },
+                fields: 'id'
+            });
+            await DriveService.makePublic(folder.data.id);
+            return folder.data.id;
+        } catch (e) { return null; }
+    },
+
+    uploadImage: async (folderId, fileName, base64Data) => {
+        try {
+            const buffer = Buffer.from(base64Data.split(',')[1], 'base64');
+            const media = { mimeType: 'image/jpeg', body: Readable.from(buffer) };
             const file = await drive.files.create({
                 resource: { name: fileName, parents: [folderId] },
-                media: media,
+                media: media, 
                 fields: 'id, webViewLink'
             });
             await DriveService.makePublic(file.data.id);
             return { id: file.data.id, link: file.data.webViewLink };
-        } catch (e) {
-            console.error("❌ Error Raw Upload:", e.message);
-            return null;
-        }
+        } catch (e) { return null; }
     },
-    
-    // (Recopie ici le reste de tes fonctions habituelles pour être sûr que le fichier soit complet)
-    getOrCreateFolder: async (name, parentId = null) => {
-        let q = `name = '${name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
-        if (parentId) q += ` and '${parentId}' in parents`;
-        const res = await drive.files.list({ q, fields: 'files(id, name)' });
-        if (res.data.files.length > 0) return res.data.files[0].id;
-        const folder = await drive.files.create({ resource: { name, mimeType: 'application/vnd.google-apps.folder', parents: parentId ? [parentId] : [] }, fields: 'id' });
-        await DriveService.makePublic(folder.data.id);
-        return folder.data.id;
+
+    renameFolder: async (id, name) => {
+        return drive.files.update({ fileId: id, resource: { name } });
     },
-    uploadImage: async (folderId, fileName, base64Data) => {
-        const buffer = Buffer.from(base64Data.split(',')[1], 'base64');
-        const media = { mimeType: 'image/jpeg', body: require('stream').Readable.from(buffer) };
-        const file = await drive.files.create({ resource: { name: fileName, parents: [folderId] }, media, fields: 'id, webViewLink' });
-        await DriveService.makePublic(file.data.id);
-        return { id: file.data.id, link: file.data.webViewLink };
+
+    deleteFolder: async (id) => {
+        return drive.files.delete({ fileId: id });
     },
-    renameFolder: async (id, name) => drive.files.update({ fileId: id, resource: { name } }),
-    deleteFolder: async (id) => drive.files.delete({ fileId: id }),
-    makePublic: async (id) => drive.permissions.create({ fileId: id, resource: { role: 'reader', type: 'anyone' } }),
+
     listFilesInFolder: async (id) => {
-        const res = await drive.files.list({ q: `'${id}' in parents and trashed = false`, fields: 'files(id, name, webViewLink, thumbnailLink)' });
-        return res.data.files;
+        try {
+            const res = await drive.files.list({ 
+                q: `'${id}' in parents and trashed = false`, 
+                fields: 'files(id, name, webViewLink, thumbnailLink)' 
+            });
+            return res.data.files;
+        } catch (e) { return []; }
     }
 };
 
