@@ -4,10 +4,9 @@ import GameStudio from '../games/GameStudio';
 import ProfStudioFolder from '../components/ProfStudioFolder';
 import HomeworkResults from '../homework/HomeworkResults';
 
-export default function ActivityStudio() {
+export default function ActivityStudio({ globalClass }) {
     const [activities, setActivities] = useState([]);
     const [chapters, setChapters] = useState([]);
-    const [classFilter, setClassFilter] = useState('6D');
     const [editingItem, setEditingItem] = useState(null); 
     const [viewingResults, setViewingResults] = useState(null);
 
@@ -32,29 +31,33 @@ export default function ActivityStudio() {
 
     if (viewingResults) return <HomeworkResults homework={viewingResults} onBack={() => setViewingResults(null)} />;
 
+    // Normalisation pour le filtrage (ex: "6D" matchera "6eD")
+    const normalize = (c) => c?.toString().toUpperCase().replace('E', '') || "";
+
     if (editingItem) {
-        const activeChaps = chapters.filter(c => c.classroom === classFilter && !c.isArchived);
+        const activeChaps = chapters.filter(c => normalize(c.classroom) === normalize(globalClass) && !c.isArchived);
         if (editingItem.type === 'homework') {
             return <HomeworkStudio initialData={editingItem.data} chapters={activeChaps} onClose={() => { setEditingItem(null); load(); }} />;
         }
-        return <GameStudio initialData={editingItem.data} chapters={activeChaps} classFilter={classFilter} onClose={() => { setEditingItem(null); load(); }} />;
+        return <GameStudio initialData={editingItem.data} chapters={activeChaps} classFilter={globalClass} onClose={() => { setEditingItem(null); load(); }} />;
     }
 
+    // Filtrage des données selon la classe sélectionnée en haut de page
+    const filteredChapters = chapters.filter(c => normalize(c.classroom) === normalize(globalClass));
+    const filteredActivities = activities.filter(a => normalize(a.classroom) === normalize(globalClass) || a.classroom === 'Toutes');
+
     return (
-        <div className="p-4 animate-in fade-in">
-            <div className="flex justify-between items-center mb-8 bg-white p-6 rounded-[35px] border-2 border-slate-50 shadow-sm">
-                <div className="flex gap-4">
-                    <button onClick={() => setEditingItem({ type: 'homework', data: null })} className="bg-orange-500 text-white px-6 py-3 rounded-2xl font-black text-xs shadow-lg">+ NOUVEAU DEVOIR</button>
-                    <button onClick={() => setEditingItem({ type: 'game', data: null })} className="bg-purple-600 text-white px-6 py-3 rounded-2xl font-black text-xs shadow-lg">+ NOUVEAU JEU</button>
-                </div>
-                <select className="bg-slate-100 p-3 rounded-xl font-black text-slate-600 outline-none border-none" value={classFilter} onChange={e => setClassFilter(e.target.value)}>
-                    <option value="6D">6eD</option><option value="5B">5eB</option><option value="5C">5eC</option><option value="2A">2A</option><option value="2CD">2CD</option>
-                </select>
+        <div className="animate-in fade-in">
+            {/* BARRE D'ACTIONS RAPIDES (Sans le sélecteur de classe qui est déjà en haut) */}
+            <div className="flex justify-start gap-4 mb-8 bg-white p-4 rounded-[30px] border-2 border-slate-50 shadow-sm">
+                <button onClick={() => setEditingItem({ type: 'homework', data: null })} className="bg-orange-500 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:scale-105 transition-all">+ Nouveau Devoir</button>
+                <button onClick={() => setEditingItem({ type: 'game', data: null })} className="bg-purple-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:scale-105 transition-all">+ Nouveau Jeu</button>
             </div>
+
             <ProfStudioFolder 
-                chapters={chapters.filter(c => c.classroom === classFilter)}
-                items={activities.filter(a => a.classroom === classFilter || a.classroom === 'Toutes')}
-                classFilter={classFilter}
+                chapters={filteredChapters}
+                items={filteredActivities}
+                classFilter={globalClass}
                 onArchive={async (id, state) => {
                     await fetch('/api/chapters', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({_id:id, isArchived:state})});
                     load();
@@ -65,17 +68,17 @@ export default function ActivityStudio() {
                 }}
                 onEditItem={(it) => setEditingItem({ type: it.actType, data: it })}
                 onDeleteItem={async (id, type) => {
-                    if(!confirm("Supprimer ?")) return;
+                    if(!confirm("Supprimer cet élément ?")) return;
                     await fetch(type === 'game' ? `/api/game-levels/${id}` : `/api/homework/${id}`, { method: 'DELETE' });
                     load();
                 }}
                 onDeleteChapter={async (id) => {
-                    if(!confirm("Supprimer le dossier ?")) return;
+                    if(!confirm("Supprimer le dossier complet sur Drive et en BDD ?")) return;
                     await fetch(`/api/chapters/${id}`, { method: 'DELETE' });
                     load();
                 }}
                 onCreateChapter={async (subject) => {
-                    await fetch('/api/chapters', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ title: 'Nouveau Dossier', subject, classroom: classFilter }) });
+                    await fetch('/api/chapters', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ title: 'Nouveau Dossier', subject, classroom: globalClass }) });
                     load();
                 }}
                 onViewResults={(hw) => setViewingResults(hw)}

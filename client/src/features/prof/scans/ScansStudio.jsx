@@ -1,16 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-export default function ScansStudio() {
+export default function ScansStudio({ globalClass }) {
     const [sessions, setSessions] = useState([]);
     const [chapters, setChapters] = useState([]);
     const [openId, setOpenId] = useState(null);
     const [activeTab, setActiveTab] = useState('scan');
-    const [selectedClass, setSelectedClass] = useState("6D");
     const [showFolderPicker, setShowFolderPicker] = useState(null);
     const [newTitle, setNewTitle] = useState("");
     const [loading, setLoading] = useState(false);
-
-    const classes = ["6D", "5B", "5C", "2A", "2CD", "1BFI"];
 
     const loadData = async () => {
         try {
@@ -32,7 +29,7 @@ export default function ScansStudio() {
             const res = await fetch('/api/scan-sessions', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title: newTitle, classroom: selectedClass })
+                body: JSON.stringify({ title: newTitle, classroom: globalClass })
             });
             if (res.ok) {
                 setNewTitle("");
@@ -66,33 +63,35 @@ export default function ScansStudio() {
         await loadData();
     };
 
-    // Normalisation pour le filtrage (ex: "6D" matchera "6eD")
     const normalize = (c) => c?.toString().toUpperCase().replace('E', '') || "";
 
     const filteredSessions = sessions.filter(s => 
-        normalize(s.classroom) === normalize(selectedClass) && !s.chapterId
+        normalize(s.classroom) === normalize(globalClass) && !s.chapterId
     );
     
     const activeChapters = chapters.filter(c => 
-        normalize(c.classroom) === normalize(selectedClass) && !c.isArchived
+        normalize(c.classroom) === normalize(globalClass) && !c.isArchived
     );
 
     return (
-        <div className="p-2 space-y-4 max-w-5xl mx-auto sm:p-6">
-            {/* CLASSES EN HAUT */}
-            <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
-                {classes.map(c => (
-                    <button key={c} onClick={() => setSelectedClass(c)} className={`px-6 py-3 rounded-2xl font-black text-xs transition-all flex-shrink-0 ${selectedClass === c ? 'bg-indigo-600 text-white shadow-lg scale-105' : 'bg-white text-slate-400 border'}`}>{c}</button>
-                ))}
-            </div>
-
-            {/* BARRE DE CRÉATION */}
+        <div className="space-y-4 animate-in fade-in">
+            {/* BARRE DE CRÉATION (Utilise la classe globale) */}
             <div className="bg-white p-4 rounded-[30px] border-2 border-indigo-100 shadow-sm flex items-center gap-3">
-                <input className="flex-1 p-3 bg-slate-50 rounded-2xl outline-none font-bold" placeholder={`Nouvelle production pour ${selectedClass}...`} value={newTitle} onChange={e=>setNewTitle(e.target.value)} />
-                <button onClick={createSession} disabled={loading} className="p-3 bg-indigo-600 text-white rounded-2xl font-black px-6 shadow-lg uppercase text-xs">Créer</button>
+                <input 
+                    className="flex-1 p-3 bg-slate-50 rounded-2xl outline-none font-bold" 
+                    placeholder={`Nouvelle production pour ${globalClass}...`} 
+                    value={newTitle} 
+                    onChange={e => setNewTitle(e.target.value)} 
+                />
+                <button 
+                    onClick={createSession} 
+                    disabled={loading} 
+                    className="p-3 bg-indigo-600 text-white rounded-2xl font-black px-6 shadow-lg uppercase text-xs"
+                >
+                    Créer
+                </button>
             </div>
 
-            {/* LISTE DES PRODUCTIONS */}
             <div className="space-y-2">
                 {filteredSessions.map(s => {
                     const parts = s.title.split('_');
@@ -106,10 +105,10 @@ export default function ScansStudio() {
                                 <div className="flex items-center gap-3 px-2 flex-1 cursor-pointer" onClick={() => setOpenId(isLocalOpen ? null : s._id)}>
                                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs ${isLocalOpen ? 'bg-indigo-600 text-white rotate-180' : 'bg-indigo-50 text-indigo-400'}`}>▼</div>
                                     <input className="text-sm sm:text-lg font-bold text-slate-700 bg-transparent border-none outline-none w-full max-w-[200px]" defaultValue={prefix} placeholder={datePart} onBlur={(e) => handleRename(s._id, s.title, e.target.value)} onClick={e => e.stopPropagation()} />
-                                    <button onClick={(e) => { e.stopPropagation(); setShowFolderPicker(s._id); }} className="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-lg font-black text-[9px] uppercase hover:bg-emerald-600 hover:text-white transition-all">💾 Enregistrer</button>
+                                    <button onClick={(e) => { e.stopPropagation(); setShowFolderPicker(s._id); }} className="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-lg font-black text-[9px] uppercase hover:bg-emerald-600 hover:text-white">💾 Enregistrer</button>
                                 </div>
                                 <div className="flex items-center justify-around gap-1 px-2">
-                                    <button onClick={() => { setOpenId(s._id); setActiveTab('quest'); }} className={`px-3 py-2 rounded-xl font-black text-[8px] uppercase ${isLocalOpen && activeTab==='quest' ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-50 text-slate-400'}`}>❓ Q.</button>
+                                    <button onClick={() => { setOpenId(s._id); setActiveTab('quest'); }} className={`px-3 py-2 rounded-xl font-black text-[8px] uppercase ${isLocalOpen && activeTab==='quest' ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-400'}`}>❓ Q.</button>
                                     <button onClick={() => { setOpenId(s._id); setActiveTab('scan'); }} className={`px-3 py-2 rounded-xl font-black text-[8px] uppercase ${isLocalOpen && activeTab==='scan' ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-600'}`}>📄 Scan</button>
                                     <button onClick={() => { setOpenId(s._id); setActiveTab('docs'); }} className={`px-3 py-2 rounded-xl font-black text-[8px] uppercase ${isLocalOpen && activeTab==='docs' ? 'bg-indigo-600 text-white' : 'bg-emerald-50 text-emerald-600'}`}>📂 Copies {s.copyUrls?.length || 0}</button>
                                     <button onClick={() => { setOpenId(s._id); setActiveTab('ia'); }} className={`px-3 py-2 rounded-xl font-black text-[8px] uppercase ${isLocalOpen && activeTab==='ia' ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-400'}`}>🤖 IA</button>
@@ -127,18 +126,14 @@ export default function ScansStudio() {
                             )}
 
                             {isLocalOpen && !showFolderPicker && (
-                                <div className="p-4 bg-slate-50/50 border-t-2 border-dashed border-slate-100 animate-in slide-in-from-top-2">
+                                <div className="p-4 bg-slate-50/50 border-t-2 border-dashed border-slate-100">
                                     <PilotArea currentSession={s} tab={activeTab} onClose={() => setOpenId(null)} onRefresh={loadData} />
                                 </div>
                             )}
                         </div>
                     );
                 })}
-                {filteredSessions.length === 0 && (
-                    <div className="text-center py-20 bg-white rounded-[30px] border-2 border-dashed border-slate-100">
-                        <p className="text-slate-300 italic text-xs uppercase tracking-widest">Aucune production pour {selectedClass}</p>
-                    </div>
-                )}
+                {filteredSessions.length === 0 && <p className="text-center py-20 text-slate-300 italic text-xs uppercase tracking-widest">Aucune production pour {globalClass}</p>}
             </div>
         </div>
     );
@@ -185,7 +180,7 @@ function PilotArea({ currentSession, tab, onClose, onRefresh }) {
     };
 
     const deletePhoto = async (url, type) => {
-        if(!confirm("Supprimer cette photo ?")) return;
+        if(!confirm("Supprimer ?")) return;
         setSession({ ...session, [type === 'quest' ? 'questionUrls' : 'copyUrls']: (type === 'quest' ? session.questionUrls : session.copyUrls).filter(u => u !== url) });
         await fetch('/api/scan-delete-photo', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ sessionId: session._id, type, url }) });
         onRefresh();
