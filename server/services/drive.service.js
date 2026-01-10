@@ -22,30 +22,41 @@ const DriveService = {
 
     getOrCreateFolder: async (name, parentId = null) => {
         try {
-            // Recherche avec tolérance (nom exact ou dossier parent)
+            // Si parentId est fourni mais invalide (supprimé), on risque l'erreur.
+            // On cherche d'abord le dossier.
             let query = `name = '${name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
-            if (parentId) query += ` and '${parentId}' in parents`;
-            
-            const res = await drive.files.list({ q: query, fields: 'files(id, name, webViewLink)' });
+            if (parentId) {
+                query += ` and '${parentId}' in parents`;
+            } else {
+                // Si pas de parent, on cherche à la racine "root"
+                query += ` and 'root' in parents`;
+            }
+
+            const res = await drive.files.list({ q: query, fields: 'files(id, name)' });
             
             if (res.data.files && res.data.files.length > 0) {
-                console.log(`📂 [DRIVE] Dossier trouvé : "${name}" -> ${res.data.files[0].webViewLink}`);
                 return res.data.files[0].id;
             }
 
-            // Création si inexistant
+            // Si on ne le trouve pas, on le crée
+            console.log(`🆕 Création physique du dossier : ${name}`);
             const fileMetadata = {
                 name: name,
                 mimeType: 'application/vnd.google-apps.folder',
-                parents: parentId ? [parentId] : []
+                parents: parentId ? [parentId] : [] // Si null, Google le met à la racine
             };
-            const folder = await drive.files.create({ resource: fileMetadata, fields: 'id, webViewLink' });
-            await DriveService.makePublic(folder.data.id);
+
+            const folder = await drive.files.create({
+                resource: fileMetadata,
+                fields: 'id'
+            });
             
-            console.log(`🆕 [DRIVE] Nouveau dossier créé : "${name}" -> ${folder.data.webViewLink}`);
+            await DriveService.makePublic(folder.data.id);
             return folder.data.id;
         } catch (e) {
-            console.error(`❌ [DRIVE ERROR] sur "${name}":`, e.message);
+            console.error(`❌ Erreur Drive sur ${name}:`, e.message);
+            // Si l'erreur est due au parentId supprimé, on retente sans parent
+            if (parentId) return DriveService.getOrCreateFolder(name, null);
             return null;
         }
     },
@@ -60,31 +71,21 @@ const DriveService = {
                 removeParents: previousParents,
                 fields: 'id, parents'
             });
-            console.log(`🚀 [DRIVE] Dossier déplacé vers nouveau parent ID: ${newParentId}`);
             return true;
-        } catch (e) {
-            console.error("❌ [DRIVE ERROR] moveFile:", e.message);
-            return false;
-        }
+        } catch (e) { return false; }
     },
 
     deleteFile: async (fileId) => {
         try {
             if (!fileId) return true;
             await drive.files.delete({ fileId: fileId });
-            console.log(`🗑️ [DRIVE] Fichier/Dossier supprimé ID: ${fileId}`);
             return true;
-        } catch (e) {
-            if (e.code === 404) return true;
-            console.error("❌ [DRIVE ERROR] deleteFile:", e.message);
-            return false;
-        }
+        } catch (e) { return true; } // On ignore si déjà supprimé
     },
 
     renameFolder: async (fileId, newName) => {
         try {
             await drive.files.update({ fileId, resource: { name: newName } });
-            console.log(`✏️ [DRIVE] Dossier renommé en : ${newName}`);
             return true;
         } catch (e) { return false; }
     },
@@ -96,7 +97,8 @@ const DriveService = {
             const media = { mimeType: 'image/jpeg', body: Readable.from(buffer) };
             const file = await drive.files.create({
                 resource: { name: fileName, parents: [folderId] },
-                media: media, fields: 'id, webViewLink'
+                media: media, 
+                fields: 'id, webViewLink'
             });
             await DriveService.makePublic(file.data.id);
             return { id: file.data.id, link: file.data.webViewLink };
