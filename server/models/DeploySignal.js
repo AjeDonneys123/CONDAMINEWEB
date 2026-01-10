@@ -6,4 +6,5 @@ const DeploySignalSchema = new mongoose.Schema({
     updatedAt: { type: Date, default: Date.now }
 });
 
-module.exports = mongoose.models.DeploySignal || mongoose.model('DeploySignal', DeploySignalSchema);
+// On force le nom 'deploysignals' (sans majuscule, au pluriel)
+module.exports = mongoose.models.DeploySignal || mongoose.model('DeploySignal', DeploySignalSchema, 'deploysignals');
