@@ -4,59 +4,83 @@ import './Login.css';
 export default function Login({ onLoginSuccess }) {
   const [fName, setFName] = useState('');
   const [lName, setLName] = useState('');
-  const [classroom, setClassroom] = useState('');
   const [password, setPassword] = useState('');
+  const [subject, setSubject] = useState('');
+  const [step, setStep] = useState('name'); // name, password, subject
   const [loading, setLoading] = useState(false);
 
-  const isProfAttempt = fName.toLowerCase().trim() === 'jean' && lName.toLowerCase().trim() === 'vuillet';
-
-  const handleLogin = async (e) => {
+  const checkUser = async (e) => {
     e.preventDefault();
     setLoading(true);
-    try {
-        const res = await fetch('/api/register', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ firstName: fName, lastName: lName, classroom, password })
-        }).then(r => r.json());
+    const res = await fetch('/api/login-step-1', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ firstName: fName, lastName: lName })
+    }).then(r => r.json());
 
-        if (res.ok) {
-            localStorage.setItem('player', JSON.stringify(res));
-            onLoginSuccess(res);
-        } else {
-            alert(res.message || "Accès refusé");
-        }
-    } catch (err) {
-        alert("Serveur hors-ligne.");
-    } finally {
-        setLoading(false);
+    if (res.isTeacher || res.isNew) {
+        setStep('password');
+    } else if (res.isStudent) {
+        localStorage.setItem('player', JSON.stringify(res.user));
+        onLoginSuccess(res.user);
+    } else {
+        alert("Utilisateur inconnu");
     }
+    setLoading(false);
+  };
+
+  const handleAuth = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    const res = await fetch('/api/login-step-2', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ firstName: fName, lastName: lName, password, subject })
+    }).then(r => r.json());
+
+    if (res.ok) {
+        if (res.needsSubject) {
+            setStep('subject');
+        } else {
+            localStorage.setItem('player', JSON.stringify(res.user));
+            onLoginSuccess(res.user);
+        }
+    } else {
+        alert(res.message);
+    }
+    setLoading(false);
   };
 
   return (
     <div className="login-screen">
-      <form onSubmit={handleLogin} className="login-card">
-        <h2 className="login-title">CONDAMINE</h2>
+      <div className="login-card animate-in zoom-in">
+        <h2 className="login-title">CONDACLASSE</h2>
         
-        <div className="login-inputs">
-            <input className="login-field" placeholder="Ton Prénom" value={fName} onChange={e => setFName(e.target.value)} required />
-            <input className="login-field" placeholder="Ton Nom" value={lName} onChange={e => setLName(e.target.value)} required />
-            
-            {isProfAttempt ? (
-                <input type="password" placeholder="Mot de passe Maître" className="login-field prof-focus" value={password} onChange={e => setPassword(e.target.value)} required />
-            ) : (
-                <select className="login-field" value={classroom} onChange={e => setClassroom(e.target.value)} required>
-                    <option value="">-- Choisis ta classe --</option>
-                    <option value="6D">6eD</option><option value="5B">5eB</option><option value="5C">5eC</option>
-                    <option value="2A">2de A</option><option value="2CD">2de CD</option>
-                </select>
-            )}
-        </div>
+        {step === 'name' && (
+            <form onSubmit={checkUser} className="login-inputs">
+                <input className="login-field" placeholder="Prénom" value={fName} onChange={e=>setFName(e.target.value)} required />
+                <input className="login-field" placeholder="Nom" value={lName} onChange={e=>setLName(e.target.value)} required />
+                <button className="login-submit-btn">Continuer</button>
+            </form>
+        )}
 
-        <button type="submit" className="login-submit-btn" disabled={loading}>
-            {loading ? 'CHARGEMENT...' : 'CONNEXION'}
-        </button>
-      </form>
+        {step === 'password' && (
+            <form onSubmit={handleAuth} className="login-inputs">
+                <p className="text-xs font-bold text-indigo-500 uppercase mb-2">Code d'accès requis</p>
+                <input type="password" autofocus className="login-field" placeholder="Mot de passe" value={password} onChange={e=>setPassword(e.target.value)} required />
+                <button className="login-submit-btn">Se connecter</button>
+                <button type="button" onClick={()=>setStep('name')} className="text-[10px] font-bold text-slate-400 mt-2 uppercase">Retour</button>
+            </form>
+        )}
+
+        {step === 'subject' && (
+            <form onSubmit={handleAuth} className="login-inputs">
+                <p className="text-xs font-bold text-indigo-500 uppercase mb-2">Bienvenue ! Ta matière ?</p>
+                <input autofocus className="login-field" placeholder="ex: Mathématiques, Histoire..." value={subject} onChange={e=>setSubject(e.target.value)} required />
+                <button className="login-submit-btn">Commencer</button>
+            </form>
+        )}
+      </div>
     </div>
   );
 }
