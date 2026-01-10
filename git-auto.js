@@ -1,49 +1,90 @@
 const { exec } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+const https = require('https');
 
 async function start() {
-    // Import dynamique pour éviter l'erreur ERR_REQUIRE_ESM avec chokidar 4
     const chokidar = await import('chokidar');
+    const versionPath = path.join(__dirname, 'server', 'version.json');
     
-    const IGNORED_PATHS = [
-        'node_modules', '.git', 'update.txt', 'history.txt',
-        'client/dist', '.DS_Store', 'snapshot.txt'
-    ];
+    // ⚠️ METS TON URL RÉELLE ICI
+    const LIVE_URL = "https://ton-site-condamine.com"; 
 
-    console.log("🚀 [GIT-AUTO] Système de déploiement automatique actif...");
+    console.log("🚀 [GIT-AUTO] Surveillance active. Prêt pour le build...");
 
     let timeout = null;
+    let isWaitingForDeploy = false;
 
     const watcher = chokidar.watch('.', {
-        ignored: IGNORED_PATHS,
+        ignored: ['node_modules', '.git', 'update.txt', 'history.txt', 'client/dist'],
         persistent: true,
         ignoreInitial: true
     });
 
-    function runGit() {
-        const timestamp = new Date().toLocaleString();
-        console.log(`📦 [${timestamp}] Changements détectés, synchronisation Git...`);
+    function checkLiveSite(targetBuild) {
+        process.stdout.write(`\r⏳ Build #${targetBuild} : Déploiement en cours sur le cloud... `);
+        
+        const interval = setInterval(() => {
+            https.get(`${LIVE_URL}/api/deploy-check`, (res) => {
+                let data = '';
+                res.on('data', (chunk) => { data += chunk; });
+                res.on('end', () => {
+                    try {
+                        const json = JSON.parse(data);
+                        if (json.build === targetBuild) {
+                            clearInterval(interval);
+                            console.log("\n" + "=".repeat(60));
+                            console.log(`✨ [DÉPLOIEMENT RÉUSSI] La version #${targetBuild} est officiellement en ligne !`);
+                            console.log(`🌍 URL : ${LIVE_URL}`);
+                            console.log(`⏰ Heure : ${new Date().toLocaleTimeString()}`);
+                            console.log("=".repeat(60) + "\n");
+                            isWaitingForDeploy = false;
+                        } else {
+                            process.stdout.write("."); // Point de progression
+                        }
+                    } catch (e) {
+                        process.stdout.write("x"); // Serveur en reboot
+                    }
+                });
+            }).on('error', () => {
+                process.stdout.write("x"); // Connexion perdue temporairement
+            });
+        }, 4000); // Polling toutes les 4 secondes
+    }
 
-        // La commande fait l'ajout, le commit et le push
-        const command = `git add . && git commit -m "Auto-sync : ${timestamp}" && git push`;
+    function runGit() {
+        if (isWaitingForDeploy) return;
+        isWaitingForDeploy = true;
+
+        // 1. Incrémenter Build
+        let v = { build: 0 };
+        try { v = JSON.parse(fs.readFileSync(versionPath, 'utf8')); } catch (e) {}
+        v.build++;
+        v.timestamp = new Date().toLocaleString('fr-FR');
+        fs.writeFileSync(versionPath, JSON.stringify(v, null, 2));
+
+        const commitMessage = `Auto-Deploy #${v.build} - ${v.timestamp}`;
+        console.log(`\n📦 [GIT] Création du commit #${v.build}...`);
+
+        const command = `git add . && git commit -m "${commitMessage}" && git push`;
 
         exec(command, (err, stdout, stderr) => {
             if (err) {
-                if (stderr.includes("nothing to commit")) {
-                    console.log("ℹ️ Rien à sauvegarder.");
-                } else {
-                    console.error("❌ Erreur Git:", stderr);
-                }
+                console.log("ℹ️ Rien à pousser sur GitHub.");
+                isWaitingForDeploy = false;
                 return;
             }
-            console.log("==================================================");
-            console.log("✨ [DÉPLOIEMENT] Changements envoyés sur GitHub !");
-            console.log("==================================================");
+            console.log(`✅ Push réussi. Build #${v.build} envoyé.`);
+            checkLiveSite(v.build);
         });
     }
 
-    watcher.on('all', () => {
+    watcher.on('all', (event, filePath) => {
+        // Sécurité : on ignore les fichiers système et de logs
+        if (filePath.includes('version.json') || filePath.includes('update.txt') || filePath.includes('history.txt') || isWaitingForDeploy) return;
+        
         clearTimeout(timeout);
-        timeout = setTimeout(runGit, 3000); // Sauvegarde 3 secondes après la modif
+        timeout = setTimeout(runGit, 5000); // Déclenche après 5s de calme
     });
 }
 
