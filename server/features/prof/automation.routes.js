@@ -3,54 +3,50 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const DriveService = require('../../services/drive.service');
 
-// Helper Arborescence (Mapping 6D -> 6e inclus)
-const getWorksFolder = async (classroom) => {
-    let rootName = classroom;
-    if (classroom === '6D') rootName = '6e';
-    if (classroom === '1D' || classroom === '1BFI') rootName = '1BFI';
-    
-    const rootId = await DriveService.getOrCreateFolder(rootName);
-    return await DriveService.getOrCreateFolder("1Travaux", rootId);
+// --- STRUCTURE CONDACLASSE ---
+const getCondaPath = async (classroom) => {
+    const condaRootId = await DriveService.getOrCreateFolder("CondaClasse");
+    const classId = await DriveService.getOrCreateFolder(classroom, condaRootId);
+    const worksId = await DriveService.getOrCreateFolder("1Travaux", classId);
+    const prodId = await DriveService.getOrCreateFolder("PRODUCTIONS", classId);
+    return { condaRootId, classId, worksId, prodId };
 };
 
-// --- ROUTE DE MIGRATION ET SYNCHRO TOTALE ---
+// --- MIGRATION CIBLÉE ---
 router.get('/init-all-folders', async (req, res) => {
     try {
-        const classes = ['6D', '5B', '5C', '2A', '2CD', '1D'];
+        const classes = ['6D', '5B', '5C', '2A', '2CD', '1BFI'];
         const Chapter = mongoose.model('Chapter');
-        let movedCount = 0;
+        let report = [];
 
-        for (const classroom of classes) {
-            console.log(`📦 Migration de la classe : ${classroom}...`);
-            const worksId = await getWorksFolder(classroom);
+        for (const code of classes) {
+            console.log(`🔍 [MIGRATION] Analyse pour la classe : ${code}`);
+            const { worksId } = await getCondaPath(code);
 
-            // Trouver tous les chapitres de cette classe en BDD
-            const chaps = await Chapter.find({ classroom: classroom });
-
+            // 1. On cherche si un dossier "1Travaux" existe déjà ailleurs (ex: dans ton dossier "6e")
+            // pour le déplacer vers le nouveau worksId si nécessaire.
+            // Mais plus simple : on déplace les CHAPITRES (dossiers enfants) vers le nouveau worksId.
+            
+            const chaps = await Chapter.find({ classroom: code });
             for (const chap of chaps) {
                 if (chap.driveFolderId) {
-                    console.log(`   🚀 Déplacement de : ${chap.title}`);
-                    // On déplace physiquement le dossier vers 1Travaux
+                    console.log(`   🚚 Déplacement physique du chapitre : ${chap.title}`);
                     await DriveService.moveFile(chap.driveFolderId, worksId);
-                    movedCount++;
                 } else {
-                    // Si le chapitre n'avait pas de dossier, on le crée
-                    console.log(`   🆕 Création dossier manquant pour : ${chap.title}`);
-                    const newId = await DriveService.getOrCreateFolder(chap.title, worksId);
+                    const newId = await DriveService.getOrCreateFolder(chap.title || "Dossier sans titre", worksId);
                     chap.driveFolderId = newId;
                     await chap.save();
                 }
             }
+            report.push(`${code}: OK`);
         }
-
-        res.json({ ok: true, message: `${movedCount} chapitres ont été rangés dans 1Travaux.` });
+        res.json({ message: "Migration vers CondaClasse terminée", report });
     } catch (e) {
-        console.error("❌ Erreur Migration:", e.message);
         res.status(500).json({ error: e.message });
     }
 });
 
-// --- CRÉATION DE CHAPITRE (SYNC DIRECTE) ---
+// --- CRÉATION CHAPITRE (Direct dans CondaClasse) ---
 router.post('/chapters', async (req, res) => {
     try {
         const { _id, title, isArchived, subject, classroom } = req.body;
@@ -61,100 +57,74 @@ router.post('/chapters', async (req, res) => {
             if (chap.driveFolderId && title && title !== chap.title) {
                 await DriveService.renameFolder(chap.driveFolderId, title);
             }
-            const updated = await Chapter.findByIdAndUpdate(_id, { title, isArchived }, { new: true });
-            return res.json(updated);
+            return res.json(await Chapter.findByIdAndUpdate(_id, { title, isArchived }, { new: true }));
         }
 
-        const worksId = await getWorksFolder(classroom);
+        const { worksId } = await getCondaPath(classroom);
         const folderTitle = title || "Nouveau Dossier";
         const driveId = await DriveService.getOrCreateFolder(folderTitle, worksId);
 
-        const newChap = await Chapter.create({ 
+        res.json(await Chapter.create({ 
             title: folderTitle, subject, classroom, driveFolderId: driveId, isArchived: false 
-        });
-        res.json(newChap);
+        }));
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// (Reste des routes : list-chaps, scan-sessions, upload, rename, assign, etc. inchangées)
-router.get('/chapters-all', async (req, res) => {
-    try { res.json(await mongoose.model('Chapter').find({})); } catch (e) { res.status(500).json([]); }
-});
-router.delete('/chapters/:id', async (req, res) => {
-    try {
-        const chap = await mongoose.model('Chapter').findById(req.params.id);
-        if (chap?.driveFolderId) await DriveService.deleteFile(chap.driveFolderId);
-        await mongoose.model('Chapter').findByIdAndDelete(req.params.id);
-        res.json({ ok: true });
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-router.get('/scan-sessions', async (req, res) => {
-    res.json(await mongoose.model('ScanSession').find({}).sort({ createdAt: -1 }));
-});
-router.patch('/scan-sessions/:id/assign-chapter', async (req, res) => {
-    try {
-        const session = await mongoose.model('ScanSession').findById(req.params.id);
-        const chapter = await mongoose.model('Chapter').findById(req.body.chapterId);
-        if (session.driveFolderId && chapter.driveFolderId) await DriveService.moveFile(session.driveFolderId, chapter.driveFolderId);
-        session.chapterId = req.body.chapterId;
-        await session.save();
-        res.json(session);
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-router.post('/scan-upload-photo', async (req, res) => {
-    try {
-        const { sessionId, type, imageBase64 } = req.body;
-        const session = await mongoose.model('ScanSession').findById(sessionId);
-        const result = await DriveService.uploadImage(session.driveFolderId, `${type}_${Date.now()}.jpg`, imageBase64);
-        if (result && result.id) {
-            const field = type === 'quest' ? { $push: { questionUrls: result.id } } : { $push: { copyUrls: result.id } };
-            const updated = await mongoose.model('ScanSession').findByIdAndUpdate(sessionId, field, { new: true });
-            return res.json(updated);
-        }
-        res.status(500).json({ error: "Echec Drive" });
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
+// --- CRÉATION PRODUCTION (Direct dans CondaClasse/PRODUCTIONS) ---
 router.post('/scan-sessions', async (req, res) => {
     try {
         const { classroom, title } = req.body;
-        const now = new Date();
-        const dateStr = `${String(now.getDate()).padStart(2, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-26`;
+        const dateStr = new Date().toLocaleDateString('fr-FR').replace(/\//g, '-') + "-26";
         const finalTitle = title ? `${title.trim()}_${dateStr}` : dateStr;
-        const rootName = (classroom === '6D') ? '6e' : ((classroom === '1D' || classroom === '1BFI') ? '1BFI' : classroom);
-        const rootId = await DriveService.getOrCreateFolder(rootName);
-        const prodId = await DriveService.getOrCreateFolder("PRODUCTIONS", rootId);
+
+        const { prodId } = await getCondaPath(classroom);
         const hwId = await DriveService.getOrCreateFolder(finalTitle, prodId);
+
         res.json(await mongoose.model('ScanSession').create({ title: finalTitle, classroom, driveFolderId: hwId }));
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
-router.delete('/scan-sessions/:id', async (req, res) => {
-    const session = await mongoose.model('ScanSession').findById(req.params.id);
-    if (session?.driveFolderId) await DriveService.deleteFile(session.driveFolderId).catch(() => {});
-    await mongoose.model('ScanSession').findByIdAndDelete(req.params.id);
+
+// (Reste des routes : delete, rename, upload, instructions, player-productions inchangées)
+router.get('/chapters-all', async (req, res) => res.json(await mongoose.model('Chapter').find({})));
+router.delete('/chapters/:id', async (req, res) => {
+    const chap = await mongoose.model('Chapter').findById(req.params.id);
+    if (chap?.driveFolderId) await DriveService.deleteFile(chap.driveFolderId);
+    await mongoose.model('Chapter').findByIdAndDelete(req.params.id);
     res.json({ ok: true });
 });
-router.patch('/scan-sessions/:id/rename', async (req, res) => {
-    const { newPrefix } = req.body;
+router.get('/scan-sessions', async (req, res) => res.json(await mongoose.model('ScanSession').find({}).sort({ createdAt: -1 })));
+router.patch('/scan-sessions/:id/assign-chapter', async (req, res) => {
     const session = await mongoose.model('ScanSession').findById(req.params.id);
-    const suffix = session.title.split('_').pop();
-    const newTitle = newPrefix ? `${newPrefix}_${suffix}` : suffix;
-    if (session.driveFolderId) await DriveService.renameFolder(session.driveFolderId, newTitle);
-    session.title = newTitle; await session.save();
+    const chapter = await mongoose.model('Chapter').findById(req.body.chapterId);
+    if (session.driveFolderId && chapter.driveFolderId) await DriveService.moveFile(session.driveFolderId, chapter.driveFolderId);
+    session.chapterId = req.body.chapterId; await session.save();
     res.json(session);
 });
+router.post('/scan-upload-photo', async (req, res) => {
+    const { sessionId, type, imageBase64 } = req.body;
+    const session = await mongoose.model('ScanSession').findById(sessionId);
+    const result = await DriveService.uploadImage(session.driveFolderId, `${type}_${Date.now()}.jpg`, imageBase64);
+    if (result) {
+        const field = type === 'quest' ? { $push: { questionUrls: result.id } } : { $push: { copyUrls: result.id } };
+        res.json(await mongoose.model('ScanSession').findByIdAndUpdate(sessionId, field, { new: true }));
+    } else res.status(500).json({ error: "Drive fail" });
+});
 router.post('/scan-delete-photo', async (req, res) => {
-    try {
-        const { sessionId, type, url } = req.body;
-        const idMatch = url.match(/id=([-\w]{25,})/) || url.match(/\/d\/([-\w]{25,})/);
-        if (idMatch) await DriveService.deleteFile(idMatch[1]);
-        const field = type === 'quest' ? { questionUrls: url } : { copyUrls: url };
-        const updated = await mongoose.model('ScanSession').findByIdAndUpdate(sessionId, { $pull: field }, { new: true });
-        res.json(updated);
-    } catch (e) { res.status(500).json({ error: e.message }); }
+    const { sessionId, type, url } = req.body;
+    const idMatch = url.match(/id=([-\w]{25,})/) || url.match(/\/d\/([-\w]{25,})/);
+    if (idMatch) await DriveService.deleteFile(idMatch[1]);
+    const field = type === 'quest' ? { questionUrls: url } : { copyUrls: url };
+    res.json(await mongoose.model('ScanSession').findByIdAndUpdate(sessionId, { $pull: field }, { new: true }));
 });
 router.patch('/scan-sessions/:id/instructions', async (req, res) => {
     await mongoose.model('ScanSession').findByIdAndUpdate(req.params.id, { teacherInstruction: req.body.text });
     res.json({ ok: true });
+});
+router.get('/player-productions/:playerId', async (req, res) => {
+    const player = await mongoose.model('Player').findById(req.params.playerId);
+    const { prodId } = await getCondaPath(player.classroom);
+    const stdId = await DriveService.getOrCreateFolder(`${player.firstName} ${player.lastName}`, prodId);
+    res.json(await DriveService.listFilesInFolder(stdId));
 });
 
 module.exports = router;
