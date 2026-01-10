@@ -11,16 +11,22 @@ export default function App() {
     window.onerror = async (msg, url, line, col, error) => {
         if (!user || user.id !== 'prof') return;
         
-        console.warn("🛠️ Tentative d'auto-réparation...");
-        await fetch('/api/auto-repair', {
+        console.log("🤖 L'IA analyse l'erreur pour vous proposer un fix...");
+        const res = await fetch('/api/auto-repair', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
                 error: msg,
                 stack: error?.stack,
-                context: `URL: ${url}, Ligne: ${line}, Col: ${col}`
+                context: `URL: ${url}, Ligne: ${line}`
             })
         });
+        const data = await res.json();
+        if (data.suggestion) {
+            console.log("================ SCRIBE IA : SUGGESTION DE FIX ================");
+            console.log(data.suggestion);
+            console.log("==============================================================");
+        }
     };
   }, [user]);
 
