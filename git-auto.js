@@ -7,10 +7,10 @@ async function start() {
     const chokidar = await import('chokidar');
     const versionPath = path.join(__dirname, 'server', 'version.json');
     
-    // ⚠️ REMPLACE PAR TON URL RÉELLE (Vercel ou Render)
-    const LIVE_URL = "https://ton-site-condamine.com"; 
+    // ⚠️ REMPLACE PAR TON URL RENDER RÉELLE ICI
+    const LIVE_URL = "https://condatrainer.onrender.com"; 
 
-    console.log("🚀 [GIT-AUTO] Système de Build Numéroté actif.");
+    console.log("🚀 [GIT-AUTO] Système de Build Numéroté actif. En attente de changements...");
 
     let timeout = null;
     let isWaitingForDeploy = false;
@@ -21,9 +21,8 @@ async function start() {
         ignoreInitial: true
     });
 
-    // Fonction de vérification du site en ligne (toutes les 4s)
     function checkLiveSite(targetBuild) {
-        process.stdout.write(`\r⏳ Build #${targetBuild} : Déploiement en cours... `);
+        process.stdout.write(`\r⏳ Build #${targetBuild} : Déploiement en cours sur Render... `);
         
         const interval = setInterval(() => {
             https.get(`${LIVE_URL}/api/deploy-check`, (res) => {
@@ -35,7 +34,7 @@ async function start() {
                         if (json.build === targetBuild) {
                             clearInterval(interval);
                             console.log("\n" + "=".repeat(60));
-                            console.log(`✨ [DÉPLOIEMENT TERMINÉ] La version #${targetBuild} est en ligne !`);
+                            console.log(`✨ [DÉPLOIEMENT RÉUSSI] La version #${targetBuild} est en ligne !`);
                             console.log(`🌍 URL : ${LIVE_URL}`);
                             console.log(`⏰ Heure : ${new Date().toLocaleTimeString()}`);
                             console.log("=".repeat(60) + "\n");
@@ -44,20 +43,19 @@ async function start() {
                             process.stdout.write(".");
                         }
                     } catch (e) {
-                        process.stdout.write("x"); // Reboot serveur
+                        process.stdout.write("x"); 
                     }
                 });
             }).on('error', () => {
-                process.stdout.write("x"); // Connexion perdue
+                process.stdout.write("x");
             });
-        }, 4000);
+        }, 4000); // Polling toutes les 4 secondes
     }
 
     function runGit() {
         if (isWaitingForDeploy) return;
         isWaitingForDeploy = true;
 
-        // 1. Incrémentation du build
         let v = { build: 0 };
         try {
             const content = fs.readFileSync(versionPath, 'utf8');
@@ -73,30 +71,20 @@ async function start() {
         const commitMessage = `Auto-Deploy #${v.build} - ${v.timestamp}`;
         console.log(`\n📦 [GIT] Création du commit #${v.build}...`);
 
-        // 2. Détection de la branche et Push
-        // On utilise 'git push' sans arguments pour utiliser la branche actuelle
         const command = `git add . && git commit -m "${commitMessage}" && git push`;
 
         exec(command, (err, stdout, stderr) => {
             if (err) {
-                if (stderr.includes("nothing to commit")) {
-                    console.log("ℹ️ [GIT] Aucun changement détecté.");
-                    isWaitingForDeploy = false;
-                } else {
-                    console.error("❌ [GIT ERROR]:", stderr);
-                    isWaitingForDeploy = false;
-                }
+                console.log("ℹ️ [GIT] Aucun changement à pousser.");
+                isWaitingForDeploy = false;
                 return;
             }
-            console.log(`✅ Push réussi. Build #${v.build} en route vers le cloud.`);
-            
-            // 3. Lancer la surveillance
+            console.log(`✅ Push réussi vers GitHub. Build #${v.build} lancé.`);
             checkLiveSite(v.build);
         });
     }
 
     watcher.on('all', (event, filePath) => {
-        // Sécurité critique : on ignore absolument ces fichiers pour éviter les boucles infinies
         const ignoredFiles = ['version.json', 'update.txt', 'history.txt', 'snapshot.txt'];
         if (ignoredFiles.some(f => filePath.includes(f)) || isWaitingForDeploy) return;
         
