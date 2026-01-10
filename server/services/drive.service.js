@@ -25,7 +25,7 @@ const DriveService = {
         try {
             let q = `name = '${name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
             if (parentId) q += ` and '${parentId}' in parents`;
-            const res = await drive.files.list({ q, fields: 'files(id, name)' });
+            const res = await drive.files.list({ q: q, fields: 'files(id, name)' });
             if (res.data.files && res.data.files.length > 0) {
                 return res.data.files[0].id;
             }
@@ -53,11 +53,28 @@ const DriveService = {
     },
 
     renameFolder: async (id, name) => {
-        return drive.files.update({ fileId: id, resource: { name } });
+        try {
+            return await drive.files.update({ fileId: id, resource: { name } });
+        } catch (e) {
+            console.error("⚠️ Impossible de renommer sur Drive (Dossier introuvable)");
+            return null;
+        }
     },
 
     deleteFolder: async (id) => {
-        return drive.files.delete({ fileId: id });
+        try {
+            if (!id) return false;
+            await drive.files.delete({ fileId: id });
+            return true;
+        } catch (e) {
+            // SI LE FICHIER N'EXISTE PAS (404), ON NE CRASH PAS
+            if (e.code === 404) {
+                console.log(`ℹ️ [DRIVE] Le dossier ${id} était déjà supprimé.`);
+                return true;
+            }
+            console.error("❌ Drive Delete Error:", e.message);
+            return false;
+        }
     },
 
     listFilesInFolder: async (id) => {
