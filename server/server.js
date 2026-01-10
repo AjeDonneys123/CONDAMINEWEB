@@ -7,10 +7,13 @@ const fs = require('fs');
 const app = express();
 const port = process.env.PORT || 3000;
 
-// --- ROUTE DE DÉPLOIEMENT (MONGODB SIGNAL) ---
+// 1. Connexion BDD
 mongoose.connect(process.env.MONGODB_URI)
     .then(async () => {
         console.log('✅ BDD Connectée.');
+        
+        // --- CHARGEMENT DES MODÈLES ---
+        require('./models/Teacher'); // <--- INDISPENSABLE
         require('./models/Player');
         require('./models/Chapter');
         require('./models/Homework');
@@ -19,40 +22,40 @@ mongoose.connect(process.env.MONGODB_URI)
         require('./models/Submission');
         require('./models/TeacherStyle');
         require('./models/ScanSession');
-        require('./models/DeploySignal');
+        const DeploySignal = require('./models/DeploySignal');
 
+        // Signal Déploiement
         try {
             const vPath = path.join(__dirname, 'version.json');
             if (fs.existsSync(vPath)) {
                 const vData = JSON.parse(fs.readFileSync(vPath, 'utf8'));
-                const DeploySignal = mongoose.model('DeploySignal');
                 await DeploySignal.findOneAndUpdate({}, { build: vData.build, status: 'live', updatedAt: new Date() }, { upsert: true });
-                console.log(`📡 [SIGNAL] Build #${vData.build} déclaré LIVE.`);
+                console.log(`📡 [SIGNAL] Build #${vData.build} LIVE.`);
             }
-        } catch (e) { console.log("⚠️ Signal live error."); }
+        } catch (e) {}
     })
     .catch(err => console.error("❌ Erreur MongoDB :", err));
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// --- ROUTES API (L'ORDRE EST CRITIQUE) ---
+// 2. Routes API
 app.use('/api', require('./features/auth/auth.routes'));
 app.use('/api', require('./features/eleve/eleve.routes'));
 app.use('/api', require('./features/prof/prof.routes'));
 app.use('/api', require('./features/game/game.routes'));
 app.use('/api', require('./features/prof/automation.routes'));
 
-// --- FRONTEND ---
+// 3. Frontend
 const distPath = path.join(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
-        if (req.path.startsWith('/api')) return res.status(404).json({ error: "Route API introuvable" });
+        if (req.path.startsWith('/api')) return res.status(404).json({ error: "API 404" });
         res.sendFile(path.join(distPath, 'index.html'));
     });
 } else {
-    app.get('/', (req, res) => res.send("Serveur API actif."));
+    app.get('/', (req, res) => res.send("Serveur API Condamine actif."));
 }
 
-app.listen(port, () => console.log(`🚀 SERVEUR NODE PRÊT : ${port}`));
+app.listen(port, () => console.log(`🚀 SERVEUR PRÊT : ${port}`));
