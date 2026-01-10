@@ -3,22 +3,35 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const DriveService = require('../../services/drive.service');
 
-// Helper Arborescence (Fix mapping 6D/6e et 1D/1BFI)
+// --- HELPER MAPPING (6D -> 6e) ---
 const getWorksFolder = async (classroom) => {
     let rootName = classroom;
-    if (classroom === '6D') rootName = '6e'; // On s'aligne sur ton dossier manuel
+    // On s'aligne sur tes dossiers manuels
+    if (classroom === '6D') rootName = '6e';
     if (classroom === '1D' || classroom === '1BFI') rootName = '1BFI';
     
-    console.log(`🔍 [SYNC] Recherche dossier racine pour classe : ${rootName}`);
+    console.log(`📂 [DRIVE] Recherche racine pour ${classroom} sous le nom : ${rootName}`);
     const rootId = await DriveService.getOrCreateFolder(rootName);
-    
-    if (!rootId) throw new Error(`Dossier de classe ${rootName} introuvable.`);
-    
-    // On crée/cherche "1Travaux" à l'intérieur
+    if (!rootId) throw new Error(`Dossier racine ${rootName} introuvable`);
+
+    // On crée ou récupère "1Travaux" à l'intérieur
     return await DriveService.getOrCreateFolder("1Travaux", rootId);
 };
 
-// --- CRÉATION CHAPITRE ---
+// --- INITIALISATION COMPLÈTE (Bouton Synchro) ---
+router.get('/init-all-folders', async (req, res) => {
+    try {
+        const classes = ['6D', '5B', '5C', '2A', '2CD', '1D'];
+        for (const c of classes) {
+            await getWorksFolder(c);
+        }
+        res.json({ ok: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// --- CRÉATION DE CHAPITRE (SYNC 1TRAVAUX) ---
 router.post('/chapters', async (req, res) => {
     try {
         const { _id, title, isArchived, subject, classroom } = req.body;
@@ -33,7 +46,6 @@ router.post('/chapters', async (req, res) => {
             return res.json(updated);
         }
 
-        // Création physique
         const worksId = await getWorksFolder(classroom);
         const driveId = await DriveService.getOrCreateFolder(title || "Nouveau Dossier", worksId);
 
@@ -45,24 +57,14 @@ router.post('/chapters', async (req, res) => {
             isArchived: false 
         });
         res.json(newChap);
-    } catch (e) {
-        console.error("❌ Erreur Route /chapters:", e.message);
-        res.status(500).json({ error: e.message });
-    }
-});
-
-// --- INITIALISATION DRIVE (Route pour ton bouton 🔄 SYNCHRO) ---
-router.get('/init-all-folders', async (req, res) => {
-    try {
-        const classes = ['6D', '5B', '5C', '2A', '2CD', '1D'];
-        for (const c of classes) {
-            await getWorksFolder(c);
-        }
-        res.json({ ok: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ... (Garder delete-chapter, scan-sessions, upload, rename, assign, etc.)
+// --- RESTE DES ROUTES (Scans, Upload, Deletion) ---
+router.get('/chapters-all', async (req, res) => {
+    try { res.json(await mongoose.model('Chapter').find({})); } catch (e) { res.status(500).json([]); }
+});
+
 router.delete('/chapters/:id', async (req, res) => {
     try {
         const chap = await mongoose.model('Chapter').findById(req.params.id);
@@ -70,10 +72,6 @@ router.delete('/chapters/:id', async (req, res) => {
         await mongoose.model('Chapter').findByIdAndDelete(req.params.id);
         res.json({ ok: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-router.get('/chapters-all', async (req, res) => {
-    try { res.json(await mongoose.model('Chapter').find({})); } catch (e) { res.status(500).json([]); }
 });
 
 router.get('/scan-sessions', async (req, res) => {
@@ -84,7 +82,9 @@ router.patch('/scan-sessions/:id/assign-chapter', async (req, res) => {
     try {
         const session = await mongoose.model('ScanSession').findById(req.params.id);
         const chapter = await mongoose.model('Chapter').findById(req.body.chapterId);
-        if (session.driveFolderId && chapter.driveFolderId) await DriveService.moveFile(session.driveFolderId, chapter.driveFolderId);
+        if (session.driveFolderId && chapter.driveFolderId) {
+            await DriveService.moveFile(session.driveFolderId, chapter.driveFolderId);
+        }
         session.chapterId = req.body.chapterId;
         await session.save();
         res.json(session);
@@ -108,15 +108,24 @@ router.post('/scan-upload-photo', async (req, res) => {
 router.post('/scan-sessions', async (req, res) => {
     try {
         const { classroom, title } = req.body;
-        const dateStr = `${String(new Date().getDate()).padStart(2, '0')}-${String(new Date().getMonth() + 1).padStart(2, '0')}-26`;
+        const jj = String(new Date().getDate()).padStart(2, '0');
+        const mm = String(new Date().getMonth() + 1).padStart(2, '0');
+        const dateStr = `${jj}-${mm}-26`;
         const finalTitle = title ? `${title.trim()}_${dateStr}` : dateStr;
-        const rootName = (classroom === '1D' || classroom === '1BFI') ? '1BFI' : (classroom === '6D' ? '6e' : classroom);
-        const rootId = await DriveService.getOrCreateFolder(rootName);
+        const root = (classroom === '6D') ? '6e' : ((classroom === '1D') ? '1BFI' : classroom);
+        const rootId = await DriveService.getOrCreateFolder(root);
         const prodId = await DriveService.getOrCreateFolder("PRODUCTIONS", rootId);
         const hwId = await DriveService.getOrCreateFolder(finalTitle, prodId);
         const newSession = await mongoose.model('ScanSession').create({ title: finalTitle, classroom, driveFolderId: hwId });
         res.json(newSession);
     } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/scan-sessions/:id', async (req, res) => {
+    const session = await mongoose.model('ScanSession').findById(req.params.id);
+    if (session?.driveFolderId) await DriveService.deleteFile(session.driveFolderId).catch(() => {});
+    await mongoose.model('ScanSession').findByIdAndDelete(req.params.id);
+    res.json({ ok: true });
 });
 
 module.exports = router;
