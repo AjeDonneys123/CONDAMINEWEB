@@ -1,5 +1,5 @@
 {
-  "build": 23,
-  "message": "Full Fix ScansStudio (Syntax error recovery) + Stable UI",
-  "timestamp": "10/01/2026 12:10:00"
+  "build": 24,
+  "message": "Renommage 'Devoir' -> 'Production' + Fix interface blanche",
+  "timestamp": "10/01/2026 12:18:00"
 }
