@@ -1,5 +1,5 @@
 {
-  "build": 20,
-  "message": "Ajout suppression dossiers + Visibilité des scans dans les activités",
-  "timestamp": "10/01/2026 11:59:28"
+  "build": 22,
+  "message": "Restaurer interface SCANS IA + Fix boutons actions + Commits explicites",
+  "timestamp": "10/01/2026 12:20:00"
 }

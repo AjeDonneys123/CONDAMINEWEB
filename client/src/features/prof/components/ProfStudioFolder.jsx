@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 export default function ProfStudioFolder({ 
     items, chapters, classFilter, 
@@ -7,6 +7,11 @@ export default function ProfStudioFolder({
     const [openChaps, setOpenChaps] = useState({});
     const [editingId, setEditingId] = useState(null);
     const [tempTitle, setTempTitle] = useState("");
+    const [allSessions, setAllSessions] = useState([]);
+
+    useEffect(() => {
+        fetch('/api/scan-sessions').then(r => r.json()).then(data => setAllSessions(Array.isArray(data) ? data : []));
+    }, [items]);
 
     const getSubjectInfo = (sub) => {
         const s = (sub || "").toUpperCase();
@@ -30,8 +35,9 @@ export default function ProfStudioFolder({
                 {chapters.filter(c => !c.isArchived).map(chap => {
                     const info = getSubjectInfo(chap.subject);
                     const isOpen = !!openChaps[chap._id];
-                    // Filtrage des items (Jeux, Devoirs standards ET Devoirs Scanés)
+                    
                     const chapItems = (items || []).filter(it => String(it.chapterId) === String(chap._id));
+                    const chapSessions = allSessions.filter(s => String(s.chapterId) === String(chap._id));
 
                     return (
                         <div key={chap._id} className={`bg-white rounded-[35px] border-2 shadow-sm overflow-hidden transition-all ${info.border}`}>
@@ -54,7 +60,7 @@ export default function ProfStudioFolder({
                                             onKeyDown={e => e.key === 'Enter' && e.target.blur()}
                                         />
                                     ) : (
-                                        <b className="text-slate-700 text-lg cursor-pointer" onClick={() => setOpenId(chap._id)}>{chap.title || "Sans titre"}</b>
+                                        <b className="text-slate-700 text-lg cursor-pointer" onClick={() => setOpenChaps({...openChaps, [chap._id]: !isOpen})}>{chap.title || "Sans titre"}</b>
                                     )}
                                 </div>
 
@@ -67,14 +73,12 @@ export default function ProfStudioFolder({
 
                             {isOpen && (
                                 <div className="p-4 bg-slate-50/50 border-t-2 border-dashed border-slate-100 space-y-2">
+                                    {/* AFFICHAGE DES DEVOIRS STANDARDS ET JEUX */}
                                     {chapItems.map(it => (
                                         <div key={it._id} className="bg-white p-4 rounded-2xl flex justify-between items-center shadow-sm border border-slate-50">
                                             <div className="flex items-center gap-3">
                                                 <span className="text-xl">{it.actType === 'game' ? '🕹️' : '📄'}</span>
-                                                <div className="flex flex-col">
-                                                    <b className="text-slate-700 text-sm">{it.title}</b>
-                                                    {it.copyUrls && <span className="text-[9px] font-black text-emerald-500 uppercase">Devoir Scané ({it.copyUrls.length} copies)</span>}
-                                                </div>
+                                                <b className="text-slate-700 text-sm">{it.title}</b>
                                             </div>
                                             <div className="flex gap-2">
                                                 <button onClick={() => onEditItem(it)} className="px-3 py-1 bg-slate-50 text-slate-400 rounded-lg font-bold text-[9px] uppercase">Editer</button>
@@ -82,7 +86,24 @@ export default function ProfStudioFolder({
                                             </div>
                                         </div>
                                     ))}
-                                    {chapItems.length === 0 && <p className="text-center py-4 text-slate-300 italic text-xs">Dossier vide</p>}
+                                    
+                                    {/* AFFICHAGE DES SCANS ENREGISTRÉS */}
+                                    {chapSessions.map(sess => (
+                                        <div key={sess._id} className="bg-emerald-50 p-4 rounded-2xl flex justify-between items-center shadow-sm border border-emerald-100">
+                                            <div className="flex items-center gap-3">
+                                                <span className="text-xl">📸</span>
+                                                <div className="flex flex-col">
+                                                    <b className="text-emerald-900 text-sm">{sess.title}</b>
+                                                    <span className="text-[9px] font-black text-emerald-600 uppercase">Devoir Scané ({sess.copyUrls?.length || 0} copies)</span>
+                                                </div>
+                                            </div>
+                                            <button onClick={() => onDeleteItem(sess._id, 'scan')} className="p-1 text-emerald-300 hover:text-red-500">✕</button>
+                                        </div>
+                                    ))}
+
+                                    {chapItems.length === 0 && chapSessions.length === 0 && (
+                                        <p className="text-center py-4 text-slate-300 italic text-xs">Dossier vide</p>
+                                    )}
                                 </div>
                             )}
                         </div>
