@@ -4,92 +4,67 @@ const path = require('path');
 const inputFile = 'update.txt';
 const statusFile = 'apply_status.json';
 
-// 🛡️ LISTE DES INTOUCHABLES (Ne seront jamais supprimés)
-const PROTECTED_PATHS = [
-    '.git',
-    'node_modules',
-    'apply.js',
-    'git-auto.js',
-    'package.json',
-    '.env',
-    'server/server.js',
-    '.',
-    './'
-];
+// 🛡️ LISTE DES INTOUCHABLES
+const PROTECTED_PATHS = ['.git', 'node_modules', 'apply.js', 'git-auto.js', 'package.json', '.env', 'server/server.js', '.', './'];
 
 console.log("------------------------------------------------");
-console.log("🛠️  [WATCHER] apply.js (v14-FORTRESS) actif.");
-console.log("🔒  Format Sécurisé : [[[£ ... £]]]");
+console.log("🛠️  [WATCHER] apply.js (v15-NOTIFIER) actif.");
+console.log("📡  Statut : Synchronisé avec le Frontend via API.");
 console.log("------------------------------------------------");
 
-function setStatus(error, truncatedFile = null) {
+// Écrit le statut pour le frontend
+function setStatus(status, file = null) {
     try {
-        fs.writeFileSync(statusFile, JSON.stringify({ error, truncatedFile, timestamp: Date.now() }, null, 2));
+        const data = { status, file, timestamp: Date.now() };
+        fs.writeFileSync(statusFile, JSON.stringify(data, null, 2));
     } catch (e) {}
 }
 
 function applyUpdate() {
     if (!fs.existsSync(inputFile)) return;
     let rawContent = "";
-    try { 
-        rawContent = fs.readFileSync(inputFile, 'utf8'); 
-    } catch (e) { return; }
+    try { rawContent = fs.readFileSync(inputFile, 'utf8'); } catch (e) { return; }
     
     if (rawContent.trim().length < 5) return;
 
     let processedCount = 0;
 
-    // --- 1. GESTION DES SUPPRESSIONS (Nouveau format £) ---
-    // Regex : [[[£ DELETE: chemin £]]]
+    // 1. DELETE
     const deleteRegex = /\[\[\[£\s*DELETE\s*:\s*([^£\]\s]+)\s*£\]\]\]/g;
     let delMatch;
-    
     while ((delMatch = deleteRegex.exec(rawContent)) !== null) {
         const relativePath = delMatch[1].trim();
         const targetPath = path.join(__dirname, relativePath);
-
-        const isProtected = PROTECTED_PATHS.some(p => 
-            relativePath === p || 
-            relativePath.startsWith(p + '/') ||
-            relativePath.startsWith('./' + p)
-        );
+        const isProtected = PROTECTED_PATHS.some(p => relativePath === p || relativePath.startsWith(p + '/') || relativePath.startsWith('./' + p));
 
         if (isProtected) {
-            console.error(`   ⛔ REFUS DE SUPPRIMER : ${relativePath} (Protégé)`);
-            processedCount++;
-            continue;
-        }
-
-        try {
-            if (fs.existsSync(targetPath)) {
-                fs.rmSync(targetPath, { recursive: true, force: true });
-                console.log(`   🗑️  SUPPRIMÉ : ${relativePath}`);
-                processedCount++;
-            } else {
-                console.log(`   ⚠️  Introuvable : ${relativePath}`);
-            }
-        } catch (e) {
-            console.error(`   ❌ ERREUR DELETE ${relativePath}: ${e.message}`);
+            console.error(`   ⛔ PROTECTED: ${relativePath}`);
+        } else {
+            try {
+                if (fs.existsSync(targetPath)) {
+                    fs.rmSync(targetPath, { recursive: true, force: true });
+                    console.log(`   🗑️  SUPPRIMÉ : ${relativePath}`);
+                    processedCount++;
+                }
+            } catch (e) {}
         }
     }
 
-    // --- 2. GESTION DES FICHIERS (Nouveau format £) ---
-    // Regex : [[[£ FILE: chemin £]]]
+    // 2. FILES
     const fileStartRegex = /\[\[\[£\s*FILE\s*:\s*([^£\]\s]+)\s*£\]\]\]/g;
     let match;
     let lastUnfinishedBlock = "";
+    let hasTruncated = false;
 
     while ((match = fileStartRegex.exec(rawContent)) !== null) {
         const filePath = match[1].trim();
         const startTag = match[0];
-        // Balise de fin avec £ : [[[£ END: chemin £]]]
         const endTag = `[[[£ END: ${filePath} £]]]`;
 
         if (rawContent.includes(endTag)) {
             const startIndex = rawContent.indexOf(startTag) + startTag.length;
             const endIndex = rawContent.indexOf(endTag);
             const fileContent = rawContent.substring(startIndex, endIndex).trim();
-
             const fullPath = path.join(__dirname, filePath);
             const dir = path.dirname(fullPath);
             
@@ -98,31 +73,35 @@ function applyUpdate() {
                 fs.writeFileSync(fullPath, fileContent);
                 console.log(`   ✅ APPLIQUÉ : ${filePath}`);
                 processedCount++;
-            } catch (e) {
-                console.error(`   ❌ ERREUR FILE ${filePath}: ${e.message}`);
-            }
+            } catch (e) { console.error(`ERR: ${e.message}`); }
         } else {
+            // C'EST ICI QUE CA SE PASSE : FICHIER COUPÉ
             lastUnfinishedBlock = rawContent.substring(rawContent.indexOf(startTag));
-            console.warn(`⚠️  [INCOMPLET] ${filePath}`);
-            setStatus("Fichier coupé détecté", filePath);
+            console.warn(`⚠️  [COUPÉ] ${filePath} - En attente de la suite...`);
+            setStatus('TRUNCATED', filePath); // <--- ALERTE LE FRONTEND
+            hasTruncated = true;
             break;
         }
     }
 
-    // --- NETTOYAGE ---
+    // Nettoyage et Reset Statut
     try {
-        if (lastUnfinishedBlock) {
-            fs.writeFileSync(inputFile, lastUnfinishedBlock.trim());
-        } else if (processedCount > 0) {
-            fs.writeFileSync(inputFile, '');
-            console.log(`✨ Terminé : ${processedCount} actions.\n`);
-            setStatus(null);
-        } else if (rawContent.length > 50 && processedCount === 0) {
-            // Si le texte ne contient pas les balises £, on considère que c'est du bruit
-            fs.writeFileSync(inputFile, '');
-            console.log(`🧹 Nettoyage texte non conforme (Format £ attendu).`);
+        if (hasTruncated) {
+            // On ne vide pas update.txt, on attend la suite
+            // Mais le statut est déjà mis à jour plus haut
+        } else {
+            if (processedCount > 0) {
+                console.log(`✨ Terminé.\n`);
+                setStatus('OK'); // Tout va bien
+                fs.writeFileSync(inputFile, '');
+            } else if (!lastUnfinishedBlock && rawContent.length > 50) {
+                fs.writeFileSync(inputFile, ''); // Poubelle
+                setStatus('OK');
+            }
         }
-    } catch (e) { console.error("Erreur nettoyage."); }
+    } catch (e) {}
 }
 
+// Initialise le statut à OK au démarrage
+setStatus('OK');
 setInterval(applyUpdate, 1000);

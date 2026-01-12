@@ -11,9 +11,7 @@ const port = process.env.PORT || 3000;
 mongoose.connect(process.env.MONGODB_URI)
     .then(async () => {
         console.log('✅ BDD Connectée.');
-        
-        // --- CHARGEMENT DES MODÈLES ---
-        require('./models/Teacher'); // <--- INDISPENSABLE
+        require('./models/Teacher');
         require('./models/Player');
         require('./models/Chapter');
         require('./models/Homework');
@@ -24,13 +22,11 @@ mongoose.connect(process.env.MONGODB_URI)
         require('./models/ScanSession');
         const DeploySignal = require('./models/DeploySignal');
 
-        // Signal Déploiement
         try {
             const vPath = path.join(__dirname, 'version.json');
             if (fs.existsSync(vPath)) {
                 const vData = JSON.parse(fs.readFileSync(vPath, 'utf8'));
                 await DeploySignal.findOneAndUpdate({}, { build: vData.build, status: 'live', updatedAt: new Date() }, { upsert: true });
-                console.log(`📡 [SIGNAL] Build #${vData.build} LIVE.`);
             }
         } catch (e) {}
     })
@@ -38,6 +34,19 @@ mongoose.connect(process.env.MONGODB_URI)
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// --- ROUTE SPECIALE POUR LE STATUT D'APPLICATION DU CODE ---
+app.get('/api/system-status', (req, res) => {
+    const statusPath = path.join(__dirname, '..', 'apply_status.json');
+    if (fs.existsSync(statusPath)) {
+        try {
+            const data = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
+            res.json(data);
+        } catch (e) { res.json({ status: 'OK' }); }
+    } else {
+        res.json({ status: 'OK' });
+    }
+});
 
 // 2. Routes API
 app.use('/api', require('./features/auth/auth.routes'));

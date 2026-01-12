@@ -15,8 +15,8 @@ async function startMagicWatcher() {
     const updateFile = 'update.txt';
 
     console.log("------------------------------------------------");
-    console.log("✨ [MAGIC PASTE] Surveillance active (Format £)");
-    console.log("🛡️  Sécurité : Rejette les copies incomplètes.");
+    console.log("✨ [MAGIC PASTE] Surveillance active (Mode Pass-Through)");
+    console.log("👉 Si tu copies un fichier coupé, le site t'avertira.");
     console.log("------------------------------------------------");
 
     setInterval(async () => {
@@ -24,25 +24,12 @@ async function startMagicWatcher() {
             const text = await clipboard.read();
 
             if (text && text !== lastContent) {
-                // 1. Détection des balises d'ouverture
-                const hasStart = text.includes('[[[£ FILE:') || text.includes('[[[£ DELETE:');
-                
-                if (hasStart) {
-                    // 2. SÉCURITÉ RENFORCÉE : Vérifie la présence d'au moins une balise de fin
-                    // Cela évite d'envoyer un fichier tronqué qui bloquerait apply.js
-                    if (!text.includes('£]]]')) {
-                        if (text !== lastContent) { // Log une seule fois
-                            console.log("⚠️  Copie détectée mais INCOMPLÈTE (Pas de '£]]]'). Ignorée.");
-                            lastContent = text; 
-                        }
-                        return;
-                    }
-
-                    console.log("⚡ Code valide détecté ! Injection...");
+                // On détecte juste le début. Si la fin manque, on envoie quand même
+                // pour que apply.js puisse lever l'alerte côté Front.
+                if (text.includes('[[[£ FILE:') || text.includes('[[[£ DELETE:')) {
                     
+                    console.log("⚡ Code détecté. Injection dans update.txt...");
                     fs.writeFileSync(updateFile, text, 'utf8');
-                    
-                    console.log(`✅ update.txt mis à jour.`);
                     lastContent = text;
                 }
             }

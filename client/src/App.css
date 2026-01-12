@@ -3,18 +3,49 @@
     position: relative;
 }
 
+/* ALERTE SYSTÈME CRITIQUE */
+.system-alert-bar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    background-color: #ef4444;
+    color: white;
+    font-weight: 900;
+    text-align: center;
+    padding: 15px;
+    z-index: 100000;
+    box-shadow: 0 5px 20px rgba(239, 68, 68, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 15px;
+    animation: slideDown 0.3s ease-out;
+}
+
+.system-alert-btn {
+    background: white;
+    color: #ef4444;
+    border: none;
+    padding: 5px 15px;
+    border-radius: 5px;
+    font-weight: 800;
+    cursor: pointer;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+}
+
+@keyframes slideDown { from { transform: translateY(-100%); } to { transform: translateY(0); } }
+
 /* --- CORRECTION POSITION BOUTON BUG --- */
-/* On le met en BAS à droite pour ne pas gêner le menu */
 .global-bug-trigger {
     position: fixed;
-    bottom: 30px; /* En bas */
-    right: 30px;  /* À droite */
+    bottom: 30px; 
+    right: 30px;
     z-index: 9999;
     width: 60px;
     height: 60px;
     background: white;
     border: 4px solid #7c3aed;
-    border-radius: 50%; /* Tout rond */
+    border-radius: 50%;
     font-size: 30px;
     display: flex;
     align-items: center;
@@ -29,32 +60,18 @@
     background: #f5f3ff;
 }
 
-/* Modale de Bug (Reste inchangée mais centrée) */
+/* Modale de Bug */
 .bug-modal-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 10000;
-    background: rgba(15, 23, 42, 0.7);
-    backdrop-filter: blur(8px);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
+    position: fixed; inset: 0; z-index: 10000;
+    background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(8px);
+    display: flex; align-items: center; justify-content: center; padding: 20px;
 }
-
 .bug-modal-card {
-    background: white;
-    width: 100%;
-    max-width: 450px;
-    border-radius: 45px;
-    padding: 2.5rem;
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-    border: 6px solid #7c3aed;
+    background: white; width: 100%; max-width: 450px; border-radius: 45px; padding: 2.5rem;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); border: 6px solid #7c3aed;
     animation: modalPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
-
 @keyframes modalPop { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-
 .bug-modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
 .bug-modal-header h2 { font-weight: 900; color: #7c3aed; font-size: 1.4rem; margin: 0; }
 .bug-modal-desc { color: #94a3b8; font-size: 0.85rem; font-weight: 600; margin-bottom: 1.5rem; }
