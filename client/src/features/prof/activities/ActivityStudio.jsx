@@ -27,14 +27,13 @@ export default function ActivityStudio({ globalClass, teacherId }) {
         } catch (e) { console.error("Erreur ActivityStudio:", e); }
     };
 
-    useEffect(() => { load(); }, [globalClass]); // Reload si on change de classe
+    useEffect(() => { load(); }, [globalClass]);
 
     if (viewingResults) return <HomeworkResults homework={viewingResults} onBack={() => setViewingResults(null)} />;
 
     const normalize = (c) => c?.toString().toUpperCase().replace('E', '') || "";
 
     if (editingItem) {
-        // Pour l'éditeur, on envoie les chapitres de la classe active
         const activeChaps = chapters.filter(c => normalize(c.classroom) === normalize(globalClass) && !c.isArchived);
         if (editingItem.type === 'homework') {
             return <HomeworkStudio initialData={editingItem.data} chapters={activeChaps} onClose={() => { setEditingItem(null); load(); }} />;
@@ -44,14 +43,13 @@ export default function ActivityStudio({ globalClass, teacherId }) {
 
     return (
         <div className="animate-in fade-in">
-            {/* BARRE D'ACTIONS RAPIDES */}
             <div className="flex justify-start gap-4 mb-8 bg-white p-4 rounded-[30px] border-2 border-slate-50 shadow-sm">
                 <button onClick={() => setEditingItem({ type: 'homework', data: null })} className="bg-orange-500 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:scale-105 transition-all">+ Nouveau Devoir</button>
                 <button onClick={() => setEditingItem({ type: 'game', data: null })} className="bg-purple-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:scale-105 transition-all">+ Nouveau Jeu</button>
             </div>
 
             <ProfStudioFolder 
-                chapters={chapters} // On envoie TOUT, le composant fils filtrera
+                chapters={chapters}
                 items={activities}
                 classFilter={globalClass}
                 onArchive={async (id, state) => {
@@ -74,14 +72,26 @@ export default function ActivityStudio({ globalClass, teacherId }) {
                     load();
                 }}
                 onCreateChapter={async (subject) => {
+                    // CORRECTION ICI : Ajout de teacherId dans le body
                     const res = await fetch('/api/chapters', { 
                         method:'POST', 
                         headers:{'Content-Type':'application/json'}, 
-                        body: JSON.stringify({ title: 'Nouveau Dossier', subject, classroom: globalClass }) 
+                        body: JSON.stringify({ 
+                            title: 'Nouveau Dossier', 
+                            subject, 
+                            classroom: globalClass,
+                            teacherId: teacherId // <--- C'EST CA QUI MANQUAIT
+                        }) 
                     });
+                    
+                    if (!res.ok) {
+                        console.error("Erreur création dossier");
+                        return null;
+                    }
+
                     const newChap = await res.json();
                     load();
-                    return newChap; // IMPORTANT : Retourne l'objet pour l'auto-focus
+                    return newChap;
                 }}
                 onViewResults={(hw) => setViewingResults(hw)}
             />
