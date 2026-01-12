@@ -1,5 +1,5 @@
 {
-  "status": "OK",
-  "file": null,
-  "timestamp": 1768246059926
+  "status": "TRUNCATED",
+  "file": "client/src/test_token_crash.js",
+  "timestamp": 1768246199280
 }

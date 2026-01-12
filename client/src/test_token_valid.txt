@@ -1,0 +1,2 @@
+Ce fichier est parfait. Il sert à amorcer la pompe.
+Le système v17 va le traiter et le créer.
