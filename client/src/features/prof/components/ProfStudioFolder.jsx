@@ -8,14 +8,13 @@ export default function ProfStudioFolder({
     const [editingId, setEditingId] = useState(null);
     const [tempTitle, setTempTitle] = useState("");
     const [allSessions, setAllSessions] = useState([]);
-    const [showAll, setShowAll] = useState(false); // Pour voir les dossiers "perdus" (mauvaise classe)
+    const [showAll, setShowAll] = useState(false);
     const inputRef = useRef(null);
 
     useEffect(() => {
         fetch('/api/scan-sessions').then(r => r.json()).then(data => setAllSessions(Array.isArray(data) ? data : []));
     }, [items]);
 
-    // Auto-focus quand on passe en mode édition
     useEffect(() => {
         if (editingId && inputRef.current) {
             inputRef.current.focus();
@@ -36,7 +35,6 @@ export default function ProfStudioFolder({
         if (newChap && newChap._id) {
             setEditingId(newChap._id);
             setTempTitle(newChap.title);
-            // On ouvre le dossier automatiquement
             setOpenChaps(prev => ({...prev, [newChap._id]: true}));
         }
     };
@@ -48,13 +46,9 @@ export default function ProfStudioFolder({
         setEditingId(null);
     };
 
-    // FILTRAGE
     const normalize = (c) => c?.toString().toUpperCase().replace('E', '') || "";
     
-    // Dossiers de la classe active
     const activeChapters = chapters.filter(c => normalize(c.classroom) === normalize(classFilter) && !c.isArchived);
-    
-    // Dossiers "Orphelins" ou d'autres classes (pour le mode "Tout voir")
     const otherChapters = chapters.filter(c => normalize(c.classroom) !== normalize(classFilter) && !c.isArchived);
 
     const displayChapters = showAll ? [...activeChapters, ...otherChapters] : activeChapters;
@@ -62,7 +56,6 @@ export default function ProfStudioFolder({
     return (
         <div className="max-w-4xl mx-auto space-y-6">
             
-            {/* BOUTONS DE CRÉATION */}
             <div className="grid grid-cols-3 gap-4 mb-4">
                 {['H', 'G', 'E'].map(s => (
                     <button key={s} onClick={() => handleCreate(s)} className={`p-4 bg-white border-2 border-dashed rounded-3xl font-black uppercase text-[10px] hover:scale-105 transition-all shadow-sm ${getSubjectInfo(s).color} ${getSubjectInfo(s).border}`}>
@@ -71,7 +64,6 @@ export default function ProfStudioFolder({
                 ))}
             </div>
 
-            {/* MESSAGE DEBUG / TOUT VOIR */}
             {otherChapters.length > 0 && (
                 <div className="text-center mb-4">
                     <span className="text-xs text-slate-400 mr-2">{otherChapters.length} dossiers masqués (autres classes)</span>
@@ -81,7 +73,6 @@ export default function ProfStudioFolder({
                 </div>
             )}
 
-            {/* LISTE ACTIVE */}
             <div className="space-y-3">
                 {displayChapters.map(chap => {
                     const info = getSubjectInfo(chap.subject);
@@ -89,8 +80,6 @@ export default function ProfStudioFolder({
                     const isEditing = editingId === chap._id;
                     const chapItems = (items || []).filter(it => String(it.chapterId) === String(chap._id));
                     const chapSessions = allSessions.filter(s => String(s.chapterId) === String(chap._id));
-
-                    // Si on affiche "Tout", on montre à quelle classe ça appartient
                     const showClassBadge = showAll && normalize(chap.classroom) !== normalize(classFilter);
 
                     return (
@@ -152,7 +141,8 @@ export default function ProfStudioFolder({
                 })}
                 {displayChapters.length === 0 && (
                     <div className="text-center py-10 border-2 border-dashed border-slate-200 rounded-[30px] bg-slate-50">
-                        <p className="text-slate-400 font-bold">Aucun dossier pour {globalClass}</p>
+                        {/* CORRECTION ICI : on utilise classFilter au lieu de globalClass */}
+                        <p className="text-slate-400 font-bold">Aucun dossier pour {classFilter}</p>
                         <p className="text-xs text-slate-300 mt-1">Cliquez sur un bouton ci-dessus pour commencer</p>
                     </div>
                 )}
