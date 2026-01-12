@@ -1,5 +1,5 @@
 {
-  "status": "OK",
-  "file": null,
-  "timestamp": 1768245573728
+  "status": "TRUNCATED",
+  "file": "\";\n    let nextStartIndex = rawContent.indexOf(startMarker, cursor);\n\n    while (nextStartIndex !== -1) {\n        const pathEndIndex = rawContent.indexOf(\"",
+  "timestamp": 1768245591754
 }
