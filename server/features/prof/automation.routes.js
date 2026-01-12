@@ -32,7 +32,7 @@ router.post('/chapters', async (req, res) => {
                 await DriveService.renameFolder(chap.driveFolderId, title);
             }
 
-            // Sécurité Mongoose : ne pas updater l'_id
+            // Sécurité : on clone le body et on supprime l'_id pour éviter le crash Mongoose
             const updateData = { ...req.body };
             delete updateData._id;
 
@@ -77,7 +77,7 @@ router.delete('/chapters/:id', async (req, res) => {
     }
 });
 
-// --- SCAN SESSIONS ---
+// --- SCAN SESSIONS (PRODUCTIONS) ---
 
 router.get('/scan-sessions', async (req, res) => {
     try { 
