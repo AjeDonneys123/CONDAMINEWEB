@@ -1,5 +1,1 @@
-[[[£ FILE: client/src/test_broken.js £]]]
-console.log("Je suis un fichier malveillant...");
-console.log("Je vais être coupé brutalement !");
-// Regarde, il n'y a pas de balise de fin ci-dessous...
-// Le suspense est insoutenable...
+[[[£ FILE: 
