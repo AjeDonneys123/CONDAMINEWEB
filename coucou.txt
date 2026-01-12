@@ -1,3 +1,0 @@
-👋 COUCOU ! 
-Le système de mise à jour (apply.js -> update.txt) fonctionne correctement.
-Si tu lis ce texte dans ton éditeur de code, c'est que le transfert s'est bien passé.

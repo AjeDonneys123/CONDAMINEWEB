@@ -1,392 +1,475 @@
 ```
+├── .env
+│   > Contains sensitive configuration data, such as the MongoDB URI and Gemini API key.
+│   > This file is crucial for the server to connect to the database and use the AI service.
+├── .gitignore
+│   > Specifies intentionally untracked files that Git should ignore.
+│   > This prevents sensitive or build-related files from being committed to the repository.
+├── apply.js
+│   > Watches for changes in `update.txt` and applies them to the project.
+│   > It supports updating files and managing the `history.txt` file for logging updates.
+├── chemin
+│   > This file's purpose is unclear without further context.
+│   > It's likely a placeholder or a file used for temporary path storage or testing.
 ├── client/
-│   > Implémente l'interface utilisateur du projet à l'aide de React et Vite.
-│   > Gère l'interaction utilisateur, l'authentification, les jeux et les devoirs.
+│   ├── .eslintrc.cjs
+│   │   > Configuration file for ESLint, a JavaScript linting tool.
+│   │   > Defines coding standards and rules for the client-side JavaScript code.
+│   ├── .gitignore
+│   │   > Specifies intentionally untracked files within the client directory that Git should ignore.
+│   │   > Prevents committing client-specific build artifacts and node modules.
+│   ├── index.html
+│   │   > The main HTML file for the React application.
+│   │   > Serves as the entry point for the client-side code, loading the React application.
+│   ├── package.json
+│   │   > Contains metadata about the client project, including dependencies and scripts.
+│   │   > Defines the packages needed for the client-side application and commands for development and building.
+│   ├── postcss.config.cjs
+│   │   > Configuration file for PostCSS, a tool for transforming CSS.
+│   │   > Defines CSS transformations such as vendor prefixing and future CSS syntax.
 │   ├── public/
 │   │   └── vite.svg
-│   │   > Fournit l'icône par défaut pour l'application Vite.
-│   │   > Améliore l'expérience utilisateur en affichant une icône reconnaissable dans l'onglet du navigateur.
+│   │       > The Vite logo in SVG format.
+│       > Used as the favicon for the application.
+│   ├── README.md
+│   │   > Provides a basic overview of the React + Vite template setup.
+│   │   > Explains how to get started with the project and available plugins.
 │   ├── src/
-│   │   > Contient le code source principal de l'application client React.
-│   │   > Organise les composants, les fonctionnalités et les services de l'interface utilisateur.
+│   │   ├── App.css
+│   │   │   > Contains global CSS styles for the entire React application.
+│   │   │   > Defines the overall layout and styling of the app, including bug trigger and modal styles.
+│   │   ├── App.jsx
+│   │   │   > The main component of the React application, handling routing and user authentication.
+│   │   │   > Manages user login, logout, and conditional rendering of different pages (ProfPage, ElevePage).
 │   │   ├── assets/
 │   │   │   └── react.svg
-│   │   │   > Fournit une image SVG de React.
-│   │   │   > Utilisée potentiellement dans des composants UI pour indiquer que React est utilisé.
+│   │   │       > An SVG image of the React logo.
+│   │       > Used as a decorative element within the application's UI.
 │   │   ├── features/
-│   │   │   > Organise les différentes fonctionnalités de l'application client.
-│   │   │   > Permet une séparation des préoccupations et une meilleure maintenabilité.
 │   │   │   ├── auth/
-│   │   │   │   > Gère la logique d'authentification des utilisateurs (élèves et professeurs).
-│   │   │   │   > Permet aux utilisateurs de se connecter et d'accéder aux fonctionnalités appropriées.
 │   │   │   │   ├── Login.css
-│   │   │   │   > Contient les styles CSS spécifiques au composant de connexion.
-│   │   │   │   > Améliore l'apparence et la convivialité de l'interface de connexion.
+│   │   │   │   │   > Styles the login screen and its components, including the form and input fields.
+│   │   │   │   │   > Provides a visually appealing interface for user authentication.
 │   │   │   │   └── Login.jsx
-│   │   │   │   > Gère le formulaire de connexion et la logique d'authentification.
-│   │   │   │   > Permet aux utilisateurs de s'authentifier et d'accéder à l'application.
+│   │   │   │       > Handles user authentication, managing login steps for teachers and students.
+│   │   │   │       > Fetches user data and manages the authentication flow using API calls.
 │   │   │   ├── eleve/
-│   │   │   │   > Contient les composants et la logique spécifiques à l'interface élève.
-│   │   │   │   > Fournit des fonctionnalités pour les devoirs, les jeux, etc.
 │   │   │   │   ├── components/
-│   │   │   │   │   > Contient des composants réutilisables pour l'interface élève.
-│   │   │   │   │   > Améliore la modularité et la maintenabilité du code.
 │   │   │   │   │   ├── DashboardFolder.jsx
-│   │   │   │   │   > Affiche les devoirs et les jeux organisés par chapitre.
-│   │   │   │   │   > Permet aux élèves de naviguer et d'accéder facilement au contenu pertinent.
+│   │   │   │   │   │   > Renders a folder-like structure to organize homeworks and games.
+│   │   │   │   │   │   > Displays items based on subject and allows navigation to specific assignments or games.
 │   │   │   │   │   ├── EleveHeader.css
-│   │   │   │   │   > Contient les styles CSS spécifiques à l'en-tête de l'interface élève.
-│   │   │   │   │   > Améliore l'apparence et la convivialité de l'en-tête.
+│   │   │   │   │   │   > Defines the styling for the header component in the student's view.
+│   │   │   │   │   │   > Includes layout, branding, and user information display.
 │   │   │   │   │   └── EleveHeader.jsx
-│   │   │   │   │   > Affiche l'en-tête de l'interface élève avec les informations de l'utilisateur.
-│   │   │   │   │   > Fournit des liens de navigation et des options de déconnexion.
+│   │   │   │   │       > Provides the header component for the student page.
+│   │   │   │   │       > Manages user info, logout, and navigation tabs.
 │   │   │   │   ├── games/
-│   │   │   │   │   > Contient les moteurs de jeux éducatifs et les wrappers React.
-│   │   │   │   │   > Fournit des jeux interactifs pour aider les élèves à apprendre.
-│   │   │   │   │   ├── starship/
-│   │   │   │   │   │   > Contient le moteur et les styles du jeu Starship.
-│   │   │   │   │   │   > Offre un jeu de tir spatial éducatif.
-│   │   │   │   │   │   ├── starship_core.js
-│   │   │   │   │   │   > Contient le moteur principal du jeu Starship.
-│   │   │   │   │   │   > Gère la logique du jeu, les collisions et les interactions.
-│   │   │   │   │   │   ├── starship_style.css
-│   │   │   │   │   │   > Contient les styles CSS spécifiques au jeu Starship.
-│   │   │   │   │   │   > Améliore l'apparence et la convivialité du jeu.
-│   │   │   │   │   │   └── StarshipWrapper.jsx
-│   │   │   │   │   │   > Intègre le moteur de jeu Starship dans un composant React.
-│   │   │   │   │   │   > Permet l'utilisation du jeu dans l'application React.
-│   │   │   │   │   ├── zombie/
-│   │   │   │   │   │   > Contient le moteur et les styles du jeu Zombie.
-│   │   │   │   │   │   > Offre un jeu de tir éducatif sur le thème des zombies.
-│   │   │   │   │   │   ├── zombie_core.js
-│   │   │   │   │   │   > Contient le moteur principal du jeu Zombie.
-│   │   │   │   │   │   > Gère la logique du jeu, les zombies et les projectiles.
-│   │   │   │   │   │   ├── zombie_style.css
-│   │   │   │   │   │   > Contient les styles CSS spécifiques au jeu Zombie.
-│   │   │   │   │   │   > Améliore l'apparence et la convivialité du jeu.
-│   │   │   │   │   │   ├── ZombieGame.css
-│   │   │   │   │   │   > Contient les styles CSS du composant ZombieGame.
-│   │   │   │   │   │   > Améliore la présentation de l'interface utilisateur du jeu Zombie.
-│   │   │   │   │   │   ├── ZombieGame.js
-│   │   │   │   │   │   > Définit la logique et l'état du jeu Zombie.
-│   │   │   │   │   │   > Gère les questions, les réponses et la progression du jeu.
-│   │   │   │   │   │   └── ZombieWrapper.jsx
-│   │   │   │   │   │   > Intègre le moteur de jeu Zombie dans un composant React.
-│   │   │   │   │   │   > Permet l'utilisation du jeu dans l'application React.
 │   │   │   │   │   ├── GamesGrid.css
-│   │   │   │   │   > Contient les styles CSS spécifiques à la grille des jeux.
-│   │   │   │   │   > Améliore la présentation de la liste des jeux disponibles.
+│   │   │   │   │   │   > Styles the grid layout for displaying available games.
+│   │   │   │   │   │   > Includes styles for the game selection overlay and buttons.
 │   │   │   │   │   ├── GamesGrid.jsx
-│   │   │   │   │   > Affiche une grille de jeux disponibles pour les élèves.
-│   │   │   │   │   > Permet aux élèves de choisir et de lancer des jeux éducatifs.
-│   │   │   │   │   └── mainGames.js
-│   │   │   │   │   > Contient la logique mathématique commune à tous les jeux éducatifs.
-│   │   │   │   │   > Centralise la gestion de la progression, des vies et des niveaux.
+│   │   │   │   │   │   > Manages the display and selection of games available to the student.
+│   │   │   │   │   │   > Fetches game data and renders the game selection interface.
+│   │   │   │   │   ├── mainGames.js
+│   │   │   │   │   │   > Defines the `GameProgression` class for managing game logic and progression.
+│   │   │   │   │   │   > Handles questions, levels, lives, and submission of answers for educational games.
+│   │   │   │   │   ├── starship/
+│   │   │   │   │   │   ├── starship_core.js
+│   │   │   │   │   │   │   > Implements the core logic for the Starship game, managing game states and actions.
+│   │   │   │   │   │   │   > Initializes game parameters, handles player input, and processes game events.
+│   │   │   │   │   │   ├── starship_style.css
+│   │   │   │   │   │   │   > Contains the CSS styles specific to the Starship game.
+│   │   │   │   │   │   │   > Defines the visual appearance of the game elements and layout.
+│   │   │   │   │   │   └── StarshipWrapper.jsx
+│   │   │   │   │   │       > Wraps the Starship game, initializing and managing the game engine.
+│   │   │   │   │   │       > Handles the setup and destruction of the game environment.
+│   │   │   │   │   └── zombie/
+│   │   │   │   │   │   ├── zombie_core.js
+│   │   │   │   │   │   │   > Implements the core logic for the Zombie game.
+│   │   │   │   │   │   │   > Handles game states, character movement, and collision detection.
+│   │   │   │   │   │   ├── zombie_style.css
+│   │   │   │   │   │   │   > Defines the CSS styles specific to the Zombie game.
+│   │   │   │   │   │   │   > Includes styles for the arena, zombies, and other game elements.
+│   │   │   │   │   │   ├── ZombieGame.css
+│   │   │   │   │   │   │   > CSS file related to the Zombie game.
+│   │   │   │   │   │   │   > Likely contains visual styles for the zombie game components.
+│   │   │   │   │   │   ├── ZombieGame.js
+│   │   │   │   │   │   │   > JavaScript file with game logic for the zombie game.
+│   │   │   │   │   │   │   > Likely manages the game state, player actions, and game rules.
+│   │   │   │   │   │   └── ZombieWrapper.jsx
+│   │   │   │   │   │       > Wraps the Zombie game, initializing and managing the game engine.
+│   │   │   │   │   │       > Creates and destroys the game instance.
 │   │   │   │   ├── homework/
-│   │   │   │   │   > Contient les composants et la logique pour la gestion des devoirs.
-│   │   │   │   │   > Permet aux élèves de consulter et de réaliser leurs devoirs.
 │   │   │   │   │   ├── Homework.css
-│   │   │   │   │   > Contient les styles CSS spécifiques aux composants de devoirs.
-│   │   │   │   │   > Améliore l'apparence et la convivialité de l'interface des devoirs.
+│   │   │   │   │   │   > Styles the layout and components related to homework assignments.
+│   │   │   │   │   │   > Defines styles for the container, modal, and text areas.
 │   │   │   │   │   ├── HomeworkList.jsx
-│   │   │   │   │   > Affiche la liste des devoirs disponibles pour l'élève.
-│   │   │   │   │   > Permet à l'élève de sélectionner et de commencer un devoir.
+│   │   │   │   │   │   > Displays a list of homework assignments for the student.
+│   │   │   │   │   │   > Fetches homework data and renders it in a dashboard.
 │   │   │   │   │   └── HomeworkWorkspace.jsx
-│   │   │   │   │   > Fournit un environnement de travail pour réaliser les devoirs.
-│   │   │   │   │   > Permet à l'élève de consulter les instructions, de répondre aux questions et de soumettre son travail.
+│   │   │   │   │       > Provides an interface for students to complete and submit homework.
+│   │   │   │   │       > Allows students to view assignments, enter answers, and submit them for analysis.
 │   │   │   │   ├── mistakes/
 │   │   │   │   │   └── MistakesBook.jsx
-│   │   │   │   │   > Affiche un carnet d'erreurs d'orthographe pour l'élève.
-│   │   │   │   │   > Permet à l'élève de consulter ses erreurs et de les corriger.
+│   │   │   │   │       > Displays a list of spelling mistakes made by the student.
+│   │   │   │   │       > Allows students to review and delete mistakes from their record.
 │   │   │   │   ├── productions/
 │   │   │   │   │   └── ProductionsList.jsx
-│   │   │   │   │   > Affiche une liste des travaux corrigés de l'élève.
-│   │   │   │   │   > Permet à l'élève d'accéder à ses productions et aux commentaires du professeur.
+│   │   │   │   │       > Displays a list of corrected productions (assignments) for the student.
+│   │   │   │   │       > Allows students to access their corrected work and feedback.
 │   │   │   │   ├── ElevePage.css
-│   │   │   │   > Contient les styles CSS spécifiques à la page élève.
-│   │   │   │   > Améliore l'apparence et la convivialité de l'interface élève.
+│   │   │   │   │   > Defines CSS styles specific to the student page.
+│   │   │   │   │   > Includes theme settings, container styles, and animation definitions.
 │   │   │   │   └── ElevePage.jsx
-│   │   │   │   > Gère l'affichage de l'interface principale pour les élèves.
-│   │   │   │   > Permet aux élèves d'accéder aux différentes fonctionnalités disponibles.
-│   │   │   └── prof/
-│   │   │       > Contient les composants et la logique spécifiques à l'interface professeur.
-│   │   │       > Fournit des fonctionnalités pour la création de devoirs, la gestion des élèves, etc.
-│   │   │       ├── activities/
-│   │   │       │   > Contient les composants et la logique pour la gestion des activités.
-│   │   │       │   > Permet aux professeurs de créer et d'assigner des activités aux élèves.
-│   │   │       │   ├── ActivityStudio.css
-│   │   │       │   > Contient les styles CSS spécifiques au composant ActivityStudio.
-│   │   │       │   > Améliore la présentation de l'interface de création d'activités.
-│   │   │       │   └── ActivityStudio.jsx
-│   │   │       │   > Gère la création et la gestion des activités (devoirs, jeux).
-│   │   │       │   > Permet aux professeurs de créer du contenu pédagogique interactif.
-│   │   │       ├── chapters/
-│   │   │       │   └── ChapterManager.jsx
-│   │   │       │   > Gère les chapitres et leur organisation.
-│   │   │       │   > Permet aux professeurs de créer, modifier et organiser les chapitres.
-│   │   │       ├── components/
-│   │   │       │   > Contient des composants réutilisables pour l'interface professeur.
-│   │   │       │   > Améliore la modularité et la maintenabilité du code.
-│   │   │       │   ├── ProfHeader.jsx
-│   │   │       │   > Affiche l'en-tête de l'interface professeur avec les informations de l'utilisateur.
-│   │   │       │   > Fournit des liens de navigation et des options de déconnexion.
-│   │   │       │   ├── ProfNav.jsx
-│   │   │       │   > Gère la navigation entre les différentes sections de l'interface professeur.
-│   │   │       │   > Fournit des liens vers les sections de gestion des élèves, des activités et des scans.
-│   │   │       │   └── ProfStudioFolder.jsx
-│   │   │       │   > Affiche une liste d'activités et permet de les organiser par chapitre.
-│   │   │       │   > Facilite la gestion des activités et la création de nouveaux chapitres.
-│   │   │       ├── games/
-│   │   │       │   > Contient les composants et la logique pour la création de jeux.
-│   │   │       │   > Permet aux professeurs de créer des jeux éducatifs personnalisés.
-│   │   │       │   ├── GameStudio.css
-│   │   │       │   > Contient les styles CSS spécifiques au composant GameStudio.
-│   │   │       │   > Améliore la présentation de l'interface de création de jeux.
-│   │   │       │   └── GameStudio.jsx
-│   │   │       │   > Gère la création de jeux éducatifs avec des questions et des réponses.
-│   │   │       │   > Permet aux professeurs de créer des quiz interactifs pour les élèves.
-│   │   │       ├── homework/
-│   │   │       │   > Contient les composants et la logique pour la création et la gestion des devoirs.
-│   │   │       │   > Permet aux professeurs de créer des devoirs personnalisés pour les élèves.
-│   │   │       │   ├── HomeworkResults.css
-│   │   │       │   > Contient les styles CSS spécifiques au composant HomeworkResults.
-│   │   │       │   > Améliore la présentation de l'interface de correction des devoirs.
-│   │   │       │   ├── HomeworkResults.jsx
-│   │   │       │   > Affiche les résultats des devoirs et permet de les corriger.
-│   │   │       │   > Fournit une interface pour consulter les réponses des élèves et leur attribuer une note.
-│   │   │       │   ├── HomeworkStudio.css
-│   │   │       │   > Contient les styles CSS spécifiques au composant HomeworkStudio.
-│   │   │       │   > Améliore la présentation de l'interface de création de devoirs.
-│   │   │       │   └── HomeworkStudio.jsx
-│   │   │       │   > Gère la création de devoirs avec des instructions et des pièces jointes.
-│   │   │       │   > Permet aux professeurs de créer des devoirs personnalisés pour les élèves.
-│   │   │       ├── scans/
-│   │   │       │   └── ScansStudio.jsx
-│   │   │       │   > Gère la numérisation de documents et leur analyse par l'IA.
-│   │   │       │   > Permet aux professeurs de numériser des devoirs et d'obtenir une correction automatique.
-│   │   │       ├── students/
-│   │   │       │   ├── StudentsManager.css
-│   │   │       │   > Contient les styles CSS spécifiques au composant StudentsManager.
-│   │   │       │   > Améliore la présentation de l'interface de gestion des élèves.
-│   │   │       │   └── StudentsManager.jsx
-│   │   │       │   > Gère la liste des élèves et permet de consulter leurs travaux.
-│   │   │       │   > Fournit une interface pour visualiser les travaux de chaque élève et leur progression.
-│   │   │       ├── Prof.css
-│   │   │       > Contient des styles CSS globaux pour l'interface professeur.
-│   │   │       > Harmonise l'apparence des différents composants et sections de l'interface.
-│   │   │       ├── ProfPage.css
-│   │   │       > Contient les styles CSS spécifiques à la page professeur.
-│   │   │       > Améliore l'apparence et la convivialité de l'interface professeur.
-│   │   │       └── ProfPage.jsx
-│   │   │       > Gère l'affichage de l'interface principale pour les professeurs.
-│   │   │       > Permet aux professeurs d'accéder aux différentes fonctionnalités disponibles.
-│   │   ├── services/
-│   │   │   └── api.js
-│   │   │   > Fournit une API centralisée pour communiquer avec le serveur backend.
-│   │   │   > Simplifie les requêtes HTTP et gère les erreurs de manière uniforme.
-│   │   ├── App.css
-│   │   > Contient les styles CSS globaux de l'application client.
-│   │   > Définit la mise en page et l'apparence générale de l'application.
-│   │   ├── App.jsx
-│   │   > Gère la logique de routage et l'état de l'utilisateur.
-│   │   > Détermine l'interface à afficher (connexion, élève ou professeur).
+│   │   │   │       > Manages the layout and components of the student page.
+│   │   │   │       > Controls the visibility of different sections based on the selected tab.
+│   │   │   ├── prof/
+│   │   │   │   ├── activities/
+│   │   │   │   │   ├── ActivityStudio.css
+│   │   │   │   │   │   > Defines styles for the activity studio, including layout and button styles.
+│   │   │   │   │   │   > Provides a visual structure for managing homework and game activities.
+│   │   │   │   │   └── ActivityStudio.jsx
+│   │   │   │   │       > Provides an interface for teachers to manage activities.
+│   │   │   │   │       > Integrates homework and game creation/editing and displays the dashboard.
+│   │   │   │   ├── chapters/
+│   │   │   │   │   └── ChapterManager.jsx
+│   │   │   │   │       > Manages the creation and display of chapters.
+│   │   │   │   │       > Allows filtering of chapters by class and editing chapter titles.
+│   │   │   │   ├── components/
+│   │   │   │   │   ├── ConsoleHUD.jsx
+│   │   │   │   │   │   > Displays a console-like HUD to show recent logs and errors.
+│   │   │   │   │   │   > Catches and displays console.error and console.log messages.
+│   │   │   │   │   ├── ProfHeader.jsx
+│   │   │   │   │   │   > Renders the header section of the professor page, including title and logout button.
+│   │   │   │   │   │   > Manages the display of bug reports.
+│   │   │   │   │   ├── ProfNav.jsx
+│   │   │   │   │   │   > Provides the navigation component for the professor page.
+│   │   │   │   │   │   > Manages tab selection and rendering of navigation buttons.
+│   │   │   │   │   └── ProfStudioFolder.jsx
+│   │   │   │   │       > Renders a folder-like structure to organize homeworks, games and scanned assignments.
+│   │   │   │   │       > Manages the data for different types of the activity.
+│   │   │   │   ├── games/
+│   │   │   │   │   ├── GameStudio.css
+│   │   │   │   │   │   > Defines styles specific to the game studio, including option displays.
+│   │   │   │   │   │   > Provides a visual structure for creating and editing game levels.
+│   │   │   │   │   └── GameStudio.jsx
+│   │   │   │   │       > Provides an interface for teachers to create and edit game levels.
+│   │   │   │   │       > Manages game creation, AI generation, and saving.
+│   │   │   │   ├── homework/
+│   │   │   │   │   ├── HomeworkResults.css
+│   │   │   │   │   │   > Styles the homework results interface for teachers.
+│   │   │   │   │   │   > Defines styles for layout, student rows, and correction areas.
+│   │   │   │   │   ├── HomeworkResults.jsx
+│   │   │   │   │   │   > Provides an interface for teachers to view and grade homework submissions.
+│   │   │   │   │   │   > Manages the display of submissions, grading, and feedback.
+│   │   │   │   │   ├── HomeworkStudio.css
+│   │   │   │   │   │   > Styles the layout for the HomeworkStudio component.
+│   │   │   │   │   │   > Defines styles for form elements, buttons, and the overall interface.
+│   │   │   │   │   └── HomeworkStudio.jsx
+│   │   │   │   │       > Allows teachers to create and edit homework assignments.
+│   │   │   │   │       > Manages the composition of homework content, questions, and documents.
+│   │   │   │   ├── scans/
+│   │   │   │   │   └── ScansStudio.jsx
+│   │   │   │   │       > Manages scanned documents and assignments.
+│   │   │   │   │       > Organizes, assigns folders, and applies AI to analyze homework submissions.
+│   │   │   │   ├── students/
+│   │   │   │   │   ├── StudentsManager.css
+│   │   │   │   │   │   > Provides CSS styles for the StudentsManager component.
+│   │   │   │   │   │   > Defines styles for filtering and display of student data.
+│   │   │   │   │   └── StudentsManager.jsx
+│   │   │   │   │       > Manages the display and filtering of student data.
+│   │   │   │   │       > Allows teachers to view student profiles and access student work.
+│   │   │   │   ├── Prof.css
+│   │   │   │   │   > Provides basic CSS styles related to professor actions
+│   │   │   │   │   > Mainly focused to be a premium theme with colors
+│   │   │   │   ├── ProfPage.css
+│   │   │   │   │   > Defines CSS styles specific to the professor page.
+│   │   │   │   │   > Includes layout, responsive design, and container styles.
+│   │   │   │   └── ProfPage.jsx
+│   │   │   │       > Manages the layout and components of the professor page.
+│   │   │   │       > Controls the visibility of different sections based on the selected tab.
+│   │   │   └── services/
+│   │   │       └── api.js
+│   │   │           > Centralizes API calls to the server, providing reusable functions for data fetching.
+│   │   │           > Handles error responses and provides a consistent interface for API interactions.
 │   │   ├── index.css
-│   │   > Contient des styles CSS globaux et des importations Tailwind CSS.
-│   │   > Assure l'uniformité du style sur l'ensemble du site.
+│   │   │   > Contains global CSS styles for the entire React application.
+│   │   │   > Sets up base styles and imports Tailwind CSS.
 │   │   └── main.jsx
-│   │   > Point d'entrée principal de l'application React.
-│   │   > Initialise l'application et rend le composant racine (App).
-│   ├── .eslintrc.cjs
-│   > Contient la configuration ESLint pour le projet client.
-│   > Définit les règles de style de code et aide à maintenir la cohérence du code.
-│   ├── .gitignore
-│   > Spécifie les fichiers et dossiers à ignorer lors du commit vers Git.
-│   > Empêche l'inclusion de fichiers inutiles ou sensibles dans le dépôt.
-│   ├── index.html
-│   > Fichier HTML de base pour l'application client.
-│   > Point d'entrée pour le navigateur et charge l'application React.
-│   ├── package.json
-│   > Contient les métadonnées du projet client et les dépendances NPM.
-│   > Permet de gérer les bibliothèques et les scripts utilisés dans le projet.
-│   ├── postcss.config.cjs
-│   > Configure PostCSS pour le projet client.
-│   > Permet d'utiliser des fonctionnalités CSS avancées et d'optimiser le code CSS.
-│   ├── README.md
-│   > Fournit une documentation de base sur le projet client.
-│   > Explique comment installer, configurer et exécuter l'application.
+│   │       > Serves as the entry point for the React application.
+│   │       > Renders the main App component into the DOM.
 │   ├── tailwind.config.cjs
-│   > Configure Tailwind CSS pour le projet client.
-│   > Définit les thèmes, les couleurs et les styles utilisés dans l'application.
+│   │   > Configuration file for Tailwind CSS.
+│   │   > Defines the project's design system, including colors, fonts, and breakpoints.
 │   └── vite.config.js
-│   > Configure Vite pour le projet client.
-│   > Définit les options de build, de développement et de proxy pour l'application.
+│       > Configuration file for Vite, a build tool.
+│       > Configures the development server, plugins, and proxy settings.
+├── coucou.txt
+│   > This file's purpose is unclear without further context.
+│   > It's likely a placeholder or a file used for temporary text storage or testing.
+├── git-auto.js
+│   > Automatically commits and pushes changes to Git when files are modified.
+│   > Uses chokidar to watch for file changes and executes Git commands.
+├── IAReadMe.md
+│   > Provides instructions on how to use Gemini 2.0 FLASH AI in the project.
+│   > Explains the `update.txt` file format and the process for updating the project.
+├── init-db.js
+│   > Initializes the MongoDB database with default player data.
+│   > Creates or updates player records in the database, including a set of predefined players.
+├── INSTRUCTIONS_OAUTH.md
+│   > Provides instructions for setting up Google OAuth authentication for the project.
+│   > Outlines common issues, solutions, and alternative methods for obtaining access to Google services.
+├── LOCKED_FILES.md
+│   > Documents which files are considered stable and should not be modified without explicit instruction.
+│   > Lists important server, game engine, and interface files that are critical to the project's functionality.
+├── package.json
+│   > Contains metadata about the project, including dependencies and scripts.
+│   > Defines the packages needed for the server-side application and commands for development and building.
 ├── public/
-│   > Contient les fichiers statiques servis directement par le serveur.
-│   > Inclut des images, des polices et d'autres ressources utilisées par l'application client.
 │   ├── images/
-│   │   > Contient les images utilisées dans l'application client.
-│   │   > Fournit des éléments visuels pour améliorer l'expérience utilisateur.
-│   │   ├── ~$che_Croissance_Demographique_5e.docx
-│   │   > Fichier résiduel temporaire de Word, non utilisé directement par l'application.
-│   │   > Doit être supprimé pour éviter de l'inclure accidentellement dans les commits.
 │   │   ├── Fiche_Croissance_Demographique_5e.docx
-│   │   > Document Word contenant une fiche sur la croissance démographique.
-│   │   > Peut être utilisé comme ressource pédagogique ou modèle pour les devoirs.
+│   │   │   > This file's purpose is unclear without further context.
+│   │   │   > It's likely a file used to test functionality that requires a docx file, in a Google Drive environment.
 │   │   ├── hero.png
-│   │   > Image utilisée comme image de héros sur la page d'accueil.
-│   │   > Attire l'attention des utilisateurs et communique le message principal du site.
+│   │   │   > An image file, likely used as a hero image on the website.
+│   │   │   > Provides a visual element for the landing page.
 │   │   ├── jetpack.png
-│   │   > Image utilisée dans le jeu Starship pour représenter un jetpack.
-│   │   > Fournit un élément visuel pour améliorer l'expérience du jeu.
+│   │   │   > An image file, likely used as a sprite in the Starship game.
+│   │   │   > Provides visual elements for the game environment.
 │   │   ├── jumper.png
-│   │   > Image utilisée dans le jeu Starship pour représenter un jumper.
-│   │   > Fournit un élément visuel pour améliorer l'expérience du jeu.
+│   │   │   > An image file, likely used as a sprite in the Starship game.
+│   │   │   > Provides visual elements for the game environment.
 │   │   ├── projectile.png
-│   │   > Image utilisée dans le jeu Zombie pour représenter un projectile.
-│   │   > Fournit un élément visuel pour améliorer l'expérience du jeu.
+│   │   │   > An image file, likely used as a sprite in the Zombie game.
+│   │   │   > Provides visual elements for the game environment.
 │   │   ├── ship.png
-│   │   > Image utilisée dans le jeu Starship pour représenter un vaisseau spatial.
-│   │   > Fournit un élément visuel pour améliorer l'expérience du jeu.
+│   │   │   > An image file, likely used as a sprite in the Starship game.
+│   │   │   > Provides visual elements for the game environment.
 │   │   └── zombi.png
-│   │   > Image utilisée dans le jeu Zombie pour représenter un zombie.
-│   │   > Fournit un élément visuel pour améliorer l'expérience du jeu.
+│   │       > An image file, likely used as a sprite in the Zombie game.
+│   │       > Provides visual elements for the game environment.
 │   └── style.css
-│   > Contient les styles CSS globaux pour l'application.
-│   > Définit la mise en page et l'apparence générale du site web.
+│       > Defines basic CSS styles for the public directory.
+│       > Sets up base styles for the HTML page.
 ├── server/
-│   > Contient le code source principal du serveur backend Node.js.
-│   > Gère les requêtes API, la logique métier et l'interaction avec la base de données.
 │   ├── features/
-│   │   > Organise les différentes fonctionnalités du serveur backend.
-│   │   > Permet une séparation des préoccupations et une meilleure maintenabilité.
 │   │   ├── auth/
 │   │   │   └── auth.routes.js
-│   │   │   > Définit les routes API pour l'authentification des utilisateurs.
-│   │   │   > Gère la logique de connexion et d'enregistrement des élèves et des professeurs.
+│   │   │       > Handles user authentication routes, including login and validation.
+│   │   │       > Manages the authentication process for teachers and students.
 │   │   ├── eleve/
 │   │   │   └── eleve.routes.js
-│   │   │   > Définit les routes API spécifiques à l'interface élève.
-│   │   │   > Gère la récupération des devoirs, la soumission de réponses et la consultation du carnet d'erreurs.
+│   │   │       > Handles API endpoints related to student data, such as homework assignments.
+│   │   │       > Manages operations such as retrieving homework and student spelling mistakes.
 │   │   ├── game/
 │   │   │   └── game.routes.js
-│   │   │   > Définit les routes API pour la gestion des jeux éducatifs.
-│   │   │   > Gère la génération de quiz par l'IA, la récupération des niveaux de jeu et la sauvegarde des scores.
+│   │   │       > Manages API endpoints related to game levels and content generation.
+│   │   │       > Handles game generation using AI, saving, and deleting game levels.
 │   │   └── prof/
 │   │       ├── automation.routes.js
-│   │       > Définit les routes API pour l'automatisation des tâches du professeur.
-│   │       > Gère la génération de suggestions de réparation par l'IA, la gestion des scans et le partage de productions.
+│   │       │   > Handles automated tasks related to professor data and class management.
+│   │       │   > Includes routes for creating classes, generating student data, and setting up Google Drive folders.
 │   │       └── prof.routes.js
-│   │       > Définit les routes API spécifiques à l'interface professeur.
-│   │       > Gère la création de devoirs, l'upload de fichiers et la gestion des élèves.
+│   │           > Handles API endpoints related to professor data and homework assignments.
+│   │           > Manages file uploads, student data retrieval, and chapter information.
 │   ├── models/
-│   │   > Définit les schémas de données pour la base de données MongoDB.
-│   │   > Permet de valider et de structurer les données stockées dans la base de données.
 │   │   ├── Bug.js
-│   │   > Définit le schéma de données pour les signalements de bugs.
-│   │   > Stocke les informations sur les bugs signalés par les utilisateurs (reporter, description, date).
+│   │   │   > Defines the Mongoose schema for storing bug reports submitted by users.
+│   │   │   > Stores the reporter's name, classroom, and bug description.
 │   │   ├── Chapter.js
-│   │   > Définit le schéma de données pour les chapitres.
-│   │   > Stocke les informations sur les chapitres (titre, matière, archivage).
+│   │   │   > Defines the Mongoose schema for storing chapter information.
+│   │   │   > Stores the chapter title, subject, archive status, classroom, and Google Drive folder ID.
 │   │   ├── DeploySignal.js
-│   │   > Définit le schéma de données pour le signal de déploiement.
-│   │   > Indique l'état du déploiement et permet de synchroniser le frontend et le backend.
+│   │   │   > Defines the Mongoose schema for tracking deployment signals.
+│   │   │   > Tracks the build number and deployment status.
 │   │   ├── GameLevel.js
-│   │   > Définit le schéma de données pour les niveaux de jeu.
-│   │   > Stocke les informations sur les niveaux de jeu (titre, classe cible, questions).
+│   │   │   > Defines the Mongoose schema for storing game level data.
+│   │   │   > Stores information about the game title, target grade, classroom, and questions.
 │   │   ├── Homework.js
-│   │   > Définit le schéma de données pour les devoirs.
-│   │   > Stocke les informations sur les devoirs (titre, classe, date, questions).
+│   │   │   > Defines the Mongoose schema for storing homework assignment data.
+│   │   │   > Stores information about the title, class, due date, associated files, and questions.
 │   │   ├── Player.js
-│   │   > Définit le schéma de données pour les joueurs (élèves et professeurs).
-│   │   > Stocke les informations sur les utilisateurs (nom, classe, erreurs d'orthographe).
+│   │   │   > Defines the Mongoose schema for storing player (student) data.
+│   │   │   > Stores information such as first name, last name, classroom, teacher and spelling mistakes.
 │   │   ├── ScanSession.js
-│   │   > Définit le schéma de données pour les sessions de numérisation.
-│   │   > Stocke les informations sur les sessions de numérisation (titre, classe, fichiers scannés).
+│   │   │   > Defines the Mongoose schema for storing scan session data.
+│   │   │   > Stores information about scanned assignments.
 │   │   ├── Submission.js
-│   │   > Définit le schéma de données pour les soumissions de devoirs.
-│   │   > Stocke les informations sur les soumissions (élève, transcription, feedback).
+│   │   │   > Defines the Mongoose schema for storing student submission data.
+│   │   │   > Stores the student ID, feedback, grade, and submission date.
+│   │   ├── Teacher.js
+│   │   │   > Defines the Mongoose schema for storing teacher data.
+│   │   │   > Stores information such as first name, last name, password, subject, and Google Drive folder ID.
 │   │   └── TeacherStyle.js
-│   │   > Définit le schéma de données pour le style pédagogique du professeur.
-│   │   > Stocke les informations sur le style pédagogique (mémoire pédagogique).
+│   │       > Defines the Mongoose schema for storing teacher-specific style settings.
+│   │       > Stores style settings.
 │   ├── services/
 │   │   └── drive.service.js
-│   │   > Fournit des services pour interagir avec l'API Google Drive.
-│   │   > Gère la création de dossiers, l'upload de fichiers et la suppression de fichiers.
+│   │       > Provides functions for interacting with the Google Drive API.
+│   │       > Manages folder creation, file uploads, and file sharing permissions.
 │   ├── server.js
-│   > Point d'entrée principal du serveur backend Node.js.
-│   > Initialise le serveur, connecte à la base de données et définit les routes API.
+│   │   > The main entry point for the server-side application.
+│   │   > Sets up the Express server, connects to MongoDB, and defines routes.
 │   └── version.json
-│   > Contient les informations sur la version actuelle du serveur.
-│   > Permet de suivre les modifications et de synchroniser le frontend et le backend.
-├── .env
-│   > Contient les variables d'environnement sensibles du projet.
-│   > Protège les informations confidentielles telles que les clés API et les URI de base de données.
-├── .gitignore
-│   > Spécifie les fichiers et dossiers à ignorer lors du commit vers Git.
-│   > Empêche l'inclusion de fichiers inutiles ou sensibles dans le dépôt.
-├── apply.js
-│   > Script Node.js qui applique les mises à jour du code à partir d'un fichier "update.txt".
-│   > Permet de déployer rapidement des modifications en lisant des instructions et en modifiant des fichiers.
-├── chemin
-│   > Fichier sans extension, probablement un vestige de tests ou de développement.
-│   > Devrait être supprimé car il n'a aucune fonction apparente.
-├── coucou.txt
-│   > Fichier texte contenant probablement un message de test.
-│   > Devrait être supprimé car il n'a aucune fonction apparente.
-├── git-auto.js
-│   > Script Node.js qui automatise les commits et les push vers Git.
-│   > Surveille les modifications de fichiers et effectue des commits réguliers pour sauvegarder le code.
-├── IAReadMe.md
-│   > Document Markdown contenant des informations sur l'utilisation de l'IA dans le projet.
-│   > Explique comment le projet utilise Gemini 2.0 FLASH et comment générer des fichiers de mise à jour.
-├── init-db.js
-│   > Script Node.js qui initialise la base de données MongoDB avec des données de base.
-│   > Crée ou met à jour les joueurs (élèves et professeurs) dans la base de données.
-├── INSTRUCTIONS_OAUTH.md
-│   > Document Markdown contenant des instructions pour configurer l'authentification OAuth avec Google.
-│   > Explique comment résoudre les problèmes de redirection URI et comment obtenir l'accès aux photos du compte Condamine.
-├── LOCKED_FILES.md
-│   > Document Markdown qui liste les fichiers critiques du projet qui ne doivent pas être modifiés.
-│   > Indique les fichiers stables et fonctionnels qui nécessitent une attention particulière avant toute modification.
-├── package.json
-│   > Contient les métadonnées du projet et les dépendances NPM.
-│   > Permet de gérer les bibliothèques et les scripts utilisés dans le projet.
-└── snap.js
-    > Script Node.js qui crée un snapshot du code source du projet et le soumet à l'IA pour documentation.
-    > Automatise la création d'une carte du projet enrichie par l'IA et la sauvegarde dans un fichier.
-
-INDEX DÉTAILLÉ
-
-- `.env`: Ce fichier contient les variables d'environnement sensibles nécessaires au fonctionnement de l'application, telles que l'URI de la base de données MongoDB et la clé API de Gemini. Il est essentiel de protéger ce fichier et de ne pas le commiter dans un dépôt public. Les valeurs sont masquées dans l'arbre pour des raisons de sécurité.
-
-- `IAReadMe.md`: Ce document Markdown fournit des instructions spécifiques sur l'utilisation de l'IA Gemini 2.0 FLASH dans le cadre du projet Condamine. Il détaille notamment la convention à respecter pour la génération des fichiers `update.txt` utilisés par le script `apply.js`, incluant l'utilisation de balises `[[[ FILE: chemin ]]]` pour identifier les fichiers à mettre à jour.
-
-- `INSTRUCTIONS_OAUTH.md`: Ce document Markdown détaille les étapes à suivre pour configurer l'authentification OAuth avec Google, notamment pour accéder aux photos du compte Condamine. Il aborde les problèmes courants comme le `redirect_uri_mismatch` et propose plusieurs options concrètes pour résoudre ces problèmes, allant de la correction de l'URI de redirection à l'utilisation de la délégation à l'échelle du domaine (Domain-wide delegation).
-
-- `LOCKED_FILES.md`: Ce document Markdown répertorie les fichiers critiques du projet qui sont considérés comme stables et fonctionnels. Il est impératif de ne pas modifier ces fichiers sans une autorisation explicite, car ils constituent la base du fonctionnement de l'application, notamment les routes d'authentification, la logique des jeux et les composants d'interface utilisateur clés.
-
-- `apply.js`: Ce script Node.js applique les mises à jour du code à partir d'un fichier nommé `update.txt`. Il lit les instructions dans ce fichier, identifie les fichiers à modifier ou les logs à ajouter à l'historique, puis effectue les changements nécessaires. Il gère également la rotation de l'historique, en conservant les logs importants de manière permanente et les logs normaux sur une période limitée (10 derniers).
-
-- `client/README.md`: Ce document Markdown fournit des informations générales sur le projet client React + Vite. Il explique que ce modèle fournit une configuration minimale pour faire fonctionner React dans Vite avec HMR et quelques règles ESLint. Il mentionne également deux plugins officiels disponibles: `@vitejs/plugin-react` et `@vitejs/plugin-react-swc`.
-
-- `client/index.html`: Ce fichier HTML est le point d'entrée de l'application client React. Il contient la structure HTML de base, y compris le conteneur racine (`<div id="root"></div>`) où l'application React sera rendue. Il inclut également une balise `<script>` qui charge le fichier `main.jsx` pour démarrer l'application.
-
-- `client/package.json`: Ce fichier JSON contient les métadonnées du projet client, y compris son nom, sa version, son type (module) et ses scripts. Il liste également les dépendances du projet (bibliothèques React, React DOM, React Router DOM) et les dépendances de développement (outils comme Vite, ESLint, Autoprefixer, Tailwind CSS).
-
-- `client/src/App.css`: Ce fichier CSS contient les styles globaux de l'application client, notamment la mise en page de base, les styles pour le bouton de signalement de bug et la modale de bug. Il définit également des animations et des transitions pour améliorer l'expérience utilisateur. Le fichier utilise une approche de conception "mobile-first" avec des requêtes média pour adapter l'interface aux différentes tailles d'écran.
-
-- `client/src/App.jsx`: Ce composant React est le point d'entrée de l'application front-end. Il gère l'état de l'utilisateur (connecté ou non), affiche le composant de connexion si l'utilisateur n'est pas connecté, et affiche soit la page professeur (si l'utilisateur a l'ID "prof"), soit la page élève. Il inclut aussi la logique de gestion des erreurs, en envoyant les erreurs au serveur pour analyse par l'IA.
-
-- `client/src/features/auth/Login.css`: Ce fichier CSS contient les styles spécifiques au composant de connexion. Il définit l'apparence du formulaire de connexion, y compris le titre, les champs de saisie, le bouton de soumission et les différents états (focus, hover, disabled). Le fichier utilise des variables CSS pour faciliter la personnalisation et la maintenance du style.
-
-- `client/src/features/auth/Login.jsx`: Ce composant React affiche le formulaire de connexion pour les élèves et les professeurs. Il gère l'état local des champs de saisie (prénom, nom, classe, mot de passe) et la logique d'authentification. Il communique avec le serveur via une requête POST pour vérifier les informations d'identification et rediriger l'utilisateur vers la page appropriée en cas de succès.
-
-- `client/src/features/eleve/ElevePage.css`: Ce fichier CSS contient les styles spécifiques à la page élève, utilisant un thème rose clair pour le fond et des transitions douces. Il définit la mise en page générale et l'animation d'apparition des éléments. L'utilisation du rose vise à créer une atmosphère plus accueillante et adaptée aux élèves.
-
-- `client/src/features/eleve/ElevePage.jsx`: Ce composant React gère l'interface principale pour les élèves. Il affiche l'en-tête de l'élève, les onglets de navigation (devoirs, français, jeux) et le contenu correspondant à l'onglet sélectionné. Il utilise des états locaux pour gérer l'onglet actif et passer les informations nécessaires aux composants enfants.
-
-- `client/src/features/eleve/components/DashboardFolder.jsx`: Ce composant React affiche les devoirs et les jeux organisés par chapitre, dans une interface de type "dossier". Il utilise un état local pour gérer l'ouverture et la fermeture des chapitres, et récupère les données des chapitres et des éléments (devoirs ou jeux) via des props. Il filtre également les éléments en fonction des élèves ciblés et gère l'affichage des archives.
-
-- `client/src/features/eleve/components/EleveHeader.css`: Ce fichier CSS contient les styles spécifiques à l'en-tête de l'interface élève. Il définit l'apparence de la barre supérieure, du nom de marque, du bouton de retour au profil professeur (si l'utilisateur est un élève de test), de la zone utilisateur et des onglets de navigation. Le fichier utilise un thème rose magenta pour correspondre au style global de l'interface élève.
-
-- `client/src/features/eleve/components/EleveHeader.jsx`: Ce composant React affiche l'en-tête de l'interface élève, y compris le nom de marque, le bouton de retour au profil professeur (si l'utilisateur est un élève de test), la zone utilisateur (nom et classe de l'élève) et les onglets de navigation (devoirs, français, jeux). Il utilise des props pour recevoir les informations de l'utilisateur, les gestionnaires d'événements et l'onglet actif
+│       > Contains version information for the current build of the project.
+│       > Stores the build number and message for tracking updates and deployments.
+├── snap.js
+│   > Creates a snapshot of the project structure and code, then uses AI to document it.
+│   > Generates `snapshot.txt` with the file tree and code, and `projectMap.txt` with AI-generated documentation.
+└── y/
+    └── google-cloud-sdk/
+        ├── .install/
+        │   └── .download/
+        └── platform/
+            ├── ext-runtime/
+            │   └── nodejs/
+            │       └── lib/
+            │           └── __pycache__/
+            │               └── comm.cpython-313.pyc
+            └── gsutil/
+                ├── gslib/
+                │   └── vendored/
+                │       ├── boto/
+                │       │   ├── __pycache__/
+                │       │   │   └── setup.cpython-313.pyc
+                │       │   └── boto/
+                │       │       ├── __pycache__/
+                │       │       │   ├── __init__.cpython-313.pyc
+                │       │       │   ├── auth_handler.cpython-313.pyc
+                │       │       │   ├── auth.cpython-313.pyc
+                │       │       │   ├── compat.cpython-313.pyc
+                │       │       │   ├── connection.cpython-313.pyc
+                │       │       │   ├── endpoints.cpython-313.pyc
+                │       │       │   ├── exception.cpython-313.pyc
+                │       │       │   ├── handler.cpython-313.pyc
+                │       │       │   ├── https_connection.cpython-313.pyc
+                │       │       │   ├── jsonresponse.cpython-313.pyc
+                │       │       │   ├── plugin.cpython-313.pyc
+                │       │       │   ├── provider.cpython-313.pyc
+                │       │       │   ├── regioninfo.cpython-313.pyc
+                │       │       │   ├── requestlog.cpython-313.pyc
+                │       │       │   ├── resultset.cpython-313.pyc
+                │       │       │   ├── storage_uri.cpython-313.pyc
+                │       │       │   └── utils.cpython-313.pyc
+                │       │       ├── awslambda/
+                │       │       │   └── __pycache__/
+                │       │       │       ├── __init__.cpython-313.pyc
+                │       │       │       ├── exceptions.cpython-313.pyc
+                │       │       │       └── layer1.cpython-313.pyc
+                │       │       ├── beanstalk/
+                │       │       │   └── __pycache__/
+                │       │       │       ├── __init__.cpython-313.pyc
+                │       │       │       ├── exception.cpython-313.pyc
+                │       │       │       ├── layer1.cpython-313.pyc
+                │       │       │       ├── response.cpython-313.pyc
+                │       │       │       └── wrapper.cpython-313.pyc
+                │       │       ├── cacerts/
+                │       │       │   └── __pycache__/
+                │       │       │       └── __init__.cpython-313.pyc
+                │       │       ├── cloudformation/
+                │       │       │   └── __pycache__/
+                │       │       │       ├── __init__.cpython-313.pyc
+                │       │       │       ├── connection.cpython-313.pyc
+                │       │       │       ├── stack.cpython-313.pyc
+                │       │       │       └── template.cpython-313.pyc
+                │       │       ├── cloudfront/
+                │       │       │   └── __pycache__/
+                │       │       │       ├── __init__.cpython-313.pyc
+                │       │       │       ├── distribution.cpython-313.pyc
+                │       │       │       ├── exception.cpython-313.pyc
+                │       │       │       ├── identity.cpython-313.pyc
+                │       │       │       ├── invalidation.cpython-313.pyc
+                │       │       │       ├── logging.cpython-313.pyc
+                │       │       │       ├── object.cpython-313.pyc
+                │       │       │       ├── origin.cpython-313.pyc
+                │       │       │       └── signers.cpython-313.pyc
+                │       │       ├── cloudhsm/
+                │       │       │   └── __pycache__/
+                │       │       │       ├── __init__.cpython-313.pyc
+                │       │       │       ├── exceptions.cpython-313.pyc
+                │       │       │       └── layer1.cpython-313.pyc
+                │       │       ├── cloudsearch/
+                │       │       │   └── __pycache__/
+                │       │       │       ├── __init__.cpython-313.pyc
+                │       │       │       ├── document.cpython-313.pyc
+                │       │       │       ├── domain.cpython-313.pyc
+                │       │       │       ├── layer1.cpython-313.pyc
+                │       │       │       ├── layer2.cpython-313.pyc
+                │       │       │       ├── optionstatus.cpython-313.pyc
+                │       │       │       ├── search.cpython-313.pyc
+                │       │       │       └── sourceattribute.cpython-313.pyc
+                │       │       ├── cloudsearch2/
+                │       │       │   └── __pycache__/
+                │       │       │       ├── __init__.cpython-313.pyc
+                │       │       │       ├── document.cpython-313.pyc
+                │       │       │       ├── domain.cpython-313.pyc
+                │       │       │       ├── exceptions.cpython-313.pyc
+                │       │       │       ├── layer1.cpython-313.pyc
+                │       │       │       ├── layer2.cpython-313.pyc
+                │       │       │       ├── optionstatus.cpython-313.pyc
+                │       │       │       └── search.cpython-313.pyc
+                │       │       ├── cloudsearchdomain/
+                │       │       │   └── __pycache__/
+                │       │       │       ├── __init__.cpython-313.pyc
+                │       │       │       ├── exceptions.cpython-313.pyc
+                │       │       │       └── layer1.cpython-313.pyc
+                │       │       ├── cloudtrail/
+                │       │       │   └── __pycache__/
+                │       │       │       ├── __init__.cpython-313.pyc
+                │       │       │       ├── exceptions.cpython-313.pyc
+                │       │       │       └── layer1.cpython-313.pyc
+                │       │       ├── codedeploy/
+                │       │       │   └── __pycache__/
+                │       │       │       ├── __init__.cpython-313.pyc
+                │       │       │       ├── exceptions.cpython-313.pyc
+                │       │       │       └── layer1.cpython-313.pyc
+                │       │       ├── cognito/
+                │       │       │   ├── __pycache__/
+                │       │       │   │   └── __init__.cpython-313.pyc
+                │       │       │   ├── identity/
+                │       │       │   │   └── __pycache__/
+                │       │       │   │       ├── __init__.cpython-313.pyc
+                │       │       │   │       ├── exceptions.cpython-313.pyc
+                │       │       │   │       └── layer1.cpython-313.pyc
+                │       │       │   └── sync/
+                │       │       │       └── __pycache__/
+                │       │       │           ├── __init__.cpython-313.pyc
+                │       │       │           ├── exceptions.cpython-313.pyc
+                │       │       │           └── layer1.cpython-313.pyc
+                │       │       ├── configservice/
+                │       │       │   └── __pycache__/
+                │       │       │       ├── __init__.cpython-313.pyc
+                │       │       │       ├── exceptions.cpython-313.pyc
+                │       │       │       └── layer1.cpython-313.pyc
+                │       │       ├── contrib/
+                │       │       │   └── __pycache__/
+                │       │       │       ├── __init__.cpython-313.pyc
+                │       │       │       └── ymlmessage.cpython-313.pyc
+                │       │       ├── datapipeline/
+                │       │       │   └── __pycache__/
+                │       │       │       ├── __init__.cpython-313.pyc
+                │       │       │       ├── exceptions.cpython-313.pyc
+                │       │       │       └── layer1.cpython-313.pyc
+                │       │       ├── directconnect/
+                │       │       │   └── __pycache__/
+                │       │       │       ├── __init__.cpython-313.pyc
+                │       │       │       ├── exceptions.cpython-313.pyc
+                │       │       │       └── layer1.cpython-313.pyc
+                │       │       ├── dynamodb/
+                │       │       │   └── __pycache__/
+                │       │       │       ├── __init__.cpython-313.pyc
+                │       │       │       ├── batch.cpython-313.pyc
+                │       │       │       ├── condition.cpython-313.pyc
+                │       │       │       ├── exceptions.cpython-313.pyc
+                │       │       │       ├── item.cpython-313.pyc
+                │       │       │       ├── layer1.cpython-313.pyc
+                │       │       │       ├── layer2.cpython-313.pyc
+                │       │       │       ├── schema.cpython-313.pyc
+                │       │       │       ├── table.cpython-313.pyc
+                │       │       │       └── types.cpython-313.pyc
+                │       │       ├── dynamodb2/
+                │       │       │   └── __pycache__/
+                │       │       │       ├── __init__.cpython-313.pyc
+                │       │       │       ├── exceptions.cpython-313.pyc
+                │       │       │       ├── fields.
