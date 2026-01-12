@@ -15,7 +15,7 @@ try {
         drive = google.drive({ version: 'v3', auth });
         console.log("✅ Google Drive API : Connecté.");
     } else {
-        console.warn("⚠️ Google Drive API : Clés manquantes dans .env. Mode hors-ligne (Drive désactivé).");
+        console.warn("⚠️ Google Drive API : Clés manquantes dans .env.");
     }
 } catch (e) {
     console.error("❌ Erreur init Drive:", e.message);
@@ -23,31 +23,53 @@ try {
 
 const DriveService = {
     getOrCreateFolder: async (name, parentId = null) => {
-        if (!drive) return null; // Sécurité anti-crash
+        if (!drive) return null;
         try {
-            let q = `name = '${name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
-            q += parentId ? ` and '${parentId}' in parents` : ` and 'root' in parents`;
+            let q = "name = '" + name + "' and mimeType = 'application/vnd.google-apps.folder' and trashed = false";
+            if (parentId) {
+                q += " and '" + parentId + "' in parents";
+            } else {
+                q += " and 'root' in parents";
+            }
             
             const res = await drive.files.list({ q, fields: 'files(id, name)' });
-            if (res.data.files?.length > 0) return res.data.files[0].id;
+            if (res.data.files && res.data.files.length > 0) {
+                return res.data.files[0].id;
+            }
 
             const folder = await drive.files.create({
-                resource: { name, mimeType: 'application/vnd.google-apps.folder', parents: parentId ? [parentId] : [] },
+                resource: { 
+                    name: name, 
+                    mimeType: 'application/vnd.google-apps.folder', 
+                    parents: parentId ? [parentId] : [] 
+                },
                 fields: 'id'
             });
             
-            // Tenter de rendre public (peut échouer selon les droits)
             try {
                 await drive.permissions.create({
                     fileId: folder.data.id,
                     resource: { role: 'reader', type: 'anyone' }
                 });
-            } catch(e) { console.warn("⚠️ Drive: Impossible de rendre public le dossier", name); }
+            } catch(e) {}
 
             return folder.data.id;
         } catch (e) { 
-            console.error(`❌ Erreur Drive (getOrCreateFolder ${name}):`, e.message);
+            console.error("❌ Erreur Drive getOrCreateFolder:", e.message);
             return null; 
+        }
+    },
+
+    renameFolder: async (fileId, newName) => {
+        if (!drive || !fileId) return;
+        try {
+            await drive.files.update({
+                fileId: fileId,
+                resource: { name: newName }
+            });
+            console.log("✅ Drive : Dossier renommé en " + newName);
+        } catch (e) {
+            console.error("❌ Erreur Drive renameFolder:", e.message);
         }
     },
 
@@ -59,7 +81,7 @@ const DriveService = {
             
             const file = await drive.files.create({
                 resource: { name: fileName, parents: [folderId] },
-                media,
+                media: media,
                 fields: 'id, webViewLink'
             });
 
@@ -72,24 +94,34 @@ const DriveService = {
 
             return { id: file.data.id, link: file.data.webViewLink };
         } catch (e) {
-            console.error("❌ Erreur Upload Drive:", e.message);
+            console.error("❌ Erreur Drive uploadImage:", e.message);
             return null;
         }
     },
 
     deleteFile: async (id) => { 
-        if (!drive) return true;
-        try { await drive.files.delete({ fileId: id }); return true; } 
-        catch (e) { return false; } 
+        if (!drive || !id) return true;
+        try { 
+            await drive.files.delete({ fileId: id }); 
+            return true; 
+        } catch (e) { 
+            return false; 
+        } 
     },
 
     moveFile: async (fileId, newParentId) => {
-        if (!drive) return;
+        if (!drive || !fileId || !newParentId) return;
         try {
-            const file = await drive.files.get({ fileId, fields: 'parents' });
-            const previous = file.data.parents?.join(',') || "";
-            return await drive.files.update({ fileId, addParents: newParentId, removeParents: previous });
-        } catch(e) { console.error("Erreur Move:", e.message); }
+            const file = await drive.files.get({ fileId: fileId, fields: 'parents' });
+            const previous = (file.data.parents || []).join(',');
+            return await drive.files.update({ 
+                fileId: fileId, 
+                addParents: newParentId, 
+                removeParents: previous 
+            });
+        } catch(e) { 
+            console.error("❌ Erreur Drive moveFile:", e.message); 
+        }
     }
 };
 
