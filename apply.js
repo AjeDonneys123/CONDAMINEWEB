@@ -1,115 +1,102 @@
 const fs = require('fs');
 const path = require('path');
-const inputFile = 'update.txt';
-const historyFile = 'history.txt';
 
-console.log("🛠️  [WATCHER] apply.js (v7) actif.");
-console.log("📜 Mémoire : 'history-important' (Permanent) | 'history' (Max 10)");
+const inputFile = 'update.txt';
+const statusFile = 'apply_status.json';
+
+console.log("------------------------------------------------");
+console.log("🛠️  [WATCHER] apply.js (v11-SÉCURITÉ MAX) actif.");
+console.log("🧹 Mode : Nettoyage automatique + Validation [[[ END ]]]");
+console.log("------------------------------------------------");
 
 /**
- * Gère la rotation de l'historique
- * @param {string} newEntry - Le contenu du log
- * @param {boolean} isImportant - Si permanent ou non
+ * Informe le site web du statut (utilisé pour l'alerte rouge en haut du site)
  */
-function manageHistory(newEntry, isImportant) {
-    const delimiter = "==================================================";
-    let historyContent = "";
-    
-    if (fs.existsSync(historyFile)) {
-        historyContent = fs.readFileSync(historyFile, 'utf8');
-    }
-
-    // On sépare les blocs existants
-    const blocks = historyContent.split(delimiter)
-        .map(b => b.trim())
-        .filter(b => b.length > 5);
-
-    // On trie : Permanents vs Flux (Normal)
-    // On identifie les permanents par le tag [IMPORTANT]
-    const importantBlocks = blocks.filter(b => b.includes("[IMPORTANT]"));
-    let normalBlocks = blocks.filter(b => !b.includes("[IMPORTANT]") && !b.includes("---"));
-
-    const timestamp = new Date().toLocaleString();
-    
-    if (isImportant) {
-        const formatted = `### [IMPORTANT] - ${timestamp}\n${newEntry}`;
-        importantBlocks.push(formatted);
-    } else {
-        const formatted = `### [LOG] - ${timestamp}\n${newEntry}`;
-        normalBlocks.push(formatted);
-        // RÈGLE : On ne garde que les 10 derniers logs normaux
-        if (normalBlocks.length > 10) {
-            normalBlocks.shift(); // Supprime le plus ancien
-        }
-    }
-
-    // Reconstruction propre du fichier
-    let finalOutput = "--- NOTES ARCHITECTURE (PERMANENT) ---\n\n";
-    finalOutput += importantBlocks.join(`\n\n${delimiter}\n\n`);
-    finalOutput += `\n\n${delimiter}\n\n`;
-    finalOutput += "--- DERNIÈRES MODIFICATIONS (FLUX MAX 10) ---\n\n";
-    finalOutput += normalBlocks.join(`\n\n${delimiter}\n\n`);
-    finalOutput += `\n\n${delimiter}\n`;
-
+function setStatus(error, truncatedFile = null) {
     try {
-        fs.writeFileSync(historyFile, finalOutput);
-        console.log(`   📝 HISTORIQUE : ${isImportant ? 'IMPORTANT (Permanent)' : 'LOG (Flux 10)'} mis à jour.`);
-    } catch (e) {
-        console.error("   ❌ Erreur écriture history.txt :", e.message);
-    }
+        fs.writeFileSync(statusFile, JSON.stringify({ error, truncatedFile, timestamp: Date.now() }, null, 2));
+    } catch (e) {}
 }
 
 /**
- * Analyse update.txt et applique les changements
+ * Analyse et applique les blocs de code de manière granulaire
  */
 function applyUpdate() {
     if (!fs.existsSync(inputFile)) return;
-    const rawContent = fs.readFileSync(inputFile, 'utf8');
-    const content = rawContent.trim();
-    if (content.length < 10) return;
+    let rawContent = "";
+    try { 
+        rawContent = fs.readFileSync(inputFile, 'utf8'); 
+    } catch (e) { return; }
+    
+    if (rawContent.trim().length < 5) return;
 
-    console.log("\n⚡ [MAJ] Nouveau flux détecté...");
+    // Regex pour détecter le début : [[[ FILE: chemin ]]]
+    const fileStartRegex = /\[\[\[\s*FILE\s*:\s*([^\]\s]+)\s*\]\]\]/g;
+    let match;
+    let lastUnfinishedBlock = "";
+    let processedCount = 0;
 
-    // Capture [[[ TYPE : TARGET ]]]
-    const parts = content.split(/\[\[\[\s*(\w+)\s*:\s*([^\]\s]+)\s*\]\]\]/);
-    let count = 0;
+    // On parcourt tous les débuts de fichiers trouvés dans update.txt
+    while ((match = fileStartRegex.exec(rawContent)) !== null) {
+        const filePath = match[1].trim();
+        const startTag = match[0];
+        const endTag = `[[[ END: ${filePath} ]]]`;
 
-    for (let i = 1; i < parts.length; i += 3) {
-        const type = parts[i] ? parts[i].trim().toLowerCase() : null;
-        const target = parts[i + 1] ? parts[i + 1].trim() : null;
-        const blockContent = parts[i + 2] ? parts[i + 2].trim() : "";
+        // VÉRIFICATION : Est-ce que ce fichier précis a sa balise de fin ?
+        if (rawContent.includes(endTag)) {
+            // BLOC COMPLET : On extrait le contenu
+            const startIndex = rawContent.indexOf(startTag) + startTag.length;
+            const endIndex = rawContent.indexOf(endTag);
+            const fileContent = rawContent.substring(startIndex, endIndex).trim();
 
-        if (type && target) {
-            const targetLower = target.toLowerCase();
-
-            // CAS 1 : HISTORIQUE DYNAMIQUE
-            if (targetLower === 'history' || type === 'update') {
-                const isImportant = targetLower.includes('important');
-                manageHistory(blockContent, isImportant);
-                count++;
-            } 
-            // CAS 2 : MISE À JOUR DE FICHIER
-            else if (type === 'file') {
-                const fullPath = path.join(__dirname, target);
-                const dir = path.dirname(fullPath);
-                
-                try {
-                    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-                    fs.writeFileSync(fullPath, blockContent);
-                    console.log(`   ✅ SYNCHRO : ${target}`);
-                    count++;
-                } catch (e) {
-                    console.error(`   ❌ ERREUR sur ${target}: ${e.message}`);
-                }
+            const fullPath = path.join(__dirname, filePath);
+            const dir = path.dirname(fullPath);
+            
+            try {
+                if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+                fs.writeFileSync(fullPath, fileContent);
+                console.log(`   ✅ APPLIQUÉ : ${filePath}`);
+                processedCount++;
+            } catch (e) {
+                console.error(`   ❌ ERREUR sur ${filePath}: ${e.message}`);
             }
+        } else {
+            // BLOC TRONQUÉ : Il manque la fin pour ce fichier
+            // On sauvegarde tout le reste du texte à partir de ce fichier pour le conserver
+            lastUnfinishedBlock = rawContent.substring(rawContent.indexOf(startTag));
+            console.warn(`⚠️  [INCOMPLET] Le fichier ${filePath} est tronqué. Attente de la suite...`);
+            setStatus("Fichier coupé détecté", filePath);
+            break; // On arrête le traitement pour ce cycle
         }
     }
 
-    if (count > 0) {
-        fs.writeFileSync(inputFile, ''); // Vide update.txt
-        console.log(`✨ Terminé : ${count} éléments traités.\n`);
+    // --- NETTOYAGE INTELLIGENT DE UPDATE.TXT ---
+    try {
+        // On réécrit le fichier :
+        // - Soit avec le bloc incomplet qu'on a gardé
+        // - Soit vide si tout a été traité
+        fs.writeFileSync(inputFile, lastUnfinishedBlock.trim());
+        
+        if (processedCount > 0 && !lastUnfinishedBlock) {
+            console.log(`✨ Terminé : ${processedCount} fichiers synchronisés. update.txt est vide.\n`);
+            setStatus(null); // On efface l'alerte sur le site
+        } else if (rawContent.length > 50 && processedCount === 0 && !lastUnfinishedBlock) {
+            // Si le fichier contient du texte mais aucune balise valide (poubelle)
+            fs.writeFileSync(inputFile, '');
+            console.log(`🧹 Nettoyage : Texte non-conforme supprimé.`);
+        }
+    } catch (e) {
+        console.error("Erreur lors du nettoyage final.");
     }
 }
 
-// Watcher toutes les secondes
+// Vérification toutes les secondes
 setInterval(applyUpdate, 1000);
+[[[ END: apply.js ]]]
+
+[[[ FILE: server/version.json ]]]
+{
+  "build": 129,
+  "message": "Upgrade apply.js to v11 (Sentinel Security + Auto-Garbage Collector)",
+  "timestamp": "12/01/2026 13:00:00"
+}
