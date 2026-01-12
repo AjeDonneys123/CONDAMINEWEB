@@ -7,7 +7,6 @@ const fs = require('fs');
 const app = express();
 const port = process.env.PORT || 3000;
 
-// 1. Connexion BDD
 mongoose.connect(process.env.MONGODB_URI)
     .then(async () => {
         console.log('✅ BDD Connectée.');
@@ -35,17 +34,22 @@ mongoose.connect(process.env.MONGODB_URI)
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// --- ROUTE SPECIALE POUR LE STATUT D'APPLICATION DU CODE ---
+// --- API SYSTÈME ---
 app.get('/api/system-status', (req, res) => {
     const statusPath = path.join(__dirname, '..', 'apply_status.json');
     if (fs.existsSync(statusPath)) {
-        try {
-            const data = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
-            res.json(data);
-        } catch (e) { res.json({ status: 'OK' }); }
-    } else {
-        res.json({ status: 'OK' });
-    }
+        try { res.json(JSON.parse(fs.readFileSync(statusPath, 'utf8'))); } 
+        catch (e) { res.json({ status: 'OK' }); }
+    } else { res.json({ status: 'OK' }); }
+});
+
+// NOUVELLE ROUTE : RESET FORCÉ DU STATUT
+app.post('/api/reset-status', (req, res) => {
+    const statusPath = path.join(__dirname, '..', 'apply_status.json');
+    try {
+        fs.writeFileSync(statusPath, JSON.stringify({ status: 'OK', timestamp: Date.now() }, null, 2));
+        res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // 2. Routes API

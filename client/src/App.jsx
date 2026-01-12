@@ -9,6 +9,16 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [sysStatus, setSysStatus] = useState({ status: 'OK' });
 
+  // Reset function qui appelle le serveur
+  const handleAckError = async () => {
+      // 1. Copie le texte pour l'IA
+      await navigator.clipboard.writeText(`⚡_FIX_REQ_⚡ Le fichier ${sysStatus.file} est incomplet. Peux-tu me le renvoyer en entier s'il te plait ?`);
+      // 2. Dit au serveur de retirer l'alerte
+      await fetch('/api/reset-status', { method: 'POST' });
+      // 3. Met à jour localement tout de suite pour la réactivité
+      setSysStatus({ status: 'OK' });
+  };
+
   useEffect(() => {
     window.onerror = async (msg, url, line, col, error) => {
         if (!user || user.id !== 'prof') return;
@@ -27,7 +37,7 @@ export default function App() {
             .then(r => r.json())
             .then(data => setSysStatus(data))
             .catch(() => {});
-    }, 2000);
+    }, 1000); // Check toutes les secondes
     return () => clearInterval(interval);
   }, []);
 
@@ -48,11 +58,8 @@ export default function App() {
       {/* ALERTE SYSTÈME SÉCURISÉE */}
       {sysStatus.status === 'TRUNCATED' && (
           <div className="system-alert-bar">
-              <span>⚠️ ATTENTION : Le fichier <u>{sysStatus.file}</u> a été coupé !</span>
-              <button 
-                className="system-alert-btn"
-                onClick={() => navigator.clipboard.writeText(`⚡_FIX_REQ_⚡ Le fichier ${sysStatus.file} est incomplet. Peux-tu me le renvoyer en entier s'il te plait ?`)}
-              >
+              <span>⚠️ ALERTE : Le fichier <u>{sysStatus.file}</u> a été coupé !</span>
+              <button className="system-alert-btn" onClick={handleAckError}>
                 COPIER & ACQUITTER
               </button>
           </div>
