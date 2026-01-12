@@ -48,6 +48,7 @@ export default function ProfStudioFolder({
 
     const normalize = (c) => c?.toString().toUpperCase().replace('E', '') || "";
     
+    // CORRECTION CRITIQUE ICI : On utilise classFilter, pas globalClass
     const activeChapters = chapters.filter(c => normalize(c.classroom) === normalize(classFilter) && !c.isArchived);
     const otherChapters = chapters.filter(c => normalize(c.classroom) !== normalize(classFilter) && !c.isArchived);
 
@@ -55,7 +56,6 @@ export default function ProfStudioFolder({
 
     return (
         <div className="max-w-4xl mx-auto space-y-6">
-            
             <div className="grid grid-cols-3 gap-4 mb-4">
                 {['H', 'G', 'E'].map(s => (
                     <button key={s} onClick={() => handleCreate(s)} className={`p-4 bg-white border-2 border-dashed rounded-3xl font-black uppercase text-[10px] hover:scale-105 transition-all shadow-sm ${getSubjectInfo(s).color} ${getSubjectInfo(s).border}`}>
@@ -66,9 +66,9 @@ export default function ProfStudioFolder({
 
             {otherChapters.length > 0 && (
                 <div className="text-center mb-4">
-                    <span className="text-xs text-slate-400 mr-2">{otherChapters.length} dossiers masqués (autres classes)</span>
+                    <span className="text-xs text-slate-400 mr-2">{otherChapters.length} dossiers masqués</span>
                     <button onClick={() => setShowAll(!showAll)} className="text-[10px] font-bold text-indigo-500 underline uppercase">
-                        {showAll ? "Masquer les autres" : "Les voir quand même"}
+                        {showAll ? "Masquer" : "Voir tout"}
                     </button>
                 </div>
             )}
@@ -133,15 +133,22 @@ export default function ProfStudioFolder({
                                             </div>
                                         </div>
                                     ))}
-                                    {chapItems.length === 0 && <p className="text-center py-4 text-slate-300 italic text-xs">Aucune activité dans ce dossier.</p>}
+                                    {chapSessions.map(sess => (
+                                        <div key={sess._id} className="bg-emerald-50 p-4 rounded-2xl flex justify-between items-center shadow-sm border border-emerald-100">
+                                            <div className="flex items-center gap-3"><span className="text-xl">📸</span><div className="flex flex-col"><b className="text-emerald-900 text-sm">{sess.title}</b><span className="text-[9px] font-black text-emerald-600 uppercase">Production ({sess.copyUrls?.length || 0} copies)</span></div></div>
+                                            <button onClick={() => onDeleteItem(sess._id, 'scan')} className="p-1 text-emerald-300 hover:text-red-500">✕</button>
+                                        </div>
+                                    ))}
+                                    {chapItems.length === 0 && chapSessions.length === 0 && <p className="text-center py-4 text-slate-300 italic text-xs">Dossier vide.</p>}
                                 </div>
                             )}
                         </div>
                     );
                 })}
+                
                 {displayChapters.length === 0 && (
                     <div className="text-center py-10 border-2 border-dashed border-slate-200 rounded-[30px] bg-slate-50">
-                        {/* CORRECTION ICI : on utilise classFilter au lieu de globalClass */}
+                        {/* CORRECTION : Utilisation de classFilter */}
                         <p className="text-slate-400 font-bold">Aucun dossier pour {classFilter}</p>
                         <p className="text-xs text-slate-300 mt-1">Cliquez sur un bouton ci-dessus pour commencer</p>
                     </div>
