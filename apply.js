@@ -4,11 +4,11 @@ const path = require('path');
 const inputFile = 'update.txt';
 const statusFile = 'apply_status.json';
 
-const PROTECTED_PATHS = ['.git', 'node_modules', 'apply.js', 'git-auto.js', 'package.json', '.env', 'server/server.js', '.', './'];
+const PROTECTED_PATHS = ['.git', 'node_modules', 'apply.js', 'magic-paste.js', 'git-auto.js', 'package.json', '.env', 'server/server.js', '.', './'];
 
 console.log("------------------------------------------------");
-console.log("🛠️  [WATCHER] apply.js (v17-KAMIKAZE) actif.");
-console.log("💥  Mode : Erreur = Alerte + Vidange immédiate.");
+console.log("🛠️  [WATCHER] apply.js (v18-TOLERANT) actif.");
+console.log("🧘  Mode : Détection souple (Regex) & Reset Auto");
 console.log("------------------------------------------------");
 
 function setStatus(status, file = null) {
@@ -16,6 +16,10 @@ function setStatus(status, file = null) {
         const data = { status, file, timestamp: Date.now() };
         fs.writeFileSync(statusFile, JSON.stringify(data, null, 2));
     } catch (e) {}
+}
+
+function escapeRegExp(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function applyUpdate() {
@@ -28,7 +32,7 @@ function applyUpdate() {
     let cursor = 0;
     let processedAny = false;
 
-    // --- 1. DELETE (Toujours traité en priorité) ---
+    // 1. DELETE (Toujours prioritaire)
     const deleteRegex = /\[\[\[£\s*DELETE\s*:\s*([^£\]\s]+)\s*£\]\]\]/g;
     let delMatch;
     while ((delMatch = deleteRegex.exec(rawContent)) !== null) {
@@ -46,29 +50,29 @@ function applyUpdate() {
         }
     }
 
-    // --- 2. FILES (Séquentiel) ---
-    const startMarker = "[[[£ FILE:";
-    let nextStartIndex = rawContent.indexOf(startMarker, cursor);
+    // 2. FILES (Analyse souple)
+    // Regex pour trouver le DEBUT : [[[£ FILE: ... £]]]
+    const startRegex = /\[\[\[£\s*FILE\s*:\s*([^£\]\s]+)\s*£\]\]\]/g;
+    let startMatch;
 
-    while (nextStartIndex !== -1) {
-        const pathEndIndex = rawContent.indexOf("£]]]", nextStartIndex);
+    // On boucle sur tous les débuts trouvés
+    while ((startMatch = startRegex.exec(rawContent)) !== null) {
+        const filePath = startMatch[1].trim();
+        const contentStartIndex = startMatch.index + startMatch[0].length;
         
-        // Sécurité de base sur la balise ouvrante
-        if (pathEndIndex === -1) {
-            // Cas très rare où même le nom du fichier est coupé
-            setStatus('TRUNCATED', 'Inconnu (En-tête coupé)');
-            fs.writeFileSync(inputFile, '');
-            return;
-        }
+        // On construit une Regex dynamique pour trouver la FIN correspondante
+        // Cela permet d'accepter des espaces variables : [[[£  END:  chemin  £]]]
+        const safePath = escapeRegExp(filePath);
+        const endPattern = new RegExp(`\\[\\[\\[£\\s*END\\s*:\\s*${safePath}\\s*£\\]\\]\\]`);
+        
+        // On cherche la fin APRES le début
+        const remainingText = rawContent.substring(contentStartIndex);
+        const endMatch = remainingText.match(endPattern);
 
-        const filePath = rawContent.substring(nextStartIndex + startMarker.length, pathEndIndex).trim();
-        const endTag = `[[[£ END: ${filePath} £]]]`;
-        const endTagIndex = rawContent.indexOf(endTag, pathEndIndex);
-
-        if (endTagIndex !== -1) {
-            // --- FICHIER COMPLET ---
-            const contentStart = pathEndIndex + 4;
-            const fileContent = rawContent.substring(contentStart, endTagIndex).trim();
+        if (endMatch) {
+            // --- C'EST BON ---
+            // Le contenu est entre le début (contentStartIndex) et le début du match de fin
+            const fileContent = remainingText.substring(0, endMatch.index).trim();
             const fullPath = path.join(__dirname, filePath);
             const dir = path.dirname(fullPath);
 
@@ -80,45 +84,29 @@ function applyUpdate() {
             } catch (e) {
                 console.error(`   ❌ ERREUR FILE ${filePath}: ${e.message}`);
             }
-
-            cursor = endTagIndex + endTag.length;
-            nextStartIndex = rawContent.indexOf(startMarker, cursor);
         } else {
-            // --- FICHIER COUPÉ ---
+            // --- C'EST COUPÉ ---
             console.warn(`⚠️  [COUPURE DÉTECTÉE] Sur le fichier : ${filePath}`);
-            console.warn(`💥  ACTION : Alerte Frontend + Vidange update.txt`);
+            console.warn(`   (Impossible de trouver la balise de fin correspondante)`);
             
-            // 1. On prévient le site web
             setStatus('TRUNCATED', filePath);
-            
-            // 2. On vide le fichier pour faire place nette au prochain copier-coller
-            fs.writeFileSync(inputFile, '');
-            
-            // 3. On arrête tout immédiatement
-            return;
+            fs.writeFileSync(inputFile, ''); // Vidange sécurité
+            return; // On arrête tout
         }
     }
 
-    // --- 3. NETTOYAGE FINAL (Si tout s'est bien passé) ---
-    // Si on arrive ici, c'est qu'aucune coupure n'a été détectée dans la boucle
+    // 3. NETTOYAGE
     if (processedAny) {
-        // On ne garde que ce qui n'a pas été traité (normalement rien ou des espaces)
-        const remaining = rawContent.substring(cursor).trim();
-        if (remaining.length === 0) {
-            fs.writeFileSync(inputFile, '');
-            setStatus('OK'); // Tout est vert
-            console.log(`✨ Cycle terminé. update.txt vidé.\n`);
-        } else {
-            // S'il reste du texte mais pas de balise FILE (poubelle), on vide aussi
-            fs.writeFileSync(inputFile, '');
-            setStatus('OK');
-        }
-    } else if (rawContent.length > 50 && !rawContent.includes('[[[£')) {
-        // Texte poubelle sans aucune balise valide
+        // Si on a traité au moins un fichier et qu'on n'a pas crashé avant, c'est que tout est OK.
         fs.writeFileSync(inputFile, '');
+        setStatus('OK');
+    } else if (rawContent.length > 50 && !rawContent.includes('[[[£')) {
+        // Texte poubelle
+        fs.writeFileSync(inputFile, '');
+        setStatus('OK');
     }
 }
 
-// Initialisation
+// Reset au démarrage pour effacer les vieilles erreurs
 setStatus('OK');
 setInterval(applyUpdate, 1000);
