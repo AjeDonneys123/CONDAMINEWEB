@@ -1,7 +1,6 @@
 const fs = require('fs');
 const path = require('path');
 
-// Fonction pour importer clipboardy dynamiquement (car c'est un module ESM)
 async function startMagicWatcher() {
     let clipboard;
     try {
@@ -16,39 +15,39 @@ async function startMagicWatcher() {
     const updateFile = 'update.txt';
 
     console.log("------------------------------------------------");
-    console.log("✨ [MAGIC PASTE] Surveillance du Presse-Papier active");
-    console.log("📋 Copiez simplement le code de l'IA (Ctrl+C)...");
-    console.log("🚀 Je l'injecte automatiquement dans update.txt !");
+    console.log("✨ [MAGIC PASTE] Surveillance active (Format £)");
+    console.log("🛡️  Sécurité : Rejette les copies incomplètes.");
     console.log("------------------------------------------------");
 
     setInterval(async () => {
         try {
-            // Lecture du presse-papier
             const text = await clipboard.read();
 
-            // Est-ce du texte nouveau ?
             if (text && text !== lastContent) {
+                // 1. Détection des balises d'ouverture
+                const hasStart = text.includes('[[[£ FILE:') || text.includes('[[[£ DELETE:');
                 
-                // Est-ce que ça ressemble à notre format sécurisé ?
-                // On cherche la balise d'ouverture OU de suppression avec le £
-                if (text.includes('[[[£ FILE:') || text.includes('[[[£ DELETE:')) {
+                if (hasStart) {
+                    // 2. SÉCURITÉ RENFORCÉE : Vérifie la présence d'au moins une balise de fin
+                    // Cela évite d'envoyer un fichier tronqué qui bloquerait apply.js
+                    if (!text.includes('£]]]')) {
+                        if (text !== lastContent) { // Log une seule fois
+                            console.log("⚠️  Copie détectée mais INCOMPLÈTE (Pas de '£]]]'). Ignorée.");
+                            lastContent = text; 
+                        }
+                        return;
+                    }
+
+                    console.log("⚡ Code valide détecté ! Injection...");
                     
-                    console.log("⚡ Code détecté dans le presse-papier !");
-                    
-                    // Injection directe
                     fs.writeFileSync(updateFile, text, 'utf8');
                     
-                    console.log(`✅ update.txt mis à jour (${text.length} caractères).`);
-                    console.log("⏳ En attente de apply.js...\n");
-
-                    // On mémorise pour ne pas le recoller en boucle
+                    console.log(`✅ update.txt mis à jour.`);
                     lastContent = text;
                 }
             }
-        } catch (err) {
-            // On ignore les erreurs (ex: presse-papier vide ou image)
-        }
-    }, 1000); // Vérification chaque seconde
+        } catch (err) {}
+    }, 1000);
 }
 
 startMagicWatcher();
