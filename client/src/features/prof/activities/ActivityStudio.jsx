@@ -9,36 +9,42 @@ export default function ActivityStudio({ globalClass, teacherId }) {
     const [chapters, setChapters] = useState([]);
     const [editingItem, setEditingItem] = useState(null); 
     const [viewingResults, setViewingResults] = useState(null);
+    const [loading, setLoading] = useState(true);
 
-    const load = async () => {
+    const loadData = async () => {
+        setLoading(true);
         try {
-            const fetchJSON = (url) => fetch(url).then(r => r.ok ? r.json() : []);
             const [hwRes, gmRes, cpRes] = await Promise.all([
-                fetchJSON('/api/homework-all'),
-                fetchJSON('/api/game-levels/all'),
-                fetchJSON('/api/chapters-all')
+                fetch('/api/homework-all').then(r => r.json()),
+                fetch('/api/game-levels/all').then(r => r.json()),
+                fetch('/api/chapters-all').then(r => r.json())
             ]);
-            const all = [
+
+            const allActivities = [
                 ...(hwRes || []).map(x => ({ ...x, actType: 'homework' })),
                 ...(gmRes || []).map(x => ({ ...x, actType: 'game' }))
             ];
-            setActivities(all);
+            
+            console.log("📦 Données reçues :", { activities: allActivities.length, chapters: cpRes.length });
+            setActivities(allActivities);
             setChapters(cpRes || []);
-        } catch (e) { console.error("Erreur ActivityStudio:", e); }
+        } catch (e) { 
+            console.error("❌ Erreur Studio Loading:", e); 
+        }
+        setLoading(false);
     };
 
-    useEffect(() => { load(); }, [globalClass]);
+    useEffect(() => { loadData(); }, [globalClass]);
 
     if (viewingResults) return <HomeworkResults homework={viewingResults} onBack={() => setViewingResults(null)} />;
 
-    const normalize = (c) => c?.toString().toUpperCase().replace('E', '') || "";
-
     if (editingItem) {
-        const activeChaps = chapters.filter(c => normalize(c.classroom) === normalize(globalClass) && !c.isArchived);
+        // On filtre les chapitres pour ne montrer que ceux de la classe active au studio
+        const activeChaps = chapters.filter(c => c.classroom === globalClass && !c.isArchived);
         if (editingItem.type === 'homework') {
-            return <HomeworkStudio initialData={editingItem.data} chapters={activeChaps} onClose={() => { setEditingItem(null); load(); }} />;
+            return <HomeworkStudio initialData={editingItem.data} chapters={activeChaps} onClose={() => { setEditingItem(null); loadData(); }} />;
         }
-        return <GameStudio initialData={editingItem.data} chapters={activeChaps} classFilter={globalClass} onClose={() => { setEditingItem(null); load(); }} />;
+        return <GameStudio initialData={editingItem.data} chapters={activeChaps} classFilter={globalClass} onClose={() => { setEditingItem(null); loadData(); }} />;
     }
 
     return (
@@ -46,55 +52,45 @@ export default function ActivityStudio({ globalClass, teacherId }) {
             <div className="flex justify-start gap-4 mb-8 bg-white p-4 rounded-[30px] border-2 border-slate-50 shadow-sm">
                 <button onClick={() => setEditingItem({ type: 'homework', data: null })} className="bg-orange-500 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:scale-105 transition-all">+ Nouveau Devoir</button>
                 <button onClick={() => setEditingItem({ type: 'game', data: null })} className="bg-purple-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:scale-105 transition-all">+ Nouveau Jeu</button>
+                <button onClick={loadData} className="ml-auto text-slate-300 hover:text-indigo-500 font-bold text-xs uppercase">🔄 Actualiser</button>
             </div>
 
-            <ProfStudioFolder 
-                chapters={chapters}
-                items={activities}
-                classFilter={globalClass}
-                onArchive={async (id, state) => {
-                    await fetch('/api/chapters', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({_id:id, isArchived:state})});
-                    load();
-                }}
-                onRename={async (id, title) => {
-                    await fetch('/api/chapters', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({_id:id, title})});
-                    load();
-                }}
-                onEditItem={(it) => setEditingItem({ type: it.actType, data: it })}
-                onDeleteItem={async (id, type) => {
-                    if(!confirm("Supprimer cet élément ?")) return;
-                    await fetch(type === 'game' ? `/api/game-levels/${id}` : `/api/homework/${id}`, { method: 'DELETE' });
-                    load();
-                }}
-                onDeleteChapter={async (id) => {
-                    if(!confirm("Supprimer le dossier complet sur Drive et en BDD ?")) return;
-                    await fetch(`/api/chapters/${id}`, { method: 'DELETE' });
-                    load();
-                }}
-                onCreateChapter={async (subject) => {
-                    // CORRECTION ICI : Ajout de teacherId dans le body
-                    const res = await fetch('/api/chapters', { 
-                        method:'POST', 
-                        headers:{'Content-Type':'application/json'}, 
-                        body: JSON.stringify({ 
-                            title: 'Nouveau Dossier', 
-                            subject, 
-                            classroom: globalClass,
-                            teacherId: teacherId // <--- C'EST CA QUI MANQUAIT
-                        }) 
-                    });
-                    
-                    if (!res.ok) {
-                        console.error("Erreur création dossier");
-                        return null;
-                    }
-
-                    const newChap = await res.json();
-                    load();
-                    return newChap;
-                }}
-                onViewResults={(hw) => setViewingResults(hw)}
-            />
+            {loading ? (
+                <div className="text-center py-20 text-slate-300 font-black animate-pulse uppercase">Connexion à la base de données...</div>
+            ) : (
+                <ProfStudioFolder 
+                    chapters={chapters}
+                    items={activities}
+                    classFilter={globalClass}
+                    onArchive={async (id, state) => {
+                        await fetch('/api/chapters', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({_id:id, isArchived:state})});
+                        loadData();
+                    }}
+                    onRename={async (id, title) => {
+                        await fetch('/api/chapters', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({_id:id, title})});
+                        loadData();
+                    }}
+                    onEditItem={(it) => setEditingItem({ type: it.actType, data: it })}
+                    onDeleteItem={async (id, type) => {
+                        if(!confirm("Supprimer ?")) return;
+                        await fetch(type === 'game' ? `/api/game-levels/${id}` : `/api/homework/${id}`, { method: 'DELETE' });
+                        loadData();
+                    }}
+                    onDeleteChapter={async (id) => {
+                        if(!confirm("Supprimer le dossier complet ?")) return;
+                        await fetch(`/api/chapters/${id}`, { method: 'DELETE' });
+                        loadData();
+                    }}
+                    onCreateChapter={async (subject) => {
+                        const res = await fetch('/api/chapters', { 
+                            method:'POST', 
+                            headers:{'Content-Type':'application/json'}, 
+                            body: JSON.stringify({ title: 'Nouveau Dossier', subject, classroom: globalClass, teacherId }) 
+                        });
+                        loadData();
+                    }}
+                />
+            )}
         </div>
     );
 }

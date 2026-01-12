@@ -3,11 +3,9 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const DriveService = require('../../services/drive.service');
 
-// Sécurité : On récupère les modèles explicitement
-const getModels = () => ({
-    Chapter: mongoose.model('Chapter'),
-    ScanSession: mongoose.model('ScanSession')
-});
+// On récupère les modèles de façon sûre
+const Chapter = mongoose.model('Chapter');
+const ScanSession = mongoose.model('ScanSession');
 
 const getCondaPath = async (teacherName, classroom) => {
     try {
@@ -19,30 +17,28 @@ const getCondaPath = async (teacherName, classroom) => {
         const prodId = await DriveService.getOrCreateFolder("PRODUCTIONS", classId);
         return { classId, worksId, prodId };
     } catch (e) {
-        console.error("❌ Drive Path Error:", e.message);
+        console.error("❌ Drive path failure:", e.message);
         return { classId: null, worksId: null, prodId: null };
     }
 };
 
-// --- ROUTES CHAPITRES ---
+// --- ROUTES CHAPITRES (DOSSIERS) ---
 
 router.post('/chapters', async (req, res) => {
     try {
-        const { Chapter } = getModels();
         const { _id, title, classroom } = req.body;
         const teacherName = "Jean Vuillet"; 
 
         if (_id) {
             const chap = await Chapter.findById(_id);
-            if (!chap) return res.status(404).json({ error: "Chapitre non trouvé" });
+            if (!chap) return res.status(404).json({ error: "Introuvable" });
 
-            // Update Drive si besoin
             if (chap.driveFolderId && title && title !== chap.title) {
                 await DriveService.renameFolder(chap.driveFolderId, title);
             }
 
             const updateData = { ...req.body };
-            delete updateData._id; 
+            delete updateData._id; // Protege l'ID immuable
             const updated = await Chapter.findByIdAndUpdate(_id, updateData, { new: true });
             return res.json(updated);
         }
@@ -53,25 +49,24 @@ router.post('/chapters', async (req, res) => {
         const newChap = await Chapter.create({ ...req.body, driveFolderId: driveId });
         res.json(newChap);
     } catch (e) { 
-        console.error("❌ Error /chapters:", e.message);
+        console.error("❌ Erreur POST /chapters:", e.message);
         res.status(500).json({ error: e.message }); 
     }
 });
 
 router.get('/chapters-all', async (req, res) => {
     try { 
-        const { Chapter } = getModels();
+        console.log("🔍 Fetching all chapters...");
         const list = await Chapter.find({}).sort({ _id: -1 });
         res.json(list || []); 
     } catch (e) { 
-        console.error("❌ Error GET /chapters-all:", e.message);
+        console.error("❌ Erreur GET /chapters-all:", e.message);
         res.status(500).json([]); 
     }
 });
 
 router.delete('/chapters/:id', async (req, res) => {
     try {
-        const { Chapter } = getModels();
         const chap = await Chapter.findById(req.params.id);
         if (chap && chap.driveFolderId) await DriveService.deleteFile(chap.driveFolderId);
         await Chapter.findByIdAndDelete(req.params.id);
@@ -83,7 +78,6 @@ router.delete('/chapters/:id', async (req, res) => {
 
 router.get('/scan-sessions', async (req, res) => {
     try { 
-        const { ScanSession } = getModels();
         const sessions = await ScanSession.find({}).sort({ createdAt: -1 });
         res.json(sessions || []); 
     } catch (e) { res.status(500).json([]); }
@@ -91,22 +85,7 @@ router.get('/scan-sessions', async (req, res) => {
 
 router.post('/scan-sessions', async (req, res) => {
     try {
-        const { ScanSession } = getModels();
         const session = await ScanSession.create(req.body);
-        res.json(session);
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-router.patch('/scan-sessions/:id/assign-chapter', async (req, res) => {
-    try {
-        const { ScanSession, Chapter } = getModels();
-        const session = await ScanSession.findById(req.params.id);
-        const chapter = await Chapter.findById(req.body.chapterId);
-        if (session.driveFolderId && chapter.driveFolderId) {
-            await DriveService.moveFile(session.driveFolderId, chapter.driveFolderId);
-        }
-        session.chapterId = req.body.chapterId;
-        await session.save();
         res.json(session);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
