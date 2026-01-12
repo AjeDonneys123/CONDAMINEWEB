@@ -2,9 +2,6 @@ const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 const DriveService = require('../../services/drive.service');
-const fs = require('fs');
-const path = require('path');
-const fetch = require('node-fetch');
 
 // Helper Arborescence (CondaClasse / Prof / Classe / ...)
 const getCondaPath = async (teacherName, classroom) => {
@@ -21,10 +18,10 @@ const getCondaPath = async (teacherName, classroom) => {
     return { classId, worksId, prodId };
 };
 
-// --- DOSSIERS (ACTIVITÉS) ---
+// --- ROUTES CHAPITRES ---
 router.post('/chapters', async (req, res) => {
     try {
-        const { _id, title, classroom, teacherId, subject } = req.body;
+        const { _id, title, classroom, teacherId } = req.body;
         const Chapter = mongoose.model('Chapter');
         const Teacher = mongoose.model('Teacher');
         const teacher = await Teacher.findById(teacherId);
@@ -44,11 +41,73 @@ router.post('/chapters', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// --- PRODUCTIONS (SCANS) ---
+router.delete('/chapters/:id', async (req, res) => {
+    try {
+        const chap = await mongoose.model('Chapter').findById(req.params.id);
+        if (chap && chap.driveFolderId) {
+            await DriveService.deleteFile(chap.driveFolderId); // Supprime sur Drive
+        }
+        await mongoose.model('Chapter').findByIdAndDelete(req.params.id);
+        res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// --- ROUTES SCAN SESSIONS (Celles qui manquaient probablement) ---
+
+// 1. LISTER
+router.get('/scan-sessions', async (req, res) => {
+    try {
+        const sessions = await mongoose.model('ScanSession').find({}).sort({ createdAt: -1 });
+        res.json(sessions);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// 2. CRÉER
+router.post('/scan-sessions', async (req, res) => {
+    try {
+        const { title, classroom } = req.body;
+        // Création BDD uniquement pour l'instant (le dossier Drive se crée si on upload)
+        const session = await mongoose.model('ScanSession').create({ title, classroom });
+        res.json(session);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// 3. RENOMMER
+router.patch('/scan-sessions/:id/rename', async (req, res) => {
+    try {
+        const { newPrefix } = req.body;
+        const session = await mongoose.model('ScanSession').findById(req.params.id);
+        const datePart = session.title.includes('_') ? session.title.split('_').pop() : new Date().toLocaleDateString().replace(/\//g, '-');
+        const newTitle = `${newPrefix}_${datePart}`;
+        
+        session.title = newTitle;
+        await session.save();
+        res.json(session);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// 4. SUPPRIMER
+router.delete('/scan-sessions/:id', async (req, res) => {
+    try {
+        await mongoose.model('ScanSession').findByIdAndDelete(req.params.id);
+        res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// 5. UPLOAD PHOTO (Quest ou Copy)
 router.post('/scan-upload-photo', async (req, res) => {
     try {
         const { sessionId, type, imageBase64 } = req.body;
         const session = await mongoose.model('ScanSession').findById(sessionId);
+        
+        // Si pas de dossier Drive, on le crée à la volée dans PRODUCTIONS
+        if (!session.driveFolderId) {
+            // On suppose un prof par défaut ou on le récupère du contexte (simplifié ici)
+            const { prodId } = await getCondaPath("Jean Vuillet", session.classroom); 
+            session.driveFolderId = await DriveService.getOrCreateFolder(session.title, prodId);
+            await session.save();
+        }
+
         const result = await DriveService.uploadImage(session.driveFolderId, `${type}_${Date.now()}.jpg`, imageBase64);
         if (result) {
             const field = type === 'quest' ? { $push: { questionUrls: result.id } } : { $push: { copyUrls: result.id } };
@@ -59,18 +118,41 @@ router.post('/scan-upload-photo', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+router.post('/scan-delete-photo', async (req, res) => {
+    try {
+        const { sessionId, type, url } = req.body;
+        // Supprime de Drive (l'URL est l'ID Drive)
+        await DriveService.deleteFile(url);
+        
+        const field = type === 'quest' ? { $pull: { questionUrls: url } } : { $pull: { copyUrls: url } };
+        await mongoose.model('ScanSession').findByIdAndUpdate(sessionId, field);
+        res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// 6. ASSIGNER À UN CHAPITRE
 router.patch('/scan-sessions/:id/assign-chapter', async (req, res) => {
     try {
         const session = await mongoose.model('ScanSession').findById(req.params.id);
         const chapter = await mongoose.model('Chapter').findById(req.body.chapterId);
+        
+        // Déplacement Drive si les deux dossiers existent
         if (session.driveFolderId && chapter.driveFolderId) {
             await DriveService.moveFile(session.driveFolderId, chapter.driveFolderId);
         }
+        
         session.chapterId = req.body.chapterId;
         await session.save();
         res.json(session);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// (Autres routes : list, delete, rename, instructions restent opérationnelles)
+// 7. INSTRUCTIONS PROFS
+router.patch('/scan-sessions/:id/instructions', async (req, res) => {
+    try {
+        await mongoose.model('ScanSession').findByIdAndUpdate(req.params.id, { teacherInstruction: req.body.text });
+        res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;
