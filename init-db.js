@@ -1,59 +1,111 @@
 const mongoose = require('mongoose');
 require('dotenv').config();
 
+// --- DÉFINITION RAPIDE DES SCHÉMAS POUR LE SCRIPT ---
 const PlayerSchema = new mongoose.Schema({
-  firstName: String,
-  lastName: String,
-  classroom: String,
-  email: String,
-  validatedQuestions: [String],
-  validatedLevels: { type: [mongoose.Schema.Types.Mixed], default: [] },
-  spellingMistakes: { type: Array, default: [] },
-  created_at: { type: Date, default: Date.now },
+  firstName: String, lastName: String, classroom: String, email: String,
+  validatedQuestions: [String], validatedLevels: [], spellingMistakes: [],
+  created_at: { type: Date, default: Date.now }
 });
 
-const Player = mongoose.model('Player', PlayerSchema, 'players');
+const TeacherSchema = new mongoose.Schema({
+    firstName: String, lastName: String, password: String, subject: String,
+    role: { type: String, default: "prof" }, createdAt: { type: Date, default: Date.now }
+});
+
+const ChapterSchema = new mongoose.Schema({
+    title: String, subject: String, isArchived: Boolean, classroom: String
+});
+
+const ScanSessionSchema = new mongoose.Schema({
+    title: String, classroom: String, chapterId: mongoose.Schema.Types.ObjectId,
+    questionUrls: [String], copyUrls: [String], teacherInstruction: String,
+    createdAt: { type: Date, default: Date.now }
+});
+
+const GameLevelSchema = new mongoose.Schema({
+    title: String, targetGrade: String, classroom: String, questions: Array,
+    chapterId: mongoose.Schema.Types.ObjectId, createdAt: { type: Date, default: Date.now }
+});
+
+const HomeworkSchema = new mongoose.Schema({
+    title: String, classroom: String, targetGrade: String, levels: Array,
+    chapterId: mongoose.Schema.Types.ObjectId, date: { type: Date, default: Date.now }
+});
+
+// --- MODÈLES ---
+const Player = mongoose.models.Player || mongoose.model('Player', PlayerSchema, 'players');
+const Teacher = mongoose.models.Teacher || mongoose.model('Teacher', TeacherSchema, 'teachers');
+const Chapter = mongoose.models.Chapter || mongoose.model('Chapter', ChapterSchema, 'chapters');
+const ScanSession = mongoose.models.ScanSession || mongoose.model('ScanSession', ScanSessionSchema, 'scansessions');
+const GameLevel = mongoose.models.GameLevel || mongoose.model('GameLevel', GameLevelSchema, 'gamelevels');
+const Homework = mongoose.models.Homework || mongoose.model('Homework', HomeworkSchema, 'homeworks');
+
+// --- DONNÉES ---
+const mainTeacher = { firstName: "Jean", lastName: "Vuillet", password: "Clemenceau1919", subject: "Histoire Géo", role: "prof" };
 
 const players = [
-    // === 1D BFI (SÉCURISÉ) ===
-    { firstName: 'Amaia Carolina', lastName: 'Arguello Zambrano', classroom: '1D', email: 'arguello.amaia@condamine.edu.ec' },
-    { firstName: 'Ezequiel', lastName: 'Benitez Valarezo', classroom: '1D', email: 'benitez.ezequiel@condamine.edu.ec' },
-    { firstName: 'Emilia Anahi', lastName: 'Conrado Guerrón', classroom: '1D', email: 'conrado.emilia@condamine.edu.ec' },
-    { firstName: 'Isabel Cristina', lastName: 'Dávila Pérez', classroom: '1D', email: 'davila.isabel@condamine.edu.ec' },
-    { firstName: 'Anna Victoria', lastName: 'Fernández Enríquez', classroom: '1D', email: 'fernandez.anna@condamine.edu.ec' },
-    { firstName: 'Doménica Elizabeth', lastName: 'Gallardo Gallardo', classroom: '1D', email: 'gallardo.domenica@condamine.edu.ec' },
-    { firstName: 'Adrián Felipe', lastName: 'Guzmán Espinosa', classroom: '1D', email: 'guzman.adrian@condamine.edu.ec' },
-    { firstName: 'Marcela Ranné', lastName: 'Herrera Sempértegui', classroom: '1D', email: 'herrera.marcela@condamine.edu.ec' },
-    { firstName: 'Batia Tatiana', lastName: 'Jácome Pástor', classroom: '1D', email: 'jacome.batia@condamine.edu.ec' },
-    { firstName: 'Fabien', lastName: 'Lhomme Santiago', classroom: '1D', email: 'lhomme.santiago@condamine.edu.ec' },
-    { firstName: 'Juan Xavier', lastName: 'Molina Alcivar', classroom: '1D', email: 'molina.juan@condamine.edu.ec' },
-    { firstName: 'Franca', lastName: 'Navarro Gallegos', classroom: '1D', email: 'navarro.franca@condamine.edu.ec' },
-    { firstName: 'Eduardo', lastName: 'Ojeda Rivera', classroom: '1D', email: 'ojeda.eduardo@condamine.edu.ec' },
-    { firstName: 'Isabella Romina', lastName: 'Quelal Espinosa', classroom: '1D', email: 'quelal.isabella@condamine.edu.ec' },
-    { firstName: 'Xander', lastName: 'Vancraeynest Martinez', classroom: '1D', email: 'vancraeynest.xander@condamine.edu.ec' },
-    { firstName: 'Francisca Leonor', lastName: 'Yánez Tinoco', classroom: '1D', email: 'yanez.francisca@condamine.edu.ec' },
-    { firstName: 'Eleve', lastName: 'Test', classroom: '1D' },
-    // Garder Gael et tests
     { firstName: 'Gael', lastName: 'Barbier Durango', classroom: '6D' },
     { firstName: 'Eleve', lastName: 'Test', classroom: '6D' },
-    { firstName: 'Eleve', lastName: 'Test', classroom: '2A' },
-    { firstName: 'Eleve', lastName: 'Test', classroom: '5B' },
-    { firstName: 'Eleve', lastName: 'Test', classroom: '5C' }
+    { firstName: 'Arthur', lastName: 'Rimbaud', classroom: '2A' },
+    { firstName: 'Victor', lastName: 'Hugo', classroom: '5B' }
 ];
 
 async function initializeDatabase() {
   try {
     await mongoose.connect(process.env.MONGODB_URI);
     console.log('✅ BDD Connectée.');
-    // On met à jour ou on insère (évite les doublons)
+
+    // 1. PROF & ÉLÈVES
+    await Teacher.findOneAndUpdate({ firstName: "Jean" }, mainTeacher, { upsert: true });
     for (const p of players) {
-        await Player.findOneAndUpdate(
-            { firstName: p.firstName, lastName: p.lastName, classroom: p.classroom },
-            p,
-            { upsert: true }
-        );
+        await Player.findOneAndUpdate({ firstName: p.firstName, lastName: p.lastName }, p, { upsert: true });
     }
-    console.log('✅ Liste des élèves synchronisée (1D BFI incluse).');
+    console.log('👥 Prof et Élèves : OK');
+
+    // 2. CHAPITRES (Dossiers)
+    // On crée un dossier pour la 6D
+    let chap6D = await Chapter.findOne({ title: "La Rome Antique", classroom: "6D" });
+    if (!chap6D) {
+        chap6D = await Chapter.create({ title: "La Rome Antique", subject: "H", classroom: "6D", isArchived: false });
+    }
+    
+    // On crée un dossier pour la 5B
+    let chap5B = await Chapter.findOne({ title: "Changement Climatique", classroom: "5B" });
+    if (!chap5B) {
+        chap5B = await Chapter.create({ title: "Changement Climatique", subject: "G", classroom: "5B", isArchived: false });
+    }
+    console.log('📁 Chapitres : OK');
+
+    // 3. ACTIVITÉS (Jeu et Devoir) liés au chapitre 6D
+    const existingGame = await GameLevel.findOne({ title: "Quiz Rome" });
+    if (!existingGame) {
+        await GameLevel.create({
+            title: "Quiz Rome", classroom: "6D", targetGrade: "6e", chapterId: chap6D._id,
+            questions: [{ q: "Qui est le premier empereur ?", options: ["Auguste", "César", "Néron", "Trajan"], a: 0 }]
+        });
+    }
+
+    const existingHW = await Homework.findOne({ title: "Rédaction César" });
+    if (!existingHW) {
+        await Homework.create({
+            title: "Rédaction César", classroom: "6D", targetGrade: "6e", chapterId: chap6D._id,
+            levels: [{ instruction: "Raconte la guerre des Gaules.", attachmentUrls: [] }]
+        });
+    }
+    console.log('⚡ Activités : OK');
+
+    // 4. SCANS (Productions)
+    const existingScan = await ScanSession.findOne({ title: "Travaux_Groupe_1" });
+    if (!existingScan) {
+        await ScanSession.create({
+            title: "Travaux_Groupe_1", classroom: "6D", chapterId: chap6D._id,
+            teacherInstruction: "Vérifier la syntaxe."
+        });
+    }
+    console.log('📸 Scans : OK');
+
+    console.log('✨ Base de données HYDRATÉE avec succès !');
   } catch (err) { console.error(err); } 
   finally { mongoose.disconnect(); }
 }
