@@ -1,9 +1,9 @@
-├── .env
 ├── .gitignore
 ├── IAReadMe.md
 ├── INSTRUCTIONS_OAUTH.md
 ├── LOCKED_FILES.md
 ├── apply.js
+├── apply_status.json
 ├── client/
 │   ├── .eslintrc.cjs
 │   ├── .gitignore
@@ -81,12 +81,16 @@
 │   │   │           └── StudentsManager.jsx
 │   │   ├── index.css
 │   │   ├── main.jsx
-│   │   └── services/
-│   │       └── api.js
+│   │   ├── services/
+│   │   │   └── api.js
+│   │   ├── test_ok.txt
+│   │   ├── test_token_crash.js
+│   │   └── test_token_valid.txt
 │   ├── tailwind.config.cjs
 │   └── vite.config.js
 ├── git-auto.js
 ├── init-db.js
+├── magic-paste.js
 ├── package-lock.json
 ├── package.json
 ├── projectMap.txt

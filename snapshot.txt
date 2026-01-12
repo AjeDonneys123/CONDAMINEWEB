@@ -1,10 +1,10 @@
 STRUCTURE:
-├── .env
 ├── .gitignore
 ├── IAReadMe.md
 ├── INSTRUCTIONS_OAUTH.md
 ├── LOCKED_FILES.md
 ├── apply.js
+├── apply_status.json
 ├── client/
 │   ├── .eslintrc.cjs
 │   ├── .gitignore
@@ -82,12 +82,16 @@ STRUCTURE:
 │   │   │           └── StudentsManager.jsx
 │   │   ├── index.css
 │   │   ├── main.jsx
-│   │   └── services/
-│   │       └── api.js
+│   │   ├── services/
+│   │   │   └── api.js
+│   │   ├── test_ok.txt
+│   │   ├── test_token_crash.js
+│   │   └── test_token_valid.txt
 │   ├── tailwind.config.cjs
 │   └── vite.config.js
 ├── git-auto.js
 ├── init-db.js
+├── magic-paste.js
 ├── package-lock.json
 ├── package.json
 ├── projectMap.txt
@@ -133,6 +137,86 @@ STRUCTURE:
 
 CODE:
 
+### FILE: IAReadMe.md
+# GUIDE IA - PROJET CONDAMINE
+
+le projet utilise Gemini 2.0 FLASH
+le projet utilise le fichier update.txt tu dois générer des grands fichiers txt qui peuvent se snipette en une fois et qui obéisse a cette convention  [[[ FILE: chemin ]]] plus d informations dans apply.js
+
+### FILE: INSTRUCTIONS_OAUTH.md
+// Cause principale
+// - redirect_uri_mismatch : l'URI de callback utilisée par ton serveur doit être exactement listée
+//   dans la Google Cloud Console (APIs & Services → Credentials → OAuth 2.0 Client ID → Authorized redirect URIs).
+// - Même si la redirection est correcte, le token que tu obtiendras appartient toujours au compte
+//   avec lequel tu t'es connecté lors du consent (vuillet433@gmail.com si tu as choisi ton perso).
+// - Pour obtenir l'accès aux photos du compte condamine (compte scolaire), il faut soit que
+//   la personne admin/ayant accès à condamine donne le consent en se connectant, soit utiliser
+//   une solution d'administration (service account + domain-wide delegation) fournie par l'admin.
+
+// Options concrètes (choisis une)
+1) Corriger le redirect URI + autoriser avec le compte ciblé (simple si tu peux te connecter au compte condamine)
+   - Dans Google Cloud Console -> Credentials -> edit OAuth client -> ajouter :
+     http://localhost:3000/api/google/oauth/callback
+   - Ouvre : http://localhost:3000/api/google/oauth
+   - Connecte-toi avec le compte condamine et accepte. (Le callback écrira le refresh token dans .env)
+   - Si tu n'as pas accès au compte condamine, demande à l'admin du collège de le faire.
+
+2) Faire autoriser le compte condamine par l'admin (si tu ne peux pas t'y connecter)
+   - Demander à l'administrateur GSuite/Workspace de :
+     a) Ouvrir le lien http://<ta-machine>:3000/api/google/oauth (ou sur leur machine)
+     b) Se connecter au compte condamine et donner le consent.
+   - L'admin peut ensuite te transmettre (sûrement hors-chat : e.g. via messagerie interne) soit :
+     - le refresh token, que tu colles toi‑même dans `.env`, ou
+     - exécuter le flow sur la machine serveur et le token sera écrit automatiquement dans `.env`.
+
+3) Domain-wide delegation (solution « admin-friendly » et scalable)
+   - L'admin crée un Service Account dans Google Cloud Console, active domain-wide delegation et
+     délègue les scopes nécessaires (photoslibrary.readonly n'est PAS toujours supporté par DWD ;
+     Drive scopes le sont). Attention : Google Photos API n'autorise généralement pas l'accès
+     via service accounts pour comptes utilisateur normaux sauf configuration particulière.
+   - Avantage : pas besoin du refresh token d'un utilisateur. Complexe à configurer côté admin.
+
+4) Récupérer les photos via Drive (si les images sont déjà synchronisées dans Drive)
+   - Si les images du compte condamine sont déjà présentes dans Google Drive (ou peuvent être placées là),
+     l'admin peut autoriser Drive API (plus simple pour service accounts/domain delegation).
+   - Dans ce cas ton système peut utiliser la Drive API pour copier les fichiers.
+
+5) Alternative non-technique (si urgent)
+   - Demander à l'admin du collège d’exporter (ou partager) le dossier Photos/Drive et de
+     te donner un lien partagé ou une archive. Tu peux ensuite importer dans ton Drive via ton outil.
+
+//// Étapes rapides pour résoudre l'erreur redirect_uri_mismatch (si tu veux tester localement toi-même)
+// 1) Ouvre Google Cloud Console -> APIs & Services -> Credentials -> OAuth 2.0 Client IDs.
+// 2) Clique sur ton client OAuth -> Authorized redirect URIs -> Add URI:
+//      http://localhost:3000/api/google/oauth/callback
+//    (La valeur doit être strictement identique à celle utilisée par l'app: schéma, host, port, path)
+// 3) Sauvegarde, puis relance : http://localhost:3000/api/google/oauth
+// 4) Si tu veux le token pour le compte condamine et que tu n'y as pas accès, demande à l'admin
+//    d'exécuter le même flow (ou de te fournir le refresh token en dehors de ce chat).
+
+### FILE: LOCKED_FILES.md
+# 🔒 FICHIERS SANCTUARISÉS
+Ces fichiers sont stables et fonctionnels. NE PAS MODIFIER SANS ORDRE EXPLICITE.
+
+## ⚙️ SERVEUR (BACKEND)
+- **server/server.js** : Point d'entrée. Connexion BDD OK.
+- **server/features/auth/auth.routes.js** : Login Prof/Élève OK.
+- **server/features/eleve/eleve.routes.js** : IA Correction + Sauvegarde OK.
+- **server/features/prof/prof.routes.js** : Création Devoir + Upload + Wizard IA OK.
+- **server/features/game/game.routes.js** : IA Génération Quiz OK.
+
+## 🎮 JEUX (MOTEURS VANELLA)
+- **client/src/features/eleve/games/zombie/zombie_core.js** : Moteur Zombie V6 (Cleanup OK).
+- **client/src/features/eleve/games/starship/starship_core.js** : Moteur Starship V7 (Input Boss OK).
+- **client/src/features/eleve/games/mainGames.js** : Logique Mathématique Commune.
+
+## 🎨 INTERFACE (REACT)
+- **client/src/features/prof/games/GameStudio.jsx** : Création Quiz + IA OK.
+- **client/src/features/prof/homework/HomeworkStudio.jsx** : Création Devoir + Wizard OK.
+
+---
+*Dernière mise à jour : Version Stable V11*
+
 ### FILE: apply.js
 const fs = require('fs');
 const path = require('path');
@@ -140,94 +224,168 @@ const path = require('path');
 const inputFile = 'update.txt';
 const statusFile = 'apply_status.json';
 
+const PROTECTED_PATHS = ['.git', 'node_modules', 'apply.js', 'magic-paste.js', 'git-auto.js', 'package.json', '.env', 'server/server.js', '.', './'];
+
 console.log("------------------------------------------------");
-console.log("🛠️  [WATCHER] apply.js (v11-SÉCURITÉ MAX) actif.");
-console.log("🧹 Mode : Nettoyage automatique + Validation [[[ END ]]]");
+console.log("🛠️  [WATCHER] apply.js (v18-TOLERANT) actif.");
+console.log("🧘  Mode : Détection souple (Regex) & Reset Auto");
 console.log("------------------------------------------------");
 
-/**
- * Informe le site web du statut (utilisé pour l'alerte rouge en haut du site)
- */
-function setStatus(error, truncatedFile = null) {
+function setStatus(status, file = null) {
     try {
-        fs.writeFileSync(statusFile, JSON.stringify({ error, truncatedFile, timestamp: Date.now() }, null, 2));
+        const data = { status, file, timestamp: Date.now() };
+        fs.writeFileSync(statusFile, JSON.stringify(data, null, 2));
     } catch (e) {}
 }
 
-/**
- * Analyse et applique les blocs de code de manière granulaire
- */
+function escapeRegExp(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function applyUpdate() {
     if (!fs.existsSync(inputFile)) return;
     let rawContent = "";
-    try { 
-        rawContent = fs.readFileSync(inputFile, 'utf8'); 
-    } catch (e) { return; }
+    try { rawContent = fs.readFileSync(inputFile, 'utf8'); } catch (e) { return; }
     
     if (rawContent.trim().length < 5) return;
 
-    // Regex pour détecter le début : [[[ FILE: chemin ]]]
-    const fileStartRegex = /\[\[\[\s*FILE\s*:\s*([^\]\s]+)\s*\]\]\]/g;
-    let match;
-    let lastUnfinishedBlock = "";
-    let processedCount = 0;
+    let cursor = 0;
+    let processedAny = false;
 
-    // On parcourt tous les débuts de fichiers trouvés dans update.txt
-    while ((match = fileStartRegex.exec(rawContent)) !== null) {
-        const filePath = match[1].trim();
-        const startTag = match[0];
-        const endTag = `[[[ END: ${filePath} ]]]`;
+    // 1. DELETE (Toujours prioritaire)
+    const deleteRegex = /\[\[\[£\s*DELETE\s*:\s*([^£\]\s]+)\s*£\]\]\]/g;
+    let delMatch;
+    while ((delMatch = deleteRegex.exec(rawContent)) !== null) {
+        const relativePath = delMatch[1].trim();
+        const targetPath = path.join(__dirname, relativePath);
+        const isProtected = PROTECTED_PATHS.some(p => relativePath === p || relativePath.startsWith(p + '/') || relativePath.startsWith('./' + p));
 
-        // VÉRIFICATION : Est-ce que ce fichier précis a sa balise de fin ?
-        if (rawContent.includes(endTag)) {
-            // BLOC COMPLET : On extrait le contenu
-            const startIndex = rawContent.indexOf(startTag) + startTag.length;
-            const endIndex = rawContent.indexOf(endTag);
-            const fileContent = rawContent.substring(startIndex, endIndex).trim();
+        if (!isProtected) {
+            try {
+                if (fs.existsSync(targetPath)) {
+                    fs.rmSync(targetPath, { recursive: true, force: true });
+                    console.log(`   🗑️  SUPPRIMÉ : ${relativePath}`);
+                }
+            } catch (e) {}
+        }
+    }
 
+    // 2. FILES (Analyse souple)
+    // Regex pour trouver le DEBUT : [[[£ FILE: ... £]]]
+    const startRegex = /\[\[\[£\s*FILE\s*:\s*([^£\]\s]+)\s*£\]\]\]/g;
+    let startMatch;
+
+    // On boucle sur tous les débuts trouvés
+    while ((startMatch = startRegex.exec(rawContent)) !== null) {
+        const filePath = startMatch[1].trim();
+        const contentStartIndex = startMatch.index + startMatch[0].length;
+        
+        // On construit une Regex dynamique pour trouver la FIN correspondante
+        // Cela permet d'accepter des espaces variables : [[[£  END:  chemin  £]]]
+        const safePath = escapeRegExp(filePath);
+        const endPattern = new RegExp(`\\[\\[\\[£\\s*END\\s*:\\s*${safePath}\\s*£\\]\\]\\]`);
+        
+        // On cherche la fin APRES le début
+        const remainingText = rawContent.substring(contentStartIndex);
+        const endMatch = remainingText.match(endPattern);
+
+        if (endMatch) {
+            // --- C'EST BON ---
+            // Le contenu est entre le début (contentStartIndex) et le début du match de fin
+            const fileContent = remainingText.substring(0, endMatch.index).trim();
             const fullPath = path.join(__dirname, filePath);
             const dir = path.dirname(fullPath);
-            
+
             try {
                 if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
                 fs.writeFileSync(fullPath, fileContent);
                 console.log(`   ✅ APPLIQUÉ : ${filePath}`);
-                processedCount++;
+                processedAny = true;
             } catch (e) {
-                console.error(`   ❌ ERREUR sur ${filePath}: ${e.message}`);
+                console.error(`   ❌ ERREUR FILE ${filePath}: ${e.message}`);
             }
         } else {
-            // BLOC TRONQUÉ : Il manque la fin pour ce fichier
-            // On sauvegarde tout le reste du texte à partir de ce fichier pour le conserver
-            lastUnfinishedBlock = rawContent.substring(rawContent.indexOf(startTag));
-            console.warn(`⚠️  [INCOMPLET] Le fichier ${filePath} est tronqué. Attente de la suite...`);
-            setStatus("Fichier coupé détecté", filePath);
-            break; // On arrête le traitement pour ce cycle
+            // --- C'EST COUPÉ ---
+            console.warn(`⚠️  [COUPURE DÉTECTÉE] Sur le fichier : ${filePath}`);
+            console.warn(`   (Impossible de trouver la balise de fin correspondante)`);
+            
+            setStatus('TRUNCATED', filePath);
+            fs.writeFileSync(inputFile, ''); // Vidange sécurité
+            return; // On arrête tout
         }
     }
 
-    // --- NETTOYAGE INTELLIGENT DE UPDATE.TXT ---
-    try {
-        // On réécrit le fichier :
-        // - Soit avec le bloc incomplet qu'on a gardé
-        // - Soit vide si tout a été traité
-        fs.writeFileSync(inputFile, lastUnfinishedBlock.trim());
-        
-        if (processedCount > 0 && !lastUnfinishedBlock) {
-            console.log(`✨ Terminé : ${processedCount} fichiers synchronisés. update.txt est vide.\n`);
-            setStatus(null); // On efface l'alerte sur le site
-        } else if (rawContent.length > 50 && processedCount === 0 && !lastUnfinishedBlock) {
-            // Si le fichier contient du texte mais aucune balise valide (poubelle)
-            fs.writeFileSync(inputFile, '');
-            console.log(`🧹 Nettoyage : Texte non-conforme supprimé.`);
-        }
-    } catch (e) {
-        console.error("Erreur lors du nettoyage final.");
+    // 3. NETTOYAGE
+    if (processedAny) {
+        // Si on a traité au moins un fichier et qu'on n'a pas crashé avant, c'est que tout est OK.
+        fs.writeFileSync(inputFile, '');
+        setStatus('OK');
+    } else if (rawContent.length > 50 && !rawContent.includes('[[[£')) {
+        // Texte poubelle
+        fs.writeFileSync(inputFile, '');
+        setStatus('OK');
     }
 }
 
-// Vérification toutes les secondes
+// Reset au démarrage pour effacer les vieilles erreurs
+setStatus('OK');
 setInterval(applyUpdate, 1000);
+
+### FILE: apply_status.json
+{
+  "status": "OK",
+  "file": null,
+  "timestamp": 1768260023562
+}
+
+### FILE: client/.eslintrc.cjs
+module.exports = {
+  root: true,
+  env: { browser: true, es2020: true },
+  extends: [
+    'eslint:recommended',
+    'plugin:react/recommended',
+    'plugin:react/jsx-runtime',
+    'plugin:react-hooks/recommended',
+  ],
+  ignorePatterns: ['dist', '.eslintrc.cjs'],
+  parserOptions: { ecmaVersion: 'latest', sourceType: 'module' },
+  settings: { react: { version: '18.2' } },
+  plugins: ['react-refresh'],
+  rules: {
+    'react-refresh/only-export-components': [
+      'warn',
+      { allowConstantExport: true },
+    ],
+  },
+}
+
+
+### FILE: client/README.md
+# React + Vite
+
+This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+
+Currently, two official plugins are available:
+
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+
+
+### FILE: client/index.html
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vite + React</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
 
 
 ### FILE: client/package-lock.json
@@ -8498,24 +8656,63 @@ setInterval(applyUpdate, 1000);
   }
 }
 
+### FILE: client/postcss.config.cjs
+module.exports = {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+}
+
 ### FILE: client/src/App.css
 .app-wrapper {
     min-height: 100vh;
     position: relative;
 }
 
+/* ALERTE SYSTÈME CRITIQUE */
+.system-alert-bar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    background-color: #ef4444;
+    color: white;
+    font-weight: 900;
+    text-align: center;
+    padding: 15px;
+    z-index: 100000;
+    box-shadow: 0 5px 20px rgba(239, 68, 68, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 15px;
+    animation: slideDown 0.3s ease-out;
+}
+
+.system-alert-btn {
+    background: white;
+    color: #ef4444;
+    border: none;
+    padding: 5px 15px;
+    border-radius: 5px;
+    font-weight: 800;
+    cursor: pointer;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+}
+
+@keyframes slideDown { from { transform: translateY(-100%); } to { transform: translateY(0); } }
+
 /* --- CORRECTION POSITION BOUTON BUG --- */
-/* On le met en BAS à droite pour ne pas gêner le menu */
 .global-bug-trigger {
     position: fixed;
-    bottom: 30px; /* En bas */
-    right: 30px;  /* À droite */
+    bottom: 30px; 
+    right: 30px;
     z-index: 9999;
     width: 60px;
     height: 60px;
     background: white;
     border: 4px solid #7c3aed;
-    border-radius: 50%; /* Tout rond */
+    border-radius: 50%;
     font-size: 30px;
     display: flex;
     align-items: center;
@@ -8530,32 +8727,18 @@ setInterval(applyUpdate, 1000);
     background: #f5f3ff;
 }
 
-/* Modale de Bug (Reste inchangée mais centrée) */
+/* Modale de Bug */
 .bug-modal-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 10000;
-    background: rgba(15, 23, 42, 0.7);
-    backdrop-filter: blur(8px);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
+    position: fixed; inset: 0; z-index: 10000;
+    background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(8px);
+    display: flex; align-items: center; justify-content: center; padding: 20px;
 }
-
 .bug-modal-card {
-    background: white;
-    width: 100%;
-    max-width: 450px;
-    border-radius: 45px;
-    padding: 2.5rem;
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-    border: 6px solid #7c3aed;
+    background: white; width: 100%; max-width: 450px; border-radius: 45px; padding: 2.5rem;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); border: 6px solid #7c3aed;
     animation: modalPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
-
 @keyframes modalPop { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-
 .bug-modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
 .bug-modal-header h2 { font-weight: 900; color: #7c3aed; font-size: 1.4rem; margin: 0; }
 .bug-modal-desc { color: #94a3b8; font-size: 0.85rem; font-weight: 600; margin-bottom: 1.5rem; }
@@ -8569,28 +8752,41 @@ import React, { useState, useEffect } from 'react';
 import Login from './features/auth/Login';
 import ProfPage from './features/prof/ProfPage';
 import ElevePage from './features/eleve/ElevePage';
-import ConsoleHUD from './features/prof/components/ConsoleHUD'; // <--- NOUVEAU
+import ConsoleHUD from './features/prof/components/ConsoleHUD';
 import './App.css';
 
 export default function App() {
   const [user, setUser] = useState(null);
+  const [sysStatus, setSysStatus] = useState({ status: 'OK' });
+
+  // Reset function qui appelle le serveur
+  const handleAckError = async () => {
+      await navigator.clipboard.writeText(`⚡_FIX_REQ_⚡ Le fichier ${sysStatus.file} est incomplet. Peux-tu me le renvoyer en entier s'il te plait ?`);
+      await fetch('/api/reset-status', { method: 'POST' });
+      setSysStatus({ status: 'OK' });
+  };
 
   useEffect(() => {
     window.onerror = async (msg, url, line, col, error) => {
-        if (!user || user.id !== 'prof') return;
-        console.error(`BUG DÉTECTÉ: ${msg}`); // Sera capté par le HUD
-        
+        if (!user || user.role !== 'prof') return; // Seul le prof voit les logs
+        console.error(`BUG DÉTECTÉ: ${msg}`);
         await fetch('/api/auto-repair', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                error: msg,
-                stack: error?.stack,
-                context: `URL: ${url}, Ligne: ${line}`
-            })
+            body: JSON.stringify({ error: msg, stack: error?.stack, context: `URL: ${url}, Ligne: ${line}` })
         });
     };
   }, [user]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+        fetch('/api/system-status')
+            .then(r => r.json())
+            .then(data => setSysStatus(data))
+            .catch(() => {});
+    }, 1000); 
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const saved = localStorage.getItem('player');
@@ -8602,23 +8798,32 @@ export default function App() {
     }
   }, []);
 
-  const handleLogout = () => {
-    localStorage.clear();
-    setUser(null);
-  };
+  const handleLogout = () => { localStorage.clear(); setUser(null); };
+
+  // CORRECTION ICI : On vérifie le ROLE ou l'ID spécial
+  const isProf = user && (user.id === 'prof' || user.role === 'prof');
 
   return (
     <div className="app-wrapper">
+      {sysStatus.status === 'TRUNCATED' && (
+          <div className="system-alert-bar">
+              <span>⚠️ ALERTE : Le fichier <u>{sysStatus.file}</u> a été coupé !</span>
+              <button className="system-alert-btn" onClick={handleAckError}>
+                COPIER & ACQUITTER
+              </button>
+          </div>
+      )}
+
       {!user ? (
         <Login onLoginSuccess={setUser} />
       ) : (
-        user.id === 'prof' ? (
+        isProf ? (
           <>
             <ProfPage user={user} onLogout={handleLogout} />
-            <ConsoleHUD /> {/* <--- AFFICHAGE DES ERREURS ICI */}
+            <ConsoleHUD />
           </>
         ) : (
-          <ElevePage user={user} onLogout={handleLogout} onBackToProf={() => setUser({ id: "prof", firstName: "Jean", lastName: "Vuillet", classroom: "Professeur" })} />
+          <ElevePage user={user} onLogout={handleLogout} onBackToProf={() => setUser({ id: "prof", firstName: "Jean", lastName: "Vuillet", classroom: "Professeur", role: "prof" })} />
         )
       )}
     </div>
@@ -11072,7 +11277,7 @@ import GameStudio from '../games/GameStudio';
 import ProfStudioFolder from '../components/ProfStudioFolder';
 import HomeworkResults from '../homework/HomeworkResults';
 
-export default function ActivityStudio({ globalClass }) {
+export default function ActivityStudio({ globalClass, teacherId }) {
     const [activities, setActivities] = useState([]);
     const [chapters, setChapters] = useState([]);
     const [editingItem, setEditingItem] = useState(null); 
@@ -11095,11 +11300,10 @@ export default function ActivityStudio({ globalClass }) {
         } catch (e) { console.error("Erreur ActivityStudio:", e); }
     };
 
-    useEffect(() => { load(); }, []);
+    useEffect(() => { load(); }, [globalClass]);
 
     if (viewingResults) return <HomeworkResults homework={viewingResults} onBack={() => setViewingResults(null)} />;
 
-    // Normalisation pour le filtrage (ex: "6D" matchera "6eD")
     const normalize = (c) => c?.toString().toUpperCase().replace('E', '') || "";
 
     if (editingItem) {
@@ -11110,21 +11314,16 @@ export default function ActivityStudio({ globalClass }) {
         return <GameStudio initialData={editingItem.data} chapters={activeChaps} classFilter={globalClass} onClose={() => { setEditingItem(null); load(); }} />;
     }
 
-    // Filtrage des données selon la classe sélectionnée en haut de page
-    const filteredChapters = chapters.filter(c => normalize(c.classroom) === normalize(globalClass));
-    const filteredActivities = activities.filter(a => normalize(a.classroom) === normalize(globalClass) || a.classroom === 'Toutes');
-
     return (
         <div className="animate-in fade-in">
-            {/* BARRE D'ACTIONS RAPIDES (Sans le sélecteur de classe qui est déjà en haut) */}
             <div className="flex justify-start gap-4 mb-8 bg-white p-4 rounded-[30px] border-2 border-slate-50 shadow-sm">
                 <button onClick={() => setEditingItem({ type: 'homework', data: null })} className="bg-orange-500 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:scale-105 transition-all">+ Nouveau Devoir</button>
                 <button onClick={() => setEditingItem({ type: 'game', data: null })} className="bg-purple-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:scale-105 transition-all">+ Nouveau Jeu</button>
             </div>
 
             <ProfStudioFolder 
-                chapters={filteredChapters}
-                items={filteredActivities}
+                chapters={chapters}
+                items={activities}
                 classFilter={globalClass}
                 onArchive={async (id, state) => {
                     await fetch('/api/chapters', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({_id:id, isArchived:state})});
@@ -11146,8 +11345,26 @@ export default function ActivityStudio({ globalClass }) {
                     load();
                 }}
                 onCreateChapter={async (subject) => {
-                    await fetch('/api/chapters', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ title: 'Nouveau Dossier', subject, classroom: globalClass }) });
+                    // CORRECTION ICI : Ajout de teacherId dans le body
+                    const res = await fetch('/api/chapters', { 
+                        method:'POST', 
+                        headers:{'Content-Type':'application/json'}, 
+                        body: JSON.stringify({ 
+                            title: 'Nouveau Dossier', 
+                            subject, 
+                            classroom: globalClass,
+                            teacherId: teacherId // <--- C'EST CA QUI MANQUAIT
+                        }) 
+                    });
+                    
+                    if (!res.ok) {
+                        console.error("Erreur création dossier");
+                        return null;
+                    }
+
+                    const newChap = await res.json();
                     load();
+                    return newChap;
                 }}
                 onViewResults={(hw) => setViewingResults(hw)}
             />
@@ -11348,7 +11565,7 @@ export default function ProfNav({ activeTab, onTabChange }) {
 }
 
 ### FILE: client/src/features/prof/components/ProfStudioFolder.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 export default function ProfStudioFolder({ 
     items, chapters, classFilter, 
@@ -11358,10 +11575,19 @@ export default function ProfStudioFolder({
     const [editingId, setEditingId] = useState(null);
     const [tempTitle, setTempTitle] = useState("");
     const [allSessions, setAllSessions] = useState([]);
+    const [showAll, setShowAll] = useState(false);
+    const inputRef = useRef(null);
 
     useEffect(() => {
         fetch('/api/scan-sessions').then(r => r.json()).then(data => setAllSessions(Array.isArray(data) ? data : []));
     }, [items]);
+
+    useEffect(() => {
+        if (editingId && inputRef.current) {
+            inputRef.current.focus();
+            inputRef.current.select();
+        }
+    }, [editingId]);
 
     const getSubjectInfo = (sub) => {
         const s = (sub || "").toUpperCase();
@@ -11371,29 +11597,61 @@ export default function ProfStudioFolder({
         return { code: '?', label: 'Autre', color: 'text-slate-400', border: 'border-slate-300', bg: 'bg-slate-50' };
     };
 
-    // --- SECTION ARCHIVES ---
+    const handleCreate = async (subject) => {
+        const newChap = await onCreateChapter(subject);
+        if (newChap && newChap._id) {
+            setEditingId(newChap._id);
+            setTempTitle(newChap.title);
+            setOpenChaps(prev => ({...prev, [newChap._id]: true}));
+        }
+    };
+
+    const handleRenameSubmit = () => {
+        if (editingId && tempTitle.trim()) {
+            onRename(editingId, tempTitle);
+        }
+        setEditingId(null);
+    };
+
+    // --- FILTRAGE ET TRI ---
+    const normalize = (c) => c?.toString().toUpperCase().replace('E', '') || "";
+    
+    // Chapitres Actifs de la classe
+    const activeChapters = chapters.filter(c => normalize(c.classroom) === normalize(classFilter) && !c.isArchived);
+    
+    // Chapitres Archivés de la classe (RESTAURÉS)
+    const archivedChapters = chapters.filter(c => normalize(c.classroom) === normalize(classFilter) && c.isArchived);
+    
+    // Chapitres autres classes (mode debug)
+    const otherChapters = chapters.filter(c => normalize(c.classroom) !== normalize(classFilter));
+
+    const displayChapters = showAll ? [...activeChapters, ...otherChapters.filter(c => !c.isArchived)] : activeChapters;
+
+    // --- RENDU SECTION ARCHIVES ---
     const renderArchiveSection = () => {
-        const archived = chapters.filter(c => c.isArchived);
-        if (archived.length === 0) return null;
+        if (archivedChapters.length === 0) return null;
 
         return (
-            <div className="mb-10 p-6 bg-slate-900 rounded-[40px] border-4 border-slate-800 shadow-xl">
-                <p className="text-center text-slate-500 font-black text-[9px] uppercase mb-6 tracking-widest">📂 Archives Classées</p>
+            <div className="mb-8 p-6 bg-slate-800 rounded-[35px] border-4 border-slate-700 shadow-xl animate-in slide-in-from-top-4">
+                <div className="flex items-center justify-center gap-2 mb-6 opacity-60">
+                    <span className="text-2xl">📦</span>
+                    <p className="font-black text-white text-[10px] uppercase tracking-widest">Archives {classFilter}</p>
+                </div>
                 <div className="grid grid-cols-3 gap-4">
                     {['H', 'G', 'E'].map(sub => {
                         const info = getSubjectInfo(sub);
-                        const list = archived.filter(c => c.subject === sub);
+                        const list = archivedChapters.filter(c => c.subject === sub);
                         return (
-                            <div key={sub} className="bg-slate-800/40 p-4 rounded-3xl border border-slate-700">
-                                <h4 className={`text-center font-black text-[9px] uppercase mb-3 ${info.color}`}>{info.label}</h4>
+                            <div key={sub} className="bg-slate-700/50 p-3 rounded-2xl border border-slate-600">
+                                <h4 className={`text-center font-black text-[9px] uppercase mb-3 ${info.color} opacity-80`}>{info.label}</h4>
                                 <div className="space-y-2">
                                     {list.map(c => (
-                                        <div key={c._id} className="bg-slate-700/40 p-2 rounded-xl flex justify-between items-center border border-slate-600/30">
+                                        <div key={c._id} className="bg-slate-600/50 p-2 px-3 rounded-xl flex justify-between items-center group hover:bg-slate-600 transition-all">
                                             <span className="text-[10px] font-bold text-slate-300 truncate flex-1 pr-2">{c.title}</span>
-                                            <button onClick={() => onArchive(c._id, false)} className="text-blue-400 font-bold">⬆️</button>
+                                            <button onClick={() => onArchive(c._id, false)} className="text-blue-300 hover:text-blue-100 font-bold text-xs" title="Désarchiver">⬆️</button>
                                         </div>
                                     ))}
-                                    {list.length === 0 && <p className="text-center text-[8px] text-slate-600 font-bold py-2">Vide</p>}
+                                    {list.length === 0 && <p className="text-center text-[8px] text-slate-500 font-bold py-2">-</p>}
                                 </div>
                             </div>
                         );
@@ -11405,71 +11663,102 @@ export default function ProfStudioFolder({
 
     return (
         <div className="max-w-4xl mx-auto space-y-6">
-            {/* 1. LES ARCHIVES (En haut) */}
+            
+            {/* 1. LES ARCHIVES (Restaurées) */}
             {renderArchiveSection()}
 
             {/* 2. BOUTONS DE CRÉATION */}
-            <div className="grid grid-cols-3 gap-4 mb-8">
+            <div className="grid grid-cols-3 gap-4 mb-4">
                 {['H', 'G', 'E'].map(s => (
-                    <button key={s} onClick={() => onCreateChapter(s)} className={`p-4 bg-white border-2 border-dashed rounded-3xl font-black uppercase text-[10px] hover:bg-slate-50 transition-all ${getSubjectInfo(s).color} ${getSubjectInfo(s).border}`}>
-                        + Dossier {getSubjectInfo(s).label}
+                    <button key={s} onClick={() => handleCreate(s)} className={`p-4 bg-white border-2 border-dashed rounded-3xl font-black uppercase text-[10px] hover:scale-105 transition-all shadow-sm ${getSubjectInfo(s).color} ${getSubjectInfo(s).border}`}>
+                        + Créer Dossier {getSubjectInfo(s).label}
                     </button>
                 ))}
             </div>
 
-            {/* 3. LISTE ACTIVE */}
+            {/* 3. MESSAGE MASQUÉ */}
+            {otherChapters.length > 0 && !showAll && (
+                <div className="text-center mb-4">
+                    <button onClick={() => setShowAll(true)} className="text-[9px] font-bold text-slate-300 uppercase hover:text-indigo-400 transition-colors">
+                        (Voir {otherChapters.length} dossiers d'autres classes)
+                    </button>
+                </div>
+            )}
+
+            {/* 4. LISTE ACTIVE */}
             <div className="space-y-3">
-                {chapters.filter(c => !c.isArchived).map(chap => {
+                {displayChapters.map(chap => {
                     const info = getSubjectInfo(chap.subject);
                     const isOpen = !!openChaps[chap._id];
+                    const isEditing = editingId === chap._id;
                     const chapItems = (items || []).filter(it => String(it.chapterId) === String(chap._id));
                     const chapSessions = allSessions.filter(s => String(s.chapterId) === String(chap._id));
+                    const showClassBadge = showAll && normalize(chap.classroom) !== normalize(classFilter);
 
                     return (
                         <div key={chap._id} className={`bg-white rounded-[35px] border-2 shadow-sm overflow-hidden transition-all ${info.border}`}>
-                            <div className="p-4 flex items-center justify-between">
+                            <div className="p-4 flex items-center justify-between bg-white">
                                 <div className="flex items-center gap-4 flex-1">
                                     <div 
-                                        className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs cursor-pointer ${isOpen ? 'bg-indigo-600 text-white' : info.bg + ' ' + info.color}`}
-                                        onClick={() => setOpenChaps({...openChaps, [chap._id]: !isOpen})}
+                                        className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-sm cursor-pointer transition-colors ${isOpen ? 'bg-indigo-600 text-white' : info.bg + ' ' + info.color}`}
+                                        onClick={() => !isEditing && setOpenChaps({...openChaps, [chap._id]: !isOpen})}
                                     >
                                         {isOpen ? '▲' : info.code}
                                     </div>
-                                    {editingId === chap._id ? (
-                                        <input autoFocus className="text-lg font-bold outline-none bg-transparent border-b-2 border-indigo-400" value={tempTitle} onChange={e => setTempTitle(e.target.value)} onBlur={() => { onRename(chap._id, tempTitle); setEditingId(null); }} onKeyDown={e => e.key === 'Enter' && e.target.blur()} />
+                                    
+                                    {isEditing ? (
+                                        <div className="flex-1 flex gap-2 animate-in fade-in">
+                                            <input 
+                                                ref={inputRef}
+                                                className="text-lg font-bold outline-none bg-slate-50 border-b-2 border-indigo-500 w-full px-2 py-1 rounded" 
+                                                value={tempTitle} 
+                                                onChange={e => setTempTitle(e.target.value)} 
+                                                onBlur={handleRenameSubmit} 
+                                                onKeyDown={e => e.key === 'Enter' && handleRenameSubmit()} 
+                                            />
+                                            <button onMouseDown={handleRenameSubmit} className="bg-green-500 text-white px-3 rounded-lg font-bold">OK</button>
+                                        </div>
                                     ) : (
-                                        <b className="text-slate-700 text-lg cursor-pointer" onClick={() => setOpenChaps({...openChaps, [chap._id]: !isOpen})}>{chap.title || "Sans titre"}</b>
+                                        <div className="flex flex-col cursor-pointer" onClick={() => setOpenChaps({...openChaps, [chap._id]: !isOpen})}>
+                                            <span className="text-xl font-black text-slate-700 hover:text-indigo-600 transition-colors">{chap.title || "Nouveau Dossier"}</span>
+                                            {showClassBadge && <span className="text-[9px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded w-fit font-bold">Classe : {chap.classroom}</span>}
+                                        </div>
                                     )}
                                 </div>
-                                <div className="flex items-center gap-2">
-                                    <button onClick={() => { setEditingId(chap._id); setTempTitle(chap.title); }} className="p-2 opacity-30 hover:opacity-100">✏️</button>
-                                    <button onClick={() => onArchive(chap._id, true)} className="px-3 py-1.5 bg-slate-50 text-slate-400 rounded-lg font-black text-[9px] uppercase hover:bg-slate-800 hover:text-white transition-all">Archiver</button>
-                                    <button onClick={() => onDeleteChapter(chap._id)} className="p-2 text-red-200 hover:text-red-500">✕</button>
+
+                                <div className="flex items-center gap-1">
+                                    {!isEditing && (
+                                        <button onClick={() => { setEditingId(chap._id); setTempTitle(chap.title); }} className="w-10 h-10 flex items-center justify-center text-xl bg-slate-50 rounded-full hover:bg-yellow-100 hover:text-yellow-600 transition-all" title="Renommer">✏️</button>
+                                    )}
+                                    <button onClick={() => onArchive(chap._id, true)} className="w-10 h-10 flex items-center justify-center bg-slate-50 text-slate-400 rounded-full hover:bg-slate-800 hover:text-white transition-all font-bold" title="Archiver">📦</button>
+                                    <button onClick={() => onDeleteChapter(chap._id)} className="w-10 h-10 flex items-center justify-center bg-slate-50 text-red-300 rounded-full hover:bg-red-500 hover:text-white transition-all font-bold" title="Supprimer">🗑️</button>
                                 </div>
                             </div>
+
                             {isOpen && (
                                 <div className="p-4 bg-slate-50/50 border-t-2 border-dashed border-slate-100 space-y-2">
                                     {chapItems.map(it => (
-                                        <div key={it._id} className="bg-white p-4 rounded-2xl flex justify-between items-center shadow-sm">
-                                            <div className="flex items-center gap-3"><span className="text-xl">{it.actType === 'game' ? '🕹️' : '📄'}</span><b className="text-slate-700 text-sm">{it.title}</b></div>
+                                        <div key={it._id} className="bg-white p-3 px-5 rounded-2xl flex justify-between items-center shadow-sm border hover:border-indigo-200 transition-colors">
+                                            <div className="flex items-center gap-3"><span className="text-lg">{it.actType === 'game' ? '🕹️' : '📄'}</span><b className="text-slate-700 text-sm">{it.title}</b></div>
                                             <div className="flex gap-2">
-                                                <button onClick={() => onEditItem(it)} className="px-3 py-1 bg-slate-50 text-slate-400 rounded-lg font-bold text-[9px] uppercase">Editer</button>
-                                                <button onClick={() => onDeleteItem(it._id, it.actType)} className="p-1 text-red-200">✕</button>
+                                                <button onClick={() => onEditItem(it)} className="px-3 py-1 bg-indigo-50 text-indigo-500 rounded-lg font-bold text-[9px] uppercase hover:bg-indigo-100">Modifier</button>
+                                                <button onClick={() => onDeleteItem(it._id, it.actType)} className="w-6 h-6 flex items-center justify-center text-red-300 hover:text-red-500">✕</button>
                                             </div>
                                         </div>
                                     ))}
-                                    {chapSessions.map(sess => (
-                                        <div key={sess._id} className="bg-emerald-50 p-4 rounded-2xl flex justify-between items-center shadow-sm border border-emerald-100">
-                                            <div className="flex items-center gap-3"><span className="text-xl">📸</span><div className="flex flex-col"><b className="text-emerald-900 text-sm">{sess.title}</b><span className="text-[9px] font-black text-emerald-600 uppercase">Production ({sess.copyUrls?.length || 0} copies)</span></div></div>
-                                            <button onClick={() => onDeleteItem(sess._id, 'scan')} className="p-1 text-emerald-300 hover:text-red-500">✕</button>
-                                        </div>
-                                    ))}
-                                    {chapItems.length === 0 && chapSessions.length === 0 && <p className="text-center py-4 text-slate-300 italic text-xs">Dossier vide</p>}
+                                    {chapItems.length === 0 && <p className="text-center py-4 text-slate-300 italic text-xs">Aucune activité dans ce dossier.</p>}
                                 </div>
                             )}
                         </div>
                     );
                 })}
+                
+                {displayChapters.length === 0 && (
+                    <div className="text-center py-10 border-2 border-dashed border-slate-200 rounded-[30px] bg-slate-50">
+                        <p className="text-slate-400 font-bold">Aucun dossier actif pour {classFilter}</p>
+                        <p className="text-xs text-slate-300 mt-1">Créez-en un ou consultez les archives ci-dessus.</p>
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -12111,28 +12400,27 @@ export default function ScansStudio({ globalClass }) {
 
     const loadData = async () => {
         try {
-            const [sRes, cRes] = await Promise.all([
-                fetch('/api/scan-sessions').then(r => r.json()),
-                fetch('/api/chapters-all').then(r => r.json())
-            ]);
+            const sRes = await fetch('/api/scan-sessions').then(r => r.ok ? r.json() : []);
             setSessions(Array.isArray(sRes) ? sRes : []);
+
+            const cRes = await fetch('/api/chapters-all').then(r => r.ok ? r.json() : []);
             setChapters(Array.isArray(cRes) ? cRes : []);
-        } catch (e) { console.error("Erreur chargement données"); }
+        } catch (e) { console.error("ERREUR CHARGEMENT SCANS:", e); }
     };
 
     useEffect(() => { loadData(); }, []);
 
     // --- FONCTION DE SYNCHRO DRIVE ---
     const syncDrive = async () => {
-        if(!confirm("Créer les dossiers 1Travaux manquants sur le Drive ?")) return;
+        if(!confirm("Créer les dossiers 1Travaux manquants sur le Drive pour " + globalClass + " ?")) return;
         setLoading(true);
         await fetch('/api/init-all-folders');
-        alert("Synchro Drive terminée !");
+        alert("Dossiers Drive vérifiés/créés !");
         setLoading(false);
     };
 
     const createSession = async () => {
-        if (loading) return;
+        if (loading || !newTitle.trim()) return;
         setLoading(true);
         try {
             const res = await fetch('/api/scan-sessions', {
@@ -12182,7 +12470,8 @@ export default function ScansStudio({ globalClass }) {
             <div className="bg-white p-4 rounded-[30px] border-2 border-indigo-100 shadow-sm space-y-3">
                 <div className="flex justify-between items-center px-2">
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Productions {globalClass}</span>
-                    <button onClick={syncDrive} disabled={loading} className="text-[9px] font-black text-indigo-400 border border-indigo-50 px-3 py-1 rounded-lg hover:bg-indigo-50 transition-all">
+                    {/* LE BOUTON EST ICI 👇 */}
+                    <button onClick={syncDrive} disabled={loading} className="text-[9px] font-black text-indigo-400 border border-indigo-50 px-3 py-1 rounded-lg hover:bg-indigo-50 transition-all cursor-pointer">
                         {loading ? '...' : '🔄 SYNCHRO DRIVE'}
                     </button>
                 </div>
@@ -12194,8 +12483,8 @@ export default function ScansStudio({ globalClass }) {
 
             <div className="space-y-2">
                 {filteredSessions.map(s => {
-                    const prefix = s.title.includes('_') ? s.title.split('_').slice(0, -1).join('_') : "";
-                    const datePart = s.title.split('_').pop();
+                    const prefix = s.title.includes('_') ? s.title.split('_').slice(0, -1).join('_') : s.title;
+                    const datePart = s.title.includes('_') ? s.title.split('_').pop() : new Date(s.createdAt).toLocaleDateString();
                     const isLocalOpen = openId === s._id;
 
                     return (
@@ -12228,6 +12517,7 @@ export default function ScansStudio({ globalClass }) {
                         </div>
                     );
                 })}
+                {filteredSessions.length === 0 && <p className="text-center py-10 text-slate-300 font-bold text-xs uppercase">Aucune session en cours pour {globalClass}</p>}
             </div>
         </div>
     );
@@ -12243,6 +12533,7 @@ function PilotArea({ currentSession, tab, onClose, onRefresh }) {
         if (videoRef.current) videoRef.current.srcObject = stream;
     };
     useEffect(() => { if (tab === 'quest' || tab === 'scan') startCamera(); return () => videoRef.current?.srcObject?.getTracks().forEach(t => t.stop()); }, [tab]);
+    
     const takePhoto = async () => {
         if (!videoRef.current) return;
         const canvas = document.createElement('canvas');
@@ -12540,6 +12831,28 @@ export const api = {
     }
 };
 
+### FILE: client/src/test_token_crash.js
+console.log("✅ FICHIER RÉPARÉ AVEC SUCCÈS !");
+console.log("Le système de sécurité 'Token + API Reset' fonctionne parfaitement.");
+console.log("Le bandeau rouge a disparu, et le fichier est maintenant complet.");
+
+export default function TestTokenValid() {
+    return "Tout est opérationnel chef !";
+}
+
+### FILE: client/tailwind.config.cjs
+/** @type {import('tailwindcss').Config} */
+module.exports = {
+  content: [
+    "./index.html",
+    "./src/**/*.{js,ts,jsx,tsx}",
+  ],
+  theme: {
+    extend: {},
+  },
+  plugins: [],
+}
+
 ### FILE: client/vite.config.js
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
@@ -12637,63 +12950,172 @@ start().catch(err => console.error("❌ Erreur Git-Auto:", err));
 const mongoose = require('mongoose');
 require('dotenv').config();
 
+// --- DÉFINITION RAPIDE DES SCHÉMAS POUR LE SCRIPT ---
 const PlayerSchema = new mongoose.Schema({
-  firstName: String,
-  lastName: String,
-  classroom: String,
-  email: String,
-  validatedQuestions: [String],
-  validatedLevels: { type: [mongoose.Schema.Types.Mixed], default: [] },
-  spellingMistakes: { type: Array, default: [] },
-  created_at: { type: Date, default: Date.now },
+  firstName: String, lastName: String, classroom: String, email: String,
+  validatedQuestions: [String], validatedLevels: [], spellingMistakes: [],
+  created_at: { type: Date, default: Date.now }
 });
 
-const Player = mongoose.model('Player', PlayerSchema, 'players');
+const TeacherSchema = new mongoose.Schema({
+    firstName: String, lastName: String, password: String, subject: String,
+    role: { type: String, default: "prof" }, createdAt: { type: Date, default: Date.now }
+});
+
+const ChapterSchema = new mongoose.Schema({
+    title: String, subject: String, isArchived: Boolean, classroom: String
+});
+
+const ScanSessionSchema = new mongoose.Schema({
+    title: String, classroom: String, chapterId: mongoose.Schema.Types.ObjectId,
+    questionUrls: [String], copyUrls: [String], teacherInstruction: String,
+    createdAt: { type: Date, default: Date.now }
+});
+
+const GameLevelSchema = new mongoose.Schema({
+    title: String, targetGrade: String, classroom: String, questions: Array,
+    chapterId: mongoose.Schema.Types.ObjectId, createdAt: { type: Date, default: Date.now }
+});
+
+const HomeworkSchema = new mongoose.Schema({
+    title: String, classroom: String, targetGrade: String, levels: Array,
+    chapterId: mongoose.Schema.Types.ObjectId, date: { type: Date, default: Date.now }
+});
+
+// --- MODÈLES ---
+const Player = mongoose.models.Player || mongoose.model('Player', PlayerSchema, 'players');
+const Teacher = mongoose.models.Teacher || mongoose.model('Teacher', TeacherSchema, 'teachers');
+const Chapter = mongoose.models.Chapter || mongoose.model('Chapter', ChapterSchema, 'chapters');
+const ScanSession = mongoose.models.ScanSession || mongoose.model('ScanSession', ScanSessionSchema, 'scansessions');
+const GameLevel = mongoose.models.GameLevel || mongoose.model('GameLevel', GameLevelSchema, 'gamelevels');
+const Homework = mongoose.models.Homework || mongoose.model('Homework', HomeworkSchema, 'homeworks');
+
+// --- DONNÉES ---
+const mainTeacher = { firstName: "Jean", lastName: "Vuillet", password: "Clemenceau1919", subject: "Histoire Géo", role: "prof" };
 
 const players = [
-    // === 1D BFI (SÉCURISÉ) ===
-    { firstName: 'Amaia Carolina', lastName: 'Arguello Zambrano', classroom: '1D', email: 'arguello.amaia@condamine.edu.ec' },
-    { firstName: 'Ezequiel', lastName: 'Benitez Valarezo', classroom: '1D', email: 'benitez.ezequiel@condamine.edu.ec' },
-    { firstName: 'Emilia Anahi', lastName: 'Conrado Guerrón', classroom: '1D', email: 'conrado.emilia@condamine.edu.ec' },
-    { firstName: 'Isabel Cristina', lastName: 'Dávila Pérez', classroom: '1D', email: 'davila.isabel@condamine.edu.ec' },
-    { firstName: 'Anna Victoria', lastName: 'Fernández Enríquez', classroom: '1D', email: 'fernandez.anna@condamine.edu.ec' },
-    { firstName: 'Doménica Elizabeth', lastName: 'Gallardo Gallardo', classroom: '1D', email: 'gallardo.domenica@condamine.edu.ec' },
-    { firstName: 'Adrián Felipe', lastName: 'Guzmán Espinosa', classroom: '1D', email: 'guzman.adrian@condamine.edu.ec' },
-    { firstName: 'Marcela Ranné', lastName: 'Herrera Sempértegui', classroom: '1D', email: 'herrera.marcela@condamine.edu.ec' },
-    { firstName: 'Batia Tatiana', lastName: 'Jácome Pástor', classroom: '1D', email: 'jacome.batia@condamine.edu.ec' },
-    { firstName: 'Fabien', lastName: 'Lhomme Santiago', classroom: '1D', email: 'lhomme.santiago@condamine.edu.ec' },
-    { firstName: 'Juan Xavier', lastName: 'Molina Alcivar', classroom: '1D', email: 'molina.juan@condamine.edu.ec' },
-    { firstName: 'Franca', lastName: 'Navarro Gallegos', classroom: '1D', email: 'navarro.franca@condamine.edu.ec' },
-    { firstName: 'Eduardo', lastName: 'Ojeda Rivera', classroom: '1D', email: 'ojeda.eduardo@condamine.edu.ec' },
-    { firstName: 'Isabella Romina', lastName: 'Quelal Espinosa', classroom: '1D', email: 'quelal.isabella@condamine.edu.ec' },
-    { firstName: 'Xander', lastName: 'Vancraeynest Martinez', classroom: '1D', email: 'vancraeynest.xander@condamine.edu.ec' },
-    { firstName: 'Francisca Leonor', lastName: 'Yánez Tinoco', classroom: '1D', email: 'yanez.francisca@condamine.edu.ec' },
-    { firstName: 'Eleve', lastName: 'Test', classroom: '1D' },
-    // Garder Gael et tests
     { firstName: 'Gael', lastName: 'Barbier Durango', classroom: '6D' },
     { firstName: 'Eleve', lastName: 'Test', classroom: '6D' },
-    { firstName: 'Eleve', lastName: 'Test', classroom: '2A' },
-    { firstName: 'Eleve', lastName: 'Test', classroom: '5B' },
-    { firstName: 'Eleve', lastName: 'Test', classroom: '5C' }
+    { firstName: 'Arthur', lastName: 'Rimbaud', classroom: '2A' },
+    { firstName: 'Victor', lastName: 'Hugo', classroom: '5B' }
 ];
 
 async function initializeDatabase() {
   try {
     await mongoose.connect(process.env.MONGODB_URI);
     console.log('✅ BDD Connectée.');
-    // On met à jour ou on insère (évite les doublons)
+
+    // 1. PROF & ÉLÈVES
+    await Teacher.findOneAndUpdate({ firstName: "Jean" }, mainTeacher, { upsert: true });
     for (const p of players) {
-        await Player.findOneAndUpdate(
-            { firstName: p.firstName, lastName: p.lastName, classroom: p.classroom },
-            p,
-            { upsert: true }
-        );
+        await Player.findOneAndUpdate({ firstName: p.firstName, lastName: p.lastName }, p, { upsert: true });
     }
-    console.log('✅ Liste des élèves synchronisée (1D BFI incluse).');
+    console.log('👥 Prof et Élèves : OK');
+
+    // 2. CHAPITRES (Dossiers)
+    // On crée un dossier pour la 6D
+    let chap6D = await Chapter.findOne({ title: "La Rome Antique", classroom: "6D" });
+    if (!chap6D) {
+        chap6D = await Chapter.create({ title: "La Rome Antique", subject: "H", classroom: "6D", isArchived: false });
+    }
+    
+    // On crée un dossier pour la 5B
+    let chap5B = await Chapter.findOne({ title: "Changement Climatique", classroom: "5B" });
+    if (!chap5B) {
+        chap5B = await Chapter.create({ title: "Changement Climatique", subject: "G", classroom: "5B", isArchived: false });
+    }
+    console.log('📁 Chapitres : OK');
+
+    // 3. ACTIVITÉS (Jeu et Devoir) liés au chapitre 6D
+    const existingGame = await GameLevel.findOne({ title: "Quiz Rome" });
+    if (!existingGame) {
+        await GameLevel.create({
+            title: "Quiz Rome", classroom: "6D", targetGrade: "6e", chapterId: chap6D._id,
+            questions: [{ q: "Qui est le premier empereur ?", options: ["Auguste", "César", "Néron", "Trajan"], a: 0 }]
+        });
+    }
+
+    const existingHW = await Homework.findOne({ title: "Rédaction César" });
+    if (!existingHW) {
+        await Homework.create({
+            title: "Rédaction César", classroom: "6D", targetGrade: "6e", chapterId: chap6D._id,
+            levels: [{ instruction: "Raconte la guerre des Gaules.", attachmentUrls: [] }]
+        });
+    }
+    console.log('⚡ Activités : OK');
+
+    // 4. SCANS (Productions)
+    const existingScan = await ScanSession.findOne({ title: "Travaux_Groupe_1" });
+    if (!existingScan) {
+        await ScanSession.create({
+            title: "Travaux_Groupe_1", classroom: "6D", chapterId: chap6D._id,
+            teacherInstruction: "Vérifier la syntaxe."
+        });
+    }
+    console.log('📸 Scans : OK');
+
+    console.log('✨ Base de données HYDRATÉE avec succès !');
   } catch (err) { console.error(err); } 
   finally { mongoose.disconnect(); }
 }
 initializeDatabase();
+
+### FILE: magic-paste.js
+const fs = require('fs');
+const path = require('path');
+
+async function startMagicWatcher() {
+    let clipboard;
+    try {
+        const module = await import('clipboardy');
+        clipboard = module.default;
+    } catch (e) {
+        console.error("❌ Erreur: Lance 'npm install clipboardy' d'abord !");
+        process.exit(1);
+    }
+
+    let lastContent = '';
+    const updateFile = 'update.txt';
+    const statusFile = 'apply_status.json';
+
+    console.log("------------------------------------------------");
+    console.log("✨ [MAGIC PASTE v3] Surveillance Haute Sécurité");
+    console.log("👉 Tag de sécurité pour acquitter : ⚡_FIX_REQ_⚡");
+    console.log("------------------------------------------------");
+
+    setInterval(async () => {
+        try {
+            const text = await clipboard.read();
+
+            if (text && text !== lastContent) {
+                
+                // CAS 1 : ACQUITTEMENT SÉCURISÉ
+                // On ne déclenche QUE si ce tag très précis est présent
+                if (text.includes("⚡_FIX_REQ_⚡")) {
+                    console.log("✅ Acquittement sécurisé détecté.");
+                    
+                    // Reset du statut
+                    try {
+                        fs.writeFileSync(statusFile, JSON.stringify({ status: 'OK', timestamp: Date.now() }, null, 2));
+                        console.log("   -> Alerte effacée.");
+                    } catch (e) {}
+                    
+                    lastContent = text;
+                    return;
+                }
+
+                // CAS 2 : INJECTION DE CODE
+                if (text.includes('[[[£ FILE:') || text.includes('[[[£ DELETE:')) {
+                    console.log("⚡ Code détecté. Injection...");
+                    fs.writeFileSync(updateFile, text, 'utf8');
+                    lastContent = text;
+                }
+            }
+        } catch (err) {}
+    }, 1000);
+}
+
+startMagicWatcher();
 
 ### FILE: package-lock.json
 {
@@ -12709,6 +13131,7 @@ initializeDatabase();
         "@google/generative-ai": "^0.1.3",
         "adm-zip": "^0.5.14",
         "chokidar": "^3.6.0",
+        "clipboardy": "^3.0.0",
         "cloudinary": "^1.41.0",
         "dotenv": "^16.4.5",
         "express": "^4.19.2",
@@ -12720,7 +13143,7 @@ initializeDatabase();
         "nodemailer": "^6.9.7"
       },
       "devDependencies": {
-        "nodemon": "^3.1.11"
+        "nodemon": "^3.1.0"
       }
     },
     "node_modules/@google/generative-ai": {
@@ -12807,6 +13230,25 @@ initializeDatabase();
       "version": "1.0.0",
       "resolved": "https://registry.npmjs.org/append-field/-/append-field-1.0.0.tgz",
       "integrity": "sha512-klpgFSWLW1ZEs8svjfb7g4qWY0YS5imI82dTg+QahUvJ8YqAY0P10Uk8tTyh9ZGuYEZEMaeJYCF5BFuX552hsw=="
+    },
+    "node_modules/arch": {
+      "version": "2.2.0",
+      "resolved": "https://registry.npmjs.org/arch/-/arch-2.2.0.tgz",
+      "integrity": "sha512-Of/R0wqp83cgHozfIYLbBMnej79U/SVGOOyuB3VVFv1NRM/PSFMK12x9KVtiYzJqmnU5WR2qp0Z5rHb7sWGnFQ==",
+      "funding": [
+        {
+          "type": "github",
+          "url": "https://github.com/sponsors/feross"
+        },
+        {
+          "type": "patreon",
+          "url": "https://www.patreon.com/feross"
+        },
+        {
+          "type": "consulting",
+          "url": "https://feross.org/support"
+        }
+      ]
     },
     "node_modules/array-flatten": {
       "version": "1.1.1",
@@ -12995,6 +13437,22 @@ initializeDatabase();
         "fsevents": "~2.3.2"
       }
     },
+    "node_modules/clipboardy": {
+      "version": "3.0.0",
+      "resolved": "https://registry.npmjs.org/clipboardy/-/clipboardy-3.0.0.tgz",
+      "integrity": "sha512-Su+uU5sr1jkUy1sGRpLKjKrvEOVXgSgiSInwa/qeID6aJ07yh+5NWc3h2QfjHjBnfX4LhtFcuAWKUsJ3r+fjbg==",
+      "dependencies": {
+        "arch": "^2.2.0",
+        "execa": "^5.1.1",
+        "is-wsl": "^2.2.0"
+      },
+      "engines": {
+        "node": "^12.20.0 || ^14.13.1 || >=16.0.0"
+      },
+      "funding": {
+        "url": "https://github.com/sponsors/sindresorhus"
+      }
+    },
     "node_modules/cloudinary": {
       "version": "1.41.3",
       "resolved": "https://registry.npmjs.org/cloudinary/-/cloudinary-1.41.3.tgz",
@@ -13088,6 +13546,19 @@ initializeDatabase();
       "version": "1.0.3",
       "resolved": "https://registry.npmjs.org/core-util-is/-/core-util-is-1.0.3.tgz",
       "integrity": "sha512-ZQBvi1DcpJ4GDqanjucZ2Hj3wEO5pZDS89BWbkcrvdxksJorwUDDZamX9ldFkp9aw2lmBDLgkObEA4DWNJ9FYQ=="
+    },
+    "node_modules/cross-spawn": {
+      "version": "7.0.6",
+      "resolved": "https://registry.npmjs.org/cross-spawn/-/cross-spawn-7.0.6.tgz",
+      "integrity": "sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==",
+      "dependencies": {
+        "path-key": "^3.1.0",
+        "shebang-command": "^2.0.0",
+        "which": "^2.0.1"
+      },
+      "engines": {
+        "node": ">= 8"
+      }
     },
     "node_modules/debug": {
       "version": "2.6.9",
@@ -13208,6 +13679,28 @@ initializeDatabase();
       "license": "MIT",
       "engines": {
         "node": ">= 0.6"
+      }
+    },
+    "node_modules/execa": {
+      "version": "5.1.1",
+      "resolved": "https://registry.npmjs.org/execa/-/execa-5.1.1.tgz",
+      "integrity": "sha512-8uSpZZocAZRBAPIEINJj3Lo9HyGitllczc27Eh5YYojjMFMn8yHMDMaUHE2Jqfq05D/wucwI4JGURyXt1vchyg==",
+      "dependencies": {
+        "cross-spawn": "^7.0.3",
+        "get-stream": "^6.0.0",
+        "human-signals": "^2.1.0",
+        "is-stream": "^2.0.0",
+        "merge-stream": "^2.0.0",
+        "npm-run-path": "^4.0.1",
+        "onetime": "^5.1.2",
+        "signal-exit": "^3.0.3",
+        "strip-final-newline": "^2.0.0"
+      },
+      "engines": {
+        "node": ">=10"
+      },
+      "funding": {
+        "url": "https://github.com/sindresorhus/execa?sponsor=1"
       }
     },
     "node_modules/express": {
@@ -13408,6 +13901,17 @@ initializeDatabase();
         "node": ">= 0.4"
       }
     },
+    "node_modules/get-stream": {
+      "version": "6.0.1",
+      "resolved": "https://registry.npmjs.org/get-stream/-/get-stream-6.0.1.tgz",
+      "integrity": "sha512-ts6Wi+2j3jQjqi70w5AlN8DFnkSwC+MqmxEzdEALB2qXZYV3X/b1CTfgPLGJNMeAWxdPfU8FO1ms3NUfaHCPYg==",
+      "engines": {
+        "node": ">=10"
+      },
+      "funding": {
+        "url": "https://github.com/sponsors/sindresorhus"
+      }
+    },
     "node_modules/glob-parent": {
       "version": "5.1.2",
       "resolved": "https://registry.npmjs.org/glob-parent/-/glob-parent-5.1.2.tgz",
@@ -13578,6 +14082,14 @@ initializeDatabase();
       "resolved": "https://registry.npmjs.org/ms/-/ms-2.1.3.tgz",
       "integrity": "sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA=="
     },
+    "node_modules/human-signals": {
+      "version": "2.1.0",
+      "resolved": "https://registry.npmjs.org/human-signals/-/human-signals-2.1.0.tgz",
+      "integrity": "sha512-B4FFZ6q/T2jhhksgkbEW3HBvWIfDW85snkQgawt07S7J5QXTk6BkNV+0yAeZrM5QpMAdYlocGoljn0sJ/WQkFw==",
+      "engines": {
+        "node": ">=10.17.0"
+      }
+    },
     "node_modules/iconv-lite": {
       "version": "0.4.24",
       "resolved": "https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.4.24.tgz",
@@ -13631,6 +14143,20 @@ initializeDatabase();
         "node": ">=8"
       }
     },
+    "node_modules/is-docker": {
+      "version": "2.2.1",
+      "resolved": "https://registry.npmjs.org/is-docker/-/is-docker-2.2.1.tgz",
+      "integrity": "sha512-F+i2BKsFrH66iaUFc0woD8sLy8getkwTwtOBjvs56Cx4CgJDeKQeqfz8wAYiSb8JOprWhHH5p77PbmYCvvUuXQ==",
+      "bin": {
+        "is-docker": "cli.js"
+      },
+      "engines": {
+        "node": ">=8"
+      },
+      "funding": {
+        "url": "https://github.com/sponsors/sindresorhus"
+      }
+    },
     "node_modules/is-extglob": {
       "version": "2.1.1",
       "resolved": "https://registry.npmjs.org/is-extglob/-/is-extglob-2.1.1.tgz",
@@ -13669,10 +14195,26 @@ initializeDatabase();
         "url": "https://github.com/sponsors/sindresorhus"
       }
     },
+    "node_modules/is-wsl": {
+      "version": "2.2.0",
+      "resolved": "https://registry.npmjs.org/is-wsl/-/is-wsl-2.2.0.tgz",
+      "integrity": "sha512-fKzAra0rGJUUBwGBgNkHZuToZcn+TtXHpeCgmkMJMMYx1sQDYaCSyjJBSCa2nH1DGm7s3n1oBnohoVTBaN7Lww==",
+      "dependencies": {
+        "is-docker": "^2.0.0"
+      },
+      "engines": {
+        "node": ">=8"
+      }
+    },
     "node_modules/isarray": {
       "version": "1.0.0",
       "resolved": "https://registry.npmjs.org/isarray/-/isarray-1.0.0.tgz",
       "integrity": "sha512-VLghIWNM6ELQzo7zwmcg0NmTVyWKYjvIeM83yjp0wRDTmUnrM678fQbcKBo6n2CJEF0szoG//ytg+TKla89ALQ=="
+    },
+    "node_modules/isexe": {
+      "version": "2.0.0",
+      "resolved": "https://registry.npmjs.org/isexe/-/isexe-2.0.0.tgz",
+      "integrity": "sha512-RHxMLp9lnKHGHRng9QFhRCMbYAcVpn69smSGcq3f36xjgVVWThj4qqLbTLlq7Ssj8B+fIQ1EuCEGI2lKsyQeIw=="
     },
     "node_modules/json-bigint": {
       "version": "1.0.0",
@@ -13747,6 +14289,11 @@ initializeDatabase();
         "url": "https://github.com/sponsors/sindresorhus"
       }
     },
+    "node_modules/merge-stream": {
+      "version": "2.0.0",
+      "resolved": "https://registry.npmjs.org/merge-stream/-/merge-stream-2.0.0.tgz",
+      "integrity": "sha512-abv/qOcuPfk3URPfDzmZU1LKmuw8kT+0nIHvKrKgFrwifol/doWcdA4ZqsWQ8ENrFKkd67Mfpo/LovbIUsbt3w=="
+    },
     "node_modules/methods": {
       "version": "1.1.2",
       "resolved": "https://registry.npmjs.org/methods/-/methods-1.1.2.tgz",
@@ -13787,6 +14334,14 @@ initializeDatabase();
       },
       "engines": {
         "node": ">= 0.6"
+      }
+    },
+    "node_modules/mimic-fn": {
+      "version": "2.1.0",
+      "resolved": "https://registry.npmjs.org/mimic-fn/-/mimic-fn-2.1.0.tgz",
+      "integrity": "sha512-OqbOk5oEQeAZ8WXWydlu9HJjz9WVdEIvamMCcXmuqUYjTknH/sqsWvhQ3vgwKFRR1HpjvNBKQ37nbJgYzGqGcg==",
+      "engines": {
+        "node": ">=6"
       }
     },
     "node_modules/minimatch": {
@@ -14096,6 +14651,17 @@ initializeDatabase();
         "node": ">=0.10.0"
       }
     },
+    "node_modules/npm-run-path": {
+      "version": "4.0.1",
+      "resolved": "https://registry.npmjs.org/npm-run-path/-/npm-run-path-4.0.1.tgz",
+      "integrity": "sha512-S48WzZW777zhNIrn7gxOlISNAqi9ZC/uQFnRdbeIHhZhCA6UqpkOT8T1G7BvfdgP4Er8gF4sUbaS0i7QvIfCWw==",
+      "dependencies": {
+        "path-key": "^3.0.0"
+      },
+      "engines": {
+        "node": ">=8"
+      }
+    },
     "node_modules/object-assign": {
       "version": "4.1.1",
       "resolved": "https://registry.npmjs.org/object-assign/-/object-assign-4.1.1.tgz",
@@ -14128,6 +14694,20 @@ initializeDatabase();
         "node": ">= 0.8"
       }
     },
+    "node_modules/onetime": {
+      "version": "5.1.2",
+      "resolved": "https://registry.npmjs.org/onetime/-/onetime-5.1.2.tgz",
+      "integrity": "sha512-kbpaSSGJTWdAY5KPVeMOKXSrPtr8C8C7wodJbcsd51jRnmD+GZu8Y0VoU6Dm5Z4vWr0Ig/1NKuWRKf7j5aaYSg==",
+      "dependencies": {
+        "mimic-fn": "^2.1.0"
+      },
+      "engines": {
+        "node": ">=6"
+      },
+      "funding": {
+        "url": "https://github.com/sponsors/sindresorhus"
+      }
+    },
     "node_modules/parseurl": {
       "version": "1.3.3",
       "resolved": "https://registry.npmjs.org/parseurl/-/parseurl-1.3.3.tgz",
@@ -14135,6 +14715,14 @@ initializeDatabase();
       "license": "MIT",
       "engines": {
         "node": ">= 0.8"
+      }
+    },
+    "node_modules/path-key": {
+      "version": "3.1.1",
+      "resolved": "https://registry.npmjs.org/path-key/-/path-key-3.1.1.tgz",
+      "integrity": "sha512-ojmeN0qd+y0jszEtoY48r0Peq5dwMEkIlCOu6Q5f41lfkswXuKtYrhgoTpLnyIcHm24Uhqx+5Tqm2InSwLhE6Q==",
+      "engines": {
+        "node": ">=8"
       }
     },
     "node_modules/path-to-regexp": {
@@ -14365,6 +14953,25 @@ initializeDatabase();
       "integrity": "sha512-E5LDX7Wrp85Kil5bhZv46j8jOeboKq5JMmYM3gVGdGH8xFpPWXUMsNrlODCrkoxMEeNi/XZIwuRvY4XNwYMJpw==",
       "license": "ISC"
     },
+    "node_modules/shebang-command": {
+      "version": "2.0.0",
+      "resolved": "https://registry.npmjs.org/shebang-command/-/shebang-command-2.0.0.tgz",
+      "integrity": "sha512-kHxr2zZpYtdmrN1qDjrrX/Z1rR1kG8Dx+gkpK1G4eXmvXswmcE1hTWBWYUzlraYw1/yZp6YuDY77YtvbN0dmDA==",
+      "dependencies": {
+        "shebang-regex": "^3.0.0"
+      },
+      "engines": {
+        "node": ">=8"
+      }
+    },
+    "node_modules/shebang-regex": {
+      "version": "3.0.0",
+      "resolved": "https://registry.npmjs.org/shebang-regex/-/shebang-regex-3.0.0.tgz",
+      "integrity": "sha512-7++dFhtcx3353uBaq8DDR4NuxBetBzC7ZQOhmTQInHEd6bSrXdiEyzCvG07Z44UYdLShWUyXt5M/yhz8ekcb1A==",
+      "engines": {
+        "node": ">=8"
+      }
+    },
     "node_modules/side-channel": {
       "version": "1.1.0",
       "resolved": "https://registry.npmjs.org/side-channel/-/side-channel-1.1.0.tgz",
@@ -14442,6 +15049,11 @@ initializeDatabase();
       "resolved": "https://registry.npmjs.org/sift/-/sift-16.0.1.tgz",
       "integrity": "sha512-Wv6BjQ5zbhW7VFefWusVP33T/EM0vYikCaQ2qR8yULbsilAT8/wQaXvuQ3ptGLpoKx+lihJE3y2UTgKDyyNHZQ=="
     },
+    "node_modules/signal-exit": {
+      "version": "3.0.7",
+      "resolved": "https://registry.npmjs.org/signal-exit/-/signal-exit-3.0.7.tgz",
+      "integrity": "sha512-wnD2ZE+l+SPC/uoS0vXeE9L1+0wuaMqKlfz9AMUo38JsyLSBWSFcHR1Rri62LZc12vLr1gb3jl7iwQhgwpAbGQ=="
+    },
     "node_modules/simple-update-notifier": {
       "version": "2.0.0",
       "resolved": "https://registry.npmjs.org/simple-update-notifier/-/simple-update-notifier-2.0.0.tgz",
@@ -14515,6 +15127,14 @@ initializeDatabase();
       "version": "5.1.2",
       "resolved": "https://registry.npmjs.org/safe-buffer/-/safe-buffer-5.1.2.tgz",
       "integrity": "sha512-Gd2UZBJDkXlY7GbJxfsE8/nvKkUEU1G38c1siN6QP6a9PT9MmHB8GnpscSmMJSoF8LOIrt8ud/wPtojys4G6+g=="
+    },
+    "node_modules/strip-final-newline": {
+      "version": "2.0.0",
+      "resolved": "https://registry.npmjs.org/strip-final-newline/-/strip-final-newline-2.0.0.tgz",
+      "integrity": "sha512-BrpvfNAE3dcvq7ll3xVumzjKjZQ5tI1sEUIKr3Uoks0XUl45St3FlatVqef9prk4jRDzhW6WZg+3bk93y6pLjA==",
+      "engines": {
+        "node": ">=6"
+      }
     },
     "node_modules/supports-color": {
       "version": "5.5.0",
@@ -14657,6 +15277,20 @@ initializeDatabase();
         "webidl-conversions": "^3.0.0"
       }
     },
+    "node_modules/which": {
+      "version": "2.0.2",
+      "resolved": "https://registry.npmjs.org/which/-/which-2.0.2.tgz",
+      "integrity": "sha512-BLI3Tl1TW3Pvl70l3yq3Y64i+awpwXqsGBYWkkqMtnbXgrMD+yj7rhW0kuEDxzJaYXGjEW5ogapKNMEKNMjibA==",
+      "dependencies": {
+        "isexe": "^2.0.0"
+      },
+      "bin": {
+        "node-which": "bin/node-which"
+      },
+      "engines": {
+        "node": ">= 8"
+      }
+    },
     "node_modules/xtend": {
       "version": "4.0.2",
       "resolved": "https://registry.npmjs.org/xtend/-/xtend-4.0.2.tgz",
@@ -14679,27 +15313,30 @@ initializeDatabase();
     "client": "npm run dev --prefix client",
     "apply": "node apply.js",
     "git-auto": "node git-auto.js",
+    "magic": "node magic-paste.js",
     "build": "npm install && npm install --prefix client && npm run build --prefix client",
     "dev": "node apply.js & node git-auto.js & npm run server-dev & npm run client"
   },
   "dependencies": {
-    "chokidar": "^3.6.0",
-    "adm-zip": "^0.5.14",
-    "express": "^4.19.2",
-    "dotenv": "^16.4.5",
-    "mongoose": "7.8.2",
     "@google/generative-ai": "^0.1.3",
-    "node-fetch": "^2.7.0",
-    "multer": "^1.4.5-lts.1",
+    "adm-zip": "^0.5.14",
+    "chokidar": "^3.6.0",
+    "clipboardy": "^3.0.0",
     "cloudinary": "^1.41.0",
-    "multer-storage-cloudinary": "^4.0.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
     "googleapis": "^126.0.0",
+    "mongoose": "7.8.2",
+    "multer": "^1.4.5-lts.1",
+    "multer-storage-cloudinary": "^4.0.0",
+    "node-fetch": "^2.7.0",
     "nodemailer": "^6.9.7"
   },
   "devDependencies": {
     "nodemon": "^3.1.0"
   }
 }
+
 
 ### FILE: public/style.css
 :root {
@@ -14962,60 +15599,136 @@ const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 const DriveService = require('../../services/drive.service');
-const fs = require('fs');
-const path = require('path');
-const fetch = require('node-fetch');
 
-// Helper Arborescence (CondaClasse / Prof / Classe / ...)
+// Helper Arborescence ROBUSTE
 const getCondaPath = async (teacherName, classroom) => {
+    // 1. Racine
     const condaRootId = await DriveService.getOrCreateFolder("CondaClasse", null);
+    
+    // 2. Prof
     const teacherId = await DriveService.getOrCreateFolder(teacherName, condaRootId);
     
+    // 3. Classe (Gestion des alias)
     let classFolderName = classroom;
-    if (classroom === '6D') classFolderName = '6e';
-    if (classroom === '1D' || classroom === '1BFI') classFolderName = '1BFI';
+    if (classroom === '6D') classFolderName = '6e'; // Alias historique
     
     const classId = await DriveService.getOrCreateFolder(classFolderName, teacherId);
+    
+    // 4. Sous-dossiers structurels
     const worksId = await DriveService.getOrCreateFolder("1Travaux", classId);
     const prodId = await DriveService.getOrCreateFolder("PRODUCTIONS", classId);
+    
     return { classId, worksId, prodId };
 };
 
-// --- DOSSIERS (ACTIVITÉS) ---
+// --- ROUTES CHAPITRES ---
 router.post('/chapters', async (req, res) => {
     try {
         const { _id, title, classroom, teacherId, subject } = req.body;
         const Chapter = mongoose.model('Chapter');
-        const Teacher = mongoose.model('Teacher');
-        const teacher = await Teacher.findById(teacherId);
-        const teacherName = teacher ? `${teacher.firstName} ${teacher.lastName}` : "Admin";
+        
+        // On récupère le nom du prof (ou défaut)
+        // Note: Dans une vraie app multi-tenant, on utiliserait req.user
+        const teacherName = "Jean Vuillet"; 
 
         if (_id) {
+            // Modification
             const chap = await Chapter.findById(_id);
-            if (chap.driveFolderId && title) await DriveService.renameFolder(chap.driveFolderId, title);
+            if (chap.driveFolderId && title) await DriveService.renameFolder(chap.driveFolderId, title); // TODO: implémenter renameFolder si besoin
             const updated = await Chapter.findByIdAndUpdate(_id, req.body, { new: true });
             return res.json(updated);
         }
 
+        // Création
         const { worksId } = await getCondaPath(teacherName, classroom);
         const driveId = await DriveService.getOrCreateFolder(title || "Nouveau Dossier", worksId);
+        
         const newChap = await Chapter.create({ ...req.body, driveFolderId: driveId });
         res.json(newChap);
+    } catch (e) { 
+        console.error("Erreur création chapitre:", e);
+        res.status(500).json({ error: e.message }); 
+    }
+});
+
+router.get('/chapters-all', async (req, res) => {
+    try { res.json(await mongoose.model('Chapter').find({}).sort({ _id: -1 })); } 
+    catch (e) { res.status(500).json([]); }
+});
+
+router.delete('/chapters/:id', async (req, res) => {
+    try {
+        const chap = await mongoose.model('Chapter').findById(req.params.id);
+        if (chap && chap.driveFolderId) await DriveService.deleteFile(chap.driveFolderId);
+        await mongoose.model('Chapter').findByIdAndDelete(req.params.id);
+        res.json({ ok: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// --- PRODUCTIONS (SCANS) ---
+// --- SCAN SESSIONS ---
+router.get('/scan-sessions', async (req, res) => {
+    try { res.json(await mongoose.model('ScanSession').find({}).sort({ createdAt: -1 })); } 
+    catch (e) { res.status(500).json([]); }
+});
+
+router.post('/scan-sessions', async (req, res) => {
+    try {
+        const { title, classroom } = req.body;
+        const session = await mongoose.model('ScanSession').create({ title, classroom });
+        res.json(session);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/scan-sessions/:id', async (req, res) => {
+    try { await mongoose.model('ScanSession').findByIdAndDelete(req.params.id); res.json({ ok: true }); } 
+    catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.patch('/scan-sessions/:id/rename', async (req, res) => {
+    try {
+        const session = await mongoose.model('ScanSession').findById(req.params.id);
+        const datePart = session.title.includes('_') ? session.title.split('_').pop() : "";
+        session.title = `${req.body.newPrefix}_${datePart || new Date().toLocaleDateString()}`;
+        await session.save();
+        res.json(session);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.post('/scan-upload-photo', async (req, res) => {
     try {
         const { sessionId, type, imageBase64 } = req.body;
         const session = await mongoose.model('ScanSession').findById(sessionId);
-        const result = await DriveService.uploadImage(session.driveFolderId, `${type}_${Date.now()}.jpg`, imageBase64);
+        
+        // AUTO-RÉPARATION DU DOSSIER DRIVE
+        if (!session.driveFolderId) {
+            console.log(`🛠️ Réparation dossier Drive pour session: ${session.title}`);
+            const { prodId } = await getCondaPath("Jean Vuillet", session.classroom);
+            session.driveFolderId = await DriveService.getOrCreateFolder(session.title, prodId);
+            await session.save();
+        }
+
+        const fileName = `${type}_${Date.now()}.jpg`;
+        const result = await DriveService.uploadImage(session.driveFolderId, fileName, imageBase64);
+        
         if (result) {
             const field = type === 'quest' ? { $push: { questionUrls: result.id } } : { $push: { copyUrls: result.id } };
             const updated = await mongoose.model('ScanSession').findByIdAndUpdate(sessionId, field, { new: true });
             return res.json(updated);
         }
-        res.status(500).json({ error: "Drive fail" });
+        throw new Error("Echec upload Drive");
+    } catch (e) { 
+        console.error("Erreur Upload Scan:", e);
+        res.status(500).json({ error: e.message }); 
+    }
+});
+
+router.post('/scan-delete-photo', async (req, res) => {
+    try {
+        const { sessionId, type, url } = req.body;
+        await DriveService.deleteFile(url);
+        const field = type === 'quest' ? { $pull: { questionUrls: url } } : { $pull: { copyUrls: url } };
+        await mongoose.model('ScanSession').findByIdAndUpdate(sessionId, field);
+        res.json({ ok: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -15023,16 +15736,28 @@ router.patch('/scan-sessions/:id/assign-chapter', async (req, res) => {
     try {
         const session = await mongoose.model('ScanSession').findById(req.params.id);
         const chapter = await mongoose.model('Chapter').findById(req.body.chapterId);
+        
         if (session.driveFolderId && chapter.driveFolderId) {
+            console.log(`🚚 Déplacement Drive: ${session.title} -> ${chapter.title}`);
             await DriveService.moveFile(session.driveFolderId, chapter.driveFolderId);
         }
+        
         session.chapterId = req.body.chapterId;
         await session.save();
         res.json(session);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// (Autres routes : list, delete, rename, instructions restent opérationnelles)
+// INITIALISATION MANUELLE (Bouton Synchro)
+router.get('/init-all-folders', async (req, res) => {
+    try {
+        // Force la création de l'arborescence pour une classe test
+        await getCondaPath("Jean Vuillet", "2CD");
+        await getCondaPath("Jean Vuillet", "6D");
+        res.json({ ok: true });
+    } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;
 
 ### FILE: server/features/prof/prof.routes.js
@@ -15244,13 +15969,10 @@ const fs = require('fs');
 const app = express();
 const port = process.env.PORT || 3000;
 
-// 1. Connexion BDD
 mongoose.connect(process.env.MONGODB_URI)
     .then(async () => {
         console.log('✅ BDD Connectée.');
-        
-        // --- CHARGEMENT DES MODÈLES ---
-        require('./models/Teacher'); // <--- INDISPENSABLE
+        require('./models/Teacher');
         require('./models/Player');
         require('./models/Chapter');
         require('./models/Homework');
@@ -15261,13 +15983,11 @@ mongoose.connect(process.env.MONGODB_URI)
         require('./models/ScanSession');
         const DeploySignal = require('./models/DeploySignal');
 
-        // Signal Déploiement
         try {
             const vPath = path.join(__dirname, 'version.json');
             if (fs.existsSync(vPath)) {
                 const vData = JSON.parse(fs.readFileSync(vPath, 'utf8'));
                 await DeploySignal.findOneAndUpdate({}, { build: vData.build, status: 'live', updatedAt: new Date() }, { upsert: true });
-                console.log(`📡 [SIGNAL] Build #${vData.build} LIVE.`);
             }
         } catch (e) {}
     })
@@ -15275,6 +15995,24 @@ mongoose.connect(process.env.MONGODB_URI)
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// --- API SYSTÈME ---
+app.get('/api/system-status', (req, res) => {
+    const statusPath = path.join(__dirname, '..', 'apply_status.json');
+    if (fs.existsSync(statusPath)) {
+        try { res.json(JSON.parse(fs.readFileSync(statusPath, 'utf8'))); } 
+        catch (e) { res.json({ status: 'OK' }); }
+    } else { res.json({ status: 'OK' }); }
+});
+
+// NOUVELLE ROUTE : RESET FORCÉ DU STATUT
+app.post('/api/reset-status', (req, res) => {
+    const statusPath = path.join(__dirname, '..', 'apply_status.json');
+    try {
+        fs.writeFileSync(statusPath, JSON.stringify({ status: 'OK', timestamp: Date.now() }, null, 2));
+        res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
 
 // 2. Routes API
 app.use('/api', require('./features/auth/auth.routes'));
@@ -15301,15 +16039,33 @@ app.listen(port, () => console.log(`🚀 SERVEUR PRÊT : ${port}`));
 const { google } = require('googleapis');
 const { Readable } = require('stream');
 
-const auth = new google.auth.OAuth2(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET, process.env.GOOGLE_REDIRECT_URI);
-auth.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
-const drive = google.drive({ version: 'v3', auth });
+let drive = null;
+
+// Initialisation sécurisée
+try {
+    if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_REFRESH_TOKEN) {
+        const auth = new google.auth.OAuth2(
+            process.env.GOOGLE_CLIENT_ID, 
+            process.env.GOOGLE_CLIENT_SECRET, 
+            process.env.GOOGLE_REDIRECT_URI
+        );
+        auth.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
+        drive = google.drive({ version: 'v3', auth });
+        console.log("✅ Google Drive API : Connecté.");
+    } else {
+        console.warn("⚠️ Google Drive API : Clés manquantes dans .env. Mode hors-ligne (Drive désactivé).");
+    }
+} catch (e) {
+    console.error("❌ Erreur init Drive:", e.message);
+}
 
 const DriveService = {
     getOrCreateFolder: async (name, parentId = null) => {
+        if (!drive) return null; // Sécurité anti-crash
         try {
             let q = `name = '${name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
             q += parentId ? ` and '${parentId}' in parents` : ` and 'root' in parents`;
+            
             const res = await drive.files.list({ q, fields: 'files(id, name)' });
             if (res.data.files?.length > 0) return res.data.files[0].id;
 
@@ -15317,40 +16073,61 @@ const DriveService = {
                 resource: { name, mimeType: 'application/vnd.google-apps.folder', parents: parentId ? [parentId] : [] },
                 fields: 'id'
             });
-            // Rendre public
-            await drive.permissions.create({ fileId: folder.data.id, resource: { role: 'reader', type: 'anyone' } });
+            
+            // Tenter de rendre public (peut échouer selon les droits)
+            try {
+                await drive.permissions.create({
+                    fileId: folder.data.id,
+                    resource: { role: 'reader', type: 'anyone' }
+                });
+            } catch(e) { console.warn("⚠️ Drive: Impossible de rendre public le dossier", name); }
+
             return folder.data.id;
-        } catch (e) { return null; }
+        } catch (e) { 
+            console.error(`❌ Erreur Drive (getOrCreateFolder ${name}):`, e.message);
+            return null; 
+        }
     },
 
-    // Nouvelle logique de chemin : CondaClasse / Nom Prof / Classe / ...
-    getTeacherPath: async (teacherName, classroom = null) => {
-        const rootId = await DriveService.getOrCreateFolder("CondaClasse");
-        const teacherId = await DriveService.getOrCreateFolder(teacherName, rootId);
-        if (!classroom) return { rootId, teacherId };
-
-        const classId = await DriveService.getOrCreateFolder(classroom, teacherId);
-        const worksId = await DriveService.getOrCreateFolder("1Travaux", classId);
-        const prodId = await DriveService.getOrCreateFolder("PRODUCTIONS", classId);
-        return { rootId, teacherId, classId, worksId, prodId };
-    },
-
-    deleteFile: async (id) => { try { await drive.files.delete({ fileId: id }); return true; } catch (e) { return true; } },
-    moveFile: async (fileId, newParentId) => {
-        const file = await drive.files.get({ fileId, fields: 'parents' });
-        const previous = file.data.parents?.join(',') || "";
-        return drive.files.update({ fileId, addParents: newParentId, removeParents: previous });
-    },
     uploadImage: async (folderId, fileName, base64Data) => {
-        const buffer = Buffer.from(base64Data.split(',')[1], 'base64');
-        const media = { mimeType: 'image/jpeg', body: Readable.from(buffer) };
-        const file = await drive.files.create({ resource: { name: fileName, parents: [folderId] }, media, fields: 'id, webViewLink' });
-        await drive.permissions.create({ fileId: file.data.id, resource: { role: 'reader', type: 'anyone' } });
-        return { id: file.data.id, link: file.data.webViewLink };
+        if (!drive) return null;
+        try {
+            const buffer = Buffer.from(base64Data.split(',')[1], 'base64');
+            const media = { mimeType: 'image/jpeg', body: Readable.from(buffer) };
+            
+            const file = await drive.files.create({
+                resource: { name: fileName, parents: [folderId] },
+                media,
+                fields: 'id, webViewLink'
+            });
+
+            try {
+                await drive.permissions.create({
+                    fileId: file.data.id,
+                    resource: { role: 'reader', type: 'anyone' }
+                });
+            } catch(e) {}
+
+            return { id: file.data.id, link: file.data.webViewLink };
+        } catch (e) {
+            console.error("❌ Erreur Upload Drive:", e.message);
+            return null;
+        }
     },
-    listFilesInFolder: async (id) => {
-        const res = await drive.files.list({ q: `'${id}' in parents and trashed = false`, fields: 'files(id, name, webViewLink, thumbnailLink)' });
-        return res.data.files || [];
+
+    deleteFile: async (id) => { 
+        if (!drive) return true;
+        try { await drive.files.delete({ fileId: id }); return true; } 
+        catch (e) { return false; } 
+    },
+
+    moveFile: async (fileId, newParentId) => {
+        if (!drive) return;
+        try {
+            const file = await drive.files.get({ fileId, fields: 'parents' });
+            const previous = file.data.parents?.join(',') || "";
+            return await drive.files.update({ fileId, addParents: newParentId, removeParents: previous });
+        } catch(e) { console.error("Erreur Move:", e.message); }
     }
 };
 
@@ -15370,7 +16147,8 @@ require('dotenv').config();
 
 const OUTPUT_FILENAME = 'snapshot.txt';
 const MAP_FILENAME = 'projectMap.txt';
-const IGNORE = ['node_modules', '.git', 'dist', 'google-cloud-sdk', 'y', 'snapshot.txt', 'history.txt', 'update.txt'];
+// J'ai ajouté .env ici pour être sûr qu'on ne l'ouvre jamais par erreur, même si on change les filtres
+const IGNORE = ['node_modules', '.git', 'dist', 'build', 'google-cloud-sdk', 'y', 'snapshot.txt', 'history.txt', 'update.txt', '.env'];
 
 function buildTree(dir, prefix = '') {
     let structure = '';
@@ -15380,7 +16158,9 @@ function buildTree(dir, prefix = '') {
         items.forEach((item, index) => {
             const isLast = index === items.length - 1;
             const fullPath = path.join(dir, item);
-            const isDir = fs.statSync(fullPath).isDirectory();
+            let isDir = false;
+            try { isDir = fs.statSync(fullPath).isDirectory(); } catch(e) {}
+            
             structure += prefix + (isLast ? '└── ' : '├── ') + item + (isDir ? '/' : '') + '\n';
             if (isDir) structure += buildTree(fullPath, prefix + (isLast ? '    ' : '│   '));
         });
@@ -15395,9 +16175,25 @@ function captureContent(dir, baseDir = "") {
         for (const item of items) {
             const p = path.join(dir, item);
             const rel = path.join(baseDir, item);
-            if (fs.statSync(p).isDirectory()) content += captureContent(p, rel);
-            else if (['.js', '.jsx', '.css', '.json'].includes(path.extname(item))) {
-                content += `\n### FILE: ${rel}\n${fs.readFileSync(p, 'utf8')}\n`;
+            let stat;
+            try { stat = fs.statSync(p); } catch(e) { continue; }
+
+            if (stat.isDirectory()) {
+                content += captureContent(p, rel);
+            } else {
+                const ext = path.extname(item).toLowerCase();
+                // AJOUT DES EXTENSIONS MANQUANTES (.cjs, .mjs, .html, .md)
+                if (['.js', '.jsx', '.css', '.json', '.html', '.cjs', '.mjs', '.md'].includes(ext)) {
+                    try {
+                        const fileContent = fs.readFileSync(p, 'utf8');
+                        // Petite sécurité : on ne prend pas les fichiers trop énormes (> 500ko) pour ne pas saturer
+                        if (fileContent.length < 500000) {
+                            content += `\n### FILE: ${rel}\n${fileContent}\n`;
+                        } else {
+                            content += `\n### FILE: ${rel}\n(Fichier trop volumineux - ignoré)\n`;
+                        }
+                    } catch (e) {}
+                }
             }
         }
     } catch (e) {}
@@ -15405,11 +16201,14 @@ function captureContent(dir, baseDir = "") {
 }
 
 async function run() {
-    console.log("📸 Snapshot de sécurité...");
+    console.log("📸 Snapshot de sécurité (Extensions étendues)...");
     const tree = buildTree(__dirname);
     const code = captureContent(__dirname);
-    fs.writeFileSync(OUTPUT_FILENAME, `STRUCTURE:\n${tree}\n\nCODE:\n${code}`);
+    
+    const finalContent = `STRUCTURE:\n${tree}\n\nCODE:\n${code}`;
+    
+    fs.writeFileSync(OUTPUT_FILENAME, finalContent);
     fs.writeFileSync(MAP_FILENAME, tree);
-    console.log("✨ Terminé. Structure CondaClasse préservée.");
+    console.log(`✨ Terminé. Snapshot généré (${(finalContent.length / 1024).toFixed(2)} KB).`);
 }
 run();
