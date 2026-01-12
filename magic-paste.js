@@ -13,10 +13,11 @@ async function startMagicWatcher() {
 
     let lastContent = '';
     const updateFile = 'update.txt';
+    const statusFile = 'apply_status.json';
 
     console.log("------------------------------------------------");
-    console.log("✨ [MAGIC PASTE] Surveillance active (Mode Pass-Through)");
-    console.log("👉 Si tu copies un fichier coupé, le site t'avertira.");
+    console.log("✨ [MAGIC PASTE v3] Surveillance Haute Sécurité");
+    console.log("👉 Tag de sécurité pour acquitter : ⚡_FIX_REQ_⚡");
     console.log("------------------------------------------------");
 
     setInterval(async () => {
@@ -24,11 +25,25 @@ async function startMagicWatcher() {
             const text = await clipboard.read();
 
             if (text && text !== lastContent) {
-                // On détecte juste le début. Si la fin manque, on envoie quand même
-                // pour que apply.js puisse lever l'alerte côté Front.
-                if (text.includes('[[[£ FILE:') || text.includes('[[[£ DELETE:')) {
+                
+                // CAS 1 : ACQUITTEMENT SÉCURISÉ
+                // On ne déclenche QUE si ce tag très précis est présent
+                if (text.includes("⚡_FIX_REQ_⚡")) {
+                    console.log("✅ Acquittement sécurisé détecté.");
                     
-                    console.log("⚡ Code détecté. Injection dans update.txt...");
+                    // Reset du statut
+                    try {
+                        fs.writeFileSync(statusFile, JSON.stringify({ status: 'OK', timestamp: Date.now() }, null, 2));
+                        console.log("   -> Alerte effacée.");
+                    } catch (e) {}
+                    
+                    lastContent = text;
+                    return;
+                }
+
+                // CAS 2 : INJECTION DE CODE
+                if (text.includes('[[[£ FILE:') || text.includes('[[[£ DELETE:')) {
+                    console.log("⚡ Code détecté. Injection...");
                     fs.writeFileSync(updateFile, text, 'utf8');
                     lastContent = text;
                 }

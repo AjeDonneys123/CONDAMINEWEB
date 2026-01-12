@@ -9,12 +9,10 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [sysStatus, setSysStatus] = useState({ status: 'OK' });
 
-  // 1. Surveillance des BUGS JS
   useEffect(() => {
     window.onerror = async (msg, url, line, col, error) => {
         if (!user || user.id !== 'prof') return;
         console.error(`BUG DÉTECTÉ: ${msg}`);
-        
         await fetch('/api/auto-repair', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -23,7 +21,6 @@ export default function App() {
     };
   }, [user]);
 
-  // 2. Surveillance du STATUT DE DÉPLOIEMENT (Fichier coupé ?)
   useEffect(() => {
     const interval = setInterval(() => {
         fetch('/api/system-status')
@@ -34,7 +31,6 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  // 3. Persistance User
   useEffect(() => {
     const saved = localStorage.getItem('player');
     if (saved) {
@@ -49,15 +45,15 @@ export default function App() {
 
   return (
     <div className="app-wrapper">
-      {/* ALERTE SYSTÈME EN CAS DE FICHIER COUPÉ */}
+      {/* ALERTE SYSTÈME SÉCURISÉE */}
       {sysStatus.status === 'TRUNCATED' && (
           <div className="system-alert-bar">
-              <span>⚠️ ATTENTION : Le fichier <u>{sysStatus.file}</u> a été coupé lors de la copie !</span>
+              <span>⚠️ ATTENTION : Le fichier <u>{sysStatus.file}</u> a été coupé !</span>
               <button 
                 className="system-alert-btn"
-                onClick={() => navigator.clipboard.writeText(`Le fichier ${sysStatus.file} est incomplet. Peux-tu me le renvoyer en entier s'il te plait ?`)}
+                onClick={() => navigator.clipboard.writeText(`⚡_FIX_REQ_⚡ Le fichier ${sysStatus.file} est incomplet. Peux-tu me le renvoyer en entier s'il te plait ?`)}
               >
-                COPIER LE MESSAGE POUR L'IA
+                COPIER & ACQUITTER
               </button>
           </div>
       )}
