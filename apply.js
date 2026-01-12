@@ -4,23 +4,30 @@ const path = require('path');
 const inputFile = 'update.txt';
 const statusFile = 'apply_status.json';
 
+// 🛡️ LISTE DES INTOUCHABLES (Ne seront jamais supprimés)
+const PROTECTED_PATHS = [
+    '.git',
+    'node_modules',
+    'apply.js',
+    'git-auto.js',
+    'package.json',
+    '.env',
+    'server/server.js',
+    '.',
+    './'
+];
+
 console.log("------------------------------------------------");
-console.log("🛠️  [WATCHER] apply.js (v12-DESTRUCTOR) actif.");
-console.log("🧹 Mode : Création + SUPPRESSION (DELETE) + Nettoyage");
+console.log("🛠️  [WATCHER] apply.js (v14-FORTRESS) actif.");
+console.log("🔒  Format Sécurisé : [[[£ ... £]]]");
 console.log("------------------------------------------------");
 
-/**
- * Informe le site web du statut
- */
 function setStatus(error, truncatedFile = null) {
     try {
         fs.writeFileSync(statusFile, JSON.stringify({ error, truncatedFile, timestamp: Date.now() }, null, 2));
     } catch (e) {}
 }
 
-/**
- * Analyse et applique les blocs de code
- */
 function applyUpdate() {
     if (!fs.existsSync(inputFile)) return;
     let rawContent = "";
@@ -32,41 +39,53 @@ function applyUpdate() {
 
     let processedCount = 0;
 
-    // --- 1. GESTION DES SUPPRESSIONS (Nouveau v12) ---
-    // Syntaxe : [[[ DELETE: chemin/vers/fichier_ou_dossier ]]]
-    const deleteRegex = /\[\[\[\s*DELETE\s*:\s*([^\]\s]+)\s*\]\]\]/g;
+    // --- 1. GESTION DES SUPPRESSIONS (Nouveau format £) ---
+    // Regex : [[[£ DELETE: chemin £]]]
+    const deleteRegex = /\[\[\[£\s*DELETE\s*:\s*([^£\]\s]+)\s*£\]\]\]/g;
     let delMatch;
     
     while ((delMatch = deleteRegex.exec(rawContent)) !== null) {
-        const targetPath = path.join(__dirname, delMatch[1].trim());
+        const relativePath = delMatch[1].trim();
+        const targetPath = path.join(__dirname, relativePath);
+
+        const isProtected = PROTECTED_PATHS.some(p => 
+            relativePath === p || 
+            relativePath.startsWith(p + '/') ||
+            relativePath.startsWith('./' + p)
+        );
+
+        if (isProtected) {
+            console.error(`   ⛔ REFUS DE SUPPRIMER : ${relativePath} (Protégé)`);
+            processedCount++;
+            continue;
+        }
+
         try {
             if (fs.existsSync(targetPath)) {
-                // rmSync avec recursive:true supprime fichiers ET dossiers
                 fs.rmSync(targetPath, { recursive: true, force: true });
-                console.log(`   🗑️  SUPPRIMÉ : ${delMatch[1]}`);
+                console.log(`   🗑️  SUPPRIMÉ : ${relativePath}`);
                 processedCount++;
             } else {
-                console.log(`   ⚠️  Introuvable (déjà supprimé ?) : ${delMatch[1]}`);
+                console.log(`   ⚠️  Introuvable : ${relativePath}`);
             }
         } catch (e) {
-            console.error(`   ❌ ERREUR DELETE ${delMatch[1]}: ${e.message}`);
+            console.error(`   ❌ ERREUR DELETE ${relativePath}: ${e.message}`);
         }
     }
 
-    // --- 2. GESTION DES FICHIERS (Création / Modification) ---
-    const fileStartRegex = /\[\[\[\s*FILE\s*:\s*([^\]\s]+)\s*\]\]\]/g;
+    // --- 2. GESTION DES FICHIERS (Nouveau format £) ---
+    // Regex : [[[£ FILE: chemin £]]]
+    const fileStartRegex = /\[\[\[£\s*FILE\s*:\s*([^£\]\s]+)\s*£\]\]\]/g;
     let match;
     let lastUnfinishedBlock = "";
 
-    // On parcourt tous les débuts de fichiers trouvés
     while ((match = fileStartRegex.exec(rawContent)) !== null) {
         const filePath = match[1].trim();
         const startTag = match[0];
-        const endTag = `[[[ END: ${filePath} ]]]`;
+        // Balise de fin avec £ : [[[£ END: chemin £]]]
+        const endTag = `[[[£ END: ${filePath} £]]]`;
 
-        // VÉRIFICATION : Est-ce que ce fichier précis a sa balise de fin ?
         if (rawContent.includes(endTag)) {
-            // BLOC COMPLET : On extrait le contenu
             const startIndex = rawContent.indexOf(startTag) + startTag.length;
             const endIndex = rawContent.indexOf(endTag);
             const fileContent = rawContent.substring(startIndex, endIndex).trim();
@@ -80,36 +99,30 @@ function applyUpdate() {
                 console.log(`   ✅ APPLIQUÉ : ${filePath}`);
                 processedCount++;
             } catch (e) {
-                console.error(`   ❌ ERREUR sur ${filePath}: ${e.message}`);
+                console.error(`   ❌ ERREUR FILE ${filePath}: ${e.message}`);
             }
         } else {
-            // BLOC TRONQUÉ : Il manque la fin
             lastUnfinishedBlock = rawContent.substring(rawContent.indexOf(startTag));
-            console.warn(`⚠️  [INCOMPLET] Le fichier ${filePath} est tronqué. Attente de la suite...`);
+            console.warn(`⚠️  [INCOMPLET] ${filePath}`);
             setStatus("Fichier coupé détecté", filePath);
-            break; // On arrête tout pour ce cycle
+            break;
         }
     }
 
-    // --- NETTOYAGE DE UPDATE.TXT ---
+    // --- NETTOYAGE ---
     try {
-        // S'il y a un bloc incomplet, on le garde. Sinon on vide tout.
         if (lastUnfinishedBlock) {
             fs.writeFileSync(inputFile, lastUnfinishedBlock.trim());
         } else if (processedCount > 0) {
-            // Tout a été traité (delete ou file), on vide
             fs.writeFileSync(inputFile, '');
-            console.log(`✨ Terminé : ${processedCount} actions. update.txt vidé.\n`);
+            console.log(`✨ Terminé : ${processedCount} actions.\n`);
             setStatus(null);
         } else if (rawContent.length > 50 && processedCount === 0) {
-            // Sécurité poubelle
+            // Si le texte ne contient pas les balises £, on considère que c'est du bruit
             fs.writeFileSync(inputFile, '');
-            console.log(`🧹 Nettoyage : Texte non-conforme supprimé.`);
+            console.log(`🧹 Nettoyage texte non conforme (Format £ attendu).`);
         }
-    } catch (e) {
-        console.error("Erreur lors du nettoyage final.");
-    }
+    } catch (e) { console.error("Erreur nettoyage."); }
 }
 
-// Vérification toutes les secondes
 setInterval(applyUpdate, 1000);
