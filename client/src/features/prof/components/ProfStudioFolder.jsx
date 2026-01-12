@@ -46,16 +46,61 @@ export default function ProfStudioFolder({
         setEditingId(null);
     };
 
+    // --- FILTRAGE ET TRI ---
     const normalize = (c) => c?.toString().toUpperCase().replace('E', '') || "";
     
-    // CORRECTION CRITIQUE ICI : On utilise classFilter, pas globalClass
+    // Chapitres Actifs de la classe
     const activeChapters = chapters.filter(c => normalize(c.classroom) === normalize(classFilter) && !c.isArchived);
-    const otherChapters = chapters.filter(c => normalize(c.classroom) !== normalize(classFilter) && !c.isArchived);
+    
+    // Chapitres Archivés de la classe (RESTAURÉS)
+    const archivedChapters = chapters.filter(c => normalize(c.classroom) === normalize(classFilter) && c.isArchived);
+    
+    // Chapitres autres classes (mode debug)
+    const otherChapters = chapters.filter(c => normalize(c.classroom) !== normalize(classFilter));
 
-    const displayChapters = showAll ? [...activeChapters, ...otherChapters] : activeChapters;
+    const displayChapters = showAll ? [...activeChapters, ...otherChapters.filter(c => !c.isArchived)] : activeChapters;
+
+    // --- RENDU SECTION ARCHIVES ---
+    const renderArchiveSection = () => {
+        if (archivedChapters.length === 0) return null;
+
+        return (
+            <div className="mb-8 p-6 bg-slate-800 rounded-[35px] border-4 border-slate-700 shadow-xl animate-in slide-in-from-top-4">
+                <div className="flex items-center justify-center gap-2 mb-6 opacity-60">
+                    <span className="text-2xl">📦</span>
+                    <p className="font-black text-white text-[10px] uppercase tracking-widest">Archives {classFilter}</p>
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                    {['H', 'G', 'E'].map(sub => {
+                        const info = getSubjectInfo(sub);
+                        const list = archivedChapters.filter(c => c.subject === sub);
+                        return (
+                            <div key={sub} className="bg-slate-700/50 p-3 rounded-2xl border border-slate-600">
+                                <h4 className={`text-center font-black text-[9px] uppercase mb-3 ${info.color} opacity-80`}>{info.label}</h4>
+                                <div className="space-y-2">
+                                    {list.map(c => (
+                                        <div key={c._id} className="bg-slate-600/50 p-2 px-3 rounded-xl flex justify-between items-center group hover:bg-slate-600 transition-all">
+                                            <span className="text-[10px] font-bold text-slate-300 truncate flex-1 pr-2">{c.title}</span>
+                                            <button onClick={() => onArchive(c._id, false)} className="text-blue-300 hover:text-blue-100 font-bold text-xs" title="Désarchiver">⬆️</button>
+                                        </div>
+                                    ))}
+                                    {list.length === 0 && <p className="text-center text-[8px] text-slate-500 font-bold py-2">-</p>}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+        );
+    };
 
     return (
         <div className="max-w-4xl mx-auto space-y-6">
+            
+            {/* 1. LES ARCHIVES (Restaurées) */}
+            {renderArchiveSection()}
+
+            {/* 2. BOUTONS DE CRÉATION */}
             <div className="grid grid-cols-3 gap-4 mb-4">
                 {['H', 'G', 'E'].map(s => (
                     <button key={s} onClick={() => handleCreate(s)} className={`p-4 bg-white border-2 border-dashed rounded-3xl font-black uppercase text-[10px] hover:scale-105 transition-all shadow-sm ${getSubjectInfo(s).color} ${getSubjectInfo(s).border}`}>
@@ -64,15 +109,16 @@ export default function ProfStudioFolder({
                 ))}
             </div>
 
-            {otherChapters.length > 0 && (
+            {/* 3. MESSAGE MASQUÉ */}
+            {otherChapters.length > 0 && !showAll && (
                 <div className="text-center mb-4">
-                    <span className="text-xs text-slate-400 mr-2">{otherChapters.length} dossiers masqués</span>
-                    <button onClick={() => setShowAll(!showAll)} className="text-[10px] font-bold text-indigo-500 underline uppercase">
-                        {showAll ? "Masquer" : "Voir tout"}
+                    <button onClick={() => setShowAll(true)} className="text-[9px] font-bold text-slate-300 uppercase hover:text-indigo-400 transition-colors">
+                        (Voir {otherChapters.length} dossiers d'autres classes)
                     </button>
                 </div>
             )}
 
+            {/* 4. LISTE ACTIVE */}
             <div className="space-y-3">
                 {displayChapters.map(chap => {
                     const info = getSubjectInfo(chap.subject);
@@ -133,13 +179,7 @@ export default function ProfStudioFolder({
                                             </div>
                                         </div>
                                     ))}
-                                    {chapSessions.map(sess => (
-                                        <div key={sess._id} className="bg-emerald-50 p-4 rounded-2xl flex justify-between items-center shadow-sm border border-emerald-100">
-                                            <div className="flex items-center gap-3"><span className="text-xl">📸</span><div className="flex flex-col"><b className="text-emerald-900 text-sm">{sess.title}</b><span className="text-[9px] font-black text-emerald-600 uppercase">Production ({sess.copyUrls?.length || 0} copies)</span></div></div>
-                                            <button onClick={() => onDeleteItem(sess._id, 'scan')} className="p-1 text-emerald-300 hover:text-red-500">✕</button>
-                                        </div>
-                                    ))}
-                                    {chapItems.length === 0 && chapSessions.length === 0 && <p className="text-center py-4 text-slate-300 italic text-xs">Dossier vide.</p>}
+                                    {chapItems.length === 0 && <p className="text-center py-4 text-slate-300 italic text-xs">Aucune activité dans ce dossier.</p>}
                                 </div>
                             )}
                         </div>
@@ -148,9 +188,8 @@ export default function ProfStudioFolder({
                 
                 {displayChapters.length === 0 && (
                     <div className="text-center py-10 border-2 border-dashed border-slate-200 rounded-[30px] bg-slate-50">
-                        {/* CORRECTION : Utilisation de classFilter */}
-                        <p className="text-slate-400 font-bold">Aucun dossier pour {classFilter}</p>
-                        <p className="text-xs text-slate-300 mt-1">Cliquez sur un bouton ci-dessus pour commencer</p>
+                        <p className="text-slate-400 font-bold">Aucun dossier actif pour {classFilter}</p>
+                        <p className="text-xs text-slate-300 mt-1">Créez-en un ou consultez les archives ci-dessus.</p>
                     </div>
                 )}
             </div>
