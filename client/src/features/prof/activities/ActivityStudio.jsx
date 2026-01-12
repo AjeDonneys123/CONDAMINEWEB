@@ -19,18 +19,12 @@ export default function ActivityStudio({ globalClass, teacherId }) {
                 fetch('/api/game-levels/all').then(r => r.json()),
                 fetch('/api/chapters-all').then(r => r.json())
             ]);
-
-            const allActivities = [
+            setActivities([
                 ...(hwRes || []).map(x => ({ ...x, actType: 'homework' })),
                 ...(gmRes || []).map(x => ({ ...x, actType: 'game' }))
-            ];
-            
-            console.log("📦 Données reçues :", { activities: allActivities.length, chapters: cpRes.length });
-            setActivities(allActivities);
+            ]);
             setChapters(cpRes || []);
-        } catch (e) { 
-            console.error("❌ Erreur Studio Loading:", e); 
-        }
+        } catch (e) { console.error(e); }
         setLoading(false);
     };
 
@@ -39,7 +33,6 @@ export default function ActivityStudio({ globalClass, teacherId }) {
     if (viewingResults) return <HomeworkResults homework={viewingResults} onBack={() => setViewingResults(null)} />;
 
     if (editingItem) {
-        // On filtre les chapitres pour ne montrer que ceux de la classe active au studio
         const activeChaps = chapters.filter(c => c.classroom === globalClass && !c.isArchived);
         if (editingItem.type === 'homework') {
             return <HomeworkStudio initialData={editingItem.data} chapters={activeChaps} onClose={() => { setEditingItem(null); loadData(); }} />;
@@ -47,16 +40,33 @@ export default function ActivityStudio({ globalClass, teacherId }) {
         return <GameStudio initialData={editingItem.data} chapters={activeChaps} classFilter={globalClass} onClose={() => { setEditingItem(null); loadData(); }} />;
     }
 
+    const handleCreateChapter = async (subject) => {
+        setLoading(true);
+        try {
+            const res = await fetch('/api/chapters', { 
+                method:'POST', 
+                headers:{'Content-Type':'application/json'}, 
+                body: JSON.stringify({ 
+                    title: 'Nouveau Dossier', 
+                    subject, 
+                    classroom: globalClass, 
+                    teacherId 
+                }) 
+            });
+            if (res.ok) await loadData();
+        } catch (e) { console.error(e); }
+        setLoading(false);
+    };
+
     return (
         <div className="animate-in fade-in">
             <div className="flex justify-start gap-4 mb-8 bg-white p-4 rounded-[30px] border-2 border-slate-50 shadow-sm">
                 <button onClick={() => setEditingItem({ type: 'homework', data: null })} className="bg-orange-500 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:scale-105 transition-all">+ Nouveau Devoir</button>
                 <button onClick={() => setEditingItem({ type: 'game', data: null })} className="bg-purple-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:scale-105 transition-all">+ Nouveau Jeu</button>
-                <button onClick={loadData} className="ml-auto text-slate-300 hover:text-indigo-500 font-bold text-xs uppercase">🔄 Actualiser</button>
             </div>
 
             {loading ? (
-                <div className="text-center py-20 text-slate-300 font-black animate-pulse uppercase">Connexion à la base de données...</div>
+                <div className="text-center py-20 text-slate-300 font-black animate-pulse">Chargement...</div>
             ) : (
                 <ProfStudioFolder 
                     chapters={chapters}
@@ -77,18 +87,11 @@ export default function ActivityStudio({ globalClass, teacherId }) {
                         loadData();
                     }}
                     onDeleteChapter={async (id) => {
-                        if(!confirm("Supprimer le dossier complet ?")) return;
+                        if(!confirm("Supprimer le dossier ?")) return;
                         await fetch(`/api/chapters/${id}`, { method: 'DELETE' });
                         loadData();
                     }}
-                    onCreateChapter={async (subject) => {
-                        const res = await fetch('/api/chapters', { 
-                            method:'POST', 
-                            headers:{'Content-Type':'application/json'}, 
-                            body: JSON.stringify({ title: 'Nouveau Dossier', subject, classroom: globalClass, teacherId }) 
-                        });
-                        loadData();
-                    }}
+                    onCreateChapter={handleCreateChapter}
                 />
             )}
         </div>
