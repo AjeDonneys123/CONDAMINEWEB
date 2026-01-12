@@ -3,87 +3,111 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const DriveService = require('../../services/drive.service');
 
-// Arborescence Drive
+// Sécurité : On récupère les modèles explicitement
+const getModels = () => ({
+    Chapter: mongoose.model('Chapter'),
+    ScanSession: mongoose.model('ScanSession')
+});
+
 const getCondaPath = async (teacherName, classroom) => {
-    const condaRootId = await DriveService.getOrCreateFolder("CondaClasse", null);
-    const profId = await DriveService.getOrCreateFolder(teacherName, condaRootId);
-    let classFolderName = classroom || "Sans_Classe";
-    const classId = await DriveService.getOrCreateFolder(classFolderName, profId);
-    const worksId = await DriveService.getOrCreateFolder("1Travaux", classId);
-    const prodId = await DriveService.getOrCreateFolder("PRODUCTIONS", classId);
-    return { classId, worksId, prodId };
+    try {
+        const condaRootId = await DriveService.getOrCreateFolder("CondaClasse", null);
+        const teacherFolderId = await DriveService.getOrCreateFolder(teacherName, condaRootId);
+        let classFolderName = classroom || "Sans_Classe";
+        const classId = await DriveService.getOrCreateFolder(classFolderName, teacherFolderId);
+        const worksId = await DriveService.getOrCreateFolder("1Travaux", classId);
+        const prodId = await DriveService.getOrCreateFolder("PRODUCTIONS", classId);
+        return { classId, worksId, prodId };
+    } catch (e) {
+        console.error("❌ Drive Path Error:", e.message);
+        return { classId: null, worksId: null, prodId: null };
+    }
 };
 
-// --- CHAPITRES ---
+// --- ROUTES CHAPITRES ---
+
 router.post('/chapters', async (req, res) => {
     try {
+        const { Chapter } = getModels();
         const { _id, title, classroom } = req.body;
-        const Chapter = mongoose.model('Chapter');
-        const teacherName = "Jean Vuillet";
+        const teacherName = "Jean Vuillet"; 
 
         if (_id) {
-            console.log(`📝 Mise à jour chapitre ${_id}...`);
             const chap = await Chapter.findById(_id);
-            if (!chap) return res.status(404).json({ error: "Introuvable" });
+            if (!chap) return res.status(404).json({ error: "Chapitre non trouvé" });
 
+            // Update Drive si besoin
             if (chap.driveFolderId && title && title !== chap.title) {
                 await DriveService.renameFolder(chap.driveFolderId, title);
             }
 
             const updateData = { ...req.body };
-            delete updateData._id; // SÉCURITÉ : Ne jamais tenter d'updater l'ID
-
+            delete updateData._id; 
             const updated = await Chapter.findByIdAndUpdate(_id, updateData, { new: true });
             return res.json(updated);
         }
 
-        console.log(`🆕 Création nouveau chapitre: ${title}`);
         const { worksId } = await getCondaPath(teacherName, classroom);
-        const driveId = await DriveService.getOrCreateFolder(title || "Nouveau Dossier", worksId);
+        const driveId = worksId ? await DriveService.getOrCreateFolder(title || "Nouveau Dossier", worksId) : null;
         
         const newChap = await Chapter.create({ ...req.body, driveFolderId: driveId });
         res.json(newChap);
-    } catch (e) {
-        console.error("❌ Erreur /chapters:", e.message);
-        res.status(500).json({ error: e.message });
+    } catch (e) { 
+        console.error("❌ Error /chapters:", e.message);
+        res.status(500).json({ error: e.message }); 
     }
 });
 
 router.get('/chapters-all', async (req, res) => {
-    try {
-        const data = await mongoose.model('Chapter').find({}).sort({ _id: -1 });
-        res.json(data);
-    } catch (e) { res.status(500).json([]); }
+    try { 
+        const { Chapter } = getModels();
+        const list = await Chapter.find({}).sort({ _id: -1 });
+        res.json(list || []); 
+    } catch (e) { 
+        console.error("❌ Error GET /chapters-all:", e.message);
+        res.status(500).json([]); 
+    }
 });
 
 router.delete('/chapters/:id', async (req, res) => {
     try {
-        const chap = await mongoose.model('Chapter').findById(req.params.id);
+        const { Chapter } = getModels();
+        const chap = await Chapter.findById(req.params.id);
         if (chap && chap.driveFolderId) await DriveService.deleteFile(chap.driveFolderId);
-        await mongoose.model('Chapter').findByIdAndDelete(req.params.id);
+        await Chapter.findByIdAndDelete(req.params.id);
         res.json({ ok: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // --- SCAN SESSIONS ---
+
 router.get('/scan-sessions', async (req, res) => {
-    try {
-        const sessions = await mongoose.model('ScanSession').find({}).sort({ createdAt: -1 });
-        res.json(sessions);
+    try { 
+        const { ScanSession } = getModels();
+        const sessions = await ScanSession.find({}).sort({ createdAt: -1 });
+        res.json(sessions || []); 
     } catch (e) { res.status(500).json([]); }
 });
 
 router.post('/scan-sessions', async (req, res) => {
     try {
-        const session = await mongoose.model('ScanSession').create(req.body);
+        const { ScanSession } = getModels();
+        const session = await ScanSession.create(req.body);
         res.json(session);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.delete('/scan-sessions/:id', async (req, res) => {
+router.patch('/scan-sessions/:id/assign-chapter', async (req, res) => {
     try {
-        await mongoose.model('ScanSession').findByIdAndDelete(req.params.id);
-        res.json({ ok: true });
+        const { ScanSession, Chapter } = getModels();
+        const session = await ScanSession.findById(req.params.id);
+        const chapter = await Chapter.findById(req.body.chapterId);
+        if (session.driveFolderId && chapter.driveFolderId) {
+            await DriveService.moveFile(session.driveFolderId, chapter.driveFolderId);
+        }
+        session.chapterId = req.body.chapterId;
+        await session.save();
+        res.json(session);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
