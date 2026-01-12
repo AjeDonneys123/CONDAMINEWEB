@@ -92,11 +92,3 @@ function applyUpdate() {
 
 // Vérification toutes les secondes
 setInterval(applyUpdate, 1000);
-[[[ END: apply.js ]]]
-
-[[[ FILE: server/version.json ]]]
-{
-  "build": 129,
-  "message": "Upgrade apply.js to v11 (Sentinel Security + Auto-Garbage Collector)",
-  "timestamp": "12/01/2026 13:00:00"
-}
