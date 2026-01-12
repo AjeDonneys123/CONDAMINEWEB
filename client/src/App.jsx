@@ -11,17 +11,14 @@ export default function App() {
 
   // Reset function qui appelle le serveur
   const handleAckError = async () => {
-      // 1. Copie le texte pour l'IA
       await navigator.clipboard.writeText(`⚡_FIX_REQ_⚡ Le fichier ${sysStatus.file} est incomplet. Peux-tu me le renvoyer en entier s'il te plait ?`);
-      // 2. Dit au serveur de retirer l'alerte
       await fetch('/api/reset-status', { method: 'POST' });
-      // 3. Met à jour localement tout de suite pour la réactivité
       setSysStatus({ status: 'OK' });
   };
 
   useEffect(() => {
     window.onerror = async (msg, url, line, col, error) => {
-        if (!user || user.id !== 'prof') return;
+        if (!user || user.role !== 'prof') return; // Seul le prof voit les logs
         console.error(`BUG DÉTECTÉ: ${msg}`);
         await fetch('/api/auto-repair', {
             method: 'POST',
@@ -37,7 +34,7 @@ export default function App() {
             .then(r => r.json())
             .then(data => setSysStatus(data))
             .catch(() => {});
-    }, 1000); // Check toutes les secondes
+    }, 1000); 
     return () => clearInterval(interval);
   }, []);
 
@@ -53,9 +50,11 @@ export default function App() {
 
   const handleLogout = () => { localStorage.clear(); setUser(null); };
 
+  // CORRECTION ICI : On vérifie le ROLE ou l'ID spécial
+  const isProf = user && (user.id === 'prof' || user.role === 'prof');
+
   return (
     <div className="app-wrapper">
-      {/* ALERTE SYSTÈME SÉCURISÉE */}
       {sysStatus.status === 'TRUNCATED' && (
           <div className="system-alert-bar">
               <span>⚠️ ALERTE : Le fichier <u>{sysStatus.file}</u> a été coupé !</span>
@@ -68,13 +67,13 @@ export default function App() {
       {!user ? (
         <Login onLoginSuccess={setUser} />
       ) : (
-        user.id === 'prof' ? (
+        isProf ? (
           <>
             <ProfPage user={user} onLogout={handleLogout} />
             <ConsoleHUD />
           </>
         ) : (
-          <ElevePage user={user} onLogout={handleLogout} onBackToProf={() => setUser({ id: "prof", firstName: "Jean", lastName: "Vuillet", classroom: "Professeur" })} />
+          <ElevePage user={user} onLogout={handleLogout} onBackToProf={() => setUser({ id: "prof", firstName: "Jean", lastName: "Vuillet", classroom: "Professeur", role: "prof" })} />
         )
       )}
     </div>
