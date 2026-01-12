@@ -1,5 +1,5 @@
 {
-  "error": "Fichier coupé détecté",
-  "truncatedFile": "client/src/test_broken.js",
-  "timestamp": 1768245303414
+  "status": "OK",
+  "file": null,
+  "timestamp": 1768245573728
 }
