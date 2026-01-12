@@ -11,32 +11,22 @@ export default function ScansStudio({ globalClass }) {
 
     const loadData = async () => {
         try {
-            // On fait les appels séquentiellement pour voir lequel plante dans la console
-            const sRes = await fetch('/api/scan-sessions').then(r => {
-                if (!r.ok) throw new Error(`Sessions: ${r.statusText}`);
-                return r.json();
-            });
+            const sRes = await fetch('/api/scan-sessions').then(r => r.ok ? r.json() : []);
             setSessions(Array.isArray(sRes) ? sRes : []);
 
-            const cRes = await fetch('/api/chapters-all').then(r => {
-                if (!r.ok) throw new Error(`Chapters: ${r.statusText}`);
-                return r.json();
-            });
+            const cRes = await fetch('/api/chapters-all').then(r => r.ok ? r.json() : []);
             setChapters(Array.isArray(cRes) ? cRes : []);
-
-        } catch (e) { 
-            console.error("ERREUR CHARGEMENT SCANS:", e); 
-        }
+        } catch (e) { console.error("ERREUR CHARGEMENT SCANS:", e); }
     };
 
     useEffect(() => { loadData(); }, []);
 
     // --- FONCTION DE SYNCHRO DRIVE ---
     const syncDrive = async () => {
-        if(!confirm("Créer les dossiers 1Travaux manquants sur le Drive ?")) return;
+        if(!confirm("Créer les dossiers 1Travaux manquants sur le Drive pour " + globalClass + " ?")) return;
         setLoading(true);
         await fetch('/api/init-all-folders');
-        alert("Synchro Drive terminée !");
+        alert("Dossiers Drive vérifiés/créés !");
         setLoading(false);
     };
 
@@ -87,10 +77,14 @@ export default function ScansStudio({ globalClass }) {
 
     return (
         <div className="space-y-4 animate-in fade-in">
-            {/* BARRE DE CRÉATION */}
+            {/* BARRE DE CRÉATION + BOUTON SYNCHRO */}
             <div className="bg-white p-4 rounded-[30px] border-2 border-indigo-100 shadow-sm space-y-3">
                 <div className="flex justify-between items-center px-2">
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Productions {globalClass}</span>
+                    {/* LE BOUTON EST ICI 👇 */}
+                    <button onClick={syncDrive} disabled={loading} className="text-[9px] font-black text-indigo-400 border border-indigo-50 px-3 py-1 rounded-lg hover:bg-indigo-50 transition-all cursor-pointer">
+                        {loading ? '...' : '🔄 SYNCHRO DRIVE'}
+                    </button>
                 </div>
                 <div className="flex items-center gap-3">
                     <input className="flex-1 p-3 bg-slate-50 rounded-2xl outline-none font-bold" placeholder={`Nouvelle production pour ${globalClass}...`} value={newTitle} onChange={e=>setNewTitle(e.target.value)} />
@@ -150,6 +144,7 @@ function PilotArea({ currentSession, tab, onClose, onRefresh }) {
         if (videoRef.current) videoRef.current.srcObject = stream;
     };
     useEffect(() => { if (tab === 'quest' || tab === 'scan') startCamera(); return () => videoRef.current?.srcObject?.getTracks().forEach(t => t.stop()); }, [tab]);
+    
     const takePhoto = async () => {
         if (!videoRef.current) return;
         const canvas = document.createElement('canvas');

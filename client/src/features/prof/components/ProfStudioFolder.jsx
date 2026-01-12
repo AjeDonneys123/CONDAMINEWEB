@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 export default function ProfStudioFolder({ 
     items, chapters, classFilter, 
@@ -8,10 +8,20 @@ export default function ProfStudioFolder({
     const [editingId, setEditingId] = useState(null);
     const [tempTitle, setTempTitle] = useState("");
     const [allSessions, setAllSessions] = useState([]);
+    const [showAll, setShowAll] = useState(false); // Pour voir les dossiers "perdus" (mauvaise classe)
+    const inputRef = useRef(null);
 
     useEffect(() => {
         fetch('/api/scan-sessions').then(r => r.json()).then(data => setAllSessions(Array.isArray(data) ? data : []));
     }, [items]);
+
+    // Auto-focus quand on passe en mode édition
+    useEffect(() => {
+        if (editingId && inputRef.current) {
+            inputRef.current.focus();
+            inputRef.current.select();
+        }
+    }, [editingId]);
 
     const getSubjectInfo = (sub) => {
         const s = (sub || "").toUpperCase();
@@ -21,105 +31,131 @@ export default function ProfStudioFolder({
         return { code: '?', label: 'Autre', color: 'text-slate-400', border: 'border-slate-300', bg: 'bg-slate-50' };
     };
 
-    // --- SECTION ARCHIVES ---
-    const renderArchiveSection = () => {
-        const archived = chapters.filter(c => c.isArchived);
-        if (archived.length === 0) return null;
-
-        return (
-            <div className="mb-10 p-6 bg-slate-900 rounded-[40px] border-4 border-slate-800 shadow-xl">
-                <p className="text-center text-slate-500 font-black text-[9px] uppercase mb-6 tracking-widest">📂 Archives Classées</p>
-                <div className="grid grid-cols-3 gap-4">
-                    {['H', 'G', 'E'].map(sub => {
-                        const info = getSubjectInfo(sub);
-                        const list = archived.filter(c => c.subject === sub);
-                        return (
-                            <div key={sub} className="bg-slate-800/40 p-4 rounded-3xl border border-slate-700">
-                                <h4 className={`text-center font-black text-[9px] uppercase mb-3 ${info.color}`}>{info.label}</h4>
-                                <div className="space-y-2">
-                                    {list.map(c => (
-                                        <div key={c._id} className="bg-slate-700/40 p-2 rounded-xl flex justify-between items-center border border-slate-600/30">
-                                            <span className="text-[10px] font-bold text-slate-300 truncate flex-1 pr-2">{c.title}</span>
-                                            <button onClick={() => onArchive(c._id, false)} className="text-blue-400 font-bold">⬆️</button>
-                                        </div>
-                                    ))}
-                                    {list.length === 0 && <p className="text-center text-[8px] text-slate-600 font-bold py-2">Vide</p>}
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-            </div>
-        );
+    const handleCreate = async (subject) => {
+        const newChap = await onCreateChapter(subject);
+        if (newChap && newChap._id) {
+            setEditingId(newChap._id);
+            setTempTitle(newChap.title);
+            // On ouvre le dossier automatiquement
+            setOpenChaps(prev => ({...prev, [newChap._id]: true}));
+        }
     };
+
+    const handleRenameSubmit = () => {
+        if (editingId && tempTitle.trim()) {
+            onRename(editingId, tempTitle);
+        }
+        setEditingId(null);
+    };
+
+    // FILTRAGE
+    const normalize = (c) => c?.toString().toUpperCase().replace('E', '') || "";
+    
+    // Dossiers de la classe active
+    const activeChapters = chapters.filter(c => normalize(c.classroom) === normalize(classFilter) && !c.isArchived);
+    
+    // Dossiers "Orphelins" ou d'autres classes (pour le mode "Tout voir")
+    const otherChapters = chapters.filter(c => normalize(c.classroom) !== normalize(classFilter) && !c.isArchived);
+
+    const displayChapters = showAll ? [...activeChapters, ...otherChapters] : activeChapters;
 
     return (
         <div className="max-w-4xl mx-auto space-y-6">
-            {/* 1. LES ARCHIVES (En haut) */}
-            {renderArchiveSection()}
-
-            {/* 2. BOUTONS DE CRÉATION */}
-            <div className="grid grid-cols-3 gap-4 mb-8">
+            
+            {/* BOUTONS DE CRÉATION */}
+            <div className="grid grid-cols-3 gap-4 mb-4">
                 {['H', 'G', 'E'].map(s => (
-                    <button key={s} onClick={() => onCreateChapter(s)} className={`p-4 bg-white border-2 border-dashed rounded-3xl font-black uppercase text-[10px] hover:bg-slate-50 transition-all ${getSubjectInfo(s).color} ${getSubjectInfo(s).border}`}>
-                        + Dossier {getSubjectInfo(s).label}
+                    <button key={s} onClick={() => handleCreate(s)} className={`p-4 bg-white border-2 border-dashed rounded-3xl font-black uppercase text-[10px] hover:scale-105 transition-all shadow-sm ${getSubjectInfo(s).color} ${getSubjectInfo(s).border}`}>
+                        + Créer Dossier {getSubjectInfo(s).label}
                     </button>
                 ))}
             </div>
 
-            {/* 3. LISTE ACTIVE */}
+            {/* MESSAGE DEBUG / TOUT VOIR */}
+            {otherChapters.length > 0 && (
+                <div className="text-center mb-4">
+                    <span className="text-xs text-slate-400 mr-2">{otherChapters.length} dossiers masqués (autres classes)</span>
+                    <button onClick={() => setShowAll(!showAll)} className="text-[10px] font-bold text-indigo-500 underline uppercase">
+                        {showAll ? "Masquer les autres" : "Les voir quand même"}
+                    </button>
+                </div>
+            )}
+
+            {/* LISTE ACTIVE */}
             <div className="space-y-3">
-                {chapters.filter(c => !c.isArchived).map(chap => {
+                {displayChapters.map(chap => {
                     const info = getSubjectInfo(chap.subject);
                     const isOpen = !!openChaps[chap._id];
+                    const isEditing = editingId === chap._id;
                     const chapItems = (items || []).filter(it => String(it.chapterId) === String(chap._id));
                     const chapSessions = allSessions.filter(s => String(s.chapterId) === String(chap._id));
 
+                    // Si on affiche "Tout", on montre à quelle classe ça appartient
+                    const showClassBadge = showAll && normalize(chap.classroom) !== normalize(classFilter);
+
                     return (
                         <div key={chap._id} className={`bg-white rounded-[35px] border-2 shadow-sm overflow-hidden transition-all ${info.border}`}>
-                            <div className="p-4 flex items-center justify-between">
+                            <div className="p-4 flex items-center justify-between bg-white">
                                 <div className="flex items-center gap-4 flex-1">
                                     <div 
-                                        className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs cursor-pointer ${isOpen ? 'bg-indigo-600 text-white' : info.bg + ' ' + info.color}`}
-                                        onClick={() => setOpenChaps({...openChaps, [chap._id]: !isOpen})}
+                                        className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-sm cursor-pointer transition-colors ${isOpen ? 'bg-indigo-600 text-white' : info.bg + ' ' + info.color}`}
+                                        onClick={() => !isEditing && setOpenChaps({...openChaps, [chap._id]: !isOpen})}
                                     >
                                         {isOpen ? '▲' : info.code}
                                     </div>
-                                    {editingId === chap._id ? (
-                                        <input autoFocus className="text-lg font-bold outline-none bg-transparent border-b-2 border-indigo-400" value={tempTitle} onChange={e => setTempTitle(e.target.value)} onBlur={() => { onRename(chap._id, tempTitle); setEditingId(null); }} onKeyDown={e => e.key === 'Enter' && e.target.blur()} />
+                                    
+                                    {isEditing ? (
+                                        <div className="flex-1 flex gap-2 animate-in fade-in">
+                                            <input 
+                                                ref={inputRef}
+                                                className="text-lg font-bold outline-none bg-slate-50 border-b-2 border-indigo-500 w-full px-2 py-1 rounded" 
+                                                value={tempTitle} 
+                                                onChange={e => setTempTitle(e.target.value)} 
+                                                onBlur={handleRenameSubmit} 
+                                                onKeyDown={e => e.key === 'Enter' && handleRenameSubmit()} 
+                                            />
+                                            <button onMouseDown={handleRenameSubmit} className="bg-green-500 text-white px-3 rounded-lg font-bold">OK</button>
+                                        </div>
                                     ) : (
-                                        <b className="text-slate-700 text-lg cursor-pointer" onClick={() => setOpenChaps({...openChaps, [chap._id]: !isOpen})}>{chap.title || "Sans titre"}</b>
+                                        <div className="flex flex-col cursor-pointer" onClick={() => setOpenChaps({...openChaps, [chap._id]: !isOpen})}>
+                                            <span className="text-xl font-black text-slate-700 hover:text-indigo-600 transition-colors">{chap.title || "Nouveau Dossier"}</span>
+                                            {showClassBadge && <span className="text-[9px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded w-fit font-bold">Classe : {chap.classroom}</span>}
+                                        </div>
                                     )}
                                 </div>
-                                <div className="flex items-center gap-2">
-                                    <button onClick={() => { setEditingId(chap._id); setTempTitle(chap.title); }} className="p-2 opacity-30 hover:opacity-100">✏️</button>
-                                    <button onClick={() => onArchive(chap._id, true)} className="px-3 py-1.5 bg-slate-50 text-slate-400 rounded-lg font-black text-[9px] uppercase hover:bg-slate-800 hover:text-white transition-all">Archiver</button>
-                                    <button onClick={() => onDeleteChapter(chap._id)} className="p-2 text-red-200 hover:text-red-500">✕</button>
+
+                                <div className="flex items-center gap-1">
+                                    {!isEditing && (
+                                        <button onClick={() => { setEditingId(chap._id); setTempTitle(chap.title); }} className="w-10 h-10 flex items-center justify-center text-xl bg-slate-50 rounded-full hover:bg-yellow-100 hover:text-yellow-600 transition-all" title="Renommer">✏️</button>
+                                    )}
+                                    <button onClick={() => onArchive(chap._id, true)} className="w-10 h-10 flex items-center justify-center bg-slate-50 text-slate-400 rounded-full hover:bg-slate-800 hover:text-white transition-all font-bold" title="Archiver">📦</button>
+                                    <button onClick={() => onDeleteChapter(chap._id)} className="w-10 h-10 flex items-center justify-center bg-slate-50 text-red-300 rounded-full hover:bg-red-500 hover:text-white transition-all font-bold" title="Supprimer">🗑️</button>
                                 </div>
                             </div>
+
                             {isOpen && (
                                 <div className="p-4 bg-slate-50/50 border-t-2 border-dashed border-slate-100 space-y-2">
                                     {chapItems.map(it => (
-                                        <div key={it._id} className="bg-white p-4 rounded-2xl flex justify-between items-center shadow-sm">
-                                            <div className="flex items-center gap-3"><span className="text-xl">{it.actType === 'game' ? '🕹️' : '📄'}</span><b className="text-slate-700 text-sm">{it.title}</b></div>
+                                        <div key={it._id} className="bg-white p-3 px-5 rounded-2xl flex justify-between items-center shadow-sm border hover:border-indigo-200 transition-colors">
+                                            <div className="flex items-center gap-3"><span className="text-lg">{it.actType === 'game' ? '🕹️' : '📄'}</span><b className="text-slate-700 text-sm">{it.title}</b></div>
                                             <div className="flex gap-2">
-                                                <button onClick={() => onEditItem(it)} className="px-3 py-1 bg-slate-50 text-slate-400 rounded-lg font-bold text-[9px] uppercase">Editer</button>
-                                                <button onClick={() => onDeleteItem(it._id, it.actType)} className="p-1 text-red-200">✕</button>
+                                                <button onClick={() => onEditItem(it)} className="px-3 py-1 bg-indigo-50 text-indigo-500 rounded-lg font-bold text-[9px] uppercase hover:bg-indigo-100">Modifier</button>
+                                                <button onClick={() => onDeleteItem(it._id, it.actType)} className="w-6 h-6 flex items-center justify-center text-red-300 hover:text-red-500">✕</button>
                                             </div>
                                         </div>
                                     ))}
-                                    {chapSessions.map(sess => (
-                                        <div key={sess._id} className="bg-emerald-50 p-4 rounded-2xl flex justify-between items-center shadow-sm border border-emerald-100">
-                                            <div className="flex items-center gap-3"><span className="text-xl">📸</span><div className="flex flex-col"><b className="text-emerald-900 text-sm">{sess.title}</b><span className="text-[9px] font-black text-emerald-600 uppercase">Production ({sess.copyUrls?.length || 0} copies)</span></div></div>
-                                            <button onClick={() => onDeleteItem(sess._id, 'scan')} className="p-1 text-emerald-300 hover:text-red-500">✕</button>
-                                        </div>
-                                    ))}
-                                    {chapItems.length === 0 && chapSessions.length === 0 && <p className="text-center py-4 text-slate-300 italic text-xs">Dossier vide</p>}
+                                    {chapItems.length === 0 && <p className="text-center py-4 text-slate-300 italic text-xs">Aucune activité dans ce dossier.</p>}
                                 </div>
                             )}
                         </div>
                     );
                 })}
+                {displayChapters.length === 0 && (
+                    <div className="text-center py-10 border-2 border-dashed border-slate-200 rounded-[30px] bg-slate-50">
+                        <p className="text-slate-400 font-bold">Aucun dossier pour {globalClass}</p>
+                        <p className="text-xs text-slate-300 mt-1">Cliquez sur un bouton ci-dessus pour commencer</p>
+                    </div>
+                )}
             </div>
         </div>
     );
