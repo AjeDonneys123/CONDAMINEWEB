@@ -1,5 +1,5 @@
 {
-  "build": 128,
-  "message": "Preserve Core Logic (Games/Hw/Photos/Folders) + Fix Model Loading + Deep Clean",
-  "timestamp": "12/01/2026 13:10:00"
+  "build": 129,
+  "message": "Upgrade apply.js to v11 (Sentinel Security + Auto-Garbage Collector)",
+  "timestamp": "12/01/2026 13:00:00"
 }
