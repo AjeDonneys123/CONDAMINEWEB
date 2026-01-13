@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './ScansStudio.css';
 
-export default function ScansStudio({ globalClass }) {
+export default function ScansStudio({ globalClass, user }) {
     const [sessions, setSessions] = useState([]);
     const [chapters, setChapters] = useState([]);
     const [openId, setOpenId] = useState(null); 
@@ -53,23 +53,34 @@ export default function ScansStudio({ globalClass }) {
     };
 
     const handleAssign = async (sessionId, chapterId) => {
+        setLoading(true);
         await fetch(`/api/scan-sessions/${sessionId}/assign-chapter`, {
             method: 'PATCH',
             headers: {'Content-Type':'application/json'},
             body: JSON.stringify({ chapterId })
         });
+        setShowFolderPicker(null);
         setActiveMode('upload');
         await loadData();
+        setLoading(false);
     };
 
     const normalize = (c) => c?.toString().toUpperCase().replace('E', '') || "";
     const filteredSessions = sessions.filter(s => normalize(s.classroom) === normalize(globalClass));
-    const availableChapters = chapters.filter(c => normalize(c.classroom) === normalize(globalClass) && !c.isArchived);
+    
+    // FILTRE : Uniquement les chapitres de la classe courante ET non archivés
+    const availableChapters = chapters.filter(c => 
+        normalize(c.classroom) === normalize(globalClass) && 
+        c.isArchived === false
+    );
+
+    // Groupement des chapitres par section pour le picker
+    const sections = user?.subjectSections || [];
 
     return (
         <div className="space-y-4 animate-in fade-in">
             <div className="bg-white p-3 rounded-[22px] border-2 border-slate-50 flex gap-2 shadow-sm">
-                <input className="flex-1 px-4 bg-slate-50 rounded-xl outline-none font-bold text-sm" placeholder="Nouveau titre..." value={newTitle} onChange={e=>setNewTitle(e.target.value)} />
+                <input className="flex-1 px-4 bg-slate-50 rounded-xl outline-none font-bold text-sm" placeholder="Nouvelle production..." value={newTitle} onChange={e=>setNewTitle(e.target.value)} />
                 <button onClick={createSession} disabled={loading} className="px-6 bg-indigo-600 text-white rounded-xl font-black uppercase text-[10px]">Créer</button>
             </div>
 
@@ -81,7 +92,7 @@ export default function ScansStudio({ globalClass }) {
                     return (
                         <div key={s._id} className={`bg-white rounded-[25px] border-2 transition-all ${isOpen ? 'border-indigo-500 shadow-lg' : 'border-slate-50'}`}>
                             
-                            <div className="p-2 px-3 flex items-center justify-between gap-1 overflow-x-auto no-scrollbar">
+                            <div className="p-2 px-3 flex items-center justify-between gap-1">
                                 <div className="flex-1 min-w-[80px] cursor-pointer" onClick={() => setOpenId(isOpen ? null : s._id)}>
                                     <h3 className="font-black text-slate-700 text-[10px] truncate uppercase">{s.title || "Titre"}</h3>
                                     {assigned && <div className="text-[7px] font-black text-emerald-500 uppercase truncate">📁 {assigned.title}</div>}
@@ -90,7 +101,7 @@ export default function ScansStudio({ globalClass }) {
                                 <div className="flex items-center gap-1">
                                     <button onClick={() => { setOpenId(s._id); setActiveMode('upload'); }} className={`tool-btn ${isOpen && activeMode === 'upload' ? 'active-upload' : ''}`}>SNAP</button>
                                     <button onClick={() => { setOpenId(s._id); setActiveMode('files'); }} className={`tool-btn ${isOpen && activeMode === 'files' ? 'active-files' : ''}`}>FILES</button>
-                                    <button onClick={() => { setOpenId(s._id); setActiveMode('class'); }} className={`tool-btn ${isOpen && activeMode === 'class' ? 'active-class' : ''}`}>CLASS</button>
+                                    <button onClick={() => { setOpenId(s._id); setShowFolderPicker(s._id); setActiveMode('class'); }} className={`tool-btn ${isOpen && activeMode === 'class' ? 'active-class' : ''}`}>CLASS</button>
                                     <button onClick={() => { setOpenId(s._id); setActiveMode('ia'); }} className={`tool-btn ${isOpen && activeMode === 'ia' ? 'active-ia' : ''}`}>IA</button>
                                     <button onClick={async () => { if(confirm("Supprimer ?")) { await fetch(`/api/scan-sessions/${s._id}`, {method:'DELETE'}); await loadData(); } }} className="tool-btn-danger">✕</button>
                                 </div>
@@ -101,11 +112,25 @@ export default function ScansStudio({ globalClass }) {
                                     
                                     {activeMode === 'class' ? (
                                         <div className="animate-in zoom-in p-2">
-                                            <p className="text-[9px] font-black text-indigo-400 uppercase mb-3">Dossiers actifs {globalClass} :</p>
-                                            <div className="flex flex-wrap gap-2">
-                                                {availableChapters.map(c => (
-                                                    <button key={c._id} onClick={() => handleAssign(s._id, c._id)} className="px-4 py-2 bg-white border-2 border-indigo-100 rounded-xl text-[10px] font-bold text-slate-600">📁 {c.title}</button>
-                                                ))}
+                                            <p className="text-[9px] font-black text-indigo-400 uppercase mb-4">Classer dans un dossier actif ({globalClass}) :</p>
+                                            <div className="space-y-4">
+                                                {sections.map(sec => {
+                                                    const chaps = availableChapters.filter(c => c.subject === sec.name);
+                                                    if (chaps.length === 0) return null;
+                                                    return (
+                                                        <div key={sec.name}>
+                                                            <div className="text-[8px] font-black uppercase mb-2 px-2" style={{ color: sec.color }}>{sec.name}</div>
+                                                            <div className="flex flex-wrap gap-2">
+                                                                {chaps.map(c => (
+                                                                    <button key={c._id} onClick={() => handleAssign(s._id, c._id)} className="px-3 py-2 bg-white border-2 border-slate-100 rounded-xl text-[10px] font-bold text-slate-600 hover:border-indigo-500">
+                                                                        📁 {c.title}
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                                {availableChapters.length === 0 && <p className="text-[10px] font-bold text-slate-300 italic text-center py-4">Aucun dossier de cours actif pour cette classe.</p>}
                                             </div>
                                         </div>
                                     ) : (
@@ -125,10 +150,10 @@ export default function ScansStudio({ globalClass }) {
                                                             {driveFiles.list.map(f => (
                                                                 <a key={f.id} href={f.webViewLink} target="_blank" rel="noreferrer" className="flex flex-col items-center">
                                                                     <img src={f.thumbnailLink} className="w-full aspect-[3/4] object-cover rounded-lg border shadow-sm" alt="p" />
-                                                                    <span className="text-[6px] font-bold text-slate-400 mt-1 truncate w-full text-center">{f.name}</span>
+                                                                    <span className="text-[6px] font-bold text-slate-400 mt-1 truncate w-full text-center px-1">{f.name}</span>
                                                                 </a>
                                                             ))}
-                                                            {driveFiles.list.length === 0 && <p className="col-span-full text-center py-10 text-[9px] font-black text-slate-300 uppercase italic">Dossier vide</p>}
+                                                            {driveFiles.list.length === 0 && <p className="col-span-full text-center py-10 text-[9px] font-black text-slate-300 uppercase">Dossier vide</p>}
                                                         </div>
                                                     )}
                                                 </div>
@@ -186,18 +211,18 @@ function PilotSnap({ session, type, onRefresh }) {
 
     return (
         <div className="flex flex-col gap-4 animate-in fade-in">
-            <div className="relative aspect-[3/4] max-xs mx-auto bg-black rounded-[25px] overflow-hidden border-4 border-white shadow-md">
+            <div className="relative aspect-[3/4] max-w-xs mx-auto bg-black rounded-[25px] overflow-hidden border-4 border-white shadow-md">
                 <video ref={videoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
                 {flash && <div className="absolute inset-0 bg-white z-50"></div>}
                 <button onClick={takeSnap} disabled={capturing} className={`absolute bottom-4 left-1/2 -translate-x-1/2 w-14 h-14 rounded-full border-4 border-white/30 shadow-xl ${capturing ? 'bg-red-500 animate-pulse' : 'bg-white'}`} />
                 <div className={`absolute top-3 right-3 px-3 py-1 rounded-full text-[7px] font-black text-white uppercase ${type === 'subject' ? 'bg-orange-500' : 'bg-indigo-600'}`}>
-                    {type === 'subject' ? 'SUJET' : 'COPIE'}
+                    MODE {type === 'subject' ? 'SUJET' : 'COPIE'}
                 </div>
             </div>
             <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar px-1">
                 {currentPhotos?.map((id, i) => (
                     <div key={id} className="relative min-w-[55px] h-[75px] bg-slate-200 rounded-lg overflow-hidden border border-white shadow-sm flex-shrink-0">
-                        <img src={`https://drive.google.com/thumbnail?id=${id}&sz=w200`} className="w-full h-full object-cover" alt="p" />
+                        <img src={`https://drive.google.com/thumbnail?id=${id}&sz=w200`} className="w-full h-full object-cover" />
                         <div className="absolute top-0.5 left-0.5 bg-black/50 text-white text-[5px] font-black px-1 rounded-sm">{i+1}</div>
                     </div>
                 ))}

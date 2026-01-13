@@ -1,6 +1,6 @@
 {
-  "version": "1.3.8",
-  "build": 169,
-  "description": "Lock User Story #10: Full Cleanup on Delete",
-  "timestamp": "2026-01-13T22:02:13.193Z"
+  "version": "1.3.9",
+  "build": 170,
+  "description": "Finalized Classify: Non-archived filter + Physical Drive move (US #9)",
+  "timestamp": "2026-01-13T23:23:36.718Z"
 }
