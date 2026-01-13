@@ -3,13 +3,13 @@
   "version": "1.0.0",
   "scripts": {
     "start": "node server/server.js",
-    "server-dev": "nodemon --ignore 'server/version.json' --ignore 'update.txt' --ignore 'history.txt' server/server.js",
+    "server-dev": "nodemon --ignore 'server/version.json' --ignore 'update.txt' --ignore 'apply_status.json' server/server.js",
     "client": "npm run dev --prefix client",
     "apply": "node apply.js",
     "git-auto": "node git-auto.js",
     "magic": "node magic-paste.js",
-    "build": "npm install && npm install --prefix client && npm run build --prefix client",
-    "dev": "node apply.js & node git-auto.js & npm run server-dev & npm run client"
+    "clean": "node cleanup.js",
+    "dev": "node apply.js & node magic-paste.js & node git-auto.js & npm run server-dev & npm run client"
   },
   "dependencies": {
     "@google/generative-ai": "^0.1.3",

@@ -1,6 +1,6 @@
 {
-  "version": "1.2.5",
-  "build": 157,
-  "description": "Restore Chapter Creation/Deletion + Locked Files Compliance",
-  "timestamp": "2026-01-13T20:28:31.673Z"
+  "version": "1.2.8",
+  "build": 159,
+  "description": "Added cleanup utility script",
+  "timestamp": "2026-01-13T20:32:05.557Z"
 }
