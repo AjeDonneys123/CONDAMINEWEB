@@ -1,6 +1,6 @@
 {
-  "version": "1.2.2",
-  "build": 153,
-  "description": "Fix Mobile Sync Sections + High Visibility Delete Buttons",
-  "timestamp": "2026-01-13T17:48:31.182Z"
+  "version": "1.2.3",
+  "build": 154,
+  "description": "Fixed Scans Toolbar + Active Folder Filter + IA Correction Logic",
+  "timestamp": "2026-01-13T17:53:03.861Z"
 }

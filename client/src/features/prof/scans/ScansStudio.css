@@ -1,7 +1,5 @@
-/* --- UI SCANS MOBILE REFACTOR --- */
-
 .tool-btn {
-    padding: 0.5rem 0.7rem;
+    padding: 0.4rem 0.6rem;
     border-radius: 0.8rem;
     font-size: 8px;
     font-weight: 900;
@@ -11,48 +9,31 @@
     border: 1px solid #e2e8f0;
     cursor: pointer;
     transition: all 0.2s;
-    white-space: nowrap;
 }
 
-.active-upload { 
-    background: #f97316 !important; 
-    color: white !important; 
-    border-color: #f97316 !important; 
-    box-shadow: 0 4px 10px rgba(249, 115, 22, 0.2); 
+.tool-btn-danger {
+    padding: 0.4rem 0.8rem;
+    background: #fff1f2;
+    color: #ef4444;
+    border: 1px solid #fee2e2;
+    border-radius: 0.8rem;
+    font-weight: 900;
+    cursor: pointer;
 }
 
-.active-files { 
-    background: #4f46e5 !important; 
-    color: white !important; 
-    border-color: #4f46e5 !important; 
-    box-shadow: 0 4px 10px rgba(79, 70, 229, 0.2); 
-}
+.active-upload { background: #f97316 !important; color: white !important; border-color: #f97316 !important; }
+.active-files { background: #4f46e5 !important; color: white !important; border-color: #4f46e5 !important; }
+.active-class { background: #6366f1 !important; color: white !important; border-color: #6366f1 !important; }
+.active-ia { background: #10b981 !important; color: white !important; border-color: #10b981 !important; }
 
 .sub-tab {
-    flex: 1;
-    padding: 0.6rem;
-    border-radius: 0.8rem;
-    font-size: 8px;
-    font-weight: 900;
-    color: #94a3b8;
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    transition: all 0.2s;
+    flex: 1; padding: 0.6rem; border-radius: 0.8rem;
+    font-size: 8px; font-weight: 900; color: #94a3b8;
+    background: transparent; border: none; cursor: pointer; transition: all 0.2s;
 }
+.sub-tab.active { background: white; color: #1e293b; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
 
-.sub-tab.active {
-    background: white;
-    color: #1e293b;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-}
-
-.active-ia-tab {
-    background: #10b981 !important;
-    color: white !important;
-    box-shadow: 0 4px 10px rgba(16, 185, 129, 0.2);
-}
-
+.no-scrollbar::-webkit-scrollbar { display: none; }
 .custom-scrollbar::-webkit-scrollbar { height: 3px; }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
 
