@@ -30,37 +30,50 @@ export default function ActivityStudio({ globalClass, user }) {
 
     useEffect(() => { loadData(); }, [globalClass]);
 
-    // RENOMMAGE FLUIDE (User Story #7)
-    const handleRenameChapter = async (id, title) => {
-        // 1. Mise à jour "Optimiste" de l'interface (immédiat)
-        setChapters(prev => prev.map(c => c._id === id ? { ...c, title } : c));
+    // CRÉATION INSTANTANÉE (Optimistic UI)
+    const handleCreateChapter = async (subjectName, title) => {
+        // ID temporaire pour l'affichage immédiat
+        const tempId = "temp-" + Date.now();
+        const newTempChapter = {
+            _id: tempId,
+            title: title || "Nouveau Dossier",
+            subject: subjectName,
+            classroom: globalClass,
+            isArchived: false
+        };
+
+        // 1. Ajout immédiat à la liste (UI ultra réactive)
+        setChapters(prev => [newTempChapter, ...prev]);
 
         try {
             const res = await fetch('/api/chapters', { 
                 method:'POST', 
                 headers:{'Content-Type':'application/json'}, 
-                body:JSON.stringify({_id:id, title})
+                body: JSON.stringify({ title, subject: subjectName, classroom: globalClass, teacherId: user?.id || user?._id }) 
             });
-            // Si erreur serveur, on recharge les vraies données
-            if (!res.ok) loadData();
-        } catch (e) { 
+            const finalData = await res.json();
+            
+            // 2. Remplacer l'item temporaire par le vrai item (avec son vrai ID BDD)
+            setChapters(prev => prev.map(c => c._id === tempId ? finalData : c));
+        } catch (e) {
             console.error(e);
-            loadData(); 
+            loadData(); // En cas d'erreur, on reset proprement
         }
     };
 
-    const handleCreateChapter = async (subjectName, title) => {
-        const res = await fetch('/api/chapters', { 
-            method:'POST', 
-            headers:{'Content-Type':'application/json'}, 
-            body: JSON.stringify({ title, subject: subjectName, classroom: globalClass, teacherId: user?.id || user?._id }) 
-        });
-        if (res.ok) loadData();
+    const handleRenameChapter = async (id, title) => {
+        setChapters(prev => prev.map(c => c._id === id ? { ...c, title } : c));
+        try {
+            await fetch('/api/chapters', { 
+                method:'POST', 
+                headers:{'Content-Type':'application/json'}, 
+                body:JSON.stringify({_id:id, title})
+            });
+        } catch (e) { loadData(); }
     };
 
     const handleDeleteChapter = async (id) => {
         if (!confirm("Supprimer ce dossier ?")) return;
-        // Update optimiste
         setChapters(prev => prev.filter(c => c._id !== id));
         await fetch(`/api/chapters/${id}`, { method: 'DELETE' });
     };
@@ -79,19 +92,20 @@ export default function ActivityStudio({ globalClass, user }) {
                 <button onClick={() => setEditingItem({ type: 'game', data: null })} className="bg-purple-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:scale-105 transition-transform"> Nouveau Jeu</button>
             </div>
 
-            {loading ? <div className="text-center py-20 text-slate-300 font-black animate-pulse uppercase italic">Récupération des dossiers...</div> : (
+            {loading && chapters.length === 0 ? <div className="text-center py-20 text-slate-300 font-black animate-pulse uppercase italic">Chargement...</div> : (
                 <ProfStudioFolder 
                     user={user} chapters={chapters} items={activities} classFilter={globalClass}
                     onArchive={async (id, state) => {
+                        setChapters(prev => prev.map(c => c._id === id ? { ...c, isArchived: state } : c));
                         await fetch('/api/chapters', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({_id:id, isArchived:state})});
-                        loadData();
                     }}
                     onRename={handleRenameChapter}
                     onEditItem={(it) => setEditingItem({ type: it.actType, data: it })}
                     onDeleteItem={async (id, type) => {
                         if(!confirm("Supprimer ?")) return;
-                        await fetch(type === 'game' ? `/api/game-levels/${id}` : `/api/homework/${id}`, { method: 'DELETE' });
-                        loadData();
+                        setActivities(prev => prev.filter(a => a._id !== id));
+                        const endpoint = type === 'game' ? `/api/game-levels/${id}` : `/api/homework/${id}`;
+                        await fetch(endpoint, { method: 'DELETE' });
                     }}
                     onDeleteChapter={handleDeleteChapter}
                     onCreateChapter={handleCreateChapter}
