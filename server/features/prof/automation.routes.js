@@ -6,11 +6,8 @@ const DriveService = require('../../services/drive.service');
 const getScanSession = () => mongoose.model('ScanSession');
 const getChapter = () => mongoose.model('Chapter');
 const getPlayer = () => mongoose.model('Player');
+const getTeacher = () => mongoose.model('Teacher');
 
-/**
- * US #11 : Normalisation du nom pour Drive
- * Enlève les accents et met en majuscules pour éviter les doublons "Géo" / "GEO"
- */
 const normalizeFolderName = (name) => {
     return name.toUpperCase()
         .normalize("NFD")
@@ -19,7 +16,6 @@ const normalizeFolderName = (name) => {
         .trim();
 };
 
-// HELPER : Racine de la classe -> Devoirs et Élèves
 const getClassBasePaths = async (classroom) => {
     const condaRootId = await DriveService.getOrCreateFolder("CondaClasse", null);
     const teacherId = await DriveService.getOrCreateFolder("Jean Vuillet", condaRootId);
@@ -29,34 +25,72 @@ const getClassBasePaths = async (classroom) => {
     return { devoirsId, elevesId };
 };
 
-// --- ROUTE DE RÉORGANISATION GLOBALE (MISE À JOUR US #11) ---
+// --- ROUTE DE RÉORGANISATION ET NETTOYAGE STRICT (US #12) ---
 router.get('/init-all-folders', async (req, res) => {
     try {
+        console.log("🧼 Audit et Nettoyage du Drive lancé...");
+        
+        // 1. Récupérer le prof pour avoir la liste des "Vraies" matières (Sections)
+        const teacher = await getTeacher().findOne({ firstName: "Jean" });
+        if (!teacher) return res.status(404).json({ error: "Prof non trouvé" });
+        
+        const validSubjects = teacher.subjectSections.map(s => s.name);
+        const validSubjectsNormalized = validSubjects.map(s => normalizeFolderName(s));
+
         const players = await getPlayer().find({});
         const classes = [...new Set(players.map(p => p.classroom))].filter(Boolean);
 
         for (const cls of classes) {
+            console.log(`🔨 Audit Classe : ${cls}`);
             const paths = await getClassBasePaths(cls);
+
+            // A. Recasage des chapitres
             const chapters = await getChapter().find({ classroom: cls });
-            
             for (const chap of chapters) {
-                // US #11 : On normalise le nom de la matière pour le dossier Drive
-                const subjectNormalized = normalizeFolderName(chap.subject || "AUTRE");
+                const subjectName = chap.subject || "AUTRE";
+                const subjectNormalized = normalizeFolderName(subjectName);
                 const subjectFolderId = await DriveService.getOrCreateFolder(subjectNormalized, paths.devoirsId);
                 
                 const chapterFolderId = await DriveService.getOrCreateFolder(chap.title || "Sans Titre", subjectFolderId);
                 await getChapter().findByIdAndUpdate(chap._id, { driveFolderId: chapterFolderId });
             }
+
+            // B. Nettoyage des dossiers parasites sur Drive
+            // On liste tous les dossiers présents dans "Devoirs" sur Drive
+            const driveFolders = await DriveService.listFiles(paths.devoirsId);
             
+            for (const folder of driveFolders) {
+                if (folder.mimeType === 'application/vnd.google-apps.folder') {
+                    // Si le dossier n'est pas dans la liste des matières validées
+                    if (!validSubjectsNormalized.includes(normalizeFolderName(folder.name))) {
+                        console.log(`🗑️ Parasite détecté : ${folder.name}. Vérification contenu...`);
+                        
+                        const subContent = await DriveService.listFiles(folder.id);
+                        if (subContent.length === 0) {
+                            console.log(`   -> Dossier vide, suppression.`);
+                            await DriveService.deleteFile(folder.id);
+                        } else {
+                            console.log(`   -> Dossier non vide, conservé pour sécurité.`);
+                        }
+                    }
+                }
+            }
+
+            // C. Vérifier les dossiers élèves
             for (const p of players.filter(p => p.classroom === cls)) {
                 const studentName = `${p.firstName} ${p.lastName}`.toUpperCase();
                 await DriveService.getOrCreateFolder(studentName, paths.elevesId);
             }
         }
-        res.json({ ok: true, message: "Drive normalisé et synchronisé." });
-    } catch (e) { res.status(500).json({ error: e.message }); }
+
+        res.json({ ok: true, message: "Nettoyage terminé. Drive aligné sur les archives." });
+    } catch (e) {
+        console.error("❌ Erreur Audit Drive:", e.message);
+        res.status(500).json({ error: e.message });
+    }
 });
 
+// --- ROUTES CHAPITRES ---
 router.post('/chapters', async (req, res) => {
     try {
         const { _id, title, classroom, subject } = req.body;
@@ -65,7 +99,6 @@ router.post('/chapters', async (req, res) => {
             return res.json(updated);
         }
         const paths = await getClassBasePaths(classroom);
-        // US #11 : Application de la normalisation lors de la création
         const subjectNormalized = normalizeFolderName(subject);
         const subjectFolderId = await DriveService.getOrCreateFolder(subjectNormalized, paths.devoirsId);
         const driveId = await DriveService.getOrCreateFolder(title, subjectFolderId);
@@ -93,15 +126,6 @@ router.post('/scan-sessions', async (req, res) => {
         }, { new: true });
         res.json(final);
     } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-router.get('/scan-sessions/:id/files/:type', async (req, res) => {
-    try {
-        const session = await getScanSession().findById(req.params.id);
-        const folderId = (req.params.type === 'subject') ? session.subjectFolderId : session.copiesFolderId;
-        const files = await DriveService.listFiles(folderId);
-        res.json(files);
-    } catch (e) { res.status(500).json([]); }
 });
 
 router.post('/scan-upload-photo', async (req, res) => {

@@ -28,4 +28,5 @@ Ne jamais tronquer le code pour éviter l'alerte TRUNCATED."
 8. **CLASSEMENT ALPHANUMÉRIQUE** : Tri naturel (I, II, III) des dossiers.
 9. **MIROIR PHYSIQUE** : Classer une production dans un chapitre déclenche le déplacement physique.
 10. **NETTOYAGE INTÉGRAL** : Suppression BDD = Suppression Drive.
-11. **NORMALISATION PHYSIQUE (NEW)** : Les noms des super-dossiers sur Drive sont normalisés (Majuscules, sans accents) pour éviter les doublons de correspondance (ex: "Géo" et "Géographie" fusionnent sur Drive).
+11. **NORMALISATION PHYSIQUE** : Noms de dossiers Drive sans accents et en majuscules.
+12. **ALIGNEMENT ET NETTOYAGE (NEW)** : La structure Drive est forcée de s'aligner sur les Super-Dossiers définis en Archives. Tout dossier Drive "orphelin" ou mal nommé est vidé de ses chapitres vers les dossiers corrects puis supprimé.

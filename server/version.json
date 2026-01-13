@@ -1,6 +1,6 @@
 {
-  "version": "1.3.13",
-  "build": 174,
-  "description": "User Story #11: Subject Folder Normalization (No more duplicate GEO/Géo folders)",
-  "timestamp": "2026-01-13T23:42:12.210Z"
+  "version": "1.3.14",
+  "build": 175,
+  "description": "User Story #12: Strict Subject Alignment & Parasite Cleanup",
+  "timestamp": "2026-01-13T23:48:23.122Z"
 }
