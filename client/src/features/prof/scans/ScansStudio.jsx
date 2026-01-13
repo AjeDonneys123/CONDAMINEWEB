@@ -25,7 +25,6 @@ export default function ScansStudio({ globalClass }) {
 
     useEffect(() => { loadData(); }, [globalClass]);
 
-    // Chargement automatique du Drive quand on change d'onglet en mode "files"
     useEffect(() => {
         if (openId && activeMode === 'files') {
             fetchDriveFiles(openId, activeTab);
@@ -35,7 +34,6 @@ export default function ScansStudio({ globalClass }) {
     const fetchDriveFiles = async (sessionId, type) => {
         setDriveFiles({ list: [], loading: true });
         try {
-            // On utilise la route de session pour bénéficier de l'auto-réparation
             const res = await fetch(`/api/scan-sessions/${sessionId}/files/${type}`);
             const data = await res.json();
             setDriveFiles({ list: Array.isArray(data) ? data : [], loading: false });
@@ -71,7 +69,7 @@ export default function ScansStudio({ globalClass }) {
     return (
         <div className="space-y-4 animate-in fade-in">
             <div className="bg-white p-3 rounded-[22px] border-2 border-slate-50 flex gap-2 shadow-sm">
-                <input className="flex-1 px-4 bg-slate-50 rounded-xl outline-none font-bold text-sm" placeholder="Nouvelle production..." value={newTitle} onChange={e=>setNewTitle(e.target.value)} />
+                <input className="flex-1 px-4 bg-slate-50 rounded-xl outline-none font-bold text-sm" placeholder="Nom de la production..." value={newTitle} onChange={e=>setNewTitle(e.target.value)} />
                 <button onClick={createSession} disabled={loading} className="px-6 bg-indigo-600 text-white rounded-xl font-black uppercase text-[10px]">Créer</button>
             </div>
 
@@ -82,13 +80,11 @@ export default function ScansStudio({ globalClass }) {
 
                     return (
                         <div key={s._id} className={`bg-white rounded-[25px] border-2 transition-all ${isOpen ? 'border-indigo-500 shadow-lg' : 'border-slate-50'}`}>
-                            
                             <div className="p-2 px-3 flex items-center justify-between gap-1 overflow-x-auto no-scrollbar">
                                 <div className="flex-1 min-w-[80px] cursor-pointer" onClick={() => setOpenId(isOpen ? null : s._id)}>
-                                    <h3 className="font-black text-slate-700 text-[10px] truncate uppercase">{s.title || "Titre"}</h3>
+                                    <h3 className="font-black text-slate-700 text-[10px] truncate uppercase">{s.title || "Production"}</h3>
                                     {assigned && <div className="text-[7px] font-black text-emerald-500 uppercase truncate">📁 {assigned.title}</div>}
                                 </div>
-
                                 <div className="flex items-center gap-1">
                                     <button onClick={() => { setOpenId(s._id); setActiveMode('upload'); }} className={`tool-btn ${isOpen && activeMode === 'upload' ? 'active-upload' : ''}`}>SNAP</button>
                                     <button onClick={() => { setOpenId(s._id); setActiveMode('files'); }} className={`tool-btn ${isOpen && activeMode === 'files' ? 'active-files' : ''}`}>FILES</button>
@@ -100,13 +96,12 @@ export default function ScansStudio({ globalClass }) {
 
                             {isOpen && (
                                 <div className="border-t border-slate-100 p-3 bg-slate-50/30">
-                                    
                                     {activeMode === 'class' ? (
                                         <div className="animate-in zoom-in p-2">
                                             <p className="text-[9px] font-black text-indigo-400 uppercase mb-3">Dossiers actifs {globalClass} :</p>
                                             <div className="flex flex-wrap gap-2">
                                                 {availableChapters.map(c => (
-                                                    <button key={c._id} onClick={() => handleAssign(s._id, c._id)} className="px-4 py-2 bg-white border-2 border-indigo-100 rounded-xl text-[10px] font-bold text-slate-600">📁 {c.title}</button>
+                                                    <button key={c._id} onClick={() => handleAssign(s._id, c._id)} className="px-4 py-2 bg-white border-2 border-indigo-100 rounded-xl text-[10px] font-bold text-slate-600 hover:border-indigo-500 transition-all">📁 {c.title}</button>
                                                 ))}
                                             </div>
                                         </div>
@@ -130,7 +125,6 @@ export default function ScansStudio({ globalClass }) {
                                                                     <span className="text-[6px] font-bold text-slate-400 mt-1 truncate w-full text-center">{f.name}</span>
                                                                 </a>
                                                             ))}
-                                                            {driveFiles.list.length === 0 && <p className="col-span-full text-center py-10 text-[9px] font-black text-slate-300 uppercase">Dossier vide</p>}
                                                         </div>
                                                     )}
                                                 </div>
@@ -138,7 +132,7 @@ export default function ScansStudio({ globalClass }) {
 
                                             {activeMode === 'ia' && (
                                                 <div className="space-y-3 animate-in zoom-in">
-                                                    <div className="bg-white p-4 rounded-2xl border-2 border-emerald-100">
+                                                    <div className="bg-white p-4 rounded-2xl border-2 border-emerald-100 shadow-sm">
                                                         <textarea className="w-full h-24 p-2 bg-slate-50 rounded-xl border-none outline-none text-xs font-medium" placeholder="Instructions IA..." defaultValue={s.teacherInstruction} />
                                                     </div>
                                                     <button className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-black text-xs shadow-lg">🚀 CORRIGER LES COPIES</button>
@@ -180,14 +174,18 @@ function PilotSnap({ session, type, onRefresh }) {
         canvas.width = videoRef.current.videoWidth; canvas.height = videoRef.current.videoHeight;
         canvas.getContext('2d').drawImage(videoRef.current, 0, 0);
         const data = canvas.toDataURL('image/jpeg', 0.8);
-        await fetch('/api/scan-upload-photo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: session._id, type: type, imageBase64: data }) });
+        await fetch('/api/scan-upload-photo', { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify({ sessionId: session._id, type: type, imageBase64: data }) 
+        });
         onRefresh(); setCapturing(false);
     };
 
     const currentPhotos = type === 'subject' ? session.subjectUrls : session.copyUrls;
 
     return (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4 animate-in fade-in">
             <div className="relative aspect-[3/4] max-w-xs mx-auto bg-black rounded-[25px] overflow-hidden border-4 border-white shadow-md">
                 <video ref={videoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
                 {flash && <div className="absolute inset-0 bg-white z-50"></div>}

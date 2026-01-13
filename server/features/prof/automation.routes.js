@@ -6,16 +6,13 @@ const DriveService = require('../../services/drive.service');
 const getScanSession = () => mongoose.model('ScanSession');
 const getChapter = () => mongoose.model('Chapter');
 
-// HELPER : Racine de la classe -> Devoirs et Élèves
+// HELPER : Racine de la classe -> Devoirs et Élèves (NOMENCLATURE VALIDÉE)
 const getClassBasePaths = async (classroom) => {
     const condaRootId = await DriveService.getOrCreateFolder("CondaClasse", null);
     const teacherId = await DriveService.getOrCreateFolder("Jean Vuillet", condaRootId);
     const classId = await DriveService.getOrCreateFolder(classroom, teacherId);
-    
-    // NOMS CLAIRS VALIDÉS
     const devoirsId = await DriveService.getOrCreateFolder("Devoirs", classId);
     const elevesId = await DriveService.getOrCreateFolder("Élèves", classId);
-    
     return { devoirsId, elevesId };
 };
 
@@ -33,47 +30,34 @@ router.post('/chapters', async (req, res) => {
         const { _id, title, classroom, subject, teacherId } = req.body;
         const Chapter = getChapter();
 
-        if (_id) {
+        if (_id && mongoose.Types.ObjectId.isValid(_id)) {
             const existing = await Chapter.findById(_id);
-            if (existing.driveFolderId && title && title !== existing.title) {
+            if (existing && existing.driveFolderId && title && title !== existing.title) {
                 DriveService.renameFolder(existing.driveFolderId, title).catch(() => {});
             }
             const updated = await Chapter.findByIdAndUpdate(_id, req.body, { new: true });
             return res.json(updated);
         }
 
-        // Migration : Utilisation du dossier "Devoirs"
         const paths = await getClassBasePaths(classroom);
         const subjectFolderId = await DriveService.getOrCreateFolder(subject.toUpperCase(), paths.devoirsId);
         const chapterDriveId = await DriveService.getOrCreateFolder(title || "Nouveau Dossier", subjectFolderId);
         
-        res.json(await Chapter.create({ 
-            ...req.body, 
-            driveFolderId: chapterDriveId,
-            isArchived: false 
-        }));
+        const newChap = await Chapter.create({ ...req.body, driveFolderId: chapterDriveId, isArchived: false });
+        res.json(newChap);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// --- ROUTES ÉLÈVES (PORTFOLIOS DRIVE) ---
-
-router.get('/player-productions/:playerId', async (req, res) => {
+router.delete('/chapters/:id', async (req, res) => {
     try {
-        const Player = mongoose.model('Player');
-        const student = await Player.findById(req.params.playerId);
-        if (!student) return res.status(404).json({ error: "Élève non trouvé" });
-
-        const paths = await getClassBasePaths(student.classroom);
-        // On crée/récupère le dossier au nom de l'élève dans "Élèves"
-        const studentFolderName = `${student.firstName} ${student.lastName}`.toUpperCase();
-        const studentFolderId = await DriveService.getOrCreateFolder(studentFolderName, paths.elevesId);
-
-        const files = await DriveService.listFiles(studentFolderId);
-        res.json(files);
+        const chap = await getChapter().findById(req.params.id);
+        if (chap?.driveFolderId) DriveService.deleteFile(chap.driveFolderId).catch(() => {});
+        await getChapter().findByIdAndDelete(req.params.id);
+        res.json({ ok: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// --- ROUTES SCANS ---
+// --- ROUTES SCANS (SESSIONS) ---
 
 router.get('/scan-sessions', async (req, res) => {
     try {
@@ -84,8 +68,80 @@ router.get('/scan-sessions', async (req, res) => {
 
 router.post('/scan-sessions', async (req, res) => {
     try {
-        const session = await getScanSession().create(req.body);
-        res.json(session);
+        const { title, classroom } = req.body;
+        const session = await getScanSession().create({ title, classroom });
+        
+        // Création structure Drive Sujet/Copies/Corrections
+        const condaRootId = await DriveService.getOrCreateFolder("CondaClasse", null);
+        const teacherId = await DriveService.getOrCreateFolder("Jean Vuillet", condaRootId);
+        const classId = await DriveService.getOrCreateFolder(classroom, teacherId);
+        const prodId = await DriveService.getOrCreateFolder("Devoirs", classId); // On range les scans dans Devoirs
+        
+        const sessionDriveId = await DriveService.getOrCreateFolder(title, prodId);
+        const subjectId = await DriveService.getOrCreateFolder("Sujet", sessionDriveId);
+        const copiesId = await DriveService.getOrCreateFolder("Copies", sessionDriveId);
+        const correctionsId = await DriveService.getOrCreateFolder("Corrections", sessionDriveId);
+
+        const finalSession = await getScanSession().findByIdAndUpdate(session._id, {
+            driveFolderId: sessionDriveId,
+            subjectFolderId: subjectId,
+            copiesFolderId: copiesId,
+            correctionsFolderId: correctionsId
+        }, { new: true });
+
+        res.json(finalSession);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ROUTE : Lister les fichiers d'un dossier de scan (Sujet ou Copies)
+router.get('/scan-sessions/:id/files/:type', async (req, res) => {
+    try {
+        const session = await getScanSession().findById(req.params.id);
+        if (!session) return res.status(404).json({ error: "Session non trouvée" });
+
+        const type = req.params.type;
+        let folderId = (type === 'subject') ? session.subjectFolderId : (type === 'copies' ? session.copiesFolderId : session.correctionsFolderId);
+
+        if (!folderId) return res.json([]); // Pas encore de dossier créé
+
+        const files = await DriveService.listFiles(folderId);
+        res.json(files);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ROUTE : Upload Photo Scan (RESTAURÉE)
+router.post('/scan-upload-photo', async (req, res) => {
+    try {
+        const { sessionId, type, imageBase64 } = req.body; 
+        const session = await getScanSession().findById(sessionId);
+        if (!session) return res.status(404).json({ error: "Session introuvable" });
+
+        const targetFolder = type === 'subject' ? session.subjectFolderId : session.copiesFolderId;
+        const driveFile = await DriveService.uploadImage(targetFolder || session.driveFolderId, `${type}_${Date.now()}.jpg`, imageBase64);
+        
+        if (driveFile) {
+            const field = type === 'subject' ? 'subjectUrls' : 'copyUrls';
+            const updated = await getScanSession().findByIdAndUpdate(sessionId, { $push: { [field]: driveFile.id } }, { new: true });
+            res.json(updated);
+        } else {
+            res.status(500).json({ error: "Échec upload Drive" });
+        }
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/scan-sessions/:id', async (req, res) => {
+    try {
+        const session = await getScanSession().findById(req.params.id);
+        if (session?.driveFolderId) DriveService.deleteFile(session.driveFolderId).catch(() => {});
+        await getScanSession().findByIdAndDelete(req.params.id);
+        res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.patch('/scan-sessions/:id/assign-chapter', async (req, res) => {
+    try {
+        const updated = await getScanSession().findByIdAndUpdate(req.params.id, { chapterId: req.body.chapterId }, { new: true });
+        res.json(updated);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
