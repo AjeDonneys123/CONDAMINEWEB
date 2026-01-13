@@ -1,6 +1,6 @@
 {
-  "version": "1.0.4",
-  "build": 135,
-  "description": "Fix Scan Upload 404 + Version Badge",
-  "timestamp": "2024-01-20T12:00:00Z"
+  "version": "1.1.0",
+  "build": 140,
+  "description": "Deploy Monitor + Auto Refresh",
+  "timestamp": "2024-01-20T17:00:00Z"
 }

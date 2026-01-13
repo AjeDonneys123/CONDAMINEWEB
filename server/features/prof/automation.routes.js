@@ -26,6 +26,13 @@ router.post('/chapters', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+router.delete('/chapters/:id', async (req, res) => {
+    try {
+        await getChapter().findByIdAndDelete(req.params.id);
+        res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // --- ROUTES SCANS ---
 router.get('/scan-sessions', async (req, res) => {
     try {
@@ -36,49 +43,54 @@ router.get('/scan-sessions', async (req, res) => {
 
 router.post('/scan-sessions', async (req, res) => {
     try {
-        const session = await getScanSession().create(req.body);
+        const { title, classroom } = req.body;
+        const session = await getScanSession().create({ title, classroom });
         res.json(session);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// FIX : Route upload photo (Celle qui causait la 404)
+// ROUTE EXPLORATION DRIVE (SUJETS, COPIES, CORRECTIONS)
+router.get('/scan-sessions/:id/files/:type', async (req, res) => {
+    try {
+        const session = await getScanSession().findById(req.params.id);
+        if (!session) return res.status(404).json({ error: "Session introuvable" });
+
+        const type = req.params.type;
+        let folderId = (type === 'subject') ? session.subjectFolderId : (type === 'copies' ? session.copiesFolderId : session.correctionsFolderId);
+
+        // Auto-réparation intelligente des dossiers Drive
+        if (!folderId) {
+            const condaRootId = await DriveService.getOrCreateFolder("CondaClasse", null);
+            const teacherId = await DriveService.getOrCreateFolder("Jean Vuillet", condaRootId);
+            const classId = await DriveService.getOrCreateFolder(session.classroom, teacherId);
+            const prodRootId = await DriveService.getOrCreateFolder("PRODUCTIONS", classId);
+            const rootId = await DriveService.getOrCreateFolder(session.title || "Sans Titre", prodRootId);
+            
+            const subName = (type === 'subject') ? "Sujet" : (type === 'copies' ? "Copies" : "Corrections");
+            folderId = await DriveService.getOrCreateFolder(subName, rootId);
+
+            await getScanSession().findByIdAndUpdate(req.params.id, { 
+                driveFolderId: rootId,
+                [type === 'subject' ? 'subjectFolderId' : (type === 'copies' ? 'copiesFolderId' : 'correctionsFolderId')]: folderId 
+            });
+        }
+
+        const files = await DriveService.listFiles(folderId);
+        res.json(files);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.post('/scan-upload-photo', async (req, res) => {
     try {
         const { sessionId, type, imageBase64 } = req.body; 
         const session = await getScanSession().findById(sessionId);
-        if (!session) return res.status(404).json({ error: "Session non trouvée" });
-
-        // On utilise l'ID dossier Drive de la session (fallback sur root si absent)
-        const targetFolder = session.driveFolderId || "root";
-        const fileName = `${type}_${Date.now()}.jpg`;
-
-        const driveFile = await DriveService.uploadImage(targetFolder, fileName, imageBase64);
-        
+        const folderId = type === 'subject' ? session.subjectFolderId : session.copiesFolderId;
+        const driveFile = await DriveService.uploadImage(folderId || session.driveFolderId, `${type}_${Date.now()}.jpg`, imageBase64);
         if (driveFile) {
-            const updateField = type === 'subject' ? 'subjectUrls' : 'copyUrls';
-            const updated = await getScanSession().findByIdAndUpdate(
-                sessionId, 
-                { $push: { [updateField]: driveFile.id } }, 
-                { new: true }
-            );
+            const field = type === 'subject' ? 'subjectUrls' : 'copyUrls';
+            const updated = await getScanSession().findByIdAndUpdate(sessionId, { $push: { [field]: driveFile.id } }, { new: true });
             res.json(updated);
-        } else {
-            res.status(500).json({ error: "Échec Drive" });
-        }
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-router.delete('/scan-sessions/:id', async (req, res) => {
-    try {
-        await getScanSession().findByIdAndDelete(req.params.id);
-        res.json({ ok: true });
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-router.patch('/scan-sessions/:id/assign-chapter', async (req, res) => {
-    try {
-        const updated = await getScanSession().findByIdAndUpdate(req.params.id, { chapterId: req.body.chapterId }, { new: true });
-        res.json(updated);
+        } else { res.status(500).send("Erreur upload"); }
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

@@ -37,12 +37,20 @@ const DriveService = {
         } catch (e) { return null; }
     },
 
-    ensureSessionStructure: async (rootFolderId) => {
-        if (!drive || !rootFolderId) return {};
-        const subjectId = await DriveService.getOrCreateFolder("Sujet", rootFolderId);
-        const copiesId = await DriveService.getOrCreateFolder("Copies", rootFolderId);
-        const correctionsId = await DriveService.getOrCreateFolder("Corrections", rootFolderId);
-        return { subjectId, copiesId, correctionsId };
+    // Lister les fichiers d'un dossier
+    listFiles: async (folderId) => {
+        if (!drive || !folderId) return [];
+        try {
+            const res = await drive.files.list({
+                q: `'${folderId}' in parents and trashed = false`,
+                fields: 'files(id, name, webViewLink, thumbnailLink, mimeType)',
+                orderBy: 'name'
+            });
+            return res.data.files || [];
+        } catch (e) {
+            console.error("Drive listFiles error:", e.message);
+            return [];
+        }
     },
 
     deleteFile: async (id) => { 
