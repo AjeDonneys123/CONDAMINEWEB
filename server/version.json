@@ -1,6 +1,6 @@
 {
-  "version": "1.2.9",
-  "build": 160,
-  "description": "Fix US#7: Robust Chapter Renaming with Drive Fallback",
-  "timestamp": "2026-01-13T20:38:05.915Z"
+  "version": "1.3.0",
+  "build": 161,
+  "description": "Fluid UI: Background Drive renaming + No-reload frontend updates",
+  "timestamp": "2026-01-13T20:42:19.641Z"
 }

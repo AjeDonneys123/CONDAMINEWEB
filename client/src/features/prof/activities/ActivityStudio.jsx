@@ -19,64 +19,58 @@ export default function ActivityStudio({ globalClass, user }) {
                 fetch('/api/game-levels/all').then(r => r.json()),
                 fetch('/api/chapters-all').then(r => r.json())
             ]);
-            
             setActivities([
                 ...(Array.isArray(hwRes) ? hwRes : []).map(x => ({ ...x, actType: 'homework' })),
                 ...(Array.isArray(gmRes) ? gmRes : []).map(x => ({ ...x, actType: 'game' }))
             ]);
             setChapters(Array.isArray(cpRes) ? cpRes : []);
-        } catch (e) { console.error("Erreur chargement Studio:", e); }
+        } catch (e) { console.error("Load error:", e); }
         setLoading(false);
     };
 
     useEffect(() => { loadData(); }, [globalClass]);
 
-    if (viewingResults) return <HomeworkResults homework={viewingResults} onBack={() => setViewingResults(null)} />;
+    // RENOMMAGE FLUIDE (User Story #7)
+    const handleRenameChapter = async (id, title) => {
+        // 1. Mise à jour "Optimiste" de l'interface (immédiat)
+        setChapters(prev => prev.map(c => c._id === id ? { ...c, title } : c));
 
-    if (editingItem) {
-        const activeChaps = chapters.filter(c => c.classroom === globalClass && !c.isArchived);
-        if (editingItem.type === 'homework') {
-            return <HomeworkStudio initialData={editingItem.data} chapters={activeChaps} onClose={() => { setEditingItem(null); loadData(); }} />;
-        }
-        return <GameStudio initialData={editingItem.data} chapters={activeChaps} classFilter={globalClass} onClose={() => { setEditingItem(null); loadData(); }} />;
-    }
-
-    // FONCTION RESTAURÉE : Création de chapitre (Dossier)
-    const handleCreateChapter = async (subjectName) => {
         try {
             const res = await fetch('/api/chapters', { 
                 method:'POST', 
                 headers:{'Content-Type':'application/json'}, 
-                body: JSON.stringify({ 
-                    title: 'Nouveau Dossier', 
-                    subject: subjectName, 
-                    classroom: globalClass, 
-                    teacherId: user?.id || user?._id 
-                }) 
-            });
-            if (res.ok) await loadData();
-        } catch (e) { console.error(e); }
-    };
-
-    // FONCTION RESTAURÉE : Suppression de chapitre
-    const handleDeleteChapter = async (id) => {
-        if (!confirm("Voulez-vous supprimer ce dossier et tout son contenu sur Google Drive ?")) return;
-        try {
-            const res = await fetch(`/api/chapters/${id}`, { method: 'DELETE' });
-            if (res.ok) await loadData();
-        } catch (e) { console.error(e); }
-    };
-
-    const handleRenameChapter = async (id, title) => {
-        try {
-            await fetch('/api/chapters', { 
-                method:'POST', 
-                headers:{'Content-Type':'application/json'}, 
                 body:JSON.stringify({_id:id, title})
             });
-            loadData();
-        } catch (e) { console.error(e); }
+            // Si erreur serveur, on recharge les vraies données
+            if (!res.ok) loadData();
+        } catch (e) { 
+            console.error(e);
+            loadData(); 
+        }
     };
+
+    const handleCreateChapter = async (subjectName, title) => {
+        const res = await fetch('/api/chapters', { 
+            method:'POST', 
+            headers:{'Content-Type':'application/json'}, 
+            body: JSON.stringify({ title, subject: subjectName, classroom: globalClass, teacherId: user?.id || user?._id }) 
+        });
+        if (res.ok) loadData();
+    };
+
+    const handleDeleteChapter = async (id) => {
+        if (!confirm("Supprimer ce dossier ?")) return;
+        // Update optimiste
+        setChapters(prev => prev.filter(c => c._id !== id));
+        await fetch(`/api/chapters/${id}`, { method: 'DELETE' });
+    };
+
+    if (viewingResults) return <HomeworkResults homework={viewingResults} onBack={() => setViewingResults(null)} />;
+    if (editingItem) {
+        const activeChaps = chapters.filter(c => c.classroom === globalClass && !c.isArchived);
+        if (editingItem.type === 'homework') return <HomeworkStudio initialData={editingItem.data} chapters={activeChaps} onClose={() => { setEditingItem(null); loadData(); }} />;
+        return <GameStudio initialData={editingItem.data} chapters={activeChaps} classFilter={globalClass} onClose={() => { setEditingItem(null); loadData(); }} />;
+    }
 
     return (
         <div className="animate-in fade-in">
@@ -85,14 +79,9 @@ export default function ActivityStudio({ globalClass, user }) {
                 <button onClick={() => setEditingItem({ type: 'game', data: null })} className="bg-purple-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:scale-105 transition-transform"> Nouveau Jeu</button>
             </div>
 
-            {loading ? (
-                <div className="text-center py-20 text-slate-300 font-black animate-pulse uppercase">Récupération des dossiers...</div>
-            ) : (
+            {loading ? <div className="text-center py-20 text-slate-300 font-black animate-pulse uppercase italic">Récupération des dossiers...</div> : (
                 <ProfStudioFolder 
-                    user={user}
-                    chapters={chapters}
-                    items={activities}
-                    classFilter={globalClass}
+                    user={user} chapters={chapters} items={activities} classFilter={globalClass}
                     onArchive={async (id, state) => {
                         await fetch('/api/chapters', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({_id:id, isArchived:state})});
                         loadData();
@@ -100,9 +89,8 @@ export default function ActivityStudio({ globalClass, user }) {
                     onRename={handleRenameChapter}
                     onEditItem={(it) => setEditingItem({ type: it.actType, data: it })}
                     onDeleteItem={async (id, type) => {
-                        if(!confirm("Supprimer cet élément ?")) return;
-                        const endpoint = type === 'game' ? `/api/game-levels/${id}` : `/api/homework/${id}`;
-                        await fetch(endpoint, { method: 'DELETE' });
+                        if(!confirm("Supprimer ?")) return;
+                        await fetch(type === 'game' ? `/api/game-levels/${id}` : `/api/homework/${id}`, { method: 'DELETE' });
                         loadData();
                     }}
                     onDeleteChapter={handleDeleteChapter}
