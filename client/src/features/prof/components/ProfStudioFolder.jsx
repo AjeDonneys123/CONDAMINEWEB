@@ -10,12 +10,23 @@ export default function ProfStudioFolder({
     const [pickingSectionFor, setPickingSectionFor] = useState(null);
     const [isDeleteMode, setIsDeleteMode] = useState(false);
     
-    const [sections, setSections] = useState(user?.subjectSections || []);
+    // Initialisation intelligente des sections (Super-Dossiers)
+    const [sections, setSections] = useState([]);
 
     const norm = (c) => c?.toString().toUpperCase().replace('E', '').trim() || "";
 
+    // FIX MOBILE : Si l'utilisateur n'a pas de sections en local, on tente de les récupérer ou on met les défauts
     useEffect(() => { 
-        if (user?.subjectSections) setSections(user.subjectSections); 
+        if (user?.subjectSections && user.subjectSections.length > 0) {
+            setSections(user.subjectSections);
+        } else {
+            // Valeurs par défaut de secours pour éviter l'écran vide sur mobile
+            setSections([
+                { name: 'Histoire', color: '#ef4444' },
+                { name: 'Géographie', color: '#3b82f6' },
+                { name: 'EMC', color: '#22c55e' }
+            ]);
+        }
     }, [user]);
 
     const saveSections = async (newSections) => {
@@ -62,11 +73,14 @@ export default function ProfStudioFolder({
     const activeChapters = (chapters || []).filter(c => !c.isArchived && norm(c.classroom) === norm(classFilter));
     const archivedChapters = (chapters || []).filter(c => c.isArchived && norm(c.classroom) === norm(classFilter));
 
+    // Dossiers qui n'ont pas de catégorie matchant les sections actuelles
+    const orphanChapters = activeChapters.filter(c => !sections.some(s => s.name === c.subject));
+
     const renderChapterCard = (chap, section, isOpen, chapItems) => {
-        const color = section?.color || "#cbd5e1";
+        const color = section?.color || "#94a3b8";
         const letter = section?.name?.substring(0, 1).toUpperCase() || "?";
         return (
-            <div key={chap._id} className="bg-white rounded-[35px] border-2 shadow-sm overflow-hidden transition-all" style={{ borderColor: isOpen ? color : '#f8fafc' }}>
+            <div key={chap._id} className="bg-white rounded-[35px] border-2 shadow-sm overflow-hidden transition-all mb-3" style={{ borderColor: isOpen ? color : '#f8fafc' }}>
                 <div className="p-4 flex items-center justify-between">
                     <div className="flex items-center gap-4 flex-1 cursor-pointer" onClick={() => setOpenChaps({...openChaps, [chap._id]: !isOpen})}>
                         <div className="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-white text-sm relative" style={{ backgroundColor: color }} onClick={(e) => { e.stopPropagation(); setPickingSectionFor(chap._id); }}>
@@ -81,7 +95,7 @@ export default function ProfStudioFolder({
                             {editingId === chap._id ? (
                                 <input autoFocus className="text-xl font-black outline-none border-b-2" style={{ borderColor: color }} value={tempTitle} onChange={e => setTempTitle(e.target.value)} onBlur={() => { onRename(chap._id, tempTitle); setEditingId(null); }} onClick={e=>e.stopPropagation()} />
                             ) : (
-                                <span className="text-xl font-black text-slate-800">{chap.title || "Sans titre"}</span>
+                                <span className="text-lg font-black text-slate-700">{chap.title || "Sans titre"}</span>
                             )}
                             <span className="text-[9px] font-bold text-slate-400 uppercase">{chapItems.length} ÉLÉMENTS</span>
                         </div>
@@ -89,7 +103,9 @@ export default function ProfStudioFolder({
                     <div className="flex gap-1">
                         <button onClick={(e) => { e.stopPropagation(); setEditingId(chap._id); setTempTitle(chap.title); }} className="w-9 h-9 flex items-center justify-center bg-slate-50 rounded-full">✏️</button>
                         <button onClick={(e) => { e.stopPropagation(); onArchive(chap._id, !chap.isArchived); }} className="w-9 h-9 flex items-center justify-center bg-slate-50 rounded-full hover:bg-slate-800 hover:text-white">📦</button>
-                        <button onClick={(e) => { e.stopPropagation(); onDeleteChapter(chap._id); }} className="w-9 h-9 flex items-center justify-center bg-slate-50 rounded-full text-red-200">🗑️</button>
+                        
+                        {/* CROIX DE SUPPRESSION VISIBLE */}
+                        <button onClick={(e) => { e.stopPropagation(); onDeleteChapter(chap._id); }} className="w-9 h-9 flex items-center justify-center bg-red-50 text-red-600 rounded-full font-black border border-red-100">✕</button>
                     </div>
                 </div>
                 {isOpen && (
@@ -99,7 +115,7 @@ export default function ProfStudioFolder({
                                 <b className="text-slate-700 text-sm">{it.actType === 'game' ? '🕹️' : '📄'} {it.title}</b>
                                 <div className="flex gap-2">
                                     <button onClick={() => onEditItem(it)} className="px-3 py-1 bg-indigo-50 text-indigo-600 rounded-lg font-black text-[9px] uppercase">Modifier</button>
-                                    <button onClick={() => onDeleteItem(it._id, it.actType)} className="text-red-300 font-bold p-1">✕</button>
+                                    <button onClick={() => onDeleteItem(it._id, it.actType)} className="w-8 h-8 flex items-center justify-center bg-red-50 text-red-600 rounded-lg font-black text-xs border border-red-100">✕</button>
                                 </div>
                             </div>
                         ))}
@@ -114,22 +130,22 @@ export default function ProfStudioFolder({
             {/* ARCHIVES / CONFIG SECTIONS */}
             <div className="p-8 bg-slate-900 rounded-[50px] border-4 border-slate-800 shadow-2xl">
                 <div className="flex justify-between items-center mb-8 px-2">
-                    <h3 className="text-white font-black text-xs uppercase tracking-widest px-2">📂 Configuration Super-Dossiers</h3>
+                    <h3 className="text-white font-black text-[10px] uppercase tracking-widest">📂 Super-Dossiers</h3>
                     <div className="flex gap-2">
-                        <button onClick={addSection} className="bg-indigo-600 text-white px-5 py-2 rounded-2xl font-black text-[10px] uppercase shadow-lg">+ Nouveau</button>
-                        <button onClick={() => setIsDeleteMode(!isDeleteMode)} className={`px-5 py-2 rounded-2xl font-black text-[10px] uppercase ${isDeleteMode ? 'bg-red-500 text-white' : 'bg-slate-700 text-slate-300'}`}>Gérer</button>
+                        <button onClick={addSection} className="bg-indigo-600 text-white px-5 py-2 rounded-2xl font-black text-[9px] uppercase shadow-lg">+ Nouveau</button>
+                        <button onClick={() => setIsDeleteMode(!isDeleteMode)} className={`px-5 py-2 rounded-2xl font-black text-[9px] uppercase ${isDeleteMode ? 'bg-red-500 text-white' : 'bg-slate-700 text-slate-300'}`}>Gérer</button>
                     </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     {sections.map(s => (
                         <div key={s.name} className="bg-slate-800/40 p-5 rounded-[35px] border border-slate-700">
                             <h4 className="font-black text-[10px] uppercase tracking-widest mb-4 flex justify-between" style={{ color: s.color }}>
-                                {s.name} {isDeleteMode && <span onClick={() => removeSection(s.name)} className="cursor-pointer">✕</span>}
+                                {s.name} {isDeleteMode && <span onClick={() => removeSection(s.name)} className="cursor-pointer bg-red-500 text-white w-4 h-4 flex items-center justify-center rounded-full text-[8px]">✕</span>}
                             </h4>
                             <div className="space-y-2">
                                 {archivedChapters.filter(c => c.subject === s.name).map(c => (
                                     <div key={c._id} className="bg-slate-800/80 p-2 px-3 rounded-xl flex justify-between items-center border border-slate-700/50">
-                                        <span className="text-white font-bold text-[11px] truncate">{c.title}</span>
+                                        <span className="text-white font-bold text-[11px] truncate pr-2">{c.title}</span>
                                         <button onClick={() => onArchive(c._id, false)} className="text-blue-400 font-bold p-1">⬆️</button>
                                     </div>
                                 ))}
@@ -143,15 +159,23 @@ export default function ProfStudioFolder({
             <div className="space-y-16">
                 {sections.map(s => (
                     <div key={'active-' + s.name} className="animate-in fade-in">
-                        <div className="flex items-center justify-between mb-6 px-6 border-b border-slate-100 pb-4">
+                        <div className="flex items-center justify-between mb-4 px-6 border-b border-slate-100 pb-4">
                             <h3 className="font-black text-lg uppercase tracking-widest" style={{ color: s.color }}>{s.name}</h3>
-                            <button onClick={() => onCreateChapter(s.name)} className="text-[9px] font-black px-6 py-2 rounded-full border-2 border-dashed" style={{ color: s.color, borderColor: s.color }}>+ NOUVEAU DOSSIER {s.name.toUpperCase()}</button>
+                            <button onClick={() => onCreateChapter(s.name)} className="text-[9px] font-black px-6 py-2 rounded-full border-2 border-dashed" style={{ color: s.color, borderColor: s.color }}>+ CRÉER UN DOSSIER {s.name.toUpperCase()}</button>
                         </div>
-                        <div className="grid grid-cols-1 gap-4">
+                        <div className="grid grid-cols-1 gap-1">
                             {activeChapters.filter(c => c.subject === s.name).map(chap => renderChapterCard(chap, s, openChaps[chap._id], (items || []).filter(it => String(it.chapterId) === String(chap._id))))}
                         </div>
                     </div>
                 ))}
+
+                {/* SECTION POUR LES DOSSIERS NON CLASSÉS (FIX MOBILE) */}
+                {orphanChapters.length > 0 && (
+                    <div className="animate-in fade-in pt-10 border-t-4 border-dashed border-slate-100">
+                        <h3 className="font-black text-slate-300 text-xs uppercase tracking-widest px-6 mb-4">Dossiers à classer</h3>
+                        {orphanChapters.map(chap => renderChapterCard(chap, null, openChaps[chap._id], (items || []).filter(it => String(it.chapterId) === String(chap._id))))}
+                    </div>
+                )}
             </div>
         </div>
     );
