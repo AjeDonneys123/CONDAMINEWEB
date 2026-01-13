@@ -39,3 +39,4 @@ Avant toute modification des fichiers ci-dessus, vérifier que :
 4. **EXPLORATEUR DRIVE RÉEL** : Le bouton FILES permet de visualiser les fichiers réellement présents sur le Drive (listing dynamique) avec miniatures cliquables.
 5. **CLASSIFICATION** : Une production de scan peut être assignée ou déplacée dans un dossier de cours actif (non archivé) de la classe correspondante.
 6. **AUTO-REFRESH DÉPLOIEMENT** : Le site détecte un redémarrage serveur (Build ID) et force un rechargement de page pour l'utilisateur sans action manuelle (F5).
+7. **SYNCHRONISATION DU NOM** : Le renommage d'un dossier de cours (Chapter) dans l'interface met à jour simultanément le titre en base de données et le nom du dossier correspondant sur Google Drive.
