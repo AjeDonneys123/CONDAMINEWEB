@@ -5,10 +5,11 @@ export default function ScansStudio({ globalClass }) {
     const [sessions, setSessions] = useState([]);
     const [chapters, setChapters] = useState([]);
     const [openId, setOpenId] = useState(null); 
-    const [activeMode, setActiveMode] = useState('upload'); // 'upload', 'files', 'ia', 'class'
-    const [activeTab, setActiveTab] = useState('subject');
+    const [activeMode, setActiveMode] = useState('upload'); 
+    const [activeTab, setActiveTab] = useState('subject'); 
     const [newTitle, setNewTitle] = useState("");
     const [loading, setLoading] = useState(false);
+    const [showFolderPicker, setShowFolderPicker] = useState(null);
     const [driveFiles, setDriveFiles] = useState({ list: [], loading: false });
 
     const loadData = async () => {
@@ -19,18 +20,22 @@ export default function ScansStudio({ globalClass }) {
             ]);
             if (sRes.ok) setSessions(await sRes.json());
             if (cRes.ok) setChapters(await cRes.json());
-        } catch (e) { console.error(e); }
+        } catch (e) { console.error("Load error:", e); }
     };
 
     useEffect(() => { loadData(); }, [globalClass]);
 
+    // Chargement automatique du Drive quand on change d'onglet en mode "files"
     useEffect(() => {
-        if (openId && activeMode === 'files') fetchDriveFiles(openId, activeTab);
+        if (openId && activeMode === 'files') {
+            fetchDriveFiles(openId, activeTab);
+        }
     }, [activeTab, activeMode, openId]);
 
     const fetchDriveFiles = async (sessionId, type) => {
         setDriveFiles({ list: [], loading: true });
         try {
+            // On utilise la route de session pour bénéficier de l'auto-réparation
             const res = await fetch(`/api/scan-sessions/${sessionId}/files/${type}`);
             const data = await res.json();
             setDriveFiles({ list: Array.isArray(data) ? data : [], loading: false });
@@ -59,20 +64,8 @@ export default function ScansStudio({ globalClass }) {
         await loadData();
     };
 
-    const runCorrection = async (id) => {
-        setLoading(true);
-        try {
-            const res = await fetch(`/api/scan-sessions/${id}/correct`, { method: 'POST' });
-            const data = await res.json();
-            alert(data.message || "Analyse lancée !");
-        } catch(e) { alert("Erreur IA"); }
-        setLoading(false);
-    };
-
     const normalize = (c) => c?.toString().toUpperCase().replace('E', '') || "";
     const filteredSessions = sessions.filter(s => normalize(s.classroom) === normalize(globalClass));
-    
-    // FILTRE DEMANDÉ : Dossiers de la classe courante ET non archivés
     const availableChapters = chapters.filter(c => normalize(c.classroom) === normalize(globalClass) && !c.isArchived);
 
     return (
@@ -90,11 +83,10 @@ export default function ScansStudio({ globalClass }) {
                     return (
                         <div key={s._id} className={`bg-white rounded-[25px] border-2 transition-all ${isOpen ? 'border-indigo-500 shadow-lg' : 'border-slate-50'}`}>
                             
-                            {/* TOOLBAR MOBILE OPTIMIZED */}
-                            <div className="p-2 px-3 flex items-center justify-between gap-1 overflow-x-auto custom-scrollbar no-scrollbar">
-                                <div className="flex-1 min-w-[100px] cursor-pointer" onClick={() => setOpenId(isOpen ? null : s._id)}>
-                                    <h3 className="font-black text-slate-700 text-[11px] truncate uppercase">{s.title || "Titre"}</h3>
-                                    {assigned && <div className="text-[8px] font-black text-emerald-500 uppercase truncate">📁 {assigned.title}</div>}
+                            <div className="p-2 px-3 flex items-center justify-between gap-1 overflow-x-auto no-scrollbar">
+                                <div className="flex-1 min-w-[80px] cursor-pointer" onClick={() => setOpenId(isOpen ? null : s._id)}>
+                                    <h3 className="font-black text-slate-700 text-[10px] truncate uppercase">{s.title || "Titre"}</h3>
+                                    {assigned && <div className="text-[7px] font-black text-emerald-500 uppercase truncate">📁 {assigned.title}</div>}
                                 </div>
 
                                 <div className="flex items-center gap-1">
@@ -102,63 +94,57 @@ export default function ScansStudio({ globalClass }) {
                                     <button onClick={() => { setOpenId(s._id); setActiveMode('files'); }} className={`tool-btn ${isOpen && activeMode === 'files' ? 'active-files' : ''}`}>FILES</button>
                                     <button onClick={() => { setOpenId(s._id); setActiveMode('class'); }} className={`tool-btn ${isOpen && activeMode === 'class' ? 'active-class' : ''}`}>CLASS</button>
                                     <button onClick={() => { setOpenId(s._id); setActiveMode('ia'); }} className={`tool-btn ${isOpen && activeMode === 'ia' ? 'active-ia' : ''}`}>IA</button>
-                                    <button onClick={async () => { if(confirm("Supprimer ?")) { await fetch(`/api/scan-sessions/${s._id}`, {method:'DELETE'}); loadData(); } }} className="tool-btn-danger">✕</button>
+                                    <button onClick={async () => { if(confirm("Supprimer ?")) { await fetch(`/api/scan-sessions/${s._id}`, {method:'DELETE'}); await loadData(); } }} className="tool-btn-danger">✕</button>
                                 </div>
                             </div>
 
-                            {/* CONTENU DYNAMIQUE */}
                             {isOpen && (
                                 <div className="border-t border-slate-100 p-3 bg-slate-50/30">
                                     
-                                    {activeMode === 'upload' && (
-                                        <>
-                                            <div className="flex gap-1 mb-4 bg-white/60 p-1 rounded-xl shadow-inner">
-                                                <button onClick={() => setActiveTab('subject')} className={`sub-tab ${activeTab === 'subject' ? 'active' : ''}`}>SUJET</button>
-                                                <button onClick={() => setActiveTab('copies')} className={`sub-tab ${activeTab === 'copies' ? 'active' : ''}`}>COPIES</button>
-                                            </div>
-                                            <PilotSnap session={s} type={activeTab === 'corrections' ? 'subject' : activeTab} onRefresh={loadData} />
-                                        </>
-                                    )}
-
-                                    {activeMode === 'files' && (
-                                        <div className="animate-in zoom-in">
-                                            <div className="flex gap-1 mb-4 bg-white/60 p-1 rounded-xl shadow-inner">
-                                                <button onClick={() => setActiveTab('subject')} className={`sub-tab ${activeTab === 'subject' ? 'active' : ''}`}>SUJET</button>
-                                                <button onClick={() => setActiveTab('copies')} className={`sub-tab ${activeTab === 'copies' ? 'active' : ''}`}>COPIES</button>
-                                                <button onClick={() => setActiveTab('corrections')} className={`sub-tab ${activeTab === 'corrections' ? 'active' : ''}`}>CORRECT.</button>
-                                            </div>
-                                            {driveFiles.loading ? <div className="py-10 text-center animate-pulse text-xs font-black text-slate-300">SYNC DRIVE...</div> : (
-                                                <div className="grid grid-cols-3 gap-2">
-                                                    {driveFiles.list.map(f => (
-                                                        <a key={f.id} href={f.webViewLink} target="_blank" rel="noreferrer" className="flex flex-col items-center">
-                                                            <img src={f.thumbnailLink} className="w-full aspect-[3/4] object-cover rounded-lg border shadow-sm" alt="p" />
-                                                            <span className="text-[6px] font-bold text-slate-400 mt-1 truncate w-full text-center">{f.name}</span>
-                                                        </a>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-
-                                    {activeMode === 'class' && (
+                                    {activeMode === 'class' ? (
                                         <div className="animate-in zoom-in p-2">
                                             <p className="text-[9px] font-black text-indigo-400 uppercase mb-3">Dossiers actifs {globalClass} :</p>
                                             <div className="flex flex-wrap gap-2">
                                                 {availableChapters.map(c => (
-                                                    <button key={c._id} onClick={() => handleAssign(s._id, c._id)} className="px-4 py-2 bg-white border-2 border-indigo-100 rounded-xl text-[10px] font-bold text-slate-600 hover:border-indigo-500">📁 {c.title}</button>
+                                                    <button key={c._id} onClick={() => handleAssign(s._id, c._id)} className="px-4 py-2 bg-white border-2 border-indigo-100 rounded-xl text-[10px] font-bold text-slate-600">📁 {c.title}</button>
                                                 ))}
-                                                {availableChapters.length === 0 && <p className="text-[10px] font-bold text-slate-300">Aucun dossier actif créé.</p>}
                                             </div>
                                         </div>
-                                    )}
+                                    ) : (
+                                        <>
+                                            <div className="flex gap-1 mb-4 bg-white/60 p-1 rounded-xl shadow-inner">
+                                                <button onClick={() => setActiveTab('subject')} className={`sub-tab ${activeTab === 'subject' ? 'active' : ''}`}>SUJET</button>
+                                                <button onClick={() => setActiveTab('copies')} className={`sub-tab ${activeTab === 'copies' ? 'active' : ''}`}>COPIES</button>
+                                                {activeMode === 'files' && <button onClick={() => setActiveTab('corrections')} className={`sub-tab ${activeTab === 'corrections' ? 'active' : ''}`}>CORRECT.</button>}
+                                            </div>
 
-                                    {activeMode === 'ia' && (
-                                        <div className="space-y-3 animate-in zoom-in">
-                                            <div className="bg-white p-4 rounded-2xl border-2 border-emerald-100">
-                                                <textarea className="w-full h-24 p-2 bg-slate-50 rounded-xl border-none outline-none text-xs font-medium" placeholder="Instructions IA..." defaultValue={s.teacherInstruction} />
-                                            </div>
-                                            <button onClick={() => runCorrection(s._id)} disabled={loading} className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-black text-xs shadow-lg hover:scale-[1.02] transition-all">🚀 CORRIGER LES COPIES</button>
-                                        </div>
+                                            {activeMode === 'upload' && <PilotSnap session={s} type={activeTab === 'corrections' ? 'subject' : activeTab} onRefresh={loadData} />}
+                                            
+                                            {activeMode === 'files' && (
+                                                <div className="animate-in zoom-in">
+                                                    {driveFiles.loading ? <div className="py-10 text-center animate-pulse text-[10px] font-black text-slate-300">SYNC DRIVE...</div> : (
+                                                        <div className="grid grid-cols-3 gap-2">
+                                                            {driveFiles.list.map(f => (
+                                                                <a key={f.id} href={f.webViewLink} target="_blank" rel="noreferrer" className="flex flex-col items-center">
+                                                                    <img src={f.thumbnailLink} className="w-full aspect-[3/4] object-cover rounded-lg border shadow-sm" alt="p" />
+                                                                    <span className="text-[6px] font-bold text-slate-400 mt-1 truncate w-full text-center">{f.name}</span>
+                                                                </a>
+                                                            ))}
+                                                            {driveFiles.list.length === 0 && <p className="col-span-full text-center py-10 text-[9px] font-black text-slate-300 uppercase">Dossier vide</p>}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+
+                                            {activeMode === 'ia' && (
+                                                <div className="space-y-3 animate-in zoom-in">
+                                                    <div className="bg-white p-4 rounded-2xl border-2 border-emerald-100">
+                                                        <textarea className="w-full h-24 p-2 bg-slate-50 rounded-xl border-none outline-none text-xs font-medium" placeholder="Instructions IA..." defaultValue={s.teacherInstruction} />
+                                                    </div>
+                                                    <button className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-black text-xs shadow-lg">🚀 CORRIGER LES COPIES</button>
+                                                </div>
+                                            )}
+                                        </>
                                     )}
                                 </div>
                             )}

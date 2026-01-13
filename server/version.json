@@ -1,6 +1,6 @@
 {
-  "version": "1.2.3",
-  "build": 154,
-  "description": "Fixed Scans Toolbar + Active Folder Filter + IA Correction Logic",
-  "timestamp": "2026-01-13T17:53:03.861Z"
+  "version": "1.2.4",
+  "build": 155,
+  "description": "Fix Cloud Sync + Auto-Repair Drive Folders",
+  "timestamp": "2026-01-13T19:34:47.858Z"
 }
