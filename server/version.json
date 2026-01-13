@@ -1,6 +1,6 @@
 {
-  "version": "1.2.4",
-  "build": 157,
-  "description": "Fix Cloud Sync + Auto-Repair Drive Folders",
-  "timestamp": "2026-01-13T20:17:55.749Z"
+  "version": "1.2.5",
+  "build": 156,
+  "description": "Restore Chapter Creation/Deletion + Locked Files Compliance",
+  "timestamp": "2026-01-13T20:20:42.991Z"
 }

@@ -41,6 +41,7 @@ export default function ActivityStudio({ globalClass, user }) {
         return <GameStudio initialData={editingItem.data} chapters={activeChaps} classFilter={globalClass} onClose={() => { setEditingItem(null); loadData(); }} />;
     }
 
+    // FONCTION RESTAURÉE : Création de chapitre (Dossier)
     const handleCreateChapter = async (subjectName) => {
         try {
             const res = await fetch('/api/chapters', { 
@@ -57,11 +58,31 @@ export default function ActivityStudio({ globalClass, user }) {
         } catch (e) { console.error(e); }
     };
 
+    // FONCTION RESTAURÉE : Suppression de chapitre
+    const handleDeleteChapter = async (id) => {
+        if (!confirm("Voulez-vous supprimer ce dossier et tout son contenu sur Google Drive ?")) return;
+        try {
+            const res = await fetch(`/api/chapters/${id}`, { method: 'DELETE' });
+            if (res.ok) await loadData();
+        } catch (e) { console.error(e); }
+    };
+
+    const handleRenameChapter = async (id, title) => {
+        try {
+            await fetch('/api/chapters', { 
+                method:'POST', 
+                headers:{'Content-Type':'application/json'}, 
+                body:JSON.stringify({_id:id, title})
+            });
+            loadData();
+        } catch (e) { console.error(e); }
+    };
+
     return (
         <div className="animate-in fade-in">
             <div className="flex justify-start gap-4 mb-8 bg-white p-4 rounded-[30px] border-2 border-slate-50 shadow-sm">
-                <button onClick={() => setEditingItem({ type: 'homework', data: null })} className="bg-orange-500 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg"> Nouveau Devoir</button>
-                <button onClick={() => setEditingItem({ type: 'game', data: null })} className="bg-purple-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg"> Nouveau Jeu</button>
+                <button onClick={() => setEditingItem({ type: 'homework', data: null })} className="bg-orange-500 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:scale-105 transition-transform"> Nouveau Devoir</button>
+                <button onClick={() => setEditingItem({ type: 'game', data: null })} className="bg-purple-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:scale-105 transition-transform"> Nouveau Jeu</button>
             </div>
 
             {loading ? (
@@ -76,10 +97,7 @@ export default function ActivityStudio({ globalClass, user }) {
                         await fetch('/api/chapters', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({_id:id, isArchived:state})});
                         loadData();
                     }}
-                    onRename={async (id, title) => {
-                        await fetch('/api/chapters', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({_id:id, title})});
-                        loadData();
-                    }}
+                    onRename={handleRenameChapter}
                     onEditItem={(it) => setEditingItem({ type: it.actType, data: it })}
                     onDeleteItem={async (id, type) => {
                         if(!confirm("Supprimer cet élément ?")) return;
@@ -87,11 +105,7 @@ export default function ActivityStudio({ globalClass, user }) {
                         await fetch(endpoint, { method: 'DELETE' });
                         loadData();
                     }}
-                    onDeleteChapter={async (id) => {
-                        if(!confirm("Supprimer ce dossier ?")) return;
-                        await fetch(`/api/chapters/${id}`, { method: 'DELETE' });
-                        loadData();
-                    }}
+                    onDeleteChapter={handleDeleteChapter}
                     onCreateChapter={handleCreateChapter}
                 />
             )}

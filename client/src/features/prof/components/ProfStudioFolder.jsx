@@ -10,17 +10,15 @@ export default function ProfStudioFolder({
     const [pickingSectionFor, setPickingSectionFor] = useState(null);
     const [isDeleteMode, setIsDeleteMode] = useState(false);
     
-    // Initialisation intelligente des sections (Super-Dossiers)
+    // Persistence Mobile (User Story #1)
     const [sections, setSections] = useState([]);
 
     const norm = (c) => c?.toString().toUpperCase().replace('E', '').trim() || "";
 
-    // FIX MOBILE : Si l'utilisateur n'a pas de sections en local, on tente de les récupérer ou on met les défauts
     useEffect(() => { 
         if (user?.subjectSections && user.subjectSections.length > 0) {
             setSections(user.subjectSections);
         } else {
-            // Valeurs par défaut de secours pour éviter l'écran vide sur mobile
             setSections([
                 { name: 'Histoire', color: '#ef4444' },
                 { name: 'Géographie', color: '#3b82f6' },
@@ -72,8 +70,6 @@ export default function ProfStudioFolder({
 
     const activeChapters = (chapters || []).filter(c => !c.isArchived && norm(c.classroom) === norm(classFilter));
     const archivedChapters = (chapters || []).filter(c => c.isArchived && norm(c.classroom) === norm(classFilter));
-
-    // Dossiers qui n'ont pas de catégorie matchant les sections actuelles
     const orphanChapters = activeChapters.filter(c => !sections.some(s => s.name === c.subject));
 
     const renderChapterCard = (chap, section, isOpen, chapItems) => {
@@ -103,8 +99,6 @@ export default function ProfStudioFolder({
                     <div className="flex gap-1">
                         <button onClick={(e) => { e.stopPropagation(); setEditingId(chap._id); setTempTitle(chap.title); }} className="w-9 h-9 flex items-center justify-center bg-slate-50 rounded-full">✏️</button>
                         <button onClick={(e) => { e.stopPropagation(); onArchive(chap._id, !chap.isArchived); }} className="w-9 h-9 flex items-center justify-center bg-slate-50 rounded-full hover:bg-slate-800 hover:text-white">📦</button>
-                        
-                        {/* CROIX DE SUPPRESSION VISIBLE */}
                         <button onClick={(e) => { e.stopPropagation(); onDeleteChapter(chap._id); }} className="w-9 h-9 flex items-center justify-center bg-red-50 text-red-600 rounded-full font-black border border-red-100">✕</button>
                     </div>
                 </div>
@@ -127,7 +121,6 @@ export default function ProfStudioFolder({
 
     return (
         <div className="max-w-5xl mx-auto space-y-12 pb-20">
-            {/* ARCHIVES / CONFIG SECTIONS */}
             <div className="p-8 bg-slate-900 rounded-[50px] border-4 border-slate-800 shadow-2xl">
                 <div className="flex justify-between items-center mb-8 px-2">
                     <h3 className="text-white font-black text-[10px] uppercase tracking-widest">📂 Super-Dossiers</h3>
@@ -155,7 +148,6 @@ export default function ProfStudioFolder({
                 </div>
             </div>
 
-            {/* DOSSIERS ACTIFS */}
             <div className="space-y-16">
                 {sections.map(s => (
                     <div key={'active-' + s.name} className="animate-in fade-in">
@@ -168,8 +160,6 @@ export default function ProfStudioFolder({
                         </div>
                     </div>
                 ))}
-
-                {/* SECTION POUR LES DOSSIERS NON CLASSÉS (FIX MOBILE) */}
                 {orphanChapters.length > 0 && (
                     <div className="animate-in fade-in pt-10 border-t-4 border-dashed border-slate-100">
                         <h3 className="font-black text-slate-300 text-xs uppercase tracking-widest px-6 mb-4">Dossiers à classer</h3>
