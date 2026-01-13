@@ -6,7 +6,6 @@ const DriveService = require('../../services/drive.service');
 const getChapter = () => mongoose.model('Chapter');
 const getScanSession = () => mongoose.model('ScanSession');
 
-// Helper pour trouver le chemin Drive "1Travaux" d'une classe
 const getWorksPath = async (classroom) => {
     try {
         const condaRootId = await DriveService.getOrCreateFolder("CondaClasse", null);
@@ -16,7 +15,7 @@ const getWorksPath = async (classroom) => {
     } catch (e) { return null; }
 };
 
-// --- ROUTES CHAPITRES (DOSSIERS DE COURS) ---
+// --- ROUTES CHAPITRES (LOCKED LOGIC - Story #2 & #7) ---
 
 router.get('/chapters-all', async (req, res) => {
     try {
@@ -27,20 +26,32 @@ router.get('/chapters-all', async (req, res) => {
 
 router.post('/chapters', async (req, res) => {
     try {
-        const { _id, title, classroom, subject, teacherId, isArchived } = req.body;
+        const { _id, title, classroom, subject, teacherId } = req.body;
         const Chapter = getChapter();
 
         if (_id) {
-            // MISE À JOUR : Renommage ou Archivage
+            // MISE À JOUR : Renommage (User Story #7)
             const existing = await Chapter.findById(_id);
+            if (!existing) return res.status(404).json({ error: "Dossier non trouvé" });
+
+            // US #7 : Synchro Drive sécurisée
             if (existing.driveFolderId && title && title !== existing.title) {
-                await DriveService.renameFolder(existing.driveFolderId, title);
+                try {
+                    await DriveService.renameFolder(existing.driveFolderId, title);
+                } catch (driveErr) {
+                    console.error("US#7 Drive Sync Fail (Non-blocking):", driveErr.message);
+                }
             }
-            const updated = await Chapter.findByIdAndUpdate(_id, req.body, { new: true });
+            
+            // On retire l'ID du body pour ne pas tenter de le modifier dans Mongo
+            const updateData = { ...req.body };
+            delete updateData._id;
+
+            const updated = await Chapter.findByIdAndUpdate(_id, updateData, { new: true });
             return res.json(updated);
         }
 
-        // CRÉATION : Nouveau dossier avec structure Drive (User Story #2)
+        // CRÉATION (User Story #2)
         const worksParentId = await getWorksPath(classroom);
         const driveId = await DriveService.getOrCreateFolder(title || "Nouveau Dossier", worksParentId);
         
@@ -53,21 +64,24 @@ router.post('/chapters', async (req, res) => {
             isArchived: false 
         });
         res.json(newChap);
-    } catch (e) { res.status(500).json({ error: e.message }); }
+    } catch (e) { 
+        console.error("Erreur 500 /chapters:", e.message);
+        res.status(500).json({ error: e.message }); 
+    }
 });
 
 router.delete('/chapters/:id', async (req, res) => {
     try {
         const chap = await getChapter().findById(req.params.id);
         if (chap && chap.driveFolderId) {
-            await DriveService.deleteFile(chap.driveFolderId);
+            try { await DriveService.deleteFile(chap.driveFolderId); } catch(e) {}
         }
         await getChapter().findByIdAndDelete(req.params.id);
         res.json({ ok: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// --- ROUTES SCANS (LOCKED LOGIC) ---
+// --- ROUTES SCANS ---
 
 router.get('/scan-sessions', async (req, res) => {
     try {
@@ -81,6 +95,15 @@ router.get('/scan-sessions/:id/files/:type', async (req, res) => {
         const session = await getScanSession().findById(req.params.id);
         const type = req.params.type;
         let folderId = (type === 'subject') ? session.subjectFolderId : (type === 'copies' ? session.copiesFolderId : session.correctionsFolderId);
+        
+        if (!folderId && session.driveFolderId) {
+            const subName = (type === 'subject') ? "Sujet" : (type === 'copies' ? "Copies" : "Corrections");
+            folderId = await DriveService.getOrCreateFolder(subName, session.driveFolderId);
+            await getScanSession().findByIdAndUpdate(req.params.id, { 
+                [type === 'subject' ? 'subjectFolderId' : (type === 'copies' ? 'copiesFolderId' : 'correctionsFolderId')]: folderId 
+            });
+        }
+
         const files = await DriveService.listFiles(folderId);
         res.json(files);
     } catch (e) { res.status(500).json({ error: e.message }); }

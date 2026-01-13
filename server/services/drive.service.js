@@ -37,7 +37,21 @@ const DriveService = {
         } catch (e) { return null; }
     },
 
-    // Lister les fichiers d'un dossier
+    // US #7 : Bas niveau rename
+    renameFolder: async (fileId, newName) => {
+        if (!drive || !fileId) return;
+        try {
+            await drive.files.update({ 
+                fileId: fileId, 
+                resource: { name: newName } 
+            });
+            return true;
+        } catch (e) {
+            console.error("Drive renameFolder error:", e.message);
+            return false;
+        }
+    },
+
     listFiles: async (folderId) => {
         if (!drive || !folderId) return [];
         try {
@@ -47,10 +61,7 @@ const DriveService = {
                 orderBy: 'name'
             });
             return res.data.files || [];
-        } catch (e) {
-            console.error("Drive listFiles error:", e.message);
-            return [];
-        }
+        } catch (e) { return []; }
     },
 
     deleteFile: async (id) => { 

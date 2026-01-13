@@ -1,6 +1,6 @@
 {
-  "version": "1.2.8",
-  "build": 159,
-  "description": "Added cleanup utility script",
-  "timestamp": "2026-01-13T20:32:05.557Z"
+  "version": "1.2.9",
+  "build": 160,
+  "description": "Fix US#7: Robust Chapter Renaming with Drive Fallback",
+  "timestamp": "2026-01-13T20:38:05.915Z"
 }
