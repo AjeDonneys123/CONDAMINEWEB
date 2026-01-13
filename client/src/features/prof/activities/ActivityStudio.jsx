@@ -41,7 +41,6 @@ export default function ActivityStudio({ globalClass, user }) {
         return <GameStudio initialData={editingItem.data} chapters={activeChaps} classFilter={globalClass} onClose={() => { setEditingItem(null); loadData(); }} />;
     }
 
-    // Fonction de création de dossier liée à un super-dossier (subject)
     const handleCreateChapter = async (subjectName) => {
         try {
             const res = await fetch('/api/chapters', { 
@@ -49,7 +48,7 @@ export default function ActivityStudio({ globalClass, user }) {
                 headers:{'Content-Type':'application/json'}, 
                 body: JSON.stringify({ 
                     title: 'Nouveau Dossier', 
-                    subject: subjectName, // C'est ici qu'on lie au super-dossier
+                    subject: subjectName, 
                     classroom: globalClass, 
                     teacherId: user?.id || user?._id 
                 }) 
@@ -74,29 +73,21 @@ export default function ActivityStudio({ globalClass, user }) {
                     items={activities}
                     classFilter={globalClass}
                     onArchive={async (id, state) => {
-                        await fetch('/api/chapters', { 
-                            method:'POST', 
-                            headers:{'Content-Type':'application/json'}, 
-                            body:JSON.stringify({_id:id, isArchived:state})
-                        });
+                        await fetch('/api/chapters', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({_id:id, isArchived:state})});
                         loadData();
                     }}
                     onRename={async (id, title) => {
-                        await fetch('/api/chapters', { 
-                            method:'POST', 
-                            headers:{'Content-Type':'application/json'}, 
-                            body:JSON.stringify({_id:id, title})
-                        });
+                        await fetch('/api/chapters', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({_id:id, title})});
                         loadData();
                     }}
                     onEditItem={(it) => setEditingItem({ type: it.actType, data: it })}
                     onDeleteItem={async (id, type) => {
-                        if(!confirm("Supprimer cet élément ?")) return;
+                        if(!confirm("Supprimer ?")) return;
                         await fetch(type === 'game' ? `/api/game-levels/${id}` : `/api/homework/${id}`, { method: 'DELETE' });
                         loadData();
                     }}
                     onDeleteChapter={async (id) => {
-                        if(!confirm("Supprimer ce dossier et tout son contenu Drive ?")) return;
+                        if(!confirm("Supprimer ?")) return;
                         await fetch(`/api/chapters/${id}`, { method: 'DELETE' });
                         loadData();
                     }}

@@ -49,10 +49,9 @@ export default function ScansStudio({ globalClass }) {
 
     return (
         <div className="space-y-6 animate-in fade-in">
-            {/* Barre de création */}
             <div className="bg-white p-6 rounded-[35px] border-2 border-indigo-50 shadow-sm flex gap-4">
-                <input className="flex-1 p-4 bg-slate-50 rounded-2xl outline-none font-bold text-slate-700" placeholder="Nom du travail (ex: Dictée du jour)..." value={newTitle} onChange={e=>setNewTitle(e.target.value)} />
-                <button onClick={createSession} disabled={loading} className="px-8 bg-indigo-600 text-white rounded-2xl font-black uppercase text-xs shadow-lg">Créer</button>
+                <input className="flex-1 p-4 bg-slate-50 rounded-2xl outline-none font-bold text-slate-700" placeholder="Nom de la production (ex: Évaluation Géo)..." value={newTitle} onChange={e=>setNewTitle(e.target.value)} />
+                <button onClick={createSession} disabled={loading} className="px-8 bg-indigo-600 text-white rounded-2xl font-black uppercase text-xs">Créer</button>
             </div>
 
             <div className="space-y-4">
@@ -65,7 +64,7 @@ export default function ScansStudio({ globalClass }) {
                                 <div className="flex items-center gap-4 cursor-pointer flex-1" onClick={() => setOpenId(isOpen ? null : s._id)}>
                                     <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-white ${isOpen ? 'bg-indigo-600' : 'bg-slate-200'}`}>{isOpen ? '▼' : '▶'}</div>
                                     <div>
-                                        <h3 className="font-black text-slate-700">{s.title}</h3>
+                                        <h3 className="font-black text-slate-700">{s.title || "Sans titre"}</h3>
                                         <div className="flex items-center gap-2">
                                             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{s.subjectUrls?.length || 0} SUJET • {s.copyUrls?.length || 0} COPIES</span>
                                             {assigned && <span className="text-[9px] font-black bg-emerald-100 text-emerald-600 px-2 py-0.5 rounded-md uppercase">📁 {assigned.title}</span>}
@@ -73,12 +72,11 @@ export default function ScansStudio({ globalClass }) {
                                     </div>
                                 </div>
                                 <div className="flex gap-2">
-                                    <button onClick={() => setShowFolderPicker(s._id)} className="px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl font-black text-[10px] uppercase">{assigned ? 'Déplacer' : 'Classer'}</button>
+                                    <button onClick={() => setShowFolderPicker(s._id)} className="px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl font-black text-[9px] uppercase">{assigned ? 'Déplacer' : 'Classer'}</button>
                                     <button onClick={async () => { if(confirm("Supprimer ?")) { await fetch(`/api/scan-sessions/${s._id}`, {method:'DELETE'}); loadData(); } }} className="text-slate-300 font-bold p-2 hover:text-red-500">✕</button>
                                 </div>
                             </div>
 
-                            {/* PICKER DE DOSSIER */}
                             {showFolderPicker === s._id && (
                                 <div className="p-4 bg-emerald-50 border-t flex flex-wrap gap-2 animate-in slide-in-from-top-2">
                                     <p className="w-full text-[10px] font-black text-emerald-800 uppercase px-2 mb-2">Dossier de cours :</p>
@@ -90,7 +88,7 @@ export default function ScansStudio({ globalClass }) {
                             {isOpen && !showFolderPicker && (
                                 <div className="border-t-2 border-dashed border-slate-100 p-6 bg-slate-50/30">
                                     <div className="flex gap-2 mb-6">
-                                        <button onClick={() => setActiveTab('subject')} className={`flex-1 py-3 rounded-2xl font-black text-[10px] transition-all ${activeTab === 'subject' ? 'bg-orange-500 text-white shadow-md' : 'bg-white text-slate-400 border'}`}>1. LE SUJET (QUES+DOCS)</button>
+                                        <button onClick={() => setActiveTab('subject')} className={`flex-1 py-3 rounded-2xl font-black text-[10px] transition-all ${activeTab === 'subject' ? 'bg-orange-500 text-white shadow-md' : 'bg-white text-slate-400 border'}`}>1. LE SUJET (DOCS)</button>
                                         <button onClick={() => setActiveTab('copies')} className={`flex-1 py-3 rounded-2xl font-black text-[10px] transition-all ${activeTab === 'copies' ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-slate-400 border'}`}>2. LES COPIES</button>
                                         <button onClick={() => setActiveTab('ia')} className={`flex-1 py-3 rounded-2xl font-black text-[10px] transition-all ${activeTab === 'ia' ? 'bg-emerald-600 text-white shadow-md' : 'bg-white text-slate-400 border'}`}>3. CORRECTION IA</button>
                                     </div>
@@ -124,10 +122,9 @@ function PilotArea({ session, tab, onRefresh }) {
     const takeSnap = async () => {
         if (capturing) return;
         setCapturing(true);
-        const video = videoRef.current;
         const canvas = document.createElement('canvas');
-        canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-        canvas.getContext('2d').drawImage(video, 0, 0);
+        canvas.width = videoRef.current.videoWidth; canvas.height = videoRef.current.videoHeight;
+        canvas.getContext('2d').drawImage(videoRef.current, 0, 0);
         const data = canvas.toDataURL('image/jpeg', 0.7);
 
         await fetch('/api/scan-upload-photo', {
@@ -163,10 +160,9 @@ function PilotArea({ session, tab, onRefresh }) {
                 </div>
             </div>
 
-            {/* Plateau de prévisualisation */}
             <div className="space-y-2 px-2">
                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Photos enregistrées ({currentPhotos?.length || 0})</span>
-                <div className="flex gap-3 overflow-x-auto pb-4 custom-scrollbar">
+                <div className="flex gap-3 overflow-x-auto pb-4 custom-scrollbar px-2">
                     {currentPhotos?.map((id, i) => (
                         <div key={id} className="relative min-w-[85px] h-[115px] bg-slate-200 rounded-xl overflow-hidden border-2 border-white shadow-sm flex-shrink-0 animate-in slide-in-from-right-2">
                             <img src={`https://drive.google.com/thumbnail?id=${id}&sz=w200`} className="w-full h-full object-cover" alt="prev" />
