@@ -13,29 +13,38 @@
     align-items: center; justify-content: center;
     letter-spacing: 1px; z-index: 1000000;
     border-bottom: 1px solid #1e293b;
-    gap: 20px;
+    gap: 30px;
 }
 
-/* INDICATEUR DE DEPLOIEMENT */
-.deploy-indicator {
+/* INDICATEURS */
+.deploy-indicator, .live-indicator {
     display: flex; align-items: center; gap: 8px;
-    color: #38bdf8; font-size: 9px;
+    font-size: 9px;
+}
+
+.deploy-indicator { color: #38bdf8; }
+.live-indicator { color: #22c55e; }
+
+.deploy-dot, .live-dot {
+    width: 8px; height: 8px; border-radius: 50%; display: inline-block;
 }
 
 .deploy-dot {
-    width: 8px; height: 8px; background: #38bdf8;
-    border-radius: 50%; display: inline-block;
-    box-shadow: 0 0 10px #38bdf8;
-    animation: pulse-blue 1.5s infinite;
+    background: #38bdf8; box-shadow: 0 0 10px #38bdf8;
+    animation: pulse-indicator 1.5s infinite;
 }
 
-@keyframes pulse-blue {
+.live-dot {
+    background: #22c55e; box-shadow: 0 0 10px rgba(34, 197, 94, 0.4);
+}
+
+@keyframes pulse-indicator {
     0% { transform: scale(0.9); opacity: 0.6; }
     50% { transform: scale(1.2); opacity: 1; }
     100% { transform: scale(0.9); opacity: 0.6; }
 }
 
-/* OVERLAY DE SYNCHRO AUTO */
+/* OVERLAY DE SYNCHRO */
 .sync-overlay {
     position: fixed; inset: 0; background: #0f172a;
     display: flex; align-items: center; justify-content: center;
@@ -51,6 +60,3 @@
     margin: 0 auto 1.5rem; animation: spin 1s linear infinite;
 }
 @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-
-.sync-card h2 { font-weight: 900; margin-bottom: 0.5rem; color: #1e293b; }
-.sync-card p { color: #64748b; font-weight: 600; }

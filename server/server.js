@@ -19,9 +19,28 @@ const models = [
 ];
 models.forEach(m => { try { require(m); } catch (e) {} });
 
-// 2. CONNEXION MONGODB
+// 2. CONNEXION MONGODB + AUTO-RESET DU SIGNAL DE DÉPLOIEMENT
 mongoose.connect(process.env.MONGODB_URI)
-    .then(() => console.log('✅ MongoDB Connecté.'))
+    .then(async () => {
+        console.log('✅ MongoDB Connecté.');
+        
+        // --- LOGIQUE D'AUTO-RESET DU SIGNAL ---
+        try {
+            const DeploySignal = mongoose.model('DeploySignal');
+            const versionData = JSON.parse(fs.readFileSync(path.join(__dirname, 'version.json'), 'utf8'));
+            
+            // On informe la BDD que le build actuel est maintenant "live"
+            await DeploySignal.findOneAndUpdate({}, { 
+                status: 'live', 
+                build: versionData.build,
+                updatedAt: new Date()
+            }, { upsert: true });
+            
+            console.log(`✨ Signal de déploiement réinitialisé sur LIVE (Build #${versionData.build})`);
+        } catch (err) {
+            console.error("❌ Erreur reset signal déploiement:", err.message);
+        }
+    })
     .catch(err => console.error("❌ Erreur MongoDB :", err.message));
 
 app.use(express.json({ limit: '50mb' }));
@@ -58,7 +77,7 @@ if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
     app.get('*', (req, res) => res.sendFile(path.join(distPath, 'index.html')));
 } else {
-    app.get('/', (req, res) => res.send("Serveur Condamine - Monitor Actif."));
+    app.get('/', (req, res) => res.send("Serveur Condamine - Mode Monitor."));
 }
 
-app.listen(port, () => console.log(`🚀 SERVEUR BOOT [${SERVER_BOOT_ID}]`));
+app.listen(port, () => console.log(`🚀 SERVEUR DÉMARRÉ [BOOT_ID: ${SERVER_BOOT_ID}]`));
