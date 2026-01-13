@@ -1,18 +1,23 @@
 import React from 'react';
 import './EleveHeader.css';
 
-export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, onTabChange }) {
-  const isTestEleve = user.firstName === "Eleve" && user.lastName === "Test";
+export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, onTabChange, onTogglePink }) {
+  const isTestEleve = user.firstName === "Eleve" || user.id === "prof" || user.role === "prof";
 
   return (
     <div className="header-wrapper">
       <div className="top-bar">
-        <div className="brand-zone">
+        <div className="brand-zone flex items-center gap-4">
           <h1 className="brand-name">Condamine</h1>
-          {isTestEleve && <button onClick={onBackToProf} className="btn-back-prof">🎓 RETOUR PROF</button>}
+          {isTestEleve && <button onClick={onBackToProf} className="btn-back-prof">🎓 PROF</button>}
+          
+          {/* BOUTON ANA VICTORIA */}
+          <button onClick={onTogglePink} className="btn-ana-victoria">
+            🌸 ANA VICTORIA
+          </button>
         </div>
         <div className="user-zone">
-            <span className="user-badge">{user.firstName} ({user.classroom})</span>
+            <span className="user-badge">{user.firstName} ({user.classroom || 'Prof'})</span>
             <button onClick={onLogout} className="logout-link">✕</button>
         </div>
       </div>

@@ -3,17 +3,18 @@ import EleveHeader from './components/EleveHeader';
 import HomeworkList from './homework/HomeworkList';
 import MistakesBook from './mistakes/MistakesBook';
 import GamesGrid from './games/GamesGrid';
-import ProductionsList from './productions/ProductionsList'; // <--- NOUVEAU
+import ProductionsList from './productions/ProductionsList';
+import './ElevePage.css';
 
-export default function ElevePage({ user, onLogout, onBackToProf, onOpenBug }) {
+export default function ElevePage({ user, onLogout, onBackToProf, onTogglePink }) {
   const [tab, setTab] = useState('devoirs');
 
   return (
     <div className="eleve-page-wrapper">
         <div className="eleve-page-container">
           <EleveHeader 
-            user={user} onLogout={onLogout} onBackToProf={onBackToProf} onOpenBug={onOpenBug}
-            activeTab={tab} onTabChange={setTab} 
+            user={user} onLogout={onLogout} onBackToProf={onBackToProf}
+            activeTab={tab} onTabChange={setTab} onTogglePink={onTogglePink}
           />
           
           <div className="mt-8">

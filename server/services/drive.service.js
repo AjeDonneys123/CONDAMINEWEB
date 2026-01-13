@@ -34,33 +34,24 @@ const DriveService = {
                 fields: 'id'
             });
             return folder.data.id;
-        } catch (e) { 
-            console.error("Drive getOrCreate error:", e.message);
-            return null; 
-        }
+        } catch (e) { return null; }
     },
-    renameFolder: async (fileId, newName) => {
-        if (!drive || !fileId) return;
-        try {
-            await drive.files.update({ fileId: fileId, resource: { name: newName } });
-        } catch (e) {
-            console.error("Drive rename error:", e.message);
-        }
+
+    ensureSessionStructure: async (rootFolderId) => {
+        if (!drive || !rootFolderId) return {};
+        const subjectId = await DriveService.getOrCreateFolder("Sujet", rootFolderId);
+        const copiesId = await DriveService.getOrCreateFolder("Copies", rootFolderId);
+        const correctionsId = await DriveService.getOrCreateFolder("Corrections", rootFolderId);
+        return { subjectId, copiesId, correctionsId };
     },
+
     deleteFile: async (id) => { 
         if (!drive || !id) return true;
         try { await drive.files.delete({ fileId: id }); return true; } catch (e) { return false; } 
     },
-    moveFile: async (fileId, newParentId) => {
-        if (!drive || !fileId || !newParentId) return;
-        try {
-            const file = await drive.files.get({ fileId: fileId, fields: 'parents' });
-            const previous = (file.data.parents || []).join(',');
-            return await drive.files.update({ fileId: fileId, addParents: newParentId, removeParents: previous });
-        } catch(e) {}
-    },
+
     uploadImage: async (folderId, fileName, base64Data) => {
-        if (!drive) return null;
+        if (!drive || !folderId) return null;
         try {
             const buffer = Buffer.from(base64Data.split(',')[1], 'base64');
             const media = { mimeType: 'image/jpeg', body: Readable.from(buffer) };
