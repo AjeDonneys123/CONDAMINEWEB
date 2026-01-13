@@ -10,10 +10,16 @@ export default function ProfStudioFolder({
     const [pickingSectionFor, setPickingSectionFor] = useState(null);
     const [isDeleteMode, setIsDeleteMode] = useState(false);
     
-    // Persistence Mobile (User Story #1)
     const [sections, setSections] = useState([]);
 
     const norm = (c) => c?.toString().toUpperCase().replace('E', '').trim() || "";
+
+    // FONCTION DE TRI ALPHANUMÉRIQUE NATUREL (US #8)
+    const smartSort = (a, b) => {
+        const titleA = a.title || "";
+        const titleB = b.title || "";
+        return titleA.localeCompare(titleB, undefined, { numeric: true, sensitivity: 'base' });
+    };
 
     useEffect(() => { 
         if (user?.subjectSections && user.subjectSections.length > 0) {
@@ -44,18 +50,11 @@ export default function ProfStudioFolder({
         } catch(e) { console.error(e); }
     };
 
-    const addSection = () => {
-        const name = prompt("Nom du super-dossier (ex: Français, Géo...)");
-        if (!name) return;
-        const colors = ["#ef4444", "#3b82f6", "#22c55e", "#a855f7", "#f59e0b", "#ec4899"];
-        const color = colors[sections.length % colors.length];
-        saveSections([...sections, { name, color }]);
-    };
-
-    const removeSection = (name) => {
-        if(!confirm("Supprimer ce super-dossier ?")) return;
-        saveSections(sections.filter(s => s.name !== name));
-        setIsDeleteMode(false);
+    const handleRenameSubmit = (id) => {
+        if (tempTitle.trim()) {
+            onRename(id, tempTitle);
+        }
+        setEditingId(null);
     };
 
     const changeChapterSection = async (chapId, sectionName) => {
@@ -68,8 +67,15 @@ export default function ProfStudioFolder({
         window.location.reload(); 
     };
 
-    const activeChapters = (chapters || []).filter(c => !c.isArchived && norm(c.classroom) === norm(classFilter));
-    const archivedChapters = (chapters || []).filter(c => c.isArchived && norm(c.classroom) === norm(classFilter));
+    // Application du tri intelligent (US #8)
+    const activeChapters = (chapters || [])
+        .filter(c => !c.isArchived && norm(c.classroom) === norm(classFilter))
+        .sort(smartSort);
+
+    const archivedChapters = (chapters || [])
+        .filter(c => c.isArchived && norm(c.classroom) === norm(classFilter))
+        .sort(smartSort);
+
     const orphanChapters = activeChapters.filter(c => !sections.some(s => s.name === c.subject));
 
     const renderChapterCard = (chap, section, isOpen, chapItems) => {
@@ -78,7 +84,7 @@ export default function ProfStudioFolder({
         return (
             <div key={chap._id} className="bg-white rounded-[35px] border-2 shadow-sm overflow-hidden transition-all mb-3" style={{ borderColor: isOpen ? color : '#f8fafc' }}>
                 <div className="p-4 flex items-center justify-between">
-                    <div className="flex items-center gap-4 flex-1 cursor-pointer" onClick={() => setOpenChaps({...openChaps, [chap._id]: !isOpen})}>
+                    <div className="flex items-center gap-4 flex-1 cursor-pointer" onClick={() => setOpenId(isOpen ? null : s._id)}>
                         <div className="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-white text-sm relative" style={{ backgroundColor: color }} onClick={(e) => { e.stopPropagation(); setPickingSectionFor(chap._id); }}>
                             {pickingSectionFor === chap._id ? "..." : letter}
                             {pickingSectionFor === chap._id && (
@@ -87,9 +93,18 @@ export default function ProfStudioFolder({
                                 </div>
                             )}
                         </div>
-                        <div className="flex flex-col">
+                        <div className="flex flex-col" onClick={() => setOpenChaps({...openChaps, [chap._id]: !isOpen})}>
                             {editingId === chap._id ? (
-                                <input autoFocus className="text-xl font-black outline-none border-b-2" style={{ borderColor: color }} value={tempTitle} onChange={e => setTempTitle(e.target.value)} onBlur={() => { onRename(chap._id, tempTitle); setEditingId(null); }} onClick={e=>e.stopPropagation()} />
+                                <input 
+                                    autoFocus 
+                                    className="text-lg font-black outline-none border-b-2" 
+                                    style={{ borderColor: color }} 
+                                    value={tempTitle} 
+                                    onChange={e => setTempTitle(e.target.value)} 
+                                    onKeyDown={(e) => { if (e.key === 'Enter') handleRenameSubmit(chap._id); }}
+                                    onBlur={() => handleRenameSubmit(chap._id)} 
+                                    onClick={e=>e.stopPropagation()} 
+                                />
                             ) : (
                                 <span className="text-lg font-black text-slate-700">{chap.title || "Sans titre"}</span>
                             )}
@@ -97,7 +112,7 @@ export default function ProfStudioFolder({
                         </div>
                     </div>
                     <div className="flex gap-1">
-                        <button onClick={(e) => { e.stopPropagation(); setEditingId(chap._id); setTempTitle(chap.title); }} className="w-9 h-9 flex items-center justify-center bg-slate-50 rounded-full">✏️</button>
+                        <button onClick={(e) => { e.stopPropagation(); setEditingId(chap._id); setTempTitle(chap.title); }} className="w-9 h-9 flex items-center justify-center bg-slate-50 rounded-full text-slate-400">✏️</button>
                         <button onClick={(e) => { e.stopPropagation(); onArchive(chap._id, !chap.isArchived); }} className="w-9 h-9 flex items-center justify-center bg-slate-50 rounded-full hover:bg-slate-800 hover:text-white">📦</button>
                         <button onClick={(e) => { e.stopPropagation(); onDeleteChapter(chap._id); }} className="w-9 h-9 flex items-center justify-center bg-red-50 text-red-600 rounded-full font-black border border-red-100">✕</button>
                     </div>
@@ -125,7 +140,7 @@ export default function ProfStudioFolder({
                 <div className="flex justify-between items-center mb-8 px-2">
                     <h3 className="text-white font-black text-[10px] uppercase tracking-widest">📂 Super-Dossiers</h3>
                     <div className="flex gap-2">
-                        <button onClick={addSection} className="bg-indigo-600 text-white px-5 py-2 rounded-2xl font-black text-[9px] uppercase shadow-lg">+ Nouveau</button>
+                        <button onClick={() => { const n = prompt("Nom ?"); if(n) saveSections([...sections, {name:n, color:'#3b82f6'}]); }} className="bg-indigo-600 text-white px-5 py-2 rounded-2xl font-black text-[9px] uppercase shadow-lg">+ Nouveau</button>
                         <button onClick={() => setIsDeleteMode(!isDeleteMode)} className={`px-5 py-2 rounded-2xl font-black text-[9px] uppercase ${isDeleteMode ? 'bg-red-500 text-white' : 'bg-slate-700 text-slate-300'}`}>Gérer</button>
                     </div>
                 </div>
@@ -133,7 +148,7 @@ export default function ProfStudioFolder({
                     {sections.map(s => (
                         <div key={s.name} className="bg-slate-800/40 p-5 rounded-[35px] border border-slate-700">
                             <h4 className="font-black text-[10px] uppercase tracking-widest mb-4 flex justify-between" style={{ color: s.color }}>
-                                {s.name} {isDeleteMode && <span onClick={() => removeSection(s.name)} className="cursor-pointer bg-red-500 text-white w-4 h-4 flex items-center justify-center rounded-full text-[8px]">✕</span>}
+                                {s.name} {isDeleteMode && <span onClick={() => saveSections(sections.filter(x=>x.name!==s.name))} className="cursor-pointer bg-red-500 text-white w-4 h-4 flex items-center justify-center rounded-full text-[8px]">✕</span>}
                             </h4>
                             <div className="space-y-2">
                                 {archivedChapters.filter(c => c.subject === s.name).map(c => (
@@ -153,7 +168,7 @@ export default function ProfStudioFolder({
                     <div key={'active-' + s.name} className="animate-in fade-in">
                         <div className="flex items-center justify-between mb-4 px-6 border-b border-slate-100 pb-4">
                             <h3 className="font-black text-lg uppercase tracking-widest" style={{ color: s.color }}>{s.name}</h3>
-                            <button onClick={() => onCreateChapter(s.name)} className="text-[9px] font-black px-6 py-2 rounded-full border-2 border-dashed" style={{ color: s.color, borderColor: s.color }}>+ CRÉER UN DOSSIER {s.name.toUpperCase()}</button>
+                            <button onClick={() => { const n = prompt("Nom du dossier ?"); if(n) onCreateChapter(s.name, n); }} className="text-[9px] font-black px-6 py-2 rounded-full border-2 border-dashed" style={{ color: s.color, borderColor: s.color }}>+ CRÉER UN DOSSIER {s.name.toUpperCase()}</button>
                         </div>
                         <div className="grid grid-cols-1 gap-1">
                             {activeChapters.filter(c => c.subject === s.name).map(chap => renderChapterCard(chap, s, openChaps[chap._id], (items || []).filter(it => String(it.chapterId) === String(chap._id))))}

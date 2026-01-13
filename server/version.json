@@ -1,6 +1,6 @@
 {
-  "version": "1.3.2",
-  "build": 163,
-  "description": "Fix 404 API Chapters + Robust Fluid Renaming",
-  "timestamp": "2026-01-13T20:46:33.562Z"
+  "version": "1.3.3",
+  "build": 164,
+  "description": "Smart alphanumeric sorting for archives (User Story #8)",
+  "timestamp": "2026-01-13T20:50:47.155Z"
 }
