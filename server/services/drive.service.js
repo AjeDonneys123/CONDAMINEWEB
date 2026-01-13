@@ -12,10 +12,10 @@ try {
         );
         auth.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
         drive = google.drive({ version: 'v3', auth });
-        console.log("✅ Google Drive : Prêt.");
+        console.log("✅ Drive API Prêt.");
     }
 } catch (e) {
-    console.error("❌ Drive API Init Error:", e.message);
+    console.error("❌ Erreur Init Drive:", e.message);
 }
 
 const DriveService = {
@@ -30,17 +30,22 @@ const DriveService = {
             if (res.data.files && res.data.files.length > 0) return res.data.files[0].id;
 
             const folder = await drive.files.create({
-                resource: { name, mimeType: 'application/vnd.google-apps.folder', parents: parentId ? [parentId] : [] },
+                resource: { name: name, mimeType: 'application/vnd.google-apps.folder', parents: parentId ? [parentId] : [] },
                 fields: 'id'
             });
             return folder.data.id;
-        } catch (e) { return null; }
+        } catch (e) { 
+            console.error("Drive getOrCreate error:", e.message);
+            return null; 
+        }
     },
     renameFolder: async (fileId, newName) => {
         if (!drive || !fileId) return;
         try {
             await drive.files.update({ fileId: fileId, resource: { name: newName } });
-        } catch (e) {}
+        } catch (e) {
+            console.error("Drive rename error:", e.message);
+        }
     },
     deleteFile: async (id) => { 
         if (!drive || !id) return true;
@@ -51,7 +56,7 @@ const DriveService = {
         try {
             const file = await drive.files.get({ fileId: fileId, fields: 'parents' });
             const previous = (file.data.parents || []).join(',');
-            return await drive.files.update({ fileId, addParents: newParentId, removeParents: previous });
+            return await drive.files.update({ fileId: fileId, addParents: newParentId, removeParents: previous });
         } catch(e) {}
     },
     uploadImage: async (folderId, fileName, base64Data) => {

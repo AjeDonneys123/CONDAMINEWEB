@@ -5,12 +5,9 @@ const mongoose = require('mongoose');
 router.get('/players', async (req, res) => {
     try {
         const Player = mongoose.model('Player');
-        const players = await Player.find({}).sort({ classroom: 1, lastName: 1 });
-        res.json(players || []);
-    } catch (e) { 
-        console.error("❌ Error GET /players:", e.message);
-        res.status(500).json([]); 
-    }
+        const data = await Player.find({}).sort({ classroom: 1, lastName: 1 });
+        res.json(data || []);
+    } catch (e) { res.json([]); }
 });
 
 router.get('/homework-all', async (req, res) => {
@@ -18,19 +15,20 @@ router.get('/homework-all', async (req, res) => {
         const Homework = mongoose.model('Homework');
         const data = await Homework.find({}).sort({ date: -1 });
         res.json(data || []); 
-    } catch (e) { 
-        res.status(500).json([]); 
-    }
+    } catch (e) { res.json([]); }
 });
 
-router.get('/chapters-all', async (req, res) => {
+// Route vitale : Sauvegarde des super-dossiers (sections)
+router.patch('/teacher/:id/sections', async (req, res) => {
     try {
-        const Chapter = mongoose.model('Chapter');
-        const list = await Chapter.find({});
-        res.json(list || []);
-    } catch (e) {
-        res.status(500).json([]);
-    }
+        const Teacher = mongoose.model('Teacher');
+        const updated = await Teacher.findByIdAndUpdate(
+            req.params.id, 
+            { subjectSections: req.body.sections }, 
+            { new: true }
+        );
+        res.json(updated);
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 module.exports = router;

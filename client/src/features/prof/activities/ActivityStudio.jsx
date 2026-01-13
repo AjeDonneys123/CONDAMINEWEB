@@ -4,7 +4,7 @@ import GameStudio from '../games/GameStudio';
 import ProfStudioFolder from '../components/ProfStudioFolder';
 import HomeworkResults from '../homework/HomeworkResults';
 
-export default function ActivityStudio({ globalClass, teacherId }) {
+export default function ActivityStudio({ globalClass, user }) {
     const [activities, setActivities] = useState([]);
     const [chapters, setChapters] = useState([]);
     const [editingItem, setEditingItem] = useState(null); 
@@ -19,12 +19,13 @@ export default function ActivityStudio({ globalClass, teacherId }) {
                 fetch('/api/game-levels/all').then(r => r.json()),
                 fetch('/api/chapters-all').then(r => r.json())
             ]);
+            
             setActivities([
-                ...(hwRes || []).map(x => ({ ...x, actType: 'homework' })),
-                ...(gmRes || []).map(x => ({ ...x, actType: 'game' }))
+                ...(Array.isArray(hwRes) ? hwRes : []).map(x => ({ ...x, actType: 'homework' })),
+                ...(Array.isArray(gmRes) ? gmRes : []).map(x => ({ ...x, actType: 'game' }))
             ]);
-            setChapters(cpRes || []);
-        } catch (e) { console.error(e); }
+            setChapters(Array.isArray(cpRes) ? cpRes : []);
+        } catch (e) { console.error("Erreur chargement Studio:", e); }
         setLoading(false);
     };
 
@@ -40,54 +41,62 @@ export default function ActivityStudio({ globalClass, teacherId }) {
         return <GameStudio initialData={editingItem.data} chapters={activeChaps} classFilter={globalClass} onClose={() => { setEditingItem(null); loadData(); }} />;
     }
 
-    const handleCreateChapter = async (subject) => {
-        setLoading(true);
+    // Fonction de création de dossier liée à un super-dossier (subject)
+    const handleCreateChapter = async (subjectName) => {
         try {
             const res = await fetch('/api/chapters', { 
                 method:'POST', 
                 headers:{'Content-Type':'application/json'}, 
                 body: JSON.stringify({ 
                     title: 'Nouveau Dossier', 
-                    subject, 
+                    subject: subjectName, // C'est ici qu'on lie au super-dossier
                     classroom: globalClass, 
-                    teacherId 
+                    teacherId: user?.id || user?._id 
                 }) 
             });
             if (res.ok) await loadData();
         } catch (e) { console.error(e); }
-        setLoading(false);
     };
 
     return (
         <div className="animate-in fade-in">
             <div className="flex justify-start gap-4 mb-8 bg-white p-4 rounded-[30px] border-2 border-slate-50 shadow-sm">
-                <button onClick={() => setEditingItem({ type: 'homework', data: null })} className="bg-orange-500 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:scale-105 transition-all">+ Nouveau Devoir</button>
-                <button onClick={() => setEditingItem({ type: 'game', data: null })} className="bg-purple-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:scale-105 transition-all">+ Nouveau Jeu</button>
+                <button onClick={() => setEditingItem({ type: 'homework', data: null })} className="bg-orange-500 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:scale-105 transition-transform"> Nouveau Devoir</button>
+                <button onClick={() => setEditingItem({ type: 'game', data: null })} className="bg-purple-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:scale-105 transition-transform"> Nouveau Jeu</button>
             </div>
 
             {loading ? (
-                <div className="text-center py-20 text-slate-300 font-black animate-pulse">Chargement...</div>
+                <div className="text-center py-20 text-slate-300 font-black animate-pulse uppercase">Récupération des dossiers...</div>
             ) : (
                 <ProfStudioFolder 
+                    user={user}
                     chapters={chapters}
                     items={activities}
                     classFilter={globalClass}
                     onArchive={async (id, state) => {
-                        await fetch('/api/chapters', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({_id:id, isArchived:state})});
+                        await fetch('/api/chapters', { 
+                            method:'POST', 
+                            headers:{'Content-Type':'application/json'}, 
+                            body:JSON.stringify({_id:id, isArchived:state})
+                        });
                         loadData();
                     }}
                     onRename={async (id, title) => {
-                        await fetch('/api/chapters', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({_id:id, title})});
+                        await fetch('/api/chapters', { 
+                            method:'POST', 
+                            headers:{'Content-Type':'application/json'}, 
+                            body:JSON.stringify({_id:id, title})
+                        });
                         loadData();
                     }}
                     onEditItem={(it) => setEditingItem({ type: it.actType, data: it })}
                     onDeleteItem={async (id, type) => {
-                        if(!confirm("Supprimer ?")) return;
+                        if(!confirm("Supprimer cet élément ?")) return;
                         await fetch(type === 'game' ? `/api/game-levels/${id}` : `/api/homework/${id}`, { method: 'DELETE' });
                         loadData();
                     }}
                     onDeleteChapter={async (id) => {
-                        if(!confirm("Supprimer le dossier ?")) return;
+                        if(!confirm("Supprimer ce dossier et tout son contenu Drive ?")) return;
                         await fetch(`/api/chapters/${id}`, { method: 'DELETE' });
                         loadData();
                     }}
