@@ -1,6 +1,6 @@
 {
-  "version": "1.1.1",
-  "build": 141,
-  "description": "Auto-reset deploy signal to live on boot",
-  "timestamp": "2024-01-20T17:30:00Z"
+  "version": "1.1.2",
+  "build": 142,
+  "description": "Fix Camera Snapshot + Classify Button",
+  "timestamp": "2024-01-20T18:15:00Z"
 }
