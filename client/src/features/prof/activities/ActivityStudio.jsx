@@ -60,8 +60,8 @@ export default function ActivityStudio({ globalClass, user }) {
     return (
         <div className="animate-in fade-in">
             <div className="flex justify-start gap-4 mb-8 bg-white p-4 rounded-[30px] border-2 border-slate-50 shadow-sm">
-                <button onClick={() => setEditingItem({ type: 'homework', data: null })} className="bg-orange-500 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:scale-105 transition-transform"> Nouveau Devoir</button>
-                <button onClick={() => setEditingItem({ type: 'game', data: null })} className="bg-purple-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:scale-105 transition-transform"> Nouveau Jeu</button>
+                <button onClick={() => setEditingItem({ type: 'homework', data: null })} className="bg-orange-500 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg"> Nouveau Devoir</button>
+                <button onClick={() => setEditingItem({ type: 'game', data: null })} className="bg-purple-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg"> Nouveau Jeu</button>
             </div>
 
             {loading ? (
@@ -82,12 +82,13 @@ export default function ActivityStudio({ globalClass, user }) {
                     }}
                     onEditItem={(it) => setEditingItem({ type: it.actType, data: it })}
                     onDeleteItem={async (id, type) => {
-                        if(!confirm("Supprimer ?")) return;
-                        await fetch(type === 'game' ? `/api/game-levels/${id}` : `/api/homework/${id}`, { method: 'DELETE' });
+                        if(!confirm("Supprimer cet élément ?")) return;
+                        const endpoint = type === 'game' ? `/api/game-levels/${id}` : `/api/homework/${id}`;
+                        await fetch(endpoint, { method: 'DELETE' });
                         loadData();
                     }}
                     onDeleteChapter={async (id) => {
-                        if(!confirm("Supprimer ?")) return;
+                        if(!confirm("Supprimer ce dossier ?")) return;
                         await fetch(`/api/chapters/${id}`, { method: 'DELETE' });
                         loadData();
                     }}

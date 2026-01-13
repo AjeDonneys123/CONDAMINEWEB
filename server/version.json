@@ -1,5 +1,6 @@
 {
-  "build": 129,
-  "message": "Upgrade apply.js to v11 (Sentinel Security + Auto-Garbage Collector)",
-  "timestamp": "12/01/2026 13:00:00"
+  "version": "1.0.4",
+  "build": 135,
+  "description": "Fix Scan Upload 404 + Version Badge",
+  "timestamp": "2024-01-20T12:00:00Z"
 }

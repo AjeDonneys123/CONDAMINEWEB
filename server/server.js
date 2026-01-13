@@ -7,15 +7,14 @@ const fs = require('fs');
 const app = express();
 const port = process.env.PORT || 3000;
 
-// 1. CHARGEMENT DES MODÈLES (DÉTERMINISTE)
+// 1. CHARGEMENT DES MODÈLES
 const models = [
     './models/Teacher', './models/Player', './models/Chapter', 
     './models/Homework', './models/GameLevel', './models/Bug', 
     './models/Submission', './models/TeacherStyle', './models/ScanSession', 
     './models/DeploySignal'
 ];
-
-models.forEach(m => { try { require(m); } catch (e) { console.error("Modèle absent:", m); } });
+models.forEach(m => { try { require(m); } catch (e) { console.error("Erreur modèle:", m); } });
 
 // 2. CONNEXION MONGODB
 mongoose.connect(process.env.MONGODB_URI)
@@ -25,43 +24,37 @@ mongoose.connect(process.env.MONGODB_URI)
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// 3. API SYSTÈME ANTI-ALERTE (FIX RENDER)
+// 3. ROUTES SYSTÈME (STATUT + VERSION)
 app.get('/api/system-status', (req, res) => {
-    try {
-        const statusPath = path.join(__dirname, '..', 'apply_status.json');
-        if (fs.existsSync(statusPath)) {
-            const raw = fs.readFileSync(statusPath, 'utf8').trim();
-            if (raw && raw.startsWith('{')) return res.status(200).json(JSON.parse(raw));
-        }
-    } catch (e) {}
     res.status(200).json({ status: 'OK' });
 });
 
-app.post('/api/reset-status', (req, res) => {
+app.get('/api/app-version', (req, res) => {
     try {
-        const statusPath = path.join(__dirname, '..', 'apply_status.json');
-        fs.writeFileSync(statusPath, JSON.stringify({ status: 'OK', timestamp: Date.now() }, null, 2));
-        res.json({ ok: true });
-    } catch (e) { res.status(200).json({ ok: false }); }
+        const v = JSON.parse(fs.readFileSync(path.join(__dirname, 'version.json'), 'utf8'));
+        res.json(v);
+    } catch (e) { res.json({ version: "1.0.0", build: 0 }); }
 });
 
-// 4. ROUTES API
+// 4. ROUTES API (ORDRE CRITIQUE)
 app.use('/api', require('./features/auth/auth.routes'));
 app.use('/api', require('./features/eleve/eleve.routes'));
 app.use('/api', require('./features/prof/prof.routes'));
 app.use('/api', require('./features/game/game.routes'));
 app.use('/api', require('./features/prof/automation.routes'));
 
-// 5. FRONTEND
+// 5. GARDE-FOU API
+app.all('/api/*', (req, res) => {
+    res.status(404).json({ error: `Route API inexistante : ${req.method} ${req.originalUrl}` });
+});
+
+// 6. FRONTEND
 const distPath = path.join(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-        if (req.path.startsWith('/api')) return res.status(404).json({ error: "404" });
-        res.sendFile(path.join(distPath, 'index.html'));
-    });
+    app.get('*', (req, res) => res.sendFile(path.join(distPath, 'index.html')));
 } else {
     app.get('/', (req, res) => res.send("Serveur Condamine - Prêt."));
 }
 
-app.listen(port, () => console.log("🚀 Port " + port));
+app.listen(port, () => console.log("🚀 SERVEUR DÉMARRÉ SUR PORT " + port));

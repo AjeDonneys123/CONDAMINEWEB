@@ -1,13 +1,35 @@
 .app-wrapper {
     min-height: 100vh;
     background-color: #f8fafc;
+    position: relative;
+    padding-top: 25px; /* Laisse la place pour le badge de version */
+}
+
+/* BADGE DE VERSION */
+.version-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 25px;
+    background: #1e293b;
+    color: #94a3b8;
+    font-size: 9px;
+    font-weight: 900;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    z-index: 1000000;
+    border-bottom: 1px solid #334155;
+    pointer-events: none;
 }
 
 .system-alert-bar {
-    position: fixed; top: 0; left: 0; right: 0;
-    background: #ef4444; color: white; padding: 12px;
-    z-index: 100000; text-align: center; font-weight: 900;
-    box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4);
+    position: fixed; top: 25px; left: 0; right: 0;
+    background: #ef4444; color: white; padding: 10px;
+    text-align: center; font-weight: 900; z-index: 1000001;
 }
 
 .animate-in {

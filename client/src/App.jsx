@@ -8,6 +8,7 @@ import './App.css';
 export default function App() {
   const [user, setUser] = useState(null);
   const [sysStatus, setSysStatus] = useState({ status: 'OK' });
+  const [appVersion, setAppVersion] = useState({ version: '1.0.0', build: 0 });
 
   useEffect(() => {
     const saved = localStorage.getItem('player');
@@ -17,6 +18,12 @@ export default function App() {
         if (parsed) setUser(parsed);
       } catch (e) { localStorage.removeItem('player'); }
     }
+    
+    // Fetch Version
+    fetch('/api/app-version')
+        .then(r => r.json())
+        .then(data => setAppVersion(data))
+        .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -26,23 +33,27 @@ export default function App() {
             .then(data => setSysStatus(data))
             .catch(() => {});
     };
-    const interval = setInterval(check, 5000);
-    return () => clearInterval(interval);
+    const itv = setInterval(check, 5000);
+    return () => clearInterval(itv);
   }, []);
 
   const handleLogout = () => { localStorage.clear(); setUser(null); };
-  const isProf = user && (user.id === 'prof' || user.role === 'prof');
 
   return (
     <div className="app-wrapper">
+      {/* VERSION BADGE - TOUT EN HAUT */}
+      <div className="version-banner">
+          v{appVersion.version} - build {appVersion.build} 🚀
+      </div>
+
       {sysStatus.status === 'TRUNCATED' && (
-          <div className="system-alert-bar">⚠️ ATTENTION : FICHIER COMPROMIS ({sysStatus.file})</div>
+          <div className="system-alert-bar">⚠️ FICHIER COMPROMIS ({sysStatus.file})</div>
       )}
 
       {!user ? (
         <Login onLoginSuccess={setUser} />
       ) : (
-        isProf ? (
+        (user.id === 'prof' || user.role === 'prof') ? (
           <>
             <ProfPage user={user} onLogout={handleLogout} />
             <ConsoleHUD />
