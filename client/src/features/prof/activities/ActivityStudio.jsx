@@ -30,20 +30,30 @@ export default function ActivityStudio({ globalClass, user }) {
 
     useEffect(() => { loadData(); }, [globalClass]);
 
-    // CRÉATION INSTANTANÉE (Optimistic UI)
-    const handleCreateChapter = async (subjectName, title) => {
-        // ID temporaire pour l'affichage immédiat
-        const tempId = "temp-" + Date.now();
-        const newTempChapter = {
-            _id: tempId,
-            title: title || "Nouveau Dossier",
-            subject: subjectName,
-            classroom: globalClass,
-            isArchived: false
-        };
+    // RENOMMAGE (User Story #7) : Optimiste + Backend
+    const handleRenameChapter = async (id, title) => {
+        if (id.toString().startsWith('temp-')) return; // Sécurité
 
-        // 1. Ajout immédiat à la liste (UI ultra réactive)
-        setChapters(prev => [newTempChapter, ...prev]);
+        // 1. Update UI instantané
+        setChapters(prev => prev.map(c => c._id === id ? { ...c, title } : c));
+
+        try {
+            const res = await fetch('/api/chapters', { 
+                method:'POST', 
+                headers:{'Content-Type':'application/json'}, 
+                body:JSON.stringify({_id:id, title})
+            });
+            if (!res.ok) throw new Error("Update failed");
+        } catch (e) {
+            console.error("Rename failed, rolling back...");
+            loadData(); 
+        }
+    };
+
+    const handleCreateChapter = async (subjectName, title) => {
+        const tempId = "temp-" + Date.now();
+        const newTemp = { _id: tempId, title: title || "Nouveau Dossier", subject: subjectName, classroom: globalClass, isArchived: false };
+        setChapters(prev => [newTemp, ...prev]);
 
         try {
             const res = await fetch('/api/chapters', { 
@@ -51,24 +61,8 @@ export default function ActivityStudio({ globalClass, user }) {
                 headers:{'Content-Type':'application/json'}, 
                 body: JSON.stringify({ title, subject: subjectName, classroom: globalClass, teacherId: user?.id || user?._id }) 
             });
-            const finalData = await res.json();
-            
-            // 2. Remplacer l'item temporaire par le vrai item (avec son vrai ID BDD)
-            setChapters(prev => prev.map(c => c._id === tempId ? finalData : c));
-        } catch (e) {
-            console.error(e);
-            loadData(); // En cas d'erreur, on reset proprement
-        }
-    };
-
-    const handleRenameChapter = async (id, title) => {
-        setChapters(prev => prev.map(c => c._id === id ? { ...c, title } : c));
-        try {
-            await fetch('/api/chapters', { 
-                method:'POST', 
-                headers:{'Content-Type':'application/json'}, 
-                body:JSON.stringify({_id:id, title})
-            });
+            const data = await res.json();
+            setChapters(prev => prev.map(c => c._id === tempId ? data : c));
         } catch (e) { loadData(); }
     };
 
@@ -88,11 +82,11 @@ export default function ActivityStudio({ globalClass, user }) {
     return (
         <div className="animate-in fade-in">
             <div className="flex justify-start gap-4 mb-8 bg-white p-4 rounded-[30px] border-2 border-slate-50 shadow-sm">
-                <button onClick={() => setEditingItem({ type: 'homework', data: null })} className="bg-orange-500 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:scale-105 transition-transform"> Nouveau Devoir</button>
-                <button onClick={() => setEditingItem({ type: 'game', data: null })} className="bg-purple-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:scale-105 transition-transform"> Nouveau Jeu</button>
+                <button onClick={() => setEditingItem({ type: 'homework', data: null })} className="bg-orange-500 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg"> Nouveau Devoir</button>
+                <button onClick={() => setEditingItem({ type: 'game', data: null })} className="bg-purple-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg"> Nouveau Jeu</button>
             </div>
 
-            {loading && chapters.length === 0 ? <div className="text-center py-20 text-slate-300 font-black animate-pulse uppercase italic">Chargement...</div> : (
+            {loading && chapters.length === 0 ? <div className="text-center py-20 text-slate-300 font-black animate-pulse uppercase">Chargement...</div> : (
                 <ProfStudioFolder 
                     user={user} chapters={chapters} items={activities} classFilter={globalClass}
                     onArchive={async (id, state) => {

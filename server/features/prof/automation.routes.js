@@ -5,7 +5,7 @@ const DriveService = require('../../services/drive.service');
 
 const getChapter = () => mongoose.model('Chapter');
 
-// Helper interne pour créer la structure Drive sans bloquer la réponse API
+// Helper : Provisioning Drive en arrière-plan (User Story #2)
 const provisionDriveFolder = async (chapterId, title, classroom) => {
     try {
         const condaRootId = await DriveService.getOrCreateFolder("CondaClasse", null);
@@ -15,26 +15,34 @@ const provisionDriveFolder = async (chapterId, title, classroom) => {
         const driveId = await DriveService.getOrCreateFolder(title, worksId);
         
         await mongoose.model('Chapter').findByIdAndUpdate(chapterId, { driveFolderId: driveId });
-        console.log(`✨ Drive Provisioning Complete for: ${title}`);
+        console.log(`✨ Drive Provisioning Success: ${title}`);
     } catch (e) {
-        console.error("❌ Drive Provisioning Failed:", e.message);
+        console.error("❌ Drive Provisioning Error:", e.message);
     }
 };
 
-// --- ROUTES CHAPITRES (LOCKED LOGIC - US #2 & #7 OPTIMISÉES) ---
+// --- ROUTES CHAPITRES (LOCKED LOGIC - US #2 & #7) ---
+
+router.get('/chapters-all', async (req, res) => {
+    try {
+        const data = await getChapter().find({}).sort({ _id: -1 });
+        res.json(data || []);
+    } catch (e) { res.status(500).json([]); }
+});
 
 router.post('/chapters', async (req, res) => {
     try {
         const { _id, title, classroom, subject, teacherId } = req.body;
         const Chapter = getChapter();
 
-        if (_id) {
-            // MISE À JOUR FLUIDE
+        // CAS 1 : RENOMMAGE / MISE À JOUR (User Story #7)
+        if (_id && mongoose.Types.ObjectId.isValid(_id)) {
             const existing = await Chapter.findById(_id);
-            if (!existing) return res.status(404).json({ error: "Introuvable" });
+            if (!existing) return res.status(404).json({ error: "Dossier introuvable" });
 
+            // Synchro Drive en arrière-plan
             if (existing.driveFolderId && title && title !== existing.title) {
-                DriveService.renameFolder(existing.driveFolderId, title).catch(() => {});
+                DriveService.renameFolder(existing.driveFolderId, title).catch(e => console.error("Drive Rename Fail", e));
             }
             
             const updateData = { ...req.body };
@@ -43,31 +51,23 @@ router.post('/chapters', async (req, res) => {
             return res.json(updated);
         }
 
-        // CRÉATION INSTANTANÉE (User Story #2 en arrière-plan)
-        // 1. On crée d'abord en BDD pour avoir un ID immédiatement
+        // CAS 2 : CRÉATION (User Story #2)
         const newChap = await Chapter.create({ 
             title: title || "Nouveau Dossier", 
             classroom, 
             subject, 
             teacherId, 
-            driveFolderId: null, // Sera rempli par la tâche de fond
             isArchived: false 
         });
 
-        // 2. On lance la création Drive en tâche de fond (SANS await)
+        // Lancement provisioning Drive en arrière-plan pour fluidité
         provisionDriveFolder(newChap._id, newChap.title, classroom);
 
-        // 3. On répond immédiatement au client
         res.json(newChap);
-
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-router.get('/chapters-all', async (req, res) => {
-    try {
-        const data = await getChapter().find({}).sort({ _id: -1 });
-        res.json(data || []);
-    } catch (e) { res.status(500).json([]); }
+    } catch (e) { 
+        console.error("Erreur API Chapters:", e.message);
+        res.status(500).json({ error: e.message }); 
+    }
 });
 
 router.delete('/chapters/:id', async (req, res) => {
