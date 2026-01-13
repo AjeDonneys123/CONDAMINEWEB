@@ -14,17 +14,6 @@ router.get('/chapters-all', async (req, res) => {
     } catch (e) { res.status(500).json([]); }
 });
 
-router.post('/chapters', async (req, res) => {
-    try {
-        const { _id, ...body } = req.body;
-        if (_id) {
-            const updated = await getChapter().findByIdAndUpdate(_id, body, { new: true });
-            return res.json(updated);
-        }
-        res.json(await getChapter().create({ ...body, isArchived: false }));
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
 // --- ROUTES SCANS ---
 router.get('/scan-sessions', async (req, res) => {
     try {
@@ -58,35 +47,40 @@ router.post('/scan-sessions', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ROUTE : Classer une production dans un dossier
-router.patch('/scan-sessions/:id/assign-chapter', async (req, res) => {
+// ROUTE EXPLORATEUR DRIVE (INDISPENSABLE POUR LE BOUTON FILES)
+router.get('/scan-sessions/:id/files/:type', async (req, res) => {
     try {
-        const updated = await getScanSession().findByIdAndUpdate(
-            req.params.id, 
-            { chapterId: req.body.chapterId }, 
-            { new: true }
-        );
-        res.json(updated);
+        const session = await getScanSession().findById(req.params.id);
+        if (!session) return res.status(404).json({ error: "Introuvable" });
+
+        const type = req.params.type;
+        let folderId = (type === 'subject') ? session.subjectFolderId : (type === 'copies' ? session.copiesFolderId : session.correctionsFolderId);
+
+        // Réparation si dossier non configuré
+        if (!folderId && session.driveFolderId) {
+            const subName = (type === 'subject') ? "Sujet" : (type === 'copies' ? "Copies" : "Corrections");
+            folderId = await DriveService.getOrCreateFolder(subName, session.driveFolderId);
+            await getScanSession().findByIdAndUpdate(req.params.id, { 
+                [type === 'subject' ? 'subjectFolderId' : (type === 'copies' ? 'copiesFolderId' : 'correctionsFolderId')]: folderId 
+            });
+        }
+
+        const files = await DriveService.listFiles(folderId);
+        res.json(files);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ROUTE : Upload Photo Instantane
 router.post('/scan-upload-photo', async (req, res) => {
     try {
         const { sessionId, type, imageBase64 } = req.body; 
         const session = await getScanSession().findById(sessionId);
-        if(!session) return res.status(404).json({error:"Session introuvable"});
-
-        const targetFolder = type === 'subject' ? (session.subjectFolderId || session.driveFolderId) : (session.copiesFolderId || session.driveFolderId);
-        const driveFile = await DriveService.uploadImage(targetFolder, `${type}_${Date.now()}.jpg`, imageBase64);
-        
+        const folderId = type === 'subject' ? session.subjectFolderId : session.copiesFolderId;
+        const driveFile = await DriveService.uploadImage(folderId || session.driveFolderId, `${type}_${Date.now()}.jpg`, imageBase64);
         if (driveFile) {
             const field = type === 'subject' ? 'subjectUrls' : 'copyUrls';
-            const updated = await getScanSession().findByIdAndUpdate(sessionId, { $push: { [field]: driveFile.id } }, { new: true });
-            res.json(updated);
-        } else {
-            res.status(500).json({error:"Erreur Drive"});
-        }
+            await getScanSession().findByIdAndUpdate(sessionId, { $push: { [field]: driveFile.id } });
+            res.json({ ok: true });
+        } else { res.status(500).send("Erreur upload"); }
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
