@@ -40,4 +40,6 @@ Avant toute modification des fichiers ci-dessus, vérifier que :
 5. **CLASSIFICATION** : Une production de scan peut être assignée ou déplacée dans un dossier de cours actif (non archivé) de la classe correspondante.
 6. **AUTO-REFRESH DÉPLOIEMENT** : Le site détecte un redémarrage serveur (Build ID) et force un rechargement de page pour l'utilisateur sans action manuelle (F5).
 7. **SYNCHRONISATION DU NOM** : Le renommage d'un dossier de cours (Chapter) dans l'interface met à jour simultanément le titre en base de données et le nom du dossier correspondant sur Google Drive.
-8. **CLASSEMENT ALPHANUMÉRIQUE** : Les dossiers (Chapters) sont automatiquement triés dans l'interface par ordre naturel (I, II, III ou 1, 2, 10), garantissant une structure de cours logique et ordonnée.
+8. **CLASSEMENT ALPHANUMÉRIQUE** : Les dossiers (Chapters) sont automatiquement triés dans l'interface par ordre naturel (I, II, III ou 1, 2, 10).
+9. **MIROIR PHYSIQUE** : Classer une production dans un chapitre déclenche le déplacement physique du dossier de scan vers le dossier du chapitre sur Google Drive.
+10. **NETTOYAGE INTÉGRAL** : La suppression d'un dossier (Chapter) ou d'une production (ScanSession) dans l'interface entraîne la suppression définitive du dossier physique correspondant sur Google Drive.

@@ -1,6 +1,6 @@
 {
-  "version": "1.3.7",
-  "build": 168,
-  "description": "System Auto-Repair: Fix 500 Upload + Robust Drive Migration",
-  "timestamp": "2026-01-13T21:57:06.116Z"
+  "version": "1.3.8",
+  "build": 169,
+  "description": "Lock User Story #10: Full Cleanup on Delete",
+  "timestamp": "2026-01-13T22:02:13.193Z"
 }
