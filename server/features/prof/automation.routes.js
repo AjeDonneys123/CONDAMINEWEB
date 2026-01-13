@@ -7,6 +7,18 @@ const getScanSession = () => mongoose.model('ScanSession');
 const getChapter = () => mongoose.model('Chapter');
 const getPlayer = () => mongoose.model('Player');
 
+/**
+ * US #11 : Normalisation du nom pour Drive
+ * Enlève les accents et met en majuscules pour éviter les doublons "Géo" / "GEO"
+ */
+const normalizeFolderName = (name) => {
+    return name.toUpperCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^A-Z0-9]/g, "_")
+        .trim();
+};
+
 // HELPER : Racine de la classe -> Devoirs et Élèves
 const getClassBasePaths = async (classroom) => {
     const condaRootId = await DriveService.getOrCreateFolder("CondaClasse", null);
@@ -17,7 +29,7 @@ const getClassBasePaths = async (classroom) => {
     return { devoirsId, elevesId };
 };
 
-// --- ROUTE DE RÉORGANISATION GLOBALE ---
+// --- ROUTE DE RÉORGANISATION GLOBALE (MISE À JOUR US #11) ---
 router.get('/init-all-folders', async (req, res) => {
     try {
         const players = await getPlayer().find({});
@@ -26,44 +38,41 @@ router.get('/init-all-folders', async (req, res) => {
         for (const cls of classes) {
             const paths = await getClassBasePaths(cls);
             const chapters = await getChapter().find({ classroom: cls });
+            
             for (const chap of chapters) {
-                const subjectFolderId = await DriveService.getOrCreateFolder((chap.subject || "AUTRE").toUpperCase(), paths.devoirsId);
+                // US #11 : On normalise le nom de la matière pour le dossier Drive
+                const subjectNormalized = normalizeFolderName(chap.subject || "AUTRE");
+                const subjectFolderId = await DriveService.getOrCreateFolder(subjectNormalized, paths.devoirsId);
+                
                 const chapterFolderId = await DriveService.getOrCreateFolder(chap.title || "Sans Titre", subjectFolderId);
                 await getChapter().findByIdAndUpdate(chap._id, { driveFolderId: chapterFolderId });
             }
-            const classPlayers = players.filter(p => p.classroom === cls);
-            for (const p of classPlayers) {
+            
+            for (const p of players.filter(p => p.classroom === cls)) {
                 const studentName = `${p.firstName} ${p.lastName}`.toUpperCase();
                 await DriveService.getOrCreateFolder(studentName, paths.elevesId);
             }
         }
-        res.json({ ok: true, message: "Drive synchronisé." });
+        res.json({ ok: true, message: "Drive normalisé et synchronisé." });
     } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// --- ROUTES CHAPITRES ---
-router.get('/chapters-all', async (req, res) => {
-    try {
-        const data = await getChapter().find({}).sort({ _id: -1 });
-        res.json(data || []);
-    } catch (e) { res.status(500).json([]); }
 });
 
 router.post('/chapters', async (req, res) => {
     try {
-        const { _id, title, classroom, subject, teacherId } = req.body;
+        const { _id, title, classroom, subject } = req.body;
         if (_id && mongoose.Types.ObjectId.isValid(_id)) {
             const updated = await getChapter().findByIdAndUpdate(_id, req.body, { new: true });
             return res.json(updated);
         }
         const paths = await getClassBasePaths(classroom);
-        const subjectFolderId = await DriveService.getOrCreateFolder(subject.toUpperCase(), paths.devoirsId);
+        // US #11 : Application de la normalisation lors de la création
+        const subjectNormalized = normalizeFolderName(subject);
+        const subjectFolderId = await DriveService.getOrCreateFolder(subjectNormalized, paths.devoirsId);
         const driveId = await DriveService.getOrCreateFolder(title, subjectFolderId);
         res.json(await getChapter().create({ ...req.body, driveFolderId: driveId, isArchived: false }));
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// --- ROUTES SCANS ---
 router.get('/scan-sessions', async (req, res) => {
     try {
         const data = await getScanSession().find({}).sort({ createdAt: -1 });
