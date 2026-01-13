@@ -12,6 +12,8 @@ export default function ScansStudio({ globalClass, user }) {
     const [showFolderPicker, setShowFolderPicker] = useState(null);
     const [driveFiles, setDriveFiles] = useState({ list: [], loading: false });
 
+    console.log("📸 [SCANS-STUDIO] Chargement du composant...");
+
     const loadData = async () => {
         try {
             const [sRes, cRes] = await Promise.all([
@@ -25,19 +27,17 @@ export default function ScansStudio({ globalClass, user }) {
 
     useEffect(() => { loadData(); }, [globalClass]);
 
-    useEffect(() => {
-        if (openId && activeMode === 'files') {
-            fetchDriveFiles(openId, activeTab);
-        }
-    }, [activeTab, activeMode, openId]);
-
-    const fetchDriveFiles = async (sessionId, type) => {
-        setDriveFiles({ list: [], loading: true });
+    // FONCTION DE RÉORGANISATION DU DRIVE
+    const syncDrive = async () => {
+        if(!confirm("Réorganiser tout ton Google Drive (création des dossiers Devoirs/Élèves) ?")) return;
+        setLoading(true);
         try {
-            const res = await fetch(`/api/scan-sessions/${sessionId}/files/${type}`);
+            const res = await fetch('/api/init-all-folders');
             const data = await res.json();
-            setDriveFiles({ list: Array.isArray(data) ? data : [], loading: false });
-        } catch (e) { setDriveFiles({ list: [], loading: false }); }
+            alert("✅ " + data.message);
+            await loadData();
+        } catch (e) { alert("❌ Erreur lors de la synchronisation."); }
+        setLoading(false);
     };
 
     const createSession = async () => {
@@ -67,21 +67,20 @@ export default function ScansStudio({ globalClass, user }) {
 
     const normalize = (c) => c?.toString().toUpperCase().replace('E', '') || "";
     const filteredSessions = sessions.filter(s => normalize(s.classroom) === normalize(globalClass));
-    
-    // FILTRE : Uniquement les chapitres de la classe courante ET non archivés
-    const availableChapters = chapters.filter(c => 
-        normalize(c.classroom) === normalize(globalClass) && 
-        c.isArchived === false
-    );
-
-    // Groupement des chapitres par section pour le picker
+    const availableChapters = chapters.filter(c => normalize(c.classroom) === normalize(globalClass) && !c.isArchived);
     const sections = user?.subjectSections || [];
 
     return (
         <div className="space-y-4 animate-in fade-in">
-            <div className="bg-white p-3 rounded-[22px] border-2 border-slate-50 flex gap-2 shadow-sm">
-                <input className="flex-1 px-4 bg-slate-50 rounded-xl outline-none font-bold text-sm" placeholder="Nouvelle production..." value={newTitle} onChange={e=>setNewTitle(e.target.value)} />
-                <button onClick={createSession} disabled={loading} className="px-6 bg-indigo-600 text-white rounded-xl font-black uppercase text-[10px]">Créer</button>
+            {/* BARRE DE CRÉATION + BOUTON SYNCHRO VISIBLE */}
+            <div className="bg-white p-3 rounded-[22px] border-2 border-indigo-50 flex items-center gap-2 shadow-sm">
+                <input className="flex-1 px-4 py-3 bg-slate-50 rounded-xl outline-none font-bold text-xs" placeholder="Nom de la production..." value={newTitle} onChange={e=>setNewTitle(e.target.value)} />
+                <button onClick={createSession} disabled={loading} className="px-5 py-3 bg-indigo-600 text-white rounded-xl font-black uppercase text-[10px] shadow-lg">Créer</button>
+                
+                {/* BOUTON DE SYNCHRO DRIVE (BIEN VISIBLE) */}
+                <button onClick={syncDrive} disabled={loading} className="w-12 h-11 flex items-center justify-center bg-indigo-50 text-indigo-600 rounded-xl border border-indigo-100 hover:bg-indigo-600 hover:text-white transition-all">
+                    {loading ? '...' : '🔄'}
+                </button>
             </div>
 
             <div className="space-y-2">
@@ -91,13 +90,11 @@ export default function ScansStudio({ globalClass, user }) {
 
                     return (
                         <div key={s._id} className={`bg-white rounded-[25px] border-2 transition-all ${isOpen ? 'border-indigo-500 shadow-lg' : 'border-slate-50'}`}>
-                            
-                            <div className="p-2 px-3 flex items-center justify-between gap-1">
+                            <div className="p-2 px-3 flex items-center justify-between gap-1 overflow-x-auto no-scrollbar">
                                 <div className="flex-1 min-w-[80px] cursor-pointer" onClick={() => setOpenId(isOpen ? null : s._id)}>
                                     <h3 className="font-black text-slate-700 text-[10px] truncate uppercase">{s.title || "Titre"}</h3>
                                     {assigned && <div className="text-[7px] font-black text-emerald-500 uppercase truncate">📁 {assigned.title}</div>}
                                 </div>
-
                                 <div className="flex items-center gap-1">
                                     <button onClick={() => { setOpenId(s._id); setActiveMode('upload'); }} className={`tool-btn ${isOpen && activeMode === 'upload' ? 'active-upload' : ''}`}>SNAP</button>
                                     <button onClick={() => { setOpenId(s._id); setActiveMode('files'); }} className={`tool-btn ${isOpen && activeMode === 'files' ? 'active-files' : ''}`}>FILES</button>
@@ -109,10 +106,9 @@ export default function ScansStudio({ globalClass, user }) {
 
                             {isOpen && (
                                 <div className="border-t border-slate-100 p-3 bg-slate-50/30">
-                                    
                                     {activeMode === 'class' ? (
                                         <div className="animate-in zoom-in p-2">
-                                            <p className="text-[9px] font-black text-indigo-400 uppercase mb-4">Classer dans un dossier actif ({globalClass}) :</p>
+                                            <p className="text-[9px] font-black text-indigo-400 uppercase mb-4">Classer dans un dossier actif :</p>
                                             <div className="space-y-4">
                                                 {sections.map(sec => {
                                                     const chaps = availableChapters.filter(c => c.subject === sec.name);
@@ -122,15 +118,12 @@ export default function ScansStudio({ globalClass, user }) {
                                                             <div className="text-[8px] font-black uppercase mb-2 px-2" style={{ color: sec.color }}>{sec.name}</div>
                                                             <div className="flex flex-wrap gap-2">
                                                                 {chaps.map(c => (
-                                                                    <button key={c._id} onClick={() => handleAssign(s._id, c._id)} className="px-3 py-2 bg-white border-2 border-slate-100 rounded-xl text-[10px] font-bold text-slate-600 hover:border-indigo-500">
-                                                                        📁 {c.title}
-                                                                    </button>
+                                                                    <button key={c._id} onClick={() => handleAssign(s._id, c._id)} className="px-3 py-2 bg-white border-2 border-slate-100 rounded-xl text-[10px] font-bold text-slate-600 hover:border-indigo-500">📁 {c.title}</button>
                                                                 ))}
                                                             </div>
                                                         </div>
                                                     );
                                                 })}
-                                                {availableChapters.length === 0 && <p className="text-[10px] font-bold text-slate-300 italic text-center py-4">Aucun dossier de cours actif pour cette classe.</p>}
                                             </div>
                                         </div>
                                     ) : (
@@ -138,35 +131,8 @@ export default function ScansStudio({ globalClass, user }) {
                                             <div className="flex gap-1 mb-4 bg-white/60 p-1 rounded-xl shadow-inner">
                                                 <button onClick={() => setActiveTab('subject')} className={`sub-tab ${activeTab === 'subject' ? 'active' : ''}`}>SUJET</button>
                                                 <button onClick={() => setActiveTab('copies')} className={`sub-tab ${activeTab === 'copies' ? 'active' : ''}`}>COPIES</button>
-                                                {activeMode === 'files' && <button onClick={() => setActiveTab('corrections')} className={`sub-tab ${activeTab === 'corrections' ? 'active' : ''}`}>CORRECT.</button>}
                                             </div>
-
-                                            {activeMode === 'upload' && <PilotSnap session={s} type={activeTab === 'corrections' ? 'subject' : activeTab} onRefresh={loadData} />}
-                                            
-                                            {activeMode === 'files' && (
-                                                <div className="animate-in zoom-in">
-                                                    {driveFiles.loading ? <div className="py-10 text-center animate-pulse text-[10px] font-black text-slate-300">SYNC DRIVE...</div> : (
-                                                        <div className="grid grid-cols-3 gap-2">
-                                                            {driveFiles.list.map(f => (
-                                                                <a key={f.id} href={f.webViewLink} target="_blank" rel="noreferrer" className="flex flex-col items-center">
-                                                                    <img src={f.thumbnailLink} className="w-full aspect-[3/4] object-cover rounded-lg border shadow-sm" alt="p" />
-                                                                    <span className="text-[6px] font-bold text-slate-400 mt-1 truncate w-full text-center px-1">{f.name}</span>
-                                                                </a>
-                                                            ))}
-                                                            {driveFiles.list.length === 0 && <p className="col-span-full text-center py-10 text-[9px] font-black text-slate-300 uppercase">Dossier vide</p>}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            )}
-
-                                            {activeMode === 'ia' && (
-                                                <div className="space-y-3 animate-in zoom-in">
-                                                    <div className="bg-white p-4 rounded-2xl border-2 border-emerald-100">
-                                                        <textarea className="w-full h-24 p-2 bg-slate-50 rounded-xl border-none outline-none text-xs font-medium" placeholder="Instructions IA..." defaultValue={s.teacherInstruction} />
-                                                    </div>
-                                                    <button className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-black text-xs shadow-lg">🚀 CORRIGER LES COPIES</button>
-                                                </div>
-                                            )}
+                                            <PilotSnap session={s} type={activeTab} onRefresh={loadData} />
                                         </>
                                     )}
                                 </div>
@@ -186,7 +152,7 @@ function PilotSnap({ session, type, onRefresh }) {
 
     const startCamera = async () => {
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } } });
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: 1280, height: 720 } });
             if (videoRef.current) videoRef.current.srcObject = stream;
         } catch (e) {
             const stream = await navigator.mediaDevices.getUserMedia({ video: true });
@@ -215,14 +181,11 @@ function PilotSnap({ session, type, onRefresh }) {
                 <video ref={videoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
                 {flash && <div className="absolute inset-0 bg-white z-50"></div>}
                 <button onClick={takeSnap} disabled={capturing} className={`absolute bottom-4 left-1/2 -translate-x-1/2 w-14 h-14 rounded-full border-4 border-white/30 shadow-xl ${capturing ? 'bg-red-500 animate-pulse' : 'bg-white'}`} />
-                <div className={`absolute top-3 right-3 px-3 py-1 rounded-full text-[7px] font-black text-white uppercase ${type === 'subject' ? 'bg-orange-500' : 'bg-indigo-600'}`}>
-                    MODE {type === 'subject' ? 'SUJET' : 'COPIE'}
-                </div>
             </div>
             <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar px-1">
                 {currentPhotos?.map((id, i) => (
                     <div key={id} className="relative min-w-[55px] h-[75px] bg-slate-200 rounded-lg overflow-hidden border border-white shadow-sm flex-shrink-0">
-                        <img src={`https://drive.google.com/thumbnail?id=${id}&sz=w200`} className="w-full h-full object-cover" />
+                        <img src={`https://drive.google.com/thumbnail?id=${id}&sz=w200`} className="w-full h-full object-cover" alt="p" />
                         <div className="absolute top-0.5 left-0.5 bg-black/50 text-white text-[5px] font-black px-1 rounded-sm">{i+1}</div>
                     </div>
                 ))}
