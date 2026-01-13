@@ -1,6 +1,6 @@
 {
-  "version": "1.3.6",
-  "build": 167,
-  "description": "Emergency Fix: Restore Scan & Status routes + Devoirs/Élèves naming",
-  "timestamp": "2026-01-13T21:54:45.645Z"
+  "version": "1.3.7",
+  "build": 168,
+  "description": "System Auto-Repair: Fix 500 Upload + Robust Drive Migration",
+  "timestamp": "2026-01-13T21:57:06.116Z"
 }
