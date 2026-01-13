@@ -1,6 +1,6 @@
 {
-  "version": "1.2.0",
-  "build": 151,
-  "description": "Mobile Optimized Scans UI + Mode Switching",
-  "timestamp": "2026-01-13T17:20:23.200Z"
+  "version": "1.2.1",
+  "build": 152,
+  "description": "Scans UI Refactor: UPLOAD mode (Sujet/Copies/IA) + Minimalist Row",
+  "timestamp": "2026-01-13T17:25:58.713Z"
 }
