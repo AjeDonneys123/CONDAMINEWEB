@@ -9,25 +9,50 @@ const AIService = require('../../services/ai.service');
 
 router.get('/all', async (req, res) => {
     try {
-        const data = await mongoose.model('GameLevel').find({}).sort({ _id: -1 });
+        const GameLevel = mongoose.model('GameLevel');
+        const data = await GameLevel.find({}).sort({ _id: -1 });
         res.json(data || []);
-    } catch (e) { res.status(500).json([]); }
+    } catch (e) {
+        res.status(500).json({ error: "Erreur récupération jeux" });
+    }
 });
 
 router.post('/generate', async (req, res) => {
     try {
         const { topic, numQuestions } = req.body;
+        if (!topic) return res.status(400).json({ error: "Sujet manquant" });
+        
+        // Appel au service IA avec gestion d'erreur
         const quiz = await AIService.generateQuiz(topic, numQuestions);
         res.json(quiz);
-    } catch (e) { res.status(500).json({ error: "IA Fail" }); }
+    } catch (e) {
+        console.error("❌ [GAMES ROUTE] Crash lors de la génération :", e.message);
+        res.status(500).json({ error: "Erreur IA", details: e.message });
+    }
 });
 
 router.post('/', async (req, res) => {
     try {
+        const Game = mongoose.model('GameLevel');
         const { _id, ...data } = req.body;
-        if (_id) return res.json(await mongoose.model('GameLevel').findByIdAndUpdate(_id, data, { new: true }));
-        res.json(await mongoose.model('GameLevel').create(data));
-    } catch (e) { res.status(500).json({ error: e.message }); }
+        if (_id && mongoose.Types.ObjectId.isValid(_id)) {
+            const updated = await Game.findByIdAndUpdate(_id, data, { new: true });
+            return res.json(updated);
+        }
+        const created = await Game.create(data);
+        res.json(created);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+router.delete('/:id', async (req, res) => {
+    try {
+        await mongoose.model('GameLevel').findByIdAndDelete(req.params.id);
+        res.json({ ok: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 });
 
 module.exports = router;
