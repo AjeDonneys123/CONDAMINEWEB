@@ -115,15 +115,14 @@
 │   │   │   └── admin.routes.js
 │   │   ├── auth/
 │   │   │   └── auth.routes.js
-│   │   ├── eleve/
-│   │   ├── game/
 │   │   ├── games/
 │   │   │   └── games.routes.js
 │   │   ├── homework/
 │   │   │   └── homework.routes.js
-│   │   ├── prof/
-│   │   └── scans/
-│   │       └── scans.routes.js
+│   │   ├── scans/
+│   │   │   └── scans.routes.js
+│   │   └── upload/
+│   │       └── upload.routes.js
 │   ├── models/
 │   │   ├── Bug.js
 │   │   ├── Chapter.js

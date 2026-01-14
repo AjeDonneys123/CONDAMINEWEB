@@ -116,15 +116,14 @@ STRUCTURE:
 │   │   │   └── admin.routes.js
 │   │   ├── auth/
 │   │   │   └── auth.routes.js
-│   │   ├── eleve/
-│   │   ├── game/
 │   │   ├── games/
 │   │   │   └── games.routes.js
 │   │   ├── homework/
 │   │   │   └── homework.routes.js
-│   │   ├── prof/
-│   │   └── scans/
-│   │       └── scans.routes.js
+│   │   ├── scans/
+│   │   │   └── scans.routes.js
+│   │   └── upload/
+│   │       └── upload.routes.js
 │   ├── models/
 │   │   ├── Bug.js
 │   │   ├── Chapter.js
@@ -235,7 +234,7 @@ console.log("🛠️  [WATCHER] apply.js (v18-TOLERANT) actif.");
 console.log("🧘  Mode : Détection souple (Regex) & Reset Auto");
 console.log("------------------------------------------------");
 
-npfunction setStatus(status, file = null) {
+function setStatus(status, file = null) {
     try {
         const data = { status, file, timestamp: Date.now() };
         fs.writeFileSync(statusFile, JSON.stringify(data, null, 2));
@@ -339,7 +338,7 @@ setInterval(applyUpdate, 1000);
 {
   "status": "OK",
   "file": null,
-  "timestamp": 1768361768221
+  "timestamp": 1768402349299
 }
 
 ### FILE: chemin/du/fichier.js
@@ -11346,7 +11345,6 @@ export default function ActivityStudio({ globalClass, user }) {
         if (!globalClass) return;
         setLoading(true);
         try {
-            // CORRECTIF : Utilisation des nouveaux points d'entrée modulaires
             const [hwRes, gmRes, cpRes] = await Promise.all([
                 fetch('/api/homework/all'),
                 fetch('/api/games/all'),
@@ -11398,7 +11396,7 @@ export default function ActivityStudio({ globalClass, user }) {
     };
 
     const handleDeleteChapter = async (id) => {
-        if (!confirm("Supprimer ce dossier ?")) return;
+        if (!confirm("Supprimer ce dossier et son contenu Drive ?")) return;
         try {
             const res = await fetch(`/api/chapters/${id}`, { method: 'DELETE' });
             if (res.ok) await loadData();
@@ -11406,34 +11404,20 @@ export default function ActivityStudio({ globalClass, user }) {
     };
 
     if (viewingResults) return <HomeworkResults homework={viewingResults} onBack={() => setViewingResults(null)} />;
-    
     if (editingItem) {
         const activeChaps = chapters.filter(c => c.classroom === globalClass && !c.isArchived);
-        if (editingItem.type === 'homework') {
-            return <HomeworkStudio 
-                initialData={editingItem.data} 
-                chapters={activeChaps} 
-                onClose={() => { setEditingItem(null); loadData(); }} 
-            />;
-        }
-        return <GameStudio 
-            initialData={editingItem.data} 
-            chapters={activeChaps} 
-            classFilter={globalClass} 
-            onClose={() => { setEditingItem(null); loadData(); }} 
-        />;
+        if (editingItem.type === 'homework') return <HomeworkStudio initialData={editingItem.data} chapters={activeChaps} globalClass={globalClass} onClose={() => { setEditingItem(null); loadData(); }} />;
+        return <GameStudio initialData={editingItem.data} chapters={activeChaps} classFilter={globalClass} onClose={() => { setEditingItem(null); loadData(); }} />;
     }
 
     return (
         <div className="animate-in fade-in">
             <div className="flex justify-start gap-4 mb-8 bg-white p-4 rounded-[30px] border-2 border-slate-50 shadow-sm">
-                <button onClick={() => setEditingItem({ type: 'homework', data: null })} className="bg-orange-500 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:scale-105 transition-transform"> Nouveau Devoir</button>
-                <button onClick={() => setEditingItem({ type: 'game', data: null })} className="bg-purple-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:scale-105 transition-transform"> Nouveau Jeu</button>
+                <button onClick={() => setEditingItem({ type: 'homework', data: null })} className="bg-orange-500 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg"> Nouveau Devoir</button>
+                <button onClick={() => setEditingItem({ type: 'game', data: null })} className="bg-purple-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg"> Nouveau Jeu</button>
             </div>
 
-            {loading ? (
-                <div className="text-center py-20 text-slate-300 font-black animate-pulse uppercase tracking-widest">Mise à jour du studio...</div>
-            ) : (
+            {loading ? <div className="text-center py-20 text-slate-300 font-black animate-pulse uppercase">Chargement...</div> : (
                 <ProfStudioFolder 
                     user={user} chapters={chapters} items={activities} classFilter={globalClass}
                     onArchive={async (id, state) => {
@@ -11443,11 +11427,12 @@ export default function ActivityStudio({ globalClass, user }) {
                     onRename={handleRenameChapter}
                     onEditItem={(it) => setEditingItem({ type: it.actType, data: it })}
                     onDeleteItem={async (id, type) => {
-                        if(!confirm("Supprimer définitivement cet élément ?")) return;
-                        // CORRECTIF : Chemins de suppression modulaires
+                        if(!confirm("Supprimer définitivement ?")) return;
+                        // CORRECTIF : Utilisation des nouveaux tiroirs API étanches
                         const endpoint = type === 'game' ? `/api/games/${id}` : `/api/homework/${id}`;
-                        await fetch(endpoint, { method: 'DELETE' });
-                        loadData();
+                        const res = await fetch(endpoint, { method: 'DELETE' });
+                        if (res.ok) await loadData();
+                        else alert("Erreur lors de la suppression.");
                     }}
                     onDeleteChapter={handleDeleteChapter}
                     onCreateChapter={handleCreateChapter}
@@ -12203,11 +12188,26 @@ export default function HomeworkResults({ homework, onBack }) {
 }
 
 ### FILE: client/src/features/prof/homework/HomeworkStudio.css
-.assign-card {
+.homework-studio-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 6000;
     background: #f8fafc;
-    padding: 15px;
-    border-radius: 20px;
-    border: 2px solid #e2e8f0;
+    display: flex;
+    flex-direction: column;
+}
+
+/* On ajoute du padding en haut pour ne pas cacher la bannière de version */
+.homework-studio-overlay > div:first-child {
+    padding-top: 40px !important;
+}
+
+.assign-card {
+    background: #ffffff;
+    padding: 1.5rem;
+    border-radius: 25px;
+    border: 1px solid #f1f5f9;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
 }
 
 .assign-card label {
@@ -12218,98 +12218,27 @@ export default function HomeworkResults({ homework, onBack }) {
     margin-bottom: 5px;
 }
 
-.assign-card select, .std-finder {
+.std-finder {
     width: 100%;
     border: none;
-    background: white;
+    background: #f8fafc;
     padding: 10px;
     border-radius: 12px;
     font-weight: 700;
     outline: none;
 }
 
-/* DROP DOWN FINDER */
-.finder-dropdown {
-    position: absolute;
-    top: 100%; left: 0; right: 0;
-    background: white;
-    border: 2px solid #orange-400;
-    border-radius: 15px;
-    z-index: 1000;
-    max-height: 200px;
-    overflow-y: auto;
-    box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-}
-
-.finder-row {
-    padding: 12px;
-    font-size: 0.8rem;
-    font-weight: 700;
-    cursor: pointer;
-    border-bottom: 1px solid #f1f5f9;
-}
-
-.finder-row:hover { background: #fff7ed; color: #f97316; }
-
-/* TAGS ELEVES */
-.std-tag {
-    background: #fff7ed;
-    color: #f97316;
-    padding: 6px 15px;
-    border-radius: 99px;
-    font-weight: 800;
-    font-size: 0.75rem;
-    border: 1px solid #ffedd5;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.std-tag button {
-    background: none; border: none; color: #f87171; cursor: pointer; font-weight: 900;
-}
-
-.page-box {
-    background: #f8fafc;
-    padding: 25px;
-    border-radius: 35px;
-    border: 2px solid #e2e8f0;
-}
-
-.btn-add-page {
-    width: 100%;
-    padding: 20px;
-    border: 3px dashed #cbd5e1;
-    background: none;
-    border-radius: 30px;
-    font-weight: 900;
-    color: #94a3b8;
-    cursor: pointer;
-}
-
-.btn-save-hw {
-    width: 100%;
-    padding: 20px;
-    background: #f97316;
-    color: white;
-    font-weight: 900;
-    font-size: 1.5rem;
-    border-radius: 30px;
-    border: none;
-    box-shadow: 0 10px 20px rgba(249, 115, 22, 0.2);
-    cursor: pointer;
-}
-
 ### FILE: client/src/features/prof/homework/HomeworkStudio.jsx
 import React, { useState, useEffect } from 'react';
 import './HomeworkStudio.css';
 
-export default function HomeworkStudio({ initialData, chapters, onClose }) {
+export default function HomeworkStudio({ initialData, chapters, globalClass, onClose }) {
   const [players, setPlayers] = useState([]);
   const [stdSearch, setStdSearch] = useState('');
   const [uploading, setUploading] = useState(false);
+  
   const [formData, setFormData] = useState(initialData || { 
-      title: '', targetGrade: 'Tous', classroom: '6D', targetPlayerIds: [], 
+      title: '', targetGrade: 'Tous', targetPlayerIds: [], 
       chapterId: (chapters && chapters.length > 0) ? chapters[0]._id : 'none',
       levels: [{ instruction: '', attachmentUrls: [], questionImage: null, aiCorrectionHint: '' }] 
   });
@@ -12319,93 +12248,117 @@ export default function HomeworkStudio({ initialData, chapters, onClose }) {
   }, []);
 
   const handleUpload = async (files, idx, type) => {
-    setUploading(true);
-    const n = JSON.parse(JSON.stringify(formData.levels));
-    for (let file of Array.from(files)) {
-      const fd = new FormData(); fd.append('file', file);
-      // Utilise le service d'upload générique
-      const res = await fetch('/api/upload', { method: 'POST', body: fd }).then(r => r.json());
-      if (res.ok) {
-        if (type === 'doc') n[idx].attachmentUrls.push(res.imageUrl);
-        else n[idx].questionImage = res.imageUrl;
-      }
+    if (!files || files.length === 0) return;
+    
+    // Sécurité : On doit avoir une session enregistrée pour avoir les IDs Drive
+    let currentHw = formData;
+    if (!formData._id) {
+        alert("⚠️ Cliquez d'abord sur 'INITIALISER LE DEVOIR' pour créer les dossiers Drive.");
+        return;
     }
-    setFormData({ ...formData, levels: n });
+    
+    setUploading(true);
+    const newLevels = JSON.parse(JSON.stringify(formData.levels));
+    
+    for (let file of Array.from(files)) {
+      const fd = new FormData(); 
+      fd.append('file', file);
+      fd.append('homeworkId', formData._id);
+      fd.append('type', type);
+      
+      try {
+        const res = await fetch('/api/homework/upload-to-drive', { method: 'POST', body: fd }).then(r => r.json());
+        if (res.ok) {
+          if (type === 'doc') newLevels[idx].attachmentUrls.push(res.imageUrl);
+          else newLevels[idx].questionImage = res.imageUrl;
+        }
+      } catch (e) { console.error(e); }
+    }
+    setFormData({ ...formData, levels: newLevels });
     setUploading(false);
   };
 
   const save = async () => {
-    if (!formData.title) return alert("Titre requis");
-    await fetch('/api/homework', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...formData, chapterId: formData.chapterId === 'none' ? null : formData.chapterId })
-    });
-    onClose();
+    if (!formData.title) return alert("Le titre est requis.");
+    setUploading(true);
+    try {
+        const res = await fetch('/api/homework', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...formData, classroom: globalClass })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            // Si c'était une création, on garde l'ID pour permettre l'upload immédiat
+            setFormData(data);
+            if (!formData._id) alert("✅ Dossiers Drive créés ! Vous pouvez maintenant ajouter des documents.");
+            else onClose();
+        }
+    } catch (e) { alert("Erreur sauvegarde."); }
+    setUploading(false);
   };
 
-  const filteredPlayers = players.filter(p => (p.firstName + " " + p.lastName).toLowerCase().includes(stdSearch.toLowerCase()));
+  const filteredPlayers = players.filter(p => p.classroom === globalClass && (p.firstName + " " + p.lastName).toLowerCase().includes(stdSearch.toLowerCase()));
 
   return (
-    <div className="fixed inset-0 z-[6000] bg-slate-50 flex flex-col animate-in zoom-in">
-        <div className="p-6 bg-orange-500 text-white flex justify-between items-center shadow-lg">
-            <input className="text-2xl font-black bg-transparent outline-none w-full placeholder:text-orange-200" value={formData.title} onChange={e=>setFormData({...formData, title:e.target.value})} placeholder="TITRE DU DEVOIR" />
+    <div className="homework-studio-overlay animate-in slide-in-from-bottom-4">
+        <div className="p-6 bg-orange-500 text-white flex justify-between items-center shadow-lg pt-12">
+            <div className="flex flex-col">
+                <input className="text-2xl font-black bg-transparent outline-none w-full placeholder:text-orange-200 uppercase" value={formData.title} onChange={e=>setFormData({...formData, title:e.target.value})} placeholder="TITRE DU DEVOIR" />
+                <span className="text-[10px] font-black opacity-80 uppercase">DOMAINE : {globalClass} | DRIVE : {formData.driveFolderId ? 'CONNECTÉ ✅' : 'NON INITIALISÉ ❌'}</span>
+            </div>
             <button onClick={onClose} className="w-10 h-10 bg-black/10 rounded-full font-black">✕</button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
             <div className="max-w-5xl mx-auto space-y-8">
-                <div className="grid grid-cols-3 gap-6">
-                    <div className="assign-card"><label>DOSSIER</label>
-                        <select className="w-full font-bold outline-none" value={formData.chapterId} onChange={e=>setFormData({...formData, chapterId: e.target.value})}>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="assign-card"><label className="text-[10px] font-black text-slate-400 uppercase mb-2 block">Dossier de cours</label>
+                        <select className="w-full font-bold outline-none bg-white p-3 rounded-xl border border-slate-200" value={formData.chapterId} onChange={e=>setFormData({...formData, chapterId: e.target.value})}>
                             <option value="none">-- Aucun dossier --</option>
                             {chapters.map(c => <option key={c._id} value={c._id}>{c.title}</option>)}
                         </select>
                     </div>
-                    <div className="assign-card"><label>CLASSE</label>
-                        <select className="w-full font-bold outline-none" value={formData.classroom} onChange={e=>setFormData({...formData, classroom: e.target.value})}>
-                            <option value="6D">6eD</option><option value="5B">5eB</option><option value="5C">5eC</option><option value="2A">2A</option><option value="2CD">2CD</option>
-                        </select>
-                    </div>
-                    <div className="assign-card relative"><label>CIBLER DES ÉLÈVES</label>
-                        <input className="w-full outline-none" placeholder="Chercher..." value={stdSearch} onChange={e=>setStdSearch(e.target.value)} />
+                    <div className="assign-card relative"><label className="text-[10px] font-black text-slate-400 uppercase mb-2 block">Cibler des élèves</label>
+                        <input className="w-full outline-none bg-white p-3 rounded-xl border border-slate-200 font-bold" placeholder="Chercher un nom..." value={stdSearch} onChange={e=>setStdSearch(e.target.value)} />
                         {stdSearch && (
                             <div className="absolute top-full left-0 right-0 bg-white shadow-xl z-50 rounded-xl max-h-40 overflow-auto border">
                                 {filteredPlayers.map(p => (
-                                    <div key={p._id} onClick={()=>{ setFormData({...formData, targetPlayerIds:[...formData.targetPlayerIds, p._id]}); setStdSearch(''); }} className="p-3 hover:bg-orange-50 cursor-pointer font-bold">{p.firstName} {p.lastName}</div>
+                                    <div key={p._id} onClick={()=>{ setFormData({...formData, targetPlayerIds:[...formData.targetPlayerIds, p._id]}); setStdSearch(''); }} className="p-3 hover:bg-orange-50 cursor-pointer font-bold border-b">{p.firstName} {p.lastName}</div>
                                 ))}
                             </div>
                         )}
                         <div className="flex flex-wrap gap-1 mt-2">
                           {formData.targetPlayerIds.map(id => (
-                            <span key={id} className="bg-orange-100 text-orange-600 px-2 py-1 rounded-lg text-[9px] font-bold">{players.find(x => x._id === id)?.firstName} <button onClick={()=>setFormData({...formData, targetPlayerIds: formData.targetPlayerIds.filter(x=>x!==id)})}>✕</button></span>
+                            <span key={id} className="bg-orange-100 text-orange-600 px-2 py-1 rounded-lg text-[9px] font-black flex items-center gap-1">{players.find(x => x._id === id)?.firstName} <button onClick={()=>setFormData({...formData, targetPlayerIds: formData.targetPlayerIds.filter(x=>x!==id)})}>✕</button></span>
                           ))}
                         </div>
                     </div>
                 </div>
 
                 {formData.levels.map((lvl, idx) => (
-                    <div key={idx} className="bg-white p-10 rounded-[50px] border shadow-sm">
-                        <div className="grid grid-cols-2 gap-10">
+                    <div key={idx} className="bg-white p-10 rounded-[50px] border border-slate-100 shadow-sm relative">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
                             <div>
-                                <label className="text-[10px] font-black uppercase text-blue-500 mb-2">Documents</label>
-                                <div className="flex flex-wrap gap-2 p-4 bg-slate-50 rounded-3xl border-2 border-dashed">
-                                    {lvl.attachmentUrls?.map((u, i) => <img key={i} src={u} className="w-16 h-16 object-cover rounded-xl" />)}
-                                    <label className="w-16 h-16 bg-white flex items-center justify-center rounded-xl border cursor-pointer">+</label>
-                                    <input type="file" multiple className="hidden" onChange={e => handleUpload(e.target.files, idx, 'doc')} />
+                                <label className="text-[10px] font-black uppercase text-blue-500 mb-2 block tracking-widest">Documents Supports (Google Drive)</label>
+                                <div className="flex flex-wrap gap-3 p-5 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
+                                    {lvl.attachmentUrls?.map((u, i) => <img key={i} src={u} className="w-20 h-20 object-cover rounded-2xl border-2 border-white shadow-sm" />)}
+                                    <label className="w-20 h-20 bg-white flex items-center justify-center rounded-2xl border border-slate-200 cursor-pointer text-slate-300 hover:text-blue-500 transition-all text-2xl font-black">
+                                        +
+                                        <input type="file" multiple className="hidden" onChange={e => handleUpload(e.target.files, idx, 'doc')} />
+                                    </label>
                                 </div>
                             </div>
                             <div>
-                                <label className="text-[10px] font-black uppercase text-orange-500 mb-2">Image Question</label>
-                                <div className="h-32 bg-slate-50 rounded-3xl border-2 border-dashed flex items-center justify-center relative overflow-hidden">
-                                    {lvl.questionImage ? <img src={lvl.questionImage} className="h-full w-full object-contain" /> : <span>PHOTO</span>}
-                                    <input type="file" className="absolute inset-0 opacity-0" onChange={e => handleUpload(e.target.files, idx, 'qimg')} />
+                                <label className="text-[10px] font-black uppercase text-orange-500 mb-2 block tracking-widest">Image Question</label>
+                                <div className="h-40 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200 flex items-center justify-center relative overflow-hidden group">
+                                    {lvl.questionImage ? <img src={lvl.questionImage} className="h-full w-full object-contain" /> : <span className="text-slate-300 font-black text-xs uppercase">Photo Question</span>}
+                                    <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={e => handleUpload(e.target.files, idx, 'qimg')} />
                                 </div>
                             </div>
                         </div>
-                        <div className="mt-8 space-y-4">
-                            <textarea className="w-full p-6 rounded-3xl h-24 border font-bold" value={lvl.instruction} onChange={e=>{const n=[...formData.levels]; n[idx].instruction=e.target.value; setFormData({...formData, levels:n});}} placeholder="Consigne..." />
-                            <textarea className="w-full p-6 rounded-3xl h-24 border bg-purple-50 text-purple-600 font-bold" value={lvl.aiCorrectionHint} onChange={e=>{const n=[...formData.levels]; n[idx].aiCorrectionHint=e.target.value; setFormData({...formData, levels:n});}} placeholder="Indices IA..." />
+                        <div className="mt-8">
+                            <textarea className="w-full p-6 rounded-3xl h-24 border border-slate-200 font-bold text-slate-600" value={lvl.instruction} onChange={e=>{const n=[...formData.levels]; n[idx].instruction=e.target.value; setFormData({...formData, levels:n});}} placeholder="Consigne..." />
                         </div>
                     </div>
                 ))}
@@ -12413,7 +12366,9 @@ export default function HomeworkStudio({ initialData, chapters, onClose }) {
         </div>
 
         <div className="p-8 bg-white border-t">
-            <button onClick={save} disabled={uploading} className="w-full p-6 bg-orange-500 text-white font-black text-2xl rounded-3xl shadow-xl">SAUVEGARDER LE DEVOIR</button>
+            <button onClick={save} disabled={uploading} className="w-full p-6 bg-orange-500 text-white font-black text-2xl rounded-3xl shadow-xl hover:bg-orange-600 transition-all uppercase">
+                {!formData._id ? "🚀 INITIALISER LE DEVOIR & LE DRIVE" : (uploading ? "SYNC DRIVE..." : "💾 SAUVEGARDER LES MODIFICATIONS")}
+            </button>
         </div>
     </div>
   );
@@ -15435,13 +15390,14 @@ header h1 { font-size: 1.3rem; color: var(--primary); margin: 0; }
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
+const DriveService = require('../../services/drive.service');
 
 /**
- * 🏢 DOMAINE ADMIN : Point d'entrée pour les listes et structures
- * Centralise les données partagées (Players, Chapters, Mistakes)
+ * 🏢 DOMAINE ADMIN (SYNC DRIVE V3)
  */
 
-// --- ÉLÈVES ---
+const normalize = (n) => n ? n.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Z0-9 ]/g, "_").trim() : "SANS_TITRE";
+
 router.get('/players', async (req, res) => {
     try {
         const data = await mongoose.model('Player').find({}).sort({ classroom: 1, lastName: 1 });
@@ -15449,62 +15405,37 @@ router.get('/players', async (req, res) => {
     } catch (e) { res.status(500).json([]); }
 });
 
-// Récupérer les fautes d'un élève (Élève view)
-router.get('/player-mistakes/:id', async (req, res) => {
-    try {
-        const p = await mongoose.model('Player').findById(req.params.id);
-        res.json(p?.spellingMistakes || []);
-    } catch (e) { res.status(500).json([]); }
-});
-
-// Récupérer les productions corrigées (Élève view)
-router.get('/player-submissions/:id', async (req, res) => {
-    try {
-        const data = await mongoose.model('Submission').find({ playerId: req.params.id }).sort({ createdAt: -1 });
-        res.json(data || []);
-    } catch (e) { res.json([]); }
-});
-
-// --- CHAPITRES ---
 router.get('/chapters-all', async (req, res) => {
-    try {
-        const data = await mongoose.model('Chapter').find({}).sort({ _id: -1 });
-        res.json(data || []);
-    } catch (e) { res.status(500).json([]); }
+    try { res.json(await mongoose.model('Chapter').find({}).sort({ _id: -1 })); } catch (e) { res.status(500).json([]); }
 });
 
 router.post('/chapters', async (req, res) => {
     try {
-        const { _id } = req.body;
+        const Chapter = mongoose.model('Chapter');
+        const { _id, title, classroom, subject } = req.body;
+        
+        // SYNC PHYSIQUE
+        const subName = subject === 'H' ? 'HISTOIRE' : subject === 'G' ? 'GEOGRAPHIE' : 'EMC';
+        const path = ["CONDACLASSE", normalize(classroom), subName, title];
+        const driveId = await DriveService.syncPath(path);
+
+        let result;
         if (_id && mongoose.Types.ObjectId.isValid(_id)) {
-            return res.json(await mongoose.model('Chapter').findByIdAndUpdate(_id, req.body, { new: true }));
+            result = await Chapter.findByIdAndUpdate(_id, { ...req.body, driveFolderId: driveId }, { new: true });
+        } else {
+            result = await Chapter.create({ ...req.body, driveFolderId: driveId, isArchived: false });
         }
-        res.json(await mongoose.model('Chapter').create({ ...req.body, isArchived: false }));
+        res.json(result);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.delete('/chapters/:id', async (req, res) => {
-    try {
-        await mongoose.model('Chapter').findByIdAndDelete(req.params.id);
-        res.json({ ok: true });
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// --- CLASSES ---
 router.delete('/classroom/:className', async (req, res) => {
     try {
         const { className } = req.params;
         await mongoose.model('Player').deleteMany({ classroom: className });
         await mongoose.model('Chapter').deleteMany({ classroom: className });
-        await mongoose.model('Homework').deleteMany({ classroom: className });
-        await mongoose.model('ScanSession').deleteMany({ classroom: className });
         res.json({ ok: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// --- BUGS ---
-router.get('/bugs', async (req, res) => {
-    try { res.json(await mongoose.model('Bug').find({}).sort({ createdAt: -1 })); } catch (e) { res.json([]); }
 });
 
 module.exports = router;
@@ -15584,55 +15515,35 @@ const AIService = require('../../services/ai.service');
  * 🕹️ DOMAINE : GAMES
  */
 
-// GET /api/games/all
 router.get('/all', async (req, res) => {
     try {
-        const GameLevel = mongoose.model('GameLevel');
-        const data = await GameLevel.find({}).sort({ _id: -1 });
+        const data = await mongoose.model('GameLevel').find({}).sort({ _id: -1 });
         res.json(data || []);
-    } catch (e) {
-        res.status(500).json({ error: "Erreur BDD" });
-    }
+    } catch (e) { res.status(500).json([]); }
 });
 
-// POST /api/games/generate
 router.post('/generate', async (req, res) => {
     try {
         const { topic, numQuestions } = req.body;
-        if (!topic) return res.status(400).json({ error: "Sujet requis" });
-        
-        const quiz = await AIService.generateQuiz(topic, numQuestions || 5);
+        const quiz = await AIService.generateQuiz(topic, numQuestions);
         res.json(quiz);
-    } catch (e) {
-        console.error("❌ [GAMES] Erreur route generate:", e.message);
-        res.status(500).json({ error: "L'IA 2.0 n'a pas pu répondre.", details: e.message });
-    }
+    } catch (e) { res.status(500).json({ error: "IA Fail", details: e.message }); }
 });
 
-// POST /api/games (Save/Update)
 router.post('/', async (req, res) => {
     try {
         const Game = mongoose.model('GameLevel');
         const { _id, ...data } = req.body;
-        if (_id && mongoose.Types.ObjectId.isValid(_id)) {
-            const updated = await Game.findByIdAndUpdate(_id, data, { new: true });
-            return res.json(updated);
-        }
-        const created = await Game.create(data);
-        res.json(created);
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
+        if (_id) return res.json(await Game.findByIdAndUpdate(_id, data, { new: true }));
+        res.json(await Game.create(data));
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// DELETE /api/games/:id
 router.delete('/:id', async (req, res) => {
     try {
         await mongoose.model('GameLevel').findByIdAndDelete(req.params.id);
         res.json({ ok: true });
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 module.exports = router;
@@ -15641,46 +15552,126 @@ module.exports = router;
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
+const multer = require('multer');
+const DriveService = require('../../services/drive.service');
+
+const upload = multer({ storage: multer.memoryStorage() });
+
+// Normalisation douce : on garde les espaces et la casse pour correspondre au Drive manuel
+const softNormalize = (n) => n ? n.trim() : "SANS_TITRE";
 
 /**
- * 📄 DOMAINE : HOMEWORK (DEVOIRS MANUELS)
+ * 📄 DOMAINE : HOMEWORK
  */
 
-// Lister tous les devoirs (GET /api/homework/all)
-router.get('/all', async (req, res) => {
-    try {
-        const data = await mongoose.model('Homework').find({}).sort({ date: -1 });
-        res.json(data || []);
-    } catch (e) { res.status(500).json([]); }
-});
-
-// Sauvegarder ou modifier (POST /api/homework)
 router.post('/', async (req, res) => {
     try {
         const Homework = mongoose.model('Homework');
-        const { _id, ...data } = req.body;
-        if (_id && mongoose.Types.ObjectId.isValid(_id)) {
-            const updated = await Homework.findByIdAndUpdate(_id, data, { new: true });
-            return res.json(updated);
+        const Chapter = mongoose.model('Chapter');
+        const { _id, chapterId, title, classroom } = req.body;
+
+        let homeworkDriveId = null;
+
+        // 1. RÉCUPÉRATION DU DOSSIER PARENT (CHAPITRE)
+        if (chapterId && chapterId !== 'none') {
+            const chapter = await Chapter.findById(chapterId);
+            if (chapter) {
+                // On cherche l'ID Drive du chapitre s'il est manquant ou invalide
+                if (!chapter.driveFolderId) {
+                    console.log(`🔍 Suture Drive pour le chapitre : ${chapter.title}`);
+                    const rootId = await DriveService.getOrCreateFolder("CONDACLASSE", null);
+                    const classId = await DriveService.getOrCreateFolder(softNormalize(classroom), rootId);
+                    const subName = chapter.subject === 'H' ? 'HISTOIRE' : chapter.subject === 'G' ? 'GEOGRAPHIE' : 'EMC';
+                    const subId = await DriveService.getOrCreateFolder(subName, classId);
+                    
+                    // On cherche le dossier par son nom exact
+                    chapter.driveFolderId = await DriveService.getOrCreateFolder(chapter.title, subId);
+                    await chapter.save();
+                }
+
+                // 2. CRÉATION DU DOSSIER DU DEVOIR DANS LE CHAPITRE
+                if (chapter.driveFolderId) {
+                    homeworkDriveId = await DriveService.getOrCreateFolder(softNormalize(title), chapter.driveFolderId);
+                    
+                    // Création des tiroirs de production (US #4)
+                    await DriveService.getOrCreateFolder("SUJET", homeworkDriveId);
+                    await DriveService.getOrCreateFolder("COPIES", homeworkDriveId);
+                    await DriveService.getOrCreateFolder("CORRECTIONS", homeworkDriveId);
+                }
+            }
         }
-        const created = await Homework.create(data);
-        res.json(created);
-    } catch (e) { res.status(500).json({ error: e.message }); }
+
+        // 3. SAUVEGARDE BDD
+        const payload = { 
+            ...req.body, 
+            driveFolderId: homeworkDriveId 
+        };
+        
+        let result;
+        if (_id && mongoose.Types.ObjectId.isValid(_id)) {
+            result = await Homework.findByIdAndUpdate(_id, payload, { new: true });
+        } else {
+            result = await Homework.create(payload);
+        }
+
+        // 4. DISTRIBUTION RACCOURCIS ÉLÈVES
+        if (req.body.targetPlayerIds?.length > 0 && homeworkDriveId) {
+            const Player = mongoose.model('Player');
+            const rootId = await DriveService.getOrCreateFolder("CONDACLASSE", null);
+            const classId = await DriveService.getOrCreateFolder(softNormalize(classroom), rootId);
+            const elevesRootId = await DriveService.getOrCreateFolder("ELEVES", classId);
+
+            for (const pId of req.body.targetPlayerIds) {
+                const student = await Player.findById(pId);
+                if (student) {
+                    const studentFolderId = await DriveService.getOrCreateFolder(softNormalize(`${student.lastName}_${student.firstName}`), elevesRootId);
+                    const studentHwFolderId = await DriveService.getOrCreateFolder("DEVOIRS", studentFolderId);
+                    await DriveService.createShortcut(homeworkDriveId, studentHwFolderId, title);
+                }
+            }
+        }
+
+        res.json(result);
+    } catch (e) {
+        console.error("❌ Error Homework Sync:", e.message);
+        res.status(500).json({ error: e.message });
+    }
 });
 
-// Récupérer pour une classe (GET /api/homework/by-class/:classroom)
-router.get('/by-class/:classroom', async (req, res) => {
+// Upload direct vers Drive
+router.post('/upload-to-drive', upload.single('file'), async (req, res) => {
     try {
-        const data = await mongoose.model('Homework').find({ 
-            $or: [{ classroom: req.params.classroom }, { classroom: "Toutes" }] 
-        }).sort({ date: -1 });
-        res.json(data || []);
-    } catch(e) { res.status(500).json([]); }
+        const { homeworkId, type } = req.body;
+        const homework = await mongoose.model('Homework').findById(homeworkId);
+        
+        if (!homework || !homework.driveFolderId) {
+            return res.status(400).json({ error: "Dossier Drive non initialisé. Sauvegardez le devoir d'abord." });
+        }
+
+        // On cible le sous-dossier SUJET du devoir
+        const subjectFolderId = await DriveService.getOrCreateFolder("SUJET", homework.driveFolderId);
+
+        const file = await DriveService.uploadFile(
+            subjectFolderId, 
+            `${type.toUpperCase()}_${Date.now()}.jpg`, 
+            req.file.buffer, 
+            req.file.mimetype
+        );
+
+        res.json({ ok: true, imageUrl: file.url });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 });
 
-// Supprimer (DELETE /api/homework/:id)
+router.get('/all', async (req, res) => {
+    try { res.json(await mongoose.model('Homework').find({}).sort({ date: -1 })); } catch (e) { res.status(500).json([]); }
+});
+
 router.delete('/:id', async (req, res) => {
     try {
+        const hw = await mongoose.model('Homework').findById(req.params.id);
+        if (hw?.driveFolderId) await DriveService.deleteFile(hw.driveFolderId);
         await mongoose.model('Homework').findByIdAndDelete(req.params.id);
         res.json({ ok: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -15694,37 +15685,104 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const DriveService = require('../../services/drive.service');
 
-const getScan = () => mongoose.model('ScanSession');
+/**
+ * 📸 DOMAINE : SCANS
+ */
 
-// Versant PROF : Capturer et lister
+const normalize = (n) => n.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Z0-9]/g, "_").trim();
+
 router.get('/sessions', async (req, res) => {
-    try { res.json(await getScan().find({}).sort({ createdAt: -1 })); } catch (e) { res.json([]); }
+    try { res.json(await mongoose.model('ScanSession').find({}).sort({ createdAt: -1 })); } catch (e) { res.status(500).json([]); }
 });
 
 router.post('/sessions', async (req, res) => {
-    try { res.json(await getScan().create(req.body)); } catch (e) { res.status(500).json({ error: e.message }); }
+    try {
+        const { title, classroom } = req.body;
+        const session = await mongoose.model('ScanSession').create({ title, classroom });
+
+        const condaRootId = await DriveService.getOrCreateFolder("CONDACLASSE", null);
+        const classId = await DriveService.getOrCreateFolder(normalize(classroom), condaRootId);
+        const sessId = await DriveService.getOrCreateFolder(normalize(title), classId);
+        
+        const subjectId = await DriveService.getOrCreateFolder("SUJET", sessId);
+        const copiesId = await DriveService.getOrCreateFolder("COPIES", sessId);
+        const correctionsId = await DriveService.getOrCreateFolder("CORRECTIONS", sessId);
+
+        const updated = await mongoose.model('ScanSession').findByIdAndUpdate(session._id, {
+            driveFolderId: sessId, subjectFolderId: subjectId, copiesFolderId: copiesId, correctionsFolderId: correctionsId
+        }, { new: true });
+
+        res.json(updated);
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.post('/upload-photo', async (req, res) => {
+router.post('/upload', async (req, res) => {
     try {
         const { sessionId, type, imageBase64 } = req.body; 
-        const session = await getScan().findById(sessionId);
+        const session = await mongoose.model('ScanSession').findById(sessionId);
         const folderId = type === 'subject' ? session.subjectFolderId : session.copiesFolderId;
-        const driveFile = await DriveService.uploadImage(folderId || "root", `${type}_${Date.now()}.jpg`, imageBase64);
+        const driveFile = await DriveService.uploadImage(folderId, `${type.toUpperCase()}_${Date.now()}.jpg`, imageBase64);
         if (driveFile) {
             const field = type === 'subject' ? 'subjectUrls' : 'copyUrls';
-            await getScan().findByIdAndUpdate(sessionId, { $push: { [field]: driveFile.id } });
+            await mongoose.model('ScanSession').findByIdAndUpdate(sessionId, { $push: { [field]: driveFile.id } });
             res.json({ ok: true });
         } else { res.status(500).send("Drive Fail"); }
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Versant ÉLÈVE : Voir ses propres copies corrigées
-router.get('/my-productions/:playerId', async (req, res) => {
+router.delete('/:id', async (req, res) => {
     try {
-        const submissions = await mongoose.model('Submission').find({ playerId: req.params.playerId }).sort({ createdAt: -1 });
-        res.json(submissions);
-    } catch (e) { res.json([]); }
+        const s = await mongoose.model('ScanSession').findById(req.params.id);
+        if (s?.driveFolderId) await DriveService.deleteFile(s.driveFolderId);
+        await mongoose.model('ScanSession').findByIdAndDelete(req.params.id);
+        res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+module.exports = router;
+
+### FILE: server/features/upload/upload.routes.js
+const express = require('express');
+const router = express.Router();
+const multer = require('multer');
+const cloudinary = require('cloudinary').v2;
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+
+/**
+ * ☁️ DOMAINE : UPLOAD (CLOUDINARY)
+ * Gère l'hébergement des images pour les devoirs et les quiz.
+ */
+
+// Configuration Cloudinary
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET
+});
+
+const storage = new CloudinaryStorage({
+    cloudinary: cloudinary,
+    params: {
+        folder: 'condamine_uploads',
+        allowed_formats: ['jpg', 'png', 'jpeg', 'webp'],
+        transformation: [{ width: 1200, quality: "auto" }]
+    }
+});
+
+const upload = multer({ storage: storage });
+
+// POST /api/upload
+router.post('/', upload.single('file'), (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ ok: false, message: "Aucun fichier reçu" });
+        }
+        // Renvoie l'URL sécurisée de Cloudinary
+        res.json({ ok: true, imageUrl: req.file.path });
+    } catch (e) {
+        console.error("❌ [UPLOAD] Crash:", e.message);
+        res.status(500).json({ ok: false, error: e.message });
+    }
 });
 
 module.exports = router;
@@ -15780,16 +15838,23 @@ module.exports = mongoose.model('GameLevel', GameLevelSchema);
 const mongoose = require('mongoose');
 
 const HomeworkSchema = new mongoose.Schema({
-    title: String,
-    classroom: String,
-    targetGrade: String,
+    title: { type: String, required: true },
+    classroom: { type: String, required: true },
+    targetGrade: { type: String, default: 'Tous' },
     targetPlayerIds: [String],
     chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter' },
-    levels: Array,
+    
+    // Miroir Drive (Même logique que ScanSession)
+    driveFolderId: String,        // Racine du devoir
+    subjectFolderId: String,      // Dossier SUJET
+    copiesFolderId: String,       // Dossier COPIES
+    correctionsFolderId: String,  // Dossier CORRECTIONS
+
+    levels: { type: Array, default: [] },
     date: { type: Date, default: Date.now }
 });
 
-module.exports = mongoose.model('Homework', HomeworkSchema);
+module.exports = mongoose.models.Homework || mongoose.model('Homework', HomeworkSchema);
 
 ### FILE: server/models/Player.js
 const mongoose = require('mongoose');
@@ -15898,8 +15963,10 @@ const express = require('express');
 const mongoose = require('mongoose');
 const fs = require('fs');
 
-// Injection globale de fetch pour Gemini (Node < 18)
-if (!global.fetch) { global.fetch = require('node-fetch'); }
+// Injection globale de fetch pour Gemini & Drive (Node < 18)
+if (!global.fetch) { 
+    global.fetch = require('node-fetch'); 
+}
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -15928,7 +15995,7 @@ mongoose.connect(process.env.MONGODB_URI).then(async () => {
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// 3. ROUTES SYSTÈME (BOOT ID & MONITORING)
+// 3. ROUTES SYSTÈME
 app.get('/api/check-deploy', (req, res) => res.json({ bootId: SERVER_BOOT_ID }));
 app.get('/api/deploy-status', async (req, res) => {
     try {
@@ -15942,75 +16009,40 @@ app.get('/api/deploy-status', async (req, res) => {
 app.use('/api/auth', require('./features/auth/auth.routes'));
 app.use('/api/games', require('./features/games/games.routes'));
 app.use('/api/scans', require('./features/scans/scans.routes'));
-app.use('/api/homework', require('./features/homework/homework.routes'));
-app.use('/api', require('./features/admin/admin.routes')); // ADMIN centralise le structural
+app.use('/api/homework', require('./features/homework/homework.routes')); // DOMAINE HOMEWORK
+app.use('/api', require('./features/admin/admin.routes')); 
 
 // 5. GESTION FRONTEND
 const distPath = path.join(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
-        if (req.path.startsWith('/api')) return res.status(404).json({ error: "API non trouvée" });
+        // Sécurité : si c'est une requête API, on ne renvoie pas de HTML
+        if (req.path.startsWith('/api')) return res.status(404).json({ error: "Route API introuvable" });
         res.sendFile(path.join(distPath, 'index.html'));
     });
 }
 
-app.listen(port, () => console.log(`🚀 CONDAMINE V2 : PRÊT (PORT ${port})`));
+app.listen(port, () => console.log(`🚀 SERVEUR PRÊT : PORT ${port}`));
 
 ### FILE: server/services/ai.service.js
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
-/**
- * 🧠 SERVICE IA CENTRALISÉ
- * Configuré pour GEMINI 2.0 FLASH
- */
 const AIService = {
     generateQuiz: async (topic, numQuestions = 5) => {
         try {
             const apiKey = process.env.GEMINI_API_KEY;
-            if (!apiKey) throw new Error("Clé API GEMINI_API_KEY manquante");
+            if (!apiKey) throw new Error("Clé API manquante");
 
             const genAI = new GoogleGenerativeAI(apiKey);
-            
-            // UTILISATION DE GEMINI 2.0 FLASH
             const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
             
-            const prompt = `
-                Tu es un professeur expert. Génère un quiz de ${numQuestions} questions sur le sujet : "${topic}".
-                Format de sortie : JSON pur uniquement (un tableau d'objets).
-                Structure : 
-                [
-                  {
-                    "q": "la question",
-                    "options": ["choix 1", "choix 2", "choix 3", "choix 4"],
-                    "a": 0
-                  }
-                ]
-                "a" est l'index de la réponse correcte.
-                IMPORTANT : Ne renvoie que le JSON. Pas de texte avant, pas de texte après, pas de balises markdown.
-            `;
-            
-            console.log(`📡 [IA 2.0] Requête pour : "${topic}"`);
+            const prompt = `Génère un quiz JSON de ${numQuestions} questions sur "${topic}". Structure: [{"q":"", "options":["","","",""], "a":0}]. Pas de markdown.`;
             
             const result = await model.generateContent(prompt);
-            const response = await result.response;
-            let text = response.text().trim();
-            
-            // Nettoyage Markdown au cas où
-            text = text.replace(/```json/g, "").replace(/```/g, "").trim();
-            
-            // Extraction du bloc JSON si l'IA a mis du texte autour
-            const startIdx = text.indexOf('[');
-            const endIdx = text.lastIndexOf(']');
-            if (startIdx !== -1 && endIdx !== -1) {
-                text = text.substring(startIdx, endIdx + 1);
-            }
-
+            let text = result.response.text().replace(/```json/g, "").replace(/```/g, "").trim();
             return JSON.parse(text);
-        } catch (e) {
-            console.error("❌ [AIService] Erreur Gemini 2.0 :", e.message);
-            throw e;
-        }
+        } catch (e) { throw e; }
     }
 };
 
@@ -16031,75 +16063,82 @@ try {
         );
         auth.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
         drive = google.drive({ version: 'v3', auth });
-        console.log("✅ Drive API Prêt.");
+        console.log("✅ Drive API : Prêt pour la suture des dossiers.");
     }
 } catch (e) {
     console.error("❌ Erreur Init Drive:", e.message);
 }
 
 const DriveService = {
-    getOrCreateFolder: async (name, parentId = null) => {
+    // Cherche un dossier par son nom exact dans un parent
+    findFolderByName: async (name, parentId = null) => {
         if (!drive) return null;
         try {
-            let q = "name = '" + name + "' and mimeType = 'application/vnd.google-apps.folder' and trashed = false";
-            if (parentId) q += " and '" + parentId + "' in parents";
-            else q += " and 'root' in parents";
+            // On échappe les apostrophes pour la requête Drive
+            const safeName = name.replace(/'/g, "\\'");
+            let q = `name = '${safeName}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
+            if (parentId) q += ` and '${parentId}' in parents`;
             
             const res = await drive.files.list({ q, fields: 'files(id, name)' });
-            if (res.data.files && res.data.files.length > 0) return res.data.files[0].id;
+            return (res.data.files && res.data.files.length > 0) ? res.data.files[0].id : null;
+        } catch (e) { return null; }
+    },
 
+    getOrCreateFolder: async (name, parentId = null) => {
+        if (!drive) return null;
+        // 1. D'abord on cherche s'il existe déjà (pour éviter les doublons invisibles)
+        const existingId = await DriveService.findFolderByName(name, parentId);
+        if (existingId) return existingId;
+
+        // 2. Sinon on crée
+        try {
             const folder = await drive.files.create({
-                resource: { name: name, mimeType: 'application/vnd.google-apps.folder', parents: parentId ? [parentId] : [] },
+                resource: { 
+                    name: name, 
+                    mimeType: 'application/vnd.google-apps.folder', 
+                    parents: parentId ? [parentId] : [] 
+                },
                 fields: 'id'
             });
             return folder.data.id;
         } catch (e) { return null; }
     },
 
-    // US #7 : Bas niveau rename
-    renameFolder: async (fileId, newName) => {
-        if (!drive || !fileId) return;
-        try {
-            await drive.files.update({ 
-                fileId: fileId, 
-                resource: { name: newName } 
-            });
-            return true;
-        } catch (e) {
-            console.error("Drive renameFolder error:", e.message);
-            return false;
-        }
-    },
-
-    listFiles: async (folderId) => {
-        if (!drive || !folderId) return [];
-        try {
-            const res = await drive.files.list({
-                q: `'${folderId}' in parents and trashed = false`,
-                fields: 'files(id, name, webViewLink, thumbnailLink, mimeType)',
-                orderBy: 'name'
-            });
-            return res.data.files || [];
-        } catch (e) { return []; }
-    },
-
-    deleteFile: async (id) => { 
-        if (!drive || !id) return true;
-        try { await drive.files.delete({ fileId: id }); return true; } catch (e) { return false; } 
-    },
-
-    uploadImage: async (folderId, fileName, base64Data) => {
+    uploadFile: async (folderId, fileName, buffer, mimeType) => {
         if (!drive || !folderId) return null;
         try {
-            const buffer = Buffer.from(base64Data.split(',')[1], 'base64');
-            const media = { mimeType: 'image/jpeg', body: Readable.from(buffer) };
+            const media = { mimeType, body: Readable.from(buffer) };
             const file = await drive.files.create({
                 resource: { name: fileName, parents: [folderId] },
                 media,
                 fields: 'id, webViewLink'
             });
-            return { id: file.data.id, link: file.data.webViewLink };
+            await drive.permissions.create({
+                fileId: file.data.id,
+                resource: { role: 'reader', type: 'anyone' }
+            });
+            return { id: file.data.id, url: `https://drive.google.com/thumbnail?id=${file.data.id}&sz=w1200` };
         } catch (e) { return null; }
+    },
+
+    createShortcut: async (targetId, parentFolderId, shortcutName) => {
+        if (!drive || !targetId || !parentFolderId) return null;
+        try {
+            await drive.files.create({
+                resource: {
+                    name: `🔗 ${shortcutName}`,
+                    mimeType: 'application/vnd.google-apps.shortcut',
+                    parents: [parentFolderId],
+                    shortcutDetails: { targetId: targetId }
+                }
+            });
+            return true;
+        } catch (e) { return null; }
+    },
+
+    deleteFile: async (id) => { 
+        if (!drive || !id) return true;
+        try { await drive.files.delete({ fileId: id }); return true; } catch (e) { return false; } 
     }
 };
 
@@ -16108,9 +16147,9 @@ module.exports = DriveService;
 ### FILE: server/version.json
 {
   "version": "1.6.0",
-  "build": 213,
+  "build": 229,
   "description": "Total Domain Isolation (Zero Porosity) + AI Service Extraction",
-  "timestamp": "2026-01-14T03:36:11.392Z"
+  "timestamp": "2026-01-14T14:52:51.235Z"
 }
 
 ### FILE: snap.js
