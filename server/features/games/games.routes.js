@@ -7,30 +7,32 @@ const AIService = require('../../services/ai.service');
  * 🕹️ DOMAINE : GAMES
  */
 
+// GET /api/games/all
 router.get('/all', async (req, res) => {
     try {
         const GameLevel = mongoose.model('GameLevel');
         const data = await GameLevel.find({}).sort({ _id: -1 });
         res.json(data || []);
     } catch (e) {
-        res.status(500).json({ error: "Erreur récupération jeux" });
+        res.status(500).json({ error: "Erreur BDD" });
     }
 });
 
+// POST /api/games/generate
 router.post('/generate', async (req, res) => {
     try {
         const { topic, numQuestions } = req.body;
-        if (!topic) return res.status(400).json({ error: "Sujet manquant" });
+        if (!topic) return res.status(400).json({ error: "Sujet requis" });
         
-        // Appel au service IA avec gestion d'erreur
-        const quiz = await AIService.generateQuiz(topic, numQuestions);
+        const quiz = await AIService.generateQuiz(topic, numQuestions || 5);
         res.json(quiz);
     } catch (e) {
-        console.error("❌ [GAMES ROUTE] Crash lors de la génération :", e.message);
-        res.status(500).json({ error: "Erreur IA", details: e.message });
+        console.error("❌ [GAMES] Erreur route generate:", e.message);
+        res.status(500).json({ error: "L'IA 2.0 n'a pas pu répondre.", details: e.message });
     }
 });
 
+// POST /api/games (Save/Update)
 router.post('/', async (req, res) => {
     try {
         const Game = mongoose.model('GameLevel');
@@ -46,6 +48,7 @@ router.post('/', async (req, res) => {
     }
 });
 
+// DELETE /api/games/:id
 router.delete('/:id', async (req, res) => {
     try {
         await mongoose.model('GameLevel').findByIdAndDelete(req.params.id);

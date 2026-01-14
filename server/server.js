@@ -4,7 +4,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const fs = require('fs');
 
-// Polyfill fetch pour Gemini (Node < 18)
+// INJECTION GLOBALE DE FETCH (Nécessaire pour le SDK Google sur Node < 18)
 if (!global.fetch) {
     global.fetch = require('node-fetch');
 }
@@ -13,10 +13,7 @@ const app = express();
 const port = process.env.PORT || 3000;
 const SERVER_BOOT_ID = Date.now();
 
-/**
- * 1. CHARGEMENT DES MODÈLES (ORDRE ALPHABÉTIQUE)
- * On force le chargement des schémas avant les routes.
- */
+// 1. CHARGEMENT DES MODÈLES (ORDRE ALPHABÉTIQUE)
 require('./models/Bug');
 require('./models/Chapter');
 require('./models/DeploySignal');
@@ -40,7 +37,7 @@ mongoose.connect(process.env.MONGODB_URI).then(async () => {
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// 3. ROUTES SYSTÈME (INDISPENSABLES)
+// 3. ROUTES SYSTÈME
 app.get('/api/check-deploy', (req, res) => res.json({ bootId: SERVER_BOOT_ID }));
 app.get('/api/deploy-status', async (req, res) => {
     try {
@@ -50,26 +47,26 @@ app.get('/api/deploy-status', async (req, res) => {
     } catch (e) { res.json({ version: '1.0.0', build: 0, status: 'live' }); }
 });
 
-/**
- * 4. ARCHITECTURE PAR DOMAINE (ZÉRO POROSITÉ)
- */
+// 4. ARCHITECTURE PAR DOMAINE (ZÉRO POROSITÉ)
 app.use('/api/auth', require('./features/auth/auth.routes'));
 app.use('/api/games', require('./features/games/games.routes'));
 app.use('/api/scans', require('./features/scans/scans.routes'));
 app.use('/api/homework', require('./features/homework/homework.routes'));
 
-// DOMAINE ADMIN : Monté sur /api pour capturer /api/players et /api/chapters-all
-// Cela répare les 404 du Frontend actuel.
-app.use('/api', require('./features/admin/admin.routes')); 
+// PONT ADMIN (Rétablit les accès /api/players et /api/chapters-all)
+app.use('/api', require('./features/admin/admin.routes'));
 
-// 5. GESTION FRONTEND (PRODUCTION)
+// 5. GESTION FRONTEND
 const distPath = path.join(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
-        if (req.path.startsWith('/api')) return res.status(404).json({ error: "Route API introuvable" });
+        if (req.path.startsWith('/api')) return res.status(404).json({ error: "Route API inexistante" });
         res.sendFile(path.join(distPath, 'index.html'));
     });
 }
 
-app.listen(port, () => console.log(`🚀 SERVEUR PRÊT : PORT ${port} (ID:${SERVER_BOOT_ID})`));
+app.listen(port, () => {
+    console.log(`🚀 SERVEUR CONDAMINE PRÊT | PORT ${port}`);
+    console.log(`🤖 IA MODE : GEMINI 2.0 FLASH`);
+});

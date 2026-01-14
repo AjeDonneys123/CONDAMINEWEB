@@ -1,7 +1,8 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 /**
- * 🧠 SERVICE IA CENTRALISÉ (V2 - ULTRA ROBUSTE)
+ * 🧠 SERVICE IA CENTRALISÉ
+ * Configuré pour GEMINI 2.0 FLASH
  */
 const AIService = {
     generateQuiz: async (topic, numQuestions = 5) => {
@@ -10,50 +11,46 @@ const AIService = {
             if (!apiKey) throw new Error("Clé API GEMINI_API_KEY manquante dans le fichier .env");
 
             const genAI = new GoogleGenerativeAI(apiKey);
-            const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+            
+            // UTILISATION DE GEMINI 2.0 FLASH
+            const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
             
             const prompt = `
-                Tu es un professeur d'histoire-géographie. 
-                Génère un quiz JSON de ${numQuestions} questions sur le sujet suivant : "${topic}".
-                
-                FORMAT DE RÉPONSE STRICTEMENT ATTENDU (JSON PUR) :
+                Tu es un professeur expert. Génère un quiz de ${numQuestions} questions sur le sujet : "${topic}".
+                Format de sortie : JSON pur uniquement (un tableau d'objets).
+                Structure : 
                 [
                   {
-                    "q": "La question ?",
-                    "options": ["Choix 1", "Choix 2", "Choix 3", "Choix 4"],
+                    "q": "la question",
+                    "options": ["choix 1", "choix 2", "choix 3", "choix 4"],
                     "a": 0
                   }
                 ]
-                Note: "a" est l'index (0 à 3) de la bonne réponse.
-                NE METS AUCUN TEXTE avant ou après le JSON. PAS de balises markdown.
+                "a" est l'index de la réponse correcte.
+                IMPORTANT : Ne renvoie que le JSON. Pas de texte avant, pas de texte après, pas de balises markdown.
             `;
             
-            console.log(`🤖 [IA] Génération pour le sujet : ${topic}`);
+            console.log(`📡 [IA 2.0] Requête pour : "${topic}"`);
+            
             const result = await model.generateContent(prompt);
             const response = await result.response;
             let text = response.text().trim();
             
-            // Nettoyage de sécurité : on retire d'éventuelles balises markdown ```json
-            if (text.includes("```")) {
-                text = text.replace(/```json/g, "").replace(/```/g, "").trim();
-            }
-
-            // On cherche le début et la fin du tableau au cas où il y aurait du texte parasite
+            // Nettoyage Markdown au cas où
+            text = text.replace(/```json/g, "").replace(/```/g, "").trim();
+            
+            // Extraction du bloc JSON si l'IA a mis du texte autour
             const startIdx = text.indexOf('[');
             const endIdx = text.lastIndexOf(']');
-            if (startIdx === -1 || endIdx === -1) throw new Error("Format JSON non trouvé dans la réponse IA");
-            
-            const cleanJson = text.substring(startIdx, endIdx + 1);
-            return JSON.parse(cleanJson);
-            
-        } catch (e) {
-            console.error("❌ [AIService] Erreur critique :", e.message);
-            throw e; // On propage pour que la route renvoie l'erreur détaillée
-        }
-    },
+            if (startIdx !== -1 && endIdx !== -1) {
+                text = text.substring(startIdx, endIdx + 1);
+            }
 
-    analyzeCopy: async (imageBuffer, instruction) => {
-        return { grade: "A", feedback: "Non implémenté." };
+            return JSON.parse(text);
+        } catch (e) {
+            console.error("❌ [AIService] Erreur Gemini 2.0 :", e.message);
+            throw e;
+        }
     }
 };
 
