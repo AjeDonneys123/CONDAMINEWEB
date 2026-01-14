@@ -1,7 +1,5 @@
 /**
- * 📞 SERVICE API CENTRALISÉ
- * Gère la communication robuste avec le serveur.
- * Évite les erreurs de parsing JSON sur les 404.
+ * 📞 SERVICE API CENTRALISÉ (V2 - ÉTANCHE)
  */
 
 const API_BASE = '/api';
@@ -15,7 +13,6 @@ const handleResponse = async (response) => {
 };
 
 export const api = {
-    // Méthodes génériques
     async get(endpoint) {
         const response = await fetch(`${API_BASE}${endpoint}`);
         return handleResponse(response);
@@ -37,11 +34,17 @@ export const api = {
         return handleResponse(response);
     },
 
-    // Raccourcis spécifiques
+    // Raccourcis Devoirs
     async getHomeworks(classroom) {
         return this.get(`/homework/by-class/${classroom}`);
     },
 
+    // Raccourcis Jeux
+    async getGames() {
+        return this.get('/games/all');
+    },
+
+    // Raccourcis Joueurs
     async getPlayers() {
         return this.get('/players');
     }

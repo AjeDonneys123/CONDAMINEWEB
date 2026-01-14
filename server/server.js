@@ -34,7 +34,7 @@ mongoose.connect(process.env.MONGODB_URI).then(async () => {
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// 3. ROUTES SYSTÈME
+// 3. ROUTES SYSTÈME (BOOT ID & MONITORING)
 app.get('/api/check-deploy', (req, res) => res.json({ bootId: SERVER_BOOT_ID }));
 app.get('/api/deploy-status', async (req, res) => {
     try {
@@ -48,17 +48,17 @@ app.get('/api/deploy-status', async (req, res) => {
 app.use('/api/auth', require('./features/auth/auth.routes'));
 app.use('/api/games', require('./features/games/games.routes'));
 app.use('/api/scans', require('./features/scans/scans.routes'));
-app.use('/api/homework', require('./features/homework/homework.routes')); // DOMAINE HOMEWORK STABILISÉ
-app.use('/api', require('./features/admin/admin.routes')); 
+app.use('/api/homework', require('./features/homework/homework.routes'));
+app.use('/api', require('./features/admin/admin.routes')); // ADMIN centralise le structural
 
 // 5. GESTION FRONTEND
 const distPath = path.join(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
-        if (req.path.startsWith('/api')) return res.status(404).json({ error: "Route API inexistante" });
+        if (req.path.startsWith('/api')) return res.status(404).json({ error: "API non trouvée" });
         res.sendFile(path.join(distPath, 'index.html'));
     });
 }
 
-app.listen(port, () => console.log(`🚀 SERVEUR CONDAMINE : PORT ${port} (READY)`));
+app.listen(port, () => console.log(`🚀 CONDAMINE V2 : PRÊT (PORT ${port})`));
