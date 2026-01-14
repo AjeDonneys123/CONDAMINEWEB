@@ -1,6 +1,6 @@
 {
-  "version": "1.4.2",
-  "build": 179,
-  "description": "Critical fix for 500 Error on /api/players + Model loading priority",
-  "timestamp": "2026-01-14T00:52:22.465Z"
+  "version": "1.4.3",
+  "build": 180,
+  "description": "Indestructible Models + Secure API Responses + Fix 500 Errors",
+  "timestamp": "2026-01-14T00:54:28.030Z"
 }

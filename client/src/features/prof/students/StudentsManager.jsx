@@ -8,11 +8,11 @@ export default function StudentsManager({ globalClass }) {
   const loadData = async () => {
     try {
         const res = await fetch('/api/players');
-        if (!res.ok) throw new Error("Serveur Error");
+        if (!res.ok) return console.error("Serveur Erreur 500 sur Players");
         const data = await res.json();
         setPlayers(Array.isArray(data) ? data : []);
     } catch (e) {
-        console.error("Erreur Players:", e.message);
+        console.error("Erreur de décodage JSON sur Players");
     }
   };
 
@@ -49,13 +49,13 @@ export default function StudentsManager({ globalClass }) {
                     <tr key={p._id} className="border-b hover:bg-slate-50 transition-colors">
                         <td className="p-5 pl-8 font-bold text-slate-700">{p.firstName} {p.lastName}</td>
                         <td className="p-5 text-right pr-8">
-                            <button className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase shadow-sm">Dossier</button>
+                            <button className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase">Dossier</button>
                         </td>
                     </tr>
                 ))}
             </tbody>
         </table>
-        {filtered.length === 0 && <p className="text-center py-20 text-slate-300 italic uppercase text-[10px]">Aucun élève trouvé</p>}
+        {filtered.length === 0 && <p className="text-center py-20 text-slate-300 font-black uppercase text-[10px]">Aucun élève</p>}
       </div>
     </div>
   );

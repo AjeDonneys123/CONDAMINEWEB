@@ -1,12 +1,11 @@
 const mongoose = require('mongoose');
-
 const PlayerSchema = new mongoose.Schema({
     firstName: String,
     lastName: String,
     classroom: String,
     email: { type: String, default: "" },
-    teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher' }, // Lié au prof
+    teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher' },
     spellingMistakes: { type: Array, default: [] }
 });
-
-module.exports = mongoose.model('Player', PlayerSchema);
+// Protection contre la re-déclaration (Crucial pour éviter les erreurs 500)
+module.exports = mongoose.models.Player || mongoose.model('Player', PlayerSchema);
