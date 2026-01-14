@@ -12,7 +12,7 @@ try {
         );
         auth.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
         drive = google.drive({ version: 'v3', auth });
-        console.log("✅ Drive API Prêt.");
+        console.log("✅ Drive API Prêt (Mode Stockage Actif)");
     }
 } catch (e) {
     console.error("❌ Erreur Init Drive:", e.message);
@@ -22,9 +22,8 @@ const DriveService = {
     getOrCreateFolder: async (name, parentId = null) => {
         if (!drive) return null;
         try {
-            let q = "name = '" + name + "' and mimeType = 'application/vnd.google-apps.folder' and trashed = false";
-            if (parentId) q += " and '" + parentId + "' in parents";
-            else q += " and 'root' in parents";
+            let q = `name = '${name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
+            if (parentId) q += ` and '${parentId}' in parents`;
             
             const res = await drive.files.list({ q, fields: 'files(id, name)' });
             if (res.data.files && res.data.files.length > 0) return res.data.files[0].id;
@@ -37,50 +36,31 @@ const DriveService = {
         } catch (e) { return null; }
     },
 
-    // US #7 : Bas niveau rename
-    renameFolder: async (fileId, newName) => {
-        if (!drive || !fileId) return;
-        try {
-            await drive.files.update({ 
-                fileId: fileId, 
-                resource: { name: newName } 
-            });
-            return true;
-        } catch (e) {
-            console.error("Drive renameFolder error:", e.message);
-            return false;
-        }
-    },
-
-    listFiles: async (folderId) => {
-        if (!drive || !folderId) return [];
-        try {
-            const res = await drive.files.list({
-                q: `'${folderId}' in parents and trashed = false`,
-                fields: 'files(id, name, webViewLink, thumbnailLink, mimeType)',
-                orderBy: 'name'
-            });
-            return res.data.files || [];
-        } catch (e) { return []; }
-    },
-
-    deleteFile: async (id) => { 
-        if (!drive || !id) return true;
-        try { await drive.files.delete({ fileId: id }); return true; } catch (e) { return false; } 
-    },
-
-    uploadImage: async (folderId, fileName, base64Data) => {
+    // Upload générique pour remplacer Cloudinary
+    uploadFile: async (folderId, fileName, buffer, mimeType) => {
         if (!drive || !folderId) return null;
         try {
-            const buffer = Buffer.from(base64Data.split(',')[1], 'base64');
-            const media = { mimeType: 'image/jpeg', body: Readable.from(buffer) };
+            const media = { mimeType, body: Readable.from(buffer) };
             const file = await drive.files.create({
                 resource: { name: fileName, parents: [folderId] },
                 media,
                 fields: 'id, webViewLink'
             });
-            return { id: file.data.id, link: file.data.webViewLink };
-        } catch (e) { return null; }
+            // On rend le fichier lisible par tous ceux qui ont le lien (pour l'affichage élève)
+            await drive.permissions.create({
+                fileId: file.data.id,
+                resource: { role: 'reader', type: 'anyone' }
+            });
+            return { id: file.data.id, url: `https://drive.google.com/thumbnail?id=${file.data.id}&sz=w1200` };
+        } catch (e) {
+            console.error("Drive Upload Error:", e.message);
+            return null;
+        }
+    },
+
+    deleteFile: async (id) => { 
+        if (!drive || !id) return true;
+        try { await drive.files.delete({ fileId: id }); return true; } catch (e) { return false; } 
     }
 };
 

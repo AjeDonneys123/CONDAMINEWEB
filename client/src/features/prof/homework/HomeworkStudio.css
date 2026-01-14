@@ -1,8 +1,23 @@
-.assign-card {
+.homework-studio-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 6000;
     background: #f8fafc;
-    padding: 15px;
-    border-radius: 20px;
-    border: 2px solid #e2e8f0;
+    display: flex;
+    flex-direction: column;
+}
+
+/* On ajoute du padding en haut pour ne pas cacher la bannière de version */
+.homework-studio-overlay > div:first-child {
+    padding-top: 40px !important;
+}
+
+.assign-card {
+    background: #ffffff;
+    padding: 1.5rem;
+    border-radius: 25px;
+    border: 1px solid #f1f5f9;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
 }
 
 .assign-card label {
@@ -13,84 +28,12 @@
     margin-bottom: 5px;
 }
 
-.assign-card select, .std-finder {
+.std-finder {
     width: 100%;
     border: none;
-    background: white;
+    background: #f8fafc;
     padding: 10px;
     border-radius: 12px;
     font-weight: 700;
     outline: none;
-}
-
-/* DROP DOWN FINDER */
-.finder-dropdown {
-    position: absolute;
-    top: 100%; left: 0; right: 0;
-    background: white;
-    border: 2px solid #orange-400;
-    border-radius: 15px;
-    z-index: 1000;
-    max-height: 200px;
-    overflow-y: auto;
-    box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-}
-
-.finder-row {
-    padding: 12px;
-    font-size: 0.8rem;
-    font-weight: 700;
-    cursor: pointer;
-    border-bottom: 1px solid #f1f5f9;
-}
-
-.finder-row:hover { background: #fff7ed; color: #f97316; }
-
-/* TAGS ELEVES */
-.std-tag {
-    background: #fff7ed;
-    color: #f97316;
-    padding: 6px 15px;
-    border-radius: 99px;
-    font-weight: 800;
-    font-size: 0.75rem;
-    border: 1px solid #ffedd5;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.std-tag button {
-    background: none; border: none; color: #f87171; cursor: pointer; font-weight: 900;
-}
-
-.page-box {
-    background: #f8fafc;
-    padding: 25px;
-    border-radius: 35px;
-    border: 2px solid #e2e8f0;
-}
-
-.btn-add-page {
-    width: 100%;
-    padding: 20px;
-    border: 3px dashed #cbd5e1;
-    background: none;
-    border-radius: 30px;
-    font-weight: 900;
-    color: #94a3b8;
-    cursor: pointer;
-}
-
-.btn-save-hw {
-    width: 100%;
-    padding: 20px;
-    background: #f97316;
-    color: white;
-    font-weight: 900;
-    font-size: 1.5rem;
-    border-radius: 30px;
-    border: none;
-    box-shadow: 0 10px 20px rgba(249, 115, 22, 0.2);
-    cursor: pointer;
 }
