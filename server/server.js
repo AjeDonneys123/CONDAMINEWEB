@@ -9,8 +9,8 @@ const port = process.env.PORT || 3000;
 const SERVER_BOOT_ID = Date.now();
 
 /**
- * 1. ENREGISTREMENT CRITIQUE DES MODÈLES (AVANT LES ROUTES)
- * On charge tous les schémas en mémoire pour éviter les erreurs "Schema hasn't been registered".
+ * 1. CHARGEMENT CRITIQUE DES MODÈLES (ORDRE ALPHABÉTIQUE)
+ * Indispensable pour éviter les erreurs "Schema hasn't been registered" (Erreur 500).
  */
 require('./models/Bug');
 require('./models/Chapter');
@@ -27,23 +27,22 @@ require('./models/TeacherStyle');
 mongoose.connect(process.env.MONGODB_URI).then(async () => {
     console.log('✅ MongoDB Connecté.');
     try {
-        // Signal de déploiement pour US #13
         const DeploySignal = mongoose.model('DeploySignal');
         await DeploySignal.findOneAndUpdate({}, { status: 'live', updatedAt: new Date() }, { upsert: true });
     } catch (e) {
-        console.warn("⚠️ Impossible de mettre à jour le signal de déploiement.");
+        console.warn("⚠️ Signal de déploiement non mis à jour.");
     }
 }).catch(err => {
-    console.error("❌ Erreur fatale MongoDB :", err.message);
-    process.exit(1);
+    console.error("❌ Erreur fatale de connexion MongoDB :", err.message);
 });
 
-// MIDDLEWARES
+// MIDDLEWARES DE PARSING
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 /**
  * 3. ROUTES SYSTÈME (BOOT & MONITORING)
+ * Placées avant les domaines pour être toujours accessibles.
  */
 app.get('/api/check-deploy', (req, res) => {
     res.json({ bootId: SERVER_BOOT_ID });
@@ -77,7 +76,7 @@ const distPath = path.join(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
-        // Sécurité : Si on demande une API qui n'existe pas, renvoyer JSON, pas HTML
+        // Si c'est une requête API qui arrive ici, c'est une 404 API
         if (req.path.startsWith('/api')) {
             return res.status(404).json({ error: "Route API introuvable", path: req.path });
         }
@@ -87,8 +86,8 @@ if (fs.existsSync(distPath)) {
 
 app.listen(port, () => {
     console.log(`-----------------------------------------------`);
-    console.log(`🚀 SERVEUR CONDAMINE MODULAIRE V2 OPERATIONNEL`);
+    console.log(`🚀 SERVEUR CONDAMINE MODULAIRE (V2)`);
     console.log(`📡 PORT : ${port}`);
-    console.log(`🛠️  BOOT ID : ${SERVER_BOOT_ID}`);
+    console.log(`🆔 BOOT ID : ${SERVER_BOOT_ID}`);
     console.log(`-----------------------------------------------`);
 });

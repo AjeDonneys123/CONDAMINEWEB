@@ -3,9 +3,11 @@ const router = express.Router();
 const mongoose = require('mongoose');
 
 /**
- * 🏢 DOMAINE : ADMIN & CLASSES
- * Gère les structures (élèves, dossiers, configuration prof).
+ * 🏢 DOMAINE : ADMIN & STRUCTURES
+ * Gère les données de base : ÉLÈVES, CHAPITRES, SECTIONS.
  */
+
+// --- ÉLÈVES ---
 
 // GET /api/players
 router.get('/players', async (req, res) => {
@@ -14,10 +16,12 @@ router.get('/players', async (req, res) => {
         const data = await Player.find({}).sort({ classroom: 1, lastName: 1 });
         res.json(data || []);
     } catch (e) {
-        console.error("Admin API Error [/players]:", e.message);
-        res.status(500).json({ error: "Échec récupération élèves" });
+        console.error("Erreur Admin API [/players]:", e.message);
+        res.status(500).json({ error: "Erreur serveur lors de la récupération des élèves" });
     }
 });
+
+// --- CHAPITRES (DOSSIERS) ---
 
 // GET /api/chapters-all
 router.get('/chapters-all', async (req, res) => {
@@ -46,21 +50,9 @@ router.post('/chapters', async (req, res) => {
     }
 });
 
-// DELETE /api/classroom/:className (US #15)
-router.delete('/classroom/:className', async (req, res) => {
-    try {
-        const { className } = req.params;
-        await mongoose.model('Player').deleteMany({ classroom: className });
-        await mongoose.model('Chapter').deleteMany({ classroom: className });
-        await mongoose.model('Homework').deleteMany({ classroom: className });
-        await mongoose.model('ScanSession').deleteMany({ classroom: className });
-        res.json({ ok: true });
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
-});
+// --- CONFIGURATION PROF ---
 
-// PATCH /api/teacher/:id/sections (Super-dossiers)
+// PATCH /api/teacher/:id/sections
 router.patch('/teacher/:id/sections', async (req, res) => {
     try {
         const Teacher = mongoose.model('Teacher');
@@ -73,6 +65,13 @@ router.patch('/teacher/:id/sections', async (req, res) => {
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
+});
+
+// BUGS
+router.get('/bugs', async (req, res) => {
+    try {
+        res.json(await mongoose.model('Bug').find({}).sort({ createdAt: -1 }));
+    } catch (e) { res.json([]); }
 });
 
 module.exports = router;
