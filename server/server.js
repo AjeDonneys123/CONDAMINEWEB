@@ -8,7 +8,7 @@ const app = express();
 const port = process.env.PORT || 3000;
 const SERVER_BOOT_ID = Date.now();
 
-// 1. CHARGEMENT DES MODÈLES (ORDRE CRITIQUE)
+// 1. CHARGEMENT DES MODÈLES
 require('./models/Teacher');
 require('./models/Player');
 require('./models/Chapter');
@@ -31,39 +31,30 @@ mongoose.connect(process.env.MONGODB_URI).then(async () => {
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// 3. ROUTES SYSTÈME (INDÉSTRUCTIBLES)
+// 3. ROUTES SYSTÈME
 app.get('/api/check-deploy', (req, res) => res.json({ bootId: SERVER_BOOT_ID }));
 app.get('/api/system-status', (req, res) => res.json({ status: 'OK' }));
-app.get('/api/deploy-status', async (req, res) => {
-    try {
-        const signal = await mongoose.model('DeploySignal').findOne({});
-        res.json({ status: signal?.status || 'live', build: 180 });
-    } catch (e) { res.json({ status: 'live', build: 180 }); }
-});
 
-// 4. ROUTES API FEATURES
-app.use('/api', require('./features/auth/auth.routes'));
-app.use('/api', require('./features/eleve/eleve.routes'));
-app.use('/api', require('./features/prof/prof.routes'));
-app.use('/api', require('./features/game/game.routes'));
-app.use('/api', require('./features/prof/automation.routes'));
+// 4. ARCHITECTURE MODULAIRE : ENREGISTREMENT DES TIROIRS
+// Chaque fichier est totalement indépendant
+app.use('/api', require('./features/auth/auth.routes'));       // Login
+app.use('/api', require('./features/eleve/eleve.routes'));     // Espace Elève
+app.use('/api', require('./features/game/game.routes'));       // Jeux & IA Quizz
+app.use('/api', require('./features/prof/teacher.routes'));    // Profil Prof & Classes
+app.use('/api', require('./features/prof/chapter.routes'));    // Dossiers & Archives
+app.use('/api', require('./features/prof/homework.routes'));   // Devoirs Manuels
+app.use('/api', require('./features/prof/scan.routes'));       // Photos & Drive Scans
 
-// Garde-fou pour les 404 API
+// 5. GARDE-FOU API
 app.all('/api/*', (req, res) => {
-    res.status(404).json({ error: `Route API introuvable : ${req.method} ${req.url}` });
+    res.status(404).json({ error: `Route non trouvée : ${req.method} ${req.url}` });
 });
 
-// 5. GESTION FRONTEND
+// 6. GESTION FRONTEND
 const distPath = path.join(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
     app.get('*', (req, res) => res.sendFile(path.join(distPath, 'index.html')));
 }
 
-// Handler final anti-crash
-app.use((err, req, res, next) => {
-    console.error("🔥 CRASH SERVEUR INTERCEPTÉ :", err.message);
-    res.status(500).json({ error: "Erreur interne", message: err.message });
-});
-
-app.listen(port, () => console.log(`🚀 SERVEUR STABLE : PORT ${port}`));
+app.listen(port, () => console.log(`🚀 SERVEUR MODULAIRE PRÊT : PORT ${port}`));
