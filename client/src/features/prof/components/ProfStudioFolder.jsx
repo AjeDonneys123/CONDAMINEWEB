@@ -27,26 +27,35 @@ export default function ProfStudioFolder({
             });
             const data = await res.json();
             if (res.ok && data.user) {
-                // MISE A JOUR DU CACHE POUR ELIMINER LES FANTOMES
                 localStorage.setItem('player', JSON.stringify(data.user));
                 setSections(data.user.subjectSections);
-                if (onNotify) onNotify({ message: data.message, drivePath: "BDD & DRIVE SYNCHRONISÉS" });
+                if (onNotify) onNotify({ message: data.message, drivePath: `SYNCHRONISATION TERMINÉE` });
             }
         } catch(e) { console.error("Erreur Synchro:", e); }
     };
 
+    // --- FILTRAGE DES DONNÉES ---
     const activeChapters = chapters
         .filter(c => !c.isArchived && norm(c.classroom) === norm(classFilter))
         .sort(smartSort);
 
-    // US #3 : On affiche les sections qui ont des chapitres OU si on est en mode Gérer
-    const getVisibleSections = () => {
-        const base = sections.filter(s => isDeleteMode || activeChapters.some(c => c.subject === s.name));
-        // On force l'affichage de "Autres" s'il y a des chapitres orphelins
+    const archivedChapters = chapters
+        .filter(c => c.isArchived && norm(c.classroom) === norm(classFilter))
+        .sort(smartSort);
+
+    // US #3 : Correction de la visibilité
+    // Une section est visible si : Mode Gérer OU elle a des chapitres ACTIFS
+    const getVisibleActiveSections = () => {
+        const list = sections.filter(s => isDeleteMode || activeChapters.some(c => c.subject === s.name));
         if (activeChapters.some(c => c.subject === "Autres")) {
-            base.push({ name: 'Autres', color: '#64748b' });
+            list.push({ name: 'Autres', color: '#64748b' });
         }
-        return base;
+        return list;
+    };
+
+    // Une section apparaît dans le carré noir si : Mode Gérer OU elle a des chapitres ARCHIVÉS
+    const getVisibleArchiveSections = () => {
+        return sections.filter(s => isDeleteMode || archivedChapters.some(c => c.subject === s.name));
     };
 
     const renderChapterCard = (chap, section) => {
@@ -71,8 +80,8 @@ export default function ProfStudioFolder({
                         </div>
                     </div>
                     <div className="flex gap-1">
-                        <button onClick={(e) => { e.stopPropagation(); setEditingId(chap._id); setTempTitle(chap.title); }} className="w-8 h-8 flex items-center justify-center bg-slate-50 text-slate-300 rounded-full hover:text-indigo-500">✏️</button>
-                        <button onClick={(e) => { e.stopPropagation(); onArchive(chap._id, !chap.isArchived); }} className="w-8 h-8 flex items-center justify-center bg-slate-50 text-slate-300 rounded-full hover:bg-slate-800 hover:text-white">📦</button>
+                        <button onClick={(e) => { e.stopPropagation(); setEditingId(chap._id); setTempTitle(chap.title); }} className="w-8 h-8 flex items-center justify-center bg-slate-50 text-slate-300 rounded-full hover:text-indigo-500 transition-colors">✏️</button>
+                        <button onClick={(e) => { e.stopPropagation(); onArchive(chap._id, !chap.isArchived); }} className="w-8 h-8 flex items-center justify-center bg-slate-50 text-slate-300 rounded-full hover:bg-slate-800 hover:text-white transition-colors">📦</button>
                         <button onClick={(e) => { e.stopPropagation(); onDeleteChapter(chap._id); }} className="w-8 h-8 flex items-center justify-center bg-red-50 text-red-300 rounded-full font-black hover:bg-red-500">✕</button>
                     </div>
                 </div>
@@ -90,28 +99,31 @@ export default function ProfStudioFolder({
         );
     };
 
-    const visibleSections = getVisibleSections();
+    const activeVisible = getVisibleActiveSections();
+    const archiveVisible = getVisibleArchiveSections();
 
     return (
         <div className="max-w-5xl mx-auto space-y-12 pb-20">
+            {/* CARRÉ NOIR : CONFIGURATION & ARCHIVES */}
             <div className="p-8 bg-slate-900 rounded-[50px] border-4 border-slate-800 shadow-2xl">
                 <div className="flex justify-between items-center mb-8 px-2">
                     <h3 className="text-white font-black text-[10px] uppercase tracking-widest">📂 Configuration des Matières</h3>
                     <div className="flex gap-2">
-                        <button onClick={() => { const n = prompt("Nom de la matière ?"); if(n) saveSections([...sections, {name:n, color:'#3b82f6'}]); }} className="bg-indigo-600 text-white px-5 py-2 rounded-2xl font-black text-[9px] uppercase hover:bg-indigo-500 shadow-lg">+ Nouvelle</button>
+                        <button onClick={() => { const n = prompt("Nom de la matière ?"); if(n) saveSections([...sections, {name:n, color:'#3b82f6'}]); }} className="bg-indigo-600 text-white px-5 py-2 rounded-2xl font-black text-[9px] uppercase shadow-lg hover:bg-indigo-500 transition-all">+ Nouvelle</button>
                         <button onClick={() => setIsDeleteMode(!isDeleteMode)} className={`px-5 py-2 rounded-2xl font-black text-[9px] uppercase transition-colors ${isDeleteMode ? 'bg-red-500 text-white' : 'bg-slate-700 text-slate-300'}`}>{isDeleteMode ? 'Terminer' : 'Gérer'}</button>
                     </div>
                 </div>
                 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    {sections.map(s => {
-                        const archs = chapters.filter(c => c.isArchived && c.subject === s.name && norm(c.classroom) === norm(classFilter));
-                        if (!isDeleteMode && archs.length === 0) return null;
+                    {archiveVisible.map(s => {
+                        const archs = archivedChapters.filter(c => c.subject === s.name);
                         return (
                             <div key={s.name} className="bg-slate-800/40 p-4 rounded-[30px] border border-slate-700 animate-in fade-in relative">
                                 <h4 className="font-black text-[9px] uppercase tracking-widest mb-4 flex justify-between items-center" style={{ color: s.color }}>
                                     {s.name}
-                                    {isDeleteMode && <button onClick={() => saveSections(sections.filter(x => x.name !== s.name))} className="text-red-500 font-black hover:scale-125 transition-transform">✕</button>}
+                                    {isDeleteMode && (
+                                        <button onClick={() => saveSections(sections.filter(x => x.name !== s.name))} className="text-red-500 font-black hover:scale-125 transition-transform">✕</button>
+                                    )}
                                 </h4>
                                 <div className="space-y-2">
                                     {archs.map(c => (
@@ -120,15 +132,20 @@ export default function ProfStudioFolder({
                                             <button onClick={() => onArchive(c._id, false)} className="text-blue-400 font-bold p-1 hover:scale-110">⬆️</button>
                                         </div>
                                     ))}
+                                    {archs.length === 0 && isDeleteMode && <div className="text-[8px] text-slate-600 uppercase font-black py-2">Matière vide</div>}
                                 </div>
                             </div>
                         );
                     })}
+                    {archiveVisible.length === 0 && !isDeleteMode && (
+                        <div className="col-span-full py-4 text-center text-slate-600 text-[10px] font-bold uppercase tracking-widest italic opacity-50">Aucune archive dans cette classe</div>
+                    )}
                 </div>
             </div>
 
+            {/* ZONES ACTIVES */}
             <div className="space-y-16">
-                {visibleSections.map(s => (
+                {activeVisible.map(s => (
                     <div key={'active-' + s.name} className="animate-in fade-in">
                         <div className="flex items-center justify-between mb-4 px-6 border-b border-slate-100 pb-4">
                             <h3 className="font-black text-base uppercase tracking-widest text-left" style={{ color: s.color }}>{s.name}</h3>
