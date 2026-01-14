@@ -1,11 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
+const DriveService = require('../../services/drive.service');
 
 /**
  * 🏢 DOMAINE ADMIN : STRUCTURES
- * Gère les listes globales (Players, Chapters)
  */
+
+const normalize = (n) => n ? n.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Z0-9 ]/g, "_").trim() : "SANS_TITRE";
 
 router.get('/players', async (req, res) => {
     try {
@@ -13,16 +15,47 @@ router.get('/players', async (req, res) => {
         const data = await Player.find({}).sort({ classroom: 1, lastName: 1 });
         res.json(data || []);
     } catch (e) { 
-        console.error("Erreur Fetch Players:", e.message);
-        res.status(500).json({ error: "Erreur BDD" }); 
+        console.error("❌ Erreur Admin /players:", e.message);
+        res.status(500).json({ error: "Erreur serveur" }); 
     }
 });
 
 router.get('/chapters-all', async (req, res) => {
     try {
-        const data = await mongoose.model('Chapter').find({}).sort({ _id: -1 });
+        const Chapter = mongoose.model('Chapter');
+        const data = await Chapter.find({}).sort({ _id: -1 });
         res.json(data || []);
     } catch (e) { res.status(500).json([]); }
+});
+
+router.post('/chapters', async (req, res) => {
+    try {
+        const Chapter = mongoose.model('Chapter');
+        const { _id, title, classroom, subject } = req.body;
+        
+        // Sync Physique Drive
+        const condaRootId = await DriveService.getOrCreateFolder("CONDACLASSE", null);
+        const classId = await DriveService.getOrCreateFolder(normalize(classroom), condaRootId);
+        const subId = await DriveService.getOrCreateFolder(normalize(subject), classId);
+        const driveId = await DriveService.getOrCreateFolder(normalize(title), subId);
+
+        let result;
+        if (_id && mongoose.Types.ObjectId.isValid(_id)) {
+            result = await Chapter.findByIdAndUpdate(_id, { ...req.body, driveFolderId: driveId }, { new: true });
+        } else {
+            result = await Chapter.create({ ...req.body, driveFolderId: driveId, isArchived: false });
+        }
+        res.json(result);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/classroom/:className', async (req, res) => {
+    try {
+        const { className } = req.params;
+        await mongoose.model('Player').deleteMany({ classroom: className });
+        await mongoose.model('Chapter').deleteMany({ classroom: className });
+        res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.get('/database-dump', async (req, res) => {
