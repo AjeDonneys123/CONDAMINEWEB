@@ -6,6 +6,6 @@ const PlayerSchema = new mongoose.Schema({
     email: { type: String, default: "" },
     teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher' },
     spellingMistakes: { type: Array, default: [] }
-});
-// Protection contre la re-déclaration (Crucial pour éviter les erreurs 500)
+}, { collection: 'players' }); // Force le nom en minuscules
+
 module.exports = mongoose.models.Player || mongoose.model('Player', PlayerSchema);
