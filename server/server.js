@@ -4,7 +4,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const fs = require('fs');
 
-// CORRECTIF : Injection globale de fetch pour Node.js (Fix Gemini "fetch is not defined")
+// Injection globale de fetch pour Node < 18 (Fix Gemini)
 if (!global.fetch) {
     global.fetch = require('node-fetch');
 }
@@ -27,7 +27,7 @@ require('./models/TeacherStyle');
 
 // 2. CONNEXION MONGODB
 mongoose.connect(process.env.MONGODB_URI).then(async () => {
-    console.log('✅ MongoDB Connected.');
+    console.log('✅ MongoDB Connecté.');
     try {
         const DeploySignal = mongoose.model('DeploySignal');
         await DeploySignal.findOneAndUpdate({}, { status: 'live', updatedAt: new Date() }, { upsert: true });
@@ -49,19 +49,24 @@ app.get('/api/deploy-status', async (req, res) => {
 
 // 4. ARCHITECTURE PAR DOMAINE (ZÉRO POROSITÉ)
 app.use('/api/auth', require('./features/auth/auth.routes'));
-app.use('/api/admin', require('./features/admin/admin.routes')); 
 app.use('/api/games', require('./features/games/games.routes'));
 app.use('/api/scans', require('./features/scans/scans.routes'));
 app.use('/api/homework', require('./features/homework/homework.routes'));
+
+/**
+ * 🏢 DOMAINE ADMIN : STRUCTURES DE BASE
+ * Montage sur /api pour capturer /api/players et /api/chapters-all
+ */
+app.use('/api', require('./features/admin/admin.routes')); 
 
 // 5. GESTION FRONTEND
 const distPath = path.join(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
-        if (req.path.startsWith('/api')) return res.status(404).json({ error: "API non trouvée" });
+        if (req.path.startsWith('/api')) return res.status(404).json({ error: "Route API introuvable" });
         res.sendFile(path.join(distPath, 'index.html'));
     });
 }
 
-app.listen(port, () => console.log(`🚀 SERVEUR PRÊT : PORT ${port} (IA : OK)`));
+app.listen(port, () => console.log(`🚀 SERVEUR PRÊT : PORT ${port}`));

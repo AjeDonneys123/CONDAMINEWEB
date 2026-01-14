@@ -4,12 +4,12 @@ const mongoose = require('mongoose');
 
 /**
  * 🏢 DOMAINE : ADMIN & CLASSES
- * Point d'entrée consolidé pour la gestion des élèves et dossiers.
+ * Point d'entrée consolidé pour les données structurelles.
  */
 
 // --- ÉLÈVES ---
 
-// GET /api/players (Anciennement dans prof.routes)
+// GET /api/players
 router.get('/players', async (req, res) => {
     try {
         const Player = mongoose.model('Player');
@@ -69,13 +69,19 @@ router.post('/chapters', async (req, res) => {
     }
 });
 
-// --- AUTRE ---
+// --- BUGS & LOGS ---
 
-// BUGS
 router.get('/bugs', async (req, res) => {
     try {
         res.json(await mongoose.model('Bug').find({}).sort({ createdAt: -1 }));
     } catch (e) { res.json([]); }
+});
+
+router.delete('/bugs/:id', async (req, res) => {
+    try {
+        await mongoose.model('Bug').findByIdAndDelete(req.params.id);
+        res.json({ ok: true });
+    } catch (e) { res.json({ ok: false }); }
 });
 
 module.exports = router;
