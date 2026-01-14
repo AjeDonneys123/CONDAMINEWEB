@@ -5,6 +5,7 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, onC
   const [players, setPlayers] = useState([]);
   const [stdSearch, setStdSearch] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [drivePathConfirmed, setDrivePathConfirmed] = useState(null);
   
   const [formData, setFormData] = useState(initialData || { 
       title: '', targetGrade: 'Tous', targetPlayerIds: [], 
@@ -18,11 +19,8 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, onC
 
   const handleUpload = async (files, idx, type) => {
     if (!files || files.length === 0) return;
-    
-    // Sécurité : On doit avoir une session enregistrée pour avoir les IDs Drive
-    let currentHw = formData;
     if (!formData._id) {
-        alert("⚠️ Cliquez d'abord sur 'INITIALISER LE DEVOIR' pour créer les dossiers Drive.");
+        alert("⚠️ Cliquez d'abord sur 'INITIALISER' pour créer l'espace Drive.");
         return;
     }
     
@@ -58,10 +56,10 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, onC
         });
         const data = await res.json();
         if (res.ok) {
-            // Si c'était une création, on garde l'ID pour permettre l'upload immédiat
             setFormData(data);
-            if (!formData._id) alert("✅ Dossiers Drive créés ! Vous pouvez maintenant ajouter des documents.");
-            else onClose();
+            setDrivePathConfirmed(data.drivePath);
+            // On ne ferme pas automatiquement à l'initialisation pour laisser voir le chemin
+            if (initialData) onClose(); 
         }
     } catch (e) { alert("Erreur sauvegarde."); }
     setUploading(false);
@@ -74,10 +72,22 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, onC
         <div className="p-6 bg-orange-500 text-white flex justify-between items-center shadow-lg pt-12">
             <div className="flex flex-col">
                 <input className="text-2xl font-black bg-transparent outline-none w-full placeholder:text-orange-200 uppercase" value={formData.title} onChange={e=>setFormData({...formData, title:e.target.value})} placeholder="TITRE DU DEVOIR" />
-                <span className="text-[10px] font-black opacity-80 uppercase">DOMAINE : {globalClass} | DRIVE : {formData.driveFolderId ? 'CONNECTÉ ✅' : 'NON INITIALISÉ ❌'}</span>
+                <span className="text-[10px] font-black opacity-80 uppercase tracking-widest">
+                    {drivePathConfirmed ? `✅ CONNECTÉ : ${drivePathConfirmed}` : `UNITÉ DRIVE : ${globalClass}`}
+                </span>
             </div>
-            <button onClick={onClose} className="w-10 h-10 bg-black/10 rounded-full font-black">✕</button>
+            <button onClick={onClose} className="w-10 h-10 bg-black/10 rounded-full font-black hover:bg-black/20 transition-colors">✕</button>
         </div>
+
+        {drivePathConfirmed && (
+            <div className="bg-emerald-500 text-white px-8 py-3 flex items-center gap-3 animate-in fade-in">
+                <span className="text-xl">📁</span>
+                <div className="flex flex-col">
+                    <span className="text-[10px] font-black uppercase opacity-70">Chemin physique sur Google Drive</span>
+                    <span className="text-xs font-bold font-mono tracking-tighter">{drivePathConfirmed}</span>
+                </div>
+            </div>
+        )}
 
         <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
             <div className="max-w-5xl mx-auto space-y-8">
@@ -90,13 +100,6 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, onC
                     </div>
                     <div className="assign-card relative"><label className="text-[10px] font-black text-slate-400 uppercase mb-2 block">Cibler des élèves</label>
                         <input className="w-full outline-none bg-white p-3 rounded-xl border border-slate-200 font-bold" placeholder="Chercher un nom..." value={stdSearch} onChange={e=>setStdSearch(e.target.value)} />
-                        {stdSearch && (
-                            <div className="absolute top-full left-0 right-0 bg-white shadow-xl z-50 rounded-xl max-h-40 overflow-auto border">
-                                {filteredPlayers.map(p => (
-                                    <div key={p._id} onClick={()=>{ setFormData({...formData, targetPlayerIds:[...formData.targetPlayerIds, p._id]}); setStdSearch(''); }} className="p-3 hover:bg-orange-50 cursor-pointer font-bold border-b">{p.firstName} {p.lastName}</div>
-                                ))}
-                            </div>
-                        )}
                         <div className="flex flex-wrap gap-1 mt-2">
                           {formData.targetPlayerIds.map(id => (
                             <span key={id} className="bg-orange-100 text-orange-600 px-2 py-1 rounded-lg text-[9px] font-black flex items-center gap-1">{players.find(x => x._id === id)?.firstName} <button onClick={()=>setFormData({...formData, targetPlayerIds: formData.targetPlayerIds.filter(x=>x!==id)})}>✕</button></span>
@@ -109,7 +112,7 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, onC
                     <div key={idx} className="bg-white p-10 rounded-[50px] border border-slate-100 shadow-sm relative">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
                             <div>
-                                <label className="text-[10px] font-black uppercase text-blue-500 mb-2 block tracking-widest">Documents Supports (Google Drive)</label>
+                                <label className="text-[10px] font-black uppercase text-blue-500 mb-2 block tracking-widest">Documents Supports</label>
                                 <div className="flex flex-wrap gap-3 p-5 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
                                     {lvl.attachmentUrls?.map((u, i) => <img key={i} src={u} className="w-20 h-20 object-cover rounded-2xl border-2 border-white shadow-sm" />)}
                                     <label className="w-20 h-20 bg-white flex items-center justify-center rounded-2xl border border-slate-200 cursor-pointer text-slate-300 hover:text-blue-500 transition-all text-2xl font-black">
@@ -120,14 +123,14 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, onC
                             </div>
                             <div>
                                 <label className="text-[10px] font-black uppercase text-orange-500 mb-2 block tracking-widest">Image Question</label>
-                                <div className="h-40 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200 flex items-center justify-center relative overflow-hidden group">
+                                <div className="h-40 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200 flex items-center justify-center relative overflow-hidden">
                                     {lvl.questionImage ? <img src={lvl.questionImage} className="h-full w-full object-contain" /> : <span className="text-slate-300 font-black text-xs uppercase">Photo Question</span>}
                                     <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={e => handleUpload(e.target.files, idx, 'qimg')} />
                                 </div>
                             </div>
                         </div>
                         <div className="mt-8">
-                            <textarea className="w-full p-6 rounded-3xl h-24 border border-slate-200 font-bold text-slate-600" value={lvl.instruction} onChange={e=>{const n=[...formData.levels]; n[idx].instruction=e.target.value; setFormData({...formData, levels:n});}} placeholder="Consigne..." />
+                            <textarea className="w-full p-6 rounded-3xl h-24 border border-slate-200 font-bold text-slate-600 outline-none focus:border-orange-500 transition-colors" value={lvl.instruction} onChange={e=>{const n=[...formData.levels]; n[idx].instruction=e.target.value; setFormData({...formData, levels:n});}} placeholder="Consigne..." />
                         </div>
                     </div>
                 ))}
@@ -136,7 +139,7 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, onC
 
         <div className="p-8 bg-white border-t">
             <button onClick={save} disabled={uploading} className="w-full p-6 bg-orange-500 text-white font-black text-2xl rounded-3xl shadow-xl hover:bg-orange-600 transition-all uppercase">
-                {!formData._id ? "🚀 INITIALISER LE DEVOIR & LE DRIVE" : (uploading ? "SYNC DRIVE..." : "💾 SAUVEGARDER LES MODIFICATIONS")}
+                {!formData._id ? "🚀 INITIALISER LE DEVOIR & LE DRIVE" : (uploading ? "SYNC EN COURS..." : "💾 SAUVEGARDER LES MODIFICATIONS")}
             </button>
         </div>
     </div>
