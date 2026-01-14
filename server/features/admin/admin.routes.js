@@ -4,7 +4,7 @@ const mongoose = require('mongoose');
 
 /**
  * 🏢 DOMAINE : ADMIN & CLASSES
- * Point d'entrée consolidé pour la gestion des structures.
+ * Gère les structures (élèves, dossiers, configuration prof).
  */
 
 // GET /api/players
@@ -14,7 +14,7 @@ router.get('/players', async (req, res) => {
         const data = await Player.find({}).sort({ classroom: 1, lastName: 1 });
         res.json(data || []);
     } catch (e) {
-        console.error("Erreur Admin /players:", e.message);
+        console.error("Admin API Error [/players]:", e.message);
         res.status(500).json({ error: "Échec récupération élèves" });
     }
 });
@@ -46,7 +46,7 @@ router.post('/chapters', async (req, res) => {
     }
 });
 
-// DELETE /api/classroom/:className
+// DELETE /api/classroom/:className (US #15)
 router.delete('/classroom/:className', async (req, res) => {
     try {
         const { className } = req.params;
@@ -60,18 +60,19 @@ router.delete('/classroom/:className', async (req, res) => {
     }
 });
 
-// GESTION DES BUGS
-router.get('/bugs', async (req, res) => {
+// PATCH /api/teacher/:id/sections (Super-dossiers)
+router.patch('/teacher/:id/sections', async (req, res) => {
     try {
-        res.json(await mongoose.model('Bug').find({}).sort({ createdAt: -1 }));
-    } catch (e) { res.json([]); }
-});
-
-router.delete('/bugs/:id', async (req, res) => {
-    try {
-        await mongoose.model('Bug').findByIdAndDelete(req.params.id);
-        res.json({ ok: true });
-    } catch (e) { res.json({ ok: false }); }
+        const Teacher = mongoose.model('Teacher');
+        const updated = await Teacher.findByIdAndUpdate(
+            req.params.id, 
+            { subjectSections: req.body.sections }, 
+            { new: true }
+        );
+        res.json(updated);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 });
 
 module.exports = router;

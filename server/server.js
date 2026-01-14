@@ -9,8 +9,8 @@ const port = process.env.PORT || 3000;
 const SERVER_BOOT_ID = Date.now();
 
 /**
- * 1. CHARGEMENT CRITIQUE DES MODÈLES (ORDRE ALPHABÉTIQUE)
- * Indispensable : On enregistre les schémas AVANT de charger les routes API.
+ * 1. ENREGISTREMENT CRITIQUE DES MODÈLES (AVANT LES ROUTES)
+ * On charge tous les schémas en mémoire pour éviter les erreurs "Schema hasn't been registered".
  */
 require('./models/Bug');
 require('./models/Chapter');
@@ -27,17 +27,18 @@ require('./models/TeacherStyle');
 mongoose.connect(process.env.MONGODB_URI).then(async () => {
     console.log('✅ MongoDB Connecté.');
     try {
-        // Mise à jour du signal de déploiement (US #13)
+        // Signal de déploiement pour US #13
         const DeploySignal = mongoose.model('DeploySignal');
         await DeploySignal.findOneAndUpdate({}, { status: 'live', updatedAt: new Date() }, { upsert: true });
     } catch (e) {
-        console.warn("⚠️ Signal de déploiement non mis à jour.");
+        console.warn("⚠️ Impossible de mettre à jour le signal de déploiement.");
     }
 }).catch(err => {
-    console.error("❌ Erreur MongoDB :", err.message);
+    console.error("❌ Erreur fatale MongoDB :", err.message);
+    process.exit(1);
 });
 
-// MIDDLEWARES DE BASE
+// MIDDLEWARES
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
@@ -66,7 +67,7 @@ app.use('/api/games', require('./features/games/games.routes'));
 app.use('/api/scans', require('./features/scans/scans.routes'));
 app.use('/api/homework', require('./features/homework/homework.routes'));
 
-// Montage du domaine Admin directement sur /api pour capturer /api/players et /api/chapters-all
+// DOMAINE ADMIN : Monté sur /api pour capturer les appels structurels (/api/players, /api/chapters-all)
 app.use('/api', require('./features/admin/admin.routes')); 
 
 /**
@@ -76,7 +77,7 @@ const distPath = path.join(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
-        // SÉCURITÉ : Si on demande une route /api inexistante, renvoyer JSON, pas HTML
+        // Sécurité : Si on demande une API qui n'existe pas, renvoyer JSON, pas HTML
         if (req.path.startsWith('/api')) {
             return res.status(404).json({ error: "Route API introuvable", path: req.path });
         }
@@ -86,7 +87,7 @@ if (fs.existsSync(distPath)) {
 
 app.listen(port, () => {
     console.log(`-----------------------------------------------`);
-    console.log(`🚀 SERVEUR CONDAMINE MODULAIRE V2 PRÊT`);
+    console.log(`🚀 SERVEUR CONDAMINE MODULAIRE V2 OPERATIONNEL`);
     console.log(`📡 PORT : ${port}`);
     console.log(`🛠️  BOOT ID : ${SERVER_BOOT_ID}`);
     console.log(`-----------------------------------------------`);
