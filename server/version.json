@@ -1,6 +1,6 @@
 {
-  "version": "1.4.3",
-  "build": 180,
-  "description": "Indestructible Models + Secure API Responses + Fix 500 Errors",
-  "timestamp": "2026-01-14T00:54:28.030Z"
+  "version": "1.4.4",
+  "build": 181,
+  "description": "Fix 404 on /homework-all + Final Robust Routing",
+  "timestamp": "2026-01-14T00:57:57.905Z"
 }

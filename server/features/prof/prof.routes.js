@@ -4,16 +4,23 @@ const mongoose = require('mongoose');
 
 const getModel = (name) => mongoose.model(name);
 
+// RÉCUPÉRER TOUS LES ÉLÈVES
 router.get('/players', async (req, res) => {
     try {
         const players = await getModel('Player').find({}).sort({ classroom: 1, lastName: 1 });
         res.json(players || []);
-    } catch (e) {
-        console.error("Error GET players:", e.message);
-        res.status(500).json({ error: e.message });
-    }
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// RÉCUPÉRER TOUS LES DEVOIRS (FIX 404)
+router.get('/homework-all', async (req, res) => {
+    try { 
+        const data = await getModel('Homework').find({}).sort({ date: -1 });
+        res.json(data || []); 
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// SAUVEGARDER LES SECTIONS (MATIÈRES)
 router.patch('/teacher/:id/sections', async (req, res) => {
     try {
         const updated = await getModel('Teacher').findByIdAndUpdate(
@@ -25,6 +32,7 @@ router.patch('/teacher/:id/sections', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// SUPPRIMER UNE CLASSE
 router.delete('/classroom/:className', async (req, res) => {
     try {
         const { className } = req.params;

@@ -8,7 +8,7 @@ const app = express();
 const port = process.env.PORT || 3000;
 const SERVER_BOOT_ID = Date.now();
 
-// 1. CHARGEMENT DES MODÈLES (RE-IMPORT PROOF)
+// 1. CHARGEMENT DES MODÈLES (ORDRE CRITIQUE)
 require('./models/Teacher');
 require('./models/Player');
 require('./models/Chapter');
@@ -24,37 +24,36 @@ require('./models/DeploySignal');
 mongoose.connect(process.env.MONGODB_URI).then(async () => {
     console.log('✅ MongoDB Connecté.');
     try {
-        const DeploySignal = mongoose.model('DeploySignal');
-        await DeploySignal.findOneAndUpdate({}, { status: 'live', updatedAt: new Date() }, { upsert: true });
+        await mongoose.model('DeploySignal').findOneAndUpdate({}, { status: 'live', updatedAt: new Date() }, { upsert: true });
     } catch (e) {}
 }).catch(err => console.error("❌ Erreur MongoDB :", err.message));
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// 3. ROUTES SYSTÈME (Garanties sans crash)
+// 3. ROUTES SYSTÈME (INDÉSTRUCTIBLES)
 app.get('/api/check-deploy', (req, res) => res.json({ bootId: SERVER_BOOT_ID }));
+app.get('/api/system-status', (req, res) => res.json({ status: 'OK' }));
 app.get('/api/deploy-status', async (req, res) => {
     try {
         const signal = await mongoose.model('DeploySignal').findOne({});
-        res.json({ status: signal?.status || 'live', build: 179 });
-    } catch (e) { res.json({ status: 'live', build: 179 }); }
+        res.json({ status: signal?.status || 'live', build: 180 });
+    } catch (e) { res.json({ status: 'live', build: 180 }); }
 });
-app.get('/api/system-status', (req, res) => res.json({ status: 'OK' }));
 
-// 4. ROUTES FEATURES
+// 4. ROUTES API FEATURES
 app.use('/api', require('./features/auth/auth.routes'));
 app.use('/api', require('./features/eleve/eleve.routes'));
 app.use('/api', require('./features/prof/prof.routes'));
 app.use('/api', require('./features/game/game.routes'));
 app.use('/api', require('./features/prof/automation.routes'));
 
-// 5. GESTIONNAIRE D'ERREURS API (FORCE LE JSON)
+// Garde-fou pour les 404 API
 app.all('/api/*', (req, res) => {
-    res.status(404).json({ error: "Endpoint introuvable" });
+    res.status(404).json({ error: `Route API introuvable : ${req.method} ${req.url}` });
 });
 
-// 6. GESTION FRONTEND
+// 5. GESTION FRONTEND
 const distPath = path.join(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
@@ -63,8 +62,8 @@ if (fs.existsSync(distPath)) {
 
 // Handler final anti-crash
 app.use((err, req, res, next) => {
-    console.error("🔥 CRASH INTERCEPTÉ :", err.message);
-    res.status(500).json({ error: "Erreur serveur", message: err.message });
+    console.error("🔥 CRASH SERVEUR INTERCEPTÉ :", err.message);
+    res.status(500).json({ error: "Erreur interne", message: err.message });
 });
 
-app.listen(port, () => console.log(`🚀 SERVEUR CONDAMINE PRÊT : ${port}`));
+app.listen(port, () => console.log(`🚀 SERVEUR STABLE : PORT ${port}`));
