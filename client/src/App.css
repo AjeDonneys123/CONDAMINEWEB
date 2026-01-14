@@ -16,6 +16,13 @@
     gap: 30px;
 }
 
+/* CORRECTIF : NUMÉRO DE BUILD EN ROUGE VIF */
+.version-txt {
+    color: #ff0000 !important; /* ROUGE VIF */
+    font-weight: 900;
+    text-shadow: 0 0 5px rgba(255, 0, 0, 0.2);
+}
+
 /* INDICATEURS */
 .deploy-indicator, .live-indicator {
     display: flex; align-items: center; gap: 8px;
