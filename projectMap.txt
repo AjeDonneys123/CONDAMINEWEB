@@ -116,19 +116,12 @@
 │   │   ├── auth/
 │   │   │   └── auth.routes.js
 │   │   ├── eleve/
-│   │   │   └── eleve.routes.js
 │   │   ├── game/
 │   │   ├── games/
 │   │   │   └── games.routes.js
 │   │   ├── homework/
 │   │   │   └── homework.routes.js
 │   │   ├── prof/
-│   │   │   ├── automation.routes.js
-│   │   │   ├── chapter.routes.js
-│   │   │   ├── homework.routes.js
-│   │   │   ├── prof.routes.js
-│   │   │   ├── scan.routes.js
-│   │   │   └── teacher.routes.js
 │   │   └── scans/
 │   │       └── scans.routes.js
 │   ├── models/

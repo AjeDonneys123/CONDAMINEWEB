@@ -117,19 +117,12 @@ STRUCTURE:
 │   │   ├── auth/
 │   │   │   └── auth.routes.js
 │   │   ├── eleve/
-│   │   │   └── eleve.routes.js
 │   │   ├── game/
 │   │   ├── games/
 │   │   │   └── games.routes.js
 │   │   ├── homework/
 │   │   │   └── homework.routes.js
 │   │   ├── prof/
-│   │   │   ├── automation.routes.js
-│   │   │   ├── chapter.routes.js
-│   │   │   ├── homework.routes.js
-│   │   │   ├── prof.routes.js
-│   │   │   ├── scan.routes.js
-│   │   │   └── teacher.routes.js
 │   │   └── scans/
 │   │       └── scans.routes.js
 │   ├── models/
@@ -346,7 +339,7 @@ setInterval(applyUpdate, 1000);
 {
   "status": "OK",
   "file": null,
-  "timestamp": 1768361207283
+  "timestamp": 1768361768221
 }
 
 ### FILE: chemin/du/fichier.js
@@ -12844,9 +12837,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
 
 ### FILE: client/src/services/api.js
 /**
- * 📞 SERVICE API CENTRALISÉ
- * Gère la communication robuste avec le serveur.
- * Évite les erreurs de parsing JSON sur les 404.
+ * 📞 SERVICE API CENTRALISÉ (V2 - ÉTANCHE)
  */
 
 const API_BASE = '/api';
@@ -12860,7 +12851,6 @@ const handleResponse = async (response) => {
 };
 
 export const api = {
-    // Méthodes génériques
     async get(endpoint) {
         const response = await fetch(`${API_BASE}${endpoint}`);
         return handleResponse(response);
@@ -12882,11 +12872,17 @@ export const api = {
         return handleResponse(response);
     },
 
-    // Raccourcis spécifiques
+    // Raccourcis Devoirs
     async getHomeworks(classroom) {
         return this.get(`/homework/by-class/${classroom}`);
     },
 
+    // Raccourcis Jeux
+    async getGames() {
+        return this.get('/games/all');
+    },
+
+    // Raccourcis Joueurs
     async getPlayers() {
         return this.get('/players');
     }
@@ -15441,37 +15437,74 @@ const router = express.Router();
 const mongoose = require('mongoose');
 
 /**
- * 🏢 DOMAINE ADMIN : Point d'entrée pour les listes structurelles
+ * 🏢 DOMAINE ADMIN : Point d'entrée pour les listes et structures
+ * Centralise les données partagées (Players, Chapters, Mistakes)
  */
 
-// GET /api/players
+// --- ÉLÈVES ---
 router.get('/players', async (req, res) => {
     try {
-        const Player = mongoose.model('Player');
-        const data = await Player.find({}).sort({ classroom: 1, lastName: 1 });
+        const data = await mongoose.model('Player').find({}).sort({ classroom: 1, lastName: 1 });
         res.json(data || []);
     } catch (e) { res.status(500).json([]); }
 });
 
-// GET /api/chapters-all
+// Récupérer les fautes d'un élève (Élève view)
+router.get('/player-mistakes/:id', async (req, res) => {
+    try {
+        const p = await mongoose.model('Player').findById(req.params.id);
+        res.json(p?.spellingMistakes || []);
+    } catch (e) { res.status(500).json([]); }
+});
+
+// Récupérer les productions corrigées (Élève view)
+router.get('/player-submissions/:id', async (req, res) => {
+    try {
+        const data = await mongoose.model('Submission').find({ playerId: req.params.id }).sort({ createdAt: -1 });
+        res.json(data || []);
+    } catch (e) { res.json([]); }
+});
+
+// --- CHAPITRES ---
 router.get('/chapters-all', async (req, res) => {
     try {
-        const Chapter = mongoose.model('Chapter');
-        const data = await Chapter.find({}).sort({ _id: -1 });
+        const data = await mongoose.model('Chapter').find({}).sort({ _id: -1 });
         res.json(data || []);
     } catch (e) { res.status(500).json([]); }
 });
 
-// POST /api/chapters
 router.post('/chapters', async (req, res) => {
     try {
-        const Chapter = mongoose.model('Chapter');
         const { _id } = req.body;
         if (_id && mongoose.Types.ObjectId.isValid(_id)) {
-            return res.json(await Chapter.findByIdAndUpdate(_id, req.body, { new: true }));
+            return res.json(await mongoose.model('Chapter').findByIdAndUpdate(_id, req.body, { new: true }));
         }
-        res.json(await Chapter.create({ ...req.body, isArchived: false }));
+        res.json(await mongoose.model('Chapter').create({ ...req.body, isArchived: false }));
     } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/chapters/:id', async (req, res) => {
+    try {
+        await mongoose.model('Chapter').findByIdAndDelete(req.params.id);
+        res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// --- CLASSES ---
+router.delete('/classroom/:className', async (req, res) => {
+    try {
+        const { className } = req.params;
+        await mongoose.model('Player').deleteMany({ classroom: className });
+        await mongoose.model('Chapter').deleteMany({ classroom: className });
+        await mongoose.model('Homework').deleteMany({ classroom: className });
+        await mongoose.model('ScanSession').deleteMany({ classroom: className });
+        res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// --- BUGS ---
+router.get('/bugs', async (req, res) => {
+    try { res.json(await mongoose.model('Bug').find({}).sort({ createdAt: -1 })); } catch (e) { res.json([]); }
 });
 
 module.exports = router;
@@ -15537,38 +15570,6 @@ router.post('/login-step-2', async (req, res) => {
             } 
         });
     } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-module.exports = router;
-
-### FILE: server/features/eleve/eleve.routes.js
-const express = require('express');
-const router = express.Router();
-const mongoose = require('mongoose');
-
-// --- RÉCUPÉRER LES DEVOIRS PAR CLASSE ---
-router.get('/homework/by-class/:classroom', async (req, res) => {
-    try {
-        const Homework = mongoose.model('Homework');
-        const list = await Homework.find({ 
-            $or: [{ classroom: req.params.classroom }, { classroom: "Toutes" }] 
-        }).sort({ date: -1 });
-        res.json(list || []);
-    } catch(e) { 
-        console.error("Erreur devoirs classe:", e.message);
-        res.status(500).json([]); 
-    }
-});
-
-// --- RÉCUPÉRER LES FAUTES D'UN ÉLÈVE ---
-router.get('/player-mistakes/:id', async (req, res) => {
-    try {
-        const Player = mongoose.model('Player');
-        const player = await Player.findById(req.params.id);
-        res.json(player ? player.spellingMistakes : []);
-    } catch(e) { 
-        res.status(500).json([]); 
-    }
 });
 
 module.exports = router;
@@ -15683,322 +15684,6 @@ router.delete('/:id', async (req, res) => {
         await mongoose.model('Homework').findByIdAndDelete(req.params.id);
         res.json({ ok: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-module.exports = router;
-
-### FILE: server/features/prof/automation.routes.js
-const express = require('express');
-const router = express.Router();
-const mongoose = require('mongoose');
-const DriveService = require('../../services/drive.service');
-
-const getChapter = () => mongoose.model('Chapter');
-const getScanSession = () => mongoose.model('ScanSession');
-
-// Helper : Normalisation des noms pour Drive (US #11)
-const normalizeFolderName = (name) => {
-    return name.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Z0-9]/g, "_").trim();
-};
-
-// Helper : Chemins de base (US #10)
-const getClassBasePaths = async (classroom) => {
-    const condaRootId = await DriveService.getOrCreateFolder("CondaClasse", null);
-    const teacherId = await DriveService.getOrCreateFolder("Jean Vuillet", condaRootId);
-    const classId = await DriveService.getOrCreateFolder(classroom, teacherId);
-    const devoirsId = await DriveService.getOrCreateFolder("Devoirs", classId);
-    const elevesId = await DriveService.getOrCreateFolder("Élèves", classId);
-    return { devoirsId, elevesId };
-};
-
-// --- ROUTES CHAPITRES (US #2, #7, #8) ---
-
-router.get('/chapters-all', async (req, res) => {
-    try {
-        const data = await getChapter().find({}).sort({ _id: -1 });
-        res.json(data || []);
-    } catch (e) { res.status(500).json([]); }
-});
-
-router.post('/chapters', async (req, res) => {
-    try {
-        const { _id, title, classroom, subject } = req.body;
-        const Chapter = getChapter();
-
-        if (_id && mongoose.Types.ObjectId.isValid(_id)) {
-            // US #7 : Renommage fluide
-            const existing = await Chapter.findById(_id);
-            if (existing && existing.driveFolderId && title && title !== existing.title) {
-                DriveService.renameFolder(existing.driveFolderId, title).catch(() => {});
-            }
-            const updated = await Chapter.findByIdAndUpdate(_id, req.body, { new: true });
-            return res.json(updated);
-        }
-
-        // CRÉATION (US #2)
-        const paths = await getClassBasePaths(classroom);
-        const subNorm = normalizeFolderName(subject);
-        const subFolderId = await DriveService.getOrCreateFolder(subNorm, paths.devoirsId);
-        const driveId = await DriveService.getOrCreateFolder(title, subFolderId);
-        
-        const newChap = await Chapter.create({ ...req.body, driveFolderId: driveId, isArchived: false });
-        res.json(newChap);
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-router.delete('/chapters/:id', async (req, res) => {
-    try {
-        const chap = await getChapter().findById(req.params.id);
-        if (chap?.driveFolderId) await DriveService.deleteFile(chap.driveFolderId).catch(() => {});
-        await getChapter().findByIdAndDelete(req.params.id);
-        res.json({ ok: true });
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// --- ROUTES SCANS ---
-
-router.get('/scan-sessions', async (req, res) => {
-    try {
-        const data = await getScanSession().find({}).sort({ createdAt: -1 });
-        res.json(data || []);
-    } catch (e) { res.status(500).json([]); }
-});
-
-router.post('/scan-sessions', async (req, res) => {
-    try {
-        const { title, classroom } = req.body;
-        const session = await getScanSession().create({ title, classroom });
-        const paths = await getClassBasePaths(classroom);
-        const driveId = await DriveService.getOrCreateFolder(title, paths.devoirsId);
-        
-        // Sous-structure auto-gérée (US #2)
-        const subjectId = await DriveService.getOrCreateFolder("Sujet", driveId);
-        const copiesId = await DriveService.getOrCreateFolder("Copies", driveId);
-        const correctionsId = await DriveService.getOrCreateFolder("Corrections", driveId);
-
-        const updated = await getScanSession().findByIdAndUpdate(session._id, {
-            driveFolderId: driveId, subjectFolderId: subjectId, copiesFolderId: copiesId, correctionsFolderId: correctionsId
-        }, { new: true });
-
-        res.json(updated);
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-module.exports = router;
-
-### FILE: server/features/prof/chapter.routes.js
-const express = require('express');
-const router = express.Router();
-const mongoose = require('mongoose');
-const DriveService = require('../../services/drive.service');
-
-const getChapter = () => mongoose.model('Chapter');
-
-router.get('/chapters-all', async (req, res) => {
-    try {
-        const data = await getChapter().find({}).sort({ _id: -1 });
-        res.json(data);
-    } catch (e) { res.status(500).json([]); }
-});
-
-router.post('/chapters', async (req, res) => {
-    try {
-        const { _id, title, classroom, subject } = req.body;
-        if (_id && mongoose.Types.ObjectId.isValid(_id)) {
-            const updated = await getChapter().findByIdAndUpdate(_id, req.body, { new: true });
-            return res.json(updated);
-        }
-        res.json(await getChapter().create({ ...req.body, isArchived: false }));
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-router.delete('/chapters/:id', async (req, res) => {
-    try {
-        await getChapter().findByIdAndDelete(req.params.id);
-        res.json({ ok: true });
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-module.exports = router;
-
-### FILE: server/features/prof/homework.routes.js
-const express = require('express');
-const router = express.Router();
-const mongoose = require('mongoose');
-
-const getHomework = () => mongoose.model('Homework');
-
-router.get('/homework-all', async (req, res) => {
-    try {
-        const data = await getHomework().find({}).sort({ date: -1 });
-        res.json(data);
-    } catch (e) { res.status(500).json([]); }
-});
-
-router.post('/homework', async (req, res) => {
-    try {
-        const { _id, ...data } = req.body;
-        if (_id) await getHomework().findByIdAndUpdate(_id, data);
-        else await getHomework().create(data);
-        res.json({ ok: true });
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-router.delete('/homework/:id', async (req, res) => {
-    try {
-        await getHomework().findByIdAndDelete(req.params.id);
-        res.json({ ok: true });
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-module.exports = router;
-
-### FILE: server/features/prof/prof.routes.js
-const express = require('express');
-const router = express.Router();
-const mongoose = require('mongoose');
-
-const getModel = (name) => mongoose.model(name);
-
-// RÉCUPÉRER TOUS LES ÉLÈVES
-router.get('/players', async (req, res) => {
-    try {
-        const players = await getModel('Player').find({}).sort({ classroom: 1, lastName: 1 });
-        res.json(players || []);
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// RÉCUPÉRER TOUS LES DEVOIRS (FIX 404)
-router.get('/homework-all', async (req, res) => {
-    try { 
-        const data = await getModel('Homework').find({}).sort({ date: -1 });
-        res.json(data || []); 
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// SAUVEGARDER LES SECTIONS (MATIÈRES)
-router.patch('/teacher/:id/sections', async (req, res) => {
-    try {
-        const updated = await getModel('Teacher').findByIdAndUpdate(
-            req.params.id, 
-            { subjectSections: req.body.sections }, 
-            { new: true }
-        );
-        res.json(updated);
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// SUPPRIMER UNE CLASSE
-router.delete('/classroom/:className', async (req, res) => {
-    try {
-        const { className } = req.params;
-        await getModel('Player').deleteMany({ classroom: className });
-        await getModel('Chapter').deleteMany({ classroom: className });
-        await getModel('Homework').deleteMany({ classroom: className });
-        await getModel('ScanSession').deleteMany({ classroom: className });
-        res.json({ ok: true });
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-module.exports = router;
-
-### FILE: server/features/prof/scan.routes.js
-const express = require('express');
-const router = express.Router();
-const mongoose = require('mongoose');
-const DriveService = require('../../services/drive.service');
-
-const getScanSession = () => mongoose.model('ScanSession');
-
-router.get('/scan-sessions', async (req, res) => {
-    try {
-        const data = await getScanSession().find({}).sort({ createdAt: -1 });
-        res.json(data);
-    } catch (e) { res.status(500).json([]); }
-});
-
-router.post('/scan-sessions', async (req, res) => {
-    try {
-        const session = await getScanSession().create(req.body);
-        res.json(session);
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-router.post('/scan-upload-photo', async (req, res) => {
-    try {
-        const { sessionId, type, imageBase64 } = req.body; 
-        const session = await getScanSession().findById(sessionId);
-        const driveFile = await DriveService.uploadImage(session.driveFolderId || "root", `${type}_${Date.now()}.jpg`, imageBase64);
-        if (driveFile) {
-            const field = type === 'subject' ? 'subjectUrls' : 'copyUrls';
-            await getScanSession().findByIdAndUpdate(sessionId, { $push: { [field]: driveFile.id } });
-            res.json({ ok: true });
-        } else { res.status(500).send("Drive Fail"); }
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-router.delete('/scan-sessions/:id', async (req, res) => {
-    try {
-        await getScanSession().findByIdAndDelete(req.params.id);
-        res.json({ ok: true });
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-module.exports = router;
-
-### FILE: server/features/prof/teacher.routes.js
-const express = require('express');
-const router = express.Router();
-const mongoose = require('mongoose');
-
-const getTeacher = () => mongoose.model('Teacher');
-const getPlayer = () => mongoose.model('Player');
-
-// Gestion des Super-Dossiers (Sections)
-router.patch('/teacher/:id/sections', async (req, res) => {
-    try {
-        const updated = await getTeacher().findByIdAndUpdate(
-            req.params.id, 
-            { subjectSections: req.body.sections }, 
-            { new: true }
-        );
-        res.json(updated);
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// Wizard : Création de classe
-router.post('/create-class-wizard', async (req, res) => {
-    try {
-        const { teacherId, className, rawData } = req.body;
-        const lines = rawData.split('\n').filter(l => l.trim());
-        const players = lines.map(line => {
-            const parts = line.trim().split(/\s+/);
-            const lastName = parts[0] || "NOM";
-            const firstName = parts.slice(1).join(' ') || "Prénom";
-            return { firstName, lastName, classroom: className, teacherId };
-        });
-        await getPlayer().insertMany(players);
-        res.json({ ok: true, count: players.length });
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// Suppression de classe
-router.delete('/classroom/:className', async (req, res) => {
-    try {
-        const { className } = req.params;
-        await getPlayer().deleteMany({ classroom: className });
-        await mongoose.model('Chapter').deleteMany({ classroom: className });
-        await mongoose.model('Homework').deleteMany({ classroom: className });
-        await mongoose.model('ScanSession').deleteMany({ classroom: className });
-        res.json({ ok: true });
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-router.get('/players', async (req, res) => {
-    try {
-        const data = await getPlayer().find({}).sort({ classroom: 1, lastName: 1 });
-        res.json(data);
-    } catch (e) { res.status(500).json([]); }
 });
 
 module.exports = router;
@@ -16243,7 +15928,7 @@ mongoose.connect(process.env.MONGODB_URI).then(async () => {
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// 3. ROUTES SYSTÈME
+// 3. ROUTES SYSTÈME (BOOT ID & MONITORING)
 app.get('/api/check-deploy', (req, res) => res.json({ bootId: SERVER_BOOT_ID }));
 app.get('/api/deploy-status', async (req, res) => {
     try {
@@ -16257,20 +15942,20 @@ app.get('/api/deploy-status', async (req, res) => {
 app.use('/api/auth', require('./features/auth/auth.routes'));
 app.use('/api/games', require('./features/games/games.routes'));
 app.use('/api/scans', require('./features/scans/scans.routes'));
-app.use('/api/homework', require('./features/homework/homework.routes')); // DOMAINE HOMEWORK STABILISÉ
-app.use('/api', require('./features/admin/admin.routes')); 
+app.use('/api/homework', require('./features/homework/homework.routes'));
+app.use('/api', require('./features/admin/admin.routes')); // ADMIN centralise le structural
 
 // 5. GESTION FRONTEND
 const distPath = path.join(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
-        if (req.path.startsWith('/api')) return res.status(404).json({ error: "Route API inexistante" });
+        if (req.path.startsWith('/api')) return res.status(404).json({ error: "API non trouvée" });
         res.sendFile(path.join(distPath, 'index.html'));
     });
 }
 
-app.listen(port, () => console.log(`🚀 SERVEUR CONDAMINE : PORT ${port} (READY)`));
+app.listen(port, () => console.log(`🚀 CONDAMINE V2 : PRÊT (PORT ${port})`));
 
 ### FILE: server/services/ai.service.js
 const { GoogleGenerativeAI } = require("@google/generative-ai");
@@ -16423,9 +16108,9 @@ module.exports = DriveService;
 ### FILE: server/version.json
 {
   "version": "1.6.0",
-  "build": 211,
+  "build": 213,
   "description": "Total Domain Isolation (Zero Porosity) + AI Service Extraction",
-  "timestamp": "2026-01-14T03:26:50.315Z"
+  "timestamp": "2026-01-14T03:36:11.392Z"
 }
 
 ### FILE: snap.js
