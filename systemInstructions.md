@@ -29,5 +29,7 @@ Ne jamais tronquer le code pour éviter l'alerte TRUNCATED."
 9. **MIROIR PHYSIQUE** : Classer une production dans un chapitre déclenche le déplacement physique.
 10. **NETTOYAGE INTÉGRAL** : Suppression BDD = Suppression Drive.
 11. **NORMALISATION PHYSIQUE** : Noms de dossiers Drive sans accents et en majuscules.
-12. **ALIGNEMENT ET NETTOYAGE** : La structure Drive est forcée de s'aligner sur les Super-Dossiers définis en Archives.
-13. **GESTION DE CLASSE (NEW)** : Possibilité de supprimer une classe entière (BDD + Drive) après double confirmation.
+12. **ALIGNEMENT ET NETTOYAGE** : La structure Drive est forcée de s'aligner sur les Super-Dossiers.
+13. **GESTION DE CLASSE** : Possibilité de supprimer une classe entière (BDD + Drive).
+14. **ISOLATION DES CLASSES** : Les chapitres sont strictement isolés par classe.
+15. **VISIBILITÉ SÉLECTIVE (NEW)** : Dans une classe donnée, seules les matières (Super-Dossiers) contenant des dossiers actifs sont affichées. Le mode "Gérer" permet d'afficher toutes les matières pour en configurer de nouvelles.

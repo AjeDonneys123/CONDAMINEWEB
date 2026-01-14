@@ -1,6 +1,6 @@
 {
-  "version": "1.4.4",
-  "build": 181,
-  "description": "Fix 404 on /homework-all + Final Robust Routing",
-  "timestamp": "2026-01-14T00:57:57.905Z"
+  "version": "1.4.7",
+  "build": 184,
+  "description": "User Story #15: Smart Subject Visibility (BFI Optimized)",
+  "timestamp": "2026-01-14T01:10:03.232Z"
 }
