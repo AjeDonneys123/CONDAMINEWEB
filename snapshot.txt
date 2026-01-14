@@ -235,7 +235,7 @@ console.log("🛠️  [WATCHER] apply.js (v18-TOLERANT) actif.");
 console.log("🧘  Mode : Détection souple (Regex) & Reset Auto");
 console.log("------------------------------------------------");
 
-function setStatus(status, file = null) {
+npfunction setStatus(status, file = null) {
     try {
         const data = { status, file, timestamp: Date.now() };
         fs.writeFileSync(statusFile, JSON.stringify(data, null, 2));
