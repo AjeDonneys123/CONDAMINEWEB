@@ -13,47 +13,40 @@ export default function ProfStudioFolder({
     const norm = (c) => c?.toString().toUpperCase().replace('E', '').trim() || "";
     const smartSort = (a, b) => (a.title || "").localeCompare(b.title || "", undefined, { numeric: true, sensitivity: 'base' });
 
-    // Initialisation
     useEffect(() => { 
         if (user?.subjectSections) setSections(user.subjectSections);
     }, [user]);
 
     const saveSections = async (newSections) => {
         const uid = user?.id || user?._id;
-        
-        // Empêcher les doublons de noms locaux avant envoi
-        const uniqueSections = newSections.filter((v, i, a) => a.findIndex(t => t.name === v.name) === i);
-        
         try {
+            // Désactivation temporaire pour éviter le spam de clics
             const res = await fetch(`/api/teacher/${uid}/sections`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sections: uniqueSections, className: classFilter })
+                body: JSON.stringify({ sections: newSections, className: classFilter })
             });
             const data = await res.json();
             
             if (res.ok && data.user) {
-                // NOTIFICATION
-                if (onNotify) onNotify(data);
-                
-                // MISE A JOUR LOCALE ET SESSION (Crucial pour le refresh)
-                setSections(data.user.subjectSections);
+                // MISE A JOUR LOCALE ET CACHE (INDISPENSABLE)
                 localStorage.setItem('player', JSON.stringify(data.user));
+                setSections(data.user.subjectSections);
                 
-                // Petit hack pour forcer React à rafraîchir l'app si nécessaire
-                if (isDeleteMode) {
-                    console.log("✅ Persistance validée.");
-                }
+                if (onNotify) onNotify({
+                    message: data.message,
+                    drivePath: data.drivePath || "SYNC BDD OK",
+                    driveError: data.driveError
+                });
             }
-        } catch(e) { console.error("Erreur Synchro BDD:", e); }
+        } catch(e) { 
+            console.error("Erreur Synchro:", e);
+            alert("Erreur de connexion serveur.");
+        }
     };
 
     const activeChapters = chapters
         .filter(c => !c.isArchived && norm(c.classroom) === norm(classFilter))
-        .sort(smartSort);
-
-    const archivedChapters = chapters
-        .filter(c => c.isArchived && norm(c.classroom) === norm(classFilter))
         .sort(smartSort);
 
     const visibleSections = isDeleteMode ? sections : sections.filter(s => activeChapters.some(c => c.subject === s.name));
@@ -72,7 +65,7 @@ export default function ProfStudioFolder({
                         <div className="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-white text-sm relative" style={{ backgroundColor: color }}>{letter}</div>
                         <div className="flex flex-col">
                             {isEditing ? (
-                                <input autoFocus className="text-sm font-black border-b-2" style={{ borderColor: color }} value={tempTitle} onChange={e => setTempTitle(e.target.value)} onBlur={() => { onRename(chap._id, tempTitle, section.name); setEditingId(null); }} onKeyDown={e => e.key === 'Enter' && (onRename(chap._id, tempTitle, section.name), setEditingId(null))} onClick={e => e.stopPropagation()} />
+                                <input autoFocus className="text-sm font-black border-b-2 outline-none" style={{ borderColor: color }} value={tempTitle} onChange={e => setTempTitle(e.target.value)} onBlur={() => { onRename(chap._id, tempTitle, section.name); setEditingId(null); }} onKeyDown={e => e.key === 'Enter' && (onRename(chap._id, tempTitle, section.name), setEditingId(null))} onClick={e => e.stopPropagation()} />
                             ) : (
                                 <span className="text-sm font-black text-slate-700">{chap.title || "Sans titre"}</span>
                             )}
@@ -111,19 +104,19 @@ export default function ProfStudioFolder({
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     {sections.map(s => {
-                        const archs = archivedChapters.filter(c => c.subject === s.name);
+                        const archs = chapters.filter(c => c.isArchived && c.subject === s.name && norm(c.classroom) === norm(classFilter));
                         if (!isDeleteMode && archs.length === 0) return null;
                         return (
                             <div key={s.name} className="bg-slate-800/40 p-4 rounded-[30px] border border-slate-700 animate-in fade-in relative">
                                 <h4 className="font-black text-[9px] uppercase tracking-widest mb-4 flex justify-between items-center" style={{ color: s.color }}>
                                     {s.name}
-                                    {isDeleteMode && <button onClick={() => saveSections(sections.filter(x => x.name !== s.name))} className="text-red-500 font-black">✕</button>}
+                                    {isDeleteMode && <button onClick={() => { if(confirm(`Supprimer ${s.name} ?`)) saveSections(sections.filter(x => x.name !== s.name)); }} className="text-red-500 font-black hover:scale-125 transition-transform">✕</button>}
                                 </h4>
                                 <div className="space-y-2">
                                     {archs.map(c => (
                                         <div key={c._id} className="bg-slate-800/80 p-2 px-3 rounded-xl flex justify-between items-center border border-slate-700/50">
-                                            <span className="text-white font-bold text-[10px] truncate pr-2">{c.title}</span>
-                                            <button onClick={() => onArchive(c._id, false)} className="text-blue-400 font-bold p-1">⬆️</button>
+                                            <span className="text-white font-bold text-[9px] truncate pr-2">{c.title}</span>
+                                            <button onClick={() => onArchive(c._id, false)} className="text-blue-400 font-bold p-1 hover:scale-110">⬆️</button>
                                         </div>
                                     ))}
                                 </div>
