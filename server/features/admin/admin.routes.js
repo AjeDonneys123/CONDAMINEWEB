@@ -1,30 +1,19 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
+const DriveService = require('../../services/drive.service');
 
 /**
- * 🏢 DOMAINE ADMIN : STRUCTURES
+ * 🏢 DOMAINE ADMIN : Point d'entrée pour les listes et structures
  */
+
+const normalize = (n) => n ? n.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Z0-9]/g, "_").trim() : "SANS_TITRE";
 
 router.get('/players', async (req, res) => {
     try {
         const data = await mongoose.model('Player').find({}).sort({ classroom: 1, lastName: 1 });
         res.json(data || []);
     } catch (e) { res.status(500).json([]); }
-});
-
-router.get('/player-mistakes/:id', async (req, res) => {
-    try {
-        const p = await mongoose.model('Player').findById(req.params.id);
-        res.json(p?.spellingMistakes || []);
-    } catch (e) { res.status(500).json([]); }
-});
-
-router.get('/player-submissions/:id', async (req, res) => {
-    try {
-        const data = await mongoose.model('Submission').find({ playerId: req.params.id }).sort({ createdAt: -1 });
-        res.json(data || []);
-    } catch (e) { res.json([]); }
 });
 
 router.get('/chapters-all', async (req, res) => {
@@ -34,14 +23,31 @@ router.get('/chapters-all', async (req, res) => {
     } catch (e) { res.status(500).json([]); }
 });
 
+// US #2 & #4 : Création de Chapitres avec Suture Drive
 router.post('/chapters', async (req, res) => {
     try {
-        const { _id } = req.body;
+        const Chapter = mongoose.model('Chapter');
+        const { _id, title, classroom, subject } = req.body;
+        
+        // --- LOGIQUE DRIVE (SUTURE) ---
+        const condaRootId = await DriveService.getOrCreateFolder("CONDACLASSE", null);
+        const classId = await DriveService.getOrCreateFolder(normalize(classroom), condaRootId);
+        const subName = subject === 'H' ? 'HISTOIRE' : subject === 'G' ? 'GEOGRAPHIE' : subject === 'E' ? 'EMC' : normalize(subject);
+        const subFolderId = await DriveService.getOrCreateFolder(subName, classId);
+        const driveId = await DriveService.getOrCreateFolder(normalize(title), subFolderId);
+
+        let updatedChapter;
         if (_id && mongoose.Types.ObjectId.isValid(_id)) {
-            return res.json(await mongoose.model('Chapter').findByIdAndUpdate(_id, req.body, { new: true }));
+            updatedChapter = await Chapter.findByIdAndUpdate(_id, { ...req.body, driveFolderId: driveId }, { new: true });
+        } else {
+            updatedChapter = await Chapter.create({ ...req.body, driveFolderId: driveId, isArchived: false });
         }
-        res.json(await mongoose.model('Chapter').create({ ...req.body, isArchived: false }));
-    } catch (e) { res.status(500).json({ error: e.message }); }
+        
+        res.json(updatedChapter);
+    } catch (e) { 
+        console.error("❌ [ADMIN] Erreur Chapitre/Drive:", e.message);
+        res.status(500).json({ error: e.message }); 
+    }
 });
 
 router.delete('/classroom/:className', async (req, res) => {
@@ -49,14 +55,8 @@ router.delete('/classroom/:className', async (req, res) => {
         const { className } = req.params;
         await mongoose.model('Player').deleteMany({ classroom: className });
         await mongoose.model('Chapter').deleteMany({ classroom: className });
-        await mongoose.model('Homework').deleteMany({ classroom: className });
-        await mongoose.model('ScanSession').deleteMany({ classroom: className });
         res.json({ ok: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-router.get('/bugs', async (req, res) => {
-    try { res.json(await mongoose.model('Bug').find({}).sort({ createdAt: -1 })); } catch (e) { res.json([]); }
 });
 
 module.exports = router;
