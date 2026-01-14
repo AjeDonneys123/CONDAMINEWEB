@@ -9,57 +9,13 @@ export default function ProfStudioFolder({
     const [tempTitle, setTempTitle] = useState("");
     const [isDeleteMode, setIsDeleteMode] = useState(false);
     const [sections, setSections] = useState([]);
-    const [isSyncing, setIsSyncing] = useState(false);
 
     const norm = (c) => c?.toString().toUpperCase().replace('E', '').trim() || "";
     const smartSort = (a, b) => (a.title || "").localeCompare(b.title || "", undefined, { numeric: true, sensitivity: 'base' });
 
     useEffect(() => { 
-        if (user?.subjectSections && user.subjectSections.length > 0) {
-            setSections(user.subjectSections);
-        } else {
-            setSections([
-                { name: 'Histoire', color: '#ef4444' },
-                { name: 'Géographie', color: '#3b82f6' },
-                { name: 'EMC', color: '#22c55e' }
-            ]);
-        }
+        if (user?.subjectSections) setSections(user.subjectSections);
     }, [user]);
-
-    // US #8 : Logique de synchronisation
-    const handleSyncDrive = async () => {
-        if (!confirm("⚠️ Lancer le nettoyage ?\n\n1. Les chapitres dont la matière a été supprimée seront déplacés vers 'Autres'.\n2. La structure physique de votre Drive sera mise à jour.")) return;
-        
-        setIsSyncing(true);
-        try {
-            const res = await fetch('/api/sync-drive-structure', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ classroom: classFilter, teacherId: user.id || user._id })
-            });
-            const data = await res.json();
-            alert(`✅ Nettoyage terminé ! ${data.migrated} dossiers déplacés vers 'Autres'.`);
-            window.location.reload();
-        } catch (e) {
-            alert("Erreur lors de la synchronisation.");
-        }
-        setIsSyncing(false);
-    };
-
-    const saveSections = async (newSections) => {
-        const uid = user?.id || user?._id;
-        if (!uid) return;
-        setSections(newSections);
-        try {
-            await fetch(`/api/teacher/${uid}/sections`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sections: newSections })
-            });
-            const updatedUser = { ...user, subjectSections: newSections };
-            localStorage.setItem('player', JSON.stringify(updatedUser));
-        } catch(e) { console.error(e); }
-    };
 
     const activeChapters = chapters
         .filter(c => !c.isArchived && norm(c.classroom) === norm(classFilter))
@@ -69,15 +25,7 @@ export default function ProfStudioFolder({
         .filter(c => c.isArchived && norm(c.classroom) === norm(classFilter))
         .sort(smartSort);
 
-    // US #15 : Visibilité sélective + Ajout du dossier Autres
-    const getVisibleSections = () => {
-        const base = sections.filter(s => isDeleteMode || activeChapters.some(c => c.subject === s.name));
-        // On ajoute la section "Autres" si des chapitres orphelins existent
-        if (activeChapters.some(c => c.subject === "Autres")) {
-            base.push({ name: 'Autres', color: '#64748b' });
-        }
-        return base;
-    };
+    const visibleSections = isDeleteMode ? sections : sections.filter(s => activeChapters.some(c => c.subject === s.name));
 
     const renderChapterCard = (chap, section) => {
         const isOpen = openChaps[chap._id];
@@ -90,12 +38,10 @@ export default function ProfStudioFolder({
             <div key={chap._id} className="bg-white rounded-[35px] border-2 shadow-sm overflow-hidden transition-all mb-3" style={{ borderColor: isOpen ? color : '#f8fafc' }}>
                 <div className="p-4 flex items-center justify-between">
                     <div className="flex items-center gap-4 flex-1 cursor-pointer" onClick={() => setOpenChaps({...openChaps, [chap._id]: !isOpen})}>
-                        <div className="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-white text-sm relative" style={{ backgroundColor: color }}>
-                            {letter}
-                        </div>
+                        <div className="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-white text-sm relative" style={{ backgroundColor: color }}>{letter}</div>
                         <div className="flex flex-col">
                             {isEditing ? (
-                                <input autoFocus className="text-lg font-black outline-none border-b-2" style={{ borderColor: color }} value={tempTitle} onChange={e => setTempTitle(e.target.value)} onBlur={() => { onRename(chap._id, tempTitle); setEditingId(null); }} onKeyDown={e => e.key === 'Enter' && (onRename(chap._id, tempTitle), setEditingId(null))} onClick={e => e.stopPropagation()} />
+                                <input autoFocus className="text-sm font-black border-b-2" style={{ borderColor: color }} value={tempTitle} onChange={e => setTempTitle(e.target.value)} onBlur={() => { onRename(chap._id, tempTitle, section.name); setEditingId(null); }} onKeyDown={e => e.key === 'Enter' && (onRename(chap._id, tempTitle, section.name), setEditingId(null))} onClick={e => e.stopPropagation()} />
                             ) : (
                                 <span className="text-sm font-black text-slate-700">{chap.title || "Sans titre"}</span>
                             )}
@@ -103,9 +49,9 @@ export default function ProfStudioFolder({
                         </div>
                     </div>
                     <div className="flex gap-1">
-                        <button onClick={(e) => { e.stopPropagation(); setEditingId(chap._id); setTempTitle(chap.title); }} className="w-9 h-9 flex items-center justify-center bg-slate-50 text-slate-400 rounded-full hover:bg-indigo-50 hover:text-indigo-600 transition-colors">✏️</button>
-                        <button onClick={(e) => { e.stopPropagation(); onArchive(chap._id, !chap.isArchived); }} className="w-9 h-9 flex items-center justify-center bg-slate-50 text-slate-400 rounded-full hover:bg-slate-800 hover:text-white transition-colors">📦</button>
-                        <button onClick={(e) => { e.stopPropagation(); onDeleteChapter(chap._id); }} className="w-9 h-9 flex items-center justify-center bg-red-50 text-red-600 rounded-full font-black hover:bg-red-500 hover:text-white transition-colors">✕</button>
+                        <button onClick={(e) => { e.stopPropagation(); setEditingId(chap._id); setTempTitle(chap.title); }} className="w-8 h-8 flex items-center justify-center bg-slate-50 text-slate-300 rounded-full hover:text-indigo-500 transition-colors">✏️</button>
+                        <button onClick={(e) => { e.stopPropagation(); onArchive(chap._id, !chap.isArchived); }} className="w-8 h-8 flex items-center justify-center bg-slate-50 text-slate-300 rounded-full hover:bg-slate-800 hover:text-white transition-colors">📦</button>
+                        <button onClick={(e) => { e.stopPropagation(); onDeleteChapter(chap._id); }} className="w-8 h-8 flex items-center justify-center bg-red-50 text-red-300 rounded-full font-black hover:bg-red-500 hover:text-white transition-colors">✕</button>
                     </div>
                 </div>
                 {isOpen && (
@@ -113,10 +59,7 @@ export default function ProfStudioFolder({
                         {chapItems.map(it => (
                             <div key={it._id} className="bg-white p-3 px-5 rounded-2xl flex justify-between items-center shadow-sm border border-transparent hover:border-indigo-200">
                                 <b className="text-slate-700 text-xs">{it.actType === 'game' ? '🕹️' : '📄'} {it.title}</b>
-                                <div className="flex gap-2">
-                                    <button onClick={() => onEditItem(it)} className="px-3 py-1 bg-indigo-50 text-indigo-600 rounded-lg font-black text-[9px] uppercase">Modifier</button>
-                                    <button onClick={() => onDeleteItem(it._id, it.actType)} className="w-8 h-8 flex items-center justify-center bg-red-50 text-red-600 rounded-lg font-black text-xs border border-red-100">✕</button>
-                                </div>
+                                <button onClick={() => onDeleteItem(it._id, it.actType)} className="w-6 h-6 flex items-center justify-center bg-red-50 text-red-400 rounded-full font-black text-[10px]">✕</button>
                             </div>
                         ))}
                     </div>
@@ -125,19 +68,12 @@ export default function ProfStudioFolder({
         );
     };
 
-    const visibleSections = getVisibleSections();
-
     return (
         <div className="max-w-5xl mx-auto space-y-12 pb-20">
-            {/* ARCHIVES / CONFIGURATION */}
             <div className="p-8 bg-slate-900 rounded-[50px] border-4 border-slate-800 shadow-2xl">
                 <div className="flex justify-between items-center mb-8 px-2">
                     <h3 className="text-white font-black text-[10px] uppercase tracking-widest">📂 Configuration des Matières</h3>
                     <div className="flex gap-2">
-                        <button onClick={handleSyncDrive} disabled={isSyncing} className={`px-5 py-2 rounded-2xl font-black text-[9px] uppercase transition-all ${isSyncing ? 'bg-slate-700 text-slate-500' : 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-lg'}`}>
-                            {isSyncing ? '🔄 Sync...' : '🔄 Synchroniser'}
-                        </button>
-                        <button onClick={() => { const n = prompt("Nom de la matière ?"); if(n) saveSections([...sections, {name:n, color:'#3b82f6'}]); }} className="bg-indigo-600 text-white px-5 py-2 rounded-2xl font-black text-[9px] uppercase hover:bg-indigo-500 shadow-lg">+ Nouvelle</button>
                         <button onClick={() => setIsDeleteMode(!isDeleteMode)} className={`px-5 py-2 rounded-2xl font-black text-[9px] uppercase transition-colors ${isDeleteMode ? 'bg-red-500 text-white' : 'bg-slate-700 text-slate-300'}`}>Gérer</button>
                     </div>
                 </div>
@@ -147,9 +83,7 @@ export default function ProfStudioFolder({
                         if (!isDeleteMode && archs.length === 0) return null;
                         return (
                             <div key={s.name} className="bg-slate-800/40 p-4 rounded-[30px] border border-slate-700 animate-in fade-in">
-                                <h4 className="font-black text-[9px] uppercase tracking-widest mb-4 flex justify-between" style={{ color: s.color }}>
-                                    {s.name} {isDeleteMode && <span onClick={() => { if(confirm(`Supprimer ${s.name} ?`)) saveSections(sections.filter(x=>x.name!==s.name)); }} className="cursor-pointer text-red-500 font-black">✕</span>}
-                                </h4>
+                                <h4 className="font-black text-[9px] uppercase tracking-widest mb-4" style={{ color: s.color }}>{s.name}</h4>
                                 <div className="space-y-2">
                                     {archs.map(c => (
                                         <div key={c._id} className="bg-slate-800/80 p-2 px-3 rounded-xl flex justify-between items-center border border-slate-700/50">
@@ -164,7 +98,6 @@ export default function ProfStudioFolder({
                 </div>
             </div>
 
-            {/* DOSSIERS ACTIFS */}
             <div className="space-y-16">
                 {visibleSections.map(s => (
                     <div key={'active-' + s.name} className="animate-in fade-in">
