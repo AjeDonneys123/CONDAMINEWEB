@@ -13,9 +13,11 @@ export default function ProfStudioFolder({
     const norm = (c) => c?.toString().toUpperCase().replace('E', '').trim() || "";
     const smartSort = (a, b) => (a.title || "").localeCompare(b.title || "", undefined, { numeric: true, sensitivity: 'base' });
 
-    // Initialisation depuis le profil
+    // Initialisation robuste des sections
     useEffect(() => { 
-        if (user?.subjectSections) setSections(user.subjectSections);
+        if (user?.subjectSections) {
+            setSections(user.subjectSections);
+        }
     }, [user]);
 
     const saveSections = async (newSections) => {
@@ -29,7 +31,7 @@ export default function ProfStudioFolder({
             const data = await res.json();
             
             if (res.ok && data.user) {
-                // MISE A JOUR LOCALE ET CACHE
+                // MISE A JOUR LOCALE ET CACHE (INDISPENSABLE)
                 localStorage.setItem('player', JSON.stringify(data.user));
                 setSections(data.user.subjectSections);
                 if (onNotify) onNotify({ message: data.message, drivePath: `JEAN VUILLET / ${classFilter} / ...` });
@@ -41,7 +43,10 @@ export default function ProfStudioFolder({
         .filter(c => !c.isArchived && norm(c.classroom) === norm(classFilter))
         .sort(smartSort);
 
-    // US #3 : Les sections visibles
+    const archivedChapters = chapters
+        .filter(c => c.isArchived && norm(c.classroom) === norm(classFilter));
+
+    // Détermination des sections à afficher dans la zone active
     const visibleSections = isDeleteMode ? sections : sections.filter(s => activeChapters.some(c => c.subject === s.name));
 
     const renderChapterCard = (chap, section) => {
@@ -66,9 +71,9 @@ export default function ProfStudioFolder({
                         </div>
                     </div>
                     <div className="flex gap-1">
-                        <button onClick={(e) => { e.stopPropagation(); setEditingId(chap._id); setTempTitle(chap.title); }} className="w-8 h-8 flex items-center justify-center bg-slate-50 text-slate-300 rounded-full hover:text-indigo-500">✏️</button>
-                        <button onClick={(e) => { e.stopPropagation(); onArchive(chap._id, !chap.isArchived); }} className="w-8 h-8 flex items-center justify-center bg-slate-50 text-slate-300 rounded-full hover:bg-slate-800 hover:text-white">📦</button>
-                        <button onClick={(e) => { e.stopPropagation(); onDeleteChapter(chap._id); }} className="w-8 h-8 flex items-center justify-center bg-red-50 text-red-300 rounded-full font-black hover:bg-red-500 hover:text-white">✕</button>
+                        <button onClick={(e) => { e.stopPropagation(); setEditingId(chap._id); setTempTitle(chap.title); }} className="w-8 h-8 flex items-center justify-center bg-slate-50 text-slate-300 rounded-full hover:text-indigo-500 transition-colors">✏️</button>
+                        <button onClick={(e) => { e.stopPropagation(); onArchive(chap._id, !chap.isArchived); }} className="w-8 h-8 flex items-center justify-center bg-slate-50 text-slate-300 rounded-full hover:bg-slate-800 hover:text-white transition-colors">📦</button>
+                        <button onClick={(e) => { e.stopPropagation(); onDeleteChapter(chap._id); }} className="w-8 h-8 flex items-center justify-center bg-red-50 text-red-300 rounded-full font-black hover:bg-red-500 hover:text-white transition-colors">✕</button>
                     </div>
                 </div>
                 {isOpen && (
@@ -87,6 +92,7 @@ export default function ProfStudioFolder({
 
     return (
         <div className="max-w-5xl mx-auto space-y-12 pb-20">
+            {/* CARRE NOIR : TOUJOURS VISIBLE ET COMPLET */}
             <div className="p-8 bg-slate-900 rounded-[50px] border-4 border-slate-800 shadow-2xl">
                 <div className="flex justify-between items-center mb-8 px-2">
                     <h3 className="text-white font-black text-[10px] uppercase tracking-widest">📂 Configuration des Matières</h3>
@@ -95,15 +101,20 @@ export default function ProfStudioFolder({
                         <button onClick={() => setIsDeleteMode(!isDeleteMode)} className={`px-5 py-2 rounded-2xl font-black text-[9px] uppercase transition-colors ${isDeleteMode ? 'bg-red-500 text-white' : 'bg-slate-700 text-slate-300'}`}>{isDeleteMode ? 'Terminer' : 'Gérer'}</button>
                     </div>
                 </div>
+                
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     {sections.map(s => {
-                        const archs = chapters.filter(c => c.isArchived && c.subject === s.name && norm(c.classroom) === norm(classFilter));
+                        const archs = archivedChapters.filter(c => c.subject === s.name);
+                        // On n'affiche pas la card si pas d'archives ET pas en mode gestion
                         if (!isDeleteMode && archs.length === 0) return null;
+
                         return (
                             <div key={s.name} className="bg-slate-800/40 p-4 rounded-[30px] border border-slate-700 animate-in fade-in relative">
                                 <h4 className="font-black text-[9px] uppercase tracking-widest mb-4 flex justify-between items-center" style={{ color: s.color }}>
                                     {s.name}
-                                    {isDeleteMode && <button onClick={() => saveSections(sections.filter(x => x.name !== s.name))} className="text-red-500 font-black hover:scale-125 transition-transform">✕</button>}
+                                    {isDeleteMode && (
+                                        <button onClick={() => saveSections(sections.filter(x => x.name !== s.name))} className="text-red-500 font-black hover:scale-125 transition-transform">✕</button>
+                                    )}
                                 </h4>
                                 <div className="space-y-2">
                                     {archs.map(c => (
@@ -112,6 +123,7 @@ export default function ProfStudioFolder({
                                             <button onClick={() => onArchive(c._id, false)} className="text-blue-400 font-bold p-1 hover:scale-110">⬆️</button>
                                         </div>
                                     ))}
+                                    {isDeleteMode && archs.length === 0 && <div className="text-[8px] text-slate-600 uppercase font-black py-2">Prête</div>}
                                 </div>
                             </div>
                         );
@@ -119,6 +131,7 @@ export default function ProfStudioFolder({
                 </div>
             </div>
 
+            {/* ZONES ACTIVES */}
             <div className="space-y-16">
                 {visibleSections.map(s => (
                     <div key={'active-' + s.name} className="animate-in fade-in">
