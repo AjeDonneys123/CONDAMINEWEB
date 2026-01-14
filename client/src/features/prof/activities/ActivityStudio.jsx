@@ -12,31 +12,34 @@ export default function ActivityStudio({ globalClass, user }) {
     const [notification, setNotification] = useState(null);
 
     const showNotify = (data) => {
-        setNotification({ 
-            msg: data.message, 
-            path: data.drivePath, 
-            isError: data.driveError 
-        });
-        setTimeout(() => setNotification(null), 6000);
+        setNotification({ msg: data.message, path: data.drivePath, isError: data.driveError });
+        setTimeout(() => setNotification(null), 5000);
     };
 
     const loadData = async () => {
         if (!globalClass) return;
         setLoading(true);
         try {
+            // Synchronisation avec les nouveaux tiroirs étanches du Backend
             const [hwRes, gmRes, cpRes] = await Promise.all([
                 fetch('/api/homework/all'),
                 fetch('/api/games/all'),
                 fetch('/api/chapters-all')
             ]);
+            
             if (hwRes.ok && gmRes.ok && cpRes.ok) {
                 const hw = await hwRes.json();
                 const gm = await gmRes.json();
                 const cp = await cpRes.json();
-                setActivities([...hw.map(x => ({ ...x, actType: 'homework' })), ...gm.map(x => ({ ...x, actType: 'game' }))]);
-                setChapters(cp);
+                
+                // On fusionne les activités pour le dossier
+                setActivities([
+                    ...hw.map(x => ({ ...x, actType: 'homework' })),
+                    ...gm.map(x => ({ ...x, actType: 'game' }))
+                ]);
+                setChapters(cp || []);
             }
-        } catch (e) { console.error(e); }
+        } catch (e) { console.error("Erreur Studio:", e); }
         setLoading(false);
     };
 
@@ -44,30 +47,38 @@ export default function ActivityStudio({ globalClass, user }) {
 
     const handleCreateChapter = async (subjectName, title) => {
         const res = await fetch('/api/chapters', { 
-            method:'POST', headers:{'Content-Type':'application/json'}, 
+            method:'POST', 
+            headers:{'Content-Type':'application/json'}, 
             body: JSON.stringify({ title, subject: subjectName, classroom: globalClass, teacherId: user.id || user._id }) 
         });
         const data = await res.json();
-        showNotify(data);
-        await loadData();
+        if (res.ok) {
+            showNotify(data);
+            await loadData();
+        }
     };
 
     const handleRenameChapter = async (id, title, subject) => {
         const res = await fetch('/api/chapters', { 
-            method:'POST', headers:{'Content-Type':'application/json'}, 
+            method:'POST', 
+            headers:{'Content-Type':'application/json'}, 
             body:JSON.stringify({_id:id, title, classroom: globalClass, subject})
         });
         const data = await res.json();
-        showNotify(data);
-        await loadData();
+        if (res.ok) {
+            showNotify(data);
+            await loadData();
+        }
     };
 
     const handleDeleteChapter = async (id) => {
-        if (!confirm("Supprimer ce dossier ?")) return;
+        if (!confirm("Supprimer ce dossier et son contenu Drive ?")) return;
         const res = await fetch(`/api/chapters/${id}`, { method: 'DELETE' });
         const data = await res.json();
-        showNotify(data);
-        await loadData();
+        if (res.ok) {
+            showNotify(data);
+            await loadData();
+        }
     };
 
     if (editingItem) {
@@ -78,30 +89,29 @@ export default function ActivityStudio({ globalClass, user }) {
 
     return (
         <div className="animate-in fade-in relative">
-            {/* BANDEAU DE NOTIFICATION DRIVE (ROUGE SI ECHEC) */}
+            {/* Notification flottante */}
             {notification && (
-                <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[9999] w-full max-w-xl px-4 animate-in slide-in-from-top-4">
-                    <div className={`rounded-3xl p-5 shadow-2xl flex items-center gap-4 border-2 ${notification.isError ? 'bg-red-600 border-red-400' : 'bg-slate-900 border-emerald-500'}`}>
-                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-2xl ${notification.isError ? 'bg-red-500' : 'bg-emerald-500'}`}>
-                            {notification.isError ? '❌' : '✅'}
-                        </div>
+                <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[9999] w-full max-w-lg px-4">
+                    <div className={`rounded-3xl p-4 shadow-2xl flex items-center gap-4 border-2 ${notification.isError ? 'bg-red-600 border-red-400' : 'bg-slate-900 border-emerald-500'}`}>
                         <div className="flex-1">
-                            <h4 className="text-white font-black text-sm uppercase">{notification.msg}</h4>
-                            <p className={`${notification.isError ? 'text-red-200' : 'text-emerald-400'} font-mono text-[9px] break-all tracking-tighter mt-1`}>{notification.path}</p>
+                            <h4 className="text-white font-black text-xs uppercase">{notification.msg}</h4>
+                            <p className="text-emerald-400 font-mono text-[9px] mt-1">{notification.path}</p>
                         </div>
-                        <button onClick={() => setNotification(null)} className="text-white/50 font-bold">✕</button>
                     </div>
                 </div>
             )}
 
             <div className="flex justify-start gap-4 mb-8 bg-white p-4 rounded-[30px] border-2 border-slate-50 shadow-sm">
-                <button onClick={() => setEditingItem({ type: 'homework', data: null })} className="bg-orange-500 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:scale-105 transition-transform"> Nouveau Devoir</button>
-                <button onClick={() => setEditingItem({ type: 'game', data: null })} className="bg-purple-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:scale-105 transition-transform"> Nouveau Jeu</button>
+                <button onClick={() => setEditingItem({ type: 'homework', data: null })} className="bg-orange-500 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg"> Nouveau Devoir</button>
+                <button onClick={() => setEditingItem({ type: 'game', data: null })} className="bg-purple-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg"> Nouveau Jeu</button>
             </div>
 
-            {!loading && (
+            {!loading ? (
                 <ProfStudioFolder 
-                    user={user} chapters={chapters} items={activities} classFilter={globalClass}
+                    user={user} 
+                    chapters={chapters} 
+                    items={activities} 
+                    classFilter={globalClass}
                     onArchive={async (id, state) => {
                         await fetch('/api/chapters', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({_id:id, isArchived:state})});
                         loadData();
@@ -110,13 +120,16 @@ export default function ActivityStudio({ globalClass, user }) {
                     onEditItem={(it) => setEditingItem({ type: it.actType, data: it })}
                     onDeleteItem={async (id, type) => {
                         if(!confirm("Supprimer ?")) return;
-                        await fetch(type === 'game' ? `/api/games/${id}` : `/api/homework/${id}`, { method: 'DELETE' });
+                        const endpoint = type === 'game' ? `/api/games/${id}` : `/api/homework/${id}`;
+                        await fetch(endpoint, { method: 'DELETE' });
                         loadData();
                     }}
                     onDeleteChapter={handleDeleteChapter}
                     onCreateChapter={handleCreateChapter}
                     onNotify={showNotify}
                 />
+            ) : (
+                <div className="text-center py-20 text-slate-300 font-black animate-pulse uppercase">Chargement des dossiers...</div>
             )}
         </div>
     );
