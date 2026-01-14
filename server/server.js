@@ -8,78 +8,49 @@ const app = express();
 const port = process.env.PORT || 3000;
 const SERVER_BOOT_ID = Date.now();
 
-// 1. CHARGEMENT DES MODÈLES (DOIT ÊTRE FAIT AVANT LES ROUTES)
-try {
-    require('./models/Teacher');
-    require('./models/Player');
-    require('./models/Chapter');
-    require('./models/Homework');
-    require('./models/GameLevel');
-    require('./models/Bug');
-    require('./models/Submission');
-    require('./models/TeacherStyle');
-    require('./models/ScanSession');
-    require('./models/DeploySignal');
-    console.log("✅ Modèles indexés.");
-} catch (e) {
-    console.error("❌ Erreur Modèles:", e.message);
-}
+// 1. CHARGEMENT DES MODÈLES (CRITIQUE)
+const models = ['./models/Teacher', './models/Player', './models/Chapter', './models/Homework', './models/GameLevel', './models/Bug', './models/Submission', './models/TeacherStyle', './models/ScanSession', './models/DeploySignal'];
+models.forEach(m => { try { require(m); } catch (e) { console.error("Erreur modèle:", m); } });
 
-// 2. CONNEXION MONGODB AVEC TIMEOUT SÉCURISÉ
-mongoose.connect(process.env.MONGODB_URI, {
-    serverSelectionTimeoutMS: 5000
-}).then(async () => {
-    console.log('✅ MongoDB Connecté.');
+// 2. CONNEXION MONGODB
+mongoose.connect(process.env.MONGODB_URI).then(async () => {
+    console.log('✅ MongoDB Connected.');
     try {
-        const DeploySignal = mongoose.model('DeploySignal');
-        await DeploySignal.findOneAndUpdate({}, { status: 'live', updatedAt: new Date() }, { upsert: true });
+        await mongoose.model('DeploySignal').findOneAndUpdate({}, { status: 'live', updatedAt: new Date() }, { upsert: true });
     } catch (e) {}
-}).catch(err => console.error("❌ Erreur Critique MongoDB :", err.message));
+});
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// 3. ROUTES SYSTÈME (INDÉSTRUCTIBLES)
+// 3. ROUTES SYSTÈME
 app.get('/api/check-deploy', (req, res) => res.json({ bootId: SERVER_BOOT_ID }));
-
 app.get('/api/deploy-status', async (req, res) => {
     try {
-        const DeploySignal = mongoose.model('DeploySignal');
-        const signal = await DeploySignal.findOne({});
-        const vPath = path.join(__dirname, 'version.json');
-        let v = { build: 172, version: "1.3.12" };
-        if (fs.existsSync(vPath)) v = JSON.parse(fs.readFileSync(vPath, 'utf8'));
-        res.json({ status: signal?.status || 'live', build: v.build, version: v.version });
-    } catch (e) { res.json({ status: 'live', build: 172 }); }
+        const signal = await mongoose.model('DeploySignal').findOne({});
+        const version = JSON.parse(fs.readFileSync(path.join(__dirname, 'version.json'), 'utf8'));
+        res.json({ status: signal?.status || 'live', build: version.build, version: version.version });
+    } catch (e) { res.json({ status: 'live', build: 176 }); }
 });
-
 app.get('/api/system-status', (req, res) => res.json({ status: 'OK' }));
 
-// 4. ROUTES FEATURES (API)
+// 4. ROUTES API (FEATURES) - ENREGISTREMENT EXPLICITE
 app.use('/api', require('./features/auth/auth.routes'));
 app.use('/api', require('./features/eleve/eleve.routes'));
 app.use('/api', require('./features/prof/prof.routes'));
 app.use('/api', require('./features/game/game.routes'));
 app.use('/api', require('./features/prof/automation.routes'));
 
-// 5. GARDE-FOU API : Toujours répondre en JSON sur /api/*
+// Garde-fou 404 API
 app.all('/api/*', (req, res) => {
-    res.status(404).json({ error: `Route API inexistante : ${req.method} ${req.url}` });
+    res.status(404).json({ error: `Route API introuvable : ${req.method} ${req.url}` });
 });
 
-// 6. GESTION FRONTEND
+// 5. GESTION FRONTEND
 const distPath = path.join(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
     app.get('*', (req, res) => res.sendFile(path.join(distPath, 'index.html')));
-} else {
-    app.get('/', (req, res) => res.send("Serveur actif (En attente du build client)"));
 }
 
-// 7. GESTION DES ERREURS GLOBALES (Empêche le 500 HTML)
-app.use((err, req, res, next) => {
-    console.error("🔥 Erreur Interne:", err.message);
-    res.status(500).json({ error: "Erreur interne du serveur" });
-});
-
-app.listen(port, () => console.log(`🚀 SERVEUR SUR PORT ${port}`));
+app.listen(port, () => console.log(`🚀 SERVEUR CONDAMINE PRÊT [PORT:${port}]`));
