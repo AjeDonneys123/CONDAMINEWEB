@@ -22,7 +22,7 @@ export default function ProfStudioFolder({
     const [isDeleteMode, setIsDeleteMode] = useState(false);
     const [sections, setSections] = useState([]);
     const [movingId, setMovingId] = useState(null); 
-    const [colorPickerIdx, setColorPickerIdx] = useState(null); // Index de la section dont on change la couleur
+    const [colorPickerIdx, setColorPickerIdx] = useState(null); 
 
     const norm = (c) => c?.toString().toUpperCase().replace('E', '').trim() || "";
     const smartSort = (a, b) => (a.title || "").localeCompare(b.title || "", undefined, { numeric: true, sensitivity: 'base' });
@@ -31,10 +31,9 @@ export default function ProfStudioFolder({
         if (user?.subjectSections) setSections(user.subjectSections);
     }, [user]);
 
-    // US #1 : Persistence Mobile & Serveur
     const saveSections = async (newSections) => {
         const uid = user?.id || user?._id;
-        setSections(newSections); // Update immédiat UI
+        setSections(newSections); 
         try {
             const res = await fetch(`/api/teacher/${uid}/sections`, {
                 method: 'PATCH',
@@ -43,7 +42,6 @@ export default function ProfStudioFolder({
             });
             const data = await res.json();
             if (res.ok && data.user) {
-                // Stockage local pour persistance immédiate au refresh
                 localStorage.setItem('player', JSON.stringify(data.user));
                 if (onNotify) onNotify(data);
             }
@@ -54,7 +52,7 @@ export default function ProfStudioFolder({
         const newSections = [...sections];
         newSections[idx].color = newColor;
         saveSections(newSections);
-        setColorPickerIdx(null);
+        setColorPickerIdx(null); // Fermeture immédiate après choix
     };
 
     const autoColorize = () => {
@@ -187,23 +185,31 @@ export default function ProfStudioFolder({
                         if (!isDeleteMode && archs.length === 0) return null;
 
                         return (
-                            <div key={s.name} className="bg-slate-800/40 p-4 rounded-[30px] border border-slate-700 animate-in fade-in relative group" style={{ borderColor: s.color + '44' }}>
+                            <div key={s.name} className="bg-slate-800/40 p-5 rounded-[30px] border border-slate-700 animate-in fade-in relative group" style={{ borderColor: s.color + '44' }}>
                                 <div className="flex justify-between items-center mb-4">
-                                    <h4 className="font-black text-[9px] uppercase tracking-widest flex items-center gap-2" style={{ color: s.color }}>
-                                        <span className="w-2 h-2 rounded-full" style={{ background: s.color }}></span>
+                                    <h4 className="font-black text-[10px] uppercase tracking-widest flex items-center gap-2" style={{ color: s.color }}>
+                                        <span className="w-2.5 h-2.5 rounded-full" style={{ background: s.color }}></span>
                                         {s.name}
                                     </h4>
                                     {isDeleteMode && (
-                                        <div className="flex gap-1 relative">
-                                            {/* SÉLECTEUR DE COULEUR MANUEL */}
-                                            <button onClick={() => setColorPickerIdx(isPickingColor ? null : idx)} className="text-white hover:scale-125 transition-transform text-[10px]">🎨</button>
-                                            <button onClick={() => saveSections(sections.filter(x => x.name !== s.name))} className="text-red-500 font-black hover:scale-125 transition-transform text-[10px]">✕</button>
+                                        <div className="flex gap-2 relative">
+                                            {/* SÉLECTEUR DE COULEUR LARGEMENT AMÉLIORÉ */}
+                                            <button onClick={() => setColorPickerIdx(isPickingColor ? null : idx)} className="text-white hover:scale-125 transition-transform text-[12px] opacity-60 hover:opacity-100">🎨</button>
+                                            <button onClick={() => saveSections(sections.filter(x => x.name !== s.name))} className="text-red-500 font-black hover:scale-125 transition-transform text-[12px] opacity-60 hover:opacity-100">✕</button>
                                             
                                             {isPickingColor && (
-                                                <div className="absolute top-6 right-0 z-[300] bg-slate-900 border border-slate-700 p-2 rounded-xl grid grid-cols-3 gap-1 shadow-2xl animate-in zoom-in">
-                                                    {COLOR_PALETTE.map(c => (
-                                                        <button key={c} onClick={() => updateSectionColor(idx, c)} className="w-6 h-6 rounded-full border border-white/20 hover:scale-110 transition-transform" style={{ background: c }} />
-                                                    ))}
+                                                <div className="absolute top-8 right-0 z-[300] bg-slate-800 border-2 border-slate-600 p-3 rounded-2xl shadow-2xl animate-in zoom-in w-[160px]">
+                                                    <p className="text-[8px] font-black text-slate-400 uppercase mb-2 text-center tracking-tighter">Choisir couleur</p>
+                                                    <div className="grid grid-cols-3 gap-2">
+                                                        {COLOR_PALETTE.map(c => (
+                                                            <button 
+                                                                key={c} 
+                                                                onClick={() => updateSectionColor(idx, c)} 
+                                                                className="w-8 h-8 rounded-full border-2 border-white/10 hover:scale-110 transition-all hover:border-white shadow-inner" 
+                                                                style={{ background: c }} 
+                                                            />
+                                                        ))}
+                                                    </div>
                                                 </div>
                                             )}
                                         </div>
@@ -241,7 +247,6 @@ export default function ProfStudioFolder({
                 </div>
             </div>
 
-            {/* ZONES ACTIVES PAR MATIÈRE */}
             <div className="space-y-16">
                 {sections.map(s => {
                     const chaps = activeChapters.filter(c => c.subject === s.name);
