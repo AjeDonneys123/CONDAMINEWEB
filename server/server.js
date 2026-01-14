@@ -8,7 +8,7 @@ const app = express();
 const port = process.env.PORT || 3000;
 const SERVER_BOOT_ID = Date.now();
 
-// 1. CHARGEMENT CRITIQUE DES MODÈLES
+// 1. CHARGEMENT DES MODÈLES (ORDRE ALPHABÉTIQUE)
 require('./models/Bug');
 require('./models/Chapter');
 require('./models/DeploySignal');
@@ -22,16 +22,12 @@ require('./models/TeacherStyle');
 
 // 2. CONNEXION MONGODB
 mongoose.connect(process.env.MONGODB_URI).then(async () => {
-    console.log('✅ MongoDB Connecté.');
+    console.log('✅ MongoDB Connected.');
     try {
         const DeploySignal = mongoose.model('DeploySignal');
         await DeploySignal.findOneAndUpdate({}, { status: 'live', updatedAt: new Date() }, { upsert: true });
-    } catch (e) {
-        console.warn("⚠️ Signal de déploiement non mis à jour.");
-    }
-}).catch(err => {
-    console.error("❌ Erreur MongoDB :", err.message);
-});
+    } catch (e) {}
+}).catch(err => console.error("❌ MongoDB Error:", err.message));
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
@@ -48,10 +44,10 @@ app.get('/api/deploy-status', async (req, res) => {
 
 // 4. ARCHITECTURE PAR DOMAINE (ZÉRO POROSITÉ)
 app.use('/api/auth', require('./features/auth/auth.routes'));
+app.use('/api/admin', require('./features/admin/admin.routes')); 
 app.use('/api/games', require('./features/games/games.routes'));
 app.use('/api/scans', require('./features/scans/scans.routes'));
 app.use('/api/homework', require('./features/homework/homework.routes'));
-app.use('/api', require('./features/admin/admin.routes')); 
 
 // 5. GESTION FRONTEND
 const distPath = path.join(process.cwd(), 'client', 'dist');
@@ -63,6 +59,4 @@ if (fs.existsSync(distPath)) {
     });
 }
 
-app.listen(port, () => {
-    console.log(`🚀 SERVEUR PRÊT : PORT ${port} (BOOT:${SERVER_BOOT_ID})`);
-});
+app.listen(port, () => console.log(`🚀 SERVEUR PRÊT : PORT ${port} (BOOT:${SERVER_BOOT_ID})`));
