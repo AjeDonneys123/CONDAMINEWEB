@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 
 const COLOR_PALETTE = [
-    '#ef4444', // Rouge
-    '#3b82f6', // Bleu
-    '#22c55e', // Vert
-    '#f59e0b', // Ambre
+    '#ef4444', // Rouge (Histoire)
+    '#3b82f6', // Bleu (Géo)
+    '#22c55e', // Vert (EMC)
+    '#f97316', // Orange
     '#8b5cf6', // Violet
     '#ec4899', // Rose
     '#06b6d4', // Cyan
-    '#f97316'  // Orange
+    '#f59e0b'  // Ambre
 ];
 
 export default function ProfStudioFolder({ 
@@ -46,10 +46,18 @@ export default function ProfStudioFolder({
         } catch(e) { console.error("Erreur Synchro Matières:", e); }
     };
 
+    // ACTION : Ré-attribuer des couleurs différentes à tout le monde
+    const autoColorize = () => {
+        const newSections = sections.map((s, i) => ({
+            ...s,
+            color: COLOR_PALETTE[i % COLOR_PALETTE.length]
+        }));
+        saveSections(newSections);
+    };
+
     const handleAddSection = () => {
         const n = prompt("Nom de la nouvelle matière ?");
         if (!n) return;
-        // Attribution d'une couleur différente basée sur le nombre de sections actuelles
         const newColor = COLOR_PALETTE[sections.length % COLOR_PALETTE.length];
         saveSections([...sections, { name: n, color: newColor }]);
     };
@@ -64,7 +72,6 @@ export default function ProfStudioFolder({
             if (res.ok) {
                 setMovingId(null);
                 if (onNotify) onNotify({ message: `Dossier reclassé en ${newSubject}` });
-                // CORRECTIF : Au lieu de window.location.reload(), on utilise onRefresh()
                 if (onRefresh) onRefresh();
             }
         } catch (e) { console.error(e); }
@@ -116,7 +123,7 @@ export default function ProfStudioFolder({
                                     <div className="max-h-[200px] overflow-y-auto custom-scrollbar">
                                         {sections.map(s => (
                                             <button key={s.name} onClick={() => moveChapter(chap._id, s.name)} className="w-full text-left p-3 hover:bg-indigo-50 rounded-xl text-[10px] font-bold text-slate-600 flex items-center gap-3 transition-colors">
-                                                <span className="w-3 h-3 rounded-full shadow-sm" style={{ background: s.color }}></span> 
+                                                <span className="w-3 h-3 rounded-full shadow-sm flex-shrink-0" style={{ background: s.color }}></span> 
                                                 <span className="truncate">{s.name}</span>
                                             </button>
                                         ))}
@@ -147,6 +154,7 @@ export default function ProfStudioFolder({
 
     return (
         <div className="max-w-5xl mx-auto space-y-12 pb-20">
+            {/* CARRE NOIR : CONFIGURATION ET ARCHIVES */}
             <div className="p-8 bg-slate-900 rounded-[50px] border-4 border-slate-800 shadow-2xl">
                 <div className="flex justify-between items-center mb-8 px-2">
                     <h3 className="text-white font-black text-[10px] uppercase tracking-widest flex items-center gap-2">
@@ -154,6 +162,9 @@ export default function ProfStudioFolder({
                         Configuration & Archives
                     </h3>
                     <div className="flex gap-2">
+                        {isDeleteMode && (
+                            <button onClick={autoColorize} className="bg-emerald-600 text-white px-5 py-2 rounded-2xl font-black text-[9px] uppercase hover:bg-emerald-500 shadow-lg">🎨 Couleurs Auto</button>
+                        )}
                         <button onClick={handleAddSection} className="bg-indigo-600 text-white px-5 py-2 rounded-2xl font-black text-[9px] uppercase hover:bg-indigo-500 shadow-lg">+ Nouvelle Matière</button>
                         <button onClick={() => setIsDeleteMode(!isDeleteMode)} className={`px-5 py-2 rounded-2xl font-black text-[9px] uppercase transition-colors ${isDeleteMode ? 'bg-red-500 text-white' : 'bg-slate-700 text-slate-300'}`}>{isDeleteMode ? 'Quitter Edition' : 'Gérer Matières'}</button>
                     </div>
@@ -165,7 +176,7 @@ export default function ProfStudioFolder({
                         if (!isDeleteMode && archs.length === 0) return null;
 
                         return (
-                            <div key={s.name} className="bg-slate-800/40 p-4 rounded-[30px] border border-slate-700 animate-in fade-in relative group">
+                            <div key={s.name} className="bg-slate-800/40 p-4 rounded-[30px] border border-slate-700 animate-in fade-in relative group" style={{ borderColor: s.color + '44' }}>
                                 <h4 className="font-black text-[9px] uppercase tracking-widest mb-4 flex justify-between items-center" style={{ color: s.color }}>
                                     {s.name}
                                     {isDeleteMode && <button onClick={() => saveSections(sections.filter(x => x.name !== s.name))} className="text-red-500 font-black hover:scale-125 transition-transform">✕</button>}
@@ -202,6 +213,7 @@ export default function ProfStudioFolder({
                 </div>
             </div>
 
+            {/* ZONES ACTIVES PAR MATIÈRE */}
             <div className="space-y-16">
                 {sections.map(s => {
                     const chaps = activeChapters.filter(c => c.subject === s.name);
