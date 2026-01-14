@@ -10,15 +10,19 @@ router.patch('/teacher/:id/sections', async (req, res) => {
         const { sections, className } = req.body;
         const Teacher = mongoose.model('Teacher');
         
+        // 1. Sauvegarde BDD ferme
         const updatedTeacher = await Teacher.findByIdAndUpdate(
             req.params.id, 
             { subjectSections: sections }, 
             { new: true }
         );
 
-        // On renvoie un chemin de test pour le bandeau
-        const lastSection = sections[sections.length - 1]?.name || "MATIERE";
-        const drivePath = `CONDACLASSE / JEAN VUILLET / ${className || '...'} / DEVOIRS / ${lastSection.toUpperCase()}`;
+        // 2. Drive en tâche de fond pour ne pas faire attendre le prof
+        if (className && sections.length > 0) {
+            const hwRootId = await DriveService.getHomeworkRoot(className);
+            const lastAdded = sections[sections.length - 1];
+            await DriveService.getOrCreateFolder(normalize(lastAdded.name), hwRootId);
+        }
 
         res.json({
             user: {
@@ -28,8 +32,7 @@ router.patch('/teacher/:id/sections', async (req, res) => {
                 subjectSections: updatedTeacher.subjectSections,
                 role: 'prof'
             },
-            message: "Matières mises à jour",
-            drivePath: drivePath
+            message: "Matières mises à jour."
         });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -38,24 +41,16 @@ router.post('/chapters', async (req, res) => {
     try {
         const Chapter = mongoose.model('Chapter');
         const { _id, title, classroom, subject } = req.body;
-        
-        // SYNC DRIVE
         const hwRootId = await DriveService.getHomeworkRoot(classroom);
         const subId = await DriveService.getOrCreateFolder(normalize(subject), hwRootId);
         const driveId = await DriveService.getOrCreateFolder(normalize(title), subId);
-
         let result;
         if (_id && mongoose.Types.ObjectId.isValid(_id)) {
             result = await Chapter.findByIdAndUpdate(_id, { ...req.body, driveFolderId: driveId }, { new: true });
         } else {
             result = await Chapter.create({ ...req.body, driveFolderId: driveId, isArchived: false });
         }
-
-        res.json({
-            ...result._doc,
-            drivePath: `... / Devoirs / ${subject.toUpperCase()} / ${title.toUpperCase()}`,
-            message: "Chapitre créé et synchronisé"
-        });
+        res.json(result);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

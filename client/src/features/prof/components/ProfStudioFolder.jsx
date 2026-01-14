@@ -13,11 +13,9 @@ export default function ProfStudioFolder({
     const norm = (c) => c?.toString().toUpperCase().replace('E', '').trim() || "";
     const smartSort = (a, b) => (a.title || "").localeCompare(b.title || "", undefined, { numeric: true, sensitivity: 'base' });
 
-    // Synchronisation vitale de l'état local avec les données utilisateur
+    // Initialisation
     useEffect(() => { 
-        if (user?.subjectSections) {
-            setSections(user.subjectSections);
-        }
+        if (user?.subjectSections) setSections(user.subjectSections);
     }, [user]);
 
     const saveSections = async (newSections) => {
@@ -29,35 +27,14 @@ export default function ProfStudioFolder({
                 body: JSON.stringify({ sections: newSections, className: classFilter })
             });
             const data = await res.json();
-            
             if (res.ok && data.user) {
-                // 1. Mise à jour immédiate du LocalStorage (Tue les fantômes)
                 localStorage.setItem('player', JSON.stringify(data.user));
-                
-                // 2. Mise à jour de l'état local pour l'affichage
                 setSections(data.user.subjectSections);
-                
-                if (onNotify) onNotify({ message: data.message, drivePath: data.drivePath });
+                if (onNotify) onNotify(data);
             }
-        } catch(e) { console.error("Erreur de synchronisation BDD:", e); }
+        } catch(e) { console.error("Erreur Synchro:", e); }
     };
 
-    const handleAddSection = () => {
-        const name = prompt("Nom de la nouvelle matière ?");
-        if (!name) return;
-
-        const cleanName = name.trim();
-        // ANTI-DOUBLON
-        if (sections.some(s => s.name.toUpperCase() === cleanName.toUpperCase())) {
-            alert("Cette matière existe déjà !");
-            return;
-        }
-
-        const newSections = [...sections, { name: cleanName, color: '#3b82f6' }];
-        saveSections(newSections);
-    };
-
-    // --- FILTRAGE DES DONNÉES ---
     const activeChapters = chapters
         .filter(c => !c.isArchived && norm(c.classroom) === norm(classFilter))
         .sort(smartSort);
@@ -65,13 +42,20 @@ export default function ProfStudioFolder({
     const archivedChapters = chapters
         .filter(c => c.isArchived && norm(c.classroom) === norm(classFilter));
 
-    // US #3 : Correction de la visibilité pour éviter l'effet "disparition"
-    // On montre les sections si : Mode Gérer OU elle a des chapitres
-    const visibleSections = sections.filter(s => 
-        isDeleteMode || 
-        activeChapters.some(c => c.subject === s.name) ||
-        archivedChapters.some(c => c.subject === s.name)
-    );
+    // --- LOGIQUE DE VISIBILITÉ (FIX GÉOGRAPHIE VIDE) ---
+    const getVisibleSections = () => {
+        // En mode "GÉRER", on affiche absolument toutes les matières du prof
+        if (isDeleteMode) return sections;
+
+        // Sinon, on n'affiche que celles qui ont au moins un chapitre actif
+        const list = sections.filter(s => activeChapters.some(c => c.subject === s.name));
+        
+        // Ajout de "Autres" si des chapitres traînent sans matière
+        if (activeChapters.some(c => c.subject === "Autres")) {
+            list.push({ name: 'Autres', color: '#64748b' });
+        }
+        return list;
+    };
 
     const renderChapterCard = (chap, section) => {
         const isOpen = openChaps[chap._id];
@@ -81,7 +65,7 @@ export default function ProfStudioFolder({
         const chapItems = items.filter(it => String(it.chapterId) === String(chap._id));
 
         return (
-            <div key={chap._id} className="bg-white rounded-[35px] border-2 shadow-sm overflow-hidden transition-all mb-3" style={{ borderColor: isOpen ? color : '#f8fafc' }}>
+            <div key={chap._id} className="bg-white rounded-[35px] border-2 shadow-sm overflow-hidden transition-all mb-3 animate-in fade-in" style={{ borderColor: isOpen ? color : '#f1f5f9' }}>
                 <div className="p-4 flex items-center justify-between">
                     <div className="flex items-center gap-4 flex-1 cursor-pointer" onClick={() => setOpenChaps({...openChaps, [chap._id]: !isOpen})}>
                         <div className="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-white text-sm relative" style={{ backgroundColor: color }}>{letter}</div>
@@ -95,9 +79,9 @@ export default function ProfStudioFolder({
                         </div>
                     </div>
                     <div className="flex gap-1">
-                        <button onClick={(e) => { e.stopPropagation(); setEditingId(chap._id); setTempTitle(chap.title); }} className="w-8 h-8 flex items-center justify-center bg-slate-50 text-slate-300 rounded-full hover:text-indigo-500 transition-colors">✏️</button>
-                        <button onClick={(e) => { e.stopPropagation(); onArchive(chap._id, !chap.isArchived); }} className="w-8 h-8 flex items-center justify-center bg-slate-50 text-slate-300 rounded-full hover:bg-slate-800 hover:text-white transition-colors">📦</button>
-                        <button onClick={(e) => { e.stopPropagation(); onDeleteChapter(chap._id); }} className="w-8 h-8 flex items-center justify-center bg-red-50 text-red-300 rounded-full font-black hover:bg-red-500 hover:text-white transition-colors">✕</button>
+                        <button onClick={(e) => { e.stopPropagation(); setEditingId(chap._id); setTempTitle(chap.title); }} className="w-8 h-8 flex items-center justify-center bg-slate-50 text-slate-300 rounded-full hover:text-indigo-500">✏️</button>
+                        <button onClick={(e) => { e.stopPropagation(); onArchive(chap._id, !chap.isArchived); }} className="w-8 h-8 flex items-center justify-center bg-slate-50 text-slate-300 rounded-full hover:bg-slate-800 hover:text-white">📦</button>
+                        <button onClick={(e) => { e.stopPropagation(); onDeleteChapter(chap._id); }} className="w-8 h-8 flex items-center justify-center bg-red-50 text-red-300 rounded-full font-black hover:bg-red-500">✕</button>
                     </div>
                 </div>
                 {isOpen && (
@@ -114,9 +98,11 @@ export default function ProfStudioFolder({
         );
     };
 
+    const visibleSections = getVisibleSections();
+
     return (
         <div className="max-w-5xl mx-auto space-y-12 pb-20">
-            {/* CARRE NOIR : TOUJOURS LÀ POUR PILOTER */}
+            {/* CARRE NOIR : CONFIGURATION ET ARCHIVES */}
             <div className="p-8 bg-slate-900 rounded-[50px] border-4 border-slate-800 shadow-2xl">
                 <div className="flex justify-between items-center mb-8 px-2">
                     <h3 className="text-white font-black text-[10px] uppercase tracking-widest flex items-center gap-2">
@@ -124,15 +110,17 @@ export default function ProfStudioFolder({
                         Configuration des Matières
                     </h3>
                     <div className="flex gap-2">
-                        <button onClick={handleAddSection} className="bg-indigo-600 text-white px-5 py-2 rounded-2xl font-black text-[9px] uppercase hover:bg-indigo-500 shadow-lg">+ Nouvelle</button>
+                        <button onClick={() => { const n = prompt("Nom de la matière ?"); if(n) saveSections([...sections, {name:n, color:'#3b82f6'}]); }} className="bg-indigo-600 text-white px-5 py-2 rounded-2xl font-black text-[9px] uppercase hover:bg-indigo-500 shadow-lg">+ Nouvelle</button>
                         <button onClick={() => setIsDeleteMode(!isDeleteMode)} className={`px-5 py-2 rounded-2xl font-black text-[9px] uppercase transition-colors ${isDeleteMode ? 'bg-red-500 text-white' : 'bg-slate-700 text-slate-300'}`}>{isDeleteMode ? 'Terminer' : 'Gérer'}</button>
                     </div>
                 </div>
                 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    {/* On affiche TOUTES les sections quand on est en mode GÉRER */}
-                    {(isDeleteMode ? sections : sections.filter(s => archivedChapters.some(c => c.subject === s.name))).map(s => {
-                        const archs = archivedChapters.filter(c => c.subject === s.name);
+                    {sections.map(s => {
+                        const archs = archivedChapters.filter(c => c.subject === s.name && norm(c.classroom) === norm(classFilter));
+                        // On n'affiche dans le carré noir que si archives OU mode gestion
+                        if (!isDeleteMode && archs.length === 0) return null;
+
                         return (
                             <div key={s.name} className="bg-slate-800/40 p-4 rounded-[30px] border border-slate-700 animate-in fade-in relative group">
                                 <h4 className="font-black text-[9px] uppercase tracking-widest mb-4 flex justify-between items-center" style={{ color: s.color }}>
@@ -154,25 +142,19 @@ export default function ProfStudioFolder({
                 </div>
             </div>
 
-            {/* ZONES ACTIVES */}
+            {/* ZONES ACTIVES : C'est ici qu'on débloque la création */}
             <div className="space-y-16">
-                {visibleSections.map(s => {
-                    const chapsInSection = activeChapters.filter(c => c.subject === s.name);
-                    // En mode normal, si pas de chapitre, on n'affiche pas la zone de création
-                    if (!isDeleteMode && chapsInSection.length === 0) return null;
-
-                    return (
-                        <div key={'active-' + s.name} className="animate-in fade-in">
-                            <div className="flex items-center justify-between mb-4 px-6 border-b border-slate-100 pb-4">
-                                <h3 className="font-black text-base uppercase tracking-widest text-left" style={{ color: s.color }}>{s.name}</h3>
-                                <button onClick={() => { const n = prompt(`Nom du dossier dans ${s.name} ?`); if(n) onCreateChapter(s.name, n); }} className="text-[9px] font-black px-6 py-2 rounded-full border-2 border-dashed hover:bg-white transition-colors" style={{ color: s.color, borderColor: s.color }}>+ CRÉER</button>
-                            </div>
-                            <div className="grid grid-cols-1 gap-1">
-                                {chapsInSection.map(chap => renderChapterCard(chap, s))}
-                            </div>
+                {visibleSections.map(s => (
+                    <div key={'active-' + s.name} className="animate-in fade-in">
+                        <div className="flex items-center justify-between mb-4 px-6 border-b border-slate-100 pb-4">
+                            <h3 className="font-black text-base uppercase tracking-widest text-left" style={{ color: s.color }}>{s.name}</h3>
+                            <button onClick={() => { const n = prompt(`Nom du dossier dans ${s.name} ?`); if(n) onCreateChapter(s.name, n); }} className="text-[9px] font-black px-6 py-2 rounded-full border-2 border-dashed hover:bg-white transition-colors" style={{ color: s.color, borderColor: s.color }}>+ CRÉER</button>
                         </div>
-                    );
-                })}
+                        <div className="grid grid-cols-1 gap-1">
+                            {activeChapters.filter(c => c.subject === s.name).map(chap => renderChapterCard(chap, s))}
+                        </div>
+                    </div>
+                ))}
             </div>
         </div>
     );
