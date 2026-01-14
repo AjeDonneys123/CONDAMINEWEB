@@ -6,96 +6,86 @@ const DriveService = require('../../services/drive.service');
 
 const upload = multer({ storage: multer.memoryStorage() });
 
-const normalize = (n) => n ? n.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Z0-9 ]/g, "_").trim() : "SANS_TITRE";
+// Normalisation stricte (US #5)
+const normalize = (n) => n ? n.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Z0-9]/g, "_").trim() : "SANS_TITRE";
 
 /**
- * 📄 DOMAINE : HOMEWORK (SYNC DRIVE V3)
+ * 📄 DOMAINE : HOMEWORK (LOGIQUE IDENTIQUE AUX SCANS)
  */
 
+// SAUVEGARDE + CRÉATION STRUCTURE DRIVE (US #4 & #7)
 router.post('/', async (req, res) => {
     try {
         const Homework = mongoose.model('Homework');
-        const Chapter = mongoose.model('Chapter');
-        const { _id, chapterId, title, classroom } = req.body;
+        const { _id, title, classroom, chapterId } = req.body;
 
-        let homeworkDriveId = null;
-
-        // 1. RECONSTRUCTION DU CHEMIN PHYSIQUE DRIVE
-        if (chapterId && chapterId !== 'none') {
-            const chapter = await Chapter.findById(chapterId);
-            if (chapter) {
-                const subName = chapter.subject === 'H' ? 'HISTOIRE' : chapter.subject === 'G' ? 'GEOGRAPHIE' : chapter.subject === 'E' ? 'EMC' : normalize(chapter.subject);
-                
-                // On synchronise toute l'arborescence
-                const path = ["CONDACLASSE", normalize(classroom), subName, chapter.title, title];
-                homeworkDriveId = await DriveService.syncPath(path);
-
-                // On s'assure que les dossiers techniques existent
-                if (homeworkDriveId) {
-                    await DriveService.getOrCreateFolder("SUJET", homeworkDriveId);
-                    await DriveService.getOrCreateFolder("COPIES", homeworkDriveId);
-                    await DriveService.getOrCreateFolder("CORRECTIONS", homeworkDriveId);
-                }
-
-                // On met à jour l'ID Drive du chapitre s'il était manquant
-                if (!chapter.driveFolderId) {
-                    // On récupère l'ID du dossier chapitre (l'avant-dernier du chemin)
-                    const chapterPath = ["CONDACLASSE", normalize(classroom), subName, chapter.title];
-                    chapter.driveFolderId = await DriveService.syncPath(chapterPath);
-                    await chapter.save();
-                }
-            }
+        // 1. On crée/récupère le devoir en BDD
+        let homework;
+        if (_id && mongoose.Types.ObjectId.isValid(_id)) {
+            homework = await Homework.findByIdAndUpdate(_id, req.body, { new: true });
+        } else {
+            homework = await Homework.create(req.body);
         }
 
-        // 2. SAUVEGARDE BDD
-        const payload = { ...req.body, driveFolderId: homeworkDriveId };
-        const result = _id ? await Homework.findByIdAndUpdate(_id, payload, { new: true }) : await Homework.create(payload);
-
-        // 3. DISTRIBUTION (RACCOURCIS)
-        if (req.body.targetPlayerIds?.length > 0 && homeworkDriveId) {
-            const Player = mongoose.model('Player');
-            const rootId = await DriveService.getOrCreateFolder("CONDACLASSE", null);
-            const classId = await DriveService.getOrCreateFolder(normalize(classroom), rootId);
-            const elevesRootId = await DriveService.getOrCreateFolder("ELEVES", classId);
-
-            for (const pId of req.body.targetPlayerIds) {
-                const student = await Player.findById(pId);
-                if (student) {
-                    const studentFolderId = await DriveService.getOrCreateFolder(normalize(`${student.lastName}_${student.firstName}`), elevesRootId);
-                    const studentHwFolderId = await DriveService.getOrCreateFolder("DEVOIRS", studentFolderId);
-                    await DriveService.createShortcut(homeworkDriveId, studentHwFolderId, title);
-                }
+        // 2. LOGIQUE DRIVE (Copie conforme de ScanSession)
+        // Si le dossier Drive n'existe pas encore, on le génère
+        if (!homework.driveFolderId) {
+            const condaRootId = await DriveService.getOrCreateFolder("CONDACLASSE", null);
+            const classFolderId = await DriveService.getOrCreateFolder(normalize(classroom), condaRootId);
+            
+            // On vérifie si on doit le mettre dans un chapitre
+            let parentId = classFolderId;
+            if (chapterId) {
+                const chapter = await mongoose.model('Chapter').findById(chapterId);
+                if (chapter?.driveFolderId) parentId = chapter.driveFolderId;
             }
+
+            // Création de la racine du devoir
+            const hwFolderId = await DriveService.getOrCreateFolder(normalize(title), parentId);
+            
+            // Création des 3 tiroirs standards (US #4)
+            const subjectId = await DriveService.getOrCreateFolder("SUJET", hwFolderId);
+            const copiesId = await DriveService.getOrCreateFolder("COPIES", hwFolderId);
+            const correctionsId = await DriveService.getOrCreateFolder("CORRECTIONS", hwFolderId);
+
+            // Mise à jour finale de l'objet
+            homework = await Homework.findByIdAndUpdate(homework._id, {
+                driveFolderId: hwFolderId,
+                subjectFolderId: subjectId,
+                copiesFolderId: copiesId,
+                correctionsFolderId: correctionsId
+            }, { new: true });
         }
 
-        res.json(result);
+        res.json(homework);
     } catch (e) {
-        console.error("❌ [HOMEWORK] Sync Crash:", e.message);
+        console.error("❌ [HOMEWORK] Erreur Sauvegarde:", e.message);
         res.status(500).json({ error: e.message });
     }
 });
 
-// Upload direct avec reconstruction du chemin
+// UPLOAD DE DOCUMENT (POST /api/homework/upload-to-drive)
 router.post('/upload-to-drive', upload.single('file'), async (req, res) => {
     try {
-        const { classroom, title, type, chapterId } = req.body;
-        const Chapter = mongoose.model('Chapter');
+        const { homeworkId, type } = req.body; // type = 'doc' ou 'qimg'
+        const homework = await mongoose.model('Homework').findById(homeworkId);
         
-        let path = ["CONDACLASSE", normalize(classroom)];
-        
-        const chapter = await Chapter.findById(chapterId);
-        if (chapter) {
-            const subName = chapter.subject === 'H' ? 'HISTOIRE' : chapter.subject === 'G' ? 'GEOGRAPHIE' : 'EMC';
-            path.push(subName, chapter.title, title, "SUJET");
-        } else {
-            path.push("DEVOIRS_LIBRES", title, "SUJET");
+        if (!homework || !homework.subjectFolderId) {
+            return res.status(400).json({ error: "Le dossier Drive n'est pas encore initialisé." });
         }
 
-        const targetFolderId = await DriveService.syncPath(path);
-        const file = await DriveService.uploadFile(targetFolderId, `${type.toUpperCase()}_${Date.now()}.jpg`, req.file.buffer, req.file.mimetype);
+        // Upload physique dans le tiroir SUJET (Comme dans les Scans)
+        const file = await DriveService.uploadFile(
+            homework.subjectFolderId, 
+            `${type.toUpperCase()}_${Date.now()}.jpg`, 
+            req.file.buffer, 
+            req.file.mimetype
+        );
 
-        res.json({ ok: true, imageUrl: file.url, driveId: file.id });
-    } catch (e) { res.status(500).json({ error: e.message }); }
+        res.json({ ok: true, imageUrl: file.url });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 });
 
 router.get('/all', async (req, res) => {
