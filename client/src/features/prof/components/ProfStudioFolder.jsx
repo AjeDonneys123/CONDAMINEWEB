@@ -17,6 +17,20 @@ export default function ProfStudioFolder({
         if (user?.subjectSections) setSections(user.subjectSections);
     }, [user]);
 
+    const saveSections = async (newSections) => {
+        const uid = user?.id || user?._id;
+        setSections(newSections);
+        try {
+            await fetch(`/api/teacher/${uid}/sections`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sections: newSections })
+            });
+            const updatedUser = { ...user, subjectSections: newSections };
+            localStorage.setItem('player', JSON.stringify(updatedUser));
+        } catch(e) { console.error(e); }
+    };
+
     const activeChapters = chapters
         .filter(c => !c.isArchived && norm(c.classroom) === norm(classFilter))
         .sort(smartSort);
@@ -25,6 +39,7 @@ export default function ProfStudioFolder({
         .filter(c => c.isArchived && norm(c.classroom) === norm(classFilter))
         .sort(smartSort);
 
+    // US #3 : Visibilité sélective
     const visibleSections = isDeleteMode ? sections : sections.filter(s => activeChapters.some(c => c.subject === s.name));
 
     const renderChapterCard = (chap, section) => {
@@ -70,11 +85,13 @@ export default function ProfStudioFolder({
 
     return (
         <div className="max-w-5xl mx-auto space-y-12 pb-20">
+            {/* CARRE NOIR : CONFIGURATION DES MATIÈRES */}
             <div className="p-8 bg-slate-900 rounded-[50px] border-4 border-slate-800 shadow-2xl">
                 <div className="flex justify-between items-center mb-8 px-2">
                     <h3 className="text-white font-black text-[10px] uppercase tracking-widest">📂 Configuration des Matières</h3>
                     <div className="flex gap-2">
-                        <button onClick={() => setIsDeleteMode(!isDeleteMode)} className={`px-5 py-2 rounded-2xl font-black text-[9px] uppercase transition-colors ${isDeleteMode ? 'bg-red-500 text-white' : 'bg-slate-700 text-slate-300'}`}>Gérer</button>
+                        <button onClick={() => { const n = prompt("Nom de la matière ?"); if(n) saveSections([...sections, {name:n, color:'#3b82f6'}]); }} className="bg-indigo-600 text-white px-5 py-2 rounded-2xl font-black text-[9px] uppercase hover:bg-indigo-500 shadow-lg">+ Nouvelle</button>
+                        <button onClick={() => setIsDeleteMode(!isDeleteMode)} className={`px-5 py-2 rounded-2xl font-black text-[9px] uppercase transition-colors ${isDeleteMode ? 'bg-red-500 text-white' : 'bg-slate-700 text-slate-300'}`}>{isDeleteMode ? 'Terminer' : 'Gérer'}</button>
                     </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -82,8 +99,20 @@ export default function ProfStudioFolder({
                         const archs = archivedChapters.filter(c => c.subject === s.name);
                         if (!isDeleteMode && archs.length === 0) return null;
                         return (
-                            <div key={s.name} className="bg-slate-800/40 p-4 rounded-[30px] border border-slate-700 animate-in fade-in">
-                                <h4 className="font-black text-[9px] uppercase tracking-widest mb-4" style={{ color: s.color }}>{s.name}</h4>
+                            <div key={s.name} className="bg-slate-800/40 p-4 rounded-[30px] border border-slate-700 animate-in fade-in relative">
+                                <h4 className="font-black text-[9px] uppercase tracking-widest mb-4 flex justify-between items-center" style={{ color: s.color }}>
+                                    {s.name}
+                                    {/* RÉTABLISSEMENT DE LA CROIX DE SUPPRESSION (ZÉRO POROSITÉ) */}
+                                    {isDeleteMode && (
+                                        <button 
+                                            onClick={() => { if(confirm(`Supprimer la matière ${s.name} ?`)) saveSections(sections.filter(x => x.name !== s.name)); }}
+                                            className="text-red-500 font-black hover:scale-125 transition-transform p-1"
+                                            title="Supprimer la matière"
+                                        >
+                                            ✕
+                                        </button>
+                                    )}
+                                </h4>
                                 <div className="space-y-2">
                                     {archs.map(c => (
                                         <div key={c._id} className="bg-slate-800/80 p-2 px-3 rounded-xl flex justify-between items-center border border-slate-700/50">
@@ -98,6 +127,7 @@ export default function ProfStudioFolder({
                 </div>
             </div>
 
+            {/* DOSSIERS ACTIFS */}
             <div className="space-y-16">
                 {visibleSections.map(s => (
                     <div key={'active-' + s.name} className="animate-in fade-in">
