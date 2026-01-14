@@ -9,13 +9,12 @@ export default function ScansStudio({ globalClass, user }) {
     const [activeTab, setActiveTab] = useState('subject'); 
     const [newTitle, setNewTitle] = useState("");
     const [loading, setLoading] = useState(false);
-    const [showFolderPicker, setShowFolderPicker] = useState(null);
-    const [driveFiles, setDriveFiles] = useState({ list: [], loading: false });
 
     const loadData = async () => {
         try {
+            // ALIGNEMENT : Appel de /api/scans/sessions (et non /api/scan-sessions)
             const [sRes, cRes] = await Promise.all([
-                fetch('/api/scan-sessions'),
+                fetch('/api/scans/sessions'),
                 fetch('/api/chapters-all')
             ]);
             if (sRes.ok) setSessions(await sRes.json());
@@ -25,22 +24,10 @@ export default function ScansStudio({ globalClass, user }) {
 
     useEffect(() => { loadData(); }, [globalClass]);
 
-    const syncDrive = async () => {
-        if(!confirm("Réorganiser ton Drive ?")) return;
-        setLoading(true);
-        try {
-            const res = await fetch('/api/init-all-folders');
-            const data = await res.json();
-            alert("✅ " + data.message);
-            loadData();
-        } catch (e) { alert("❌ Erreur"); }
-        setLoading(false);
-    };
-
     const createSession = async () => {
         if (!newTitle.trim() || loading) return;
         setLoading(true);
-        const res = await fetch('/api/scan-sessions', {
+        const res = await fetch('/api/scans/sessions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ title: newTitle, classroom: globalClass })
@@ -49,28 +36,19 @@ export default function ScansStudio({ globalClass, user }) {
         setLoading(false);
     };
 
-    const handleAssign = async (sessionId, chapterId) => {
-        await fetch(`/api/scan-sessions/${sessionId}/assign-chapter`, {
-            method: 'PATCH',
-            headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({ chapterId })
-        });
-        setShowFolderPicker(null);
-        setActiveMode('upload');
-        loadData();
-    };
-
     const normalize = (c) => c?.toString().toUpperCase().replace('E', '') || "";
     const filteredSessions = sessions.filter(s => normalize(s.classroom) === normalize(globalClass));
-    const availableChapters = chapters.filter(c => normalize(c.classroom) === normalize(globalClass) && !c.isArchived);
-    const sections = user?.subjectSections || [];
 
     return (
         <div className="space-y-4 animate-in fade-in">
             <div className="bg-white p-3 rounded-[22px] border-2 border-indigo-50 shadow-sm flex items-center gap-2">
-                <input className="flex-1 px-4 py-3 bg-slate-50 rounded-xl outline-none font-bold text-xs" placeholder="Nom de la production..." value={newTitle} onChange={e=>setNewTitle(e.target.value)} />
+                <input 
+                    className="flex-1 px-4 py-3 bg-slate-50 rounded-xl outline-none font-bold text-xs" 
+                    placeholder="Nom de la production..." 
+                    value={newTitle} 
+                    onChange={e=>setNewTitle(e.target.value)} 
+                />
                 <button onClick={createSession} disabled={loading} className="px-5 py-3 bg-indigo-600 text-white rounded-xl font-black uppercase text-[10px]">Créer</button>
-                <button onClick={syncDrive} disabled={loading} className="w-12 h-11 flex items-center justify-center bg-indigo-50 text-indigo-600 rounded-xl border border-indigo-100 hover:bg-indigo-600 hover:text-white transition-all">🔄</button>
             </div>
 
             <div className="space-y-2">
@@ -86,42 +64,18 @@ export default function ScansStudio({ globalClass, user }) {
                                 </div>
                                 <div className="flex items-center gap-1">
                                     <button onClick={() => { setOpenId(s._id); setActiveMode('upload'); }} className={`tool-btn ${isOpen && activeMode === 'upload' ? 'active-upload' : ''}`}>SNAP</button>
-                                    <button onClick={() => { setOpenId(s._id); setActiveMode('files'); }} className={`tool-btn ${isOpen && activeMode === 'files' ? 'active-files' : ''}`}>FILES</button>
-                                    <button onClick={() => { setOpenId(s._id); setShowFolderPicker(s._id); setActiveMode('class'); }} className={`tool-btn ${isOpen && activeMode === 'class' ? 'active-class' : ''}`}>CLASS</button>
                                     <button onClick={() => { setOpenId(s._id); setActiveMode('ia'); }} className={`tool-btn ${isOpen && activeMode === 'ia' ? 'active-ia' : ''}`}>IA</button>
-                                    <button onClick={async () => { if(confirm("Supprimer ?")) { await fetch(`/api/scan-sessions/${s._id}`, {method:'DELETE'}); loadData(); } }} className="tool-btn-danger">✕</button>
+                                    <button onClick={async () => { if(confirm("Supprimer ?")) { await fetch(`/api/scans/${s._id}`, {method:'DELETE'}); loadData(); } }} className="tool-btn-danger">✕</button>
                                 </div>
                             </div>
 
                             {isOpen && (
                                 <div className="border-t border-slate-100 p-3 bg-slate-50/30">
-                                    {activeMode === 'class' ? (
-                                        <div className="animate-in zoom-in p-2">
-                                            <p className="text-[9px] font-black text-indigo-400 uppercase mb-4 text-center">Classer dans un dossier actif :</p>
-                                            <div className="space-y-4">
-                                                {sections.map(sec => {
-                                                    const chaps = availableChapters.filter(c => c.subject === sec.name);
-                                                    if (chaps.length === 0) return null;
-                                                    return (
-                                                        <div key={sec.name}>
-                                                            <div className="text-[8px] font-black uppercase mb-2 px-2" style={{ color: sec.color }}>{sec.name}</div>
-                                                            <div className="flex flex-wrap gap-2">
-                                                                {chaps.map(c => <button key={c._id} onClick={() => handleAssign(s._id, c._id)} className="px-3 py-2 bg-white border-2 border-slate-100 rounded-xl text-[10px] font-bold text-slate-600">📁 {c.title}</button>)}
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <>
-                                            <div className="flex gap-1 mb-4 bg-white/60 p-1 rounded-xl shadow-inner">
-                                                <button onClick={() => setActiveTab('subject')} className={`sub-tab ${activeTab === 'subject' ? 'active' : ''}`}>SUJET</button>
-                                                <button onClick={() => setActiveTab('copies')} className={`sub-tab ${activeTab === 'copies' ? 'active' : ''}`}>COPIES</button>
-                                            </div>
-                                            <PilotSnap session={s} type={activeTab} onRefresh={loadData} />
-                                        </>
-                                    )}
+                                    <div className="flex gap-1 mb-4 bg-white/60 p-1 rounded-xl shadow-inner">
+                                        <button onClick={() => setActiveTab('subject')} className={`sub-tab ${activeTab === 'subject' ? 'active' : ''}`}>SUJET</button>
+                                        <button onClick={() => setActiveTab('copies')} className={`sub-tab ${activeTab === 'copies' ? 'active' : ''}`}>COPIES</button>
+                                    </div>
+                                    <PilotSnap session={s} type={activeTab} onRefresh={loadData} />
                                 </div>
                             )}
                         </div>
@@ -156,7 +110,7 @@ function PilotSnap({ session, type, onRefresh }) {
         canvas.width = videoRef.current.videoWidth; canvas.height = videoRef.current.videoHeight;
         canvas.getContext('2d').drawImage(videoRef.current, 0, 0);
         const data = canvas.toDataURL('image/jpeg', 0.8);
-        const res = await fetch('/api/scan-upload-photo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: session._id, type: type, imageBase64: data }) });
+        const res = await fetch('/api/scans/upload', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: session._id, type: type, imageBase64: data }) });
         if(res.ok) onRefresh();
         setCapturing(false);
     };
