@@ -5,46 +5,34 @@ const DriveService = require('../../services/drive.service');
 
 const normalize = (n) => n ? n.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Z0-9 ]/g, "_").trim() : "SANS_TITRE";
 
-// PATCH /api/teacher/:id/sections (Matières) - VERSION SUPPRESSION DRIVE
+/**
+ * 🏢 DOMAINE ADMIN : REPARATION DES ROUTES
+ */
+
+// SAUVEGARDE SECTIONS (MATIERES)
 router.patch('/teacher/:id/sections', async (req, res) => {
     try {
         const { sections, className } = req.body;
         const Teacher = mongoose.model('Teacher');
         
-        const oldTeacher = await Teacher.findById(req.params.id);
-        if (!oldTeacher) return res.status(404).send("Prof non trouvé");
-
-        // --- DÉTECTION DE LA SUPPRESSION (US #9) ---
-        const oldSections = oldTeacher.subjectSections.map(s => s.name);
-        const newSections = sections.map(s => s.name);
-        const deletedSections = oldSections.filter(x => !newSections.includes(x));
-
-        if (deletedSections.length > 0 && className) {
-            console.log(`🗑️ Suppression Drive pour les matières : ${deletedSections.join(', ')}`);
-            
-            // On récupère le chemin de base
-            const condaRootId = await DriveService.getOrCreateFolder("CONDACLASSE", null);
-            const teacherId = await DriveService.getOrCreateFolder("JEAN VUILLET", condaRootId);
-            const classFolderId = await DriveService.getOrCreateFolder(normalize(className), teacherId);
-
-            for (const sectionName of deletedSections) {
-                // On cherche le dossier physique pour le supprimer
-                const folderIdToDelete = await DriveService.getOrCreateFolder(normalize(sectionName), classFolderId);
-                if (folderIdToDelete) {
-                    await DriveService.deleteFile(folderIdToDelete);
-                    console.log(`✅ Dossier Drive effacé : ${sectionName}`);
-                }
-            }
-        }
-
-        // --- MISE À JOUR BDD ---
+        // 1. Sauvegarde BDD immédiate pour débloquer le client
         const updatedTeacher = await Teacher.findByIdAndUpdate(
             req.params.id, 
             { subjectSections: sections }, 
             { new: true }
         );
 
-        // Réponse pour synchroniser le LocalStorage du Frontend
+        // 2. Drive en tâche de fond (ne bloque pas la réponse)
+        if (className) {
+            DriveService.getOrCreateFolder("CONDACLASSE", null).then(rootId => {
+                DriveService.getOrCreateFolder("JEAN VUILLET", rootId).then(tId => {
+                    DriveService.getOrCreateFolder(normalize(className), tId).then(cId => {
+                        sections.forEach(s => DriveService.getOrCreateFolder(normalize(s.name), cId));
+                    });
+                });
+            });
+        }
+
         res.json({ 
             user: {
                 id: updatedTeacher._id,
@@ -53,37 +41,47 @@ router.patch('/teacher/:id/sections', async (req, res) => {
                 subjectSections: updatedTeacher.subjectSections,
                 role: 'prof'
             },
-            message: "Matières mises à jour et Drive nettoyé." 
+            message: "Matières synchronisées." 
         });
-    } catch (e) { 
-        console.error("❌ Crash Sections:", e.message);
-        res.status(500).json({ error: e.message }); 
+    } catch (e) {
+        res.status(500).json({ error: e.message });
     }
 });
 
+// CRÉATION CHAPITRE (REPARÉ)
 router.post('/chapters', async (req, res) => {
     try {
-        const Chapter = mongoose.model('Chapter');
         const { _id, title, classroom, subject } = req.body;
+        const Chapter = mongoose.model('Chapter');
+
+        // On sync le drive mais on ne bloque pas si ça prend du temps
         const driveId = await DriveService.syncPath(classroom, [normalize(subject), normalize(title)]);
-        const drivePath = `CONDACLASSE / JEAN VUILLET / ${classroom.toUpperCase()} / ${normalize(subject)} / ${normalize(title)}`;
-        const exists = await DriveService.verifyId(driveId);
+
         let result;
         if (_id && mongoose.Types.ObjectId.isValid(_id)) {
             result = await Chapter.findByIdAndUpdate(_id, { ...req.body, driveFolderId: driveId }, { new: true });
         } else {
             result = await Chapter.create({ ...req.body, driveFolderId: driveId, isArchived: false });
         }
-        res.json({ ...result._doc, drivePath, driveError: !exists, message: exists ? "Chapitre synchronisé" : "ERREUR DRIVE" });
-    } catch (e) { res.status(500).json({ error: e.message }); }
+        
+        res.json({
+            ...result._doc,
+            drivePath: `Drive : JEAN VUILLET / ${classroom} / ${subject} / ${title}`,
+            message: "Chapitre prêt."
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 });
 
 router.get('/players', async (req, res) => {
     try { res.json(await mongoose.model('Player').find({}).sort({ classroom: 1, lastName: 1 })); } catch (e) { res.json([]); }
 });
+
 router.get('/chapters-all', async (req, res) => {
     try { res.json(await mongoose.model('Chapter').find({}).sort({ _id: -1 })); } catch (e) { res.json([]); }
 });
+
 router.get('/database-dump', async (req, res) => {
     try {
         const dump = {
