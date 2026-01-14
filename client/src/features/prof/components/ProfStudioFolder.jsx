@@ -26,28 +26,27 @@ export default function ProfStudioFolder({
                 body: JSON.stringify({ sections: newSections, className: classFilter })
             });
             const data = await res.json();
-            
             if (res.ok && data.user) {
-                // MISE A JOUR DU CACHE POUR TUER LES FANTÔMES
+                // MISE A JOUR DU CACHE POUR ELIMINER LES FANTOMES
                 localStorage.setItem('player', JSON.stringify(data.user));
                 setSections(data.user.subjectSections);
-                if (onNotify) onNotify({ message: data.message, drivePath: `BDD & DRIVE SYNCHRONISÉS` });
+                if (onNotify) onNotify({ message: data.message, drivePath: "BDD & DRIVE SYNCHRONISÉS" });
             }
-        } catch(e) { console.error("Erreur fatale de synchronisation", e); }
+        } catch(e) { console.error("Erreur Synchro:", e); }
     };
 
     const activeChapters = chapters
         .filter(c => !c.isArchived && norm(c.classroom) === norm(classFilter))
         .sort(smartSort);
 
-    // US #3 : On affiche les sections si elles ont des chapitres OU si on est en mode Gérer
+    // US #3 : On affiche les sections qui ont des chapitres OU si on est en mode Gérer
     const getVisibleSections = () => {
-        const list = sections.filter(s => isDeleteMode || activeChapters.some(c => c.subject === s.name));
-        // On ajoute "Autres" seulement s'il y a des chapitres dedans
+        const base = sections.filter(s => isDeleteMode || activeChapters.some(c => c.subject === s.name));
+        // On force l'affichage de "Autres" s'il y a des chapitres orphelins
         if (activeChapters.some(c => c.subject === "Autres")) {
-            list.push({ name: 'Autres', color: '#64748b' });
+            base.push({ name: 'Autres', color: '#64748b' });
         }
-        return list;
+        return base;
     };
 
     const renderChapterCard = (chap, section) => {
@@ -95,12 +94,11 @@ export default function ProfStudioFolder({
 
     return (
         <div className="max-w-5xl mx-auto space-y-12 pb-20">
-            {/* CARRE NOIR : CONFIGURATION */}
             <div className="p-8 bg-slate-900 rounded-[50px] border-4 border-slate-800 shadow-2xl">
                 <div className="flex justify-between items-center mb-8 px-2">
                     <h3 className="text-white font-black text-[10px] uppercase tracking-widest">📂 Configuration des Matières</h3>
                     <div className="flex gap-2">
-                        <button onClick={() => { const n = prompt("Nom de la matière ?"); if(n) saveSections([...sections, {name:n, color:'#3b82f6'}]); }} className="bg-indigo-600 text-white px-5 py-2 rounded-2xl font-black text-[9px] uppercase shadow-lg">+ Nouvelle</button>
+                        <button onClick={() => { const n = prompt("Nom de la matière ?"); if(n) saveSections([...sections, {name:n, color:'#3b82f6'}]); }} className="bg-indigo-600 text-white px-5 py-2 rounded-2xl font-black text-[9px] uppercase hover:bg-indigo-500 shadow-lg">+ Nouvelle</button>
                         <button onClick={() => setIsDeleteMode(!isDeleteMode)} className={`px-5 py-2 rounded-2xl font-black text-[9px] uppercase transition-colors ${isDeleteMode ? 'bg-red-500 text-white' : 'bg-slate-700 text-slate-300'}`}>{isDeleteMode ? 'Terminer' : 'Gérer'}</button>
                     </div>
                 </div>
@@ -119,7 +117,7 @@ export default function ProfStudioFolder({
                                     {archs.map(c => (
                                         <div key={c._id} className="bg-slate-800/80 p-2 px-3 rounded-xl flex justify-between items-center border border-slate-700/50">
                                             <span className="text-white font-bold text-[9px] truncate pr-2">{c.title}</span>
-                                            <button onClick={() => onArchive(c._id, false)} className="text-blue-400 font-bold p-1">⬆️</button>
+                                            <button onClick={() => onArchive(c._id, false)} className="text-blue-400 font-bold p-1 hover:scale-110">⬆️</button>
                                         </div>
                                     ))}
                                 </div>
