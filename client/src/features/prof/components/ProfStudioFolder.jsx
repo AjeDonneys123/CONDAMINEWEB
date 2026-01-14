@@ -13,28 +13,39 @@ export default function ProfStudioFolder({
     const norm = (c) => c?.toString().toUpperCase().replace('E', '').trim() || "";
     const smartSort = (a, b) => (a.title || "").localeCompare(b.title || "", undefined, { numeric: true, sensitivity: 'base' });
 
+    // Initialisation
     useEffect(() => { 
         if (user?.subjectSections) setSections(user.subjectSections);
     }, [user]);
 
     const saveSections = async (newSections) => {
         const uid = user?.id || user?._id;
+        
+        // Empêcher les doublons de noms locaux avant envoi
+        const uniqueSections = newSections.filter((v, i, a) => a.findIndex(t => t.name === v.name) === i);
+        
         try {
             const res = await fetch(`/api/teacher/${uid}/sections`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sections: newSections, className: classFilter })
+                body: JSON.stringify({ sections: uniqueSections, className: classFilter })
             });
             const data = await res.json();
-            if (res.ok) {
-                // NOTIFICATION POUR LA MATIÈRE
-                if (onNotify) onNotify(data.message, data.drivePath);
+            
+            if (res.ok && data.user) {
+                // NOTIFICATION
+                if (onNotify) onNotify(data);
                 
-                setSections(newSections);
-                const updatedUser = { ...user, subjectSections: newSections };
-                localStorage.setItem('player', JSON.stringify(updatedUser));
+                // MISE A JOUR LOCALE ET SESSION (Crucial pour le refresh)
+                setSections(data.user.subjectSections);
+                localStorage.setItem('player', JSON.stringify(data.user));
+                
+                // Petit hack pour forcer React à rafraîchir l'app si nécessaire
+                if (isDeleteMode) {
+                    console.log("✅ Persistance validée.");
+                }
             }
-        } catch(e) { console.error(e); }
+        } catch(e) { console.error("Erreur Synchro BDD:", e); }
     };
 
     const activeChapters = chapters
@@ -95,7 +106,7 @@ export default function ProfStudioFolder({
                     <h3 className="text-white font-black text-[10px] uppercase tracking-widest">📂 Configuration des Matières</h3>
                     <div className="flex gap-2">
                         <button onClick={() => { const n = prompt("Nom de la matière ?"); if(n) saveSections([...sections, {name:n, color:'#3b82f6'}]); }} className="bg-indigo-600 text-white px-5 py-2 rounded-2xl font-black text-[9px] uppercase hover:bg-indigo-500 shadow-lg">+ Nouvelle</button>
-                        <button onClick={() => setIsDeleteMode(!isDeleteMode)} className={`px-5 py-2 rounded-2xl font-black text-[9px] uppercase transition-colors ${isDeleteMode ? 'bg-red-500 text-white' : 'bg-slate-700 text-slate-300'}`}>Gérer</button>
+                        <button onClick={() => setIsDeleteMode(!isDeleteMode)} className={`px-5 py-2 rounded-2xl font-black text-[9px] uppercase transition-colors ${isDeleteMode ? 'bg-red-500 text-white' : 'bg-slate-700 text-slate-300'}`}>{isDeleteMode ? 'Terminer' : 'Gérer'}</button>
                     </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

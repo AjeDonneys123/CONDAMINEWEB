@@ -5,29 +5,50 @@ const DriveService = require('../../services/drive.service');
 
 const normalize = (n) => n ? n.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Z0-9 ]/g, "_").trim() : "SANS_TITRE";
 
-// PATCH /api/teacher/:id/sections (Matières)
+// PATCH /api/teacher/:id/sections (Matières) - VERSION ROBUSTE
 router.patch('/teacher/:id/sections', async (req, res) => {
     try {
         const { sections, className } = req.body;
         const Teacher = mongoose.model('Teacher');
         
-        // On synchronise la dernière section ajoutée sur le Drive
-        const lastSection = sections[sections.length - 1]?.name || "MATIERE";
-        const driveId = await DriveService.syncPath(className, [normalize(lastSection)]);
-        const drivePath = `CONDACLASSE / JEAN VUILLET / ${className.toUpperCase()} / ${normalize(lastSection)}`;
+        // 1. Mise à jour de la BDD
+        const updatedTeacher = await Teacher.findByIdAndUpdate(
+            req.params.id, 
+            { subjectSections: sections }, 
+            { new: true } // Renvoie l'objet après modification
+        );
 
-        // Vérification de présence réelle (US Test)
-        const exists = await DriveService.verifyId(driveId);
+        if (!updatedTeacher) return res.status(404).send("Prof non trouvé");
 
-        const updated = await Teacher.findByIdAndUpdate(req.params.id, { subjectSections: sections }, { new: true });
-        
+        // 2. Synchro Drive (seulement si une nouvelle section a été ajoutée)
+        let drivePath = "SYNC BDD UNIQUEMENT";
+        let driveError = false;
+
+        if (className && sections.length > 0) {
+            const lastSection = sections[sections.length - 1];
+            const driveId = await DriveService.syncPath(className, [normalize(lastSection.name)]);
+            const exists = await DriveService.verifyId(driveId);
+            driveError = !exists;
+            drivePath = `CONDACLASSE / JEAN VUILLET / ${className.toUpperCase()} / ${normalize(lastSection.name)}`;
+        }
+
+        // 3. Réponse avec l'utilisateur COMPLET pour mettre à jour le Frontend
         res.json({ 
-            ...updated._doc, 
+            user: {
+                id: updatedTeacher._id,
+                firstName: updatedTeacher.firstName,
+                lastName: updatedTeacher.lastName,
+                subjectSections: updatedTeacher.subjectSections,
+                role: 'prof'
+            },
             drivePath, 
-            driveError: !exists,
-            message: exists ? "Matière synchronisée sur Drive" : "ERREUR : Dossier Drive introuvable" 
+            driveError,
+            message: "Matières synchronisées (BDD + Drive)" 
         });
-    } catch (e) { res.status(500).json({ error: e.message }); }
+    } catch (e) { 
+        console.error("❌ Erreur Sections:", e.message);
+        res.status(500).json({ error: e.message }); 
+    }
 });
 
 // POST /api/chapters
@@ -38,7 +59,6 @@ router.post('/chapters', async (req, res) => {
         
         const driveId = await DriveService.syncPath(classroom, [normalize(subject), normalize(title)]);
         const drivePath = `CONDACLASSE / JEAN VUILLET / ${classroom.toUpperCase()} / ${normalize(subject)} / ${normalize(title)}`;
-
         const exists = await DriveService.verifyId(driveId);
 
         let result;
@@ -47,7 +67,6 @@ router.post('/chapters', async (req, res) => {
         } else {
             result = await Chapter.create({ ...req.body, driveFolderId: driveId, isArchived: false });
         }
-
         res.json({ ...result._doc, drivePath, driveError: !exists, message: exists ? "Chapitre synchronisé" : "ERREUR DRIVE" });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
