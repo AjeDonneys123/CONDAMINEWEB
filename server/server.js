@@ -22,11 +22,11 @@ require('./models/DeploySignal');
 
 // 2. CONNEXION MONGODB
 mongoose.connect(process.env.MONGODB_URI).then(async () => {
-    console.log('✅ MongoDB Connecté.');
+    console.log('✅ MongoDB Connected.');
     try {
         await mongoose.model('DeploySignal').findOneAndUpdate({}, { status: 'live', updatedAt: new Date() }, { upsert: true });
     } catch (e) {}
-}).catch(err => console.error("❌ Erreur MongoDB :", err.message));
+}).catch(err => console.error("❌ MongoDB Error:", err.message));
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
@@ -35,26 +35,22 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.get('/api/check-deploy', (req, res) => res.json({ bootId: SERVER_BOOT_ID }));
 app.get('/api/system-status', (req, res) => res.json({ status: 'OK' }));
 
-// 4. ARCHITECTURE MODULAIRE : ENREGISTREMENT DES TIROIRS
-// Chaque fichier est totalement indépendant
-app.use('/api', require('./features/auth/auth.routes'));       // Login
-app.use('/api', require('./features/eleve/eleve.routes'));     // Espace Elève
-app.use('/api', require('./features/game/game.routes'));       // Jeux & IA Quizz
-app.use('/api', require('./features/prof/teacher.routes'));    // Profil Prof & Classes
-app.use('/api', require('./features/prof/chapter.routes'));    // Dossiers & Archives
-app.use('/api', require('./features/prof/homework.routes'));   // Devoirs Manuels
-app.use('/api', require('./features/prof/scan.routes'));       // Photos & Drive Scans
+// 4. ARCHITECTURE PAR DOMAINE (ZÉRO POROSITÉ)
+// Chaque domaine gère son versant Prof ET son versant Élève
+app.use('/api/auth', require('./features/auth/auth.routes'));
+app.use('/api/admin', require('./features/admin/admin.routes'));     // Classes, Sections, Élèves
+app.use('/api/scans', require('./features/scans/scans.routes'));     // Captures, Corrections IA, Drive
+app.use('/api/games', require('./features/games/games.routes'));     // Quiz, Moteurs de jeux
+app.use('/api/homework', require('./features/homework/homework.routes')); // Devoirs manuels
 
-// 5. GARDE-FOU API
-app.all('/api/*', (req, res) => {
-    res.status(404).json({ error: `Route non trouvée : ${req.method} ${req.url}` });
-});
-
-// 6. GESTION FRONTEND
+// 5. GESTION FRONTEND
 const distPath = path.join(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
-    app.get('*', (req, res) => res.sendFile(path.join(distPath, 'index.html')));
+    app.get('*', (req, res) => {
+        if (req.path.startsWith('/api')) return res.status(404).json({ error: "API 404" });
+        res.sendFile(path.join(distPath, 'index.html'));
+    });
 }
 
-app.listen(port, () => console.log(`🚀 SERVEUR MODULAIRE PRÊT : PORT ${port}`));
+app.listen(port, () => console.log(`🚀 SERVEUR MODULAIRE V2 PRÊT : PORT ${port}`));
