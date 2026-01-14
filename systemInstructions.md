@@ -54,3 +54,4 @@ Toute modification doit garantir la non-régression des 15 User Stories.
 13. **AUTO-REFRESH LIVE** : Détection de redémarrage (Build ID) et recharge auto du site.
 14. **WIZARD D'IMPORTATION** : Bouton "+" pour importer une classe via copier/coller.
 15. **SUPPRESSION DE CLASSE** : Nettoyage total BDD d'une classe après double confirmation.
+
