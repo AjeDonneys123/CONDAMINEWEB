@@ -4,10 +4,8 @@ const mongoose = require('mongoose');
 
 /**
  * 🏢 DOMAINE : ADMIN & CLASSES
- * Point d'entrée consolidé pour les données structurelles.
+ * Point d'entrée consolidé pour la gestion des structures.
  */
-
-// --- ÉLÈVES ---
 
 // GET /api/players
 router.get('/players', async (req, res) => {
@@ -20,27 +18,6 @@ router.get('/players', async (req, res) => {
         res.status(500).json({ error: "Erreur serveur" });
     }
 });
-
-// POST /api/create-class-wizard
-router.post('/create-class-wizard', async (req, res) => {
-    try {
-        const Player = mongoose.model('Player');
-        const { teacherId, className, rawData } = req.body;
-        const lines = rawData.split('\n').filter(l => l.trim());
-        const players = lines.map(line => {
-            const parts = line.trim().split(/\s+/);
-            const lastName = parts[0] || "NOM";
-            const firstName = parts.slice(1).join(' ') || "Prénom";
-            return { firstName, lastName, classroom: className, teacherId };
-        });
-        await Player.insertMany(players);
-        res.json({ ok: true, count: players.length });
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
-});
-
-// --- CHAPITRES (DOSSIERS) ---
 
 // GET /api/chapters-all
 router.get('/chapters-all', async (req, res) => {
@@ -69,8 +46,36 @@ router.post('/chapters', async (req, res) => {
     }
 });
 
-// --- BUGS & LOGS ---
+// DELETE /api/classroom/:className
+router.delete('/classroom/:className', async (req, res) => {
+    try {
+        const { className } = req.params;
+        await mongoose.model('Player').deleteMany({ classroom: className });
+        await mongoose.model('Chapter').deleteMany({ classroom: className });
+        await mongoose.model('Homework').deleteMany({ classroom: className });
+        await mongoose.model('ScanSession').deleteMany({ classroom: className });
+        res.json({ ok: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
 
+// PATCH /api/teacher/:id/sections
+router.patch('/teacher/:id/sections', async (req, res) => {
+    try {
+        const Teacher = mongoose.model('Teacher');
+        const updated = await Teacher.findByIdAndUpdate(
+            req.params.id, 
+            { subjectSections: req.body.sections }, 
+            { new: true }
+        );
+        res.json(updated);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// BUGS
 router.get('/bugs', async (req, res) => {
     try {
         res.json(await mongoose.model('Bug').find({}).sort({ createdAt: -1 }));
