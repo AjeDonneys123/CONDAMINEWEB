@@ -15,9 +15,10 @@ export default function ActivityStudio({ globalClass, user }) {
         if (!globalClass) return;
         setLoading(true);
         try {
+            // CORRECTIF : Utilisation des nouveaux points d'entrée modulaires
             const [hwRes, gmRes, cpRes] = await Promise.all([
-                fetch('/api/homework-all'),
-                fetch('/api/game-levels/all'),
+                fetch('/api/homework/all'),
+                fetch('/api/games/all'),
                 fetch('/api/chapters-all')
             ]);
             
@@ -55,14 +56,14 @@ export default function ActivityStudio({ globalClass, user }) {
     };
 
     const handleRenameChapter = async (id, title) => {
-        setChapters(prev => prev.map(c => c._id === id ? { ...c, title } : c));
         try {
             await fetch('/api/chapters', { 
                 method:'POST', 
                 headers:{'Content-Type':'application/json'}, 
                 body:JSON.stringify({_id:id, title})
             });
-        } catch (e) { loadData(); }
+            await loadData();
+        } catch (e) { console.error(e); }
     };
 
     const handleDeleteChapter = async (id) => {
@@ -74,20 +75,34 @@ export default function ActivityStudio({ globalClass, user }) {
     };
 
     if (viewingResults) return <HomeworkResults homework={viewingResults} onBack={() => setViewingResults(null)} />;
+    
     if (editingItem) {
         const activeChaps = chapters.filter(c => c.classroom === globalClass && !c.isArchived);
-        if (editingItem.type === 'homework') return <HomeworkStudio initialData={editingItem.data} chapters={activeChaps} onClose={() => { setEditingItem(null); loadData(); }} />;
-        return <GameStudio initialData={editingItem.data} chapters={activeChaps} classFilter={globalClass} onClose={() => { setEditingItem(null); loadData(); }} />;
+        if (editingItem.type === 'homework') {
+            return <HomeworkStudio 
+                initialData={editingItem.data} 
+                chapters={activeChaps} 
+                onClose={() => { setEditingItem(null); loadData(); }} 
+            />;
+        }
+        return <GameStudio 
+            initialData={editingItem.data} 
+            chapters={activeChaps} 
+            classFilter={globalClass} 
+            onClose={() => { setEditingItem(null); loadData(); }} 
+        />;
     }
 
     return (
         <div className="animate-in fade-in">
             <div className="flex justify-start gap-4 mb-8 bg-white p-4 rounded-[30px] border-2 border-slate-50 shadow-sm">
-                <button onClick={() => setEditingItem({ type: 'homework', data: null })} className="bg-orange-500 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg"> Nouveau Devoir</button>
-                <button onClick={() => setEditingItem({ type: 'game', data: null })} className="bg-purple-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg"> Nouveau Jeu</button>
+                <button onClick={() => setEditingItem({ type: 'homework', data: null })} className="bg-orange-500 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:scale-105 transition-transform"> Nouveau Devoir</button>
+                <button onClick={() => setEditingItem({ type: 'game', data: null })} className="bg-purple-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:scale-105 transition-transform"> Nouveau Jeu</button>
             </div>
 
-            {loading ? <div className="text-center py-20 text-slate-300 font-black animate-pulse uppercase">Chargement...</div> : (
+            {loading ? (
+                <div className="text-center py-20 text-slate-300 font-black animate-pulse uppercase tracking-widest">Mise à jour du studio...</div>
+            ) : (
                 <ProfStudioFolder 
                     user={user} chapters={chapters} items={activities} classFilter={globalClass}
                     onArchive={async (id, state) => {
@@ -97,8 +112,9 @@ export default function ActivityStudio({ globalClass, user }) {
                     onRename={handleRenameChapter}
                     onEditItem={(it) => setEditingItem({ type: it.actType, data: it })}
                     onDeleteItem={async (id, type) => {
-                        if(!confirm("Supprimer ?")) return;
-                        const endpoint = type === 'game' ? `/api/game-levels/${id}` : `/api/homework/${id}`;
+                        if(!confirm("Supprimer définitivement cet élément ?")) return;
+                        // CORRECTIF : Chemins de suppression modulaires
+                        const endpoint = type === 'game' ? `/api/games/${id}` : `/api/homework/${id}`;
                         await fetch(endpoint, { method: 'DELETE' });
                         loadData();
                     }}
