@@ -9,7 +9,7 @@ const COLOR_PALETTE = [
     '#ec4899', // Rose
     '#06b6d4', // Cyan
     '#f97316', // Orange
-    '#1e293b'  // Ardoise
+    '#facc15'  // JAUNE VIF (Remplace le noir/ardoise)
 ];
 
 export default function ProfStudioFolder({ 
@@ -103,6 +103,9 @@ export default function ProfStudioFolder({
         const letter = (section?.name || "?").substring(0, 1).toUpperCase();
         const chapItems = items.filter(it => String(it.chapterId) === String(chap._id));
 
+        // Fix contraste pour le jaune
+        const isLightColor = color === '#facc15';
+
         return (
             <div 
                 key={chap._id} 
@@ -111,7 +114,7 @@ export default function ProfStudioFolder({
             >
                 <div className="p-4 flex items-center justify-between">
                     <div className="flex items-center gap-4 flex-1 cursor-pointer" onClick={() => setOpenChaps({...openChaps, [chap._id]: !isOpen})}>
-                        <div className="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-white text-sm relative" style={{ backgroundColor: color }}>{letter}</div>
+                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-sm relative ${isLightColor ? 'text-slate-900' : 'text-white'}`} style={{ backgroundColor: color }}>{letter}</div>
                         <div className="flex flex-col text-left">
                             {isEditing ? (
                                 <input autoFocus className="text-sm font-black border-b-2 outline-none" style={{ borderColor: color }} value={tempTitle} onChange={e => setTempTitle(e.target.value)} onBlur={() => { onRename(chap._id, tempTitle, chap.subject); setEditingId(null); }} onKeyDown={e => e.key === 'Enter' && (onRename(chap._id, tempTitle, chap.subject), setEditingId(null))} onClick={e => e.stopPropagation()} />
@@ -162,19 +165,19 @@ export default function ProfStudioFolder({
 
     return (
         <div className="max-w-5xl mx-auto space-y-12 pb-20">
-            {/* CARRE JAUNE VIF (REMPLACE LE NOIR) */}
-            <div className="p-8 bg-yellow-400 rounded-[50px] border-4 border-yellow-500 shadow-2xl">
+            {/* CARRE SOMBRE : CONFIGURATION ET ARCHIVES (DESIGN ORIGINAL RESTAURE) */}
+            <div className="p-8 bg-slate-900 rounded-[50px] border-4 border-slate-800 shadow-2xl">
                 <div className="flex justify-between items-center mb-8 px-2">
-                    <h3 className="text-slate-900 font-black text-[10px] uppercase tracking-widest flex items-center gap-2">
-                        <span className="w-2 h-2 bg-slate-900 rounded-full animate-pulse"></span>
+                    <h3 className="text-white font-black text-[10px] uppercase tracking-widest flex items-center gap-2">
+                        <span className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></span>
                         Configuration & Archives
                     </h3>
                     <div className="flex gap-2">
                         {isDeleteMode && (
-                            <button onClick={autoColorize} className="bg-slate-900 text-yellow-400 px-5 py-2 rounded-2xl font-black text-[9px] uppercase hover:bg-slate-800 shadow-lg transition-all">🎨 Couleurs Auto</button>
+                            <button onClick={autoColorize} className="bg-emerald-600 text-white px-5 py-2 rounded-2xl font-black text-[9px] uppercase hover:bg-emerald-500 shadow-lg transition-all">🎨 Couleurs Auto</button>
                         )}
-                        <button onClick={handleAddSection} className="bg-white text-slate-900 px-5 py-2 rounded-2xl font-black text-[9px] uppercase hover:bg-yellow-50 shadow-lg transition-all">+ Nouvelle Matière</button>
-                        <button onClick={() => setIsDeleteMode(!isDeleteMode)} className={`px-5 py-2 rounded-2xl font-black text-[9px] uppercase transition-all shadow-md ${isDeleteMode ? 'bg-red-600 text-white' : 'bg-slate-900 text-yellow-400 hover:bg-slate-800'}`}>{isDeleteMode ? 'Quitter Edition' : 'Gérer Matières'}</button>
+                        <button onClick={handleAddSection} className="bg-indigo-600 text-white px-5 py-2 rounded-2xl font-black text-[9px] uppercase hover:bg-indigo-500 shadow-lg transition-all">+ Nouvelle Matière</button>
+                        <button onClick={() => setIsDeleteMode(!isDeleteMode)} className={`px-5 py-2 rounded-2xl font-black text-[9px] uppercase transition-all shadow-md ${isDeleteMode ? 'bg-red-600 text-white' : 'bg-slate-700 text-slate-300'}`}>{isDeleteMode ? 'Terminer' : 'Gérer Matières'}</button>
                     </div>
                 </div>
                 
@@ -185,26 +188,26 @@ export default function ProfStudioFolder({
                         if (!isDeleteMode && archs.length === 0) return null;
 
                         return (
-                            <div key={s.name} className="bg-white/30 p-5 rounded-[30px] border border-yellow-500/50 animate-in fade-in relative group backdrop-blur-sm">
+                            <div key={s.name} className="bg-slate-800/40 p-5 rounded-[30px] border border-slate-700 animate-in fade-in relative group" style={{ borderColor: s.color + '44' }}>
                                 <div className="flex justify-between items-center mb-4">
-                                    <h4 className="font-black text-[10px] uppercase tracking-widest flex items-center gap-2 text-slate-900">
+                                    <h4 className="font-black text-[10px] uppercase tracking-widest flex items-center gap-2" style={{ color: s.color }}>
                                         <span className="w-2.5 h-2.5 rounded-full border border-black/10 shadow-sm" style={{ background: s.color }}></span>
                                         {s.name}
                                     </h4>
                                     {isDeleteMode && (
                                         <div className="flex gap-2 relative">
-                                            <button onClick={() => setColorPickerIdx(isPickingColor ? null : idx)} className="text-slate-900 hover:scale-125 transition-transform text-[12px]">🎨</button>
-                                            <button onClick={() => saveSections(sections.filter(x => x.name !== s.name))} className="text-red-700 font-black hover:scale-125 transition-transform text-[12px]">✕</button>
+                                            <button onClick={() => setColorPickerIdx(isPickingColor ? null : idx)} className="text-white hover:scale-125 transition-transform text-[12px] opacity-60 hover:opacity-100">🎨</button>
+                                            <button onClick={() => saveSections(sections.filter(x => x.name !== s.name))} className="text-red-500 font-black hover:scale-125 transition-transform text-[12px] opacity-60 hover:opacity-100">✕</button>
                                             
                                             {isPickingColor && (
-                                                <div className="absolute top-8 right-0 z-[300] bg-white border-2 border-yellow-500 p-3 rounded-2xl shadow-2xl animate-in zoom-in w-[160px]">
+                                                <div className="absolute top-8 right-0 z-[300] bg-slate-800 border-2 border-slate-600 p-3 rounded-2xl shadow-2xl animate-in zoom-in w-[160px]">
                                                     <p className="text-[8px] font-black text-slate-400 uppercase mb-2 text-center tracking-tighter">Choisir couleur</p>
                                                     <div className="grid grid-cols-3 gap-2">
                                                         {COLOR_PALETTE.map(c => (
                                                             <button 
                                                                 key={c} 
                                                                 onClick={() => updateSectionColor(idx, c)} 
-                                                                className="w-8 h-8 rounded-full border-2 border-black/5 hover:scale-110 transition-all hover:border-slate-900 shadow-sm" 
+                                                                className="w-8 h-8 rounded-full border-2 border-white/10 hover:scale-110 transition-all hover:border-white shadow-inner" 
                                                                 style={{ background: c }} 
                                                             />
                                                         ))}
@@ -216,27 +219,27 @@ export default function ProfStudioFolder({
                                 </div>
                                 <div className="space-y-2">
                                     {archs.map(c => (
-                                        <div key={c._id} className="bg-white/60 p-2 px-3 rounded-xl flex justify-between items-center border border-yellow-500/20 shadow-sm">
-                                            <span className="text-slate-800 font-bold text-[9px] truncate pr-2" title={c.title}>{c.title}</span>
-                                            <button onClick={() => onArchive(c._id, false)} className="text-indigo-600 font-bold p-1 hover:scale-125 transition-transform" title="Désarchiver">⬆️</button>
+                                        <div key={c._id} className="bg-slate-800/80 p-2 px-3 rounded-xl flex justify-between items-center border border-slate-700/50">
+                                            <span className="text-white font-bold text-[9px] truncate pr-2" title={c.title}>{c.title}</span>
+                                            <button onClick={() => onArchive(c._id, false)} className="text-emerald-400 font-bold p-1 hover:scale-125 transition-transform" title="Désarchiver">⬆️</button>
                                         </div>
                                     ))}
-                                    {!isDeleteMode && archs.length === 0 && <div className="text-[8px] text-yellow-800/50 uppercase font-black py-2">Vide</div>}
+                                    {!isDeleteMode && archs.length === 0 && <div className="text-[8px] text-slate-600 uppercase font-black py-2">Vide</div>}
                                 </div>
                             </div>
                         );
                     })}
 
                     {orphanArchived.length > 0 && (
-                        <div className="bg-red-500/20 p-4 rounded-[30px] border border-red-500/30 animate-in fade-in backdrop-blur-sm">
-                            <h4 className="font-black text-[9px] uppercase tracking-widest mb-4 text-red-800">⚠️ Archives Sans Matière</h4>
+                        <div className="bg-red-900/20 p-4 rounded-[30px] border border-red-900/30 animate-in fade-in">
+                            <h4 className="font-black text-[9px] uppercase tracking-widest mb-4 text-red-400">⚠️ Archives Sans Matière</h4>
                             <div className="space-y-2">
                                 {orphanArchived.map(c => (
-                                    <div key={c._id} className="bg-white/40 p-2 px-3 rounded-xl flex justify-between items-center border border-red-500/20 shadow-sm">
-                                        <span className="text-red-900 font-bold text-[9px] truncate pr-2">{c.title}</span>
+                                    <div key={c._id} className="bg-red-900/40 p-2 px-3 rounded-xl flex justify-between items-center border border-red-900/20">
+                                        <span className="text-red-200 font-bold text-[9px] truncate pr-2">{c.title}</span>
                                         <div className="flex gap-1">
-                                            <button onClick={() => setMovingId(c._id)} className="text-indigo-600 text-[10px]" title="Assigner matière">📁</button>
-                                            <button onClick={() => onArchive(c._id, false)} className="text-slate-800 text-[10px]" title="Désarchiver">⬆️</button>
+                                            <button onClick={() => setMovingId(c._id)} className="text-blue-400 text-[10px]" title="Assigner matière">📁</button>
+                                            <button onClick={() => onArchive(c._id, false)} className="text-white text-[10px]" title="Désarchiver">⬆️</button>
                                         </div>
                                     </div>
                                 ))}
