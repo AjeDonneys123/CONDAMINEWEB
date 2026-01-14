@@ -13,7 +13,7 @@ const app = express();
 const port = process.env.PORT || 3000;
 const SERVER_BOOT_ID = Date.now();
 
-// 1. CHARGEMENT DES MODÈLES (ORDRE ALPHABÉTIQUE)
+// 1. CHARGEMENT DES MODÈLES
 require('./models/Bug');
 require('./models/Chapter');
 require('./models/DeploySignal');
@@ -27,7 +27,7 @@ require('./models/TeacherStyle');
 
 // 2. CONNEXION MONGODB
 mongoose.connect(process.env.MONGODB_URI).then(async () => {
-    console.log('✅ MongoDB Connecté.');
+    console.log('✅ MongoDB Connected.');
     try {
         await mongoose.model('DeploySignal').findOneAndUpdate({}, { status: 'live', updatedAt: new Date() }, { upsert: true });
     } catch (e) {}
@@ -51,9 +51,10 @@ app.use('/api/auth', require('./features/auth/auth.routes'));
 app.use('/api/games', require('./features/games/games.routes'));
 app.use('/api/scans', require('./features/scans/scans.routes'));
 app.use('/api/homework', require('./features/homework/homework.routes'));
+app.use('/api/upload', require('./features/upload/upload.routes')); // DOMAINE UPLOAD RÉTABLI
 app.use('/api', require('./features/admin/admin.routes')); 
 
-// 5. GESTION FRONTEND (PRODUCTION)
+// 5. GESTION FRONTEND
 const distPath = path.join(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
@@ -65,5 +66,4 @@ if (fs.existsSync(distPath)) {
 
 app.listen(port, () => {
     console.log(`🚀 SERVEUR RECONSTRUIT : PORT ${port}`);
-    console.log(`🎯 DOMAINES ACTIFS : AUTH, ADMIN, GAMES, SCANS, HOMEWORK`);
 });
