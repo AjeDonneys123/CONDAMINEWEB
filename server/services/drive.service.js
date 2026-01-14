@@ -12,12 +12,11 @@ try {
         );
         auth.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
         drive = google.drive({ version: 'v3', auth });
-        console.log("✅ Drive API V4 : Système de Synchronisation Directe");
+        console.log("✅ Drive API V4 : Hiérarchie stricte activée");
     }
 } catch (e) { console.error("❌ Erreur Init Drive:", e.message); }
 
 const DriveService = {
-    // Vérifie l'existence ou crée
     getOrCreateFolder: async (name, parentId = null) => {
         if (!drive) return null;
         try {
@@ -37,18 +36,25 @@ const DriveService = {
         } catch (e) { return null; }
     },
 
-    // Synchronisation forcée du chemin enseignant
-    syncPath: async (classroom, sectionName) => {
+    // Méthode de navigation sécurisée (Force le passage par Devoirs)
+    getHomeworkRoot: async (classroom) => {
+        const rootId = await DriveService.getOrCreateFolder("CONDACLASSE", null);
+        const teacherId = await DriveService.getOrCreateFolder("JEAN VUILLET", rootId);
+        const classId = await DriveService.getOrCreateFolder(classroom.toUpperCase(), teacherId);
+        return await DriveService.getOrCreateFolder("Devoirs", classId);
+    },
+
+    uploadFile: async (folderId, fileName, buffer, mimeType) => {
+        if (!drive || !folderId) return null;
         try {
-            const rootId = await DriveService.getOrCreateFolder("CONDACLASSE", null);
-            const teacherId = await DriveService.getOrCreateFolder("JEAN VUILLET", rootId);
-            const classId = await DriveService.getOrCreateFolder(classroom.toUpperCase(), teacherId);
-            const sectionId = await DriveService.getOrCreateFolder(sectionName.toUpperCase(), classId);
-            return sectionId;
-        } catch (e) {
-            console.error("❌ Erreur syncPath:", e.message);
-            return null;
-        }
+            const media = { mimeType, body: Readable.from(buffer) };
+            const file = await drive.files.create({
+                resource: { name: fileName, parents: [folderId] },
+                media, fields: 'id'
+            });
+            await drive.permissions.create({ fileId: file.data.id, resource: { role: 'reader', type: 'anyone' } });
+            return { id: file.data.id, url: `https://drive.google.com/thumbnail?id=${file.data.id}&sz=w1200` };
+        } catch (e) { return null; }
     },
 
     deleteFile: async (id) => { 
