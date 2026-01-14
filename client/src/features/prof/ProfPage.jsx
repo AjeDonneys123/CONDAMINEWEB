@@ -15,23 +15,27 @@ export default function ProfPage({ user, onLogout }) {
   const loadClasses = async () => {
       try {
         const res = await fetch('/api/players').then(r => r.json());
-        const uniqueClasses = [...new Set(res.map(p => p.classroom))].filter(Boolean);
-        setClasses(uniqueClasses);
-        if (!selectedClass && uniqueClasses.length > 0) setSelectedClass(uniqueClasses[0]);
+        if (Array.isArray(res)) {
+            const uniqueClasses = [...new Set(res.map(p => p.classroom))].filter(Boolean);
+            setClasses(uniqueClasses);
+            if (!selectedClass && uniqueClasses.length > 0) setSelectedClass(uniqueClasses[0]);
+        }
       } catch(e) { console.error("Erreur classes"); }
   };
 
   useEffect(() => { loadClasses(); }, []);
 
   const deleteClass = async (name) => {
-      if (!confirm(`⚠️ ATTENTION ! Supprimer la classe ${name} ?\nCela effacera tous les élèves, devoirs et chapitres de cette classe.`)) return;
-      if (!confirm(`Dernière chance : es-tu sûr de vouloir tout supprimer pour la ${name} ?`)) return;
+      if (!confirm(`⚠️ ATTENTION ! Supprimer la classe ${name} ?\nCela effacera TOUT (élèves, devoirs, dossiers) en BDD.`)) return;
+      if (!confirm(`CONFIRMATION FINALE : Supprimer la ${name} ?`)) return;
       
       setLoading(true);
       try {
-          await fetch(`/api/classroom/${name}`, { method: 'DELETE' });
-          setSelectedClass("");
-          await loadClasses();
+          const res = await fetch(`/api/classroom/${name}`, { method: 'DELETE' });
+          if (res.ok) {
+              setSelectedClass("");
+              await loadClasses();
+          }
       } catch(e) { console.error(e); }
       setLoading(false);
   };
@@ -39,18 +43,24 @@ export default function ProfPage({ user, onLogout }) {
   return (
     <div className="prof-page-container">
       <div className="prof-card bg-white shadow-2xl">
-        <ProfHeader user={user} onLogout={handleLogout} />
+        <ProfHeader user={user} onLogout={onLogout} />
         
-        <div className="px-8 py-4 flex gap-2 overflow-x-auto border-b items-center bg-slate-50/50">
-            {classes.map(c => (
-                <div key={c} className="flex items-center bg-white rounded-2xl border shadow-sm pr-2">
+        <div className="px-8 py-4 flex gap-2 overflow-x-auto border-b items-center bg-slate-50/50 no-scrollbar">
+            {(classes || []).map(c => (
+                <div key={c} className="flex items-center bg-white rounded-2xl border shadow-sm pr-1 group">
                     <button 
                         onClick={() => setSelectedClass(c)} 
-                        className={`px-6 py-3 rounded-2xl font-black text-xs transition-all whitespace-nowrap ${selectedClass === c ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400'}`}
+                        className={`px-6 py-3 rounded-2xl font-black text-[10px] transition-all whitespace-nowrap ${selectedClass === c ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400'}`}
                     >
                         {c}
                     </button>
-                    <button onClick={() => deleteClass(c)} className="ml-1 text-red-200 hover:text-red-500 font-bold px-2">✕</button>
+                    <button 
+                        onClick={() => deleteClass(c)} 
+                        className="w-8 h-8 flex items-center justify-center text-red-100 hover:text-red-500 font-bold transition-colors"
+                        title="Supprimer la classe"
+                    >
+                        ✕
+                    </button>
                 </div>
             ))}
         </div>

@@ -1,6 +1,6 @@
 {
-  "version": "1.4.0",
-  "build": 177,
-  "description": "Fix 404 Routes + Strict Drive/Archive Sync + Class Deletion",
-  "timestamp": "2026-01-14T00:46:06.054Z"
+  "version": "1.4.1",
+  "build": 178,
+  "description": "Fix React Crash (White Screen) + Robust API Routing + Safe Deletions",
+  "timestamp": "2026-01-14T00:49:33.904Z"
 }
