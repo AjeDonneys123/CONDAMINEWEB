@@ -119,7 +119,10 @@ STRUCTURE:
 │   │   ├── eleve/
 │   │   │   └── eleve.routes.js
 │   │   ├── game/
-│   │   │   └── game.routes.js
+│   │   ├── games/
+│   │   │   └── games.routes.js
+│   │   ├── homework/
+│   │   │   └── homework.routes.js
 │   │   ├── prof/
 │   │   │   ├── automation.routes.js
 │   │   │   ├── chapter.routes.js
@@ -343,7 +346,7 @@ setInterval(applyUpdate, 1000);
 {
   "status": "OK",
   "file": null,
-  "timestamp": 1768353939932
+  "timestamp": 1768358326484
 }
 
 ### FILE: chemin/du/fichier.js
@@ -9461,7 +9464,6 @@ import React, { useState, useEffect } from 'react';
 import ZombieWrapper from './zombie/ZombieWrapper';
 import StarshipWrapper from './starship/StarshipWrapper';
 import DashboardFolder from '../components/DashboardFolder';
-import { api } from '../../../services/api';
 
 export default function GamesGrid({ user }) {
   const [quizzes, setQuizzes] = useState([]);
@@ -9474,27 +9476,19 @@ export default function GamesGrid({ user }) {
     const load = async () => {
         setLoading(true);
         try {
+            // CORRECTIF : Synchronisation avec le point d'entrée modulaire /api/games/all
             const [lvlData, chapData] = await Promise.all([
-                api.get('/game-levels/all'),
+                fetch('/api/games/all').then(r => r.json()),
                 fetch('/api/chapters-all').then(r => r.json())
             ]);
-
-            const userClass = user.classroom.toString().trim(); // ex: "5B"
-            const userGrade = userClass.substring(0, 2); // ex: "5e" (si le format est 5eB) ou "5"
             
-            // FILTRAGE ROBUSTE DES JEUX
-            const filteredQuizzes = (lvlData || []).filter(l => {
-                const matchClass = l.classroom === 'Toutes' || l.classroom === userClass;
-                const matchGrade = l.targetGrade === 'Tous' || userClass.includes(l.targetGrade);
-                return matchClass || matchGrade;
-            });
-
-            setQuizzes(filteredQuizzes);
-            
-            // FILTRAGE DES CHAPITRES (doivent appartenir à la classe)
+            const userClass = user.classroom?.toString().trim() || "";
+            // US #2 : Isolation
+            setQuizzes((lvlData || []).filter(l => l.classroom === 'Toutes' || l.classroom === userClass));
             setChapters((chapData || []).filter(c => c.classroom === userClass));
-            
-        } catch (e) { console.error(e); }
+        } catch (e) { 
+            console.error("Erreur GamesGrid:", e); 
+        }
         setLoading(false);
     }
     load();
@@ -9513,15 +9507,15 @@ export default function GamesGrid({ user }) {
                   <h2 className="text-2xl font-black text-slate-700 mb-6 uppercase text-center">🕹️ {selectedQuiz.title}</h2>
                   <div className="selector-grid">
                       <button onClick={() => setActiveGame('zombie')} className="game-choice-btn zombie-btn">
-                          <span className="text-4xl mb-2">🧟</span>
-                          <span>ZOMBIE</span>
+                          <span className="text-5xl mb-2">🧟</span>
+                          <span className="font-black text-lg">ZOMBIE</span>
                       </button>
                       <button onClick={() => setActiveGame('starship')} className="game-choice-btn starship-btn">
-                          <span className="text-4xl mb-2">🚀</span>
-                          <span>STARSHIP</span>
+                          <span className="text-5xl mb-2">🚀</span>
+                          <span className="font-black text-lg">STARSHIP</span>
                       </button>
                   </div>
-                  <button onClick={() => setSelectedQuiz(null)} className="mt-8 font-black text-slate-400 hover:text-red-500 transition-colors uppercase text-xs tracking-widest">Retour au menu</button>
+                  <button onClick={() => setSelectedQuiz(null)} className="mt-8 font-black text-slate-400 hover:text-red-500 transition-colors uppercase text-[10px] tracking-widest">Retour</button>
               </div>
           </div>
       );
@@ -11900,84 +11894,106 @@ export default function GameStudio({ initialData, chapters, classFilter, onClose
   const [loadingIA, setLoadingIA] = useState(false);
 
   const handleAiGen = async () => {
-      if(!aiPrompt) return;
+      if(!aiPrompt.trim()) return;
       setLoadingIA(true);
-      const fd = new FormData(); fd.append('topic', aiPrompt); fd.append('numQuestions', 5);
-      const res = await fetch('/api/generate-game-content', { method:'POST', body:fd }).then(r=>r.json());
-      if(Array.isArray(res)) setFormData({...formData, questions:[...formData.questions, ...res]});
-      setLoadingIA(false); setGenMode('manual');
+      try {
+          // CORRECTIF : Utilisation du point d'entrée modulaire /api/games/generate
+          const res = await fetch('/api/games/generate', { 
+              method: 'POST', 
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ topic: aiPrompt, numQuestions: 5 }) 
+          });
+
+          if (!res.ok) throw new Error("Réponse API invalide");
+          const data = await res.json();
+          
+          if(Array.isArray(data)) {
+              setFormData(prev => ({...prev, questions: [...prev.questions, ...data]}));
+              setGenMode('manual');
+              setAiPrompt('');
+          }
+      } catch (e) {
+          console.error(e);
+          alert("L'IA n'est pas accessible. Vérifiez la console serveur.");
+      }
+      setLoadingIA(false); 
   };
 
   const save = async () => {
-    if (!formData.title || formData.questions.length === 0) return alert("Quiz incomplet");
-    await fetch('/api/game-levels', { 
-        method: 'POST', 
-        headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify({ ...formData, chapterId: formData.chapterId === 'none' ? null : formData.chapterId }) 
-    });
-    onClose();
+    if (!formData.title || formData.questions.length === 0) return alert("Le quiz est vide.");
+    try {
+        await fetch('/api/games', { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify({ ...formData, chapterId: formData.chapterId === 'none' ? null : formData.chapterId }) 
+        });
+        onClose();
+    } catch (e) {
+        alert("Erreur lors de la sauvegarde.");
+    }
   };
 
   return (
     <div className="fixed inset-0 z-[6000] bg-slate-50 flex flex-col animate-in zoom-in">
         <div className="p-8 bg-purple-600 text-white flex justify-between items-center shadow-xl">
-            <input className="text-3xl font-black bg-transparent outline-none w-full placeholder:text-purple-300" value={formData.title} onChange={e=>setFormData({...formData, title:e.target.value})} placeholder="TITRE DU QUIZ" />
+            <input className="text-3xl font-black bg-transparent outline-none w-full placeholder:text-purple-300" value={formData.title} onChange={e=>setFormData({...formData, title:e.target.value})} placeholder="NOM DU QUIZ" />
             <button onClick={onClose} className="text-3xl font-black">✕</button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-10 custom-scrollbar">
             <div className="max-w-4xl mx-auto space-y-10">
-                <div className="grid grid-cols-2 gap-6">
-                    <div className="assign-card"><label>DOSSIER</label>
-                        <select className="w-full font-bold outline-none" value={formData.chapterId} onChange={e=>setFormData({...formData, chapterId: e.target.value})}>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <div className="assign-card"><label className="text-[10px] font-black text-slate-400 uppercase mb-2 block">Dossier</label>
+                        <select className="w-full font-bold outline-none bg-white p-3 rounded-xl border" value={formData.chapterId} onChange={e=>setFormData({...formData, chapterId: e.target.value})}>
                             <option value="none">-- Aucun dossier --</option>
-                            {chapters.map(c => <option key={c._id} value={c._id}>{c.title || `Dossier ${c.subject}`}</option>)}
+                            {chapters.map(c => <option key={c._id} value={c._id}>{c.title}</option>)}
                         </select>
                     </div>
-                    <div className="assign-card"><label>CLASSE</label>
-                        <select className="w-full font-bold outline-none" value={formData.classroom} onChange={e=>setFormData({...formData, classroom: e.target.value})}>
+                    <div className="assign-card"><label className="text-[10px] font-black text-slate-400 uppercase mb-2 block">Classe</label>
+                        <select className="w-full font-bold outline-none bg-white p-3 rounded-xl border" value={formData.classroom} onChange={e=>setFormData({...formData, classroom: e.target.value})}>
                             <option value="6D">6eD</option><option value="5B">5eB</option><option value="5C">5eC</option><option value="2A">2A</option><option value="2CD">2CD</option>
                         </select>
                     </div>
                 </div>
 
                 <div className="flex gap-4">
-                    <button onClick={()=>setGenMode('manual')} className={`flex-1 p-4 rounded-2xl font-black ${genMode==='manual'?'bg-purple-600 text-white shadow-lg':'bg-white text-slate-400'}`}>✍️ MANUEL</button>
-                    <button onClick={()=>setGenMode('ai')} className={`flex-1 p-4 rounded-2xl font-black ${genMode==='ai'?'bg-purple-600 text-white shadow-lg':'bg-white text-slate-400'}`}>🤖 IA GÉNÉRATEUR</button>
+                    <button onClick={()=>setGenMode('manual')} className={`flex-1 p-4 rounded-2xl font-black transition-all ${genMode==='manual'?'bg-purple-600 text-white shadow-lg':'bg-white text-slate-400 border'}`}>✍️ MANUEL</button>
+                    <button onClick={()=>setGenMode('ai')} className={`flex-1 p-4 rounded-2xl font-black transition-all ${genMode==='ai'?'bg-purple-600 text-white shadow-lg':'bg-white text-slate-400 border'}`}>🤖 IA</button>
                 </div>
 
-                {/* RESTAURATION : Div pour écrire les questions manuellement */}
                 {genMode === 'manual' ? (
                     <div className="p-10 bg-white rounded-[50px] border shadow-sm">
                         <input className="w-full p-4 mb-6 border-b-2 font-black text-xl outline-none" placeholder="Question..." value={currentQ.q} onChange={e=>setCurrentQ({...currentQ, q:e.target.value})} />
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             {currentQ.options.map((opt, i) => (
-                                <div key={i} className={`flex items-center gap-2 p-3 rounded-2xl border-2 ${currentQ.a === i ? 'border-green-500 bg-green-50' : ''}`}>
-                                    <input type="radio" checked={currentQ.a === i} onChange={()=>setCurrentQ({...currentQ, a:i})} />
+                                <div key={i} className={`flex items-center gap-2 p-3 rounded-2xl border-2 transition-all ${currentQ.a === i ? 'border-green-500 bg-green-50' : 'border-slate-100'}`}>
+                                    <input type="radio" name="correct" checked={currentQ.a === i} onChange={()=>setCurrentQ({...currentQ, a:i})} />
                                     <input className="w-full bg-transparent outline-none font-bold" value={opt} onChange={e=>{const n=[...currentQ.options]; n[i]=e.target.value; setCurrentQ({...currentQ, options:n});}} placeholder={`Réponse ${i+1}`} />
                                 </div>
                             ))}
                         </div>
-                        <button onClick={()=>{ if(!currentQ.q) return; setFormData({...formData, questions:[...formData.questions, currentQ]}); setCurrentQ({q:'', options:['','','',''], a:0}); }} className="w-full mt-6 p-4 bg-purple-100 text-purple-600 rounded-3xl font-black uppercase">Ajouter la question</button>
+                        <button onClick={()=>{ if(!currentQ.q) return; setFormData({...formData, questions:[...formData.questions, currentQ]}); setCurrentQ({q:'', options:['','','',''], a:0}); }} className="w-full mt-6 p-4 bg-purple-100 text-purple-600 rounded-3xl font-black uppercase">Ajouter au quiz</button>
                     </div>
                 ) : (
                     <div className="p-10 bg-purple-50 rounded-[50px] border-4 border-dashed border-purple-200">
-                        <textarea className="w-full p-6 h-32 rounded-3xl border-none shadow-inner mb-4" placeholder="Sujet du Quiz..." value={aiPrompt} onChange={e=>setAiPrompt(e.target.value)} />
-                        <button onClick={handleAiGen} disabled={loadingIA} className="w-full p-6 bg-purple-600 text-white font-black text-xl rounded-3xl">{loadingIA?'GÉNÉRATION...':'GÉNÉRER LE QUIZ ✨'}</button>
+                        <textarea className="w-full p-6 h-32 rounded-3xl border-none shadow-inner mb-4 font-bold text-slate-700" placeholder="Décris le sujet du quiz pour l'IA..." value={aiPrompt} onChange={e=>setAiPrompt(e.target.value)} />
+                        <button onClick={handleAiGen} disabled={loadingIA} className="w-full p-6 bg-purple-600 text-white font-black text-xl rounded-3xl shadow-xl hover:scale-[1.02] active:scale-95 transition-all">
+                            {loadingIA ? '⚡ GÉNÉRATION...' : 'GÉNÉRER PAR IA 🚀'}
+                        </button>
                     </div>
                 )}
 
                 <div className="space-y-4">
                     {formData.questions.map((q, i) => (
-                        <div key={i} className="p-6 bg-white border rounded-[30px] shadow-sm">
-                            <div className="flex justify-between items-center mb-4">
+                        <div key={i} className="p-6 bg-white border rounded-[30px] shadow-sm animate-in fade-in">
+                            <div className="flex justify-between items-center mb-2">
                                 <b className="text-slate-700">{i+1}. {q.q}</b>
                                 <button onClick={()=>{const n=[...formData.questions]; n.splice(i,1); setFormData({...formData, questions:n});}} className="text-red-400 font-black p-2 hover:scale-110">✕</button>
                             </div>
-                            <div className="game-preview-options">
-                                {q.options.map((opt, optIdx) => (
-                                    <span key={optIdx} className={optIdx === q.a ? 'is-good' : ''}>
-                                        {optIdx === q.a ? '✅ ' : ''}{opt}
+                            <div className="game-preview-options flex flex-wrap gap-2">
+                                {q.options.map((opt, idx) => (
+                                    <span key={idx} className={`px-4 py-2 rounded-lg text-xs font-bold ${idx === q.a ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-slate-50 text-slate-400'}`}>
+                                        {opt}
                                     </span>
                                 ))}
                             </div>
@@ -11988,8 +12004,8 @@ export default function GameStudio({ initialData, chapters, classFilter, onClose
         </div>
 
         <div className="p-8 bg-white border-t">
-            <button onClick={save} className="w-full p-8 bg-purple-600 text-white font-black text-3xl rounded-[40px] shadow-2xl hover:scale-[1.01] active:scale-95 transition-all">
-                💾 ENREGISTRER LE QUIZ
+            <button onClick={save} className="w-full p-8 bg-purple-600 text-white font-black text-3xl rounded-[40px] uppercase shadow-2xl hover:bg-purple-700 transition-colors">
+                💾 Sauvegarder
             </button>
         </div>
     </div>
@@ -12748,36 +12764,45 @@ import './StudentsManager.css';
 export default function StudentsManager({ globalClass }) {
   const [players, setPlayers] = useState([]);
   const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(true);
 
   const loadData = async () => {
+    setLoading(true);
     try {
         const res = await fetch('/api/players');
-        if (!res.ok) return console.error("Serveur Erreur 500 sur Players");
+        if (!res.ok) throw new Error(`Code ${res.status}`);
         const data = await res.json();
         setPlayers(Array.isArray(data) ? data : []);
     } catch (e) {
-        console.error("Erreur de décodage JSON sur Players");
+        console.error("Serveur Erreur sur Players:", e.message);
+        setPlayers([]);
+    } finally {
+        setLoading(false);
     }
   };
 
   useEffect(() => { loadData(); }, [globalClass]);
 
-  const normalize = (c) => c?.toString().toUpperCase().replace('E', '') || "";
-  const filtered = players.filter(p =>
-    normalize(p.classroom) === normalize(globalClass) &&
-    ((p.firstName || "") + " " + (p.lastName || "")).toLowerCase().includes(search.toLowerCase())
-  );
+  const normalize = (c) => c?.toString().toUpperCase().replace('E', '').trim() || "";
+  
+  const filtered = players.filter(p => {
+    const matchClass = !globalClass || normalize(p.classroom) === normalize(globalClass);
+    const matchSearch = ((p.firstName || "") + " " + (p.lastName || "")).toLowerCase().includes(search.toLowerCase());
+    return matchClass && matchSearch;
+  });
 
   return (
     <div className="manager-container animate-in fade-in">
       <div className="filter-bar flex justify-between items-center bg-white p-4 rounded-[25px] border shadow-sm">
         <input 
-            className="flex-1 outline-none font-bold text-slate-400 bg-transparent" 
+            className="flex-1 outline-none font-bold text-slate-400 bg-transparent px-4" 
             placeholder="Rechercher un élève..." 
             value={search} 
             onChange={e => setSearch(e.target.value)} 
         />
-        <div className="stats-badge bg-indigo-600 text-white px-4 py-2 rounded-xl font-black">{filtered.length} ÉLÈVES</div>
+        <div className="stats-badge bg-indigo-600 text-white px-4 py-2 rounded-xl font-black">
+            {loading ? "..." : `${filtered.length} ÉLÈVES`}
+        </div>
       </div>
 
       <div className="table-wrapper bg-white rounded-[30px] overflow-hidden border mt-6 shadow-sm">
@@ -12789,9 +12814,12 @@ export default function StudentsManager({ globalClass }) {
                 </tr>
             </thead>
             <tbody>
-                {filtered.map(p => (
-                    <tr key={p._id} className="border-b hover:bg-slate-50 transition-colors">
-                        <td className="p-5 pl-8 font-bold text-slate-700">{p.firstName} {p.lastName}</td>
+                {!loading && filtered.map(p => (
+                    <tr key={p._id || p.id} className="border-b hover:bg-slate-50 transition-colors">
+                        <td className="p-5 pl-8 font-bold text-slate-700">
+                            {p.firstName} {p.lastName}
+                            <span className="ml-2 text-[8px] px-2 py-0.5 bg-slate-100 rounded text-slate-400 uppercase">{p.classroom}</span>
+                        </td>
                         <td className="p-5 text-right pr-8">
                             <button className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase">Dossier</button>
                         </td>
@@ -12799,7 +12827,9 @@ export default function StudentsManager({ globalClass }) {
                 ))}
             </tbody>
         </table>
-        {filtered.length === 0 && <p className="text-center py-20 text-slate-300 font-black uppercase text-[10px]">Aucun élève</p>}
+        {filtered.length === 0 && !loading && (
+            <p className="text-center py-20 text-slate-300 font-black uppercase text-[10px]">Aucun élève trouvé</p>
+        )}
       </div>
     </div>
   );
@@ -15439,52 +15469,76 @@ const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 
-const getModel = (n) => mongoose.model(n);
+/**
+ * 🏢 DOMAINE : ADMIN & STRUCTURES
+ * Gère les données de base : ÉLÈVES, CHAPITRES, SECTIONS.
+ */
 
-// Gestion des classes et élèves
+// --- ÉLÈVES ---
+
+// GET /api/players
 router.get('/players', async (req, res) => {
     try {
-        const data = await getModel('Player').find({}).sort({ classroom: 1, lastName: 1 });
-        res.json(data);
-    } catch (e) { res.status(500).json([]); }
+        const Player = mongoose.model('Player');
+        const data = await Player.find({}).sort({ classroom: 1, lastName: 1 });
+        res.json(data || []);
+    } catch (e) {
+        console.error("Erreur Admin API [/players]:", e.message);
+        res.status(500).json({ error: "Erreur serveur lors de la récupération des élèves" });
+    }
 });
 
-router.post('/create-class-wizard', async (req, res) => {
-    try {
-        const { teacherId, className, rawData } = req.body;
-        const lines = rawData.split('\n').filter(l => l.trim());
-        const players = lines.map(line => {
-            const parts = line.trim().split(/\s+/);
-            return { firstName: parts.slice(1).join(' '), lastName: parts[0], classroom: className, teacherId };
-        });
-        await getModel('Player').insertMany(players);
-        res.json({ ok: true });
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
+// --- CHAPITRES (DOSSIERS) ---
 
-// Gestion des Super-Dossiers (Archives)
-router.patch('/teacher/:id/sections', async (req, res) => {
-    try {
-        const updated = await getModel('Teacher').findByIdAndUpdate(req.params.id, { subjectSections: req.body.sections }, { new: true });
-        res.json(updated);
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// Chapitres (Dossiers de cours)
+// GET /api/chapters-all
 router.get('/chapters-all', async (req, res) => {
     try {
-        res.json(await getModel('Chapter').find({}).sort({ _id: -1 }));
-    } catch (e) { res.json([]); }
+        const Chapter = mongoose.model('Chapter');
+        const data = await Chapter.find({}).sort({ _id: -1 });
+        res.json(data || []);
+    } catch (e) {
+        res.status(500).json([]);
+    }
 });
 
+// POST /api/chapters
 router.post('/chapters', async (req, res) => {
     try {
+        const Chapter = mongoose.model('Chapter');
         const { _id } = req.body;
         if (_id && mongoose.Types.ObjectId.isValid(_id)) {
-            return res.json(await getModel('Chapter').findByIdAndUpdate(_id, req.body, { new: true }));
+            const updated = await Chapter.findByIdAndUpdate(_id, req.body, { new: true });
+            return res.json(updated);
         }
-        res.json(await getModel('Chapter').create({ ...req.body, isArchived: false }));
-    } catch (e) { res.status(500).json({ error: e.message }); }
+        const created = await Chapter.create({ ...req.body, isArchived: false });
+        res.json(created);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// --- CONFIGURATION PROF ---
+
+// PATCH /api/teacher/:id/sections
+router.patch('/teacher/:id/sections', async (req, res) => {
+    try {
+        const Teacher = mongoose.model('Teacher');
+        const updated = await Teacher.findByIdAndUpdate(
+            req.params.id, 
+            { subjectSections: req.body.sections }, 
+            { new: true }
+        );
+        res.json(updated);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// BUGS
+router.get('/bugs', async (req, res) => {
+    try {
+        res.json(await mongoose.model('Bug').find({}).sort({ createdAt: -1 }));
+    } catch (e) { res.json([]); }
 });
 
 module.exports = router;
@@ -15586,31 +15640,78 @@ router.get('/player-mistakes/:id', async (req, res) => {
 
 module.exports = router;
 
-### FILE: server/features/game/game.routes.js
+### FILE: server/features/games/games.routes.js
+const express = require('express');
+const router = express.Router();
+const mongoose = require('mongoose');
+const AIService = require('../../services/ai.service');
+
+/**
+ * 🕹️ DOMAINE : GAMES
+ */
+
+router.get('/all', async (req, res) => {
+    try {
+        const data = await mongoose.model('GameLevel').find({}).sort({ _id: -1 });
+        res.json(data || []);
+    } catch (e) { res.status(500).json([]); }
+});
+
+router.post('/generate', async (req, res) => {
+    try {
+        const { topic, numQuestions } = req.body;
+        const quiz = await AIService.generateQuiz(topic, numQuestions);
+        res.json(quiz);
+    } catch (e) { res.status(500).json({ error: "IA Error" }); }
+});
+
+router.post('/', async (req, res) => {
+    try {
+        const Game = mongoose.model('GameLevel');
+        const { _id, ...data } = req.body;
+        if (_id) return res.json(await Game.findByIdAndUpdate(_id, data, { new: true }));
+        res.json(await Game.create(data));
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+module.exports = router;
+
+### FILE: server/features/homework/homework.routes.js
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 
-// Route robuste pour récupérer tous les quiz (indispensable pour l'affichage)
-router.get('/game-levels/all', async (req, res) => {
-    try { 
-        const GameLevel = mongoose.model('GameLevel');
-        const data = await GameLevel.find({}).sort({ _id: -1 });
-        res.json(data || []); 
-    } catch (e) { 
-        console.error("❌ Erreur GET /game-levels/all:", e.message);
-        res.status(500).json([]); 
-    }
+/**
+ * 📄 DOMAINE : HOMEWORK
+ */
+
+router.get('/all', async (req, res) => {
+    try {
+        const data = await mongoose.model('Homework').find({}).sort({ date: -1 });
+        res.json(data || []);
+    } catch (e) { res.status(500).json([]); }
 });
 
-router.post('/game-levels', async (req, res) => {
+router.post('/', async (req, res) => {
     try {
-        const GameLevel = mongoose.model('GameLevel');
+        const Homework = mongoose.model('Homework');
         const { _id, ...data } = req.body;
-        if (_id) await GameLevel.findByIdAndUpdate(_id, data);
-        else await GameLevel.create(data);
-        res.json({ ok: true });
-    } catch(e) { res.status(500).json({error: e.message}); }
+        if (_id && mongoose.Types.ObjectId.isValid(_id)) {
+            const updated = await Homework.findByIdAndUpdate(_id, data, { new: true });
+            return res.json(updated);
+        }
+        const created = await Homework.create(data);
+        res.json(created);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/by-class/:classroom', async (req, res) => {
+    try {
+        const data = await mongoose.model('Homework').find({ 
+            $or: [{ classroom: req.params.classroom }, { classroom: "Toutes" }] 
+        }).sort({ date: -1 });
+        res.json(data || []);
+    } catch(e) { res.status(500).json([]); }
 });
 
 module.exports = router;
@@ -15999,13 +16100,12 @@ module.exports = mongoose.models.Chapter || mongoose.model('Chapter', ChapterSch
 const mongoose = require('mongoose');
 
 const DeploySignalSchema = new mongoose.Schema({
-    build: { type: Number, required: true },
-    status: { type: String, default: 'deploying' },
+    status: { type: String, default: 'live' },
     updatedAt: { type: Date, default: Date.now }
 });
 
-// On force le nom 'deploysignals' (sans majuscule, au pluriel)
-module.exports = mongoose.models.DeploySignal || mongoose.model('DeploySignal', DeploySignalSchema, 'deploysignals');
+// Protection contre la redéclaration
+module.exports = mongoose.models.DeploySignal || mongoose.model('DeploySignal', DeploySignalSchema);
 
 ### FILE: server/models/GameLevel.js
 const mongoose = require('mongoose');
@@ -16146,52 +16246,64 @@ const app = express();
 const port = process.env.PORT || 3000;
 const SERVER_BOOT_ID = Date.now();
 
-// 1. CHARGEMENT DES MODÈLES
-require('./models/Teacher');
-require('./models/Player');
-require('./models/Chapter');
-require('./models/Homework');
-require('./models/GameLevel');
+// 1. CHARGEMENT CRITIQUE DES MODÈLES
 require('./models/Bug');
-require('./models/Submission');
-require('./models/TeacherStyle');
-require('./models/ScanSession');
+require('./models/Chapter');
 require('./models/DeploySignal');
+require('./models/GameLevel');
+require('./models/Homework');
+require('./models/Player');
+require('./models/ScanSession');
+require('./models/Submission');
+require('./models/Teacher');
+require('./models/TeacherStyle');
 
 // 2. CONNEXION MONGODB
 mongoose.connect(process.env.MONGODB_URI).then(async () => {
-    console.log('✅ MongoDB Connected.');
+    console.log('✅ MongoDB Connecté.');
     try {
-        await mongoose.model('DeploySignal').findOneAndUpdate({}, { status: 'live', updatedAt: new Date() }, { upsert: true });
-    } catch (e) {}
-}).catch(err => console.error("❌ MongoDB Error:", err.message));
+        const DeploySignal = mongoose.model('DeploySignal');
+        await DeploySignal.findOneAndUpdate({}, { status: 'live', updatedAt: new Date() }, { upsert: true });
+    } catch (e) {
+        console.warn("⚠️ Signal de déploiement non mis à jour.");
+    }
+}).catch(err => {
+    console.error("❌ Erreur MongoDB :", err.message);
+});
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // 3. ROUTES SYSTÈME
 app.get('/api/check-deploy', (req, res) => res.json({ bootId: SERVER_BOOT_ID }));
-app.get('/api/system-status', (req, res) => res.json({ status: 'OK' }));
+app.get('/api/deploy-status', async (req, res) => {
+    try {
+        const sig = await mongoose.model('DeploySignal').findOne();
+        const v = JSON.parse(fs.readFileSync(path.join(__dirname, 'version.json'), 'utf8'));
+        res.json({ version: v.version, build: v.build, status: sig?.status || 'live' });
+    } catch (e) { res.json({ version: '1.0.0', build: 0, status: 'live' }); }
+});
 
 // 4. ARCHITECTURE PAR DOMAINE (ZÉRO POROSITÉ)
-// Chaque domaine gère son versant Prof ET son versant Élève
 app.use('/api/auth', require('./features/auth/auth.routes'));
-app.use('/api/admin', require('./features/admin/admin.routes'));     // Classes, Sections, Élèves
-app.use('/api/scans', require('./features/scans/scans.routes'));     // Captures, Corrections IA, Drive
-app.use('/api/games', require('./features/games/games.routes'));     // Quiz, Moteurs de jeux
-app.use('/api/homework', require('./features/homework/homework.routes')); // Devoirs manuels
+app.use('/api/games', require('./features/games/games.routes'));
+app.use('/api/scans', require('./features/scans/scans.routes'));
+app.use('/api/homework', require('./features/homework/homework.routes'));
+app.use('/api', require('./features/admin/admin.routes')); 
 
 // 5. GESTION FRONTEND
 const distPath = path.join(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
-        if (req.path.startsWith('/api')) return res.status(404).json({ error: "API 404" });
+        if (req.path.startsWith('/api')) return res.status(404).json({ error: "API non trouvée" });
         res.sendFile(path.join(distPath, 'index.html'));
     });
 }
 
-app.listen(port, () => console.log(`🚀 SERVEUR MODULAIRE V2 PRÊT : PORT ${port}`));
+app.listen(port, () => {
+    console.log(`🚀 SERVEUR PRÊT : PORT ${port} (BOOT:${SERVER_BOOT_ID})`);
+});
 
 ### FILE: server/services/ai.service.js
 const { GoogleGenerativeAI } = require("@google/generative-ai");
@@ -16316,9 +16428,9 @@ module.exports = DriveService;
 ### FILE: server/version.json
 {
   "version": "1.6.0",
-  "build": 187,
+  "build": 195,
   "description": "Total Domain Isolation (Zero Porosity) + AI Service Extraction",
-  "timestamp": "2026-01-14T01:25:43.176Z"
+  "timestamp": "2026-01-14T02:38:49.654Z"
 }
 
 ### FILE: snap.js

@@ -118,7 +118,10 @@
 │   │   ├── eleve/
 │   │   │   └── eleve.routes.js
 │   │   ├── game/
-│   │   │   └── game.routes.js
+│   │   ├── games/
+│   │   │   └── games.routes.js
+│   │   ├── homework/
+│   │   │   └── homework.routes.js
 │   │   ├── prof/
 │   │   │   ├── automation.routes.js
 │   │   │   ├── chapter.routes.js
