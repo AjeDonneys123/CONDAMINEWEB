@@ -4,7 +4,7 @@ const mongoose = require('mongoose');
 
 /**
  * 🏢 DOMAINE : ADMIN & CLASSES
- * Gère les données structurelles (Élèves, Chapitres, Sections)
+ * Point d'entrée consolidé pour la gestion des structures.
  */
 
 // GET /api/players
@@ -15,7 +15,7 @@ router.get('/players', async (req, res) => {
         res.json(data || []);
     } catch (e) {
         console.error("Erreur Admin /players:", e.message);
-        res.status(500).json({ error: "Erreur serveur" });
+        res.status(500).json({ error: "Échec récupération élèves" });
     }
 });
 
@@ -60,11 +60,18 @@ router.delete('/classroom/:className', async (req, res) => {
     }
 });
 
-// BUGS & LOGS
+// GESTION DES BUGS
 router.get('/bugs', async (req, res) => {
     try {
         res.json(await mongoose.model('Bug').find({}).sort({ createdAt: -1 }));
     } catch (e) { res.json([]); }
+});
+
+router.delete('/bugs/:id', async (req, res) => {
+    try {
+        await mongoose.model('Bug').findByIdAndDelete(req.params.id);
+        res.json({ ok: true });
+    } catch (e) { res.json({ ok: false }); }
 });
 
 module.exports = router;

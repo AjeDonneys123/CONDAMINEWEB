@@ -8,8 +8,10 @@ const app = express();
 const port = process.env.PORT || 3000;
 const SERVER_BOOT_ID = Date.now();
 
-// 1. CHARGEMENT CRITIQUE DES MODÈLES (AVANT LES ROUTES)
-// On importe manuellement chaque modèle pour garantir leur existence en mémoire
+/**
+ * 1. CHARGEMENT CRITIQUE DES MODÈLES (ORDRE ALPHABÉTIQUE)
+ * Indispensable : On enregistre les schémas AVANT de charger les routes API.
+ */
 require('./models/Bug');
 require('./models/Chapter');
 require('./models/DeploySignal');
@@ -23,21 +25,25 @@ require('./models/TeacherStyle');
 
 // 2. CONNEXION MONGODB
 mongoose.connect(process.env.MONGODB_URI).then(async () => {
-    console.log('✅ MongoDB Connected.');
+    console.log('✅ MongoDB Connecté.');
     try {
-        // Mise à jour du signal de déploiement pour le monitoring client (US #13)
+        // Mise à jour du signal de déploiement (US #13)
         const DeploySignal = mongoose.model('DeploySignal');
         await DeploySignal.findOneAndUpdate({}, { status: 'live', updatedAt: new Date() }, { upsert: true });
     } catch (e) {
         console.warn("⚠️ Signal de déploiement non mis à jour.");
     }
-}).catch(err => console.error("❌ MongoDB Connection Error:", err.message));
+}).catch(err => {
+    console.error("❌ Erreur MongoDB :", err.message);
+});
 
-// MIDDLEWARES
+// MIDDLEWARES DE BASE
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// 3. ROUTES SYSTÈME (INDISPENSABLES POUR LE FRONTEND)
+/**
+ * 3. ROUTES SYSTÈME (BOOT & MONITORING)
+ */
 app.get('/api/check-deploy', (req, res) => {
     res.json({ bootId: SERVER_BOOT_ID });
 });
@@ -52,28 +58,36 @@ app.get('/api/deploy-status', async (req, res) => {
     }
 });
 
-// 4. ARCHITECTURE PAR DOMAINE
+/**
+ * 4. ARCHITECTURE PAR DOMAINE (ZÉRO POROSITÉ)
+ */
 app.use('/api/auth', require('./features/auth/auth.routes'));
 app.use('/api/games', require('./features/games/games.routes'));
 app.use('/api/scans', require('./features/scans/scans.routes'));
 app.use('/api/homework', require('./features/homework/homework.routes'));
 
-// Montage du domaine Admin directement sur /api pour capturer /api/players, /api/chapters-all etc.
+// Montage du domaine Admin directement sur /api pour capturer /api/players et /api/chapters-all
 app.use('/api', require('./features/admin/admin.routes')); 
 
-// 5. GESTION FRONTEND (PRODUCTION)
+/**
+ * 5. GESTION DU FRONTEND (PRODUCTION)
+ */
 const distPath = path.join(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
-        if (req.path.startsWith('/api')) return res.status(404).json({ error: "Route API non trouvée" });
+        // SÉCURITÉ : Si on demande une route /api inexistante, renvoyer JSON, pas HTML
+        if (req.path.startsWith('/api')) {
+            return res.status(404).json({ error: "Route API introuvable", path: req.path });
+        }
         res.sendFile(path.join(distPath, 'index.html'));
     });
 }
 
 app.listen(port, () => {
     console.log(`-----------------------------------------------`);
-    console.log(`🚀 SERVEUR CONDAMINE PRÊT SUR LE PORT ${port}`);
-    console.log(`🆔 BOOT ID : ${SERVER_BOOT_ID}`);
+    console.log(`🚀 SERVEUR CONDAMINE MODULAIRE V2 PRÊT`);
+    console.log(`📡 PORT : ${port}`);
+    console.log(`🛠️  BOOT ID : ${SERVER_BOOT_ID}`);
     console.log(`-----------------------------------------------`);
 });
