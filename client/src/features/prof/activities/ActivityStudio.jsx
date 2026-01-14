@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import HomeworkStudio from '../homework/HomeworkStudio';
 import GameStudio from '../games/GameStudio';
 import ProfStudioFolder from '../components/ProfStudioFolder';
-import HomeworkResults from '../homework/HomeworkResults';
 
 export default function ActivityStudio({ globalClass, user }) {
     const [activities, setActivities] = useState([]);
@@ -20,7 +19,6 @@ export default function ActivityStudio({ globalClass, user }) {
         if (!globalClass) return;
         setLoading(true);
         try {
-            // Synchronisation avec les nouveaux tiroirs étanches du Backend
             const [hwRes, gmRes, cpRes] = await Promise.all([
                 fetch('/api/homework/all'),
                 fetch('/api/games/all'),
@@ -32,7 +30,6 @@ export default function ActivityStudio({ globalClass, user }) {
                 const gm = await gmRes.json();
                 const cp = await cpRes.json();
                 
-                // On fusionne les activités pour le dossier
                 setActivities([
                     ...hw.map(x => ({ ...x, actType: 'homework' })),
                     ...gm.map(x => ({ ...x, actType: 'game' }))
@@ -64,21 +61,13 @@ export default function ActivityStudio({ globalClass, user }) {
             headers:{'Content-Type':'application/json'}, 
             body:JSON.stringify({_id:id, title, classroom: globalClass, subject})
         });
-        const data = await res.json();
-        if (res.ok) {
-            showNotify(data);
-            await loadData();
-        }
+        if (res.ok) await loadData();
     };
 
     const handleDeleteChapter = async (id) => {
         if (!confirm("Supprimer ce dossier et son contenu Drive ?")) return;
         const res = await fetch(`/api/chapters/${id}`, { method: 'DELETE' });
-        const data = await res.json();
-        if (res.ok) {
-            showNotify(data);
-            await loadData();
-        }
+        if (res.ok) await loadData();
     };
 
     if (editingItem) {
@@ -89,7 +78,6 @@ export default function ActivityStudio({ globalClass, user }) {
 
     return (
         <div className="animate-in fade-in relative">
-            {/* Notification flottante */}
             {notification && (
                 <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[9999] w-full max-w-lg px-4">
                     <div className={`rounded-3xl p-4 shadow-2xl flex items-center gap-4 border-2 ${notification.isError ? 'bg-red-600 border-red-400' : 'bg-slate-900 border-emerald-500'}`}>
@@ -112,6 +100,7 @@ export default function ActivityStudio({ globalClass, user }) {
                     chapters={chapters} 
                     items={activities} 
                     classFilter={globalClass}
+                    onRefresh={loadData}
                     onArchive={async (id, state) => {
                         await fetch('/api/chapters', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({_id:id, isArchived:state})});
                         loadData();

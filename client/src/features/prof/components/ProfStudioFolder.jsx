@@ -1,8 +1,19 @@
 import React, { useState, useEffect } from 'react';
 
+const COLOR_PALETTE = [
+    '#ef4444', // Rouge
+    '#3b82f6', // Bleu
+    '#22c55e', // Vert
+    '#f59e0b', // Ambre
+    '#8b5cf6', // Violet
+    '#ec4899', // Rose
+    '#06b6d4', // Cyan
+    '#f97316'  // Orange
+];
+
 export default function ProfStudioFolder({ 
     user, items = [], chapters = [], classFilter, 
-    onArchive, onRename, onEditItem, onDeleteItem, onDeleteChapter, onCreateChapter, onNotify 
+    onArchive, onRename, onEditItem, onDeleteItem, onDeleteChapter, onCreateChapter, onNotify, onRefresh 
 }) {
     const [openChaps, setOpenChaps] = useState({});
     const [editingId, setEditingId] = useState(null);
@@ -35,6 +46,14 @@ export default function ProfStudioFolder({
         } catch(e) { console.error("Erreur Synchro Matières:", e); }
     };
 
+    const handleAddSection = () => {
+        const n = prompt("Nom de la nouvelle matière ?");
+        if (!n) return;
+        // Attribution d'une couleur différente basée sur le nombre de sections actuelles
+        const newColor = COLOR_PALETTE[sections.length % COLOR_PALETTE.length];
+        saveSections([...sections, { name: n, color: newColor }]);
+    };
+
     const moveChapter = async (chapId, newSubject) => {
         try {
             const res = await fetch('/api/chapters', {
@@ -45,7 +64,8 @@ export default function ProfStudioFolder({
             if (res.ok) {
                 setMovingId(null);
                 if (onNotify) onNotify({ message: `Dossier reclassé en ${newSubject}` });
-                window.location.reload(); 
+                // CORRECTIF : Au lieu de window.location.reload(), on utilise onRefresh()
+                if (onRefresh) onRefresh();
             }
         } catch (e) { console.error(e); }
     };
@@ -72,11 +92,7 @@ export default function ProfStudioFolder({
             <div 
                 key={chap._id} 
                 className={`bg-white rounded-[35px] border-2 shadow-sm transition-all mb-3 animate-in fade-in ${isMoving || isEditing ? 'z-[100] relative' : 'z-0 relative'}`} 
-                style={{ 
-                    borderColor: isOpen ? color : '#f1f5f9',
-                    // CORRECTIF : On retire overflow-hidden pour laisser sortir le menu
-                    overflow: 'visible' 
-                }}
+                style={{ borderColor: isOpen ? color : '#f1f5f9', overflow: 'visible' }}
             >
                 <div className="p-4 flex items-center justify-between">
                     <div className="flex items-center gap-4 flex-1 cursor-pointer" onClick={() => setOpenChaps({...openChaps, [chap._id]: !isOpen})}>
@@ -94,8 +110,6 @@ export default function ProfStudioFolder({
                     <div className="flex gap-1 items-center">
                         <div className="relative">
                             <button title="Changer de matière" onClick={(e) => { e.stopPropagation(); setMovingId(isMoving ? null : chap._id); }} className={`w-8 h-8 flex items-center justify-center rounded-full transition-all ${isMoving ? 'bg-indigo-600 text-white shadow-lg scale-110' : 'bg-slate-50 text-slate-300 hover:text-indigo-500'}`}>📁</button>
-                            
-                            {/* MENU FLOTTANT CORRIGÉ */}
                             {isMoving && (
                                 <div className="absolute right-0 top-10 z-[200] bg-white border-2 border-indigo-100 shadow-2xl rounded-2xl p-2 min-w-[180px] animate-in zoom-in">
                                     <p className="text-[9px] font-black text-slate-400 uppercase p-2 border-b mb-1 tracking-widest">Reclasser vers :</p>
@@ -140,7 +154,7 @@ export default function ProfStudioFolder({
                         Configuration & Archives
                     </h3>
                     <div className="flex gap-2">
-                        <button onClick={() => { const n = prompt("Nom de la matière ?"); if(n) saveSections([...sections, {name:n, color:'#3b82f6'}]); }} className="bg-indigo-600 text-white px-5 py-2 rounded-2xl font-black text-[9px] uppercase hover:bg-indigo-500 shadow-lg">+ Nouvelle Matière</button>
+                        <button onClick={handleAddSection} className="bg-indigo-600 text-white px-5 py-2 rounded-2xl font-black text-[9px] uppercase hover:bg-indigo-500 shadow-lg">+ Nouvelle Matière</button>
                         <button onClick={() => setIsDeleteMode(!isDeleteMode)} className={`px-5 py-2 rounded-2xl font-black text-[9px] uppercase transition-colors ${isDeleteMode ? 'bg-red-500 text-white' : 'bg-slate-700 text-slate-300'}`}>{isDeleteMode ? 'Quitter Edition' : 'Gérer Matières'}</button>
                     </div>
                 </div>
