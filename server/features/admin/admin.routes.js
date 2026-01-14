@@ -4,10 +4,8 @@ const mongoose = require('mongoose');
 
 /**
  * 🏢 DOMAINE : ADMIN & CLASSES
- * Gère les élèves, les chapitres et les configurations prof.
+ * Gère les données structurelles (Élèves, Chapitres, Sections)
  */
-
-// --- ÉLÈVES ---
 
 // GET /api/players
 router.get('/players', async (req, res) => {
@@ -16,45 +14,10 @@ router.get('/players', async (req, res) => {
         const data = await Player.find({}).sort({ classroom: 1, lastName: 1 });
         res.json(data || []);
     } catch (e) {
-        console.error("Erreur GET /players:", e.message);
-        res.status(500).json({ error: "Erreur serveur lors de la récupération des élèves" });
+        console.error("Erreur Admin /players:", e.message);
+        res.status(500).json({ error: "Erreur serveur" });
     }
 });
-
-// POST /api/create-class-wizard
-router.post('/create-class-wizard', async (req, res) => {
-    try {
-        const Player = mongoose.model('Player');
-        const { teacherId, className, rawData } = req.body;
-        const lines = rawData.split('\n').filter(l => l.trim());
-        const players = lines.map(line => {
-            const parts = line.trim().split(/\s+/);
-            const lastName = parts[0] || "NOM";
-            const firstName = parts.slice(1).join(' ') || "Prénom";
-            return { firstName, lastName, classroom: className, teacherId };
-        });
-        await Player.insertMany(players);
-        res.json({ ok: true, count: players.length });
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
-});
-
-// DELETE /api/classroom/:className
-router.delete('/classroom/:className', async (req, res) => {
-    try {
-        const { className } = req.params;
-        await mongoose.model('Player').deleteMany({ classroom: className });
-        await mongoose.model('Chapter').deleteMany({ classroom: className });
-        await mongoose.model('Homework').deleteMany({ classroom: className });
-        await mongoose.model('ScanSession').deleteMany({ classroom: className });
-        res.json({ ok: true });
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
-});
-
-// --- CHAPITRES (DOSSIERS) ---
 
 // GET /api/chapters-all
 router.get('/chapters-all', async (req, res) => {
@@ -83,45 +46,25 @@ router.post('/chapters', async (req, res) => {
     }
 });
 
-// DELETE /api/chapters/:id
-router.delete('/chapters/:id', async (req, res) => {
+// DELETE /api/classroom/:className
+router.delete('/classroom/:className', async (req, res) => {
     try {
-        await mongoose.model('Chapter').findByIdAndDelete(req.params.id);
+        const { className } = req.params;
+        await mongoose.model('Player').deleteMany({ classroom: className });
+        await mongoose.model('Chapter').deleteMany({ classroom: className });
+        await mongoose.model('Homework').deleteMany({ classroom: className });
+        await mongoose.model('ScanSession').deleteMany({ classroom: className });
         res.json({ ok: true });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
 });
 
-// --- PROF / TEACHER ---
-
-// PATCH /api/teacher/:id/sections
-router.patch('/teacher/:id/sections', async (req, res) => {
-    try {
-        const Teacher = mongoose.model('Teacher');
-        const updated = await Teacher.findByIdAndUpdate(
-            req.params.id, 
-            { subjectSections: req.body.sections }, 
-            { new: true }
-        );
-        res.json(updated);
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
-});
-
-// BUGS
+// BUGS & LOGS
 router.get('/bugs', async (req, res) => {
     try {
         res.json(await mongoose.model('Bug').find({}).sort({ createdAt: -1 }));
     } catch (e) { res.json([]); }
-});
-
-router.delete('/bugs/:id', async (req, res) => {
-    try {
-        await mongoose.model('Bug').findByIdAndDelete(req.params.id);
-        res.json({ ok: true });
-    } catch (e) { res.json({ ok: false }); }
 });
 
 module.exports = router;
