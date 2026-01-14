@@ -17,7 +17,7 @@ const getSubjectLabel = (s) => {
     return normalize(s);
 };
 
-// --- GESTION DES CHAPITRES (CRÉER / MODIFIER) ---
+// --- GESTION DES CHAPITRES ---
 router.post('/chapters', async (req, res) => {
     try {
         const Chapter = mongoose.model('Chapter');
@@ -26,7 +26,6 @@ router.post('/chapters', async (req, res) => {
         const subFolder = getSubjectLabel(subject);
         const drivePath = `CONDACLASSE / ${classroom.toUpperCase()} / ${subFolder} / ${title.toUpperCase()}`;
 
-        // Sync Physique Drive
         const condaRootId = await DriveService.getOrCreateFolder("CONDACLASSE", null);
         const classId = await DriveService.getOrCreateFolder(normalize(classroom), condaRootId);
         const subId = await DriveService.getOrCreateFolder(subFolder, classId);
@@ -42,43 +41,43 @@ router.post('/chapters', async (req, res) => {
         res.json({ 
             ...result._doc, 
             drivePath, 
-            message: _id ? "Dossier mis à jour" : "Nouveau dossier créé" 
+            message: _id ? "Dossier mis à jour" : "Nouveau chapitre créé" 
         });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// --- SUPPRESSION (US #9) ---
 router.delete('/chapters/:id', async (req, res) => {
     try {
         const Chapter = mongoose.model('Chapter');
         const chap = await Chapter.findById(req.params.id);
         if (!chap) return res.status(404).send("Introuvable");
-
-        const drivePath = `CONDACLASSE / ${chap.classroom} / ${chap.subject} / ${chap.title}`;
-        
-        if (chap.driveFolderId) {
-            await DriveService.deleteFile(chap.driveFolderId).catch(() => {});
-        }
+        const drivePath = `CONDACLASSE / ${chap.classroom} / ${getSubjectLabel(chap.subject)} / ${chap.title}`;
+        if (chap.driveFolderId) await DriveService.deleteFile(chap.driveFolderId).catch(() => {});
         await Chapter.findByIdAndDelete(req.params.id);
-
-        res.json({ ok: true, drivePath, message: "Dossier supprimé du Drive et de la BDD" });
+        res.json({ ok: true, drivePath, message: "Chapitre supprimé" });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// --- GESTION MATIÈRES (SUPER-DOSSIERS) ---
+// --- GESTION DES MATIÈRES (SUPER-DOSSIERS) ---
 router.patch('/teacher/:id/sections', async (req, res) => {
     try {
         const Teacher = mongoose.model('Teacher');
-        const updated = await Teacher.findByIdAndUpdate(req.params.id, { subjectSections: req.body.sections }, { new: true });
+        const { sections, className } = req.body; // className ajouté pour le chemin
+        
+        const updated = await Teacher.findByIdAndUpdate(req.params.id, { subjectSections: sections }, { new: true });
+        
+        // On renvoie un chemin indicatif pour la matière
+        const lastSection = sections[sections.length - 1]?.name || "MATIERES";
+        const drivePath = `CONDACLASSE / ${normalize(className || 'TOUTES')} / ${normalize(lastSection)}`;
+
         res.json({ 
             ...updated._doc, 
             message: "Configuration des matières mise à jour",
-            drivePath: "RACINE / CONDACLASSE / MATIÈRES"
+            drivePath: drivePath
         });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Récupération classique
 router.get('/players', async (req, res) => {
     try { res.json(await mongoose.model('Player').find({}).sort({ classroom: 1, lastName: 1 })); } catch (e) { res.json([]); }
 });

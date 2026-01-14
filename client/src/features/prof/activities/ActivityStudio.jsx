@@ -3,7 +3,6 @@ import HomeworkStudio from '../homework/HomeworkStudio';
 import GameStudio from '../games/GameStudio';
 import ProfStudioFolder from '../components/ProfStudioFolder';
 import HomeworkResults from '../homework/HomeworkResults';
-import './ActivityStudio.css';
 
 export default function ActivityStudio({ globalClass, user }) {
     const [activities, setActivities] = useState([]);
@@ -60,7 +59,7 @@ export default function ActivityStudio({ globalClass, user }) {
         });
         const data = await res.json();
         if (res.ok) {
-            showNotify("Chapitre renommé", data.drivePath);
+            showNotify(data.message, data.drivePath);
             await loadData();
         }
     };
@@ -83,7 +82,6 @@ export default function ActivityStudio({ globalClass, user }) {
 
     return (
         <div className="animate-in fade-in relative">
-            {/* BANDEAU DE NOTIFICATION DRIVE (US #7) */}
             {notification && (
                 <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[9999] w-full max-w-xl px-4 animate-in slide-in-from-top-4">
                     <div className="bg-slate-900 border-2 border-emerald-500 rounded-3xl p-5 shadow-2xl flex items-center gap-4">
@@ -102,7 +100,7 @@ export default function ActivityStudio({ globalClass, user }) {
                 <button onClick={() => setEditingItem({ type: 'game', data: null })} className="bg-purple-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:scale-105 transition-transform"> Nouveau Jeu</button>
             </div>
 
-            {loading ? <div className="text-center py-20 text-slate-300 font-black animate-pulse uppercase">Chargement...</div> : (
+            {!loading && (
                 <ProfStudioFolder 
                     user={user} chapters={chapters} items={activities} classFilter={globalClass}
                     onArchive={async (id, state) => {
@@ -119,6 +117,7 @@ export default function ActivityStudio({ globalClass, user }) {
                     }}
                     onDeleteChapter={handleDeleteChapter}
                     onCreateChapter={handleCreateChapter}
+                    onNotify={showNotify}
                 />
             )}
         </div>
