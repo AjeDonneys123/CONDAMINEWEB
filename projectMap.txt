@@ -6,6 +6,7 @@
 ├── chemin/
 │   └── du/
 │       └── fichier.js
+├── cleanup.js
 ├── client/
 │   ├── .eslintrc.cjs
 │   ├── .gitignore
@@ -77,6 +78,7 @@
 │   │   │       │   ├── HomeworkStudio.css
 │   │   │       │   └── HomeworkStudio.jsx
 │   │   │       ├── scans/
+│   │   │       │   ├── ScansStudio.css
 │   │   │       │   └── ScansStudio.jsx
 │   │   │       └── students/
 │   │   │           ├── StudentsManager.css
@@ -117,7 +119,11 @@
 │   │   │   └── game.routes.js
 │   │   └── prof/
 │   │       ├── automation.routes.js
-│   │       └── prof.routes.js
+│   │       ├── chapter.routes.js
+│   │       ├── homework.routes.js
+│   │       ├── prof.routes.js
+│   │       ├── scan.routes.js
+│   │       └── teacher.routes.js
 │   ├── models/
 │   │   ├── Bug.js
 │   │   ├── Chapter.js
