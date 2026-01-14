@@ -5,9 +5,7 @@ const mongoose = require('mongoose');
 const fs = require('fs');
 
 // Injection globale de fetch pour Gemini (Node < 18)
-if (!global.fetch) {
-    global.fetch = require('node-fetch');
-}
+if (!global.fetch) { global.fetch = require('node-fetch'); }
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -50,10 +48,8 @@ app.get('/api/deploy-status', async (req, res) => {
 app.use('/api/auth', require('./features/auth/auth.routes'));
 app.use('/api/games', require('./features/games/games.routes'));
 app.use('/api/scans', require('./features/scans/scans.routes'));
-app.use('/api/homework', require('./features/homework/homework.routes'));
-
-// PONT ADMIN (Rétablit les accès /api/players et /api/chapters-all)
-app.use('/api', require('./features/admin/admin.routes'));
+app.use('/api/homework', require('./features/homework/homework.routes')); // DOMAINE HOMEWORK STABILISÉ
+app.use('/api', require('./features/admin/admin.routes')); 
 
 // 5. GESTION FRONTEND
 const distPath = path.join(process.cwd(), 'client', 'dist');
@@ -65,7 +61,4 @@ if (fs.existsSync(distPath)) {
     });
 }
 
-app.listen(port, () => {
-    console.log(`🚀 SERVEUR CONDAMINE PRÊT | PORT ${port}`);
-    console.log(`🤖 IA MODE : GEMINI 2.0 FLASH`);
-});
+app.listen(port, () => console.log(`🚀 SERVEUR CONDAMINE : PORT ${port} (READY)`));
