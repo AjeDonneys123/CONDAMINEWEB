@@ -11,31 +11,26 @@ export default function App() {
   const [appInfo, setAppInfo] = useState({ version: '...', build: '...', status: 'live' });
   const bootIdRef = useRef(null);
 
-  // --- MONITEUR DE DÉPLOIEMENT ---
+  // --- MONITEUR DE DÉPLOIEMENT (US #13) ---
   useEffect(() => {
     const monitor = async () => {
       try {
-        // 1. Détection de redémarrage (Fin de déploiement)
         const bootRes = await fetch('/api/check-deploy');
         const bootData = await bootRes.json();
         
         if (!bootIdRef.current) {
           bootIdRef.current = bootData.bootId;
         } else if (bootData.bootId !== bootIdRef.current) {
-          // Si le bootId change, c'est que Render a switché sur la nouvelle version !
           setIsSyncing(true);
           setTimeout(() => window.location.reload(), 2000);
           return;
         }
 
-        // 2. Récupération du statut (Pulsation bleue)
         const statusRes = await fetch('/api/deploy-status');
         const statusData = await statusRes.json();
         setAppInfo(statusData);
 
-      } catch (e) {
-        // Erreur réseau normale pendant le redémarrage du serveur
-      }
+      } catch (e) {}
     };
 
     const interval = setInterval(monitor, 8000);
@@ -43,7 +38,6 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  // Sync session
   useEffect(() => {
     const saved = localStorage.getItem('player');
     if (saved) {
@@ -60,7 +54,7 @@ export default function App() {
         <div className="sync-card">
           <div className="sync-spinner"></div>
           <h2>SYNCHRONISATION...</h2>
-          <p>La nouvelle version du site est maintenant disponible !</p>
+          <p>Le système a été mis à jour.</p>
         </div>
       </div>
     );
@@ -71,21 +65,9 @@ export default function App() {
 
   return (
     <div className="app-wrapper">
-      {/* BANNIÈRE DE VERSION AVEC INDICATEUR LIVE/DEPLOYING */}
       <div className="version-banner">
           <span className="version-txt">BUILD {appInfo.build} (v{appInfo.version})</span>
-          {appInfo.status === 'deploying' && (
-              <div className="deploy-indicator">
-                  <span className="deploy-dot"></span>
-                  DÉPLOIEMENT EN COURS
-              </div>
-          )}
-          {appInfo.status === 'live' && (
-              <div className="live-indicator">
-                  <span className="live-dot"></span>
-                  SYSTÈME LIVE
-              </div>
-          )}
+          {appInfo.status === 'live' && <div className="live-indicator"><span className="live-dot"></span> LIVE</div>}
       </div>
 
       {!user ? (

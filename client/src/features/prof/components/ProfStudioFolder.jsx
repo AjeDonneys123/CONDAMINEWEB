@@ -9,11 +9,11 @@ export default function ProfStudioFolder({
     const [tempTitle, setTempTitle] = useState("");
     const [isDeleteMode, setIsDeleteMode] = useState(false);
     const [sections, setSections] = useState([]);
+    const [movingId, setMovingId] = useState(null); 
 
     const norm = (c) => c?.toString().toUpperCase().replace('E', '').trim() || "";
     const smartSort = (a, b) => (a.title || "").localeCompare(b.title || "", undefined, { numeric: true, sensitivity: 'base' });
 
-    // Initialisation
     useEffect(() => { 
         if (user?.subjectSections) setSections(user.subjectSections);
     }, [user]);
@@ -32,7 +32,24 @@ export default function ProfStudioFolder({
                 setSections(data.user.subjectSections);
                 if (onNotify) onNotify(data);
             }
-        } catch(e) { console.error("Erreur Synchro:", e); }
+        } catch(e) { console.error("Erreur Synchro Matières:", e); }
+    };
+
+    // US #7 : Miroir Physique - Déplacer un dossier vers une autre matière
+    const moveChapter = async (chapId, newSubject) => {
+        try {
+            const res = await fetch('/api/chapters', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ _id: chapId, subject: newSubject, classroom: classFilter })
+            });
+            if (res.ok) {
+                setMovingId(null);
+                if (onNotify) onNotify({ message: `Dossier reclassé en ${newSubject}` });
+                // Forcer rafraîchissement car le parent doit re-fetcher chapters
+                window.location.reload(); 
+            }
+        } catch (e) { console.error(e); }
     };
 
     const activeChapters = chapters
@@ -42,20 +59,9 @@ export default function ProfStudioFolder({
     const archivedChapters = chapters
         .filter(c => c.isArchived && norm(c.classroom) === norm(classFilter));
 
-    // --- LOGIQUE DE VISIBILITÉ (FIX GÉOGRAPHIE VIDE) ---
-    const getVisibleSections = () => {
-        // En mode "GÉRER", on affiche absolument toutes les matières du prof
-        if (isDeleteMode) return sections;
-
-        // Sinon, on n'affiche que celles qui ont au moins un chapitre actif
-        const list = sections.filter(s => activeChapters.some(c => c.subject === s.name));
-        
-        // Ajout de "Autres" si des chapitres traînent sans matière
-        if (activeChapters.some(c => c.subject === "Autres")) {
-            list.push({ name: 'Autres', color: '#64748b' });
-        }
-        return list;
-    };
+    // DÉTECTION DES ORPHELINS (Fix pour visibilité US #1)
+    const orphanActive = activeChapters.filter(c => !sections.some(s => s.name === c.subject));
+    const orphanArchived = archivedChapters.filter(c => !sections.some(s => s.name === c.subject));
 
     const renderChapterCard = (chap, section) => {
         const isOpen = openChaps[chap._id];
@@ -71,54 +77,68 @@ export default function ProfStudioFolder({
                         <div className="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-white text-sm relative" style={{ backgroundColor: color }}>{letter}</div>
                         <div className="flex flex-col text-left">
                             {isEditing ? (
-                                <input autoFocus className="text-sm font-black border-b-2 outline-none" style={{ borderColor: color }} value={tempTitle} onChange={e => setTempTitle(e.target.value)} onBlur={() => { onRename(chap._id, tempTitle, section.name); setEditingId(null); }} onKeyDown={e => e.key === 'Enter' && (onRename(chap._id, tempTitle, section.name), setEditingId(null))} onClick={e => e.stopPropagation()} />
+                                <input autoFocus className="text-sm font-black border-b-2 outline-none" style={{ borderColor: color }} value={tempTitle} onChange={e => setTempTitle(e.target.value)} onBlur={() => { onRename(chap._id, tempTitle, chap.subject); setEditingId(null); }} onKeyDown={e => e.key === 'Enter' && (onRename(chap._id, tempTitle, chap.subject), setEditingId(null))} onClick={e => e.stopPropagation()} />
                             ) : (
                                 <span className="text-sm font-black text-slate-700">{chap.title || "Sans titre"}</span>
                             )}
                             <span className="text-[9px] font-bold text-slate-400 uppercase">{chapItems.length} ÉLÉMENTS</span>
                         </div>
                     </div>
-                    <div className="flex gap-1">
-                        <button onClick={(e) => { e.stopPropagation(); setEditingId(chap._id); setTempTitle(chap.title); }} className="w-8 h-8 flex items-center justify-center bg-slate-50 text-slate-300 rounded-full hover:text-indigo-500">✏️</button>
-                        <button onClick={(e) => { e.stopPropagation(); onArchive(chap._id, !chap.isArchived); }} className="w-8 h-8 flex items-center justify-center bg-slate-50 text-slate-300 rounded-full hover:bg-slate-800 hover:text-white">📦</button>
-                        <button onClick={(e) => { e.stopPropagation(); onDeleteChapter(chap._id); }} className="w-8 h-8 flex items-center justify-center bg-red-50 text-red-300 rounded-full font-black hover:bg-red-500">✕</button>
+                    
+                    <div className="flex gap-1 items-center">
+                        {/* BOUTON RECLASSER (Fix Orphelins) */}
+                        <div className="relative">
+                            <button title="Changer de matière" onClick={(e) => { e.stopPropagation(); setMovingId(movingId === chap._id ? null : chap._id); }} className={`w-8 h-8 flex items-center justify-center rounded-full transition-all ${movingId === chap._id ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-300 hover:text-indigo-500'}`}>📁</button>
+                            {movingId === chap._id && (
+                                <div className="absolute right-0 top-10 z-[100] bg-white border shadow-2xl rounded-2xl p-2 min-w-[150px] animate-in zoom-in">
+                                    <p className="text-[8px] font-black text-slate-400 uppercase p-2 border-b">Déplacer vers :</p>
+                                    {sections.map(s => (
+                                        <button key={s.name} onClick={() => moveChapter(chap._id, s.name)} className="w-full text-left p-3 hover:bg-indigo-50 rounded-xl text-[10px] font-bold text-slate-600 flex items-center gap-2">
+                                            <span className="w-2 h-2 rounded-full" style={{ background: s.color }}></span> {s.name}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        <button title="Renommer" onClick={(e) => { e.stopPropagation(); setEditingId(chap._id); setTempTitle(chap.title); }} className="w-8 h-8 flex items-center justify-center bg-slate-50 text-slate-300 rounded-full hover:text-indigo-500">✏️</button>
+                        <button title="Archiver/Désarchiver" onClick={(e) => { e.stopPropagation(); onArchive(chap._id, !chap.isArchived); }} className="w-8 h-8 flex items-center justify-center bg-slate-50 text-slate-300 rounded-full hover:bg-slate-800 hover:text-white">📦</button>
+                        <button title="Supprimer Définitivement" onClick={(e) => { e.stopPropagation(); onDeleteChapter(chap._id); }} className="w-8 h-8 flex items-center justify-center bg-red-50 text-red-300 rounded-full font-black hover:bg-red-500">✕</button>
                     </div>
                 </div>
                 {isOpen && (
                     <div className="p-4 bg-slate-50/50 border-t-2 border-dashed border-slate-100 space-y-2">
                         {chapItems.map(it => (
-                            <div key={it._id} className="bg-white p-3 px-5 rounded-2xl flex justify-between items-center shadow-sm border border-transparent hover:border-indigo-200">
+                            <div key={it._id} className="bg-white p-3 px-5 rounded-2xl flex justify-between items-center shadow-sm border border-transparent hover:border-indigo-200 cursor-pointer" onClick={() => onEditItem(it)}>
                                 <b className="text-slate-700 text-xs">{it.actType === 'game' ? '🕹️' : '📄'} {it.title}</b>
-                                <button onClick={() => onDeleteItem(it._id, it.actType)} className="w-6 h-6 flex items-center justify-center bg-red-50 text-red-400 rounded-full font-black text-[10px]">✕</button>
+                                <button onClick={(e) => { e.stopPropagation(); onDeleteItem(it._id, it.actType); }} className="w-6 h-6 flex items-center justify-center bg-red-50 text-red-400 rounded-full font-black text-[10px]">✕</button>
                             </div>
                         ))}
+                        {chapItems.length === 0 && <p className="text-center py-4 text-[9px] font-bold text-slate-300 uppercase">Dossier Vide</p>}
                     </div>
                 )}
             </div>
         );
     };
 
-    const visibleSections = getVisibleSections();
-
     return (
         <div className="max-w-5xl mx-auto space-y-12 pb-20">
-            {/* CARRE NOIR : CONFIGURATION ET ARCHIVES */}
+            {/* CARRE NOIR : CONFIGURATION ET ARCHIVES (Fix US #1 & US #8) */}
             <div className="p-8 bg-slate-900 rounded-[50px] border-4 border-slate-800 shadow-2xl">
                 <div className="flex justify-between items-center mb-8 px-2">
                     <h3 className="text-white font-black text-[10px] uppercase tracking-widest flex items-center gap-2">
                         <span className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></span>
-                        Configuration des Matières
+                        Configuration & Archives
                     </h3>
                     <div className="flex gap-2">
-                        <button onClick={() => { const n = prompt("Nom de la matière ?"); if(n) saveSections([...sections, {name:n, color:'#3b82f6'}]); }} className="bg-indigo-600 text-white px-5 py-2 rounded-2xl font-black text-[9px] uppercase hover:bg-indigo-500 shadow-lg">+ Nouvelle</button>
-                        <button onClick={() => setIsDeleteMode(!isDeleteMode)} className={`px-5 py-2 rounded-2xl font-black text-[9px] uppercase transition-colors ${isDeleteMode ? 'bg-red-500 text-white' : 'bg-slate-700 text-slate-300'}`}>{isDeleteMode ? 'Terminer' : 'Gérer'}</button>
+                        <button onClick={() => { const n = prompt("Nom de la matière ?"); if(n) saveSections([...sections, {name:n, color:'#3b82f6'}]); }} className="bg-indigo-600 text-white px-5 py-2 rounded-2xl font-black text-[9px] uppercase hover:bg-indigo-500 shadow-lg">+ Nouvelle Matière</button>
+                        <button onClick={() => setIsDeleteMode(!isDeleteMode)} className={`px-5 py-2 rounded-2xl font-black text-[9px] uppercase transition-colors ${isDeleteMode ? 'bg-red-500 text-white' : 'bg-slate-700 text-slate-300'}`}>{isDeleteMode ? 'Quitter Edition' : 'Gérer Matières'}</button>
                     </div>
                 </div>
                 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                     {sections.map(s => {
-                        const archs = archivedChapters.filter(c => c.subject === s.name && norm(c.classroom) === norm(classFilter));
-                        // On n'affiche dans le carré noir que si archives OU mode gestion
+                        const archs = archivedChapters.filter(c => c.subject === s.name);
                         if (!isDeleteMode && archs.length === 0) return null;
 
                         return (
@@ -130,31 +150,65 @@ export default function ProfStudioFolder({
                                 <div className="space-y-2">
                                     {archs.map(c => (
                                         <div key={c._id} className="bg-slate-800/80 p-2 px-3 rounded-xl flex justify-between items-center border border-slate-700/50">
-                                            <span className="text-white font-bold text-[9px] truncate pr-2">{c.title}</span>
-                                            <button onClick={() => onArchive(c._id, false)} className="text-blue-400 font-bold p-1 hover:scale-110">⬆️</button>
+                                            <span className="text-white font-bold text-[9px] truncate pr-2" title={c.title}>{c.title}</span>
+                                            <button onClick={() => onArchive(c._id, false)} className="text-emerald-400 font-bold p-1 hover:scale-125 transition-transform" title="Désarchiver">⬆️</button>
                                         </div>
                                     ))}
-                                    {isDeleteMode && archs.length === 0 && <div className="text-[8px] text-slate-600 uppercase font-black py-2">Prête</div>}
+                                    {!isDeleteMode && archs.length === 0 && <div className="text-[8px] text-slate-600 uppercase font-black py-2">Vide</div>}
                                 </div>
                             </div>
                         );
                     })}
+
+                    {/* BLOC SPÉCIAL : ARCHIVES ORPHELINES (Fix #1) */}
+                    {orphanArchived.length > 0 && (
+                        <div className="bg-red-900/20 p-4 rounded-[30px] border border-red-900/30 animate-in fade-in">
+                            <h4 className="font-black text-[9px] uppercase tracking-widest mb-4 text-red-400">⚠️ Archives Sans Matière</h4>
+                            <div className="space-y-2">
+                                {orphanArchived.map(c => (
+                                    <div key={c._id} className="bg-red-900/40 p-2 px-3 rounded-xl flex justify-between items-center border border-red-900/20">
+                                        <span className="text-red-200 font-bold text-[9px] truncate pr-2">{c.title}</span>
+                                        <div className="flex gap-1">
+                                            <button onClick={() => setMovingId(c._id)} className="text-blue-400 text-[10px]" title="Assigner matière">📁</button>
+                                            <button onClick={() => onArchive(c._id, false)} className="text-white text-[10px]" title="Désarchiver">⬆️</button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
 
-            {/* ZONES ACTIVES : C'est ici qu'on débloque la création */}
+            {/* ZONES ACTIVES PAR MATIÈRE (Fix US #3 : Visibilité sélective) */}
             <div className="space-y-16">
-                {visibleSections.map(s => (
-                    <div key={'active-' + s.name} className="animate-in fade-in">
-                        <div className="flex items-center justify-between mb-4 px-6 border-b border-slate-100 pb-4">
-                            <h3 className="font-black text-base uppercase tracking-widest text-left" style={{ color: s.color }}>{s.name}</h3>
-                            <button onClick={() => { const n = prompt(`Nom du dossier dans ${s.name} ?`); if(n) onCreateChapter(s.name, n); }} className="text-[9px] font-black px-6 py-2 rounded-full border-2 border-dashed hover:bg-white transition-colors" style={{ color: s.color, borderColor: s.color }}>+ CRÉER</button>
+                {sections.map(s => {
+                    const chaps = activeChapters.filter(c => c.subject === s.name);
+                    return (
+                        <div key={'active-' + s.name} className="animate-in fade-in">
+                            <div className="flex items-center justify-between mb-4 px-6 border-b border-slate-100 pb-4">
+                                <h3 className="font-black text-base uppercase tracking-widest text-left" style={{ color: s.color }}>{s.name}</h3>
+                                <button onClick={() => { const n = prompt(`Nom du dossier dans ${s.name} ?`); if(n) onCreateChapter(s.name, n); }} className="text-[9px] font-black px-6 py-2 rounded-full border-2 border-dashed hover:bg-white transition-colors" style={{ color: s.color, borderColor: s.color }}>+ CRÉER DOSSIER</button>
+                            </div>
+                            <div className="grid grid-cols-1 gap-1">
+                                {chaps.map(chap => renderChapterCard(chap, s))}
+                                {chaps.length === 0 && <p className="text-left px-8 py-4 text-[10px] font-black text-slate-300 uppercase tracking-widest">Aucun dossier actif</p>}
+                            </div>
+                        </div>
+                    );
+                })}
+
+                {/* BLOC SPÉCIAL : ACTIFS SANS MATIÈRE (Fix #2) */}
+                {orphanActive.length > 0 && (
+                    <div className="animate-in fade-in pt-10">
+                        <div className="flex items-center justify-between mb-4 px-6 border-b border-red-100 pb-4">
+                            <h3 className="font-black text-base uppercase tracking-widest text-red-500 text-left">⚠️ DOSSIERS À RECLASSER</h3>
                         </div>
                         <div className="grid grid-cols-1 gap-1">
-                            {activeChapters.filter(c => c.subject === s.name).map(chap => renderChapterCard(chap, s))}
+                            {orphanActive.map(chap => renderChapterCard(chap, { name: 'A RECLASSER', color: '#ef4444' }))}
                         </div>
                     </div>
-                ))}
+                )}
             </div>
         </div>
     );
