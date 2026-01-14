@@ -12,25 +12,35 @@ try {
         );
         auth.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
         drive = google.drive({ version: 'v3', auth });
-        console.log("✅ Drive API V3 : Navigation par Arborescence Activée");
+        console.log("✅ Drive API : Prêt pour la suture des dossiers.");
     }
 } catch (e) {
     console.error("❌ Erreur Init Drive:", e.message);
 }
 
 const DriveService = {
-    // Cherche ou crée un dossier dans un parent spécifique
-    getOrCreateFolder: async (name, parentId = null) => {
+    // Cherche un dossier par son nom exact dans un parent
+    findFolderByName: async (name, parentId = null) => {
         if (!drive) return null;
         try {
-            const cleanName = name.replace(/'/g, "\\'"); // Protection caractères spéciaux
-            let q = `name = '${cleanName}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
+            // On échappe les apostrophes pour la requête Drive
+            const safeName = name.replace(/'/g, "\\'");
+            let q = `name = '${safeName}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
             if (parentId) q += ` and '${parentId}' in parents`;
-            else q += ` and 'root' in parents`;
             
             const res = await drive.files.list({ q, fields: 'files(id, name)' });
-            if (res.data.files && res.data.files.length > 0) return res.data.files[0].id;
+            return (res.data.files && res.data.files.length > 0) ? res.data.files[0].id : null;
+        } catch (e) { return null; }
+    },
 
+    getOrCreateFolder: async (name, parentId = null) => {
+        if (!drive) return null;
+        // 1. D'abord on cherche s'il existe déjà (pour éviter les doublons invisibles)
+        const existingId = await DriveService.findFolderByName(name, parentId);
+        if (existingId) return existingId;
+
+        // 2. Sinon on crée
+        try {
             const folder = await drive.files.create({
                 resource: { 
                     name: name, 
@@ -40,20 +50,7 @@ const DriveService = {
                 fields: 'id'
             });
             return folder.data.id;
-        } catch (e) { 
-            console.error(`[Drive] Erreur dossier ${name}:`, e.message);
-            return null; 
-        }
-    },
-
-    // Méthode surpuissante pour synchroniser un chemin complet
-    // pathArray = ["CONDACLASSE", "6D", "HISTOIRE", "CHAPITRE 1"]
-    syncPath: async (pathArray) => {
-        let lastId = null;
-        for (const folderName of pathArray) {
-            lastId = await DriveService.getOrCreateFolder(folderName, lastId);
-        }
-        return lastId;
+        } catch (e) { return null; }
     },
 
     uploadFile: async (folderId, fileName, buffer, mimeType) => {

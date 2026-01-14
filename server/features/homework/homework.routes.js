@@ -6,77 +6,102 @@ const DriveService = require('../../services/drive.service');
 
 const upload = multer({ storage: multer.memoryStorage() });
 
-// Normalisation stricte (US #5)
-const normalize = (n) => n ? n.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Z0-9]/g, "_").trim() : "SANS_TITRE";
+// Normalisation douce : on garde les espaces et la casse pour correspondre au Drive manuel
+const softNormalize = (n) => n ? n.trim() : "SANS_TITRE";
 
 /**
- * 📄 DOMAINE : HOMEWORK (LOGIQUE IDENTIQUE AUX SCANS)
+ * 📄 DOMAINE : HOMEWORK
  */
 
-// SAUVEGARDE + CRÉATION STRUCTURE DRIVE (US #4 & #7)
 router.post('/', async (req, res) => {
     try {
         const Homework = mongoose.model('Homework');
-        const { _id, title, classroom, chapterId } = req.body;
+        const Chapter = mongoose.model('Chapter');
+        const { _id, chapterId, title, classroom } = req.body;
 
-        // 1. On crée/récupère le devoir en BDD
-        let homework;
-        if (_id && mongoose.Types.ObjectId.isValid(_id)) {
-            homework = await Homework.findByIdAndUpdate(_id, req.body, { new: true });
-        } else {
-            homework = await Homework.create(req.body);
-        }
+        let homeworkDriveId = null;
 
-        // 2. LOGIQUE DRIVE (Copie conforme de ScanSession)
-        // Si le dossier Drive n'existe pas encore, on le génère
-        if (!homework.driveFolderId) {
-            const condaRootId = await DriveService.getOrCreateFolder("CONDACLASSE", null);
-            const classFolderId = await DriveService.getOrCreateFolder(normalize(classroom), condaRootId);
-            
-            // On vérifie si on doit le mettre dans un chapitre
-            let parentId = classFolderId;
-            if (chapterId) {
-                const chapter = await mongoose.model('Chapter').findById(chapterId);
-                if (chapter?.driveFolderId) parentId = chapter.driveFolderId;
+        // 1. RÉCUPÉRATION DU DOSSIER PARENT (CHAPITRE)
+        if (chapterId && chapterId !== 'none') {
+            const chapter = await Chapter.findById(chapterId);
+            if (chapter) {
+                // On cherche l'ID Drive du chapitre s'il est manquant ou invalide
+                if (!chapter.driveFolderId) {
+                    console.log(`🔍 Suture Drive pour le chapitre : ${chapter.title}`);
+                    const rootId = await DriveService.getOrCreateFolder("CONDACLASSE", null);
+                    const classId = await DriveService.getOrCreateFolder(softNormalize(classroom), rootId);
+                    const subName = chapter.subject === 'H' ? 'HISTOIRE' : chapter.subject === 'G' ? 'GEOGRAPHIE' : 'EMC';
+                    const subId = await DriveService.getOrCreateFolder(subName, classId);
+                    
+                    // On cherche le dossier par son nom exact
+                    chapter.driveFolderId = await DriveService.getOrCreateFolder(chapter.title, subId);
+                    await chapter.save();
+                }
+
+                // 2. CRÉATION DU DOSSIER DU DEVOIR DANS LE CHAPITRE
+                if (chapter.driveFolderId) {
+                    homeworkDriveId = await DriveService.getOrCreateFolder(softNormalize(title), chapter.driveFolderId);
+                    
+                    // Création des tiroirs de production (US #4)
+                    await DriveService.getOrCreateFolder("SUJET", homeworkDriveId);
+                    await DriveService.getOrCreateFolder("COPIES", homeworkDriveId);
+                    await DriveService.getOrCreateFolder("CORRECTIONS", homeworkDriveId);
+                }
             }
-
-            // Création de la racine du devoir
-            const hwFolderId = await DriveService.getOrCreateFolder(normalize(title), parentId);
-            
-            // Création des 3 tiroirs standards (US #4)
-            const subjectId = await DriveService.getOrCreateFolder("SUJET", hwFolderId);
-            const copiesId = await DriveService.getOrCreateFolder("COPIES", hwFolderId);
-            const correctionsId = await DriveService.getOrCreateFolder("CORRECTIONS", hwFolderId);
-
-            // Mise à jour finale de l'objet
-            homework = await Homework.findByIdAndUpdate(homework._id, {
-                driveFolderId: hwFolderId,
-                subjectFolderId: subjectId,
-                copiesFolderId: copiesId,
-                correctionsFolderId: correctionsId
-            }, { new: true });
         }
 
-        res.json(homework);
+        // 3. SAUVEGARDE BDD
+        const payload = { 
+            ...req.body, 
+            driveFolderId: homeworkDriveId 
+        };
+        
+        let result;
+        if (_id && mongoose.Types.ObjectId.isValid(_id)) {
+            result = await Homework.findByIdAndUpdate(_id, payload, { new: true });
+        } else {
+            result = await Homework.create(payload);
+        }
+
+        // 4. DISTRIBUTION RACCOURCIS ÉLÈVES
+        if (req.body.targetPlayerIds?.length > 0 && homeworkDriveId) {
+            const Player = mongoose.model('Player');
+            const rootId = await DriveService.getOrCreateFolder("CONDACLASSE", null);
+            const classId = await DriveService.getOrCreateFolder(softNormalize(classroom), rootId);
+            const elevesRootId = await DriveService.getOrCreateFolder("ELEVES", classId);
+
+            for (const pId of req.body.targetPlayerIds) {
+                const student = await Player.findById(pId);
+                if (student) {
+                    const studentFolderId = await DriveService.getOrCreateFolder(softNormalize(`${student.lastName}_${student.firstName}`), elevesRootId);
+                    const studentHwFolderId = await DriveService.getOrCreateFolder("DEVOIRS", studentFolderId);
+                    await DriveService.createShortcut(homeworkDriveId, studentHwFolderId, title);
+                }
+            }
+        }
+
+        res.json(result);
     } catch (e) {
-        console.error("❌ [HOMEWORK] Erreur Sauvegarde:", e.message);
+        console.error("❌ Error Homework Sync:", e.message);
         res.status(500).json({ error: e.message });
     }
 });
 
-// UPLOAD DE DOCUMENT (POST /api/homework/upload-to-drive)
+// Upload direct vers Drive
 router.post('/upload-to-drive', upload.single('file'), async (req, res) => {
     try {
-        const { homeworkId, type } = req.body; // type = 'doc' ou 'qimg'
+        const { homeworkId, type } = req.body;
         const homework = await mongoose.model('Homework').findById(homeworkId);
         
-        if (!homework || !homework.subjectFolderId) {
-            return res.status(400).json({ error: "Le dossier Drive n'est pas encore initialisé." });
+        if (!homework || !homework.driveFolderId) {
+            return res.status(400).json({ error: "Dossier Drive non initialisé. Sauvegardez le devoir d'abord." });
         }
 
-        // Upload physique dans le tiroir SUJET (Comme dans les Scans)
+        // On cible le sous-dossier SUJET du devoir
+        const subjectFolderId = await DriveService.getOrCreateFolder("SUJET", homework.driveFolderId);
+
         const file = await DriveService.uploadFile(
-            homework.subjectFolderId, 
+            subjectFolderId, 
             `${type.toUpperCase()}_${Date.now()}.jpg`, 
             req.file.buffer, 
             req.file.mimetype
