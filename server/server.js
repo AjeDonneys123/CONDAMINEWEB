@@ -8,7 +8,7 @@ const app = express();
 const port = process.env.PORT || 3000;
 const SERVER_BOOT_ID = Date.now();
 
-// 1. CHARGEMENT DES MODÈLES (ORDRE ALPHABÉTIQUE)
+// 1. CHARGEMENT DES MODÈLES (CRITIQUE : AVANT LES ROUTES)
 require('./models/Bug');
 require('./models/Chapter');
 require('./models/DeploySignal');
@@ -24,15 +24,14 @@ require('./models/TeacherStyle');
 mongoose.connect(process.env.MONGODB_URI).then(async () => {
     console.log('✅ MongoDB Connected.');
     try {
-        const DeploySignal = mongoose.model('DeploySignal');
-        await DeploySignal.findOneAndUpdate({}, { status: 'live', updatedAt: new Date() }, { upsert: true });
+        await mongoose.model('DeploySignal').findOneAndUpdate({}, { status: 'live', updatedAt: new Date() }, { upsert: true });
     } catch (e) {}
 }).catch(err => console.error("❌ MongoDB Error:", err.message));
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// 3. ROUTES SYSTÈME
+// 3. ROUTES SYSTÈME (BOOT ID & MONITORING)
 app.get('/api/check-deploy', (req, res) => res.json({ bootId: SERVER_BOOT_ID }));
 app.get('/api/deploy-status', async (req, res) => {
     try {
@@ -44,10 +43,15 @@ app.get('/api/deploy-status', async (req, res) => {
 
 // 4. ARCHITECTURE PAR DOMAINE (ZÉRO POROSITÉ)
 app.use('/api/auth', require('./features/auth/auth.routes'));
-app.use('/api/admin', require('./features/admin/admin.routes')); 
 app.use('/api/games', require('./features/games/games.routes'));
 app.use('/api/scans', require('./features/scans/scans.routes'));
 app.use('/api/homework', require('./features/homework/homework.routes'));
+
+/**
+ * 🏢 DOMAINE ADMIN : RECOIT LES APPELS STRUCTURELS
+ * Montage sur '/api' pour capturer '/api/players' et '/api/chapters-all'
+ */
+app.use('/api', require('./features/admin/admin.routes')); 
 
 // 5. GESTION FRONTEND
 const distPath = path.join(process.cwd(), 'client', 'dist');
@@ -59,4 +63,4 @@ if (fs.existsSync(distPath)) {
     });
 }
 
-app.listen(port, () => console.log(`🚀 SERVEUR PRÊT : PORT ${port} (BOOT:${SERVER_BOOT_ID})`));
+app.listen(port, () => console.log(`🚀 SERVEUR PRÊT : PORT ${port} (ID:${SERVER_BOOT_ID})`));

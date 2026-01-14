@@ -3,21 +3,40 @@ const router = express.Router();
 const mongoose = require('mongoose');
 
 /**
- * 🏢 DOMAINE : ADMIN & STRUCTURES
- * Gère les données de base : ÉLÈVES, CHAPITRES, SECTIONS.
+ * 🏢 DOMAINE : ADMIN & CLASSES
+ * Point d'entrée consolidé pour la gestion des élèves et dossiers.
  */
 
 // --- ÉLÈVES ---
 
-// GET /api/players
+// GET /api/players (Anciennement dans prof.routes)
 router.get('/players', async (req, res) => {
     try {
         const Player = mongoose.model('Player');
         const data = await Player.find({}).sort({ classroom: 1, lastName: 1 });
         res.json(data || []);
     } catch (e) {
-        console.error("Erreur Admin API [/players]:", e.message);
-        res.status(500).json({ error: "Erreur serveur lors de la récupération des élèves" });
+        console.error("Erreur Admin API /players:", e.message);
+        res.status(500).json({ error: "Erreur serveur" });
+    }
+});
+
+// POST /api/create-class-wizard
+router.post('/create-class-wizard', async (req, res) => {
+    try {
+        const Player = mongoose.model('Player');
+        const { teacherId, className, rawData } = req.body;
+        const lines = rawData.split('\n').filter(l => l.trim());
+        const players = lines.map(line => {
+            const parts = line.trim().split(/\s+/);
+            const lastName = parts[0] || "NOM";
+            const firstName = parts.slice(1).join(' ') || "Prénom";
+            return { firstName, lastName, classroom: className, teacherId };
+        });
+        await Player.insertMany(players);
+        res.json({ ok: true, count: players.length });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
     }
 });
 
@@ -50,22 +69,7 @@ router.post('/chapters', async (req, res) => {
     }
 });
 
-// --- CONFIGURATION PROF ---
-
-// PATCH /api/teacher/:id/sections
-router.patch('/teacher/:id/sections', async (req, res) => {
-    try {
-        const Teacher = mongoose.model('Teacher');
-        const updated = await Teacher.findByIdAndUpdate(
-            req.params.id, 
-            { subjectSections: req.body.sections }, 
-            { new: true }
-        );
-        res.json(updated);
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
-});
+// --- AUTRE ---
 
 // BUGS
 router.get('/bugs', async (req, res) => {
