@@ -35,7 +35,6 @@ export default function ProfStudioFolder({
         } catch(e) { console.error("Erreur Synchro Matières:", e); }
     };
 
-    // US #7 : Miroir Physique - Déplacer un dossier vers une autre matière
     const moveChapter = async (chapId, newSubject) => {
         try {
             const res = await fetch('/api/chapters', {
@@ -46,7 +45,6 @@ export default function ProfStudioFolder({
             if (res.ok) {
                 setMovingId(null);
                 if (onNotify) onNotify({ message: `Dossier reclassé en ${newSubject}` });
-                // Forcer rafraîchissement car le parent doit re-fetcher chapters
                 window.location.reload(); 
             }
         } catch (e) { console.error(e); }
@@ -59,19 +57,27 @@ export default function ProfStudioFolder({
     const archivedChapters = chapters
         .filter(c => c.isArchived && norm(c.classroom) === norm(classFilter));
 
-    // DÉTECTION DES ORPHELINS (Fix pour visibilité US #1)
     const orphanActive = activeChapters.filter(c => !sections.some(s => s.name === c.subject));
     const orphanArchived = archivedChapters.filter(c => !sections.some(s => s.name === c.subject));
 
     const renderChapterCard = (chap, section) => {
         const isOpen = openChaps[chap._id];
         const isEditing = editingId === chap._id;
+        const isMoving = movingId === chap._id;
         const color = section?.color || "#94a3b8";
         const letter = (section?.name || "?").substring(0, 1).toUpperCase();
         const chapItems = items.filter(it => String(it.chapterId) === String(chap._id));
 
         return (
-            <div key={chap._id} className="bg-white rounded-[35px] border-2 shadow-sm overflow-hidden transition-all mb-3 animate-in fade-in" style={{ borderColor: isOpen ? color : '#f1f5f9' }}>
+            <div 
+                key={chap._id} 
+                className={`bg-white rounded-[35px] border-2 shadow-sm transition-all mb-3 animate-in fade-in ${isMoving || isEditing ? 'z-[100] relative' : 'z-0 relative'}`} 
+                style={{ 
+                    borderColor: isOpen ? color : '#f1f5f9',
+                    // CORRECTIF : On retire overflow-hidden pour laisser sortir le menu
+                    overflow: 'visible' 
+                }}
+            >
                 <div className="p-4 flex items-center justify-between">
                     <div className="flex items-center gap-4 flex-1 cursor-pointer" onClick={() => setOpenChaps({...openChaps, [chap._id]: !isOpen})}>
                         <div className="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-white text-sm relative" style={{ backgroundColor: color }}>{letter}</div>
@@ -86,17 +92,21 @@ export default function ProfStudioFolder({
                     </div>
                     
                     <div className="flex gap-1 items-center">
-                        {/* BOUTON RECLASSER (Fix Orphelins) */}
                         <div className="relative">
-                            <button title="Changer de matière" onClick={(e) => { e.stopPropagation(); setMovingId(movingId === chap._id ? null : chap._id); }} className={`w-8 h-8 flex items-center justify-center rounded-full transition-all ${movingId === chap._id ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-300 hover:text-indigo-500'}`}>📁</button>
-                            {movingId === chap._id && (
-                                <div className="absolute right-0 top-10 z-[100] bg-white border shadow-2xl rounded-2xl p-2 min-w-[150px] animate-in zoom-in">
-                                    <p className="text-[8px] font-black text-slate-400 uppercase p-2 border-b">Déplacer vers :</p>
-                                    {sections.map(s => (
-                                        <button key={s.name} onClick={() => moveChapter(chap._id, s.name)} className="w-full text-left p-3 hover:bg-indigo-50 rounded-xl text-[10px] font-bold text-slate-600 flex items-center gap-2">
-                                            <span className="w-2 h-2 rounded-full" style={{ background: s.color }}></span> {s.name}
-                                        </button>
-                                    ))}
+                            <button title="Changer de matière" onClick={(e) => { e.stopPropagation(); setMovingId(isMoving ? null : chap._id); }} className={`w-8 h-8 flex items-center justify-center rounded-full transition-all ${isMoving ? 'bg-indigo-600 text-white shadow-lg scale-110' : 'bg-slate-50 text-slate-300 hover:text-indigo-500'}`}>📁</button>
+                            
+                            {/* MENU FLOTTANT CORRIGÉ */}
+                            {isMoving && (
+                                <div className="absolute right-0 top-10 z-[200] bg-white border-2 border-indigo-100 shadow-2xl rounded-2xl p-2 min-w-[180px] animate-in zoom-in">
+                                    <p className="text-[9px] font-black text-slate-400 uppercase p-2 border-b mb-1 tracking-widest">Reclasser vers :</p>
+                                    <div className="max-h-[200px] overflow-y-auto custom-scrollbar">
+                                        {sections.map(s => (
+                                            <button key={s.name} onClick={() => moveChapter(chap._id, s.name)} className="w-full text-left p-3 hover:bg-indigo-50 rounded-xl text-[10px] font-bold text-slate-600 flex items-center gap-3 transition-colors">
+                                                <span className="w-3 h-3 rounded-full shadow-sm" style={{ background: s.color }}></span> 
+                                                <span className="truncate">{s.name}</span>
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
                             )}
                         </div>
@@ -107,7 +117,7 @@ export default function ProfStudioFolder({
                     </div>
                 </div>
                 {isOpen && (
-                    <div className="p-4 bg-slate-50/50 border-t-2 border-dashed border-slate-100 space-y-2">
+                    <div className="p-4 bg-slate-50/50 border-t-2 border-dashed border-slate-100 space-y-2 rounded-b-[33px] overflow-hidden">
                         {chapItems.map(it => (
                             <div key={it._id} className="bg-white p-3 px-5 rounded-2xl flex justify-between items-center shadow-sm border border-transparent hover:border-indigo-200 cursor-pointer" onClick={() => onEditItem(it)}>
                                 <b className="text-slate-700 text-xs">{it.actType === 'game' ? '🕹️' : '📄'} {it.title}</b>
@@ -123,7 +133,6 @@ export default function ProfStudioFolder({
 
     return (
         <div className="max-w-5xl mx-auto space-y-12 pb-20">
-            {/* CARRE NOIR : CONFIGURATION ET ARCHIVES (Fix US #1 & US #8) */}
             <div className="p-8 bg-slate-900 rounded-[50px] border-4 border-slate-800 shadow-2xl">
                 <div className="flex justify-between items-center mb-8 px-2">
                     <h3 className="text-white font-black text-[10px] uppercase tracking-widest flex items-center gap-2">
@@ -160,7 +169,6 @@ export default function ProfStudioFolder({
                         );
                     })}
 
-                    {/* BLOC SPÉCIAL : ARCHIVES ORPHELINES (Fix #1) */}
                     {orphanArchived.length > 0 && (
                         <div className="bg-red-900/20 p-4 rounded-[30px] border border-red-900/30 animate-in fade-in">
                             <h4 className="font-black text-[9px] uppercase tracking-widest mb-4 text-red-400">⚠️ Archives Sans Matière</h4>
@@ -180,7 +188,6 @@ export default function ProfStudioFolder({
                 </div>
             </div>
 
-            {/* ZONES ACTIVES PAR MATIÈRE (Fix US #3 : Visibilité sélective) */}
             <div className="space-y-16">
                 {sections.map(s => {
                     const chaps = activeChapters.filter(c => c.subject === s.name);
@@ -198,7 +205,6 @@ export default function ProfStudioFolder({
                     );
                 })}
 
-                {/* BLOC SPÉCIAL : ACTIFS SANS MATIÈRE (Fix #2) */}
                 {orphanActive.length > 0 && (
                     <div className="animate-in fade-in pt-10">
                         <div className="flex items-center justify-between mb-4 px-6 border-b border-red-100 pb-4">
