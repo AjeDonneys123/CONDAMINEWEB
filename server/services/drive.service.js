@@ -12,20 +12,12 @@ try {
         );
         auth.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
         drive = google.drive({ version: 'v3', auth });
-        console.log("✅ Drive API V4 : Système de Validation de Présence Activé");
+        console.log("✅ Drive API V4 : Système de Synchronisation Directe");
     }
 } catch (e) { console.error("❌ Erreur Init Drive:", e.message); }
 
 const DriveService = {
-    // Vérifie si un ID existe réellement sur le Drive
-    verifyId: async (fileId) => {
-        if (!drive || !fileId) return false;
-        try {
-            const res = await drive.files.get({ fileId: fileId, fields: 'id, trashed' });
-            return res.data && !res.data.trashed;
-        } catch (e) { return false; }
-    },
-
+    // Vérifie l'existence ou crée
     getOrCreateFolder: async (name, parentId = null) => {
         if (!drive) return null;
         try {
@@ -45,29 +37,18 @@ const DriveService = {
         } catch (e) { return null; }
     },
 
-    // Synchronise un chemin en incluant systématiquement le sur-dossier Enseignant
-    syncPath: async (classroom, subFolders = []) => {
-        let lastId = await DriveService.getOrCreateFolder("CONDACLASSE", null);
-        lastId = await DriveService.getOrCreateFolder("JEAN VUILLET", lastId);
-        lastId = await DriveService.getOrCreateFolder(classroom.toUpperCase(), lastId);
-        
-        for (const folderName of subFolders) {
-            lastId = await DriveService.getOrCreateFolder(folderName, lastId);
-        }
-        return lastId;
-    },
-
-    uploadFile: async (folderId, fileName, buffer, mimeType) => {
-        if (!drive || !folderId) return null;
+    // Synchronisation forcée du chemin enseignant
+    syncPath: async (classroom, sectionName) => {
         try {
-            const media = { mimeType, body: Readable.from(buffer) };
-            const file = await drive.files.create({
-                resource: { name: fileName, parents: [folderId] },
-                media, fields: 'id'
-            });
-            await drive.permissions.create({ fileId: file.data.id, resource: { role: 'reader', type: 'anyone' } });
-            return { id: file.data.id, url: `https://drive.google.com/thumbnail?id=${file.data.id}&sz=w1200` };
-        } catch (e) { return null; }
+            const rootId = await DriveService.getOrCreateFolder("CONDACLASSE", null);
+            const teacherId = await DriveService.getOrCreateFolder("JEAN VUILLET", rootId);
+            const classId = await DriveService.getOrCreateFolder(classroom.toUpperCase(), teacherId);
+            const sectionId = await DriveService.getOrCreateFolder(sectionName.toUpperCase(), classId);
+            return sectionId;
+        } catch (e) {
+            console.error("❌ Erreur syncPath:", e.message);
+            return null;
+        }
     },
 
     deleteFile: async (id) => { 

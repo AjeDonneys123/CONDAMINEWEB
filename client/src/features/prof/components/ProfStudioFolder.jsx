@@ -13,6 +13,7 @@ export default function ProfStudioFolder({
     const norm = (c) => c?.toString().toUpperCase().replace('E', '').trim() || "";
     const smartSort = (a, b) => (a.title || "").localeCompare(b.title || "", undefined, { numeric: true, sensitivity: 'base' });
 
+    // Initialisation depuis le profil
     useEffect(() => { 
         if (user?.subjectSections) setSections(user.subjectSections);
     }, [user]);
@@ -26,23 +27,21 @@ export default function ProfStudioFolder({
                 body: JSON.stringify({ sections: newSections, className: classFilter })
             });
             const data = await res.json();
+            
             if (res.ok && data.user) {
+                // MISE A JOUR LOCALE ET CACHE
                 localStorage.setItem('player', JSON.stringify(data.user));
                 setSections(data.user.subjectSections);
-                if (onNotify) onNotify({ message: data.message, drivePath: data.drivePath });
+                if (onNotify) onNotify({ message: data.message, drivePath: `JEAN VUILLET / ${classFilter} / ...` });
             }
-        } catch(e) { console.error("Erreur Synchro:", e); }
+        } catch(e) { console.error("Synchro error", e); }
     };
 
     const activeChapters = chapters
         .filter(c => !c.isArchived && norm(c.classroom) === norm(classFilter))
         .sort(smartSort);
 
-    const archivedChapters = chapters
-        .filter(c => c.isArchived && norm(c.classroom) === norm(classFilter))
-        .sort(smartSort);
-
-    // US #3 : On affiche toujours les sections en mode Gérer, sinon seulement si elles ont des chapitres
+    // US #3 : Les sections visibles
     const visibleSections = isDeleteMode ? sections : sections.filter(s => activeChapters.some(c => c.subject === s.name));
 
     const renderChapterCard = (chap, section) => {
@@ -69,7 +68,7 @@ export default function ProfStudioFolder({
                     <div className="flex gap-1">
                         <button onClick={(e) => { e.stopPropagation(); setEditingId(chap._id); setTempTitle(chap.title); }} className="w-8 h-8 flex items-center justify-center bg-slate-50 text-slate-300 rounded-full hover:text-indigo-500">✏️</button>
                         <button onClick={(e) => { e.stopPropagation(); onArchive(chap._id, !chap.isArchived); }} className="w-8 h-8 flex items-center justify-center bg-slate-50 text-slate-300 rounded-full hover:bg-slate-800 hover:text-white">📦</button>
-                        <button onClick={(e) => { e.stopPropagation(); onDeleteChapter(chap._id); }} className="w-8 h-8 flex items-center justify-center bg-red-50 text-red-300 rounded-full font-black">✕</button>
+                        <button onClick={(e) => { e.stopPropagation(); onDeleteChapter(chap._id); }} className="w-8 h-8 flex items-center justify-center bg-red-50 text-red-300 rounded-full font-black hover:bg-red-500 hover:text-white">✕</button>
                     </div>
                 </div>
                 {isOpen && (
@@ -98,19 +97,19 @@ export default function ProfStudioFolder({
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     {sections.map(s => {
-                        const archs = archivedChapters.filter(c => c.subject === s.name);
+                        const archs = chapters.filter(c => c.isArchived && c.subject === s.name && norm(c.classroom) === norm(classFilter));
                         if (!isDeleteMode && archs.length === 0) return null;
                         return (
                             <div key={s.name} className="bg-slate-800/40 p-4 rounded-[30px] border border-slate-700 animate-in fade-in relative">
                                 <h4 className="font-black text-[9px] uppercase tracking-widest mb-4 flex justify-between items-center" style={{ color: s.color }}>
                                     {s.name}
-                                    {isDeleteMode && <button onClick={() => saveSections(sections.filter(x => x.name !== s.name))} className="text-red-500 font-black">✕</button>}
+                                    {isDeleteMode && <button onClick={() => saveSections(sections.filter(x => x.name !== s.name))} className="text-red-500 font-black hover:scale-125 transition-transform">✕</button>}
                                 </h4>
                                 <div className="space-y-2">
                                     {archs.map(c => (
                                         <div key={c._id} className="bg-slate-800/80 p-2 px-3 rounded-xl flex justify-between items-center border border-slate-700/50">
                                             <span className="text-white font-bold text-[9px] truncate pr-2">{c.title}</span>
-                                            <button onClick={() => onArchive(c._id, false)} className="text-blue-400 font-bold p-1">⬆️</button>
+                                            <button onClick={() => onArchive(c._id, false)} className="text-blue-400 font-bold p-1 hover:scale-110">⬆️</button>
                                         </div>
                                     ))}
                                 </div>
