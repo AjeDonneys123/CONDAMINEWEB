@@ -11,9 +11,13 @@ export default function ActivityStudio({ globalClass, user }) {
     const [loading, setLoading] = useState(true);
     const [notification, setNotification] = useState(null);
 
-    const showNotify = (msg, path) => {
-        setNotification({ msg, path });
-        setTimeout(() => setNotification(null), 5000);
+    const showNotify = (data) => {
+        setNotification({ 
+            msg: data.message, 
+            path: data.drivePath, 
+            isError: data.driveError 
+        });
+        setTimeout(() => setNotification(null), 6000);
     };
 
     const loadData = async () => {
@@ -40,38 +44,30 @@ export default function ActivityStudio({ globalClass, user }) {
 
     const handleCreateChapter = async (subjectName, title) => {
         const res = await fetch('/api/chapters', { 
-            method:'POST', 
-            headers:{'Content-Type':'application/json'}, 
+            method:'POST', headers:{'Content-Type':'application/json'}, 
             body: JSON.stringify({ title, subject: subjectName, classroom: globalClass, teacherId: user.id || user._id }) 
         });
         const data = await res.json();
-        if (res.ok) {
-            showNotify(data.message, data.drivePath);
-            await loadData();
-        }
+        showNotify(data);
+        await loadData();
     };
 
     const handleRenameChapter = async (id, title, subject) => {
         const res = await fetch('/api/chapters', { 
-            method:'POST', 
-            headers:{'Content-Type':'application/json'}, 
+            method:'POST', headers:{'Content-Type':'application/json'}, 
             body:JSON.stringify({_id:id, title, classroom: globalClass, subject})
         });
         const data = await res.json();
-        if (res.ok) {
-            showNotify(data.message, data.drivePath);
-            await loadData();
-        }
+        showNotify(data);
+        await loadData();
     };
 
     const handleDeleteChapter = async (id) => {
-        if (!confirm("Supprimer ce dossier et son contenu Drive ?")) return;
+        if (!confirm("Supprimer ce dossier ?")) return;
         const res = await fetch(`/api/chapters/${id}`, { method: 'DELETE' });
         const data = await res.json();
-        if (res.ok) {
-            showNotify(data.message, data.drivePath);
-            await loadData();
-        }
+        showNotify(data);
+        await loadData();
     };
 
     if (editingItem) {
@@ -82,15 +78,18 @@ export default function ActivityStudio({ globalClass, user }) {
 
     return (
         <div className="animate-in fade-in relative">
+            {/* BANDEAU DE NOTIFICATION DRIVE (ROUGE SI ECHEC) */}
             {notification && (
                 <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[9999] w-full max-w-xl px-4 animate-in slide-in-from-top-4">
-                    <div className="bg-slate-900 border-2 border-emerald-500 rounded-3xl p-5 shadow-2xl flex items-center gap-4">
-                        <div className="w-12 h-12 bg-emerald-500 rounded-2xl flex items-center justify-center text-2xl">✅</div>
+                    <div className={`rounded-3xl p-5 shadow-2xl flex items-center gap-4 border-2 ${notification.isError ? 'bg-red-600 border-red-400' : 'bg-slate-900 border-emerald-500'}`}>
+                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-2xl ${notification.isError ? 'bg-red-500' : 'bg-emerald-500'}`}>
+                            {notification.isError ? '❌' : '✅'}
+                        </div>
                         <div className="flex-1">
                             <h4 className="text-white font-black text-sm uppercase">{notification.msg}</h4>
-                            <p className="text-emerald-400 font-mono text-[10px] break-all tracking-tighter mt-1">{notification.path}</p>
+                            <p className={`${notification.isError ? 'text-red-200' : 'text-emerald-400'} font-mono text-[9px] break-all tracking-tighter mt-1`}>{notification.path}</p>
                         </div>
-                        <button onClick={() => setNotification(null)} className="text-slate-500 font-bold">✕</button>
+                        <button onClick={() => setNotification(null)} className="text-white/50 font-bold">✕</button>
                     </div>
                 </div>
             )}
@@ -111,8 +110,7 @@ export default function ActivityStudio({ globalClass, user }) {
                     onEditItem={(it) => setEditingItem({ type: it.actType, data: it })}
                     onDeleteItem={async (id, type) => {
                         if(!confirm("Supprimer ?")) return;
-                        const endpoint = type === 'game' ? `/api/games/${id}` : `/api/homework/${id}`;
-                        await fetch(endpoint, { method: 'DELETE' });
+                        await fetch(type === 'game' ? `/api/games/${id}` : `/api/homework/${id}`, { method: 'DELETE' });
                         loadData();
                     }}
                     onDeleteChapter={handleDeleteChapter}

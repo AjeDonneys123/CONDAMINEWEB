@@ -12,45 +12,49 @@ try {
         );
         auth.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
         drive = google.drive({ version: 'v3', auth });
-        console.log("✅ Drive API : Prêt pour la suture des dossiers.");
+        console.log("✅ Drive API V4 : Système de Validation de Présence Activé");
     }
-} catch (e) {
-    console.error("❌ Erreur Init Drive:", e.message);
-}
+} catch (e) { console.error("❌ Erreur Init Drive:", e.message); }
 
 const DriveService = {
-    // Cherche un dossier par son nom exact dans un parent
-    findFolderByName: async (name, parentId = null) => {
-        if (!drive) return null;
+    // Vérifie si un ID existe réellement sur le Drive
+    verifyId: async (fileId) => {
+        if (!drive || !fileId) return false;
         try {
-            // On échappe les apostrophes pour la requête Drive
-            const safeName = name.replace(/'/g, "\\'");
-            let q = `name = '${safeName}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
-            if (parentId) q += ` and '${parentId}' in parents`;
-            
-            const res = await drive.files.list({ q, fields: 'files(id, name)' });
-            return (res.data.files && res.data.files.length > 0) ? res.data.files[0].id : null;
-        } catch (e) { return null; }
+            const res = await drive.files.get({ fileId: fileId, fields: 'id, trashed' });
+            return res.data && !res.data.trashed;
+        } catch (e) { return false; }
     },
 
     getOrCreateFolder: async (name, parentId = null) => {
         if (!drive) return null;
-        // 1. D'abord on cherche s'il existe déjà (pour éviter les doublons invisibles)
-        const existingId = await DriveService.findFolderByName(name, parentId);
-        if (existingId) return existingId;
-
-        // 2. Sinon on crée
         try {
+            const cleanName = name.replace(/'/g, "\\'");
+            let q = `name = '${cleanName}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
+            if (parentId) q += ` and '${parentId}' in parents`;
+            else q += ` and 'root' in parents`;
+            
+            const res = await drive.files.list({ q, fields: 'files(id, name)' });
+            if (res.data.files && res.data.files.length > 0) return res.data.files[0].id;
+
             const folder = await drive.files.create({
-                resource: { 
-                    name: name, 
-                    mimeType: 'application/vnd.google-apps.folder', 
-                    parents: parentId ? [parentId] : [] 
-                },
+                resource: { name: name, mimeType: 'application/vnd.google-apps.folder', parents: parentId ? [parentId] : [] },
                 fields: 'id'
             });
             return folder.data.id;
         } catch (e) { return null; }
+    },
+
+    // Synchronise un chemin en incluant systématiquement le sur-dossier Enseignant
+    syncPath: async (classroom, subFolders = []) => {
+        let lastId = await DriveService.getOrCreateFolder("CONDACLASSE", null);
+        lastId = await DriveService.getOrCreateFolder("JEAN VUILLET", lastId);
+        lastId = await DriveService.getOrCreateFolder(classroom.toUpperCase(), lastId);
+        
+        for (const folderName of subFolders) {
+            lastId = await DriveService.getOrCreateFolder(folderName, lastId);
+        }
+        return lastId;
     },
 
     uploadFile: async (folderId, fileName, buffer, mimeType) => {
@@ -59,29 +63,10 @@ const DriveService = {
             const media = { mimeType, body: Readable.from(buffer) };
             const file = await drive.files.create({
                 resource: { name: fileName, parents: [folderId] },
-                media,
-                fields: 'id, webViewLink'
+                media, fields: 'id'
             });
-            await drive.permissions.create({
-                fileId: file.data.id,
-                resource: { role: 'reader', type: 'anyone' }
-            });
+            await drive.permissions.create({ fileId: file.data.id, resource: { role: 'reader', type: 'anyone' } });
             return { id: file.data.id, url: `https://drive.google.com/thumbnail?id=${file.data.id}&sz=w1200` };
-        } catch (e) { return null; }
-    },
-
-    createShortcut: async (targetId, parentFolderId, shortcutName) => {
-        if (!drive || !targetId || !parentFolderId) return null;
-        try {
-            await drive.files.create({
-                resource: {
-                    name: `🔗 ${shortcutName}`,
-                    mimeType: 'application/vnd.google-apps.shortcut',
-                    parents: [parentFolderId],
-                    shortcutDetails: { targetId: targetId }
-                }
-            });
-            return true;
         } catch (e) { return null; }
     },
 

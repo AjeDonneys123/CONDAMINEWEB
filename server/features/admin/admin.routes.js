@@ -3,33 +3,43 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const DriveService = require('../../services/drive.service');
 
-/**
- * 🏢 DOMAINE ADMIN : STRUCTURES & NOTIFICATIONS CHEMIN
- */
-
 const normalize = (n) => n ? n.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Z0-9 ]/g, "_").trim() : "SANS_TITRE";
 
-const getSubjectLabel = (s) => {
-    const sub = s.toUpperCase();
-    if (sub === 'H' || sub === 'HISTOIRE') return 'HISTOIRE';
-    if (sub === 'G' || sub === 'GEOGRAPHIE') return 'GEOGRAPHIE';
-    if (sub === 'E' || sub === 'EMC') return 'EMC';
-    return normalize(s);
-};
+// PATCH /api/teacher/:id/sections (Matières)
+router.patch('/teacher/:id/sections', async (req, res) => {
+    try {
+        const { sections, className } = req.body;
+        const Teacher = mongoose.model('Teacher');
+        
+        // On synchronise la dernière section ajoutée sur le Drive
+        const lastSection = sections[sections.length - 1]?.name || "MATIERE";
+        const driveId = await DriveService.syncPath(className, [normalize(lastSection)]);
+        const drivePath = `CONDACLASSE / JEAN VUILLET / ${className.toUpperCase()} / ${normalize(lastSection)}`;
 
-// --- GESTION DES CHAPITRES ---
+        // Vérification de présence réelle (US Test)
+        const exists = await DriveService.verifyId(driveId);
+
+        const updated = await Teacher.findByIdAndUpdate(req.params.id, { subjectSections: sections }, { new: true });
+        
+        res.json({ 
+            ...updated._doc, 
+            drivePath, 
+            driveError: !exists,
+            message: exists ? "Matière synchronisée sur Drive" : "ERREUR : Dossier Drive introuvable" 
+        });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/chapters
 router.post('/chapters', async (req, res) => {
     try {
         const Chapter = mongoose.model('Chapter');
         const { _id, title, classroom, subject } = req.body;
         
-        const subFolder = getSubjectLabel(subject);
-        const drivePath = `CONDACLASSE / ${classroom.toUpperCase()} / ${subFolder} / ${title.toUpperCase()}`;
+        const driveId = await DriveService.syncPath(classroom, [normalize(subject), normalize(title)]);
+        const drivePath = `CONDACLASSE / JEAN VUILLET / ${classroom.toUpperCase()} / ${normalize(subject)} / ${normalize(title)}`;
 
-        const condaRootId = await DriveService.getOrCreateFolder("CONDACLASSE", null);
-        const classId = await DriveService.getOrCreateFolder(normalize(classroom), condaRootId);
-        const subId = await DriveService.getOrCreateFolder(subFolder, classId);
-        const driveId = await DriveService.getOrCreateFolder(normalize(title), subId);
+        const exists = await DriveService.verifyId(driveId);
 
         let result;
         if (_id && mongoose.Types.ObjectId.isValid(_id)) {
@@ -38,43 +48,7 @@ router.post('/chapters', async (req, res) => {
             result = await Chapter.create({ ...req.body, driveFolderId: driveId, isArchived: false });
         }
 
-        res.json({ 
-            ...result._doc, 
-            drivePath, 
-            message: _id ? "Dossier mis à jour" : "Nouveau chapitre créé" 
-        });
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-router.delete('/chapters/:id', async (req, res) => {
-    try {
-        const Chapter = mongoose.model('Chapter');
-        const chap = await Chapter.findById(req.params.id);
-        if (!chap) return res.status(404).send("Introuvable");
-        const drivePath = `CONDACLASSE / ${chap.classroom} / ${getSubjectLabel(chap.subject)} / ${chap.title}`;
-        if (chap.driveFolderId) await DriveService.deleteFile(chap.driveFolderId).catch(() => {});
-        await Chapter.findByIdAndDelete(req.params.id);
-        res.json({ ok: true, drivePath, message: "Chapitre supprimé" });
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// --- GESTION DES MATIÈRES (SUPER-DOSSIERS) ---
-router.patch('/teacher/:id/sections', async (req, res) => {
-    try {
-        const Teacher = mongoose.model('Teacher');
-        const { sections, className } = req.body; // className ajouté pour le chemin
-        
-        const updated = await Teacher.findByIdAndUpdate(req.params.id, { subjectSections: sections }, { new: true });
-        
-        // On renvoie un chemin indicatif pour la matière
-        const lastSection = sections[sections.length - 1]?.name || "MATIERES";
-        const drivePath = `CONDACLASSE / ${normalize(className || 'TOUTES')} / ${normalize(lastSection)}`;
-
-        res.json({ 
-            ...updated._doc, 
-            message: "Configuration des matières mise à jour",
-            drivePath: drivePath
-        });
+        res.json({ ...result._doc, drivePath, driveError: !exists, message: exists ? "Chapitre synchronisé" : "ERREUR DRIVE" });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -83,6 +57,18 @@ router.get('/players', async (req, res) => {
 });
 router.get('/chapters-all', async (req, res) => {
     try { res.json(await mongoose.model('Chapter').find({}).sort({ _id: -1 })); } catch (e) { res.json([]); }
+});
+router.get('/database-dump', async (req, res) => {
+    try {
+        const dump = {
+            players: await mongoose.model('Player').find({}).lean(),
+            chapters: await mongoose.model('Chapter').find({}).lean(),
+            homework: await mongoose.model('Homework').find({}).lean(),
+            games: await mongoose.model('GameLevel').find({}).lean(),
+            scans: await mongoose.model('ScanSession').find({}).lean()
+        };
+        res.json(dump);
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 module.exports = router;
