@@ -4,7 +4,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const fs = require('fs');
 
-// Injection globale de fetch pour Gemini (Node < 18)
+// Injection globale de fetch pour Gemini & Drive (Node < 18)
 if (!global.fetch) { 
     global.fetch = require('node-fetch'); 
 }
@@ -13,7 +13,7 @@ const app = express();
 const port = process.env.PORT || 3000;
 const SERVER_BOOT_ID = Date.now();
 
-// 1. CHARGEMENT DES MODÈLES
+// 1. CHARGEMENT DES MODÈLES (ORDRE ALPHABÉTIQUE)
 require('./models/Bug');
 require('./models/Chapter');
 require('./models/DeploySignal');
@@ -50,8 +50,7 @@ app.get('/api/deploy-status', async (req, res) => {
 app.use('/api/auth', require('./features/auth/auth.routes'));
 app.use('/api/games', require('./features/games/games.routes'));
 app.use('/api/scans', require('./features/scans/scans.routes'));
-app.use('/api/homework', require('./features/homework/homework.routes'));
-app.use('/api/upload', require('./features/upload/upload.routes')); // DOMAINE UPLOAD RÉTABLI
+app.use('/api/homework', require('./features/homework/homework.routes')); // DOMAINE HOMEWORK
 app.use('/api', require('./features/admin/admin.routes')); 
 
 // 5. GESTION FRONTEND
@@ -59,11 +58,10 @@ const distPath = path.join(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
-        if (req.path.startsWith('/api')) return res.status(404).json({ error: "API non trouvée" });
+        // Sécurité : si c'est une requête API, on ne renvoie pas de HTML
+        if (req.path.startsWith('/api')) return res.status(404).json({ error: "Route API introuvable" });
         res.sendFile(path.join(distPath, 'index.html'));
     });
 }
 
-app.listen(port, () => {
-    console.log(`🚀 SERVEUR RECONSTRUIT : PORT ${port}`);
-});
+app.listen(port, () => console.log(`🚀 SERVEUR PRÊT : PORT ${port}`));
