@@ -8,7 +8,7 @@ const AIService = {
     generateQuiz: async (topic, numQuestions = 5) => {
         try {
             const apiKey = process.env.GEMINI_API_KEY;
-            if (!apiKey) throw new Error("Clé API GEMINI_API_KEY manquante dans le fichier .env");
+            if (!apiKey) throw new Error("Clé API GEMINI_API_KEY manquante");
 
             const genAI = new GoogleGenerativeAI(apiKey);
             

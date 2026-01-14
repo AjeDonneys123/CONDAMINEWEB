@@ -16,17 +16,15 @@ export default function GameStudio({ initialData, chapters, classFilter, onClose
       if(!aiPrompt.trim()) return;
       setLoadingIA(true);
       try {
+          // CORRECTIF : Utilisation du point d'entrée modulaire /api/games/generate
           const res = await fetch('/api/games/generate', { 
               method: 'POST', 
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ topic: aiPrompt, numQuestions: 5 }) 
           });
 
+          if (!res.ok) throw new Error("Réponse API invalide");
           const data = await res.json();
-
-          if (!res.ok) {
-              throw new Error(data.details || "Erreur inconnue");
-          }
           
           if(Array.isArray(data)) {
               setFormData(prev => ({...prev, questions: [...prev.questions, ...data]}));
@@ -34,8 +32,8 @@ export default function GameStudio({ initialData, chapters, classFilter, onClose
               setAiPrompt('');
           }
       } catch (e) {
-          console.error("Erreur Frontend IA:", e);
-          alert(`Erreur IA : ${e.message}\n\nVérifiez que votre clé GEMINI_API_KEY est bien configurée dans le fichier .env au dessus du dossier server.`);
+          console.error("Erreur IA:", e);
+          alert("L'IA n'a pas pu générer les questions. Vérifiez la console serveur.");
       }
       setLoadingIA(false); 
   };
@@ -43,12 +41,12 @@ export default function GameStudio({ initialData, chapters, classFilter, onClose
   const save = async () => {
     if (!formData.title || formData.questions.length === 0) return alert("Le quiz doit avoir un titre et au moins une question.");
     try {
-        const res = await fetch('/api/games', { 
+        await fetch('/api/games', { 
             method: 'POST', 
             headers: { 'Content-Type': 'application/json' }, 
             body: JSON.stringify({ ...formData, chapterId: formData.chapterId === 'none' ? null : formData.chapterId }) 
         });
-        if(res.ok) onClose();
+        onClose();
     } catch (e) {
         alert("Erreur lors de la sauvegarde.");
     }
@@ -57,29 +55,29 @@ export default function GameStudio({ initialData, chapters, classFilter, onClose
   return (
     <div className="fixed inset-0 z-[6000] bg-slate-50 flex flex-col animate-in zoom-in">
         <div className="p-8 bg-purple-600 text-white flex justify-between items-center shadow-xl">
-            <input className="text-3xl font-black bg-transparent outline-none w-full placeholder:text-purple-300" value={formData.title} onChange={e=>setFormData({...formData, title:e.target.value})} placeholder="NOM DU QUIZ" />
+            <input className="text-3xl font-black bg-transparent outline-none w-full placeholder:text-purple-300" value={formData.title} onChange={e=>setFormData({...formData, title:e.target.value})} placeholder="TITRE DU QUIZ" />
             <button onClick={onClose} className="text-3xl font-black">✕</button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-10 custom-scrollbar">
             <div className="max-w-4xl mx-auto space-y-10">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                    <div className="assign-card"><label className="text-[10px] font-black text-slate-400 uppercase mb-2 block tracking-widest">Dossier de cours</label>
-                        <select className="w-full font-bold outline-none bg-white p-3 rounded-xl border border-slate-200" value={formData.chapterId} onChange={e=>setFormData({...formData, chapterId: e.target.value})}>
+                    <div className="assign-card"><label className="text-[10px] font-black text-slate-400 uppercase mb-2 block">Dossier</label>
+                        <select className="w-full font-bold outline-none bg-white p-3 rounded-xl border" value={formData.chapterId} onChange={e=>setFormData({...formData, chapterId: e.target.value})}>
                             <option value="none">-- Aucun dossier --</option>
                             {chapters.map(c => <option key={c._id} value={c._id}>{c.title}</option>)}
                         </select>
                     </div>
-                    <div className="assign-card"><label className="text-[10px] font-black text-slate-400 uppercase mb-2 block tracking-widest">Classe cible</label>
-                        <select className="w-full font-bold outline-none bg-white p-3 rounded-xl border border-slate-200" value={formData.classroom} onChange={e=>setFormData({...formData, classroom: e.target.value})}>
+                    <div className="assign-card"><label className="text-[10px] font-black text-slate-400 uppercase mb-2 block">Classe</label>
+                        <select className="w-full font-bold outline-none bg-white p-3 rounded-xl border" value={formData.classroom} onChange={e=>setFormData({...formData, classroom: e.target.value})}>
                             <option value="6D">6eD</option><option value="5B">5eB</option><option value="5C">5eC</option><option value="2A">2A</option><option value="2CD">2CD</option>
                         </select>
                     </div>
                 </div>
 
                 <div className="flex gap-4">
-                    <button onClick={()=>setGenMode('manual')} className={`flex-1 p-4 rounded-2xl font-black transition-all ${genMode==='manual'?'bg-purple-600 text-white shadow-lg':'bg-white text-slate-400 border'}`}>✍️ CRÉATION MANUELLE</button>
-                    <button onClick={()=>setGenMode('ai')} className={`flex-1 p-4 rounded-2xl font-black transition-all ${genMode==='ai'?'bg-purple-600 text-white shadow-lg':'bg-white text-slate-400 border'}`}>🤖 GÉNÉRATEUR IA</button>
+                    <button onClick={()=>setGenMode('manual')} className={`flex-1 p-4 rounded-2xl font-black transition-all ${genMode==='manual'?'bg-purple-600 text-white shadow-lg':'bg-white text-slate-400 border'}`}>✍️ MANUEL</button>
+                    <button onClick={()=>setGenMode('ai')} className={`flex-1 p-4 rounded-2xl font-black transition-all ${genMode==='ai'?'bg-purple-600 text-white shadow-lg':'bg-white text-slate-400 border'}`}>🤖 IA</button>
                 </div>
 
                 {genMode === 'manual' ? (
@@ -93,13 +91,13 @@ export default function GameStudio({ initialData, chapters, classFilter, onClose
                                 </div>
                             ))}
                         </div>
-                        <button onClick={()=>{ if(!currentQ.q) return; setFormData({...formData, questions:[...formData.questions, currentQ]}); setCurrentQ({q:'', options:['','','',''], a:0}); }} className="w-full mt-6 p-4 bg-purple-100 text-purple-600 rounded-3xl font-black uppercase hover:bg-purple-200 transition-colors">Ajouter la question</button>
+                        <button onClick={()=>{ if(!currentQ.q) return; setFormData({...formData, questions:[...formData.questions, currentQ]}); setCurrentQ({q:'', options:['','','',''], a:0}); }} className="w-full mt-6 p-4 bg-purple-100 text-purple-600 rounded-3xl font-black uppercase hover:bg-purple-200">Ajouter la question</button>
                     </div>
                 ) : (
                     <div className="p-10 bg-purple-50 rounded-[50px] border-4 border-dashed border-purple-200">
-                        <textarea className="w-full p-6 h-32 rounded-3xl border-none shadow-inner mb-4 font-bold text-slate-700" placeholder="Décris le sujet (ex: La chute de l'Empire Romain, les volcans...)" value={aiPrompt} onChange={e=>setAiPrompt(e.target.value)} />
+                        <textarea className="w-full p-6 h-32 rounded-3xl border-none shadow-inner mb-4 font-bold text-slate-700" placeholder="Décris le sujet du quiz pour l'IA..." value={aiPrompt} onChange={e=>setAiPrompt(e.target.value)} />
                         <button onClick={handleAiGen} disabled={loadingIA} className="w-full p-6 bg-purple-600 text-white font-black text-xl rounded-3xl shadow-xl hover:scale-[1.02] active:scale-95 transition-all">
-                            {loadingIA ? '⚡ ANALYSE EN COURS...' : 'GÉNÉRER PAR IA 🚀'}
+                            {loadingIA ? '⚡ GÉNÉRATION...' : 'GÉNÉRER PAR IA 🚀'}
                         </button>
                     </div>
                 )}

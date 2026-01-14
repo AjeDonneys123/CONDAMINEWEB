@@ -4,7 +4,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const fs = require('fs');
 
-// INJECTION GLOBALE DE FETCH (Nécessaire pour le SDK Google sur Node < 18)
+// Injection globale de fetch pour Gemini (Node < 18)
 if (!global.fetch) {
     global.fetch = require('node-fetch');
 }
@@ -27,10 +27,9 @@ require('./models/TeacherStyle');
 
 // 2. CONNEXION MONGODB
 mongoose.connect(process.env.MONGODB_URI).then(async () => {
-    console.log('✅ MongoDB Connecté.');
+    console.log('✅ MongoDB Connected.');
     try {
-        const DeploySignal = mongoose.model('DeploySignal');
-        await DeploySignal.findOneAndUpdate({}, { status: 'live', updatedAt: new Date() }, { upsert: true });
+        await mongoose.model('DeploySignal').findOneAndUpdate({}, { status: 'live', updatedAt: new Date() }, { upsert: true });
     } catch (e) {}
 }).catch(err => console.error("❌ MongoDB Error:", err.message));
 
