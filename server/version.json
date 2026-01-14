@@ -1,6 +1,6 @@
 {
-  "version": "1.4.1",
-  "build": 178,
-  "description": "Fix React Crash (White Screen) + Robust API Routing + Safe Deletions",
-  "timestamp": "2026-01-14T00:49:33.904Z"
+  "version": "1.4.2",
+  "build": 179,
+  "description": "Critical fix for 500 Error on /api/players + Model loading priority",
+  "timestamp": "2026-01-14T00:52:22.465Z"
 }

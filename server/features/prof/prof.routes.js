@@ -1,29 +1,30 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
-const DriveService = require('../../services/drive.service');
 
-const getTeacher = () => mongoose.model('Teacher');
+// Helper pour accéder aux modèles de manière sécurisée
 const getPlayer = () => mongoose.model('Player');
-const getChapter = () => mongoose.model('Chapter');
+const getTeacher = () => mongoose.model('Teacher');
 const getHomework = () => mongoose.model('Homework');
-const getScanSession = () => mongoose.model('ScanSession');
 
 router.get('/players', async (req, res) => {
     try {
+        if (mongoose.connection.readyState !== 1) throw new Error("BDD non prête");
         const data = await getPlayer().find({}).sort({ classroom: 1, lastName: 1 });
         res.json(data || []);
-    } catch (e) { res.json([]); }
+    } catch (e) {
+        console.error("❌ Erreur /api/players:", e.message);
+        res.status(500).json({ error: "Erreur lors de la récupération des élèves" });
+    }
 });
 
 router.get('/homework-all', async (req, res) => {
-    try { 
+    try {
         const data = await getHomework().find({}).sort({ date: -1 });
-        res.json(data || []); 
-    } catch (e) { res.json([]); }
+        res.json(data || []);
+    } catch (e) { res.status(500).json([]); }
 });
 
-// US #1 : Mise à jour des sections (Super-Dossiers)
 router.patch('/teacher/:id/sections', async (req, res) => {
     try {
         const updated = await getTeacher().findByIdAndUpdate(
@@ -31,26 +32,22 @@ router.patch('/teacher/:id/sections', async (req, res) => {
             { subjectSections: req.body.sections }, 
             { new: true }
         );
+        if (!updated) return res.status(404).json({ error: "Prof non trouvé" });
         res.json(updated);
-    } catch (e) { res.status(500).json({ error: e.message }); }
+    } catch (e) {
+        console.error("❌ Erreur /api/teacher/sections:", e.message);
+        res.status(500).json({ error: e.message });
+    }
 });
 
-// US #13 : Suppression d'une classe entière
 router.delete('/classroom/:className', async (req, res) => {
     try {
         const { className } = req.params;
-        console.log(`🗑️ Suppression totale de la classe : ${className}`);
-
-        // 1. Nettoyage Drive (On tente de supprimer le dossier de la classe)
-        // Note: nécessite de retrouver l'ID du dossier classe, on simplifie ici par le nettoyage BDD
-        
-        // 2. Suppression BDD
         await getPlayer().deleteMany({ classroom: className });
-        await getChapter().deleteMany({ classroom: className });
+        await mongoose.model('Chapter').deleteMany({ classroom: className });
         await getHomework().deleteMany({ classroom: className });
-        await getScanSession().deleteMany({ classroom: className });
-
-        res.json({ ok: true, message: `Classe ${className} supprimée.` });
+        await mongoose.model('ScanSession').deleteMany({ classroom: className });
+        res.json({ ok: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

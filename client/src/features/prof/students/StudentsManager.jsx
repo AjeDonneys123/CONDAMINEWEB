@@ -8,10 +8,12 @@ export default function StudentsManager({ globalClass }) {
   const loadData = async () => {
     try {
         const res = await fetch('/api/players');
-        if (!res.ok) return;
+        if (!res.ok) throw new Error("Serveur Error");
         const data = await res.json();
         setPlayers(Array.isArray(data) ? data : []);
-    } catch (e) { console.error("API Players Fail"); }
+    } catch (e) {
+        console.error("Erreur Players:", e.message);
+    }
   };
 
   useEffect(() => { loadData(); }, [globalClass]);
@@ -25,7 +27,12 @@ export default function StudentsManager({ globalClass }) {
   return (
     <div className="manager-container animate-in fade-in">
       <div className="filter-bar flex justify-between items-center bg-white p-4 rounded-[25px] border shadow-sm">
-        <input className="flex-1 outline-none font-bold text-slate-400 bg-transparent" placeholder="Chercher un élève..." value={search} onChange={e => setSearch(e.target.value)} />
+        <input 
+            className="flex-1 outline-none font-bold text-slate-400 bg-transparent" 
+            placeholder="Rechercher un élève..." 
+            value={search} 
+            onChange={e => setSearch(e.target.value)} 
+        />
         <div className="stats-badge bg-indigo-600 text-white px-4 py-2 rounded-xl font-black">{filtered.length} ÉLÈVES</div>
       </div>
 
@@ -42,12 +49,13 @@ export default function StudentsManager({ globalClass }) {
                     <tr key={p._id} className="border-b hover:bg-slate-50 transition-colors">
                         <td className="p-5 pl-8 font-bold text-slate-700">{p.firstName} {p.lastName}</td>
                         <td className="p-5 text-right pr-8">
-                            <button className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase">Dossier</button>
+                            <button className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase shadow-sm">Dossier</button>
                         </td>
                     </tr>
                 ))}
             </tbody>
         </table>
+        {filtered.length === 0 && <p className="text-center py-20 text-slate-300 italic uppercase text-[10px]">Aucun élève trouvé</p>}
       </div>
     </div>
   );

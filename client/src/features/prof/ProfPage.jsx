@@ -14,20 +14,25 @@ export default function ProfPage({ user, onLogout }) {
 
   const loadClasses = async () => {
       try {
-        const res = await fetch('/api/players').then(r => r.json());
-        if (Array.isArray(res)) {
-            const uniqueClasses = [...new Set(res.map(p => p.classroom))].filter(Boolean);
+        const res = await fetch('/api/players');
+        if (!res.ok) throw new Error("Réponse serveur invalide");
+        const data = await res.json();
+        
+        if (Array.isArray(data)) {
+            const uniqueClasses = [...new Set(data.map(p => p.classroom))].filter(Boolean);
             setClasses(uniqueClasses);
             if (!selectedClass && uniqueClasses.length > 0) setSelectedClass(uniqueClasses[0]);
         }
-      } catch(e) { console.error("Erreur classes"); }
+      } catch(e) { 
+          console.error("Erreur chargement classes:", e);
+      }
   };
 
   useEffect(() => { loadClasses(); }, []);
 
   const deleteClass = async (name) => {
-      if (!confirm(`⚠️ ATTENTION ! Supprimer la classe ${name} ?\nCela effacera TOUT (élèves, devoirs, dossiers) en BDD.`)) return;
-      if (!confirm(`CONFIRMATION FINALE : Supprimer la ${name} ?`)) return;
+      if (!confirm(`⚠️ SUPPRIMER LA CLASSE ${name} ?\nCela effacera les élèves, devoirs et dossiers.`)) return;
+      if (!confirm(`TAPEZ SUR OK POUR CONFIRMER LA SUPPRESSION DE LA ${name}`)) { return; }
       
       setLoading(true);
       try {
@@ -56,8 +61,7 @@ export default function ProfPage({ user, onLogout }) {
                     </button>
                     <button 
                         onClick={() => deleteClass(c)} 
-                        className="w-8 h-8 flex items-center justify-center text-red-100 hover:text-red-500 font-bold transition-colors"
-                        title="Supprimer la classe"
+                        className="w-8 h-8 flex items-center justify-center text-red-200 hover:text-red-500 font-bold transition-colors"
                     >
                         ✕
                     </button>
