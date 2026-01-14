@@ -12,7 +12,7 @@ try {
         );
         auth.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
         drive = google.drive({ version: 'v3', auth });
-        console.log("✅ Drive API V4 : Hiérarchie stricte activée");
+        console.log("✅ Drive API V4 : Nettoyage physique activé");
     }
 } catch (e) { console.error("❌ Erreur Init Drive:", e.message); }
 
@@ -36,12 +36,35 @@ const DriveService = {
         } catch (e) { return null; }
     },
 
-    // Méthode de navigation sécurisée (Force le passage par Devoirs)
     getHomeworkRoot: async (classroom) => {
         const rootId = await DriveService.getOrCreateFolder("CONDACLASSE", null);
         const teacherId = await DriveService.getOrCreateFolder("JEAN VUILLET", rootId);
         const classId = await DriveService.getOrCreateFolder(classroom.toUpperCase(), teacherId);
         return await DriveService.getOrCreateFolder("Devoirs", classId);
+    },
+
+    // SUPPRESSION PAR NOM DANS UN PARENT (Utilisé pour les matières)
+    deleteFolderByName: async (name, parentId) => {
+        if (!drive || !parentId) return;
+        try {
+            const cleanName = name.replace(/'/g, "\\'");
+            const q = `name = '${cleanName}' and '${parentId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
+            const res = await drive.files.list({ q, fields: 'files(id)' });
+            
+            if (res.data.files && res.data.files.length > 0) {
+                for (const file of res.data.files) {
+                    await drive.files.delete({ fileId: file.id });
+                    console.log(`🗑️ [DRIVE] Dossier supprimé : ${name} (${file.id})`);
+                }
+            }
+        } catch (e) {
+            console.error(`❌ Erreur suppression Drive (${name}):`, e.message);
+        }
+    },
+
+    deleteFile: async (id) => { 
+        if (!drive || !id) return true;
+        try { await drive.files.delete({ fileId: id }); return true; } catch (e) { return false; } 
     },
 
     uploadFile: async (folderId, fileName, buffer, mimeType) => {
@@ -55,11 +78,6 @@ const DriveService = {
             await drive.permissions.create({ fileId: file.data.id, resource: { role: 'reader', type: 'anyone' } });
             return { id: file.data.id, url: `https://drive.google.com/thumbnail?id=${file.data.id}&sz=w1200` };
         } catch (e) { return null; }
-    },
-
-    deleteFile: async (id) => { 
-        if (!drive || !id) return true;
-        try { await drive.files.delete({ fileId: id }); return true; } catch (e) { return false; } 
     }
 };
 
