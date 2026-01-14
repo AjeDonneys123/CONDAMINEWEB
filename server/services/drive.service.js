@@ -12,28 +12,40 @@ try {
         );
         auth.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
         drive = google.drive({ version: 'v3', auth });
-        console.log("✅ Drive API : Système de Raccourcis Activé");
+        console.log("✅ Drive API : Prêt pour la synchronisation.");
     }
 } catch (e) {
     console.error("❌ Erreur Init Drive:", e.message);
 }
 
 const DriveService = {
+    // Version améliorée : cherche par nom si parentId est fourni
     getOrCreateFolder: async (name, parentId = null) => {
         if (!drive) return null;
         try {
+            // On cherche le dossier avec le nom exact
             let q = `name = '${name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
             if (parentId) q += ` and '${parentId}' in parents`;
             
             const res = await drive.files.list({ q, fields: 'files(id, name)' });
-            if (res.data.files && res.data.files.length > 0) return res.data.files[0].id;
+            if (res.data.files && res.data.files.length > 0) {
+                return res.data.files[0].id;
+            }
 
+            // Sinon, création
             const folder = await drive.files.create({
-                resource: { name: name, mimeType: 'application/vnd.google-apps.folder', parents: parentId ? [parentId] : [] },
+                resource: { 
+                    name: name, 
+                    mimeType: 'application/vnd.google-apps.folder', 
+                    parents: parentId ? [parentId] : [] 
+                },
                 fields: 'id'
             });
             return folder.data.id;
-        } catch (e) { return null; }
+        } catch (e) { 
+            console.error(`Erreur Drive (Folder ${name}):`, e.message);
+            return null; 
+        }
     },
 
     uploadFile: async (folderId, fileName, buffer, mimeType) => {
@@ -53,7 +65,6 @@ const DriveService = {
         } catch (e) { return null; }
     },
 
-    // CRÉATION DE RACCOURCI (US #Distribution)
     createShortcut: async (targetId, parentFolderId, shortcutName) => {
         if (!drive || !targetId || !parentFolderId) return null;
         try {
@@ -67,10 +78,7 @@ const DriveService = {
                 fields: 'id'
             });
             return res.data.id;
-        } catch (e) {
-            console.error("Erreur création raccourci Drive:", e.message);
-            return null;
-        }
+        } catch (e) { return null; }
     }
 };
 
