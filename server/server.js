@@ -8,17 +8,17 @@ const app = express();
 const port = process.env.PORT || 3000;
 const SERVER_BOOT_ID = Date.now();
 
-// 1. CHARGEMENT DES MODÈLES
-require('./models/Teacher');
-require('./models/Player');
-require('./models/Chapter');
-require('./models/Homework');
-require('./models/GameLevel');
+// 1. CHARGEMENT DES MODÈLES (ORDRE ALPHABÉTIQUE)
 require('./models/Bug');
-require('./models/Submission');
-require('./models/TeacherStyle');
-require('./models/ScanSession');
+require('./models/Chapter');
 require('./models/DeploySignal');
+require('./models/GameLevel');
+require('./models/Homework');
+require('./models/Player');
+require('./models/ScanSession');
+require('./models/Submission');
+require('./models/Teacher');
+require('./models/TeacherStyle');
 
 // 2. CONNEXION MONGODB
 mongoose.connect(process.env.MONGODB_URI).then(async () => {
@@ -28,29 +28,38 @@ mongoose.connect(process.env.MONGODB_URI).then(async () => {
     } catch (e) {}
 }).catch(err => console.error("❌ MongoDB Error:", err.message));
 
+// MIDDLEWARES DE PARSING
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // 3. ROUTES SYSTÈME
 app.get('/api/check-deploy', (req, res) => res.json({ bootId: SERVER_BOOT_ID }));
-app.get('/api/system-status', (req, res) => res.json({ status: 'OK' }));
+app.get('/api/deploy-status', async (req, res) => {
+    try {
+        const sig = await mongoose.model('DeploySignal').findOne();
+        const v = JSON.parse(fs.readFileSync(path.join(__dirname, 'version.json'), 'utf8'));
+        res.json({ version: v.version, build: v.build, status: sig?.status || 'live' });
+    } catch (e) { res.json({ version: '1.0.0', build: 0, status: 'live' }); }
+});
 
 // 4. ARCHITECTURE PAR DOMAINE (ZÉRO POROSITÉ)
-// Chaque domaine gère son versant Prof ET son versant Élève
 app.use('/api/auth', require('./features/auth/auth.routes'));
-app.use('/api/admin', require('./features/admin/admin.routes'));     // Classes, Sections, Élèves
-app.use('/api/scans', require('./features/scans/scans.routes'));     // Captures, Corrections IA, Drive
-app.use('/api/games', require('./features/games/games.routes'));     // Quiz, Moteurs de jeux
-app.use('/api/homework', require('./features/homework/homework.routes')); // Devoirs manuels
+app.use('/api/admin', require('./features/admin/admin.routes')); 
+app.use('/api/games', require('./features/games/games.routes')); // POINT D'ENTRÉE UNIQUE GAMES
+app.use('/api/scans', require('./features/scans/scans.routes'));
+app.use('/api/homework', require('./features/homework/homework.routes'));
 
 // 5. GESTION FRONTEND
 const distPath = path.join(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
-        if (req.path.startsWith('/api')) return res.status(404).json({ error: "API 404" });
+        // SÉCURITÉ : Si on demande une route API qui n'existe pas, renvoyer JSON, pas HTML
+        if (req.path.startsWith('/api')) {
+            return res.status(404).json({ error: "Route API inexistante", path: req.path });
+        }
         res.sendFile(path.join(distPath, 'index.html'));
     });
 }
 
-app.listen(port, () => console.log(`🚀 SERVEUR MODULAIRE V2 PRÊT : PORT ${port}`));
+app.listen(port, () => console.log(`🚀 SERVEUR MODULAIRE PRÊT : PORT ${port}`));

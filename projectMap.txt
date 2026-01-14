@@ -111,19 +111,23 @@
 │   └── style.css
 ├── server/
 │   ├── features/
+│   │   ├── admin/
+│   │   │   └── admin.routes.js
 │   │   ├── auth/
 │   │   │   └── auth.routes.js
 │   │   ├── eleve/
 │   │   │   └── eleve.routes.js
 │   │   ├── game/
 │   │   │   └── game.routes.js
-│   │   └── prof/
-│   │       ├── automation.routes.js
-│   │       ├── chapter.routes.js
-│   │       ├── homework.routes.js
-│   │       ├── prof.routes.js
-│   │       ├── scan.routes.js
-│   │       └── teacher.routes.js
+│   │   ├── prof/
+│   │   │   ├── automation.routes.js
+│   │   │   ├── chapter.routes.js
+│   │   │   ├── homework.routes.js
+│   │   │   ├── prof.routes.js
+│   │   │   ├── scan.routes.js
+│   │   │   └── teacher.routes.js
+│   │   └── scans/
+│   │       └── scans.routes.js
 │   ├── models/
 │   │   ├── Bug.js
 │   │   ├── Chapter.js
@@ -137,6 +141,7 @@
 │   │   └── TeacherStyle.js
 │   ├── server.js
 │   ├── services/
+│   │   ├── ai.service.js
 │   │   └── drive.service.js
 │   └── version.json
 ├── snap.js
