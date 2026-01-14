@@ -346,7 +346,7 @@ setInterval(applyUpdate, 1000);
 {
   "status": "OK",
   "file": null,
-  "timestamp": 1768358326484
+  "timestamp": 1768361207283
 }
 
 ### FILE: chemin/du/fichier.js
@@ -11353,9 +11353,10 @@ export default function ActivityStudio({ globalClass, user }) {
         if (!globalClass) return;
         setLoading(true);
         try {
+            // CORRECTIF : Utilisation des nouveaux points d'entrée modulaires
             const [hwRes, gmRes, cpRes] = await Promise.all([
-                fetch('/api/homework-all'),
-                fetch('/api/game-levels/all'),
+                fetch('/api/homework/all'),
+                fetch('/api/games/all'),
                 fetch('/api/chapters-all')
             ]);
             
@@ -11393,14 +11394,14 @@ export default function ActivityStudio({ globalClass, user }) {
     };
 
     const handleRenameChapter = async (id, title) => {
-        setChapters(prev => prev.map(c => c._id === id ? { ...c, title } : c));
         try {
             await fetch('/api/chapters', { 
                 method:'POST', 
                 headers:{'Content-Type':'application/json'}, 
                 body:JSON.stringify({_id:id, title})
             });
-        } catch (e) { loadData(); }
+            await loadData();
+        } catch (e) { console.error(e); }
     };
 
     const handleDeleteChapter = async (id) => {
@@ -11412,20 +11413,34 @@ export default function ActivityStudio({ globalClass, user }) {
     };
 
     if (viewingResults) return <HomeworkResults homework={viewingResults} onBack={() => setViewingResults(null)} />;
+    
     if (editingItem) {
         const activeChaps = chapters.filter(c => c.classroom === globalClass && !c.isArchived);
-        if (editingItem.type === 'homework') return <HomeworkStudio initialData={editingItem.data} chapters={activeChaps} onClose={() => { setEditingItem(null); loadData(); }} />;
-        return <GameStudio initialData={editingItem.data} chapters={activeChaps} classFilter={globalClass} onClose={() => { setEditingItem(null); loadData(); }} />;
+        if (editingItem.type === 'homework') {
+            return <HomeworkStudio 
+                initialData={editingItem.data} 
+                chapters={activeChaps} 
+                onClose={() => { setEditingItem(null); loadData(); }} 
+            />;
+        }
+        return <GameStudio 
+            initialData={editingItem.data} 
+            chapters={activeChaps} 
+            classFilter={globalClass} 
+            onClose={() => { setEditingItem(null); loadData(); }} 
+        />;
     }
 
     return (
         <div className="animate-in fade-in">
             <div className="flex justify-start gap-4 mb-8 bg-white p-4 rounded-[30px] border-2 border-slate-50 shadow-sm">
-                <button onClick={() => setEditingItem({ type: 'homework', data: null })} className="bg-orange-500 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg"> Nouveau Devoir</button>
-                <button onClick={() => setEditingItem({ type: 'game', data: null })} className="bg-purple-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg"> Nouveau Jeu</button>
+                <button onClick={() => setEditingItem({ type: 'homework', data: null })} className="bg-orange-500 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:scale-105 transition-transform"> Nouveau Devoir</button>
+                <button onClick={() => setEditingItem({ type: 'game', data: null })} className="bg-purple-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:scale-105 transition-transform"> Nouveau Jeu</button>
             </div>
 
-            {loading ? <div className="text-center py-20 text-slate-300 font-black animate-pulse uppercase">Chargement...</div> : (
+            {loading ? (
+                <div className="text-center py-20 text-slate-300 font-black animate-pulse uppercase tracking-widest">Mise à jour du studio...</div>
+            ) : (
                 <ProfStudioFolder 
                     user={user} chapters={chapters} items={activities} classFilter={globalClass}
                     onArchive={async (id, state) => {
@@ -11435,8 +11450,9 @@ export default function ActivityStudio({ globalClass, user }) {
                     onRename={handleRenameChapter}
                     onEditItem={(it) => setEditingItem({ type: it.actType, data: it })}
                     onDeleteItem={async (id, type) => {
-                        if(!confirm("Supprimer ?")) return;
-                        const endpoint = type === 'game' ? `/api/game-levels/${id}` : `/api/homework/${id}`;
+                        if(!confirm("Supprimer définitivement cet élément ?")) return;
+                        // CORRECTIF : Chemins de suppression modulaires
+                        const endpoint = type === 'game' ? `/api/games/${id}` : `/api/homework/${id}`;
                         await fetch(endpoint, { method: 'DELETE' });
                         loadData();
                     }}
@@ -11913,14 +11929,14 @@ export default function GameStudio({ initialData, chapters, classFilter, onClose
               setAiPrompt('');
           }
       } catch (e) {
-          console.error(e);
-          alert("L'IA n'est pas accessible. Vérifiez la console serveur.");
+          console.error("Erreur IA:", e);
+          alert("L'IA n'a pas pu générer les questions. Vérifiez la console serveur.");
       }
       setLoadingIA(false); 
   };
 
   const save = async () => {
-    if (!formData.title || formData.questions.length === 0) return alert("Le quiz est vide.");
+    if (!formData.title || formData.questions.length === 0) return alert("Le quiz doit avoir un titre et au moins une question.");
     try {
         await fetch('/api/games', { 
             method: 'POST', 
@@ -11936,7 +11952,7 @@ export default function GameStudio({ initialData, chapters, classFilter, onClose
   return (
     <div className="fixed inset-0 z-[6000] bg-slate-50 flex flex-col animate-in zoom-in">
         <div className="p-8 bg-purple-600 text-white flex justify-between items-center shadow-xl">
-            <input className="text-3xl font-black bg-transparent outline-none w-full placeholder:text-purple-300" value={formData.title} onChange={e=>setFormData({...formData, title:e.target.value})} placeholder="NOM DU QUIZ" />
+            <input className="text-3xl font-black bg-transparent outline-none w-full placeholder:text-purple-300" value={formData.title} onChange={e=>setFormData({...formData, title:e.target.value})} placeholder="TITRE DU QUIZ" />
             <button onClick={onClose} className="text-3xl font-black">✕</button>
         </div>
 
@@ -11963,16 +11979,16 @@ export default function GameStudio({ initialData, chapters, classFilter, onClose
 
                 {genMode === 'manual' ? (
                     <div className="p-10 bg-white rounded-[50px] border shadow-sm">
-                        <input className="w-full p-4 mb-6 border-b-2 font-black text-xl outline-none" placeholder="Question..." value={currentQ.q} onChange={e=>setCurrentQ({...currentQ, q:e.target.value})} />
+                        <input className="w-full p-4 mb-6 border-b-2 font-black text-xl outline-none" placeholder="Quelle est la question ?" value={currentQ.q} onChange={e=>setCurrentQ({...currentQ, q:e.target.value})} />
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             {currentQ.options.map((opt, i) => (
                                 <div key={i} className={`flex items-center gap-2 p-3 rounded-2xl border-2 transition-all ${currentQ.a === i ? 'border-green-500 bg-green-50' : 'border-slate-100'}`}>
-                                    <input type="radio" name="correct" checked={currentQ.a === i} onChange={()=>setCurrentQ({...currentQ, a:i})} />
+                                    <input type="radio" name="ans" checked={currentQ.a === i} onChange={()=>setCurrentQ({...currentQ, a:i})} />
                                     <input className="w-full bg-transparent outline-none font-bold" value={opt} onChange={e=>{const n=[...currentQ.options]; n[i]=e.target.value; setCurrentQ({...currentQ, options:n});}} placeholder={`Réponse ${i+1}`} />
                                 </div>
                             ))}
                         </div>
-                        <button onClick={()=>{ if(!currentQ.q) return; setFormData({...formData, questions:[...formData.questions, currentQ]}); setCurrentQ({q:'', options:['','','',''], a:0}); }} className="w-full mt-6 p-4 bg-purple-100 text-purple-600 rounded-3xl font-black uppercase">Ajouter au quiz</button>
+                        <button onClick={()=>{ if(!currentQ.q) return; setFormData({...formData, questions:[...formData.questions, currentQ]}); setCurrentQ({q:'', options:['','','',''], a:0}); }} className="w-full mt-6 p-4 bg-purple-100 text-purple-600 rounded-3xl font-black uppercase hover:bg-purple-200">Ajouter la question</button>
                     </div>
                 ) : (
                     <div className="p-10 bg-purple-50 rounded-[50px] border-4 border-dashed border-purple-200">
@@ -11986,8 +12002,8 @@ export default function GameStudio({ initialData, chapters, classFilter, onClose
                 <div className="space-y-4">
                     {formData.questions.map((q, i) => (
                         <div key={i} className="p-6 bg-white border rounded-[30px] shadow-sm animate-in fade-in">
-                            <div className="flex justify-between items-center mb-2">
-                                <b className="text-slate-700">{i+1}. {q.q}</b>
+                            <div className="flex justify-between items-center mb-4">
+                                <b className="text-slate-700 text-lg">{i+1}. {q.q}</b>
                                 <button onClick={()=>{const n=[...formData.questions]; n.splice(i,1); setFormData({...formData, questions:n});}} className="text-red-400 font-black p-2 hover:scale-110">✕</button>
                             </div>
                             <div className="game-preview-options flex flex-wrap gap-2">
@@ -12005,7 +12021,7 @@ export default function GameStudio({ initialData, chapters, classFilter, onClose
 
         <div className="p-8 bg-white border-t">
             <button onClick={save} className="w-full p-8 bg-purple-600 text-white font-black text-3xl rounded-[40px] uppercase shadow-2xl hover:bg-purple-700 transition-colors">
-                💾 Sauvegarder
+                💾 Sauvegarder le Quiz
             </button>
         </div>
     </div>
@@ -12299,11 +12315,6 @@ export default function HomeworkStudio({ initialData, chapters, onClose }) {
   const [players, setPlayers] = useState([]);
   const [stdSearch, setStdSearch] = useState('');
   const [uploading, setUploading] = useState(false);
-  const [showSmartWizard, setShowSmartWizard] = useState(false);
-  const [qFile, setQFile] = useState(null);
-  const [docFiles, setDocFiles] = useState([]);
-  const [smartLoading, setSmartLoading] = useState(false);
-  
   const [formData, setFormData] = useState(initialData || { 
       title: '', targetGrade: 'Tous', classroom: '6D', targetPlayerIds: [], 
       chapterId: (chapters && chapters.length > 0) ? chapters[0]._id : 'none',
@@ -12314,28 +12325,12 @@ export default function HomeworkStudio({ initialData, chapters, onClose }) {
     fetch('/api/players').then(r => r.json()).then(data => setPlayers(data || []));
   }, []);
 
-  const handleSmartGenerate = async () => {
-    if (!qFile) return alert("Photo de la question requise");
-    setSmartLoading(true);
-    const fd = new FormData();
-    fd.append('questionImg', qFile);
-    docFiles.forEach(f => fd.append('docImgs', f));
-
-    try {
-        const res = await fetch('/api/smart-generate', { method: 'POST', body: fd }).then(r => r.json());
-        if (res.levels) {
-            setFormData({ ...formData, levels: res.levels });
-            setShowSmartWizard(false);
-        }
-    } catch (e) { alert("Erreur IA"); }
-    setSmartLoading(false);
-  };
-
   const handleUpload = async (files, idx, type) => {
     setUploading(true);
     const n = JSON.parse(JSON.stringify(formData.levels));
     for (let file of Array.from(files)) {
       const fd = new FormData(); fd.append('file', file);
+      // Utilise le service d'upload générique
       const res = await fetch('/api/upload', { method: 'POST', body: fd }).then(r => r.json());
       if (res.ok) {
         if (type === 'doc') n[idx].attachmentUrls.push(res.imageUrl);
@@ -12359,30 +12354,27 @@ export default function HomeworkStudio({ initialData, chapters, onClose }) {
   const filteredPlayers = players.filter(p => (p.firstName + " " + p.lastName).toLowerCase().includes(stdSearch.toLowerCase()));
 
   return (
-    <div className="fixed inset-0 z-[6000] bg-slate-50 flex flex-col animate-in slide-in-from-bottom-4">
-        <div className="p-6 bg-orange-500 text-white flex justify-between items-center">
-            <input className="text-2xl font-black bg-transparent outline-none w-full placeholder:text-orange-200" value={formData.title} onChange={e=>setFormData({...formData, title:e.target.value})} placeholder="NOM DU DEVOIR" />
-            <div className="flex gap-4">
-                <button onClick={() => setShowSmartWizard(true)} className="bg-white/20 px-4 py-2 rounded-xl font-black text-xs uppercase">✨ SMART GENERATE</button>
-                <button onClick={onClose} className="w-10 h-10 bg-black/10 rounded-full font-black">✕</button>
-            </div>
+    <div className="fixed inset-0 z-[6000] bg-slate-50 flex flex-col animate-in zoom-in">
+        <div className="p-6 bg-orange-500 text-white flex justify-between items-center shadow-lg">
+            <input className="text-2xl font-black bg-transparent outline-none w-full placeholder:text-orange-200" value={formData.title} onChange={e=>setFormData({...formData, title:e.target.value})} placeholder="TITRE DU DEVOIR" />
+            <button onClick={onClose} className="w-10 h-10 bg-black/10 rounded-full font-black">✕</button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
             <div className="max-w-5xl mx-auto space-y-8">
                 <div className="grid grid-cols-3 gap-6">
                     <div className="assign-card"><label>DOSSIER</label>
-                        <select className="w-full font-bold" value={formData.chapterId} onChange={e=>setFormData({...formData, chapterId: e.target.value})}>
-                            <option value="none">-- Aucun --</option>
+                        <select className="w-full font-bold outline-none" value={formData.chapterId} onChange={e=>setFormData({...formData, chapterId: e.target.value})}>
+                            <option value="none">-- Aucun dossier --</option>
                             {chapters.map(c => <option key={c._id} value={c._id}>{c.title}</option>)}
                         </select>
                     </div>
                     <div className="assign-card"><label>CLASSE</label>
-                        <select className="w-full font-bold" value={formData.classroom} onChange={e=>setFormData({...formData, classroom: e.target.value})}>
-                            <option value="6D">6eD</option><option value="5B">5eB</option><option value="5C">5eC</option>
+                        <select className="w-full font-bold outline-none" value={formData.classroom} onChange={e=>setFormData({...formData, classroom: e.target.value})}>
+                            <option value="6D">6eD</option><option value="5B">5eB</option><option value="5C">5eC</option><option value="2A">2A</option><option value="2CD">2CD</option>
                         </select>
                     </div>
-                    <div className="assign-card relative"><label>CIBLER ÉLÈVES (OPTIONNEL)</label>
+                    <div className="assign-card relative"><label>CIBLER DES ÉLÈVES</label>
                         <input className="w-full outline-none" placeholder="Chercher..." value={stdSearch} onChange={e=>setStdSearch(e.target.value)} />
                         {stdSearch && (
                             <div className="absolute top-full left-0 right-0 bg-white shadow-xl z-50 rounded-xl max-h-40 overflow-auto border">
@@ -12393,7 +12385,7 @@ export default function HomeworkStudio({ initialData, chapters, onClose }) {
                         )}
                         <div className="flex flex-wrap gap-1 mt-2">
                           {formData.targetPlayerIds.map(id => (
-                            <span key={id} className="bg-orange-100 text-orange-600 px-2 py-1 rounded-lg text-[10px] font-bold">{players.find(x => x._id === id)?.firstName}</span>
+                            <span key={id} className="bg-orange-100 text-orange-600 px-2 py-1 rounded-lg text-[9px] font-bold">{players.find(x => x._id === id)?.firstName} <button onClick={()=>setFormData({...formData, targetPlayerIds: formData.targetPlayerIds.filter(x=>x!==id)})}>✕</button></span>
                           ))}
                         </div>
                     </div>
@@ -12401,10 +12393,9 @@ export default function HomeworkStudio({ initialData, chapters, onClose }) {
 
                 {formData.levels.map((lvl, idx) => (
                     <div key={idx} className="bg-white p-10 rounded-[50px] border shadow-sm">
-                        <h4 className="font-black text-slate-300 uppercase mb-6">Page {idx+1}</h4>
                         <div className="grid grid-cols-2 gap-10">
                             <div>
-                                <label className="text-[10px] font-black uppercase text-blue-500">Documents</label>
+                                <label className="text-[10px] font-black uppercase text-blue-500 mb-2">Documents</label>
                                 <div className="flex flex-wrap gap-2 p-4 bg-slate-50 rounded-3xl border-2 border-dashed">
                                     {lvl.attachmentUrls?.map((u, i) => <img key={i} src={u} className="w-16 h-16 object-cover rounded-xl" />)}
                                     <label className="w-16 h-16 bg-white flex items-center justify-center rounded-xl border cursor-pointer">+</label>
@@ -12412,7 +12403,7 @@ export default function HomeworkStudio({ initialData, chapters, onClose }) {
                                 </div>
                             </div>
                             <div>
-                                <label className="text-[10px] font-black uppercase text-orange-500">Photo Question</label>
+                                <label className="text-[10px] font-black uppercase text-orange-500 mb-2">Image Question</label>
                                 <div className="h-32 bg-slate-50 rounded-3xl border-2 border-dashed flex items-center justify-center relative overflow-hidden">
                                     {lvl.questionImage ? <img src={lvl.questionImage} className="h-full w-full object-contain" /> : <span>PHOTO</span>}
                                     <input type="file" className="absolute inset-0 opacity-0" onChange={e => handleUpload(e.target.files, idx, 'qimg')} />
@@ -12420,8 +12411,8 @@ export default function HomeworkStudio({ initialData, chapters, onClose }) {
                             </div>
                         </div>
                         <div className="mt-8 space-y-4">
-                            <textarea className="w-full p-6 rounded-3xl h-24 border" value={lvl.instruction} onChange={e=>{const n=[...formData.levels]; n[idx].instruction=e.target.value; setFormData({...formData, levels:n});}} placeholder="Consigne manuelle..." />
-                            <textarea className="w-full p-6 rounded-3xl h-24 border bg-purple-50" value={lvl.aiCorrectionHint} onChange={e=>{const n=[...formData.levels]; n[idx].aiCorrectionHint=e.target.value; setFormData({...formData, levels:n});}} placeholder="Indices IA (ex: Réponse attendue...)" />
+                            <textarea className="w-full p-6 rounded-3xl h-24 border font-bold" value={lvl.instruction} onChange={e=>{const n=[...formData.levels]; n[idx].instruction=e.target.value; setFormData({...formData, levels:n});}} placeholder="Consigne..." />
+                            <textarea className="w-full p-6 rounded-3xl h-24 border bg-purple-50 text-purple-600 font-bold" value={lvl.aiCorrectionHint} onChange={e=>{const n=[...formData.levels]; n[idx].aiCorrectionHint=e.target.value; setFormData({...formData, levels:n});}} placeholder="Indices IA..." />
                         </div>
                     </div>
                 ))}
@@ -12429,28 +12420,8 @@ export default function HomeworkStudio({ initialData, chapters, onClose }) {
         </div>
 
         <div className="p-8 bg-white border-t">
-            <button onClick={save} disabled={uploading} className="w-full p-6 bg-orange-500 text-white font-black text-2xl rounded-3xl shadow-xl">SAUVEGARDER</button>
+            <button onClick={save} disabled={uploading} className="w-full p-6 bg-orange-500 text-white font-black text-2xl rounded-3xl shadow-xl">SAUVEGARDER LE DEVOIR</button>
         </div>
-
-        {showSmartWizard && (
-          <div className="fixed inset-0 bg-slate-900/95 z-[7000] flex items-center justify-center p-6">
-              <div className="bg-white p-12 rounded-[60px] max-w-2xl w-full border-[10px] border-purple-500">
-                  <h2 className="text-3xl font-black text-purple-600 mb-8 text-center uppercase">Smart Generate ✨</h2>
-                  <div className="space-y-6 mb-10">
-                      <div className="p-10 bg-purple-50 rounded-[40px] border-4 border-dashed relative">
-                          <p className="font-black text-purple-800 text-center">{qFile ? "✅ Photo Question OK" : "1. PHOTO DE LA QUESTION"}</p>
-                          <input type="file" className="absolute inset-0 opacity-0" onChange={e => setQFile(e.target.files[0])} />
-                      </div>
-                      <div className="p-10 bg-orange-50 rounded-[40px] border-4 border-dashed relative">
-                          <p className="font-black text-orange-800 text-center">{docFiles.length > 0 ? `✅ ${docFiles.length} Docs OK` : "2. PHOTOS DES DOCUMENTS"}</p>
-                          <input type="file" multiple className="absolute inset-0 opacity-0" onChange={e => setDocFiles(Array.from(e.target.files))} />
-                      </div>
-                  </div>
-                  <button onClick={handleSmartGenerate} disabled={smartLoading} className="w-full p-6 bg-purple-600 text-white font-black text-xl rounded-3xl">{smartLoading ? 'ANALYSE...' : 'GÉNÉRER LE DEVOIR 🚀'}</button>
-                  <button onClick={()=>setShowSmartWizard(false)} className="w-full mt-4 text-slate-400 font-bold">Annuler</button>
-              </div>
-          </div>
-        )}
     </div>
   );
 }
@@ -12821,7 +12792,7 @@ export default function StudentsManager({ globalClass }) {
                             <span className="ml-2 text-[8px] px-2 py-0.5 bg-slate-100 rounded text-slate-400 uppercase">{p.classroom}</span>
                         </td>
                         <td className="p-5 text-right pr-8">
-                            <button className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase">Dossier</button>
+                            <button className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase">Voir Dossier</button>
                         </td>
                     </tr>
                 ))}
@@ -15470,11 +15441,8 @@ const router = express.Router();
 const mongoose = require('mongoose');
 
 /**
- * 🏢 DOMAINE : ADMIN & STRUCTURES
- * Gère les données de base : ÉLÈVES, CHAPITRES, SECTIONS.
+ * 🏢 DOMAINE ADMIN : Point d'entrée pour les listes structurelles
  */
-
-// --- ÉLÈVES ---
 
 // GET /api/players
 router.get('/players', async (req, res) => {
@@ -15482,13 +15450,8 @@ router.get('/players', async (req, res) => {
         const Player = mongoose.model('Player');
         const data = await Player.find({}).sort({ classroom: 1, lastName: 1 });
         res.json(data || []);
-    } catch (e) {
-        console.error("Erreur Admin API [/players]:", e.message);
-        res.status(500).json({ error: "Erreur serveur lors de la récupération des élèves" });
-    }
+    } catch (e) { res.status(500).json([]); }
 });
-
-// --- CHAPITRES (DOSSIERS) ---
 
 // GET /api/chapters-all
 router.get('/chapters-all', async (req, res) => {
@@ -15496,9 +15459,7 @@ router.get('/chapters-all', async (req, res) => {
         const Chapter = mongoose.model('Chapter');
         const data = await Chapter.find({}).sort({ _id: -1 });
         res.json(data || []);
-    } catch (e) {
-        res.status(500).json([]);
-    }
+    } catch (e) { res.status(500).json([]); }
 });
 
 // POST /api/chapters
@@ -15507,38 +15468,10 @@ router.post('/chapters', async (req, res) => {
         const Chapter = mongoose.model('Chapter');
         const { _id } = req.body;
         if (_id && mongoose.Types.ObjectId.isValid(_id)) {
-            const updated = await Chapter.findByIdAndUpdate(_id, req.body, { new: true });
-            return res.json(updated);
+            return res.json(await Chapter.findByIdAndUpdate(_id, req.body, { new: true }));
         }
-        const created = await Chapter.create({ ...req.body, isArchived: false });
-        res.json(created);
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
-});
-
-// --- CONFIGURATION PROF ---
-
-// PATCH /api/teacher/:id/sections
-router.patch('/teacher/:id/sections', async (req, res) => {
-    try {
-        const Teacher = mongoose.model('Teacher');
-        const updated = await Teacher.findByIdAndUpdate(
-            req.params.id, 
-            { subjectSections: req.body.sections }, 
-            { new: true }
-        );
-        res.json(updated);
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
-});
-
-// BUGS
-router.get('/bugs', async (req, res) => {
-    try {
-        res.json(await mongoose.model('Bug').find({}).sort({ createdAt: -1 }));
-    } catch (e) { res.json([]); }
+        res.json(await Chapter.create({ ...req.body, isArchived: false }));
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 module.exports = router;
@@ -15650,28 +15583,55 @@ const AIService = require('../../services/ai.service');
  * 🕹️ DOMAINE : GAMES
  */
 
+// GET /api/games/all
 router.get('/all', async (req, res) => {
     try {
-        const data = await mongoose.model('GameLevel').find({}).sort({ _id: -1 });
+        const GameLevel = mongoose.model('GameLevel');
+        const data = await GameLevel.find({}).sort({ _id: -1 });
         res.json(data || []);
-    } catch (e) { res.status(500).json([]); }
+    } catch (e) {
+        res.status(500).json({ error: "Erreur BDD" });
+    }
 });
 
+// POST /api/games/generate
 router.post('/generate', async (req, res) => {
     try {
         const { topic, numQuestions } = req.body;
-        const quiz = await AIService.generateQuiz(topic, numQuestions);
+        if (!topic) return res.status(400).json({ error: "Sujet requis" });
+        
+        const quiz = await AIService.generateQuiz(topic, numQuestions || 5);
         res.json(quiz);
-    } catch (e) { res.status(500).json({ error: "IA Error" }); }
+    } catch (e) {
+        console.error("❌ [GAMES] Erreur route generate:", e.message);
+        res.status(500).json({ error: "L'IA 2.0 n'a pas pu répondre.", details: e.message });
+    }
 });
 
+// POST /api/games (Save/Update)
 router.post('/', async (req, res) => {
     try {
         const Game = mongoose.model('GameLevel');
         const { _id, ...data } = req.body;
-        if (_id) return res.json(await Game.findByIdAndUpdate(_id, data, { new: true }));
-        res.json(await Game.create(data));
-    } catch (e) { res.status(500).json({ error: e.message }); }
+        if (_id && mongoose.Types.ObjectId.isValid(_id)) {
+            const updated = await Game.findByIdAndUpdate(_id, data, { new: true });
+            return res.json(updated);
+        }
+        const created = await Game.create(data);
+        res.json(created);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// DELETE /api/games/:id
+router.delete('/:id', async (req, res) => {
+    try {
+        await mongoose.model('GameLevel').findByIdAndDelete(req.params.id);
+        res.json({ ok: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 });
 
 module.exports = router;
@@ -15682,9 +15642,10 @@ const router = express.Router();
 const mongoose = require('mongoose');
 
 /**
- * 📄 DOMAINE : HOMEWORK
+ * 📄 DOMAINE : HOMEWORK (DEVOIRS MANUELS)
  */
 
+// Lister tous les devoirs (GET /api/homework/all)
 router.get('/all', async (req, res) => {
     try {
         const data = await mongoose.model('Homework').find({}).sort({ date: -1 });
@@ -15692,6 +15653,7 @@ router.get('/all', async (req, res) => {
     } catch (e) { res.status(500).json([]); }
 });
 
+// Sauvegarder ou modifier (POST /api/homework)
 router.post('/', async (req, res) => {
     try {
         const Homework = mongoose.model('Homework');
@@ -15705,6 +15667,7 @@ router.post('/', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Récupérer pour une classe (GET /api/homework/by-class/:classroom)
 router.get('/by-class/:classroom', async (req, res) => {
     try {
         const data = await mongoose.model('Homework').find({ 
@@ -15712,6 +15675,14 @@ router.get('/by-class/:classroom', async (req, res) => {
         }).sort({ date: -1 });
         res.json(data || []);
     } catch(e) { res.status(500).json([]); }
+});
+
+// Supprimer (DELETE /api/homework/:id)
+router.delete('/:id', async (req, res) => {
+    try {
+        await mongoose.model('Homework').findByIdAndDelete(req.params.id);
+        res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 module.exports = router;
@@ -16242,11 +16213,14 @@ const express = require('express');
 const mongoose = require('mongoose');
 const fs = require('fs');
 
+// Injection globale de fetch pour Gemini (Node < 18)
+if (!global.fetch) { global.fetch = require('node-fetch'); }
+
 const app = express();
 const port = process.env.PORT || 3000;
 const SERVER_BOOT_ID = Date.now();
 
-// 1. CHARGEMENT CRITIQUE DES MODÈLES
+// 1. CHARGEMENT DES MODÈLES (ORDRE ALPHABÉTIQUE)
 require('./models/Bug');
 require('./models/Chapter');
 require('./models/DeploySignal');
@@ -16260,16 +16234,11 @@ require('./models/TeacherStyle');
 
 // 2. CONNEXION MONGODB
 mongoose.connect(process.env.MONGODB_URI).then(async () => {
-    console.log('✅ MongoDB Connecté.');
+    console.log('✅ MongoDB Connected.');
     try {
-        const DeploySignal = mongoose.model('DeploySignal');
-        await DeploySignal.findOneAndUpdate({}, { status: 'live', updatedAt: new Date() }, { upsert: true });
-    } catch (e) {
-        console.warn("⚠️ Signal de déploiement non mis à jour.");
-    }
-}).catch(err => {
-    console.error("❌ Erreur MongoDB :", err.message);
-});
+        await mongoose.model('DeploySignal').findOneAndUpdate({}, { status: 'live', updatedAt: new Date() }, { upsert: true });
+    } catch (e) {}
+}).catch(err => console.error("❌ MongoDB Error:", err.message));
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
@@ -16288,7 +16257,7 @@ app.get('/api/deploy-status', async (req, res) => {
 app.use('/api/auth', require('./features/auth/auth.routes'));
 app.use('/api/games', require('./features/games/games.routes'));
 app.use('/api/scans', require('./features/scans/scans.routes'));
-app.use('/api/homework', require('./features/homework/homework.routes'));
+app.use('/api/homework', require('./features/homework/homework.routes')); // DOMAINE HOMEWORK STABILISÉ
 app.use('/api', require('./features/admin/admin.routes')); 
 
 // 5. GESTION FRONTEND
@@ -16296,41 +16265,67 @@ const distPath = path.join(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
-        if (req.path.startsWith('/api')) return res.status(404).json({ error: "API non trouvée" });
+        if (req.path.startsWith('/api')) return res.status(404).json({ error: "Route API inexistante" });
         res.sendFile(path.join(distPath, 'index.html'));
     });
 }
 
-app.listen(port, () => {
-    console.log(`🚀 SERVEUR PRÊT : PORT ${port} (BOOT:${SERVER_BOOT_ID})`);
-});
+app.listen(port, () => console.log(`🚀 SERVEUR CONDAMINE : PORT ${port} (READY)`));
 
 ### FILE: server/services/ai.service.js
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 /**
- * 🧠 SERVICE IA (GEMINI)
- * Isolé des routes pour éviter toute porosité.
- * Centralise l'intelligence du système.
+ * 🧠 SERVICE IA CENTRALISÉ
+ * Configuré pour GEMINI 2.0 FLASH
  */
 const AIService = {
     generateQuiz: async (topic, numQuestions = 5) => {
         try {
-            const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-            const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-            const prompt = `Génère un quiz JSON sur "${topic}". Tableau d'objets avec q, options (4), a (index).`;
+            const apiKey = process.env.GEMINI_API_KEY;
+            if (!apiKey) throw new Error("Clé API GEMINI_API_KEY manquante");
+
+            const genAI = new GoogleGenerativeAI(apiKey);
+            
+            // UTILISATION DE GEMINI 2.0 FLASH
+            const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+            
+            const prompt = `
+                Tu es un professeur expert. Génère un quiz de ${numQuestions} questions sur le sujet : "${topic}".
+                Format de sortie : JSON pur uniquement (un tableau d'objets).
+                Structure : 
+                [
+                  {
+                    "q": "la question",
+                    "options": ["choix 1", "choix 2", "choix 3", "choix 4"],
+                    "a": 0
+                  }
+                ]
+                "a" est l'index de la réponse correcte.
+                IMPORTANT : Ne renvoie que le JSON. Pas de texte avant, pas de texte après, pas de balises markdown.
+            `;
+            
+            console.log(`📡 [IA 2.0] Requête pour : "${topic}"`);
             
             const result = await model.generateContent(prompt);
-            const text = result.response.text().replace(/```json/g, "").replace(/```/g, "").trim();
+            const response = await result.response;
+            let text = response.text().trim();
+            
+            // Nettoyage Markdown au cas où
+            text = text.replace(/```json/g, "").replace(/```/g, "").trim();
+            
+            // Extraction du bloc JSON si l'IA a mis du texte autour
+            const startIdx = text.indexOf('[');
+            const endIdx = text.lastIndexOf(']');
+            if (startIdx !== -1 && endIdx !== -1) {
+                text = text.substring(startIdx, endIdx + 1);
+            }
+
             return JSON.parse(text);
         } catch (e) {
-            throw new Error("Échec de la génération IA");
+            console.error("❌ [AIService] Erreur Gemini 2.0 :", e.message);
+            throw e;
         }
-    },
-
-    analyzeCopy: async (imageBuffer, instruction) => {
-        // Logique de correction de copie à venir ici
-        return { grade: "A", feedback: "Excellent travail." };
     }
 };
 
@@ -16428,9 +16423,9 @@ module.exports = DriveService;
 ### FILE: server/version.json
 {
   "version": "1.6.0",
-  "build": 195,
+  "build": 211,
   "description": "Total Domain Isolation (Zero Porosity) + AI Service Extraction",
-  "timestamp": "2026-01-14T02:38:49.654Z"
+  "timestamp": "2026-01-14T03:26:50.315Z"
 }
 
 ### FILE: snap.js
