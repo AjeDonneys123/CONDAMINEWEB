@@ -67,6 +67,8 @@ STRUCTURE:
 │   │   │       │   └── ChapterManager.jsx
 │   │   │       ├── components/
 │   │   │       │   ├── ConsoleHUD.jsx
+│   │   │       │   ├── DatabaseViewer.css
+│   │   │       │   ├── DatabaseViewer.jsx
 │   │   │       │   ├── ProfHeader.jsx
 │   │   │       │   ├── ProfNav.jsx
 │   │   │       │   └── ProfStudioFolder.jsx
@@ -338,7 +340,7 @@ setInterval(applyUpdate, 1000);
 {
   "status": "OK",
   "file": null,
-  "timestamp": 1768402349299
+  "timestamp": 1768429391962
 }
 
 ### FILE: chemin/du/fichier.js
@@ -8730,6 +8732,13 @@ module.exports = {
     gap: 30px;
 }
 
+/* CORRECTIF : NUMÉRO DE BUILD EN ROUGE VIF */
+.version-txt {
+    color: #ff0000 !important; /* ROUGE VIF */
+    font-weight: 900;
+    text-shadow: 0 0 5px rgba(255, 0, 0, 0.2);
+}
+
 /* INDICATEURS */
 .deploy-indicator, .live-indicator {
     display: flex; align-items: center; gap: 8px;
@@ -11338,13 +11347,19 @@ export default function ActivityStudio({ globalClass, user }) {
     const [activities, setActivities] = useState([]);
     const [chapters, setChapters] = useState([]);
     const [editingItem, setEditingItem] = useState(null); 
-    const [viewingResults, setViewingResults] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [notification, setNotification] = useState(null);
+
+    const showNotify = (data) => {
+        setNotification({ msg: data.message, path: data.drivePath, isError: data.driveError });
+        setTimeout(() => setNotification(null), 5000);
+    };
 
     const loadData = async () => {
         if (!globalClass) return;
         setLoading(true);
         try {
+            // Synchronisation avec les nouveaux tiroirs étanches du Backend
             const [hwRes, gmRes, cpRes] = await Promise.all([
                 fetch('/api/homework/all'),
                 fetch('/api/games/all'),
@@ -11356,54 +11371,55 @@ export default function ActivityStudio({ globalClass, user }) {
                 const gm = await gmRes.json();
                 const cp = await cpRes.json();
                 
+                // On fusionne les activités pour le dossier
                 setActivities([
                     ...hw.map(x => ({ ...x, actType: 'homework' })),
                     ...gm.map(x => ({ ...x, actType: 'game' }))
                 ]);
-                setChapters(cp);
+                setChapters(cp || []);
             }
-        } catch (e) { console.error("API Studio Error", e); }
+        } catch (e) { console.error("Erreur Studio:", e); }
         setLoading(false);
     };
 
     useEffect(() => { loadData(); }, [globalClass]);
 
     const handleCreateChapter = async (subjectName, title) => {
-        try {
-            const res = await fetch('/api/chapters', { 
-                method:'POST', 
-                headers:{'Content-Type':'application/json'}, 
-                body: JSON.stringify({ 
-                    title: title || 'Nouveau Dossier', 
-                    subject: subjectName, 
-                    classroom: globalClass, 
-                    teacherId: user?.id || user?._id 
-                }) 
-            });
-            if (res.ok) await loadData();
-        } catch (e) { console.error(e); }
+        const res = await fetch('/api/chapters', { 
+            method:'POST', 
+            headers:{'Content-Type':'application/json'}, 
+            body: JSON.stringify({ title, subject: subjectName, classroom: globalClass, teacherId: user.id || user._id }) 
+        });
+        const data = await res.json();
+        if (res.ok) {
+            showNotify(data);
+            await loadData();
+        }
     };
 
-    const handleRenameChapter = async (id, title) => {
-        try {
-            await fetch('/api/chapters', { 
-                method:'POST', 
-                headers:{'Content-Type':'application/json'}, 
-                body:JSON.stringify({_id:id, title})
-            });
+    const handleRenameChapter = async (id, title, subject) => {
+        const res = await fetch('/api/chapters', { 
+            method:'POST', 
+            headers:{'Content-Type':'application/json'}, 
+            body:JSON.stringify({_id:id, title, classroom: globalClass, subject})
+        });
+        const data = await res.json();
+        if (res.ok) {
+            showNotify(data);
             await loadData();
-        } catch (e) { console.error(e); }
+        }
     };
 
     const handleDeleteChapter = async (id) => {
         if (!confirm("Supprimer ce dossier et son contenu Drive ?")) return;
-        try {
-            const res = await fetch(`/api/chapters/${id}`, { method: 'DELETE' });
-            if (res.ok) await loadData();
-        } catch (e) { console.error(e); }
+        const res = await fetch(`/api/chapters/${id}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (res.ok) {
+            showNotify(data);
+            await loadData();
+        }
     };
 
-    if (viewingResults) return <HomeworkResults homework={viewingResults} onBack={() => setViewingResults(null)} />;
     if (editingItem) {
         const activeChaps = chapters.filter(c => c.classroom === globalClass && !c.isArchived);
         if (editingItem.type === 'homework') return <HomeworkStudio initialData={editingItem.data} chapters={activeChaps} globalClass={globalClass} onClose={() => { setEditingItem(null); loadData(); }} />;
@@ -11411,15 +11427,30 @@ export default function ActivityStudio({ globalClass, user }) {
     }
 
     return (
-        <div className="animate-in fade-in">
+        <div className="animate-in fade-in relative">
+            {/* Notification flottante */}
+            {notification && (
+                <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[9999] w-full max-w-lg px-4">
+                    <div className={`rounded-3xl p-4 shadow-2xl flex items-center gap-4 border-2 ${notification.isError ? 'bg-red-600 border-red-400' : 'bg-slate-900 border-emerald-500'}`}>
+                        <div className="flex-1">
+                            <h4 className="text-white font-black text-xs uppercase">{notification.msg}</h4>
+                            <p className="text-emerald-400 font-mono text-[9px] mt-1">{notification.path}</p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <div className="flex justify-start gap-4 mb-8 bg-white p-4 rounded-[30px] border-2 border-slate-50 shadow-sm">
                 <button onClick={() => setEditingItem({ type: 'homework', data: null })} className="bg-orange-500 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg"> Nouveau Devoir</button>
                 <button onClick={() => setEditingItem({ type: 'game', data: null })} className="bg-purple-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg"> Nouveau Jeu</button>
             </div>
 
-            {loading ? <div className="text-center py-20 text-slate-300 font-black animate-pulse uppercase">Chargement...</div> : (
+            {!loading ? (
                 <ProfStudioFolder 
-                    user={user} chapters={chapters} items={activities} classFilter={globalClass}
+                    user={user} 
+                    chapters={chapters} 
+                    items={activities} 
+                    classFilter={globalClass}
                     onArchive={async (id, state) => {
                         await fetch('/api/chapters', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({_id:id, isArchived:state})});
                         loadData();
@@ -11427,16 +11458,17 @@ export default function ActivityStudio({ globalClass, user }) {
                     onRename={handleRenameChapter}
                     onEditItem={(it) => setEditingItem({ type: it.actType, data: it })}
                     onDeleteItem={async (id, type) => {
-                        if(!confirm("Supprimer définitivement ?")) return;
-                        // CORRECTIF : Utilisation des nouveaux tiroirs API étanches
+                        if(!confirm("Supprimer ?")) return;
                         const endpoint = type === 'game' ? `/api/games/${id}` : `/api/homework/${id}`;
-                        const res = await fetch(endpoint, { method: 'DELETE' });
-                        if (res.ok) await loadData();
-                        else alert("Erreur lors de la suppression.");
+                        await fetch(endpoint, { method: 'DELETE' });
+                        loadData();
                     }}
                     onDeleteChapter={handleDeleteChapter}
                     onCreateChapter={handleCreateChapter}
+                    onNotify={showNotify}
                 />
+            ) : (
+                <div className="text-center py-20 text-slate-300 font-black animate-pulse uppercase">Chargement des dossiers...</div>
             )}
         </div>
     );
@@ -11548,12 +11580,210 @@ export default function ConsoleHUD() {
     );
 }
 
+### FILE: client/src/features/prof/components/DatabaseViewer.css
+.db-viewer-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    background: rgba(15, 23, 42, 0.9);
+    backdrop-filter: blur(10px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+}
+
+.db-viewer-window {
+    background: white;
+    width: 100%;
+    height: 100%;
+    border-radius: 40px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.db-header {
+    padding: 2rem;
+    background: white;
+    border-bottom: 1px solid #f1f5f9;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.db-tabs {
+    padding: 1rem 2rem;
+    background: #f8fafc;
+    display: flex;
+    gap: 10px;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.db-tab-btn {
+    padding: 0.6rem 1.5rem;
+    border-radius: 12px;
+    font-weight: 800;
+    font-size: 0.8rem;
+    color: #94a3b8;
+    background: white;
+    border: 1px solid #e2e8f0;
+    transition: all 0.2s;
+}
+
+.db-tab-btn.active {
+    color: white;
+    border-color: transparent;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+.db-table-container {
+    flex: 1;
+    overflow: auto;
+    background: white;
+}
+
+.db-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.75rem;
+    font-family: 'JetBrains Mono', monospace; /* Pour le look tech */
+}
+
+.db-table th {
+    position: sticky;
+    top: 0;
+    background: #f8fafc;
+    color: #64748b;
+    text-align: left;
+    padding: 1rem;
+    font-weight: 900;
+    text-transform: uppercase;
+    border-bottom: 2px solid #e2e8f0;
+    z-index: 10;
+}
+
+.db-table td {
+    padding: 0.8rem 1rem;
+    border-bottom: 1px solid #f1f5f9;
+    color: #334155;
+    font-weight: 500;
+}
+
+.db-table tr:hover {
+    background: #fdf2f8; /* Petit rappel rose au survol */
+}
+
+### FILE: client/src/features/prof/components/DatabaseViewer.jsx
+import React, { useState, useEffect } from 'react';
+import './DatabaseViewer.css';
+
+export default function DatabaseViewer({ onClose }) {
+    const [data, setData] = useState(null);
+    const [activeTab, setActiveTab] = useState('players');
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        fetch('/api/database-dump')
+            .then(r => r.json())
+            .then(d => { setData(d); setLoading(false); });
+    }, []);
+
+    const exportToCSV = (collectionKey) => {
+        const items = data[collectionKey];
+        if (!items || items.length === 0) return;
+        
+        const headers = Object.keys(items[0]).join(',');
+        const rows = items.map(row => 
+            Object.values(row).map(val => `"${String(val).replace(/"/g, '""')}"`).join(',')
+        ).join('\n');
+        
+        const csvContent = "data:text/csv;charset=utf-8," + headers + "\n" + rows;
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `condamine_${collectionKey}.csv`);
+        document.body.appendChild(link);
+        link.click();
+    };
+
+    if (loading) return (
+        <div className="db-viewer-overlay">
+            <div className="animate-pulse font-black text-white text-2xl">CHARGEMENT DE LA BDD...</div>
+        </div>
+    );
+
+    const collections = [
+        { key: 'players', label: '👥 Élèves', color: 'bg-blue-500' },
+        { key: 'chapters', label: '📁 Chapitres', color: 'bg-indigo-500' },
+        { key: 'homework', label: '📄 Devoirs', color: 'bg-orange-500' },
+        { key: 'games', label: '🕹️ Jeux', color: 'bg-purple-500' },
+        { key: 'scans', label: '📸 Scans', color: 'bg-emerald-500' }
+    ];
+
+    const currentData = data[activeTab] || [];
+    const columns = currentData.length > 0 ? Object.keys(currentData[0]) : [];
+
+    return (
+        <div className="db-viewer-overlay animate-in fade-in">
+            <div className="db-viewer-window shadow-2xl">
+                <div className="db-header">
+                    <div className="flex items-center gap-4">
+                        <h2 className="text-xl font-black uppercase tracking-tighter">Explorateur BDD</h2>
+                        <button onClick={() => exportToCSV(activeTab)} className="px-4 py-1 bg-emerald-100 text-emerald-700 rounded-lg font-black text-[10px] uppercase hover:bg-emerald-200 transition-colors">📥 Télécharger .CSV (Excel)</button>
+                    </div>
+                    <button onClick={onClose} className="w-10 h-10 flex items-center justify-center bg-slate-100 rounded-full font-black text-slate-400 hover:text-red-500">✕</button>
+                </div>
+
+                <div className="db-tabs">
+                    {collections.map(c => (
+                        <button 
+                            key={c.key} 
+                            onClick={() => setActiveTab(c.key)}
+                            className={`db-tab-btn ${activeTab === c.key ? 'active ' + c.color : ''}`}
+                        >
+                            {c.label}
+                            <span className="ml-2 opacity-50 text-[10px]">{data[c.key]?.length}</span>
+                        </button>
+                    ))}
+                </div>
+
+                <div className="db-table-container custom-scrollbar">
+                    <table className="db-table">
+                        <thead>
+                            <tr>
+                                {columns.map(col => <th key={col}>{col}</th>)}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {currentData.map((row, i) => (
+                                <tr key={i}>
+                                    {columns.map(col => (
+                                        <td key={col} className="truncate max-w-[200px]" title={String(row[col])}>
+                                            {typeof row[col] === 'object' ? JSON.stringify(row[col]) : String(row[col])}
+                                        </td>
+                                    ))}
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                    {currentData.length === 0 && (
+                        <div className="py-20 text-center text-slate-300 font-bold uppercase">Aucune donnée dans cette collection</div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
 ### FILE: client/src/features/prof/components/ProfHeader.jsx
 import React, { useState } from 'react';
+import DatabaseViewer from './DatabaseViewer';
 
 export default function ProfHeader({ user, onLogout }) {
   const [bugs, setBugs] = useState([]);
   const [showBugs, setShowBugs] = useState(false);
+  const [showDB, setShowDB] = useState(false);
 
   const loadBugs = async () => {
       const data = await fetch('/api/bugs').then(r => r.json());
@@ -11572,10 +11802,13 @@ export default function ProfHeader({ user, onLogout }) {
         <h2 className="text-3xl font-black text-slate-800 tracking-tighter uppercase">Jean Vuillet</h2>
         <p className="text-indigo-500 font-black text-xs uppercase tracking-widest">Histoire Géo EMC</p>
       </div>
-      <div className="flex gap-4">
+      <div className="flex gap-3">
+          <button onClick={() => setShowDB(true)} className="bg-slate-900 text-white px-4 py-2 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:bg-slate-800 transition-all">📊 Database</button>
           <button onClick={loadBugs} className="bg-amber-100 text-amber-600 px-4 py-2 rounded-2xl font-black text-[10px] uppercase shadow-sm">🐞 Bugs ({bugs.length})</button>
           <button onClick={onLogout} className="bg-white text-slate-300 px-4 py-2 rounded-2xl font-bold border border-slate-100 hover:text-red-500 transition-all text-[10px] uppercase">Quitter</button>
       </div>
+
+      {showDB && <DatabaseViewer onClose={() => setShowDB(false)} />}
 
       {showBugs && (
           <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/40 backdrop-blur-sm p-6">
@@ -11639,44 +11872,37 @@ import React, { useState, useEffect } from 'react';
 
 export default function ProfStudioFolder({ 
     user, items = [], chapters = [], classFilter, 
-    onArchive, onRename, onEditItem, onDeleteItem, onDeleteChapter, onCreateChapter 
+    onArchive, onRename, onEditItem, onDeleteItem, onDeleteChapter, onCreateChapter, onNotify 
 }) {
     const [openChaps, setOpenChaps] = useState({});
     const [editingId, setEditingId] = useState(null);
     const [tempTitle, setTempTitle] = useState("");
-    const [pickingSectionFor, setPickingSectionFor] = useState(null);
     const [isDeleteMode, setIsDeleteMode] = useState(false);
     const [sections, setSections] = useState([]);
 
     const norm = (c) => c?.toString().toUpperCase().replace('E', '').trim() || "";
-
     const smartSort = (a, b) => (a.title || "").localeCompare(b.title || "", undefined, { numeric: true, sensitivity: 'base' });
 
+    // Initialisation
     useEffect(() => { 
-        if (user?.subjectSections && user.subjectSections.length > 0) {
-            setSections(user.subjectSections);
-        } else {
-            setSections([
-                { name: 'Histoire', color: '#ef4444' },
-                { name: 'Géographie', color: '#3b82f6' },
-                { name: 'EMC', color: '#22c55e' }
-            ]);
-        }
+        if (user?.subjectSections) setSections(user.subjectSections);
     }, [user]);
 
     const saveSections = async (newSections) => {
         const uid = user?.id || user?._id;
-        if (!uid) return;
-        setSections(newSections);
         try {
-            await fetch(`/api/teacher/${uid}/sections`, {
+            const res = await fetch(`/api/teacher/${uid}/sections`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sections: newSections })
+                body: JSON.stringify({ sections: newSections, className: classFilter })
             });
-            const updatedUser = { ...user, subjectSections: newSections };
-            localStorage.setItem('player', JSON.stringify(updatedUser));
-        } catch(e) { console.error(e); }
+            const data = await res.json();
+            if (res.ok && data.user) {
+                localStorage.setItem('player', JSON.stringify(data.user));
+                setSections(data.user.subjectSections);
+                if (onNotify) onNotify(data);
+            }
+        } catch(e) { console.error("Erreur Synchro:", e); }
     };
 
     const activeChapters = chapters
@@ -11684,15 +11910,21 @@ export default function ProfStudioFolder({
         .sort(smartSort);
 
     const archivedChapters = chapters
-        .filter(c => c.isArchived && norm(c.classroom) === norm(classFilter))
-        .sort(smartSort);
+        .filter(c => c.isArchived && norm(c.classroom) === norm(classFilter));
 
-    // US #15 : On détermine quelles sections sont "actives" pour cette classe
-    const getActiveSections = () => {
-        if (isDeleteMode) return sections; // En mode gestion, on montre tout
-        return sections.filter(s => 
-            activeChapters.some(c => c.subject === s.name)
-        );
+    // --- LOGIQUE DE VISIBILITÉ (FIX GÉOGRAPHIE VIDE) ---
+    const getVisibleSections = () => {
+        // En mode "GÉRER", on affiche absolument toutes les matières du prof
+        if (isDeleteMode) return sections;
+
+        // Sinon, on n'affiche que celles qui ont au moins un chapitre actif
+        const list = sections.filter(s => activeChapters.some(c => c.subject === s.name));
+        
+        // Ajout de "Autres" si des chapitres traînent sans matière
+        if (activeChapters.some(c => c.subject === "Autres")) {
+            list.push({ name: 'Autres', color: '#64748b' });
+        }
+        return list;
     };
 
     const renderChapterCard = (chap, section) => {
@@ -11703,15 +11935,13 @@ export default function ProfStudioFolder({
         const chapItems = items.filter(it => String(it.chapterId) === String(chap._id));
 
         return (
-            <div key={chap._id} className="bg-white rounded-[35px] border-2 shadow-sm overflow-hidden transition-all mb-3" style={{ borderColor: isOpen ? color : '#f8fafc' }}>
+            <div key={chap._id} className="bg-white rounded-[35px] border-2 shadow-sm overflow-hidden transition-all mb-3 animate-in fade-in" style={{ borderColor: isOpen ? color : '#f1f5f9' }}>
                 <div className="p-4 flex items-center justify-between">
                     <div className="flex items-center gap-4 flex-1 cursor-pointer" onClick={() => setOpenChaps({...openChaps, [chap._id]: !isOpen})}>
-                        <div className="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-white text-sm relative" style={{ backgroundColor: color }}>
-                            {letter}
-                        </div>
-                        <div className="flex flex-col">
+                        <div className="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-white text-sm relative" style={{ backgroundColor: color }}>{letter}</div>
+                        <div className="flex flex-col text-left">
                             {isEditing ? (
-                                <input autoFocus className="text-lg font-black outline-none border-b-2" style={{ borderColor: color }} value={tempTitle} onChange={e => setTempTitle(e.target.value)} onBlur={() => { onRename(chap._id, tempTitle); setEditingId(null); }} onKeyDown={e => e.key === 'Enter' && (onRename(chap._id, tempTitle), setEditingId(null))} onClick={e => e.stopPropagation()} />
+                                <input autoFocus className="text-sm font-black border-b-2 outline-none" style={{ borderColor: color }} value={tempTitle} onChange={e => setTempTitle(e.target.value)} onBlur={() => { onRename(chap._id, tempTitle, section.name); setEditingId(null); }} onKeyDown={e => e.key === 'Enter' && (onRename(chap._id, tempTitle, section.name), setEditingId(null))} onClick={e => e.stopPropagation()} />
                             ) : (
                                 <span className="text-sm font-black text-slate-700">{chap.title || "Sans titre"}</span>
                             )}
@@ -11719,9 +11949,9 @@ export default function ProfStudioFolder({
                         </div>
                     </div>
                     <div className="flex gap-1">
-                        <button onClick={(e) => { e.stopPropagation(); setEditingId(chap._id); setTempTitle(chap.title); }} className="w-9 h-9 flex items-center justify-center bg-slate-50 text-slate-400 rounded-full">✏️</button>
-                        <button onClick={(e) => { e.stopPropagation(); onArchive(chap._id, !chap.isArchived); }} className="w-9 h-9 flex items-center justify-center bg-slate-50 text-slate-400 rounded-full hover:bg-slate-800 hover:text-white">📦</button>
-                        <button onClick={(e) => { e.stopPropagation(); onDeleteChapter(chap._id); }} className="w-9 h-9 flex items-center justify-center bg-red-50 text-red-600 rounded-full font-black">✕</button>
+                        <button onClick={(e) => { e.stopPropagation(); setEditingId(chap._id); setTempTitle(chap.title); }} className="w-8 h-8 flex items-center justify-center bg-slate-50 text-slate-300 rounded-full hover:text-indigo-500">✏️</button>
+                        <button onClick={(e) => { e.stopPropagation(); onArchive(chap._id, !chap.isArchived); }} className="w-8 h-8 flex items-center justify-center bg-slate-50 text-slate-300 rounded-full hover:bg-slate-800 hover:text-white">📦</button>
+                        <button onClick={(e) => { e.stopPropagation(); onDeleteChapter(chap._id); }} className="w-8 h-8 flex items-center justify-center bg-red-50 text-red-300 rounded-full font-black hover:bg-red-500">✕</button>
                     </div>
                 </div>
                 {isOpen && (
@@ -11729,10 +11959,7 @@ export default function ProfStudioFolder({
                         {chapItems.map(it => (
                             <div key={it._id} className="bg-white p-3 px-5 rounded-2xl flex justify-between items-center shadow-sm border border-transparent hover:border-indigo-200">
                                 <b className="text-slate-700 text-xs">{it.actType === 'game' ? '🕹️' : '📄'} {it.title}</b>
-                                <div className="flex gap-2">
-                                    <button onClick={() => onEditItem(it)} className="px-3 py-1 bg-indigo-50 text-indigo-600 rounded-lg font-black text-[9px] uppercase">Modifier</button>
-                                    <button onClick={() => onDeleteItem(it._id, it.actType)} className="w-8 h-8 flex items-center justify-center bg-red-50 text-red-600 rounded-lg font-black text-xs border border-red-100">✕</button>
-                                </div>
+                                <button onClick={() => onDeleteItem(it._id, it.actType)} className="w-6 h-6 flex items-center justify-center bg-red-50 text-red-400 rounded-full font-black text-[10px]">✕</button>
                             </div>
                         ))}
                     </div>
@@ -11741,37 +11968,43 @@ export default function ProfStudioFolder({
         );
     };
 
-    const visibleSections = getActiveSections();
+    const visibleSections = getVisibleSections();
 
     return (
         <div className="max-w-5xl mx-auto space-y-12 pb-20">
-            {/* ARCHIVES / SUPER-DOSSIERS */}
+            {/* CARRE NOIR : CONFIGURATION ET ARCHIVES */}
             <div className="p-8 bg-slate-900 rounded-[50px] border-4 border-slate-800 shadow-2xl">
                 <div className="flex justify-between items-center mb-8 px-2">
-                    <h3 className="text-white font-black text-[10px] uppercase tracking-widest">📂 Configuration des Matières</h3>
+                    <h3 className="text-white font-black text-[10px] uppercase tracking-widest flex items-center gap-2">
+                        <span className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></span>
+                        Configuration des Matières
+                    </h3>
                     <div className="flex gap-2">
-                        <button onClick={() => { const n = prompt("Nom du Super-Dossier ?"); if(n) saveSections([...sections, {name:n, color:'#3b82f6'}]); }} className="bg-indigo-600 text-white px-5 py-2 rounded-2xl font-black text-[9px] uppercase">+ Nouveau</button>
-                        <button onClick={() => setIsDeleteMode(!isDeleteMode)} className={`px-5 py-2 rounded-2xl font-black text-[9px] uppercase ${isDeleteMode ? 'bg-red-500 text-white' : 'bg-slate-700 text-slate-300'}`}>Gérer</button>
+                        <button onClick={() => { const n = prompt("Nom de la matière ?"); if(n) saveSections([...sections, {name:n, color:'#3b82f6'}]); }} className="bg-indigo-600 text-white px-5 py-2 rounded-2xl font-black text-[9px] uppercase hover:bg-indigo-500 shadow-lg">+ Nouvelle</button>
+                        <button onClick={() => setIsDeleteMode(!isDeleteMode)} className={`px-5 py-2 rounded-2xl font-black text-[9px] uppercase transition-colors ${isDeleteMode ? 'bg-red-500 text-white' : 'bg-slate-700 text-slate-300'}`}>{isDeleteMode ? 'Terminer' : 'Gérer'}</button>
                     </div>
                 </div>
+                
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     {sections.map(s => {
-                        const archs = archivedChapters.filter(c => c.subject === s.name);
-                        // On cache les sections vides en mode normal (User Story #15)
+                        const archs = archivedChapters.filter(c => c.subject === s.name && norm(c.classroom) === norm(classFilter));
+                        // On n'affiche dans le carré noir que si archives OU mode gestion
                         if (!isDeleteMode && archs.length === 0) return null;
 
                         return (
-                            <div key={s.name} className="bg-slate-800/40 p-4 rounded-[30px] border border-slate-700 animate-in fade-in">
-                                <h4 className="font-black text-[9px] uppercase tracking-widest mb-4 flex justify-between" style={{ color: s.color }}>
-                                    {s.name} {isDeleteMode && <span onClick={() => { if(confirm(`Supprimer ${s.name} ?`)) saveSections(sections.filter(x=>x.name!==s.name)); }} className="cursor-pointer text-red-500 font-black">✕</span>}
+                            <div key={s.name} className="bg-slate-800/40 p-4 rounded-[30px] border border-slate-700 animate-in fade-in relative group">
+                                <h4 className="font-black text-[9px] uppercase tracking-widest mb-4 flex justify-between items-center" style={{ color: s.color }}>
+                                    {s.name}
+                                    {isDeleteMode && <button onClick={() => saveSections(sections.filter(x => x.name !== s.name))} className="text-red-500 font-black hover:scale-125 transition-transform">✕</button>}
                                 </h4>
                                 <div className="space-y-2">
                                     {archs.map(c => (
                                         <div key={c._id} className="bg-slate-800/80 p-2 px-3 rounded-xl flex justify-between items-center border border-slate-700/50">
-                                            <span className="text-white font-bold text-[10px] truncate pr-2">{c.title}</span>
-                                            <button onClick={() => onArchive(c._id, false)} className="text-blue-400 font-bold p-1">⬆️</button>
+                                            <span className="text-white font-bold text-[9px] truncate pr-2">{c.title}</span>
+                                            <button onClick={() => onArchive(c._id, false)} className="text-blue-400 font-bold p-1 hover:scale-110">⬆️</button>
                                         </div>
                                     ))}
+                                    {isDeleteMode && archs.length === 0 && <div className="text-[8px] text-slate-600 uppercase font-black py-2">Prête</div>}
                                 </div>
                             </div>
                         );
@@ -11779,27 +12012,19 @@ export default function ProfStudioFolder({
                 </div>
             </div>
 
-            {/* DOSSIERS ACTIFS */}
+            {/* ZONES ACTIVES : C'est ici qu'on débloque la création */}
             <div className="space-y-16">
                 {visibleSections.map(s => (
                     <div key={'active-' + s.name} className="animate-in fade-in">
                         <div className="flex items-center justify-between mb-4 px-6 border-b border-slate-100 pb-4">
-                            <h3 className="font-black text-base uppercase tracking-widest" style={{ color: s.color }}>{s.name}</h3>
-                            <button onClick={() => { const n = prompt(`Nom du dossier dans ${s.name} ?`); if(n) onCreateChapter(s.name, n); }} className="text-[9px] font-black px-6 py-2 rounded-full border-2 border-dashed" style={{ color: s.color, borderColor: s.color }}>+ CRÉER</button>
+                            <h3 className="font-black text-base uppercase tracking-widest text-left" style={{ color: s.color }}>{s.name}</h3>
+                            <button onClick={() => { const n = prompt(`Nom du dossier dans ${s.name} ?`); if(n) onCreateChapter(s.name, n); }} className="text-[9px] font-black px-6 py-2 rounded-full border-2 border-dashed hover:bg-white transition-colors" style={{ color: s.color, borderColor: s.color }}>+ CRÉER</button>
                         </div>
                         <div className="grid grid-cols-1 gap-1">
                             {activeChapters.filter(c => c.subject === s.name).map(chap => renderChapterCard(chap, s))}
                         </div>
                     </div>
                 ))}
-                
-                {/* Si aucune section n'est active, on aide le prof */}
-                {!isDeleteMode && visibleSections.length === 0 && (
-                    <div className="text-center py-20 bg-slate-50 rounded-[50px] border-4 border-dashed border-slate-100">
-                        <p className="text-slate-400 font-black text-xs uppercase mb-4">Aucune matière active pour cette classe</p>
-                        <button onClick={() => setIsDeleteMode(true)} className="bg-indigo-600 text-white px-8 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg">Clique ici pour configurer la classe</button>
-                    </div>
-                )}
             </div>
         </div>
     );
@@ -12236,6 +12461,7 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, onC
   const [players, setPlayers] = useState([]);
   const [stdSearch, setStdSearch] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [drivePathConfirmed, setDrivePathConfirmed] = useState(null);
   
   const [formData, setFormData] = useState(initialData || { 
       title: '', targetGrade: 'Tous', targetPlayerIds: [], 
@@ -12249,11 +12475,8 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, onC
 
   const handleUpload = async (files, idx, type) => {
     if (!files || files.length === 0) return;
-    
-    // Sécurité : On doit avoir une session enregistrée pour avoir les IDs Drive
-    let currentHw = formData;
     if (!formData._id) {
-        alert("⚠️ Cliquez d'abord sur 'INITIALISER LE DEVOIR' pour créer les dossiers Drive.");
+        alert("⚠️ Cliquez d'abord sur 'INITIALISER' pour créer l'espace Drive.");
         return;
     }
     
@@ -12289,10 +12512,10 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, onC
         });
         const data = await res.json();
         if (res.ok) {
-            // Si c'était une création, on garde l'ID pour permettre l'upload immédiat
             setFormData(data);
-            if (!formData._id) alert("✅ Dossiers Drive créés ! Vous pouvez maintenant ajouter des documents.");
-            else onClose();
+            setDrivePathConfirmed(data.drivePath);
+            // On ne ferme pas automatiquement à l'initialisation pour laisser voir le chemin
+            if (initialData) onClose(); 
         }
     } catch (e) { alert("Erreur sauvegarde."); }
     setUploading(false);
@@ -12305,10 +12528,22 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, onC
         <div className="p-6 bg-orange-500 text-white flex justify-between items-center shadow-lg pt-12">
             <div className="flex flex-col">
                 <input className="text-2xl font-black bg-transparent outline-none w-full placeholder:text-orange-200 uppercase" value={formData.title} onChange={e=>setFormData({...formData, title:e.target.value})} placeholder="TITRE DU DEVOIR" />
-                <span className="text-[10px] font-black opacity-80 uppercase">DOMAINE : {globalClass} | DRIVE : {formData.driveFolderId ? 'CONNECTÉ ✅' : 'NON INITIALISÉ ❌'}</span>
+                <span className="text-[10px] font-black opacity-80 uppercase tracking-widest">
+                    {drivePathConfirmed ? `✅ CONNECTÉ : ${drivePathConfirmed}` : `UNITÉ DRIVE : ${globalClass}`}
+                </span>
             </div>
-            <button onClick={onClose} className="w-10 h-10 bg-black/10 rounded-full font-black">✕</button>
+            <button onClick={onClose} className="w-10 h-10 bg-black/10 rounded-full font-black hover:bg-black/20 transition-colors">✕</button>
         </div>
+
+        {drivePathConfirmed && (
+            <div className="bg-emerald-500 text-white px-8 py-3 flex items-center gap-3 animate-in fade-in">
+                <span className="text-xl">📁</span>
+                <div className="flex flex-col">
+                    <span className="text-[10px] font-black uppercase opacity-70">Chemin physique sur Google Drive</span>
+                    <span className="text-xs font-bold font-mono tracking-tighter">{drivePathConfirmed}</span>
+                </div>
+            </div>
+        )}
 
         <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
             <div className="max-w-5xl mx-auto space-y-8">
@@ -12321,13 +12556,6 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, onC
                     </div>
                     <div className="assign-card relative"><label className="text-[10px] font-black text-slate-400 uppercase mb-2 block">Cibler des élèves</label>
                         <input className="w-full outline-none bg-white p-3 rounded-xl border border-slate-200 font-bold" placeholder="Chercher un nom..." value={stdSearch} onChange={e=>setStdSearch(e.target.value)} />
-                        {stdSearch && (
-                            <div className="absolute top-full left-0 right-0 bg-white shadow-xl z-50 rounded-xl max-h-40 overflow-auto border">
-                                {filteredPlayers.map(p => (
-                                    <div key={p._id} onClick={()=>{ setFormData({...formData, targetPlayerIds:[...formData.targetPlayerIds, p._id]}); setStdSearch(''); }} className="p-3 hover:bg-orange-50 cursor-pointer font-bold border-b">{p.firstName} {p.lastName}</div>
-                                ))}
-                            </div>
-                        )}
                         <div className="flex flex-wrap gap-1 mt-2">
                           {formData.targetPlayerIds.map(id => (
                             <span key={id} className="bg-orange-100 text-orange-600 px-2 py-1 rounded-lg text-[9px] font-black flex items-center gap-1">{players.find(x => x._id === id)?.firstName} <button onClick={()=>setFormData({...formData, targetPlayerIds: formData.targetPlayerIds.filter(x=>x!==id)})}>✕</button></span>
@@ -12340,7 +12568,7 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, onC
                     <div key={idx} className="bg-white p-10 rounded-[50px] border border-slate-100 shadow-sm relative">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
                             <div>
-                                <label className="text-[10px] font-black uppercase text-blue-500 mb-2 block tracking-widest">Documents Supports (Google Drive)</label>
+                                <label className="text-[10px] font-black uppercase text-blue-500 mb-2 block tracking-widest">Documents Supports</label>
                                 <div className="flex flex-wrap gap-3 p-5 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
                                     {lvl.attachmentUrls?.map((u, i) => <img key={i} src={u} className="w-20 h-20 object-cover rounded-2xl border-2 border-white shadow-sm" />)}
                                     <label className="w-20 h-20 bg-white flex items-center justify-center rounded-2xl border border-slate-200 cursor-pointer text-slate-300 hover:text-blue-500 transition-all text-2xl font-black">
@@ -12351,14 +12579,14 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, onC
                             </div>
                             <div>
                                 <label className="text-[10px] font-black uppercase text-orange-500 mb-2 block tracking-widest">Image Question</label>
-                                <div className="h-40 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200 flex items-center justify-center relative overflow-hidden group">
+                                <div className="h-40 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200 flex items-center justify-center relative overflow-hidden">
                                     {lvl.questionImage ? <img src={lvl.questionImage} className="h-full w-full object-contain" /> : <span className="text-slate-300 font-black text-xs uppercase">Photo Question</span>}
                                     <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={e => handleUpload(e.target.files, idx, 'qimg')} />
                                 </div>
                             </div>
                         </div>
                         <div className="mt-8">
-                            <textarea className="w-full p-6 rounded-3xl h-24 border border-slate-200 font-bold text-slate-600" value={lvl.instruction} onChange={e=>{const n=[...formData.levels]; n[idx].instruction=e.target.value; setFormData({...formData, levels:n});}} placeholder="Consigne..." />
+                            <textarea className="w-full p-6 rounded-3xl h-24 border border-slate-200 font-bold text-slate-600 outline-none focus:border-orange-500 transition-colors" value={lvl.instruction} onChange={e=>{const n=[...formData.levels]; n[idx].instruction=e.target.value; setFormData({...formData, levels:n});}} placeholder="Consigne..." />
                         </div>
                     </div>
                 ))}
@@ -12367,7 +12595,7 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, onC
 
         <div className="p-8 bg-white border-t">
             <button onClick={save} disabled={uploading} className="w-full p-6 bg-orange-500 text-white font-black text-2xl rounded-3xl shadow-xl hover:bg-orange-600 transition-all uppercase">
-                {!formData._id ? "🚀 INITIALISER LE DEVOIR & LE DRIVE" : (uploading ? "SYNC DRIVE..." : "💾 SAUVEGARDER LES MODIFICATIONS")}
+                {!formData._id ? "🚀 INITIALISER LE DEVOIR & LE DRIVE" : (uploading ? "SYNC EN COURS..." : "💾 SAUVEGARDER LES MODIFICATIONS")}
             </button>
         </div>
     </div>
@@ -12432,13 +12660,12 @@ export default function ScansStudio({ globalClass, user }) {
     const [activeTab, setActiveTab] = useState('subject'); 
     const [newTitle, setNewTitle] = useState("");
     const [loading, setLoading] = useState(false);
-    const [showFolderPicker, setShowFolderPicker] = useState(null);
-    const [driveFiles, setDriveFiles] = useState({ list: [], loading: false });
 
     const loadData = async () => {
         try {
+            // ALIGNEMENT : Appel de /api/scans/sessions (et non /api/scan-sessions)
             const [sRes, cRes] = await Promise.all([
-                fetch('/api/scan-sessions'),
+                fetch('/api/scans/sessions'),
                 fetch('/api/chapters-all')
             ]);
             if (sRes.ok) setSessions(await sRes.json());
@@ -12448,22 +12675,10 @@ export default function ScansStudio({ globalClass, user }) {
 
     useEffect(() => { loadData(); }, [globalClass]);
 
-    const syncDrive = async () => {
-        if(!confirm("Réorganiser ton Drive ?")) return;
-        setLoading(true);
-        try {
-            const res = await fetch('/api/init-all-folders');
-            const data = await res.json();
-            alert("✅ " + data.message);
-            loadData();
-        } catch (e) { alert("❌ Erreur"); }
-        setLoading(false);
-    };
-
     const createSession = async () => {
         if (!newTitle.trim() || loading) return;
         setLoading(true);
-        const res = await fetch('/api/scan-sessions', {
+        const res = await fetch('/api/scans/sessions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ title: newTitle, classroom: globalClass })
@@ -12472,28 +12687,19 @@ export default function ScansStudio({ globalClass, user }) {
         setLoading(false);
     };
 
-    const handleAssign = async (sessionId, chapterId) => {
-        await fetch(`/api/scan-sessions/${sessionId}/assign-chapter`, {
-            method: 'PATCH',
-            headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({ chapterId })
-        });
-        setShowFolderPicker(null);
-        setActiveMode('upload');
-        loadData();
-    };
-
     const normalize = (c) => c?.toString().toUpperCase().replace('E', '') || "";
     const filteredSessions = sessions.filter(s => normalize(s.classroom) === normalize(globalClass));
-    const availableChapters = chapters.filter(c => normalize(c.classroom) === normalize(globalClass) && !c.isArchived);
-    const sections = user?.subjectSections || [];
 
     return (
         <div className="space-y-4 animate-in fade-in">
             <div className="bg-white p-3 rounded-[22px] border-2 border-indigo-50 shadow-sm flex items-center gap-2">
-                <input className="flex-1 px-4 py-3 bg-slate-50 rounded-xl outline-none font-bold text-xs" placeholder="Nom de la production..." value={newTitle} onChange={e=>setNewTitle(e.target.value)} />
+                <input 
+                    className="flex-1 px-4 py-3 bg-slate-50 rounded-xl outline-none font-bold text-xs" 
+                    placeholder="Nom de la production..." 
+                    value={newTitle} 
+                    onChange={e=>setNewTitle(e.target.value)} 
+                />
                 <button onClick={createSession} disabled={loading} className="px-5 py-3 bg-indigo-600 text-white rounded-xl font-black uppercase text-[10px]">Créer</button>
-                <button onClick={syncDrive} disabled={loading} className="w-12 h-11 flex items-center justify-center bg-indigo-50 text-indigo-600 rounded-xl border border-indigo-100 hover:bg-indigo-600 hover:text-white transition-all">🔄</button>
             </div>
 
             <div className="space-y-2">
@@ -12509,42 +12715,18 @@ export default function ScansStudio({ globalClass, user }) {
                                 </div>
                                 <div className="flex items-center gap-1">
                                     <button onClick={() => { setOpenId(s._id); setActiveMode('upload'); }} className={`tool-btn ${isOpen && activeMode === 'upload' ? 'active-upload' : ''}`}>SNAP</button>
-                                    <button onClick={() => { setOpenId(s._id); setActiveMode('files'); }} className={`tool-btn ${isOpen && activeMode === 'files' ? 'active-files' : ''}`}>FILES</button>
-                                    <button onClick={() => { setOpenId(s._id); setShowFolderPicker(s._id); setActiveMode('class'); }} className={`tool-btn ${isOpen && activeMode === 'class' ? 'active-class' : ''}`}>CLASS</button>
                                     <button onClick={() => { setOpenId(s._id); setActiveMode('ia'); }} className={`tool-btn ${isOpen && activeMode === 'ia' ? 'active-ia' : ''}`}>IA</button>
-                                    <button onClick={async () => { if(confirm("Supprimer ?")) { await fetch(`/api/scan-sessions/${s._id}`, {method:'DELETE'}); loadData(); } }} className="tool-btn-danger">✕</button>
+                                    <button onClick={async () => { if(confirm("Supprimer ?")) { await fetch(`/api/scans/${s._id}`, {method:'DELETE'}); loadData(); } }} className="tool-btn-danger">✕</button>
                                 </div>
                             </div>
 
                             {isOpen && (
                                 <div className="border-t border-slate-100 p-3 bg-slate-50/30">
-                                    {activeMode === 'class' ? (
-                                        <div className="animate-in zoom-in p-2">
-                                            <p className="text-[9px] font-black text-indigo-400 uppercase mb-4 text-center">Classer dans un dossier actif :</p>
-                                            <div className="space-y-4">
-                                                {sections.map(sec => {
-                                                    const chaps = availableChapters.filter(c => c.subject === sec.name);
-                                                    if (chaps.length === 0) return null;
-                                                    return (
-                                                        <div key={sec.name}>
-                                                            <div className="text-[8px] font-black uppercase mb-2 px-2" style={{ color: sec.color }}>{sec.name}</div>
-                                                            <div className="flex flex-wrap gap-2">
-                                                                {chaps.map(c => <button key={c._id} onClick={() => handleAssign(s._id, c._id)} className="px-3 py-2 bg-white border-2 border-slate-100 rounded-xl text-[10px] font-bold text-slate-600">📁 {c.title}</button>)}
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <>
-                                            <div className="flex gap-1 mb-4 bg-white/60 p-1 rounded-xl shadow-inner">
-                                                <button onClick={() => setActiveTab('subject')} className={`sub-tab ${activeTab === 'subject' ? 'active' : ''}`}>SUJET</button>
-                                                <button onClick={() => setActiveTab('copies')} className={`sub-tab ${activeTab === 'copies' ? 'active' : ''}`}>COPIES</button>
-                                            </div>
-                                            <PilotSnap session={s} type={activeTab} onRefresh={loadData} />
-                                        </>
-                                    )}
+                                    <div className="flex gap-1 mb-4 bg-white/60 p-1 rounded-xl shadow-inner">
+                                        <button onClick={() => setActiveTab('subject')} className={`sub-tab ${activeTab === 'subject' ? 'active' : ''}`}>SUJET</button>
+                                        <button onClick={() => setActiveTab('copies')} className={`sub-tab ${activeTab === 'copies' ? 'active' : ''}`}>COPIES</button>
+                                    </div>
+                                    <PilotSnap session={s} type={activeTab} onRefresh={loadData} />
                                 </div>
                             )}
                         </div>
@@ -12579,7 +12761,7 @@ function PilotSnap({ session, type, onRefresh }) {
         canvas.width = videoRef.current.videoWidth; canvas.height = videoRef.current.videoHeight;
         canvas.getContext('2d').drawImage(videoRef.current, 0, 0);
         const data = canvas.toDataURL('image/jpeg', 0.8);
-        const res = await fetch('/api/scan-upload-photo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: session._id, type: type, imageBase64: data }) });
+        const res = await fetch('/api/scans/upload', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: session._id, type: type, imageBase64: data }) });
         if(res.ok) onRefresh();
         setCapturing(false);
     };
@@ -15392,33 +15574,47 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const DriveService = require('../../services/drive.service');
 
-/**
- * 🏢 DOMAINE ADMIN (SYNC DRIVE V3)
- */
-
 const normalize = (n) => n ? n.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Z0-9 ]/g, "_").trim() : "SANS_TITRE";
 
-router.get('/players', async (req, res) => {
+router.patch('/teacher/:id/sections', async (req, res) => {
     try {
-        const data = await mongoose.model('Player').find({}).sort({ classroom: 1, lastName: 1 });
-        res.json(data || []);
-    } catch (e) { res.status(500).json([]); }
-});
+        const { sections, className } = req.body;
+        const Teacher = mongoose.model('Teacher');
+        
+        // 1. Sauvegarde BDD ferme
+        const updatedTeacher = await Teacher.findByIdAndUpdate(
+            req.params.id, 
+            { subjectSections: sections }, 
+            { new: true }
+        );
 
-router.get('/chapters-all', async (req, res) => {
-    try { res.json(await mongoose.model('Chapter').find({}).sort({ _id: -1 })); } catch (e) { res.status(500).json([]); }
+        // 2. Drive en tâche de fond pour ne pas faire attendre le prof
+        if (className && sections.length > 0) {
+            const hwRootId = await DriveService.getHomeworkRoot(className);
+            const lastAdded = sections[sections.length - 1];
+            await DriveService.getOrCreateFolder(normalize(lastAdded.name), hwRootId);
+        }
+
+        res.json({
+            user: {
+                id: updatedTeacher._id,
+                firstName: updatedTeacher.firstName,
+                lastName: updatedTeacher.lastName,
+                subjectSections: updatedTeacher.subjectSections,
+                role: 'prof'
+            },
+            message: "Matières mises à jour."
+        });
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.post('/chapters', async (req, res) => {
     try {
         const Chapter = mongoose.model('Chapter');
         const { _id, title, classroom, subject } = req.body;
-        
-        // SYNC PHYSIQUE
-        const subName = subject === 'H' ? 'HISTOIRE' : subject === 'G' ? 'GEOGRAPHIE' : 'EMC';
-        const path = ["CONDACLASSE", normalize(classroom), subName, title];
-        const driveId = await DriveService.syncPath(path);
-
+        const hwRootId = await DriveService.getHomeworkRoot(classroom);
+        const subId = await DriveService.getOrCreateFolder(normalize(subject), hwRootId);
+        const driveId = await DriveService.getOrCreateFolder(normalize(title), subId);
         let result;
         if (_id && mongoose.Types.ObjectId.isValid(_id)) {
             result = await Chapter.findByIdAndUpdate(_id, { ...req.body, driveFolderId: driveId }, { new: true });
@@ -15429,13 +15625,11 @@ router.post('/chapters', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.delete('/classroom/:className', async (req, res) => {
-    try {
-        const { className } = req.params;
-        await mongoose.model('Player').deleteMany({ classroom: className });
-        await mongoose.model('Chapter').deleteMany({ classroom: className });
-        res.json({ ok: true });
-    } catch (e) { res.status(500).json({ error: e.message }); }
+router.get('/players', async (req, res) => {
+    try { res.json(await mongoose.model('Player').find({}).sort({ classroom: 1, lastName: 1 })); } catch (e) { res.json([]); }
+});
+router.get('/chapters-all', async (req, res) => {
+    try { res.json(await mongoose.model('Chapter').find({}).sort({ _id: -1 })); } catch (e) { res.json([]); }
 });
 
 module.exports = router;
@@ -15509,7 +15703,6 @@ module.exports = router;
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
-const AIService = require('../../services/ai.service');
 
 /**
  * 🕹️ DOMAINE : GAMES
@@ -15520,14 +15713,6 @@ router.get('/all', async (req, res) => {
         const data = await mongoose.model('GameLevel').find({}).sort({ _id: -1 });
         res.json(data || []);
     } catch (e) { res.status(500).json([]); }
-});
-
-router.post('/generate', async (req, res) => {
-    try {
-        const { topic, numQuestions } = req.body;
-        const quiz = await AIService.generateQuiz(topic, numQuestions);
-        res.json(quiz);
-    } catch (e) { res.status(500).json({ error: "IA Fail", details: e.message }); }
 });
 
 router.post('/', async (req, res) => {
@@ -15556,13 +15741,7 @@ const multer = require('multer');
 const DriveService = require('../../services/drive.service');
 
 const upload = multer({ storage: multer.memoryStorage() });
-
-// Normalisation douce : on garde les espaces et la casse pour correspondre au Drive manuel
-const softNormalize = (n) => n ? n.trim() : "SANS_TITRE";
-
-/**
- * 📄 DOMAINE : HOMEWORK
- */
+const normalize = (n) => n ? n.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Z0-9 ]/g, "_").trim() : "SANS_TITRE";
 
 router.post('/', async (req, res) => {
     try {
@@ -15572,109 +15751,47 @@ router.post('/', async (req, res) => {
 
         let homeworkDriveId = null;
 
-        // 1. RÉCUPÉRATION DU DOSSIER PARENT (CHAPITRE)
         if (chapterId && chapterId !== 'none') {
             const chapter = await Chapter.findById(chapterId);
             if (chapter) {
-                // On cherche l'ID Drive du chapitre s'il est manquant ou invalide
-                if (!chapter.driveFolderId) {
-                    console.log(`🔍 Suture Drive pour le chapitre : ${chapter.title}`);
-                    const rootId = await DriveService.getOrCreateFolder("CONDACLASSE", null);
-                    const classId = await DriveService.getOrCreateFolder(softNormalize(classroom), rootId);
-                    const subName = chapter.subject === 'H' ? 'HISTOIRE' : chapter.subject === 'G' ? 'GEOGRAPHIE' : 'EMC';
-                    const subId = await DriveService.getOrCreateFolder(subName, classId);
-                    
-                    // On cherche le dossier par son nom exact
-                    chapter.driveFolderId = await DriveService.getOrCreateFolder(chapter.title, subId);
-                    await chapter.save();
-                }
-
-                // 2. CRÉATION DU DOSSIER DU DEVOIR DANS LE CHAPITRE
-                if (chapter.driveFolderId) {
-                    homeworkDriveId = await DriveService.getOrCreateFolder(softNormalize(title), chapter.driveFolderId);
-                    
-                    // Création des tiroirs de production (US #4)
-                    await DriveService.getOrCreateFolder("SUJET", homeworkDriveId);
-                    await DriveService.getOrCreateFolder("COPIES", homeworkDriveId);
-                    await DriveService.getOrCreateFolder("CORRECTIONS", homeworkDriveId);
-                }
+                // On passe par Devoirs
+                const hwRootId = await DriveService.getHomeworkRoot(classroom);
+                const subId = await DriveService.getOrCreateFolder(normalize(chapter.subject), hwRootId);
+                const chapId = await DriveService.getOrCreateFolder(normalize(chapter.title), subId);
+                homeworkDriveId = await DriveService.getOrCreateFolder(normalize(title), chapId);
+                
+                await DriveService.getOrCreateFolder("SUJET", homeworkDriveId);
+                await DriveService.getOrCreateFolder("COPIES", homeworkDriveId);
+                await DriveService.getOrCreateFolder("CORRECTIONS", homeworkDriveId);
             }
         }
 
-        // 3. SAUVEGARDE BDD
-        const payload = { 
-            ...req.body, 
-            driveFolderId: homeworkDriveId 
-        };
-        
-        let result;
-        if (_id && mongoose.Types.ObjectId.isValid(_id)) {
-            result = await Homework.findByIdAndUpdate(_id, payload, { new: true });
-        } else {
-            result = await Homework.create(payload);
-        }
+        const payload = { ...req.body, driveFolderId: homeworkDriveId };
+        const result = _id ? await Homework.findByIdAndUpdate(_id, payload, { new: true }) : await Homework.create(payload);
 
-        // 4. DISTRIBUTION RACCOURCIS ÉLÈVES
-        if (req.body.targetPlayerIds?.length > 0 && homeworkDriveId) {
-            const Player = mongoose.model('Player');
-            const rootId = await DriveService.getOrCreateFolder("CONDACLASSE", null);
-            const classId = await DriveService.getOrCreateFolder(softNormalize(classroom), rootId);
-            const elevesRootId = await DriveService.getOrCreateFolder("ELEVES", classId);
-
-            for (const pId of req.body.targetPlayerIds) {
-                const student = await Player.findById(pId);
-                if (student) {
-                    const studentFolderId = await DriveService.getOrCreateFolder(softNormalize(`${student.lastName}_${student.firstName}`), elevesRootId);
-                    const studentHwFolderId = await DriveService.getOrCreateFolder("DEVOIRS", studentFolderId);
-                    await DriveService.createShortcut(homeworkDriveId, studentHwFolderId, title);
-                }
-            }
-        }
-
-        res.json(result);
-    } catch (e) {
-        console.error("❌ Error Homework Sync:", e.message);
-        res.status(500).json({ error: e.message });
-    }
+        res.json({
+            ...result._doc,
+            drivePath: `... / Devoirs / ${result.title}`,
+            message: "Devoir synchronisé"
+        });
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Upload direct vers Drive
 router.post('/upload-to-drive', upload.single('file'), async (req, res) => {
     try {
         const { homeworkId, type } = req.body;
         const homework = await mongoose.model('Homework').findById(homeworkId);
-        
-        if (!homework || !homework.driveFolderId) {
-            return res.status(400).json({ error: "Dossier Drive non initialisé. Sauvegardez le devoir d'abord." });
-        }
+        if (!homework?.driveFolderId) throw new Error("Dossier Drive absent");
 
-        // On cible le sous-dossier SUJET du devoir
         const subjectFolderId = await DriveService.getOrCreateFolder("SUJET", homework.driveFolderId);
-
-        const file = await DriveService.uploadFile(
-            subjectFolderId, 
-            `${type.toUpperCase()}_${Date.now()}.jpg`, 
-            req.file.buffer, 
-            req.file.mimetype
-        );
+        const file = await DriveService.uploadFile(subjectFolderId, `${type.toUpperCase()}_${Date.now()}.jpg`, req.file.buffer, req.file.mimetype);
 
         res.json({ ok: true, imageUrl: file.url });
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.get('/all', async (req, res) => {
     try { res.json(await mongoose.model('Homework').find({}).sort({ date: -1 })); } catch (e) { res.status(500).json([]); }
-});
-
-router.delete('/:id', async (req, res) => {
-    try {
-        const hw = await mongoose.model('Homework').findById(req.params.id);
-        if (hw?.driveFolderId) await DriveService.deleteFile(hw.driveFolderId);
-        await mongoose.model('Homework').findByIdAndDelete(req.params.id);
-        res.json({ ok: true });
-    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 module.exports = router;
@@ -15689,51 +15806,22 @@ const DriveService = require('../../services/drive.service');
  * 📸 DOMAINE : SCANS
  */
 
-const normalize = (n) => n.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Z0-9]/g, "_").trim();
-
 router.get('/sessions', async (req, res) => {
-    try { res.json(await mongoose.model('ScanSession').find({}).sort({ createdAt: -1 })); } catch (e) { res.status(500).json([]); }
+    try {
+        const data = await mongoose.model('ScanSession').find({}).sort({ createdAt: -1 });
+        res.json(data || []);
+    } catch (e) { res.status(500).json([]); }
 });
 
 router.post('/sessions', async (req, res) => {
     try {
-        const { title, classroom } = req.body;
-        const session = await mongoose.model('ScanSession').create({ title, classroom });
-
-        const condaRootId = await DriveService.getOrCreateFolder("CONDACLASSE", null);
-        const classId = await DriveService.getOrCreateFolder(normalize(classroom), condaRootId);
-        const sessId = await DriveService.getOrCreateFolder(normalize(title), classId);
-        
-        const subjectId = await DriveService.getOrCreateFolder("SUJET", sessId);
-        const copiesId = await DriveService.getOrCreateFolder("COPIES", sessId);
-        const correctionsId = await DriveService.getOrCreateFolder("CORRECTIONS", sessId);
-
-        const updated = await mongoose.model('ScanSession').findByIdAndUpdate(session._id, {
-            driveFolderId: sessId, subjectFolderId: subjectId, copiesFolderId: copiesId, correctionsFolderId: correctionsId
-        }, { new: true });
-
-        res.json(updated);
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-router.post('/upload', async (req, res) => {
-    try {
-        const { sessionId, type, imageBase64 } = req.body; 
-        const session = await mongoose.model('ScanSession').findById(sessionId);
-        const folderId = type === 'subject' ? session.subjectFolderId : session.copiesFolderId;
-        const driveFile = await DriveService.uploadImage(folderId, `${type.toUpperCase()}_${Date.now()}.jpg`, imageBase64);
-        if (driveFile) {
-            const field = type === 'subject' ? 'subjectUrls' : 'copyUrls';
-            await mongoose.model('ScanSession').findByIdAndUpdate(sessionId, { $push: { [field]: driveFile.id } });
-            res.json({ ok: true });
-        } else { res.status(500).send("Drive Fail"); }
+        const session = await mongoose.model('ScanSession').create(req.body);
+        res.json(session);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.delete('/:id', async (req, res) => {
     try {
-        const s = await mongoose.model('ScanSession').findById(req.params.id);
-        if (s?.driveFolderId) await DriveService.deleteFile(s.driveFolderId);
         await mongoose.model('ScanSession').findByIdAndDelete(req.params.id);
         res.json({ ok: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -15807,7 +15895,8 @@ const ChapterSchema = new mongoose.Schema({
     isArchived: { type: Boolean, default: false },
     classroom: { type: String, required: true },
     driveFolderId: String
-});
+}, { collection: 'chapters' });
+
 module.exports = mongoose.models.Chapter || mongoose.model('Chapter', ChapterSchema);
 
 ### FILE: server/models/DeploySignal.js
@@ -15823,41 +15912,34 @@ module.exports = mongoose.models.DeploySignal || mongoose.model('DeploySignal', 
 
 ### FILE: server/models/GameLevel.js
 const mongoose = require('mongoose');
-
 const GameLevelSchema = new mongoose.Schema({
     chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter' },
     title: String,
     targetGrade: String,
     classroom: String,
     questions: Array
-});
+}, { collection: 'gamelevels' }); // On choisit la version sans underscore
 
-module.exports = mongoose.model('GameLevel', GameLevelSchema);
+module.exports = mongoose.models.GameLevel || mongoose.model('GameLevel', GameLevelSchema);
 
 ### FILE: server/models/Homework.js
 const mongoose = require('mongoose');
-
 const HomeworkSchema = new mongoose.Schema({
-    title: { type: String, required: true },
-    classroom: { type: String, required: true },
-    targetGrade: { type: String, default: 'Tous' },
+    title: String,
+    classroom: String,
+    targetGrade: String,
     targetPlayerIds: [String],
     chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter' },
-    
-    // Miroir Drive (Même logique que ScanSession)
-    driveFolderId: String,        // Racine du devoir
-    subjectFolderId: String,      // Dossier SUJET
-    copiesFolderId: String,       // Dossier COPIES
-    correctionsFolderId: String,  // Dossier CORRECTIONS
-
-    levels: { type: Array, default: [] },
+    driveFolderId: String,
+    levels: Array,
     date: { type: Date, default: Date.now }
-});
+}, { collection: 'homeworks' });
 
 module.exports = mongoose.models.Homework || mongoose.model('Homework', HomeworkSchema);
 
 ### FILE: server/models/Player.js
 const mongoose = require('mongoose');
+
 const PlayerSchema = new mongoose.Schema({
     firstName: String,
     lastName: String,
@@ -15865,29 +15947,28 @@ const PlayerSchema = new mongoose.Schema({
     email: { type: String, default: "" },
     teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher' },
     spellingMistakes: { type: Array, default: [] }
+}, { 
+    collection: 'players',
+    timestamps: { createdAt: 'created_at' }
 });
-// Protection contre la re-déclaration (Crucial pour éviter les erreurs 500)
+
 module.exports = mongoose.models.Player || mongoose.model('Player', PlayerSchema);
 
 ### FILE: server/models/ScanSession.js
 const mongoose = require('mongoose');
-
 const ScanSessionSchema = new mongoose.Schema({
     title: { type: String, default: "" }, 
     classroom: { type: String, required: true },
     chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter' }, 
-    
-    driveFolderId: String,        // Racine
-    subjectFolderId: String,      // Sous-dossier Sujet
-    copiesFolderId: String,       // Sous-dossier Copies
-    correctionsFolderId: String,  // Sous-dossier Corrections
-
+    driveFolderId: String,
+    subjectFolderId: String,
+    copiesFolderId: String,
+    correctionsFolderId: String,
     subjectUrls: { type: [String], default: [] }, 
     copyUrls: { type: [String], default: [] },
-    
     teacherInstruction: { type: String, default: "" }, 
     createdAt: { type: Date, default: Date.now }
-});
+}, { collection: 'scansessions' });
 
 module.exports = mongoose.models.ScanSession || mongoose.model('ScanSession', ScanSessionSchema);
 
@@ -15963,16 +16044,13 @@ const express = require('express');
 const mongoose = require('mongoose');
 const fs = require('fs');
 
-// Injection globale de fetch pour Gemini & Drive (Node < 18)
-if (!global.fetch) { 
-    global.fetch = require('node-fetch'); 
-}
+if (!global.fetch) { global.fetch = require('node-fetch'); }
 
 const app = express();
 const port = process.env.PORT || 3000;
 const SERVER_BOOT_ID = Date.now();
 
-// 1. CHARGEMENT DES MODÈLES (ORDRE ALPHABÉTIQUE)
+// 1. MODÈLES
 require('./models/Bug');
 require('./models/Chapter');
 require('./models/DeploySignal');
@@ -15984,9 +16062,9 @@ require('./models/Submission');
 require('./models/Teacher');
 require('./models/TeacherStyle');
 
-// 2. CONNEXION MONGODB
+// 2. MONGODB
 mongoose.connect(process.env.MONGODB_URI).then(async () => {
-    console.log('✅ MongoDB Connected.');
+    console.log('✅ MongoDB Connecté.');
     try {
         await mongoose.model('DeploySignal').findOneAndUpdate({}, { status: 'live', updatedAt: new Date() }, { upsert: true });
     } catch (e) {}
@@ -15995,35 +16073,36 @@ mongoose.connect(process.env.MONGODB_URI).then(async () => {
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// 3. ROUTES SYSTÈME
+// 3. SYSTÈME
 app.get('/api/check-deploy', (req, res) => res.json({ bootId: SERVER_BOOT_ID }));
 app.get('/api/deploy-status', async (req, res) => {
     try {
         const sig = await mongoose.model('DeploySignal').findOne();
-        const v = JSON.parse(fs.readFileSync(path.join(__dirname, 'version.json'), 'utf8'));
+        const vPath = path.join(__dirname, 'version.json');
+        let v = { version: "1.6.0", build: 0 };
+        if (fs.existsSync(vPath)) v = JSON.parse(fs.readFileSync(vPath, 'utf8'));
         res.json({ version: v.version, build: v.build, status: sig?.status || 'live' });
-    } catch (e) { res.json({ version: '1.0.0', build: 0, status: 'live' }); }
+    } catch (e) { res.json({ version: '1.6.0', build: 0, status: 'live' }); }
 });
 
-// 4. ARCHITECTURE PAR DOMAINE (ZÉRO POROSITÉ)
+// 4. ROUTES DOMAINES
 app.use('/api/auth', require('./features/auth/auth.routes'));
 app.use('/api/games', require('./features/games/games.routes'));
 app.use('/api/scans', require('./features/scans/scans.routes'));
-app.use('/api/homework', require('./features/homework/homework.routes')); // DOMAINE HOMEWORK
-app.use('/api', require('./features/admin/admin.routes')); 
+app.use('/api/homework', require('./features/homework/homework.routes'));
+app.use('/api', require('./features/admin/admin.routes')); // CAPTURE /players et /teacher/...
 
-// 5. GESTION FRONTEND
+// 5. FRONTEND
 const distPath = path.join(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
-        // Sécurité : si c'est une requête API, on ne renvoie pas de HTML
-        if (req.path.startsWith('/api')) return res.status(404).json({ error: "Route API introuvable" });
+        if (req.path.startsWith('/api')) return res.status(404).json({ error: "Route API inexistante" });
         res.sendFile(path.join(distPath, 'index.html'));
     });
 }
 
-app.listen(port, () => console.log(`🚀 SERVEUR PRÊT : PORT ${port}`));
+app.listen(port, () => console.log(`🚀 SERVEUR ACTIF | PORT ${port}`));
 
 ### FILE: server/services/ai.service.js
 const { GoogleGenerativeAI } = require("@google/generative-ai");
@@ -16063,45 +16142,59 @@ try {
         );
         auth.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
         drive = google.drive({ version: 'v3', auth });
-        console.log("✅ Drive API : Prêt pour la suture des dossiers.");
+        console.log("✅ Drive API V4 : Nettoyage physique activé");
     }
-} catch (e) {
-    console.error("❌ Erreur Init Drive:", e.message);
-}
+} catch (e) { console.error("❌ Erreur Init Drive:", e.message); }
 
 const DriveService = {
-    // Cherche un dossier par son nom exact dans un parent
-    findFolderByName: async (name, parentId = null) => {
-        if (!drive) return null;
-        try {
-            // On échappe les apostrophes pour la requête Drive
-            const safeName = name.replace(/'/g, "\\'");
-            let q = `name = '${safeName}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
-            if (parentId) q += ` and '${parentId}' in parents`;
-            
-            const res = await drive.files.list({ q, fields: 'files(id, name)' });
-            return (res.data.files && res.data.files.length > 0) ? res.data.files[0].id : null;
-        } catch (e) { return null; }
-    },
-
     getOrCreateFolder: async (name, parentId = null) => {
         if (!drive) return null;
-        // 1. D'abord on cherche s'il existe déjà (pour éviter les doublons invisibles)
-        const existingId = await DriveService.findFolderByName(name, parentId);
-        if (existingId) return existingId;
-
-        // 2. Sinon on crée
         try {
+            const cleanName = name.replace(/'/g, "\\'");
+            let q = `name = '${cleanName}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
+            if (parentId) q += ` and '${parentId}' in parents`;
+            else q += ` and 'root' in parents`;
+            
+            const res = await drive.files.list({ q, fields: 'files(id, name)' });
+            if (res.data.files && res.data.files.length > 0) return res.data.files[0].id;
+
             const folder = await drive.files.create({
-                resource: { 
-                    name: name, 
-                    mimeType: 'application/vnd.google-apps.folder', 
-                    parents: parentId ? [parentId] : [] 
-                },
+                resource: { name: name, mimeType: 'application/vnd.google-apps.folder', parents: parentId ? [parentId] : [] },
                 fields: 'id'
             });
             return folder.data.id;
         } catch (e) { return null; }
+    },
+
+    getHomeworkRoot: async (classroom) => {
+        const rootId = await DriveService.getOrCreateFolder("CONDACLASSE", null);
+        const teacherId = await DriveService.getOrCreateFolder("JEAN VUILLET", rootId);
+        const classId = await DriveService.getOrCreateFolder(classroom.toUpperCase(), teacherId);
+        return await DriveService.getOrCreateFolder("Devoirs", classId);
+    },
+
+    // SUPPRESSION PAR NOM DANS UN PARENT (Utilisé pour les matières)
+    deleteFolderByName: async (name, parentId) => {
+        if (!drive || !parentId) return;
+        try {
+            const cleanName = name.replace(/'/g, "\\'");
+            const q = `name = '${cleanName}' and '${parentId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
+            const res = await drive.files.list({ q, fields: 'files(id)' });
+            
+            if (res.data.files && res.data.files.length > 0) {
+                for (const file of res.data.files) {
+                    await drive.files.delete({ fileId: file.id });
+                    console.log(`🗑️ [DRIVE] Dossier supprimé : ${name} (${file.id})`);
+                }
+            }
+        } catch (e) {
+            console.error(`❌ Erreur suppression Drive (${name}):`, e.message);
+        }
+    },
+
+    deleteFile: async (id) => { 
+        if (!drive || !id) return true;
+        try { await drive.files.delete({ fileId: id }); return true; } catch (e) { return false; } 
     },
 
     uploadFile: async (folderId, fileName, buffer, mimeType) => {
@@ -16110,35 +16203,11 @@ const DriveService = {
             const media = { mimeType, body: Readable.from(buffer) };
             const file = await drive.files.create({
                 resource: { name: fileName, parents: [folderId] },
-                media,
-                fields: 'id, webViewLink'
+                media, fields: 'id'
             });
-            await drive.permissions.create({
-                fileId: file.data.id,
-                resource: { role: 'reader', type: 'anyone' }
-            });
+            await drive.permissions.create({ fileId: file.data.id, resource: { role: 'reader', type: 'anyone' } });
             return { id: file.data.id, url: `https://drive.google.com/thumbnail?id=${file.data.id}&sz=w1200` };
         } catch (e) { return null; }
-    },
-
-    createShortcut: async (targetId, parentFolderId, shortcutName) => {
-        if (!drive || !targetId || !parentFolderId) return null;
-        try {
-            await drive.files.create({
-                resource: {
-                    name: `🔗 ${shortcutName}`,
-                    mimeType: 'application/vnd.google-apps.shortcut',
-                    parents: [parentFolderId],
-                    shortcutDetails: { targetId: targetId }
-                }
-            });
-            return true;
-        } catch (e) { return null; }
-    },
-
-    deleteFile: async (id) => { 
-        if (!drive || !id) return true;
-        try { await drive.files.delete({ fileId: id }); return true; } catch (e) { return false; } 
     }
 };
 
@@ -16147,9 +16216,9 @@ module.exports = DriveService;
 ### FILE: server/version.json
 {
   "version": "1.6.0",
-  "build": 229,
+  "build": 261,
   "description": "Total Domain Isolation (Zero Porosity) + AI Service Extraction",
-  "timestamp": "2026-01-14T14:52:51.235Z"
+  "timestamp": "2026-01-14T22:23:15.069Z"
 }
 
 ### FILE: snap.js

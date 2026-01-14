@@ -66,6 +66,8 @@
 │   │   │       │   └── ChapterManager.jsx
 │   │   │       ├── components/
 │   │   │       │   ├── ConsoleHUD.jsx
+│   │   │       │   ├── DatabaseViewer.css
+│   │   │       │   ├── DatabaseViewer.jsx
 │   │   │       │   ├── ProfHeader.jsx
 │   │   │       │   ├── ProfNav.jsx
 │   │   │       │   └── ProfStudioFolder.jsx
