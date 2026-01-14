@@ -12,7 +12,7 @@ try {
         );
         auth.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
         drive = google.drive({ version: 'v3', auth });
-        console.log("✅ Drive API Prêt (Mode Stockage Actif)");
+        console.log("✅ Drive API : Système de Raccourcis Activé");
     }
 } catch (e) {
     console.error("❌ Erreur Init Drive:", e.message);
@@ -36,7 +36,6 @@ const DriveService = {
         } catch (e) { return null; }
     },
 
-    // Upload générique pour remplacer Cloudinary
     uploadFile: async (folderId, fileName, buffer, mimeType) => {
         if (!drive || !folderId) return null;
         try {
@@ -46,21 +45,32 @@ const DriveService = {
                 media,
                 fields: 'id, webViewLink'
             });
-            // On rend le fichier lisible par tous ceux qui ont le lien (pour l'affichage élève)
             await drive.permissions.create({
                 fileId: file.data.id,
                 resource: { role: 'reader', type: 'anyone' }
             });
             return { id: file.data.id, url: `https://drive.google.com/thumbnail?id=${file.data.id}&sz=w1200` };
-        } catch (e) {
-            console.error("Drive Upload Error:", e.message);
-            return null;
-        }
+        } catch (e) { return null; }
     },
 
-    deleteFile: async (id) => { 
-        if (!drive || !id) return true;
-        try { await drive.files.delete({ fileId: id }); return true; } catch (e) { return false; } 
+    // CRÉATION DE RACCOURCI (US #Distribution)
+    createShortcut: async (targetId, parentFolderId, shortcutName) => {
+        if (!drive || !targetId || !parentFolderId) return null;
+        try {
+            const res = await drive.files.create({
+                resource: {
+                    name: `🔗 ${shortcutName}`,
+                    mimeType: 'application/vnd.google-apps.shortcut',
+                    parents: [parentFolderId],
+                    shortcutDetails: { targetId: targetId }
+                },
+                fields: 'id'
+            });
+            return res.data.id;
+        } catch (e) {
+            console.error("Erreur création raccourci Drive:", e.message);
+            return null;
+        }
     }
 };
 
