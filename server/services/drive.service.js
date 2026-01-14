@@ -12,27 +12,25 @@ try {
         );
         auth.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
         drive = google.drive({ version: 'v3', auth });
-        console.log("✅ Drive API : Prêt pour la synchronisation.");
+        console.log("✅ Drive API V3 : Navigation par Arborescence Activée");
     }
 } catch (e) {
     console.error("❌ Erreur Init Drive:", e.message);
 }
 
 const DriveService = {
-    // Version améliorée : cherche par nom si parentId est fourni
+    // Cherche ou crée un dossier dans un parent spécifique
     getOrCreateFolder: async (name, parentId = null) => {
         if (!drive) return null;
         try {
-            // On cherche le dossier avec le nom exact
-            let q = `name = '${name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
+            const cleanName = name.replace(/'/g, "\\'"); // Protection caractères spéciaux
+            let q = `name = '${cleanName}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
             if (parentId) q += ` and '${parentId}' in parents`;
+            else q += ` and 'root' in parents`;
             
             const res = await drive.files.list({ q, fields: 'files(id, name)' });
-            if (res.data.files && res.data.files.length > 0) {
-                return res.data.files[0].id;
-            }
+            if (res.data.files && res.data.files.length > 0) return res.data.files[0].id;
 
-            // Sinon, création
             const folder = await drive.files.create({
                 resource: { 
                     name: name, 
@@ -43,9 +41,19 @@ const DriveService = {
             });
             return folder.data.id;
         } catch (e) { 
-            console.error(`Erreur Drive (Folder ${name}):`, e.message);
+            console.error(`[Drive] Erreur dossier ${name}:`, e.message);
             return null; 
         }
+    },
+
+    // Méthode surpuissante pour synchroniser un chemin complet
+    // pathArray = ["CONDACLASSE", "6D", "HISTOIRE", "CHAPITRE 1"]
+    syncPath: async (pathArray) => {
+        let lastId = null;
+        for (const folderName of pathArray) {
+            lastId = await DriveService.getOrCreateFolder(folderName, lastId);
+        }
+        return lastId;
     },
 
     uploadFile: async (folderId, fileName, buffer, mimeType) => {
@@ -68,17 +76,21 @@ const DriveService = {
     createShortcut: async (targetId, parentFolderId, shortcutName) => {
         if (!drive || !targetId || !parentFolderId) return null;
         try {
-            const res = await drive.files.create({
+            await drive.files.create({
                 resource: {
                     name: `🔗 ${shortcutName}`,
                     mimeType: 'application/vnd.google-apps.shortcut',
                     parents: [parentFolderId],
                     shortcutDetails: { targetId: targetId }
-                },
-                fields: 'id'
+                }
             });
-            return res.data.id;
+            return true;
         } catch (e) { return null; }
+    },
+
+    deleteFile: async (id) => { 
+        if (!drive || !id) return true;
+        try { await drive.files.delete({ fileId: id }); return true; } catch (e) { return false; } 
     }
 };
 
