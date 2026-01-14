@@ -15,7 +15,6 @@ export default function ActivityStudio({ globalClass, user }) {
         if (!globalClass) return;
         setLoading(true);
         try {
-            // CORRECTIF : Utilisation des nouveaux points d'entrée modulaires
             const [hwRes, gmRes, cpRes] = await Promise.all([
                 fetch('/api/homework/all'),
                 fetch('/api/games/all'),
@@ -67,7 +66,7 @@ export default function ActivityStudio({ globalClass, user }) {
     };
 
     const handleDeleteChapter = async (id) => {
-        if (!confirm("Supprimer ce dossier ?")) return;
+        if (!confirm("Supprimer ce dossier et son contenu Drive ?")) return;
         try {
             const res = await fetch(`/api/chapters/${id}`, { method: 'DELETE' });
             if (res.ok) await loadData();
@@ -75,34 +74,20 @@ export default function ActivityStudio({ globalClass, user }) {
     };
 
     if (viewingResults) return <HomeworkResults homework={viewingResults} onBack={() => setViewingResults(null)} />;
-    
     if (editingItem) {
         const activeChaps = chapters.filter(c => c.classroom === globalClass && !c.isArchived);
-        if (editingItem.type === 'homework') {
-            return <HomeworkStudio 
-                initialData={editingItem.data} 
-                chapters={activeChaps} 
-                onClose={() => { setEditingItem(null); loadData(); }} 
-            />;
-        }
-        return <GameStudio 
-            initialData={editingItem.data} 
-            chapters={activeChaps} 
-            classFilter={globalClass} 
-            onClose={() => { setEditingItem(null); loadData(); }} 
-        />;
+        if (editingItem.type === 'homework') return <HomeworkStudio initialData={editingItem.data} chapters={activeChaps} globalClass={globalClass} onClose={() => { setEditingItem(null); loadData(); }} />;
+        return <GameStudio initialData={editingItem.data} chapters={activeChaps} classFilter={globalClass} onClose={() => { setEditingItem(null); loadData(); }} />;
     }
 
     return (
         <div className="animate-in fade-in">
             <div className="flex justify-start gap-4 mb-8 bg-white p-4 rounded-[30px] border-2 border-slate-50 shadow-sm">
-                <button onClick={() => setEditingItem({ type: 'homework', data: null })} className="bg-orange-500 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:scale-105 transition-transform"> Nouveau Devoir</button>
-                <button onClick={() => setEditingItem({ type: 'game', data: null })} className="bg-purple-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:scale-105 transition-transform"> Nouveau Jeu</button>
+                <button onClick={() => setEditingItem({ type: 'homework', data: null })} className="bg-orange-500 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg"> Nouveau Devoir</button>
+                <button onClick={() => setEditingItem({ type: 'game', data: null })} className="bg-purple-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-lg"> Nouveau Jeu</button>
             </div>
 
-            {loading ? (
-                <div className="text-center py-20 text-slate-300 font-black animate-pulse uppercase tracking-widest">Mise à jour du studio...</div>
-            ) : (
+            {loading ? <div className="text-center py-20 text-slate-300 font-black animate-pulse uppercase">Chargement...</div> : (
                 <ProfStudioFolder 
                     user={user} chapters={chapters} items={activities} classFilter={globalClass}
                     onArchive={async (id, state) => {
@@ -112,11 +97,12 @@ export default function ActivityStudio({ globalClass, user }) {
                     onRename={handleRenameChapter}
                     onEditItem={(it) => setEditingItem({ type: it.actType, data: it })}
                     onDeleteItem={async (id, type) => {
-                        if(!confirm("Supprimer définitivement cet élément ?")) return;
-                        // CORRECTIF : Chemins de suppression modulaires
+                        if(!confirm("Supprimer définitivement ?")) return;
+                        // CORRECTIF : Utilisation des nouveaux tiroirs API étanches
                         const endpoint = type === 'game' ? `/api/games/${id}` : `/api/homework/${id}`;
-                        await fetch(endpoint, { method: 'DELETE' });
-                        loadData();
+                        const res = await fetch(endpoint, { method: 'DELETE' });
+                        if (res.ok) await loadData();
+                        else alert("Erreur lors de la suppression.");
                     }}
                     onDeleteChapter={handleDeleteChapter}
                     onCreateChapter={handleCreateChapter}
