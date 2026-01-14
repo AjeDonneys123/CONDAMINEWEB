@@ -15,26 +15,25 @@ router.post('/', async (req, res) => {
     try {
         const Homework = mongoose.model('Homework');
         const Chapter = mongoose.model('Chapter');
-        const { _id, chapterId, title, classroom } = req.body;
+        const { _id, chapterId, title } = req.body;
 
         let homeworkDriveId = null;
-        let constructedPath = "MON_DRIVE";
+        let constructedPath = "JEAN VUILLET / DEVOIRS";
 
         if (chapterId && chapterId !== 'none') {
             const chapter = await Chapter.findById(chapterId);
             if (chapter) {
-                const subName = normalize(chapter.subject);
-                constructedPath = `CONDACLASSE / ${classroom} / ${subName} / ${chapter.title} / ${title}`;
-
-                // Suture Drive
-                const condaRootId = await DriveService.getOrCreateFolder("CONDACLASSE", null);
-                const classId = await DriveService.getOrCreateFolder(normalize(classroom), condaRootId);
-                const subId = await DriveService.getOrCreateFolder(subName, classId);
+                // Chemin : DEVOIRS / MATIERE / CHAPITRE / DEVOIR
+                const rootId = await DriveService.getOrCreateFolder("CONDACLASSE", null);
+                const teacherId = await DriveService.getOrCreateFolder("JEAN VUILLET", rootId);
+                const devoirsId = await DriveService.getOrCreateFolder("DEVOIRS", teacherId);
+                const subId = await DriveService.getOrCreateFolder(normalize(chapter.subject), devoirsId);
                 const chapId = await DriveService.getOrCreateFolder(normalize(chapter.title), subId);
                 
                 homeworkDriveId = await DriveService.getOrCreateFolder(normalize(title), chapId);
-                
-                // Tiroirs US #4
+                constructedPath = `JEAN VUILLET / DEVOIRS / ${chapter.subject.toUpperCase()} / ${chapter.title} / ${title}`;
+
+                // Sous-dossiers US #4
                 await DriveService.getOrCreateFolder("SUJET", homeworkDriveId);
                 await DriveService.getOrCreateFolder("COPIES", homeworkDriveId);
                 await DriveService.getOrCreateFolder("CORRECTIONS", homeworkDriveId);
@@ -42,49 +41,37 @@ router.post('/', async (req, res) => {
         }
 
         const payload = { ...req.body, driveFolderId: homeworkDriveId };
-        let result;
-        if (_id && mongoose.Types.ObjectId.isValid(_id)) {
-            result = await Homework.findByIdAndUpdate(_id, payload, { new: true });
-        } else {
-            result = await Homework.create(payload);
-        }
+        const result = _id ? await Homework.findByIdAndUpdate(_id, payload, { new: true }) : await Homework.create(payload);
 
-        // On renvoie bien le drivePath pour le bandeau vert
         res.json({ ...result._doc, drivePath: constructedPath });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
 });
 
-// FIX 404 : Route de suppression explicite
-router.delete('/:id', async (req, res) => {
+router.post('/upload-to-drive', upload.single('file'), async (req, res) => {
     try {
-        const Homework = mongoose.model('Homework');
-        const hw = await Homework.findById(req.params.id);
-        if (hw?.driveFolderId) {
-            await DriveService.deleteFile(hw.driveFolderId).catch(() => {});
-        }
-        await Homework.findByIdAndDelete(req.params.id);
-        res.json({ ok: true });
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
+        const { homeworkId, type } = req.body;
+        const homework = await mongoose.model('Homework').findById(homeworkId);
+        if (!homework?.driveFolderId) throw new Error("Dossier Drive absent");
+
+        const subjectFolderId = await DriveService.getOrCreateFolder("SUJET", homework.driveFolderId);
+        const file = await DriveService.uploadFile(subjectFolderId, `${type.toUpperCase()}_${Date.now()}.jpg`, req.file.buffer, req.file.mimetype);
+
+        res.json({ ok: true, imageUrl: file.url });
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.get('/all', async (req, res) => {
     try { res.json(await mongoose.model('Homework').find({}).sort({ date: -1 })); } catch (e) { res.status(500).json([]); }
 });
 
-router.post('/upload-to-drive', upload.single('file'), async (req, res) => {
+router.delete('/:id', async (req, res) => {
     try {
-        const { homeworkId, type } = req.body;
-        const homework = await mongoose.model('Homework').findById(homeworkId);
-        if (!homework?.driveFolderId) throw new Error("Dossier Drive non initialisé");
-
-        const subjectFolderId = await DriveService.getOrCreateFolder("SUJET", homework.driveFolderId);
-        const file = await DriveService.uploadFile(subjectFolderId, `${type.toUpperCase()}_${Date.now()}.jpg`, req.file.buffer, req.file.mimetype);
-
-        res.json({ ok: true, imageUrl: file.url });
+        const hw = await mongoose.model('Homework').findById(req.params.id);
+        if (hw?.driveFolderId) await DriveService.deleteFile(hw.driveFolderId);
+        await mongoose.model('Homework').findByIdAndDelete(req.params.id);
+        res.json({ ok: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

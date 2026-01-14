@@ -10,7 +10,7 @@ const app = express();
 const port = process.env.PORT || 3000;
 const SERVER_BOOT_ID = Date.now();
 
-// 1. CHARGEMENT DES MODÈLES
+// 1. CHARGEMENT DES MODÈLES (ORDRE ALPHABÉTIQUE)
 require('./models/Bug');
 require('./models/Chapter');
 require('./models/DeploySignal');
@@ -38,9 +38,12 @@ app.get('/api/check-deploy', (req, res) => res.json({ bootId: SERVER_BOOT_ID }))
 app.get('/api/deploy-status', async (req, res) => {
     try {
         const sig = await mongoose.model('DeploySignal').findOne();
-        const v = JSON.parse(fs.readFileSync(path.join(__dirname, 'server', 'version.json'), 'utf8'));
+        // Correction du chemin pour éviter l'erreur 500
+        const v = JSON.parse(fs.readFileSync(path.join(__dirname, 'version.json'), 'utf8'));
         res.json({ version: v.version, build: v.build, status: sig?.status || 'live' });
-    } catch (e) { res.json({ version: '1.6.0', build: 0, status: 'live' }); }
+    } catch (e) { 
+        res.json({ version: '1.6.0', build: 0, status: 'live' }); 
+    }
 });
 
 // 4. ARCHITECTURE PAR DOMAINE
@@ -48,16 +51,19 @@ app.use('/api/auth', require('./features/auth/auth.routes'));
 app.use('/api/games', require('./features/games/games.routes'));
 app.use('/api/scans', require('./features/scans/scans.routes'));
 app.use('/api/homework', require('./features/homework/homework.routes'));
-app.use('/api', require('./features/admin/admin.routes')); // ADMIN (Capture tout le reste)
+app.use('/api', require('./features/admin/admin.routes')); 
 
 // 5. GESTION FRONTEND
 const distPath = path.join(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
-        if (req.path.startsWith('/api')) return res.status(404).json({ error: "API non trouvée" });
+        if (req.path.startsWith('/api')) return res.status(404).json({ error: "Route API inexistante" });
         res.sendFile(path.join(distPath, 'index.html'));
     });
 }
 
-app.listen(port, () => console.log(`🚀 SERVEUR CONDAMINE RELANCÉ | PORT ${port}`));
+app.listen(port, () => {
+    console.log(`🚀 SERVEUR STABILISÉ | PORT ${port}`);
+    console.log(`📂 ROOT DRIVE : CONDACLASSE / JEAN VUILLET / DEVOIRS`);
+});

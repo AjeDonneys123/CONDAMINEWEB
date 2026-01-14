@@ -6,32 +6,47 @@ const DriveService = require('../../services/drive.service');
 const normalize = (n) => n ? n.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Z0-9 ]/g, "_").trim() : "SANS_TITRE";
 
 /**
- * 🏢 DOMAINE ADMIN : REPARATION DES ROUTES
+ * 🏢 DOMAINE ADMIN : GESTION STRUCTURELLE (MATIERES & CHAPITRES)
  */
 
-// SAUVEGARDE SECTIONS (MATIERES)
+// PATCH /api/teacher/:id/sections (Matières)
+// Gère la création et la suppression physique avec transfert vers "Autres"
 router.patch('/teacher/:id/sections', async (req, res) => {
     try {
-        const { sections, className } = req.body;
+        const { sections } = req.body;
         const Teacher = mongoose.model('Teacher');
+        const Chapter = mongoose.model('Chapter');
         
-        // 1. Sauvegarde BDD immédiate pour débloquer le client
+        const oldTeacher = await Teacher.findById(req.params.id);
+        if (!oldTeacher) return res.status(404).send("Prof non trouvé");
+
+        // 1. Détection des suppressions pour nettoyage Drive
+        const oldNames = oldTeacher.subjectSections.map(s => s.name);
+        const newNames = sections.map(s => s.name);
+        const removed = oldNames.filter(x => !newNames.includes(x));
+
+        if (removed.length > 0) {
+            const rootId = await DriveService.getOrCreateFolder("CONDACLASSE", null);
+            const teacherId = await DriveService.getOrCreateFolder("JEAN VUILLET", rootId);
+            const devoirsId = await DriveService.getOrCreateFolder("DEVOIRS", teacherId);
+
+            for (const name of removed) {
+                // Transfert BDD des chapitres vers "Autres"
+                await Chapter.updateMany({ subject: name }, { subject: "Autres" });
+                
+                // Suppression physique du dossier matière sur Drive
+                const folderId = await DriveService.getOrCreateFolder(normalize(name), devoirsId);
+                if (folderId) await DriveService.deleteFile(folderId);
+                console.log(`🗑️ Drive Nettoyé : Matière ${name} supprimée.`);
+            }
+        }
+
+        // 2. Mise à jour BDD Prof
         const updatedTeacher = await Teacher.findByIdAndUpdate(
             req.params.id, 
             { subjectSections: sections }, 
             { new: true }
         );
-
-        // 2. Drive en tâche de fond (ne bloque pas la réponse)
-        if (className) {
-            DriveService.getOrCreateFolder("CONDACLASSE", null).then(rootId => {
-                DriveService.getOrCreateFolder("JEAN VUILLET", rootId).then(tId => {
-                    DriveService.getOrCreateFolder(normalize(className), tId).then(cId => {
-                        sections.forEach(s => DriveService.getOrCreateFolder(normalize(s.name), cId));
-                    });
-                });
-            });
-        }
 
         res.json({ 
             user: {
@@ -41,21 +56,25 @@ router.patch('/teacher/:id/sections', async (req, res) => {
                 subjectSections: updatedTeacher.subjectSections,
                 role: 'prof'
             },
-            message: "Matières synchronisées." 
+            message: removed.length > 0 ? "Nettoyage Drive effectué." : "Matières mises à jour."
         });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
 });
 
-// CRÉATION CHAPITRE (REPARÉ)
+// POST /api/chapters (Création dans JEAN VUILLET / DEVOIRS / MATIERE)
 router.post('/chapters', async (req, res) => {
     try {
-        const { _id, title, classroom, subject } = req.body;
+        const { _id, title, subject } = req.body;
         const Chapter = mongoose.model('Chapter');
 
-        // On sync le drive mais on ne bloque pas si ça prend du temps
-        const driveId = await DriveService.syncPath(classroom, [normalize(subject), normalize(title)]);
+        // Reconstruction du chemin immuable
+        const rootId = await DriveService.getOrCreateFolder("CONDACLASSE", null);
+        const teacherId = await DriveService.getOrCreateFolder("JEAN VUILLET", rootId);
+        const devoirsId = await DriveService.getOrCreateFolder("DEVOIRS", teacherId);
+        const subId = await DriveService.getOrCreateFolder(normalize(subject), devoirsId);
+        const driveId = await DriveService.getOrCreateFolder(normalize(title), subId);
 
         let result;
         if (_id && mongoose.Types.ObjectId.isValid(_id)) {
@@ -66,8 +85,8 @@ router.post('/chapters', async (req, res) => {
         
         res.json({
             ...result._doc,
-            drivePath: `Drive : JEAN VUILLET / ${classroom} / ${subject} / ${title}`,
-            message: "Chapitre prêt."
+            drivePath: `JEAN VUILLET / DEVOIRS / ${subject.toUpperCase()} / ${title.toUpperCase()}`,
+            message: "Dossier Chapitre synchronisé."
         });
     } catch (e) {
         res.status(500).json({ error: e.message });
