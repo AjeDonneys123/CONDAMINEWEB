@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
 
 const COLOR_PALETTE = [
-    '#ef4444', // Rouge (Histoire)
-    '#3b82f6', // Bleu (Géo)
-    '#22c55e', // Vert (EMC)
-    '#f97316', // Orange
+    '#ef4444', // Rouge
+    '#3b82f6', // Bleu
+    '#22c55e', // Vert
+    '#f59e0b', // Ambre
     '#8b5cf6', // Violet
     '#ec4899', // Rose
     '#06b6d4', // Cyan
-    '#f59e0b'  // Ambre
+    '#f97316', // Orange
+    '#1e293b'  // Ardoise
 ];
 
 export default function ProfStudioFolder({ 
@@ -21,6 +22,7 @@ export default function ProfStudioFolder({
     const [isDeleteMode, setIsDeleteMode] = useState(false);
     const [sections, setSections] = useState([]);
     const [movingId, setMovingId] = useState(null); 
+    const [colorPickerIdx, setColorPickerIdx] = useState(null); // Index de la section dont on change la couleur
 
     const norm = (c) => c?.toString().toUpperCase().replace('E', '').trim() || "";
     const smartSort = (a, b) => (a.title || "").localeCompare(b.title || "", undefined, { numeric: true, sensitivity: 'base' });
@@ -29,8 +31,10 @@ export default function ProfStudioFolder({
         if (user?.subjectSections) setSections(user.subjectSections);
     }, [user]);
 
+    // US #1 : Persistence Mobile & Serveur
     const saveSections = async (newSections) => {
         const uid = user?.id || user?._id;
+        setSections(newSections); // Update immédiat UI
         try {
             const res = await fetch(`/api/teacher/${uid}/sections`, {
                 method: 'PATCH',
@@ -39,14 +43,20 @@ export default function ProfStudioFolder({
             });
             const data = await res.json();
             if (res.ok && data.user) {
+                // Stockage local pour persistance immédiate au refresh
                 localStorage.setItem('player', JSON.stringify(data.user));
-                setSections(data.user.subjectSections);
                 if (onNotify) onNotify(data);
             }
         } catch(e) { console.error("Erreur Synchro Matières:", e); }
     };
 
-    // ACTION : Ré-attribuer des couleurs différentes à tout le monde
+    const updateSectionColor = (idx, newColor) => {
+        const newSections = [...sections];
+        newSections[idx].color = newColor;
+        saveSections(newSections);
+        setColorPickerIdx(null);
+    };
+
     const autoColorize = () => {
         const newSections = sections.map((s, i) => ({
             ...s,
@@ -171,16 +181,34 @@ export default function ProfStudioFolder({
                 </div>
                 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                    {sections.map(s => {
+                    {sections.map((s, idx) => {
                         const archs = archivedChapters.filter(c => c.subject === s.name);
+                        const isPickingColor = colorPickerIdx === idx;
                         if (!isDeleteMode && archs.length === 0) return null;
 
                         return (
                             <div key={s.name} className="bg-slate-800/40 p-4 rounded-[30px] border border-slate-700 animate-in fade-in relative group" style={{ borderColor: s.color + '44' }}>
-                                <h4 className="font-black text-[9px] uppercase tracking-widest mb-4 flex justify-between items-center" style={{ color: s.color }}>
-                                    {s.name}
-                                    {isDeleteMode && <button onClick={() => saveSections(sections.filter(x => x.name !== s.name))} className="text-red-500 font-black hover:scale-125 transition-transform">✕</button>}
-                                </h4>
+                                <div className="flex justify-between items-center mb-4">
+                                    <h4 className="font-black text-[9px] uppercase tracking-widest flex items-center gap-2" style={{ color: s.color }}>
+                                        <span className="w-2 h-2 rounded-full" style={{ background: s.color }}></span>
+                                        {s.name}
+                                    </h4>
+                                    {isDeleteMode && (
+                                        <div className="flex gap-1 relative">
+                                            {/* SÉLECTEUR DE COULEUR MANUEL */}
+                                            <button onClick={() => setColorPickerIdx(isPickingColor ? null : idx)} className="text-white hover:scale-125 transition-transform text-[10px]">🎨</button>
+                                            <button onClick={() => saveSections(sections.filter(x => x.name !== s.name))} className="text-red-500 font-black hover:scale-125 transition-transform text-[10px]">✕</button>
+                                            
+                                            {isPickingColor && (
+                                                <div className="absolute top-6 right-0 z-[300] bg-slate-900 border border-slate-700 p-2 rounded-xl grid grid-cols-3 gap-1 shadow-2xl animate-in zoom-in">
+                                                    {COLOR_PALETTE.map(c => (
+                                                        <button key={c} onClick={() => updateSectionColor(idx, c)} className="w-6 h-6 rounded-full border border-white/20 hover:scale-110 transition-transform" style={{ background: c }} />
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
                                 <div className="space-y-2">
                                     {archs.map(c => (
                                         <div key={c._id} className="bg-slate-800/80 p-2 px-3 rounded-xl flex justify-between items-center border border-slate-700/50">
