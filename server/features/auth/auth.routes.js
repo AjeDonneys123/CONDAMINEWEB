@@ -3,10 +3,26 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const DriveService = require('../../services/drive.service');
 
-// ROUTE REPARATION DRIVE
+// US #8 : REPARATION OAUTH (ANTI-400)
 router.get('/google/login', (req, res) => {
     const url = DriveService.getAuthUrl();
-    if (!url) return res.status(500).send("Erreur: Variables .env manquantes (ID ou Secret)");
+    if (!url) {
+        return res.status(500).send(`
+            <div style="font-family:sans-serif; padding:50px; border:3px solid red; border-radius:30px; max-width:800px; margin: 40 auto; background: #fff1f2;">
+                <h1 style="color:#b91c1c;">🚨 ERREUR PARAMÈTRES OAUTH</h1>
+                <p>Google rejette la demande car des paramètres sont manquants ou invalides.</p>
+                <div style="background:white; padding:20px; border-radius:15px; border: 1px solid #fecaca; margin: 20px 0;">
+                    <p><b>Statut de vos variables .env :</b></p>
+                    <ul style="font-family:monospace;">
+                        <li>GOOGLE_CLIENT_ID: ${process.env.GOOGLE_CLIENT_ID ? '✅ OK' : '❌ MANQUANT'}</li>
+                        <li>GOOGLE_CLIENT_SECRET: ${process.env.GOOGLE_CLIENT_SECRET ? '✅ OK' : '❌ MANQUANT'}</li>
+                        <li>GOOGLE_REDIRECT_URI: ${process.env.GOOGLE_REDIRECT_URI ? '✅ OK' : '❌ MANQUANT (Utilisez http://localhost:3000/api/auth/google/callback)'}</li>
+                    </ul>
+                </div>
+                <p>Une fois corrigé, <b>redémarrez le terminal</b>.</p>
+            </div>
+        `);
+    }
     res.redirect(url);
 });
 
@@ -16,13 +32,13 @@ router.get('/google/callback', async (req, res) => {
         const refreshToken = await DriveService.setTokenFromCode(code);
         res.send(`
             <div style="font-family:sans-serif; padding:50px; text-align:center;">
-                <h1 style="color:#22c55e;">Clé Google Drive Réparée !</h1>
-                <p>Copie cette valeur et colle-la dans ton <b>.env</b> :</p>
+                <h1 style="color:#059669;">Succès !</h1>
+                <p>Copie ce nouveau token dans ton <b>.env</b> :</p>
                 <textarea style="width:100%; height:80px; font-family:monospace; padding:15px; border-radius:10px; border:1px solid #ccc; background:#f9fafb;" readonly>${refreshToken}</textarea>
-                <p>Enregistre le .env et <b>redémarre ton terminal</b>.</p>
+                <p>Puis <b>redémarre ton serveur</b>.</p>
             </div>
         `);
-    } catch (e) { res.status(500).send("Erreur Callback : " + e.message); }
+    } catch (e) { res.status(500).send("Erreur callback: " + e.message); }
 });
 
 router.post('/login-step-1', async (req, res) => {

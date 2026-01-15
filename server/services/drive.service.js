@@ -5,20 +5,20 @@ let driveInstance = null;
 let oauth2Client = null;
 
 const initDrive = () => {
-    try {
-        const clientID = process.env.GOOGLE_CLIENT_ID;
-        const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-        const redirectURI = process.env.GOOGLE_REDIRECT_URI || "http://localhost:3000/api/auth/google/callback";
+    const clientID = process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    const redirectURI = process.env.GOOGLE_REDIRECT_URI || "http://localhost:3000/api/auth/google/callback";
 
-        if (clientID && clientSecret) {
+    if (clientID && clientSecret) {
+        try {
             oauth2Client = new google.auth.OAuth2(clientID, clientSecret, redirectURI);
             if (process.env.GOOGLE_REFRESH_TOKEN) {
                 oauth2Client.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
                 driveInstance = google.drive({ version: 'v3', auth: oauth2Client });
-                console.log("✅ Drive Service V32 : Connecté");
+                console.log("✅ Drive Service V34 : Initialisé pour condamine.edu.ec");
             }
-        }
-    } catch (e) { console.error("❌ Drive Init Error:", e.message); }
+        } catch (e) { console.error("❌ Drive Init Error:", e.message); }
+    }
 };
 
 initDrive();
@@ -26,12 +26,13 @@ initDrive();
 const DriveService = {
     normalize: (n) => n ? n.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Z0-9 ]/g, "_").trim() : "SANS_TITRE",
 
-    // DIAGNOSTIC RÉEL
     testConnection: async () => {
-        if (!oauth2Client || !driveInstance) return { ok: false, error: "Variables .env manquantes" };
+        if (!oauth2Client || !driveInstance) return { ok: false, error: "Configuration .env manquante" };
         try {
             const res = await driveInstance.about.get({ fields: 'user(emailAddress,displayName)' });
-            return { ok: true, email: res.data.user.emailAddress, name: res.data.user.displayName };
+            const email = res.data.user.emailAddress;
+            const isWrongAccount = !email.endsWith('@condamine.edu.ec');
+            return { ok: true, email, name: res.data.user.displayName, warning: isWrongAccount };
         } catch (e) {
             return { ok: false, error: e.message };
         }
@@ -65,16 +66,11 @@ const DriveService = {
         } catch (e) { return null; }
     },
 
-    // US #9 : Suppression physique réelle par ID
     deleteEntity: async (id) => { 
         if (!await DriveService.checkAuth() || !id) return;
-        try { 
-            await driveInstance.files.delete({ fileId: id }); 
-            console.log(`🗑️ [DRIVE] Pulvérisé : ${id}`);
-        } catch (e) { console.error(`❌ [DRIVE] Erreur sur ${id}:`, e.message); } 
+        try { await driveInstance.files.delete({ fileId: id }); } catch (e) {} 
     },
 
-    // Lister TOUT ce qui est dans un dossier (pour le Nuke)
     listEverythingInside: async (parentId) => {
         if (!await DriveService.checkAuth() || !parentId) return [];
         try {
@@ -87,19 +83,24 @@ const DriveService = {
         } catch (e) { return []; }
     },
 
-    // Récupère l'ID du dossier de classe (CONDA CLASSE > PROF > CLASSE)
     getClassFolderId: async (teacherName, classroom) => {
         const rootId = await DriveService.getOrCreateFolder("CONDA CLASSE");
         const profId = await DriveService.getOrCreateFolder(teacherName, rootId);
         return await DriveService.getOrCreateFolder(classroom, profId);
     },
 
+    // REPARATION DU LIEN (ANTI-400)
     getAuthUrl: () => {
         if (!oauth2Client) initDrive();
         if (!oauth2Client) return null;
+        
+        // On vérifie que les params critiques ne sont pas vides
+        if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_REDIRECT_URI) return null;
+
         return oauth2Client.generateAuthUrl({
-            access_type: 'offline', prompt: 'consent',
-            redirect_uri: process.env.GOOGLE_REDIRECT_URI || "http://localhost:3000/api/auth/google/callback",
+            access_type: 'offline',
+            prompt: 'consent',
+            // On force le scope exact
             scope: ['https://www.googleapis.com/auth/drive.file']
         });
     },
