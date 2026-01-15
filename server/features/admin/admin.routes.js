@@ -2,21 +2,43 @@ const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 
+// Helper pour éviter le crash si une collection n'est pas encore créée
+async function safeFind(modelName) {
+    try {
+        const Model = mongoose.model(modelName);
+        return await Model.find({}).lean();
+    } catch (e) {
+        return [];
+    }
+}
+
 router.get('/database-dump', async (req, res) => {
-    res.json({
-        players: await mongoose.model('Player').find({}),
-        chapters: await mongoose.model('Chapter').find({}),
-        homeworks: await mongoose.model('Homework').find({}),
-        gamelevels: await mongoose.model('GameLevel').find({}),
-        teachers: await mongoose.model('Teacher').find({}),
-        scansessions: await mongoose.model('ScanSession').find({}),
-        bugs: await mongoose.model('Bug').find({}),
-        deploysignals: await mongoose.model('DeploySignal').find({})
-    });
+    try {
+        const dump = {
+            players: await safeFind('Player'),
+            chapters: await safeFind('Chapter'),
+            homeworks: await safeFind('Homework'),
+            gamelevels: await safeFind('GameLevel'),
+            teachers: await safeFind('Teacher'),
+            scansessions: await safeFind('ScanSession'),
+            submissions: await safeFind('Submission'),
+            bugs: await safeFind('Bug'),
+            deploysignals: await safeFind('DeploySignal')
+        };
+        res.json(dump);
+    } catch (e) {
+        console.error("❌ Dump Error:", e.message);
+        res.status(500).json({ error: "Erreur lors de l'extraction des données", details: e.message });
+    }
 });
 
 router.get('/players', async (req, res) => {
-    res.json(await mongoose.model('Player').find({}).sort({ classroom: 1 }));
+    try {
+        const players = await mongoose.model('Player').find({}).sort({ classroom: 1 });
+        res.json(players);
+    } catch (e) {
+        res.status(500).json([]);
+    }
 });
 
 module.exports = router;

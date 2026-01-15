@@ -1,3 +1,3 @@
-# 🔒 FICHIERS STABLES
+# 🔒 FICHIERS SANCTUARISÉS
 - server/server.js (Enregistrement Modèles)
-- client/src/App.jsx (Moniteur Déploiement)
+- client/src/App.jsx (Logiciel de synchronisation)
