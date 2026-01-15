@@ -21,11 +21,11 @@ function applyUpdate() {
         const filePath = startMatch[1].trim();
         const contentStart = startMatch.index + startMatch[0].length;
         const endPattern = new RegExp(`\\[\\[\\[£\\s*END\\s*:\\s*${filePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*£\\]\\]\\]`);
-        const remaining = rawContent.substring(contentStart);
-        const endMatch = remaining.match(endPattern);
+        const remainingText = rawContent.substring(contentStart);
+        const endMatch = remainingText.match(endPattern);
 
         if (endMatch) {
-            const fileContent = remaining.substring(0, endMatch.index).trim();
+            const fileContent = remainingText.substring(0, endMatch.index).trim();
             const fullPath = path.join(__dirname, filePath);
             if (!fs.existsSync(path.dirname(fullPath))) fs.mkdirSync(path.dirname(fullPath), { recursive: true });
             fs.writeFileSync(fullPath, fileContent);
