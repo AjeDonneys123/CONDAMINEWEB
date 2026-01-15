@@ -12,7 +12,7 @@ const app = express();
 const port = process.env.PORT || 3000;
 const SERVER_BOOT_ID = Date.now();
 
-// MODÈLES
+// 1. MODÈLES
 require('./models/Teacher');
 require('./models/Player');
 require('./models/Chapter');
@@ -24,12 +24,12 @@ require('./models/TeacherStyle');
 require('./models/DeploySignal');
 require('./models/Bug');
 
-mongoose.connect(process.env.MONGODB_URI).then(() => console.log('✅ Connected Atlas (Build 332)'));
+mongoose.connect(process.env.MONGODB_URI).then(() => console.log('✅ MongoDB Connected (Build 333 - Zero Porosity)'));
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// ROUTES API
+// 2. ROUTES API (PASSERELLES UNIQUEMENT)
 app.use('/api/auth', require('./features/auth/auth.routes'));
 app.use('/api/structure', require('./features/structure/structure.routes'));
 app.use('/api/games', require('./features/games/games.routes'));
@@ -37,17 +37,16 @@ app.use('/api/homework', require('./features/homework/homework.routes'));
 app.use('/api/scans', require('./features/scans/scans.routes'));
 app.use('/api', require('./features/admin/admin.routes'));
 
-// DIAGNOSTIC DRIVE (US#12)
 const DriveService = require('./services/drive.service');
 app.get('/api/drive-check', async (req, res) => {
     try {
         const status = await DriveService.testConnection();
         res.json(status);
-    } catch (e) { res.status(500).json({ ok: false, error: "Drive Inaccessible" }); }
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.get('/api/check-deploy', (req, res) => res.json({ bootId: SERVER_BOOT_ID }));
-app.get('/api/deploy-status', (req, res) => res.json({ version: "2.3.2", build: 332, status: "live" }));
+app.get('/api/deploy-status', (req, res) => res.json({ version: "2.3.3", build: 333, status: "live" }));
 
 const distPath = path.join(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) {
@@ -55,4 +54,4 @@ if (fs.existsSync(distPath)) {
     app.get('*', (req, res) => res.sendFile(path.join(distPath, 'index.html')));
 }
 
-app.listen(port, () => console.log(`🚀 SERVEUR CONDAMINE ACTIF`));
+app.listen(port, () => console.log(`🚀 SERVEUR CONDAMINE ACTIF (BUILD 333)`));
