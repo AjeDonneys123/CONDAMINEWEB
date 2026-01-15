@@ -3,19 +3,15 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const DriveService = require('../../services/drive.service');
 
-// US #15 : Fix Error 500 sur Players
+// Route Players (Fix 500)
 router.get('/players', async (req, res) => {
     try {
         const Player = mongoose.model('Player');
-        const data = await Player.find({}).sort({ classroom: 1, lastName: 1 });
-        res.json(data);
-    } catch (e) {
-        console.error("❌ Erreur /api/players:", e.message);
-        res.status(500).json({ error: "Impossible de charger les élèves" });
-    }
+        res.json(await Player.find({}).sort({ classroom: 1, lastName: 1 }));
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// US #8 : Synchro Drive Forcee (Le bouton de secours)
+// US #8 : Synchronisation Miroir Conforme
 router.post('/sync-drive', async (req, res) => {
     try {
         const { classroom, teacherId } = req.body;
@@ -24,18 +20,18 @@ router.post('/sync-drive', async (req, res) => {
         const Homework = mongoose.model('Homework');
 
         const prof = await Teacher.findById(teacherId);
+        if (!prof) throw new Error("Prof non identifié");
+        const teacherName = `${prof.firstName} ${prof.lastName}`;
+
         const classChapters = await Chapter.find({ classroom });
         const classHomeworks = await Homework.find({ classroom });
 
-        const classRootId = await DriveService.getClassRoot(classroom);
-        const devoirsId = await DriveService.getOrCreateFolder("DEVOIRS", classRootId);
-
         for (const section of prof.subjectSections) {
-            const secId = await DriveService.getOrCreateFolder(section.name, devoirsId);
+            const subjectId = await DriveService.getPathFolder(teacherName, classroom, section.name);
             const chaps = classChapters.filter(c => c.subject === section.name);
             
             for (const chap of chaps) {
-                const chapId = await DriveService.getOrCreateFolder(chap.title, secId);
+                const chapId = await DriveService.getOrCreateFolder(chap.title, subjectId);
                 await Chapter.findByIdAndUpdate(chap._id, { driveFolderId: chapId });
 
                 const hws = classHomeworks.filter(h => h.chapterId?.toString() === chap._id.toString());
@@ -48,25 +44,19 @@ router.post('/sync-drive', async (req, res) => {
                 }
             }
         }
-        res.json({ ok: true, message: "Miroir Drive aligné sur les archives !" });
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-router.patch('/teacher/:id/sections', async (req, res) => {
-    try {
-        const { sections } = req.body;
-        const updatedTeacher = await mongoose.model('Teacher').findByIdAndUpdate(req.params.id, { subjectSections: sections }, { new: true });
-        res.json({ user: { id: updatedTeacher._id, firstName: updatedTeacher.firstName, lastName: updatedTeacher.lastName, subjectSections: updatedTeacher.subjectSections, role: 'prof' } });
+        res.json({ ok: true, message: `Drive de ${teacherName} aligné !` });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.post('/chapters', async (req, res) => {
     try {
-        const { _id, title, classroom, subject } = req.body;
-        const classRootId = await DriveService.getClassRoot(classroom);
-        const devoirsId = await DriveService.getOrCreateFolder("DEVOIRS", classRootId);
-        const subId = await DriveService.getOrCreateFolder(subject, devoirsId);
-        const driveId = await DriveService.getOrCreateFolder(title, subId);
+        const { _id, title, classroom, subject, teacherId } = req.body;
+        const Teacher = mongoose.model('Teacher');
+        const prof = await Teacher.findById(teacherId);
+        if(!prof) throw new Error("Prof requis");
+        
+        const teacherName = `${prof.firstName} ${prof.lastName}`;
+        const driveId = await DriveService.getPathFolder(teacherName, classroom, subject, title);
 
         let result;
         if (_id && mongoose.Types.ObjectId.isValid(_id)) {

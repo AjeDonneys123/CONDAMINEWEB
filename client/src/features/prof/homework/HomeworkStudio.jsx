@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './HomeworkStudio.css';
 
-export default function HomeworkStudio({ initialData, chapters, globalClass, onClose }) {
+export default function HomeworkStudio({ initialData, chapters, globalClass, user, onClose }) {
   const [players, setPlayers] = useState([]);
   const [stdSearch, setStdSearch] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -19,20 +19,14 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, onC
 
   const handleUpload = async (files, idx, type) => {
     if (!files || files.length === 0) return;
-    if (!formData._id) {
-        alert("⚠️ Cliquez d'abord sur 'INITIALISER' en bas pour créer l'espace Drive.");
-        return;
-    }
-    
+    if (!formData._id) { alert("⚠️ INITIALISEZ le devoir d'abord."); return; }
     setUploading(true);
     const newLevels = JSON.parse(JSON.stringify(formData.levels));
-    
     for (let file of Array.from(files)) {
       const fd = new FormData(); 
       fd.append('file', file);
       fd.append('homeworkId', formData._id);
       fd.append('type', type);
-      
       try {
         const res = await fetch('/api/homework/upload-to-drive', { method: 'POST', body: fd }).then(r => r.json());
         if (res.ok) {
@@ -52,20 +46,11 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, onC
         const res = await fetch('/api/homework', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ...formData, classroom: globalClass }) // globalClass écrase tout classroom interne erroné
+            body: JSON.stringify({ ...formData, classroom: globalClass, teacherId: user.id || user._id })
         });
         const data = await res.json();
-        
-        // US #4 : Feedback physique réel
-        setSaveStatus({ 
-            active: true, 
-            path: data.drivePath, 
-            message: data.message, 
-            driveError: !data.driveFolderId 
-        });
-        
+        setSaveStatus({ active: true, path: data.drivePath, message: data.message, driveError: !data.driveFolderId });
         if (res.ok) setFormData(data);
-
     } catch (e) { alert("Erreur serveur."); }
     setUploading(false);
   };
@@ -75,40 +60,23 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, onC
         {saveStatus.active && (
             <div className="fixed inset-0 z-[7000] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-xl">
                 <div className={`bg-white rounded-[40px] p-10 max-w-2xl w-full text-center shadow-2xl border-4 ${saveStatus.driveError ? 'border-red-500' : 'border-emerald-500'} animate-in zoom-in`}>
-                    <div className={`w-20 h-20 rounded-full flex items-center justify-center text-4xl mx-auto mb-6 ${saveStatus.driveError ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'}`}>
-                        {saveStatus.driveError ? '⚠️' : '✓'}
-                    </div>
-                    <h2 className="text-2xl font-black text-slate-800 uppercase mb-2">
-                        {saveStatus.driveError ? "Erreur Drive" : saveStatus.message}
-                    </h2>
-                    
+                    <div className={`w-20 h-20 rounded-full flex items-center justify-center text-4xl mx-auto mb-6 ${saveStatus.driveError ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'}`}>{saveStatus.driveError ? '⚠️' : '✓'}</div>
+                    <h2 className="text-2xl font-black text-slate-800 uppercase mb-2">{saveStatus.driveError ? "Erreur de Synchro" : saveStatus.message}</h2>
                     <div className="bg-slate-50 p-6 rounded-3xl border-2 border-dashed border-slate-200 text-left my-6">
-                        <span className={`text-[10px] font-black uppercase block mb-2 ${saveStatus.driveError ? 'text-red-500' : 'text-emerald-500'}`}>
-                            Emplacement physique sur le Cloud :
-                        </span>
-                        <code className="text-xs font-mono font-bold text-slate-600 break-all leading-relaxed">
-                            {saveStatus.path}
-                        </code>
+                        <span className="text-[10px] font-black uppercase text-slate-400 block mb-2">Emplacement vérifié sur Drive :</span>
+                        <code className="text-xs font-mono font-bold text-slate-600 break-all leading-relaxed">{saveStatus.path}</code>
                     </div>
-
-                    <button 
-                        onClick={onClose} 
-                        className="w-full p-5 bg-slate-900 text-white font-black rounded-2xl hover:bg-slate-800 transition-all uppercase tracking-widest"
-                    >
-                        Continuer
-                    </button>
+                    <button onClick={onClose} className="w-full p-5 bg-slate-900 text-white font-black rounded-2xl uppercase tracking-widest">Fermer le Studio</button>
                 </div>
             </div>
         )}
-
         <div className="p-6 bg-orange-500 text-white flex justify-between items-center shadow-lg pt-12">
             <div className="flex flex-col">
                 <input className="text-2xl font-black bg-transparent outline-none w-full placeholder:text-orange-200 uppercase" value={formData.title} onChange={e=>setFormData({...formData, title:e.target.value})} placeholder="TITRE DU DEVOIR" />
-                <span className="text-[10px] font-black opacity-80 uppercase tracking-widest">UNITÉ DRIVE : {globalClass}</span>
+                <span className="text-[10px] font-black opacity-80 uppercase tracking-widest">PROF : {user.firstName} {user.lastName} | CLASSE : {globalClass}</span>
             </div>
             <button onClick={onClose} className="w-10 h-10 bg-black/10 rounded-full font-black hover:bg-black/20">✕</button>
         </div>
-
         <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
             <div className="max-w-5xl mx-auto space-y-8">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -118,13 +86,9 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, onC
                             {chapters.map(c => <option key={c._id} value={c._id}>{c.title}</option>)}
                         </select>
                     </div>
-                    <div className="assign-card relative"><label className="text-[10px] font-black text-slate-400 uppercase mb-2 block">Élèves Cibles</label>
-                        <input className="w-full outline-none bg-white p-3 rounded-xl border border-slate-200 font-bold" placeholder="Chercher un nom..." value={stdSearch} onChange={e=>setStdSearch(e.target.value)} />
-                    </div>
                 </div>
-
                 {formData.levels.map((lvl, idx) => (
-                    <div key={idx} className="bg-white p-10 rounded-[50px] border border-slate-100 shadow-sm relative">
+                    <div key={idx} className="bg-white p-10 rounded-[50px] border border-slate-100 shadow-sm">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
                             <div>
                                 <label className="text-[10px] font-black uppercase text-blue-500 mb-2 block">Documents Supports</label>
@@ -138,7 +102,6 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, onC
                 ))}
             </div>
         </div>
-
         <div className="p-8 bg-white border-t">
             <button onClick={save} disabled={uploading} className="w-full p-6 bg-orange-500 text-white font-black text-2xl rounded-3xl shadow-xl hover:bg-orange-600 transition-all uppercase">
                 {uploading ? "SYNC..." : (formData._id ? "SAUVEGARDER" : "INITIALISER")}

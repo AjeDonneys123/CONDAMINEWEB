@@ -1,35 +1,32 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
-const multer = require('multer');
 const DriveService = require('../../services/drive.service');
-
-const upload = multer({ storage: multer.memoryStorage() });
 
 router.post('/', async (req, res) => {
     try {
         const Homework = mongoose.model('Homework');
         const Chapter = mongoose.model('Chapter');
-        const { _id, chapterId, title, classroom } = req.body;
+        const Teacher = mongoose.model('Teacher');
+        const { _id, chapterId, title, classroom, teacherId } = req.body;
 
         let homeworkDriveId = null;
         let pathStr = "CONDA CLASSE";
 
         if (chapterId && chapterId !== 'none') {
             const chapter = await Chapter.findById(chapterId);
-            if (chapter) {
-                const classRootId = await DriveService.getClassRoot(classroom);
-                const devoirsId = await DriveService.getOrCreateFolder("DEVOIRS", classRootId);
-                const subjectId = await DriveService.getOrCreateFolder(chapter.subject, devoirsId);
-                const chapId = await DriveService.getOrCreateFolder(chapter.title, subjectId);
-                
+            const prof = await Teacher.findById(teacherId);
+            
+            if (chapter && prof) {
+                const teacherName = `${prof.firstName} ${prof.lastName}`;
+                const chapId = await DriveService.getPathFolder(teacherName, classroom, chapter.subject, chapter.title);
                 homeworkDriveId = await DriveService.getOrCreateFolder(title, chapId);
                 
                 await DriveService.getOrCreateFolder("SUJET", homeworkDriveId);
                 await DriveService.getOrCreateFolder("COPIES", homeworkDriveId);
                 await DriveService.getOrCreateFolder("CORRECTIONS", homeworkDriveId);
 
-                pathStr = `CONDA CLASSE / ${classroom.toUpperCase()} / DEVOIRS / ${DriveService.normalize(chapter.subject)} / ${DriveService.normalize(chapter.title)} / ${DriveService.normalize(title)}`;
+                pathStr = `CONDA CLASSE / ${DriveService.normalize(teacherName)} / ${classroom.toUpperCase()} / DEVOIRS / ${DriveService.normalize(chapter.subject)} / ${DriveService.normalize(chapter.title)} / ${DriveService.normalize(title)}`;
             }
         }
 
@@ -39,7 +36,7 @@ router.post('/', async (req, res) => {
         res.json({
             ...result._doc,
             drivePath: pathStr,
-            message: _id ? "Mise à jour réussie" : "Création réussie"
+            message: _id ? "Modifications sauvegardées" : "Espace Drive créé"
         });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });

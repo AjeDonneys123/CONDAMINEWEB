@@ -12,12 +12,11 @@ try {
         );
         auth.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
         drive = google.drive({ version: 'v3', auth });
-        console.log("✅ Drive Service V6 : Miroir Physique Absolu");
+        console.log("✅ Drive Service V8 : Hiérarchie Multi-Prof active");
     }
 } catch (e) { console.error("❌ Erreur Init Drive:", e.message); }
 
 const DriveService = {
-    // Normalisation US #5
     normalize: (n) => n ? n.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Z0-9 ]/g, "_").trim() : "SANS_TITRE",
 
     getOrCreateFolder: async (name, parentId = null) => {
@@ -39,11 +38,16 @@ const DriveService = {
         } catch (e) { return null; }
     },
 
-    // US #4 : La racine conforme
-    getClassRoot: async (classroom) => {
+    // LE CHEMIN ABSOLU : CONDA CLASSE > PROF > CLASSE > DEVOIRS > MATIERE > CHAPITRE
+    getPathFolder: async (teacherName, classroom, subject, chapterTitle = null) => {
         const rootId = await DriveService.getOrCreateFolder("CONDA CLASSE");
-        const teacherId = await DriveService.getOrCreateFolder("JEAN VUILLET", rootId);
-        return await DriveService.getOrCreateFolder(classroom, teacherId);
+        const profId = await DriveService.getOrCreateFolder(teacherName, rootId);
+        const classId = await DriveService.getOrCreateFolder(classroom, profId);
+        const devoirsRootId = await DriveService.getOrCreateFolder("DEVOIRS", classId);
+        const subjectId = await DriveService.getOrCreateFolder(subject, devoirsRootId);
+        
+        if (!chapterTitle) return subjectId;
+        return await DriveService.getOrCreateFolder(chapterTitle, subjectId);
     },
 
     deleteFile: async (id) => { 

@@ -10,16 +10,16 @@ const app = express();
 const port = process.env.PORT || 3000;
 const SERVER_BOOT_ID = Date.now();
 
-// 1. MODÈLES
-require('./models/Bug');
-require('./models/Chapter');
-require('./models/DeploySignal');
-require('./models/GameLevel');
-require('./models/Homework');
+// 1. CHARGEMENT PRIORITAIRE DES MODÈLES (Empêche les erreurs 500 de dépendances)
+require('./models/Teacher');
 require('./models/Player');
+require('./models/Chapter');
+require('./models/Homework');
+require('./models/GameLevel');
 require('./models/ScanSession');
 require('./models/Submission');
-require('./models/Teacher');
+require('./models/Bug');
+require('./models/DeploySignal');
 require('./models/TeacherStyle');
 
 // 2. MONGODB
@@ -33,19 +33,19 @@ mongoose.connect(process.env.MONGODB_URI).then(async () => {
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// 3. SYSTÈME (US #13)
+// 3. SYSTÈME
 app.get('/api/check-deploy', (req, res) => res.json({ bootId: SERVER_BOOT_ID }));
 app.get('/api/deploy-status', async (req, res) => {
     try {
         const sig = await mongoose.model('DeploySignal').findOne();
         const vPath = path.join(__dirname, 'version.json');
-        let v = { version: "1.6.0", build: 0 };
+        let v = { version: "1.7.5", build: 0 };
         if (fs.existsSync(vPath)) v = JSON.parse(fs.readFileSync(vPath, 'utf8'));
         res.json({ version: v.version, build: v.build, status: sig?.status || 'live' });
-    } catch (e) { res.json({ version: '1.6.0', build: 0, status: 'live' }); }
+    } catch (e) { res.json({ version: '1.7.5', build: 0, status: 'live' }); }
 });
 
-// 4. ROUTES DOMAINES (Zéro Porosité)
+// 4. ROUTES DOMAINES
 app.use('/api/auth', require('./features/auth/auth.routes'));
 app.use('/api/games', require('./features/games/games.routes'));
 app.use('/api/scans', require('./features/scans/scans.routes'));
