@@ -5,36 +5,38 @@ let driveInstance = null;
 let oauth2Client = null;
 
 const initDrive = () => {
-    // Lecture directe des variables au moment de l'appel
+    // US #13 : Récupération forcée
     const clientID = process.env.GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-    const redirectURI = process.env.GOOGLE_REDIRECT_URI;
+    
+    // Correction : Si le redirect_uri est absent, on utilise la valeur standard par défaut
+    const redirectURI = process.env.GOOGLE_REDIRECT_URI || "http://localhost:3000/api/auth/google/callback";
 
-    if (clientID && clientSecret && redirectURI) {
+    if (clientID && clientSecret) {
         try {
             oauth2Client = new google.auth.OAuth2(clientID, clientSecret, redirectURI);
+            
             if (process.env.GOOGLE_REFRESH_TOKEN) {
                 oauth2Client.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
                 driveInstance = google.drive({ version: 'v3', auth: oauth2Client });
-                console.log("✅ [DRIVE] Instance Google Drive connectée");
+                console.log("✅ [DRIVE] Service V28 initialisé avec succès");
             }
             return true;
         } catch (e) {
-            console.error("❌ [DRIVE] Erreur init:", e.message);
+            console.error("❌ [DRIVE] Erreur fatale initialisation:", e.message);
             return false;
         }
     }
+    console.error("❌ [DRIVE] Variables manquantes dans le .env");
     return false;
 };
 
-// Premier essai
 initDrive();
 
 const DriveService = {
     normalize: (n) => n ? n.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Z0-9 ]/g, "_").trim() : "SANS_TITRE",
 
     checkAuth: async () => {
-        // Tentative de ré-initialisation à chaque vérification si vide
         if (!oauth2Client) initDrive();
         if (!oauth2Client) return false;
         try {
@@ -42,6 +44,7 @@ const DriveService = {
                 oauth2Client.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
                 driveInstance = google.drive({ version: 'v3', auth: oauth2Client });
             }
+            if (!driveInstance) return false;
             await oauth2Client.getAccessToken();
             return true;
         } catch (e) { return false; }
@@ -98,8 +101,10 @@ const DriveService = {
         if (!oauth2Client) initDrive();
         if (!oauth2Client) return null;
         return oauth2Client.generateAuthUrl({
-            access_type: 'offline', prompt: 'consent',
-            redirect_uri: process.env.GOOGLE_REDIRECT_URI,
+            access_type: 'offline', 
+            prompt: 'consent',
+            // US #13 : Sécurité de redirection
+            redirect_uri: process.env.GOOGLE_REDIRECT_URI || "http://localhost:3000/api/auth/google/callback",
             scope: ['https://www.googleapis.com/auth/drive.file']
         });
     },

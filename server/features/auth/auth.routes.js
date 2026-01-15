@@ -3,25 +3,16 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const DriveService = require('../../services/drive.service');
 
-// ROUTE DE DIAGNOSTIC ET LOGIN
 router.get('/google/login', (req, res) => {
     const url = DriveService.getAuthUrl();
     if (!url) {
         return res.status(500).send(`
             <div style="font-family:sans-serif; padding:50px; border:3px solid red; border-radius:30px; max-width:800px; margin: 40px auto; background: #fff1f2; text-align:center;">
-                <h1 style="color:#b91c1c;">🚨 CONFIGURATION INVISIBLE</h1>
-                <p>Le serveur ne parvient toujours pas à lire <b>GOOGLE_CLIENT_ID</b>.</p>
-                
-                <div style="background:white; padding:20px; border-radius:15px; border: 1px solid #fecaca; margin: 20px 0; text-align:left;">
-                    <p><b>Diagnostic Système :</b></p>
-                    <ul>
-                        <li><b>CWD (Dossier actuel) :</b> ${process.cwd()}</li>
-                        <li><b>Variables lues :</b> ${Object.keys(process.env).filter(k => k.startsWith('GOOGLE')).join(', ') || 'AUCUNE'}</li>
-                    </ul>
-                </div>
-
-                <p>Si tu viens de créer le fichier <b>.env</b>, clique sur le bouton ci-dessous :</p>
-                <a href="/api/auth/google/login" style="display:inline-block; padding:15px 30px; background:#b91c1c; color:white; text-decoration:none; border-radius:10px; font-weight:bold;">RECHARGER LA CONFIGURATION</a>
+                <h1 style="color:#b91c1c;">🚨 ERREUR REDIRECT_URI</h1>
+                <p>Il manque la variable <b>GOOGLE_REDIRECT_URI</b> dans ton fichier .env.</p>
+                <p>Ajoute cette ligne exacte :</p>
+                <code style="background:black; color:white; padding:10px; display:block; margin:20px 0;">GOOGLE_REDIRECT_URI=http://localhost:3000/api/auth/google/callback</code>
+                <a href="/api/auth/google/login" style="display:inline-block; margin-top:20px; padding:10px 20px; background:#b91c1c; color:white; text-decoration:none; border-radius:5px;">RE-TENTER</a>
             </div>
         `);
     }
@@ -34,10 +25,10 @@ router.get('/google/callback', async (req, res) => {
         const refreshToken = await DriveService.setTokenFromCode(code);
         res.send(`
             <div style="font-family:sans-serif; padding:50px; text-align:center;">
-                <h1 style="color:#059669;">Nouveau Token Généré !</h1>
-                <p>Copie cette valeur et mets à jour ton <b>.env</b> :</p>
+                <h1 style="color:#059669;">Succès !</h1>
+                <p>Copie ton nouveau token ci-dessous :</p>
                 <textarea style="width:100%; height:80px; font-family:monospace; padding:15px; border-radius:10px; border:1px solid #ccc; background:#f9fafb;" readonly>${refreshToken}</textarea>
-                <p>Ensuite, <b>redémarre manuellement ton serveur</b>.</p>
+                <p>Met à jour ton <b>.env</b> et redémarre ton terminal.</p>
             </div>
         `);
     } catch (e) { res.status(500).send("Erreur callback: " + e.message); }
