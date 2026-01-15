@@ -23,14 +23,12 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, use
             throw new Error(errorData.error || "Erreur lors de la création Cloud");
         }
 
-        const result = await response.json();
-        console.log("✅ Devoir sauvegardé:", result);
         onClose();
     } catch (e) { 
         console.error("❌ Erreur Studio:", e.message);
         alert(e.message); 
     } finally {
-        setUploading(false); // GARANTIT LE DÉBLOCAGE DU BOUTON
+        setUploading(false);
     }
   };
 
@@ -62,7 +60,7 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, use
         </div>
 
         <div className="p-8 border-t bg-slate-50">
-            <button onClick={save} disabled={uploading} className="w-full p-6 bg-orange-500 text-white font-black text-2xl rounded-3xl shadow-xl uppercase transition-all active:scale-95">
+            <button onClick={save} disabled={uploading} className="w-full p-6 bg-orange-500 text-white font-black text-2xl rounded-3xl shadow-xl uppercase">
                 {uploading ? "CRÉATION DE L'ESPACE CLOUD..." : "LANCER LE DEVOIR"}
             </button>
         </div>

@@ -18,13 +18,11 @@ export default function ProfStudioFolder({ items, chapters, classFilter, user, o
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ sections: newSections })
         });
-        // On rafraîchit le localstorage pour App.jsx
         const updatedUser = { ...user, subjectSections: newSections };
         localStorage.setItem('player', JSON.stringify(updatedUser));
     };
 
     const handleSync = async (mode = 'sync') => {
-        if (mode === 'nuke' && !confirm("🚨 DANGER : Tout effacer dans cette classe ?")) return;
         setIsSyncing(true);
         try {
             await fetch('/api/structure/sync-drive', {
@@ -40,12 +38,24 @@ export default function ProfStudioFolder({ items, chapters, classFilter, user, o
     const handleCreateChapter = async (subjectName) => {
         const title = prompt(`Nom du nouveau dossier dans ${subjectName} ?`);
         if (!title) return;
-        await fetch('/api/structure/chapters', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title, subject: subjectName, classroom: classFilter, teacherId: user.id || user._id })
-        });
-        onRefresh();
+        
+        try {
+            const res = await fetch('/api/structure/chapters', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    title, 
+                    subject: subjectName, 
+                    classroom: classFilter, 
+                    teacherId: user.id || user._id 
+                })
+            });
+            if (res.ok) onRefresh();
+            else {
+                const err = await res.json();
+                alert("Erreur: " + err.error);
+            }
+        } catch (e) { alert("Erreur réseau"); }
     };
 
     const handleArchive = async (id, state) => {
@@ -58,12 +68,14 @@ export default function ProfStudioFolder({ items, chapters, classFilter, user, o
     };
 
     const norm = (c) => c?.toString().toUpperCase().replace('E', '') || "";
+    
+    // FILTRE ROBUSTE : On affiche ce qui appartient à la classe
     const activeChapters = chapters.filter(c => norm(c.classroom) === norm(classFilter) && !c.isArchived);
     const archivedChapters = chapters.filter(c => norm(c.classroom) === norm(classFilter) && c.isArchived);
 
     return (
         <div className="space-y-12">
-            {/* ENTÊTE DE GESTION (US #8) */}
+            {/* PANNEAU DE CONFIGURATION */}
             <div className="p-8 bg-slate-900 rounded-[50px] border-4 border-slate-800 shadow-2xl">
                 <div className="flex justify-between items-center mb-8 px-2">
                     <h3 className="text-white font-black text-[10px] uppercase tracking-widest">Configuration & Miroir Cloud</h3>
@@ -77,7 +89,6 @@ export default function ProfStudioFolder({ items, chapters, classFilter, user, o
                     </div>
                 </div>
 
-                {/* ARCHIVES (US #2) */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                     {sections.map((s, idx) => {
                         const archs = archivedChapters.filter(c => c.subject === s.name);
@@ -94,7 +105,6 @@ export default function ProfStudioFolder({ items, chapters, classFilter, user, o
                                             <button onClick={() => handleArchive(c._id, false)} className="text-emerald-400 font-bold p-1">⬆️</button>
                                         </div>
                                     ))}
-                                    {archs.length === 0 && <span className="text-[8px] text-slate-600 font-bold uppercase">Aucune archive</span>}
                                 </div>
                             </div>
                         );
@@ -102,7 +112,7 @@ export default function ProfStudioFolder({ items, chapters, classFilter, user, o
                 </div>
             </div>
 
-            {/* DOSSIERS ACTIFS PAR MATIÈRE */}
+            {/* LISTE DES MATIÈRES ET CHAPITRES */}
             <div className="space-y-16">
                 {sections.map((s, sIdx) => {
                     const chaps = activeChapters.filter(c => c.subject === s.name);
@@ -137,7 +147,7 @@ export default function ProfStudioFolder({ items, chapters, classFilter, user, o
                                                     {chapItems.map(it => (
                                                         <div key={it._id} className="bg-white p-4 px-6 rounded-2xl flex justify-between items-center shadow-sm border border-slate-100 group">
                                                             <div className="flex flex-col">
-                                                                <b className="text-slate-600 text-xs uppercase">{it.title}</b>
+                                                                <b className="text-slate-600 text-xs uppercase tracking-tight">{it.title}</b>
                                                                 <span className={`text-[8px] font-black uppercase mt-1 px-2 py-0.5 rounded-full w-fit ${it.actType === 'game' ? 'bg-purple-100 text-purple-600' : 'bg-orange-100 text-orange-600'}`}>
                                                                     {it.actType === 'game' ? '🕹️ Quiz' : '📝 Devoir'}
                                                                 </span>
@@ -148,6 +158,7 @@ export default function ProfStudioFolder({ items, chapters, classFilter, user, o
                                                             </div>
                                                         </div>
                                                     ))}
+                                                    {chapItems.length === 0 && <p className="text-center text-[9px] font-bold text-slate-300 uppercase italic">Dossier vide</p>}
                                                 </div>
                                             )}
                                         </div>

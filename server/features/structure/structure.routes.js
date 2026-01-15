@@ -5,24 +5,34 @@ const DriveService = require('../../services/drive.service');
 
 router.get('/chapters', async (req, res) => {
     try {
-        res.json(await mongoose.model('Chapter').find({}));
+        const data = await mongoose.model('Chapter').find({}).lean();
+        res.json(data);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.post('/chapters', async (req, res) => {
     try {
         const { teacherId, classroom, subject, title, _id } = req.body;
-        const prof = await mongoose.model('Teacher').findById(teacherId);
-        const { chapterId } = await DriveService.getMirrorPathId(`${prof.firstName} ${prof.lastName}`, classroom, subject, title);
+        const Teacher = mongoose.model('Teacher');
+        const prof = await Teacher.findById(teacherId);
+        
+        if (!prof) throw new Error("Enseignant introuvable");
+
+        const teacherName = `${prof.firstName} ${prof.lastName}`;
+        // US #4 : Création physique obligatoire
+        const { chapterId } = await DriveService.getMirrorPathId(teacherName, classroom, subject, title);
         
         let result;
         if (_id) {
-            result = await mongoose.model('Chapter').findByIdAndUpdate(_id, { ...req.body, driveFolderId: chapterId }, { new: true });
+            result = await mongoose.model('Chapter').findByIdAndUpdate(_id, { title, subject, classroom, driveFolderId: chapterId }, { new: true });
         } else {
-            result = await mongoose.model('Chapter').create({ ...req.body, driveFolderId: chapterId });
+            result = await mongoose.model('Chapter').create({ title, subject, classroom, driveFolderId: chapterId, teacherId });
         }
         res.json(result);
-    } catch (e) { res.status(500).json({ error: e.message }); }
+    } catch (e) { 
+        console.error("❌ Chapter POST error:", e.message);
+        res.status(500).json({ error: e.message }); 
+    }
 });
 
 router.post('/chapters/archive', async (req, res) => {
@@ -35,9 +45,10 @@ router.post('/chapters/archive', async (req, res) => {
 
 router.delete('/chapters/:id', async (req, res) => {
     try {
-        const chap = await mongoose.model('Chapter').findById(req.params.id);
+        const Chapter = mongoose.model('Chapter');
+        const chap = await Chapter.findById(req.params.id);
         if (chap?.driveFolderId) await DriveService.deleteEntity(chap.driveFolderId);
-        await mongoose.model('Chapter').findByIdAndDelete(req.params.id);
+        await Chapter.findByIdAndDelete(req.params.id);
         res.json({ ok: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -45,7 +56,8 @@ router.delete('/chapters/:id', async (req, res) => {
 router.post('/sync-drive', async (req, res) => {
     try {
         const { classroom, teacherId, mode } = req.body;
-        const prof = await mongoose.model('Teacher').findById(teacherId);
+        const Teacher = mongoose.model('Teacher');
+        const prof = await Teacher.findById(teacherId);
         const teacherName = `${prof.firstName} ${prof.lastName}`;
 
         if (mode === 'nuke') {
