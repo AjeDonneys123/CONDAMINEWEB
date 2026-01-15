@@ -18,34 +18,30 @@ require('./models/Homework'); require('./models/GameLevel'); require('./models/S
 require('./models/Submission'); require('./models/TeacherStyle'); require('./models/DeploySignal');
 require('./models/Bug');
 
-mongoose.connect(process.env.MONGODB_URI).then(() => console.log('✅ MongoDB Connected (Build 337)'));
+mongoose.connect(process.env.MONGODB_URI).then(() => console.log('✅ Connected (Build 133)'));
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// 2. ROUTES
+// 2. ROUTES API
 app.use('/api/auth', require('./features/auth/auth.routes'));
 app.use('/api/structure', require('./features/structure/structure.routes'));
 app.use('/api/games', require('./features/games/games.routes'));
 app.use('/api/homework', require('./features/homework/homework.routes'));
 app.use('/api/scans', require('./features/scans/scans.routes'));
-app.use('/api', require('./features/admin/admin.routes'));
-
-const DriveService = require('./services/drive.service');
-app.get('/api/drive-check', async (req, res) => {
-    try {
-        const status = await DriveService.testConnection();
-        res.json(status);
-    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
-});
+app.use('/api/admin', require('./features/admin/admin.routes'));
 
 app.get('/api/check-deploy', (req, res) => res.json({ bootId: SERVER_BOOT_ID }));
-app.get('/api/deploy-status', (req, res) => res.json({ version: "2.3.7", build: 337, status: "live" }));
+
+// ALIGNEMENT BUILD #133
+app.get('/api/deploy-status', (req, res) => res.json({ version: "2.6.3", build: 133, status: "live" }));
 
 const distPath = path.join(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
-    app.get('*', (req, res) => res.sendFile(path.join(distPath, 'index.html')));
+    app.get('*', (req, res) => {
+        if (req.path.startsWith('/api')) return res.status(404).json({ error: "Route API inconnue" });
+        res.sendFile(path.join(distPath, 'index.html'));
+    });
 }
-
-app.listen(port, () => console.log(`🚀 SERVEUR CONDAMINE ACTIF (BUILD 337)`));
+app.listen(port, () => console.log(`🚀 SERVEUR CONDAMINE ACTIF (BUILD 133)`));

@@ -3,10 +3,6 @@ const { google } = require('googleapis');
 let driveInstance = null;
 let oauth2Client = null;
 
-/**
- * 🛠️ SERVICE : GOOGLE DRIVE API
- * Fichier CRITIQUE : Seul point de contact avec le Cloud Pro.
- */
 const initDrive = () => {
     try {
         const clientID = process.env.GOOGLE_CLIENT_ID;
@@ -17,7 +13,7 @@ const initDrive = () => {
             if (process.env.GOOGLE_REFRESH_TOKEN) {
                 oauth2Client.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
                 driveInstance = google.drive({ version: 'v3', auth: oauth2Client });
-                console.log("✅ Drive Service Ready: condamine.edu.ec");
+                console.log("✅ Drive Service Ready: Hybrid Mode (Brain + Pro)");
             }
         }
     } catch (e) { console.error("❌ Drive Init Error:", e.message); }
@@ -29,13 +25,7 @@ const DriveService = {
     
     checkAuth: async () => {
         if (!oauth2Client || !driveInstance) return false;
-        try { 
-            const { token } = await oauth2Client.getAccessToken(); 
-            return !!token; 
-        } catch (e) { 
-            console.error("❌ Drive Auth Expired");
-            return false; 
-        }
+        try { const { token } = await oauth2Client.getAccessToken(); return !!token; } catch (e) { return false; }
     },
 
     getOrCreateFolder: async (name, parentId = null) => {
@@ -76,7 +66,9 @@ const DriveService = {
         try {
             const res = await driveInstance.about.get({ fields: 'user(emailAddress)' });
             const email = res.data.user.emailAddress;
-            return { ok: true, email, isPro: email.endsWith('@condamine.edu.ec') };
+            // US#12 : VALIDATION HYBRIDE (Accepte le cerveau Gmail et le domaine Pro)
+            const isPro = email.endsWith('@condamine.edu.ec') || email === 'vuillet433@gmail.com';
+            return { ok: true, email, isPro };
         } catch (e) { return { ok: false, error: "Connexion Drive échouée" }; }
     },
 

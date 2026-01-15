@@ -1,39 +1,44 @@
 const express = require('express');
 const router = express.Router();
-const mongoose = require('mongoose');
+const AdminService = require('../../services/admin.service');
+const DriveService = require('../../services/drive.service');
 
-router.get('/database-dump', async (req, res) => {
-    try {
-        res.json({
-            players: await mongoose.model('Player').find({}).lean(),
-            chapters: await mongoose.model('Chapter').find({}).lean(),
-            homeworks: await mongoose.model('Homework').find({}).lean(),
-            gamelevels: await mongoose.model('GameLevel').find({}).lean(),
-            teachers: await mongoose.model('Teacher').find({}).lean(),
-            submissions: await mongoose.model('Submission').find({}).lean()
-        });
-    } catch (e) { res.status(500).json({ error: "Dump Error" }); }
-});
+/**
+ * ⚙️ ROUTER : ADMINISTRATION (POROSITÉ ZÉRO)
+ */
 
 router.get('/players', async (req, res) => {
     try {
-        res.json(await mongoose.model('Player').find({}).sort({ classroom: 1, lastName: 1 }));
+        const players = await AdminService.getAllPlayers();
+        res.json(players);
     } catch (e) { res.status(500).json([]); }
+});
+
+router.get('/database-dump', async (req, res) => {
+    try {
+        const data = await AdminService.getFullDump();
+        res.json(data);
+    } catch (e) { res.status(500).json({ error: "Dump impossible" }); }
+});
+
+// US#12 : Diagnostic Drive Pro
+router.get('/drive-check', async (req, res) => {
+    try {
+        const status = await DriveService.testConnection();
+        res.json(status);
+    } catch (e) { res.status(500).json({ ok: false, error: "Drive Inaccessible" }); }
 });
 
 router.delete('/classroom/:name', async (req, res) => {
     try {
-        const name = req.params.name;
-        await mongoose.model('Player').deleteMany({ classroom: name });
-        await mongoose.model('Chapter').deleteMany({ classroom: name });
-        await mongoose.model('Homework').deleteMany({ classroom: name });
-        res.json({ ok: true });
+        const result = await AdminService.deleteClassroom(req.params.name);
+        res.json(result);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.patch('/teacher/:id/sections', async (req, res) => {
     try {
-        const updated = await mongoose.model('Teacher').findByIdAndUpdate(req.params.id, { subjectSections: req.body.sections }, { new: true });
+        const updated = await AdminService.updateTeacherSections(req.params.id, req.body.sections);
         res.json({ ok: true, user: updated });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });

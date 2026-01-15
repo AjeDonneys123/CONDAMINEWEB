@@ -143,6 +143,7 @@ STRUCTURE:
 │   │   ├── drive.service.js
 │   │   ├── homework.service.js
 │   │   ├── mistake.service.js
+│   │   ├── scan.service.js
 │   │   └── structure.service.js
 │   └── version.json
 ├── snap.js
@@ -211,7 +212,7 @@ setInterval(applyUpdate, 1000);
 {
   "status": "OK",
   "file": null,
-  "timestamp": 1768495593122
+  "timestamp": 1768495799207
 }
 [[[£ END: apply_status.json £]]]
 
@@ -1421,40 +1422,49 @@ import React from 'react';
 import './SystemDocs.css';
 
 /**
- * 🗺️ CARTE DU SYSTÈME OPTIMUM (V2.3.6)
- * Cette carte reflète l'arbre de fichiers validé.
+ * 🗺️ CARTE DU SYSTÈME CONDAMINE (FULL 6 PILIERS)
+ * Build 337 : Inclusion de la fonctionnalité Scanne.
  */
 const DOC_MAP = [
     {
         id: 'auth', title: '🔐 Authentification', class: 'cat-auth',
         stories: [
-            { id: 'US#1', title: 'Accès Hybride', files: [{ path: 'server/features/auth/auth.routes.js', desc: 'Gestion des jetons.' }], risk: 'LOW' },
-            { id: 'US#2', title: 'Isolation Rôles', files: [{ path: 'client/src/App.jsx', desc: 'Routeur central Prof/Élève.' }], risk: 'MANAGED' }
+            { id: 'US#1', title: 'Accès Hybride', files: [{ path: 'server/features/auth/auth.routes.js', desc: 'Passerelle OAuth2 et codes secrets.' }], risk: 'LOW' },
+            { id: 'US#2', title: 'Isolation Rôles', files: [{ path: 'client/src/App.jsx', desc: 'Routeur et persistance session.' }], risk: 'MANAGED' }
         ]
     },
     {
         id: 'games', title: '🕹️ Jeux', class: 'cat-games',
         stories: [
             { id: 'US#10', title: 'Quiz IA', files: [{ path: 'server/services/ai.service.js', desc: 'Moteur Gemini JSON.' }], risk: 'MANAGED' },
-            { id: 'US#11', title: 'Erreurs', files: [{ path: 'server/services/mistake.service.js', desc: 'Archivage des fautes.' }], risk: 'LOW' }
+            { id: 'US#11', title: 'Erreurs', files: [{ path: 'server/services/mistake.service.js', desc: 'Service d\'archivage des fautes.' }], risk: 'LOW' }
         ]
     },
     {
         id: 'homework', title: '📚 Devoirs', class: 'cat-homework',
         stories: [
-            { id: 'US#3', title: 'Analyse IA', files: [{ path: 'server/services/homework.service.js', desc: 'Logique de correction scellée.' }], risk: 'MANAGED' }
+            { id: 'US#3', title: 'Analyse IA', files: [{ path: 'server/services/homework.service.js', desc: 'Intelligence de correction scellée.' }], risk: 'MANAGED' }
+        ]
+    },
+    {
+        id: 'scans', title: '📤 Scanne (PilotSnap)', class: 'cat-scans',
+        stories: [
+            { id: 'US#6', title: 'Capture Multi-Snap', files: [
+                { path: 'server/services/scan.service.js', desc: 'Service de gestion des sessions de capture.' },
+                { path: 'client/src/features/prof/scans/ScansStudio.jsx', desc: 'Contrôleur caméra et interface de rafale.' }
+            ], risk: 'MEDIUM' }
         ]
     },
     {
         id: 'archiving', title: '📂 Archivage & Drive', class: 'cat-archiving',
         stories: [
-            { id: 'US#4', title: 'Miroir Cloud', files: [{ path: 'server/services/structure.service.js', desc: 'Gestion de l\'arborescence.' }, { path: 'server/services/drive.service.js', desc: 'API Google Drive.' }], risk: 'MANAGED' }
+            { id: 'US#4', title: 'Miroir Cloud', files: [{ path: 'server/services/structure.service.js', desc: 'Architecte BDD/Drive.' }, { path: 'server/services/drive.service.js', desc: 'API Google Drive.' }], risk: 'MANAGED' }
         ]
     },
     {
         id: 'admin', title: '⚙️ Administration', class: 'cat-admin',
         stories: [
-            { id: 'US#15', title: 'Classes', files: [{ path: 'server/features/admin/admin.routes.js', desc: 'Nettoyage des données.' }], risk: 'HIGH' }
+            { id: 'US#15', title: 'Classes', files: [{ path: 'server/features/admin/admin.routes.js', desc: 'Nettoyage radical des données.' }], risk: 'HIGH' }
         ]
     }
 ];
@@ -1465,8 +1475,8 @@ export default function SystemDocs({ onClose }) {
             <div className="docs-window" onClick={e => e.stopPropagation()}>
                 <div className="docs-header">
                     <div>
-                        <h2 className="text-2xl font-black uppercase tracking-tighter">Audit Architecture Optimum</h2>
-                        <p className="text-xs text-slate-400 font-bold">Build 336 : Le projet est propre et découplé.</p>
+                        <h2 className="text-2xl font-black uppercase tracking-tighter">Audit Architecture Condamine</h2>
+                        <p className="text-xs text-slate-400 font-bold">Build 337 : Rétablissement de l'exhaustivité (6 piliers)</p>
                     </div>
                     <button className="btn-close-docs" onClick={onClose}>✕</button>
                 </div>
@@ -1788,7 +1798,11 @@ setInterval(async () => {
   "version": "1.0.0",
   "scripts": {
     "start": "node server/server.js",
-    "dev": "nodemon server/server.js"
+    "server": "nodemon --ignore 'update.txt' --ignore 'apply_status.json' server/server.js",
+    "client": "npm run dev --prefix client",
+    "dev": "node apply.js & node magic-paste.js & npm run server & npm run client",
+    "kill": "lsof -ti:3000 | xargs kill -9",
+    "apply": "node apply.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.1.3",
@@ -1796,9 +1810,12 @@ setInterval(async () => {
     "express": "^4.19.2",
     "googleapis": "^126.0.0",
     "mongoose": "7.8.2",
-    "node-fetch": "^2.7.0"
+    "node-fetch": "^2.7.0",
+    "multer": "^1.4.5-lts.1"
   },
-  "devDependencies": { "nodemon": "^3.1.0" }
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  }
 }
 [[[£ END: package.json £]]]
 
@@ -2000,9 +2017,41 @@ module.exports = router;
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
+const ScanService = require('../../services/scan.service');
+
+/**
+ * 📸 ROUTER : SCANS (POROSITÉ ZÉRO)
+ */
 
 router.get('/sessions', async (req, res) => {
-    res.json(await mongoose.model('ScanSession').find({}));
+    try {
+        const sessions = await mongoose.model('ScanSession').find({}).sort({ createdAt: -1 });
+        res.json(sessions);
+    } catch (e) { res.status(500).json([]); }
+});
+
+router.post('/sessions', async (req, res) => {
+    try {
+        const result = await ScanService.createSession(req.body);
+        res.json(result);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/upload', async (req, res) => {
+    try {
+        const { sessionId, type, imageBase64 } = req.body;
+        // Simulé : L'upload Drive réel se ferait via drive.service
+        const driveId = "DRIVE_ID_" + Date.now();
+        const result = await ScanService.addCapture(sessionId, type, driveId);
+        res.json(result);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/:id', async (req, res) => {
+    try {
+        await ScanService.deleteSession(req.params.id);
+        res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 module.exports = router;
@@ -2214,18 +2263,18 @@ const app = express();
 const port = process.env.PORT || 3000;
 const SERVER_BOOT_ID = Date.now();
 
-// 1. CHARGEMENT DES MODÈLES
+// 1. MODÈLES
 require('./models/Teacher'); require('./models/Player'); require('./models/Chapter');
 require('./models/Homework'); require('./models/GameLevel'); require('./models/ScanSession');
 require('./models/Submission'); require('./models/TeacherStyle'); require('./models/DeploySignal');
 require('./models/Bug');
 
-mongoose.connect(process.env.MONGODB_URI).then(() => console.log('✅ MongoDB Connected (Build 336)'));
+mongoose.connect(process.env.MONGODB_URI).then(() => console.log('✅ MongoDB Connected (Build 337)'));
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// 2. ROUTES API
+// 2. ROUTES
 app.use('/api/auth', require('./features/auth/auth.routes'));
 app.use('/api/structure', require('./features/structure/structure.routes'));
 app.use('/api/games', require('./features/games/games.routes'));
@@ -2242,7 +2291,7 @@ app.get('/api/drive-check', async (req, res) => {
 });
 
 app.get('/api/check-deploy', (req, res) => res.json({ bootId: SERVER_BOOT_ID }));
-app.get('/api/deploy-status', (req, res) => res.json({ version: "2.3.6", build: 336, status: "live" }));
+app.get('/api/deploy-status', (req, res) => res.json({ version: "2.3.7", build: 337, status: "live" }));
 
 const distPath = path.join(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) {
@@ -2250,52 +2299,40 @@ if (fs.existsSync(distPath)) {
     app.get('*', (req, res) => res.sendFile(path.join(distPath, 'index.html')));
 }
 
-app.listen(port, () => console.log(`🚀 SERVEUR CONDAMINE ACTIF (BUILD 336)`));
+app.listen(port, () => console.log(`🚀 SERVEUR CONDAMINE ACTIF (BUILD 337)`));
 [[[£ END: server/server.js £]]]
 
 [[[£ FILE: server/services/ai.service.js £]]]
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 /**
- * 🧠 SERVICE : INTELLIGENCE ARTIFICIELLE
- * Fichier CRITIQUE : Seul point de contact avec Gemini.
+ * 🧠 SERVICE : IA GEMINI 2.0 FLASH
  */
 const AIService = {
-    // Nettoyeur pour garantir un JSON valide même si Gemini bafouille
     sanitizeJSON: (text) => {
         try {
-            const start = text.indexOf('{');
-            const end = text.lastIndexOf('}') + 1;
-            if (start === -1 || end === 0) throw new Error("Aucun JSON trouvé dans la réponse IA");
+            const start = text.indexOf('{') !== -1 ? text.indexOf('{') : text.indexOf('[');
+            const lastBrace = text.lastIndexOf('}');
+            const lastBracket = text.lastIndexOf(']');
+            const end = Math.max(lastBrace, lastBracket) + 1;
             return JSON.parse(text.substring(start, end));
-        } catch (e) {
-            console.error("❌ Erreur Parsing IA:", text);
-            throw new Error("L'IA a renvoyé un format invalide.");
-        }
+        } catch (e) { throw new Error("Format IA invalide"); }
     },
 
     analyzeSubmission: async (userText, instruction, classroom, context) => {
-        try {
-            const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-            const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-            const prompt = `${context}\nCONSIGNE: ${instruction}\nCLASSE: ${classroom}\nTEXTE: ${userText}\nFormat JSON pur: { "grade": string, "feedback_fond": string, "corrections": [] }`;
-            const result = await model.generateContent(prompt);
-            return AIService.sanitizeJSON(result.response.text());
-        } catch (e) { throw e; }
+        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+        const prompt = `${context}\nCONSIGNE: ${instruction}\nCLASSE: ${classroom}\nTEXTE: ${userText}\nFormat JSON: { "grade": string, "feedback_fond": string, "corrections": [] }`;
+        const result = await model.generateContent(prompt);
+        return AIService.sanitizeJSON(result.response.text());
     },
 
     generateQuiz: async (topic, numQuestions = 5) => {
-        try {
-            const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-            const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-            const prompt = `Génère un quiz JSON sur "${topic}" (${numQuestions} questions). Format: [{ "q": string, "options": [string], "a": number }]`;
-            const result = await model.generateContent(prompt);
-            const text = result.response.text();
-            // Utilise un traitement spécifique pour les tableaux JSON
-            const start = text.indexOf('[');
-            const end = text.lastIndexOf(']') + 1;
-            return JSON.parse(text.substring(start, end));
-        } catch (e) { throw e; }
+        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+        const prompt = `Génère un quiz JSON sur "${topic}" (${numQuestions} questions). Format: [{ "q": string, "options": [string], "a": number }]`;
+        const result = await model.generateContent(prompt);
+        return AIService.sanitizeJSON(result.response.text());
     }
 };
 
@@ -2462,6 +2499,37 @@ const MistakeService = {
 module.exports = MistakeService;
 [[[£ END: server/services/mistake.service.js £]]]
 
+[[[£ FILE: server/services/scan.service.js £]]]
+const mongoose = require('mongoose');
+
+/**
+ * 📤 SERVICE : GESTION DES SCANS
+ * Mission : Gérer les sessions de capture PilotSnap.
+ */
+const ScanService = {
+    createSession: async (data) => {
+        const ScanSession = mongoose.model('ScanSession');
+        return await ScanSession.create(data);
+    },
+    
+    addCapture: async (sessionId, type, driveId) => {
+        const ScanSession = mongoose.model('ScanSession');
+        const field = type === 'subject' ? 'subjectUrls' : 'copyUrls';
+        return await ScanSession.findByIdAndUpdate(sessionId, {
+            $push: { [field]: driveId }
+        }, { new: true });
+    },
+
+    deleteSession: async (id) => {
+        const ScanSession = mongoose.model('ScanSession');
+        // US#9 : Idéalement ici, on supprimerait aussi les fichiers sur Drive
+        return await ScanSession.findByIdAndDelete(id);
+    }
+};
+
+module.exports = ScanService;
+[[[£ END: server/services/scan.service.js £]]]
+
 [[[£ FILE: server/services/structure.service.js £]]]
 const mongoose = require('mongoose');
 const DriveService = require('./drive.service');
@@ -2491,8 +2559,8 @@ module.exports = StructureService;
 [[[£ FILE: server/version.json £]]]
 {
   "version": "1.1.0",
-  "build": 129,
-  "timestamp": "2026-01-15T16:46:36.511Z"
+  "build": 133,
+  "timestamp": "2026-01-15T16:50:02.400Z"
 }
 [[[£ END: server/version.json £]]]
 

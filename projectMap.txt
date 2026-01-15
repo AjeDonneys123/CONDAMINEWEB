@@ -142,6 +142,7 @@
 │   │   ├── drive.service.js
 │   │   ├── homework.service.js
 │   │   ├── mistake.service.js
+│   │   ├── scan.service.js
 │   │   └── structure.service.js
 │   └── version.json
 ├── snap.js
