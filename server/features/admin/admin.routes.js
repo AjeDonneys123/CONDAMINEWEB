@@ -3,17 +3,27 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const DriveService = require('../../services/drive.service');
 
-// DIAGNOSTIC : Route de vérification du lien Google
-router.get('/drive-check', async (req, res) => {
-    const status = await DriveService.testConnection();
-    res.json(status);
+// US #15 : Diagnostic BDD complet (Pour l'explorateur DatabaseViewer)
+router.get('/database-dump', async (req, res) => {
+    try {
+        const dump = {
+            players: await mongoose.model('Player').find({}).lean(),
+            teachers: await mongoose.model('Teacher').find({}).lean(),
+            chapters: await mongoose.model('Chapter').find({}).lean(),
+            homework: await mongoose.model('Homework').find({}).lean(),
+            games: await mongoose.model('GameLevel').find({}).lean(),
+            scans: await mongoose.model('ScanSession').find({}).lean()
+        };
+        res.json(dump);
+    } catch (e) {
+        console.error("❌ Erreur Dump BDD:", e.message);
+        res.status(500).json({ error: "Impossible de dumper la base" });
+    }
 });
 
 router.get('/players', async (req, res) => {
-    try {
-        const Player = mongoose.model('Player');
-        res.json(await Player.find({}).sort({ classroom: 1, lastName: 1 }));
-    } catch (e) { res.status(500).json({ error: "BDD_ERROR" }); }
+    try { res.json(await mongoose.model('Player').find({}).sort({ classroom: 1, lastName: 1 })); } 
+    catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.get('/chapters-all', async (req, res) => {
@@ -21,35 +31,33 @@ router.get('/chapters-all', async (req, res) => {
     catch (e) { res.status(500).json([]); }
 });
 
+// US #8 & #9 : SYNC ET NUKE SÉCURISÉ
 router.post('/sync-drive', async (req, res) => {
     try {
         const { classroom, teacherId, mode } = req.body;
-        
-        // SÉCURITÉ : On vérifie si c'est bien le compte condamine.edu.ec
-        const status = await DriveService.testConnection();
-        if (!status.isPro) {
-            return res.status(403).json({ error: "Action bloquée : Vous n'êtes pas sur le compte condamine.edu.ec !" });
-        }
+        if (!classroom) return res.status(400).json({ error: "Classe non spécifiée" });
+
+        const isReady = await DriveService.checkAuth();
+        if (!isReady) return res.status(401).json({ error: "Drive non authentifié" });
 
         const prof = await mongoose.model('Teacher').findById(teacherId);
         const teacherName = `${prof.firstName} ${prof.lastName}`;
-        const classFolderId = await DriveService.getClassFolderId(teacherName, classroom);
+        const { classFolderId, devoirsFolderId } = await DriveService.getSpecificDevoirsFolder(teacherName, classroom);
 
         if (mode === 'nuke') {
-            const trashItems = await DriveService.listEverythingInside(classFolderId);
-            for (const item of trashItems) { await DriveService.deleteEntity(item.id); }
+            if (devoirsFolderId) await DriveService.deleteEntity(devoirsFolderId);
             await mongoose.model('Chapter').deleteMany({ classroom });
             await mongoose.model('Homework').deleteMany({ classroom });
             await DriveService.getOrCreateFolder("DEVOIRS", classFolderId);
-            return res.json({ ok: true, message: "Nettoyage terminé." });
+            return res.json({ ok: true, message: "Classe nettoyée." });
         }
 
-        const devoirsId = await DriveService.getOrCreateFolder("DEVOIRS", classFolderId);
+        // Reconstruction
         const chapters = await mongoose.model('Chapter').find({ classroom });
         const homeworks = await mongoose.model('Homework').find({ classroom });
 
         for (const section of prof.subjectSections) {
-            const subId = await DriveService.getOrCreateFolder(section.name, devoirsId);
+            const subId = await DriveService.getOrCreateFolder(section.name, devoirsFolderId);
             const classChaps = chapters.filter(c => c.subject === section.name);
             for (const chap of classChaps) {
                 const chapId = await DriveService.getOrCreateFolder(chap.title, subId);
@@ -64,7 +72,7 @@ router.post('/sync-drive', async (req, res) => {
                 }
             }
         }
-        res.json({ ok: true, message: "Synchronisation terminée." });
+        res.json({ ok: true, message: "Synchronisation réussie." });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -72,8 +80,8 @@ router.post('/chapters', async (req, res) => {
     try {
         const { _id, title, classroom, subject, teacherId } = req.body;
         const prof = await mongoose.model('Teacher').findById(teacherId);
-        const classId = await DriveService.getClassFolderId(`${prof.firstName} ${prof.lastName}`, classroom);
-        const devRoot = await DriveService.getOrCreateFolder("DEVOIRS", classId);
+        const { classFolderId } = await DriveService.getSpecificDevoirsFolder(`${prof.firstName} ${prof.lastName}`, classroom);
+        const devRoot = await DriveService.getOrCreateFolder("DEVOIRS", classFolderId);
         const subId = await DriveService.getOrCreateFolder(subject, devRoot);
         const driveId = await DriveService.getOrCreateFolder(title, subId);
         let result = _id ? await mongoose.model('Chapter').findByIdAndUpdate(_id, { ...req.body, driveFolderId: driveId }, { new: true })
