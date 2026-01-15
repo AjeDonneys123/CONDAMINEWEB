@@ -11,7 +11,6 @@ export default function App() {
   const [appInfo, setAppInfo] = useState({ version: '...', build: '...', status: 'live' });
   const bootIdRef = useRef(null);
 
-  // --- MONITEUR DE DÉPLOIEMENT (US #13) ---
   useEffect(() => {
     const monitor = async () => {
       try {
