@@ -13,10 +13,10 @@ const initDrive = () => {
             if (process.env.GOOGLE_REFRESH_TOKEN) {
                 oauth2Client.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
                 driveInstance = google.drive({ version: 'v3', auth: oauth2Client });
-                console.log("✅ Drive Service Ready: PRO Mode");
+                console.log("✅ Drive Service Ready: PRO Mode condamine.edu.ec");
             }
         }
-    } catch (e) { console.error("❌ Drive Error:", e.message); }
+    } catch (e) { console.error("❌ Drive Init Error:", e.message); }
 };
 initDrive();
 
@@ -25,7 +25,7 @@ const DriveService = {
     
     checkAuth: async () => {
         if (!oauth2Client || !driveInstance) return false;
-        try { return !!(await oauth2Client.getAccessToken()); } catch (e) { return false; }
+        try { const token = await oauth2Client.getAccessToken(); return !!token; } catch (e) { return false; }
     },
 
     getOrCreateFolder: async (name, parentId = null) => {

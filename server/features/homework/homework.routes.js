@@ -2,28 +2,11 @@ const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 const DriveService = require('../../services/drive.service');
-const AIService = require('../../services/ai.service');
 
 router.get('/all', async (req, res) => {
     try {
-        const Homework = mongoose.model('Homework');
-        res.json(await Homework.find({}).sort({ date: -1 }));
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-router.post('/analyze-homework', async (req, res) => {
-    try {
-        const { userText, homeworkInstruction, classroom, playerId, homeworkId, levelIndex } = req.body;
-        const style = await mongoose.model('TeacherStyle').findOne({ teacherId: "jean_vuillet" });
-        const analysis = await AIService.analyzeSubmission(userText, homeworkInstruction, classroom, style?.pedagogicalMemory || "");
-        
-        if (playerId) {
-            await mongoose.model('Player').findByIdAndUpdate(playerId, {
-                $push: { spellingMistakes: { $each: analysis.corrections || [] } }
-            });
-        }
-        await mongoose.model('Submission').create({ playerId, homeworkId, levelIndex, originalTranscription: userText, feedback: analysis.feedback_fond, grade: analysis.grade });
-        res.json(analysis);
+        const data = await mongoose.model('Homework').find({}).sort({ date: -1 });
+        res.json(data);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -35,8 +18,11 @@ router.post('/', async (req, res) => {
         const prof = await Teacher.findById(teacherId);
         const chap = await Chapter.findById(chapterId);
 
+        if (!prof || !chap) throw new Error("Données enseignant ou dossier introuvables");
+
         let driveId = req.body.driveFolderId;
-        if (!driveId && prof && chap) {
+        if (!driveId) {
+            console.log(`📡 Création miroir Drive pour: ${title}`);
             const teacherName = `${prof.firstName} ${prof.lastName}`;
             const pathInfo = await DriveService.getMirrorPathId(teacherName, classroom, chap.subject, chap.title);
             driveId = await DriveService.getOrCreateFolder(title, pathInfo.chapterId);
@@ -44,14 +30,19 @@ router.post('/', async (req, res) => {
                 await DriveService.getOrCreateFolder("SUJET", driveId);
                 await DriveService.getOrCreateFolder("COPIES", driveId);
                 await DriveService.getOrCreateFolder("CORRECTIONS", driveId);
+            } else {
+                throw new Error("Impossible de créer le dossier sur Google Drive");
             }
         }
 
         const Homework = mongoose.model('Homework');
         const payload = { ...req.body, driveFolderId: driveId };
-        const r = _id ? await Homework.findByIdAndUpdate(_id, payload, { new: true }) : await Homework.create(payload);
-        res.json(r);
-    } catch (e) { res.status(500).json({ error: e.message }); }
+        const result = _id ? await Homework.findByIdAndUpdate(_id, payload, { new: true }) : await Homework.create(payload);
+        res.json(result);
+    } catch (e) { 
+        console.error("❌ [HW_ROUTE] Error:", e.message);
+        res.status(500).json({ error: e.message }); 
+    }
 });
 
 router.delete('/:id', async (req, res) => {

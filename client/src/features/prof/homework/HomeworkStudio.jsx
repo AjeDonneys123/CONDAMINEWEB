@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 
 export default function HomeworkStudio({ initialData, chapters, globalClass, user, onClose }) {
   const [formData, setFormData] = useState(initialData || { 
@@ -9,16 +9,29 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, use
 
   const save = async () => {
     if (!formData.title || !formData.chapterId) return alert("Titre et Chapitre requis");
+    
     setUploading(true);
     try {
-        const res = await fetch('/api/homework', {
+        const response = await fetch('/api/homework', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ...formData, teacherId: user.id || user._id })
         });
-        if (res.ok) onClose();
-    } catch (e) { alert("Erreur serveur"); }
-    setUploading(false);
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || "Erreur lors de la création Cloud");
+        }
+
+        const result = await response.json();
+        console.log("✅ Devoir sauvegardé:", result);
+        onClose();
+    } catch (e) { 
+        console.error("❌ Erreur Studio:", e.message);
+        alert(e.message); 
+    } finally {
+        setUploading(false); // GARANTIT LE DÉBLOCAGE DU BOUTON
+    }
   };
 
   return (
@@ -28,7 +41,7 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, use
             <button onClick={onClose} className="text-2xl font-black">✕</button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-10 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto p-10">
             <div className="max-w-4xl mx-auto space-y-8">
                 <div className="p-8 bg-slate-50 rounded-[30px] border">
                     <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Dossier Archive</label>
@@ -49,7 +62,7 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, use
         </div>
 
         <div className="p-8 border-t bg-slate-50">
-            <button onClick={save} disabled={uploading} className="w-full p-6 bg-orange-500 text-white font-black text-2xl rounded-3xl shadow-xl uppercase">
+            <button onClick={save} disabled={uploading} className="w-full p-6 bg-orange-500 text-white font-black text-2xl rounded-3xl shadow-xl uppercase transition-all active:scale-95">
                 {uploading ? "CRÉATION DE L'ESPACE CLOUD..." : "LANCER LE DEVOIR"}
             </button>
         </div>
