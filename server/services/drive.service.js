@@ -15,9 +15,9 @@ const initDrive = () => {
             if (process.env.GOOGLE_REFRESH_TOKEN) {
                 oauth2Client.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
                 driveInstance = google.drive({ version: 'v3', auth: oauth2Client });
-                console.log("✅ Drive Service V34 : Initialisé pour condamine.edu.ec");
+                console.log("✅ [DRIVE] Initialisé. Token détecté.");
             }
-        } catch (e) { console.error("❌ Drive Init Error:", e.message); }
+        } catch (e) { console.error("❌ [DRIVE] Init Error:", e.message); }
     }
 };
 
@@ -26,13 +26,20 @@ initDrive();
 const DriveService = {
     normalize: (n) => n ? n.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Z0-9 ]/g, "_").trim() : "SANS_TITRE",
 
+    // US #12 : Test de connexion avec détection forcée du domaine condamine
     testConnection: async () => {
-        if (!oauth2Client || !driveInstance) return { ok: false, error: "Configuration .env manquante" };
+        if (!oauth2Client || !driveInstance) return { ok: false, error: "Configuration manquante" };
         try {
             const res = await driveInstance.about.get({ fields: 'user(emailAddress,displayName)' });
             const email = res.data.user.emailAddress;
-            const isWrongAccount = !email.endsWith('@condamine.edu.ec');
-            return { ok: true, email, name: res.data.user.displayName, warning: isWrongAccount };
+            // Vérification stricte du compte scolaire
+            const isCondamine = email.endsWith('@condamine.edu.ec');
+            return { 
+                ok: true, 
+                email, 
+                name: res.data.user.displayName, 
+                isPro: isCondamine 
+            };
         } catch (e) {
             return { ok: false, error: e.message };
         }
@@ -89,18 +96,12 @@ const DriveService = {
         return await DriveService.getOrCreateFolder(classroom, profId);
     },
 
-    // REPARATION DU LIEN (ANTI-400)
     getAuthUrl: () => {
         if (!oauth2Client) initDrive();
         if (!oauth2Client) return null;
-        
-        // On vérifie que les params critiques ne sont pas vides
-        if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_REDIRECT_URI) return null;
-
         return oauth2Client.generateAuthUrl({
             access_type: 'offline',
-            prompt: 'consent',
-            // On force le scope exact
+            prompt: 'select_account', // FORCE l'utilisateur à choisir son compte
             scope: ['https://www.googleapis.com/auth/drive.file']
         });
     },

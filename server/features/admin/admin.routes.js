@@ -3,7 +3,7 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const DriveService = require('../../services/drive.service');
 
-// ROUTE DE DIAGNOSTIC
+// DIAGNOSTIC : Route de vérification du lien Google
 router.get('/drive-check', async (req, res) => {
     const status = await DriveService.testConnection();
     res.json(status);
@@ -13,7 +13,7 @@ router.get('/players', async (req, res) => {
     try {
         const Player = mongoose.model('Player');
         res.json(await Player.find({}).sort({ classroom: 1, lastName: 1 }));
-    } catch (e) { res.status(500).json({ error: "DB_ERR" }); }
+    } catch (e) { res.status(500).json({ error: "BDD_ERROR" }); }
 });
 
 router.get('/chapters-all', async (req, res) => {
@@ -21,24 +21,23 @@ router.get('/chapters-all', async (req, res) => {
     catch (e) { res.status(500).json([]); }
 });
 
-// US #8 & #9 : SYNC ET NUKE (L'ARME ULTIME)
 router.post('/sync-drive', async (req, res) => {
     try {
         const { classroom, teacherId, mode } = req.body;
-        const isReady = await DriveService.checkAuth();
-        if (!isReady) return res.status(401).json({ error: "Drive déconnecté." });
+        
+        // SÉCURITÉ : On vérifie si c'est bien le compte condamine.edu.ec
+        const status = await DriveService.testConnection();
+        if (!status.isPro) {
+            return res.status(403).json({ error: "Action bloquée : Vous n'êtes pas sur le compte condamine.edu.ec !" });
+        }
 
         const prof = await mongoose.model('Teacher').findById(teacherId);
         const teacherName = `${prof.firstName} ${prof.lastName}`;
-
         const classFolderId = await DriveService.getClassFolderId(teacherName, classroom);
 
         if (mode === 'nuke') {
-            console.log(`🧨 [NUKE] Vidage intégral de la classe ${classroom}...`);
             const trashItems = await DriveService.listEverythingInside(classFolderId);
-            for (const item of trashItems) {
-                await DriveService.deleteEntity(item.id);
-            }
+            for (const item of trashItems) { await DriveService.deleteEntity(item.id); }
             await mongoose.model('Chapter').deleteMany({ classroom });
             await mongoose.model('Homework').deleteMany({ classroom });
             await DriveService.getOrCreateFolder("DEVOIRS", classFolderId);
@@ -66,10 +65,7 @@ router.post('/sync-drive', async (req, res) => {
             }
         }
         res.json({ ok: true, message: "Synchronisation terminée." });
-    } catch (e) {
-        console.error("❌ Synchro Error:", e.message);
-        res.status(500).json({ error: e.message });
-    }
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.post('/chapters', async (req, res) => {
@@ -80,7 +76,6 @@ router.post('/chapters', async (req, res) => {
         const devRoot = await DriveService.getOrCreateFolder("DEVOIRS", classId);
         const subId = await DriveService.getOrCreateFolder(subject, devRoot);
         const driveId = await DriveService.getOrCreateFolder(title, subId);
-
         let result = _id ? await mongoose.model('Chapter').findByIdAndUpdate(_id, { ...req.body, driveFolderId: driveId }, { new: true })
                          : await mongoose.model('Chapter').create({ ...req.body, driveFolderId: driveId, isArchived: false });
         res.json(result);

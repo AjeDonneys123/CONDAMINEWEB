@@ -3,16 +3,16 @@ import DatabaseViewer from './DatabaseViewer';
 
 export default function ProfHeader({ user, onLogout }) {
   const [showDB, setShowDB] = useState(false);
-  const [driveStatus, setDriveStatus] = useState({ loading: true, ok: false, email: '' });
+  const [driveStatus, setDriveStatus] = useState({ loading: true, ok: false, email: '', isPro: false });
 
   const checkDrive = async () => {
       setDriveStatus(prev => ({ ...prev, loading: true }));
       try {
           const res = await fetch('/api/drive-check');
           const data = await res.json();
-          setDriveStatus({ loading: false, ok: data.ok, email: data.email || data.error });
+          setDriveStatus({ loading: false, ok: data.ok, email: data.email || data.error, isPro: data.isPro });
       } catch (e) {
-          setDriveStatus({ loading: false, ok: false, email: 'Serveur injoignable' });
+          setDriveStatus({ loading: false, ok: false, email: 'Serveur injoignable', isPro: false });
       }
   };
 
@@ -25,14 +25,15 @@ export default function ProfHeader({ user, onLogout }) {
       <div className="flex flex-col">
         <h2 className="text-2xl font-black text-slate-800 tracking-tighter uppercase">{user.firstName} {user.lastName}</h2>
         
-        {/* INDICATEUR DE CONNEXION DRIVE (Diagnostic V32) */}
         <div className="flex items-center gap-2 mt-1 cursor-pointer group" onClick={checkDrive}>
-            <div className={`w-2 h-2 rounded-full ${driveStatus.loading ? 'bg-slate-300 animate-pulse' : driveStatus.ok ? 'bg-emerald-500 shadow-[0_0_8px_#10b981]' : 'bg-red-500 shadow-[0_0_8px_#ef4444]'}`}></div>
-            <span className={`text-[9px] font-black uppercase tracking-widest ${driveStatus.ok ? 'text-emerald-600' : 'text-red-500'}`}>
-                Drive : {driveStatus.loading ? 'Vérification...' : driveStatus.ok ? `Connecté (${driveStatus.email})` : `Erreur (${driveStatus.email})`}
+            <div className={`w-2.5 h-2.5 rounded-full ${driveStatus.loading ? 'bg-slate-300 animate-pulse' : (driveStatus.ok && driveStatus.isPro) ? 'bg-emerald-500 shadow-[0_0_8px_#10b981]' : 'bg-red-600 shadow-[0_0_8px_#ef4444] animate-bounce'}`}></div>
+            <span className={`text-[10px] font-black uppercase tracking-widest ${ (driveStatus.ok && driveStatus.isPro) ? 'text-emerald-600' : 'text-red-600'}`}>
+                {driveStatus.loading ? 'Vérification Drive...' : (driveStatus.isPro ? `Drive PRO (${driveStatus.email})` : `🚨 COMPTE PERSO DÉTECTÉ (${driveStatus.email})`)}
             </span>
-            <span className="text-[8px] opacity-0 group-hover:opacity-100 transition-opacity text-slate-400"> (Cliquer pour tester)</span>
         </div>
+        {!driveStatus.isPro && !driveStatus.loading && (
+            <p className="text-[8px] text-red-500 font-bold uppercase mt-1">Action requise : Utilisez une fenêtre privée pour lier condamine.edu.ec</p>
+        )}
       </div>
 
       <div className="flex gap-3">
