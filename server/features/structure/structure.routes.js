@@ -3,6 +3,7 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const DriveService = require('../../services/drive.service');
 
+// LISTE DES CHAPITRES
 router.get('/chapters', async (req, res) => {
     try {
         const data = await mongoose.model('Chapter').find({}).lean();
@@ -10,27 +11,36 @@ router.get('/chapters', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// CRÉATION DE CHAPITRE (BDD + DRIVE)
 router.post('/chapters', async (req, res) => {
     try {
         const { teacherId, classroom, subject, title, _id } = req.body;
         const Teacher = mongoose.model('Teacher');
         const prof = await Teacher.findById(teacherId);
         
-        if (!prof) throw new Error("Enseignant introuvable");
+        if (!prof) throw new Error("Compte enseignant introuvable.");
 
+        // US #4 & #5 : CRÉATION PHYSIQUE SUR DRIVE
+        console.log(`📡 [STRUCTURE] Création Drive pour: ${title} (${subject})`);
         const teacherName = `${prof.firstName} ${prof.lastName}`;
-        // US #4 : Création physique obligatoire
-        const { chapterId } = await DriveService.getMirrorPathId(teacherName, classroom, subject, title);
+        const driveContext = await DriveService.getMirrorPathId(teacherName, classroom, subject, title);
         
+        if (!driveContext.chapterId) throw new Error("Échec de création du dossier Google Drive.");
+
+        const Chapter = mongoose.model('Chapter');
         let result;
         if (_id) {
-            result = await mongoose.model('Chapter').findByIdAndUpdate(_id, { title, subject, classroom, driveFolderId: chapterId }, { new: true });
+            result = await Chapter.findByIdAndUpdate(_id, { 
+                title, subject, classroom, driveFolderId: driveContext.chapterId 
+            }, { new: true });
         } else {
-            result = await mongoose.model('Chapter').create({ title, subject, classroom, driveFolderId: chapterId, teacherId });
+            result = await Chapter.create({ 
+                title, subject, classroom, driveFolderId: driveContext.chapterId, teacherId 
+            });
         }
         res.json(result);
     } catch (e) { 
-        console.error("❌ Chapter POST error:", e.message);
+        console.error("❌ [STRUCTURE_ERROR]:", e.message);
         res.status(500).json({ error: e.message }); 
     }
 });
@@ -68,6 +78,7 @@ router.post('/sync-drive', async (req, res) => {
             return res.json({ message: "Nuke OK" });
         }
 
+        // Restauration miroir complète
         const chapters = await mongoose.model('Chapter').find({ classroom });
         for (const chap of chapters) {
             await DriveService.getMirrorPathId(teacherName, classroom, chap.subject, chap.title);

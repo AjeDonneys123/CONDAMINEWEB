@@ -2,21 +2,6 @@ const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 
-router.patch('/teacher/:id/sections', async (req, res) => {
-    try {
-        const { sections } = req.body;
-        const updated = await mongoose.model('Teacher').findByIdAndUpdate(req.params.id, { subjectSections: sections }, { new: true });
-        res.json({ ok: true, user: updated });
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-router.get('/players', async (req, res) => {
-    try {
-        const players = await mongoose.model('Player').find({});
-        res.json(players);
-    } catch (e) { res.status(500).json([]); }
-});
-
 router.get('/database-dump', async (req, res) => {
     try {
         const dump = {
@@ -27,6 +12,21 @@ router.get('/database-dump', async (req, res) => {
             teachers: await mongoose.model('Teacher').find({})
         };
         res.json(dump);
+    } catch (e) { res.status(500).json({ error: "Dump impossible" }); }
+});
+
+router.get('/players', async (req, res) => {
+    try {
+        const data = await mongoose.model('Player').find({}).sort({ classroom: 1, lastName: 1 });
+        res.json(data);
+    } catch (e) { res.status(500).json([]); }
+});
+
+router.patch('/teacher/:id/sections', async (req, res) => {
+    try {
+        const { sections } = req.body;
+        const updated = await mongoose.model('Teacher').findByIdAndUpdate(req.params.id, { subjectSections: sections }, { new: true });
+        res.json({ ok: true, user: updated });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

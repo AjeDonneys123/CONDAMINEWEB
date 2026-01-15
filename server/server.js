@@ -12,7 +12,7 @@ const app = express();
 const port = process.env.PORT || 3000;
 const SERVER_BOOT_ID = Date.now();
 
-// 1. ENREGISTREMENT DES MODÈLES (ORDRE CRITIQUE)
+// 1. MODÈLES
 require('./models/Teacher');
 require('./models/Player');
 require('./models/Chapter');
@@ -24,12 +24,12 @@ require('./models/TeacherStyle');
 require('./models/DeploySignal');
 require('./models/Bug');
 
-mongoose.connect(process.env.MONGODB_URI).then(() => console.log('✅ MongoDB Connected (Build 323 - Logic Restored)'));
+mongoose.connect(process.env.MONGODB_URI).then(() => console.log('✅ MongoDB Connected (Build 324)'));
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// 2. ROUTES API DÉCOUPLÉES
+// 2. ROUTES API (POROSITÉ ZÉRO)
 app.use('/api/auth', require('./features/auth/auth.routes'));
 app.use('/api/structure', require('./features/structure/structure.routes'));
 app.use('/api/games', require('./features/games/games.routes'));
@@ -37,7 +37,7 @@ app.use('/api/homework', require('./features/homework/homework.routes'));
 app.use('/api', require('./features/admin/admin.routes'));
 
 app.get('/api/check-deploy', (req, res) => res.json({ bootId: SERVER_BOOT_ID }));
-app.get('/api/deploy-status', (req, res) => res.json({ version: "2.2.3", build: 323, status: "live" }));
+app.get('/api/deploy-status', (req, res) => res.json({ version: "2.2.4", build: 324, status: "live" }));
 
 const distPath = path.join(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) {

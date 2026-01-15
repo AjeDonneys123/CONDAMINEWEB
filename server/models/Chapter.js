@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 const ChapterSchema = new mongoose.Schema({
     title: { type: String, required: true },
-    subject: { type: String, default: "H" },
+    subject: { type: String, required: true }, // ex: "Histoire"
     isArchived: { type: Boolean, default: false },
     classroom: { type: String, required: true },
     driveFolderId: String,
