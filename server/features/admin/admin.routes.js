@@ -3,108 +3,102 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const DriveService = require('../../services/drive.service');
 
-// US #15 : Fix Error 500 Players
+// US #15 : Players
 router.get('/players', async (req, res) => {
-    try {
-        const Player = mongoose.model('Player');
-        res.json(await Player.find({}).sort({ classroom: 1, lastName: 1 }));
-    } catch (e) { res.status(500).json({ error: e.message }); }
+    try { res.json(await mongoose.model('Player').find({}).sort({ classroom: 1, lastName: 1 })); } 
+    catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// US #8 : SYNCHRO TOTALE (BDD + DRIVE)
+// US #8 & #9 : REMISE À ZÉRO TOTALE (Bouton de la dernière chance)
 router.post('/sync-drive', async (req, res) => {
     try {
-        const { classroom, teacherId } = req.body;
+        const { classroom, teacherId, mode } = req.body;
         const Teacher = mongoose.model('Teacher');
         const Chapter = mongoose.model('Chapter');
         const Homework = mongoose.model('Homework');
 
         const prof = await Teacher.findById(teacherId);
-        if (!prof) throw new Error("Professeur introuvable");
         const teacherName = `${prof.firstName} ${prof.lastName}`;
-
-        // --- PHASE 1 : NETTOYAGE BDD (LA VÉRITÉ DES ARCHIVES) ---
-        // On force tous les chapitres à avoir le nom complet de la matière au lieu des codes H/G/E
-        const classChapters = await Chapter.find({ classroom });
-        for (let chap of classChapters) {
-            // On cherche la section du prof qui correspond (soit par nom exact, soit par initiale)
-            const matchedSection = prof.subjectSections.find(s => 
-                s.name.toUpperCase() === chap.subject.toUpperCase() || 
-                s.name.toUpperCase().startsWith(chap.subject.toUpperCase())
-            );
-            if (matchedSection && chap.subject !== matchedSection.name) {
-                console.log(`🧹 BDD Cleanup: ${chap.title} (${chap.subject} -> ${matchedSection.name})`);
-                await Chapter.findByIdAndUpdate(chap._id, { subject: matchedSection.name });
-            }
-        }
-
-        // --- PHASE 2 : MIROIR PHYSIQUE DRIVE ---
         const devoirsRootId = await DriveService.getDevoirsRootId(teacherName, classroom);
 
-        // 1. On évacue tout l'existant Drive dans une sauvegarde
-        const backupId = await DriveService.getOrCreateFolder(`BACKUP_SYNC_${Date.now()}`, 
-            await DriveService.getOrCreateFolder(classroom, 
-                await DriveService.getOrCreateFolder(teacherName, 
-                    await DriveService.getOrCreateFolder("CONDA CLASSE")
-                )
-            )
-        );
-        const currentFiles = await DriveService.listChildren(devoirsRootId);
-        for (const file of currentFiles) {
-            await DriveService.moveEntity(file.id, backupId);
+        // SI MODE NUKE : ON EFFACE TOUT BDD + DRIVE POUR CETTE CLASSE
+        if (mode === 'nuke') {
+            console.log(`🧨 [NUKE] Nettoyage total pour ${classroom}`);
+            // 1. Drive
+            const files = await DriveService.listChildren(devoirsRootId);
+            for (const f of files) await DriveService.deleteFile(f.id);
+            // 2. BDD
+            await Chapter.deleteMany({ classroom });
+            await Homework.deleteMany({ classroom });
+            return res.json({ ok: true, message: "Base de données et Drive vidés. Repartez sur du propre !" });
         }
 
-        // 2. On reconstruit tout à partir de la BDD maintenant propre
-        const cleanChapters = await Chapter.find({ classroom });
+        // SINON : SYNCHRO CLASSIQUE (Reconstruction)
+        const chapters = await Chapter.find({ classroom });
         const homeworks = await Homework.find({ classroom });
 
         for (const section of prof.subjectSections) {
-            const subjectFolderId = await DriveService.getOrCreateFolder(section.name, devoirsRootId);
-            const chaps = cleanChapters.filter(c => c.subject === section.name);
-            
-            for (const chap of chaps) {
-                const chapFolderId = await DriveService.getOrCreateFolder(chap.title, subjectFolderId);
+            const subFolderId = await DriveService.getOrCreateFolder(section.name, devoirsRootId);
+            const secChapters = chapters.filter(c => c.subject === section.name);
+            for (const chap of secChapters) {
+                const chapFolderId = await DriveService.getOrCreateFolder(chap.title, subFolderId);
                 await Chapter.findByIdAndUpdate(chap._id, { driveFolderId: chapFolderId });
-
                 const hws = homeworks.filter(h => h.chapterId?.toString() === chap._id.toString());
                 for (const hw of hws) {
-                    const hwFolderId = await DriveService.getOrCreateFolder(hw.title, chapFolderId);
-                    await DriveService.getOrCreateFolder("SUJET", hwFolderId);
-                    await DriveService.getOrCreateFolder("COPIES", hwFolderId);
-                    await DriveService.getOrCreateFolder("CORRECTIONS", hwFolderId);
-                    await Homework.findByIdAndUpdate(hw._id, { driveFolderId: hwFolderId });
+                    const hwId = await DriveService.getOrCreateFolder(hw.title, chapFolderId);
+                    await DriveService.getOrCreateFolder("SUJET", hwId);
+                    await DriveService.getOrCreateFolder("COPIES", hwId);
+                    await DriveService.getOrCreateFolder("CORRECTIONS", hwId);
+                    await Homework.findByIdAndUpdate(hw._id, { driveFolderId: hwId });
                 }
             }
         }
+        res.json({ ok: true, message: "Miroir Drive reconstruit avec succès." });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
 
-        res.json({ ok: true, message: "Base de données nettoyée et Drive reconstruit à 100%." });
-    } catch (e) {
-        console.error("❌ Synchro Error:", e.message);
-        res.status(500).json({ error: e.message });
-    }
+// US #6 : Synchro des matières (Renommer / Supprimer)
+router.patch('/teacher/:id/sections', async (req, res) => {
+    try {
+        const { sections, className, deletedSection } = req.body;
+        const Teacher = mongoose.model('Teacher');
+        const prof = await Teacher.findById(req.params.id);
+        const teacherName = `${prof.firstName} ${prof.lastName}`;
+
+        // US #9 : Si une section a été supprimée, on la vire du Drive
+        if (deletedSection && className) {
+            const devoirsRoot = await DriveService.getDevoirsRootId(teacherName, className);
+            const children = await DriveService.listChildren(devoirsRoot);
+            const target = children.find(c => c.name === DriveService.normalize(deletedSection));
+            if (target) await DriveService.deleteFile(target.id);
+        }
+
+        const updated = await Teacher.findByIdAndUpdate(req.params.id, { subjectSections: sections }, { new: true });
+        res.json({ user: { id: updated._id, firstName: updated.firstName, lastName: updated.lastName, subjectSections: updated.subjectSections, role: 'prof' } });
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.post('/chapters', async (req, res) => {
     try {
         const { _id, title, classroom, subject, teacherId } = req.body;
         const prof = await mongoose.model('Teacher').findById(teacherId);
-        const teacherName = `${prof.firstName} ${prof.lastName}`;
-        const root = await DriveService.getDevoirsRootId(teacherName, classroom);
+        const root = await DriveService.getDevoirsRootId(`${prof.firstName} ${prof.lastName}`, classroom);
         const subId = await DriveService.getOrCreateFolder(subject, root);
         const driveId = await DriveService.getOrCreateFolder(title, subId);
 
-        let result;
-        if (_id && mongoose.Types.ObjectId.isValid(_id)) {
-            result = await mongoose.model('Chapter').findByIdAndUpdate(_id, { ...req.body, driveFolderId: driveId }, { new: true });
-        } else {
-            result = await mongoose.model('Chapter').create({ ...req.body, driveFolderId: driveId, isArchived: false });
-        }
+        let result = _id ? await mongoose.model('Chapter').findByIdAndUpdate(_id, { ...req.body, driveFolderId: driveId }, { new: true }) 
+                         : await mongoose.model('Chapter').create({ ...req.body, driveFolderId: driveId, isArchived: false });
         res.json(result);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.get('/chapters-all', async (req, res) => {
-    try { res.json(await mongoose.model('Chapter').find({})); } catch (e) { res.json([]); }
+router.delete('/chapters/:id', async (req, res) => {
+    try {
+        const chap = await mongoose.model('Chapter').findById(req.params.id);
+        if (chap?.driveFolderId) await DriveService.deleteFile(chap.driveFolderId);
+        await mongoose.model('Chapter').findByIdAndDelete(req.params.id);
+        res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 module.exports = router;
