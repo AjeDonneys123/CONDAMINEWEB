@@ -2,41 +2,32 @@ const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 
-async function safeFind(modelName) {
+router.patch('/teacher/:id/sections', async (req, res) => {
     try {
-        const Model = mongoose.model(modelName);
-        return await Model.find({}).lean();
-    } catch (e) {
-        console.warn(`⚠️ Collection ${modelName} non initialisée.`);
-        return [];
-    }
-}
-
-router.get('/database-dump', async (req, res) => {
-    try {
-        const dump = {
-            players: await safeFind('Player'),
-            chapters: await safeFind('Chapter'),
-            homeworks: await safeFind('Homework'),
-            gamelevels: await safeFind('GameLevel'),
-            teachers: await safeFind('Teacher'),
-            scansessions: await safeFind('ScanSession'),
-            submissions: await safeFind('Submission'),
-            bugs: await safeFind('Bug'),
-            deploysignals: await safeFind('DeploySignal')
-        };
-        res.json(dump);
-    } catch (e) {
-        res.status(500).json({ error: "Crash du Dump", details: e.message });
-    }
+        const { sections } = req.body;
+        const updated = await mongoose.model('Teacher').findByIdAndUpdate(req.params.id, { subjectSections: sections }, { new: true });
+        res.json({ ok: true, user: updated });
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.get('/players', async (req, res) => {
     try {
-        res.json(await mongoose.model('Player').find({}).sort({ classroom: 1 }));
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
+        const players = await mongoose.model('Player').find({});
+        res.json(players);
+    } catch (e) { res.status(500).json([]); }
+});
+
+router.get('/database-dump', async (req, res) => {
+    try {
+        const dump = {
+            players: await mongoose.model('Player').find({}),
+            chapters: await mongoose.model('Chapter').find({}),
+            homeworks: await mongoose.model('Homework').find({}),
+            gamelevels: await mongoose.model('GameLevel').find({}),
+            teachers: await mongoose.model('Teacher').find({})
+        };
+        res.json(dump);
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 module.exports = router;

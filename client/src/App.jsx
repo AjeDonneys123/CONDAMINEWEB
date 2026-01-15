@@ -8,7 +8,7 @@ import './App.css';
 export default function App() {
   const [user, setUser] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [appInfo, setAppInfo] = useState({ version: '2.2.1', build: 321, status: 'live' });
+  const [appInfo, setAppInfo] = useState({ version: '2.2.2', build: 322, status: 'live' });
   const bootIdRef = useRef(null);
 
   useEffect(() => {
