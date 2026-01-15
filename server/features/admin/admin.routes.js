@@ -3,6 +3,7 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const DriveService = require('../../services/drive.service');
 
+// Route Players (Fix US #15)
 router.get('/players', async (req, res) => {
     try {
         const Player = mongoose.model('Player');
@@ -15,7 +16,7 @@ router.get('/chapters-all', async (req, res) => {
     catch (e) { res.status(500).json([]); }
 });
 
-// US #8 & #9 : NUKE RADICAL (LANCE-FLAMMES)
+// US #8 & #9 : SYNC ET NUKE (L'ARME ULTIME)
 router.post('/sync-drive', async (req, res) => {
     try {
         const { classroom, teacherId, mode } = req.body;
@@ -25,31 +26,32 @@ router.post('/sync-drive', async (req, res) => {
         const prof = await mongoose.model('Teacher').findById(teacherId);
         const teacherName = `${prof.firstName} ${prof.lastName}`;
 
-        // 1. On récupère le dossier de la classe
-        const classFolderId = await DriveService.getClassFolder(teacherName, classroom);
+        // 1. Localiser le dossier racine de la classe
+        const classFolderId = await DriveService.getClassFolderId(teacherName, classroom);
 
+        // --- MODE NUKE : NETTOYAGE PAR LE VIDE ---
         if (mode === 'nuke') {
-            console.log(`🧨 [LANCE-FLAMMES] Nettoyage intégral de ${classroom}...`);
+            console.log(`🧨 [EXTERMINATION] Vidage de la classe ${classroom}...`);
             
-            // 2. On liste TOUS les enfants du dossier classe (DEVOIRS, H, GEO, etc.)
-            const children = await DriveService.listAllChildren(classFolderId);
+            // On liste TOUT ce qui traîne dans le dossier de classe (DEVOIRS, H, GEO, etc.)
+            const trashItems = await DriveService.listEverythingInside(classFolderId);
             
-            // 3. On les supprime TOUS un par un
-            for (const item of children) {
+            // On supprime TOUT physiquement
+            for (const item of trashItems) {
                 await DriveService.deleteEntity(item.id);
             }
             
-            // 4. On vide la BDD
+            // Nettoyage BDD
             await mongoose.model('Chapter').deleteMany({ classroom });
             await mongoose.model('Homework').deleteMany({ classroom });
             
-            // 5. On recrée le dossier DEVOIRS tout neuf
+            // Recréer le dossier DEVOIRS propre
             await DriveService.getOrCreateFolder("DEVOIRS", classFolderId);
             
-            return res.json({ ok: true, message: "Drive pulvérisé et recréé à neuf." });
+            return res.json({ ok: true, message: "Le Cloud et la BDD ont été intégralement vidés." });
         }
 
-        // MODE SYNC CLASSIQUE (Reconstruction)
+        // --- MODE SYNC : RECONSTRUCTION ---
         const devoirsId = await DriveService.getOrCreateFolder("DEVOIRS", classFolderId);
         const chapters = await mongoose.model('Chapter').find({ classroom });
         const homeworks = await mongoose.model('Homework').find({ classroom });
@@ -70,8 +72,9 @@ router.post('/sync-drive', async (req, res) => {
                 }
             }
         }
-        res.json({ ok: true, message: "Synchronisation terminée." });
+        res.json({ ok: true, message: "Miroir reconstitué avec succès." });
     } catch (e) {
+        console.error("❌ Synchro Error:", e.message);
         res.status(500).json({ error: e.message });
     }
 });
@@ -80,8 +83,7 @@ router.post('/chapters', async (req, res) => {
     try {
         const { _id, title, classroom, subject, teacherId } = req.body;
         const prof = await mongoose.model('Teacher').findById(teacherId);
-        const teacherName = `${prof.firstName} ${prof.lastName}`;
-        const classId = await DriveService.getClassFolder(teacherName, classroom);
+        const classId = await DriveService.getClassFolderId(`${prof.firstName} ${prof.lastName}`, classroom);
         const devRoot = await DriveService.getOrCreateFolder("DEVOIRS", classId);
         const subId = await DriveService.getOrCreateFolder(subject, devRoot);
         const driveId = await DriveService.getOrCreateFolder(title, subId);
@@ -96,11 +98,10 @@ router.patch('/teacher/:id/sections', async (req, res) => {
     try {
         const { sections, className, deletedSection } = req.body;
         const prof = await mongoose.model('Teacher').findById(req.params.id);
-        const teacherName = `${prof.firstName} ${prof.lastName}`;
         if (deletedSection && className) {
-            const classId = await DriveService.getClassFolder(teacherName, className);
-            const devRoot = await DriveService.getOrCreateFolder("DEVOIRS", classId);
-            const children = await DriveService.listAllChildren(devRoot);
+            const classId = await DriveService.getClassFolderId(`${prof.firstName} ${prof.lastName}`, className);
+            const devId = await DriveService.getOrCreateFolder("DEVOIRS", classId);
+            const children = await DriveService.listEverythingInside(devId);
             const target = children.find(c => c.name === DriveService.normalize(deletedSection));
             if (target) await DriveService.deleteEntity(target.id);
         }
