@@ -12,7 +12,7 @@ try {
         );
         auth.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
         drive = google.drive({ version: 'v3', auth });
-        console.log("✅ Drive Service V8 : Hiérarchie Multi-Prof active");
+        console.log("✅ Drive Service V9 : Mode Miroir BDD Stricte");
     }
 } catch (e) { console.error("❌ Erreur Init Drive:", e.message); }
 
@@ -38,16 +38,30 @@ const DriveService = {
         } catch (e) { return null; }
     },
 
-    // LE CHEMIN ABSOLU : CONDA CLASSE > PROF > CLASSE > DEVOIRS > MATIERE > CHAPITRE
-    getPathFolder: async (teacherName, classroom, subject, chapterTitle = null) => {
+    // US #7 : Déplacer un dossier physiquement si la hiérarchie change
+    moveFolder: async (fileId, newParentId) => {
+        if (!drive || !fileId || !newParentId) return;
+        try {
+            const file = await drive.files.get({ fileId, fields: 'parents' });
+            const previousParents = file.data.parents.join(',');
+            await drive.files.update({
+                fileId,
+                addParents: newParentId,
+                removeParents: previousParents,
+                fields: 'id, parents'
+            });
+        } catch (e) { console.error("❌ Erreur Move Drive:", e.message); }
+    },
+
+    // RECONSTRUCTION DU CHEMIN COMPLET (LA RÉFÉRENCE ABSOLUE)
+    getMirrorPathId: async (teacherName, classroom, subject, chapterTitle) => {
         const rootId = await DriveService.getOrCreateFolder("CONDA CLASSE");
         const profId = await DriveService.getOrCreateFolder(teacherName, rootId);
         const classId = await DriveService.getOrCreateFolder(classroom, profId);
         const devoirsRootId = await DriveService.getOrCreateFolder("DEVOIRS", classId);
         const subjectId = await DriveService.getOrCreateFolder(subject, devoirsRootId);
-        
-        if (!chapterTitle) return subjectId;
-        return await DriveService.getOrCreateFolder(chapterTitle, subjectId);
+        const chapterId = await DriveService.getOrCreateFolder(chapterTitle, subjectId);
+        return { subjectId, chapterId };
     },
 
     deleteFile: async (id) => { 

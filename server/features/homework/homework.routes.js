@@ -19,9 +19,13 @@ router.post('/', async (req, res) => {
             
             if (chapter && prof) {
                 const teacherName = `${prof.firstName} ${prof.lastName}`;
-                const chapId = await DriveService.getPathFolder(teacherName, classroom, chapter.subject, chapter.title);
-                homeworkDriveId = await DriveService.getOrCreateFolder(title, chapId);
+                // US #7 : On récupère l'ID du chapitre parent réel (même s'il a bougé)
+                const { chapterId: driveChapId } = await DriveService.getMirrorPathId(teacherName, classroom, chapter.subject, chapter.title);
                 
+                // Création du dossier Devoir
+                homeworkDriveId = await DriveService.getOrCreateFolder(title, driveChapId);
+                
+                // Structure US #4
                 await DriveService.getOrCreateFolder("SUJET", homeworkDriveId);
                 await DriveService.getOrCreateFolder("COPIES", homeworkDriveId);
                 await DriveService.getOrCreateFolder("CORRECTIONS", homeworkDriveId);
@@ -36,7 +40,7 @@ router.post('/', async (req, res) => {
         res.json({
             ...result._doc,
             drivePath: pathStr,
-            message: _id ? "Modifications sauvegardées" : "Espace Drive créé"
+            message: _id ? "Devoir mis à jour" : "Dossier Drive créé"
         });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
