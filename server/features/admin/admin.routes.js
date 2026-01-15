@@ -3,13 +3,34 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const DriveService = require('../../services/drive.service');
 
-const normalize = (n) => n ? n.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Z0-9 ]/g, "_").trim() : "SANS_TITRE";
+const normalize = (n) => DriveService.normalizeName(n);
 
-/**
- * 🛠️ ADMINISTRATION & DOSSIERS
- */
+// US #8 : Route de synchronisation globale
+router.post('/sync-drive', async (req, res) => {
+    try {
+        const { classroom, teacherId } = req.body;
+        const Teacher = mongoose.model('Teacher');
+        const Chapter = mongoose.model('Chapter');
+        const Homework = mongoose.model('Homework');
 
-// Mise à jour des sections (matières) du prof + synchro Drive
+        const prof = await Teacher.findById(teacherId);
+        const chapters = await Chapter.find({ classroom });
+        const homeworks = await Homework.find({ classroom });
+
+        const result = await DriveService.syncFullStructure(
+            classroom, 
+            prof.subjectSections, 
+            chapters, 
+            homeworks
+        );
+
+        if (result.error) throw new Error(result.error);
+        res.json({ ok: true, message: "Drive synchronisé avec succès" });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 router.patch('/teacher/:id/sections', async (req, res) => {
     try {
         const { sections, className } = req.body;
@@ -21,11 +42,10 @@ router.patch('/teacher/:id/sections', async (req, res) => {
             { new: true }
         );
 
-        // Synchro Drive optionnelle en tâche de fond
         if (className && sections.length > 0) {
             const hwRootId = await DriveService.getHomeworkRoot(className);
             const lastAdded = sections[sections.length - 1];
-            await DriveService.getOrCreateFolder(normalize(lastAdded.name), hwRootId);
+            await DriveService.getOrCreateFolder(lastAdded.name, hwRootId);
         }
 
         res.json({
@@ -41,29 +61,28 @@ router.patch('/teacher/:id/sections', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Création / Mise à jour de chapitre (Dossier)
 router.post('/chapters', async (req, res) => {
     try {
         const Chapter = mongoose.model('Chapter');
         const { _id, title, classroom, subject } = req.body;
         
         let driveId = req.body.driveFolderId;
+        let fullPath = "CONDA CLASSE";
 
-        // US #4 & #5 : Structure Auto-gérée & Normalisation
         if (title && subject && classroom) {
             const hwRootId = await DriveService.getHomeworkRoot(classroom);
-            const subId = await DriveService.getOrCreateFolder(normalize(subject), hwRootId);
-            driveId = await DriveService.getOrCreateFolder(normalize(title), subId);
+            const subId = await DriveService.getOrCreateFolder(subject, hwRootId);
+            driveId = await DriveService.getOrCreateFolder(title, subId);
+            fullPath = `CONDA CLASSE / ${classroom.toUpperCase()} / DEVOIRS / ${normalize(subject)} / ${normalize(title)}`;
         }
 
         let result;
         if (_id && mongoose.Types.ObjectId.isValid(_id)) {
-            // US #6 : Synchro du nom / matière
             result = await Chapter.findByIdAndUpdate(_id, { ...req.body, driveFolderId: driveId }, { new: true });
         } else {
             result = await Chapter.create({ ...req.body, driveFolderId: driveId, isArchived: false });
         }
-        res.json(result);
+        res.json({ ...result._doc, drivePath: fullPath });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -75,7 +94,6 @@ router.get('/chapters-all', async (req, res) => {
     try { res.json(await mongoose.model('Chapter').find({}).sort({ _id: -1 })); } catch (e) { res.json([]); }
 });
 
-// US #9 : Nettoyage intégral
 router.delete('/chapters/:id', async (req, res) => {
     try {
         const Chapter = mongoose.model('Chapter');
@@ -84,7 +102,7 @@ router.delete('/chapters/:id', async (req, res) => {
             await DriveService.deleteFile(chap.driveFolderId);
         }
         await Chapter.findByIdAndDelete(req.params.id);
-        res.json({ ok: true, message: "Dossier supprimé physiquement sur Drive" });
+        res.json({ ok: true, message: "Dossier supprimé sur Drive" });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

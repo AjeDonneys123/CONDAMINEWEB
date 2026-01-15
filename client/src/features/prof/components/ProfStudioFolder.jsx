@@ -9,7 +9,7 @@ const COLOR_PALETTE = [
     '#ec4899', // Rose
     '#06b6d4', // Cyan
     '#f97316', // Orange
-    '#facc15'  // JAUNE VIF (Remplace le noir/ardoise)
+    '#facc15'  // Jaune
 ];
 
 export default function ProfStudioFolder({ 
@@ -23,13 +23,28 @@ export default function ProfStudioFolder({
     const [sections, setSections] = useState([]);
     const [movingId, setMovingId] = useState(null); 
     const [colorPickerIdx, setColorPickerIdx] = useState(null); 
-
-    const norm = (c) => c?.toString().toUpperCase().replace('E', '').trim() || "";
-    const smartSort = (a, b) => (a.title || "").localeCompare(b.title || "", undefined, { numeric: true, sensitivity: 'base' });
+    const [isSyncing, setIsSyncing] = useState(false);
 
     useEffect(() => { 
         if (user?.subjectSections) setSections(user.subjectSections);
     }, [user]);
+
+    // US #8 : Force le Drive à s'aligner sur la BDD
+    const handleForceSync = async () => {
+        setIsSyncing(true);
+        try {
+            const res = await fetch('/api/sync-drive', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ classroom: classFilter, teacherId: user.id || user._id })
+            });
+            const data = await res.json();
+            if (onNotify) onNotify({ message: data.message || data.error, driveError: !!data.error });
+        } catch (e) {
+            console.error(e);
+        }
+        setIsSyncing(false);
+    };
 
     const saveSections = async (newSections) => {
         const uid = user?.id || user?._id;
@@ -79,7 +94,8 @@ export default function ProfStudioFolder({
             });
             if (res.ok) {
                 setMovingId(null);
-                if (onNotify) onNotify({ message: `Dossier reclassé en ${newSubject}` });
+                const data = await res.json();
+                if (onNotify) onNotify({ message: `Dossier reclassé dans ${newSubject}`, drivePath: data.drivePath });
                 if (onRefresh) onRefresh();
             }
         } catch (e) { console.error(e); }
@@ -102,8 +118,6 @@ export default function ProfStudioFolder({
         const color = section?.color || "#94a3b8";
         const letter = (section?.name || "?").substring(0, 1).toUpperCase();
         const chapItems = items.filter(it => String(it.chapterId) === String(chap._id));
-
-        // Fix contraste pour le jaune
         const isLightColor = color === '#facc15';
 
         return (
@@ -165,7 +179,6 @@ export default function ProfStudioFolder({
 
     return (
         <div className="max-w-5xl mx-auto space-y-12 pb-20">
-            {/* CARRE SOMBRE : CONFIGURATION ET ARCHIVES (DESIGN ORIGINAL RESTAURE) */}
             <div className="p-8 bg-slate-900 rounded-[50px] border-4 border-slate-800 shadow-2xl">
                 <div className="flex justify-between items-center mb-8 px-2">
                     <h3 className="text-white font-black text-[10px] uppercase tracking-widest flex items-center gap-2">
@@ -173,6 +186,9 @@ export default function ProfStudioFolder({
                         Configuration & Archives
                     </h3>
                     <div className="flex gap-2">
+                        <button onClick={handleForceSync} disabled={isSyncing} className={`px-5 py-2 rounded-2xl font-black text-[9px] uppercase shadow-lg transition-all ${isSyncing ? 'bg-slate-700 text-slate-500' : 'bg-white text-indigo-600 hover:bg-indigo-50'}`}>
+                            {isSyncing ? 'Sync...' : '🔄 Synchro Drive'}
+                        </button>
                         {isDeleteMode && (
                             <button onClick={autoColorize} className="bg-emerald-600 text-white px-5 py-2 rounded-2xl font-black text-[9px] uppercase hover:bg-emerald-500 shadow-lg transition-all">🎨 Couleurs Auto</button>
                         )}
@@ -280,3 +296,6 @@ export default function ProfStudioFolder({
         </div>
     );
 }
+
+const norm = (c) => c?.toString().toUpperCase().replace('E', '').trim() || "";
+const smartSort = (a, b) => (a.title || "").localeCompare(b.title || "", undefined, { numeric: true, sensitivity: 'base' });
