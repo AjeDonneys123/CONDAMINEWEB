@@ -12,18 +12,18 @@ const app = express();
 const port = process.env.PORT || 3000;
 const SERVER_BOOT_ID = Date.now();
 
-// 1. CHARGEMENT DES MODÈLES
+// 1. MODÈLES
 require('./models/Teacher'); require('./models/Player'); require('./models/Chapter');
 require('./models/Homework'); require('./models/GameLevel'); require('./models/ScanSession');
 require('./models/Submission'); require('./models/TeacherStyle'); require('./models/DeploySignal');
 require('./models/Bug');
 
-mongoose.connect(process.env.MONGODB_URI).then(() => console.log('✅ MongoDB Connected (Build 336)'));
+mongoose.connect(process.env.MONGODB_URI).then(() => console.log('✅ MongoDB Connected (Build 337)'));
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// 2. ROUTES API
+// 2. ROUTES
 app.use('/api/auth', require('./features/auth/auth.routes'));
 app.use('/api/structure', require('./features/structure/structure.routes'));
 app.use('/api/games', require('./features/games/games.routes'));
@@ -40,7 +40,7 @@ app.get('/api/drive-check', async (req, res) => {
 });
 
 app.get('/api/check-deploy', (req, res) => res.json({ bootId: SERVER_BOOT_ID }));
-app.get('/api/deploy-status', (req, res) => res.json({ version: "2.3.6", build: 336, status: "live" }));
+app.get('/api/deploy-status', (req, res) => res.json({ version: "2.3.7", build: 337, status: "live" }));
 
 const distPath = path.join(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) {
@@ -48,4 +48,4 @@ if (fs.existsSync(distPath)) {
     app.get('*', (req, res) => res.sendFile(path.join(distPath, 'index.html')));
 }
 
-app.listen(port, () => console.log(`🚀 SERVEUR CONDAMINE ACTIF (BUILD 336)`));
+app.listen(port, () => console.log(`🚀 SERVEUR CONDAMINE ACTIF (BUILD 337)`));
