@@ -7,7 +7,7 @@ import ScansStudio from './scans/ScansStudio';
 import './ProfPage.css';
 
 export default function ProfPage({ user, onLogout }) {
-  const [tab, setTab] = useState('students');
+  const [tab, setTab] = useState('activities');
   const [classes, setClasses] = useState([]);
   const [selectedClass, setSelectedClass] = useState("");
   const [loading, setLoading] = useState(false);
@@ -15,13 +15,17 @@ export default function ProfPage({ user, onLogout }) {
   const loadClasses = async () => {
       try {
         const res = await fetch('/api/players');
-        if (!res.ok) throw new Error("Réponse serveur invalide");
+        if (!res.ok) throw new Error("Erreur Serveur");
         const data = await res.json();
         
         if (Array.isArray(data)) {
             const uniqueClasses = [...new Set(data.map(p => p.classroom))].filter(Boolean);
             setClasses(uniqueClasses);
-            if (!selectedClass && uniqueClasses.length > 0) setSelectedClass(uniqueClasses[0]);
+            // Par défaut on prend la 2CD si elle existe, sinon la première
+            if (!selectedClass) {
+                const target = uniqueClasses.find(c => c === '2CD') || uniqueClasses[0];
+                setSelectedClass(target);
+            }
         }
       } catch(e) { 
           console.error("Erreur chargement classes:", e);
@@ -31,16 +35,11 @@ export default function ProfPage({ user, onLogout }) {
   useEffect(() => { loadClasses(); }, []);
 
   const deleteClass = async (name) => {
-      if (!confirm(`⚠️ SUPPRIMER LA CLASSE ${name} ?\nCela effacera les élèves, devoirs et dossiers.`)) return;
-      if (!confirm(`TAPEZ SUR OK POUR CONFIRMER LA SUPPRESSION DE LA ${name}`)) { return; }
-      
+      if (!confirm(`⚠️ SUPPRIMER LA CLASSE ${name} ?`)) return;
       setLoading(true);
       try {
           const res = await fetch(`/api/classroom/${name}`, { method: 'DELETE' });
-          if (res.ok) {
-              setSelectedClass("");
-              await loadClasses();
-          }
+          if (res.ok) { setSelectedClass(""); await loadClasses(); }
       } catch(e) { console.error(e); }
       setLoading(false);
   };
@@ -59,12 +58,7 @@ export default function ProfPage({ user, onLogout }) {
                     >
                         {c}
                     </button>
-                    <button 
-                        onClick={() => deleteClass(c)} 
-                        className="w-8 h-8 flex items-center justify-center text-red-200 hover:text-red-500 font-bold transition-colors"
-                    >
-                        ✕
-                    </button>
+                    <button onClick={() => deleteClass(c)} className="w-8 h-8 flex items-center justify-center text-red-200 hover:text-red-500 font-bold transition-colors">✕</button>
                 </div>
             ))}
         </div>

@@ -10,17 +10,11 @@ const app = express();
 const port = process.env.PORT || 3000;
 const SERVER_BOOT_ID = Date.now();
 
-// 1. CHARGEMENT PRIORITAIRE DES MODÈLES (Empêche les erreurs 500 de dépendances)
-require('./models/Teacher');
-require('./models/Player');
-require('./models/Chapter');
-require('./models/Homework');
-require('./models/GameLevel');
-require('./models/ScanSession');
-require('./models/Submission');
-require('./models/Bug');
-require('./models/DeploySignal');
-require('./models/TeacherStyle');
+// 1. ENREGISTREMENT PRIORITAIRE DES MODÈLES (Anti-Erreur 500)
+const modelsPath = path.join(__dirname, 'models');
+fs.readdirSync(modelsPath).forEach(file => {
+    if (file.endsWith('.js')) require(path.join(modelsPath, file));
+});
 
 // 2. MONGODB
 mongoose.connect(process.env.MONGODB_URI).then(async () => {
@@ -33,16 +27,16 @@ mongoose.connect(process.env.MONGODB_URI).then(async () => {
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// 3. SYSTÈME
+// 3. SYSTÈME (Vérification de vie)
 app.get('/api/check-deploy', (req, res) => res.json({ bootId: SERVER_BOOT_ID }));
 app.get('/api/deploy-status', async (req, res) => {
     try {
         const sig = await mongoose.model('DeploySignal').findOne();
         const vPath = path.join(__dirname, 'version.json');
-        let v = { version: "1.7.5", build: 0 };
+        let v = { version: "1.8.0", build: 0 };
         if (fs.existsSync(vPath)) v = JSON.parse(fs.readFileSync(vPath, 'utf8'));
         res.json({ version: v.version, build: v.build, status: sig?.status || 'live' });
-    } catch (e) { res.json({ version: '1.7.5', build: 0, status: 'live' }); }
+    } catch (e) { res.json({ version: '1.8.0', build: 0, status: 'live' }); }
 });
 
 // 4. ROUTES DOMAINES
@@ -62,4 +56,4 @@ if (fs.existsSync(distPath)) {
     });
 }
 
-app.listen(port, () => console.log(`🚀 SERVEUR ACTIF | PORT ${port} | BOOT ID ${SERVER_BOOT_ID}`));
+app.listen(port, () => console.log(`🚀 SERVEUR CONDAMINE | PORT ${port} | BOOT ${SERVER_BOOT_ID}`));
