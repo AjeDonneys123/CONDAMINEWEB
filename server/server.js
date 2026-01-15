@@ -12,7 +12,7 @@ const app = express();
 const port = process.env.PORT || 3000;
 const SERVER_BOOT_ID = Date.now();
 
-// 1. MODÈLES (ORDRE CRITIQUE)
+// MODÈLES
 require('./models/Teacher');
 require('./models/Player');
 require('./models/Chapter');
@@ -24,26 +24,20 @@ require('./models/TeacherStyle');
 require('./models/DeploySignal');
 require('./models/Bug');
 
-mongoose.connect(process.env.MONGODB_URI).then(() => console.log('✅ MongoDB Connected (Build 325)'));
+mongoose.connect(process.env.MONGODB_URI).then(() => console.log('✅ MongoDB Connected (Build 326)'));
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// 2. ROUTES API
+// ROUTES API
 app.use('/api/auth', require('./features/auth/auth.routes'));
 app.use('/api/structure', require('./features/structure/structure.routes'));
 app.use('/api/games', require('./features/games/games.routes'));
 app.use('/api/homework', require('./features/homework/homework.routes'));
 app.use('/api', require('./features/admin/admin.routes'));
 
-// 3. DIAGNOSTIC DRIVE (US #12)
-const DriveService = require('./services/drive.service');
-app.get('/api/drive-check', async (req, res) => {
-    res.json(await DriveService.testConnection());
-});
-
 app.get('/api/check-deploy', (req, res) => res.json({ bootId: SERVER_BOOT_ID }));
-app.get('/api/deploy-status', (req, res) => res.json({ version: "2.2.5", build: 325, status: "live" }));
+app.get('/api/deploy-status', (req, res) => res.json({ version: "2.2.6", build: 326, status: "live" }));
 
 const distPath = path.join(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) {

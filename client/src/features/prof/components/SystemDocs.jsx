@@ -5,44 +5,35 @@ const DOC_MAP = [
     {
         id: 'auth', title: '🔐 Authentification', class: 'cat-auth',
         stories: [
-            { id: 'US#1', title: 'Connexion Hybride (Google/Code)', files: ['server/features/auth/auth.routes.js', 'client/src/features/auth/Login.jsx'] },
-            { id: 'US#2', title: 'Isolation Prof/Élève', files: ['client/src/App.jsx', 'server/models/Teacher.js'] }
+            { id: 'US#1', title: 'Connexion Hybride', files: ['server/features/auth/auth.routes.js', 'client/src/features/auth/Login.jsx'], risk: 'LOW' },
+            { id: 'US#2', title: 'Isolation Prof/Élève', files: ['client/src/App.jsx'], risk: 'HIGH' }
         ]
     },
     {
-        id: 'games', title: '🕹️ Jeux (Zombie/Starship)', class: 'cat-games',
+        id: 'games', title: '🕹️ Jeux', class: 'cat-games',
         stories: [
-            { id: 'US#10', title: 'Génération de Quiz par IA Flash', files: ['server/features/games/games.routes.js', 'server/services/ai.service.js'] },
-            { id: 'US#11', title: 'Mise à jour Carnet d’erreurs', files: ['server/features/homework/homework.routes.js', 'server/models/Player.js'] }
+            { id: 'US#10', title: 'Génération Quiz IA', files: ['server/features/games/games.routes.js', 'server/services/ai.service.js'], risk: 'MEDIUM' },
+            { id: 'US#11', title: 'Carnet d’erreurs', files: ['server/models/Player.js', 'server/features/homework/homework.routes.js'], risk: 'HIGH' }
         ]
     },
     {
-        id: 'homework', title: '📚 Devoirs & Pédagogie', class: 'cat-homework',
+        id: 'homework', title: '📚 Devoirs', class: 'cat-homework',
         stories: [
-            { id: 'US#3', title: 'Analyse et Correction IA', files: ['server/features/homework/homework.routes.js', 'server/services/ai.service.js'] },
-            { id: 'US#14', title: 'Respect du Style Enseignant', files: ['server/models/TeacherStyle.js', 'client/src/features/eleve/homework/HomeworkWorkspace.jsx'] }
+            { id: 'US#3', title: 'Analyse IA', files: ['server/features/homework/homework.routes.js', 'server/services/ai.service.js'], risk: 'CRITICAL' }
         ]
     },
     {
-        id: 'scans', title: '📤 Scans & Capture IA', class: 'cat-scans',
+        id: 'archiving', title: '📂 Archivage & Drive', class: 'cat-archiving',
         stories: [
-            { id: 'US#6', title: 'Capture Multi-Snap Caméra', files: ['client/src/features/prof/scans/ScansStudio.jsx', 'server/features/scans/scans.routes.js'] }
-        ]
-    },
-    {
-        id: 'archiving', title: '📂 Archivage & Miroir Drive', class: 'cat-archiving',
-        stories: [
-            { id: 'US#4', title: 'Hiérarchie Drive Automatique', files: ['server/services/drive.service.js', 'server/features/structure/structure.routes.js'] },
-            { id: 'US#5', title: 'Normalisation Physique des Noms', files: ['server/services/drive.service.js'] },
-            { id: 'US#8', title: 'Synchronisation / Nuke', files: ['server/features/structure/structure.routes.js', 'client/src/features/prof/components/ProfStudioFolder.jsx'] },
-            { id: 'US#9', title: 'Nettoyage Intégral Drive', files: ['server/features/homework/homework.routes.js', 'server/features/structure/structure.routes.js'] }
+            { id: 'US#4', title: 'Hiérarchie Drive', files: ['server/services/drive.service.js', 'server/features/structure/structure.routes.js'], risk: 'MEDIUM' },
+            { id: 'US#9', title: 'Nettoyage Intégral', files: ['server/features/homework/homework.routes.js', 'server/features/structure/structure.routes.js'], risk: 'HIGH' }
         ]
     },
     {
         id: 'admin', title: '⚙️ Administration', class: 'cat-admin',
         stories: [
-            { id: 'US#13', title: 'Moniteur de Déploiement Auto', files: ['server/server.js', 'client/src/App.jsx'] },
-            { id: 'US#15', title: 'Explorateur BDD (Raw Explorer)', files: ['server/features/admin/admin.routes.js', 'client/src/features/prof/components/DatabaseViewer.jsx'] }
+            { id: 'US#13', title: 'Moniteur Déploiement', files: ['server/server.js', 'client/src/App.jsx'], risk: 'MEDIUM' },
+            { id: 'US#15', title: 'Raw Explorer BDD', files: ['server/features/admin/admin.routes.js', 'client/src/features/prof/components/DatabaseViewer.jsx'], risk: 'LOW' }
         ]
     }
 ];
@@ -53,8 +44,8 @@ export default function SystemDocs({ onClose }) {
             <div className="docs-window" onClick={e => e.stopPropagation()}>
                 <div className="docs-header">
                     <div>
-                        <h2 className="text-2xl font-black uppercase tracking-tighter">Carte du Système Condamine</h2>
-                        <p className="text-xs text-slate-400 font-bold">Liaison User Stories ➔ Fichiers de code</p>
+                        <h2 className="text-2xl font-black uppercase tracking-tighter">Carte du Système (Audit Porosité)</h2>
+                        <p className="text-xs text-slate-400 font-bold">Analyse Build 326 : Surveillance des fichiers partagés</p>
                     </div>
                     <button className="btn-close-docs" onClick={onClose}>✕</button>
                 </div>
@@ -64,10 +55,15 @@ export default function SystemDocs({ onClose }) {
                             <h3 className="cat-title">{cat.title}</h3>
                             {cat.stories.map(us => (
                                 <div key={us.id} className="us-block">
-                                    <span className="us-title">{us.id} : {us.title}</span>
+                                    <div className="flex justify-between items-start mb-1">
+                                        <span className="us-title">{us.id} : {us.title}</span>
+                                        <span className={`risk-badge risk-${us.risk.toLowerCase()}`}>{us.risk}</span>
+                                    </div>
                                     <div className="file-list">
                                         {us.files.map(f => (
-                                            <span key={f} className="file-tag">{f}</span>
+                                            <span key={f} className={`file-tag ${DOC_MAP.filter(c => c.stories.some(s => s.files.includes(f))).length > 1 ? 'is-shared' : ''}`}>
+                                                {f} {DOC_MAP.filter(c => c.stories.some(s => s.files.includes(f))).length > 1 ? '⚠️' : ''}
+                                            </span>
                                         ))}
                                     </div>
                                 </div>

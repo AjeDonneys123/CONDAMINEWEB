@@ -1,73 +1,22 @@
-.docs-overlay {
-    position: fixed; inset: 0; z-index: 11000;
-    background: rgba(15, 23, 42, 0.95);
-    backdrop-filter: blur(10px);
-    display: flex; align-items: center; justify-content: center;
-    padding: 40px;
-}
-
-.docs-window {
-    background: white; width: 100%; height: 100%;
-    max-width: 1200px; border-radius: 40px;
-    display: flex; flex-direction: column; overflow: hidden;
-    box-shadow: 0 50px 100px -20px rgba(0,0,0,0.5);
-}
-
-.docs-header {
-    padding: 2rem; background: #1e293b; color: white;
-    display: flex; justify-content: space-between; align-items: center;
-}
-
-.docs-content {
-    flex: 1; overflow-y: auto; padding: 2rem;
-    display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-    gap: 2rem; background: #f8fafc;
-}
-
-.doc-category-card {
-    background: white; border-radius: 25px; padding: 1.5rem;
-    border: 1px solid #e2e8f0; shadow: 0 4px 6px rgba(0,0,0,0.02);
-}
-
-.cat-title {
-    font-size: 1.1rem; font-weight: 900; color: #1e293b;
-    text-transform: uppercase; margin-bottom: 1.5rem;
-    display: flex; align-items: center; gap: 10px;
-    border-bottom: 3px solid #eee; padding-bottom: 0.5rem;
-}
-
-.us-block {
-    margin-bottom: 1.5rem; padding-left: 1rem;
-    border-left: 3px solid #cbd5e1;
-}
-
-.us-title {
-    font-size: 0.85rem; font-weight: 800; color: #2563eb;
-    display: block; margin-bottom: 0.4rem;
-}
-
-.file-list {
-    display: flex; flex-direction: column; gap: 4px;
-}
-
-.file-tag {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.65rem; font-weight: 600; color: #64748b;
-    background: #f1f5f9; padding: 4px 8px; border-radius: 6px;
-    width: fit-content; border: 1px solid #e2e8f0;
-}
-
+.docs-overlay { position: fixed; inset: 0; z-index: 11000; background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(10px); display: flex; align-items: center; justify-content: center; padding: 40px; }
+.docs-window { background: white; width: 100%; height: 100%; max-width: 1200px; border-radius: 40px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 50px 100px -20px rgba(0,0,0,0.5); }
+.docs-header { padding: 2rem; background: #1e293b; color: white; display: flex; justify-content: space-between; align-items: center; }
+.docs-content { flex: 1; overflow-y: auto; padding: 2rem; display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 2rem; background: #f8fafc; }
+.doc-category-card { background: white; border-radius: 25px; padding: 1.5rem; border: 1px solid #e2e8f0; position: relative; }
+.cat-title { font-size: 1.1rem; font-weight: 900; color: #1e293b; text-transform: uppercase; margin-bottom: 1.5rem; border-bottom: 3px solid #eee; padding-bottom: 0.5rem; }
+.us-block { margin-bottom: 1.5rem; padding-left: 1rem; border-left: 3px solid #cbd5e1; }
+.us-title { font-size: 0.85rem; font-weight: 800; color: #2563eb; display: block; }
+.file-list { display: flex; flex-direction: column; gap: 4px; margin-top: 5px; }
+.file-tag { font-family: monospace; font-size: 0.65rem; font-weight: 600; color: #64748b; background: #f1f5f9; padding: 4px 8px; border-radius: 6px; border: 1px solid #e2e8f0; }
+.file-tag.is-shared { border-color: #f97316; background: #fff7ed; color: #c2410c; }
+.risk-badge { font-size: 0.5rem; font-weight: 900; padding: 2px 6px; border-radius: 4px; color: white; }
+.risk-low { background: #10b981; }
+.risk-medium { background: #f59e0b; }
+.risk-high { background: #ef4444; }
+.risk-critical { background: #000; box-shadow: 0 0 10px red; }
 .cat-auth { border-top: 8px solid #3b82f6; }
 .cat-games { border-top: 8px solid #a855f7; }
 .cat-homework { border-top: 8px solid #f97316; }
-.cat-scans { border-top: 8px solid #10b981; }
 .cat-archiving { border-top: 8px solid #6366f1; }
 .cat-admin { border-top: 8px solid #475569; }
-
-.btn-close-docs {
-    background: rgba(255,255,255,0.1); color: white;
-    width: 40px; height: 40px; border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    font-weight: 900; border: none; cursor: pointer;
-}
-.btn-close-docs:hover { background: #ef4444; }
+.btn-close-docs { background: rgba(255,255,255,0.1); color: white; width: 40px; height: 40px; border-radius: 50%; border: none; cursor: pointer; font-weight: bold; }
