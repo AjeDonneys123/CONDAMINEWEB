@@ -2,30 +2,50 @@ const { google } = require('googleapis');
 const { Readable } = require('stream');
 
 let driveInstance = null;
+let oauth2Client = null;
 
-try {
-    if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_REFRESH_TOKEN) {
-        const auth = new google.auth.OAuth2(
-            process.env.GOOGLE_CLIENT_ID, 
-            process.env.GOOGLE_CLIENT_SECRET, 
-            process.env.GOOGLE_REDIRECT_URI
-        );
-        auth.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
-        driveInstance = google.drive({ version: 'v3', auth });
-        console.log("✅ Drive Service V17 : Force Brute & Nuke par suppression de dossier racine");
+const initDrive = () => {
+    try {
+        if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_REFRESH_TOKEN) {
+            oauth2Client = new google.auth.OAuth2(
+                process.env.GOOGLE_CLIENT_ID, 
+                process.env.GOOGLE_CLIENT_SECRET, 
+                process.env.GOOGLE_REDIRECT_URI
+            );
+            oauth2Client.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
+            driveInstance = google.drive({ version: 'v3', auth: oauth2Client });
+            console.log("✅ Drive Service V18 : Connecté");
+        } else {
+            console.warn("⚠️ Drive non configuré : Variables d'environnement manquantes.");
+        }
+    } catch (e) {
+        console.error("❌ Drive Init Error:", e.message);
     }
-} catch (e) { console.error("❌ Drive Init Error:", e.message); }
+};
+
+initDrive();
 
 const DriveService = {
     normalize: (n) => n ? n.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Z0-9 ]/g, "_").trim() : "SANS_TITRE",
 
+    // Vérifie si le token est valide avant toute opération lourde
+    checkAuth: async () => {
+        if (!driveInstance) return false;
+        try {
+            await oauth2Client.getAccessToken();
+            return true;
+        } catch (e) {
+            console.error("🚨 AUTH ERROR (invalid_grant?) :", e.message);
+            return false;
+        }
+    },
+
     getOrCreateFolder: async (name, parentId = null) => {
-        if (!driveInstance) return null;
+        if (!await DriveService.checkAuth()) return null;
         const cleanName = DriveService.normalize(name);
         try {
             let q = `name = '${cleanName.replace(/'/g, "\\'")}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
             if (parentId) q += ` and '${parentId}' in parents`;
-            else q += ` and 'root' in parents`;
             
             const res = await driveInstance.files.list({ q, fields: 'files(id, name)' });
             if (res.data.files && res.data.files.length > 0) return res.data.files[0].id;
@@ -38,31 +58,43 @@ const DriveService = {
         } catch (e) { return null; }
     },
 
-    // US #9 : Suppression physique irréversible
     deleteEntity: async (id) => { 
-        if (!driveInstance || !id) return;
+        if (!await DriveService.checkAuth()) return;
         try { 
             await driveInstance.files.delete({ fileId: id }); 
-            console.log(`🗑️ Drive: Objet ${id} pulvérisé.`);
-        } catch (e) { console.error("❌ Erreur suppression physique:", e.message); } 
+        } catch (e) { console.error("❌ Erreur suppression:", e.message); } 
     },
 
-    // Recherche récursive du dossier DEVOIRS pour une classe spécifique
+    listChildren: async (parentId) => {
+        if (!await DriveService.checkAuth()) return [];
+        try {
+            const res = await driveInstance.files.list({ q: `'${parentId}' in parents and trashed = false`, fields: 'files(id, name)' });
+            return res.data.files || [];
+        } catch (e) { return []; }
+    },
+
     getSpecificDevoirsFolder: async (teacherName, classroom) => {
         const rootId = await DriveService.getOrCreateFolder("CONDA CLASSE");
         const profId = await DriveService.getOrCreateFolder(teacherName, rootId);
         const classId = await DriveService.getOrCreateFolder(classroom, profId);
-        
-        // On cherche si un dossier DEVOIRS existe déjà dedans
-        const res = await driveInstance.files.list({
-            q: `name = 'DEVOIRS' and '${classId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
-            fields: 'files(id)'
+        const devoirsId = await DriveService.getOrCreateFolder("DEVOIRS", classId);
+        return { classFolderId: classId, devoirsFolderId: devoirsId };
+    },
+
+    // Méthode pour générer l'URL d'autorisation (utile pour réparer le token)
+    getAuthUrl: () => {
+        if (!oauth2Client) return null;
+        return oauth2Client.generateAuthUrl({
+            access_type: 'offline',
+            prompt: 'consent',
+            scope: ['https://www.googleapis.com/auth/drive.file']
         });
-        
-        return {
-            classFolderId: classId,
-            devoirsFolderId: res.data.files[0]?.id || null
-        };
+    },
+
+    // Méthode pour échanger le code contre un token
+    setTokenFromCode: async (code) => {
+        const { tokens } = await oauth2Client.getToken(code);
+        return tokens.refresh_token;
     }
 };
 
