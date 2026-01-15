@@ -7,7 +7,7 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, use
   const [uploading, setUploading] = useState(false);
   const [saveStatus, setSaveStatus] = useState({ active: false, path: '', message: '', driveError: false });
   
-  // US #13 : Fix crash firstName
+  // US #13 : Sécurité anti-crash firstName
   const profName = user?.firstName ? `${user.firstName} ${user.lastName}` : "Chargement...";
 
   const [formData, setFormData] = useState(initialData || { 
@@ -22,7 +22,7 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, use
 
   const handleUpload = async (files, idx, type) => {
     if (!files || files.length === 0) return;
-    if (!formData._id) { alert("⚠️ Initialisez d'abord."); return; }
+    if (!formData._id) { alert("⚠️ Enregistrez le titre d'abord."); return; }
     setUploading(true);
     const newLevels = JSON.parse(JSON.stringify(formData.levels));
     for (let file of Array.from(files)) {
@@ -41,8 +41,8 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, use
   };
 
   const save = async () => {
-    if (!formData.title) return alert("Titre requis.");
-    if (!user) return alert("Utilisateur non chargé.");
+    if (!formData.title) return alert("Le titre est requis.");
+    if (!user) return alert("Utilisateur non authentifié.");
     setUploading(true);
     try {
         const res = await fetch('/api/homework', {
@@ -53,7 +53,7 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, use
         const data = await res.json();
         setSaveStatus({ active: true, path: data.drivePath, message: data.message, driveError: !data.driveFolderId });
         if (res.ok) setFormData(data);
-    } catch (e) { alert("Erreur."); }
+    } catch (e) { alert("Erreur serveur."); }
     setUploading(false);
   };
 
@@ -63,15 +63,17 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, use
             <div className="fixed inset-0 z-[7000] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-xl">
                 <div className={`bg-white rounded-[40px] p-10 max-w-2xl w-full text-center shadow-2xl border-4 ${saveStatus.driveError ? 'border-red-500' : 'border-emerald-500'} animate-in zoom-in`}>
                     <div className={`w-20 h-20 rounded-full flex items-center justify-center text-4xl mx-auto mb-6 ${saveStatus.driveError ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'}`}>{saveStatus.driveError ? '⚠️' : '✓'}</div>
-                    <h2 className="text-2xl font-black text-slate-800 uppercase mb-2">{saveStatus.message}</h2>
+                    <h2 className="text-2xl font-black text-slate-800 uppercase mb-2">{saveStatus.driveError ? "Conflit Drive détecté" : "Vérification terminée"}</h2>
                     <div className="bg-slate-50 p-6 rounded-3xl border-2 border-dashed border-slate-200 text-left my-6">
-                        <span className="text-[10px] font-black uppercase text-slate-400 block mb-2">Emplacement Cloud :</span>
+                        <span className={`text-[10px] font-black uppercase block mb-2 ${saveStatus.driveError ? 'text-red-500' : 'text-emerald-500'}`}>Emplacement Cloud Reconstitué :</span>
                         <code className="text-xs font-mono font-bold text-slate-600 break-all leading-relaxed">{saveStatus.path}</code>
                     </div>
-                    <button onClick={onClose} className="w-full p-5 bg-slate-900 text-white font-black rounded-2xl uppercase tracking-widest">Retour</button>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-6 italic">Astuce: Utilisez "Synchro Drive" dans les archives si le dossier n'apparaît pas.</p>
+                    <button onClick={onClose} className="w-full p-5 bg-slate-900 text-white font-black rounded-2xl uppercase tracking-widest hover:bg-slate-800 transition-all">Fermer et Continuer</button>
                 </div>
             </div>
         )}
+
         <div className="p-6 bg-orange-500 text-white flex justify-between items-center shadow-lg pt-12">
             <div className="flex flex-col text-left">
                 <input className="text-2xl font-black bg-transparent outline-none w-full placeholder:text-orange-200 uppercase" value={formData.title} onChange={e=>setFormData({...formData, title:e.target.value})} placeholder="TITRE DU DEVOIR" />
@@ -79,10 +81,11 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, use
             </div>
             <button onClick={onClose} className="w-10 h-10 bg-black/10 rounded-full font-black hover:bg-black/20">✕</button>
         </div>
+
         <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
             <div className="max-w-5xl mx-auto space-y-8">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="assign-card"><label className="text-[10px] font-black text-slate-400 uppercase mb-2 block text-left">Dossier Archive</label>
+                    <div className="assign-card"><label className="text-[10px] font-black text-slate-400 uppercase mb-2 block text-left">Dossier Archive Associé</label>
                         <select className="w-full font-bold outline-none bg-white p-3 rounded-xl border border-slate-200" value={formData.chapterId} onChange={e=>setFormData({...formData, chapterId: e.target.value})}>
                             <option value="none">-- Aucun dossier --</option>
                             {chapters.map(c => <option key={c._id} value={c._id}>{c.title}</option>)}
@@ -96,7 +99,10 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, use
                                 <label className="text-[10px] font-black uppercase text-blue-500 mb-2 block text-left">Documents Supports</label>
                                 <div className="flex flex-wrap gap-3 p-5 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
                                     {lvl.attachmentUrls?.map((u, i) => <img key={i} src={u} className="w-20 h-20 object-cover rounded-2xl" />)}
-                                    <label className="w-20 h-20 bg-white flex items-center justify-center rounded-2xl border cursor-pointer text-2xl font-black">+</label>
+                                    <label className="w-20 h-20 bg-white flex items-center justify-center rounded-2xl border cursor-pointer text-2xl font-black">
+                                        +
+                                        <input type="file" multiple className="hidden" onChange={e => handleUpload(e.target.files, idx, 'doc')} />
+                                    </label>
                                 </div>
                             </div>
                         </div>
@@ -104,9 +110,10 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, use
                 ))}
             </div>
         </div>
+
         <div className="p-8 bg-white border-t">
             <button onClick={save} disabled={uploading} className="w-full p-6 bg-orange-500 text-white font-black text-2xl rounded-3xl shadow-xl hover:bg-orange-600 transition-all uppercase">
-                {uploading ? "SYNCHRO..." : (formData._id ? "SAUVEGARDER" : "INITIALISER")}
+                {uploading ? "SYNC..." : (formData._id ? "SAUVEGARDER" : "INITIALISER")}
             </button>
         </div>
     </div>

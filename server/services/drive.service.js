@@ -12,12 +12,12 @@ try {
         );
         auth.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
         driveInstance = google.drive({ version: 'v3', auth });
-        console.log("✅ Drive Service V12 : Miroir Conforme (Full Name) activé");
+        console.log("✅ Drive Service V13 : Alignement BDD & Physique activé");
     }
 } catch (e) { console.error("❌ Drive Init Error:", e.message); }
 
 const DriveService = {
-    // US #5 : Normalisation stricte pour éviter les doublons type "H" vs "HISTOIRE"
+    // US #5 : Normalisation stricte (MAJUSCULES, PAS D'ACCENTS)
     normalize: (n) => n ? n.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Z0-9 ]/g, "_").trim() : "SANS_TITRE",
 
     getOrCreateFolder: async (name, parentId = null) => {
@@ -56,12 +56,17 @@ const DriveService = {
         } catch (e) { return []; }
     },
 
-    // RECONSTRUCTION HIÉRARCHIQUE : CONDA CLASSE > PROF > CLASSE > DEVOIRS
+    // RECONSTRUCTION DU CHEMIN MAITRE
     getDevoirsRootId: async (teacherName, classroom) => {
         const rootId = await DriveService.getOrCreateFolder("CONDA CLASSE");
         const profId = await DriveService.getOrCreateFolder(teacherName, rootId);
         const classId = await DriveService.getOrCreateFolder(classroom, profId);
         return await DriveService.getOrCreateFolder("DEVOIRS", classId);
+    },
+
+    deleteFile: async (id) => { 
+        if (!driveInstance || !id) return;
+        try { await driveInstance.files.delete({ fileId: id }); } catch (e) {} 
     }
 };
 
