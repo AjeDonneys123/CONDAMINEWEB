@@ -3,7 +3,19 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const DriveService = require('../../services/drive.service');
 
-// US #8 : Synchronisation Manuelle (Bouton 🔄)
+// US #15 : Fix Error 500 sur Players
+router.get('/players', async (req, res) => {
+    try {
+        const Player = mongoose.model('Player');
+        const data = await Player.find({}).sort({ classroom: 1, lastName: 1 });
+        res.json(data);
+    } catch (e) {
+        console.error("❌ Erreur /api/players:", e.message);
+        res.status(500).json({ error: "Impossible de charger les élèves" });
+    }
+});
+
+// US #8 : Synchro Drive Forcee (Le bouton de secours)
 router.post('/sync-drive', async (req, res) => {
     try {
         const { classroom, teacherId } = req.body;
@@ -15,22 +27,17 @@ router.post('/sync-drive', async (req, res) => {
         const classChapters = await Chapter.find({ classroom });
         const classHomeworks = await Homework.find({ classroom });
 
-        console.log(`🔄 [SYNC] Début alignement pour ${classroom}`);
-        
         const classRootId = await DriveService.getClassRoot(classroom);
         const devoirsId = await DriveService.getOrCreateFolder("DEVOIRS", classRootId);
 
-        // Aligner chaque matière du prof
         for (const section of prof.subjectSections) {
             const secId = await DriveService.getOrCreateFolder(section.name, devoirsId);
-            
-            // Aligner les chapitres
             const chaps = classChapters.filter(c => c.subject === section.name);
+            
             for (const chap of chaps) {
                 const chapId = await DriveService.getOrCreateFolder(chap.title, secId);
                 await Chapter.findByIdAndUpdate(chap._id, { driveFolderId: chapId });
 
-                // Aligner les devoirs
                 const hws = classHomeworks.filter(h => h.chapterId?.toString() === chap._id.toString());
                 for (const hw of hws) {
                     const hwId = await DriveService.getOrCreateFolder(hw.title, chapId);
@@ -41,22 +48,15 @@ router.post('/sync-drive', async (req, res) => {
                 }
             }
         }
-
-        res.json({ ok: true, message: `Alignement Drive terminé pour ${classroom}` });
-    } catch (e) {
-        console.error("❌ Erreur Sync:", e.message);
-        res.status(500).json({ error: e.message });
-    }
+        res.json({ ok: true, message: "Miroir Drive aligné sur les archives !" });
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.patch('/teacher/:id/sections', async (req, res) => {
     try {
-        const { sections, className } = req.body;
+        const { sections } = req.body;
         const updatedTeacher = await mongoose.model('Teacher').findByIdAndUpdate(req.params.id, { subjectSections: sections }, { new: true });
-        res.json({
-            user: { id: updatedTeacher._id, firstName: updatedTeacher.firstName, lastName: updatedTeacher.lastName, subjectSections: updatedTeacher.subjectSections, role: 'prof' },
-            message: "Matières mises à jour"
-        });
+        res.json({ user: { id: updatedTeacher._id, firstName: updatedTeacher.firstName, lastName: updatedTeacher.lastName, subjectSections: updatedTeacher.subjectSections, role: 'prof' } });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -78,12 +78,8 @@ router.post('/chapters', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.get('/players', async (req, res) => {
-    try { res.json(await mongoose.model('Player').find({}).sort({ classroom: 1, lastName: 1 })); } catch (e) { res.json([]); }
-});
-
 router.get('/chapters-all', async (req, res) => {
-    try { res.json(await mongoose.model('Chapter').find({}).sort({ _id: -1 })); } catch (e) { res.json([]); }
+    try { res.json(await mongoose.model('Chapter').find({})); } catch (e) { res.json([]); }
 });
 
 module.exports = router;
