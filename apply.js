@@ -20,7 +20,8 @@ function applyUpdate() {
     while ((startMatch = startRegex.exec(rawContent)) !== null) {
         const filePath = startMatch[1].trim();
         const contentStart = startMatch.index + startMatch[0].length;
-        const endPattern = new RegExp(`\\[\\[\\[£\\s*END\\s*:\\s*${filePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*£\\]\\]\\]`);
+        const safePath = filePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const endPattern = new RegExp(`\\[\\[\\[£\\s*END\\s*:\\s*${safePath}\\s*£\\]\\]\\]`);
         const remainingText = rawContent.substring(contentStart);
         const endMatch = remainingText.match(endPattern);
 

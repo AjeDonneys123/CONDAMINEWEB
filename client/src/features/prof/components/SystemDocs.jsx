@@ -70,7 +70,7 @@ const DOC_MAP = [
         ]
     },
     {
-        id: 'archiving', title: '📂 Archivage & Miroir Drive', class: 'cat-archiving',
+        id: 'archiving', title: '📂 Archivage & Drive', class: 'cat-archiving',
         stories: [
             { 
                 id: 'US#4', title: 'Hiérarchie Auto-Gérée', 
@@ -96,12 +96,6 @@ const DOC_MAP = [
                     { path: 'server/features/admin/admin.routes.js', desc: 'Permet la création/suppression de classes avec nettoyage en cascade.' },
                     { path: 'client/src/features/prof/ProfPage.jsx', desc: 'Contrôleur central de l\'espace enseignant et sélecteur dynamique.' }
                 ], risk: 'HIGH' 
-            },
-            { 
-                id: 'US#13', title: 'Diagnostic Déploiement', 
-                files: [
-                    { path: 'server/server.js', desc: 'Génère le Boot ID pour forcer la mise à jour des clients (Auto-Reload).' }
-                ], risk: 'MEDIUM' 
             }
         ]
     }
@@ -113,8 +107,8 @@ export default function SystemDocs({ onClose }) {
             <div className="docs-window" onClick={e => e.stopPropagation()}>
                 <div className="docs-header">
                     <div>
-                        <h2 className="text-2xl font-black uppercase tracking-tighter">Carte du Système Condamine</h2>
-                        <p className="text-xs text-slate-400 font-bold">Build 331 : Audit complet des 6 fonctionnalités majeures</p>
+                        <h2 className="text-2xl font-black uppercase tracking-tighter">Carte du Système (Audit Porosité)</h2>
+                        <p className="text-xs text-slate-400 font-bold">Build 332 : Surveillance des points de rupture</p>
                     </div>
                     <button className="btn-close-docs" onClick={onClose}>✕</button>
                 </div>
@@ -131,7 +125,7 @@ export default function SystemDocs({ onClose }) {
                                     <div className="file-list-docs">
                                         {us.files.map((f, idx) => (
                                             <div key={idx} className="file-entry-audit">
-                                                <span className="file-path-audit">{f.path}</span>
+                                                <span className="file-tag-path">{f.path}</span>
                                                 <p className="file-desc-audit">{f.desc}</p>
                                             </div>
                                         ))}

@@ -3,6 +3,10 @@ const { google } = require('googleapis');
 let driveInstance = null;
 let oauth2Client = null;
 
+/**
+ * 🛠️ SERVICE : GOOGLE DRIVE API
+ * Fichier CRITIQUE : Seul point de contact avec le Cloud Pro.
+ */
 const initDrive = () => {
     try {
         const clientID = process.env.GOOGLE_CLIENT_ID;
@@ -25,7 +29,13 @@ const DriveService = {
     
     checkAuth: async () => {
         if (!oauth2Client || !driveInstance) return false;
-        try { const token = await oauth2Client.getAccessToken(); return !!token; } catch (e) { return false; }
+        try { 
+            const { token } = await oauth2Client.getAccessToken(); 
+            return !!token; 
+        } catch (e) { 
+            console.error("❌ Drive Auth Expired");
+            return false; 
+        }
     },
 
     getOrCreateFolder: async (name, parentId = null) => {
@@ -58,7 +68,7 @@ const DriveService = {
 
     deleteEntity: async (id) => {
         if (!await DriveService.checkAuth() || !id) return;
-        try { await driveInstance.files.delete({ fileId: id }); } catch (e) {}
+        try { await driveInstance.files.delete({ fileId: id }); } catch (e) { console.error("❌ Drive Delete Error:", e.message); }
     },
 
     testConnection: async () => {
@@ -67,7 +77,7 @@ const DriveService = {
             const res = await driveInstance.about.get({ fields: 'user(emailAddress)' });
             const email = res.data.user.emailAddress;
             return { ok: true, email, isPro: email.endsWith('@condamine.edu.ec') };
-        } catch (e) { return { ok: false, error: "Inaccessible" }; }
+        } catch (e) { return { ok: false, error: "Connexion Drive échouée" }; }
     },
 
     getAuthUrl: () => oauth2Client?.generateAuthUrl({ access_type: 'offline', scope: ['https://www.googleapis.com/auth/drive.file'], prompt: 'consent' }),
