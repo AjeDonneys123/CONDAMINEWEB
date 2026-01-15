@@ -4,7 +4,6 @@ const { Readable } = require('stream');
 let driveInstance = null;
 let oauth2Client = null;
 
-// US #8 : Initialisation dynamique des clés
 const initDrive = () => {
     const clientID = process.env.GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
@@ -16,29 +15,29 @@ const initDrive = () => {
             if (process.env.GOOGLE_REFRESH_TOKEN) {
                 oauth2Client.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
                 driveInstance = google.drive({ version: 'v3', auth: oauth2Client });
-                console.log("✅ Drive Service V25 : Authentifié");
-            } else {
-                console.log("ℹ️ Drive Service V25 : Prêt mais sans token.");
             }
             return true;
         } catch (e) {
-            console.error("❌ Drive Init Error:", e.message);
             return false;
         }
     }
     return false;
 };
 
+// Initialisation au démarrage
 initDrive();
 
 const DriveService = {
     normalize: (n) => n ? n.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Z0-9 ]/g, "_").trim() : "SANS_TITRE",
 
     checkAuth: async () => {
+        // Tentative de ré-initialisation si le client a été créé vide
         if (!oauth2Client) initDrive();
         if (!oauth2Client) return false;
+        
         try {
-            if (!driveInstance && process.env.GOOGLE_REFRESH_TOKEN) {
+            // Si on a un token dans le .env mais pas encore chargé dans le client
+            if (!oauth2Client.credentials.refresh_token && process.env.GOOGLE_REFRESH_TOKEN) {
                 oauth2Client.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
                 driveInstance = google.drive({ version: 'v3', auth: oauth2Client });
             }

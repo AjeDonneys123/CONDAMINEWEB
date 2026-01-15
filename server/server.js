@@ -2,17 +2,32 @@ const path = require('path');
 const express = require('express');
 const mongoose = require('mongoose');
 const fs = require('fs');
-
-// US #13 : Chargement ABSOLU du .env (Monte d'un cran depuis le dossier server)
 const dotenv = require('dotenv');
-const envPath = path.join(__dirname, '..', '.env');
 
-if (fs.existsSync(envPath)) {
-    dotenv.config({ path: envPath });
-    console.log("✅ Fichier .env chargé depuis :", envPath);
-} else {
-    console.error("❌ ERREUR CRITIQUE : Fichier .env introuvable à :", envPath);
+// US #13 : SCAN DE SÉCURITÉ DU FICHIER .ENV
+const possiblePaths = [
+    path.join(process.cwd(), '.env'),
+    path.join(__dirname, '.env'),
+    path.join(__dirname, '..', '.env')
+];
+
+let envLoaded = false;
+for (const p of possiblePaths) {
+    if (fs.existsSync(p)) {
+        dotenv.config({ path: p });
+        console.log("✅ [ENV] Fichier détecté et chargé :", p);
+        envLoaded = true;
+        break;
+    }
 }
+
+if (!envLoaded) {
+    console.error("❌ [ENV] AUCUN FICHIER .ENV TROUVÉ ! Le Drive ne pourra pas fonctionner.");
+}
+
+// Vérification immédiate des clés
+console.log("🔑 [CONFIG] ID Client présent :", !!process.env.GOOGLE_CLIENT_ID);
+console.log("🔑 [CONFIG] Secret présent :", !!process.env.GOOGLE_CLIENT_SECRET);
 
 if (!global.fetch) { global.fetch = require('node-fetch'); }
 
@@ -49,7 +64,7 @@ app.use('/api/homework', require('./features/homework/homework.routes'));
 app.use('/api', require('./features/admin/admin.routes')); 
 
 app.get('/api/check-deploy', (req, res) => res.json({ bootId: SERVER_BOOT_ID }));
-app.get('/api/deploy-status', (req, res) => res.json({ version: "1.9.5", build: 295, status: "live" }));
+app.get('/api/deploy-status', (req, res) => res.json({ version: "2.0.0", build: 300, status: "live" }));
 
 // 4. FRONTEND
 const distPath = path.join(process.cwd(), 'client', 'dist');
@@ -61,4 +76,4 @@ if (fs.existsSync(distPath)) {
     });
 }
 
-app.listen(port, () => console.log(`🚀 SERVEUR ACTIF | PORT ${port}`));
+app.listen(port, () => console.log(`🚀 SERVEUR CONDAMINE ACTIF | PORT ${port}`));
