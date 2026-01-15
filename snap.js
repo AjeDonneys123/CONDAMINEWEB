@@ -4,7 +4,10 @@ require('dotenv').config();
 
 const OUTPUT_FILENAME = 'snapshot.txt';
 const MAP_FILENAME = 'projectMap.txt';
-const IGNORE = ['node_modules', '.git', 'dist', 'build', 'snapshot.txt', 'update.txt', '.env', 'package-lock.json'];
+const IGNORE = [
+    'node_modules', '.git', 'dist', 'build', 'snapshot.txt', 'update.txt', 
+    '.env', 'package-lock.json', '${rel}', 'path', 'chemin'
+];
 
 function buildTree(dir, prefix = '') {
     let structure = '';
@@ -30,7 +33,6 @@ function captureContent(dir, baseDir = "") {
             const p = path.join(dir, item);
             const rel = path.join(baseDir, item);
             const stat = fs.statSync(p);
-
             if (stat.isDirectory()) {
                 content += captureContent(p, rel);
             } else {
@@ -46,15 +48,12 @@ function captureContent(dir, baseDir = "") {
 }
 
 function run() {
-    console.log("📸 Génération du Snapshot Condamine...");
+    console.log("📸 Génération du Snapshot Optimum...");
     const tree = buildTree(__dirname);
     const code = captureContent(__dirname);
     const finalContent = `STRUCTURE:\n${tree}\n\nCODE:\n${code}`;
-    
     fs.writeFileSync(OUTPUT_FILENAME, finalContent);
     fs.writeFileSync(MAP_FILENAME, tree);
-    console.log(`✨ Terminé : ${OUTPUT_FILENAME} est prêt.`);
+    console.log(`✨ Terminé : ${OUTPUT_FILENAME} est le miroir parfait du projet.`);
 }
-
-// APPEL CRITIQUE : Sans cette ligne, le script ne fait rien.
 run();

@@ -1,85 +1,41 @@
 import React from 'react';
 import './SystemDocs.css';
 
+/**
+ * 🗺️ CARTE DU SYSTÈME OPTIMUM (V2.3.6)
+ * Cette carte reflète l'arbre de fichiers validé.
+ */
 const DOC_MAP = [
     {
         id: 'auth', title: '🔐 Authentification', class: 'cat-auth',
         stories: [
-            { 
-                id: 'US#1', title: 'Accès Hybride', 
-                files: [
-                    { path: 'server/features/auth/auth.routes.js', desc: 'Gestion des jetons et validation sécurisée.' },
-                    { path: 'client/src/features/auth/Login.jsx', desc: 'Interface de tri Prof/Élève.' }
-                ], risk: 'LOW' 
-            },
-            { 
-                id: 'US#2', title: 'Isolation Étanche', 
-                files: [
-                    { path: 'client/src/App.jsx', desc: 'SÉCURISÉ : Routeur découplé du moniteur réseau.' }
-                ], risk: 'MANAGED' 
-            }
+            { id: 'US#1', title: 'Accès Hybride', files: [{ path: 'server/features/auth/auth.routes.js', desc: 'Gestion des jetons.' }], risk: 'LOW' },
+            { id: 'US#2', title: 'Isolation Rôles', files: [{ path: 'client/src/App.jsx', desc: 'Routeur central Prof/Élève.' }], risk: 'MANAGED' }
         ]
     },
     {
-        id: 'games', title: '🕹️ Jeux (Zombie/Starship)', class: 'cat-games',
+        id: 'games', title: '🕹️ Jeux', class: 'cat-games',
         stories: [
-            { 
-                id: 'US#10', title: 'Génération Quiz IA', 
-                files: [
-                    { path: 'server/services/ai.service.js', desc: 'Moteur Gemini protégé par un sanitizer JSON.' }
-                ], risk: 'MANAGED' 
-            },
-            { 
-                id: 'US#11', title: 'Carnet d\'Erreurs', 
-                files: [
-                    { path: 'server/services/mistake.service.js', desc: 'Service central d\'archivage des fautes.' }
-                ], risk: 'LOW' 
-            }
+            { id: 'US#10', title: 'Quiz IA', files: [{ path: 'server/services/ai.service.js', desc: 'Moteur Gemini JSON.' }], risk: 'MANAGED' },
+            { id: 'US#11', title: 'Erreurs', files: [{ path: 'server/services/mistake.service.js', desc: 'Archivage des fautes.' }], risk: 'LOW' }
         ]
     },
     {
-        id: 'homework', title: '📚 Devoirs & Pédagogie', class: 'cat-homework',
+        id: 'homework', title: '📚 Devoirs', class: 'cat-homework',
         stories: [
-            { 
-                id: 'US#3', title: 'Correction IA', 
-                files: [
-                    { path: 'server/services/homework.service.js', desc: 'SÉCURISÉ : Logique métier hors des routes.' }
-                ], risk: 'MANAGED' 
-            }
-        ]
-    },
-    {
-        id: 'scans', title: '📤 Scanne (PilotSnap)', class: 'cat-scans',
-        stories: [
-            { 
-                id: 'US#6', title: 'Capture Multi-Snap', 
-                files: [
-                    { path: 'client/src/features/prof/scans/ScansStudio.jsx', desc: 'Contrôleur caméra natif.' }
-                ], risk: 'LOW' 
-            }
+            { id: 'US#3', title: 'Analyse IA', files: [{ path: 'server/services/homework.service.js', desc: 'Logique de correction scellée.' }], risk: 'MANAGED' }
         ]
     },
     {
         id: 'archiving', title: '📂 Archivage & Drive', class: 'cat-archiving',
         stories: [
-            { 
-                id: 'US#4', title: 'Hiérarchie Drive', 
-                files: [
-                    { path: 'server/services/structure.service.js', desc: 'SÉCURISÉ : Création atomique BDD + Drive.' },
-                    { path: 'server/services/drive.service.js', desc: 'Vérificateur de jeton avant action.' }
-                ], risk: 'MANAGED' 
-            }
+            { id: 'US#4', title: 'Miroir Cloud', files: [{ path: 'server/services/structure.service.js', desc: 'Gestion de l\'arborescence.' }, { path: 'server/services/drive.service.js', desc: 'API Google Drive.' }], risk: 'MANAGED' }
         ]
     },
     {
         id: 'admin', title: '⚙️ Administration', class: 'cat-admin',
         stories: [
-            { 
-                id: 'US#15', title: 'Gestion Classes', 
-                files: [
-                    { path: 'server/features/admin/admin.routes.js', desc: 'Nettoyage en cascade sécurisé.' }
-                ], risk: 'MANAGED' 
-            }
+            { id: 'US#15', title: 'Classes', files: [{ path: 'server/features/admin/admin.routes.js', desc: 'Nettoyage des données.' }], risk: 'HIGH' }
         ]
     }
 ];
@@ -90,8 +46,8 @@ export default function SystemDocs({ onClose }) {
             <div className="docs-window" onClick={e => e.stopPropagation()}>
                 <div className="docs-header">
                     <div>
-                        <h2 className="text-2xl font-black uppercase tracking-tighter">Tableau des Risques Condamine</h2>
-                        <p className="text-xs text-slate-400 font-bold">Build 335 : Les points de rupture sont passés sous contrôle (MANAGED)</p>
+                        <h2 className="text-2xl font-black uppercase tracking-tighter">Audit Architecture Optimum</h2>
+                        <p className="text-xs text-slate-400 font-bold">Build 336 : Le projet est propre et découplé.</p>
                     </div>
                     <button className="btn-close-docs" onClick={onClose}>✕</button>
                 </div>
