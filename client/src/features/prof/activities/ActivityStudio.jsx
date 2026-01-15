@@ -12,14 +12,13 @@ export default function ActivityStudio({ globalClass, user }) {
     const loadData = async () => {
         setLoading(true);
         try {
-            // US #15 : Diagnostic robuste des erreurs JSON
             const fetchJSON = async (url) => {
-                const r = await fetch(url);
-                if (!r.ok) {
-                    const err = await r.json();
-                    throw new Error(err.details || "Erreur Serveur");
+                const response = await fetch(url);
+                if (!response.ok) {
+                    const errorBody = await response.json().catch(() => ({}));
+                    throw new Error(errorBody.error || `Erreur ${response.status}`);
                 }
-                return r.json();
+                return response.json();
             };
 
             const [hw, gm, cp] = await Promise.all([
@@ -35,7 +34,11 @@ export default function ActivityStudio({ globalClass, user }) {
             setChapters(cp || []);
         } catch (e) { 
             console.error("❌ Erreur Fetch:", e.message);
-            alert("Erreur de synchronisation avec la BDD : " + e.message);
+            // Si l'erreur est "Failed to fetch", le serveur est probablement éteint
+            const msg = e.message === "Failed to fetch" 
+                ? "Le serveur ne répond pas. Vérifiez que 'npm run dev' est bien lancé."
+                : "Erreur BDD : " + e.message;
+            alert(msg);
         }
         setLoading(false);
     };
@@ -43,10 +46,10 @@ export default function ActivityStudio({ globalClass, user }) {
     useEffect(() => { loadData(); }, [globalClass]);
 
     const handleDeleteItem = async (id, type) => {
-        if (!confirm("🗑️ Supprimer définitivement cet élément et son dossier Drive ?")) return;
+        if (!confirm("🗑️ Confirmer la suppression ?")) return;
         try {
             const res = await fetch(type === 'game' ? `/api/games/${id}` : `/api/homework/${id}`, { method: 'DELETE' });
-            if (!res.ok) throw new Error("Échec suppression");
+            if (!res.ok) throw new Error("Erreur lors de la suppression");
             loadData();
         } catch (e) { alert(e.message); }
     };
@@ -59,11 +62,11 @@ export default function ActivityStudio({ globalClass, user }) {
     return (
         <div className="space-y-8 animate-in fade-in">
             <div className="flex gap-4 mb-6">
-                <button onClick={() => setEditingItem({type:'homework'})} className="bg-orange-500 text-white px-6 py-3 rounded-2xl font-black text-[10px] shadow-lg hover:scale-105 transition-transform">NOUVEAU DEVOIR</button>
-                <button onClick={() => setEditingItem({type:'game'})} className="bg-purple-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] shadow-lg hover:scale-105 transition-transform">NOUVEAU JEU</button>
+                <button onClick={() => setEditingItem({type:'homework'})} className="bg-orange-500 text-white px-6 py-3 rounded-2xl font-black text-[10px] shadow-lg">NOUVEAU DEVOIR</button>
+                <button onClick={() => setEditingItem({type:'game'})} className="bg-purple-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] shadow-lg">NOUVEAU JEU</button>
             </div>
             {loading ? (
-                <div className="text-center py-20 text-slate-300 font-black animate-pulse uppercase">Mise à jour...</div>
+                <div className="text-center py-20 text-slate-300 font-black animate-pulse uppercase">Synchronisation...</div>
             ) : (
                 <ProfStudioFolder 
                     chapters={chapters} 

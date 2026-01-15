@@ -2,12 +2,12 @@ const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 
-// Helper pour éviter le crash si une collection n'est pas encore créée
 async function safeFind(modelName) {
     try {
         const Model = mongoose.model(modelName);
         return await Model.find({}).lean();
     } catch (e) {
+        console.warn(`⚠️ Collection ${modelName} non initialisée.`);
         return [];
     }
 }
@@ -27,17 +27,15 @@ router.get('/database-dump', async (req, res) => {
         };
         res.json(dump);
     } catch (e) {
-        console.error("❌ Dump Error:", e.message);
-        res.status(500).json({ error: "Erreur lors de l'extraction des données", details: e.message });
+        res.status(500).json({ error: "Crash du Dump", details: e.message });
     }
 });
 
 router.get('/players', async (req, res) => {
     try {
-        const players = await mongoose.model('Player').find({}).sort({ classroom: 1 });
-        res.json(players);
+        res.json(await mongoose.model('Player').find({}).sort({ classroom: 1 }));
     } catch (e) {
-        res.status(500).json([]);
+        res.status(500).json({ error: e.message });
     }
 });
 

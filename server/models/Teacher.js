@@ -1,5 +1,9 @@
 const mongoose = require('mongoose');
 const TeacherSchema = new mongoose.Schema({
-    firstName: String, lastName: String, password: { type: String, default: "Clemenceau1919" }
+    firstName: { type: String, required: true },
+    lastName: { type: String, required: true },
+    password: { type: String, required: true },
+    subjectSections: { type: Array, default: [] },
+    driveFolderId: String
 });
 module.exports = mongoose.models.Teacher || mongoose.model('Teacher', TeacherSchema);
