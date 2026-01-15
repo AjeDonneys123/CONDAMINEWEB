@@ -3,14 +3,15 @@ const express = require('express');
 const mongoose = require('mongoose');
 const fs = require('fs');
 
-// US #13 : Chargement ultra-prioritaire du .env
+// US #13 : Chargement ABSOLU du .env (Monte d'un cran depuis le dossier server)
 const dotenv = require('dotenv');
-const envPath = path.resolve(process.cwd(), '.env');
+const envPath = path.join(__dirname, '..', '.env');
+
 if (fs.existsSync(envPath)) {
     dotenv.config({ path: envPath });
-    console.log("✅ Fichier .env détecté et chargé.");
+    console.log("✅ Fichier .env chargé depuis :", envPath);
 } else {
-    console.error("❌ Fichier .env INTROUVABLE à la racine !");
+    console.error("❌ ERREUR CRITIQUE : Fichier .env introuvable à :", envPath);
 }
 
 if (!global.fetch) { global.fetch = require('node-fetch'); }
@@ -19,7 +20,7 @@ const app = express();
 const port = process.env.PORT || 3000;
 const SERVER_BOOT_ID = Date.now();
 
-// 1. MODÈLES (Ordre de sécurité)
+// 1. MODÈLES
 require('./models/Teacher');
 require('./models/Player');
 require('./models/Chapter');
@@ -40,18 +41,17 @@ mongoose.connect(process.env.MONGODB_URI).then(async () => {
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// 3. ROUTES API
+// 3. ROUTES
 app.use('/api/auth', require('./features/auth/auth.routes'));
 app.use('/api/games', require('./features/games/games.routes'));
 app.use('/api/scans', require('./features/scans/scans.routes'));
 app.use('/api/homework', require('./features/homework/homework.routes'));
 app.use('/api', require('./features/admin/admin.routes')); 
 
-// 4. SYSTÈME
 app.get('/api/check-deploy', (req, res) => res.json({ bootId: SERVER_BOOT_ID }));
-app.get('/api/deploy-status', (req, res) => res.json({ version: "1.9.0", build: 290, status: "live" }));
+app.get('/api/deploy-status', (req, res) => res.json({ version: "1.9.5", build: 295, status: "live" }));
 
-// 5. FRONTEND
+// 4. FRONTEND
 const distPath = path.join(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));

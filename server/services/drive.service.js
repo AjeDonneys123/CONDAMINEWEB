@@ -4,15 +4,11 @@ const { Readable } = require('stream');
 let driveInstance = null;
 let oauth2Client = null;
 
+// US #8 : Initialisation dynamique des clés
 const initDrive = () => {
     const clientID = process.env.GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
     const redirectURI = process.env.GOOGLE_REDIRECT_URI;
-
-    // DIAGNOSTIC (S'affichera dans ta console node)
-    if (!clientID) console.error("❌ Erreur Config: GOOGLE_CLIENT_ID manquant");
-    if (!clientSecret) console.error("❌ Erreur Config: GOOGLE_CLIENT_SECRET manquant");
-    if (!redirectURI) console.error("❌ Erreur Config: GOOGLE_REDIRECT_URI manquant");
 
     if (clientID && clientSecret && redirectURI) {
         try {
@@ -20,22 +16,25 @@ const initDrive = () => {
             if (process.env.GOOGLE_REFRESH_TOKEN) {
                 oauth2Client.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
                 driveInstance = google.drive({ version: 'v3', auth: oauth2Client });
-                console.log("✅ Drive Service V24 : Connecté");
+                console.log("✅ Drive Service V25 : Authentifié");
+            } else {
+                console.log("ℹ️ Drive Service V25 : Prêt mais sans token.");
             }
+            return true;
         } catch (e) {
             console.error("❌ Drive Init Error:", e.message);
+            return false;
         }
     }
+    return false;
 };
 
-// On appelle l'init immédiatement
 initDrive();
 
 const DriveService = {
     normalize: (n) => n ? n.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Z0-9 ]/g, "_").trim() : "SANS_TITRE",
 
     checkAuth: async () => {
-        // Tentative de ré-init si oauth2Client est nul (au cas où le .env a été chargé tard)
         if (!oauth2Client) initDrive();
         if (!oauth2Client) return false;
         try {
@@ -43,6 +42,7 @@ const DriveService = {
                 oauth2Client.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
                 driveInstance = google.drive({ version: 'v3', auth: oauth2Client });
             }
+            if (!driveInstance) return false;
             await oauth2Client.getAccessToken();
             return true;
         } catch (e) { return false; }
@@ -96,7 +96,7 @@ const DriveService = {
     },
 
     getAuthUrl: () => {
-        if (!oauth2Client) initDrive(); // Tentative de secours
+        if (!oauth2Client) initDrive();
         if (!oauth2Client) return null;
         return oauth2Client.generateAuthUrl({
             access_type: 'offline', prompt: 'consent',

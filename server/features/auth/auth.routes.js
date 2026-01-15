@@ -3,21 +3,23 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const DriveService = require('../../services/drive.service');
 
-// REPARATION GOOGLE OAUTH
+// US #8 : Route pour forcer le login Google
 router.get('/google/login', (req, res) => {
     const url = DriveService.getAuthUrl();
     if (!url) {
-        // Détails pour aider le prof à debug
         return res.status(500).send(`
-            <div style="font-family:sans-serif; padding:40px; border:2px solid red; border-radius:20px; max-width:600px; margin: 40px auto;">
-                <h1 style="color:red;">Erreur de configuration Google</h1>
-                <p>Le serveur ne trouve pas les clés d'accès dans le fichier <b>.env</b>.</p>
-                <p>Vérifie que ton fichier .env contient :</p>
-                <pre style="background:#eee; padding:10px;">
-GOOGLE_CLIENT_ID=...
-GOOGLE_CLIENT_SECRET=...
-GOOGLE_REDIRECT_URI=http://localhost:3000/api/auth/google/callback
-                </pre>
+            <div style="font-family:sans-serif; padding:50px; border:3px solid red; border-radius:30px; max-width:700px; margin: 40px auto; background: #fff1f2;">
+                <h1 style="color:#b91c1c; margin-top:0;">🛑 CONFIGURATION INCOMPLÈTE</h1>
+                <p>Le serveur ne parvient pas à lire vos identifiants dans le fichier <b>.env</b>.</p>
+                <div style="background:white; padding:20px; border-radius:15px; border: 1px solid #fecaca; margin: 20px 0;">
+                    <p style="margin-top:0;"><b>Vérifications à faire :</b></p>
+                    <ol>
+                        <li>Le fichier s'appelle exactement <b>.env</b> (pas .env.txt)</li>
+                        <li>Il est à la racine du projet (pas dans server/)</li>
+                        <li>Les noms sont EXACTS : GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI</li>
+                    </ol>
+                </div>
+                <p style="font-size:12px; color:#6b7280;">Détail technique : oauth2Client est null</p>
             </div>
         `);
     }
@@ -29,11 +31,11 @@ router.get('/google/callback', async (req, res) => {
         const code = req.query.code;
         const refreshToken = await DriveService.setTokenFromCode(code);
         res.send(`
-            <div style="font-family:sans-serif; padding:40px; text-align:center;">
-                <h1 style="color:#22c55e;">Clé générée !</h1>
-                <p>Copie cette valeur dans ton <b>.env</b> :</p>
-                <code style="display:block; background:#f1f5f9; padding:20px; border-radius:10px; word-break:break-all; border:1px solid #ccc;">${refreshToken}</code>
-                <p>Puis <b>redémarre ton serveur</b> (le bouton Nuke fonctionnera).</p>
+            <div style="font-family:sans-serif; padding:50px; text-align:center;">
+                <h1 style="color:#059669;">Succès !</h1>
+                <p>Copie cette valeur et mets à jour ton <b>.env</b> :</p>
+                <textarea style="width:100%; height:100px; font-family:monospace; padding:15px; border-radius:10px; border:1px solid #ccc; background:#f9fafb;" readonly>${refreshToken}</textarea>
+                <p>Puis <b>redémarre le serveur</b> pour activer le Drive.</p>
             </div>
         `);
     } catch (e) { res.status(500).send("Erreur callback: " + e.message); }
