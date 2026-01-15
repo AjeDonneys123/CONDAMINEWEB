@@ -16,22 +16,17 @@ export default function App() {
       try {
         const bootRes = await fetch('/api/check-deploy');
         const bootData = await bootRes.json();
-        
-        if (!bootIdRef.current) {
-          bootIdRef.current = bootData.bootId;
-        } else if (bootData.bootId !== bootIdRef.current) {
+        if (!bootIdRef.current) bootIdRef.current = bootData.bootId;
+        else if (bootData.bootId !== bootIdRef.current) {
           setIsSyncing(true);
           setTimeout(() => window.location.reload(), 2000);
           return;
         }
-
         const statusRes = await fetch('/api/deploy-status');
         const statusData = await statusRes.json();
         setAppInfo(statusData);
-
       } catch (e) {}
     };
-
     const interval = setInterval(monitor, 8000);
     monitor();
     return () => clearInterval(interval);
@@ -47,17 +42,11 @@ export default function App() {
     }
   }, []);
 
-  if (isSyncing) {
-    return (
+  if (isSyncing) return (
       <div className="sync-overlay">
-        <div className="sync-card">
-          <div className="sync-spinner"></div>
-          <h2>SYNCHRONISATION...</h2>
-          <p>Le système a été mis à jour.</p>
-        </div>
+        <div className="sync-card"><div className="sync-spinner"></div><h2>SYNCHRONISATION...</h2></div>
       </div>
-    );
-  }
+  );
 
   const handleLogout = () => { localStorage.clear(); setUser(null); };
   const isProf = user && (user.id === 'prof' || user.role === 'prof');
@@ -66,21 +55,11 @@ export default function App() {
     <div className="app-wrapper">
       <div className="version-banner">
           <span className="version-txt">BUILD {appInfo.build} (v{appInfo.version})</span>
-          {appInfo.status === 'live' && <div className="live-indicator"><span className="live-dot"></span> LIVE</div>}
+          <div className="live-indicator"><span className="live-dot"></span> LIVE</div>
       </div>
-
-      {!user ? (
-        <Login onLoginSuccess={setUser} />
-      ) : (
-        isProf ? (
-          <>
-            <ProfPage user={user} onLogout={handleLogout} />
-            <ConsoleHUD />
-          </>
-        ) : (
-          <ElevePage user={user} onLogout={handleLogout} onBackToProf={() => setUser({ id: "prof", role: "prof" })} />
-        )
-      )}
+      {!user ? <Login onLoginSuccess={setUser} /> : 
+       isProf ? <><ProfPage user={user} onLogout={handleLogout} /><ConsoleHUD /></> : 
+       <ElevePage user={user} onLogout={handleLogout} onBackToProf={() => setUser({ id: "prof", role: "prof" })} />}
     </div>
   );
 }

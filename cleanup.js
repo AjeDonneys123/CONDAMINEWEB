@@ -5,26 +5,15 @@ const IGNORE = ['.git', 'node_modules', 'client'];
 
 function cleanEmptyDirs(dir) {
     if (!fs.existsSync(dir)) return;
-    
     const items = fs.readdirSync(dir);
-
     items.forEach(item => {
         const fullPath = path.join(dir, item);
         if (fs.statSync(fullPath).isDirectory() && !IGNORE.includes(item)) {
             cleanEmptyDirs(fullPath);
         }
     });
-
     if (dir !== '.' && fs.readdirSync(dir).length === 0) {
-        console.log(`🗑️  Dossier vide supprimé : ${dir}`);
-        try {
-            fs.rmdirSync(dir);
-        } catch (e) {
-            console.error(`❌ Impossible de supprimer ${dir}: ${e.message}`);
-        }
+        try { fs.rmdirSync(dir); } catch (e) {}
     }
 }
-
-console.log("🧼 Lancement du nettoyage des dossiers vides...");
 cleanEmptyDirs('.');
-console.log("✨ Nettoyage terminé.");

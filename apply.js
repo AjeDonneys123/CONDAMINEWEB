@@ -29,7 +29,6 @@ function applyUpdate() {
     
     if (rawContent.trim().length < 5) return;
 
-    let cursor = 0;
     let processedAny = false;
 
     const deleteRegex = /\[\[\[£\s*DELETE\s*:\s*([^£\]\s]+)\s*£\]\]\]/g;
