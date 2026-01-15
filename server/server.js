@@ -24,26 +24,30 @@ require('./models/TeacherStyle');
 require('./models/DeploySignal');
 require('./models/Bug');
 
-mongoose.connect(process.env.MONGODB_URI).then(() => console.log('✅ MongoDB Connected (Build 329)'));
+mongoose.connect(process.env.MONGODB_URI).then(() => console.log('✅ Connected Atlas (Build 331)'));
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// 2. ROUTES API
+// 2. ROUTES
 app.use('/api/auth', require('./features/auth/auth.routes'));
 app.use('/api/structure', require('./features/structure/structure.routes'));
 app.use('/api/games', require('./features/games/games.routes'));
 app.use('/api/homework', require('./features/homework/homework.routes'));
+app.use('/api/scans', require('./features/scans/scans.routes'));
 app.use('/api', require('./features/admin/admin.routes'));
 
 // 3. DIAGNOSTIC DRIVE
 const DriveService = require('./services/drive.service');
 app.get('/api/drive-check', async (req, res) => {
-    try { res.json(await DriveService.testConnection()); } catch (e) { res.status(500).json({ ok: false }); }
+    try {
+        const status = await DriveService.testConnection();
+        res.json(status);
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.get('/api/check-deploy', (req, res) => res.json({ bootId: SERVER_BOOT_ID }));
-app.get('/api/deploy-status', (req, res) => res.json({ version: "2.2.9", build: 329, status: "live" }));
+app.get('/api/deploy-status', (req, res) => res.json({ version: "2.3.1", build: 331, status: "live" }));
 
 const distPath = path.join(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) {

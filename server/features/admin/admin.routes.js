@@ -21,10 +21,19 @@ router.get('/players', async (req, res) => {
     } catch (e) { res.status(500).json([]); }
 });
 
+router.delete('/classroom/:name', async (req, res) => {
+    try {
+        const name = req.params.name;
+        await mongoose.model('Player').deleteMany({ classroom: name });
+        await mongoose.model('Chapter').deleteMany({ classroom: name });
+        await mongoose.model('Homework').deleteMany({ classroom: name });
+        res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.patch('/teacher/:id/sections', async (req, res) => {
     try {
-        const { sections } = req.body;
-        const updated = await mongoose.model('Teacher').findByIdAndUpdate(req.params.id, { subjectSections: sections }, { new: true });
+        const updated = await mongoose.model('Teacher').findByIdAndUpdate(req.params.id, { subjectSections: req.body.sections }, { new: true });
         res.json({ ok: true, user: updated });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
