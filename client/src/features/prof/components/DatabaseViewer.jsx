@@ -4,7 +4,7 @@ import './DatabaseViewer.css';
 const DESCRIPTIONS = {
     players: "👤 Base des élèves. Gère l'appartenance aux classes et l'historique des erreurs d'orthographe (US #11).",
     chapters: "📁 Dossiers de cours. Sert de pivot pour la création automatique de l'arborescence Google Drive (US #4).",
-    homeworks: "📝 Paramètres des devoirs (IA). Définit les consignes, les documents supports et les élèves ciblés.",
+    homeworks: "📝 Paramètres des devoirs (IA). Définit les consignes, les documents supports et les dossiers Cloud associés.",
     gamelevels: "🎮 Moteur de quiz. Contient les questions et les réponses pour les jeux Zombie et Starship (US #10).",
     scansessions: "📸 Sessions de scan camera. Fait le lien entre les photos brutes et les corrections IA générées.",
     teachers: "🎓 Comptes enseignants. Stocke les préférences, les matières et le code secret d'accès.",
@@ -20,7 +20,8 @@ export default function DatabaseViewer({ onClose }) {
     useEffect(() => {
         fetch('/api/database-dump')
             .then(res => res.json())
-            .then(d => { setData(d); setLoading(false); });
+            .then(d => { setData(d); setLoading(false); })
+            .catch(() => setLoading(false));
     }, []);
 
     if (loading) return <div className="db-viewer-overlay"><div className="text-white font-black animate-pulse">ACCÈS MONGODB ATLAS...</div></div>;

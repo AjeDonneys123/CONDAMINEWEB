@@ -1,42 +1,43 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
-const AIService = require('../../services/ai.service');
+const DriveService = require('../../services/drive.service');
 
 router.get('/all', async (req, res) => {
     try {
         const Homework = mongoose.model('Homework');
-        res.json(await Homework.find({}).sort({ date: -1 }));
-    } catch (e) { res.status(500).json([]); }
-});
-
-router.post('/analyze-homework', async (req, res) => {
-    const { userText, homeworkInstruction, classroom, playerId, homeworkId, levelIndex } = req.body;
-    const style = await mongoose.model('TeacherStyle').findOne({ teacherId: "jean_vuillet" });
-    const analysis = await AIService.analyzeSubmission(userText, homeworkInstruction, classroom, style?.pedagogicalMemory || "");
-    
-    if (playerId) {
-        await mongoose.model('Player').findByIdAndUpdate(playerId, {
-            $push: { spellingMistakes: { $each: analysis.corrections || [] } }
-        });
+        const data = await Homework.find({}).sort({ date: -1 });
+        res.json(data || []);
+    } catch (e) {
+        res.status(500).json({ error: "Erreur lecture devoirs", details: e.message });
     }
-    await mongoose.model('Submission').create({ playerId, homeworkId, levelIndex, originalTranscription: userText, feedback: analysis.feedback_fond, grade: analysis.grade });
-    res.json(analysis);
 });
 
 router.post('/', async (req, res) => {
     try {
+        const Homework = mongoose.model('Homework');
         const { _id, ...data } = req.body;
-        const r = _id ? await mongoose.model('Homework').findByIdAndUpdate(_id, data, { new: true }) : await mongoose.model('Homework').create(data);
-        res.json(r);
-    } catch (e) { res.status(500).json({ error: e.message }); }
+        const result = _id ? await Homework.findByIdAndUpdate(_id, data, { new: true }) : await Homework.create(data);
+        res.json(result);
+    } catch (e) {
+        res.status(500).json({ error: "Erreur sauvegarde", details: e.message });
+    }
 });
 
+// US #9 : SUPPRESSION INTÉGRALE (BDD + DRIVE)
 router.delete('/:id', async (req, res) => {
     try {
-        await mongoose.model('Homework').findByIdAndDelete(req.params.id);
-        res.json({ ok: true });
-    } catch (e) { res.status(500).json({ error: e.message }); }
+        const Homework = mongoose.model('Homework');
+        const hw = await Homework.findById(req.params.id);
+        if (hw && hw.driveFolderId) {
+            await DriveService.deleteEntity(hw.driveFolderId);
+        }
+        await Homework.findByIdAndDelete(req.params.id);
+        res.json({ ok: true, message: "Devoir supprimé" });
+    } catch (e) {
+        console.error("❌ Delete Error:", e.message);
+        res.status(500).json({ error: "Échec de suppression", details: e.message });
+    }
 });
 
 module.exports = router;
