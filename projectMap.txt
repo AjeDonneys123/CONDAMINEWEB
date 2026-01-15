@@ -1,3 +1,4 @@
+├── ${rel}
 ├── .gitignore
 ├── INSTRUCTIONS_OAUTH.md
 ├── LOCKED_FILES.md
@@ -12,7 +13,6 @@
 │   ├── .gitignore
 │   ├── README.md
 │   ├── index.html
-│   ├── package-lock.json
 │   ├── package.json
 │   ├── postcss.config.cjs
 │   ├── public/
@@ -70,7 +70,9 @@
 │   │   │       │   ├── DatabaseViewer.jsx
 │   │   │       │   ├── ProfHeader.jsx
 │   │   │       │   ├── ProfNav.jsx
-│   │   │       │   └── ProfStudioFolder.jsx
+│   │   │       │   ├── ProfStudioFolder.jsx
+│   │   │       │   ├── SystemDocs.css
+│   │   │       │   └── SystemDocs.jsx
 │   │   │       ├── games/
 │   │   │       │   ├── GameStudio.css
 │   │   │       │   └── GameStudio.jsx
@@ -95,10 +97,11 @@
 │   ├── tailwind.config.cjs
 │   └── vite.config.js
 ├── git-auto.js
+├── history.txt
 ├── init-db.js
 ├── magic-paste.js
-├── package-lock.json
 ├── package.json
+├── path
 ├── projectMap.txt
 ├── public/
 │   ├── images/
@@ -141,7 +144,10 @@
 │   ├── server.js
 │   ├── services/
 │   │   ├── ai.service.js
-│   │   └── drive.service.js
+│   │   ├── drive.service.js
+│   │   ├── homework.service.js
+│   │   ├── mistake.service.js
+│   │   └── structure.service.js
 │   └── version.json
 ├── snap.js
 └── systemInstructions.md
