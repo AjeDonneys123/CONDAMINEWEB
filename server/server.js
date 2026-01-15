@@ -12,24 +12,18 @@ const app = express();
 const port = process.env.PORT || 3000;
 const SERVER_BOOT_ID = Date.now();
 
-// 1. MODÈLES
-require('./models/Teacher');
-require('./models/Player');
-require('./models/Chapter');
-require('./models/Homework');
-require('./models/GameLevel');
-require('./models/ScanSession');
-require('./models/Submission');
-require('./models/TeacherStyle');
-require('./models/DeploySignal');
+// MODÈLES
+require('./models/Teacher'); require('./models/Player'); require('./models/Chapter');
+require('./models/Homework'); require('./models/GameLevel'); require('./models/ScanSession');
+require('./models/Submission'); require('./models/TeacherStyle'); require('./models/DeploySignal');
 require('./models/Bug');
 
-mongoose.connect(process.env.MONGODB_URI).then(() => console.log('✅ Connected Atlas (Build 334)'));
+mongoose.connect(process.env.MONGODB_URI).then(() => console.log('✅ Connected Build 335'));
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// 2. ROUTES API
+// ROUTES
 app.use('/api/auth', require('./features/auth/auth.routes'));
 app.use('/api/structure', require('./features/structure/structure.routes'));
 app.use('/api/games', require('./features/games/games.routes'));
@@ -37,7 +31,6 @@ app.use('/api/homework', require('./features/homework/homework.routes'));
 app.use('/api/scans', require('./features/scans/scans.routes'));
 app.use('/api', require('./features/admin/admin.routes'));
 
-// 3. DIAGNOSTIC DRIVE
 const DriveService = require('./services/drive.service');
 app.get('/api/drive-check', async (req, res) => {
     try {
@@ -47,12 +40,11 @@ app.get('/api/drive-check', async (req, res) => {
 });
 
 app.get('/api/check-deploy', (req, res) => res.json({ bootId: SERVER_BOOT_ID }));
-app.get('/api/deploy-status', (req, res) => res.json({ version: "2.3.4", build: 334, status: "live" }));
+app.get('/api/deploy-status', (req, res) => res.json({ version: "2.3.5", build: 335, status: "live" }));
 
 const distPath = path.join(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
     app.get('*', (req, res) => res.sendFile(path.join(distPath, 'index.html')));
 }
-
-app.listen(port, () => console.log(`🚀 SERVEUR CONDAMINE ACTIF`));
+app.listen(port);

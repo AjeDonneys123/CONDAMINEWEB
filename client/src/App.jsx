@@ -5,33 +5,39 @@ import ElevePage from './features/eleve/ElevePage';
 import ConsoleHUD from './features/prof/components/ConsoleHUD';
 import './App.css';
 
+/**
+ * 🔒 COMPOSANT RACINE (POROSITÉ ZÉRO)
+ * US#2 : Isolation Prof/Élève
+ * US#13 : Moniteur de déploiement sécurisé
+ */
 export default function App() {
   const [user, setUser] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [appInfo, setAppInfo] = useState({ version: '2.2.2', build: 322, status: 'live' });
+  const [appInfo, setAppInfo] = useState({ version: '2.3.5', build: 335, status: 'live' });
   const bootIdRef = useRef(null);
 
+  // 🛡️ Logic de déploiement isolée pour ne pas bloquer l'UI
   useEffect(() => {
-    const monitor = async () => {
+    const checkUpdate = async () => {
       try {
-        const bootRes = await fetch('/api/check-deploy');
-        const bootData = await bootRes.json();
-        if (!bootIdRef.current) bootIdRef.current = bootData.bootId;
-        else if (bootData.bootId !== bootIdRef.current) {
+        const res = await fetch('/api/check-deploy');
+        if (!res.ok) return;
+        const data = await res.json();
+        
+        if (!bootIdRef.current) {
+          bootIdRef.current = data.bootId;
+        } else if (data.bootId !== bootIdRef.current) {
           setIsSyncing(true);
-          setTimeout(() => window.location.reload(), 2000);
-          return;
+          setTimeout(() => window.location.reload(), 1500);
         }
-        const statusRes = await fetch('/api/deploy-status');
-        const statusData = await statusRes.json();
-        setAppInfo(statusData);
-      } catch (e) {}
+      } catch (e) { /* Silencieux : n'impacte pas l'utilisateur */ }
     };
-    const interval = setInterval(monitor, 8000);
-    monitor();
-    return () => clearInterval(interval);
+
+    const timer = setInterval(checkUpdate, 10000);
+    return () => clearInterval(timer);
   }, []);
 
+  // Persistance session
   useEffect(() => {
     const saved = localStorage.getItem('player');
     if (saved) {
@@ -45,7 +51,15 @@ export default function App() {
   const handleLogout = () => { localStorage.clear(); setUser(null); };
   const isProf = user && (user.id === 'prof' || user.role === 'prof');
 
-  if (isSyncing) return <div className="sync-overlay"><div className="sync-card"><h2>SYNCHRONISATION BUILD {appInfo.build}...</h2></div></div>;
+  if (isSyncing) return (
+    <div className="sync-overlay">
+      <div className="sync-card">
+        <div className="sync-spinner"></div>
+        <h2>MISE À JOUR BUILD {appInfo.build}</h2>
+        <p>Synchronisation avec le serveur...</p>
+      </div>
+    </div>
+  );
 
   return (
     <div className="app-wrapper">
@@ -53,9 +67,19 @@ export default function App() {
           <span className="version-txt">BUILD {appInfo.build} (v{appInfo.version})</span>
           <div className="live-indicator"><span className="live-dot"></span> LIVE</div>
       </div>
-      {!user ? <Login onLoginSuccess={setUser} /> : 
-       isProf ? <><ProfPage user={user} onLogout={handleLogout} /><ConsoleHUD /></> : 
-       <ElevePage user={user} onLogout={handleLogout} onBackToProf={() => setUser({ id: "prof", role: "prof" })} />}
+
+      {!user ? (
+        <Login onLoginSuccess={setUser} />
+      ) : (
+        isProf ? (
+          <>
+            <ProfPage user={user} onLogout={handleLogout} />
+            <ConsoleHUD />
+          </>
+        ) : (
+          <ElevePage user={user} onLogout={handleLogout} onBackToProf={() => setUser({ id: "prof", role: "prof" })} />
+        )
+      )}
     </div>
   );
 }
