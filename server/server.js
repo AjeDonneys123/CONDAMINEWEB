@@ -4,44 +4,41 @@ const mongoose = require('mongoose');
 const fs = require('fs');
 const dotenv = require('dotenv');
 
-const envPath = path.resolve(process.cwd(), '.env');
-if (fs.existsSync(envPath)) dotenv.config({ path: envPath });
+dotenv.config();
 if (!global.fetch) global.fetch = require('node-fetch');
 
 const app = express();
 const port = process.env.PORT || 3000;
+
+// FIX SYNC : On définit l'ID de boot UNE SEULE FOIS au démarrage
 const SERVER_BOOT_ID = Date.now();
 
-// 1. MODÈLES
-require('./models/Teacher'); require('./models/Player'); require('./models/Chapter');
-require('./models/Homework'); require('./models/GameLevel'); require('./models/ScanSession');
-require('./models/Submission'); require('./models/TeacherStyle'); require('./models/DeploySignal');
-require('./models/Bug');
+// MODELES
+require('./models/Teacher');
+require('./models/Player');
+require('./models/Chapter');
+require('./models/Homework');
+require('./models/GameLevel');
+require('./models/Submission');
 
-mongoose.connect(process.env.MONGODB_URI).then(() => console.log('✅ Connected (Build 133)'));
+mongoose.connect(process.env.MONGODB_URI).then(() => console.log('✅ MongoDB Condamine Connecté'));
 
 app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// 2. ROUTES API
+// ROUTES
 app.use('/api/auth', require('./features/auth/auth.routes'));
 app.use('/api/structure', require('./features/structure/structure.routes'));
 app.use('/api/games', require('./features/games/games.routes'));
 app.use('/api/homework', require('./features/homework/homework.routes'));
-app.use('/api/scans', require('./features/scans/scans.routes'));
 app.use('/api/admin', require('./features/admin/admin.routes'));
 
+// La route renvoie maintenant toujours le même ID tant que le serveur ne redémarre pas
 app.get('/api/check-deploy', (req, res) => res.json({ bootId: SERVER_BOOT_ID }));
-
-// ALIGNEMENT BUILD #133
-app.get('/api/deploy-status', (req, res) => res.json({ version: "2.6.3", build: 133, status: "live" }));
 
 const distPath = path.join(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-        if (req.path.startsWith('/api')) return res.status(404).json({ error: "Route API inconnue" });
-        res.sendFile(path.join(distPath, 'index.html'));
-    });
+    app.get('*', (req, res) => res.sendFile(path.join(distPath, 'index.html')));
 }
-app.listen(port, () => console.log(`🚀 SERVEUR CONDAMINE ACTIF (BUILD 133)`));
+
+app.listen(port, () => console.log(`🚀 CONDAMINE PRO ACTIF SUR PORT ${port}`));

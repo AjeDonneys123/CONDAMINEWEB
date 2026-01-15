@@ -6,11 +6,10 @@ const TeacherSchema = new mongoose.Schema({
     subjectSections: { 
         type: Array, 
         default: [
-            { name: 'Histoire', color: '#ef4444' },
-            { name: 'Géographie', color: '#3b82f6' },
+            { name: 'HISTOIRE', color: '#ef4444' },
+            { name: 'GEOGRAPHIE', color: '#3b82f6' },
             { name: 'EMC', color: '#22c55e' }
         ] 
-    },
-    driveFolderId: String
+    }
 });
 module.exports = mongoose.models.Teacher || mongoose.model('Teacher', TeacherSchema);

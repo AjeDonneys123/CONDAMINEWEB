@@ -1,8 +1,7 @@
 const mongoose = require('mongoose');
 const ChapterSchema = new mongoose.Schema({
     title: { type: String, required: true },
-    subject: { type: String, required: true }, // ex: "Histoire"
-    isArchived: { type: Boolean, default: false },
+    subject: { type: String, required: true },
     classroom: { type: String, required: true },
     driveFolderId: String,
     teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher' }

@@ -12,47 +12,18 @@ export default function ActivityStudio({ globalClass, user }) {
     const loadData = async () => {
         setLoading(true);
         try {
-            const fetchJSON = async (url) => {
-                const response = await fetch(url);
-                if (!response.ok) {
-                    const errorBody = await response.json().catch(() => ({}));
-                    throw new Error(errorBody.error || `Erreur ${response.status}`);
-                }
-                return response.json();
-            };
-
             const [hw, gm, cp] = await Promise.all([
-                fetchJSON('/api/homework/all'),
-                fetchJSON('/api/games/all'),
-                fetchJSON('/api/structure/chapters')
+                fetch('/api/homework/all').then(r => r.json()),
+                fetch('/api/games/all').then(r => r.json()),
+                fetch('/api/structure/chapters').then(r => r.json())
             ]);
-            
-            setActivities([
-                ...hw.map(x => ({...x, actType: 'homework'})), 
-                ...gm.map(x => ({...x, actType: 'game'}))
-            ]);
+            setActivities([...hw.map(x => ({...x, actType: 'homework'})), ...gm.map(x => ({...x, actType: 'game'}))]);
             setChapters(cp || []);
-        } catch (e) { 
-            console.error("❌ Erreur Fetch:", e.message);
-            // Si l'erreur est "Failed to fetch", le serveur est probablement éteint
-            const msg = e.message === "Failed to fetch" 
-                ? "Le serveur ne répond pas. Vérifiez que 'npm run dev' est bien lancé."
-                : "Erreur BDD : " + e.message;
-            alert(msg);
-        }
+        } catch (e) { console.error("❌ ActivityStudio Load error:", e); }
         setLoading(false);
     };
 
     useEffect(() => { loadData(); }, [globalClass]);
-
-    const handleDeleteItem = async (id, type) => {
-        if (!confirm("🗑️ Confirmer la suppression ?")) return;
-        try {
-            const res = await fetch(type === 'game' ? `/api/games/${id}` : `/api/homework/${id}`, { method: 'DELETE' });
-            if (!res.ok) throw new Error("Erreur lors de la suppression");
-            loadData();
-        } catch (e) { alert(e.message); }
-    };
 
     if (editingItem) {
         if (editingItem.type === 'homework') return <HomeworkStudio initialData={editingItem.data} chapters={chapters} globalClass={globalClass} user={user} onClose={() => {setEditingItem(null); loadData();}} />;
@@ -72,8 +43,15 @@ export default function ActivityStudio({ globalClass, user }) {
                     chapters={chapters} 
                     items={activities} 
                     classFilter={globalClass}
+                    user={user}
                     onEditItem={(it) => setEditingItem({type: it.actType, data: it})}
-                    onDeleteItem={handleDeleteItem}
+                    onDeleteItem={async (id, type) => {
+                        if(confirm('Supprimer ?')) {
+                            await fetch(type==='game'?`/api/games/${id}`:`/api/homework/${id}`, {method:'DELETE'});
+                            loadData();
+                        }
+                    }}
+                    onRefresh={loadData}
                 />
             )}
         </div>

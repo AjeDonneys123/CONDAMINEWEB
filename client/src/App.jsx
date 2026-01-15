@@ -2,14 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import Login from './features/auth/Login';
 import ProfPage from './features/prof/ProfPage';
 import ElevePage from './features/eleve/ElevePage';
-import ConsoleHUD from './features/prof/components/ConsoleHUD';
 import './App.css';
 
 export default function App() {
   const [user, setUser] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
-  // ALIGNEMENT BUILD #133
-  const [appInfo, setAppInfo] = useState({ version: '2.6.3', build: 133, status: 'live' });
   const bootIdRef = useRef(null);
 
   useEffect(() => {
@@ -17,7 +14,11 @@ export default function App() {
       try {
         const res = await fetch('/api/check-deploy');
         const data = await res.json();
-        if (!bootIdRef.current) bootIdRef.current = data.bootId;
+        // Si c'est le premier appel, on stocke l'ID
+        if (!bootIdRef.current) {
+          bootIdRef.current = data.bootId;
+        } 
+        // Si l'ID a changé, le serveur a redémarré : on reload
         else if (data.bootId !== bootIdRef.current) {
           setIsSyncing(true);
           setTimeout(() => window.location.reload(), 1500);
@@ -31,29 +32,20 @@ export default function App() {
   useEffect(() => {
     const saved = localStorage.getItem('player');
     if (saved) {
-      try {
         const parsed = JSON.parse(saved);
-        if (parsed) {
-          if (!parsed.id && parsed._id) parsed.id = parsed._id.toString();
-          setUser(parsed);
-        }
-      } catch (e) { localStorage.removeItem('player'); }
+        setUser({ ...parsed, id: parsed._id || parsed.id });
     }
   }, []);
 
   const handleLogout = () => { localStorage.clear(); setUser(null); };
   const isProf = user && (user.id === 'prof' || user.role === 'prof');
 
-  if (isSyncing) return <div className="sync-overlay"><div className="sync-card"><h2>SYNCHRONISATION...</h2><p>Mise à jour vers Build {appInfo.build}</p></div></div>;
+  if (isSyncing) return <div className="sync-overlay"><h2>SYNC EN COURS...</h2></div>;
 
   return (
     <div className="app-wrapper">
-      <div className="version-banner">
-          <span className="version-txt">BUILD {appInfo.build} (v{appInfo.version})</span>
-          <div className="live-indicator"><span className="live-dot"></span> LIVE</div>
-      </div>
       {!user ? <Login onLoginSuccess={setUser} /> : 
-       isProf ? <><ProfPage user={user} onLogout={handleLogout} /><ConsoleHUD /></> : 
+       isProf ? <ProfPage user={user} onLogout={handleLogout} /> : 
        <ElevePage user={user} onLogout={handleLogout} onBackToProf={() => setUser({ id: "prof", role: "prof" })} />}
     </div>
   );

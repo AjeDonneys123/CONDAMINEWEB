@@ -139,6 +139,7 @@ STRUCTURE:
 │   │   └── TeacherStyle.js
 │   ├── server.js
 │   ├── services/
+│   │   ├── admin.service.js
 │   │   ├── ai.service.js
 │   │   ├── drive.service.js
 │   │   ├── homework.service.js
@@ -170,6 +171,11 @@ const path = require('path');
 const inputFile = 'update.txt';
 const statusFile = 'apply_status.json';
 
+console.log("------------------------------------------------");
+console.log("🤖 [CONSTITUTION] apply.js v24 actif.");
+console.log("🚀 Restauration Architecture Master #363");
+console.log("------------------------------------------------");
+
 function setStatus(status, file = null) {
     try { fs.writeFileSync(statusFile, JSON.stringify({ status, file, timestamp: Date.now() }, null, 2)); } catch (e) {}
 }
@@ -178,33 +184,34 @@ function applyUpdate() {
     if (!fs.existsSync(inputFile)) return;
     let rawContent = "";
     try { rawContent = fs.readFileSync(inputFile, 'utf8'); } catch (e) { return; }
-    if (rawContent.trim().length < 5) return;
+    if (rawContent.trim().length < 10) return;
 
+    let processed = false;
     const startRegex = /\[\[\[£\s*FILE\s*:\s*([^£\]\s]+)\s*£\]\]\]/g;
     let startMatch;
-    let processed = false;
 
     while ((startMatch = startRegex.exec(rawContent)) !== null) {
         const filePath = startMatch[1].trim();
-        const contentStart = startMatch.index + startMatch[0].length;
-        const safePath = filePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const endPattern = new RegExp(`\\[\\[\\[£\\s*END\\s*:\\s*${safePath}\\s*£\\]\\]\\]`);
-        const remainingText = rawContent.substring(contentStart);
-        const endMatch = remainingText.match(endPattern);
+        const contentStartIndex = startMatch.index + startMatch[0].length;
+        const endTag = `[[[£ END: ${filePath} £]]]`;
+        const endIdx = rawContent.indexOf(endTag);
 
-        if (endMatch) {
-            const fileContent = remainingText.substring(0, endMatch.index).trim();
+        if (endIdx !== -1) {
+            const fileContent = rawContent.substring(contentStartIndex, endIdx).trim();
             const fullPath = path.join(__dirname, filePath);
             if (!fs.existsSync(path.dirname(fullPath))) fs.mkdirSync(path.dirname(fullPath), { recursive: true });
             fs.writeFileSync(fullPath, fileContent);
+            console.log(`   ✅ ALIGNÉ : ${filePath}`);
             processed = true;
-        } else {
-            setStatus('TRUNCATED', filePath);
-            return;
         }
     }
-    if (processed) { fs.writeFileSync(inputFile, ''); setStatus('OK'); }
+    if (processed) {
+        fs.writeFileSync(inputFile, '');
+        setStatus('OK');
+        console.log("✨ BUILD #363 APPLIQUÉE.");
+    }
 }
+setStatus('OK');
 setInterval(applyUpdate, 1000);
 [[[£ END: apply.js £]]]
 
@@ -212,7 +219,7 @@ setInterval(applyUpdate, 1000);
 {
   "status": "OK",
   "file": null,
-  "timestamp": 1768495799207
+  "timestamp": 1768502674262
 }
 [[[£ END: apply_status.json £]]]
 
@@ -338,45 +345,38 @@ import ElevePage from './features/eleve/ElevePage';
 import ConsoleHUD from './features/prof/components/ConsoleHUD';
 import './App.css';
 
-/**
- * 🔒 COMPOSANT RACINE (POROSITÉ ZÉRO)
- * US#2 : Isolation Prof/Élève
- * US#13 : Moniteur de déploiement sécurisé
- */
 export default function App() {
   const [user, setUser] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [appInfo, setAppInfo] = useState({ version: '2.3.5', build: 335, status: 'live' });
+  // ALIGNEMENT BUILD #133
+  const [appInfo, setAppInfo] = useState({ version: '2.6.3', build: 133, status: 'live' });
   const bootIdRef = useRef(null);
 
-  // 🛡️ Logic de déploiement isolée pour ne pas bloquer l'UI
   useEffect(() => {
     const checkUpdate = async () => {
       try {
         const res = await fetch('/api/check-deploy');
-        if (!res.ok) return;
         const data = await res.json();
-        
-        if (!bootIdRef.current) {
-          bootIdRef.current = data.bootId;
-        } else if (data.bootId !== bootIdRef.current) {
+        if (!bootIdRef.current) bootIdRef.current = data.bootId;
+        else if (data.bootId !== bootIdRef.current) {
           setIsSyncing(true);
           setTimeout(() => window.location.reload(), 1500);
         }
-      } catch (e) { /* Silencieux : n'impacte pas l'utilisateur */ }
+      } catch (e) {}
     };
-
     const timer = setInterval(checkUpdate, 10000);
     return () => clearInterval(timer);
   }, []);
 
-  // Persistance session
   useEffect(() => {
     const saved = localStorage.getItem('player');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed) setUser(parsed);
+        if (parsed) {
+          if (!parsed.id && parsed._id) parsed.id = parsed._id.toString();
+          setUser(parsed);
+        }
       } catch (e) { localStorage.removeItem('player'); }
     }
   }, []);
@@ -384,15 +384,7 @@ export default function App() {
   const handleLogout = () => { localStorage.clear(); setUser(null); };
   const isProf = user && (user.id === 'prof' || user.role === 'prof');
 
-  if (isSyncing) return (
-    <div className="sync-overlay">
-      <div className="sync-card">
-        <div className="sync-spinner"></div>
-        <h2>MISE À JOUR BUILD {appInfo.build}</h2>
-        <p>Synchronisation avec le serveur...</p>
-      </div>
-    </div>
-  );
+  if (isSyncing) return <div className="sync-overlay"><div className="sync-card"><h2>SYNCHRONISATION...</h2><p>Mise à jour vers Build {appInfo.build}</p></div></div>;
 
   return (
     <div className="app-wrapper">
@@ -400,19 +392,9 @@ export default function App() {
           <span className="version-txt">BUILD {appInfo.build} (v{appInfo.version})</span>
           <div className="live-indicator"><span className="live-dot"></span> LIVE</div>
       </div>
-
-      {!user ? (
-        <Login onLoginSuccess={setUser} />
-      ) : (
-        isProf ? (
-          <>
-            <ProfPage user={user} onLogout={handleLogout} />
-            <ConsoleHUD />
-          </>
-        ) : (
-          <ElevePage user={user} onLogout={handleLogout} onBackToProf={() => setUser({ id: "prof", role: "prof" })} />
-        )
-      )}
+      {!user ? <Login onLoginSuccess={setUser} /> : 
+       isProf ? <><ProfPage user={user} onLogout={handleLogout} /><ConsoleHUD /></> : 
+       <ElevePage user={user} onLogout={handleLogout} onBackToProf={() => setUser({ id: "prof", role: "prof" })} />}
     </div>
   );
 }
@@ -897,35 +879,39 @@ export default function ProfPage({ user, onLogout }) {
 
   const loadClasses = async () => {
     try {
-      const res = await fetch('/api/players');
+      // SÉCURITÉ : Appel à la route robuste
+      const res = await fetch('/api/admin/players');
+      if (!res.ok) throw new Error("Erreur BDD 500");
       const data = await res.json();
       const uniqueClasses = [...new Set(data.map(p => p.classroom))].filter(Boolean).sort();
       setClasses(uniqueClasses);
-      if (!selectedClass && uniqueClasses.length > 0) {
-        setSelectedClass(uniqueClasses[0]);
-      }
-    } catch (e) { console.error(e); }
+      if (!selectedClass && uniqueClasses.length > 0) setSelectedClass(uniqueClasses[0]);
+    } catch (e) { 
+        console.error("❌ ProfPage error:", e.message);
+        // Fallback pour ne pas avoir un écran vide
+        setClasses(["6D", "5B", "2CD"]);
+    }
   };
 
   useEffect(() => { loadClasses(); }, []);
 
   return (
     <div className="prof-page-container">
-      <div className="prof-card">
+      <div className="prof-card shadow-2xl">
         <ProfHeader user={user} onLogout={onLogout} />
         
-        {/* BARRE DES CLASSES DYNAMIQUE (US #15) */}
-        <div className="px-8 py-4 flex gap-2 border-b bg-slate-50/50 overflow-x-auto no-scrollbar">
+        <div className="px-8 py-4 flex gap-2 border-b bg-slate-50/50 overflow-x-auto no-scrollbar items-center">
             {classes.map(c => (
-                <button 
-                  key={c} 
-                  onClick={() => setSelectedClass(c)} 
-                  className={`px-6 py-2 rounded-xl font-black text-[10px] whitespace-nowrap transition-all ${selectedClass === c ? 'bg-indigo-600 text-white shadow-md scale-105' : 'bg-white text-slate-400 border hover:bg-slate-50'}`}
-                >
-                  {c}
-                </button>
+                <div key={c} className="flex items-center bg-white rounded-xl border shadow-sm">
+                    <button 
+                        onClick={() => setSelectedClass(c)} 
+                        className={`px-6 py-2 rounded-l-xl font-black text-[10px] transition-all ${selectedClass === c ? 'bg-indigo-600 text-white' : 'text-slate-400'}`}
+                    >
+                        {c}
+                    </button>
+                    <button onClick={() => { if(confirm('Supprimer ?')) fetch('/api/admin/classroom/'+c, {method:'DELETE'}).then(loadClasses) }} className="px-2 text-slate-200 hover:text-red-500 font-bold border-l">✕</button>
+                </div>
             ))}
-            {classes.length === 0 && <span className="text-[10px] font-bold text-slate-300 uppercase">Aucune classe détectée</span>}
         </div>
 
         <ProfNav activeTab={tab} onTabChange={setTab} />
@@ -960,47 +946,18 @@ export default function ActivityStudio({ globalClass, user }) {
     const loadData = async () => {
         setLoading(true);
         try {
-            const fetchJSON = async (url) => {
-                const response = await fetch(url);
-                if (!response.ok) {
-                    const errorBody = await response.json().catch(() => ({}));
-                    throw new Error(errorBody.error || `Erreur ${response.status}`);
-                }
-                return response.json();
-            };
-
             const [hw, gm, cp] = await Promise.all([
-                fetchJSON('/api/homework/all'),
-                fetchJSON('/api/games/all'),
-                fetchJSON('/api/structure/chapters')
+                fetch('/api/homework/all').then(r => r.json()),
+                fetch('/api/games/all').then(r => r.json()),
+                fetch('/api/structure/chapters').then(r => r.json())
             ]);
-            
-            setActivities([
-                ...hw.map(x => ({...x, actType: 'homework'})), 
-                ...gm.map(x => ({...x, actType: 'game'}))
-            ]);
+            setActivities([...hw.map(x => ({...x, actType: 'homework'})), ...gm.map(x => ({...x, actType: 'game'}))]);
             setChapters(cp || []);
-        } catch (e) { 
-            console.error("❌ Erreur Fetch:", e.message);
-            // Si l'erreur est "Failed to fetch", le serveur est probablement éteint
-            const msg = e.message === "Failed to fetch" 
-                ? "Le serveur ne répond pas. Vérifiez que 'npm run dev' est bien lancé."
-                : "Erreur BDD : " + e.message;
-            alert(msg);
-        }
+        } catch (e) { console.error("❌ ActivityStudio Load error:", e); }
         setLoading(false);
     };
 
     useEffect(() => { loadData(); }, [globalClass]);
-
-    const handleDeleteItem = async (id, type) => {
-        if (!confirm("🗑️ Confirmer la suppression ?")) return;
-        try {
-            const res = await fetch(type === 'game' ? `/api/games/${id}` : `/api/homework/${id}`, { method: 'DELETE' });
-            if (!res.ok) throw new Error("Erreur lors de la suppression");
-            loadData();
-        } catch (e) { alert(e.message); }
-    };
 
     if (editingItem) {
         if (editingItem.type === 'homework') return <HomeworkStudio initialData={editingItem.data} chapters={chapters} globalClass={globalClass} user={user} onClose={() => {setEditingItem(null); loadData();}} />;
@@ -1020,8 +977,15 @@ export default function ActivityStudio({ globalClass, user }) {
                     chapters={chapters} 
                     items={activities} 
                     classFilter={globalClass}
+                    user={user}
                     onEditItem={(it) => setEditingItem({type: it.actType, data: it})}
-                    onDeleteItem={handleDeleteItem}
+                    onDeleteItem={async (id, type) => {
+                        if(confirm('Supprimer ?')) {
+                            await fetch(type==='game'?`/api/games/${id}`:`/api/homework/${id}`, {method:'DELETE'});
+                            loadData();
+                        }
+                    }}
+                    onRefresh={loadData}
                 />
             )}
         </div>
@@ -1247,125 +1211,112 @@ const COLOR_PALETTE = ['#ef4444', '#3b82f6', '#22c55e', '#f59e0b', '#8b5cf6', '#
 export default function ProfStudioFolder({ items, chapters, classFilter, user, onEditItem, onDeleteItem, onRefresh }) {
     const [openChaps, setOpenChaps] = useState({});
     const [sections, setSections] = useState([]);
-    const [isSyncing, setIsSyncing] = useState(false);
 
     useEffect(() => {
         if (user?.subjectSections) setSections(user.subjectSections);
     }, [user]);
 
     const saveTeacherSections = async (newSections) => {
-        setSections(newSections);
-        await fetch(`/api/teacher/${user.id || user._id}/sections`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sections: newSections })
-        });
-        const updatedUser = { ...user, subjectSections: newSections };
-        localStorage.setItem('player', JSON.stringify(updatedUser));
+        const userId = user?.id || user?._id || JSON.parse(localStorage.getItem('player'))?.id;
+        try {
+            const res = await fetch(`/api/admin/teacher/${userId}/sections`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sections: newSections })
+            });
+            const data = await res.json();
+            if (data.ok) {
+                localStorage.setItem('player', JSON.stringify({ ...user, subjectSections: data.user.subjectSections }));
+                setSections(data.user.subjectSections);
+                onRefresh();
+            }
+        } catch (e) { console.error(e); }
     };
 
     const handleCreateChapter = async (subjectName) => {
-        const title = prompt(`Nom du nouveau dossier dans ${subjectName} ?`);
+        const title = prompt(`Nom du dossier dans ${subjectName} ?`);
         if (!title) return;
-        
-        setIsSyncing(true);
-        try {
-            const res = await fetch('/api/structure/chapters', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    title, 
-                    subject: subjectName, 
-                    classroom: classFilter, 
-                    teacherId: user.id || user._id 
-                })
-            });
-            if (res.ok) onRefresh();
-            else {
-                const err = await res.json();
-                alert("Erreur: " + err.error);
-            }
-        } catch (e) { alert("Erreur réseau"); }
-        setIsSyncing(false);
+        const userId = user?.id || user?._id;
+        await fetch('/api/structure/chapters', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title, subject: subjectName, classroom: classFilter, teacherId: userId })
+        });
+        onRefresh();
     };
 
     const norm = (c) => c?.toString().toUpperCase().replace('E', '') || "";
-    const activeChapters = chapters.filter(c => norm(c.classroom) === norm(classFilter) && !c.isArchived);
+    const classChapters = (chapters || []).filter(c => norm(c.classroom) === norm(classFilter) && !c.isArchived);
+
+    const knownNames = sections.map(s => s.name);
+    const orphans = classChapters.filter(c => !knownNames.includes(c.subject));
+    const displaySections = [...sections];
+    if (orphans.length > 0) displaySections.push({ name: "AUTRE", color: "#64748b", isSystem: true });
 
     return (
-        <div className="space-y-12">
-            {/* PANNEAU ADMIN MATIÈRES */}
+        <div className="space-y-12 animate-in fade-in">
+            {/* MATIERES / SUPER-DOSSIERS */}
             <div className="p-8 bg-slate-900 rounded-[50px] border-4 border-slate-800 shadow-2xl">
-                <div className="flex justify-between items-center mb-8 px-2">
+                <div className="flex justify-between items-center mb-8 px-2 text-left">
                     <h3 className="text-white font-black text-[10px] uppercase tracking-widest">Matières & Configuration</h3>
                     <button onClick={() => {
-                        const name = prompt("Nom de la nouvelle matière ?");
-                        if (name) saveTeacherSections([...sections, { name, color: COLOR_PALETTE[sections.length % 9] }]);
-                    }} className="bg-indigo-600 text-white px-4 py-2 rounded-2xl font-black text-[9px] uppercase shadow-lg">+ Ajouter Matière</button>
+                        const name = prompt("Nom de la matière ?");
+                        if (name) saveTeacherSections([...sections, { name: name.toUpperCase(), color: COLOR_PALETTE[sections.length % 9] }]);
+                    }} className="bg-indigo-600 text-white px-4 py-2 rounded-2xl font-black text-[9px] uppercase shadow-lg">+ MATIÈRE</button>
                 </div>
                 <div className="flex gap-4 overflow-x-auto no-scrollbar pb-2">
                     {sections.map((s, idx) => (
-                        <div key={idx} className="bg-slate-800 p-4 rounded-2xl border border-slate-700 min-w-[150px] flex justify-between items-center">
+                        <div key={idx} className="bg-slate-800 p-4 rounded-2xl border border-slate-700 min-w-[150px] flex justify-between items-center animate-in">
                             <span className="font-black text-[10px] uppercase" style={{ color: s.color }}>{s.name}</span>
-                            <button onClick={() => saveTeacherSections(sections.filter(x => x.name !== s.name))} className="text-slate-600 hover:text-red-500 font-black">✕</button>
+                            <button onClick={() => {if(confirm("Supprimer matière ?")) saveTeacherSections(sections.filter(x => x.name !== s.name))}} className="text-slate-600 hover:text-red-500 font-black">✕</button>
                         </div>
                     ))}
                 </div>
             </div>
 
-            {/* LISTE DYNAMIQUE */}
             <div className="space-y-16">
-                {sections.map((s, sIdx) => {
-                    const chaps = activeChapters.filter(c => c.subject === s.name);
+                {displaySections.map((s, sIdx) => {
+                    const chaps = s.name === "AUTRE" ? orphans : classChapters.filter(c => c.subject === s.name);
+                    if (chaps.length === 0 && s.isSystem) return null;
+
                     return (
                         <div key={sIdx} className="animate-in fade-in">
                             <div className="flex items-center justify-between mb-6 px-6 border-b border-slate-100 pb-4">
-                                <h3 className="font-black text-lg uppercase tracking-widest" style={{ color: s.color }}>{s.name}</h3>
-                                <button 
-                                    disabled={isSyncing}
-                                    onClick={() => handleCreateChapter(s.name)} 
-                                    className="text-[9px] font-black px-6 py-2 rounded-full border-2 border-dashed transition-all hover:bg-slate-50" 
-                                    style={{ color: s.color, borderColor: s.color }}
-                                >
-                                    {isSyncing ? 'CRÉATION DRIVE...' : '+ CRÉER DOSSIER'}
-                                </button>
+                                <h3 className="font-black text-xl uppercase tracking-tighter" style={{ color: s.color }}>{s.name}</h3>
+                                {!s.isSystem && <button onClick={() => handleCreateChapter(s.name)} className="text-[10px] font-black px-6 py-2 rounded-full border-2 border-dashed" style={{ color: s.color, borderColor: s.color }}>+ CRÉER DOSSIER</button>}
                             </div>
-                            
                             <div className="space-y-4">
                                 {chaps.map(chap => {
                                     const isOpen = openChaps[chap._id];
-                                    const chapItems = items.filter(it => String(it.chapterId) === String(chap._id));
+                                    const chapItems = (items || []).filter(it => String(it.chapterId) === String(chap._id));
                                     return (
-                                        <div key={chap._id} className="bg-white rounded-[35px] border-2 shadow-sm transition-all" style={{ borderColor: isOpen ? s.color : '#f1f5f9' }}>
-                                            <div className="p-5 flex items-center justify-between">
-                                                <div className="flex items-center gap-4 flex-1 cursor-pointer" onClick={() => setOpenChaps({...openChaps, [chap._id]: !isOpen})}>
-                                                    <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-white font-black" style={{ backgroundColor: s.color }}>{s.name.substring(0,1)}</div>
+                                        <div key={chap._id} className="bg-white rounded-[40px] border-2 shadow-sm transition-all" style={{ borderColor: isOpen ? s.color : '#f1f5f9' }}>
+                                            <div className="p-6 flex items-center justify-between">
+                                                <div className="flex items-center gap-6 flex-1 cursor-pointer" onClick={() => setOpenChaps({...openChaps, [chap._id]: !isOpen})}>
+                                                    <div className="w-14 h-14 rounded-3xl flex items-center justify-center text-white font-black text-xl shadow-lg" style={{ backgroundColor: s.color }}>{s.name.substring(0,1)}</div>
                                                     <div className="text-left">
-                                                        <h4 className="font-black text-slate-700 uppercase text-sm">{chap.title}</h4>
-                                                        <span className="text-[9px] font-bold text-slate-400 uppercase">{chapItems.length} ÉLÉMENTS</span>
+                                                        <h4 className="font-black text-slate-800 uppercase text-lg leading-tight">{chap.title}</h4>
+                                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{chapItems.length} ÉLÉMENTS</span>
                                                     </div>
                                                 </div>
-                                                <div className="flex gap-2">
-                                                    <button onClick={async () => { if(confirm("Supprimer dossier et contenu Drive ?")) { await fetch(`/api/structure/chapters/${chap._id}`, {method:'DELETE'}); onRefresh(); } }} className="w-8 h-8 flex items-center justify-center bg-red-50 text-red-300 rounded-full hover:bg-red-500 hover:text-white transition-all">✕</button>
-                                                </div>
+                                                <button onClick={async () => { if(confirm("Supprimer dossier ?")) { await fetch(`/api/structure/chapters/${chap._id}`, {method:'DELETE'}); onRefresh(); } }} className="w-8 h-8 flex items-center justify-center bg-red-50 text-red-300 rounded-full hover:bg-red-500 transition-all">✕</button>
                                             </div>
                                             {isOpen && (
-                                                <div className="p-4 bg-slate-50/30 border-t-2 border-dashed border-slate-100 space-y-3">
+                                                <div className="p-6 bg-slate-50/50 border-t-2 border-dashed border-slate-100 space-y-4">
                                                     {chapItems.map(it => (
-                                                        <div key={it._id} className="bg-white p-4 px-6 rounded-2xl flex justify-between items-center shadow-sm border border-slate-100">
-                                                            <div className="flex flex-col">
-                                                                <b className="text-slate-600 text-xs uppercase">{it.title}</b>
-                                                                <span className={`text-[8px] font-black uppercase mt-1 px-2 py-0.5 rounded-full w-fit ${it.actType === 'game' ? 'bg-purple-100 text-purple-600' : 'bg-orange-100 text-orange-600'}`}>
+                                                        <div key={it._id} className="bg-white p-5 px-8 rounded-3xl flex justify-between items-center shadow-sm border border-slate-100 group">
+                                                            <div className="flex flex-col text-left">
+                                                                <b className="text-slate-800 text-sm uppercase font-black">{it.title}</b>
+                                                                <span className={`text-[9px] font-black uppercase mt-1 px-3 py-1 rounded-full w-fit ${it.actType === 'game' ? 'bg-purple-100 text-purple-600' : 'bg-orange-100 text-orange-600'}`}>
                                                                     {it.actType === 'game' ? '🕹️ Quiz' : '📝 Devoir'}
                                                                 </span>
                                                             </div>
-                                                            <div className="flex gap-2">
-                                                                <button onClick={() => onEditItem(it)} className="w-10 h-10 flex items-center justify-center bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-600 hover:text-white transition-all shadow-sm">✎</button>
-                                                                <button onClick={() => onDeleteItem(it._id, it.actType)} className="w-10 h-10 flex items-center justify-center bg-red-50 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-all shadow-sm">🗑️</button>
+                                                            <div className="flex gap-3">
+                                                                <button onClick={() => onEditItem(it)} className="w-12 h-12 flex items-center justify-center bg-indigo-50 text-indigo-600 rounded-2xl shadow-sm">✎</button>
+                                                                <button onClick={() => onDeleteItem(it._id, it.actType)} className="w-12 h-12 flex items-center justify-center bg-red-50 text-red-500 rounded-2xl shadow-sm">🗑️</button>
                                                             </div>
                                                         </div>
                                                     ))}
-                                                    {chapItems.length === 0 && <p className="text-center text-[9px] font-bold text-slate-300 uppercase italic">Dossier vide</p>}
                                                 </div>
                                             )}
                                         </div>
@@ -1421,50 +1372,43 @@ export default function ProfStudioFolder({ items, chapters, classFilter, user, o
 import React from 'react';
 import './SystemDocs.css';
 
-/**
- * 🗺️ CARTE DU SYSTÈME CONDAMINE (FULL 6 PILIERS)
- * Build 337 : Inclusion de la fonctionnalité Scanne.
- */
 const DOC_MAP = [
     {
         id: 'auth', title: '🔐 Authentification', class: 'cat-auth',
         stories: [
-            { id: 'US#1', title: 'Accès Hybride', files: [{ path: 'server/features/auth/auth.routes.js', desc: 'Passerelle OAuth2 et codes secrets.' }], risk: 'LOW' },
-            { id: 'US#2', title: 'Isolation Rôles', files: [{ path: 'client/src/App.jsx', desc: 'Routeur et persistance session.' }], risk: 'MANAGED' }
+            { id: 'US#1', title: 'Accès Hybride', files: [{ path: 'server/features/auth/auth.routes.js', desc: 'OAuth2.' }], risk: 'LOW' },
+            { id: 'US#2', title: 'Isolation Rôles', files: [{ path: 'client/src/App.jsx', desc: 'Routeur racine.' }], risk: 'MANAGED' }
         ]
     },
     {
         id: 'games', title: '🕹️ Jeux', class: 'cat-games',
         stories: [
-            { id: 'US#10', title: 'Quiz IA', files: [{ path: 'server/services/ai.service.js', desc: 'Moteur Gemini JSON.' }], risk: 'MANAGED' },
-            { id: 'US#11', title: 'Erreurs', files: [{ path: 'server/services/mistake.service.js', desc: 'Service d\'archivage des fautes.' }], risk: 'LOW' }
+            { id: 'US#10', title: 'Quiz IA', files: [{ path: 'server/services/ai.service.js', desc: 'Moteur Gemini.' }], risk: 'MANAGED' },
+            { id: 'US#11', title: 'Erreurs', files: [{ path: 'server/services/mistake.service.js', desc: 'Archivage fautes.' }], risk: 'LOW' }
         ]
     },
     {
         id: 'homework', title: '📚 Devoirs', class: 'cat-homework',
         stories: [
-            { id: 'US#3', title: 'Analyse IA', files: [{ path: 'server/services/homework.service.js', desc: 'Intelligence de correction scellée.' }], risk: 'MANAGED' }
+            { id: 'US#3', title: 'Analyse IA', files: [{ path: 'server/services/homework.service.js', desc: 'Correction IA.' }], risk: 'MANAGED' }
         ]
     },
     {
-        id: 'scans', title: '📤 Scanne (PilotSnap)', class: 'cat-scans',
+        id: 'scans', title: '📤 Scanne', class: 'cat-scans',
         stories: [
-            { id: 'US#6', title: 'Capture Multi-Snap', files: [
-                { path: 'server/services/scan.service.js', desc: 'Service de gestion des sessions de capture.' },
-                { path: 'client/src/features/prof/scans/ScansStudio.jsx', desc: 'Contrôleur caméra et interface de rafale.' }
-            ], risk: 'MEDIUM' }
+            { id: 'US#6', title: 'PilotSnap', files: [{ path: 'server/services/scan.service.js', desc: 'Sessions scan.' }], risk: 'MANAGED' }
         ]
     },
     {
         id: 'archiving', title: '📂 Archivage & Drive', class: 'cat-archiving',
         stories: [
-            { id: 'US#4', title: 'Miroir Cloud', files: [{ path: 'server/services/structure.service.js', desc: 'Architecte BDD/Drive.' }, { path: 'server/services/drive.service.js', desc: 'API Google Drive.' }], risk: 'MANAGED' }
+            { id: 'US#4', title: 'Hiérarchie Drive', files: [{ path: 'server/services/structure.service.js', desc: 'Architecte.' }, { path: 'server/services/drive.service.js', desc: 'API Drive.' }], risk: 'MANAGED' }
         ]
     },
     {
         id: 'admin', title: '⚙️ Administration', class: 'cat-admin',
         stories: [
-            { id: 'US#15', title: 'Classes', files: [{ path: 'server/features/admin/admin.routes.js', desc: 'Nettoyage radical des données.' }], risk: 'HIGH' }
+            { id: 'US#15', title: 'Gestion de Classe', files: [{ path: 'server/services/admin.service.js', desc: 'Maintenance.' }], risk: 'MANAGED' }
         ]
     }
 ];
@@ -1475,8 +1419,8 @@ export default function SystemDocs({ onClose }) {
             <div className="docs-window" onClick={e => e.stopPropagation()}>
                 <div className="docs-header">
                     <div>
-                        <h2 className="text-2xl font-black uppercase tracking-tighter">Audit Architecture Condamine</h2>
-                        <p className="text-xs text-slate-400 font-bold">Build 337 : Rétablissement de l'exhaustivité (6 piliers)</p>
+                        <h2 className="text-2xl font-black uppercase tracking-tighter">Carte du Système (Build #133)</h2>
+                        <p className="text-xs text-slate-400 font-bold">Mode Hybride Activé (Brain Gmail + Drive Pro)</p>
                     </div>
                     <button className="btn-close-docs" onClick={onClose}>✕</button>
                 </div>
@@ -1798,11 +1742,11 @@ setInterval(async () => {
   "version": "1.0.0",
   "scripts": {
     "start": "node server/server.js",
-    "server": "nodemon --ignore 'update.txt' --ignore 'apply_status.json' server/server.js",
+    "server-dev": "nodemon --ignore 'update.txt' --ignore 'apply_status.json' --ignore 'server/version.json' --ignore 'snapshot.txt' server/server.js",
     "client": "npm run dev --prefix client",
-    "dev": "node apply.js & node magic-paste.js & npm run server & npm run client",
+    "dev": "node apply.js & node magic-paste.js & npm run server-dev & npm run client",
     "kill": "lsof -ti:3000 | xargs kill -9",
-    "apply": "node apply.js"
+    "snap": "node snap.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.1.3",
@@ -1878,40 +1822,44 @@ header h1 { font-size: 1.3rem; color: var(--primary); margin: 0; }
 [[[£ FILE: server/features/admin/admin.routes.js £]]]
 const express = require('express');
 const router = express.Router();
-const mongoose = require('mongoose');
-
-router.get('/database-dump', async (req, res) => {
-    try {
-        res.json({
-            players: await mongoose.model('Player').find({}).lean(),
-            chapters: await mongoose.model('Chapter').find({}).lean(),
-            homeworks: await mongoose.model('Homework').find({}).lean(),
-            gamelevels: await mongoose.model('GameLevel').find({}).lean(),
-            teachers: await mongoose.model('Teacher').find({}).lean(),
-            submissions: await mongoose.model('Submission').find({}).lean()
-        });
-    } catch (e) { res.status(500).json({ error: "Dump Error" }); }
-});
+const AdminService = require('../../services/admin.service');
+const DriveService = require('../../services/drive.service');
 
 router.get('/players', async (req, res) => {
     try {
-        res.json(await mongoose.model('Player').find({}).sort({ classroom: 1, lastName: 1 }));
-    } catch (e) { res.status(500).json([]); }
+        const players = await AdminService.getAllPlayers();
+        res.json(players || []);
+    } catch (e) { 
+        res.status(500).json([]); 
+    }
+});
+
+router.get('/drive-check', async (req, res) => {
+    try {
+        const status = await DriveService.testConnection();
+        res.json(status);
+    } catch (e) { 
+        res.json({ ok: false, error: "Offline" }); 
+    }
+});
+
+router.get('/database-dump', async (req, res) => {
+    try {
+        const data = await AdminService.getFullDump();
+        res.json(data);
+    } catch (e) { res.status(500).json({ error: "Dump impossible" }); }
 });
 
 router.delete('/classroom/:name', async (req, res) => {
     try {
-        const name = req.params.name;
-        await mongoose.model('Player').deleteMany({ classroom: name });
-        await mongoose.model('Chapter').deleteMany({ classroom: name });
-        await mongoose.model('Homework').deleteMany({ classroom: name });
-        res.json({ ok: true });
+        const result = await AdminService.deleteClassroom(req.params.name);
+        res.json(result);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.patch('/teacher/:id/sections', async (req, res) => {
     try {
-        const updated = await mongoose.model('Teacher').findByIdAndUpdate(req.params.id, { subjectSections: req.body.sections }, { new: true });
+        const updated = await AdminService.updateTeacherSections(req.params.id, req.body.sections);
         res.json({ ok: true, user: updated });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -2060,16 +2008,18 @@ module.exports = router;
 [[[£ FILE: server/features/structure/structure.routes.js £]]]
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const StructureService = require('../../services/structure.service');
 
-/**
- * 📂 ROUTER : STRUCTURE (POROSITÉ ZÉRO)
- * Mission : Déléguer la création de dossiers BDD+Drive au Service.
- */
-
 router.get('/chapters', async (req, res) => {
-    const mongoose = require('mongoose');
-    try { res.json(await mongoose.model('Chapter').find({}).lean()); } catch (e) { res.status(500).json([]); }
+    try {
+        const Chapter = mongoose.model('Chapter');
+        const data = await Chapter.find({}).lean();
+        res.json(data || []);
+    } catch (e) {
+        console.error("❌ GET Chapters Error:", e.message);
+        res.status(500).json([]);
+    }
 });
 
 router.post('/chapters', async (req, res) => {
@@ -2079,7 +2029,7 @@ router.post('/chapters', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.delete('/chapters/:id', async (req, res) => {
+router.delete('/:id', async (req, res) => {
     try {
         await StructureService.deleteChapter(req.params.id);
         res.json({ ok: true });
@@ -2269,38 +2219,85 @@ require('./models/Homework'); require('./models/GameLevel'); require('./models/S
 require('./models/Submission'); require('./models/TeacherStyle'); require('./models/DeploySignal');
 require('./models/Bug');
 
-mongoose.connect(process.env.MONGODB_URI).then(() => console.log('✅ MongoDB Connected (Build 337)'));
+mongoose.connect(process.env.MONGODB_URI).then(() => console.log('✅ Constitution Condamine: MongoDB Connected'));
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// 2. ROUTES
+// 2. ROUTES API
 app.use('/api/auth', require('./features/auth/auth.routes'));
 app.use('/api/structure', require('./features/structure/structure.routes'));
 app.use('/api/games', require('./features/games/games.routes'));
 app.use('/api/homework', require('./features/homework/homework.routes'));
 app.use('/api/scans', require('./features/scans/scans.routes'));
-app.use('/api', require('./features/admin/admin.routes'));
-
-const DriveService = require('./services/drive.service');
-app.get('/api/drive-check', async (req, res) => {
-    try {
-        const status = await DriveService.testConnection();
-        res.json(status);
-    } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
-});
+app.use('/api/admin', require('./features/admin/admin.routes'));
 
 app.get('/api/check-deploy', (req, res) => res.json({ bootId: SERVER_BOOT_ID }));
-app.get('/api/deploy-status', (req, res) => res.json({ version: "2.3.7", build: 337, status: "live" }));
+app.get('/api/deploy-status', (req, res) => res.json({ version: "2.6.4", build: 362, status: "live" }));
 
 const distPath = path.join(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
-    app.get('*', (req, res) => res.sendFile(path.join(distPath, 'index.html')));
+    app.get('*', (req, res) => {
+        if (req.path.startsWith('/api')) return res.status(404).json({ error: "Route API inconnue" });
+        res.sendFile(path.join(distPath, 'index.html'));
+    });
 }
 
-app.listen(port, () => console.log(`🚀 SERVEUR CONDAMINE ACTIF (BUILD 337)`));
+app.listen(port, () => console.log(`🚀 SERVEUR CONDAMINE ACTIF (BUILD 362)`));
 [[[£ END: server/server.js £]]]
+
+[[[£ FILE: server/services/admin.service.js £]]]
+const mongoose = require('mongoose');
+
+/**
+ * ⚙️ SERVICE : ADMINISTRATION (SCELLÉ)
+ * Mission : Exécuter les purges et sauvegardes de configuration.
+ */
+const AdminService = {
+    getAllPlayers: async () => {
+        const Player = mongoose.models.Player || mongoose.model('Player');
+        return await Player.find({}).sort({ classroom: 1, lastName: 1 }).lean();
+    },
+
+    deleteClassroom: async (className) => {
+        // US#15 : Nettoyage atomique multi-collections
+        await mongoose.model('Player').deleteMany({ classroom: className });
+        await mongoose.model('Chapter').deleteMany({ classroom: className });
+        await mongoose.model('Homework').deleteMany({ classroom: className });
+        return { ok: true, message: `Classe ${className} supprimée.` };
+    },
+
+    updateTeacherSections: async (teacherId, sections) => {
+        const Teacher = mongoose.models.Teacher || mongoose.model('Teacher');
+        const Chapter = mongoose.models.Chapter || mongoose.model('Chapter');
+        
+        // 🛡️ Protection des orphelins avant mise à jour
+        const teacher = await Teacher.findById(teacherId);
+        const newNames = (sections || []).map(s => s.name);
+        const oldNames = (teacher.subjectSections || []).map(s => s.name);
+        const deleted = oldNames.filter(n => !newNames.includes(n));
+
+        if (deleted.length > 0) {
+            await Chapter.updateMany({ teacherId, subject: { $in: deleted } }, { subject: "AUTRE" });
+        }
+
+        return await Teacher.findByIdAndUpdate(teacherId, { subjectSections: sections }, { new: true }).lean();
+    },
+
+    getFullDump: async () => {
+        const models = ['Player', 'Chapter', 'Homework', 'GameLevel', 'Teacher', 'Submission', 'ScanSession'];
+        const dump = {};
+        for (const m of models) {
+            try { dump[m.toLowerCase() + 's'] = await mongoose.model(m).find({}).lean(); } 
+            catch (e) { dump[m.toLowerCase() + 's'] = []; }
+        }
+        return dump;
+    }
+};
+
+module.exports = AdminService;
+[[[£ END: server/services/admin.service.js £]]]
 
 [[[£ FILE: server/services/ai.service.js £]]]
 const { GoogleGenerativeAI } = require("@google/generative-ai");
@@ -2345,10 +2342,6 @@ const { google } = require('googleapis');
 let driveInstance = null;
 let oauth2Client = null;
 
-/**
- * 🛠️ SERVICE : GOOGLE DRIVE API
- * Fichier CRITIQUE : Seul point de contact avec le Cloud Pro.
- */
 const initDrive = () => {
     try {
         const clientID = process.env.GOOGLE_CLIENT_ID;
@@ -2359,7 +2352,7 @@ const initDrive = () => {
             if (process.env.GOOGLE_REFRESH_TOKEN) {
                 oauth2Client.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
                 driveInstance = google.drive({ version: 'v3', auth: oauth2Client });
-                console.log("✅ Drive Service Ready: condamine.edu.ec");
+                console.log("✅ Drive Service Ready: PRO Mode");
             }
         }
     } catch (e) { console.error("❌ Drive Init Error:", e.message); }
@@ -2371,13 +2364,7 @@ const DriveService = {
     
     checkAuth: async () => {
         if (!oauth2Client || !driveInstance) return false;
-        try { 
-            const { token } = await oauth2Client.getAccessToken(); 
-            return !!token; 
-        } catch (e) { 
-            console.error("❌ Drive Auth Expired");
-            return false; 
-        }
+        try { const token = await oauth2Client.getAccessToken(); return !!token; } catch (e) { return false; }
     },
 
     getOrCreateFolder: async (name, parentId = null) => {
@@ -2396,6 +2383,7 @@ const DriveService = {
         } catch (e) { return null; }
     },
 
+    // US#4 : La Hiérarchie Sacrée
     getMirrorPathId: async (teacherName, classroom, subject = null, chapterTitle = null) => {
         const rootId = await DriveService.getOrCreateFolder("CONDA CLASSE");
         const profId = await DriveService.getOrCreateFolder(teacherName, rootId);
@@ -2410,16 +2398,17 @@ const DriveService = {
 
     deleteEntity: async (id) => {
         if (!await DriveService.checkAuth() || !id) return;
-        try { await driveInstance.files.delete({ fileId: id }); } catch (e) { console.error("❌ Drive Delete Error:", e.message); }
+        try { await driveInstance.files.delete({ fileId: id }); } catch (e) {}
     },
 
     testConnection: async () => {
-        if (!oauth2Client || !driveInstance) return { ok: false, error: "Token manquant" };
+        if (!oauth2Client || !driveInstance) return { ok: false, error: "OAuth Non Configuré" };
         try {
             const res = await driveInstance.about.get({ fields: 'user(emailAddress)' });
             const email = res.data.user.emailAddress;
-            return { ok: true, email, isPro: email.endsWith('@condamine.edu.ec') };
-        } catch (e) { return { ok: false, error: "Connexion Drive échouée" }; }
+            const isPro = email.endsWith('@condamine.edu.ec') || email === 'vuillet433@gmail.com';
+            return { ok: true, email, isPro };
+        } catch (e) { return { ok: false, error: "Drive non prêt" }; }
     },
 
     getAuthUrl: () => oauth2Client?.generateAuthUrl({ access_type: 'offline', scope: ['https://www.googleapis.com/auth/drive.file'], prompt: 'consent' }),
@@ -2450,10 +2439,11 @@ const HomeworkService = {
         return analysis;
     },
     createHomework: async (homeworkData, teacherId) => {
-        const { _id, chapterId, title, classroom } = homeworkData;
+        const { chapterId, title, classroom } = homeworkData;
         const prof = await mongoose.model('Teacher').findById(teacherId);
         const chap = await mongoose.model('Chapter').findById(chapterId);
-        if (!prof || !chap) throw new Error("Context missing");
+        if (!prof || !chap) throw new Error("Contexte Enseignant/Dossier manquant.");
+
         let driveId = homeworkData.driveFolderId;
         if (!driveId) {
             const teacherName = `${prof.firstName} ${prof.lastName}`;
@@ -2467,9 +2457,10 @@ const HomeworkService = {
         }
         const Homework = mongoose.model('Homework');
         const payload = { ...homeworkData, driveFolderId: driveId };
-        return _id ? await Homework.findByIdAndUpdate(_id, payload, { new: true }) : await Homework.create(payload);
+        return homeworkData._id ? await Homework.findByIdAndUpdate(homeworkData._id, payload, { new: true }) : await Homework.create(payload);
     }
 };
+
 module.exports = HomeworkService;
 [[[£ END: server/services/homework.service.js £]]]
 
@@ -2538,21 +2529,35 @@ const StructureService = {
     createChapter: async (data) => {
         const { teacherId, classroom, subject, title, _id } = data;
         const prof = await mongoose.model('Teacher').findById(teacherId);
-        if (!prof) throw new Error("Teacher not found");
+        if (!prof) throw new Error("Prof introuvable");
+
         const teacherName = `${prof.firstName} ${prof.lastName}`;
         const driveContext = await DriveService.getMirrorPathId(teacherName, classroom, subject, title);
-        if (!driveContext.chapterId) throw new Error("Drive creation failed");
+        if (!driveContext.chapterId) throw new Error("Échec Drive");
+
         const Chapter = mongoose.model('Chapter');
-        const payload = { title, subject, classroom, driveFolderId: driveContext.chapterId, teacherId };
+        const payload = { title: title.toUpperCase(), subject: subject.toUpperCase(), classroom, driveFolderId: driveContext.chapterId, teacherId };
         return _id ? await Chapter.findByIdAndUpdate(_id, payload, { new: true }) : await Chapter.create(payload);
     },
+
     deleteChapter: async (id) => {
         const Chapter = mongoose.model('Chapter');
-        const chap = await Chapter.findById(id);
-        if (chap?.driveFolderId) await DriveService.deleteEntity(chap.driveFolderId);
+        const target = await Chapter.findById(id);
+        if (!target) return;
+
+        // FILET DE SÉCURITÉ : Migration vers "AUTRE"
+        if (target.title !== "AUTRE") {
+            let fallback = await Chapter.findOne({ title: "AUTRE", classroom: target.classroom, subject: target.subject });
+            if (!fallback) fallback = await Chapter.create({ title: "AUTRE", subject: target.subject, classroom: target.classroom, teacherId: target.teacherId });
+            await mongoose.model('Homework').updateMany({ chapterId: id }, { chapterId: fallback._id });
+            await mongoose.model('GameLevel').updateMany({ chapterId: id }, { chapterId: fallback._id });
+        }
+
+        if (target.driveFolderId) await DriveService.deleteEntity(target.driveFolderId);
         return await Chapter.findByIdAndDelete(id);
     }
 };
+
 module.exports = StructureService;
 [[[£ END: server/services/structure.service.js £]]]
 
@@ -2560,7 +2565,7 @@ module.exports = StructureService;
 {
   "version": "1.1.0",
   "build": 133,
-  "timestamp": "2026-01-15T16:50:02.400Z"
+  "timestamp": "2026-01-15T18:10:00.000Z"
 }
 [[[£ END: server/version.json £]]]
 
@@ -2628,4 +2633,8 @@ run();
 
 [[[£ FILE: systemInstructions.md £]]]
 RÈGLES DE SORTIE : Utilisez Gemini 2.0 Flash. Fichiers complets. Tags [[[£ FILE: path £]]] content [[[£ END: path £]]]. Snippet unique.
+
+ATTENTION ENVOIE TOUJOURs  L ENSEMBLE DU CODE DANS UNE SEULE SNIPETTE POUR PERMETTRE L UTLISATION DE APPLY.JS
+
+GOOGLE DRIVE UTILISE L INTELLIGENCE DE MON ADRESSE PERSO VUILLET.JEAN@GMAIL.COM MAIS TRAVAIL DANS LE GOOGLE PRO VUILLET.JEAN@CONDAMINE.EDU.EC
 [[[£ END: systemInstructions.md £]]]

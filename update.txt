@@ -1,0 +1,340 @@
+[[[£ FILE: apply.js £]]]
+const fs = require('fs');
+const path = require('path');
+const inputFile = 'update.txt';
+
+console.log("------------------------------------------------");
+console.log("🤖 [CONSTITUTION] apply.js v36 actif.");
+console.log("🚀 Fix ECONNREFUSED & Drive - Build #373");
+console.log("------------------------------------------------");
+
+function applyUpdate() {
+    if (!fs.existsSync(inputFile)) return;
+    let rawContent = "";
+    try { rawContent = fs.readFileSync(inputFile, 'utf8'); } catch (e) { return; }
+    if (rawContent.trim().length < 10) return;
+
+    let processed = false;
+    const startRegex = /\[\[\[£\s*FILE\s*:\s*([^£\]\s]+)\s*£\]\]\]/g;
+    let startMatch;
+
+    while ((startMatch = startRegex.exec(rawContent)) !== null) {
+        const filePath = startMatch[1].trim();
+        const contentStartIndex = startMatch.index + startMatch[0].length;
+        const endTag = `[[[£ END: ${filePath} £]]]`;
+        const endIdx = rawContent.indexOf(endTag);
+
+        if (endIdx !== -1) {
+            const fileContent = rawContent.substring(contentStartIndex, endIdx).trim();
+            const fullPath = path.join(__dirname, filePath);
+            if (!fs.existsSync(path.dirname(fullPath))) fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+            fs.writeFileSync(fullPath, fileContent);
+            console.log(`   ✅ ALIGNÉ : ${filePath}`);
+            processed = true;
+        }
+    }
+    if (processed) {
+        fs.writeFileSync(inputFile, ''); // Vide pour stopper la boucle
+        console.log("✨ SERVEUR RÉALIGNÉ.");
+    }
+}
+setInterval(applyUpdate, 1500);
+
+[[[£ FILE: magic-paste.js £]]]
+const fs = require('fs');
+const inputFile = 'update.txt';
+let lastWritten = "";
+
+setInterval(async () => {
+    try {
+        const module = await import('clipboardy');
+        const text = await module.default.read();
+        
+        if (text.includes('[[[£ FILE:') && text !== lastWritten) {
+            fs.writeFileSync(inputFile, text);
+            lastWritten = text;
+            console.log("📋 Flux Condamine capturé.");
+        }
+    } catch (e) {}
+}, 2000);
+
+[[[£ FILE: package.json £]]]
+{
+  "name": "condamine-pro",
+  "version": "1.3.1",
+  "scripts": {
+    "start": "node server/server.js",
+    "server-dev": "nodemon --ignore 'update.txt' --ignore 'apply_status.json' --ignore 'client/' server/server.js",
+    "client": "npm run dev --prefix client",
+    "dev": "node apply.js & node magic-paste.js & npm run server-dev & npm run client"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.1.3",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "googleapis": "^126.0.0",
+    "mongoose": "7.8.2",
+    "node-fetch": "^2.7.0",
+    "multer": "^1.4.5-lts.1",
+    "clipboardy": "^4.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  }
+}
+
+[[[£ FILE: server/server.js £]]]
+const path = require('path');
+const express = require('express');
+const mongoose = require('mongoose');
+const fs = require('fs');
+const dotenv = require('dotenv');
+
+// 1. INIT CONFIG
+const envPath = path.resolve(process.cwd(), '.env');
+if (fs.existsSync(envPath)) dotenv.config({ path: envPath });
+if (!global.fetch) global.fetch = require('node-fetch');
+
+const app = express();
+const port = process.env.PORT || 3000;
+const SERVER_BOOT_ID = Date.now(); // Fixé une fois pour toute
+
+// 2. DOMAINES (MODELES)
+try {
+    require('./models/Teacher');
+    require('./models/Player');
+    require('./models/Chapter');
+    require('./models/Homework');
+    require('./models/GameLevel');
+    require('./models/Submission');
+} catch (e) { console.error("❌ Erreur chargement modèles:", e.message); }
+
+// 3. DATABASE
+mongoose.connect(process.env.MONGODB_URI)
+    .then(() => console.log('✅ MongoDB Hermétique'))
+    .catch(err => console.error('❌ Erreur MongoDB:', err.message));
+
+app.use(express.json({ limit: '50mb' }));
+
+// 4. ROUTES API (SÉCURISÉES)
+const safeRequire = (p) => { try { return require(p); } catch(e) { console.error(`⚠️ Route ${p} indisponible`); return express.Router(); }};
+
+app.use('/api/auth', safeRequire('./features/auth/auth.routes'));
+app.use('/api/admin', safeRequire('./features/admin/admin.routes'));
+app.use('/api/structure', safeRequire('./features/structure/structure.routes'));
+app.use('/api/games', safeRequire('./features/games/games.routes'));
+app.use('/api/homework', safeRequire('./features/homework/homework.routes'));
+
+app.get('/api/check-deploy', (req, res) => res.json({ bootId: SERVER_BOOT_ID }));
+
+// 5. STATIC & PROXY FIX
+const distPath = path.join(process.cwd(), 'client', 'dist');
+if (fs.existsSync(distPath)) {
+    app.use(express.static(distPath));
+    app.get('*', (req, res) => {
+        if (!req.path.startsWith('/api')) res.sendFile(path.join(distPath, 'index.html'));
+    });
+}
+
+// 6. START
+app.listen(port, '0.0.0.0', () => {
+    console.log(`🚀 SERVEUR CONDAMINE READY | BOOT_ID: ${SERVER_BOOT_ID}`);
+});
+
+[[[£ FILE: server/services/drive.service.js £]]]
+const { google } = require('googleapis');
+
+let oauth2Client = null;
+let driveInstance = null;
+
+const DriveService = {
+    init: () => {
+        try {
+            const clientID = process.env.GOOGLE_CLIENT_ID;
+            const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+            const refresh = process.env.GOOGLE_REFRESH_TOKEN;
+            const redirect = process.env.GOOGLE_REDIRECT_URI || "http://localhost:3000/api/auth/google/callback";
+            
+            if (clientID && clientSecret) {
+                oauth2Client = new google.auth.OAuth2(clientID, clientSecret, redirect);
+                if (refresh) {
+                    oauth2Client.setCredentials({ refresh_token: refresh });
+                    driveInstance = google.drive({ version: 'v3', auth: oauth2Client });
+                    console.log("✅ Drive Service Initialisé.");
+                }
+            }
+        } catch (e) { console.error("Drive Init Error:", e.message); }
+    },
+
+    normalize: (n) => n ? n.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Z0-9 ]/g, "_").trim() : "SANS_TITRE",
+
+    testConnection: async () => {
+        if (!driveInstance) return { ok: false, error: "Non configuré" };
+        try {
+            const res = await driveInstance.about.get({ fields: 'user(emailAddress)' });
+            const email = res.data.user.emailAddress;
+            const isCondamine = email.endsWith('@condamine.edu.ec') || email === 'vuillet.jean@gmail.com';
+            return { ok: true, email, isCondamine };
+        } catch (e) { return { ok: false, error: "Session Drive expirée" }; }
+    },
+
+    getAuthUrl: () => {
+        if (!oauth2Client) return "#";
+        return oauth2Client.generateAuthUrl({ access_type: 'offline', scope: ['https://www.googleapis.com/auth/drive.file', 'email'], prompt: 'consent' });
+    },
+
+    exchangeCode: async (code) => {
+        if (!oauth2Client) throw new Error("Client OAuth non prêt");
+        const { tokens } = await oauth2Client.getToken(code);
+        return tokens.refresh_token;
+    },
+
+    getOrCreateFolder: async (name, parentId = null) => {
+        if (!driveInstance) throw new Error("Drive indisponible");
+        const cleanName = DriveService.normalize(name);
+        try {
+            let q = `name = '${cleanName.replace(/'/g, "\\'")}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
+            if (parentId) q += ` and '${parentId}' in parents`;
+            const list = await driveInstance.files.list({ q, fields: 'files(id)' });
+            if (list.data.files?.length > 0) return list.data.files[0].id;
+            const folder = await driveInstance.files.create({
+                resource: { name: cleanName, mimeType: 'application/vnd.google-apps.folder', parents: parentId ? [parentId] : [] },
+                fields: 'id'
+            });
+            return folder.data.id;
+        } catch (e) { throw e; }
+    },
+
+    getMirrorPathId: async (teacherName, classroom, subject, chapterTitle) => {
+        const rootId = await DriveService.getOrCreateFolder("CONDA CLASSE");
+        const profId = await DriveService.getOrCreateFolder(teacherName, rootId);
+        const classId = await DriveService.getOrCreateFolder(classroom, profId);
+        const devoirsId = await DriveService.getOrCreateFolder("DEVOIRS", classId);
+        const subjectId = await DriveService.getOrCreateFolder(subject, devoirsId);
+        const chapterId = await DriveService.getOrCreateFolder(chapterTitle, subjectId);
+        return { rootId, profId, classId, devoirsId, subjectId, chapterId };
+    }
+};
+
+DriveService.init();
+module.exports = DriveService;
+
+[[[£ FILE: client/src/features/prof/components/ProfHeader.jsx £]]]
+import React, { useState, useEffect } from 'react';
+import DatabaseViewer from './DatabaseViewer';
+
+export default function ProfHeader({ user, onLogout }) {
+  const [showDB, setShowDB] = useState(false);
+  const [drive, setDrive] = useState({ loading: true, ok: false, email: '', error: '' });
+
+  const checkDrive = async () => {
+    try {
+      const res = await fetch('/api/admin/drive-check');
+      if (!res.ok) throw new Error("Serveur muet");
+      const data = await res.json();
+      setDrive({ loading: false, ok: data.ok, email: data.email, error: data.error });
+    } catch (e) { setDrive({ loading: false, ok: false, error: 'ECONNREFUSED : Serveur éteint' }); }
+  };
+
+  useEffect(() => { checkDrive(); }, []);
+
+  const handleFixDrive = () => window.open('/api/auth/google/login', '_blank');
+
+  return (
+    <div className="p-8 pb-4 flex justify-between items-center bg-white border-b">
+      <div className="text-left">
+        <h2 className="text-2xl font-black text-slate-800 uppercase tracking-tighter">{user.firstName} {user.lastName}</h2>
+        <div className="flex items-center gap-2 mt-1">
+          <div className={`w-3 h-3 rounded-full ${drive.loading ? 'bg-slate-300 animate-pulse' : drive.ok ? 'bg-emerald-500 shadow-[0_0_10px_#10b981]' : 'bg-red-500 animate-pulse'}`}></div>
+          <span className={`text-[10px] font-black uppercase tracking-widest ${drive.ok ? 'text-emerald-600' : 'text-slate-400'}`}>
+            {drive.loading ? 'Vérification...' : drive.ok ? `Drive OK : ${drive.email}` : `🚨 ${drive.error}`}
+          </span>
+          {!drive.ok && !drive.loading && (
+            <button onClick={handleFixDrive} className="text-[9px] bg-red-50 text-red-500 px-2 py-0.5 rounded-md font-bold hover:bg-red-500 hover:text-white transition-all">RÉPARER</button>
+          )}
+        </div>
+      </div>
+      <div className="flex gap-3">
+        <button onClick={() => setShowDB(true)} className="bg-slate-900 text-white px-4 py-2 rounded-2xl font-black text-[10px] uppercase shadow-lg">📊 BDD</button>
+        <button onClick={onLogout} className="bg-white text-slate-300 px-4 py-2 rounded-2xl font-bold border border-slate-100 text-[10px] uppercase hover:text-red-500">✕</button>
+      </div>
+      {showDB && <DatabaseViewer onClose={() => setShowDB(false)} />}
+    </div>
+  );
+}
+
+[[[£ FILE: client/src/App.jsx £]]]
+import React, { useState, useEffect, useRef } from 'react';
+import Login from './features/auth/Login';
+import ProfPage from './features/prof/ProfPage';
+import ElevePage from './features/eleve/ElevePage';
+import './App.css';
+
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const bootIdRef = useRef(null);
+
+  useEffect(() => {
+    const checkUpdate = async () => {
+      try {
+        const res = await fetch('/api/check-deploy');
+        if (!res.ok) return; // Serveur en train de redémarrer
+        const data = await res.json();
+        if (!bootIdRef.current) {
+          bootIdRef.current = data.bootId;
+        } else if (data.bootId !== bootIdRef.current) {
+          setIsSyncing(true);
+          setTimeout(() => window.location.reload(), 1000);
+        }
+      } catch (e) {}
+    };
+    const timer = setInterval(checkUpdate, 10000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('player');
+    if (saved) {
+        const parsed = JSON.parse(saved);
+        setUser({ ...parsed, id: parsed._id || parsed.id });
+    }
+  }, []);
+
+  const handleLogout = () => { localStorage.clear(); setUser(null); };
+  const isProf = user && (user.id === 'prof' || user.role === 'prof');
+
+  if (isSyncing) return <div className="sync-overlay"><h2>RECONNEXION AU SERVEUR...</h2></div>;
+
+  return (
+    <div className="app-wrapper">
+      {!user ? <Login onLoginSuccess={setUser} /> : 
+       isProf ? <ProfPage user={user} onLogout={handleLogout} /> : 
+       <ElevePage user={user} onLogout={handleLogout} onBackToProf={() => setUser({ id: "prof", role: "prof" })} />}
+    </div>
+  );
+}
+
+[[[£ FILE: server/features/admin/admin.routes.js £]]]
+const express = require('express');
+const router = express.Router();
+const AdminService = require('../../services/admin.service');
+const DriveService = require('../../services/drive.service');
+
+router.get('/players', async (req, res) => {
+    try { res.json(await AdminService.getAllPlayers()); } catch (e) { res.status(500).json([]); }
+});
+
+router.get('/drive-check', async (req, res) => {
+    try { res.json(await DriveService.testConnection()); } catch (e) { res.json({ ok: false, error: e.message }); }
+});
+
+router.delete('/classroom/:name', async (req, res) => {
+    try { await AdminService.deleteClassroom(req.params.name); res.json({ ok: true }); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.patch('/teacher/:id/sections', async (req, res) => {
+    try { res.json(await AdminService.updateTeacherSections(req.params.id, req.body.sections)); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+module.exports = router;

@@ -3,44 +3,17 @@ const router = express.Router();
 const AdminService = require('../../services/admin.service');
 const DriveService = require('../../services/drive.service');
 
-/**
- * ⚙️ ROUTER : ADMINISTRATION (POROSITÉ ZÉRO)
- */
-
-router.get('/players', async (req, res) => {
-    try {
-        const players = await AdminService.getAllPlayers();
-        res.json(players);
-    } catch (e) { res.status(500).json([]); }
-});
-
-router.get('/database-dump', async (req, res) => {
-    try {
-        const data = await AdminService.getFullDump();
-        res.json(data);
-    } catch (e) { res.status(500).json({ error: "Dump impossible" }); }
-});
-
-// US#12 : Diagnostic Drive Pro
-router.get('/drive-check', async (req, res) => {
-    try {
-        const status = await DriveService.testConnection();
-        res.json(status);
-    } catch (e) { res.status(500).json({ ok: false, error: "Drive Inaccessible" }); }
-});
+router.get('/players', async (req, res) => res.json(await AdminService.getAllPlayers()));
+router.get('/drive-check', async (req, res) => res.json(await DriveService.testConnection()));
 
 router.delete('/classroom/:name', async (req, res) => {
-    try {
-        const result = await AdminService.deleteClassroom(req.params.name);
-        res.json(result);
-    } catch (e) { res.status(500).json({ error: e.message }); }
+    await AdminService.deleteClassroom(req.params.name);
+    res.json({ ok: true });
 });
 
 router.patch('/teacher/:id/sections', async (req, res) => {
-    try {
-        const updated = await AdminService.updateTeacherSections(req.params.id, req.body.sections);
-        res.json({ ok: true, user: updated });
-    } catch (e) { res.status(500).json({ error: e.message }); }
+    const updated = await AdminService.updateTeacherSections(req.params.id, req.body.sections);
+    res.json(updated);
 });
 
 module.exports = router;
