@@ -3,24 +3,34 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const DriveService = require('../../services/drive.service');
 
-// US #15 : Fix Error 500 sur Players
-router.get('/players', async (req, res) => {
-    try {
-        const Player = mongoose.model('Player');
-        res.json(await Player.find({}).sort({ classroom: 1, lastName: 1 }));
-    } catch (e) { res.status(500).json({ error: "DATABASE_STALL" }); }
-});
+/**
+ * 🛠️ DOMAINE : ADMINISTRATION (DIAGNOSTIC TOTAL)
+ */
 
+// US #15 : Diagnostic BDD aligné sur les collections RÉELLES
 router.get('/database-dump', async (req, res) => {
     try {
+        // On interroge les modèles en utilisant leurs noms exacts pour coller à la réalité MongoDB
         const dump = {
             players: await mongoose.model('Player').find({}).lean(),
             teachers: await mongoose.model('Teacher').find({}).lean(),
             chapters: await mongoose.model('Chapter').find({}).lean(),
-            homework: await mongoose.model('Homework').find({}).lean()
+            homeworks: await mongoose.model('Homework').find({}).lean(),
+            gamelevels: await mongoose.model('GameLevel').find({}).lean(),
+            scansessions: await mongoose.model('ScanSession').find({}).lean(),
+            bugs: await mongoose.model('Bug').find({}).lean(),
+            deploysignals: await mongoose.model('DeploySignal').find({}).lean()
         };
         res.json(dump);
-    } catch (e) { res.status(500).json({ error: e.message }); }
+    } catch (e) {
+        console.error("❌ Erreur Dump BDD:", e.message);
+        res.status(500).json({ error: "Impossible de dumper la base" });
+    }
+});
+
+router.get('/players', async (req, res) => {
+    try { res.json(await mongoose.model('Player').find({}).sort({ classroom: 1, lastName: 1 })); } 
+    catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.get('/drive-check', async (req, res) => {
