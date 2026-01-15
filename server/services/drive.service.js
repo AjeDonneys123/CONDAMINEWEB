@@ -15,7 +15,7 @@ const initDrive = () => {
             if (process.env.GOOGLE_REFRESH_TOKEN) {
                 oauth2Client.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
                 driveInstance = google.drive({ version: 'v3', auth: oauth2Client });
-                console.log("✅ Drive Service V38 : Initialisé");
+                console.log("✅ Drive Service V39 : Auto-Réparateur actif");
             }
         }
     } catch (e) { console.error("❌ Drive Init Error:", e.message); }
@@ -34,10 +34,12 @@ const DriveService = {
         } catch (e) { return false; }
     },
 
+    // US #4 & #5 : Recherche et création forcée
     getOrCreateFolder: async (name, parentId = null) => {
         if (!await DriveService.checkAuth()) return null;
         const cleanName = DriveService.normalize(name);
         try {
+            // Recherche avec filtrage parent strict
             let q = `name = '${cleanName.replace(/'/g, "\\'")}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
             if (parentId) q += ` and '${parentId}' in parents`;
             else q += ` and 'root' in parents`;
@@ -45,15 +47,20 @@ const DriveService = {
             const res = await driveInstance.files.list({ q, fields: 'files(id, name)' });
             if (res.data.files && res.data.files.length > 0) return res.data.files[0].id;
 
+            // US #4 : Création si manquant
             const folder = await driveInstance.files.create({
                 resource: { name: cleanName, mimeType: 'application/vnd.google-apps.folder', parents: parentId ? [parentId] : [] },
                 fields: 'id'
             });
+            console.log(`📁 Créé : ${cleanName} (ID: ${folder.data.id})`);
             return folder.data.id;
-        } catch (e) { return null; }
+        } catch (e) { 
+            console.error(`❌ Erreur Création ${name}:`, e.message);
+            return null; 
+        }
     },
 
-    // US #4 & #7 : RECONSTRUCTION DU CHEMIN MIROIR SÉCURISÉE
+    // RECONSTRUCTION HIÉRARCHIQUE TOTALE (SANS FAILLES)
     getMirrorPathId: async (teacherName, classroom, subject, chapterTitle = null) => {
         try {
             const rootId = await DriveService.getOrCreateFolder("CONDA CLASSE");
@@ -61,25 +68,17 @@ const DriveService = {
 
             const profId = await DriveService.getOrCreateFolder(teacherName, rootId);
             const classId = await DriveService.getOrCreateFolder(classroom, profId);
-            const devoirsRootId = await DriveService.getOrCreateFolder("DEVOIRS", classId);
-            const subjectId = await DriveService.getOrCreateFolder(subject, devoirsRootId);
+            const devoirsId = await DriveService.getOrCreateFolder("DEVOIRS", classId);
+            const subjectId = await DriveService.getOrCreateFolder(subject, devoirsId);
             
-            if (!chapterTitle) return { devoirsRootId, subjectId };
+            if (!chapterTitle) return { devoirsId, subjectId };
+            
             const chapterId = await DriveService.getOrCreateFolder(chapterTitle, subjectId);
-            return { devoirsRootId, subjectId, chapterId };
+            return { devoirsId, subjectId, chapterId };
         } catch (e) {
-            console.error("❌ Mirror Path Error:", e.message);
+            console.error("❌ Mirror Path Build Error:", e.message);
             return {};
         }
-    },
-
-    getSpecificDevoirsFolder: async (teacherName, classroom) => {
-        const rootId = await DriveService.getOrCreateFolder("CONDA CLASSE");
-        if (!rootId) return { classFolderId: null };
-        const profId = await DriveService.getOrCreateFolder(teacherName, rootId);
-        const classId = await DriveService.getOrCreateFolder(classroom, profId);
-        const devoirsId = await DriveService.getOrCreateFolder("DEVOIRS", classId);
-        return { classFolderId: classId, devoirsFolderId: devoirsId };
     },
 
     deleteEntity: async (id) => { 
@@ -93,39 +92,6 @@ const DriveService = {
             const res = await driveInstance.files.list({ q: `'${parentId}' in parents and trashed = false`, fields: 'files(id, name)' });
             return res.data.files || [];
         } catch (e) { return []; }
-    },
-
-    moveEntity: async (fileId, newParentId) => {
-        if (!await DriveService.checkAuth() || !fileId || !newParentId) return;
-        try {
-            const file = await driveInstance.files.get({ fileId, fields: 'parents' });
-            const previousParents = (file.data.parents || []).join(',');
-            await driveInstance.files.update({ fileId, addParents: newParentId, removeParents: previousParents });
-        } catch (e) {}
-    },
-
-    testConnection: async () => {
-        if (!oauth2Client || !driveInstance) return { ok: false, error: "Token manquant" };
-        try {
-            const res = await driveInstance.about.get({ fields: 'user(emailAddress)' });
-            const email = res.data.user.emailAddress;
-            return { ok: true, email, isPro: email.endsWith('@condamine.edu.ec') };
-        } catch (e) { return { ok: false, error: e.message }; }
-    },
-
-    getAuthUrl: () => {
-        if (!oauth2Client) initDrive();
-        if (!oauth2Client) return null;
-        return oauth2Client.generateAuthUrl({
-            access_type: 'offline', prompt: 'select_account',
-            scope: ['https://www.googleapis.com/auth/drive.file']
-        });
-    },
-
-    setTokenFromCode: async (code) => {
-        if (!oauth2Client) return null;
-        const { tokens } = await oauth2Client.getToken(code);
-        return tokens.refresh_token;
     }
 };
 
