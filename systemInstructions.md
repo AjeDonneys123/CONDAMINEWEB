@@ -36,4 +36,4 @@ Toute tentative de connexion sur un compte personnel (ex: gmail.com) doit être 
 !!! regle ultra archi importante : envoie moi toujours l ensemble du code dans un seul token en respectnatn la logique de apply.s
 
 J utilise google drive de facon hybride le cerveau est mon adresse vuillet433@gmali.com
-mais en réalité je travail avec le drive invité de 
+mais en réalité je travail avec le drive invité de vuillet.jean
