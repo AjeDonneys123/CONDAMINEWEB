@@ -15,7 +15,7 @@ const initDrive = () => {
             if (process.env.GOOGLE_REFRESH_TOKEN) {
                 oauth2Client.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
                 driveInstance = google.drive({ version: 'v3', auth: oauth2Client });
-                console.log("✅ Drive Service V24 : Prêt pour diagnostic");
+                console.log("✅ Drive Service V32 : Connecté");
             }
         }
     } catch (e) { console.error("❌ Drive Init Error:", e.message); }
@@ -26,7 +26,7 @@ initDrive();
 const DriveService = {
     normalize: (n) => n ? n.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Z0-9 ]/g, "_").trim() : "SANS_TITRE",
 
-    // TEST DE CONNEXION RÉEL
+    // DIAGNOSTIC RÉEL
     testConnection: async () => {
         if (!oauth2Client || !driveInstance) return { ok: false, error: "Variables .env manquantes" };
         try {
@@ -52,8 +52,11 @@ const DriveService = {
         try {
             let q = `name = '${cleanName.replace(/'/g, "\\'")}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
             if (parentId) q += ` and '${parentId}' in parents`;
+            else q += ` and 'root' in parents`;
+            
             const res = await driveInstance.files.list({ q, fields: 'files(id, name)' });
             if (res.data.files && res.data.files.length > 0) return res.data.files[0].id;
+
             const folder = await driveInstance.files.create({
                 resource: { name: cleanName, mimeType: 'application/vnd.google-apps.folder', parents: parentId ? [parentId] : [] },
                 fields: 'id'
@@ -62,11 +65,16 @@ const DriveService = {
         } catch (e) { return null; }
     },
 
+    // US #9 : Suppression physique réelle par ID
     deleteEntity: async (id) => { 
         if (!await DriveService.checkAuth() || !id) return;
-        try { await driveInstance.files.delete({ fileId: id }); } catch (e) { console.error("Err Delete:", e.message); } 
+        try { 
+            await driveInstance.files.delete({ fileId: id }); 
+            console.log(`🗑️ [DRIVE] Pulvérisé : ${id}`);
+        } catch (e) { console.error(`❌ [DRIVE] Erreur sur ${id}:`, e.message); } 
     },
 
+    // Lister TOUT ce qui est dans un dossier (pour le Nuke)
     listEverythingInside: async (parentId) => {
         if (!await DriveService.checkAuth() || !parentId) return [];
         try {
@@ -79,6 +87,7 @@ const DriveService = {
         } catch (e) { return []; }
     },
 
+    // Récupère l'ID du dossier de classe (CONDA CLASSE > PROF > CLASSE)
     getClassFolderId: async (teacherName, classroom) => {
         const rootId = await DriveService.getOrCreateFolder("CONDA CLASSE");
         const profId = await DriveService.getOrCreateFolder(teacherName, rootId);

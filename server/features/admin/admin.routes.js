@@ -3,7 +3,7 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const DriveService = require('../../services/drive.service');
 
-// DIAGNOSTIC : Route de vérification du lien Google
+// ROUTE DE DIAGNOSTIC
 router.get('/drive-check', async (req, res) => {
     const status = await DriveService.testConnection();
     res.json(status);
@@ -21,6 +21,7 @@ router.get('/chapters-all', async (req, res) => {
     catch (e) { res.status(500).json([]); }
 });
 
+// US #8 & #9 : SYNC ET NUKE (L'ARME ULTIME)
 router.post('/sync-drive', async (req, res) => {
     try {
         const { classroom, teacherId, mode } = req.body;
@@ -29,9 +30,11 @@ router.post('/sync-drive', async (req, res) => {
 
         const prof = await mongoose.model('Teacher').findById(teacherId);
         const teacherName = `${prof.firstName} ${prof.lastName}`;
+
         const classFolderId = await DriveService.getClassFolderId(teacherName, classroom);
 
         if (mode === 'nuke') {
+            console.log(`🧨 [NUKE] Vidage intégral de la classe ${classroom}...`);
             const trashItems = await DriveService.listEverythingInside(classFolderId);
             for (const item of trashItems) {
                 await DriveService.deleteEntity(item.id);
@@ -63,7 +66,10 @@ router.post('/sync-drive', async (req, res) => {
             }
         }
         res.json({ ok: true, message: "Synchronisation terminée." });
-    } catch (e) { res.status(500).json({ error: e.message }); }
+    } catch (e) {
+        console.error("❌ Synchro Error:", e.message);
+        res.status(500).json({ error: e.message });
+    }
 });
 
 router.post('/chapters', async (req, res) => {
@@ -74,6 +80,7 @@ router.post('/chapters', async (req, res) => {
         const devRoot = await DriveService.getOrCreateFolder("DEVOIRS", classId);
         const subId = await DriveService.getOrCreateFolder(subject, devRoot);
         const driveId = await DriveService.getOrCreateFolder(title, subId);
+
         let result = _id ? await mongoose.model('Chapter').findByIdAndUpdate(_id, { ...req.body, driveFolderId: driveId }, { new: true })
                          : await mongoose.model('Chapter').create({ ...req.body, driveFolderId: driveId, isArchived: false });
         res.json(result);

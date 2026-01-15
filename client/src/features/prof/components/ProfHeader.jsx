@@ -16,7 +16,7 @@ export default function ProfHeader({ user, onLogout }) {
       }
   };
 
-  useEffect(() => { checkDrive(); }, []);
+  useEffect(() => { if (user) checkDrive(); }, [user]);
 
   if (!user) return <div className="p-8 bg-white animate-pulse">Chargement...</div>;
 
@@ -25,12 +25,13 @@ export default function ProfHeader({ user, onLogout }) {
       <div className="flex flex-col">
         <h2 className="text-2xl font-black text-slate-800 tracking-tighter uppercase">{user.firstName} {user.lastName}</h2>
         
-        {/* INDICATEUR DE CONNEXION DRIVE (Diagnostic) */}
-        <div className="flex items-center gap-2 mt-1 cursor-pointer" onClick={checkDrive} title="Cliquer pour re-tester la connexion">
+        {/* INDICATEUR DE CONNEXION DRIVE (Diagnostic V32) */}
+        <div className="flex items-center gap-2 mt-1 cursor-pointer group" onClick={checkDrive}>
             <div className={`w-2 h-2 rounded-full ${driveStatus.loading ? 'bg-slate-300 animate-pulse' : driveStatus.ok ? 'bg-emerald-500 shadow-[0_0_8px_#10b981]' : 'bg-red-500 shadow-[0_0_8px_#ef4444]'}`}></div>
             <span className={`text-[9px] font-black uppercase tracking-widest ${driveStatus.ok ? 'text-emerald-600' : 'text-red-500'}`}>
                 Drive : {driveStatus.loading ? 'Vérification...' : driveStatus.ok ? `Connecté (${driveStatus.email})` : `Erreur (${driveStatus.email})`}
             </span>
+            <span className="text-[8px] opacity-0 group-hover:opacity-100 transition-opacity text-slate-400"> (Cliquer pour tester)</span>
         </div>
       </div>
 
