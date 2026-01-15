@@ -3,19 +3,10 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const DriveService = require('../../services/drive.service');
 
+// ROUTE REPARATION DRIVE
 router.get('/google/login', (req, res) => {
     const url = DriveService.getAuthUrl();
-    if (!url) {
-        return res.status(500).send(`
-            <div style="font-family:sans-serif; padding:50px; border:3px solid red; border-radius:30px; max-width:800px; margin: 40px auto; background: #fff1f2; text-align:center;">
-                <h1 style="color:#b91c1c;">🚨 ERREUR REDIRECT_URI</h1>
-                <p>Il manque la variable <b>GOOGLE_REDIRECT_URI</b> dans ton fichier .env.</p>
-                <p>Ajoute cette ligne exacte :</p>
-                <code style="background:black; color:white; padding:10px; display:block; margin:20px 0;">GOOGLE_REDIRECT_URI=http://localhost:3000/api/auth/google/callback</code>
-                <a href="/api/auth/google/login" style="display:inline-block; margin-top:20px; padding:10px 20px; background:#b91c1c; color:white; text-decoration:none; border-radius:5px;">RE-TENTER</a>
-            </div>
-        `);
-    }
+    if (!url) return res.status(500).send("Erreur: Variables .env manquantes (ID ou Secret)");
     res.redirect(url);
 });
 
@@ -25,13 +16,13 @@ router.get('/google/callback', async (req, res) => {
         const refreshToken = await DriveService.setTokenFromCode(code);
         res.send(`
             <div style="font-family:sans-serif; padding:50px; text-align:center;">
-                <h1 style="color:#059669;">Succès !</h1>
-                <p>Copie ton nouveau token ci-dessous :</p>
+                <h1 style="color:#22c55e;">Clé Google Drive Réparée !</h1>
+                <p>Copie cette valeur et colle-la dans ton <b>.env</b> :</p>
                 <textarea style="width:100%; height:80px; font-family:monospace; padding:15px; border-radius:10px; border:1px solid #ccc; background:#f9fafb;" readonly>${refreshToken}</textarea>
-                <p>Met à jour ton <b>.env</b> et redémarre ton terminal.</p>
+                <p>Enregistre le .env et <b>redémarre ton terminal</b>.</p>
             </div>
         `);
-    } catch (e) { res.status(500).send("Erreur callback: " + e.message); }
+    } catch (e) { res.status(500).send("Erreur Callback : " + e.message); }
 });
 
 router.post('/login-step-1', async (req, res) => {
