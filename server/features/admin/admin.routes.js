@@ -7,62 +7,64 @@ const DriveService = require('../../services/drive.service');
 router.get('/players', async (req, res) => {
     try {
         const Player = mongoose.model('Player');
-        const data = await Player.find({}).sort({ classroom: 1, lastName: 1 });
-        res.json(data);
+        res.json(await Player.find({}).sort({ classroom: 1, lastName: 1 }));
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// US #8 : SYNCHRO MIROIR ABSOLUE (CORRIGÉ : Pas de "google is not defined")
+// US #8 : MIROIR ABSOLU (NUKE & REBUILD)
 router.post('/sync-drive', async (req, res) => {
     try {
         const { classroom, teacherId } = req.body;
         const prof = await mongoose.model('Teacher').findById(teacherId);
-        if (!prof) throw new Error("Professeur non identifié");
+        if (!prof) throw new Error("Professeur non trouvé");
         
         const teacherName = `${prof.firstName} ${prof.lastName}`;
         const chapters = await mongoose.model('Chapter').find({ classroom });
         const homeworks = await mongoose.model('Homework').find({ classroom });
 
-        // 1. On récupère les IDs de la structure de base
-        const { devoirsRootId } = await DriveService.getMirrorPathId(teacherName, classroom, "INIT");
+        // 1. Récupérer la racine physique
+        const devoirsRootId = await DriveService.getDevoirsRootId(teacherName, classroom);
 
-        // 2. VIDAGE : On déplace tout l'existant dans un dossier SAUVEGARDE (Nuke)
-        const backupName = `SAUVEGARDE_${new Date().toLocaleDateString('fr-FR').replace(/\//g, '-')}_${Date.now()}`;
+        // 2. VIDAGE : On déplace tout dans un dossier de secours
+        const backupName = `SAUVEGARDE_SYNC_${Date.now()}`;
         const classRootId = await DriveService.getOrCreateFolder(classroom, await DriveService.getOrCreateFolder(teacherName, await DriveService.getOrCreateFolder("CONDA CLASSE")));
         const backupId = await DriveService.getOrCreateFolder(backupName, classRootId);
         
         const currentFiles = await DriveService.listChildren(devoirsRootId);
         for (const file of currentFiles) {
-            if (file.name !== backupName) {
-                await DriveService.moveEntity(file.id, backupId);
-            }
+            await DriveService.moveEntity(file.id, backupId);
         }
 
-        // 3. RECONSTRUCTION : On recrée tout selon la BDD (Miroir exact)
+        // 3. RECONSTRUCTION CONFORME AUX ARCHIVES (Matières > Chapitres > Devoirs)
         for (const section of prof.subjectSections) {
-            // Recrée le dossier Matière
-            const { subjectId } = await DriveService.getMirrorPathId(teacherName, classroom, section.name);
+            // Création du dossier Matière avec le NOM COMPLET (ex: HISTOIRE au lieu de H)
+            const subjectFolderId = await DriveService.getOrCreateFolder(section.name, devoirsRootId);
             
-            const secChapters = chapters.filter(c => c.subject === section.name);
-            for (const chap of secChapters) {
-                const chapId = await DriveService.getOrCreateFolder(chap.title, subjectId);
-                await mongoose.model('Chapter').findByIdAndUpdate(chap._id, { driveFolderId: chapId });
+            // On cherche les chapitres qui appartiennent à cette matière
+            // (on gère le cas où le chapitre a "H" ou "HISTOIRE" en BDD)
+            const secChapters = chapters.filter(c => 
+                c.subject === section.name || (section.name.startsWith(c.subject) && c.subject.length === 1)
+            );
 
+            for (const chap of secChapters) {
+                const chapFolderId = await DriveService.getOrCreateFolder(chap.title, subjectFolderId);
+                await mongoose.model('Chapter').findByIdAndUpdate(chap._id, { driveFolderId: chapFolderId, subject: section.name });
+
+                // Devoirs dans ce chapitre
                 const chapHw = homeworks.filter(h => h.chapterId?.toString() === chap._id.toString());
                 for (const hw of chapHw) {
-                    const hwId = await DriveService.getOrCreateFolder(hw.title, chapId);
-                    // US #4
-                    await DriveService.getOrCreateFolder("SUJET", hwId);
-                    await DriveService.getOrCreateFolder("COPIES", hwId);
-                    await DriveService.getOrCreateFolder("CORRECTIONS", hwId);
-                    await mongoose.model('Homework').findByIdAndUpdate(hw._id, { driveFolderId: hwId });
+                    const hwFolderId = await DriveService.getOrCreateFolder(hw.title, chapFolderId);
+                    await DriveService.getOrCreateFolder("SUJET", hwFolderId);
+                    await DriveService.getOrCreateFolder("COPIES", hwFolderId);
+                    await DriveService.getOrCreateFolder("CORRECTIONS", hwFolderId);
+                    await mongoose.model('Homework').findByIdAndUpdate(hw._id, { driveFolderId: hwFolderId });
                 }
             }
         }
 
-        res.json({ ok: true, message: `Miroir Drive reconstitué pour ${teacherName}` });
+        res.json({ ok: true, message: `Miroir Drive reconstruit (Matières complètes) pour ${teacherName}` });
     } catch (e) {
-        console.error("❌ Erreur Sync Miroir:", e);
+        console.error("❌ Echec Synchro:", e.message);
         res.status(500).json({ error: e.message });
     }
 });
@@ -73,13 +75,15 @@ router.post('/chapters', async (req, res) => {
         const prof = await mongoose.model('Teacher').findById(teacherId);
         const teacherName = `${prof.firstName} ${prof.lastName}`;
 
-        const { chapterId } = await DriveService.getMirrorPathId(teacherName, classroom, subject, title);
+        const rootId = await DriveService.getDevoirsRootId(teacherName, classroom);
+        const subId = await DriveService.getOrCreateFolder(subject, rootId);
+        const driveId = await DriveService.getOrCreateFolder(title, subId);
 
         let result;
         if (_id && mongoose.Types.ObjectId.isValid(_id)) {
-            result = await mongoose.model('Chapter').findByIdAndUpdate(_id, { ...req.body, driveFolderId: chapterId }, { new: true });
+            result = await mongoose.model('Chapter').findByIdAndUpdate(_id, { ...req.body, driveFolderId: driveId }, { new: true });
         } else {
-            result = await mongoose.model('Chapter').create({ ...req.body, driveFolderId: chapterId, isArchived: false });
+            result = await mongoose.model('Chapter').create({ ...req.body, driveFolderId: driveId, isArchived: false });
         }
         res.json(result);
     } catch (e) { res.status(500).json({ error: e.message }); }

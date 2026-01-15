@@ -7,8 +7,8 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, use
   const [uploading, setUploading] = useState(false);
   const [saveStatus, setSaveStatus] = useState({ active: false, path: '', message: '', driveError: false });
   
-  // US #13 : Sécurité sur l'objet user pour éviter le crash 'firstName'
-  const profName = user ? `${user.firstName} ${user.lastName}` : "Chargement...";
+  // US #13 : Fix crash firstName
+  const profName = user?.firstName ? `${user.firstName} ${user.lastName}` : "Chargement...";
 
   const [formData, setFormData] = useState(initialData || { 
       title: '', targetGrade: 'Tous', targetPlayerIds: [], 
@@ -22,14 +22,12 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, use
 
   const handleUpload = async (files, idx, type) => {
     if (!files || files.length === 0) return;
-    if (!formData._id) { alert("⚠️ INITIALISEZ le devoir d'abord."); return; }
+    if (!formData._id) { alert("⚠️ Initialisez d'abord."); return; }
     setUploading(true);
     const newLevels = JSON.parse(JSON.stringify(formData.levels));
     for (let file of Array.from(files)) {
       const fd = new FormData(); 
-      fd.append('file', file);
-      fd.append('homeworkId', formData._id);
-      fd.append('type', type);
+      fd.append('file', file); fd.append('homeworkId', formData._id); fd.append('type', type);
       try {
         const res = await fetch('/api/homework/upload-to-drive', { method: 'POST', body: fd }).then(r => r.json());
         if (res.ok) {
@@ -43,23 +41,19 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, use
   };
 
   const save = async () => {
-    if (!formData.title) return alert("Le titre est requis.");
-    if (!user) return alert("Erreur d'authentification prof.");
+    if (!formData.title) return alert("Titre requis.");
+    if (!user) return alert("Utilisateur non chargé.");
     setUploading(true);
     try {
         const res = await fetch('/api/homework', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                ...formData, 
-                classroom: globalClass, 
-                teacherId: user.id || user._id 
-            })
+            body: JSON.stringify({ ...formData, classroom: globalClass, teacherId: user.id || user._id })
         });
         const data = await res.json();
         setSaveStatus({ active: true, path: data.drivePath, message: data.message, driveError: !data.driveFolderId });
         if (res.ok) setFormData(data);
-    } catch (e) { alert("Erreur serveur."); }
+    } catch (e) { alert("Erreur."); }
     setUploading(false);
   };
 
@@ -69,12 +63,12 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, use
             <div className="fixed inset-0 z-[7000] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-xl">
                 <div className={`bg-white rounded-[40px] p-10 max-w-2xl w-full text-center shadow-2xl border-4 ${saveStatus.driveError ? 'border-red-500' : 'border-emerald-500'} animate-in zoom-in`}>
                     <div className={`w-20 h-20 rounded-full flex items-center justify-center text-4xl mx-auto mb-6 ${saveStatus.driveError ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'}`}>{saveStatus.driveError ? '⚠️' : '✓'}</div>
-                    <h2 className="text-2xl font-black text-slate-800 uppercase mb-2">{saveStatus.driveError ? "Erreur Drive" : saveStatus.message}</h2>
+                    <h2 className="text-2xl font-black text-slate-800 uppercase mb-2">{saveStatus.message}</h2>
                     <div className="bg-slate-50 p-6 rounded-3xl border-2 border-dashed border-slate-200 text-left my-6">
-                        <span className="text-[10px] font-black uppercase text-slate-400 block mb-2">Emplacement conforme vérifié :</span>
+                        <span className="text-[10px] font-black uppercase text-slate-400 block mb-2">Emplacement Cloud :</span>
                         <code className="text-xs font-mono font-bold text-slate-600 break-all leading-relaxed">{saveStatus.path}</code>
                     </div>
-                    <button onClick={onClose} className="w-full p-5 bg-slate-900 text-white font-black rounded-2xl uppercase tracking-widest">Retour aux activités</button>
+                    <button onClick={onClose} className="w-full p-5 bg-slate-900 text-white font-black rounded-2xl uppercase tracking-widest">Retour</button>
                 </div>
             </div>
         )}
@@ -88,7 +82,7 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, use
         <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
             <div className="max-w-5xl mx-auto space-y-8">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="assign-card"><label className="text-[10px] font-black text-slate-400 uppercase mb-2 block text-left">Dossier Archive associé</label>
+                    <div className="assign-card"><label className="text-[10px] font-black text-slate-400 uppercase mb-2 block text-left">Dossier Archive</label>
                         <select className="w-full font-bold outline-none bg-white p-3 rounded-xl border border-slate-200" value={formData.chapterId} onChange={e=>setFormData({...formData, chapterId: e.target.value})}>
                             <option value="none">-- Aucun dossier --</option>
                             {chapters.map(c => <option key={c._id} value={c._id}>{c.title}</option>)}
@@ -106,16 +100,13 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, use
                                 </div>
                             </div>
                         </div>
-                        <div className="mt-8">
-                            <textarea className="w-full p-6 rounded-3xl h-24 border border-slate-200 font-bold text-slate-600 outline-none focus:border-orange-500 transition-colors" value={lvl.instruction} onChange={e=>{const n=[...formData.levels]; n[idx].instruction=e.target.value; setFormData({...formData, levels:n});}} placeholder="Consigne du devoir..." />
-                        </div>
                     </div>
                 ))}
             </div>
         </div>
         <div className="p-8 bg-white border-t">
             <button onClick={save} disabled={uploading} className="w-full p-6 bg-orange-500 text-white font-black text-2xl rounded-3xl shadow-xl hover:bg-orange-600 transition-all uppercase">
-                {uploading ? "SYNCHRONISATION..." : (formData._id ? "💾 ENREGISTRER MIROIR" : "🚀 INITIALISER MIROIR")}
+                {uploading ? "SYNCHRO..." : (formData._id ? "SAUVEGARDER" : "INITIALISER")}
             </button>
         </div>
     </div>
