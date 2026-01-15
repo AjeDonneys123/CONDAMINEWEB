@@ -12,7 +12,7 @@ const app = express();
 const port = process.env.PORT || 3000;
 const SERVER_BOOT_ID = Date.now();
 
-// 1. ENREGISTREMENT SYNC DES MODÈLES (ORDRE CRITIQUE)
+// 1. MODÈLES (ORDRE CRITIQUE)
 require('./models/Teacher');
 require('./models/Player');
 require('./models/Chapter');
@@ -24,33 +24,25 @@ require('./models/TeacherStyle');
 require('./models/DeploySignal');
 require('./models/Bug');
 
-// 2. CONNEXION BDD
-mongoose.connect(process.env.MONGODB_URI)
-    .then(() => console.log('✅ MongoDB Atlas Connecté (Build 315)'))
-    .catch(err => console.error("❌ Erreur de connexion BDD:", err.message));
+mongoose.connect(process.env.MONGODB_URI).then(() => console.log('✅ MongoDB Connected (Logic Restored)'));
 
 app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// 3. MONTAGE DES ROUTES API
+// 2. ROUTES
 app.use('/api/auth', require('./features/auth/auth.routes'));
 app.use('/api/structure', require('./features/structure/structure.routes'));
 app.use('/api/games', require('./features/games/games.routes'));
 app.use('/api/homework', require('./features/homework/homework.routes'));
 app.use('/api', require('./features/admin/admin.routes'));
 
-// Health Check pour le Frontend
-app.get('/api/health', (req, res) => res.json({ status: 'ok', db: mongoose.connection.readyState }));
 app.get('/api/check-deploy', (req, res) => res.json({ bootId: SERVER_BOOT_ID }));
-app.get('/api/deploy-status', (req, res) => res.json({ version: "2.1.5", build: 315, status: "live" }));
+app.get('/api/deploy-status', (req, res) => res.json({ version: "2.2.0", build: 320, status: "live" }));
 
-// 4. SERVEUR DE FICHIERS (PROD)
 const distPath = path.join(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-        if (req.path.startsWith('/api')) return res.status(404).json({ error: "Route API inconnue" });
-        res.sendFile(path.join(distPath, 'index.html'));
-    });
+    app.get('*', (req, res) => res.sendFile(path.join(distPath, 'index.html')));
 }
 
-app.listen(port, () => console.log(`🚀 Serveur Condamine opérationnel sur port ${port}`));
+app.listen(port, () => console.log(`🚀 SERVEUR CONDAMINE ACTIF`));

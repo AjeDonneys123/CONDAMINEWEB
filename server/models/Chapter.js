@@ -1,9 +1,10 @@
 const mongoose = require('mongoose');
 const ChapterSchema = new mongoose.Schema({
     title: { type: String, required: true },
-    subject: String,
+    subject: { type: String, default: "H" },
     isArchived: { type: Boolean, default: false },
-    classroom: String,
-    driveFolderId: String
+    classroom: { type: String, required: true },
+    driveFolderId: String,
+    teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher' }
 }, { collection: 'chapters' });
 module.exports = mongoose.models.Chapter || mongoose.model('Chapter', ChapterSchema);
