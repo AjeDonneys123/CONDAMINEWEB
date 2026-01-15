@@ -5,11 +5,8 @@ let driveInstance = null;
 let oauth2Client = null;
 
 const initDrive = () => {
-    // US #13 : Récupération forcée
     const clientID = process.env.GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-    
-    // Correction : Si le redirect_uri est absent, on utilise la valeur standard par défaut
     const redirectURI = process.env.GOOGLE_REDIRECT_URI || "http://localhost:3000/api/auth/google/callback";
 
     if (clientID && clientSecret) {
@@ -19,15 +16,16 @@ const initDrive = () => {
             if (process.env.GOOGLE_REFRESH_TOKEN) {
                 oauth2Client.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
                 driveInstance = google.drive({ version: 'v3', auth: oauth2Client });
-                console.log("✅ [DRIVE] Service V28 initialisé avec succès");
+                console.log("✅ [DRIVE] Connexion établie avec le nouveau Refresh Token");
+            } else {
+                console.warn("⚠️ [DRIVE] Refresh Token manquant dans le .env");
             }
             return true;
         } catch (e) {
-            console.error("❌ [DRIVE] Erreur fatale initialisation:", e.message);
+            console.error("❌ [DRIVE] Erreur initialisation:", e.message);
             return false;
         }
     }
-    console.error("❌ [DRIVE] Variables manquantes dans le .env");
     return false;
 };
 
@@ -45,9 +43,13 @@ const DriveService = {
                 driveInstance = google.drive({ version: 'v3', auth: oauth2Client });
             }
             if (!driveInstance) return false;
+            // Test réel de validité du token
             await oauth2Client.getAccessToken();
             return true;
-        } catch (e) { return false; }
+        } catch (e) {
+            console.error("🚨 [DRIVE] Token invalide ou expiré :", e.message);
+            return false;
+        }
     },
 
     getOrCreateFolder: async (name, parentId = null) => {
@@ -56,8 +58,10 @@ const DriveService = {
         try {
             let q = `name = '${cleanName.replace(/'/g, "\\'")}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
             if (parentId) q += ` and '${parentId}' in parents`;
+            
             const res = await driveInstance.files.list({ q, fields: 'files(id, name)' });
             if (res.data.files && res.data.files.length > 0) return res.data.files[0].id;
+
             const folder = await driveInstance.files.create({
                 resource: { name: cleanName, mimeType: 'application/vnd.google-apps.folder', parents: parentId ? [parentId] : [] },
                 fields: 'id'
@@ -66,18 +70,12 @@ const DriveService = {
         } catch (e) { return null; }
     },
 
-    getSpecificDevoirsFolder: async (teacherName, classroom) => {
-        const rootId = await DriveService.getOrCreateFolder("CONDA CLASSE");
-        if (!rootId) return { classFolderId: null };
-        const profId = await DriveService.getOrCreateFolder(teacherName, rootId);
-        const classId = await DriveService.getOrCreateFolder(classroom, profId);
-        const devoirsId = await DriveService.getOrCreateFolder("DEVOIRS", classId);
-        return { classFolderId: classId, devoirsFolderId: devoirsId };
-    },
-
     deleteEntity: async (id) => { 
-        if (!await DriveService.checkAuth()) return;
-        try { await driveInstance.files.delete({ fileId: id }); } catch (e) {} 
+        if (!await DriveService.checkAuth() || !id) return;
+        try { 
+            await driveInstance.files.delete({ fileId: id }); 
+            console.log(`🗑️ [DRIVE] ${id} supprimé.`);
+        } catch (e) { console.error("❌ [DRIVE] Erreur suppression:", e.message); } 
     },
 
     listChildren: async (parentId) => {
@@ -92,18 +90,30 @@ const DriveService = {
         if (!await DriveService.checkAuth() || !fileId || !newParentId) return;
         try {
             const file = await driveInstance.files.get({ fileId, fields: 'parents' });
-            const prev = (file.data.parents || []).join(',');
-            await driveInstance.files.update({ fileId, addParents: newParentId, removeParents: prev });
-        } catch (e) {}
+            const previousParents = (file.data.parents || []).join(',');
+            await driveInstance.files.update({
+                fileId,
+                addParents: newParentId,
+                removeParents: previousParents,
+                fields: 'id, parents'
+            });
+        } catch (e) { console.error("❌ [DRIVE] Erreur déplacement:", e.message); }
+    },
+
+    getSpecificDevoirsFolder: async (teacherName, classroom) => {
+        const rootId = await DriveService.getOrCreateFolder("CONDA CLASSE");
+        if (!rootId) return { classFolderId: null };
+        const profId = await DriveService.getOrCreateFolder(teacherName, rootId);
+        const classId = await DriveService.getOrCreateFolder(classroom, profId);
+        const devoirsId = await DriveService.getOrCreateFolder("DEVOIRS", classId);
+        return { classFolderId: classId, devoirsFolderId: devoirsId };
     },
 
     getAuthUrl: () => {
         if (!oauth2Client) initDrive();
         if (!oauth2Client) return null;
         return oauth2Client.generateAuthUrl({
-            access_type: 'offline', 
-            prompt: 'consent',
-            // US #13 : Sécurité de redirection
+            access_type: 'offline', prompt: 'consent',
             redirect_uri: process.env.GOOGLE_REDIRECT_URI || "http://localhost:3000/api/auth/google/callback",
             scope: ['https://www.googleapis.com/auth/drive.file']
         });
