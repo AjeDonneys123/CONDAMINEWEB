@@ -29,4 +29,4 @@ if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
     app.get('*', (req, res) => res.sendFile(path.join(distPath, 'index.html')));
 }
-app.listen(port, () => console.log(`🚀 Port ${port}`));
+app.listen(port, () => console.log(`🚀 SERVEUR CONDAMINE ACTIF`));

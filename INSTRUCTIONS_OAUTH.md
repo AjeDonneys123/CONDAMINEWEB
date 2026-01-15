@@ -11,8 +11,3 @@ Si tu reçois l'erreur `invalid_grant`, ton token Google est mort. Voici comment
 5.  **Mettre à jour le .env** : Copie cette chaîne et colle-la dans ton fichier `.env` sur la ligne :
     `GOOGLE_REFRESH_TOKEN=...ta_nouvelle_valeur...`
 6.  **Redémarrer** : Relance le serveur.
-
-### ✅ Pourquoi ça arrive ?
-- Tu as changé le mot de passe du compte Google.
-- Tu as révoqué les accès manuellement dans les paramètres de sécurité Google.
-- Le token a expiré (rare mais possible après 6 mois d'inactivité).

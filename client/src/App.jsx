@@ -8,7 +8,7 @@ import './App.css';
 export default function App() {
   const [user, setUser] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [appInfo, setAppInfo] = useState({ version: '...', build: '...', status: 'live' });
+  const [appInfo, setAppInfo] = useState({ version: '2.1.2', build: 312, status: 'live' });
   const bootIdRef = useRef(null);
 
   useEffect(() => {
@@ -42,14 +42,10 @@ export default function App() {
     }
   }, []);
 
-  if (isSyncing) return (
-      <div className="sync-overlay">
-        <div className="sync-card"><div className="sync-spinner"></div><h2>SYNCHRONISATION...</h2></div>
-      </div>
-  );
-
   const handleLogout = () => { localStorage.clear(); setUser(null); };
   const isProf = user && (user.id === 'prof' || user.role === 'prof');
+
+  if (isSyncing) return <div className="sync-overlay"><div className="sync-card"><h2>SYNCHRONISATION...</h2></div></div>;
 
   return (
     <div className="app-wrapper">

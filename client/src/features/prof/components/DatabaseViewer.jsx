@@ -54,7 +54,6 @@ export default function DatabaseViewer({ onClose }) {
                     ))}
                 </div>
                 
-                {/* BANDEAU DESCRIPTIF CONTEXTUEL */}
                 <div className="db-tab-desc">
                     {DESCRIPTIONS[activeTab] || "Données système."}
                 </div>
