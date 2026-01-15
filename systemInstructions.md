@@ -33,4 +33,4 @@ Toute tentative de connexion sur un compte personnel (ex: gmail.com) doit être 
 ## 📸 Capture & Exploration
 12. **EXPLORATEUR DRIVE RÉEL** : Diagnostic permanent du compte connecté dans le Header.
 
-!!! regle ultra archi importante 
+!!! regle ultra archi importante : envoie moi toujours l ensemble du code dans un seul token
