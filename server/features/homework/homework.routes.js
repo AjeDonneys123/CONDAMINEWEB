@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 const DriveService = require('../../services/drive.service');
+const AIService = require('../../services/ai.service');
 
 router.get('/all', async (req, res) => {
     try {
@@ -13,16 +14,13 @@ router.get('/all', async (req, res) => {
 router.post('/', async (req, res) => {
     try {
         const { _id, chapterId, title, classroom, teacherId } = req.body;
-        const Teacher = mongoose.model('Teacher');
-        const Chapter = mongoose.model('Chapter');
-        const prof = await Teacher.findById(teacherId);
-        const chap = await Chapter.findById(chapterId);
+        const prof = await mongoose.model('Teacher').findById(teacherId);
+        const chap = await mongoose.model('Chapter').findById(chapterId);
 
-        if (!prof || !chap) throw new Error("Données enseignant ou dossier introuvables");
+        if (!prof || !chap) throw new Error("Données manquantes");
 
         let driveId = req.body.driveFolderId;
         if (!driveId) {
-            console.log(`📡 Création miroir Drive pour: ${title}`);
             const teacherName = `${prof.firstName} ${prof.lastName}`;
             const pathInfo = await DriveService.getMirrorPathId(teacherName, classroom, chap.subject, chap.title);
             driveId = await DriveService.getOrCreateFolder(title, pathInfo.chapterId);
@@ -30,19 +28,13 @@ router.post('/', async (req, res) => {
                 await DriveService.getOrCreateFolder("SUJET", driveId);
                 await DriveService.getOrCreateFolder("COPIES", driveId);
                 await DriveService.getOrCreateFolder("CORRECTIONS", driveId);
-            } else {
-                throw new Error("Impossible de créer le dossier sur Google Drive");
             }
         }
 
-        const Homework = mongoose.model('Homework');
         const payload = { ...req.body, driveFolderId: driveId };
-        const result = _id ? await Homework.findByIdAndUpdate(_id, payload, { new: true }) : await Homework.create(payload);
-        res.json(result);
-    } catch (e) { 
-        console.error("❌ [HW_ROUTE] Error:", e.message);
-        res.status(500).json({ error: e.message }); 
-    }
+        const r = _id ? await mongoose.model('Homework').findByIdAndUpdate(_id, payload, { new: true }) : await mongoose.model('Homework').create(payload);
+        res.json(r);
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.delete('/:id', async (req, res) => {

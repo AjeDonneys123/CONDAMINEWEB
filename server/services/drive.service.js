@@ -61,6 +61,15 @@ const DriveService = {
         try { await driveInstance.files.delete({ fileId: id }); } catch (e) {}
     },
 
+    testConnection: async () => {
+        if (!oauth2Client || !driveInstance) return { ok: false, error: "Token manquant" };
+        try {
+            const res = await driveInstance.about.get({ fields: 'user(emailAddress)' });
+            const email = res.data.user.emailAddress;
+            return { ok: true, email, isPro: email.endsWith('@condamine.edu.ec') };
+        } catch (e) { return { ok: false, error: e.message }; }
+    },
+
     getAuthUrl: () => oauth2Client?.generateAuthUrl({ access_type: 'offline', scope: ['https://www.googleapis.com/auth/drive.file'], prompt: 'consent' }),
     setTokenFromCode: async (code) => { const { tokens } = await oauth2Client.getToken(code); return tokens.refresh_token; }
 };
