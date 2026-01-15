@@ -1,25 +1,15 @@
-// --- ÉTAPE 0 : CHARGEMENT DU .ENV AVANT TOUT LE RESTE ---
 const path = require('path');
+const express = require('express');
+const mongoose = require('mongoose');
 const fs = require('fs');
 const dotenv = require('dotenv');
 
+// US #13 : Chargement .env
 const envPath = path.resolve(process.cwd(), '.env');
 if (fs.existsSync(envPath)) {
-    const result = dotenv.config({ path: envPath });
-    if (result.error) {
-        console.error("❌ [ENV] Erreur de parsing du fichier .env");
-    } else {
-        console.log("✅ [ENV] Fichier chargé avec succès.");
-    }
-} else {
-    console.error("❌ [ENV] FICHIER .ENV INTROUVABLE !");
+    dotenv.config({ path: envPath });
+    console.log("✅ [ENV] Chargé");
 }
-
-// Vérification immédiate
-console.log("🔑 [CONFIG] ID Client détecté :", process.env.GOOGLE_CLIENT_ID ? "OUI (OK)" : "NON (VIDE)");
-
-const express = require('express');
-const mongoose = require('mongoose');
 
 if (!global.fetch) { global.fetch = require('node-fetch'); }
 
@@ -27,7 +17,7 @@ const app = express();
 const port = process.env.PORT || 3000;
 const SERVER_BOOT_ID = Date.now();
 
-// 1. MODÈLES
+// 1. MODÈLES (Sécurité de chargement)
 require('./models/Teacher');
 require('./models/Player');
 require('./models/Chapter');
@@ -48,17 +38,19 @@ mongoose.connect(process.env.MONGODB_URI).then(async () => {
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// 3. ROUTES
+// 3. ROUTES DOMAINES (HERMÉTIQUES)
 app.use('/api/auth', require('./features/auth/auth.routes'));
+app.use('/api/structure', require('./features/structure/structure.routes')); // NOUVEAU
 app.use('/api/games', require('./features/games/games.routes'));
 app.use('/api/scans', require('./features/scans/scans.routes'));
 app.use('/api/homework', require('./features/homework/homework.routes'));
 app.use('/api', require('./features/admin/admin.routes')); 
 
+// 4. SYSTÈME
 app.get('/api/check-deploy', (req, res) => res.json({ bootId: SERVER_BOOT_ID }));
-app.get('/api/deploy-status', (req, res) => res.json({ version: "2.1.0", build: 310, status: "live" }));
+app.get('/api/deploy-status', (req, res) => res.json({ version: "2.5.0", build: 350, status: "live" }));
 
-// 4. FRONTEND
+// 5. FRONTEND
 const distPath = path.join(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));

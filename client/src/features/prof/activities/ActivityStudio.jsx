@@ -11,7 +11,7 @@ export default function ActivityStudio({ globalClass, user }) {
     const [notification, setNotification] = useState(null);
 
     const showNotify = (data) => {
-        setNotification({ msg: data.message || data.error, path: data.drivePath, isError: !!data.error });
+        setNotification({ msg: data.message || data.error, isError: !!data.error });
         setTimeout(() => setNotification(null), 5000);
     };
 
@@ -22,7 +22,7 @@ export default function ActivityStudio({ globalClass, user }) {
             const [hwRes, gmRes, cpRes] = await Promise.all([
                 fetch('/api/homework/all'),
                 fetch('/api/games/all'),
-                fetch('/api/chapters-all')
+                fetch('/api/structure/chapters') // ROUTE MODULAIRE
             ]);
             
             if (hwRes.ok && gmRes.ok && cpRes.ok) {
@@ -43,7 +43,7 @@ export default function ActivityStudio({ globalClass, user }) {
     useEffect(() => { loadData(); }, [globalClass]);
 
     const handleCreateChapter = async (subjectName, title) => {
-        const res = await fetch('/api/chapters', { 
+        const res = await fetch('/api/structure/chapters', { 
             method:'POST', 
             headers:{'Content-Type':'application/json'}, 
             body: JSON.stringify({ title, subject: subjectName, classroom: globalClass, teacherId: user.id || user._id }) 
@@ -85,11 +85,11 @@ export default function ActivityStudio({ globalClass, user }) {
                     classFilter={globalClass}
                     onRefresh={loadData}
                     onArchive={async (id, state) => {
-                        await fetch('/api/chapters', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({_id:id, isArchived:state, teacherId: user.id || user._id})});
+                        await fetch('/api/structure/chapters', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({_id:id, isArchived:state, teacherId: user.id || user._id})});
                         loadData();
                     }}
                     onRename={async (id, title, subject) => {
-                        await fetch('/api/chapters', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({_id:id, title, classroom: globalClass, subject, teacherId: user.id || user._id})});
+                        await fetch('/api/structure/chapters', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({_id:id, title, classroom: globalClass, subject, teacherId: user.id || user._id})});
                         loadData();
                     }}
                     onEditItem={(it) => setEditingItem({ type: it.actType, data: it })}
@@ -100,7 +100,7 @@ export default function ActivityStudio({ globalClass, user }) {
                     }}
                     onDeleteChapter={async (id) => {
                         if (!confirm("Supprimer dossier et son contenu Drive ?")) return;
-                        await fetch(`/api/chapters/${id}`, { method: 'DELETE' });
+                        await fetch(`/api/structure/chapters/${id}`, { method: 'DELETE' });
                         loadData();
                     }}
                     onCreateChapter={handleCreateChapter}
