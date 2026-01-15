@@ -20,23 +20,6 @@ export default function ProfStudioFolder({
 
     useEffect(() => { if (user?.subjectSections) setSections(user.subjectSections); }, [user]);
 
-    const handleNuke = async () => {
-        if (!confirm("🚨 ATTENTION : Ceci va EFFACER TOUS les chapitres et devoirs de cette classe sur l'app ET sur le Drive !")) return;
-        if (!confirm("Voulez-vous vraiment repartir de zéro pour cette classe ?")) return;
-        setIsSyncing(true);
-        try {
-            const res = await fetch('/api/sync-drive', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ classroom: classFilter, teacherId: user.id || user._id, mode: 'nuke' })
-            });
-            const data = await res.json();
-            onNotify(data);
-            onRefresh();
-        } catch (e) { console.error(e); }
-        setIsSyncing(false);
-    };
-
     const handleForceSync = async () => {
         setIsSyncing(true);
         try {
@@ -52,29 +35,46 @@ export default function ProfStudioFolder({
         setIsSyncing(false);
     };
 
+    const handleNuke = async () => {
+        if (!confirm("⚠️ DANGER : Tu vas effacer TOUS les devoirs et chapitres de cette classe sur Drive et dans l'app.")) return;
+        if (!confirm("Dernière confirmation : tout vider pour repartir de zéro ?")) return;
+        setIsSyncing(true);
+        try {
+            const res = await fetch('/api/sync-drive', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ classroom: classFilter, teacherId: user.id || user._id, mode: 'nuke' })
+            });
+            const data = await res.json();
+            onNotify(data);
+            onRefresh();
+        } catch (e) { console.error(e); }
+        setIsSyncing(false);
+    };
+
     const saveSections = async (newSections, deletedName = null) => {
         const uid = user?.id || user?._id;
         setSections(newSections); 
         try {
-            await fetch(`/api/teacher/${uid}/sections`, {
+            const res = await fetch(`/api/teacher/${uid}/sections`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ sections: newSections, className: classFilter, deletedSection: deletedName })
             });
-            onRefresh();
+            const data = await res.json();
+            if (res.ok && data.user) localStorage.setItem('player', JSON.stringify(data.user));
         } catch(e) { console.error(e); }
     };
 
     const activeChapters = chapters.filter(c => !c.isArchived && norm(c.classroom) === norm(classFilter)).sort(smartSort);
     const archivedChapters = chapters.filter(c => c.isArchived && norm(c.classroom) === norm(classFilter));
-    const orphanActive = activeChapters.filter(c => !sections.some(s => s.name === c.subject));
 
     const renderChapterCard = (chap, section) => {
         const isOpen = openChaps[chap._id];
         const color = section?.color || "#94a3b8";
         const chapItems = items.filter(it => String(it.chapterId) === String(chap._id));
         return (
-            <div key={chap._id} className="bg-white rounded-[35px] border-2 shadow-sm mb-3 relative overflow-visible transition-all" style={{ borderColor: isOpen ? color : '#f1f5f9', zIndex: movingId === chap._id ? 100 : 1 }}>
+            <div key={chap._id} className="bg-white rounded-[35px] border-2 shadow-sm mb-3 relative overflow-visible" style={{ borderColor: isOpen ? color : '#f1f5f9', zIndex: movingId === chap._id ? 100 : 1 }}>
                 <div className="p-4 flex items-center justify-between">
                     <div className="flex items-center gap-4 flex-1 cursor-pointer" onClick={() => setOpenChaps({...openChaps, [chap._id]: !isOpen})}>
                         <div className="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-white text-sm" style={{ backgroundColor: color }}>{section?.name?.substring(0,1)}</div>
@@ -84,7 +84,7 @@ export default function ProfStudioFolder({
                         </div>
                     </div>
                     <div className="flex gap-1 items-center">
-                        <button onClick={(e) => { e.stopPropagation(); setMovingId(movingId === chap._id ? null : chap._id); }} className="w-8 h-8 flex items-center justify-center bg-slate-50 rounded-full">📁</button>
+                        <button onClick={(e) => { e.stopPropagation(); setMovingId(movingId === chap._id ? null : chap._id); }} className={`w-8 h-8 flex items-center justify-center rounded-full ${movingId === chap._id ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-300'}`}>📁</button>
                         {movingId === chap._id && (
                             <div className="absolute right-0 top-10 z-[200] bg-white border-2 shadow-2xl rounded-2xl p-2 min-w-[150px] animate-in zoom-in">
                                 {sections.map(s => (
@@ -97,14 +97,14 @@ export default function ProfStudioFolder({
                                 ))}
                             </div>
                         )}
-                        <button onClick={(e) => { e.stopPropagation(); onArchive(chap._id, !chap.isArchived); }} className="w-8 h-8 flex items-center justify-center bg-slate-50 rounded-full">📦</button>
-                        <button onClick={(e) => { e.stopPropagation(); onDeleteChapter(chap._id); }} className="w-8 h-8 flex items-center justify-center bg-red-50 text-red-300 rounded-full">✕</button>
+                        <button onClick={(e) => { e.stopPropagation(); onArchive(chap._id, !chap.isArchived); }} className="w-8 h-8 flex items-center justify-center bg-slate-50 text-slate-300 rounded-full">📦</button>
+                        <button onClick={(e) => { e.stopPropagation(); onDeleteChapter(chap._id); }} className="w-8 h-8 flex items-center justify-center bg-red-50 text-red-300 rounded-full font-black">✕</button>
                     </div>
                 </div>
                 {isOpen && (
                     <div className="p-4 bg-slate-50/50 border-t-2 border-dashed border-slate-100 space-y-2">
                         {chapItems.map(it => (
-                            <div key={it._id} className="bg-white p-3 px-5 rounded-2xl flex justify-between items-center shadow-sm cursor-pointer border border-transparent" onClick={() => onEditItem(it)}>
+                            <div key={it._id} className="bg-white p-3 px-5 rounded-2xl flex justify-between items-center shadow-sm cursor-pointer hover:border-indigo-200 border border-transparent" onClick={() => onEditItem(it)}>
                                 <b className="text-slate-700 text-xs">{it.title}</b>
                                 <button onClick={(e) => { e.stopPropagation(); onDeleteItem(it._id, it.actType); }} className="text-red-400 font-black text-[10px]">✕</button>
                             </div>
@@ -119,12 +119,15 @@ export default function ProfStudioFolder({
         <div className="max-w-5xl mx-auto space-y-12 pb-20">
             <div className="p-8 bg-slate-900 rounded-[50px] border-4 border-slate-800 shadow-2xl">
                 <div className="flex justify-between items-center mb-8 px-2">
-                    <h3 className="text-white font-black text-[10px] uppercase tracking-widest">Configuration & Miroir</h3>
+                    <h3 className="text-white font-black text-[10px] uppercase tracking-widest flex items-center gap-2">
+                        <span className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></span>
+                        Configuration & Miroir
+                    </h3>
                     <div className="flex gap-2">
-                        <button onClick={handleForceSync} disabled={isSyncing} className="bg-white text-indigo-600 px-4 py-2 rounded-2xl font-black text-[9px] uppercase shadow-lg">🔄 Synchro</button>
+                        <button onClick={handleForceSync} disabled={isSyncing} className="bg-white text-indigo-600 px-4 py-2 rounded-2xl font-black text-[9px] uppercase shadow-lg transition-all">🔄 Synchro</button>
                         <button onClick={handleNuke} disabled={isSyncing} className="bg-red-600 text-white px-4 py-2 rounded-2xl font-black text-[9px] uppercase shadow-lg">🧨 Nuke</button>
-                        <button onClick={() => { const n = prompt("Nom ?"); if(n) saveSections([...sections, {name:n, color:COLOR_PALETTE[sections.length%9]}]); }} className="bg-indigo-600 text-white px-4 py-2 rounded-2xl font-black text-[9px] uppercase shadow-lg">+ Matière</button>
-                        <button onClick={() => setIsDeleteMode(!isDeleteMode)} className={`px-4 py-2 rounded-2xl font-black text-[9px] uppercase transition-colors ${isDeleteMode ? 'bg-amber-500' : 'bg-slate-700'}`}>{isDeleteMode ? 'OK' : 'Gérer'}</button>
+                        <button onClick={() => { const n = prompt("Nom de la matière ?"); if(n) saveSections([...sections, {name:n, color:COLOR_PALETTE[sections.length%9]}]); }} className="bg-indigo-600 text-white px-4 py-2 rounded-2xl font-black text-[9px] uppercase shadow-lg">+ Matière</button>
+                        <button onClick={() => setIsDeleteMode(!isDeleteMode)} className={`px-4 py-2 rounded-2xl font-black text-[9px] uppercase transition-colors ${isDeleteMode ? 'bg-amber-500' : 'bg-slate-700'}`}>{isDeleteMode ? 'Terminer' : 'Gérer'}</button>
                     </div>
                 </div>
                 
@@ -158,7 +161,7 @@ export default function ProfStudioFolder({
                         <div key={'active-' + s.name} className="animate-in fade-in">
                             <div className="flex items-center justify-between mb-4 px-6 border-b border-slate-100 pb-4">
                                 <h3 className="font-black text-base uppercase tracking-widest text-left" style={{ color: s.color }}>{s.name}</h3>
-                                <button onClick={() => { const n = prompt(`Dossier ?`); if(n) onCreateChapter(s.name, n); }} className="text-[9px] font-black px-6 py-2 rounded-full border-2 border-dashed" style={{ color: s.color, borderColor: s.color }}>+ Créer</button>
+                                <button onClick={() => { const n = prompt(`Nom du dossier ?`); if(n) onCreateChapter(s.name, n); }} className="text-[9px] font-black px-6 py-2 rounded-full border-2 border-dashed" style={{ color: s.color, borderColor: s.color }}>+ CRÉER</button>
                             </div>
                             <div className="grid grid-cols-1 gap-1">{chaps.map(chap => renderChapterCard(chap, s))}</div>
                         </div>

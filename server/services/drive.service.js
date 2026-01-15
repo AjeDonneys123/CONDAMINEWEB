@@ -12,7 +12,7 @@ try {
         );
         auth.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
         driveInstance = google.drive({ version: 'v3', auth });
-        console.log("✅ Drive Service V16 : Suppression Récursive Activée");
+        console.log("✅ Drive Service V17 : Force Brute & Nuke par suppression de dossier racine");
     }
 } catch (e) { console.error("❌ Drive Init Error:", e.message); }
 
@@ -38,29 +38,31 @@ const DriveService = {
         } catch (e) { return null; }
     },
 
-    // Suppression radicale US #9
+    // US #9 : Suppression physique irréversible
     deleteEntity: async (id) => { 
         if (!driveInstance || !id) return;
         try { 
             await driveInstance.files.delete({ fileId: id }); 
-            console.log(`🗑️ Drive permanent delete: ${id}`);
+            console.log(`🗑️ Drive: Objet ${id} pulvérisé.`);
         } catch (e) { console.error("❌ Erreur suppression physique:", e.message); } 
     },
 
-    listChildren: async (parentId) => {
-        if (!driveInstance || !parentId) return [];
-        try {
-            const res = await driveInstance.files.list({ q: `'${parentId}' in parents and trashed = false`, fields: 'files(id, name)' });
-            return res.data.files || [];
-        } catch (e) { return []; }
-    },
-
-    // Récupère l'ID du dossier "DEVOIRS" pour un prof et une classe donnée
-    getSpecificDevoirsId: async (teacherName, classroom) => {
+    // Recherche récursive du dossier DEVOIRS pour une classe spécifique
+    getSpecificDevoirsFolder: async (teacherName, classroom) => {
         const rootId = await DriveService.getOrCreateFolder("CONDA CLASSE");
         const profId = await DriveService.getOrCreateFolder(teacherName, rootId);
         const classId = await DriveService.getOrCreateFolder(classroom, profId);
-        return await DriveService.getOrCreateFolder("DEVOIRS", classId);
+        
+        // On cherche si un dossier DEVOIRS existe déjà dedans
+        const res = await driveInstance.files.list({
+            q: `name = 'DEVOIRS' and '${classId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+            fields: 'files(id)'
+        });
+        
+        return {
+            classFolderId: classId,
+            devoirsFolderId: res.data.files[0]?.id || null
+        };
     }
 };
 

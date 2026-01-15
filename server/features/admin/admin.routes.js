@@ -19,7 +19,7 @@ router.get('/chapters-all', async (req, res) => {
     } catch (e) { res.status(500).json([]); }
 });
 
-// US #8 & #9 : NUKE & SYNC
+// US #8 & #9 : NUKE & SYNC (LOGIQUE RADICALE)
 router.post('/sync-drive', async (req, res) => {
     try {
         const { classroom, teacherId, mode } = req.body;
@@ -28,36 +28,42 @@ router.post('/sync-drive', async (req, res) => {
         const Homework = mongoose.model('Homework');
 
         const prof = await Teacher.findById(teacherId);
-        if (!prof) throw new Error("Prof non trouvé");
+        if (!prof) throw new Error("Professeur non trouvé");
         const teacherName = `${prof.firstName} ${prof.lastName}`;
 
-        // ID du dossier DEVOIRS cible
-        const devoirsId = await DriveService.getSpecificDevoirsId(teacherName, classroom);
+        // Localisation du dossier DEVOIRS
+        const { classFolderId, devoirsFolderId } = await DriveService.getSpecificDevoirsFolder(teacherName, classroom);
 
+        // --- MODE NUKE : ON SUPPRIME TOUT ---
         if (mode === 'nuke') {
-            console.log(`🧨 EXECUTION NUKE: ${teacherName} > ${classroom}`);
-            // 1. On vide le contenu du dossier DEVOIRS sur le Drive
-            const files = await DriveService.listChildren(devoirsId);
-            for (const f of files) {
-                await DriveService.deleteEntity(f.id);
+            console.log(`🧨 NUKE EN COURS : ${classroom}`);
+            if (devoirsFolderId) {
+                await DriveService.deleteEntity(devoirsFolderId);
             }
-            // 2. On vide la BDD pour cette classe
+            // Nettoyage BDD pour cette classe uniquement
             await Chapter.deleteMany({ classroom });
             await Homework.deleteMany({ classroom });
             
-            return res.json({ ok: true, message: "Nettoyage terminé : Drive et BDD sont vierges." });
+            // On recrée la base DEVOIRS propre
+            await DriveService.getOrCreateFolder("DEVOIRS", classFolderId);
+            
+            return res.json({ ok: true, message: "Drive et BDD réinitialisés pour cette classe." });
         }
 
-        // SYNC CLASSIQUE : Reconstruction miroir
+        // --- MODE SYNC : RECONSTRUCTION MIROIR ---
+        const activeDevoirsId = await DriveService.getOrCreateFolder("DEVOIRS", classFolderId);
         const chapters = await Chapter.find({ classroom });
         const homeworks = await Homework.find({ classroom });
 
         for (const section of prof.subjectSections) {
-            const subId = await DriveService.getOrCreateFolder(section.name, devoirsId);
-            const chaps = chapters.filter(c => c.subject === section.name);
-            for (const chap of chaps) {
+            // Création dossier matière
+            const subId = await DriveService.getOrCreateFolder(section.name, activeDevoirsId);
+            
+            const classChaps = chapters.filter(c => c.subject === section.name);
+            for (const chap of classChaps) {
                 const chapId = await DriveService.getOrCreateFolder(chap.title, subId);
                 await Chapter.findByIdAndUpdate(chap._id, { driveFolderId: chapId });
+
                 const hws = homeworks.filter(h => h.chapterId?.toString() === chap._id.toString());
                 for (const hw of hws) {
                     const hwId = await DriveService.getOrCreateFolder(hw.title, chapId);
@@ -68,7 +74,8 @@ router.post('/sync-drive', async (req, res) => {
                 }
             }
         }
-        res.json({ ok: true, message: "Synchronisation miroir réussie." });
+
+        res.json({ ok: true, message: "Synchronisation miroir terminée." });
     } catch (e) {
         console.error("❌ Synchro Error:", e.message);
         res.status(500).json({ error: e.message });
@@ -79,32 +86,14 @@ router.post('/chapters', async (req, res) => {
     try {
         const { _id, title, classroom, subject, teacherId } = req.body;
         const prof = await mongoose.model('Teacher').findById(teacherId);
-        const devoirsId = await DriveService.getSpecificDevoirsId(`${prof.firstName} ${prof.lastName}`, classroom);
-        const subId = await DriveService.getOrCreateFolder(subject, devoirsId);
+        const { classFolderId } = await DriveService.getSpecificDevoirsFolder(`${prof.firstName} ${prof.lastName}`, classroom);
+        const devRoot = await DriveService.getOrCreateFolder("DEVOIRS", classFolderId);
+        const subId = await DriveService.getOrCreateFolder(subject, devRoot);
         const driveId = await DriveService.getOrCreateFolder(title, subId);
 
-        let result;
-        if (_id && mongoose.Types.ObjectId.isValid(_id)) {
-            result = await mongoose.model('Chapter').findByIdAndUpdate(_id, { ...req.body, driveFolderId: driveId }, { new: true });
-        } else {
-            result = await mongoose.model('Chapter').create({ ...req.body, driveFolderId: driveId, isArchived: false });
-        }
+        let result = _id ? await mongoose.model('Chapter').findByIdAndUpdate(_id, { ...req.body, driveFolderId: driveId }, { new: true })
+                         : await mongoose.model('Chapter').create({ ...req.body, driveFolderId: driveId, isArchived: false });
         res.json(result);
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-router.patch('/teacher/:id/sections', async (req, res) => {
-    try {
-        const { sections, className, deletedSection } = req.body;
-        const prof = await mongoose.model('Teacher').findById(req.params.id);
-        if (deletedSection && className) {
-            const devId = await DriveService.getSpecificDevoirsId(`${prof.firstName} ${prof.lastName}`, className);
-            const children = await DriveService.listChildren(devId);
-            const target = children.find(c => c.name === DriveService.normalize(deletedSection));
-            if (target) await DriveService.deleteEntity(target.id);
-        }
-        const updated = await mongoose.model('Teacher').findByIdAndUpdate(req.params.id, { subjectSections: sections }, { new: true });
-        res.json({ user: { id: updated._id, firstName: updated.firstName, lastName: updated.lastName, subjectSections: updated.subjectSections, role: 'prof' } });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
