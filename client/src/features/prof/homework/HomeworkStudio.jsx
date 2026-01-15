@@ -52,7 +52,7 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, onC
         const res = await fetch('/api/homework', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ...formData, classroom: globalClass })
+            body: JSON.stringify({ ...formData, classroom: globalClass }) // globalClass écrase tout classroom interne erroné
         });
         const data = await res.json();
         
@@ -72,7 +72,6 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, onC
 
   return (
     <div className="homework-studio-overlay animate-in slide-in-from-bottom-4">
-        {/* MODALE DE VÉRIFICATION MANUELLE (Fix US #13) */}
         {saveStatus.active && (
             <div className="fixed inset-0 z-[7000] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-xl">
                 <div className={`bg-white rounded-[40px] p-10 max-w-2xl w-full text-center shadow-2xl border-4 ${saveStatus.driveError ? 'border-red-500' : 'border-emerald-500'} animate-in zoom-in`}>
@@ -80,15 +79,15 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, onC
                         {saveStatus.driveError ? '⚠️' : '✓'}
                     </div>
                     <h2 className="text-2xl font-black text-slate-800 uppercase mb-2">
-                        {saveStatus.driveError ? "Erreur de Connexion Drive" : saveStatus.message}
+                        {saveStatus.driveError ? "Erreur Drive" : saveStatus.message}
                     </h2>
                     
                     <div className="bg-slate-50 p-6 rounded-3xl border-2 border-dashed border-slate-200 text-left my-6">
                         <span className={`text-[10px] font-black uppercase block mb-2 ${saveStatus.driveError ? 'text-red-500' : 'text-emerald-500'}`}>
-                            Emplacement physique vérifié :
+                            Emplacement physique sur le Cloud :
                         </span>
-                        <code className="text-xs font-mono font-bold text-slate-600 break-all">
-                            {saveStatus.path || "Indisponible - Vérifiez la synchro globale"}
+                        <code className="text-xs font-mono font-bold text-slate-600 break-all leading-relaxed">
+                            {saveStatus.path}
                         </code>
                     </div>
 
@@ -96,7 +95,7 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, onC
                         onClick={onClose} 
                         className="w-full p-5 bg-slate-900 text-white font-black rounded-2xl hover:bg-slate-800 transition-all uppercase tracking-widest"
                     >
-                        Fermer le Studio
+                        Continuer
                     </button>
                 </div>
             </div>
@@ -119,13 +118,8 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, onC
                             {chapters.map(c => <option key={c._id} value={c._id}>{c.title}</option>)}
                         </select>
                     </div>
-                    <div className="assign-card relative"><label className="text-[10px] font-black text-slate-400 uppercase mb-2 block">Cibler des élèves (Optionnel)</label>
+                    <div className="assign-card relative"><label className="text-[10px] font-black text-slate-400 uppercase mb-2 block">Élèves Cibles</label>
                         <input className="w-full outline-none bg-white p-3 rounded-xl border border-slate-200 font-bold" placeholder="Chercher un nom..." value={stdSearch} onChange={e=>setStdSearch(e.target.value)} />
-                        <div className="flex flex-wrap gap-1 mt-2">
-                          {formData.targetPlayerIds.map(id => (
-                            <span key={id} className="bg-orange-100 text-orange-600 px-2 py-1 rounded-lg text-[9px] font-black flex items-center gap-1">{players.find(x => x._id === id)?.firstName} <button onClick={()=>setFormData({...formData, targetPlayerIds: formData.targetPlayerIds.filter(x=>x!==id)})}>✕</button></span>
-                          ))}
-                        </div>
                     </div>
                 </div>
 
@@ -133,25 +127,12 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, onC
                     <div key={idx} className="bg-white p-10 rounded-[50px] border border-slate-100 shadow-sm relative">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
                             <div>
-                                <label className="text-[10px] font-black uppercase text-blue-500 mb-2 block tracking-widest">Documents Supports</label>
+                                <label className="text-[10px] font-black uppercase text-blue-500 mb-2 block">Documents Supports</label>
                                 <div className="flex flex-wrap gap-3 p-5 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
-                                    {lvl.attachmentUrls?.map((u, i) => <img key={i} src={u} className="w-20 h-20 object-cover rounded-2xl border border-white shadow-sm" />)}
-                                    <label className="w-20 h-20 bg-white flex items-center justify-center rounded-2xl border border-slate-200 cursor-pointer text-slate-300 hover:text-blue-500 transition-all text-2xl font-black">
-                                        +
-                                        <input type="file" multiple className="hidden" onChange={e => handleUpload(e.target.files, idx, 'doc')} />
-                                    </label>
+                                    {lvl.attachmentUrls?.map((u, i) => <img key={i} src={u} className="w-20 h-20 object-cover rounded-2xl" />)}
+                                    <label className="w-20 h-20 bg-white flex items-center justify-center rounded-2xl border cursor-pointer text-2xl font-black">+</label>
                                 </div>
                             </div>
-                            <div>
-                                <label className="text-[10px] font-black uppercase text-orange-500 mb-2 block tracking-widest">Image Question</label>
-                                <div className="h-40 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200 flex items-center justify-center relative overflow-hidden">
-                                    {lvl.questionImage ? <img src={lvl.questionImage} className="h-full w-full object-contain" /> : <span className="text-slate-300 font-black text-xs uppercase">Photo Question</span>}
-                                    <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={e => handleUpload(e.target.files, idx, 'qimg')} />
-                                </div>
-                            </div>
-                        </div>
-                        <div className="mt-8">
-                            <textarea className="w-full p-6 rounded-3xl h-24 border border-slate-200 font-bold text-slate-600 outline-none focus:border-orange-500 transition-colors" value={lvl.instruction} onChange={e=>{const n=[...formData.levels]; n[idx].instruction=e.target.value; setFormData({...formData, levels:n});}} placeholder="Saisissez la consigne ici..." />
                         </div>
                     </div>
                 ))}
@@ -160,7 +141,7 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, onC
 
         <div className="p-8 bg-white border-t">
             <button onClick={save} disabled={uploading} className="w-full p-6 bg-orange-500 text-white font-black text-2xl rounded-3xl shadow-xl hover:bg-orange-600 transition-all uppercase">
-                {uploading ? "SYNCHRONISATION..." : (formData._id ? "💾 SAUVEGARDER LES MODIFICATIONS" : "🚀 INITIALISER LE DEVOIR")}
+                {uploading ? "SYNC..." : (formData._id ? "SAUVEGARDER" : "INITIALISER")}
             </button>
         </div>
     </div>
