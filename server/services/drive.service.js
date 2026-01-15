@@ -13,7 +13,7 @@ const initDrive = () => {
             if (process.env.GOOGLE_REFRESH_TOKEN) {
                 oauth2Client.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
                 driveInstance = google.drive({ version: 'v3', auth: oauth2Client });
-                console.log("✅ Drive Service Ready: PRO Mode condamine.edu.ec");
+                console.log("✅ Drive Service Ready: PRO Mode");
             }
         }
     } catch (e) { console.error("❌ Drive Init Error:", e.message); }
@@ -62,12 +62,12 @@ const DriveService = {
     },
 
     testConnection: async () => {
-        if (!oauth2Client || !driveInstance) return { ok: false, error: "Token manquant" };
+        if (!oauth2Client || !driveInstance) return { ok: false, error: "Configuration manquante" };
         try {
             const res = await driveInstance.about.get({ fields: 'user(emailAddress)' });
             const email = res.data.user.emailAddress;
             return { ok: true, email, isPro: email.endsWith('@condamine.edu.ec') };
-        } catch (e) { return { ok: false, error: e.message }; }
+        } catch (e) { return { ok: false, error: "Erreur de connexion Drive" }; }
     },
 
     getAuthUrl: () => oauth2Client?.generateAuthUrl({ access_type: 'offline', scope: ['https://www.googleapis.com/auth/drive.file'], prompt: 'consent' }),

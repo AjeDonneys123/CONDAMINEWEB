@@ -5,20 +5,20 @@ const mongoose = require('mongoose');
 router.get('/database-dump', async (req, res) => {
     try {
         const dump = {
-            players: await mongoose.model('Player').find({}),
-            chapters: await mongoose.model('Chapter').find({}),
-            homeworks: await mongoose.model('Homework').find({}),
-            gamelevels: await mongoose.model('GameLevel').find({}),
-            teachers: await mongoose.model('Teacher').find({})
+            players: await mongoose.model('Player').find({}).lean(),
+            chapters: await mongoose.model('Chapter').find({}).lean(),
+            homeworks: await mongoose.model('Homework').find({}).lean(),
+            gamelevels: await mongoose.model('GameLevel').find({}).lean(),
+            teachers: await mongoose.model('Teacher').find({}).lean(),
+            submissions: await mongoose.model('Submission').find({}).lean()
         };
         res.json(dump);
-    } catch (e) { res.status(500).json({ error: "Dump impossible" }); }
+    } catch (e) { res.status(500).json({ error: "Dump Error" }); }
 });
 
 router.get('/players', async (req, res) => {
     try {
-        const data = await mongoose.model('Player').find({}).sort({ classroom: 1, lastName: 1 });
-        res.json(data);
+        res.json(await mongoose.model('Player').find({}).sort({ classroom: 1 }));
     } catch (e) { res.status(500).json([]); }
 });
 

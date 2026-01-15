@@ -13,18 +13,12 @@ const port = process.env.PORT || 3000;
 const SERVER_BOOT_ID = Date.now();
 
 // MODÈLES
-require('./models/Teacher');
-require('./models/Player');
-require('./models/Chapter');
-require('./models/Homework');
-require('./models/GameLevel');
-require('./models/ScanSession');
-require('./models/Submission');
-require('./models/TeacherStyle');
-require('./models/DeploySignal');
+require('./models/Teacher'); require('./models/Player'); require('./models/Chapter');
+require('./models/Homework'); require('./models/GameLevel'); require('./models/ScanSession');
+require('./models/Submission'); require('./models/TeacherStyle'); require('./models/DeploySignal');
 require('./models/Bug');
 
-mongoose.connect(process.env.MONGODB_URI).then(() => console.log('✅ MongoDB Connected (Build 326)'));
+mongoose.connect(process.env.MONGODB_URI).then(() => console.log('✅ Connected'));
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
@@ -36,8 +30,19 @@ app.use('/api/games', require('./features/games/games.routes'));
 app.use('/api/homework', require('./features/homework/homework.routes'));
 app.use('/api', require('./features/admin/admin.routes'));
 
+// RÉPARATON : Diagnostic Drive (US#12)
+const DriveService = require('./services/drive.service');
+app.get('/api/drive-check', async (req, res) => {
+    try {
+        const status = await DriveService.testConnection();
+        res.json(status);
+    } catch (e) {
+        res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
 app.get('/api/check-deploy', (req, res) => res.json({ bootId: SERVER_BOOT_ID }));
-app.get('/api/deploy-status', (req, res) => res.json({ version: "2.2.6", build: 326, status: "live" }));
+app.get('/api/deploy-status', (req, res) => res.json({ version: "2.2.7", build: 327, status: "live" }));
 
 const distPath = path.join(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) {

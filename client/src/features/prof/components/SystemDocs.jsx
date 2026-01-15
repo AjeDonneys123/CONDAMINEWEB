@@ -5,35 +5,103 @@ const DOC_MAP = [
     {
         id: 'auth', title: '🔐 Authentification', class: 'cat-auth',
         stories: [
-            { id: 'US#1', title: 'Connexion Hybride', files: ['server/features/auth/auth.routes.js', 'client/src/features/auth/Login.jsx'], risk: 'LOW' },
-            { id: 'US#2', title: 'Isolation Prof/Élève', files: ['client/src/App.jsx'], risk: 'HIGH' }
+            { 
+                id: 'US#1', title: 'Connexion Hybride', 
+                files: [
+                    { path: 'server/features/auth/auth.routes.js', desc: 'Gère les flux OAuth Google et vérification des mots de passe.' },
+                    { path: 'client/src/features/auth/Login.jsx', desc: 'Interface de saisie et redirection selon le rôle (Prof/Élève).' }
+                ], risk: 'LOW' 
+            },
+            { 
+                id: 'US#2', title: 'Isolation Prof/Élève', 
+                files: [
+                    { path: 'client/src/App.jsx', desc: 'Routeur racine et persistance de session locale.' }
+                ], risk: 'HIGH' 
+            }
         ]
     },
     {
-        id: 'games', title: '🕹️ Jeux', class: 'cat-games',
+        id: 'games', title: '🕹️ Jeux (Zombie/Starship)', class: 'cat-games',
         stories: [
-            { id: 'US#10', title: 'Génération Quiz IA', files: ['server/features/games/games.routes.js', 'server/services/ai.service.js'], risk: 'MEDIUM' },
-            { id: 'US#11', title: 'Carnet d’erreurs', files: ['server/models/Player.js', 'server/features/homework/homework.routes.js'], risk: 'HIGH' }
+            { 
+                id: 'US#10', title: 'Génération Quiz IA', 
+                files: [
+                    { path: 'server/features/games/games.routes.js', desc: 'Point d\'entrée API pour la création et suppression de quiz.' },
+                    { path: 'server/services/ai.service.js', desc: 'Moteur Gemini 2.0 Flash traduisant les cours en JSON Questions/Réponses.' }
+                ], risk: 'MEDIUM' 
+            },
+            { 
+                id: 'US#11', title: 'Mise à jour Carnet d’erreurs', 
+                files: [
+                    { path: 'server/models/Player.js', desc: 'Stocke les fautes d\'orthographe détectées pour chaque élève.' }
+                ], risk: 'HIGH' 
+            }
         ]
     },
     {
-        id: 'homework', title: '📚 Devoirs', class: 'cat-homework',
+        id: 'homework', title: '📚 Devoirs & Pédagogie', class: 'cat-homework',
         stories: [
-            { id: 'US#3', title: 'Analyse IA', files: ['server/features/homework/homework.routes.js', 'server/services/ai.service.js'], risk: 'CRITICAL' }
+            { 
+                id: 'US#3', title: 'Analyse et Correction IA', 
+                files: [
+                    { path: 'server/features/homework/homework.routes.js', desc: 'Orchestre la correction entre le texte élève et l\'IA.' },
+                    { path: 'server/models/Submission.js', desc: 'Archive historique des copies et notes attribuées.' }
+                ], risk: 'CRITICAL' 
+            },
+            { 
+                id: 'US#14', title: 'Style Enseignant', 
+                files: [
+                    { path: 'server/models/TeacherStyle.js', desc: 'Mémoire pédagogique (Notation A/B/C ou /20).' }
+                ], risk: 'MEDIUM' 
+            }
+        ]
+    },
+    {
+        id: 'scans', title: '📤 Scanne & Capture', class: 'cat-scans',
+        stories: [
+            { 
+                id: 'US#6', title: 'Capture Multi-Snap', 
+                files: [
+                    { path: 'client/src/features/prof/scans/ScansStudio.jsx', desc: 'Pilote caméra pour capture de copies physiques.' },
+                    { path: 'server/models/ScanSession.js', desc: 'Structure de données des sessions de scan en attente.' }
+                ], risk: 'LOW' 
+            }
         ]
     },
     {
         id: 'archiving', title: '📂 Archivage & Drive', class: 'cat-archiving',
         stories: [
-            { id: 'US#4', title: 'Hiérarchie Drive', files: ['server/services/drive.service.js', 'server/features/structure/structure.routes.js'], risk: 'MEDIUM' },
-            { id: 'US#9', title: 'Nettoyage Intégral', files: ['server/features/homework/homework.routes.js', 'server/features/structure/structure.routes.js'], risk: 'HIGH' }
+            { 
+                id: 'US#4', title: 'Hiérarchie Miroir', 
+                files: [
+                    { path: 'server/services/drive.service.js', desc: 'Génie civil du Drive : crée et organise les dossiers physiques.' },
+                    { path: 'server/features/structure/structure.routes.js', desc: 'Synchronise les chapitres BDD avec l\'arborescence Cloud.' }
+                ], risk: 'CRITICAL' 
+            },
+            { 
+                id: 'US#9', title: 'Nettoyage Intégral', 
+                files: [
+                    { path: 'server/features/structure/structure.routes.js', desc: 'Exécute la destruction physique des entités sur Drive (US#9).' }
+                ], risk: 'HIGH' 
+            }
         ]
     },
     {
         id: 'admin', title: '⚙️ Administration', class: 'cat-admin',
         stories: [
-            { id: 'US#13', title: 'Moniteur Déploiement', files: ['server/server.js', 'client/src/App.jsx'], risk: 'MEDIUM' },
-            { id: 'US#15', title: 'Raw Explorer BDD', files: ['server/features/admin/admin.routes.js', 'client/src/features/prof/components/DatabaseViewer.jsx'], risk: 'LOW' }
+            { 
+                id: 'US#13', title: 'Moniteur Déploiement', 
+                files: [
+                    { path: 'server/server.js', desc: 'Génère le Boot ID unique à chaque démarrage serveur.' }
+                ], risk: 'MEDIUM' 
+            },
+            { 
+                id: 'US#15', title: 'Raw Explorer BDD', 
+                files: [
+                    { path: 'server/features/admin/admin.routes.js', desc: 'Expose le dump sécurisé des collections MongoDB.' },
+                    { path: 'client/src/features/prof/components/DatabaseViewer.jsx', desc: 'Interface de diagnostic des données brutes.' }
+                ], risk: 'LOW' 
+            }
         ]
     }
 ];
@@ -45,7 +113,7 @@ export default function SystemDocs({ onClose }) {
                 <div className="docs-header">
                     <div>
                         <h2 className="text-2xl font-black uppercase tracking-tighter">Carte du Système (Audit Porosité)</h2>
-                        <p className="text-xs text-slate-400 font-bold">Analyse Build 326 : Surveillance des fichiers partagés</p>
+                        <p className="text-xs text-slate-400 font-bold">Build 327 : Documentation technique & fonctionnelle</p>
                     </div>
                     <button className="btn-close-docs" onClick={onClose}>✕</button>
                 </div>
@@ -60,10 +128,11 @@ export default function SystemDocs({ onClose }) {
                                         <span className={`risk-badge risk-${us.risk.toLowerCase()}`}>{us.risk}</span>
                                     </div>
                                     <div className="file-list">
-                                        {us.files.map(f => (
-                                            <span key={f} className={`file-tag ${DOC_MAP.filter(c => c.stories.some(s => s.files.includes(f))).length > 1 ? 'is-shared' : ''}`}>
-                                                {f} {DOC_MAP.filter(c => c.stories.some(s => s.files.includes(f))).length > 1 ? '⚠️' : ''}
-                                            </span>
+                                        {us.files.map((f, idx) => (
+                                            <div key={idx} className="file-item-doc">
+                                                <span className="file-tag-path">{f.path}</span>
+                                                <p className="file-desc-text">{f.desc}</p>
+                                            </div>
                                         ))}
                                     </div>
                                 </div>
