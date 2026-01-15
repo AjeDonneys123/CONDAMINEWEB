@@ -1,12 +1,8 @@
-├── ${rel}
 ├── .gitignore
 ├── INSTRUCTIONS_OAUTH.md
 ├── LOCKED_FILES.md
 ├── apply.js
 ├── apply_status.json
-├── chemin/
-│   └── du/
-│       └── fichier.js
 ├── cleanup.js
 ├── client/
 │   ├── .eslintrc.cjs
@@ -101,7 +97,6 @@
 ├── init-db.js
 ├── magic-paste.js
 ├── package.json
-├── path
 ├── projectMap.txt
 ├── public/
 │   ├── images/
