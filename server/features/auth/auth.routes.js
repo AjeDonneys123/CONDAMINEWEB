@@ -3,28 +3,25 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const DriveService = require('../../services/drive.service');
 
-// US #8 : Récupération du lien Google
+// ROUTE DE DIAGNOSTIC ET LOGIN
 router.get('/google/login', (req, res) => {
     const url = DriveService.getAuthUrl();
     if (!url) {
         return res.status(500).send(`
-            <div style="font-family:sans-serif; padding:50px; border:3px solid red; border-radius:30px; max-width:700px; margin: 40px auto; background: #fff1f2;">
-                <h1 style="color:#b91c1c; margin-top:0;">🛑 CONFIGURATION INCOMPLÈTE</h1>
-                <p>Le serveur ne parvient pas à lire vos identifiants dans le fichier <b>.env</b>.</p>
-                <div style="background:white; padding:20px; border-radius:15px; border: 1px solid #fecaca; margin: 20px 0;">
-                    <p style="margin-top:0;"><b>Ceci arrive si :</b></p>
+            <div style="font-family:sans-serif; padding:50px; border:3px solid red; border-radius:30px; max-width:800px; margin: 40px auto; background: #fff1f2; text-align:center;">
+                <h1 style="color:#b91c1c;">🚨 CONFIGURATION INVISIBLE</h1>
+                <p>Le serveur ne parvient toujours pas à lire <b>GOOGLE_CLIENT_ID</b>.</p>
+                
+                <div style="background:white; padding:20px; border-radius:15px; border: 1px solid #fecaca; margin: 20px 0; text-align:left;">
+                    <p><b>Diagnostic Système :</b></p>
                     <ul>
-                        <li>Les variables ne sont pas dans le fichier <b>.env</b> à la racine.</li>
-                        <li>Le fichier s'appelle <b>.env.txt</b> (fréquent sur Windows).</li>
+                        <li><b>CWD (Dossier actuel) :</b> ${process.cwd()}</li>
+                        <li><b>Variables lues :</b> ${Object.keys(process.env).filter(k => k.startsWith('GOOGLE')).join(', ') || 'AUCUNE'}</li>
                     </ul>
-                    <p><b>Contenu attendu :</b></p>
-                    <pre style="background:#f8fafc; padding:10px; font-size:11px;">
-GOOGLE_CLIENT_ID=...
-GOOGLE_CLIENT_SECRET=...
-GOOGLE_REDIRECT_URI=http://localhost:3000/api/auth/google/callback
-                    </pre>
                 </div>
-                <p style="font-size:12px; color:#6b7280;">Détail : DriveService.getAuthUrl() a renvoyé null.</p>
+
+                <p>Si tu viens de créer le fichier <b>.env</b>, clique sur le bouton ci-dessous :</p>
+                <a href="/api/auth/google/login" style="display:inline-block; padding:15px 30px; background:#b91c1c; color:white; text-decoration:none; border-radius:10px; font-weight:bold;">RECHARGER LA CONFIGURATION</a>
             </div>
         `);
     }
@@ -40,7 +37,7 @@ router.get('/google/callback', async (req, res) => {
                 <h1 style="color:#059669;">Nouveau Token Généré !</h1>
                 <p>Copie cette valeur et mets à jour ton <b>.env</b> :</p>
                 <textarea style="width:100%; height:80px; font-family:monospace; padding:15px; border-radius:10px; border:1px solid #ccc; background:#f9fafb;" readonly>${refreshToken}</textarea>
-                <p>Ensuite, <b>redémarre le serveur</b>.</p>
+                <p>Ensuite, <b>redémarre manuellement ton serveur</b>.</p>
             </div>
         `);
     } catch (e) { res.status(500).send("Erreur callback: " + e.message); }

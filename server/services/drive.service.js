@@ -5,6 +5,7 @@ let driveInstance = null;
 let oauth2Client = null;
 
 const initDrive = () => {
+    // Lecture directe des variables au moment de l'appel
     const clientID = process.env.GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
     const redirectURI = process.env.GOOGLE_REDIRECT_URI;
@@ -15,33 +16,32 @@ const initDrive = () => {
             if (process.env.GOOGLE_REFRESH_TOKEN) {
                 oauth2Client.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
                 driveInstance = google.drive({ version: 'v3', auth: oauth2Client });
+                console.log("✅ [DRIVE] Instance Google Drive connectée");
             }
             return true;
         } catch (e) {
+            console.error("❌ [DRIVE] Erreur init:", e.message);
             return false;
         }
     }
     return false;
 };
 
-// Initialisation au démarrage
+// Premier essai
 initDrive();
 
 const DriveService = {
     normalize: (n) => n ? n.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Z0-9 ]/g, "_").trim() : "SANS_TITRE",
 
     checkAuth: async () => {
-        // Tentative de ré-initialisation si le client a été créé vide
+        // Tentative de ré-initialisation à chaque vérification si vide
         if (!oauth2Client) initDrive();
         if (!oauth2Client) return false;
-        
         try {
-            // Si on a un token dans le .env mais pas encore chargé dans le client
-            if (!oauth2Client.credentials.refresh_token && process.env.GOOGLE_REFRESH_TOKEN) {
+            if (!driveInstance && process.env.GOOGLE_REFRESH_TOKEN) {
                 oauth2Client.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
                 driveInstance = google.drive({ version: 'v3', auth: oauth2Client });
             }
-            if (!driveInstance) return false;
             await oauth2Client.getAccessToken();
             return true;
         } catch (e) { return false; }
