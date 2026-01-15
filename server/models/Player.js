@@ -12,4 +12,8 @@ const PlayerSchema = new mongoose.Schema({
     timestamps: { createdAt: 'created_at' }
 });
 
+// OPTIMISATION : Accélère le chargement de la liste des élèves (US #15)
+PlayerSchema.index({ classroom: 1 });
+PlayerSchema.index({ lastName: 1, firstName: 1 });
+
 module.exports = mongoose.models.Player || mongoose.model('Player', PlayerSchema);

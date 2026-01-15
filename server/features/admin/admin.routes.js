@@ -4,13 +4,12 @@ const mongoose = require('mongoose');
 const DriveService = require('../../services/drive.service');
 
 /**
- * 🛠️ DOMAINE : ADMINISTRATION (DIAGNOSTIC TOTAL)
+ * 🛠️ DOMAINE : ADMINISTRATION (DIAGNOSTIC & ÉLÈVES)
+ * Cloisonnement : Ne gère aucune logique de dossier ou de Drive métier.
  */
 
-// US #15 : Diagnostic BDD aligné sur les collections RÉELLES
 router.get('/database-dump', async (req, res) => {
     try {
-        // On interroge les modèles en utilisant leurs noms exacts pour coller à la réalité MongoDB
         const dump = {
             players: await mongoose.model('Player').find({}).lean(),
             teachers: await mongoose.model('Teacher').find({}).lean(),
@@ -22,20 +21,18 @@ router.get('/database-dump', async (req, res) => {
             deploysignals: await mongoose.model('DeploySignal').find({}).lean()
         };
         res.json(dump);
-    } catch (e) {
-        console.error("❌ Erreur Dump BDD:", e.message);
-        res.status(500).json({ error: "Impossible de dumper la base" });
-    }
+    } catch (e) { res.status(500).json({ error: "Dump impossible" }); }
 });
 
 router.get('/players', async (req, res) => {
-    try { res.json(await mongoose.model('Player').find({}).sort({ classroom: 1, lastName: 1 })); } 
-    catch (e) { res.status(500).json({ error: e.message }); }
+    try { 
+        // Utilisation de l'index défini dans le modèle
+        res.json(await mongoose.model('Player').find({}).sort({ classroom: 1, lastName: 1 })); 
+    } catch (e) { res.status(500).json({ error: "Erreur lecture Players" }); }
 });
 
 router.get('/drive-check', async (req, res) => {
-    const status = await DriveService.testConnection();
-    res.json(status);
+    res.json(await DriveService.testConnection());
 });
 
 router.patch('/teacher/:id/sections', async (req, res) => {
