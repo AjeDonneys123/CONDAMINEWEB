@@ -5,15 +5,18 @@ let driveInstance = null;
 
 try {
     if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_REFRESH_TOKEN) {
-        const auth = new google.auth.OAuth2(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET, process.env.GOOGLE_REDIRECT_URI);
+        const auth = new google.auth.OAuth2(
+            process.env.GOOGLE_CLIENT_ID, 
+            process.env.GOOGLE_CLIENT_SECRET, 
+            process.env.GOOGLE_REDIRECT_URI
+        );
         auth.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
         driveInstance = google.drive({ version: 'v3', auth });
-        console.log("✅ Drive Service V14 : Nettoyage Radical & Miroir Stricte");
+        console.log("✅ Drive Service V15 : Nuke par suppression de dossier actif");
     }
 } catch (e) { console.error("❌ Drive Init Error:", e.message); }
 
 const DriveService = {
-    // US #5 : Normalisation sans compromis
     normalize: (n) => n ? n.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Z0-9 ]/g, "_").trim() : "SANS_TITRE",
 
     getOrCreateFolder: async (name, parentId = null) => {
@@ -35,16 +38,15 @@ const DriveService = {
         } catch (e) { return null; }
     },
 
-    // US #9 : Suppression physique réelle
-    deleteFile: async (id) => { 
+    // US #9 : Suppression physique (Dossier ou Fichier)
+    deleteEntity: async (id) => { 
         if (!driveInstance || !id) return;
         try { 
             await driveInstance.files.delete({ fileId: id }); 
-            console.log(`🗑️ Drive: Objet ${id} supprimé.`);
+            console.log(`🗑️ Drive: Objet ${id} supprimé définitivement.`);
         } catch (e) { console.error("❌ Erreur Delete Drive:", e.message); } 
     },
 
-    // Lister les enfants pour le nettoyage
     listChildren: async (parentId) => {
         if (!driveInstance || !parentId) return [];
         try {
@@ -53,12 +55,10 @@ const DriveService = {
         } catch (e) { return []; }
     },
 
-    // Chemin Maître : CONDA CLASSE > PROF > CLASSE > DEVOIRS
     getDevoirsRootId: async (teacherName, classroom) => {
         const rootId = await DriveService.getOrCreateFolder("CONDA CLASSE");
         const profId = await DriveService.getOrCreateFolder(teacherName, rootId);
-        const classId = await DriveService.getOrCreateFolder(classroom, profId);
-        return await DriveService.getOrCreateFolder("DEVOIRS", classId);
+        return await DriveService.getOrCreateFolder(classroom, profId);
     }
 };
 

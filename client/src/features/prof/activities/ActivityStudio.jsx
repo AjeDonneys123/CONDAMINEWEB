@@ -11,7 +11,7 @@ export default function ActivityStudio({ globalClass, user }) {
     const [notification, setNotification] = useState(null);
 
     const showNotify = (data) => {
-        setNotification({ msg: data.message, path: data.drivePath, isError: data.driveError });
+        setNotification({ msg: data.message || data.error, path: data.drivePath, isError: !!data.error });
         setTimeout(() => setNotification(null), 5000);
     };
 
@@ -48,31 +48,15 @@ export default function ActivityStudio({ globalClass, user }) {
             headers:{'Content-Type':'application/json'}, 
             body: JSON.stringify({ title, subject: subjectName, classroom: globalClass, teacherId: user.id || user._id }) 
         });
-        const data = await res.json();
         if (res.ok) {
-            showNotify(data);
+            showNotify({ message: "Chapitre créé" });
             await loadData();
         }
     };
 
-    const handleRenameChapter = async (id, title, subject) => {
-        const res = await fetch('/api/chapters', { 
-            method:'POST', 
-            headers:{'Content-Type':'application/json'}, 
-            body:JSON.stringify({_id:id, title, classroom: globalClass, subject})
-        });
-        if (res.ok) await loadData();
-    };
-
-    const handleDeleteChapter = async (id) => {
-        if (!confirm("Supprimer ce dossier et son contenu Drive ?")) return;
-        const res = await fetch(`/api/chapters/${id}`, { method: 'DELETE' });
-        if (res.ok) await loadData();
-    };
-
     if (editingItem) {
         const activeChaps = chapters.filter(c => c.classroom === globalClass && !c.isArchived);
-        if (editingItem.type === 'homework') return <HomeworkStudio initialData={editingItem.data} chapters={activeChaps} globalClass={globalClass} onClose={() => { setEditingItem(null); loadData(); }} />;
+        if (editingItem.type === 'homework') return <HomeworkStudio initialData={editingItem.data} chapters={activeChaps} globalClass={globalClass} user={user} onClose={() => { setEditingItem(null); loadData(); }} />;
         return <GameStudio initialData={editingItem.data} chapters={activeChaps} classFilter={globalClass} onClose={() => { setEditingItem(null); loadData(); }} />;
     }
 
@@ -83,7 +67,6 @@ export default function ActivityStudio({ globalClass, user }) {
                     <div className={`rounded-3xl p-4 shadow-2xl flex items-center gap-4 border-2 ${notification.isError ? 'bg-red-600 border-red-400' : 'bg-slate-900 border-emerald-500'}`}>
                         <div className="flex-1">
                             <h4 className="text-white font-black text-xs uppercase">{notification.msg}</h4>
-                            <p className="text-emerald-400 font-mono text-[9px] mt-1">{notification.path}</p>
                         </div>
                     </div>
                 </div>
@@ -102,23 +85,29 @@ export default function ActivityStudio({ globalClass, user }) {
                     classFilter={globalClass}
                     onRefresh={loadData}
                     onArchive={async (id, state) => {
-                        await fetch('/api/chapters', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({_id:id, isArchived:state})});
+                        await fetch('/api/chapters', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({_id:id, isArchived:state, teacherId: user.id || user._id})});
                         loadData();
                     }}
-                    onRename={handleRenameChapter}
+                    onRename={async (id, title, subject) => {
+                        await fetch('/api/chapters', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({_id:id, title, classroom: globalClass, subject, teacherId: user.id || user._id})});
+                        loadData();
+                    }}
                     onEditItem={(it) => setEditingItem({ type: it.actType, data: it })}
                     onDeleteItem={async (id, type) => {
-                        if(!confirm("Supprimer ?")) return;
-                        const endpoint = type === 'game' ? `/api/games/${id}` : `/api/homework/${id}`;
-                        await fetch(endpoint, { method: 'DELETE' });
+                        if(!confirm("Supprimer l'élément ?")) return;
+                        await fetch(type === 'game' ? `/api/games/${id}` : `/api/homework/${id}`, { method: 'DELETE' });
                         loadData();
                     }}
-                    onDeleteChapter={handleDeleteChapter}
+                    onDeleteChapter={async (id) => {
+                        if (!confirm("Supprimer dossier et son contenu Drive ?")) return;
+                        await fetch(`/api/chapters/${id}`, { method: 'DELETE' });
+                        loadData();
+                    }}
                     onCreateChapter={handleCreateChapter}
                     onNotify={showNotify}
                 />
             ) : (
-                <div className="text-center py-20 text-slate-300 font-black animate-pulse uppercase">Chargement des dossiers...</div>
+                <div className="text-center py-20 text-slate-300 font-black animate-pulse uppercase">Initialisation...</div>
             )}
         </div>
     );
