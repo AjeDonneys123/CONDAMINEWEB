@@ -12,7 +12,7 @@ try {
         );
         auth.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
         driveInstance = google.drive({ version: 'v3', auth });
-        console.log("✅ Drive Service V15 : Nuke par suppression de dossier actif");
+        console.log("✅ Drive Service V16 : Suppression Récursive Activée");
     }
 } catch (e) { console.error("❌ Drive Init Error:", e.message); }
 
@@ -38,13 +38,13 @@ const DriveService = {
         } catch (e) { return null; }
     },
 
-    // US #9 : Suppression physique (Dossier ou Fichier)
+    // Suppression radicale US #9
     deleteEntity: async (id) => { 
         if (!driveInstance || !id) return;
         try { 
             await driveInstance.files.delete({ fileId: id }); 
-            console.log(`🗑️ Drive: Objet ${id} supprimé définitivement.`);
-        } catch (e) { console.error("❌ Erreur Delete Drive:", e.message); } 
+            console.log(`🗑️ Drive permanent delete: ${id}`);
+        } catch (e) { console.error("❌ Erreur suppression physique:", e.message); } 
     },
 
     listChildren: async (parentId) => {
@@ -55,10 +55,12 @@ const DriveService = {
         } catch (e) { return []; }
     },
 
-    getDevoirsRootId: async (teacherName, classroom) => {
+    // Récupère l'ID du dossier "DEVOIRS" pour un prof et une classe donnée
+    getSpecificDevoirsId: async (teacherName, classroom) => {
         const rootId = await DriveService.getOrCreateFolder("CONDA CLASSE");
         const profId = await DriveService.getOrCreateFolder(teacherName, rootId);
-        return await DriveService.getOrCreateFolder(classroom, profId);
+        const classId = await DriveService.getOrCreateFolder(classroom, profId);
+        return await DriveService.getOrCreateFolder("DEVOIRS", classId);
     }
 };
 
