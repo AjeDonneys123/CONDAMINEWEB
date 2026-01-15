@@ -1,5 +1,5 @@
 {
-  "status": "OK",
-  "file": null,
-  "timestamp": 1768440802083
+  "status": "TRUNCATED",
+  "file": "server/features/admin/admin.routes.js",
+  "timestamp": 1768440887166
 }

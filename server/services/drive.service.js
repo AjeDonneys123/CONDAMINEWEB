@@ -14,7 +14,7 @@ const initDrive = () => {
             );
             oauth2Client.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
             driveInstance = google.drive({ version: 'v3', auth: oauth2Client });
-            console.log("✅ Drive Service V22 : Mode Nettoyage Intégral activé");
+            console.log("✅ Drive Service V23 : Mode Extermination activé");
         }
     } catch (e) {
         console.error("❌ Drive Init Error:", e.message);
@@ -30,10 +30,6 @@ const DriveService = {
         if (!oauth2Client) initDrive();
         if (!oauth2Client) return false;
         try {
-            if (!driveInstance && process.env.GOOGLE_REFRESH_TOKEN) {
-                oauth2Client.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
-                driveInstance = google.drive({ version: 'v3', auth: oauth2Client });
-            }
             await oauth2Client.getAccessToken();
             return true;
         } catch (e) { return false; }
@@ -43,6 +39,7 @@ const DriveService = {
         if (!await DriveService.checkAuth()) return null;
         const cleanName = DriveService.normalize(name);
         try {
+            // On cherche s'il en existe déjà un
             let q = `name = '${cleanName.replace(/'/g, "\\'")}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
             if (parentId) q += ` and '${parentId}' in parents`;
             else q += ` and 'root' in parents`;
@@ -50,6 +47,7 @@ const DriveService = {
             const res = await driveInstance.files.list({ q, fields: 'files(id, name)' });
             if (res.data.files && res.data.files.length > 0) return res.data.files[0].id;
 
+            // Sinon création
             const folder = await driveInstance.files.create({
                 resource: { name: cleanName, mimeType: 'application/vnd.google-apps.folder', parents: parentId ? [parentId] : [] },
                 fields: 'id'
@@ -58,33 +56,33 @@ const DriveService = {
         } catch (e) { return null; }
     },
 
-    // US #9 : Suppression physique définitive
+    // US #9 : Suppression physique réelle par ID
     deleteEntity: async (id) => { 
         if (!await DriveService.checkAuth() || !id) return;
         try { 
             await driveInstance.files.delete({ fileId: id }); 
-            console.log(`🗑️ [DRIVE] Suppression : ${id}`);
-        } catch (e) { console.error("❌ [DRIVE] Erreur suppression :", e.message); } 
+            console.log(`🗑️ [DRIVE] Pulvérisé : ${id}`);
+        } catch (e) { console.error(`❌ [DRIVE] Erreur sur ${id}:`, e.message); } 
     },
 
-    // Liste ABSOLUMENT TOUT dans un dossier (sans filtre de nom)
-    listAllChildren: async (parentId) => {
+    // Lister ABSOLUMENT TOUT ce qui est dans un dossier parent
+    listEverythingInside: async (parentId) => {
         if (!await DriveService.checkAuth() || !parentId) return [];
         try {
             const res = await driveInstance.files.list({
                 q: `'${parentId}' in parents and trashed = false`,
-                fields: 'files(id, name)'
+                fields: 'files(id, name, mimeType)',
+                pageSize: 1000
             });
             return res.data.files || [];
         } catch (e) { return []; }
     },
 
     // Récupère l'ID du dossier de classe (CONDA CLASSE > PROF > CLASSE)
-    getClassFolder: async (teacherName, classroom) => {
+    getClassFolderId: async (teacherName, classroom) => {
         const rootId = await DriveService.getOrCreateFolder("CONDA CLASSE");
         const profId = await DriveService.getOrCreateFolder(teacherName, rootId);
-        const classId = await DriveService.getOrCreateFolder(classroom, profId);
-        return classId;
+        return await DriveService.getOrCreateFolder(classroom, profId);
     }
 };
 
