@@ -4,9 +4,18 @@ const mongoose = require('mongoose');
 const DriveService = require('../../services/drive.service');
 
 /**
- * 📄 DOMAINE : DEVOIRS (MIROIR)
+ * 📄 DOMAINE : DEVOIRS
  */
 
+// Liste tous les devoirs
+router.get('/all', async (req, res) => {
+    try {
+        const Homework = mongoose.model('Homework');
+        res.json(await Homework.find({}).sort({ date: -1 }));
+    } catch (e) { res.status(500).json([]); }
+});
+
+// US #4 & #7 : Création/Update avec Miroir Drive
 router.post('/', async (req, res) => {
     try {
         const Homework = mongoose.model('Homework');
@@ -26,7 +35,6 @@ router.post('/', async (req, res) => {
                 
                 hwDriveId = await DriveService.getOrCreateFolder(title, pathInfo.chapterId);
                 
-                // US #4 : Sous-dossiers obligatoires
                 if (hwDriveId) {
                     await DriveService.getOrCreateFolder("SUJET", hwDriveId);
                     await DriveService.getOrCreateFolder("COPIES", hwDriveId);
@@ -42,13 +50,20 @@ router.post('/', async (req, res) => {
         res.json({
             ...result._doc,
             drivePath: pathLog,
-            message: _id ? "Mise à jour miroir réussie" : "Espace Devoir créé sur Drive"
+            message: _id ? "Mise à jour réussie" : "Espace Drive créé"
         });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.get('/all', async (req, res) => {
-    try { res.json(await mongoose.model('Homework').find({})); } catch (e) { res.status(500).json([]); }
+// US #9 : Suppression par ID (Fix 404)
+router.delete('/:id', async (req, res) => {
+    try {
+        const Homework = mongoose.model('Homework');
+        const hw = await Homework.findById(req.params.id);
+        if (hw?.driveFolderId) await DriveService.deleteFile(hw.driveFolderId);
+        await Homework.findByIdAndDelete(req.params.id);
+        res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 module.exports = router;
