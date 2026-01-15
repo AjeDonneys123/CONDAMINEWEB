@@ -123,6 +123,8 @@
 │   │   │   └── homework.routes.js
 │   │   ├── scans/
 │   │   │   └── scans.routes.js
+│   │   ├── structure/
+│   │   │   └── structure.routes.js
 │   │   └── upload/
 │   │       └── upload.routes.js
 │   ├── models/
