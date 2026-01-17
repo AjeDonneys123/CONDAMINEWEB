@@ -1,8 +1,3 @@
-
-
-
-
-
 const mongoose = require('mongoose');
 /**
  * SECTION 17 : RAPPORTS DE BUGS
@@ -20,7 +15,3 @@ const BugReportSchema = new mongoose.Schema({
 }, { collection: 'bugreports' });
 
 module.exports = mongoose.models.BugReport || mongoose.model('BugReport', BugReportSchema);
-
-
-
-

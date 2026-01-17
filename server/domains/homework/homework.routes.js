@@ -1,8 +1,3 @@
-
-
-
-
-
 const express = require('express');
 const router = express.Router();
 const HomeworkDB = require('./db/homework.db');
@@ -42,7 +37,3 @@ router.delete('/:id', async (req, res) => {
 });
 
 module.exports = router;
-
-
-
-

@@ -1,7 +1,3 @@
-
-
-
-
 const { google } = require('googleapis');
 let oauth2Client = null;
 let driveInstance = null;
@@ -53,6 +49,3 @@ const DriveEngine = {
 };
 DriveEngine.init();
 module.exports = DriveEngine;
-
-
-

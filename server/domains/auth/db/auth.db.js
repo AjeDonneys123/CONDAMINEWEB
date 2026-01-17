@@ -1,8 +1,3 @@
-
-
-
-
-
 const mongoose = require('mongoose');
 
 /**
@@ -21,7 +16,3 @@ const AuthDB = {
 };
 
 module.exports = AuthDB;
-
-
-
-

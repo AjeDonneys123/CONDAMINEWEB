@@ -1,8 +1,3 @@
-
-
-
-
-
 const DriveEngine = require('../../../core/drive.engine');
 const mongoose = require('mongoose');
 
@@ -26,7 +21,3 @@ const StudentDrive = {
     }
 };
 module.exports = StudentDrive;
-
-
-
-

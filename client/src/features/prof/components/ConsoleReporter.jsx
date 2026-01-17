@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect } from 'react';
 import './ConsoleReporter.css';
 
@@ -98,4 +96,3 @@ export default function ConsoleReporter({ user }) {
         </div>
     );
 }
-

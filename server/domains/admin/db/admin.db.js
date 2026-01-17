@@ -1,5 +1,3 @@
-
-
 const mongoose = require('mongoose');
 
 /**
@@ -30,4 +28,3 @@ const AdminDB = {
 };
 
 module.exports = AdminDB;
-

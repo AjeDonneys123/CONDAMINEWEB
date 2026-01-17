@@ -1,8 +1,3 @@
-
-
-
-
-
 const mongoose = require('mongoose');
 /**
  * SECTION 14 : LE CARNET D'ORTHOGRAPHE
@@ -16,7 +11,3 @@ const MistakesBookSchema = new mongoose.Schema({
     date: { type: Date, default: Date.now }
 }, { collection: 'mistakes' });
 module.exports = mongoose.models.MistakesBook || mongoose.model('MistakesBook', MistakesBookSchema);
-
-
-
-

@@ -1,8 +1,3 @@
-
-
-
-
-
 const mongoose = require('mongoose');
 const HomeworkDB = {
     getAll: async () => await mongoose.model('Homework').find({}).sort({ date: -1 }).lean(),
@@ -13,7 +8,3 @@ const HomeworkDB = {
     }
 };
 module.exports = HomeworkDB;
-
-
-
-

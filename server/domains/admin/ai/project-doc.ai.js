@@ -1,6 +1,3 @@
-
-
-
 const AIEngine = require('../../../core/ai.engine');
 
 const ProjectDocAI = {
@@ -16,5 +13,3 @@ const ProjectDocAI = {
     }
 };
 module.exports = ProjectDocAI;
-
-

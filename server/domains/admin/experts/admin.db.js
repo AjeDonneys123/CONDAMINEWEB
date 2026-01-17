@@ -1,8 +1,3 @@
-
-
-
-
-
 const AdminDB = require('../db/admin.db');
 const mongoose = require('mongoose');
 
@@ -21,7 +16,3 @@ const AdminExpert = {
     }
 };
 module.exports = AdminExpert;
-
-
-
-

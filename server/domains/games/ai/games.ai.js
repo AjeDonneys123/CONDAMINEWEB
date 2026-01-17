@@ -1,8 +1,3 @@
-
-
-
-
-
 const AIEngine = require('../../../core/ai.engine');
 const GamesAI = {
     askQuiz: async (prompt) => {
@@ -11,7 +6,3 @@ const GamesAI = {
     }
 };
 module.exports = GamesAI;
-
-
-
-

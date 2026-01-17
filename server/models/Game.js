@@ -1,8 +1,3 @@
-
-
-
-
-
 const mongoose = require('mongoose');
 /**
  * SECTION 10 : LES JEUX (Conteneurs)
@@ -15,7 +10,3 @@ const GameSchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now }
 }, { collection: 'games' });
 module.exports = mongoose.models.Game || mongoose.model('Game', GameSchema);
-
-
-
-

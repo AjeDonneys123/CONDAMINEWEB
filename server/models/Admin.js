@@ -1,6 +1,3 @@
-
-
-
 const mongoose = require('mongoose');
 
 const AdminSchema = new mongoose.Schema({
@@ -11,5 +8,3 @@ const AdminSchema = new mongoose.Schema({
 }, { collection: 'admins' });
 
 module.exports = mongoose.models.Admin || mongoose.model('Admin', AdminSchema);
-
-

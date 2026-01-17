@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect } from 'react';
 import './ProjectTreeViewer.css';
 
@@ -75,4 +73,3 @@ export default function ProjectTreeViewer({ onClose }) {
         </div>
     );
 }
-

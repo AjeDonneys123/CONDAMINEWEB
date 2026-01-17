@@ -1,8 +1,3 @@
-
-
-
-
-
 const express = require('express');
 const router = express.Router();
 const GamesExpertDB = require('./experts/games.db');
@@ -27,7 +22,3 @@ router.delete('/:id', async (req, res) => {
 });
 
 module.exports = router;
-
-
-
-

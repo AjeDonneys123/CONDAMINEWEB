@@ -1,8 +1,3 @@
-
-
-
-
-
 const mongoose = require('mongoose');
 /**
  * SECTION 6 : LES MATIÈRES
@@ -14,7 +9,3 @@ const SubjectSchema = new mongoose.Schema({
     icon: String
 }, { collection: 'subjects' });
 module.exports = mongoose.models.Subject || mongoose.model('Subject', SubjectSchema);
-
-
-
-

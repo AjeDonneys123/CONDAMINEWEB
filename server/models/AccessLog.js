@@ -1,8 +1,3 @@
-
-
-
-
-
 const mongoose = require('mongoose');
 /**
  * SECTION 15 : LOGS D'ACCÈS
@@ -17,7 +12,3 @@ const AccessLogSchema = new mongoose.Schema({
     ip: String
 }, { collection: 'accesslogs' });
 module.exports = mongoose.models.AccessLog || mongoose.model('AccessLog', AccessLogSchema);
-
-
-
-

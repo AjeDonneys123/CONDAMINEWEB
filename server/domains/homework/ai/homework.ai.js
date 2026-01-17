@@ -1,8 +1,3 @@
-
-
-
-
-
 const AIEngine = require('../../../core/ai.engine');
 const HomeworkAI = {
     analyze: async (userText, instruction, aiHints) => {
@@ -14,7 +9,3 @@ const HomeworkAI = {
     }
 };
 module.exports = HomeworkAI;
-
-
-
-

@@ -1,44 +1,51 @@
 const path = require('path');
+const fs = require('fs');
 const express = require('express');
 const mongoose = require('mongoose');
-const fs = require('fs');
 const dotenv = require('dotenv');
 
-dotenv.config();
 if (!global.fetch) global.fetch = require('node-fetch');
+dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 3000;
-
-// FIX SYNC : On définit l'ID de boot UNE SEULE FOIS au démarrage
 const SERVER_BOOT_ID = Date.now();
 
-// MODELES
-require('./models/Teacher');
-require('./models/Player');
-require('./models/Chapter');
-require('./models/Homework');
-require('./models/GameLevel');
-require('./models/Submission');
+console.log("🚀 [SYSTEM] Initialisation Condamine REBOOT...");
+const modelsDir = path.join(__dirname, 'models');
+const models = ['AcademicYear', 'Admin', 'Classroom', 'Subject', 'Teacher', 'Student', 'Enrollment', 'Chapter', 'Homework', 'Game', 'GameLevel', 'Submission', 'GameProgress', 'MistakesBook', 'AccessLog', 'ProjectDoc', 'BugReport', 'Player'];
 
-mongoose.connect(process.env.MONGODB_URI).then(() => console.log('✅ MongoDB Condamine Connecté'));
+models.forEach(m => {
+    try {
+        const p = path.join(modelsDir, `${m}.js`);
+        if (fs.existsSync(p)) require(p);
+    } catch (e) {}
+});
 
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({ limit: '100mb' }));
 
-// ROUTES
-app.use('/api/auth', require('./features/auth/auth.routes'));
-app.use('/api/structure', require('./features/structure/structure.routes'));
-app.use('/api/games', require('./features/games/games.routes'));
-app.use('/api/homework', require('./features/homework/homework.routes'));
-app.use('/api/admin', require('./features/admin/admin.routes'));
+try {
+    app.use('/api/auth', require('./domains/auth/auth.routes'));
+    app.use('/api/admin', require('./domains/admin/admin.routes'));
+    app.use('/api/structure', require('./domains/structure/structure.routes'));
+    app.use('/api/games', require('./domains/games/games.routes'));
+    app.use('/api/homework', require('./domains/homework/homework.routes')); 
+} catch (e) { console.error("❌ Route Error:", e); }
 
-// La route renvoie maintenant toujours le même ID tant que le serveur ne redémarre pas
-app.get('/api/check-deploy', (req, res) => res.json({ bootId: SERVER_BOOT_ID }));
+app.get('/api/check-deploy', (req, res) => res.json({ bootId: SERVER_BOOT_ID, status: "OK" }));
+app.get('/panic', (req, res) => res.redirect('/api/admin/panic-ui'));
+
+mongoose.connect(process.env.MONGODB_URI).then(() => console.log('✅ BDD OK'));
 
 const distPath = path.join(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
-    app.get('*', (req, res) => res.sendFile(path.join(distPath, 'index.html')));
+    app.get('*', (req, res) => {
+        if (req.path.startsWith('/api')) return res.status(404).json({ error: "API Not Found" });
+        res.sendFile(path.join(distPath, 'index.html'));
+    });
+} else {
+    app.get('/', (req, res) => res.send("<h1>Backend OK</h1>"));
 }
 
-app.listen(port, () => console.log(`🚀 CONDAMINE PRO ACTIF SUR PORT ${port}`));
+app.listen(port, '0.0.0.0', () => console.log(`🚀 UP | PORT ${port}`));

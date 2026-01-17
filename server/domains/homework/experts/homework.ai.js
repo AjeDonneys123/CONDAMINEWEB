@@ -1,8 +1,3 @@
-
-
-
-
-
 const AIEngine = require('../../../core/ai.engine');
 
 const HomeworkAI = {
@@ -15,7 +10,3 @@ const HomeworkAI = {
 };
 
 module.exports = HomeworkAI;
-
-
-
-

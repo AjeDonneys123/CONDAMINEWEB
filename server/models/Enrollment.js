@@ -1,8 +1,3 @@
-
-
-
-
-
 const mongoose = require('mongoose');
 /**
  * SECTION 7 : LES INSCRIPTIONS (La liaison vitale)
@@ -14,7 +9,3 @@ const EnrollmentSchema = new mongoose.Schema({
     yearId: { type: mongoose.Schema.Types.ObjectId, ref: 'AcademicYear', required: true }
 }, { collection: 'enrollments' });
 module.exports = mongoose.models.Enrollment || mongoose.model('Enrollment', EnrollmentSchema);
-
-
-
-

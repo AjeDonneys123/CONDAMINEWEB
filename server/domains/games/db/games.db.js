@@ -1,8 +1,3 @@
-
-
-
-
-
 const mongoose = require('mongoose');
 const GamesDB = {
     fetchAll: async () => await mongoose.model('GameLevel').find({}).lean(),
@@ -13,7 +8,3 @@ const GamesDB = {
     }
 };
 module.exports = GamesDB;
-
-
-
-

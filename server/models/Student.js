@@ -1,5 +1,3 @@
-
-
 const mongoose = require('mongoose');
 
 /**
@@ -26,4 +24,3 @@ const StudentSchema = new mongoose.Schema({
 }, { collection: 'students' });
 
 module.exports = mongoose.models.Student || mongoose.model('Student', StudentSchema);
-

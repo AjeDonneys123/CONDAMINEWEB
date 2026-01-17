@@ -1,8 +1,3 @@
-
-
-
-
-
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const AIEngine = {
@@ -25,7 +20,3 @@ const AIEngine = {
     }
 };
 module.exports = AIEngine;
-
-
-
-

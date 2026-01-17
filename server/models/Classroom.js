@@ -1,5 +1,3 @@
-
-
 const mongoose = require('mongoose');
 
 /**
@@ -14,4 +12,3 @@ const ClassroomSchema = new mongoose.Schema({
 }, { collection: 'classrooms' });
 
 module.exports = mongoose.models.Classroom || mongoose.model('Classroom', ClassroomSchema);
-

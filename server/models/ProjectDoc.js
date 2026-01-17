@@ -1,6 +1,3 @@
-
-
-
 const mongoose = require('mongoose');
 
 const ProjectDocSchema = new mongoose.Schema({
@@ -13,5 +10,3 @@ const ProjectDocSchema = new mongoose.Schema({
 }, { collection: 'projectdocs' });
 
 module.exports = mongoose.models.ProjectDoc || mongoose.model('ProjectDoc', ProjectDocSchema);
-
-

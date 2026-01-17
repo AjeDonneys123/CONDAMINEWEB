@@ -1,8 +1,3 @@
-
-
-
-
-
 const mongoose = require('mongoose');
 
 const HomeworkDB = {
@@ -29,7 +24,3 @@ const HomeworkDB = {
 };
 
 module.exports = HomeworkDB;
-
-
-
-

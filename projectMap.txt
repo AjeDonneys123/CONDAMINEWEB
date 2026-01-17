@@ -1,3 +1,4 @@
+├── ...
 ├── .gitignore
 ├── INSTRUCTIONS_OAUTH.md
 ├── LOCKED_FILES.md
@@ -58,15 +59,22 @@
 │   │   │       ├── activities/
 │   │   │       │   ├── ActivityStudio.css
 │   │   │       │   └── ActivityStudio.jsx
+│   │   │       ├── admin/
+│   │   │       │   ├── AdminDashboard.css
+│   │   │       │   └── AdminDashboard.jsx
 │   │   │       ├── chapters/
 │   │   │       │   └── ChapterManager.jsx
 │   │   │       ├── components/
 │   │   │       │   ├── ConsoleHUD.jsx
+│   │   │       │   ├── ConsoleReporter.css
+│   │   │       │   ├── ConsoleReporter.jsx
 │   │   │       │   ├── DatabaseViewer.css
 │   │   │       │   ├── DatabaseViewer.jsx
 │   │   │       │   ├── ProfHeader.jsx
 │   │   │       │   ├── ProfNav.jsx
 │   │   │       │   ├── ProfStudioFolder.jsx
+│   │   │       │   ├── ProjectTreeViewer.css
+│   │   │       │   ├── ProjectTreeViewer.jsx
 │   │   │       │   ├── SystemDocs.css
 │   │   │       │   └── SystemDocs.jsx
 │   │   │       ├── games/
@@ -110,41 +118,82 @@
 │   │   └── ~$che_Croissance_Demographique_5e.docx
 │   └── style.css
 ├── server/
-│   ├── features/
+│   ├── core/
+│   │   ├── ai.engine.js
+│   │   └── drive.engine.js
+│   ├── domains/
 │   │   ├── admin/
-│   │   │   └── admin.routes.js
+│   │   │   ├── admin.routes.js
+│   │   │   ├── ai/
+│   │   │   │   ├── admin.ai.js
+│   │   │   │   └── project-doc.ai.js
+│   │   │   ├── db/
+│   │   │   │   └── admin.db.js
+│   │   │   └── experts/
+│   │   │       ├── admin.db.js
+│   │   │       └── admin.expert.js
 │   │   ├── auth/
-│   │   │   └── auth.routes.js
+│   │   │   ├── auth.routes.js
+│   │   │   ├── db/
+│   │   │   │   └── auth.db.js
+│   │   │   └── experts/
+│   │   │       └── auth.expert.js
 │   │   ├── games/
+│   │   │   ├── ai/
+│   │   │   │   ├── games.ai.js
+│   │   │   │   └── quiz-creator.ai.js
+│   │   │   ├── db/
+│   │   │   │   └── games.db.js
+│   │   │   ├── experts/
+│   │   │   │   ├── games.db.js
+│   │   │   │   └── quiz-creator.ai.js
 │   │   │   └── games.routes.js
 │   │   ├── homework/
+│   │   │   ├── ai/
+│   │   │   │   └── homework.ai.js
+│   │   │   ├── db/
+│   │   │   │   └── homework.db.js
+│   │   │   ├── experts/
+│   │   │   │   ├── homework.ai.js
+│   │   │   │   └── homework.db.js
 │   │   │   └── homework.routes.js
-│   │   ├── scans/
-│   │   │   └── scans.routes.js
 │   │   ├── structure/
+│   │   │   ├── db/
+│   │   │   │   └── structure.db.js
+│   │   │   ├── drive/
+│   │   │   │   └── structure.drive.js
+│   │   │   ├── experts/
+│   │   │   │   ├── structure.db.js
+│   │   │   │   └── structure.drive.js
 │   │   │   └── structure.routes.js
-│   │   └── upload/
-│   │       └── upload.routes.js
+│   │   └── students/
+│   │       └── experts/
+│   │           └── student.drive.js
 │   ├── models/
+│   │   ├── AcademicYear.js
+│   │   ├── AccessLog.js
+│   │   ├── Admin.js
 │   │   ├── Bug.js
+│   │   ├── BugReport.js
 │   │   ├── Chapter.js
+│   │   ├── Classroom.js
 │   │   ├── DeploySignal.js
+│   │   ├── Enrollment.js
+│   │   ├── Game.js
 │   │   ├── GameLevel.js
+│   │   ├── GameProgress.js
 │   │   ├── Homework.js
+│   │   ├── MistakesBook.js
 │   │   ├── Player.js
+│   │   ├── ProjectDoc.js
 │   │   ├── ScanSession.js
+│   │   ├── Student.js
+│   │   ├── Subject.js
 │   │   ├── Submission.js
 │   │   ├── Teacher.js
 │   │   └── TeacherStyle.js
 │   ├── server.js
-│   ├── services/
-│   │   ├── admin.service.js
-│   │   ├── ai.service.js
-│   │   ├── drive.service.js
-│   │   ├── homework.service.js
-│   │   ├── mistake.service.js
-│   │   ├── scan.service.js
-│   │   └── structure.service.js
 │   └── version.json
 ├── snap.js
-└── systemInstructions.md
+├── systemInstructions.md
+└── tree.txt

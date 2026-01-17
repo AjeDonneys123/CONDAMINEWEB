@@ -1,7 +1,3 @@
-
-
-
-
 const DriveEngine = require('../../../core/drive.engine');
 const StructureDrive = {
     createPath: async (prof, cls, sub, title) => {
@@ -14,6 +10,3 @@ const StructureDrive = {
     }
 };
 module.exports = StructureDrive;
-
-
-

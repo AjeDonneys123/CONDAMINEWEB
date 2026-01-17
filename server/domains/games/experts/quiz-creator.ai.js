@@ -1,8 +1,3 @@
-
-
-
-
-
 const GamesAI = require('../ai/games.ai');
 const AIEngine = require('../../../core/ai.engine');
 
@@ -15,7 +10,3 @@ const QuizCreatorExpertAI = {
     }
 };
 module.exports = QuizCreatorExpertAI;
-
-
-
-

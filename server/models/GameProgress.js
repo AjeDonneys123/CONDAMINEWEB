@@ -1,8 +1,3 @@
-
-
-
-
-
 const mongoose = require('mongoose');
 /**
  * SECTION 13 : JEUX DES ÉLÈVES (Progression)
@@ -15,7 +10,3 @@ const GameProgressSchema = new mongoose.Schema({
     isCompleted: { type: Boolean, default: false }
 }, { collection: 'gameprogress' });
 module.exports = mongoose.models.GameProgress || mongoose.model('GameProgress', GameProgressSchema);
-
-
-
-
