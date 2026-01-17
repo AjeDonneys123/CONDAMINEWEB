@@ -1,0 +1,44 @@
+
+
+
+
+
+.tree-container {
+    background: white; padding: 3rem; border-radius: 40px; border: 1px solid #e2e8f0;
+    max-height: 80vh; overflow-y: auto;
+}
+.tree-node { position: relative; padding-left: 24px; }
+.tree-item {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 6px 0; font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    border-bottom: 1px dashed #f1f5f9;
+}
+.tree-item:hover { background: #f8fafc; }
+.tree-item::before {
+    content: ""; position: absolute; left: -14px; width: 14px;
+    height: 1.5px; background: #000; top: 18px;
+}
+.tree-children { position: relative; margin-left: 10px; border-left: 1.5px solid #000; }
+.tree-main-info { display: flex; align-items: center; gap: 8px; cursor: pointer; flex: 1; }
+.folder-name { font-weight: 900; color: #4f46e5; text-transform: uppercase; letter-spacing: 0.5px; }
+.file-name { font-weight: 500; color: #1e293b; }
+.file-desc { color: #94a3b8; font-style: italic; font-size: 10px; padding-left: 20px; text-align: right; max-width: 50%; }
+.toggle-icon { width: 12px; display: inline-block; text-align: center; font-weight: bold; color: #000; }
+
+/* BADGE AUDIT PASSWORD */
+.password-audit-badge {
+    margin-top: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 900;
+    color: #4f46e5;
+    background: #f5f3ff;
+    padding: 2px 8px;
+    border-radius: 6px;
+    width: fit-content;
+    border: 1px solid #ddd6fe;
+}
+
+
+
+

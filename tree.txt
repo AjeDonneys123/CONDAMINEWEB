@@ -1,0 +1,31 @@
+
+.
+├── apply.js
+Moteur d'injection de code automatique.
+├── magic-paste.js
+Capture auto du code Gemini (Mac).
+├── snap.js
+Générateur de snapshot.txt pour l'IA.
+├── systemInstructions.md
+RÈGLES D'OR : définit comment Gemini doit te répondre et coder.
+├── client/
+│   └── src/
+│       ├── App.jsx
+│       Routeur principal gérant l'accès et l'auto-rechargement par détection de bootId.
+│       └── features/
+│           └── prof/
+│               └── components/
+│                   ├── ConsoleReporter.jsx
+│                   Sentinelle V41 : Bandeau d'alerte rouge universel (POST/GET) + Raccourci Mac Cmd+Shift+L.
+│                   └── ConsoleReporter.css
+│                   Design du bandeau d'alerte rouge (Red Signal).
+├── server/
+│   ├── server.js
+│   Cerveau backend : Chargement séquentiel des modèles (Anti-500) et API Express.
+│   └── domains/
+│       └── admin/
+│           ├── admin.routes.js
+│           Routes API Dashboard (Fix Admins, Subjects, Classes).
+│           └── experts/
+│               └── admin.expert.js
+│               Expert gérant l'Arbre et les diagnostics de maintenance.
