@@ -8,13 +8,10 @@ export default function Login({ onLoginSuccess }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [showFinder, setShowFinder] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState(null);
-  
-  // PROF
   const [fName, setFName] = useState('');
   const [lName, setLName] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -42,8 +39,6 @@ export default function Login({ onLoginSuccess }) {
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
-    
-    // CORPS DE LA REQUÊTE STANDARDISÉ
     const body = selectedClassId === 'PROF' 
         ? { role: 'PROF', firstName: fName, lastName: lName, password }
         : { role: 'STUDENT', studentId: selectedStudent?.id };
@@ -55,7 +50,6 @@ export default function Login({ onLoginSuccess }) {
             body: JSON.stringify(body)
         });
         const data = await res.json();
-        
         if (res.ok) {
             localStorage.setItem('player', JSON.stringify(data.user));
             onLoginSuccess(data.user);
@@ -68,17 +62,17 @@ export default function Login({ onLoginSuccess }) {
 
   return (
     <div className="login-screen">
-      <div className="login-card shadow-2xl border-t-[12px] border-indigo-600">
+      <div className="login-card">
         <h2 className="login-title">CONDACLASSE</h2>
         <form onSubmit={handleLogin} className="login-inputs">
             <select className="login-field" value={selectedClassId} onChange={e => setSelectedClassId(e.target.value)} required>
                 <option value="">CHOISIR TA CLASSE...</option>
                 {classes.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
-                <option value="PROF" className="prof-option font-black text-indigo-600">🎓 ENSEIGNANT / ADMIN</option>
+                <option value="PROF" className="font-black text-indigo-600">🎓 ENSEIGNANT / ADMIN</option>
             </select>
 
             {selectedClassId && selectedClassId !== 'PROF' && (
-                <div className="finder-container animate-in slide-in-from-top-2">
+                <div>
                     {!selectedStudent ? (
                         <>
                             <input className="login-field" placeholder="Tape ton nom..." value={searchTerm}
@@ -86,7 +80,7 @@ export default function Login({ onLoginSuccess }) {
                                 onFocus={() => setShowFinder(true)}
                             />
                             {showFinder && searchTerm.length > 0 && (
-                                <div className="finder-results custom-scrollbar">
+                                <div className="finder-results">
                                     {filteredStudents.map(s => (
                                         <div key={s.id} className="finder-item" onClick={() => { setSelectedStudent(s); setShowFinder(false); }}>
                                             {s.name}
@@ -96,21 +90,21 @@ export default function Login({ onLoginSuccess }) {
                             )}
                         </>
                     ) : (
-                        <div className="selected-student-badge animate-in zoom-in">
-                            <span>{selectedStudent.name}</span>
-                            <button type="button" onClick={() => setSelectedStudent(null)} className="ml-2 font-black">✕</button>
+                        <div className="bg-indigo-50 p-4 rounded-xl flex justify-between items-center">
+                            <span className="font-bold">{selectedStudent.name}</span>
+                            <button type="button" onClick={() => setSelectedStudent(null)}>✕</button>
                         </div>
                     )}
                 </div>
             )}
 
             {selectedClassId === 'PROF' && (
-                <div className="space-y-2 animate-in fade-in">
+                <div className="space-y-2">
                     <input className="login-field" placeholder="Prénom" value={fName} onChange={e=>setFName(e.target.value)} required />
                     <input className="login-field" placeholder="Nom" value={lName} onChange={e=>setLName(e.target.value)} required />
                     <div className="relative">
-                        <input type={showPassword ? "text" : "password"} className="login-field border-indigo-400" placeholder="Mot de passe" value={password} onChange={e=>setPassword(e.target.value)} required />
-                        <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-indigo-400 font-black text-[9px] uppercase">
+                        <input type={showPassword ? "text" : "password"} className="login-field" placeholder="Mot de passe" value={password} onChange={e=>setPassword(e.target.value)} required />
+                        <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-[9px] uppercase font-black">
                             {showPassword ? "Cacher" : "Voir"}
                         </button>
                     </div>

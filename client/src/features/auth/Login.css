@@ -4,3 +4,6 @@
 .login-inputs { display: flex; flex-direction: column; gap: 1rem; }
 .login-field { width: 100%; padding: 1.1rem; border-radius: 18px; border: 2px solid #e2e8f0; background: #f8fafc; font-weight: 700; outline: none; }
 .login-submit-btn { width: 100%; padding: 1.25rem; background-color: #2563eb !important; color: white !important; border-radius: 20px; font-weight: 900; cursor: pointer; border: none; text-transform: uppercase; }
+.finder-results { max-height: 200px; overflow-y: auto; background: white; border: 2px solid #e2e8f0; border-radius: 18px; margin-top: 5px; }
+.finder-item { padding: 12px; cursor: pointer; font-weight: 700; text-align: left; }
+.finder-item:hover { background: #f1f5f9; }

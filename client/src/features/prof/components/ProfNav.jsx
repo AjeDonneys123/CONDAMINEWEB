@@ -4,10 +4,9 @@ export default function ProfNav({ activeTab, onTabChange, isAdmin }) {
   const tabs = [
     { id: 'students', label: '👥 ÉLÈVES', color: 'bg-blue-600' },
     { id: 'activities', label: '⚡ ACTIVITÉS', color: 'bg-purple-600' },
-    { id: 'scans', label: '📤 SCANS IA', color: 'bg-emerald-600' }
   ];
   
-  // LE MAILLON MANQUANT : On ajoute le bouton ADMIN à la liste si isAdmin est true
+  // NOUVEAU : On ajoute l'Admin seulement si autorisé
   if (isAdmin) {
       tabs.push({ id: 'admin', label: '⚙️ ADMIN', color: 'bg-slate-800' });
   }

@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+// Gardé uniquement pour la migration initiale
 const PlayerSchema = new mongoose.Schema({
     firstName: String, lastName: String, classroom: String, spellingMistakes: Array
 }, { collection: 'players' });

@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 const ChapterSchema = new mongoose.Schema({
     title: { type: String, required: true },
     subject: { type: String, required: true },
-    classroom: { type: String, required: true },
+    classroom: String, 
     driveFolderId: String,
     teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher' }
 }, { collection: 'chapters' });

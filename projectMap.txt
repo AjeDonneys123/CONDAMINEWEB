@@ -164,7 +164,8 @@
 │   │   │   │   └── structure.drive.js
 │   │   │   ├── experts/
 │   │   │   │   ├── structure.db.js
-│   │   │   │   └── structure.drive.js
+│   │   │   │   ├── structure.drive.js
+│   │   │   │   └── structure.expert.js
 │   │   │   └── structure.routes.js
 │   │   └── students/
 │   │       └── experts/

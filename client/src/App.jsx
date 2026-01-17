@@ -14,11 +14,9 @@ export default function App() {
       try {
         const res = await fetch('/api/check-deploy');
         const data = await res.json();
-        // Si c'est le premier appel, on stocke l'ID
         if (!bootIdRef.current) {
           bootIdRef.current = data.bootId;
         } 
-        // Si l'ID a changé, le serveur a redémarré : on reload
         else if (data.bootId !== bootIdRef.current) {
           setIsSyncing(true);
           setTimeout(() => window.location.reload(), 1500);

@@ -1,35 +1,9 @@
-.tree-container {
-    background: white; padding: 3rem; border-radius: 40px; border: 1px solid #e2e8f0;
-    max-height: 80vh; overflow-y: auto;
-}
-.tree-node { position: relative; padding-left: 24px; }
-.tree-item {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 6px 0; font-family: 'JetBrains Mono', monospace; font-size: 11px;
-    border-bottom: 1px dashed #f1f5f9;
-}
-.tree-item:hover { background: #f8fafc; }
-.tree-item::before {
-    content: ""; position: absolute; left: -14px; width: 14px;
-    height: 1.5px; background: #000; top: 18px;
-}
-.tree-children { position: relative; margin-left: 10px; border-left: 1.5px solid #000; }
-.tree-main-info { display: flex; align-items: center; gap: 8px; cursor: pointer; flex: 1; }
-.folder-name { font-weight: 900; color: #4f46e5; text-transform: uppercase; letter-spacing: 0.5px; }
-.file-name { font-weight: 500; color: #1e293b; }
-.file-desc { color: #94a3b8; font-style: italic; font-size: 10px; padding-left: 20px; text-align: right; max-width: 50%; }
-.toggle-icon { width: 12px; display: inline-block; text-align: center; font-weight: bold; color: #000; }
-
-/* BADGE AUDIT PASSWORD */
-.password-audit-badge {
-    margin-top: 4px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
-    font-weight: 900;
-    color: #4f46e5;
-    background: #f5f3ff;
-    padding: 2px 8px;
-    border-radius: 6px;
-    width: fit-content;
-    border: 1px solid #ddd6fe;
-}
+.admin-tab { padding: 0.6rem 1.2rem; border-radius: 12px; font-weight: 800; font-size: 0.7rem; color: #94a3b8; background: transparent; transition: all 0.2s; white-space: nowrap; }
+.admin-tab.active { background: white; color: #4f46e5; shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+.admin-input { width: 100%; padding: 0.8rem 1rem; border-radius: 14px; border: 2px solid #f1f5f9; background: #f8fafc; font-weight: 700; font-size: 0.85rem; outline: none; transition: border-color 0.2s; }
+.admin-input:focus { border-color: #4f46e5; }
+.admin-btn-submit { width: 100%; padding: 1rem; background: #4f46e5; color: white; border-radius: 14px; font-weight: 900; font-size: 0.8rem; margin-top: 1rem; box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3); }
+.admin-table { width: 100%; border-collapse: collapse; }
+.admin-table th { text-align: left; }
+.admin-table td { font-size: 0.85rem; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
