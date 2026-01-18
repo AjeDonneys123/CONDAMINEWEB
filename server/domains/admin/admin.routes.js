@@ -27,6 +27,25 @@ router.post('/classrooms', asyncHandler(async (req, res) => {
     res.json(newClass);
 }));
 
+router.patch('/classrooms/:id', asyncHandler(async (req, res) => {
+    const Classroom = mongoose.model('Classroom');
+    const { name, type } = req.body;
+    
+    const existing = await Classroom.findOne({ name: name.toUpperCase().trim(), _id: { $ne: req.params.id } });
+    if (existing) return res.status(409).json({ error: "Ce nom de classe est déjà pris." });
+
+    const updated = await Classroom.findByIdAndUpdate(req.params.id, { 
+        name: name.toUpperCase().trim(), 
+        type 
+    }, { new: true });
+    
+    if (updated) {
+        await mongoose.model('Student').updateMany({ classId: updated._id }, { currentClass: updated.name });
+    }
+
+    res.json(updated);
+}));
+
 router.delete('/classrooms/:id', asyncHandler(async (req, res) => {
     await mongoose.model('Classroom').findByIdAndDelete(req.params.id);
     res.json({ ok: true });
@@ -47,6 +66,20 @@ router.post('/subjects', asyncHandler(async (req, res) => {
         color: req.body.color || '#6366f1'
     });
     res.json(newSubject);
+}));
+
+router.patch('/subjects/:id', asyncHandler(async (req, res) => {
+    const Subject = mongoose.model('Subject');
+    const { name, color } = req.body;
+    
+    const existing = await Subject.findOne({ name: name.toUpperCase().trim(), _id: { $ne: req.params.id } });
+    if (existing) return res.status(409).json({ error: "Cette matière existe déjà." });
+
+    const updated = await Subject.findByIdAndUpdate(req.params.id, { 
+        name: name.toUpperCase().trim(), 
+        color 
+    }, { new: true });
+    res.json(updated);
 }));
 
 router.delete('/subjects/:id', asyncHandler(async (req, res) => {
@@ -74,6 +107,12 @@ router.post('/teachers', asyncHandler(async (req, res) => {
     res.json(newTeacher);
 }));
 
+router.patch('/teachers/:id', asyncHandler(async (req, res) => {
+    const Teacher = mongoose.model('Teacher');
+    const updated = await Teacher.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    res.json(updated);
+}));
+
 router.delete('/teachers/:id', asyncHandler(async (req, res) => {
     await mongoose.model('Teacher').findByIdAndDelete(req.params.id);
     res.json({ ok: true });
@@ -97,6 +136,12 @@ router.post('/admins', asyncHandler(async (req, res) => {
 
     const newAdmin = await Admin.create(req.body);
     res.json(newAdmin);
+}));
+
+router.patch('/admins/:id', asyncHandler(async (req, res) => {
+    const Admin = mongoose.model('Admin');
+    const updated = await Admin.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    res.json(updated);
 }));
 
 router.delete('/admins/:id', asyncHandler(async (req, res) => {
@@ -129,14 +174,19 @@ router.post('/students', asyncHandler(async (req, res) => {
 
     const cls = await Classroom.findById(classId);
     if (!cls) return res.status(404).json({ error: "Classe introuvable." });
+    
+    // GESTION DU NOM COMPLET
+    const fullNameToSave = req.body.fullName ? req.body.fullName.trim() : `${fName} ${lName.toUpperCase()}`;
 
-    // CRÉATION AVEC LIENS CLASSE ROBUSTES
     const newStudent = await Student.create({
         firstName: fName,
         lastName: lName.toUpperCase(),
+        fullName: fullNameToSave,
         email: req.body.email || "",
-        currentClass: cls.name, // Sauvegarde du Nom
-        classId: cls._id        // Sauvegarde de l'ID
+        birthDate: req.body.birthDate || null,
+        gender: req.body.gender || "",
+        currentClass: cls.name,
+        classId: cls._id
     });
 
     const year = await AcademicYear.findOne({ isCurrent: true });
@@ -149,6 +199,46 @@ router.post('/students', asyncHandler(async (req, res) => {
     }
 
     res.json(newStudent);
+}));
+
+router.patch('/students/:id', asyncHandler(async (req, res) => {
+    const Student = mongoose.model('Student');
+    const Enrollment = mongoose.model('Enrollment');
+    const Classroom = mongoose.model('Classroom');
+    const AcademicYear = mongoose.model('AcademicYear');
+
+    const { firstName, lastName, fullName, email, classId, birthDate, gender } = req.body;
+    const studentId = req.params.id;
+
+    const updateData = {
+        firstName: firstName.trim(),
+        lastName: lastName.toUpperCase().trim(),
+        fullName: fullName ? fullName.trim() : undefined,
+        email: email,
+        birthDate: birthDate || null,
+        gender: gender || ""
+    };
+
+    if (classId) {
+        const cls = await Classroom.findById(classId);
+        if (cls) {
+            updateData.classId = cls._id;
+            updateData.currentClass = cls.name;
+
+            const year = await AcademicYear.findOne({ isCurrent: true });
+            if (year) {
+                await Enrollment.deleteMany({ studentId: studentId, yearId: year._id });
+                await Enrollment.create({
+                    studentId: studentId,
+                    classId: cls._id,
+                    yearId: year._id
+                });
+            }
+        }
+    }
+
+    const updated = await Student.findByIdAndUpdate(studentId, updateData, { new: true });
+    res.json(updated);
 }));
 
 router.delete('/students/:id', asyncHandler(async (req, res) => {
@@ -205,7 +295,6 @@ router.post('/maintenance/migrate-legacy', asyncHandler(async (req, res) => {
     const year = await mongoose.model('AcademicYear').findOne({ isCurrent: true });
     for (const p of legacy) {
         let student = await mongoose.model('Student').findOne({ firstName: p.firstName, lastName: p.lastName });
-        // MIGRATION AVEC VALEURS PAR DÉFAUT
         if (!student) student = await mongoose.model('Student').create({ 
             firstName: p.firstName, 
             lastName: p.lastName, 
@@ -218,7 +307,6 @@ router.post('/maintenance/migrate-legacy', asyncHandler(async (req, res) => {
             const ex = await mongoose.model('Enrollment').findOne({ studentId: student._id, classId: cls._id });
             if (!ex) await mongoose.model('Enrollment').create({ studentId: student._id, classId: cls._id, yearId: year?._id });
             
-            // Mise à jour rétroactive du lien classId
             if (!student.classId) {
                 student.classId = cls._id;
                 await student.save();

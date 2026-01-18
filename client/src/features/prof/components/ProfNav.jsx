@@ -1,14 +1,27 @@
 import React from 'react';
 
-export default function ProfNav({ activeTab, onTabChange, isAdmin }) {
-  const tabs = [
-    { id: 'students', label: '👥 ÉLÈVES', color: 'bg-blue-600' },
-    { id: 'activities', label: '⚡ ACTIVITÉS', color: 'bg-purple-600' },
-  ];
+export default function ProfNav({ activeTab, onTabChange, user }) {
   
-  // NOUVEAU : On ajoute l'Admin seulement si autorisé
-  if (isAdmin) {
-      tabs.push({ id: 'admin', label: '⚙️ ADMIN', color: 'bg-slate-800' });
+  let tabs = [];
+
+  if (user.isDeveloper) {
+      // 1. LE DÉVELOPPEUR (Jean) : Accès Total
+      tabs = [
+          { id: 'activities', label: '⚡ ACTIVITÉS', color: 'bg-purple-600' },
+          { id: 'students', label: '👥 ÉLÈVES', color: 'bg-blue-600' },
+          { id: 'admin', label: '⚙️ ADMIN', color: 'bg-slate-800' }
+      ];
+  } else if (user.isAdmin) {
+      // 2. L'ADMINISTRATEUR : Accès Admin Uniquement
+      tabs = [
+          { id: 'admin', label: '🛡️ ADMINISTRATION', color: 'bg-slate-800' }
+      ];
+  } else {
+      // 3. LE PROFESSEUR : Accès Pédagogique Uniquement
+      tabs = [
+          { id: 'activities', label: '⚡ ACTIVITÉS', color: 'bg-purple-600' },
+          { id: 'students', label: '👥 ÉLÈVES', color: 'bg-blue-600' }
+      ];
   }
 
   return (
