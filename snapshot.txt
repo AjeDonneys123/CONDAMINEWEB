@@ -269,7 +269,7 @@ setInterval(applyUpdate, 1000);
 {
   "status": "OK",
   "file": null,
-  "timestamp": 1768690637679
+  "timestamp": 1768742202364
 }
 [[[£ END: apply_status.json £]]]
 
@@ -313,7 +313,7 @@ Currently, two official plugins are available:
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Vite + React</title>
+    <title>Condamine Pro</title>
   </head>
   <body>
     <div id="root"></div>
@@ -356,33 +356,11 @@ Currently, two official plugins are available:
     position: relative;
     padding-top: 30px;
 }
-
-.version-banner {
-    position: fixed; top: 0; left: 0; right: 0;
-    height: 30px; background: #0f172a; color: #64748b;
-    font-size: 10px; font-weight: 900; display: flex;
-    align-items: center; justify-content: center;
-    letter-spacing: 1px; z-index: 1000000;
-    border-bottom: 1px solid #1e293b;
-    gap: 30px;
-}
-
-.version-txt {
-    color: #ff0000 !important;
-    font-weight: 900;
-}
-
-.live-indicator { color: #22c55e; display: flex; align-items: center; gap: 8px; font-size: 9px; }
-.live-dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; }
-
 .sync-overlay {
     position: fixed; inset: 0; background: #0f172a;
     display: flex; align-items: center; justify-content: center;
     z-index: 9999999;
 }
-.sync-card { background: white; padding: 3rem; border-radius: 40px; text-align: center; }
-.sync-spinner { width: 50px; height: 50px; border: 5px solid #f3f3f3; border-top: 5px solid #3498db; border-radius: 50%; animation: spin 1s linear infinite; }
-@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 [[[£ END: client/src/App.css £]]]
 
 [[[£ FILE: client/src/App.jsx £]]]
@@ -402,11 +380,9 @@ export default function App() {
       try {
         const res = await fetch('/api/check-deploy');
         const data = await res.json();
-        // Si c'est le premier appel, on stocke l'ID
         if (!bootIdRef.current) {
           bootIdRef.current = data.bootId;
         } 
-        // Si l'ID a changé, le serveur a redémarré : on reload
         else if (data.bootId !== bootIdRef.current) {
           setIsSyncing(true);
           setTimeout(() => window.location.reload(), 1500);
@@ -447,6 +423,9 @@ export default function App() {
 .login-inputs { display: flex; flex-direction: column; gap: 1rem; }
 .login-field { width: 100%; padding: 1.1rem; border-radius: 18px; border: 2px solid #e2e8f0; background: #f8fafc; font-weight: 700; outline: none; }
 .login-submit-btn { width: 100%; padding: 1.25rem; background-color: #2563eb !important; color: white !important; border-radius: 20px; font-weight: 900; cursor: pointer; border: none; text-transform: uppercase; }
+.finder-results { max-height: 200px; overflow-y: auto; background: white; border: 2px solid #e2e8f0; border-radius: 18px; margin-top: 5px; }
+.finder-item { padding: 12px; cursor: pointer; font-weight: 700; text-align: left; }
+.finder-item:hover { background: #f1f5f9; }
 [[[£ END: client/src/features/auth/Login.css £]]]
 
 [[[£ FILE: client/src/features/auth/Login.jsx £]]]
@@ -460,13 +439,10 @@ export default function Login({ onLoginSuccess }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [showFinder, setShowFinder] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState(null);
-  
-  // PROF
   const [fName, setFName] = useState('');
   const [lName, setLName] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -494,8 +470,6 @@ export default function Login({ onLoginSuccess }) {
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
-    
-    // CORPS DE LA REQUÊTE STANDARDISÉ
     const body = selectedClassId === 'PROF' 
         ? { role: 'PROF', firstName: fName, lastName: lName, password }
         : { role: 'STUDENT', studentId: selectedStudent?.id };
@@ -507,7 +481,6 @@ export default function Login({ onLoginSuccess }) {
             body: JSON.stringify(body)
         });
         const data = await res.json();
-        
         if (res.ok) {
             localStorage.setItem('player', JSON.stringify(data.user));
             onLoginSuccess(data.user);
@@ -520,17 +493,17 @@ export default function Login({ onLoginSuccess }) {
 
   return (
     <div className="login-screen">
-      <div className="login-card shadow-2xl border-t-[12px] border-indigo-600">
+      <div className="login-card">
         <h2 className="login-title">CONDACLASSE</h2>
         <form onSubmit={handleLogin} className="login-inputs">
             <select className="login-field" value={selectedClassId} onChange={e => setSelectedClassId(e.target.value)} required>
                 <option value="">CHOISIR TA CLASSE...</option>
                 {classes.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
-                <option value="PROF" className="prof-option font-black text-indigo-600">🎓 ENSEIGNANT / ADMIN</option>
+                <option value="PROF" className="font-black text-indigo-600">🎓 ENSEIGNANT / ADMIN</option>
             </select>
 
             {selectedClassId && selectedClassId !== 'PROF' && (
-                <div className="finder-container animate-in slide-in-from-top-2">
+                <div>
                     {!selectedStudent ? (
                         <>
                             <input className="login-field" placeholder="Tape ton nom..." value={searchTerm}
@@ -538,7 +511,7 @@ export default function Login({ onLoginSuccess }) {
                                 onFocus={() => setShowFinder(true)}
                             />
                             {showFinder && searchTerm.length > 0 && (
-                                <div className="finder-results custom-scrollbar">
+                                <div className="finder-results">
                                     {filteredStudents.map(s => (
                                         <div key={s.id} className="finder-item" onClick={() => { setSelectedStudent(s); setShowFinder(false); }}>
                                             {s.name}
@@ -548,21 +521,21 @@ export default function Login({ onLoginSuccess }) {
                             )}
                         </>
                     ) : (
-                        <div className="selected-student-badge animate-in zoom-in">
-                            <span>{selectedStudent.name}</span>
-                            <button type="button" onClick={() => setSelectedStudent(null)} className="ml-2 font-black">✕</button>
+                        <div className="bg-indigo-50 p-4 rounded-xl flex justify-between items-center">
+                            <span className="font-bold">{selectedStudent.name}</span>
+                            <button type="button" onClick={() => setSelectedStudent(null)}>✕</button>
                         </div>
                     )}
                 </div>
             )}
 
             {selectedClassId === 'PROF' && (
-                <div className="space-y-2 animate-in fade-in">
+                <div className="space-y-2">
                     <input className="login-field" placeholder="Prénom" value={fName} onChange={e=>setFName(e.target.value)} required />
                     <input className="login-field" placeholder="Nom" value={lName} onChange={e=>setLName(e.target.value)} required />
                     <div className="relative">
-                        <input type={showPassword ? "text" : "password"} className="login-field border-indigo-400" placeholder="Mot de passe" value={password} onChange={e=>setPassword(e.target.value)} required />
-                        <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-indigo-400 font-black text-[9px] uppercase">
+                        <input type={showPassword ? "text" : "password"} className="login-field" placeholder="Mot de passe" value={password} onChange={e=>setPassword(e.target.value)} required />
+                        <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-[9px] uppercase font-black">
                             {showPassword ? "Cacher" : "Voir"}
                         </button>
                     </div>
@@ -987,7 +960,6 @@ export default function ProfPage({ user, onLogout }) {
   const [classes, setClasses] = useState([]);
   const [selectedClassId, setSelectedClassId] = useState("");
 
-  // --- SÉCURITÉ : GOD MODE (JEAN VUILLET) ---
   const isJean = (user.firstName === 'Jean' && user.lastName === 'Vuillet');
   const superUser = {
       ...user,
@@ -1000,10 +972,8 @@ export default function ProfPage({ user, onLogout }) {
         const res = await fetch('/api/admin/classrooms');
         if (res.ok) {
             const data = await res.json();
-            if (Array.isArray(data)) {
-                setClasses(data);
-                if (!selectedClassId && data.length > 0) setSelectedClassId(data[0]._id);
-            }
+            setClasses(data);
+            if (!selectedClassId && data.length > 0) setSelectedClassId(data[0]._id);
         }
     } catch(e) {}
   };
@@ -1017,28 +987,23 @@ export default function ProfPage({ user, onLogout }) {
       <div className="prof-card shadow-2xl">
         <ProfHeader user={superUser} onLogout={onLogout} />
         
-        {/* SÉLECTEUR DE CLASSE */}
         <div className="px-8 py-4 flex gap-2 border-b bg-slate-50/50 overflow-x-auto no-scrollbar items-center">
-            {classes.length === 0 && <span className="text-xs text-slate-400 italic">Aucune classe. Créez-en une dans l'Admin.</span>}
             {classes.map(c => (
                 <button key={c._id} onClick={() => setSelectedClassId(c._id)} 
                         className={`px-6 py-2 rounded-xl font-black text-[10px] transition-all whitespace-nowrap ${selectedClassId === c._id ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-slate-400 border shadow-sm'}`}>
-                    {c.type === 'GROUP' ? '🏷️ ' : ''}{c.name}
+                    {c.name}
                 </button>
             ))}
         </div>
 
-        {/* NAVIGATION */}
         <ProfNav activeTab={tab} onTabChange={setTab} isAdmin={superUser.isAdmin} />
         
         <div className="p-8">
           {tab === 'activities' && <ActivityStudio globalClass={currentClassName} globalClassId={selectedClassId} user={superUser} />}
           {tab === 'students' && <StudentsManager globalClassId={selectedClassId} />}
           {tab === 'admin' && superUser.isAdmin && <AdminDashboard user={superUser} onRefresh={loadClasses} />}
-          {tab === 'scans' && <div className="p-20 text-center text-slate-300 font-black uppercase">Module Scan bientôt disponible</div>}
         </div>
       </div>
-
       {superUser.isDeveloper && <ConsoleReporter user={superUser} />}
     </div>
   );
@@ -1112,41 +1077,15 @@ export default function ActivityStudio({ globalClass, user }) {
 [[[£ END: client/src/features/prof/activities/ActivityStudio.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/admin/AdminDashboard.css £]]]
-.tree-container {
-    background: white; padding: 3rem; border-radius: 40px; border: 1px solid #e2e8f0;
-    max-height: 80vh; overflow-y: auto;
-}
-.tree-node { position: relative; padding-left: 24px; }
-.tree-item {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 6px 0; font-family: 'JetBrains Mono', monospace; font-size: 11px;
-    border-bottom: 1px dashed #f1f5f9;
-}
-.tree-item:hover { background: #f8fafc; }
-.tree-item::before {
-    content: ""; position: absolute; left: -14px; width: 14px;
-    height: 1.5px; background: #000; top: 18px;
-}
-.tree-children { position: relative; margin-left: 10px; border-left: 1.5px solid #000; }
-.tree-main-info { display: flex; align-items: center; gap: 8px; cursor: pointer; flex: 1; }
-.folder-name { font-weight: 900; color: #4f46e5; text-transform: uppercase; letter-spacing: 0.5px; }
-.file-name { font-weight: 500; color: #1e293b; }
-.file-desc { color: #94a3b8; font-style: italic; font-size: 10px; padding-left: 20px; text-align: right; max-width: 50%; }
-.toggle-icon { width: 12px; display: inline-block; text-align: center; font-weight: bold; color: #000; }
-
-/* BADGE AUDIT PASSWORD */
-.password-audit-badge {
-    margin-top: 4px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
-    font-weight: 900;
-    color: #4f46e5;
-    background: #f5f3ff;
-    padding: 2px 8px;
-    border-radius: 6px;
-    width: fit-content;
-    border: 1px solid #ddd6fe;
-}
+.admin-tab { padding: 0.6rem 1.2rem; border-radius: 12px; font-weight: 800; font-size: 0.7rem; color: #94a3b8; background: transparent; transition: all 0.2s; white-space: nowrap; }
+.admin-tab.active { background: white; color: #4f46e5; shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+.admin-input { width: 100%; padding: 0.8rem 1rem; border-radius: 14px; border: 2px solid #f1f5f9; background: #f8fafc; font-weight: 700; font-size: 0.85rem; outline: none; transition: border-color 0.2s; }
+.admin-input:focus { border-color: #4f46e5; }
+.admin-btn-submit { width: 100%; padding: 1rem; background: #4f46e5; color: white; border-radius: 14px; font-weight: 900; font-size: 0.8rem; margin-top: 1rem; box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3); }
+.admin-table { width: 100%; border-collapse: collapse; }
+.admin-table th { text-align: left; }
+.admin-table td { font-size: 0.85rem; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
 [[[£ END: client/src/features/prof/admin/AdminDashboard.css £]]]
 
 [[[£ FILE: client/src/features/prof/admin/AdminDashboard.jsx £]]]
@@ -1156,106 +1095,174 @@ import './AdminDashboard.css';
 export default function AdminDashboard({ user, onRefresh }) {
     const [view, setView] = useState('classes');
     const [items, setItems] = useState([]);
-    const [name, setName] = useState('');
-    const [classType, setClassType] = useState('CLASS');
-    const [form, setForm] = useState({ firstName: '', lastName: '', password: '', role: 'admin' });
-    
-    // IMPORT
-    const [importingClass, setImportingClass] = useState(null); 
-    const [importText, setImportText] = useState("");
-    const [importImage, setImportImage] = useState(null);
-    const [analyzedStudents, setAnalyzedStudents] = useState(null);
-    const [loadingAI, setLoadingAI] = useState(false);
-    const [ecoMode, setEcoMode] = useState(false);
+    const [loading, setLoading] = useState(false);
 
-    const ROUTES_MAP = { 'classes': 'classrooms', 'subjects': 'subjects', 'teachers': 'teachers', 'admins': 'admins', 'bugs': 'bugs' };
+    // Form states
+    const [formClass, setFormClass] = useState({ name: '', type: 'CLASS' });
+    const [formSubject, setFormSubject] = useState({ name: '', color: '#6366f1' });
+    const [formUser, setFormUser] = useState({ firstName: '', lastName: '', password: '', role: 'admin' });
 
     const loadData = async () => {
+        setLoading(true);
         try {
-            const endpoint = ROUTES_MAP[view];
-            const res = await fetch(`/api/admin/${endpoint}`);
+            const res = await fetch(`/api/admin/${view === 'staff' ? 'admins' : view}`);
             if (res.ok) setItems(await res.json());
-            else setItems([]);
-        } catch (e) { setItems([]); }
+        } catch (e) { console.error(e); }
+        setLoading(false);
     };
 
     useEffect(() => { loadData(); }, [view]);
 
-    // OUTILS
-    const handleFixIndexes = async () => { if(confirm("Nettoyer ?")) try { await fetch('/api/admin/maintenance/fix-admins', { method: 'POST' }); alert("Fait"); } catch(e){} };
-    const handleResync = async () => { if(confirm("Resync ?")) try { await fetch('/api/admin/maintenance/resync-classes', { method: 'POST' }); onRefresh(); } catch(e){} };
-    const handlePurge = async () => { if(confirm("Purger Orphelins ?")) try { await fetch('/api/admin/maintenance/purge-orphans', { method: 'POST' }); onRefresh(); } catch(e){} };
-    const handleTotalSync = async () => { if(confirm("⚡ SYNC & KILL ?")) try { await fetch('/api/admin/maintenance/total-sync', { method: 'POST' }); onRefresh(); } catch(e){} };
-
-    const handleAnalyze = async () => {
-        setLoadingAI(true);
-        try {
-            const res = await fetch('/api/admin/import/analyze', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ text: importText, image: importImage }) });
-            const data = await res.json();
-            setAnalyzedStudents(data);
-        } catch (e) { alert("Erreur IA"); }
-        setLoadingAI(false);
-    };
-
-    const handleConfirmImport = async () => {
-        setLoadingAI(true);
-        try {
-            await fetch('/api/admin/import/execute', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ classId: importingClass, students: analyzedStudents }) });
-            alert("Succès");
-            setImportingClass(null); setAnalyzedStudents(null); setImportText(""); setImportImage(null);
-        } catch (e) { alert("Erreur"); }
-        setLoadingAI(false);
-    };
-
-    const handleAdd = async (e) => {
+    const handleCreateClass = async (e) => {
         e.preventDefault();
-        try {
-            const endpoint = ROUTES_MAP[view];
-            let body = {};
-            if (view === 'classes') body = { name, type: classType };
-            else if (view === 'subjects') body = { name };
-            else body = form;
-            const res = await fetch(`/api/admin/${endpoint}`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
-            if (res.ok) { setName(''); setForm({ firstName: '', lastName: '', password: '', role: 'admin' }); loadData(); onRefresh(); }
-        } catch (error) {}
+        await fetch('/api/admin/classrooms', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(formClass)
+        });
+        setFormClass({ name: '', type: 'CLASS' });
+        loadData();
+        onRefresh();
+    };
+
+    const handleCreateSubject = async (e) => {
+        e.preventDefault();
+        await fetch('/api/admin/subjects', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(formSubject)
+        });
+        setFormSubject({ name: '', color: '#6366f1' });
+        loadData();
+    };
+
+    const handleCreateUser = async (e) => {
+        e.preventDefault();
+        const endpoint = view === 'teachers' ? 'teachers' : 'admins';
+        await fetch(`/api/admin/${endpoint}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(formUser)
+        });
+        setFormUser({ firstName: '', lastName: '', password: '', role: 'admin' });
+        loadData();
     };
 
     const handleDelete = async (id) => {
-        if (!confirm("Supprimer ?")) return;
-        const endpoint = ROUTES_MAP[view];
-        const res = await fetch(`/api/admin/${endpoint}/${id}`, { method: 'DELETE' });
-        if (res.ok) { loadData(); onRefresh(); }
+        if (!confirm("Supprimer définitivement ?")) return;
+        const endpoint = view === 'staff' ? 'admins' : view;
+        await fetch(`/api/admin/${endpoint}/${id}`, { method: 'DELETE' });
+        loadData();
+        if(view === 'classes') onRefresh();
+    };
+
+    const handleFixBug = async (id) => {
+        await fetch(`/api/admin/bugs/${id}`, { method: 'PATCH' });
+        loadData();
     };
 
     return (
-        <div className="space-y-6 animate-in fade-in">
-            <div className="flex justify-between items-center mb-8">
-                <div className="flex gap-2 bg-slate-100 p-1.5 rounded-2xl w-fit overflow-x-auto no-scrollbar">
-                    <button onClick={() => setView('classes')} className={`px-4 py-2 rounded-xl font-black text-[10px] uppercase ${view === 'classes' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400'}`}>🏫 Classes</button>
-                    <button onClick={() => setView('subjects')} className={`px-4 py-2 rounded-xl font-black text-[10px] uppercase ${view === 'subjects' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400'}`}>📚 Matières</button>
-                    <button onClick={() => setView('teachers')} className={`px-4 py-2 rounded-xl font-black text-[10px] uppercase ${view === 'teachers' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400'}`}>👨‍🏫 Profs</button>
-                    {user.isDeveloper && (
-                        <>
-                            <button onClick={() => setView('admins')} className={`px-4 py-2 rounded-xl font-black text-[10px] uppercase ${view === 'admins' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400'}`}>🛡️ Staff</button>
-                            <button onClick={() => setView('bugs')} className={`px-4 py-2 rounded-xl font-black text-[10px] uppercase ${view === 'bugs' ? 'bg-white text-red-600 shadow-sm' : 'text-slate-400'}`}>🪲 Bugs</button>
-                        </>
-                    )}
-                </div>
-                <div className="flex gap-2">
-                    {view === 'admins' && <button onClick={handleFixIndexes} className="bg-amber-100 text-amber-600 px-4 py-2 rounded-xl font-black text-[10px] uppercase">🧹 NETTOYER</button>}
-                    {view === 'classes' && (
-                        <>
-                            <button onClick={handleResync} className="bg-blue-100 text-blue-600 px-4 py-2 rounded-xl font-black text-[10px] uppercase">🔄 RESYNC</button>
-                            <button onClick={handlePurge} className="bg-red-100 text-red-600 px-4 py-2 rounded-xl font-black text-[10px] uppercase">💀 PURGE</button>
-                            <button onClick={handleTotalSync} className="bg-orange-100 text-orange-600 px-4 py-2 rounded-xl font-black text-[10px] uppercase">⚡ SYNC/KILL</button>
-                        </>
-                    )}
-                </div>
+        <div className="admin-container animate-in fade-in">
+            {/* NAVIGATION TABS */}
+            <div className="flex gap-2 bg-slate-100 p-1.5 rounded-2xl mb-8 w-fit overflow-x-auto no-scrollbar">
+                <button onClick={() => setView('classes')} className={`admin-tab ${view === 'classes' ? 'active' : ''}`}>🏫 CLASSES</button>
+                <button onClick={() => setView('subjects')} className={`admin-tab ${view === 'subjects' ? 'active' : ''}`}>📚 MATIÈRES</button>
+                <button onClick={() => setView('teachers')} className={`admin-tab ${view === 'teachers' ? 'active' : ''}`}>👨‍🏫 PROFS</button>
+                <button onClick={() => setView('staff')} className={`admin-tab ${view === 'staff' ? 'active' : ''}`}>🛡️ STAFF</button>
+                <button onClick={() => setView('bugs')} className={`admin-tab ${view === 'bugs' ? 'active' : ''}`}>🪲 BUGS</button>
             </div>
 
-            {/* CONTENU (Liste des classes, etc.) */}
-            {/* Je te laisse la structure HTML existante, le JS est à jour */}
-            {/* ... */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* FORMULAIRE D'AJOUT (Sauf pour Bugs) */}
+                {view !== 'bugs' && (
+                    <div className="lg:col-span-1">
+                        <div className="bg-white p-6 rounded-[30px] border shadow-sm sticky top-8">
+                            <h3 className="font-black text-xs uppercase mb-6 text-slate-400">Ajouter {view}</h3>
+                            
+                            {view === 'classes' && (
+                                <form onSubmit={handleCreateClass} className="space-y-4">
+                                    <input className="admin-input" placeholder="NOM DE LA CLASSE (Ex: 6B)" value={formClass.name} onChange={e => setFormClass({...formClass, name: e.target.value})} required />
+                                    <select className="admin-input" value={formClass.type} onChange={e => setFormClass({...formClass, type: e.target.value})}>
+                                        <option value="CLASS">CLASSE ADMINISTRATIVE</option>
+                                        <option value="GROUP">GROUPE PÉDAGOGIQUE</option>
+                                    </select>
+                                    <button className="admin-btn-submit">CRÉER CLASSE</button>
+                                </form>
+                            )}
+
+                            {view === 'subjects' && (
+                                <form onSubmit={handleCreateSubject} className="space-y-4">
+                                    <input className="admin-input" placeholder="NOM MATIÈRE (Ex: HISTOIRE)" value={formSubject.name} onChange={e => setFormSubject({...formSubject, name: e.target.value})} required />
+                                    <input type="color" className="w-full h-12 rounded-xl cursor-pointer" value={formSubject.color} onChange={e => setFormSubject({...formSubject, color: e.target.value})} />
+                                    <button className="admin-btn-submit">AJOUTER MATIÈRE</button>
+                                </form>
+                            )}
+
+                            {(view === 'teachers' || view === 'staff') && (
+                                <form onSubmit={handleCreateUser} className="space-y-4">
+                                    <input className="admin-input" placeholder="Prénom" value={formUser.firstName} onChange={e => setFormUser({...formUser, firstName: e.target.value})} required />
+                                    <input className="admin-input" placeholder="Nom" value={formUser.lastName} onChange={e => setFormUser({...formUser, lastName: e.target.value})} required />
+                                    <input className="admin-input" type="password" placeholder="Mot de passe" value={formUser.password} onChange={e => setFormUser({...formUser, password: e.target.value})} required />
+                                    {view === 'staff' && (
+                                        <select className="admin-input" value={formUser.role} onChange={e => setFormUser({...formUser, role: e.target.value})}>
+                                            <option value="admin">ADMINISTRATEUR</option>
+                                            <option value="developer">DÉVELOPPEUR</option>
+                                        </select>
+                                    )}
+                                    <button className="admin-btn-submit">CRÉER COMPTE</button>
+                                </form>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {/* LISTE DES ÉLÉMENTS */}
+                <div className={view === 'bugs' ? 'lg:col-span-3' : 'lg:col-span-2'}>
+                    <div className="bg-white rounded-[30px] border shadow-sm overflow-hidden">
+                        <table className="admin-table">
+                            <thead className="bg-slate-50">
+                                <tr>
+                                    <th className="p-4 text-[10px] font-black uppercase text-slate-400">Élément</th>
+                                    <th className="p-4 text-[10px] font-black uppercase text-slate-400">Infos / Status</th>
+                                    <th className="p-4 text-right"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {loading ? (
+                                    <tr><td colSpan="3" className="p-20 text-center font-black text-slate-300 animate-pulse">CHARGEMENT...</td></tr>
+                                ) : items.length === 0 ? (
+                                    <tr><td colSpan="3" className="p-20 text-center font-black text-slate-300">AUCUNE DONNÉE</td></tr>
+                                ) : items.map(it => (
+                                    <tr key={it._id} className="border-t hover:bg-slate-50 transition-colors">
+                                        <td className="p-4">
+                                            <div className="font-black text-slate-700 uppercase">
+                                                {it.name || `${it.firstName} ${it.lastName}`}
+                                            </div>
+                                            {view === 'subjects' && <div className="text-[10px] font-bold" style={{color: it.color}}>{it.color}</div>}
+                                        </td>
+                                        <td className="p-4">
+                                            {view === 'classes' && <span className={`px-2 py-1 rounded text-[9px] font-black ${it.type === 'GROUP' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>{it.type}</span>}
+                                            {view === 'staff' && <span className="px-2 py-1 rounded bg-slate-100 text-slate-600 text-[9px] font-black uppercase">{it.role}</span>}
+                                            {view === 'bugs' && (
+                                                <div className="max-w-md">
+                                                    <div className="text-xs font-bold text-slate-600 mb-1">{it.description}</div>
+                                                    <span className={`px-2 py-1 rounded text-[9px] font-black uppercase ${it.status === 'fixed' ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>{it.status}</span>
+                                                </div>
+                                            )}
+                                        </td>
+                                        <td className="p-4 text-right">
+                                            {view === 'bugs' && it.status === 'open' ? (
+                                                <button onClick={() => handleFixBug(it._id)} className="text-emerald-500 font-black text-[10px] mr-4 uppercase">RÉSOLU ?</button>
+                                            ) : null}
+                                            <button onClick={() => handleDelete(it._id)} className="text-red-300 hover:text-red-500 font-black text-[10px] uppercase">Supprimer</button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
         </div>
     );
 }
@@ -1400,17 +1407,16 @@ export default function ConsoleReporter({ user }) {
 [[[£ END: client/src/features/prof/components/ConsoleReporter.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/components/DatabaseViewer.css £]]]
-.db-viewer-overlay { position: fixed; inset: 0; z-index: 10000; background: rgba(15, 23, 42, 0.9); backdrop-filter: blur(10px); display: flex; align-items: center; justify-content: center; padding: 40px; }
+.db-viewer-overlay { position: fixed; inset: 0; z-index: 10000; background: rgba(15, 23, 42, 0.95); display: flex; align-items: center; justify-content: center; padding: 2rem; }
 .db-viewer-window { background: white; width: 100%; height: 100%; border-radius: 40px; display: flex; flex-direction: column; overflow: hidden; }
-.db-header { padding: 1.5rem 2rem; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center; }
-.db-tabs { padding: 1rem 2rem; background: #f8fafc; display: flex; gap: 10px; border-bottom: 1px solid #f1f5f9; }
-.db-tab-btn { padding: 0.6rem 1.5rem; border-radius: 12px; font-weight: 800; font-size: 0.8rem; color: #94a3b8; background: white; border: 1px solid #e2e8f0; transition: all 0.2s; cursor: pointer; }
-.db-tab-btn.active { color: white; border-color: transparent; box-shadow: 0 10px 15px rgba(0,0,0,0.1); }
-.db-tab-desc { padding: 1rem 2rem; background: #eff6ff; border-bottom: 1px solid #dbeafe; font-size: 0.75rem; font-weight: 700; color: #1e40af; display: flex; align-items: center; gap: 10px; }
-.db-table-container { flex: 1; overflow: auto; }
-.db-table { width: 100%; border-collapse: collapse; font-size: 0.7rem; font-family: monospace; }
-.db-table th { position: sticky; top: 0; background: #f8fafc; padding: 1rem; text-align: left; border-bottom: 2px solid #e2e8f0; z-index: 10; }
-.db-table td { padding: 0.8rem 1rem; border-bottom: 1px solid #f1f5f9; }
+.db-header { padding: 1.5rem 2rem; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
+.db-tabs { display: flex; overflow-x: auto; background: #f8fafc; border-bottom: 1px solid #eee; padding: 0.5rem 2rem; gap: 10px; }
+.db-tab-btn { padding: 0.5rem 1rem; border-radius: 10px; font-weight: 800; font-size: 0.7rem; color: #94a3b8; white-space: nowrap; }
+.db-tab-btn.active { background: #1e293b; color: white; }
+.db-table-container { flex: 1; overflow: auto; padding: 1rem; }
+.db-table { width: 100%; border-collapse: collapse; font-family: monospace; font-size: 0.65rem; }
+.db-table th { background: #f8fafc; text-align: left; padding: 0.8rem; border-bottom: 2px solid #eee; position: sticky; top: 0; }
+.db-table td { padding: 0.6rem 0.8rem; border-bottom: 1px solid #f1f5f9; }
 [[[£ END: client/src/features/prof/components/DatabaseViewer.css £]]]
 
 [[[£ FILE: client/src/features/prof/components/DatabaseViewer.jsx £]]]
@@ -1418,108 +1424,95 @@ import React, { useState, useEffect } from 'react';
 import './DatabaseViewer.css';
 
 const DESCRIPTIONS = {
-    players: "👤 Base des élèves. Gère l'appartenance aux classes et l'historique des erreurs d'orthographe (US #11).",
-    chapters: "📁 Dossiers de cours. Sert de pivot pour la création automatique de l'arborescence Google Drive (US #4).",
-    homeworks: "📝 Paramètres des devoirs (IA). Définit les consignes, les documents supports et les dossiers Cloud associés.",
-    gamelevels: "🎮 Moteur de quiz. Contient les questions et les réponses pour les jeux Zombie et Starship (US #10).",
-    scansessions: "📸 Sessions de scan camera. Fait le lien entre les photos brutes et les corrections IA générées.",
-    submissions: "📤 Rendu des élèves. Contient les textes tapés par les élèves et les notes attribuées par l'IA.",
-    teachers: "🎓 Comptes enseignants. Stocke les préférences, les matières et le code secret d'accès.",
-    bugs: "🐞 Journal technique. Liste les incidents rapportés par les utilisateurs pour le débogage.",
-    deploysignals: "📡 Signal de déploiement. Force le rafraîchissement auto des clients lors d'une mise à jour (US #13)."
+    academicyears: "📅 Années Scolaires. Pivot de l'archivage.",
+    enrollments: "🔗 Inscriptions. Lien Student <-> Class par année.",
+    students: "👤 Profils Elèves. Données permanentes.",
+    classrooms: "🏫 Classes & Groupes Pédagogiques.",
+    subjects: "📚 Matières. Catalogue officiel.",
+    teachers: "🎓 Enseignants. Préférences et sections.",
+    admins: "🛡️ Staff & Développeurs.",
+    chapters: "📁 Chapitres. Dossiers Cloud Drive.",
+    homeworks: "📝 Devoirs. Consignes IA.",
+    submissions: "📤 Rendus. Notes et feedback IA.",
+    gamelevels: "🎮 Quiz. Moteur Zombie/Starship.",
+    gameprogress: "📈 Scores. Progression jeux.",
+    mistakes: "✒️ Orthographe. Carnet de remédiation.",
+    accesslogs: "🔐 Sécurité. Logs d'accès système.",
+    bugreports: "🪲 Bugs. Erreurs capturées.",
+    projectdocs: "🧠 Mémoire IA. Documentation code.",
+    players_legacy: "⚠️ LEGACY. Anciennes données à migrer."
 };
 
 export default function DatabaseViewer({ onClose }) {
     const [data, setData] = useState(null);
-    const [activeTab, setActiveTab] = useState('players');
+    const [activeTab, setActiveTab] = useState('students');
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
 
-    useEffect(() => {
-        fetch('/api/database-dump')
-            .then(async res => {
-                if (!res.ok) {
-                    const errData = await res.json().catch(() => ({}));
-                    throw new Error(errData.details || `Erreur ${res.status}`);
-                }
-                return res.json();
-            })
+    const loadData = () => {
+        setLoading(true);
+        fetch('/api/admin/database-dump')
+            .then(res => res.json())
             .then(d => { setData(d); setLoading(false); })
-            .catch(err => {
-                setError(err.message);
-                setLoading(false);
-            });
-    }, []);
+            .catch(() => setLoading(false));
+    };
 
-    if (loading) return <div className="db-viewer-overlay"><div className="text-white font-black animate-pulse">SYNCHRO BDD...</div></div>;
+    useEffect(() => { loadData(); }, []);
 
-    if (error) return (
-        <div className="db-viewer-overlay">
-            <div className="bg-white p-8 rounded-3xl max-w-lg text-center shadow-2xl">
-                <h2 className="text-red-600 font-black text-xl mb-4">ERREUR SERVEUR</h2>
-                <p className="text-slate-500 text-sm mb-6">{error}</p>
-                <button onClick={onClose} className="bg-slate-900 text-white px-6 py-2 rounded-xl font-bold">FERMER</button>
-            </div>
-        </div>
-    );
+    const handleMigrate = async () => {
+        if(!confirm("Lancer la migration vers la structure ARCHITECTE PRO ?")) return;
+        await fetch('/api/admin/maintenance/migrate-legacy', { method: 'POST' });
+        loadData();
+    };
 
-    const collections = [
-        { key: 'players', label: 'players', color: 'bg-blue-500' },
-        { key: 'chapters', label: 'chapters', color: 'bg-indigo-500' },
-        { key: 'homeworks', label: 'homeworks', color: 'bg-orange-500' },
-        { key: 'gamelevels', label: 'gamelevels', color: 'bg-purple-500' },
-        { key: 'scansessions', label: 'scans', color: 'bg-emerald-500' },
-        { key: 'submissions', label: 'rendus', color: 'bg-pink-500' },
-        { key: 'teachers', label: 'profs', color: 'bg-slate-700' }
-    ];
+    if (loading) return <div className="db-viewer-overlay"><h2 className="text-white font-black animate-pulse">SYNCHRONISATION BDD PRO...</h2></div>;
 
-    const currentData = (data && data[activeTab]) ? data[activeTab] : [];
+    const collections = Object.keys(data || {}).sort();
+    const currentData = data[activeTab] || [];
     const columns = currentData.length > 0 ? Object.keys(currentData[0]).filter(k => k !== '__v') : [];
 
     return (
-        <div className="db-viewer-overlay animate-in">
-            <div className="db-viewer-window shadow-2xl">
+        <div className="db-viewer-overlay" onClick={onClose}>
+            <div className="db-viewer-window" onClick={e => e.stopPropagation()}>
                 <div className="db-header">
-                    <div className="flex flex-col text-left">
-                        <h2 className="text-xl font-black uppercase">MongoDB Raw Explorer</h2>
-                        <span className="text-[9px] font-bold text-slate-400 uppercase">Diagnostic en direct</span>
+                    <div className="flex flex-col">
+                        <h2 className="font-black uppercase text-xl text-slate-800">Condamine Architecte Pro</h2>
+                        <span className="text-[9px] text-indigo-500 font-black tracking-widest uppercase">Système de Base de Données Relationnelle</span>
                     </div>
-                    <button onClick={onClose} className="w-10 h-10 flex items-center justify-center bg-slate-100 rounded-full font-black text-slate-400 hover:text-red-500 transition-colors">✕</button>
+                    <div className="flex gap-3">
+                        <button onClick={handleMigrate} className="bg-amber-100 text-amber-600 px-4 py-2 rounded-xl font-black text-[10px]">MIGRATION PRO</button>
+                        <button onClick={onClose} className="w-10 h-10 bg-slate-100 rounded-full font-black">✕</button>
+                    </div>
                 </div>
 
-                <div className="db-tabs no-scrollbar overflow-x-auto">
+                <div className="db-tabs no-scrollbar">
                     {collections.map(c => (
-                        <button 
-                            key={c.key} 
-                            onClick={() => setActiveTab(c.key)} 
-                            className={`db-tab-btn whitespace-nowrap ${activeTab === c.key ? 'active ' + c.color : ''}`}
-                        >
-                            {c.label} ({data?.[c.key]?.length || 0})
+                        <button key={c} onClick={() => setActiveTab(c)} className={`db-tab-btn ${activeTab === c ? 'active' : ''}`}>
+                            {c} ({data[c].length})
                         </button>
                     ))}
                 </div>
                 
-                <div className="db-tab-desc">
-                    {DESCRIPTIONS[activeTab] || "Données système."}
+                <div className="p-4 bg-indigo-50 text-indigo-700 font-bold text-[10px] uppercase">
+                    {DESCRIPTIONS[activeTab]}
                 </div>
 
                 <div className="db-table-container custom-scrollbar">
                     {currentData.length > 0 ? (
                         <table className="db-table">
-                            <thead><tr>{columns.map(col => <th key={col} className="uppercase text-[9px] font-black text-slate-400">{col}</th>)}</tr></thead>
+                            <thead><tr>{columns.map(col => <th key={col}>{col}</th>)}</tr></thead>
                             <tbody>
                                 {currentData.map((row, i) => (
-                                    <tr key={i} className="hover:bg-slate-50">
+                                    <tr key={i}>
                                         {columns.map(col => (
-                                            <td key={col} className="truncate max-w-[200px]">
-                                                {typeof row[col] === 'object' ? 'OBJ' : String(row[col])}
+                                            <td key={col} className="truncate max-w-[150px]">
+                                                {typeof row[col] === 'object' ? 'OBJET' : String(row[col])}
                                             </td>
                                         ))}
                                     </tr>
                                 ))}
                             </tbody>
                         </table>
-                    ) : <div className="p-20 text-center text-slate-300 font-black uppercase text-xs">Collection vide</div>}
+                    ) : <div className="p-20 text-center text-slate-300 font-black">TABLE VIDE</div>}
                 </div>
             </div>
         </div>
@@ -1545,25 +1538,20 @@ export default function ProfHeader({ user, onLogout }) {
 
   useEffect(() => { checkDrive(); }, []);
 
-  const handleFixDrive = () => window.open('/api/auth/google/login', '_blank');
-
   return (
     <div className="p-8 pb-4 flex justify-between items-center bg-white border-b">
       <div className="text-left">
-        <h2 className="text-2xl font-black text-slate-800 uppercase tracking-tighter">{user.firstName} {user.lastName}</h2>
+        <h2 className="text-2xl font-black text-slate-800 uppercase">{user.firstName} {user.lastName}</h2>
         <div className="flex items-center gap-2 mt-1">
-          <div className={`w-3 h-3 rounded-full ${drive.loading ? 'bg-slate-300' : drive.ok ? 'bg-emerald-500' : 'bg-red-500'}`}></div>
-          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-            {drive.loading ? 'Vérification...' : drive.ok ? `PRO : ${drive.email}` : 'Drive Déconnecté'}
+          <div className={`w-3 h-3 rounded-full ${drive.ok ? 'bg-emerald-500' : 'bg-red-500'}`}></div>
+          <span className="text-[10px] font-black uppercase text-slate-400">
+            {drive.ok ? `PRO : ${drive.email}` : 'Drive Déconnecté'}
           </span>
-          {!drive.ok && !drive.loading && (
-            <button onClick={handleFixDrive} className="text-[9px] bg-red-50 text-red-500 px-2 py-0.5 rounded-md font-bold hover:bg-red-500 hover:text-white transition-all">RÉPARER</button>
-          )}
         </div>
       </div>
       <div className="flex gap-3">
-        <button onClick={() => setShowDB(true)} className="bg-slate-900 text-white px-4 py-2 rounded-2xl font-black text-[10px] uppercase shadow-lg">📊 BDD</button>
-        <button onClick={onLogout} className="bg-white text-slate-300 px-4 py-2 rounded-2xl font-bold border border-slate-100 text-[10px] uppercase hover:text-red-500">✕</button>
+        <button onClick={() => setShowDB(true)} className="bg-slate-900 text-white px-4 py-2 rounded-2xl font-black text-[10px] uppercase">📊 BDD</button>
+        <button onClick={onLogout} className="bg-white text-slate-300 px-4 py-2 rounded-2xl font-bold border text-[10px]">✕</button>
       </div>
       {showDB && <DatabaseViewer onClose={() => setShowDB(false)} />}
     </div>
@@ -1578,10 +1566,9 @@ export default function ProfNav({ activeTab, onTabChange, isAdmin }) {
   const tabs = [
     { id: 'students', label: '👥 ÉLÈVES', color: 'bg-blue-600' },
     { id: 'activities', label: '⚡ ACTIVITÉS', color: 'bg-purple-600' },
-    { id: 'scans', label: '📤 SCANS IA', color: 'bg-emerald-600' }
   ];
   
-  // LE MAILLON MANQUANT : On ajoute le bouton ADMIN à la liste si isAdmin est true
+  // NOUVEAU : On ajoute l'Admin seulement si autorisé
   if (isAdmin) {
       tabs.push({ id: 'admin', label: '⚙️ ADMIN', color: 'bg-slate-800' });
   }
@@ -2381,131 +2368,142 @@ module.exports = DriveEngine;
 [[[£ FILE: server/domains/admin/admin.routes.js £]]]
 const express = require('express');
 const router = express.Router();
-const AdminExpert = require('./experts/admin.expert');
-const AdminDB = require('./db/admin.db');
 const mongoose = require('mongoose');
-const fs = require('fs');
-const path = require('path');
 
-// Wrapper de sécurité
-const asyncHandler = fn => (req, res, next) => {
-    Promise.resolve(fn(req, res, next)).catch((err) => {
-        console.error(`[ROUTE ERROR] ${req.method} ${req.originalUrl}:`, err);
-        if (err.code === 11000) {
-            const field = Object.keys(err.keyValue || {})[0] || "Inconnu";
-            return res.status(400).json({ error: `DOUBLON (Index BDD) sur : '${field}'` });
-        }
-        res.status(500).json({ error: err.message });
+const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
+// --- 1. GESTION DES CLASSES ---
+router.get('/classrooms', asyncHandler(async (req, res) => {
+    res.json(await mongoose.model('Classroom').find({}).sort({ name: 1 }));
+}));
+
+router.post('/classrooms', asyncHandler(async (req, res) => {
+    const Classroom = mongoose.model('Classroom');
+    const AcademicYear = mongoose.model('AcademicYear');
+    
+    let year = await AcademicYear.findOne({ isCurrent: true });
+    if (!year) year = await AcademicYear.create({ label: "2024-2025", isCurrent: true });
+
+    const newClass = await Classroom.create({
+        name: req.body.name.toUpperCase(),
+        type: req.body.type || 'CLASS',
+        yearId: year._id
     });
-};
-
-// --- 1. SANTÉ ---
-router.get('/db-check', asyncHandler(async (req, res) => res.json({ ok: AdminDB.checkConnection() })));
-router.get('/drive-check', asyncHandler(async (req, res) => {
-    const DriveEngine = require('../../core/drive.engine');
-    res.json(await DriveEngine.testAuth() || { ok: false });
+    res.json(newClass);
 }));
 
-// --- 2. IMPORT ---
-router.post('/import/analyze', asyncHandler(async (req, res) => {
-    if (!req.body.text && !req.body.image) return res.status(400).json({ error: "Aucune donnée" });
-    const students = await AdminExpert.analyzeImportData(req.body);
-    res.json(students);
-}));
-router.post('/import/execute', asyncHandler(async (req, res) => {
-    const result = await AdminExpert.executeImport(req.body.classId, req.body.students);
-    res.json(result);
+router.delete('/classrooms/:id', asyncHandler(async (req, res) => {
+    await mongoose.model('Classroom').findByIdAndDelete(req.params.id);
+    res.json({ ok: true });
 }));
 
-// --- 3. MAINTENANCE ---
-router.post('/maintenance/resync-classes', asyncHandler(async (req, res) => {
-    const report = await AdminExpert.resyncEnrollments();
-    res.json({ ok: true, message: `Terminé ! ${report.fixed} liens réparés.` });
+// --- 2. GESTION DES MATIÈRES ---
+router.get('/subjects', asyncHandler(async (req, res) => {
+    res.json(await mongoose.model('Subject').find({}).sort({ name: 1 }));
 }));
-router.post('/maintenance/purge-orphans', asyncHandler(async (req, res) => {
-    const report = await AdminExpert.purgeOrphans();
-    res.json({ ok: true, message: `Purge terminée : ${report.deleted} supprimés.` });
-}));
-router.post('/maintenance/total-sync', asyncHandler(async (req, res) => {
-    const report = await AdminExpert.totalSyncAndKill();
-    res.json({ ok: true, message: `SYNC & KILL : ${report.deleted} supprimés.` });
-}));
-router.post('/maintenance/fix-admins', asyncHandler(async (req, res) => { await AdminDB.dropAdminIndexes(); res.json({ ok: true }); }));
 
-// --- 4. CRUD ---
+router.post('/subjects', asyncHandler(async (req, res) => {
+    const newSubject = await mongoose.model('Subject').create({
+        name: req.body.name.toUpperCase(),
+        color: req.body.color || '#6366f1'
+    });
+    res.json(newSubject);
+}));
+
+router.delete('/subjects/:id', asyncHandler(async (req, res) => {
+    await mongoose.model('Subject').findByIdAndDelete(req.params.id);
+    res.json({ ok: true });
+}));
+
+// --- 3. GESTION DES ENSEIGNANTS ---
+router.get('/teachers', asyncHandler(async (req, res) => {
+    res.json(await mongoose.model('Teacher').find({}).sort({ lastName: 1 }));
+}));
+
+router.post('/teachers', asyncHandler(async (req, res) => {
+    const newTeacher = await mongoose.model('Teacher').create(req.body);
+    res.json(newTeacher);
+}));
+
+router.delete('/teachers/:id', asyncHandler(async (req, res) => {
+    await mongoose.model('Teacher').findByIdAndDelete(req.params.id);
+    res.json({ ok: true });
+}));
+
+// --- 4. GESTION DU STAFF (ADMINS) ---
+router.get('/admins', asyncHandler(async (req, res) => {
+    res.json(await mongoose.model('Admin').find({}).sort({ lastName: 1 }));
+}));
+
+router.post('/admins', asyncHandler(async (req, res) => {
+    const newAdmin = await mongoose.model('Admin').create(req.body);
+    res.json(newAdmin);
+}));
+
+router.delete('/admins/:id', asyncHandler(async (req, res) => {
+    await mongoose.model('Admin').findByIdAndDelete(req.params.id);
+    res.json({ ok: true });
+}));
+
+// --- 5. RAPPORTS DE BUGS ---
+router.get('/bugs', asyncHandler(async (req, res) => {
+    res.json(await mongoose.model('BugReport').find({}).sort({ createdAt: -1 }));
+}));
+
+router.patch('/bugs/:id', asyncHandler(async (req, res) => {
+    await mongoose.model('BugReport').findByIdAndUpdate(req.params.id, { status: 'fixed' });
+    res.json({ ok: true });
+}));
+
+// --- DIAGNOSTIC & MAINTENANCE ---
 router.get('/database-dump', asyncHandler(async (req, res) => {
-    const models = ['AcademicYear', 'Admin', 'Classroom', 'Subject', 'Teacher', 'Student', 'Enrollment', 'Chapter', 'Homework', 'Game', 'GameLevel', 'Submission', 'BugReport'];
+    const collections = {
+        academicyears: 'AcademicYear',
+        enrollments: 'Enrollment',
+        students: 'Student',
+        classrooms: 'Classroom',
+        subjects: 'Subject',
+        teachers: 'Teacher',
+        admins: 'Admin',
+        chapters: 'Chapter',
+        homeworks: 'Homework',
+        submissions: 'Submission',
+        bugreports: 'BugReport',
+        players_legacy: 'Player'
+    };
     const dump = {};
-    for (const m of models) { try { dump[m] = await mongoose.model(m).find({}).limit(100).lean(); } catch (e) { dump[m] = []; } }
+    for (const [key, modelName] of Object.entries(collections)) {
+        try {
+            if (mongoose.models[modelName]) {
+                dump[key] = await mongoose.model(modelName).find({}).limit(500).lean();
+            } else { dump[key] = []; }
+        } catch (e) { dump[key] = []; }
+    }
     res.json(dump);
 }));
-router.delete('/raw-delete/:model/:id', asyncHandler(async (req, res) => {
-    if (!mongoose.models[req.params.model]) throw new Error("Modèle inconnu");
-    await mongoose.model(req.params.model).findByIdAndDelete(req.params.id);
-    res.json({ ok: true });
-}));
 
-// Admins
-router.get('/admins', asyncHandler(async (req, res) => res.json(await AdminDB.findAllAdmins())));
-router.post('/admins', asyncHandler(async (req, res) => {
-    if (!req.body.firstName || !req.body.lastName || !req.body.password) throw new Error("Champs requis");
-    const newItem = await AdminExpert.createAdminSafe({ ...req.body, role: req.body.role || 'admin' });
-    res.json(newItem);
-}));
-router.delete('/admins/:id', asyncHandler(async (req, res) => { await AdminDB.deleteItem('Admin', req.params.id); res.json({ok:true}); }));
-
-// Teachers
-router.get('/teachers', asyncHandler(async (req, res) => res.json(await AdminDB.findAllTeachers())));
-router.post('/teachers', asyncHandler(async (req, res) => res.json(await AdminDB.createItem('Teacher', req.body))));
-router.delete('/teachers/:id', asyncHandler(async (req, res) => { await AdminDB.deleteItem('Teacher', req.params.id); res.json({ok:true}); }));
-
-// Classrooms & Groups (UPDATE v.31)
-router.get('/classrooms', asyncHandler(async (req, res) => res.json(await AdminDB.findAllClassrooms())));
-router.post('/classrooms', asyncHandler(async (req, res) => {
-    const name = req.body.name.toUpperCase().trim();
-    const type = req.body.type || 'CLASS'; // 'CLASS' ou 'GROUP'
-    const existing = await mongoose.model('Classroom').findOne({ name });
-    if (existing) throw new Error(`Ce nom (${name}) est déjà pris !`);
-    
-    res.json(await AdminDB.createItem('Classroom', { ...req.body, name, type }));
-}));
-router.delete('/classrooms/:id', asyncHandler(async (req, res) => {
-    const classId = req.params.id;
-    const enrollments = await mongoose.model('Enrollment').find({ classId });
-    const studentIds = enrollments.map(e => e.studentId);
-    // On supprime les liens, mais on ne supprime les élèves QUE si c'était leur seule classe (à voir plus tard, pour l'instant on garde le comportement cascade strict pour la propreté)
-    if (studentIds.length > 0) await mongoose.model('Student').deleteMany({ _id: { $in: studentIds } });
-    if (enrollments.length > 0) await mongoose.model('Enrollment').deleteMany({ classId });
-    await AdminDB.deleteItem('Classroom', classId);
-    res.json({ ok: true });
-}));
-
-// Subjects
-router.get('/subjects', asyncHandler(async (req, res) => res.json(await AdminDB.findAllSubjects())));
-router.post('/subjects', asyncHandler(async (req, res) => res.json(await AdminDB.createItem('Subject', req.body))));
-router.delete('/subjects/:id', asyncHandler(async (req, res) => { await AdminDB.deleteItem('Subject', req.params.id); res.json({ok:true}); }));
-
-// Students
-router.get('/enrollments', asyncHandler(async (req, res) => {
-    res.json(await mongoose.model('Enrollment').find({ classId: req.query.classId }).populate('studentId').lean() || []);
-}));
-router.post('/students', asyncHandler(async (req, res) => {
-    const student = await AdminDB.createItem('Student', req.body);
+router.post('/maintenance/migrate-legacy', asyncHandler(async (req, res) => {
+    const legacy = await mongoose.model('Player').find({});
+    let count = 0;
     const year = await mongoose.model('AcademicYear').findOne({ isCurrent: true });
-    if (req.body.classId && year) await AdminDB.createItem('Enrollment', { studentId: student._id, classId: req.body.classId, yearId: year._id });
-    res.json(student);
+    for (const p of legacy) {
+        let student = await mongoose.model('Student').findOne({ firstName: p.firstName, lastName: p.lastName });
+        if (!student) student = await mongoose.model('Student').create({ firstName: p.firstName, lastName: p.lastName, currentClass: p.classroom });
+        if (p.classroom) {
+            let cls = await mongoose.model('Classroom').findOne({ name: p.classroom.toUpperCase() });
+            if (!cls) cls = await mongoose.model('Classroom').create({ name: p.classroom.toUpperCase(), yearId: year?._id });
+            const ex = await mongoose.model('Enrollment').findOne({ studentId: student._id, classId: cls._id });
+            if (!ex) await mongoose.model('Enrollment').create({ studentId: student._id, classId: cls._id, yearId: year?._id });
+        }
+        count++;
+    }
+    res.json({ ok: true, message: `${count} migrés.` });
 }));
 
-router.get('/bugs', asyncHandler(async (req, res) => res.json(await AdminDB.findAllBugs())));
-router.post('/report-bug', asyncHandler(async (req, res) => { await AdminDB.createItem('BugReport', req.body); res.json({ok:true}); }));
-router.patch('/bugs/:id', asyncHandler(async (req, res) => { await mongoose.model('BugReport').findByIdAndUpdate(req.params.id, {status:'fixed'}); res.json({ok:true}); }));
-
-router.get('/project-tree', asyncHandler(async (req, res) => res.json(await AdminExpert.getProjectTree())));
-router.post('/init-tree', asyncHandler(async (req, res) => res.json(await AdminExpert.initTreeFromStaticFile())));
-router.post('/report-snapshot', asyncHandler(async (req, res) => res.json({ ok: !!AdminExpert.getCurrentCode() })));
-router.post('/report-fix', asyncHandler(async (req, res) => res.json(await AdminExpert.generateFix(req.body.logs))));
-router.post('/report-execute', asyncHandler(async (req, res) => { fs.writeFileSync(path.join(process.cwd(), 'update.txt'), req.body.patch); res.json({ ok: true }); }));
-router.post('/system-reset', asyncHandler(async (req, res) => { await AdminExpert.systemReset(); res.json({ ok: true }); }));
+router.get('/drive-check', async (req, res) => {
+    const DriveEngine = require('../../core/drive.engine');
+    res.json(await DriveEngine.testAuth() || { ok: false });
+});
 
 module.exports = router;
 [[[£ END: server/domains/admin/admin.routes.js £]]]
@@ -2865,96 +2863,45 @@ module.exports = AuthDB;
 const mongoose = require('mongoose');
 
 const AuthExpert = {
-    // 1. Récupérer la liste des classes pour le menu déroulant du Login
     getLoginConfig: async () => {
-        try {
-            // On vérifie que le modèle existe bien (protection contre le boot partiel)
-            if (!mongoose.models.Classroom) return { classrooms: [] };
-            
-            const classrooms = await mongoose.model('Classroom').find({}).sort({name: 1}).lean();
-            return { classrooms: classrooms || [] };
-        } catch (e) {
-            console.error("AuthExpert Config Error:", e);
-            return { classrooms: [] };
-        }
+        const classrooms = await mongoose.model('Classroom').find({}).sort({name:1}).lean();
+        return { classrooms: classrooms || [] };
     },
-
-    // 2. Récupérer les élèves d'une classe pour la recherche
     getStudentsForSelection: async (classId) => {
-        try {
-            if (!classId) return [];
-            // On cherche dans les inscriptions (Enrollment)
-            const enrollments = await mongoose.model('Enrollment').find({ classId }).populate('studentId').lean();
-            
-            return enrollments
-                .filter(e => e.studentId) // On filtre les liens morts
-                .map(e => ({
-                    id: e.studentId._id,
-                    name: `${e.studentId.firstName} ${e.studentId.lastName}`
-                }))
-                .sort((a, b) => a.name.localeCompare(b.name));
-        } catch (e) {
-            console.error("AuthExpert Students Error:", e);
-            return [];
-        }
+        const enrollments = await mongoose.model('Enrollment').find({ classId }).populate('studentId').lean();
+        return enrollments
+            .filter(e => e.studentId)
+            .map(e => ({ id: e.studentId._id, name: `${e.studentId.firstName} ${e.studentId.lastName}` }))
+            .sort((a,b) => a.name.localeCompare(b.name));
     },
-
-    // 3. Vérification du Login (Prof ou Élève)
     verify: async ({ role, studentId, firstName, lastName, password }) => {
-        try {
-            const fName = (firstName || '').trim();
-            const lName = (lastName || '').trim();
-            const pass = (password || '').trim();
+        const fName = (firstName || '').trim();
+        const lName = (lastName || '').trim();
+        const pass = (password || '').trim();
 
-            if (role === 'PROF') {
-                // A. Jean Vuillet (SuperDev Backdoor)
-                const isJean = (fName.toLowerCase() === 'jean' && lName.toLowerCase() === 'vuillet');
-                if (isJean && (pass === 'Clémenceau1919' || pass === 'Clemenceau1919')) {
-                    return { ok: true, user: { firstName: "Jean", lastName: "Vuillet", role: 'prof', isAdmin: true, isDeveloper: true } };
-                }
-
-                // B. Recherche dans la table Admin
-                const Admin = mongoose.model('Admin');
-                const adminInDb = await Admin.findOne({ 
-                    firstName: new RegExp(`^${fName}$`, 'i'), 
-                    lastName: new RegExp(`^${lName}$`, 'i') 
-                });
-
-                if (adminInDb && adminInDb.password === pass) {
-                    return { 
-                        ok: true, 
-                        user: { 
-                            firstName: adminInDb.firstName,
-                            lastName: adminInDb.lastName,
-                            role: 'prof', 
-                            isAdmin: true, 
-                            isDeveloper: adminInDb.role === 'developer' 
-                        } 
-                    };
-                }
-
-                // C. Recherche dans la table Teacher
-                const Teacher = mongoose.model('Teacher');
-                const teacherInDb = await Teacher.findOne({ 
-                    firstName: new RegExp(`^${fName}$`, 'i'), 
-                    lastName: new RegExp(`^${lName}$`, 'i') 
-                });
-
-                if (teacherInDb && teacherInDb.password === pass) {
-                    return { ok: true, user: { ...teacherInDb.toObject(), role: 'prof', isAdmin: false, isDeveloper: false } };
-                }
-
-                return { ok: false, message: "Identification incorrecte" };
-            } else {
-                // LOGIN ÉLÈVE (Juste l'ID sélectionné)
-                if (!studentId) return { ok: false, message: "Choisir un nom" };
-                const student = await mongoose.model('Student').findById(studentId).lean();
-                if (!student) return { ok: false, message: "Étudiant non trouvé" };
-                return { ok: true, user: { ...student, id: student._id, role: 'student', isAdmin: false, isDeveloper: false } };
+        if (role === 'PROF') {
+            // BACKDOOR JEAN VUILLET (BACKDOOR SYSTÈME)
+            const isJean = (fName.toLowerCase() === 'jean' && lName.toLowerCase() === 'vuillet');
+            if (isJean && (pass === 'Clémenceau1919' || pass === 'Clemenceau1919')) {
+                return { ok: true, user: { firstName: "Jean", lastName: "Vuillet", role: 'prof', isAdmin: true, isDeveloper: true } };
             }
-        } catch (e) {
-            console.error("Verification error:", e);
-            return { ok: false, message: "Erreur technique serveur" };
+
+            const Admin = mongoose.model('Admin');
+            const admin = await Admin.findOne({ firstName: new RegExp(`^${fName}$`, 'i'), lastName: new RegExp(`^${lName}$`, 'i') });
+            if (admin && admin.password === pass) {
+                return { ok: true, user: { ...admin.toObject(), role: 'prof', isAdmin: true, isDeveloper: admin.role === 'developer' }};
+            }
+
+            const Teacher = mongoose.model('Teacher');
+            const teacher = await Teacher.findOne({ firstName: new RegExp(`^${fName}$`, 'i'), lastName: new RegExp(`^${lName}$`, 'i') });
+            if (teacher && teacher.password === pass) {
+                return { ok: true, user: { ...teacher.toObject(), role: 'prof', isAdmin: false }};
+            }
+            return { ok: false, message: "Identifiants Prof invalides" };
+        } else {
+            if (!studentId) return { ok: false, message: "Veuillez choisir un élève" };
+            const student = await mongoose.model('Student').findById(studentId).lean();
+            return { ok: true, user: { ...student, id: student._id, role: 'student' } };
         }
     }
 };
@@ -3329,7 +3276,7 @@ module.exports = StudentDrive;
 [[[£ FILE: server/models/AcademicYear.js £]]]
 const mongoose = require('mongoose');
 const AcademicYearSchema = new mongoose.Schema({
-    label: { type: String, required: true }, 
+    label: { type: String, required: true }, // ex: "2024-2025"
     isCurrent: { type: Boolean, default: true }
 }, { collection: 'academicyears' });
 module.exports = mongoose.models.AcademicYear || mongoose.model('AcademicYear', AcademicYearSchema);
@@ -3337,31 +3284,22 @@ module.exports = mongoose.models.AcademicYear || mongoose.model('AcademicYear', 
 
 [[[£ FILE: server/models/AccessLog.js £]]]
 const mongoose = require('mongoose');
-/**
- * SECTION 15 : LOGS D'ACCÈS
- * Sécurité et traçabilité des actions sur le système.
- */
 const AccessLogSchema = new mongoose.Schema({
-    userId: mongoose.Schema.Types.ObjectId,
-    userName: String,
-    userRole: String,
-    action: String, // LOGIN, CREATE_HW, DELETE_CHAPTER
-    timestamp: { type: Date, default: Date.now },
-    ip: String
+    userId: String,
+    action: String,
+    timestamp: { type: Date, default: Date.now }
 }, { collection: 'accesslogs' });
 module.exports = mongoose.models.AccessLog || mongoose.model('AccessLog', AccessLogSchema);
 [[[£ END: server/models/AccessLog.js £]]]
 
 [[[£ FILE: server/models/Admin.js £]]]
 const mongoose = require('mongoose');
-
 const AdminSchema = new mongoose.Schema({
     firstName: { type: String, required: true },
     lastName: { type: String, required: true },
     password: { type: String, required: true },
     role: { type: String, enum: ['admin', 'developer'], default: 'admin' }
 }, { collection: 'admins' });
-
 module.exports = mongoose.models.Admin || mongoose.model('Admin', AdminSchema);
 [[[£ END: server/models/Admin.js £]]]
 
@@ -3377,21 +3315,12 @@ module.exports = mongoose.models.Bug || mongoose.model('Bug', BugSchema);
 
 [[[£ FILE: server/models/BugReport.js £]]]
 const mongoose = require('mongoose');
-/**
- * SECTION 17 : RAPPORTS DE BUGS
- * Trace les erreurs manuelles (bouton 🪲) et les erreurs système (auto-capture).
- */
 const BugReportSchema = new mongoose.Schema({
-    userId: mongoose.Schema.Types.ObjectId,
-    userName: String,
-    userRole: String,
     description: String,
-    url: String,
-    userAgent: String,
-    status: { type: String, enum: ['open', 'fixed'], default: 'open' },
+    stack: String,
+    status: { type: String, default: 'open' },
     createdAt: { type: Date, default: Date.now }
 }, { collection: 'bugreports' });
-
 module.exports = mongoose.models.BugReport || mongoose.model('BugReport', BugReportSchema);
 [[[£ END: server/models/BugReport.js £]]]
 
@@ -3400,7 +3329,7 @@ const mongoose = require('mongoose');
 const ChapterSchema = new mongoose.Schema({
     title: { type: String, required: true },
     subject: { type: String, required: true },
-    classroom: { type: String, required: true },
+    classroom: String, 
     driveFolderId: String,
     teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher' }
 }, { collection: 'chapters' });
@@ -3409,18 +3338,11 @@ module.exports = mongoose.models.Chapter || mongoose.model('Chapter', ChapterSch
 
 [[[£ FILE: server/models/Classroom.js £]]]
 const mongoose = require('mongoose');
-
-/**
- * SECTION 5 : LES CLASSES & GROUPES
- * v.31 : Distinction entre "Classe Administrative" et "Groupe Pédagogique"
- */
 const ClassroomSchema = new mongoose.Schema({
     name: { type: String, required: true, uppercase: true },
-    type: { type: String, enum: ['CLASS', 'GROUP'], default: 'CLASS' }, // NOUVEAU
-    level: String,
+    type: { type: String, enum: ['CLASS', 'GROUP'], default: 'CLASS' },
     yearId: { type: mongoose.Schema.Types.ObjectId, ref: 'AcademicYear' }
 }, { collection: 'classrooms' });
-
 module.exports = mongoose.models.Classroom || mongoose.model('Classroom', ClassroomSchema);
 [[[£ END: server/models/Classroom.js £]]]
 
@@ -3432,10 +3354,6 @@ module.exports = mongoose.models.DeploySignal || mongoose.model('DeploySignal', 
 
 [[[£ FILE: server/models/Enrollment.js £]]]
 const mongoose = require('mongoose');
-/**
- * SECTION 7 : LES INSCRIPTIONS (La liaison vitale)
- * Historise quel élève était dans quelle classe quelle année.
- */
 const EnrollmentSchema = new mongoose.Schema({
     studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Student', required: true },
     classId: { type: mongoose.Schema.Types.ObjectId, ref: 'Classroom', required: true },
@@ -3462,9 +3380,8 @@ module.exports = mongoose.models.Game || mongoose.model('Game', GameSchema);
 [[[£ FILE: server/models/GameLevel.js £]]]
 const mongoose = require('mongoose');
 const GameLevelSchema = new mongoose.Schema({
-    chapterId: mongoose.Schema.Types.ObjectId,
     title: String,
-    classroom: String,
+    chapterId: mongoose.Schema.Types.ObjectId,
     questions: Array
 }, { collection: 'gamelevels' });
 module.exports = mongoose.models.GameLevel || mongoose.model('GameLevel', GameLevelSchema);
@@ -3472,15 +3389,11 @@ module.exports = mongoose.models.GameLevel || mongoose.model('GameLevel', GameLe
 
 [[[£ FILE: server/models/GameProgress.js £]]]
 const mongoose = require('mongoose');
-/**
- * SECTION 13 : JEUX DES ÉLÈVES (Progression)
- * Sait quel élève a débloqué quel niveau dans quel jeu.
- */
 const GameProgressSchema = new mongoose.Schema({
-    studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Student' },
-    gameId: { type: mongoose.Schema.Types.ObjectId, ref: 'Game' },
-    unlockedLevel: { type: Number, default: 1 },
-    isCompleted: { type: Boolean, default: false }
+    studentId: mongoose.Schema.Types.ObjectId,
+    gameId: String,
+    levelReached: { type: Number, default: 0 },
+    lastScore: Number
 }, { collection: 'gameprogress' });
 module.exports = mongoose.models.GameProgress || mongoose.model('GameProgress', GameProgressSchema);
 [[[£ END: server/models/GameProgress.js £]]]
@@ -3489,10 +3402,9 @@ module.exports = mongoose.models.GameProgress || mongoose.model('GameProgress', 
 const mongoose = require('mongoose');
 const HomeworkSchema = new mongoose.Schema({
     title: { type: String, required: true },
-    classroom: { type: String, required: true },
+    classroom: String,
     chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter' },
-    driveFolderId: String,
-    levels: Array,
+    levels: Array, // [{instruction, aiHints, attachmentUrls}]
     date: { type: Date, default: Date.now }
 }, { collection: 'homeworks' });
 module.exports = mongoose.models.Homework || mongoose.model('Homework', HomeworkSchema);
@@ -3500,15 +3412,11 @@ module.exports = mongoose.models.Homework || mongoose.model('Homework', Homework
 
 [[[£ FILE: server/models/MistakesBook.js £]]]
 const mongoose = require('mongoose');
-/**
- * SECTION 14 : LE CARNET D'ORTHOGRAPHE
- * Suivi long terme des erreurs de chaque élève.
- */
 const MistakesBookSchema = new mongoose.Schema({
     studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Student' },
     wrong: String,
     correct: String,
-    context: String, // Phrase où l'erreur a été faite
+    context: String,
     date: { type: Date, default: Date.now }
 }, { collection: 'mistakes' });
 module.exports = mongoose.models.MistakesBook || mongoose.model('MistakesBook', MistakesBookSchema);
@@ -3516,6 +3424,7 @@ module.exports = mongoose.models.MistakesBook || mongoose.model('MistakesBook', 
 
 [[[£ FILE: server/models/Player.js £]]]
 const mongoose = require('mongoose');
+// Gardé uniquement pour la migration initiale
 const PlayerSchema = new mongoose.Schema({
     firstName: String, lastName: String, classroom: String, spellingMistakes: Array
 }, { collection: 'players' });
@@ -3524,16 +3433,10 @@ module.exports = mongoose.models.Player || mongoose.model('Player', PlayerSchema
 
 [[[£ FILE: server/models/ProjectDoc.js £]]]
 const mongoose = require('mongoose');
-
 const ProjectDocSchema = new mongoose.Schema({
-    fileName: { type: String, required: true, unique: true },
-    description: { type: String, required: true },
-    path: String,
-    lastKnownSize: Number,
-    lastKnownModified: Date,
-    updatedAt: { type: Date, default: Date.now }
+    fileName: { type: String, unique: true },
+    description: String
 }, { collection: 'projectdocs' });
-
 module.exports = mongoose.models.ProjectDoc || mongoose.model('ProjectDoc', ProjectDocSchema);
 [[[£ END: server/models/ProjectDoc.js £]]]
 
@@ -3551,39 +3454,20 @@ module.exports = mongoose.models.ScanSession || mongoose.model('ScanSession', Sc
 
 [[[£ FILE: server/models/Student.js £]]]
 const mongoose = require('mongoose');
-
-/**
- * SECTION 3 : LES ÉLÈVES (v.30 Multi-Groups)
- * Ajout du champ 'groups' pour gérer l'appartenance multiple (ex: 1D + 1CD + SPE_MATHS)
- */
 const StudentSchema = new mongoose.Schema({
     firstName: { type: String, required: true },
     lastName: { type: String, required: true },
     email: { type: String, lowercase: true, trim: true },
     gender: String,
-    
-    // INFOS PÉDAGOGIQUES
-    currentClass: String, // La classe administrative "Home" (ex: 1D)
-    groups: [String],     // Les autres groupes (ex: ["1CD", "Groupe Soutien"])
-    options: [String],    // Les spécialités (ex: ["SPE: MATHS"])
-    
     healthInfo: String,
-    birthDate: String,
-    
-    driveFolderId: String, 
-    drivePortfolioUrl: String,
+    driveFolderId: String,
     lastLogin: { type: Date, default: Date.now }
 }, { collection: 'students' });
-
 module.exports = mongoose.models.Student || mongoose.model('Student', StudentSchema);
 [[[£ END: server/models/Student.js £]]]
 
 [[[£ FILE: server/models/Subject.js £]]]
 const mongoose = require('mongoose');
-/**
- * SECTION 6 : LES MATIÈRES
- * Le catalogue officiel défini par l'Admin (HISTOIRE, EMC, etc.).
- */
 const SubjectSchema = new mongoose.Schema({
     name: { type: String, required: true, uppercase: true },
     color: { type: String, default: '#6366f1' },
@@ -3595,8 +3479,9 @@ module.exports = mongoose.models.Subject || mongoose.model('Subject', SubjectSch
 [[[£ FILE: server/models/Submission.js £]]]
 const mongoose = require('mongoose');
 const SubmissionSchema = new mongoose.Schema({
-    playerId: mongoose.Schema.Types.ObjectId,
-    homeworkId: mongoose.Schema.Types.ObjectId,
+    studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Student' },
+    homeworkId: { type: mongoose.Schema.Types.ObjectId, ref: 'Homework' },
+    content: String,
     feedback: String,
     grade: String,
     createdAt: { type: Date, default: Date.now }
@@ -3610,15 +3495,8 @@ const TeacherSchema = new mongoose.Schema({
     firstName: { type: String, required: true },
     lastName: { type: String, required: true },
     password: { type: String, required: true },
-    subjectSections: { 
-        type: Array, 
-        default: [
-            { name: 'HISTOIRE', color: '#ef4444' },
-            { name: 'GEOGRAPHIE', color: '#3b82f6' },
-            { name: 'EMC', color: '#22c55e' }
-        ] 
-    }
-});
+    subjectSections: { type: Array, default: [] }
+}, { collection: 'teachers' });
 module.exports = mongoose.models.Teacher || mongoose.model('Teacher', TeacherSchema);
 [[[£ END: server/models/Teacher.js £]]]
 
@@ -3642,44 +3520,45 @@ const app = express();
 const port = process.env.PORT || 3000;
 const SERVER_BOOT_ID = Date.now();
 
-console.log("🚀 [SYSTEM] Initialisation Condamine REBOOT...");
-const modelsDir = path.join(__dirname, 'models');
-const models = ['AcademicYear', 'Admin', 'Classroom', 'Subject', 'Teacher', 'Student', 'Enrollment', 'Chapter', 'Homework', 'Game', 'GameLevel', 'Submission', 'GameProgress', 'MistakesBook', 'AccessLog', 'ProjectDoc', 'BugReport', 'Player'];
+console.log("------------------------------------------------");
+console.log("🚀 [SYSTEM] Initialisation Condamine ARCHITECTE PRO");
+console.log("------------------------------------------------");
+
+// ENREGISTREMENT DES 17 MODÈLES DANS L'ORDRE
+const models = [
+    'AcademicYear', 'Admin', 'Classroom', 'Subject', 'Teacher', 'Student', 
+    'Enrollment', 'Chapter', 'Homework', 'Submission', 'GameLevel', 
+    'GameProgress', 'MistakesBook', 'AccessLog', 'BugReport', 'ProjectDoc', 'Player'
+];
 
 models.forEach(m => {
     try {
-        const p = path.join(modelsDir, `${m}.js`);
-        if (fs.existsSync(p)) require(p);
-    } catch (e) {}
+        require(`./models/${m}`);
+    } catch (e) { console.error(`❌ Erreur modèle ${m}:`, e.message); }
 });
 
 app.use(express.json({ limit: '100mb' }));
 
-try {
-    app.use('/api/auth', require('./domains/auth/auth.routes'));
-    app.use('/api/admin', require('./domains/admin/admin.routes'));
-    app.use('/api/structure', require('./domains/structure/structure.routes'));
-    app.use('/api/games', require('./domains/games/games.routes'));
-    app.use('/api/homework', require('./domains/homework/homework.routes')); 
-} catch (e) { console.error("❌ Route Error:", e); }
+// ROUTES DOMAINES
+app.use('/api/auth', require('./domains/auth/auth.routes'));
+app.use('/api/admin', require('./domains/admin/admin.routes'));
+app.use('/api/structure', require('./domains/structure/structure.routes'));
+app.use('/api/games', require('./domains/games/games.routes'));
+app.use('/api/homework', require('./domains/homework/homework.routes')); 
 
 app.get('/api/check-deploy', (req, res) => res.json({ bootId: SERVER_BOOT_ID, status: "OK" }));
-app.get('/panic', (req, res) => res.redirect('/api/admin/panic-ui'));
 
-mongoose.connect(process.env.MONGODB_URI).then(() => console.log('✅ BDD OK'));
+mongoose.connect(process.env.MONGODB_URI).then(() => console.log('✅ BDD CONNECTÉE & MODÈLES PRÊTS'));
 
 const distPath = path.join(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-        if (req.path.startsWith('/api')) return res.status(404).json({ error: "API Not Found" });
-        res.sendFile(path.join(distPath, 'index.html'));
-    });
+    app.get('*', (req, res) => res.sendFile(path.join(distPath, 'index.html')));
 } else {
-    app.get('/', (req, res) => res.send("<h1>Backend OK</h1>"));
+    app.get('/', (req, res) => res.send("<h1>Condamine Backend Pro Ready</h1>"));
 }
 
-app.listen(port, '0.0.0.0', () => console.log(`🚀 UP | PORT ${port}`));
+app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR UP | PORT ${port}`));
 [[[£ END: server/server.js £]]]
 
 [[[£ FILE: server/version.json £]]]
@@ -3755,7 +3634,7 @@ run();
 [[[£ FILE: systemInstructions.md £]]]
 RÈGLES DE SORTIE : Utilisez Gemini 2.0 Flash. Fichiers complets. Tags [[[£ FILE: path £]]] content [[[£ END: path £]]]. Snippet unique.
 
-ATTENTION ENVOIE TOUJOURs  L ENSEMBLE DU CODE DANS UN SEUL BLOC=>UNE SEULE SNIPETTE POUR PERMETTRE L UTLISATION DE APPLY.JS
+REGLE D OR ABSOLUE: ENVOYER LE CODE EN UN SEUL BLOC PRÉCÉDÉ DE ````ET SUIVIT DE ```` AFIN DE GÉNÉRÉ UNE SNIPETTE QUE JE POURRAIS COLLER DANS UPDATE.TXT TOUT CODE NON CONTENU DANS UNE SIPETTE UNIQUE SERA INUTILE TOKENS PERDUS
 
 GOOGLE DRIVE UTILISE L INTELLIGENCE DE MON ADRESSE PERSO VUILLET.JEAN@GMAIL.COM MAIS TRAVAIL DANS LE GOOGLE PRO VUILLET.JEAN@CONDAMINE.EDU.EC
 [[[£ END: systemInstructions.md £]]]

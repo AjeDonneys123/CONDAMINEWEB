@@ -5,61 +5,100 @@ export default function AdminDashboard({ user, onRefresh }) {
     const [view, setView] = useState('classes');
     const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(false);
+    
+    // Pour le dropdown des classes
+    const [allClasses, setAllClasses] = useState([]);
 
     // Form states
     const [formClass, setFormClass] = useState({ name: '', type: 'CLASS' });
     const [formSubject, setFormSubject] = useState({ name: '', color: '#6366f1' });
     const [formUser, setFormUser] = useState({ firstName: '', lastName: '', password: '', role: 'admin' });
+    const [formStudent, setFormStudent] = useState({ firstName: '', lastName: '', email: '', classId: '' });
+
+    const getEndpoint = (v) => {
+        if (v === 'classes') return 'classrooms';
+        if (v === 'staff') return 'admins';
+        if (v === 'students') return 'students';
+        return v;
+    };
 
     const loadData = async () => {
         setLoading(true);
         try {
-            const res = await fetch(`/api/admin/${view === 'staff' ? 'admins' : view}`);
+            const endpoint = getEndpoint(view);
+            const res = await fetch(`/api/admin/${endpoint}`);
             if (res.ok) setItems(await res.json());
+            
+            if (view !== 'classes') {
+                const resClasses = await fetch('/api/admin/classrooms');
+                if (resClasses.ok) setAllClasses(await resClasses.json());
+            }
         } catch (e) { console.error(e); }
         setLoading(false);
     };
 
     useEffect(() => { loadData(); }, [view]);
 
+    const safePost = async (url, body) => {
+        try {
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            if (!res.ok) {
+                const err = await res.json();
+                alert("⚠️ " + (err.error || "Erreur inconnue"));
+                return false;
+            }
+            return true;
+        } catch (e) {
+            alert("Erreur réseau");
+            return false;
+        }
+    };
+
     const handleCreateClass = async (e) => {
         e.preventDefault();
-        await fetch('/api/admin/classrooms', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(formClass)
-        });
-        setFormClass({ name: '', type: 'CLASS' });
-        loadData();
-        onRefresh();
+        const success = await safePost('/api/admin/classrooms', formClass);
+        if (success) {
+            setFormClass({ name: '', type: 'CLASS' });
+            loadData();
+            onRefresh();
+        }
     };
 
     const handleCreateSubject = async (e) => {
         e.preventDefault();
-        await fetch('/api/admin/subjects', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(formSubject)
-        });
-        setFormSubject({ name: '', color: '#6366f1' });
-        loadData();
+        const success = await safePost('/api/admin/subjects', formSubject);
+        if (success) {
+            setFormSubject({ name: '', color: '#6366f1' });
+            loadData();
+        }
     };
 
     const handleCreateUser = async (e) => {
         e.preventDefault();
         const endpoint = view === 'teachers' ? 'teachers' : 'admins';
-        await fetch(`/api/admin/${endpoint}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(formUser)
-        });
-        setFormUser({ firstName: '', lastName: '', password: '', role: 'admin' });
-        loadData();
+        const success = await safePost(`/api/admin/${endpoint}`, formUser);
+        if (success) {
+            setFormUser({ firstName: '', lastName: '', password: '', role: 'admin' });
+            loadData();
+        }
+    };
+
+    const handleCreateStudent = async (e) => {
+        e.preventDefault();
+        const success = await safePost('/api/admin/students', formStudent);
+        if (success) {
+            setFormStudent({ firstName: '', lastName: '', email: '', classId: '' });
+            loadData();
+        }
     };
 
     const handleDelete = async (id) => {
         if (!confirm("Supprimer définitivement ?")) return;
-        const endpoint = view === 'staff' ? 'admins' : view;
+        const endpoint = getEndpoint(view);
         await fetch(`/api/admin/${endpoint}/${id}`, { method: 'DELETE' });
         loadData();
         if(view === 'classes') onRefresh();
@@ -76,8 +115,9 @@ export default function AdminDashboard({ user, onRefresh }) {
             <div className="flex gap-2 bg-slate-100 p-1.5 rounded-2xl mb-8 w-fit overflow-x-auto no-scrollbar">
                 <button onClick={() => setView('classes')} className={`admin-tab ${view === 'classes' ? 'active' : ''}`}>🏫 CLASSES</button>
                 <button onClick={() => setView('subjects')} className={`admin-tab ${view === 'subjects' ? 'active' : ''}`}>📚 MATIÈRES</button>
+                <button onClick={() => setView('students')} className={`admin-tab ${view === 'students' ? 'active' : ''}`}>👥 ÉLÈVES</button>
                 <button onClick={() => setView('teachers')} className={`admin-tab ${view === 'teachers' ? 'active' : ''}`}>👨‍🏫 PROFS</button>
-                <button onClick={() => setView('staff')} className={`admin-tab ${view === 'staff' ? 'active' : ''}`}>🛡️ STAFF</button>
+                <button onClick={() => setView('staff')} className={`admin-tab ${view === 'staff' ? 'active' : ''}`}>🛡️ ADMINS</button>
                 <button onClick={() => setView('bugs')} className={`admin-tab ${view === 'bugs' ? 'active' : ''}`}>🪲 BUGS</button>
             </div>
 
@@ -86,7 +126,9 @@ export default function AdminDashboard({ user, onRefresh }) {
                 {view !== 'bugs' && (
                     <div className="lg:col-span-1">
                         <div className="bg-white p-6 rounded-[30px] border shadow-sm sticky top-8">
-                            <h3 className="font-black text-xs uppercase mb-6 text-slate-400">Ajouter {view}</h3>
+                            <h3 className="font-black text-xs uppercase mb-6 text-slate-400">
+                                {view === 'staff' ? 'CRÉER UN ADMINISTRATEUR' : `AJOUTER ${view}`}
+                            </h3>
                             
                             {view === 'classes' && (
                                 <form onSubmit={handleCreateClass} className="space-y-4">
@@ -107,6 +149,23 @@ export default function AdminDashboard({ user, onRefresh }) {
                                 </form>
                             )}
 
+                            {view === 'students' && (
+                                <form onSubmit={handleCreateStudent} className="space-y-4">
+                                    <input className="admin-input" placeholder="Prénom" value={formStudent.firstName} onChange={e => setFormStudent({...formStudent, firstName: e.target.value})} required />
+                                    <input className="admin-input" placeholder="Nom" value={formStudent.lastName} onChange={e => setFormStudent({...formStudent, lastName: e.target.value})} required />
+                                    <input className="admin-input" placeholder="Email (Optionnel)" value={formStudent.email} onChange={e => setFormStudent({...formStudent, email: e.target.value})} />
+                                    
+                                    <select className="admin-input" value={formStudent.classId} onChange={e => setFormStudent({...formStudent, classId: e.target.value})} required>
+                                        <option value="">-- CHOISIR CLASSE (OBLIGATOIRE) --</option>
+                                        {(allClasses.length ? allClasses : items).map(c => (
+                                            <option key={c._id} value={c._id}>{c.name}</option>
+                                        ))}
+                                    </select>
+
+                                    <button className="admin-btn-submit">INSCRIRE ÉLÈVE</button>
+                                </form>
+                            )}
+
                             {(view === 'teachers' || view === 'staff') && (
                                 <form onSubmit={handleCreateUser} className="space-y-4">
                                     <input className="admin-input" placeholder="Prénom" value={formUser.firstName} onChange={e => setFormUser({...formUser, firstName: e.target.value})} required />
@@ -114,11 +173,13 @@ export default function AdminDashboard({ user, onRefresh }) {
                                     <input className="admin-input" type="password" placeholder="Mot de passe" value={formUser.password} onChange={e => setFormUser({...formUser, password: e.target.value})} required />
                                     {view === 'staff' && (
                                         <select className="admin-input" value={formUser.role} onChange={e => setFormUser({...formUser, role: e.target.value})}>
-                                            <option value="admin">ADMINISTRATEUR</option>
-                                            <option value="developer">DÉVELOPPEUR</option>
+                                            <option value="admin">ADMINISTRATEUR (Accès Complet)</option>
+                                            <option value="developer">DÉVELOPPEUR (Accès Technique)</option>
                                         </select>
                                     )}
-                                    <button className="admin-btn-submit">CRÉER COMPTE</button>
+                                    <button className="admin-btn-submit">
+                                        {view === 'staff' ? 'CRÉER ADMIN' : 'CRÉER PROF'}
+                                    </button>
                                 </form>
                             )}
                         </div>
@@ -131,8 +192,8 @@ export default function AdminDashboard({ user, onRefresh }) {
                         <table className="admin-table">
                             <thead className="bg-slate-50">
                                 <tr>
-                                    <th className="p-4 text-[10px] font-black uppercase text-slate-400">Élément</th>
-                                    <th className="p-4 text-[10px] font-black uppercase text-slate-400">Infos / Status</th>
+                                    <th className="p-4 text-[10px] font-black uppercase text-slate-400">Nom / Identité</th>
+                                    <th className="p-4 text-[10px] font-black uppercase text-slate-400">Rôle / Détails</th>
                                     <th className="p-4 text-right"></th>
                                 </tr>
                             </thead>
@@ -148,10 +209,12 @@ export default function AdminDashboard({ user, onRefresh }) {
                                                 {it.name || `${it.firstName} ${it.lastName}`}
                                             </div>
                                             {view === 'subjects' && <div className="text-[10px] font-bold" style={{color: it.color}}>{it.color}</div>}
+                                            {view === 'students' && <div className="text-[10px] text-slate-400">{it.email}</div>}
                                         </td>
                                         <td className="p-4">
                                             {view === 'classes' && <span className={`px-2 py-1 rounded text-[9px] font-black ${it.type === 'GROUP' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>{it.type}</span>}
-                                            {view === 'staff' && <span className="px-2 py-1 rounded bg-slate-100 text-slate-600 text-[9px] font-black uppercase">{it.role}</span>}
+                                            {view === 'staff' && <span className={`px-2 py-1 rounded text-[9px] font-black uppercase ${it.role === 'developer' ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-200 text-slate-600'}`}>{it.role}</span>}
+                                            {view === 'students' && <span className="px-2 py-1 rounded bg-orange-100 text-orange-600 text-[9px] font-black uppercase">{it.currentClass || 'AUCUNE'}</span>}
                                             {view === 'bugs' && (
                                                 <div className="max-w-md">
                                                     <div className="text-xs font-bold text-slate-600 mb-1">{it.description}</div>

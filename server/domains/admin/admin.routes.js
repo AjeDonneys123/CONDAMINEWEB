@@ -13,11 +13,14 @@ router.post('/classrooms', asyncHandler(async (req, res) => {
     const Classroom = mongoose.model('Classroom');
     const AcademicYear = mongoose.model('AcademicYear');
     
+    const existing = await Classroom.findOne({ name: req.body.name.toUpperCase().trim() });
+    if (existing) return res.status(409).json({ error: `La classe ${existing.name} existe déjà.` });
+
     let year = await AcademicYear.findOne({ isCurrent: true });
     if (!year) year = await AcademicYear.create({ label: "2024-2025", isCurrent: true });
 
     const newClass = await Classroom.create({
-        name: req.body.name.toUpperCase(),
+        name: req.body.name.toUpperCase().trim(),
         type: req.body.type || 'CLASS',
         yearId: year._id
     });
@@ -35,8 +38,12 @@ router.get('/subjects', asyncHandler(async (req, res) => {
 }));
 
 router.post('/subjects', asyncHandler(async (req, res) => {
-    const newSubject = await mongoose.model('Subject').create({
-        name: req.body.name.toUpperCase(),
+    const Subject = mongoose.model('Subject');
+    const existing = await Subject.findOne({ name: req.body.name.toUpperCase().trim() });
+    if (existing) return res.status(409).json({ error: `La matière ${existing.name} existe déjà.` });
+
+    const newSubject = await Subject.create({
+        name: req.body.name.toUpperCase().trim(),
         color: req.body.color || '#6366f1'
     });
     res.json(newSubject);
@@ -53,7 +60,17 @@ router.get('/teachers', asyncHandler(async (req, res) => {
 }));
 
 router.post('/teachers', asyncHandler(async (req, res) => {
-    const newTeacher = await mongoose.model('Teacher').create(req.body);
+    const Teacher = mongoose.model('Teacher');
+    const fName = req.body.firstName.trim();
+    const lName = req.body.lastName.trim();
+
+    const existing = await Teacher.findOne({ 
+        firstName: new RegExp(`^${fName}$`, 'i'), 
+        lastName: new RegExp(`^${lName}$`, 'i') 
+    });
+    if (existing) return res.status(409).json({ error: `Le professeur ${fName} ${lName} existe déjà.` });
+
+    const newTeacher = await Teacher.create(req.body);
     res.json(newTeacher);
 }));
 
@@ -68,7 +85,17 @@ router.get('/admins', asyncHandler(async (req, res) => {
 }));
 
 router.post('/admins', asyncHandler(async (req, res) => {
-    const newAdmin = await mongoose.model('Admin').create(req.body);
+    const Admin = mongoose.model('Admin');
+    const fName = req.body.firstName.trim();
+    const lName = req.body.lastName.trim();
+
+    const existing = await Admin.findOne({ 
+        firstName: new RegExp(`^${fName}$`, 'i'), 
+        lastName: new RegExp(`^${lName}$`, 'i') 
+    });
+    if (existing) return res.status(409).json({ error: `L'admin ${fName} ${lName} existe déjà.` });
+
+    const newAdmin = await Admin.create(req.body);
     res.json(newAdmin);
 }));
 
@@ -77,7 +104,65 @@ router.delete('/admins/:id', asyncHandler(async (req, res) => {
     res.json({ ok: true });
 }));
 
-// --- 5. RAPPORTS DE BUGS ---
+// --- 5. GESTION DES ÉLÈVES ---
+router.get('/students', asyncHandler(async (req, res) => {
+    res.json(await mongoose.model('Student').find({}).sort({ lastName: 1, firstName: 1 }));
+}));
+
+router.post('/students', asyncHandler(async (req, res) => {
+    const Student = mongoose.model('Student');
+    const Classroom = mongoose.model('Classroom');
+    const Enrollment = mongoose.model('Enrollment');
+    const AcademicYear = mongoose.model('AcademicYear');
+
+    const fName = req.body.firstName.trim();
+    const lName = req.body.lastName.trim();
+    const classId = req.body.classId;
+
+    if (!classId) return res.status(400).json({ error: "La sélection d'une classe est obligatoire." });
+
+    const existing = await Student.findOne({ 
+        firstName: new RegExp(`^${fName}$`, 'i'), 
+        lastName: new RegExp(`^${lName}$`, 'i') 
+    });
+    if (existing) return res.status(409).json({ error: `L'élève ${fName} ${lName} existe déjà.` });
+
+    const cls = await Classroom.findById(classId);
+    if (!cls) return res.status(404).json({ error: "Classe introuvable." });
+
+    // CRÉATION AVEC LIENS CLASSE ROBUSTES
+    const newStudent = await Student.create({
+        firstName: fName,
+        lastName: lName.toUpperCase(),
+        email: req.body.email || "",
+        currentClass: cls.name, // Sauvegarde du Nom
+        classId: cls._id        // Sauvegarde de l'ID
+    });
+
+    const year = await AcademicYear.findOne({ isCurrent: true });
+    if (year) {
+        await Enrollment.create({
+            studentId: newStudent._id,
+            classId: classId,
+            yearId: year._id
+        });
+    }
+
+    res.json(newStudent);
+}));
+
+router.delete('/students/:id', asyncHandler(async (req, res) => {
+    const Enrollment = mongoose.model('Enrollment');
+    const Student = mongoose.model('Student');
+    
+    await Student.findByIdAndDelete(req.params.id);
+    await Enrollment.deleteMany({ studentId: req.params.id });
+    await mongoose.model('Submission').deleteMany({ studentId: req.params.id });
+    
+    res.json({ ok: true });
+}));
+
+// --- 6. RAPPORTS DE BUGS ---
 router.get('/bugs', asyncHandler(async (req, res) => {
     res.json(await mongoose.model('BugReport').find({}).sort({ createdAt: -1 }));
 }));
@@ -120,12 +205,24 @@ router.post('/maintenance/migrate-legacy', asyncHandler(async (req, res) => {
     const year = await mongoose.model('AcademicYear').findOne({ isCurrent: true });
     for (const p of legacy) {
         let student = await mongoose.model('Student').findOne({ firstName: p.firstName, lastName: p.lastName });
-        if (!student) student = await mongoose.model('Student').create({ firstName: p.firstName, lastName: p.lastName, currentClass: p.classroom });
+        // MIGRATION AVEC VALEURS PAR DÉFAUT
+        if (!student) student = await mongoose.model('Student').create({ 
+            firstName: p.firstName, 
+            lastName: p.lastName, 
+            currentClass: p.classroom || "UNKNOWN" 
+        });
+        
         if (p.classroom) {
             let cls = await mongoose.model('Classroom').findOne({ name: p.classroom.toUpperCase() });
             if (!cls) cls = await mongoose.model('Classroom').create({ name: p.classroom.toUpperCase(), yearId: year?._id });
             const ex = await mongoose.model('Enrollment').findOne({ studentId: student._id, classId: cls._id });
             if (!ex) await mongoose.model('Enrollment').create({ studentId: student._id, classId: cls._id, yearId: year?._id });
+            
+            // Mise à jour rétroactive du lien classId
+            if (!student.classId) {
+                student.classId = cls._id;
+                await student.save();
+            }
         }
         count++;
     }

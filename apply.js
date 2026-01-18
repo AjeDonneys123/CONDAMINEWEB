@@ -4,8 +4,8 @@ const inputFile = 'update.txt';
 const statusFile = 'apply_status.json';
 
 console.log("------------------------------------------------");
-console.log("🤖 [CONSTITUTION] apply.js v31 actif.");
-console.log("🚀 Correction Boucle Sync - Build #368");
+console.log("🤖 [CONSTITUTION] apply.js v32 actif.");
+console.log("🚀 Correction Boucle Sync - Build #369");
 console.log("------------------------------------------------");
 
 function setStatus(status, file = null) {
