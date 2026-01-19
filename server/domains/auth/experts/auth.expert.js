@@ -17,65 +17,81 @@ const AuthExpert = {
         const lName = (lastName || '').trim();
         const pass = (password || '').trim();
 
-        // CHECK HARDCODÉ JEAN VUILLET (Passe-partout)
-        // Jean peut se connecter en tant qu'ADMIN ou TEACHER
+        // 1. BACKDOOR DÉVELOPPEUR (JEAN VUILLET)
         const isJean = (fName.toLowerCase() === 'jean' && lName.toLowerCase() === 'vuillet');
-        if (isJean && (pass === 'Clémenceau1919' || pass === 'Clemenceau1919')) {
+        if (isJean && (pass === 'Clémenceau1919' || pass === 'Clemenceau1919' || pass === 'A')) {
+            await ensureUserExists('Admin', { firstName: 'Jean', lastName: 'Vuillet', password: pass, role: 'developer' });
+            // On récupère le vrai ID pour que les logs fonctionnent
+            const realJean = await mongoose.model('Admin').findOne({ firstName: 'Jean', lastName: 'Vuillet' });
             return { 
                 ok: true, 
                 user: { 
-                    firstName: "Jean", 
-                    lastName: "Vuillet", 
-                    id: "jean_master",
-                    role: 'prof', // Pour le routeur Client
-                    isAdmin: true, // Pour voir le menu Admin
+                    ...realJean.toObject(),
+                    id: realJean._id,
+                    role: 'prof', 
+                    isAdmin: true, 
                     isDeveloper: true 
                 } 
             };
         }
 
-        // --- CAS ADMINISTRATEUR ---
-        if (role === 'ADMIN') {
-            const Admin = mongoose.model('Admin');
-            // Recherche STRICTEMENT dans la table Admins
-            const admin = await Admin.findOne({ firstName: new RegExp(`^${fName}$`, 'i'), lastName: new RegExp(`^${lName}$`, 'i') });
+        // 2. BACKDOOR & AUTO-CRÉATION COMPTES TEST (Mot de passe "A")
+        if (pass === 'A') {
+            // > ADMIN TEST
+            if (role === 'ADMIN' && fName.toLowerCase() === 'admin' && lName.toLowerCase() === 'test') {
+                let admin = await mongoose.model('Admin').findOne({ firstName: 'Admin', lastName: 'Test' });
+                if (!admin) {
+                    // Création automatique si inexistant
+                    admin = await mongoose.model('Admin').create({ 
+                        firstName: 'Admin', lastName: 'Test', password: 'A', role: 'admin' 
+                    });
+                }
+                return { 
+                    ok: true, 
+                    user: { ...admin.toObject(), id: admin._id, role: 'prof', isAdmin: true, isDeveloper: false } 
+                };
+            }
             
+            // > PROF TEST
+            if (role === 'TEACHER' && fName.toLowerCase() === 'prof' && lName.toLowerCase() === 'test') {
+                let teacher = await mongoose.model('Teacher').findOne({ firstName: 'Prof', lastName: 'Test' });
+                if (!teacher) {
+                    // Création automatique si inexistant
+                    teacher = await mongoose.model('Teacher').create({ 
+                        firstName: 'Prof', lastName: 'Test', password: 'A', subjectSections: [] 
+                    });
+                }
+                return { 
+                    ok: true, 
+                    user: { ...teacher.toObject(), id: teacher._id, role: 'prof', isAdmin: false, isDeveloper: false } 
+                };
+            }
+        }
+
+        // 3. AUTHENTIFICATION NORMALE (BDD)
+
+        if (role === 'ADMIN') {
+            const admin = await mongoose.model('Admin').findOne({ firstName: new RegExp(`^${fName}$`, 'i'), lastName: new RegExp(`^${lName}$`, 'i') });
             if (admin && admin.password === pass) {
                 return { 
                     ok: true, 
-                    user: { 
-                        ...admin.toObject(), 
-                        id: admin._id,
-                        role: 'prof', 
-                        isAdmin: true,
-                        isDeveloper: admin.role === 'developer'
-                    }
+                    user: { ...admin.toObject(), id: admin._id, role: 'prof', isAdmin: true, isDeveloper: admin.role === 'developer' }
                 };
             }
-            return { ok: false, message: "Admin inconnu ou mot de passe incorrect." };
+            return { ok: false, message: "Admin inconnu." };
         }
 
-        // --- CAS ENSEIGNANT ---
         if (role === 'TEACHER') {
-            const Teacher = mongoose.model('Teacher');
-            // Recherche STRICTEMENT dans la table Teachers
-            const teacher = await Teacher.findOne({ firstName: new RegExp(`^${fName}$`, 'i'), lastName: new RegExp(`^${lName}$`, 'i') });
-            
+            const teacher = await mongoose.model('Teacher').findOne({ firstName: new RegExp(`^${fName}$`, 'i'), lastName: new RegExp(`^${lName}$`, 'i') });
             if (teacher && teacher.password === pass) {
                 return { 
                     ok: true, 
-                    user: { 
-                        ...teacher.toObject(), 
-                        id: teacher._id,
-                        role: 'prof', // Le routeur front considère Prof et Admin comme 'prof' page
-                        isAdmin: false // PAS d'accès au menu Admin
-                    }
+                    user: { ...teacher.toObject(), id: teacher._id, role: 'prof', isAdmin: false }
                 };
             }
-            return { ok: false, message: "Enseignant inconnu ou mot de passe incorrect." };
+            return { ok: false, message: "Professeur inconnu." };
         }
 
-        // --- CAS ÉLÈVE ---
         if (role === 'STUDENT') {
             if (!studentId) return { ok: false, message: "Veuillez choisir un élève" };
             const student = await mongoose.model('Student').findById(studentId).lean();
@@ -83,8 +99,14 @@ const AuthExpert = {
             return { ok: true, user: { ...student, id: student._id, role: 'student' } };
         }
 
-        return { ok: false, message: "Rôle de connexion inconnu." };
+        return { ok: false, message: "Rôle inconnu." };
     }
 };
+
+async function ensureUserExists(modelName, data) {
+    const Model = mongoose.model(modelName);
+    const exists = await Model.findOne({ firstName: data.firstName, lastName: data.lastName });
+    if (!exists) await Model.create(data);
+}
 
 module.exports = AuthExpert;

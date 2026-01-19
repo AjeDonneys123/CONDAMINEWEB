@@ -12,3 +12,22 @@
 .zoom-overlay { position: fixed; inset: 0; z-index: 9999; background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; }
 .zoom-card { background: white; width: 90%; max-width: 500px; border-radius: 30px; padding: 2rem; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); animation: zoomIn 0.2s ease-out; }
 @keyframes zoomIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+/* [NOUVEAU] BARRE DEVOPS QUICK SWITCH */
+.dev-shortcuts {
+    display: flex; gap: 10px; margin-bottom: 2rem; 
+    background: #1e293b; padding: 10px; border-radius: 20px;
+    align-items: center; overflow-x: auto;
+}
+/* CORRECTION ICI : suppression de "font-black;" qui était une erreur */
+.dev-label { font-size: 10px; color: #64748b; text-transform: uppercase; margin-right: 10px; white-space: nowrap; font-weight: 900; }
+.btn-shortcut {
+    padding: 8px 16px; border-radius: 12px; border: none; cursor: pointer;
+    font-size: 10px; font-weight: 900; color: white; text-transform: uppercase;
+    transition: transform 0.1s; white-space: nowrap;
+}
+.btn-shortcut:hover { transform: scale(1.05); }
+.sc-admin { background: #f43f5e; } /* Rose/Rouge */
+.sc-prof { background: #8b5cf6; } /* Violet */
+.sc-eleve { background: #f97316; } /* Orange */
+.sc-jean { background: #3b82f6; border: 2px solid #60a5fa; } /* Bleu Jean */

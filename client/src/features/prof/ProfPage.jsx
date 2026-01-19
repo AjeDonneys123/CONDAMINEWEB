@@ -8,17 +8,20 @@ import ConsoleReporter from './components/ConsoleReporter';
 import './ProfPage.css';
 
 export default function ProfPage({ user, onLogout }) {
+  // Jean Vuillet est toujours considéré comme développeur suprême
   const isJean = (user.firstName === 'Jean' && user.lastName === 'Vuillet');
   
+  // Construction de l'objet SuperUser avec les droits calculés
   const superUser = {
       ...user,
       isAdmin: user.isAdmin === true || isJean,
       isDeveloper: user.isDeveloper === true || isJean
   };
 
-  // 1. DÉFINITION DE LA VUE PAR DÉFAUT SELON LE RÔLE
-  // Si Admin => 'admin', Sinon => 'activities'
-  const [tab, setTab] = useState(superUser.isAdmin ? 'admin' : 'activities');
+  // Vue par défaut intelligente
+  const [tab, setTab] = useState(
+      superUser.isDeveloper ? 'activities' : (superUser.isAdmin ? 'admin' : 'activities')
+  );
   
   const [classes, setClasses] = useState([]);
   const [selectedClassId, setSelectedClassId] = useState("");
@@ -38,38 +41,51 @@ export default function ProfPage({ user, onLogout }) {
 
   const currentClassName = classes.find(c => c._id === selectedClassId)?.name || "";
 
-  // Est-ce un "Simple Prof" (Ni Admin, Ni Dev) ?
-  const isSimpleProf = !superUser.isAdmin && !superUser.isDeveloper;
+  // Un "Simple Prof" est quelqu'un qui n'est NI admin NI dév.
+  // Il a besoin du sélecteur de classe pour travailler.
+  // Le développeur aussi en a besoin pour tester.
+  const needsClassSelector = !superUser.isAdmin || superUser.isDeveloper;
 
   return (
     <div className="prof-page-container">
       <div className="prof-card shadow-2xl">
         <ProfHeader user={superUser} onLogout={onLogout} />
         
-        {/* SÉLECTEUR DE CLASSE : Caché pour l'Admin pur (inutile), Visible pour Prof et Dev */}
-        {(isSimpleProf || superUser.isDeveloper) && (
+        {/* SÉLECTEUR DE CLASSE */}
+        {needsClassSelector && (
             <div className="px-8 py-4 flex gap-2 border-b bg-slate-50/50 overflow-x-auto no-scrollbar items-center">
+                <span className="text-[10px] font-black text-slate-300 mr-2 uppercase tracking-widest">Classe active :</span>
                 {classes.map(c => (
                     <button key={c._id} onClick={() => setSelectedClassId(c._id)} 
                             className={`px-6 py-2 rounded-xl font-black text-[10px] transition-all whitespace-nowrap ${selectedClassId === c._id ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-slate-400 border shadow-sm'}`}>
                         {c.name}
                     </button>
                 ))}
+                {classes.length === 0 && <span className="text-xs text-red-400 font-bold italic">Aucune classe configurée (Voir Admin)</span>}
             </div>
         )}
 
-        {/* NAVIGATION INTELLIGENTE */}
+        {/* NAVIGATION */}
         <ProfNav activeTab={tab} onTabChange={setTab} user={superUser} />
         
-        <div className="p-8">
-          {tab === 'activities' && <ActivityStudio globalClass={currentClassName} globalClassId={selectedClassId} user={superUser} />}
-          {tab === 'students' && <StudentsManager globalClassId={selectedClassId} />}
+        <div className="p-8 bg-white min-h-[600px]">
+          {/* VUES PÉDAGOGIQUES (Prof + Dev) */}
+          {(superUser.role === 'prof' || superUser.isDeveloper) && tab === 'activities' && (
+             <ActivityStudio globalClass={currentClassName} globalClassId={selectedClassId} user={superUser} />
+          )}
           
-          {/* Dashboard Admin sécurisé */}
-          {tab === 'admin' && superUser.isAdmin && <AdminDashboard user={superUser} onRefresh={loadClasses} />}
+          {(superUser.role === 'prof' || superUser.isDeveloper) && tab === 'students' && (
+             <StudentsManager globalClassId={selectedClassId} />
+          )}
+          
+          {/* VUE ADMINISTRATIVE (Admin + Dev) */}
+          {superUser.isAdmin && tab === 'admin' && (
+             <AdminDashboard user={superUser} onRefresh={loadClasses} />
+          )}
         </div>
       </div>
       
+      {/* OUTILS DE DEBUG POUR LE DÉVELOPPEUR */}
       {superUser.isDeveloper && <ConsoleReporter user={superUser} />}
     </div>
   );

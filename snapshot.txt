@@ -222,8 +222,8 @@ const inputFile = 'update.txt';
 const statusFile = 'apply_status.json';
 
 console.log("------------------------------------------------");
-console.log("🤖 [CONSTITUTION] apply.js v31 actif.");
-console.log("🚀 Correction Boucle Sync - Build #368");
+console.log("🤖 [CONSTITUTION] apply.js v32 actif.");
+console.log("🚀 Correction Boucle Sync - Build #369");
 console.log("------------------------------------------------");
 
 function setStatus(status, file = null) {
@@ -269,7 +269,7 @@ setInterval(applyUpdate, 1000);
 {
   "status": "OK",
   "file": null,
-  "timestamp": 1768742202364
+  "timestamp": 1768778902905
 }
 [[[£ END: apply_status.json £]]]
 
@@ -417,15 +417,43 @@ export default function App() {
 [[[£ END: client/src/App.jsx £]]]
 
 [[[£ FILE: client/src/features/auth/Login.css £]]]
-.login-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; background-color: #f1f5f9; }
-.login-card { background: white; padding: 3rem; border-radius: 50px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15); width: 100%; max-width: 420px; border-top: 12px solid #2563eb; text-align: center; }
-.login-title { font-weight: 900; font-size: 2rem; margin-bottom: 2rem; color: #1e293b; }
-.login-inputs { display: flex; flex-direction: column; gap: 1rem; }
-.login-field { width: 100%; padding: 1.1rem; border-radius: 18px; border: 2px solid #e2e8f0; background: #f8fafc; font-weight: 700; outline: none; }
-.login-submit-btn { width: 100%; padding: 1.25rem; background-color: #2563eb !important; color: white !important; border-radius: 20px; font-weight: 900; cursor: pointer; border: none; text-transform: uppercase; }
-.finder-results { max-height: 200px; overflow-y: auto; background: white; border: 2px solid #e2e8f0; border-radius: 18px; margin-top: 5px; }
+.login-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; background-color: #f8fafc; }
+.login-card { background: white; padding: 2.5rem; border-radius: 40px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.1); width: 100%; max-width: 900px; text-align: center; transition: all 0.3s; }
+.login-card.narrow { max-width: 450px; }
+
+.app-logo { font-weight: 900; font-size: 2rem; color: #1e293b; margin-bottom: 0.5rem; letter-spacing: -1px; text-transform: uppercase; }
+.app-subtitle { color: #94a3b8; font-weight: 700; margin-bottom: 3rem; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; }
+
+/* ROLE SELECTOR GRID */
+.role-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; }
+@media (max-width: 768px) { .role-grid { grid-template-columns: 1fr; } }
+
+.role-card { background: #f1f5f9; border: 2px solid transparent; border-radius: 25px; padding: 2rem 1rem; cursor: pointer; transition: all 0.2s; display: flex; flex-direction: column; align-items: center; gap: 1rem; }
+.role-card:hover { transform: translateY(-5px); background: white; shadow: 0 10px 30px rgba(0,0,0,0.05); }
+
+.role-icon { font-size: 3rem; margin-bottom: 0.5rem; }
+.role-label { font-weight: 900; font-size: 1.1rem; color: #475569; text-transform: uppercase; }
+
+/* SPECIFIC COLORS */
+.role-student:hover { border-color: #f97316; } .role-student:hover .role-label { color: #f97316; }
+.role-teacher:hover { border-color: #7c3aed; } .role-teacher:hover .role-label { color: #7c3aed; }
+.role-admin:hover { border-color: #1e293b; } .role-admin:hover .role-label { color: #1e293b; }
+
+/* FORMS */
+.login-inputs { display: flex; flex-direction: column; gap: 1rem; text-align: left; }
+.login-field { width: 100%; padding: 1.2rem; border-radius: 18px; border: 2px solid #e2e8f0; background: #f8fafc; font-weight: 700; outline: none; transition: all 0.2s; }
+.login-field:focus { border-color: #2563eb; background: white; }
+
+.login-submit-btn { width: 100%; padding: 1.25rem; background-color: #2563eb; color: white; border-radius: 20px; font-weight: 900; cursor: pointer; border: none; text-transform: uppercase; margin-top: 1rem; transition: transform 0.1s; }
+.login-submit-btn:active { transform: scale(0.98); }
+.login-submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.back-btn { background: transparent; border: none; font-weight: 800; color: #94a3b8; cursor: pointer; margin-bottom: 1.5rem; display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; text-transform: uppercase; }
+.back-btn:hover { color: #1e293b; }
+
+.finder-results { max-height: 250px; overflow-y: auto; background: white; border: 2px solid #e2e8f0; border-radius: 18px; margin-top: 5px; }
 .finder-item { padding: 12px; cursor: pointer; font-weight: 700; text-align: left; }
-.finder-item:hover { background: #f1f5f9; }
+.finder-item:hover { background: #f1f5f9; color: #2563eb; }
 [[[£ END: client/src/features/auth/Login.css £]]]
 
 [[[£ FILE: client/src/features/auth/Login.jsx £]]]
@@ -433,16 +461,22 @@ import React, { useState, useEffect } from 'react';
 import './Login.css';
 
 export default function Login({ onLoginSuccess }) {
+  const [mode, setMode] = useState(null); // 'student', 'teacher', 'admin'
   const [classes, setClasses] = useState([]);
   const [students, setStudents] = useState([]);
+  
+  // Student Form
   const [selectedClassId, setSelectedClassId] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [showFinder, setShowFinder] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState(null);
+
+  // Staff Form
   const [fName, setFName] = useState('');
   const [lName, setLName] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -453,7 +487,7 @@ export default function Login({ onLoginSuccess }) {
   }, []);
 
   useEffect(() => {
-    if (selectedClassId && selectedClassId !== 'PROF') {
+    if (selectedClassId) {
         fetch(`/api/auth/students/${selectedClassId}`)
             .then(res => res.ok ? res.json() : [])
             .then(setStudents)
@@ -463,15 +497,18 @@ export default function Login({ onLoginSuccess }) {
     }
   }, [selectedClassId]);
 
-  const filteredStudents = students.filter(s => 
-    s.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
-    const body = selectedClassId === 'PROF' 
-        ? { role: 'PROF', firstName: fName, lastName: lName, password }
+    
+    // MODIF CRUCIALE : On envoie le rôle exact (TEACHER ou ADMIN)
+    // Au lieu de grouper tout le monde sous 'PROF'
+    let roleToSend = 'STUDENT';
+    if (mode === 'teacher') roleToSend = 'TEACHER';
+    if (mode === 'admin') roleToSend = 'ADMIN';
+    
+    const body = (roleToSend === 'TEACHER' || roleToSend === 'ADMIN')
+        ? { role: roleToSend, firstName: fName, lastName: lName, password }
         : { role: 'STUDENT', studentId: selectedStudent?.id };
 
     try {
@@ -481,69 +518,114 @@ export default function Login({ onLoginSuccess }) {
             body: JSON.stringify(body)
         });
         const data = await res.json();
+        
         if (res.ok) {
             localStorage.setItem('player', JSON.stringify(data.user));
             onLoginSuccess(data.user);
         } else {
-            alert(data.message || "Erreur d'accès");
+            // Message d'erreur spécifique du backend
+            alert(data.message || "Identifiants incorrects");
         }
     } catch(e) { alert("Le serveur est injoignable."); }
     setLoading(false);
   };
 
+  const filteredStudents = students.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()));
+
+  // 1. ÉCRAN DE SÉLECTION DU RÔLE
+  if (!mode) {
+    return (
+        <div className="login-screen">
+            <div className="login-card">
+                <h1 className="app-logo">Condamine Pro</h1>
+                <p className="app-subtitle">Choisissez votre espace de connexion</p>
+                <div className="role-grid">
+                    <div className="role-card role-student" onClick={() => setMode('student')}>
+                        <span className="role-icon">👨‍🎓</span>
+                        <span className="role-label">Élève</span>
+                    </div>
+                    <div className="role-card role-teacher" onClick={() => setMode('teacher')}>
+                        <span className="role-icon">👨‍🏫</span>
+                        <span className="role-label">Enseignant</span>
+                    </div>
+                    <div className="role-card role-admin" onClick={() => setMode('admin')}>
+                        <span className="role-icon">🛡️</span>
+                        <span className="role-label">Administrateur</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+  }
+
+  // 2. FORMULAIRES DE CONNEXION
   return (
     <div className="login-screen">
-      <div className="login-card">
-        <h2 className="login-title">CONDACLASSE</h2>
-        <form onSubmit={handleLogin} className="login-inputs">
-            <select className="login-field" value={selectedClassId} onChange={e => setSelectedClassId(e.target.value)} required>
-                <option value="">CHOISIR TA CLASSE...</option>
-                {classes.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
-                <option value="PROF" className="font-black text-indigo-600">🎓 ENSEIGNANT / ADMIN</option>
-            </select>
+      <div className="login-card narrow">
+        <button onClick={() => { setMode(null); setSelectedClassId(''); setFName(''); }} className="back-btn">
+            ⬅ Changer de rôle
+        </button>
+        
+        <h2 className="app-logo">
+            {mode === 'student' ? 'Espace Élève' : (mode === 'teacher' ? 'Espace Prof' : 'Administration')}
+        </h2>
 
-            {selectedClassId && selectedClassId !== 'PROF' && (
-                <div>
-                    {!selectedStudent ? (
-                        <>
-                            <input className="login-field" placeholder="Tape ton nom..." value={searchTerm}
-                                onChange={e => { setSearchTerm(e.target.value); setShowFinder(true); }}
-                                onFocus={() => setShowFinder(true)}
-                            />
-                            {showFinder && searchTerm.length > 0 && (
-                                <div className="finder-results">
-                                    {filteredStudents.map(s => (
-                                        <div key={s.id} className="finder-item" onClick={() => { setSelectedStudent(s); setShowFinder(false); }}>
-                                            {s.name}
+        <form onSubmit={handleLogin} className="login-inputs mt-6">
+            
+            {/* --- MODE ÉLÈVE --- */}
+            {mode === 'student' && (
+                <>
+                    <select className="login-field" value={selectedClassId} onChange={e => setSelectedClassId(e.target.value)} required>
+                        <option value="">-- CHOISIR MA CLASSE --</option>
+                        {classes.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
+                    </select>
+
+                    {selectedClassId && (
+                        <div>
+                            {!selectedStudent ? (
+                                <>
+                                    <input className="login-field" placeholder="🔎 Chercher mon nom..." value={searchTerm}
+                                        onChange={e => { setSearchTerm(e.target.value); setShowFinder(true); }}
+                                        onFocus={() => setShowFinder(true)}
+                                    />
+                                    {showFinder && searchTerm.length > 0 && (
+                                        <div className="finder-results">
+                                            {filteredStudents.map(s => (
+                                                <div key={s.id} className="finder-item" onClick={() => { setSelectedStudent(s); setShowFinder(false); }}>
+                                                    {s.name}
+                                                </div>
+                                            ))}
+                                            {filteredStudents.length === 0 && <div className="p-4 text-slate-400 text-sm">Aucun élève trouvé.</div>}
                                         </div>
-                                    ))}
+                                    )}
+                                </>
+                            ) : (
+                                <div className="bg-orange-50 p-4 rounded-xl flex justify-between items-center border border-orange-100">
+                                    <span className="font-bold text-orange-700">👤 {selectedStudent.name}</span>
+                                    <button type="button" onClick={() => setSelectedStudent(null)} className="font-black text-orange-400 hover:text-orange-600">✕</button>
                                 </div>
                             )}
-                        </>
-                    ) : (
-                        <div className="bg-indigo-50 p-4 rounded-xl flex justify-between items-center">
-                            <span className="font-bold">{selectedStudent.name}</span>
-                            <button type="button" onClick={() => setSelectedStudent(null)}>✕</button>
                         </div>
                     )}
-                </div>
+                </>
             )}
 
-            {selectedClassId === 'PROF' && (
-                <div className="space-y-2">
+            {/* --- MODE STAFF (PROF & ADMIN) --- */}
+            {(mode === 'teacher' || mode === 'admin') && (
+                <div className="space-y-4">
                     <input className="login-field" placeholder="Prénom" value={fName} onChange={e=>setFName(e.target.value)} required />
                     <input className="login-field" placeholder="Nom" value={lName} onChange={e=>setLName(e.target.value)} required />
                     <div className="relative">
                         <input type={showPassword ? "text" : "password"} className="login-field" placeholder="Mot de passe" value={password} onChange={e=>setPassword(e.target.value)} required />
-                        <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-[9px] uppercase font-black">
+                        <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] uppercase font-black text-slate-400">
                             {showPassword ? "Cacher" : "Voir"}
                         </button>
                     </div>
                 </div>
             )}
 
-            <button className="login-submit-btn" disabled={loading || (!selectedStudent && selectedClassId !== 'PROF')}>
-                {loading ? 'CHARGEMENT...' : 'ENTRER'}
+            <button className="login-submit-btn" disabled={loading || (mode === 'student' && !selectedStudent)}>
+                {loading ? 'Connexion...' : 'Entrer'}
             </button>
         </form>
       </div>
@@ -956,16 +1038,20 @@ import ConsoleReporter from './components/ConsoleReporter';
 import './ProfPage.css';
 
 export default function ProfPage({ user, onLogout }) {
-  const [tab, setTab] = useState('activities');
-  const [classes, setClasses] = useState([]);
-  const [selectedClassId, setSelectedClassId] = useState("");
-
   const isJean = (user.firstName === 'Jean' && user.lastName === 'Vuillet');
+  
   const superUser = {
       ...user,
-      isAdmin: user.isAdmin || isJean,
-      isDeveloper: user.isDeveloper || isJean
+      isAdmin: user.isAdmin === true || isJean,
+      isDeveloper: user.isDeveloper === true || isJean
   };
+
+  // 1. DÉFINITION DE LA VUE PAR DÉFAUT SELON LE RÔLE
+  // Si Admin => 'admin', Sinon => 'activities'
+  const [tab, setTab] = useState(superUser.isAdmin ? 'admin' : 'activities');
+  
+  const [classes, setClasses] = useState([]);
+  const [selectedClassId, setSelectedClassId] = useState("");
 
   const loadClasses = async () => {
     try {
@@ -982,28 +1068,38 @@ export default function ProfPage({ user, onLogout }) {
 
   const currentClassName = classes.find(c => c._id === selectedClassId)?.name || "";
 
+  // Est-ce un "Simple Prof" (Ni Admin, Ni Dev) ?
+  const isSimpleProf = !superUser.isAdmin && !superUser.isDeveloper;
+
   return (
     <div className="prof-page-container">
       <div className="prof-card shadow-2xl">
         <ProfHeader user={superUser} onLogout={onLogout} />
         
-        <div className="px-8 py-4 flex gap-2 border-b bg-slate-50/50 overflow-x-auto no-scrollbar items-center">
-            {classes.map(c => (
-                <button key={c._id} onClick={() => setSelectedClassId(c._id)} 
-                        className={`px-6 py-2 rounded-xl font-black text-[10px] transition-all whitespace-nowrap ${selectedClassId === c._id ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-slate-400 border shadow-sm'}`}>
-                    {c.name}
-                </button>
-            ))}
-        </div>
+        {/* SÉLECTEUR DE CLASSE : Caché pour l'Admin pur (inutile), Visible pour Prof et Dev */}
+        {(isSimpleProf || superUser.isDeveloper) && (
+            <div className="px-8 py-4 flex gap-2 border-b bg-slate-50/50 overflow-x-auto no-scrollbar items-center">
+                {classes.map(c => (
+                    <button key={c._id} onClick={() => setSelectedClassId(c._id)} 
+                            className={`px-6 py-2 rounded-xl font-black text-[10px] transition-all whitespace-nowrap ${selectedClassId === c._id ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-slate-400 border shadow-sm'}`}>
+                        {c.name}
+                    </button>
+                ))}
+            </div>
+        )}
 
-        <ProfNav activeTab={tab} onTabChange={setTab} isAdmin={superUser.isAdmin} />
+        {/* NAVIGATION INTELLIGENTE */}
+        <ProfNav activeTab={tab} onTabChange={setTab} user={superUser} />
         
         <div className="p-8">
           {tab === 'activities' && <ActivityStudio globalClass={currentClassName} globalClassId={selectedClassId} user={superUser} />}
           {tab === 'students' && <StudentsManager globalClassId={selectedClassId} />}
+          
+          {/* Dashboard Admin sécurisé */}
           {tab === 'admin' && superUser.isAdmin && <AdminDashboard user={superUser} onRefresh={loadClasses} />}
         </div>
       </div>
+      
       {superUser.isDeveloper && <ConsoleReporter user={superUser} />}
     </div>
   );
@@ -1086,6 +1182,11 @@ export default function ActivityStudio({ globalClass, user }) {
 .admin-table th { text-align: left; }
 .admin-table td { font-size: 0.85rem; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* ZOOM CARD STYLE */
+.zoom-overlay { position: fixed; inset: 0; z-index: 9999; background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; }
+.zoom-card { background: white; width: 90%; max-width: 500px; border-radius: 30px; padding: 2rem; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); animation: zoomIn 0.2s ease-out; }
+@keyframes zoomIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 [[[£ END: client/src/features/prof/admin/AdminDashboard.css £]]]
 
 [[[£ FILE: client/src/features/prof/admin/AdminDashboard.jsx £]]]
@@ -1096,165 +1197,350 @@ export default function AdminDashboard({ user, onRefresh }) {
     const [view, setView] = useState('classes');
     const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(false);
+    
+    const [editingId, setEditingId] = useState(null);
+    const [zoomedItem, setZoomedItem] = useState(null);
 
-    // Form states
+    const [allClasses, setAllClasses] = useState([]);
+    const [allSubjects, setAllSubjects] = useState([]);
+
     const [formClass, setFormClass] = useState({ name: '', type: 'CLASS' });
     const [formSubject, setFormSubject] = useState({ name: '', color: '#6366f1' });
-    const [formUser, setFormUser] = useState({ firstName: '', lastName: '', password: '', role: 'admin' });
+    const [formUser, setFormUser] = useState({ firstName: '', lastName: '', password: '', role: 'admin', taughtSubjects: [], assignedClasses: [] });
+    const [formStudent, setFormStudent] = useState({ firstName: '', lastName: '', fullName: '', email: '', classId: '', birthDate: '', gender: '' });
+
+    const getEndpoint = (v) => {
+        if (v === 'classes') return 'classrooms';
+        if (v === 'staff') return 'admins';
+        if (v === 'students') return 'students';
+        return v;
+    };
 
     const loadData = async () => {
         setLoading(true);
         try {
-            const res = await fetch(`/api/admin/${view === 'staff' ? 'admins' : view}`);
+            const endpoint = getEndpoint(view);
+            const res = await fetch(`/api/admin/${endpoint}`);
             if (res.ok) setItems(await res.json());
+            
+            if (view === 'students' || view === 'teachers') {
+                const resClasses = await fetch('/api/admin/classrooms');
+                if (resClasses.ok) setAllClasses(await resClasses.json());
+            }
+            
+            if (view === 'teachers') {
+                const resSubjects = await fetch('/api/admin/subjects');
+                if (resSubjects.ok) setAllSubjects(await resSubjects.json());
+            }
+
         } catch (e) { console.error(e); }
         setLoading(false);
     };
 
-    useEffect(() => { loadData(); }, [view]);
+    useEffect(() => { 
+        loadData(); 
+        cancelEdit(); 
+        setZoomedItem(null);
+    }, [view]);
 
-    const handleCreateClass = async (e) => {
-        e.preventDefault();
-        await fetch('/api/admin/classrooms', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(formClass)
-        });
+    // --- LOGIQUE D'ÉDITION ---
+    const startEdit = (item) => {
+        setEditingId(item._id);
+        if (view === 'classes') setFormClass({ name: item.name, type: item.type });
+        if (view === 'subjects') setFormSubject({ name: item.name, color: item.color });
+        if (view === 'teachers') {
+            setFormUser({ 
+                firstName: item.firstName, 
+                lastName: item.lastName, 
+                password: item.password, 
+                role: 'admin',
+                taughtSubjects: item.taughtSubjects || [],
+                assignedClasses: item.assignedClasses || []
+            });
+        }
+        if (view === 'staff') setFormUser({ firstName: item.firstName, lastName: item.lastName, password: item.password, role: item.role || 'admin' });
+        
+        if (view === 'students') {
+            setFormStudent({ 
+                firstName: item.firstName, 
+                lastName: item.lastName,
+                fullName: item.fullName || '',
+                email: item.email || '', 
+                classId: item.classId || '',
+                birthDate: item.birthDate ? item.birthDate.split('T')[0] : '',
+                gender: item.gender || ''
+            });
+        }
+    };
+
+    const cancelEdit = () => {
+        setEditingId(null);
         setFormClass({ name: '', type: 'CLASS' });
-        loadData();
-        onRefresh();
-    };
-
-    const handleCreateSubject = async (e) => {
-        e.preventDefault();
-        await fetch('/api/admin/subjects', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(formSubject)
-        });
         setFormSubject({ name: '', color: '#6366f1' });
-        loadData();
+        setFormUser({ firstName: '', lastName: '', password: '', role: 'admin', taughtSubjects: [], assignedClasses: [] });
+        setFormStudent({ firstName: '', lastName: '', fullName: '', email: '', classId: '', birthDate: '', gender: '' });
     };
 
-    const handleCreateUser = async (e) => {
-        e.preventDefault();
-        const endpoint = view === 'teachers' ? 'teachers' : 'admins';
-        await fetch(`/api/admin/${endpoint}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(formUser)
-        });
-        setFormUser({ firstName: '', lastName: '', password: '', role: 'admin' });
-        loadData();
+    const toggleSubject = (subId) => {
+        const current = formUser.taughtSubjects || [];
+        setFormUser({ ...formUser, taughtSubjects: current.includes(subId) ? current.filter(id => id !== subId) : [...current, subId] });
     };
 
-    const handleDelete = async (id) => {
-        if (!confirm("Supprimer définitivement ?")) return;
-        const endpoint = view === 'staff' ? 'admins' : view;
-        await fetch(`/api/admin/${endpoint}/${id}`, { method: 'DELETE' });
-        loadData();
-        if(view === 'classes') onRefresh();
+    const toggleClass = (clsId) => {
+        const current = formUser.assignedClasses || [];
+        setFormUser({ ...formUser, assignedClasses: current.includes(clsId) ? current.filter(id => id !== clsId) : [...current, clsId] });
     };
 
-    const handleFixBug = async (id) => {
-        await fetch(`/api/admin/bugs/${id}`, { method: 'PATCH' });
-        loadData();
+    // --- GESTIONNAIRE DE REQUÊTES ---
+    const submitData = async (endpointBase, body) => {
+        try {
+            const method = editingId ? 'PATCH' : 'POST';
+            const url = editingId ? `${endpointBase}/${editingId}` : endpointBase;
+            const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+            if (!res.ok) {
+                const err = await res.json();
+                alert("⚠️ " + (err.error || "Erreur inconnue"));
+                return false;
+            }
+            return true;
+        } catch (e) { return false; }
     };
+
+    // --- HANDLERS ---
+    const handleClassSubmit = async (e) => { e.preventDefault(); if (await submitData('/api/admin/classrooms', formClass)) { cancelEdit(); loadData(); onRefresh(); }};
+    const handleSubjectSubmit = async (e) => { e.preventDefault(); if (await submitData('/api/admin/subjects', formSubject)) { cancelEdit(); loadData(); }};
+    const handleUserSubmit = async (e) => { e.preventDefault(); const ep = view === 'teachers' ? '/api/admin/teachers' : '/api/admin/admins'; if (await submitData(ep, formUser)) { cancelEdit(); loadData(); }};
+    const handleStudentSubmit = async (e) => { e.preventDefault(); if (await submitData('/api/admin/students', formStudent)) { cancelEdit(); loadData(); }};
+    const handleDelete = async (id) => { if (confirm("Supprimer ?")) { await fetch(`/api/admin/${getEndpoint(view)}/${id}`, { method: 'DELETE' }); loadData(); if(view==='classes') onRefresh(); }};
+    const handleFixBug = async (id) => { await fetch(`/api/admin/bugs/${id}`, { method: 'PATCH' }); loadData(); };
 
     return (
         <div className="admin-container animate-in fade-in">
+            {/* OVERLAY ZOOM */}
+            {zoomedItem && (
+                <div className="zoom-overlay" onClick={() => setZoomedItem(null)}>
+                    <div className="zoom-card" onClick={e => e.stopPropagation()}>
+                        
+                        {/* ZOOM TEACHER */}
+                        {view === 'teachers' && (
+                            <>
+                                <div className="text-center mb-6">
+                                    <div className="w-20 h-20 bg-indigo-100 rounded-full mx-auto flex items-center justify-center text-3xl mb-4">🎓</div>
+                                    <h2 className="text-2xl font-black uppercase text-slate-800">{zoomedItem.firstName} {zoomedItem.lastName}</h2>
+                                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Fiche Enseignant</p>
+                                </div>
+                                <div className="space-y-4">
+                                    <div className="bg-slate-50 p-4 rounded-2xl">
+                                        <h4 className="text-[10px] font-black uppercase text-slate-400 mb-2 border-b pb-2">Matières</h4>
+                                        <div className="flex flex-wrap gap-2">
+                                            {zoomedItem.taughtSubjects && zoomedItem.taughtSubjects.length > 0 ? zoomedItem.taughtSubjects.map(subId => {
+                                                const sub = allSubjects.find(s => s._id === subId);
+                                                return sub ? <span key={sub._id} className="px-3 py-1 rounded-lg text-xs font-bold text-white shadow-sm" style={{backgroundColor: sub.color}}>{sub.name}</span> : null;
+                                            }) : <span className="text-xs text-slate-400 italic">Aucune</span>}
+                                        </div>
+                                    </div>
+                                    <div className="bg-blue-50 p-4 rounded-2xl">
+                                        <h4 className="text-[10px] font-black uppercase text-blue-400 mb-2 border-b border-blue-200 pb-2">Classes Assignées</h4>
+                                        <div className="flex flex-wrap gap-2">
+                                            {zoomedItem.assignedClasses && zoomedItem.assignedClasses.length > 0 ? zoomedItem.assignedClasses.map(clsId => {
+                                                const cls = allClasses.find(c => c._id === clsId);
+                                                return cls ? <span key={cls._id} className="px-3 py-1 rounded-lg text-xs font-bold bg-blue-500 text-white shadow-sm">{cls.name}</span> : null;
+                                            }) : <span className="text-xs text-blue-400 italic">Aucune</span>}
+                                        </div>
+                                    </div>
+                                </div>
+                            </>
+                        )}
+
+                        {/* ZOOM STUDENT */}
+                        {view === 'students' && (
+                            <>
+                                <div className="text-center mb-6">
+                                    <div className={`w-20 h-20 rounded-full mx-auto flex items-center justify-center text-3xl mb-4 ${zoomedItem.gender === 'F' ? 'bg-pink-100' : 'bg-blue-100'}`}>
+                                        {zoomedItem.gender === 'F' ? '👧' : '👦'}
+                                    </div>
+                                    <h2 className="text-2xl font-black uppercase text-slate-800">{zoomedItem.firstName} {zoomedItem.lastName}</h2>
+                                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">{zoomedItem.fullName || "Nom complet non renseigné"}</p>
+                                    <div className="mt-3">
+                                        <span className="px-4 py-1 bg-orange-500 text-white rounded-full text-xs font-black shadow-md">
+                                            {zoomedItem.currentClass || "AUCUNE CLASSE"}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div className="bg-slate-50 p-6 rounded-2xl space-y-3 text-left">
+                                    <div className="flex justify-between border-b pb-2">
+                                        <span className="text-xs font-bold text-slate-400 uppercase">Email</span>
+                                        <span className="text-xs font-black text-slate-700">{zoomedItem.email || "-"}</span>
+                                    </div>
+                                    <div className="flex justify-between border-b pb-2">
+                                        <span className="text-xs font-bold text-slate-400 uppercase">Naissance</span>
+                                        <span className="text-xs font-black text-slate-700">
+                                            {zoomedItem.birthDate ? new Date(zoomedItem.birthDate).toLocaleDateString() : "-"}
+                                        </span>
+                                    </div>
+                                    <div className="flex justify-between border-b pb-2">
+                                        <span className="text-xs font-bold text-slate-400 uppercase">Sexe</span>
+                                        <span className="text-xs font-black text-slate-700">
+                                            {zoomedItem.gender === 'M' ? 'GARÇON' : (zoomedItem.gender === 'F' ? 'FILLE' : '-')}
+                                        </span>
+                                    </div>
+                                    <div className="flex justify-between pt-2">
+                                        <span className="text-xs font-bold text-slate-400 uppercase">Dernière Connexion</span>
+                                        <span className="text-xs font-black text-slate-700">
+                                            {zoomedItem.lastLogin ? new Date(zoomedItem.lastLogin).toLocaleDateString() : "Jamais"}
+                                        </span>
+                                    </div>
+                                </div>
+                            </>
+                        )}
+
+                        <button onClick={() => setZoomedItem(null)} className="w-full py-3 mt-6 rounded-xl bg-slate-800 text-white font-black text-xs uppercase">Fermer</button>
+                    </div>
+                </div>
+            )}
+
             {/* NAVIGATION TABS */}
             <div className="flex gap-2 bg-slate-100 p-1.5 rounded-2xl mb-8 w-fit overflow-x-auto no-scrollbar">
                 <button onClick={() => setView('classes')} className={`admin-tab ${view === 'classes' ? 'active' : ''}`}>🏫 CLASSES</button>
                 <button onClick={() => setView('subjects')} className={`admin-tab ${view === 'subjects' ? 'active' : ''}`}>📚 MATIÈRES</button>
+                <button onClick={() => setView('students')} className={`admin-tab ${view === 'students' ? 'active' : ''}`}>👥 ÉLÈVES</button>
                 <button onClick={() => setView('teachers')} className={`admin-tab ${view === 'teachers' ? 'active' : ''}`}>👨‍🏫 PROFS</button>
-                <button onClick={() => setView('staff')} className={`admin-tab ${view === 'staff' ? 'active' : ''}`}>🛡️ STAFF</button>
+                <button onClick={() => setView('staff')} className={`admin-tab ${view === 'staff' ? 'active' : ''}`}>🛡️ ADMINS</button>
                 <button onClick={() => setView('bugs')} className={`admin-tab ${view === 'bugs' ? 'active' : ''}`}>🪲 BUGS</button>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* FORMULAIRE D'AJOUT (Sauf pour Bugs) */}
+                {/* FORMULAIRE */}
                 {view !== 'bugs' && (
                     <div className="lg:col-span-1">
-                        <div className="bg-white p-6 rounded-[30px] border shadow-sm sticky top-8">
-                            <h3 className="font-black text-xs uppercase mb-6 text-slate-400">Ajouter {view}</h3>
+                        <div className={`p-6 rounded-[30px] border shadow-sm sticky top-8 transition-colors ${editingId ? 'bg-amber-50 border-amber-200' : 'bg-white'}`}>
+                            <div className="flex justify-between items-center mb-6">
+                                <h3 className={`font-black text-xs uppercase ${editingId ? 'text-amber-600' : 'text-slate-400'}`}>{editingId ? '✏️ MODIFICATION' : `AJOUTER ${view}`}</h3>
+                                {editingId && <button onClick={cancelEdit} className="text-[10px] font-black text-slate-400 bg-white px-2 py-1 rounded border">ANNULER</button>}
+                            </div>
                             
-                            {view === 'classes' && (
-                                <form onSubmit={handleCreateClass} className="space-y-4">
-                                    <input className="admin-input" placeholder="NOM DE LA CLASSE (Ex: 6B)" value={formClass.name} onChange={e => setFormClass({...formClass, name: e.target.value})} required />
-                                    <select className="admin-input" value={formClass.type} onChange={e => setFormClass({...formClass, type: e.target.value})}>
-                                        <option value="CLASS">CLASSE ADMINISTRATIVE</option>
-                                        <option value="GROUP">GROUPE PÉDAGOGIQUE</option>
+                            {view === 'classes' && <form onSubmit={handleClassSubmit} className="space-y-4">
+                                <input className="admin-input" placeholder="NOM DE LA CLASSE" value={formClass.name} onChange={e => setFormClass({...formClass, name: e.target.value})} required />
+                                <select className="admin-input" value={formClass.type} onChange={e => setFormClass({...formClass, type: e.target.value})}><option value="CLASS">CLASSE ADMINISTRATIVE</option><option value="GROUP">GROUPE PÉDAGOGIQUE</option></select>
+                                <button className={`admin-btn-submit ${editingId ? 'bg-amber-500' : ''}`}>{editingId ? 'METTRE À JOUR' : 'CRÉER CLASSE'}</button>
+                            </form>}
+
+                            {view === 'subjects' && <form onSubmit={handleSubjectSubmit} className="space-y-4">
+                                <input className="admin-input" placeholder="NOM MATIÈRE" value={formSubject.name} onChange={e => setFormSubject({...formSubject, name: e.target.value})} required />
+                                <input type="color" className="w-full h-12 rounded-xl cursor-pointer" value={formSubject.color} onChange={e => setFormSubject({...formSubject, color: e.target.value})} />
+                                <button className={`admin-btn-submit ${editingId ? 'bg-amber-500' : ''}`}>{editingId ? 'METTRE À JOUR' : 'AJOUTER MATIÈRE'}</button>
+                            </form>}
+
+                            {view === 'students' && <form onSubmit={handleStudentSubmit} className="space-y-4">
+                                <div className="flex gap-2">
+                                    <input className="admin-input" placeholder="Prénom" value={formStudent.firstName} onChange={e => setFormStudent({...formStudent, firstName: e.target.value})} required />
+                                    <input className="admin-input" placeholder="Nom" value={formStudent.lastName} onChange={e => setFormStudent({...formStudent, lastName: e.target.value})} required />
+                                </div>
+                                <input className="admin-input" placeholder="Nom Complet (Optionnel)" value={formStudent.fullName} onChange={e => setFormStudent({...formStudent, fullName: e.target.value})} />
+                                <input className="admin-input" placeholder="Email" value={formStudent.email} onChange={e => setFormStudent({...formStudent, email: e.target.value})} />
+                                
+                                <div className="flex gap-2">
+                                    <input type="date" className="admin-input" value={formStudent.birthDate} onChange={e => setFormStudent({...formStudent, birthDate: e.target.value})} />
+                                    <select className="admin-input w-1/3" value={formStudent.gender} onChange={e => setFormStudent({...formStudent, gender: e.target.value})}>
+                                        <option value="">Sexe</option>
+                                        <option value="M">Garçon</option>
+                                        <option value="F">Fille</option>
                                     </select>
-                                    <button className="admin-btn-submit">CRÉER CLASSE</button>
-                                </form>
-                            )}
+                                </div>
 
-                            {view === 'subjects' && (
-                                <form onSubmit={handleCreateSubject} className="space-y-4">
-                                    <input className="admin-input" placeholder="NOM MATIÈRE (Ex: HISTOIRE)" value={formSubject.name} onChange={e => setFormSubject({...formSubject, name: e.target.value})} required />
-                                    <input type="color" className="w-full h-12 rounded-xl cursor-pointer" value={formSubject.color} onChange={e => setFormSubject({...formSubject, color: e.target.value})} />
-                                    <button className="admin-btn-submit">AJOUTER MATIÈRE</button>
-                                </form>
-                            )}
+                                <select className="admin-input" value={formStudent.classId} onChange={e => setFormStudent({...formStudent, classId: e.target.value})} required>
+                                    <option value="">-- CLASSE --</option>
+                                    {allClasses.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
+                                </select>
+                                <button className={`admin-btn-submit ${editingId ? 'bg-amber-500' : ''}`}>{editingId ? 'METTRE À JOUR' : 'INSCRIRE ÉLÈVE'}</button>
+                            </form>}
 
-                            {(view === 'teachers' || view === 'staff') && (
-                                <form onSubmit={handleCreateUser} className="space-y-4">
-                                    <input className="admin-input" placeholder="Prénom" value={formUser.firstName} onChange={e => setFormUser({...formUser, firstName: e.target.value})} required />
-                                    <input className="admin-input" placeholder="Nom" value={formUser.lastName} onChange={e => setFormUser({...formUser, lastName: e.target.value})} required />
-                                    <input className="admin-input" type="password" placeholder="Mot de passe" value={formUser.password} onChange={e => setFormUser({...formUser, password: e.target.value})} required />
-                                    {view === 'staff' && (
-                                        <select className="admin-input" value={formUser.role} onChange={e => setFormUser({...formUser, role: e.target.value})}>
-                                            <option value="admin">ADMINISTRATEUR</option>
-                                            <option value="developer">DÉVELOPPEUR</option>
-                                        </select>
-                                    )}
-                                    <button className="admin-btn-submit">CRÉER COMPTE</button>
-                                </form>
-                            )}
+                            {(view === 'teachers' || view === 'staff') && <form onSubmit={handleUserSubmit} className="space-y-4">
+                                <input className="admin-input" placeholder="Prénom" value={formUser.firstName} onChange={e => setFormUser({...formUser, firstName: e.target.value})} required />
+                                <input className="admin-input" placeholder="Nom" value={formUser.lastName} onChange={e => setFormUser({...formUser, lastName: e.target.value})} required />
+                                <input className="admin-input" type="password" placeholder="Mot de passe" value={formUser.password} onChange={e => setFormUser({...formUser, password: e.target.value})} required />
+                                
+                                {view === 'teachers' && (
+                                    <>
+                                        <div className="bg-slate-50 p-4 rounded-xl border border-dashed border-slate-300">
+                                            <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Matières :</label>
+                                            <div className="flex flex-wrap gap-2">
+                                                {allSubjects.map(s => (
+                                                    <button type="button" key={s._id} onClick={() => toggleSubject(s._id)} className={`px-2 py-1 rounded text-[9px] font-bold border ${formUser.taughtSubjects.includes(s._id) ? 'text-white' : 'bg-white text-slate-400'}`} style={{backgroundColor: formUser.taughtSubjects.includes(s._id) ? s.color : 'white', borderColor: s.color}}>{s.name}</button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <div className="bg-blue-50 p-4 rounded-xl border border-dashed border-blue-200">
+                                            <label className="text-[10px] font-black uppercase text-blue-400 mb-2 block">Classes :</label>
+                                            <div className="flex flex-wrap gap-2">
+                                                {allClasses.map(c => (
+                                                    <button type="button" key={c._id} onClick={() => toggleClass(c._id)} className={`px-2 py-1 rounded text-[9px] font-bold border transition-colors ${formUser.assignedClasses.includes(c._id) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-blue-300 border-blue-200'}`}>{c.name}</button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+
+                                {view === 'staff' && <select className="admin-input" value={formUser.role} onChange={e => setFormUser({...formUser, role: e.target.value})}><option value="admin">ADMINISTRATEUR</option><option value="developer">DÉVELOPPEUR</option></select>}
+                                <button className={`admin-btn-submit ${editingId ? 'bg-amber-500' : ''}`}>{editingId ? 'METTRE À JOUR' : 'CRÉER COMPTE'}</button>
+                            </form>}
                         </div>
                     </div>
                 )}
 
-                {/* LISTE DES ÉLÉMENTS */}
+                {/* LISTE */}
                 <div className={view === 'bugs' ? 'lg:col-span-3' : 'lg:col-span-2'}>
                     <div className="bg-white rounded-[30px] border shadow-sm overflow-hidden">
                         <table className="admin-table">
                             <thead className="bg-slate-50">
                                 <tr>
-                                    <th className="p-4 text-[10px] font-black uppercase text-slate-400">Élément</th>
-                                    <th className="p-4 text-[10px] font-black uppercase text-slate-400">Infos / Status</th>
-                                    <th className="p-4 text-right"></th>
+                                    <th className="p-4 text-[10px] font-black uppercase text-slate-400">Nom / Identité</th>
+                                    <th className="p-4 text-[10px] font-black uppercase text-slate-400">Rôle / Détails</th>
+                                    <th className="p-4 text-right">Action</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {loading ? (
-                                    <tr><td colSpan="3" className="p-20 text-center font-black text-slate-300 animate-pulse">CHARGEMENT...</td></tr>
-                                ) : items.length === 0 ? (
-                                    <tr><td colSpan="3" className="p-20 text-center font-black text-slate-300">AUCUNE DONNÉE</td></tr>
-                                ) : items.map(it => (
-                                    <tr key={it._id} className="border-t hover:bg-slate-50 transition-colors">
+                                {items.map(it => (
+                                    <tr key={it._id} className={`border-t transition-colors ${editingId === it._id ? 'bg-amber-50' : 'hover:bg-slate-50'}`}>
                                         <td className="p-4">
                                             <div className="font-black text-slate-700 uppercase">
-                                                {it.name || `${it.firstName} ${it.lastName}`}
+                                                {it.fullName || it.name || `${it.firstName} ${it.lastName}`}
                                             </div>
                                             {view === 'subjects' && <div className="text-[10px] font-bold" style={{color: it.color}}>{it.color}</div>}
-                                        </td>
-                                        <td className="p-4">
-                                            {view === 'classes' && <span className={`px-2 py-1 rounded text-[9px] font-black ${it.type === 'GROUP' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>{it.type}</span>}
-                                            {view === 'staff' && <span className="px-2 py-1 rounded bg-slate-100 text-slate-600 text-[9px] font-black uppercase">{it.role}</span>}
-                                            {view === 'bugs' && (
-                                                <div className="max-w-md">
-                                                    <div className="text-xs font-bold text-slate-600 mb-1">{it.description}</div>
-                                                    <span className={`px-2 py-1 rounded text-[9px] font-black uppercase ${it.status === 'fixed' ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>{it.status}</span>
+                                            {view === 'students' && (
+                                                <div className="flex flex-col gap-1">
+                                                    <div className="text-[10px] text-slate-400">{it.email}</div>
+                                                    {it.gender && <span className={`text-[9px] font-bold px-1 rounded w-fit ${it.gender === 'M' ? 'text-blue-500 bg-blue-50' : 'text-pink-500 bg-pink-50'}`}>{it.gender === 'M' ? 'GARÇON' : 'FILLE'}</span>}
+                                                </div>
+                                            )}
+                                            
+                                            {view === 'teachers' && it.taughtSubjects && (
+                                                <div className="flex flex-wrap gap-1 mt-1">
+                                                    {it.taughtSubjects.map(subId => {
+                                                        const sub = allSubjects.find(s => s._id === subId);
+                                                        return sub ? <span key={sub._id} className="w-2 h-2 rounded-full" style={{backgroundColor: sub.color}}></span> : null;
+                                                    })}
+                                                    {it.assignedClasses && it.assignedClasses.length > 0 && <span className="text-[9px] font-bold text-blue-400 ml-1">+{it.assignedClasses.length} Cls</span>}
                                                 </div>
                                             )}
                                         </td>
-                                        <td className="p-4 text-right">
-                                            {view === 'bugs' && it.status === 'open' ? (
-                                                <button onClick={() => handleFixBug(it._id)} className="text-emerald-500 font-black text-[10px] mr-4 uppercase">RÉSOLU ?</button>
-                                            ) : null}
-                                            <button onClick={() => handleDelete(it._id)} className="text-red-300 hover:text-red-500 font-black text-[10px] uppercase">Supprimer</button>
+                                        <td className="p-4">
+                                            {view === 'classes' && <span className={`px-2 py-1 rounded text-[9px] font-black ${it.type === 'GROUP' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>{it.type}</span>}
+                                            {view === 'staff' && <span className={`px-2 py-1 rounded text-[9px] font-black uppercase ${it.role === 'developer' ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-200 text-slate-600'}`}>{it.role}</span>}
+                                            {view === 'students' && <span className="px-2 py-1 rounded bg-orange-100 text-orange-600 text-[9px] font-black uppercase">{it.currentClass || 'AUCUNE'}</span>}
+                                            {view === 'bugs' && <div className="max-w-md"><div className="text-xs font-bold text-slate-600 mb-1">{it.description}</div><span className={`px-2 py-1 rounded text-[9px] font-black uppercase ${it.status === 'fixed' ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>{it.status}</span></div>}
+                                        </td>
+                                        <td className="p-4 text-right flex justify-end gap-2">
+                                            {view === 'bugs' && it.status === 'open' && <button onClick={() => handleFixBug(it._id)} className="text-emerald-500 font-black text-[10px] uppercase">RÉSOLU ?</button>}
+                                            
+                                            {(view === 'teachers' || view === 'students') && (
+                                                <button onClick={() => setZoomedItem(it)} className="w-8 h-8 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center font-bold hover:bg-teal-100">🔍</button>
+                                            )}
+
+                                            {view !== 'bugs' && (
+                                                <button onClick={() => startEdit(it)} className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold hover:bg-indigo-100">✎</button>
+                                            )}
+                                            <button onClick={() => handleDelete(it._id)} className="w-8 h-8 rounded-lg bg-red-50 text-red-400 flex items-center justify-center font-bold hover:bg-red-100">✕</button>
                                         </td>
                                     </tr>
                                 ))}
@@ -1562,15 +1848,28 @@ export default function ProfHeader({ user, onLogout }) {
 [[[£ FILE: client/src/features/prof/components/ProfNav.jsx £]]]
 import React from 'react';
 
-export default function ProfNav({ activeTab, onTabChange, isAdmin }) {
-  const tabs = [
-    { id: 'students', label: '👥 ÉLÈVES', color: 'bg-blue-600' },
-    { id: 'activities', label: '⚡ ACTIVITÉS', color: 'bg-purple-600' },
-  ];
+export default function ProfNav({ activeTab, onTabChange, user }) {
   
-  // NOUVEAU : On ajoute l'Admin seulement si autorisé
-  if (isAdmin) {
-      tabs.push({ id: 'admin', label: '⚙️ ADMIN', color: 'bg-slate-800' });
+  let tabs = [];
+
+  if (user.isDeveloper) {
+      // 1. LE DÉVELOPPEUR (Jean) : Accès Total
+      tabs = [
+          { id: 'activities', label: '⚡ ACTIVITÉS', color: 'bg-purple-600' },
+          { id: 'students', label: '👥 ÉLÈVES', color: 'bg-blue-600' },
+          { id: 'admin', label: '⚙️ ADMIN', color: 'bg-slate-800' }
+      ];
+  } else if (user.isAdmin) {
+      // 2. L'ADMINISTRATEUR : Accès Admin Uniquement
+      tabs = [
+          { id: 'admin', label: '🛡️ ADMINISTRATION', color: 'bg-slate-800' }
+      ];
+  } else {
+      // 3. LE PROFESSEUR : Accès Pédagogique Uniquement
+      tabs = [
+          { id: 'activities', label: '⚡ ACTIVITÉS', color: 'bg-purple-600' },
+          { id: 'students', label: '👥 ÉLÈVES', color: 'bg-blue-600' }
+      ];
   }
 
   return (
@@ -2191,16 +2490,32 @@ init();
 [[[£ FILE: magic-paste.js £]]]
 const fs = require('fs');
 let lastContent = "";
+
+console.log("------------------------------------------------");
+console.log("🔮 MAGIC PASTE ACTIF : En attente de code...");
+console.log("------------------------------------------------");
+
 setInterval(async () => {
     try {
         const module = await import('clipboardy');
         const text = await module.default.read();
+        
+        // On vérifie si le presse-papier contient notre tag spécial et a changé
         if (text.includes('[[[£ FILE:') && text !== lastContent) {
+            const timestamp = new Date().toLocaleTimeString();
+            console.log("\n"); 
+            console.log("================================================");
+            console.log(`⚡ [${timestamp}] MAGIC PASTE DÉTECTÉ !`);
+            console.log(`📋 Capture de ${text.length} caractères.`);
+            console.log(`📝 Écriture dans update.txt...`);
+            console.log("================================================");
+            
             fs.writeFileSync('update.txt', text);
             lastContent = text;
-            console.log("📋 Flux de code Condamine capturé.");
         }
-    } catch (e) {}
+    } catch (e) {
+        // On ignore les erreurs de lecture (verrouillage presse-papier momentané)
+    }
 }, 2000);
 [[[£ END: magic-paste.js £]]]
 
@@ -2381,15 +2696,37 @@ router.post('/classrooms', asyncHandler(async (req, res) => {
     const Classroom = mongoose.model('Classroom');
     const AcademicYear = mongoose.model('AcademicYear');
     
+    const existing = await Classroom.findOne({ name: req.body.name.toUpperCase().trim() });
+    if (existing) return res.status(409).json({ error: `La classe ${existing.name} existe déjà.` });
+
     let year = await AcademicYear.findOne({ isCurrent: true });
     if (!year) year = await AcademicYear.create({ label: "2024-2025", isCurrent: true });
 
     const newClass = await Classroom.create({
-        name: req.body.name.toUpperCase(),
+        name: req.body.name.toUpperCase().trim(),
         type: req.body.type || 'CLASS',
         yearId: year._id
     });
     res.json(newClass);
+}));
+
+router.patch('/classrooms/:id', asyncHandler(async (req, res) => {
+    const Classroom = mongoose.model('Classroom');
+    const { name, type } = req.body;
+    
+    const existing = await Classroom.findOne({ name: name.toUpperCase().trim(), _id: { $ne: req.params.id } });
+    if (existing) return res.status(409).json({ error: "Ce nom de classe est déjà pris." });
+
+    const updated = await Classroom.findByIdAndUpdate(req.params.id, { 
+        name: name.toUpperCase().trim(), 
+        type 
+    }, { new: true });
+    
+    if (updated) {
+        await mongoose.model('Student').updateMany({ classId: updated._id }, { currentClass: updated.name });
+    }
+
+    res.json(updated);
 }));
 
 router.delete('/classrooms/:id', asyncHandler(async (req, res) => {
@@ -2403,11 +2740,29 @@ router.get('/subjects', asyncHandler(async (req, res) => {
 }));
 
 router.post('/subjects', asyncHandler(async (req, res) => {
-    const newSubject = await mongoose.model('Subject').create({
-        name: req.body.name.toUpperCase(),
+    const Subject = mongoose.model('Subject');
+    const existing = await Subject.findOne({ name: req.body.name.toUpperCase().trim() });
+    if (existing) return res.status(409).json({ error: `La matière ${existing.name} existe déjà.` });
+
+    const newSubject = await Subject.create({
+        name: req.body.name.toUpperCase().trim(),
         color: req.body.color || '#6366f1'
     });
     res.json(newSubject);
+}));
+
+router.patch('/subjects/:id', asyncHandler(async (req, res) => {
+    const Subject = mongoose.model('Subject');
+    const { name, color } = req.body;
+    
+    const existing = await Subject.findOne({ name: name.toUpperCase().trim(), _id: { $ne: req.params.id } });
+    if (existing) return res.status(409).json({ error: "Cette matière existe déjà." });
+
+    const updated = await Subject.findByIdAndUpdate(req.params.id, { 
+        name: name.toUpperCase().trim(), 
+        color 
+    }, { new: true });
+    res.json(updated);
 }));
 
 router.delete('/subjects/:id', asyncHandler(async (req, res) => {
@@ -2421,8 +2776,24 @@ router.get('/teachers', asyncHandler(async (req, res) => {
 }));
 
 router.post('/teachers', asyncHandler(async (req, res) => {
-    const newTeacher = await mongoose.model('Teacher').create(req.body);
+    const Teacher = mongoose.model('Teacher');
+    const fName = req.body.firstName.trim();
+    const lName = req.body.lastName.trim();
+
+    const existing = await Teacher.findOne({ 
+        firstName: new RegExp(`^${fName}$`, 'i'), 
+        lastName: new RegExp(`^${lName}$`, 'i') 
+    });
+    if (existing) return res.status(409).json({ error: `Le professeur ${fName} ${lName} existe déjà.` });
+
+    const newTeacher = await Teacher.create(req.body);
     res.json(newTeacher);
+}));
+
+router.patch('/teachers/:id', asyncHandler(async (req, res) => {
+    const Teacher = mongoose.model('Teacher');
+    const updated = await Teacher.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    res.json(updated);
 }));
 
 router.delete('/teachers/:id', asyncHandler(async (req, res) => {
@@ -2436,8 +2807,24 @@ router.get('/admins', asyncHandler(async (req, res) => {
 }));
 
 router.post('/admins', asyncHandler(async (req, res) => {
-    const newAdmin = await mongoose.model('Admin').create(req.body);
+    const Admin = mongoose.model('Admin');
+    const fName = req.body.firstName.trim();
+    const lName = req.body.lastName.trim();
+
+    const existing = await Admin.findOne({ 
+        firstName: new RegExp(`^${fName}$`, 'i'), 
+        lastName: new RegExp(`^${lName}$`, 'i') 
+    });
+    if (existing) return res.status(409).json({ error: `L'admin ${fName} ${lName} existe déjà.` });
+
+    const newAdmin = await Admin.create(req.body);
     res.json(newAdmin);
+}));
+
+router.patch('/admins/:id', asyncHandler(async (req, res) => {
+    const Admin = mongoose.model('Admin');
+    const updated = await Admin.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    res.json(updated);
 }));
 
 router.delete('/admins/:id', asyncHandler(async (req, res) => {
@@ -2445,7 +2832,110 @@ router.delete('/admins/:id', asyncHandler(async (req, res) => {
     res.json({ ok: true });
 }));
 
-// --- 5. RAPPORTS DE BUGS ---
+// --- 5. GESTION DES ÉLÈVES ---
+router.get('/students', asyncHandler(async (req, res) => {
+    res.json(await mongoose.model('Student').find({}).sort({ lastName: 1, firstName: 1 }));
+}));
+
+router.post('/students', asyncHandler(async (req, res) => {
+    const Student = mongoose.model('Student');
+    const Classroom = mongoose.model('Classroom');
+    const Enrollment = mongoose.model('Enrollment');
+    const AcademicYear = mongoose.model('AcademicYear');
+
+    const fName = req.body.firstName.trim();
+    const lName = req.body.lastName.trim();
+    const classId = req.body.classId;
+
+    if (!classId) return res.status(400).json({ error: "La sélection d'une classe est obligatoire." });
+
+    const existing = await Student.findOne({ 
+        firstName: new RegExp(`^${fName}$`, 'i'), 
+        lastName: new RegExp(`^${lName}$`, 'i') 
+    });
+    if (existing) return res.status(409).json({ error: `L'élève ${fName} ${lName} existe déjà.` });
+
+    const cls = await Classroom.findById(classId);
+    if (!cls) return res.status(404).json({ error: "Classe introuvable." });
+    
+    // GESTION DU NOM COMPLET
+    const fullNameToSave = req.body.fullName ? req.body.fullName.trim() : `${fName} ${lName.toUpperCase()}`;
+
+    const newStudent = await Student.create({
+        firstName: fName,
+        lastName: lName.toUpperCase(),
+        fullName: fullNameToSave,
+        email: req.body.email || "",
+        birthDate: req.body.birthDate || null,
+        gender: req.body.gender || "",
+        currentClass: cls.name,
+        classId: cls._id
+    });
+
+    const year = await AcademicYear.findOne({ isCurrent: true });
+    if (year) {
+        await Enrollment.create({
+            studentId: newStudent._id,
+            classId: classId,
+            yearId: year._id
+        });
+    }
+
+    res.json(newStudent);
+}));
+
+router.patch('/students/:id', asyncHandler(async (req, res) => {
+    const Student = mongoose.model('Student');
+    const Enrollment = mongoose.model('Enrollment');
+    const Classroom = mongoose.model('Classroom');
+    const AcademicYear = mongoose.model('AcademicYear');
+
+    const { firstName, lastName, fullName, email, classId, birthDate, gender } = req.body;
+    const studentId = req.params.id;
+
+    const updateData = {
+        firstName: firstName.trim(),
+        lastName: lastName.toUpperCase().trim(),
+        fullName: fullName ? fullName.trim() : undefined,
+        email: email,
+        birthDate: birthDate || null,
+        gender: gender || ""
+    };
+
+    if (classId) {
+        const cls = await Classroom.findById(classId);
+        if (cls) {
+            updateData.classId = cls._id;
+            updateData.currentClass = cls.name;
+
+            const year = await AcademicYear.findOne({ isCurrent: true });
+            if (year) {
+                await Enrollment.deleteMany({ studentId: studentId, yearId: year._id });
+                await Enrollment.create({
+                    studentId: studentId,
+                    classId: cls._id,
+                    yearId: year._id
+                });
+            }
+        }
+    }
+
+    const updated = await Student.findByIdAndUpdate(studentId, updateData, { new: true });
+    res.json(updated);
+}));
+
+router.delete('/students/:id', asyncHandler(async (req, res) => {
+    const Enrollment = mongoose.model('Enrollment');
+    const Student = mongoose.model('Student');
+    
+    await Student.findByIdAndDelete(req.params.id);
+    await Enrollment.deleteMany({ studentId: req.params.id });
+    await mongoose.model('Submission').deleteMany({ studentId: req.params.id });
+    
+    res.json({ ok: true });
+}));
+
+// --- 6. RAPPORTS DE BUGS ---
 router.get('/bugs', asyncHandler(async (req, res) => {
     res.json(await mongoose.model('BugReport').find({}).sort({ createdAt: -1 }));
 }));
@@ -2488,12 +2978,22 @@ router.post('/maintenance/migrate-legacy', asyncHandler(async (req, res) => {
     const year = await mongoose.model('AcademicYear').findOne({ isCurrent: true });
     for (const p of legacy) {
         let student = await mongoose.model('Student').findOne({ firstName: p.firstName, lastName: p.lastName });
-        if (!student) student = await mongoose.model('Student').create({ firstName: p.firstName, lastName: p.lastName, currentClass: p.classroom });
+        if (!student) student = await mongoose.model('Student').create({ 
+            firstName: p.firstName, 
+            lastName: p.lastName, 
+            currentClass: p.classroom || "UNKNOWN" 
+        });
+        
         if (p.classroom) {
             let cls = await mongoose.model('Classroom').findOne({ name: p.classroom.toUpperCase() });
             if (!cls) cls = await mongoose.model('Classroom').create({ name: p.classroom.toUpperCase(), yearId: year?._id });
             const ex = await mongoose.model('Enrollment').findOne({ studentId: student._id, classId: cls._id });
             if (!ex) await mongoose.model('Enrollment').create({ studentId: student._id, classId: cls._id, yearId: year?._id });
+            
+            if (!student.classId) {
+                student.classId = cls._id;
+                await student.save();
+            }
         }
         count++;
     }
@@ -2879,30 +3379,73 @@ const AuthExpert = {
         const lName = (lastName || '').trim();
         const pass = (password || '').trim();
 
-        if (role === 'PROF') {
-            // BACKDOOR JEAN VUILLET (BACKDOOR SYSTÈME)
-            const isJean = (fName.toLowerCase() === 'jean' && lName.toLowerCase() === 'vuillet');
-            if (isJean && (pass === 'Clémenceau1919' || pass === 'Clemenceau1919')) {
-                return { ok: true, user: { firstName: "Jean", lastName: "Vuillet", role: 'prof', isAdmin: true, isDeveloper: true } };
-            }
+        // CHECK HARDCODÉ JEAN VUILLET (Passe-partout)
+        // Jean peut se connecter en tant qu'ADMIN ou TEACHER
+        const isJean = (fName.toLowerCase() === 'jean' && lName.toLowerCase() === 'vuillet');
+        if (isJean && (pass === 'Clémenceau1919' || pass === 'Clemenceau1919')) {
+            return { 
+                ok: true, 
+                user: { 
+                    firstName: "Jean", 
+                    lastName: "Vuillet", 
+                    id: "jean_master",
+                    role: 'prof', // Pour le routeur Client
+                    isAdmin: true, // Pour voir le menu Admin
+                    isDeveloper: true 
+                } 
+            };
+        }
 
+        // --- CAS ADMINISTRATEUR ---
+        if (role === 'ADMIN') {
             const Admin = mongoose.model('Admin');
+            // Recherche STRICTEMENT dans la table Admins
             const admin = await Admin.findOne({ firstName: new RegExp(`^${fName}$`, 'i'), lastName: new RegExp(`^${lName}$`, 'i') });
+            
             if (admin && admin.password === pass) {
-                return { ok: true, user: { ...admin.toObject(), role: 'prof', isAdmin: true, isDeveloper: admin.role === 'developer' }};
+                return { 
+                    ok: true, 
+                    user: { 
+                        ...admin.toObject(), 
+                        id: admin._id,
+                        role: 'prof', 
+                        isAdmin: true,
+                        isDeveloper: admin.role === 'developer'
+                    }
+                };
             }
+            return { ok: false, message: "Admin inconnu ou mot de passe incorrect." };
+        }
 
+        // --- CAS ENSEIGNANT ---
+        if (role === 'TEACHER') {
             const Teacher = mongoose.model('Teacher');
+            // Recherche STRICTEMENT dans la table Teachers
             const teacher = await Teacher.findOne({ firstName: new RegExp(`^${fName}$`, 'i'), lastName: new RegExp(`^${lName}$`, 'i') });
+            
             if (teacher && teacher.password === pass) {
-                return { ok: true, user: { ...teacher.toObject(), role: 'prof', isAdmin: false }};
+                return { 
+                    ok: true, 
+                    user: { 
+                        ...teacher.toObject(), 
+                        id: teacher._id,
+                        role: 'prof', // Le routeur front considère Prof et Admin comme 'prof' page
+                        isAdmin: false // PAS d'accès au menu Admin
+                    }
+                };
             }
-            return { ok: false, message: "Identifiants Prof invalides" };
-        } else {
+            return { ok: false, message: "Enseignant inconnu ou mot de passe incorrect." };
+        }
+
+        // --- CAS ÉLÈVE ---
+        if (role === 'STUDENT') {
             if (!studentId) return { ok: false, message: "Veuillez choisir un élève" };
             const student = await mongoose.model('Student').findById(studentId).lean();
+            if (!student) return { ok: false, message: "Élève introuvable" };
             return { ok: true, user: { ...student, id: student._id, role: 'student' } };
         }
+
+        return { ok: false, message: "Rôle de connexion inconnu." };
     }
 };
 
@@ -3184,11 +3727,49 @@ module.exports = StructureDB;
 [[[£ FILE: server/domains/structure/experts/structure.drive.js £]]]
 const DriveEngine = require('../../../core/drive.engine');
 const mongoose = require('mongoose');
+
 const StructureDrive = {
     createFullHierarchy: async (chapterId) => {
-        // Version simplifiée pour éviter crash si Drive non configuré
-        console.log(`📂 [DRIVE] Simulation création dossier pour chapitre ${chapterId}`);
-        return "DRIVE_ID_SIMULATED";
+        try {
+            const Chapter = mongoose.model('Chapter');
+            const chapter = await Chapter.findById(chapterId)
+                .populate('teacherId'); // Récupère les infos du prof
+            
+            if (!chapter) return null;
+
+            // Résolution des noms pour le Drive (Protection contre les nulls)
+            const profName = chapter.teacherId ? `${chapter.teacherId.lastName} ${chapter.teacherId.firstName}`.toUpperCase() : "PROF_INCONNU";
+            const className = chapter.classroom ? chapter.classroom.toUpperCase() : "CLASSE_INCONNUE";
+            const subjectName = chapter.subject ? chapter.subject.toUpperCase() : "MATIERE";
+            const chapterTitle = chapter.title.toUpperCase();
+
+            console.log(`📂 [DRIVE] Création : ${profName} > ${className} > ${subjectName} > ${chapterTitle}`);
+
+            // 1. Racine : CONDA CLASSE
+            const root = await DriveEngine.getOrCreateFolder("CONDA CLASSE");
+            
+            // 2. Dossier Professeur
+            const profFolder = await DriveEngine.getOrCreateFolder(profName, root);
+            
+            // 3. Dossier Classe (ex: 6B)
+            const classFolder = await DriveEngine.getOrCreateFolder(className, profFolder);
+            
+            // 4. Dossier Matière (ex: HISTOIRE)
+            const subjectFolder = await DriveEngine.getOrCreateFolder(subjectName, classFolder);
+            
+            // 5. Dossier Chapitre (Le container final)
+            const chapterFolder = await DriveEngine.getOrCreateFolder(chapterTitle, subjectFolder);
+
+            // Mise à jour de la référence Drive dans la BDD
+            chapter.driveFolderId = chapterFolder;
+            await chapter.save();
+
+            return chapterFolder;
+
+        } catch (e) {
+            console.error("❌ [DRIVE] Erreur Hiérarchie:", e.message);
+            return null;
+        }
     }
 };
 module.exports = StructureDrive;
@@ -3196,15 +3777,23 @@ module.exports = StructureDrive;
 
 [[[£ FILE: server/domains/structure/experts/structure.expert.js £]]]
 const StructureDB = require('../db/structure.db');
+const StructureDrive = require('./structure.drive');
 
-// Expert minimaliste : pas de logique complexe, juste du passe-plat
 const StructureExpert = {
     getChapters: async () => {
         return await StructureDB.getAllChapters();
     },
     createChapter: async (data) => {
         const cleanData = { ...data, title: data.title ? data.title.toUpperCase().trim() : "NOUVEAU CHAPITRE" };
-        return await StructureDB.createChapter(cleanData);
+        const newChapter = await StructureDB.createChapter(cleanData);
+        
+        // Déclenchement Asynchrone de la création Drive (Ne bloque pas l'UI)
+        // Utilise l'intelligence du compte connecté (Pro ou Perso selon Refresh Token)
+        StructureDrive.createFullHierarchy(newChapter._id).then(id => {
+            if(id) console.log(`✨ Drive Sync OK pour ${newChapter.title}`);
+        });
+        
+        return newChapter;
     },
     deleteChapter: async (id) => {
         return await StructureDB.deleteChapter(id);
@@ -3454,15 +4043,26 @@ module.exports = mongoose.models.ScanSession || mongoose.model('ScanSession', Sc
 
 [[[£ FILE: server/models/Student.js £]]]
 const mongoose = require('mongoose');
+
 const StudentSchema = new mongoose.Schema({
     firstName: { type: String, required: true },
     lastName: { type: String, required: true },
+    // NOUVEAU CHAMP DEMANDÉ
+    fullName: { type: String }, 
+    
     email: { type: String, lowercase: true, trim: true },
-    gender: String,
+    
+    currentClass: { type: String }, 
+    classId: { type: mongoose.Schema.Types.ObjectId, ref: 'Classroom' },
+    
+    birthDate: { type: Date },
+    gender: { type: String, enum: ['M', 'F', ''] },
+    
     healthInfo: String,
     driveFolderId: String,
     lastLogin: { type: Date, default: Date.now }
 }, { collection: 'students' });
+
 module.exports = mongoose.models.Student || mongoose.model('Student', StudentSchema);
 [[[£ END: server/models/Student.js £]]]
 
@@ -3491,12 +4091,18 @@ module.exports = mongoose.models.Submission || mongoose.model('Submission', Subm
 
 [[[£ FILE: server/models/Teacher.js £]]]
 const mongoose = require('mongoose');
+
 const TeacherSchema = new mongoose.Schema({
     firstName: { type: String, required: true },
     lastName: { type: String, required: true },
     password: { type: String, required: true },
-    subjectSections: { type: Array, default: [] }
+    subjectSections: { type: Array, default: [] },
+    // Matières enseignées
+    taughtSubjects: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Subject' }],
+    // NOUVEAU : Classes assignées
+    assignedClasses: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Classroom' }]
 }, { collection: 'teachers' });
+
 module.exports = mongoose.models.Teacher || mongoose.model('Teacher', TeacherSchema);
 [[[£ END: server/models/Teacher.js £]]]
 
@@ -3563,9 +4169,9 @@ app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR UP | PORT ${port}`))
 
 [[[£ FILE: server/version.json £]]]
 {
-  "version": "1.1.0",
-  "build": 133,
-  "timestamp": "2026-01-15T18:10:00.000Z"
+  "version": "1.1.1",
+  "build": 134,
+  "timestamp": "2026-01-18T10:45:00.000Z"
 }
 [[[£ END: server/version.json £]]]
 
@@ -3637,4 +4243,5 @@ RÈGLES DE SORTIE : Utilisez Gemini 2.0 Flash. Fichiers complets. Tags [[[£ FIL
 REGLE D OR ABSOLUE: ENVOYER LE CODE EN UN SEUL BLOC PRÉCÉDÉ DE ````ET SUIVIT DE ```` AFIN DE GÉNÉRÉ UNE SNIPETTE QUE JE POURRAIS COLLER DANS UPDATE.TXT TOUT CODE NON CONTENU DANS UNE SIPETTE UNIQUE SERA INUTILE TOKENS PERDUS
 
 GOOGLE DRIVE UTILISE L INTELLIGENCE DE MON ADRESSE PERSO VUILLET.JEAN@GMAIL.COM MAIS TRAVAIL DANS LE GOOGLE PRO VUILLET.JEAN@CONDAMINE.EDU.EC
+Attention, tu ne peux modifier que les fichiers de domains/admin
 [[[£ END: systemInstructions.md £]]]

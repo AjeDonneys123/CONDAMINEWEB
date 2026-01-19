@@ -1,9 +1,10 @@
 const mongoose = require('mongoose');
 
 const StudentSchema = new mongoose.Schema({
-    firstName: { type: String, required: true },
-    lastName: { type: String, required: true },
-    // NOUVEAU CHAMP DEMANDÉ
+    firstName: { type: String, required: true }, // Prénom séparé
+    lastName: { type: String, required: true },  // Nom séparé
+    
+    // NOUVEAU CHAMP DEMANDÉ POUR FLEXIBILITÉ
     fullName: { type: String }, 
     
     email: { type: String, lowercase: true, trim: true },

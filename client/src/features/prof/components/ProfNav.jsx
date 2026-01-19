@@ -30,7 +30,7 @@ export default function ProfNav({ activeTab, onTabChange, user }) {
         <button 
             key={t.id} 
             onClick={() => onTabChange(t.id)} 
-            className={`flex-1 min-w-[120px] py-4 rounded-2xl font-black text-xs transition-all ${activeTab === t.id ? t.color + ' text-white shadow-lg scale-105' : 'bg-slate-50 text-slate-400'}`}
+            className={`flex-1 min-w-[120px] py-4 rounded-2xl font-black text-xs transition-all ${activeTab === t.id ? t.color + ' text-white shadow-lg scale-105' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}
         >
             {t.label}
         </button>
