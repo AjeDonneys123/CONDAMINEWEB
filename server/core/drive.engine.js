@@ -3,21 +3,27 @@ let oauth2Client = null;
 let driveInstance = null;
 
 const DriveEngine = {
+    // On expose le client pour que les experts (comme StructureDrive) puissent l'utiliser
+    oauth2Client: null,
+
     init: () => {
         try {
             const clientID = process.env.GOOGLE_CLIENT_ID;
             const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
             const refresh = process.env.GOOGLE_REFRESH_TOKEN;
             const redirect = process.env.GOOGLE_REDIRECT_URI || "http://localhost:3000/api/auth/google/callback";
+            
             if (clientID && clientSecret) {
                 oauth2Client = new google.auth.OAuth2(clientID, clientSecret, redirect);
                 if (refresh) {
                     oauth2Client.setCredentials({ refresh_token: refresh });
                     driveInstance = google.drive({ version: 'v3', auth: oauth2Client });
-                    console.log("✅ Drive Engine Ready.");
+                    // Mise à jour de l'export
+                    DriveEngine.oauth2Client = oauth2Client;
+                    console.log("✅ Drive Engine Ready & Client Exported.");
                 }
             }
-        } catch (e) { console.error("Drive Init Error"); }
+        } catch (e) { console.error("Drive Init Error", e.message); }
     },
     testAuth: async () => {
         if (!driveInstance) return { ok: false, error: "Non configuré" };

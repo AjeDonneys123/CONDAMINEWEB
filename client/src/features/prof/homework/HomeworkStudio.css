@@ -1,1 +1,13 @@
-.hw-studio-overlay { position: fixed; inset: 0; background: #f8fafc; z-index: 6000; display: flex; flex-direction: column; }
+/* AJOUT STYLE V13 */
+.v13-badge { 
+    background: #06b6d4; 
+    color: white; 
+    padding: 10px 20px; 
+    border-radius: 50px; 
+    font-weight: 950; 
+    font-size: 11px; 
+    letter-spacing: 0.1em;
+    box-shadow: 0 4px 15px rgba(6, 182, 212, 0.3);
+    margin-right: 20px;
+}
+/* ... le reste du CSS V8/V11 reste applicable ... */

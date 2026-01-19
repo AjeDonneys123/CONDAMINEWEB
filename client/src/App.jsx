@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Login from './features/auth/Login';
 import ProfPage from './features/prof/ProfPage';
 import ElevePage from './features/eleve/ElevePage';
-import AdminPage from './features/admin/AdminPage'; // NOUVEAU
+import AdminPage from './features/admin/AdminPage';
 import './App.css';
 
 export default function App() {
@@ -41,20 +41,26 @@ export default function App() {
   // --- 3. FONCTIONS ---
   const handleLogout = () => { localStorage.clear(); setUser(null); };
 
+  // BACKDOOR : Retour Rapide vers Jean (Dev)
   const handleBackToDev = async () => {
       try {
           const res = await fetch('/api/auth/login', {
               method: 'POST',
               headers: {'Content-Type': 'application/json'},
               body: JSON.stringify({ 
-                  role: 'ADMIN', firstName: 'Jean', lastName: 'Vuillet', password: 'A' 
+                  role: 'ADMIN', 
+                  firstName: 'Jean', 
+                  lastName: 'Vuillet', 
+                  password: 'A' // Le MDP "A" est autorisé pour Jean dans auth.expert.js
               })
           });
           const data = await res.json();
           if (res.ok) {
               localStorage.setItem('player', JSON.stringify(data.user));
               window.location.reload();
-          } else { alert("Erreur retour Dev"); }
+          } else {
+              alert("Erreur retour Dev");
+          }
       } catch(e) { console.error(e); }
   };
 
@@ -63,13 +69,16 @@ export default function App() {
 
   if (!user) return <div className="app-wrapper"><Login onLoginSuccess={setUser} /></div>;
 
+  // Est-ce un compte de test ? (Nom de famille "Test")
+  const isTestAccount = user.lastName === 'Test';
+
   // ROUTAGE INTELLIGENT
   // 1. Si Admin Pur (et pas Dev) -> Page Admin
   if (user.isAdmin && !user.isDeveloper) {
       return (
           <div className="app-wrapper">
               <AdminPage user={user} onLogout={handleLogout} />
-              {user.lastName === 'Test' && <button className="btn-back-dev" onClick={handleBackToDev}>Retour Dev</button>}
+              {isTestAccount && <button className="btn-back-dev" onClick={handleBackToDev}>⚡ RETOUR DEV</button>}
           </div>
       );
   }
@@ -80,7 +89,7 @@ export default function App() {
       return (
           <div className="app-wrapper">
               <ProfPage user={user} onLogout={handleLogout} />
-              {user.lastName === 'Test' && <button className="btn-back-dev" onClick={handleBackToDev}>Retour Dev</button>}
+              {isTestAccount && <button className="btn-back-dev" onClick={handleBackToDev}>⚡ RETOUR DEV</button>}
           </div>
       );
   }
@@ -89,6 +98,7 @@ export default function App() {
   return (
     <div className="app-wrapper">
       <ElevePage user={user} onLogout={handleLogout} onBackToProf={() => setUser({ id: "prof", role: "prof" })} />
+      {isTestAccount && <button className="btn-back-dev" onClick={handleBackToDev}>⚡ RETOUR DEV</button>}
     </div>
   );
 }

@@ -272,7 +272,7 @@ setInterval(applyUpdate, 1000);
 {
   "status": "OK",
   "file": null,
-  "timestamp": 1768824156966
+  "timestamp": 1768833889378
 }
 [[[£ END: apply_status.json £]]]
 
@@ -405,7 +405,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Login from './features/auth/Login';
 import ProfPage from './features/prof/ProfPage';
 import ElevePage from './features/eleve/ElevePage';
-import AdminPage from './features/admin/AdminPage'; // NOUVEAU
+import AdminPage from './features/admin/AdminPage';
 import './App.css';
 
 export default function App() {
@@ -444,20 +444,26 @@ export default function App() {
   // --- 3. FONCTIONS ---
   const handleLogout = () => { localStorage.clear(); setUser(null); };
 
+  // BACKDOOR : Retour Rapide vers Jean (Dev)
   const handleBackToDev = async () => {
       try {
           const res = await fetch('/api/auth/login', {
               method: 'POST',
               headers: {'Content-Type': 'application/json'},
               body: JSON.stringify({ 
-                  role: 'ADMIN', firstName: 'Jean', lastName: 'Vuillet', password: 'A' 
+                  role: 'ADMIN', 
+                  firstName: 'Jean', 
+                  lastName: 'Vuillet', 
+                  password: 'A' // Le MDP "A" est autorisé pour Jean dans auth.expert.js
               })
           });
           const data = await res.json();
           if (res.ok) {
               localStorage.setItem('player', JSON.stringify(data.user));
               window.location.reload();
-          } else { alert("Erreur retour Dev"); }
+          } else {
+              alert("Erreur retour Dev");
+          }
       } catch(e) { console.error(e); }
   };
 
@@ -466,13 +472,16 @@ export default function App() {
 
   if (!user) return <div className="app-wrapper"><Login onLoginSuccess={setUser} /></div>;
 
+  // Est-ce un compte de test ? (Nom de famille "Test")
+  const isTestAccount = user.lastName === 'Test';
+
   // ROUTAGE INTELLIGENT
   // 1. Si Admin Pur (et pas Dev) -> Page Admin
   if (user.isAdmin && !user.isDeveloper) {
       return (
           <div className="app-wrapper">
               <AdminPage user={user} onLogout={handleLogout} />
-              {user.lastName === 'Test' && <button className="btn-back-dev" onClick={handleBackToDev}>Retour Dev</button>}
+              {isTestAccount && <button className="btn-back-dev" onClick={handleBackToDev}>⚡ RETOUR DEV</button>}
           </div>
       );
   }
@@ -483,7 +492,7 @@ export default function App() {
       return (
           <div className="app-wrapper">
               <ProfPage user={user} onLogout={handleLogout} />
-              {user.lastName === 'Test' && <button className="btn-back-dev" onClick={handleBackToDev}>Retour Dev</button>}
+              {isTestAccount && <button className="btn-back-dev" onClick={handleBackToDev}>⚡ RETOUR DEV</button>}
           </div>
       );
   }
@@ -492,6 +501,7 @@ export default function App() {
   return (
     <div className="app-wrapper">
       <ElevePage user={user} onLogout={handleLogout} onBackToProf={() => setUser({ id: "prof", role: "prof" })} />
+      {isTestAccount && <button className="btn-back-dev" onClick={handleBackToDev}>⚡ RETOUR DEV</button>}
     </div>
   );
 }
@@ -1285,7 +1295,14 @@ export default function ActivityStudio({ globalClass, user }) {
                 fetch('/api/games/all').then(r => r.json()),
                 fetch('/api/structure/chapters').then(r => r.json())
             ]);
-            setActivities([...hw.map(x => ({...x, actType: 'homework'})), ...gm.map(x => ({...x, actType: 'game'}))]);
+            
+            // On fusionne Devoirs (DM) et Jeux (Game)
+            // On pourrait ajouter ici les AC (Activités Classe) plus tard
+            setActivities([
+                ...hw.map(x => ({...x, actType: 'homework', typeLabel: '📝 DM'})), 
+                ...gm.map(x => ({...x, actType: 'game', typeLabel: '🎮 JEU'}))
+            ]);
+            
             setChapters(cp || []);
         } catch (e) { console.error("❌ ActivityStudio Load error:", e); }
         setLoading(false);
@@ -1293,6 +1310,7 @@ export default function ActivityStudio({ globalClass, user }) {
 
     useEffect(() => { loadData(); }, [globalClass]);
 
+    // Écrans d'édition (Modales Plein Écran)
     if (editingItem) {
         if (editingItem.type === 'homework') return <HomeworkStudio initialData={editingItem.data} chapters={chapters} globalClass={globalClass} user={user} onClose={() => {setEditingItem(null); loadData();}} />;
         return <GameStudio initialData={editingItem.data} chapters={chapters} classFilter={globalClass} onClose={() => {setEditingItem(null); loadData();}} />;
@@ -1300,12 +1318,14 @@ export default function ActivityStudio({ globalClass, user }) {
 
     return (
         <div className="space-y-8 animate-in fade-in">
+            {/* Barre d'outils rapide */}
             <div className="flex gap-4 mb-6">
-                <button onClick={() => setEditingItem({type:'homework'})} className="bg-orange-500 text-white px-6 py-3 rounded-2xl font-black text-[10px] shadow-lg">NOUVEAU DEVOIR</button>
-                <button onClick={() => setEditingItem({type:'game'})} className="bg-purple-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] shadow-lg">NOUVEAU JEU</button>
+                <button onClick={() => setEditingItem({type:'homework'})} className="bg-orange-500 text-white px-6 py-3 rounded-2xl font-black text-[10px] shadow-lg hover:scale-105 transition-transform">+ CRÉER UN DEVOIR (DM)</button>
+                <button onClick={() => setEditingItem({type:'game'})} className="bg-purple-600 text-white px-6 py-3 rounded-2xl font-black text-[10px] shadow-lg hover:scale-105 transition-transform">+ CRÉER UN JEU</button>
             </div>
+
             {loading ? (
-                <div className="text-center py-20 text-slate-300 font-black animate-pulse uppercase">Synchronisation...</div>
+                <div className="text-center py-20 text-slate-300 font-black animate-pulse uppercase">Chargement de votre bureau...</div>
             ) : (
                 <ProfStudioFolder 
                     chapters={chapters} 
@@ -1314,7 +1334,7 @@ export default function ActivityStudio({ globalClass, user }) {
                     user={user}
                     onEditItem={(it) => setEditingItem({type: it.actType, data: it})}
                     onDeleteItem={async (id, type) => {
-                        if(confirm('Supprimer ?')) {
+                        if(confirm('Supprimer cet élément ?')) {
                             await fetch(type==='game'?`/api/games/${id}`:`/api/homework/${id}`, {method:'DELETE'});
                             loadData();
                         }
@@ -1340,7 +1360,10 @@ export default function ActivityStudio({ globalClass, user }) {
 
 /* ZOOM CARD STYLE */
 .zoom-overlay { position: fixed; inset: 0; z-index: 9999; background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; }
-.zoom-card { background: white; width: 90%; max-width: 500px; border-radius: 30px; padding: 2rem; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); animation: zoomIn 0.2s ease-out; }
+/* Z-INDEX SUPÉRIEUR POUR LE ZOOM ÉLÈVE PAR DESSUS LA LISTE DE CLASSE */
+.zoom-overlay.level-2 { z-index: 10001; }
+
+.zoom-card { background: white; width: 90%; max-width: 500px; border-radius: 30px; padding: 2rem; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); animation: zoomIn 0.2s ease-out; position: relative; max-height: 90vh; display: flex; flex-direction: column; }
 @keyframes zoomIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
 /* [NOUVEAU] BARRE DEVOPS QUICK SWITCH */
@@ -1349,7 +1372,7 @@ export default function ActivityStudio({ globalClass, user }) {
     background: #1e293b; padding: 10px; border-radius: 20px;
     align-items: center; overflow-x: auto;
 }
-/* CORRECTION ICI : suppression de "font-black;" qui était une erreur */
+
 .dev-label { font-size: 10px; color: #64748b; text-transform: uppercase; margin-right: 10px; white-space: nowrap; font-weight: 900; }
 .btn-shortcut {
     padding: 8px 16px; border-radius: 12px; border: none; cursor: pointer;
@@ -1383,6 +1406,9 @@ export default function AdminDashboard({ user, onRefresh }) {
     const [editingId, setEditingId] = useState(null);
     const [zoomedItem, setZoomedItem] = useState(null);
 
+    // --- ÉTAT POUR LISTE ÉLÈVES D'UNE CLASSE ---
+    const [viewingClassRoster, setViewingClassRoster] = useState(null);
+
     const [allClasses, setAllClasses] = useState([]);
     const [allSubjects, setAllSubjects] = useState([]);
 
@@ -1391,55 +1417,42 @@ export default function AdminDashboard({ user, onRefresh }) {
     const [formUser, setFormUser] = useState({ firstName: '', lastName: '', password: '', role: 'admin', taughtSubjects: [], assignedClasses: [] });
     const [formStudent, setFormStudent] = useState({ firstName: '', lastName: '', fullName: '', email: '', classId: '', birthDate: '', gender: '' });
 
-    // --- [NOUVEAU] LOGIQUE DE BASCULE RAPIDE (SHORTCUTS) ---
+    // --- LOGIQUE DE BASCULE RAPIDE (SHORTCUTS) ---
     const handleQuickSwitch = async (targetRole) => {
         let credentials = {};
-        
         try {
             if (targetRole === 'JEAN') {
                 credentials = { role: 'ADMIN', firstName: 'Jean', lastName: 'Vuillet', password: 'Clemenceau1919' };
             }
             else if (targetRole === 'ADMIN_TEST') {
-                // On s'assure que le compte existe ou on tente le login direct via backdoor
                 credentials = { role: 'ADMIN', firstName: 'Admin', lastName: 'Test', password: 'A' };
             }
             else if (targetRole === 'PROF_TEST') {
                 credentials = { role: 'TEACHER', firstName: 'Prof', lastName: 'Test', password: 'A' };
             }
             else if (targetRole === 'ELEVE_TEST') {
-                // Pour l'élève, on doit trouver son ID réel
-                // On cherche "Eleve TEST" ou on prend le premier élève trouvé pour tester
                 const res = await fetch('/api/admin/students');
                 const students = await res.json();
-                
-                // Priorité à "Eleve Test", sinon le premier
                 let targetStudent = students.find(s => s.firstName.toLowerCase() === 'eleve' && s.lastName.toLowerCase() === 'test');
-                
                 if (!targetStudent) {
-                    // Création à la volée si inexistant pour faciliter la vie
-                    if(confirm("Compte 'Eleve Test' introuvable. Voulez-vous utiliser le premier élève de la liste ?")) {
-                         targetStudent = students[0];
-                    } else return;
+                    if(confirm("Compte 'Eleve Test' introuvable. Voulez-vous utiliser le premier élève de la liste ?")) targetStudent = students[0];
+                    else return;
                 }
-
                 if (!targetStudent) return alert("Aucun élève dans la base.");
                 credentials = { role: 'STUDENT', studentId: targetStudent._id };
             }
 
-            // Exécution du Login
             const res = await fetch('/api/auth/login', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify(credentials)
             });
-
             const data = await res.json();
             if (res.ok) {
                 localStorage.setItem('player', JSON.stringify(data.user));
-                window.location.reload(); // Rechargement pour basculer l'interface
+                window.location.reload(); 
             } else {
                 alert("Erreur switch : " + data.message);
-                // Si le compte n'existe pas, on propose de le créer
                 if (targetRole === 'ADMIN_TEST' || targetRole === 'PROF_TEST') {
                     if(confirm(`Le compte ${targetRole} n'existe pas. Le créer ?`)) {
                         const ep = targetRole === 'PROF_TEST' ? '/api/admin/teachers' : '/api/admin/admins';
@@ -1453,14 +1466,11 @@ export default function AdminDashboard({ user, onRefresh }) {
                                 role: targetRole === 'PROF_TEST' ? undefined : 'admin'
                             })
                         });
-                        handleQuickSwitch(targetRole); // On réessaie
+                        handleQuickSwitch(targetRole); 
                     }
                 }
             }
-        } catch (e) {
-            console.error(e);
-            alert("Erreur technique lors du switch.");
-        }
+        } catch (e) { console.error(e); alert("Erreur technique lors du switch."); }
     };
 
     const getEndpoint = (v) => {
@@ -1477,13 +1487,12 @@ export default function AdminDashboard({ user, onRefresh }) {
             const res = await fetch(`/api/admin/${endpoint}`);
             if (res.ok) setItems(await res.json());
             
+            // On charge toujours les référentiels pour faire les liens
             const resClasses = await fetch('/api/admin/classrooms');
             if (resClasses.ok) setAllClasses(await resClasses.json());
             
-            if (view === 'teachers') {
-                const resSubjects = await fetch('/api/admin/subjects');
-                if (resSubjects.ok) setAllSubjects(await resSubjects.json());
-            }
+            const resSubjects = await fetch('/api/admin/subjects');
+            if (resSubjects.ok) setAllSubjects(await resSubjects.json());
 
         } catch (e) { console.error(e); }
         setLoading(false);
@@ -1495,7 +1504,19 @@ export default function AdminDashboard({ user, onRefresh }) {
         setZoomedItem(null);
     }, [view]);
 
-    // ... (Logique Import inchangée) ...
+    // --- CHARGEMENT TROMBINOSCOPE CLASSE ---
+    const handleViewRoster = async (cls) => {
+        setLoading(true);
+        try {
+            const res = await fetch('/api/admin/students');
+            const allStudents = await res.json();
+            const roster = allStudents.filter(s => s.classId === cls._id || s.currentClass === cls.name);
+            setViewingClassRoster({ ...cls, students: roster });
+        } catch(e) { console.error(e); alert("Erreur chargement liste"); }
+        setLoading(false);
+    };
+
+
     const openImportModal = (type) => {
         setImportType(type);
         setImportText("");
@@ -1544,7 +1565,6 @@ export default function AdminDashboard({ user, onRefresh }) {
         setImporting(false);
     };
 
-    // ... (Logique Edit inchangée) ...
     const startEdit = (item) => {
         setEditingId(item._id);
         if (view === 'classes') setFormClass({ name: item.name, type: item.type });
@@ -1564,14 +1584,7 @@ export default function AdminDashboard({ user, onRefresh }) {
         setFormUser({ firstName: '', lastName: '', password: '', role: 'admin', taughtSubjects: [], assignedClasses: [] });
         setFormStudent({ firstName: '', lastName: '', fullName: '', email: '', classId: '', birthDate: '', gender: '' });
     };
-    const toggleSubject = (subId) => {
-        const current = formUser.taughtSubjects || [];
-        setFormUser({ ...formUser, taughtSubjects: current.includes(subId) ? current.filter(id => id !== subId) : [...current, subId] });
-    };
-    const toggleClass = (clsId) => {
-        const current = formUser.assignedClasses || [];
-        setFormUser({ ...formUser, assignedClasses: current.includes(clsId) ? current.filter(id => id !== clsId) : [...current, clsId] });
-    };
+    
     const submitData = async (endpointBase, body) => {
         try {
             const method = editingId ? 'PATCH' : 'POST';
@@ -1589,9 +1602,12 @@ export default function AdminDashboard({ user, onRefresh }) {
     const handleDelete = async (id) => { if (confirm("Supprimer ?")) { await fetch(`/api/admin/${getEndpoint(view)}/${id}`, { method: 'DELETE' }); loadData(); if(view==='classes') onRefresh(); }};
     const handleFixBug = async (id) => { await fetch(`/api/admin/bugs/${id}`, { method: 'PATCH' }); loadData(); };
 
+    // HELPER POUR LES BADGES PROFS
+    const getSubjectBadge = (id) => allSubjects.find(s => s._id === id);
+    const getClassBadge = (id) => allClasses.find(c => c._id === id);
+
     return (
         <div className="admin-container animate-in fade-in">
-            {/* [NOUVEAU] BARRE DEVOPS QUICK SWITCH */}
             {user.isDeveloper && (
                 <div className="dev-shortcuts">
                     <span className="dev-label">🚀 SWITCH RAPIDE :</span>
@@ -1603,7 +1619,7 @@ export default function AdminDashboard({ user, onRefresh }) {
                 </div>
             )}
 
-            {/* OVERLAY IMPORT IA (Inchangé) */}
+            {/* OVERLAY IMPORT IA */}
             {showImportModal && (
                 <div className="zoom-overlay" onClick={() => setShowImportModal(false)}>
                     <div className="zoom-card w-[600px] max-w-full" onClick={e => e.stopPropagation()}>
@@ -1664,24 +1680,107 @@ export default function AdminDashboard({ user, onRefresh }) {
                 </div>
             )}
 
-            {/* ZOOM OVERLAY (Inchangé) */}
+            {/* OVERLAY LISTE ÉLÈVES (TROMBINOSCOPE) */}
+            {viewingClassRoster && (
+                <div className="zoom-overlay" onClick={() => setViewingClassRoster(null)}>
+                    <div className="zoom-card" style={{width: '800px', maxWidth: '95%'}} onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-between items-center mb-6">
+                            <div>
+                                <h2 className="text-2xl font-black text-slate-800 uppercase">Classe {viewingClassRoster.name}</h2>
+                                <span className="text-xs font-bold text-slate-400 uppercase">{viewingClassRoster.students.length} Élèves inscrits</span>
+                            </div>
+                            <button onClick={() => setViewingClassRoster(null)} className="w-10 h-10 rounded-full bg-slate-100 font-black text-slate-400 hover:bg-red-50 hover:text-red-500">✕</button>
+                        </div>
+                        
+                        <div className="overflow-y-auto custom-scrollbar flex-1 bg-slate-50 rounded-2xl p-4">
+                            {viewingClassRoster.students.length === 0 ? (
+                                <div className="text-center py-10 text-slate-300 font-bold italic">Aucun élève dans cette classe.</div>
+                            ) : (
+                                <table className="w-full text-sm">
+                                    <thead>
+                                        <tr className="text-left text-slate-400 uppercase text-[10px]">
+                                            <th className="pb-2 pl-2">Nom</th>
+                                            <th className="pb-2 text-right pr-2">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {viewingClassRoster.students.map(s => (
+                                            <tr key={s._id} className="border-b border-slate-100 last:border-0 hover:bg-white transition-colors rounded-lg">
+                                                <td className="py-3 pl-2 font-bold text-slate-700">
+                                                    {s.firstName} <span className="uppercase">{s.lastName}</span>
+                                                    <div className="text-[9px] text-slate-400 font-normal">{s.email}</div>
+                                                </td>
+                                                <td className="py-3 text-right pr-2">
+                                                    <button onClick={() => setZoomedItem(s)} className="bg-white border border-indigo-100 text-indigo-600 px-3 py-1.5 rounded-lg font-black text-[10px] hover:bg-indigo-50 shadow-sm flex items-center gap-1 ml-auto">
+                                                        <span>🔍</span> ZOOM
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ZOOM OVERLAY (FICHE DÉTAIL) */}
             {zoomedItem && (
-                <div className="zoom-overlay" onClick={() => setZoomedItem(null)}>
+                <div className="zoom-overlay level-2" onClick={() => setZoomedItem(null)}>
                     <div className="zoom-card" onClick={e => e.stopPropagation()}>
                         <h2 className="text-2xl font-black uppercase text-slate-800 mb-4">{zoomedItem.firstName} {zoomedItem.lastName}</h2>
-                        {view === 'students' && (
+                        
+                        {view === 'teachers' ? (
+                            <div className="space-y-4">
+                                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                                    <p className="text-xs font-bold text-slate-400 uppercase mb-2">Matières Enseignées</p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {zoomedItem.taughtSubjects?.length > 0 ? zoomedItem.taughtSubjects.map(id => {
+                                            const sub = getSubjectBadge(id);
+                                            return sub ? (
+                                                <span key={id} className="px-2 py-1 rounded-md text-[10px] font-black text-white" style={{background: sub.color}}>
+                                                    {sub.name}
+                                                </span>
+                                            ) : null;
+                                        }) : <span className="text-slate-400 italic text-sm">Aucune matière</span>}
+                                    </div>
+                                </div>
+                                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                                    <p className="text-xs font-bold text-slate-400 uppercase mb-2">Classes Assignées</p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {zoomedItem.assignedClasses?.length > 0 ? zoomedItem.assignedClasses.map(id => {
+                                            const cls = getClassBadge(id);
+                                            return cls ? (
+                                                <span key={id} className="px-2 py-1 rounded-md text-[10px] font-black bg-white border border-slate-200 text-slate-700">
+                                                    {cls.name}
+                                                </span>
+                                            ) : null;
+                                        }) : <span className="text-slate-400 italic text-sm">Aucune classe</span>}
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (view === 'students' || zoomedItem.email !== undefined) ? (
+                            <div className="space-y-4">
+                                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                                    <p className="text-xs font-bold text-slate-400 uppercase mb-1">Email</p>
+                                    <p className="font-bold text-slate-700">{zoomedItem.email || "Non renseigné"}</p>
+                                </div>
+                                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                                    <p className="text-xs font-bold text-slate-400 uppercase mb-1">Classe Actuelle</p>
+                                    <p className="font-bold text-slate-700">{zoomedItem.currentClass || "Aucune"}</p>
+                                </div>
+                                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                                    <p className="text-xs font-bold text-slate-400 uppercase mb-1">Santé / Info</p>
+                                    <p className="text-sm text-slate-600">{zoomedItem.healthInfo || "RAS"}</p>
+                                </div>
+                            </div>
+                        ) : (
                             <div className="space-y-2 text-sm text-slate-600">
-                                <p>📧 {zoomedItem.email}</p>
-                                <p>🏫 {zoomedItem.currentClass}</p>
+                                <p>Rôle : {zoomedItem.role}</p>
                             </div>
                         )}
-                        {view === 'teachers' && (
-                            <div className="space-y-2 text-sm text-slate-600">
-                                <p>📚 {zoomedItem.taughtSubjects?.length || 0} Matières</p>
-                                <p>🎓 {zoomedItem.assignedClasses?.length || 0} Classes</p>
-                            </div>
-                        )}
-                        <button onClick={() => setZoomedItem(null)} className="w-full py-3 mt-6 rounded-xl bg-slate-800 text-white font-black text-xs uppercase">Fermer</button>
+                        <button onClick={() => setZoomedItem(null)} className="w-full py-3 mt-6 rounded-xl bg-slate-800 text-white font-black text-xs uppercase hover:bg-slate-700 transition-colors">Fermer</button>
                     </div>
                 </div>
             )}
@@ -1697,7 +1796,7 @@ export default function AdminDashboard({ user, onRefresh }) {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* FORMULAIRE (Inchangé) */}
+                {/* FORMULAIRE */}
                 {view !== 'bugs' && (
                     <div className="lg:col-span-1">
                         <div className={`p-6 rounded-[30px] border shadow-sm sticky top-8 transition-colors ${editingId ? 'bg-amber-50 border-amber-200' : 'bg-white'}`}>
@@ -1717,7 +1816,7 @@ export default function AdminDashboard({ user, onRefresh }) {
                                 <select className="admin-input" value={formClass.type} onChange={e => setFormClass({...formClass, type: e.target.value})}><option value="CLASS">CLASSE ADMINISTRATIVE</option><option value="GROUP">GROUPE PÉDAGOGIQUE</option></select>
                                 <button className={`admin-btn-submit ${editingId ? 'bg-amber-500' : ''}`}>{editingId ? 'METTRE À JOUR' : 'CRÉER CLASSE'}</button>
                             </form>}
-                            {/* ... Reste des formulaires identiques ... */}
+                            
                             {view === 'subjects' && <form onSubmit={handleSubjectSubmit} className="space-y-4">
                                 <input className="admin-input" placeholder="NOM MATIÈRE" value={formSubject.name} onChange={e => setFormSubject({...formSubject, name: e.target.value})} required />
                                 <input type="color" className="w-full h-12 rounded-xl cursor-pointer" value={formSubject.color} onChange={e => setFormSubject({...formSubject, color: e.target.value})} />
@@ -1749,7 +1848,7 @@ export default function AdminDashboard({ user, onRefresh }) {
                     </div>
                 )}
 
-                {/* LISTE (Inchangée) */}
+                {/* LISTE */}
                 <div className={view === 'bugs' ? 'lg:col-span-3' : 'lg:col-span-2'}>
                     <div className="bg-white rounded-[30px] border shadow-sm overflow-hidden">
                         <table className="admin-table">
@@ -1775,8 +1874,29 @@ export default function AdminDashboard({ user, onRefresh }) {
                                             {view === 'staff' && <span className={`px-2 py-1 rounded text-[9px] font-black uppercase ${it.role === 'developer' ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-200 text-slate-600'}`}>{it.role}</span>}
                                             {view === 'students' && <span className="px-2 py-1 rounded bg-orange-100 text-orange-600 text-[9px] font-black uppercase">{it.currentClass || 'AUCUNE'}</span>}
                                             {view === 'bugs' && <div className="max-w-md"><div className="text-xs font-bold text-slate-600 mb-1">{it.description}</div><span className={`px-2 py-1 rounded text-[9px] font-black uppercase ${it.status === 'fixed' ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>{it.status}</span></div>}
+                                            
+                                            {/* AFFICHAGE SPÉCIFIQUE PROFS DANS LA LISTE */}
+                                            {view === 'teachers' && (
+                                                <div className="flex flex-col gap-1.5">
+                                                    <div className="flex flex-wrap gap-1">
+                                                        {it.taughtSubjects?.map(id => {
+                                                            const sub = getSubjectBadge(id);
+                                                            return sub ? <span key={id} className="text-[9px] font-black px-1.5 rounded text-white" style={{background:sub.color}}>{sub.name}</span> : null;
+                                                        })}
+                                                    </div>
+                                                    <div className="flex flex-wrap gap-1">
+                                                        {it.assignedClasses?.map(id => {
+                                                            const cls = getClassBadge(id);
+                                                            return cls ? <span key={id} className="text-[9px] font-bold px-1.5 rounded bg-slate-100 text-slate-600 border border-slate-200">{cls.name}</span> : null;
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            )}
                                         </td>
                                         <td className="p-4 text-right flex justify-end gap-2">
+                                            {view === 'classes' && (
+                                                <button onClick={() => handleViewRoster(it)} className="w-8 h-8 rounded-lg bg-cyan-50 text-cyan-600 flex items-center justify-center font-bold hover:bg-cyan-100" title="Voir les élèves">👥</button>
+                                            )}
                                             {view === 'bugs' && it.status === 'open' && <button onClick={() => handleFixBug(it._id)} className="text-emerald-500 font-black text-[10px] uppercase">RÉSOLU ?</button>}
                                             {(view === 'teachers' || view === 'students') && <button onClick={() => setZoomedItem(it)} className="w-8 h-8 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center font-bold hover:bg-teal-100">🔍</button>}
                                             {view !== 'bugs' && <button onClick={() => startEdit(it)} className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold hover:bg-indigo-100">✎</button>}
@@ -1933,7 +2053,8 @@ export default function ConsoleReporter({ user }) {
 [[[£ END: client/src/features/prof/components/ConsoleReporter.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/components/DatabaseViewer.css £]]]
-.db-viewer-overlay { position: fixed; inset: 0; z-index: 10000; background: rgba(15, 23, 42, 0.95); display: flex; align-items: center; justify-content: center; padding: 2rem; }
+/* CORRECTION Z-INDEX : Passage à 20000 pour être au-dessus de tout */
+.db-viewer-overlay { position: fixed; inset: 0; z-index: 20000; background: rgba(15, 23, 42, 0.95); display: flex; align-items: center; justify-content: center; padding: 2rem; }
 .db-viewer-window { background: white; width: 100%; height: 100%; border-radius: 40px; display: flex; flex-direction: column; overflow: hidden; }
 .db-header { padding: 1.5rem 2rem; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
 .db-tabs { display: flex; overflow-x: auto; background: #f8fafc; border-bottom: 1px solid #eee; padding: 0.5rem 2rem; gap: 10px; }
@@ -1966,34 +2087,69 @@ const DESCRIPTIONS = {
     accesslogs: "🔐 Sécurité. Logs d'accès système.",
     bugreports: "🪲 Bugs. Erreurs capturées.",
     projectdocs: "🧠 Mémoire IA. Documentation code.",
-    players_legacy: "⚠️ LEGACY. Anciennes données à migrer."
+    players: "⚠️ LEGACY. Anciennes données à migrer."
 };
 
 export default function DatabaseViewer({ onClose }) {
     const [data, setData] = useState(null);
     const [activeTab, setActiveTab] = useState('students');
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
 
     const loadData = () => {
         setLoading(true);
+        setError(null);
         fetch('/api/admin/database-dump')
-            .then(res => res.json())
-            .then(d => { setData(d); setLoading(false); })
-            .catch(() => setLoading(false));
+            .then(async res => {
+                if(!res.ok) {
+                    const txt = await res.text();
+                    throw new Error(txt || "Erreur serveur inconnue");
+                }
+                return res.json();
+            })
+            .then(d => { 
+                setData(d); 
+                // Si l'onglet actif n'existe pas ou est vide, on cherche le premier non vide
+                const keys = Object.keys(d || {});
+                if (keys.length > 0) {
+                    if (!d[activeTab]) setActiveTab(keys[0]);
+                }
+                setLoading(false); 
+            })
+            .catch(err => {
+                console.error("DB LOAD ERROR:", err);
+                setError(err.message);
+                setLoading(false);
+            });
     };
 
     useEffect(() => { loadData(); }, []);
 
     const handleMigrate = async () => {
         if(!confirm("Lancer la migration vers la structure ARCHITECTE PRO ?")) return;
-        await fetch('/api/admin/maintenance/migrate-legacy', { method: 'POST' });
-        loadData();
+        setLoading(true);
+        try {
+            await fetch('/api/admin/maintenance/migrate-legacy', { method: 'POST' });
+            loadData();
+        } catch(e) { alert("Erreur migration"); setLoading(false); }
     };
 
-    if (loading) return <div className="db-viewer-overlay"><h2 className="text-white font-black animate-pulse">SYNCHRONISATION BDD PRO...</h2></div>;
+    if (loading) return <div className="db-viewer-overlay"><h2 className="text-white font-black animate-pulse text-2xl">SYNCHRONISATION BDD PRO...</h2></div>;
+    
+    if (error) return (
+        <div className="db-viewer-overlay">
+            <div className="bg-white p-8 rounded-2xl text-center shadow-2xl max-w-lg">
+                <h2 className="text-red-500 font-black text-xl mb-4">ERREUR CRITIQUE</h2>
+                <div className="bg-slate-100 p-4 rounded-xl text-xs font-mono text-left mb-4 overflow-auto max-h-40">
+                    {error}
+                </div>
+                <button onClick={onClose} className="bg-slate-800 text-white px-6 py-2 rounded-xl font-bold">FERMER</button>
+            </div>
+        </div>
+    );
 
     const collections = Object.keys(data || {}).sort();
-    const currentData = data[activeTab] || [];
+    const currentData = (data && data[activeTab]) ? data[activeTab] : [];
     const columns = currentData.length > 0 ? Object.keys(currentData[0]).filter(k => k !== '__v') : [];
 
     return (
@@ -2006,20 +2162,20 @@ export default function DatabaseViewer({ onClose }) {
                     </div>
                     <div className="flex gap-3">
                         <button onClick={handleMigrate} className="bg-amber-100 text-amber-600 px-4 py-2 rounded-xl font-black text-[10px]">MIGRATION PRO</button>
-                        <button onClick={onClose} className="w-10 h-10 bg-slate-100 rounded-full font-black">✕</button>
+                        <button onClick={onClose} className="w-10 h-10 bg-slate-100 rounded-full font-black hover:bg-red-50 hover:text-red-500 transition-colors">✕</button>
                     </div>
                 </div>
 
                 <div className="db-tabs no-scrollbar">
                     {collections.map(c => (
                         <button key={c} onClick={() => setActiveTab(c)} className={`db-tab-btn ${activeTab === c ? 'active' : ''}`}>
-                            {c} ({data[c].length})
+                            {c} ({data[c]?.length || 0})
                         </button>
                     ))}
                 </div>
                 
-                <div className="p-4 bg-indigo-50 text-indigo-700 font-bold text-[10px] uppercase">
-                    {DESCRIPTIONS[activeTab]}
+                <div className="p-4 bg-indigo-50 text-indigo-700 font-bold text-[10px] uppercase border-b border-indigo-100">
+                    {DESCRIPTIONS[activeTab] || `COLLECTION : ${activeTab.toUpperCase()}`}
                 </div>
 
                 <div className="db-table-container custom-scrollbar">
@@ -2030,15 +2186,15 @@ export default function DatabaseViewer({ onClose }) {
                                 {currentData.map((row, i) => (
                                     <tr key={i}>
                                         {columns.map(col => (
-                                            <td key={col} className="truncate max-w-[150px]">
-                                                {typeof row[col] === 'object' ? 'OBJET' : String(row[col])}
+                                            <td key={col} className="truncate max-w-[150px]" title={typeof row[col] === 'object' ? JSON.stringify(row[col]) : String(row[col])}>
+                                                {typeof row[col] === 'object' ? (Array.isArray(row[col]) ? `[Array(${row[col].length})]` : '{Objet}') : String(row[col])}
                                             </td>
                                         ))}
                                     </tr>
                                 ))}
                             </tbody>
                         </table>
-                    ) : <div className="p-20 text-center text-slate-300 font-black">TABLE VIDE</div>}
+                    ) : <div className="p-20 text-center text-slate-300 font-black text-xl uppercase">TABLE {activeTab} VIDE</div>}
                 </div>
             </div>
         </div>
@@ -2129,104 +2285,245 @@ export default function ProfNav({ activeTab, onTabChange, user }) {
 [[[£ END: client/src/features/prof/components/ProfNav.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/components/ProfStudioFolder.jsx £]]]
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
+// Couleurs pour les sections
 const COLORS = ['#ef4444', '#3b82f6', '#22c55e', '#f59e0b', '#8b5cf6', '#ec4899'];
 
 export default function ProfStudioFolder({ items, chapters, classFilter, user, onEditItem, onDeleteItem, onRefresh }) {
-    const [openChaps, setOpenChaps] = useState({});
     const [sections, setSections] = useState(user?.subjectSections || []);
+    const [activeSection, setActiveSection] = useState(null); 
+    const [openChaps, setOpenChaps] = useState({}); 
+    const [showArchived, setShowArchived] = useState(false); 
 
-    const saveSections = async (newSecs) => {
-        const id = user.id || user._id;
-        const res = await fetch(`/api/admin/teacher/${id}/sections`, {
-            method: 'PATCH',
+    useEffect(() => {
+        if (sections.length > 0 && !activeSection) setActiveSection(sections[0].name);
+    }, [sections]);
+
+    // --- ACTIONS ---
+    const handleAddSection = async () => {
+        const name = prompt("Nom de la nouvelle section (ex: Géographie, Projets...) ?");
+        if (!name) return;
+        const res = await fetch('/api/structure/sections', {
+            method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sections: newSecs })
+            body: JSON.stringify({ teacherId: user.id || user._id, sectionName: name })
         });
         if (res.ok) {
+            const newSecs = await res.json();
             setSections(newSecs);
+            setActiveSection(name);
             const local = JSON.parse(localStorage.getItem('player'));
             localStorage.setItem('player', JSON.stringify({...local, subjectSections: newSecs}));
         }
     };
 
-    const handleCreateChapter = async (subject) => {
-        const title = prompt(`Nom du dossier dans ${subject} ?`);
+    const handleDeleteSection = async (name, e) => {
+        e.stopPropagation();
+        if(!confirm(`Supprimer la section "${name}" ?`)) return;
+        const id = user.id || user._id;
+        await fetch(`/api/structure/sections/${id}/${name}`, { method: 'DELETE' });
+        setSections(sections.filter(s => s.name !== name));
+        if(activeSection === name) setActiveSection(null);
+    };
+
+    const handleCreateChapter = async () => {
+        if (!activeSection) return alert("Sélectionnez d'abord une section !");
+        const title = prompt(`Nouveau chapitre dans "${activeSection}" ?`);
         if (!title) return;
+        
         await fetch('/api/structure/chapters', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title, subject, classroom: classFilter, teacherId: user.id || user._id })
+            body: JSON.stringify({ 
+                title, 
+                section: activeSection, 
+                classroom: classFilter, 
+                teacherId: user.id || user._id 
+            })
         });
         onRefresh();
     };
 
-    const classChapters = (chapters || []).filter(c => c.classroom === classFilter);
+    const toggleArchive = async (chapId, currentState) => {
+        await fetch(`/api/structure/chapters/${chapId}/archive`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ isArchived: !currentState })
+        });
+        onRefresh();
+    };
+
+    const deleteChapter = async (chapId) => {
+        if(!confirm("Supprimer ce chapitre et tout son contenu ?")) return;
+        await fetch(`/api/structure/chapters/${chapId}`, { method: 'DELETE' });
+        onRefresh();
+    };
+
+    // --- FILTRAGE INTELLIGENT ---
+    let relevantChapters = chapters;
+    if (classFilter) {
+        relevantChapters = relevantChapters.filter(c => !c.classroom || c.classroom === classFilter);
+    }
+    
+    // Filtrage par Section
+    if (activeSection) {
+        relevantChapters = relevantChapters.filter(c => c.section === activeSection || (!c.section && activeSection === 'Général'));
+    }
+
+    // Calcul des compteurs (AVANT filtrage visuel)
+    const countActive = relevantChapters.filter(c => !c.isArchived).length;
+    const countArchived = relevantChapters.filter(c => c.isArchived).length;
+
+    // Filtrage final pour affichage
+    const visibleChapters = relevantChapters.filter(c => showArchived ? c.isArchived : !c.isArchived);
+    
+    const activeColor = sections.find(s => s.name === activeSection)?.color || '#64748b';
 
     return (
         <div className="space-y-12">
+            
+            {/* 1. LE CARRÉ NOIR DES SECTIONS */}
             <div className="p-6 bg-slate-900 rounded-[35px] border-4 border-slate-800 shadow-xl">
                 <div className="flex justify-between items-center mb-6">
-                    <h3 className="text-white font-black text-[10px] uppercase tracking-widest px-2">Matières Drive Condamine</h3>
-                    <button onClick={() => { const n = prompt("Nom matière ?"); if(n) saveSections([...sections, { name: n.toUpperCase(), color: COLORS[sections.length % 6] }]); }} className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-black text-[9px] tracking-tighter hover:bg-indigo-500">+ MATIÈRE</button>
+                    <h3 className="text-white font-black text-[10px] uppercase tracking-widest px-2">
+                        SECTIONS DRIVE CONDAMINE
+                    </h3>
+                    <button 
+                        onClick={handleAddSection} 
+                        className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-black text-[9px] tracking-tighter hover:bg-indigo-500 shadow-lg"
+                    >
+                        + SECTION
+                    </button>
                 </div>
+                
                 <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2">
+                    {sections.length === 0 && <span className="text-slate-500 text-xs italic p-2">Aucune section. Créez-en une !</span>}
+                    
                     {sections.map((s, idx) => (
-                        <div key={idx} className="bg-slate-800 p-3 px-5 rounded-xl border border-slate-700 flex items-center gap-4 animate-in">
+                        <button 
+                            key={idx} 
+                            onClick={() => { setActiveSection(s.name); setShowArchived(false); }}
+                            className={`p-3 px-5 rounded-xl border flex items-center gap-4 transition-all ${activeSection === s.name ? 'bg-slate-700 border-white/20 shadow-lg scale-105' : 'bg-slate-800 border-slate-700 hover:bg-slate-750'}`}
+                        >
                             <span className="font-black text-[10px] uppercase" style={{ color: s.color }}>{s.name}</span>
-                            <button onClick={() => { if(confirm("Supprimer ?")) saveSections(sections.filter(x => x.name !== s.name)) }} className="text-slate-600 hover:text-red-500 font-bold">✕</button>
-                        </div>
+                            {activeSection === s.name && (
+                                <span onClick={(e) => handleDeleteSection(s.name, e)} className="text-slate-500 hover:text-red-500 font-bold ml-2">✕</span>
+                            )}
+                        </button>
                     ))}
                 </div>
             </div>
 
-            <div className="space-y-16">
-                {sections.map((s, sIdx) => {
-                    const chaps = classChapters.filter(c => c.subject === s.name);
-                    return (
-                        <div key={sIdx} className="animate-in fade-in">
-                            <div className="flex items-center justify-between mb-6 px-6 border-b pb-4">
-                                <h3 className="font-black text-xl uppercase tracking-tighter" style={{ color: s.color }}>{s.name}</h3>
-                                <button onClick={() => handleCreateChapter(s.name)} className="text-[10px] font-black px-6 py-2 rounded-full border-2 border-dashed hover:bg-slate-50 transition-all" style={{ color: s.color, borderColor: s.color }}>+ CRÉER DOSSIER CLOUD</button>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {chaps.map(chap => {
-                                    const isOpen = openChaps[chap._id];
-                                    const chapItems = (items || []).filter(it => String(it.chapterId) === String(chap._id));
-                                    return (
-                                        <div key={chap._id} className="bg-white rounded-[35px] border-2 shadow-sm transition-all" style={{ borderColor: isOpen ? s.color : '#f1f5f9' }}>
-                                            <div className="p-6 flex items-center justify-between cursor-pointer" onClick={() => setOpenChaps({...openChaps, [chap._id]: !isOpen})}>
+            {/* 2. ZONE DE CONTENU */}
+            <div className="min-h-[400px]">
+                <div className="flex justify-between items-end mb-6 px-4">
+                    <div>
+                        <h2 className="text-3xl font-black uppercase tracking-tight" style={{ color: activeColor }}>
+                            {activeSection || "DOSSIER RACINE"}
+                        </h2>
+                        
+                        {/* Indicateurs de contenu */}
+                        <div className="flex items-center gap-2 mt-2">
+                            <span className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase transition-colors ${!showArchived ? 'bg-slate-800 text-white shadow-md' : 'bg-slate-100 text-slate-400'}`}>
+                                {countActive} DOSSIERS ACTIFS
+                            </span>
+                            <span className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase transition-colors ${showArchived ? 'bg-amber-100 text-amber-700 border border-amber-200 shadow-md' : 'bg-slate-50 text-slate-300'}`}>
+                                {countArchived} ARCHIVÉS
+                            </span>
+                        </div>
+                    </div>
+                    
+                    <div className="flex gap-2">
+                         <button 
+                            onClick={() => setShowArchived(!showArchived)} 
+                            className={`px-4 py-3 rounded-xl text-[10px] font-black border transition-colors ${showArchived ? 'bg-slate-800 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
+                         >
+                            {showArchived ? 'RETOUR AUX ACTIFS' : `VOIR ARCHIVES (${countArchived}) 📦`}
+                         </button>
+                         
+                         {activeSection && !showArchived && (
+                            <button onClick={handleCreateChapter} className="px-6 py-3 rounded-xl text-white text-[10px] font-black shadow-xl hover:opacity-90 transition-transform hover:scale-105" style={{ backgroundColor: activeColor }}>
+                                + NOUVEAU CHAPITRE
+                            </button>
+                         )}
+                    </div>
+                </div>
+
+                {/* 3. GRILLE DES CHAPITRES */}
+                <div className="grid grid-cols-1 gap-6">
+                    {visibleChapters.map(chap => {
+                        const isOpen = openChaps[chap._id];
+                        const chapItems = items.filter(it => String(it.chapterId) === String(chap._id));
+                        
+                        return (
+                            <div key={chap._id} className={`bg-white border-2 rounded-[25px] overflow-hidden transition-all duration-300 ${isOpen ? 'shadow-xl ring-4 ring-opacity-10' : 'shadow-sm hover:border-slate-300'}`} style={{ borderColor: isOpen ? activeColor : '#e2e8f0', '--tw-ring-color': activeColor }}>
+                                
+                                {/* En-tête Chapitre */}
+                                <div className="p-6 flex justify-between items-center cursor-pointer bg-white" onClick={() => setOpenChaps({...openChaps, [chap._id]: !isOpen})}>
+                                    <div className="flex items-center gap-5">
+                                        <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-white font-black text-xl shadow-md transition-transform" style={{ backgroundColor: activeColor, transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}>
+                                            {isOpen ? '📂' : '📁'}
+                                        </div>
+                                        <div>
+                                            <h3 className="font-black text-slate-700 text-lg uppercase tracking-tight">{chap.title}</h3>
+                                            <div className="flex gap-2 mt-1">
+                                                <span className="text-[9px] font-bold bg-slate-100 text-slate-400 px-2 py-0.5 rounded uppercase">{chapItems.length} ACTIVITÉS</span>
+                                                {chap.isArchived && <span className="text-[9px] font-bold bg-amber-100 text-amber-600 px-2 py-0.5 rounded uppercase">ARCHIVÉ</span>}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="flex items-center gap-2">
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); toggleArchive(chap._id, chap.isArchived); }}
+                                            className="w-10 h-10 rounded-xl bg-slate-50 text-slate-400 flex items-center justify-center hover:bg-slate-100 transition-colors"
+                                            title={chap.isArchived ? "Désarchiver" : "Archiver"}
+                                        >
+                                            {chap.isArchived ? '📤' : '📦'}
+                                        </button>
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); deleteChapter(chap._id); }}
+                                            className="w-10 h-10 rounded-xl bg-red-50 text-red-400 flex items-center justify-center hover:bg-red-100 transition-colors"
+                                        >
+                                            ✕
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Contenu */}
+                                {isOpen && (
+                                    <div className="bg-slate-50/80 border-t p-4 space-y-3 animate-in slide-in-from-top-2">
+                                        {chapItems.length === 0 && <div className="text-center text-xs text-slate-400 italic py-6 border-2 border-dashed border-slate-200 rounded-xl">Dossier vide. Ajoutez des jeux ou des devoirs via les boutons en haut.</div>}
+                                        
+                                        {chapItems.map(it => (
+                                            <div key={it._id} className="bg-white p-4 rounded-2xl flex justify-between items-center shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
                                                 <div className="flex items-center gap-4">
-                                                    <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-white font-black text-lg shadow-md" style={{ backgroundColor: s.color }}>{s.name[0]}</div>
-                                                    <div className="text-left">
-                                                        <h4 className="font-black text-slate-800 uppercase text-md leading-tight">{chap.title}</h4>
-                                                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{chapItems.length} ÉLÉMENTS CLOUD</span>
-                                                    </div>
+                                                    <span className={`text-[9px] font-black px-3 py-1.5 rounded-lg uppercase tracking-wider ${it.actType === 'game' ? 'bg-purple-100 text-purple-600' : 'bg-orange-100 text-orange-600'}`}>
+                                                        {it.typeLabel || (it.actType === 'game' ? 'JEU' : 'DM')}
+                                                    </span>
+                                                    <span className="font-bold text-slate-700 text-sm">{it.title}</span>
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <button onClick={() => onEditItem(it)} className="px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-600 text-[10px] font-black hover:bg-indigo-100">MODIFIER</button>
+                                                    <button onClick={() => onDeleteItem(it._id, it.actType)} className="px-3 py-1.5 rounded-lg bg-red-50 text-red-500 text-[10px] font-black hover:bg-red-100">SUPPRIMER</button>
                                                 </div>
                                             </div>
-                                            {isOpen && (
-                                                <div className="p-4 bg-slate-50/50 border-t space-y-2 rounded-b-[35px]">
-                                                    {chapItems.map(it => (
-                                                        <div key={it._id} className="bg-white p-3 px-5 rounded-2xl flex justify-between items-center shadow-sm border border-slate-100">
-                                                            <div className="text-left">
-                                                                <b className="text-slate-700 text-xs font-black uppercase">{it.title}</b>
-                                                            </div>
-                                                            <div className="flex gap-2">
-                                                                <button onClick={() => onEditItem(it)} className="w-8 h-8 flex items-center justify-center bg-indigo-50 text-indigo-600 rounded-lg text-xs">✎</button>
-                                                                <button onClick={() => onDeleteItem(it._id, it.actType)} className="w-8 h-8 flex items-center justify-center bg-red-50 text-red-500 rounded-lg text-xs">🗑️</button>
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </div>
-                                    );
-                                })}
+                                        ))}
+                                    </div>
+                                )}
                             </div>
+                        );
+                    })}
+                    
+                    {visibleChapters.length === 0 && (
+                        <div className="p-16 border-4 border-dashed border-slate-200 rounded-[40px] text-center">
+                            <div className="text-4xl mb-4 opacity-20">📂</div>
+                            <p className="text-slate-400 font-bold uppercase tracking-widest">{showArchived ? "Aucune archive trouvée." : "Ce dossier est vide."}</p>
+                            {!showArchived && <p className="text-slate-300 text-sm mt-2">Cliquez sur "+ NOUVEAU CHAPITRE" pour commencer.</p>}
                         </div>
-                    );
-                })}
+                    )}
+                </div>
             </div>
         </div>
     );
@@ -2959,25 +3256,27 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const AdminExpert = require('./experts/admin.expert');
 
+// Wrapper pour gérer les erreurs async automatiquement
 const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
-// --- IMPORTATION IA ---
-router.post('/import/analyze', asyncHandler(async (req, res) => {
-    // req.body = { text, type: 'students'|'classes' }
-    const result = await AdminExpert.analyzeImportData(req.body);
-    res.json(result);
-}));
+// --- 1. IMPORTATION IA ---
+router.post('/import/analyze', asyncHandler(async (req, res) => res.json(await AdminExpert.analyzeImportData(req.body))));
+router.post('/import/execute', asyncHandler(async (req, res) => res.json(await AdminExpert.executeImport(req.body.classId, req.body.data, req.body.type))));
 
-router.post('/import/execute', asyncHandler(async (req, res) => {
-    // req.body = { classId, data, type }
-    const result = await AdminExpert.executeImport(req.body.classId, req.body.data, req.body.type);
-    res.json(result);
-}));
+// --- 2. SYSTÈME & OUTILS (C'est ici que manquait votre route) ---
+router.get('/drive-check', asyncHandler(async (req, res) => res.json(await AdminExpert.checkDriveStatus())));
+router.get('/database-dump', asyncHandler(async (req, res) => res.json(await AdminExpert.getFullDump()))); // <--- LA ROUTE MANQUANTE
+router.get('/project-tree', asyncHandler(async (req, res) => res.json(await AdminExpert.getProjectTree())));
+router.post('/init-tree', asyncHandler(async (req, res) => res.json({ ok: true }))); 
 
-// ... (Le reste du fichier routes est inchangé, je ne le répète pas pour économiser les tokens, il est déjà bien en place) ...
-// (Gardez vos routes CRUD existantes pour classrooms, subjects, etc.)
+// --- 3. MAINTENANCE ---
+router.post('/maintenance/migrate-legacy', asyncHandler(async (req, res) => res.json(await AdminExpert.migrateLegacy())));
+router.post('/maintenance/resync-enrollments', asyncHandler(async (req, res) => res.json(await AdminExpert.resyncEnrollments())));
+router.post('/maintenance/purge-orphans', asyncHandler(async (req, res) => res.json(await AdminExpert.purgeOrphans())));
 
-// --- CRUD GENERIQUES (Rappel pour la forme) ---
+// --- 4. CRUD GÉNÉRIQUES ---
+
+// CLASSROOMS
 router.get('/classrooms', asyncHandler(async (req, res) => res.json(await mongoose.model('Classroom').find({}).sort({ name: 1 }))));
 router.post('/classrooms', asyncHandler(async (req, res) => {
     const existing = await mongoose.model('Classroom').findOne({ name: req.body.name.toUpperCase().trim() });
@@ -2988,16 +3287,72 @@ router.post('/classrooms', asyncHandler(async (req, res) => {
 }));
 router.delete('/classrooms/:id', asyncHandler(async (req, res) => { await mongoose.model('Classroom').findByIdAndDelete(req.params.id); res.json({ok:true}); }));
 
+// SUBJECTS
 router.get('/subjects', asyncHandler(async (req, res) => res.json(await mongoose.model('Subject').find({}).sort({ name: 1 }))));
 router.post('/subjects', asyncHandler(async (req, res) => res.json(await mongoose.model('Subject').create(req.body))));
 router.delete('/subjects/:id', asyncHandler(async (req, res) => { await mongoose.model('Subject').findByIdAndDelete(req.params.id); res.json({ok:true}); }));
 
+// STUDENTS
 router.get('/students', asyncHandler(async (req, res) => res.json(await mongoose.model('Student').find({}).sort({ lastName: 1 }))));
-router.post('/students', asyncHandler(async (req, res) => { /* ... logique création student simple ... */ res.json({ok:true}); })); // Simplifié ici car géré par l'import IA principalement
+router.post('/students', asyncHandler(async (req, res) => {
+    let year = await mongoose.model('AcademicYear').findOne({ isCurrent: true });
+    if(!year) year = await mongoose.model('AcademicYear').create({ label: "2024-2025", isCurrent: true });
+    
+    const studentData = { ...req.body, fullName: `${req.body.firstName} ${req.body.lastName}` };
+    
+    if(req.body._id) {
+        // Mode UPDATE
+        const s = await mongoose.model('Student').findByIdAndUpdate(req.body._id, studentData, {new:true});
+        if(req.body.classId) {
+             const cls = await mongoose.model('Classroom').findById(req.body.classId);
+             if(cls) await mongoose.model('Student').findByIdAndUpdate(s._id, { currentClass: cls.name });
+             await mongoose.model('Enrollment').findOneAndUpdate(
+                 { studentId: s._id }, 
+                 { studentId: s._id, classId: req.body.classId, yearId: year._id }, 
+                 { upsert: true }
+             );
+        }
+        res.json(s);
+    } else {
+        // Mode CREATE
+        const s = await mongoose.model('Student').create(studentData);
+        if(req.body.classId) {
+            const cls = await mongoose.model('Classroom').findById(req.body.classId);
+            if(cls) await mongoose.model('Student').findByIdAndUpdate(s._id, { currentClass: cls.name });
+            await mongoose.model('Enrollment').create({ studentId: s._id, classId: req.body.classId, yearId: year._id });
+        }
+        res.json(s);
+    }
+}));
+router.delete('/students/:id', asyncHandler(async (req, res) => {
+    await mongoose.model('Student').findByIdAndDelete(req.params.id);
+    await mongoose.model('Enrollment').deleteMany({ studentId: req.params.id });
+    res.json({ok:true});
+}));
 
+// TEACHERS
 router.get('/teachers', asyncHandler(async (req, res) => res.json(await mongoose.model('Teacher').find({}))));
+router.post('/teachers', asyncHandler(async (req, res) => {
+    if(req.body._id) res.json(await mongoose.model('Teacher').findByIdAndUpdate(req.body._id, req.body, {new:true}));
+    else res.json(await mongoose.model('Teacher').create(req.body));
+}));
+router.delete('/teachers/:id', asyncHandler(async (req, res) => { await mongoose.model('Teacher').findByIdAndDelete(req.params.id); res.json({ok:true}); }));
+
+// ADMINS
 router.get('/admins', asyncHandler(async (req, res) => res.json(await mongoose.model('Admin').find({}))));
-router.get('/bugs', asyncHandler(async (req, res) => res.json(await mongoose.model('BugReport').find({}))));
+router.post('/admins', asyncHandler(async (req, res) => {
+    if(req.body._id) res.json(await mongoose.model('Admin').findByIdAndUpdate(req.body._id, req.body, {new:true}));
+    else res.json(await mongoose.model('Admin').create(req.body));
+}));
+router.delete('/admins/:id', asyncHandler(async (req, res) => { await mongoose.model('Admin').findByIdAndDelete(req.params.id); res.json({ok:true}); }));
+
+// BUGS
+router.get('/bugs', asyncHandler(async (req, res) => res.json(await mongoose.model('BugReport').find({}).sort({createdAt: -1}))));
+router.patch('/bugs/:id', asyncHandler(async (req, res) => {
+    const bug = await mongoose.model('BugReport').findById(req.params.id);
+    if(bug) { bug.status = 'fixed'; await bug.save(); }
+    res.json(bug);
+}));
 
 module.exports = router;
 [[[£ END: server/domains/admin/admin.routes.js £]]]
@@ -3115,6 +3470,9 @@ module.exports = AdminExpert;
 const mongoose = require('mongoose');
 const AdminDB = require('../db/admin.db');
 const AdminAI = require('../ai/admin.ai');
+const DriveEngine = require('../../../core/drive.engine');
+const fs = require('fs');
+const path = require('path');
 
 const AdminExpert = {
     // --- IMPORTATION ---
@@ -3141,14 +3499,14 @@ const AdminExpert = {
                         await AdminDB.createItem('Classroom', { name, type: cls.type || 'CLASS', yearId: year._id });
                         results.added++;
                     } else {
-                        results.updated++; // Existe déjà
+                        results.updated++;
                     }
                 } catch(e) { results.failed++; }
             }
             return results;
         }
 
-        // CAS IMPORT ÉLÈVES (existant)
+        // CAS IMPORT ÉLÈVES
         const targetClassroom = await mongoose.model('Classroom').findById(classId);
         const targetGroupName = targetClassroom ? targetClassroom.name : "GROUPE_INCONNU";
         let year = await mongoose.model('AcademicYear').findOne({ isCurrent: true });
@@ -3164,7 +3522,8 @@ const AdminExpert = {
                 
                 const studentUpdate = {
                     firstName: cleanFirst, lastName: cleanLast, email: cleanEmail, gender: s.gender,
-                    options: s.options || [], healthInfo: s.healthInfo || ""
+                    options: s.options || [], healthInfo: s.healthInfo || "",
+                    fullName: `${cleanFirst} ${cleanLast}`
                 };
 
                 if (!student) {
@@ -3186,11 +3545,131 @@ const AdminExpert = {
         return results;
     },
     
-    // ... (Reste des méthodes inchangées : getProjectTree, totalSyncAndKill etc.) ...
-    getProjectTree: async () => ({}), // Placeholder pour compatibilité
-    totalSyncAndKill: async () => ({ deleted: 0, kept: 0 }),
-    resyncEnrollments: async () => ({}),
-    purgeOrphans: async () => ({ deleted: 0 })
+    // --- SYSTEM & DRIVE ---
+    getProjectTree: async () => {
+        const root = process.cwd();
+        const ignore = ['node_modules', '.git', 'dist', 'build', '.env', 'package-lock.json', '.DS_Store', 'update.txt', 'apply_status.json'];
+        
+        const scan = (dir) => {
+            const name = path.basename(dir);
+            let stats;
+            try { stats = fs.statSync(dir); } catch(e) { return null; }
+            
+            const node = { 
+                name, 
+                type: stats.isDirectory() ? 'folder' : 'file', 
+                path: path.relative(root, dir).replace(/\\/g, '/'),
+                size: stats.size,
+                desc: "" 
+            };
+            
+            if (stats.isDirectory()) {
+                try {
+                    const items = fs.readdirSync(dir).filter(x => !ignore.includes(x));
+                    node.children = items.map(i => scan(path.join(dir, i))).filter(x => x !== null);
+                    node.children.sort((a, b) => {
+                         if (a.type === b.type) return a.name.localeCompare(b.name);
+                         return a.type === 'folder' ? -1 : 1;
+                    });
+                } catch(e) { node.children = []; }
+            }
+            return node;
+        };
+        
+        return scan(root);
+    },
+
+    checkDriveStatus: async () => {
+        return await DriveEngine.testAuth();
+    },
+
+    // VERSION ROBUSTE QUI NE CRASH JAMAIS
+    getFullDump: async () => {
+        const TARGET_MODELS = [
+            'AcademicYear', 'Admin', 'Classroom', 'Subject', 'Teacher', 'Student', 
+            'Enrollment', 'Chapter', 'Homework', 'Submission', 'GameLevel', 
+            'GameProgress', 'MistakesBook', 'AccessLog', 'BugReport', 'ProjectDoc', 'Player'
+        ];
+        
+        const dump = {};
+        
+        for (const modelName of TARGET_MODELS) {
+            try {
+                // On vérifie si le modèle existe dans Mongoose
+                if (mongoose.models[modelName]) {
+                    const model = mongoose.model(modelName);
+                    const collectionName = model.collection.name; // ex: 'students'
+                    
+                    // On limite à 500 entrées pour éviter le timeout HTTP sur les grosses tables (logs)
+                    dump[collectionName] = await model.find({}).limit(500).sort({_id: -1}).lean();
+                }
+            } catch(e) {
+                console.error(`⚠️ Skip dump ${modelName}:`, e.message);
+                dump[`ERROR_${modelName}`] = [{ error: e.message }];
+            }
+        }
+        return dump;
+    },
+
+    // --- MAINTENANCE ---
+    migrateLegacy: async () => {
+        const Player = mongoose.model('Player');
+        const Student = mongoose.model('Student');
+        const players = await Player.find({});
+        let count = 0;
+        
+        for(const p of players) {
+            const exists = await Student.findOne({ firstName: p.firstName, lastName: p.lastName });
+            if(!exists) {
+                await Student.create({
+                    firstName: p.firstName,
+                    lastName: p.lastName,
+                    fullName: `${p.firstName} ${p.lastName}`,
+                    currentClass: p.classroom
+                });
+                count++;
+            }
+        }
+        return { migrated: count };
+    },
+
+    resyncEnrollments: async () => {
+        const Enroll = mongoose.model('Enrollment');
+        const Student = mongoose.model('Student');
+        const Class = mongoose.model('Classroom');
+        const students = await Student.find({});
+        let count = 0;
+        let year = await mongoose.model('AcademicYear').findOne({ isCurrent: true });
+        
+        for(const s of students) {
+            if(s.currentClass) {
+                const cls = await Class.findOne({ name: s.currentClass });
+                if(cls) {
+                    const exists = await Enroll.findOne({ studentId: s._id, classId: cls._id });
+                    if(!exists) {
+                        await Enroll.create({ studentId: s._id, classId: cls._id, yearId: year._id });
+                        count++;
+                    }
+                }
+            }
+        }
+        return { created: count };
+    },
+
+    purgeOrphans: async () => {
+        const Enroll = mongoose.model('Enrollment');
+        const allEnrolls = await Enroll.find({});
+        let deleted = 0;
+        for(const e of allEnrolls) {
+            const s = await mongoose.model('Student').findById(e.studentId);
+            const c = await mongoose.model('Classroom').findById(e.classId);
+            if(!s || !c) {
+                await Enroll.findByIdAndDelete(e._id);
+                deleted++;
+            }
+        }
+        return { deleted };
+    }
 };
 
 module.exports = AdminExpert;
@@ -3721,32 +4200,76 @@ module.exports = StructureExpert;
 [[[£ FILE: server/domains/structure/structure.routes.js £]]]
 const express = require('express');
 const router = express.Router();
-const StructureExpert = require('./experts/structure.expert');
+const mongoose = require('mongoose');
 
-// Route sécurisée : Si ça plante, on renvoie un tableau vide [] au lieu de 500
-router.get('/chapters', async (req, res) => {
-    try {
-        const chapters = await StructureExpert.getChapters();
-        res.json(chapters || []);
-    } catch (e) {
-        console.error("Route Crash /chapters:", e);
-        res.json([]); // Fallback de sécurité
+const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
+// --- 1. GESTION DES SECTIONS (Dans le profil Prof) ---
+router.post('/sections', asyncHandler(async (req, res) => {
+    const { teacherId, sectionName } = req.body;
+    const Teacher = mongoose.model('Teacher');
+    const prof = await Teacher.findById(teacherId);
+    
+    if (!prof) return res.status(404).json({ error: "Prof introuvable" });
+    
+    // On ajoute la section si elle n'existe pas déjà
+    // On stocke des objets simples { name: "Géographie", color: "..." }
+    const exists = prof.subjectSections.find(s => s.name === sectionName);
+    if (!exists) {
+        const colors = ['#ef4444', '#3b82f6', '#22c55e', '#f59e0b', '#8b5cf6', '#ec4899'];
+        const color = colors[prof.subjectSections.length % colors.length];
+        prof.subjectSections.push({ name: sectionName, color });
+        await prof.save();
     }
-});
+    
+    res.json(prof.subjectSections);
+}));
 
-router.post('/chapters', async (req, res) => {
-    try {
-        const chapter = await StructureExpert.createChapter(req.body);
-        res.json(chapter);
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
+router.delete('/sections/:teacherId/:sectionName', asyncHandler(async (req, res) => {
+    const { teacherId, sectionName } = req.params;
+    const Teacher = mongoose.model('Teacher');
+    
+    // On retire la section
+    await Teacher.findByIdAndUpdate(teacherId, { 
+        $pull: { subjectSections: { name: sectionName } } 
+    });
+    
+    res.json({ ok: true });
+}));
 
-router.delete('/chapters/:id', async (req, res) => {
-    try {
-        await StructureExpert.deleteChapter(req.params.id);
-        res.json({ ok: true });
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
+// --- 2. GESTION DES CHAPITRES ---
+router.get('/chapters', asyncHandler(async (req, res) => {
+    // On renvoie tous les chapitres
+    const chapters = await mongoose.model('Chapter').find({}).sort({ createdAt: -1 });
+    res.json(chapters);
+}));
+
+router.post('/chapters', asyncHandler(async (req, res) => {
+    // Création d'un chapitre dans une section
+    const newChapter = await mongoose.model('Chapter').create({
+        title: req.body.title.toUpperCase(),
+        section: req.body.section, // Lien vers la section
+        classroom: req.body.classroom,
+        teacherId: req.body.teacherId
+    });
+    res.json(newChapter);
+}));
+
+// Route pour archiver/désarchiver
+router.patch('/chapters/:id/archive', asyncHandler(async (req, res) => {
+    const { isArchived } = req.body;
+    const updated = await mongoose.model('Chapter').findByIdAndUpdate(
+        req.params.id, 
+        { isArchived: isArchived }, 
+        { new: true }
+    );
+    res.json(updated);
+}));
+
+router.delete('/chapters/:id', asyncHandler(async (req, res) => {
+    await mongoose.model('Chapter').findByIdAndDelete(req.params.id);
+    res.json({ ok: true });
+}));
 
 module.exports = router;
 [[[£ END: server/domains/structure/structure.routes.js £]]]
@@ -3831,13 +4354,26 @@ module.exports = mongoose.models.BugReport || mongoose.model('BugReport', BugRep
 
 [[[£ FILE: server/models/Chapter.js £]]]
 const mongoose = require('mongoose');
+
 const ChapterSchema = new mongoose.Schema({
     title: { type: String, required: true },
-    subject: { type: String, required: true },
+    
+    // La "Section" est libre (créée par le prof), remplace l'ancienne logique "Matière Admin"
+    section: { type: String, default: "Général" }, 
+    
+    // Gardé pour compatibilité temporaire, mais moins utilisé
+    subject: { type: String }, 
+    
     classroom: String, 
     driveFolderId: String,
-    teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher' }
+    teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher' },
+    
+    // [NOUVEAU] Gestion d'archivage
+    isArchived: { type: Boolean, default: false },
+    
+    createdAt: { type: Date, default: Date.now }
 }, { collection: 'chapters' });
+
 module.exports = mongoose.models.Chapter || mongoose.model('Chapter', ChapterSchema);
 [[[£ END: server/models/Chapter.js £]]]
 

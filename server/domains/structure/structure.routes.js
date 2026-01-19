@@ -1,30 +1,59 @@
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const StructureExpert = require('./experts/structure.expert');
+const StructureDrive = require('./experts/structure.drive');
 
-// Route sécurisée : Si ça plante, on renvoie un tableau vide [] au lieu de 500
-router.get('/chapters', async (req, res) => {
+const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
+// --- 1. MOUCHARD DRIVE ---
+router.get('/drive-tree', async (req, res) => {
     try {
-        const chapters = await StructureExpert.getChapters();
-        res.json(chapters || []);
+        const tree = await StructureDrive.getDriveTree();
+        res.json(tree);
     } catch (e) {
-        console.error("Route Crash /chapters:", e);
-        res.json([]); // Fallback de sécurité
+        res.status(500).json({ name: "Erreur Cloud", children: [], error: e.message });
     }
 });
 
-router.post('/chapters', async (req, res) => {
-    try {
-        const chapter = await StructureExpert.createChapter(req.body);
-        res.json(chapter);
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
+// SUPPRESSION DRIVE
+router.delete('/drive/:id', asyncHandler(async (req, res) => {
+    const result = await StructureDrive.deleteDriveItem(req.params.id);
+    res.json(result);
+}));
 
-router.delete('/chapters/:id', async (req, res) => {
-    try {
-        await StructureExpert.deleteChapter(req.params.id);
-        res.json({ ok: true });
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
+// --- 2. SECTIONS ---
+router.post('/sections', asyncHandler(async (req, res) => {
+    const { teacherId, sectionName } = req.body;
+    let userDoc = await mongoose.model('Teacher').findById(teacherId) || await mongoose.model('Admin').findById(teacherId);
+    if (!userDoc) return res.status(404).json({ error: "User not found" });
+    const normalized = sectionName.toUpperCase().trim();
+    if (!userDoc.subjectSections) userDoc.subjectSections = [];
+    if (!userDoc.subjectSections.find(s => s.name === normalized)) {
+        const colors = ['#ef4444', '#3b82f6', '#22c55e', '#f59e0b', '#8b5cf6', '#ec4899'];
+        userDoc.subjectSections.push({ name: normalized, color: colors[userDoc.subjectSections.length % colors.length] });
+        userDoc.markModified('subjectSections');
+        await userDoc.save();
+    }
+    res.json(userDoc.subjectSections);
+}));
+
+router.delete('/sections/:teacherId/:sectionName', asyncHandler(async (req, res) => {
+    const normalized = req.params.sectionName.toUpperCase().trim();
+    await mongoose.model('Teacher').findByIdAndUpdate(req.params.teacherId, { $pull: { subjectSections: { name: normalized } } });
+    await mongoose.model('Admin').findByIdAndUpdate(req.params.teacherId, { $pull: { subjectSections: { name: normalized } } });
+    res.json({ ok: true });
+}));
+
+// --- 3. CHAPITRES ---
+router.get('/chapters', asyncHandler(async (req, res) => res.json(await StructureExpert.getChapters())));
+router.post('/chapters', asyncHandler(async (req, res) => res.json(await StructureExpert.createChapter(req.body))));
+router.patch('/chapters/:id/archive', asyncHandler(async (req, res) => {
+    res.json(await mongoose.model('Chapter').findByIdAndUpdate(req.params.id, { isArchived: !!req.body.isArchived }, { new: true }));
+}));
+router.delete('/chapters/:id', asyncHandler(async (req, res) => {
+    await StructureExpert.deleteChapter(req.params.id);
+    res.json({ ok: true });
+}));
 
 module.exports = router;

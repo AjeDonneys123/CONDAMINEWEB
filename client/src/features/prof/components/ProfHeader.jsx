@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import DatabaseViewer from './DatabaseViewer';
+import DriveViewer from './DriveViewer';
 
 export default function ProfHeader({ user, onLogout }) {
   const [showDB, setShowDB] = useState(false);
+  const [showDrive, setShowDrive] = useState(false);
   const [drive, setDrive] = useState({ loading: true, ok: false, email: '' });
 
   const checkDrive = async () => {
@@ -27,10 +29,15 @@ export default function ProfHeader({ user, onLogout }) {
         </div>
       </div>
       <div className="flex gap-3">
+        {/* BOUTON MOUCHARD DRIVE V14 */}
+        <button onClick={() => setShowDrive(true)} className="bg-cyan-600 text-white px-4 py-2 rounded-2xl font-black text-[10px] uppercase shadow-lg shadow-cyan-100 transition-transform active:scale-95">☁️ DRIVE</button>
+        
         <button onClick={() => setShowDB(true)} className="bg-slate-900 text-white px-4 py-2 rounded-2xl font-black text-[10px] uppercase">📊 BDD</button>
         <button onClick={onLogout} className="bg-white text-slate-300 px-4 py-2 rounded-2xl font-bold border text-[10px]">✕</button>
       </div>
+      
       {showDB && <DatabaseViewer onClose={() => setShowDB(false)} />}
+      {showDrive && <DriveViewer onClose={() => setShowDrive(false)} />}
     </div>
   );
 }
