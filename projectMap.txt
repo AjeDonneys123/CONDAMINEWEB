@@ -20,6 +20,9 @@
 │   │   ├── assets/
 │   │   │   └── react.svg
 │   │   ├── features/
+│   │   │   ├── admin/
+│   │   │   │   ├── AdminPage.css
+│   │   │   │   └── AdminPage.jsx
 │   │   │   ├── auth/
 │   │   │   │   ├── Login.css
 │   │   │   │   └── Login.jsx

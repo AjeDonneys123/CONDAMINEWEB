@@ -17,6 +17,9 @@ export default function AdminDashboard({ user, onRefresh }) {
     const [editingId, setEditingId] = useState(null);
     const [zoomedItem, setZoomedItem] = useState(null);
 
+    // --- ÉTAT POUR LISTE ÉLÈVES D'UNE CLASSE ---
+    const [viewingClassRoster, setViewingClassRoster] = useState(null);
+
     const [allClasses, setAllClasses] = useState([]);
     const [allSubjects, setAllSubjects] = useState([]);
 
@@ -25,55 +28,42 @@ export default function AdminDashboard({ user, onRefresh }) {
     const [formUser, setFormUser] = useState({ firstName: '', lastName: '', password: '', role: 'admin', taughtSubjects: [], assignedClasses: [] });
     const [formStudent, setFormStudent] = useState({ firstName: '', lastName: '', fullName: '', email: '', classId: '', birthDate: '', gender: '' });
 
-    // --- [NOUVEAU] LOGIQUE DE BASCULE RAPIDE (SHORTCUTS) ---
+    // --- LOGIQUE DE BASCULE RAPIDE (SHORTCUTS) ---
     const handleQuickSwitch = async (targetRole) => {
         let credentials = {};
-        
         try {
             if (targetRole === 'JEAN') {
                 credentials = { role: 'ADMIN', firstName: 'Jean', lastName: 'Vuillet', password: 'Clemenceau1919' };
             }
             else if (targetRole === 'ADMIN_TEST') {
-                // On s'assure que le compte existe ou on tente le login direct via backdoor
                 credentials = { role: 'ADMIN', firstName: 'Admin', lastName: 'Test', password: 'A' };
             }
             else if (targetRole === 'PROF_TEST') {
                 credentials = { role: 'TEACHER', firstName: 'Prof', lastName: 'Test', password: 'A' };
             }
             else if (targetRole === 'ELEVE_TEST') {
-                // Pour l'élève, on doit trouver son ID réel
-                // On cherche "Eleve TEST" ou on prend le premier élève trouvé pour tester
                 const res = await fetch('/api/admin/students');
                 const students = await res.json();
-                
-                // Priorité à "Eleve Test", sinon le premier
                 let targetStudent = students.find(s => s.firstName.toLowerCase() === 'eleve' && s.lastName.toLowerCase() === 'test');
-                
                 if (!targetStudent) {
-                    // Création à la volée si inexistant pour faciliter la vie
-                    if(confirm("Compte 'Eleve Test' introuvable. Voulez-vous utiliser le premier élève de la liste ?")) {
-                         targetStudent = students[0];
-                    } else return;
+                    if(confirm("Compte 'Eleve Test' introuvable. Voulez-vous utiliser le premier élève de la liste ?")) targetStudent = students[0];
+                    else return;
                 }
-
                 if (!targetStudent) return alert("Aucun élève dans la base.");
                 credentials = { role: 'STUDENT', studentId: targetStudent._id };
             }
 
-            // Exécution du Login
             const res = await fetch('/api/auth/login', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify(credentials)
             });
-
             const data = await res.json();
             if (res.ok) {
                 localStorage.setItem('player', JSON.stringify(data.user));
-                window.location.reload(); // Rechargement pour basculer l'interface
+                window.location.reload(); 
             } else {
                 alert("Erreur switch : " + data.message);
-                // Si le compte n'existe pas, on propose de le créer
                 if (targetRole === 'ADMIN_TEST' || targetRole === 'PROF_TEST') {
                     if(confirm(`Le compte ${targetRole} n'existe pas. Le créer ?`)) {
                         const ep = targetRole === 'PROF_TEST' ? '/api/admin/teachers' : '/api/admin/admins';
@@ -87,14 +77,11 @@ export default function AdminDashboard({ user, onRefresh }) {
                                 role: targetRole === 'PROF_TEST' ? undefined : 'admin'
                             })
                         });
-                        handleQuickSwitch(targetRole); // On réessaie
+                        handleQuickSwitch(targetRole); 
                     }
                 }
             }
-        } catch (e) {
-            console.error(e);
-            alert("Erreur technique lors du switch.");
-        }
+        } catch (e) { console.error(e); alert("Erreur technique lors du switch."); }
     };
 
     const getEndpoint = (v) => {
@@ -111,13 +98,12 @@ export default function AdminDashboard({ user, onRefresh }) {
             const res = await fetch(`/api/admin/${endpoint}`);
             if (res.ok) setItems(await res.json());
             
+            // On charge toujours les référentiels pour faire les liens
             const resClasses = await fetch('/api/admin/classrooms');
             if (resClasses.ok) setAllClasses(await resClasses.json());
             
-            if (view === 'teachers') {
-                const resSubjects = await fetch('/api/admin/subjects');
-                if (resSubjects.ok) setAllSubjects(await resSubjects.json());
-            }
+            const resSubjects = await fetch('/api/admin/subjects');
+            if (resSubjects.ok) setAllSubjects(await resSubjects.json());
 
         } catch (e) { console.error(e); }
         setLoading(false);
@@ -129,7 +115,19 @@ export default function AdminDashboard({ user, onRefresh }) {
         setZoomedItem(null);
     }, [view]);
 
-    // ... (Logique Import inchangée) ...
+    // --- CHARGEMENT TROMBINOSCOPE CLASSE ---
+    const handleViewRoster = async (cls) => {
+        setLoading(true);
+        try {
+            const res = await fetch('/api/admin/students');
+            const allStudents = await res.json();
+            const roster = allStudents.filter(s => s.classId === cls._id || s.currentClass === cls.name);
+            setViewingClassRoster({ ...cls, students: roster });
+        } catch(e) { console.error(e); alert("Erreur chargement liste"); }
+        setLoading(false);
+    };
+
+
     const openImportModal = (type) => {
         setImportType(type);
         setImportText("");
@@ -178,7 +176,6 @@ export default function AdminDashboard({ user, onRefresh }) {
         setImporting(false);
     };
 
-    // ... (Logique Edit inchangée) ...
     const startEdit = (item) => {
         setEditingId(item._id);
         if (view === 'classes') setFormClass({ name: item.name, type: item.type });
@@ -198,14 +195,7 @@ export default function AdminDashboard({ user, onRefresh }) {
         setFormUser({ firstName: '', lastName: '', password: '', role: 'admin', taughtSubjects: [], assignedClasses: [] });
         setFormStudent({ firstName: '', lastName: '', fullName: '', email: '', classId: '', birthDate: '', gender: '' });
     };
-    const toggleSubject = (subId) => {
-        const current = formUser.taughtSubjects || [];
-        setFormUser({ ...formUser, taughtSubjects: current.includes(subId) ? current.filter(id => id !== subId) : [...current, subId] });
-    };
-    const toggleClass = (clsId) => {
-        const current = formUser.assignedClasses || [];
-        setFormUser({ ...formUser, assignedClasses: current.includes(clsId) ? current.filter(id => id !== clsId) : [...current, clsId] });
-    };
+    
     const submitData = async (endpointBase, body) => {
         try {
             const method = editingId ? 'PATCH' : 'POST';
@@ -223,9 +213,12 @@ export default function AdminDashboard({ user, onRefresh }) {
     const handleDelete = async (id) => { if (confirm("Supprimer ?")) { await fetch(`/api/admin/${getEndpoint(view)}/${id}`, { method: 'DELETE' }); loadData(); if(view==='classes') onRefresh(); }};
     const handleFixBug = async (id) => { await fetch(`/api/admin/bugs/${id}`, { method: 'PATCH' }); loadData(); };
 
+    // HELPER POUR LES BADGES PROFS
+    const getSubjectBadge = (id) => allSubjects.find(s => s._id === id);
+    const getClassBadge = (id) => allClasses.find(c => c._id === id);
+
     return (
         <div className="admin-container animate-in fade-in">
-            {/* [NOUVEAU] BARRE DEVOPS QUICK SWITCH */}
             {user.isDeveloper && (
                 <div className="dev-shortcuts">
                     <span className="dev-label">🚀 SWITCH RAPIDE :</span>
@@ -237,7 +230,7 @@ export default function AdminDashboard({ user, onRefresh }) {
                 </div>
             )}
 
-            {/* OVERLAY IMPORT IA (Inchangé) */}
+            {/* OVERLAY IMPORT IA */}
             {showImportModal && (
                 <div className="zoom-overlay" onClick={() => setShowImportModal(false)}>
                     <div className="zoom-card w-[600px] max-w-full" onClick={e => e.stopPropagation()}>
@@ -298,24 +291,107 @@ export default function AdminDashboard({ user, onRefresh }) {
                 </div>
             )}
 
-            {/* ZOOM OVERLAY (Inchangé) */}
+            {/* OVERLAY LISTE ÉLÈVES (TROMBINOSCOPE) */}
+            {viewingClassRoster && (
+                <div className="zoom-overlay" onClick={() => setViewingClassRoster(null)}>
+                    <div className="zoom-card" style={{width: '800px', maxWidth: '95%'}} onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-between items-center mb-6">
+                            <div>
+                                <h2 className="text-2xl font-black text-slate-800 uppercase">Classe {viewingClassRoster.name}</h2>
+                                <span className="text-xs font-bold text-slate-400 uppercase">{viewingClassRoster.students.length} Élèves inscrits</span>
+                            </div>
+                            <button onClick={() => setViewingClassRoster(null)} className="w-10 h-10 rounded-full bg-slate-100 font-black text-slate-400 hover:bg-red-50 hover:text-red-500">✕</button>
+                        </div>
+                        
+                        <div className="overflow-y-auto custom-scrollbar flex-1 bg-slate-50 rounded-2xl p-4">
+                            {viewingClassRoster.students.length === 0 ? (
+                                <div className="text-center py-10 text-slate-300 font-bold italic">Aucun élève dans cette classe.</div>
+                            ) : (
+                                <table className="w-full text-sm">
+                                    <thead>
+                                        <tr className="text-left text-slate-400 uppercase text-[10px]">
+                                            <th className="pb-2 pl-2">Nom</th>
+                                            <th className="pb-2 text-right pr-2">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {viewingClassRoster.students.map(s => (
+                                            <tr key={s._id} className="border-b border-slate-100 last:border-0 hover:bg-white transition-colors rounded-lg">
+                                                <td className="py-3 pl-2 font-bold text-slate-700">
+                                                    {s.firstName} <span className="uppercase">{s.lastName}</span>
+                                                    <div className="text-[9px] text-slate-400 font-normal">{s.email}</div>
+                                                </td>
+                                                <td className="py-3 text-right pr-2">
+                                                    <button onClick={() => setZoomedItem(s)} className="bg-white border border-indigo-100 text-indigo-600 px-3 py-1.5 rounded-lg font-black text-[10px] hover:bg-indigo-50 shadow-sm flex items-center gap-1 ml-auto">
+                                                        <span>🔍</span> ZOOM
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ZOOM OVERLAY (FICHE DÉTAIL) */}
             {zoomedItem && (
-                <div className="zoom-overlay" onClick={() => setZoomedItem(null)}>
+                <div className="zoom-overlay level-2" onClick={() => setZoomedItem(null)}>
                     <div className="zoom-card" onClick={e => e.stopPropagation()}>
                         <h2 className="text-2xl font-black uppercase text-slate-800 mb-4">{zoomedItem.firstName} {zoomedItem.lastName}</h2>
-                        {view === 'students' && (
+                        
+                        {view === 'teachers' ? (
+                            <div className="space-y-4">
+                                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                                    <p className="text-xs font-bold text-slate-400 uppercase mb-2">Matières Enseignées</p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {zoomedItem.taughtSubjects?.length > 0 ? zoomedItem.taughtSubjects.map(id => {
+                                            const sub = getSubjectBadge(id);
+                                            return sub ? (
+                                                <span key={id} className="px-2 py-1 rounded-md text-[10px] font-black text-white" style={{background: sub.color}}>
+                                                    {sub.name}
+                                                </span>
+                                            ) : null;
+                                        }) : <span className="text-slate-400 italic text-sm">Aucune matière</span>}
+                                    </div>
+                                </div>
+                                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                                    <p className="text-xs font-bold text-slate-400 uppercase mb-2">Classes Assignées</p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {zoomedItem.assignedClasses?.length > 0 ? zoomedItem.assignedClasses.map(id => {
+                                            const cls = getClassBadge(id);
+                                            return cls ? (
+                                                <span key={id} className="px-2 py-1 rounded-md text-[10px] font-black bg-white border border-slate-200 text-slate-700">
+                                                    {cls.name}
+                                                </span>
+                                            ) : null;
+                                        }) : <span className="text-slate-400 italic text-sm">Aucune classe</span>}
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (view === 'students' || zoomedItem.email !== undefined) ? (
+                            <div className="space-y-4">
+                                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                                    <p className="text-xs font-bold text-slate-400 uppercase mb-1">Email</p>
+                                    <p className="font-bold text-slate-700">{zoomedItem.email || "Non renseigné"}</p>
+                                </div>
+                                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                                    <p className="text-xs font-bold text-slate-400 uppercase mb-1">Classe Actuelle</p>
+                                    <p className="font-bold text-slate-700">{zoomedItem.currentClass || "Aucune"}</p>
+                                </div>
+                                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                                    <p className="text-xs font-bold text-slate-400 uppercase mb-1">Santé / Info</p>
+                                    <p className="text-sm text-slate-600">{zoomedItem.healthInfo || "RAS"}</p>
+                                </div>
+                            </div>
+                        ) : (
                             <div className="space-y-2 text-sm text-slate-600">
-                                <p>📧 {zoomedItem.email}</p>
-                                <p>🏫 {zoomedItem.currentClass}</p>
+                                <p>Rôle : {zoomedItem.role}</p>
                             </div>
                         )}
-                        {view === 'teachers' && (
-                            <div className="space-y-2 text-sm text-slate-600">
-                                <p>📚 {zoomedItem.taughtSubjects?.length || 0} Matières</p>
-                                <p>🎓 {zoomedItem.assignedClasses?.length || 0} Classes</p>
-                            </div>
-                        )}
-                        <button onClick={() => setZoomedItem(null)} className="w-full py-3 mt-6 rounded-xl bg-slate-800 text-white font-black text-xs uppercase">Fermer</button>
+                        <button onClick={() => setZoomedItem(null)} className="w-full py-3 mt-6 rounded-xl bg-slate-800 text-white font-black text-xs uppercase hover:bg-slate-700 transition-colors">Fermer</button>
                     </div>
                 </div>
             )}
@@ -331,7 +407,7 @@ export default function AdminDashboard({ user, onRefresh }) {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* FORMULAIRE (Inchangé) */}
+                {/* FORMULAIRE */}
                 {view !== 'bugs' && (
                     <div className="lg:col-span-1">
                         <div className={`p-6 rounded-[30px] border shadow-sm sticky top-8 transition-colors ${editingId ? 'bg-amber-50 border-amber-200' : 'bg-white'}`}>
@@ -351,7 +427,7 @@ export default function AdminDashboard({ user, onRefresh }) {
                                 <select className="admin-input" value={formClass.type} onChange={e => setFormClass({...formClass, type: e.target.value})}><option value="CLASS">CLASSE ADMINISTRATIVE</option><option value="GROUP">GROUPE PÉDAGOGIQUE</option></select>
                                 <button className={`admin-btn-submit ${editingId ? 'bg-amber-500' : ''}`}>{editingId ? 'METTRE À JOUR' : 'CRÉER CLASSE'}</button>
                             </form>}
-                            {/* ... Reste des formulaires identiques ... */}
+                            
                             {view === 'subjects' && <form onSubmit={handleSubjectSubmit} className="space-y-4">
                                 <input className="admin-input" placeholder="NOM MATIÈRE" value={formSubject.name} onChange={e => setFormSubject({...formSubject, name: e.target.value})} required />
                                 <input type="color" className="w-full h-12 rounded-xl cursor-pointer" value={formSubject.color} onChange={e => setFormSubject({...formSubject, color: e.target.value})} />
@@ -383,7 +459,7 @@ export default function AdminDashboard({ user, onRefresh }) {
                     </div>
                 )}
 
-                {/* LISTE (Inchangée) */}
+                {/* LISTE */}
                 <div className={view === 'bugs' ? 'lg:col-span-3' : 'lg:col-span-2'}>
                     <div className="bg-white rounded-[30px] border shadow-sm overflow-hidden">
                         <table className="admin-table">
@@ -409,8 +485,29 @@ export default function AdminDashboard({ user, onRefresh }) {
                                             {view === 'staff' && <span className={`px-2 py-1 rounded text-[9px] font-black uppercase ${it.role === 'developer' ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-200 text-slate-600'}`}>{it.role}</span>}
                                             {view === 'students' && <span className="px-2 py-1 rounded bg-orange-100 text-orange-600 text-[9px] font-black uppercase">{it.currentClass || 'AUCUNE'}</span>}
                                             {view === 'bugs' && <div className="max-w-md"><div className="text-xs font-bold text-slate-600 mb-1">{it.description}</div><span className={`px-2 py-1 rounded text-[9px] font-black uppercase ${it.status === 'fixed' ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>{it.status}</span></div>}
+                                            
+                                            {/* AFFICHAGE SPÉCIFIQUE PROFS DANS LA LISTE */}
+                                            {view === 'teachers' && (
+                                                <div className="flex flex-col gap-1.5">
+                                                    <div className="flex flex-wrap gap-1">
+                                                        {it.taughtSubjects?.map(id => {
+                                                            const sub = getSubjectBadge(id);
+                                                            return sub ? <span key={id} className="text-[9px] font-black px-1.5 rounded text-white" style={{background:sub.color}}>{sub.name}</span> : null;
+                                                        })}
+                                                    </div>
+                                                    <div className="flex flex-wrap gap-1">
+                                                        {it.assignedClasses?.map(id => {
+                                                            const cls = getClassBadge(id);
+                                                            return cls ? <span key={id} className="text-[9px] font-bold px-1.5 rounded bg-slate-100 text-slate-600 border border-slate-200">{cls.name}</span> : null;
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            )}
                                         </td>
                                         <td className="p-4 text-right flex justify-end gap-2">
+                                            {view === 'classes' && (
+                                                <button onClick={() => handleViewRoster(it)} className="w-8 h-8 rounded-lg bg-cyan-50 text-cyan-600 flex items-center justify-center font-bold hover:bg-cyan-100" title="Voir les élèves">👥</button>
+                                            )}
                                             {view === 'bugs' && it.status === 'open' && <button onClick={() => handleFixBug(it._id)} className="text-emerald-500 font-black text-[10px] uppercase">RÉSOLU ?</button>}
                                             {(view === 'teachers' || view === 'students') && <button onClick={() => setZoomedItem(it)} className="w-8 h-8 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center font-bold hover:bg-teal-100">🔍</button>}
                                             {view !== 'bugs' && <button onClick={() => startEdit(it)} className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold hover:bg-indigo-100">✎</button>}

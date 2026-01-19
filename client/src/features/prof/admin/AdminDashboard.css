@@ -10,7 +10,10 @@
 
 /* ZOOM CARD STYLE */
 .zoom-overlay { position: fixed; inset: 0; z-index: 9999; background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; }
-.zoom-card { background: white; width: 90%; max-width: 500px; border-radius: 30px; padding: 2rem; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); animation: zoomIn 0.2s ease-out; }
+/* Z-INDEX SUPÉRIEUR POUR LE ZOOM ÉLÈVE PAR DESSUS LA LISTE DE CLASSE */
+.zoom-overlay.level-2 { z-index: 10001; }
+
+.zoom-card { background: white; width: 90%; max-width: 500px; border-radius: 30px; padding: 2rem; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); animation: zoomIn 0.2s ease-out; position: relative; max-height: 90vh; display: flex; flex-direction: column; }
 @keyframes zoomIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
 /* [NOUVEAU] BARRE DEVOPS QUICK SWITCH */
@@ -19,7 +22,7 @@
     background: #1e293b; padding: 10px; border-radius: 20px;
     align-items: center; overflow-x: auto;
 }
-/* CORRECTION ICI : suppression de "font-black;" qui était une erreur */
+
 .dev-label { font-size: 10px; color: #64748b; text-transform: uppercase; margin-right: 10px; white-space: nowrap; font-weight: 900; }
 .btn-shortcut {
     padding: 8px 16px; border-radius: 12px; border: none; cursor: pointer;
