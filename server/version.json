@@ -1,7 +1,8 @@
 {
-  "version": "1.59.0",
-  "build": 194,
-  "timestamp": "2026-01-19T21:55:00.000Z",
-  "studio_version": 59,
-  "status": "INSTANT_TEST_REPAIR_AND_LOGIN_FIXED"
+  "version": "1.94.0",
+  "build": 217,
+  "timestamp": "2026-01-20T18:30:00.000Z",
+  "studio_version": 94,
+  "status": "CROSS_DOMAIN_COHERENCE_LOCKED",
+  "storage_strategy": "VAULT_WITH_INTEGRITY_CHECK"
 }

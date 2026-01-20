@@ -2,23 +2,22 @@ import React, { useState, useEffect, useRef } from 'react';
 import './HomeworkStudio.css';
 
 /**
- * 🎨 STUDIO DEVOIR - VERSION 13
- * Simplification Arborescence (Retrait Année) + Badge visible.
+ * 🎨 STUDIO DEVOIR - VERSION 93
+ * Fix : Rendu d'image universel (Local Preview & Cloud Display)
  */
 export default function HomeworkStudio({ initialData, chapters, globalClass, globalClassId, user, onClose }) {
   const [formData, setFormData] = useState(initialData || { 
-      title: '', 
-      chapterId: '', 
-      classroom: globalClass, 
+      title: '', chapterId: '', classroom: globalClass, 
       levels: [{ instruction: '', instructionUrls: [], aiHints: '', attachmentUrls: [] }],
-      assignedStudents: [],
-      isAllClass: true
+      assignedStudents: [], isAllClass: true
   });
 
   const [activeLevelIdx, setActiveLevelIdx] = useState(0);
   const [classStudents, setClassStudents] = useState([]);
   const [zoomImg, setZoomImg] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
+  
   const fileInputRef = useRef(null);
   const [uploadTarget, setUploadTarget] = useState(null);
 
@@ -30,8 +29,19 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
     }
   }, [globalClassId]);
 
-  const activeLevel = formData.levels[activeLevelIdx];
+  // FONCTION MIRACLE : Transforme un lien Drive ou local en image affichable
+  const getDisplayUrl = (url) => {
+      if (!url) return "";
+      if (url.startsWith('/uploads')) return url; // Image locale en attente de synchro
+      if (url.includes('drive.google.com')) {
+          // Extrait l'ID de l'URL Drive pour forcer l'affichage direct
+          const id = url.match(/[-\w]{25,}/);
+          return id ? `https://drive.google.com/thumbnail?id=${id[0]}&sz=w1000` : url;
+      }
+      return url;
+  };
 
+  const activeLevel = formData.levels[activeLevelIdx];
   const updateLevel = (field, value) => {
     const newLevels = [...formData.levels];
     newLevels[activeLevelIdx][field] = value;
@@ -47,93 +57,113 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
       try {
           const res = await fetch('/api/homework/upload', { method: 'POST', body: data });
           const result = await res.json();
-          if (res.ok && result.urls) updateLevel(uploadTarget, [...activeLevel[uploadTarget], ...result.urls]);
-      } catch (err) { alert("Erreur upload"); } finally { setIsUploading(false); e.target.value = null; }
+          if (res.ok) updateLevel(uploadTarget, [...activeLevel[uploadTarget], ...result.urls]);
+      } catch (err) { alert("Erreur upload temporaire."); } 
+      finally { setIsUploading(false); e.target.value = null; }
   };
 
   const handleSave = async () => {
     if (!formData.title || !formData.chapterId) return alert("❌ Titre et Dossier requis !");
-    
-    let finalData = { ...formData, teacherId: user.id || user._id };
-    if (formData.isAllClass) {
-        finalData.assignedStudents = classStudents.map(s => s._id);
-    }
-
-    const res = await fetch('/api/homework', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(finalData)
-    });
-    if (res.ok) onClose();
+    setIsPublishing(true);
+    const finalAssigned = formData.isAllClass ? classStudents.map(s => s._id) : formData.assignedStudents;
+    try {
+        const res = await fetch('/api/homework', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...formData, assignedStudents: finalAssigned, teacherId: user.id || user._id })
+        });
+        const resData = await res.json();
+        if (res.ok) onClose();
+        else alert("🔥 ERREUR : " + (resData.error || "Échec synchro Cloud."));
+    } catch(e) { alert("Erreur réseau."); }
+    finally { setIsPublishing(false); }
   };
 
   return (
-    <div className="hw-v3-studio-overlay">
+    <div className="v84-studio-container">
         <input type="file" ref={fileInputRef} style={{ display: 'none' }} multiple accept="image/*" onChange={handleFileSelect} />
-        {zoomImg && <div className="v3-zoom-overlay" onClick={() => setZoomImg(null)}><div className="v3-zoom-card"><img src={zoomImg} alt="zoom" /><button className="v3-zoom-close">FERMER</button></div></div>}
-        {isUploading && <div className="v3-upload-spinner"><div className="spinner"></div><span>V13 - SYNC CLOUD EN COURS...</span></div>}
-
-        <div className="hw-v3-header">
-            <div className="flex items-center gap-4 flex-1">
-                <input className="hw-v3-title-input" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} placeholder="TITRE DU DEVOIR MAISON..." />
+        {zoomImg && <div className="v84-zoom-overlay" onClick={() => setZoomImg(null)}><img src={getDisplayUrl(zoomImg)} alt="zoom" /></div>}
+        
+        {(isUploading || isPublishing) && (
+            <div className="v84-upload-loader">
+                <div className="v84-spinner"></div>
+                <span>{isPublishing ? 'SYNCHRONISATION GOOGLE DRIVE...' : 'RÉCEPTION...'}</span>
             </div>
-            <div className="v13-badge">STUDIO V13</div>
-            <button onClick={onClose} className="v3-close-x">✕</button>
+        )}
+
+        <div className="v84-header">
+            <div className="v84-header-left">
+                <div className="v84-icon">📝</div>
+                <input className="v84-title-input" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} placeholder="TITRE DU DEVOIR..." />
+            </div>
+            <div className="v84-version-tag">STUDIO V93</div>
+            <button onClick={onClose} className="v84-close-btn">✕</button>
         </div>
 
-        <div className="hw-v3-content">
-            <div className="v3-side-nav">
-                <label className="v3-label">Pages DM</label>
-                {formData.levels.map((lvl, idx) => (
-                    <div key={idx} className={`v3-page-tab ${activeLevelIdx === idx ? 'active' : ''}`} onClick={() => setActiveLevelIdx(idx)}>PAGE {idx + 1}</div>
-                ))}
-                <button className="v3-add-page" onClick={() => setFormData({...formData, levels: [...formData.levels, { instruction: '', instructionUrls: [], aiHints: '', attachmentUrls: [] }]})}>+ PAGE</button>
-                <div className="mt-auto">
-                    <label className="v3-label">Destination (Master)</label>
-                    <select className="v3-select" value={formData.chapterId} onChange={e => setFormData({...formData, chapterId: e.target.value})}>
+        <div className="v84-body">
+            <div className="v84-sidebar-left">
+                <h4 className="v84-sidebar-label">Pages du DM</h4>
+                <div className="v84-pages-list custom-scrollbar">
+                    {formData.levels.map((lvl, idx) => (
+                        <div key={idx} className={`v84-page-item ${activeLevelIdx === idx ? 'active' : ''}`} onClick={() => setActiveLevelIdx(idx)}>
+                            <div className="v84-page-header">
+                                <span className="v84-page-name">PAGE {idx + 1}</span>
+                                {formData.levels.length > 1 && <button className="v84-del-page" onClick={(e) => { e.stopPropagation(); setFormData({...formData, levels: formData.levels.filter((_, i) => i !== idx)}); setActiveLevelIdx(0); }}>✕</button>}
+                            </div>
+                        </div>
+                    ))}
+                    <button className="v84-add-page-btn" onClick={() => setFormData({...formData, levels: [...formData.levels, { instruction: '', instructionUrls: [], aiHints: '', attachmentUrls: [] }]})}>+ NOUVELLE PAGE</button>
+                </div>
+                <div className="v84-chapter-box">
+                    <label className="v84-sidebar-label">Dossier Master</label>
+                    <select className="v84-select" value={formData.chapterId} onChange={e => setFormData({...formData, chapterId: e.target.value})}>
                         <option value="">-- CHOISIR --</option>
-                        {chapters.map(c => <option key={c._id} value={c._id}>[{c.section}] {c.title}</option>)}
+                        {chapters.filter(c => !globalClass || c.classroom === globalClass).map(c => <option key={c._id} value={c._id}>[{c.section}] {c.title}</option>)}
                     </select>
                 </div>
             </div>
 
-            <div className="v3-editor-area custom-scrollbar">
-                <div className="v3-card">
-                    <label className="v3-label">1. Énoncé & Consignes (Images ou texte)</label>
-                    <textarea className="v3-text-area" value={activeLevel.instruction} onChange={e => updateLevel('instruction', e.target.value)} placeholder="Écrivez vos instructions..." />
-                    <button className="v3-add-doc-btn" onClick={() => { setUploadTarget('instructionUrls'); fileInputRef.current.click(); }}>📂 CHARGER ÉNONCÉ IMAGE</button>
-                    <div className="v3-gallery">
+            <div className="v84-main-editor custom-scrollbar">
+                <div className="v84-card">
+                    <label className="v84-card-label">1. ÉNONCÉ & CONSIGNE</label>
+                    <textarea className="v84-textarea" value={activeLevel.instruction} onChange={e => updateLevel('instruction', e.target.value)} placeholder="Consigne textuelle..." />
+                    <button className="v84-upload-btn" onClick={() => { setUploadTarget('instructionUrls'); fileInputRef.current.click(); }}>📂 CHARGER ÉNONCÉ(S)</button>
+                    <div className="v84-gallery">
                         {activeLevel.instructionUrls.map((url, i) => (
-                            <div key={i} className="v3-thumb-box"><img src={url} onClick={() => setZoomImg(url)} /><button className="v3-del-btn" onClick={() => updateLevel('instructionUrls', activeLevel.instructionUrls.filter((_, idx) => idx !== i))}>✕</button></div>
+                            <div key={i} className="v84-thumb">
+                                <img src={getDisplayUrl(url)} onClick={() => setZoomImg(url)} />
+                                <button className="v84-thumb-del" onClick={() => updateLevel('instructionUrls', activeLevel.instructionUrls.filter((_, idx) => idx !== i))}>✕</button>
+                            </div>
                         ))}
                     </div>
                 </div>
-                <div className="v3-card ai-style"><label className="v3-label">2. Correction IA</label><textarea className="v3-text-area ai-input" value={activeLevel.aiHints} onChange={e => updateLevel('aiHints', e.target.value)} placeholder="Indices pour Gemini..." /></div>
-                <div className="v3-card">
-                    <label className="v3-label">3. Supports pour l'élève (Documents)</label>
-                    <button className="v3-add-doc-btn" onClick={() => { setUploadTarget('attachmentUrls'); fileInputRef.current.click(); }}>📂 CHARGER DOCUMENTS SUPPORTS</button>
-                    <div className="v3-gallery">
+
+                <div className="v84-card v84-ai-card">
+                    <label className="v84-card-label">2. CORRECTION IA (Indices)</label>
+                    <textarea className="v84-textarea v84-ai-textarea" value={activeLevel.aiHints} onChange={e => updateLevel('aiHints', e.target.value)} placeholder="Ce que l'IA doit vérifier..." />
+                </div>
+
+                <div className="v84-card">
+                    <label className="v84-card-label">3. DOCUMENTS SUPPORTS</label>
+                    <button className="v84-upload-btn" onClick={() => { setUploadTarget('attachmentUrls'); fileInputRef.current.click(); }}>📂 CHARGER SUPPORTS</button>
+                    <div className="v84-gallery">
                         {activeLevel.attachmentUrls.map((url, i) => (
-                            <div key={i} className="v3-thumb-box"><img src={url} onClick={() => setZoomImg(url)} /><button className="v3-del-btn" onClick={() => updateLevel('attachmentUrls', activeLevel.attachmentUrls.filter((_, idx) => idx !== i))}>✕</button></div>
+                            <div key={i} className="v84-thumb">
+                                <img src={getDisplayUrl(url)} onClick={() => setZoomImg(url)} />
+                                <button className="v84-thumb-del" onClick={() => updateLevel('attachmentUrls', activeLevel.attachmentUrls.filter((_, idx) => idx !== i))}>✕</button>
+                            </div>
                         ))}
                     </div>
                 </div>
             </div>
 
-            <div className="v3-side-assign">
-                <label className="v3-label">Assignation & Ponts Drive</label>
-                <div className="v3-students-list custom-scrollbar">
-                    <div className={`v3-student-item ${formData.isAllClass ? 'selected' : ''}`} onClick={() => setFormData({...formData, isAllClass: true, assignedStudents: []})}>
-                        TOUTE LA CLASSE ({globalClass})
-                    </div>
-                    {classStudents.map(s => (
-                        <div key={s._id} className={`v3-student-item ${formData.assignedStudents.includes(s._id) ? 'selected' : ''}`} onClick={() => {
-                            const next = formData.assignedStudents.includes(s._id) ? formData.assignedStudents.filter(id => id !== s._id) : [...formData.assignedStudents, s._id];
-                            setFormData({...formData, assignedStudents: next, isAllClass: false});
-                        }}>{s.firstName} {s.lastName}</div>
-                    ))}
+            <div className="v84-sidebar-right">
+                <h4 className="v84-sidebar-label">Assignation ({globalClass})</h4>
+                <div className="v84-students-list custom-scrollbar">
+                    <div className={`v84-student-row ${formData.isAllClass ? 'selected' : ''}`} onClick={() => setFormData({...formData, isAllClass: true, assignedStudents: []})}><div className="v84-check"></div><span>TOUTE LA CLASSE</span></div>
+                    {classStudents.map(s => <div key={s._id} className={`v84-student-row ${formData.assignedStudents.includes(s._id) ? 'selected' : ''}`} onClick={() => { const next = formData.assignedStudents.includes(s._id) ? formData.assignedStudents.filter(id => id !== s._id) : [...formData.assignedStudents, s._id]; setFormData({...formData, assignedStudents: next, isAllClass: false}); }}><div className="v84-check"></div><span>{s.firstName} {s.lastName}</span></div>)}
                 </div>
-                <button className="v3-save-btn" onClick={handleSave}>PUBLIER ET SYNC DRIVE</button>
+                <button className="v84-publish-btn" onClick={handleSave} disabled={isPublishing}>PUBLIER LE DEVOIR 🚀</button>
             </div>
         </div>
     </div>

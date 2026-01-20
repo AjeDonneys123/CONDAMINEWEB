@@ -1,10 +1,11 @@
 {
   "name": "condamine-pro",
-  "version": "1.2.0",
+  "version": "1.69.0",
   "scripts": {
     "start": "node server/server.js",
     "server-dev": "nodemon --ignore 'update.txt' --ignore 'apply_status.json' server/server.js",
     "client": "npm run dev --prefix client",
+    "test": "node tests/integrity.test.js",
     "dev": "node apply.js & node magic-paste.js & npm run server-dev & npm run client"
   },
   "dependencies": {
@@ -16,8 +17,5 @@
     "node-fetch": "^2.7.0",
     "multer": "^1.4.5-lts.1",
     "clipboardy": "^4.0.0"
-  },
-  "devDependencies": {
-    "nodemon": "^3.1.0"
   }
 }

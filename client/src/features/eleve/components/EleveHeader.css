@@ -1,7 +1,16 @@
 .header-wrapper { display: flex; flex-direction: column; gap: 1.5rem; margin-bottom: 2rem; }
 .top-bar { display: flex; justify-content: space-between; align-items: center; background: white; padding: 1rem 2rem; border-radius: 25px; border: 2px solid #fce7f3; }
-.brand-name { color: #db2777; font-weight: 900; font-size: 1.5rem; text-transform: uppercase; }
-.user-badge { font-size: 0.8rem; font-weight: 700; color: #9d174d; background: #fce7f3; padding: 0.5rem 1rem; border-radius: 9999px; }
+.brand-name { color: #db2777; font-weight: 900; font-size: 1.5rem; text-transform: uppercase; letter-spacing: -1px; }
+
+.v80-user-info { display: flex; flex-direction: column; align-items: flex-end; }
+.v80-user-name { font-weight: 900; color: #1e293b; font-size: 0.9rem; text-transform: uppercase; }
+.v80-user-class { font-weight: 950; color: #db2777; font-size: 0.7rem; background: #fdf2f8; padding: 2px 8px; border-radius: 6px; border: 1px solid #fbcfe8; }
+
+.v80-logout-btn { width: 35px; height: 35px; border-radius: 50%; background: #f1f5f9; color: #94a3b8; border: none; cursor: pointer; font-weight: 900; transition: all 0.2s; }
+.v80-logout-btn:hover { background: #fee2e2; color: #ef4444; }
+
+.v80-back-prof { background: #1e293b; color: white; padding: 5px 12px; border-radius: 10px; font-weight: 900; font-size: 8px; text-transform: uppercase; letter-spacing: 1px; border: none; cursor: pointer; }
+
 .nav-tabs { display: flex; padding: 0.4rem; background: white; border-radius: 20px; border: 2px solid #fce7f3; gap: 0.5rem; width: fit-content; }
-.tab-item { padding: 0.8rem 2rem; border-radius: 16px; font-weight: 800; font-size: 0.9rem; color: #f472b6; cursor: pointer; }
-.tab-active { background: #db2777 !important; color: white !important; }
+.tab-item { padding: 0.8rem 2rem; border-radius: 16px; font-weight: 800; font-size: 0.9rem; color: #f472b6; cursor: pointer; border: none; background: transparent; }
+.tab-active { background: #db2777 !important; color: white !important; box-shadow: 0 4px 12px rgba(219, 39, 119, 0.3); }

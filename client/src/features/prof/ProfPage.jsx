@@ -8,8 +8,8 @@ import ConsoleReporter from './components/ConsoleReporter';
 import './ProfPage.css';
 
 /**
- * 🎓 PAGE PROFESSEUR V53
- * Filtrage dynamique de la barre "Classe Active" selon les affectations réelles.
+ * 🎓 PAGE PROFESSEUR V95
+ * Resilience accrue contre les erreurs 500 du serveur.
  */
 export default function ProfPage({ user, onLogout }) {
   const isJean = (user.firstName === 'Jean' && user.lastName === 'Vuillet');
@@ -23,69 +23,64 @@ export default function ProfPage({ user, onLogout }) {
   const loadProfileAndClasses = async () => {
     setLoading(true);
     try {
-        // 1. Récupérer toutes les classes de l'établissement
-        const resCls = await fetch('/api/admin/classrooms');
-        const allCls = await resCls.json();
-
-        // 2. Récupérer le profil à jour pour les affectations
-        const resMe = await fetch(`/api/admin/teachers/${user.id || user._id}`);
-        const myProfile = await resMe.json();
-
-        // 3. LOGIQUE DE FILTRAGE V53
-        let filteredCls = [];
+        const userId = user.id || user._id;
         
+        // On effectue les appels un par un pour mieux gérer les erreurs isolées
+        const resCls = await fetch('/api/admin/classrooms');
+        const allCls = resCls.ok ? await resCls.json() : [];
+
+        const resMe = await fetch(`/api/admin/teachers/${userId}`);
+        // V95 : Si l'identité fail, on utilise le profil local en fallback
+        const myProfile = resMe.ok ? await resMe.json() : user;
+
+        let filteredCls = [];
         if (superUser.isDeveloper) {
-            // Le développeur voit tout pour pouvoir tester n'importe quelle classe
             filteredCls = allCls;
         } else {
-            // Le prof ne voit que ce qui lui est assigné
             const assignedIds = myProfile.assignedClasses || [];
-            filteredCls = allCls.filter(c => assignedIds.includes(c._id));
+            filteredCls = allCls.filter(c => assignedIds.some(id => String(id) === String(c._id)));
         }
 
         setClasses(filteredCls);
         
-        // Sélection par défaut : la première de la liste filtrée
-        if (filteredCls.length > 0 && !selectedClassId) {
-            setSelectedClassId(filteredCls[0]._id);
+        if (filteredCls.length > 0) {
+            const stillExists = filteredCls.some(c => String(c._id) === String(selectedClassId));
+            if (!selectedClassId || !stillExists) {
+                setSelectedClassId(filteredCls[0]._id);
+            }
         }
-    } catch(e) { console.error("❌ ProfPage Load Error:", e); }
+    } catch(e) { 
+        console.error("❌ Erreur Toolbar V95:", e.message); 
+    }
     setLoading(false);
   };
 
-  // Rechargement quand on revient sur la page ou qu'on change d'onglet Admin
   useEffect(() => { loadProfileAndClasses(); }, [tab]);
 
-  const currentClassName = classes.find(c => c._id === selectedClassId)?.name || "";
+  const currentClassName = classes.find(c => String(c._id) === String(selectedClassId))?.name || "";
 
   return (
     <div className="prof-page-container">
       <div className="prof-card shadow-2xl">
         <ProfHeader user={superUser} onLogout={onLogout} />
         
-        {/* BANDEAU CLASSE ACTIVE (V53 : FILTRÉ) */}
         <div className="px-8 py-4 flex gap-2 border-b bg-slate-50/50 overflow-x-auto no-scrollbar items-center min-h-[70px]">
             <span className="text-[10px] font-black text-slate-400 mr-2 uppercase tracking-widest whitespace-nowrap">
-                {superUser.isDeveloper ? '🛠️ TOUTES LES CLASSES :' : '📚 MES CLASSES :'}
+                {superUser.isDeveloper ? '🛠️ MODE ARCHITECTE :' : '📚 MES CLASSES :'}
             </span>
             
             {loading ? (
-                <div className="flex gap-2">
-                    <div className="w-16 h-8 bg-slate-200 animate-pulse rounded-lg"></div>
-                    <div className="w-16 h-8 bg-slate-200 animate-pulse rounded-lg"></div>
-                </div>
+                <span className="text-[10px] text-slate-300 font-black animate-pulse">CHARGEMENT...</span>
             ) : (
                 <>
                     {classes.map(c => (
                         <button key={c._id} onClick={() => setSelectedClassId(c._id)} 
-                                className={`px-5 py-2 rounded-xl font-black text-[10px] transition-all whitespace-nowrap border-2 ${selectedClassId === c._id ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg' : 'bg-white text-slate-400 border-slate-100 hover:border-slate-200'}`}>
+                                className={`px-5 py-2 rounded-xl font-black text-[10px] transition-all whitespace-nowrap border-2 ${String(selectedClassId) === String(c._id) ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg' : 'bg-white text-slate-400 border-slate-100 hover:border-slate-200'}`}>
                             {c.type === 'GROUP' ? '👥' : '🏫'} {c.name}
                         </button>
                     ))}
                     {classes.length === 0 && (
-                        <span className="text-[10px] text-red-400 font-black italic uppercase">
-                            ⚠️ Aucune classe affectée. Contactez l'administrateur.
-                        </span>
+                        <span className="text-[10px] text-red-400 font-black italic uppercase">⚠️ AUCUNE AFFECTATION</span>
                     )}
                 </>
             )}
@@ -101,7 +96,7 @@ export default function ProfPage({ user, onLogout }) {
       </div>
       
       {superUser.isDeveloper && <ConsoleReporter user={superUser} />}
-      <div className="fixed bottom-4 right-4 bg-indigo-600 text-white font-black text-[9px] px-4 py-2 rounded-full shadow-2xl z-[20000]">STUDIO V53</div>
+      <div className="fixed bottom-4 right-4 bg-indigo-600 text-white font-black text-[9px] px-4 py-2 rounded-full shadow-2xl z-[20000]">STUDIO V95</div>
     </div>
   );
 }

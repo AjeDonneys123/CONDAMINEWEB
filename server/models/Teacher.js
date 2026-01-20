@@ -7,9 +7,11 @@ const TeacherSchema = new mongoose.Schema({
     subjectSections: { type: Array, default: [] },
     taughtSubjects: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Subject' }],
     assignedClasses: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Classroom' }],
+    isDeveloper: { type: Boolean, default: false },
+    driveFolderId: { type: String },
     
-    // Remplacement de isAdmin par isDeveloper
-    isDeveloper: { type: Boolean, default: false }
+    // V71 : Flag de compte de test pour le bouton retour dev
+    isTestAccount: { type: Boolean, default: false }
 }, { collection: 'teachers' });
 
 module.exports = mongoose.models.Teacher || mongoose.model('Teacher', TeacherSchema);

@@ -1,0 +1,36 @@
+1. Sécurité & Accès (Authentification)
+Vérifie que Jean Vuillet a le rôle unique de isDeveloper (Architecte Suprême).
+Vérifie que le bouton "RETOUR DÉVELOPPEUR" est présent sur tous les comptes de test (isTestAccount: true).
+Vérifie que seul Jean Vuillet peut promouvoir ou rétrograder un autre utilisateur au rang de Développeur.
+Vérifie que le mot de passe "A" est autorisé uniquement pour le provisionnement des comptes de test (Admin Test, Prof Test, Eleve Test).
+Vérifie que le bouton "🚀 TESTER" dans le Dashboard Admin permet de basculer instantanément (sans login manuel) sur n'importe quel compte de test de classe, de groupe ou de staff.
+2. Gestion Administrative (Dashboard)
+Vérifie que le Dashboard possède 5 onglets : CLASSES, GROUPES, ÉLÈVES, PROFS, DIRECTION.
+Vérifie que chaque onglet possède son bouton "+ AJOUTER" fonctionnel (BDD + Provisioning Drive).
+Vérifie que la distinction entre Classe Administrative (Maison de l'élève) et Groupe Pédagogique (Option/Demi-groupe) est respectée.
+Vérifie que l'onglet PROFS permet d'attribuer des Matières (taughtSubjects) et des Classes/Groupes (assignedClasses).
+Vérifie que les listes dans l'Admin affichent les IDs Drive pour résoudre les incohérences.
+3. Pédagogie & Devoirs (Studio)
+Vérifie que le Studio Devoir est multi-pages (Niveaux).
+Vérifie que chaque page contient : Consigne (Texte + Images), Indices IA (Secret Gemini), Documents de Travail (Supports).
+Vérifie que l'ajout de documents se fait par upload depuis le disque (pas seulement URL).
+Vérifie que les miniatures d'images ont une croix rouge de suppression et un clic pour zoomer.
+Vérifie que l'assignation peut se faire soit à "Toute la classe", soit par sélection individuelle d'élèves.
+4. Expérience Élève (Workspace)
+Vérifie que l'élève voit son nom et sa classe administrative dans son header.
+Vérifie que la liseuse de documents supporte le Drag & Slide (Panoramique) et la navigation entre plusieurs documents.
+Vérifie que les images de consigne sont visibles dans le panneau latéral gauche de l'élève.
+Vérifie que les documents de travail s'adaptent à la hauteur de l'espace noir.
+5. Architecture Cloud (Google Drive)
+Vérifie que la racine unique est CONDA PROJECT.
+Vérifie que le stockage utilise la stratégie "Vault" (Vrac ordonné par IDs stockés en BDD).
+Vérifie que le Mouchard Drive permet de voir l'arborescence et de supprimer (mettre à la corbeille) des fichiers/dossiers.
+Vérifie que le moteur de routage envoie le travail de l'élève dans son "Casier" (sa Classe Administrative), même si le devoir vient d'un groupe transversal.
+6. Maintenance & Système
+Vérifie que les 17 modèles Mongoose sont chargés au démarrage du serveur.
+Vérifie que l'IA utilise strictement gemini-2.0-flash.
+Vérifie que le badge de version (ex: STUDIO V84) est visible sur les écrans prof et admin.
+Vérifie que le bandeau "Classe Active" du prof est filtré selon ses affectations réelles (sauf pour le Développeur qui voit tout).
+Tu peux désormais copier ce bloc et l'utiliser comme préambule à tes prochains ordres.
+Vérifie que le formulaire de création de devoir contient bien choix classe choix eleves specifique ajout de page ajout de documents ajout de questions
+ajout d ordres pour l ia qu il est bien enregistré en bdd avec un id relié au bon chapitre

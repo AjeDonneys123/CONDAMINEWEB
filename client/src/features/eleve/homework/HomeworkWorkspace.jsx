@@ -1,9 +1,9 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import './Homework.css';
 
 /**
- * 📖 LISEUSE ÉLÈVE PROFESSIONNELLE - VERSION 8
- * Gère le Drag & Slide, la navigation multi-docs et le plein écran hauteur.
+ * 📖 LISEUSE ÉLÈVE V102
+ * Affichage robuste via Proxy interne.
  */
 export default function HomeworkWorkspace({ homework, user, onQuit }) {
   const [pageIdx, setPageIdx] = useState(0);
@@ -12,33 +12,18 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
   const [submitting, setSubmitting] = useState(false);
   const [aiResult, setAiResult] = useState(null);
 
-  // --- LOGIQUE DE DRAG & SLIDE (PAN) ---
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [startPos, setStartPos] = useState({ x: 0, y: 0 });
-  const viewerRef = useRef(null);
-
+  
   const currentPage = homework.levels[pageIdx];
   const instrDocs = currentPage.instructionUrls || [];
   const workDocs = currentPage.attachmentUrls || [];
 
-  // Reset du pan et du document quand on change de page
   useEffect(() => {
     setOffset({ x: 0, y: 0 });
     setActiveDocIdx(0);
   }, [pageIdx]);
-
-  const handleMouseDown = (e) => {
-    setIsDragging(true);
-    setStartPos({ x: e.clientX - offset.x, y: e.clientY - offset.y });
-  };
-
-  const handleMouseMove = (e) => {
-    if (!isDragging) return;
-    setOffset({ x: e.clientX - startPos.x, y: e.clientY - startPos.y });
-  };
-
-  const handleMouseUp = () => setIsDragging(false);
 
   const submitToIA = async () => {
       if(!answer.trim()) return;
@@ -55,100 +40,66 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
             })
         }).then(r => r.json());
         setAiResult(res);
-      } catch(e) { alert("Erreur réseau"); }
+      } catch(e) { alert("Erreur serveur IA"); }
       setSubmitting(false);
   };
 
   return (
     <div className="homework-container v8-liseuse">
-      
-      {/* 1. ZONE NOIRE : DOCUMENTS DE TRAVAIL (75% Hauteur) */}
       <div 
         className="viewer-top-area" 
-        ref={viewerRef}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
+        onMouseDown={(e) => { setIsDragging(true); setStartPos({ x: e.clientX - offset.x, y: e.clientY - offset.y }); }}
+        onMouseMove={(e) => { if (isDragging) setOffset({ x: e.clientX - startPos.x, y: e.clientY - startPos.y }); }}
+        onMouseUp={() => setIsDragging(false)}
+        onMouseLeave={() => setIsDragging(false)}
         style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
       >
-          {/* Navigation Doc Suivant/Précédent */}
           {workDocs.length > 1 && (
             <>
-                <button className="v8-nav-arrow left" onClick={(e) => { e.stopPropagation(); setActiveDocIdx(prev => Math.max(0, prev - 1)); setOffset({x:0, y:0}); }}>❮</button>
-                <button className="v8-nav-arrow right" onClick={(e) => { e.stopPropagation(); setActiveDocIdx(prev => Math.min(workDocs.length - 1, prev + 1)); setOffset({x:0, y:0}); }}>❯</button>
+                <button className="v8-nav-arrow left" onClick={(e) => { e.stopPropagation(); setActiveDocIdx(prev => Math.max(0, prev - 1)); }}>❮</button>
+                <button className="v8-nav-arrow right" onClick={(e) => { e.stopPropagation(); setActiveDocIdx(prev => Math.min(workDocs.length - 1, prev + 1)); }}>❯</button>
                 <div className="v8-doc-counter">{activeDocIdx + 1} / {workDocs.length}</div>
             </>
           )}
 
-          {/* Affichage du document avec Pan */}
-          <div 
-            className="v8-pan-container"
-            style={{ transform: `translate(${offset.x}px, ${offset.y}px)` }}
-          >
+          <div className="v8-pan-container" style={{ transform: `translate(${offset.x}px, ${offset.y}px)` }}>
               {workDocs.length > 0 ? (
-                  <img 
-                    src={workDocs[activeDocIdx]} 
-                    className="v8-main-img" 
-                    draggable="false" 
-                    alt="Work" 
-                  />
-              ) : (
-                  <div className="text-slate-700 font-black text-3xl opacity-20">AUCUN SUPPORT</div>
-              )}
+                  <img key={workDocs[activeDocIdx]} src={workDocs[activeDocIdx]} className="v8-main-img" draggable="false" alt="Support" />
+              ) : <div className="text-slate-700 font-black opacity-20">AUCUN SUPPORT DE TRAVAIL</div>}
           </div>
       </div>
 
-      {/* 2. ZONE BLANCHE : INTERACTION (25% Hauteur) */}
       <div className="interaction-bottom-area">
-          
-          {/* COLONNE GAUCHE : QUESTIONS & MINIATURES */}
           <div className="question-panel custom-scrollbar">
-              <div className="v8-page-badge">CONSIGNE PAGE {pageIdx + 1}</div>
+              <div className="v8-page-badge">CONSIGNE ÉTAPE {pageIdx + 1}</div>
               <p className="v8-instruction-text">{currentPage.instruction}</p>
-              
               <div className="v8-instruction-gallery">
                   {instrDocs.map((url, i) => (
-                      <img key={i} src={url} className="v8-mini-thumb" onClick={() => window.open(url)} alt="Instr" />
+                      <img key={i} src={url} className="v8-mini-thumb" onClick={() => window.open(url)} alt="Consigne" />
                   ))}
               </div>
           </div>
 
-          {/* COLONNE DROITE : RÉPONSE & ENVOI */}
           <div className="answer-panel">
-              <textarea 
-                className="answer-input" 
-                value={answer} 
-                onChange={e => setAnswer(e.target.value)} 
-                placeholder="Rédigez votre analyse ici..." 
-              />
+              <textarea className="answer-input" value={answer} onChange={e => setAnswer(e.target.value)} placeholder="Votre réponse ici..." />
               <div className="v8-footer-actions">
-                  <div className="v8-progress">ÉTAPE {pageIdx + 1} / {homework.levels.length}</div>
-                  <button onClick={submitToIA} disabled={submitting} className="btn-send-ai">
-                    {submitting ? 'CORRECTION...' : 'ENVOYER MA RÉPONSE 🤖'}
-                  </button>
+                  <div className="v8-progress">PAGE {pageIdx + 1} / {homework.levels.length}</div>
+                  <button onClick={submitToIA} disabled={submitting} className="btn-send-ai">{submitting ? 'ANALYSE...' : 'ENVOYER 🤖'}</button>
               </div>
           </div>
       </div>
 
-      {/* MODALE DE FEEDBACK IA */}
       {aiResult && (
           <div className="ai-modal-overlay">
-              <div className="ai-modal-box animate-in zoom-in">
+              <div className="ai-modal-box">
                   <div className="v8-grade-badge">{aiResult.grade}</div>
-                  <h3 className="text-xl font-black text-slate-800 mb-4 uppercase tracking-tighter">Retour de votre correcteur</h3>
                   <div dangerouslySetInnerHTML={{__html: aiResult.feedback_fond}} className="v8-feedback-content custom-scrollbar" />
-                  
                   <button onClick={() => {
                       setAiResult(null); 
-                      if(pageIdx < homework.levels.length - 1) { 
-                          setPageIdx(pageIdx + 1); 
-                          setAnswer(''); 
-                      } else {
-                          onQuit();
-                      }
+                      if(pageIdx < homework.levels.length - 1) { setPageIdx(pageIdx + 1); setAnswer(''); }
+                      else onQuit();
                   }} className="v8-next-page-btn">
-                      {pageIdx < homework.levels.length - 1 ? 'PASSER À LA PAGE SUIVANTE' : 'TERMINER LE DEVOIR'}
+                      {pageIdx < homework.levels.length - 1 ? 'PAGE SUIVANTE' : 'TERMINER'}
                   </button>
               </div>
           </div>
