@@ -5,10 +5,11 @@ const TeacherSchema = new mongoose.Schema({
     lastName: { type: String, required: true },
     password: { type: String, required: true },
     subjectSections: { type: Array, default: [] },
-    // Matières enseignées
     taughtSubjects: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Subject' }],
-    // NOUVEAU : Classes assignées
-    assignedClasses: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Classroom' }]
+    assignedClasses: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Classroom' }],
+    
+    // Remplacement de isAdmin par isDeveloper
+    isDeveloper: { type: Boolean, default: false }
 }, { collection: 'teachers' });
 
 module.exports = mongoose.models.Teacher || mongoose.model('Teacher', TeacherSchema);

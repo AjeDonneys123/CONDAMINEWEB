@@ -1,7 +1,7 @@
 {
-  "version": "1.17.0",
-  "build": 151,
-  "timestamp": "2026-01-19T15:10:00.000Z",
-  "studio_version": 17,
-  "features": ["DRIVE_DELETE_CAPABILITY"]
+  "version": "1.52.0",
+  "build": 187,
+  "timestamp": "2026-01-19T20:10:00.000Z",
+  "studio_version": 52,
+  "status": "DUAL_COLUMN_ASSIGNMENT_UI"
 }

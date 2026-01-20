@@ -4,30 +4,22 @@ import './DriveViewer.css';
 const DriveNode = ({ node, depth = 0, onDelete }) => {
     const [isOpen, setIsOpen] = useState(depth < 1);
     const isFolder = node.type === 'folder';
-    const isRoot = node.name === 'CONDA CLASSE';
+    const isRoot = node.name === 'CONDA PROJECT';
+    const isBranch = ['ENSEIGNANTS', 'ADMINISTRATION', 'CLASSES'].includes(node.name);
 
     return (
         <div className="drive-node" style={{ marginLeft: depth > 0 ? '20px' : '0' }}>
-            <div className={`drive-item ${isFolder ? 'is-folder' : 'is-file'}`}>
-                <div className="flex-1 flex items-center gap-3 cursor-pointer" onClick={() => isFolder && setIsOpen(!isOpen)}>
-                    <span className="drive-icon">{isFolder ? (isOpen ? '📂' : '📁') : '📄'}</span>
-                    <span className="drive-name">{node.name}</span>
+            <div className={`drive-item ${isFolder ? 'is-folder' : 'is-file'} ${isBranch ? 'branch-style' : ''}`}>
+                <div className="flex-1 flex flex-col cursor-pointer" onClick={() => isFolder && setIsOpen(!isOpen)}>
+                    <div className="flex items-center gap-3">
+                        <span className="drive-icon">{isFolder ? (isOpen ? '📂' : '📁') : '📄'}</span>
+                        <span className="drive-name">{node.name}</span>
+                    </div>
                 </div>
-                
                 <div className="drive-actions">
-                    {!isFolder && node.link && (
-                        <a href={node.link} target="_blank" className="drive-action-btn view" title="Ouvrir">👁️</a>
-                    )}
-                    
-                    {/* Bouton de suppression nuclear - Sauf pour la racine */}
-                    {!isRoot && (
-                        <button 
-                            className="drive-action-btn delete" 
-                            onClick={(e) => { e.stopPropagation(); onDelete(node.id, node.name, isFolder); }}
-                            title="Supprimer définitivement"
-                        >
-                            ✕
-                        </button>
+                    {!isFolder && node.link && <a href={node.link} target="_blank" className="drive-action-btn view">👁️</a>}
+                    {!isRoot && !isBranch && (
+                        <button className="drive-action-btn delete" onClick={(e) => { e.stopPropagation(); onDelete(node.id, node.name); }}>✕</button>
                     )}
                 </div>
             </div>
@@ -47,32 +39,30 @@ const DriveNode = ({ node, depth = 0, onDelete }) => {
 export default function DriveViewer({ onClose }) {
     const [tree, setTree] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [isDeleting, setIsDeleting] = useState(false);
+    const [syncing, setSyncing] = useState(false);
 
     const loadTree = async () => {
         setLoading(true);
-        try {
-            const res = await fetch('/api/structure/drive-tree');
-            const data = await res.json();
-            setTree(data);
-        } catch (e) { console.error(e); }
+        const res = await fetch('/api/structure/drive-tree');
+        setTree(await res.json());
         setLoading(false);
     };
 
-    const handleDelete = async (id, name, isFolder) => {
-        const type = isFolder ? "LE DOSSIER" : "LE FICHIER";
-        if (!window.confirm(`⚠️ ATTENTION ⚠️\n\nÊtes-vous sûr de vouloir supprimer définitivement ${type} :\n"${name}" ?\n\nCette action est irréversible sur Google Drive.`)) return;
+    const handleSync = async () => {
+        setSyncing(true);
+        const res = await fetch('/api/structure/sync-root', { method: 'POST' });
+        const result = await res.json();
+        if (result.ok) {
+            alert(`ALIGNEMENT RÉUSSI :\n- ${result.stats.teachers} Profs\n- ${result.stats.admins} Admins\n- ${result.stats.classes} Classes`);
+            await loadTree();
+        }
+        setSyncing(false);
+    };
 
-        setIsDeleting(true);
-        try {
-            const res = await fetch(`/api/structure/drive/${id}`, { method: 'DELETE' });
-            if (res.ok) {
-                loadTree();
-            } else {
-                alert("Erreur lors de la suppression.");
-            }
-        } catch (e) { alert("Erreur réseau"); }
-        setIsDeleting(false);
+    const handleDelete = async (id, name) => {
+        if (!confirm(`Supprimer ${name} ?`)) return;
+        await fetch(`/api/structure/drive/${id}`, { method: 'DELETE' });
+        loadTree();
     };
 
     useEffect(() => { loadTree(); }, []);
@@ -82,23 +72,16 @@ export default function DriveViewer({ onClose }) {
             <div className="drive-viewer-window" onClick={e => e.stopPropagation()}>
                 <div className="drive-viewer-header">
                     <div>
-                        <h2 className="text-xl font-black text-white uppercase tracking-tighter">Mouchard Nucléaire Drive</h2>
-                        <p className="text-[9px] font-black text-red-400 tracking-[0.2em]">CONTRÔLE TOTAL DU CLOUD</p>
+                        <h2 className="text-xl font-black text-white uppercase tracking-tighter">Mouchard V33</h2>
+                        <p className="text-[9px] font-black text-emerald-400 tracking-widest uppercase">CONDA PROJECT</p>
                     </div>
                     <div className="flex gap-3">
-                        <button onClick={loadTree} className="v14-refresh-btn">ACTUALISER</button>
+                        <button onClick={handleSync} disabled={syncing} className="v14-sync-btn">{syncing ? 'ALIGNEMENT...' : '🔄 SYNCHRO BDD ↔ CLOUD'}</button>
                         <button onClick={onClose} className="v14-close-btn">✕</button>
                     </div>
                 </div>
                 <div className="drive-viewer-body custom-scrollbar">
-                    {(loading || isDeleting) ? (
-                        <div className="v14-loader">
-                            <div className="spinner"></div>
-                            <span>{isDeleting ? 'SUPPRESSION EN COURS...' : 'SCAN DU CLOUD EN COURS...'}</span>
-                        </div>
-                    ) : (
-                        tree && <DriveNode node={tree} onDelete={handleDelete} />
-                    )}
+                    {loading ? <div className="v14-loader"><div className="spinner"></div><span>SCAN DU DRIVE...</span></div> : tree && <DriveNode node={tree} onDelete={handleDelete} />}
                 </div>
             </div>
         </div>

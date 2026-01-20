@@ -12,15 +12,24 @@ router.get('/drive-tree', async (req, res) => {
         const tree = await StructureDrive.getDriveTree();
         res.json(tree);
     } catch (e) {
-        res.status(500).json({ name: "Erreur Cloud", children: [], error: e.message });
+        res.status(200).json({ name: "Erreur Cloud", children: [], error: e.message });
     }
 });
 
-// SUPPRESSION DRIVE
-router.delete('/drive/:id', asyncHandler(async (req, res) => {
-    const result = await StructureDrive.deleteDriveItem(req.params.id);
+// SYNCHRO RACINE ET DONNÉES EXISTANTES V25
+router.post('/sync-root', asyncHandler(async (req, res) => {
+    const result = await StructureDrive.syncBaseStructure();
     res.json(result);
 }));
+
+router.delete('/drive/:id', async (req, res) => {
+    try {
+        const result = await StructureDrive.deleteDriveItem(req.params.id);
+        res.json(result);
+    } catch (e) {
+        res.status(200).json({ error: e.message });
+    }
+});
 
 // --- 2. SECTIONS ---
 router.post('/sections', asyncHandler(async (req, res) => {

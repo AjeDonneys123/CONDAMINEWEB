@@ -3,9 +3,10 @@ const AdminSchema = new mongoose.Schema({
     firstName: { type: String, required: true },
     lastName: { type: String, required: true },
     password: { type: String, required: true },
-    // Rôle : 'admin' (classique) ou 'developer' (accès total)
     role: { type: String, enum: ['admin', 'developer'], default: 'admin' },
-    // NOUVEAU : Permet aux admins/devs de gérer leurs propres sections comme les profs
-    subjectSections: { type: Array, default: [] }
+    subjectSections: { type: Array, default: [] },
+    
+    // Remplacement de isAdmin par isDeveloper
+    isDeveloper: { type: Boolean, default: false }
 }, { collection: 'admins' });
 module.exports = mongoose.models.Admin || mongoose.model('Admin', AdminSchema);
