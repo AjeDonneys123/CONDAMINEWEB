@@ -5,12 +5,16 @@ import ElevePage from './features/eleve/ElevePage';
 import AdminPage from './features/admin/AdminPage';
 import './App.css';
 
+/**
+ * 🚀 APPLICATION CONDAMINE PRO - VERSION 55
+ * Gestion du routage intelligent et de la backdoor développeur pour les tests.
+ */
 export default function App() {
   const [user, setUser] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const bootIdRef = useRef(null);
 
-  // --- 1. SYSTÈME DE SYNC ---
+  // --- 1. SYSTÈME DE SYNC (Auto-reload lors du déploiement) ---
   useEffect(() => {
     const checkUpdate = async () => {
       try {
@@ -21,11 +25,11 @@ export default function App() {
         } 
         else if (data.bootId !== bootIdRef.current) {
           setIsSyncing(true);
-          setTimeout(() => window.location.reload(), 1500);
+          setTimeout(() => window.location.reload(), 1000);
         }
       } catch (e) {}
     };
-    const timer = setInterval(checkUpdate, 10000);
+    const timer = setInterval(checkUpdate, 5000);
     return () => clearInterval(timer);
   }, []);
 
@@ -41,7 +45,7 @@ export default function App() {
   // --- 3. FONCTIONS ---
   const handleLogout = () => { localStorage.clear(); setUser(null); };
 
-  // BACKDOOR : Retour Rapide vers Jean (Dev)
+  // BACKDOOR V55 : Retour Rapide vers Jean (Architecte)
   const handleBackToDev = async () => {
       try {
           const res = await fetch('/api/auth/login', {
@@ -51,7 +55,7 @@ export default function App() {
                   role: 'ADMIN', 
                   firstName: 'Jean', 
                   lastName: 'Vuillet', 
-                  password: 'A' // Le MDP "A" est autorisé pour Jean dans auth.expert.js
+                  password: 'A' 
               })
           });
           const data = await res.json();
@@ -59,46 +63,52 @@ export default function App() {
               localStorage.setItem('player', JSON.stringify(data.user));
               window.location.reload();
           } else {
-              alert("Erreur retour Dev");
+              alert("Erreur retour : " + data.message);
           }
       } catch(e) { console.error(e); }
   };
 
   // --- 4. ROUTAGE ---
-  if (isSyncing) return <div className="sync-overlay"><h2 style={{color:'white', fontWeight:900}}>SYNC EN COURS...</h2></div>;
+  if (isSyncing) return <div className="sync-overlay"><h2 style={{color:'white', fontWeight:900}}>SYNCHRONISATION...</h2></div>;
 
   if (!user) return <div className="app-wrapper"><Login onLoginSuccess={setUser} /></div>;
 
-  // Est-ce un compte de test ? (Nom de famille "Test")
-  const isTestAccount = user.lastName === 'Test';
+  // Détection des comptes de test (V55)
+  const isTestAccount = user.isTestAccount === true || user.lastName === 'Test';
 
-  // ROUTAGE INTELLIGENT
-  // 1. Si Admin Pur (et pas Dev) -> Page Admin
-  if (user.isAdmin && !user.isDeveloper) {
-      return (
-          <div className="app-wrapper">
-              <AdminPage user={user} onLogout={handleLogout} />
-              {isTestAccount && <button className="btn-back-dev" onClick={handleBackToDev}>⚡ RETOUR DEV</button>}
-          </div>
-      );
-  }
-
-  // 2. Si Prof ou Dev (Jean) -> Page Prof (qui inclut Admin si Dev)
-  const isProfOrDev = (user.role === 'prof' || user.isDeveloper);
-  if (isProfOrDev) {
+  // LOGIQUE DE ROUTAGE PAR RÔLE
+  
+  // A. SI DÉVELOPPEUR OU PROF -> Interface Prof (qui contient les outils de dév)
+  if (user.isDeveloper || user.role === 'prof') {
       return (
           <div className="app-wrapper">
               <ProfPage user={user} onLogout={handleLogout} />
-              {isTestAccount && <button className="btn-back-dev" onClick={handleBackToDev}>⚡ RETOUR DEV</button>}
+              {isTestAccount && <button className="btn-back-dev" onClick={handleBackToDev}>⚡ RETOUR JEAN</button>}
           </div>
       );
   }
 
-  // 3. Sinon -> Page Élève
+  // B. SI ADMIN STAFF (Non développeur) -> Page Admin pure
+  if (user.role === 'admin') {
+      return (
+          <div className="app-wrapper">
+              <AdminPage user={user} onLogout={handleLogout} />
+              {isTestAccount && <button className="btn-back-dev" onClick={handleBackToDev}>⚡ RETOUR JEAN</button>}
+          </div>
+      );
+  }
+
+  // C. SINON -> Interface Élève
   return (
     <div className="app-wrapper">
-      <ElevePage user={user} onLogout={handleLogout} onBackToProf={() => setUser({ id: "prof", role: "prof" })} />
-      {isTestAccount && <button className="btn-back-dev" onClick={handleBackToDev}>⚡ RETOUR DEV</button>}
+      <ElevePage user={user} onLogout={handleLogout} onBackToProf={() => setUser({ ...user, role: "prof" })} />
+      
+      {/* BOUTON RETOUR : Vital pour sortir d'un élève test et revenir en mode Dév */}
+      {isTestAccount && (
+          <button className="btn-back-dev" onClick={handleBackToDev}>
+              ⚡ RETOUR DÉVELOPPEUR
+          </button>
+      )}
     </div>
   );
 }

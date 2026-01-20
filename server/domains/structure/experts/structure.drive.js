@@ -5,8 +5,8 @@ const mongoose = require('mongoose');
 const ROOT_NAME = "CONDA PROJECT";
 
 /**
- * 🛠️ EXPERT DRIVE STRUCTURE - VERSION 51
- * Synchronisation dynamique des affectations profs.
+ * 🛠️ EXPERT DRIVE STRUCTURE - VERSION 58
+ * Synchro BDD ↔ Cloud + Création automatique des élèves de test manquants.
  */
 const StructureDrive = {
     getDriveTree: async () => {
@@ -27,95 +27,70 @@ const StructureDrive = {
                 return { id, name, type: 'folder', children };
             };
             return await scan(rootId, ROOT_NAME);
-        } catch (e) { return { name: "Erreur", error: e.message }; }
+        } catch (e) { return { name: "Erreur Cloud", error: e.message }; }
     },
 
     /**
-     * SYNCHRO V51 : Provisionne les dossiers des classes/groupes dans l'espace de chaque prof.
+     * SYNCHRO V58 : RÉPARATION ET ALIGNEMENT TOTAL
+     * 1. Création des dossiers racines.
+     * 2. Provisionnement des élèves TEST pour TOUTES les classes.
+     * 3. Création des dossiers profs/classes sur Drive.
      */
     syncBaseStructure: async () => {
         try {
-            const drive = google.drive({ version: 'v3', auth: DriveEngine.oauth2Client });
             const rootId = await DriveEngine.getOrCreateFolder(ROOT_NAME);
-            const tRootId = await DriveEngine.getOrCreateFolder("ENSEIGNANTS", rootId);
-            const cRootId = await DriveEngine.getOrCreateFolder("CLASSES", rootId);
-            const aRootId = await DriveEngine.getOrCreateFolder("ADMINISTRATION", rootId);
+            const teachersRootId = await DriveEngine.getOrCreateFolder("ENSEIGNANTS", rootId);
+            const classesRootId = await DriveEngine.getOrCreateFolder("CLASSES", rootId);
 
-            // 1. SYNC PROFS ET LEURS AFFECTATIONS
-            const teachers = await mongoose.model('Teacher').find({}).populate('assignedClasses');
-            for (const t of teachers) {
-                const profName = `${t.lastName.toUpperCase()} ${t.firstName.toUpperCase()}`;
-                const profFolderId = await DriveEngine.getOrCreateFolder(profName, tRootId);
+            const Student = mongoose.model('Student');
+            const Classroom = mongoose.model('Classroom');
+            const Enrollment = mongoose.model('Enrollment');
+            const AcademicYear = mongoose.model('AcademicYear');
 
-                // On crée les dossiers pour chaque classe ou groupe assigné
-                if (t.assignedClasses && t.assignedClasses.length > 0) {
-                    for (const cls of t.assignedClasses) {
-                        await DriveEngine.getOrCreateFolder(cls.name.toUpperCase(), profFolderId);
-                    }
-                }
-            }
+            let year = await AcademicYear.findOne({ isCurrent: true });
+            if (!year) year = await AcademicYear.create({ label: "2025-2026", isCurrent: true });
 
-            // 2. SYNC ADMINS (Non-profs)
-            const admins = await mongoose.model('Admin').find({});
-            for (const a of admins) {
-                const isProf = await mongoose.model('Teacher').findOne({ firstName: a.firstName, lastName: a.lastName });
-                if (!isProf) {
-                    await DriveEngine.getOrCreateFolder(`${a.lastName.toUpperCase()} ${a.firstName.toUpperCase()}`, aRootId);
-                }
-            }
-
-            // 3. SYNC CLASSES (Structure administrative)
-            const classrooms = await mongoose.model('Classroom').find({ type: 'CLASS' });
+            // A. SYNC CLASSES & ÉLÈVES TEST
+            const classrooms = await Classroom.find({});
             for (const cls of classrooms) {
-                await DriveEngine.getOrCreateFolder(cls.name.toUpperCase(), cRootId);
+                // 1. Dossier Drive pour la classe (si type CLASS)
+                if (cls.type === 'CLASS') {
+                    await DriveEngine.getOrCreateFolder(cls.name.toUpperCase(), classesRootId);
+                }
+
+                // 2. CRÉATION ÉLÈVE TEST SI MANQUANT (Logique V58)
+                const testEmail = `test.${cls.name.toLowerCase().replace(/\s/g, '')}@condamine.local`;
+                let testStudent = await Student.findOne({ email: testEmail });
+                
+                if (!testStudent) {
+                    console.log(`👤 [REPAIR] Création élève test pour : ${cls.name}`);
+                    testStudent = await Student.create({
+                        firstName: "Eleve",
+                        lastName: "Test",
+                        fullName: `Eleve Test (${cls.name})`,
+                        email: testEmail,
+                        classId: cls._id,
+                        currentClass: cls.name,
+                        isTestAccount: true
+                    });
+                }
+
+                // Inscription BDD
+                await Enrollment.findOneAndUpdate(
+                    { studentId: testStudent._id, classId: cls._id },
+                    { studentId: testStudent._id, classId: cls._id, yearId: year._id },
+                    { upsert: true }
+                );
+            }
+
+            // B. SYNC PROFS
+            const teachers = await mongoose.model('Teacher').find({});
+            for (const t of teachers) {
+                await DriveEngine.getOrCreateFolder(`${t.lastName.toUpperCase()} ${t.firstName.toUpperCase()}`, teachersRootId);
             }
 
             return { ok: true };
-        } catch (e) { console.error("❌ Synchro V51 Fail:", e.message); throw e; }
-    },
-
-    createHomeworkHierarchy: async (homeworkId) => {
-        try {
-            const Homework = mongoose.model('Homework');
-            const Chapter = mongoose.model('Chapter');
-            const Student = mongoose.model('Student');
-            const Classroom = mongoose.model('Classroom');
-            
-            const hw = await Homework.findById(homeworkId).populate('teacherId');
-            const chap = await Chapter.findById(hw.chapterId);
-            const profName = `${hw.teacherId.lastName.toUpperCase()} ${hw.teacherId.firstName.toUpperCase()}`;
-            const subjectName = (chap?.section || "GENERAL").toUpperCase();
-            const groupName = hw.classroom ? hw.classroom.toUpperCase() : "GROUPE";
-            const homeworkName = `DEVOIR - ${hw.title.toUpperCase()}`;
-
-            const rootId = await DriveEngine.getOrCreateFolder(ROOT_NAME);
-            const tRootId = await DriveEngine.getOrCreateFolder("ENSEIGNANTS", rootId);
-            const pFolderId = await DriveEngine.getOrCreateFolder(profName, tRootId);
-            const pGroupId = await DriveEngine.getOrCreateFolder(groupName, pFolderId);
-            const pSubjId = await DriveEngine.getOrCreateFolder(subjectName, pGroupId);
-            const masterHwId = await DriveEngine.getOrCreateFolder(homeworkName, pSubjId);
-            
-            await DriveEngine.getOrCreateFolder("1-DOCUMENTS_SUPPORTS", masterHwId);
-            await DriveEngine.getOrCreateFolder("2-CONSIGNE_ORIGINALE", masterHwId);
-            const pCopiesRootId = await DriveEngine.getOrCreateFolder("3-COPIES_ELEVES", masterHwId);
-
-            const cRootId = await DriveEngine.getOrCreateFolder("CLASSES", rootId);
-            if (hw.assignedStudents?.length > 0) {
-                for (const sId of hw.assignedStudents) {
-                    const s = await Student.findById(sId);
-                    if (s) {
-                        const adminCls = await Classroom.findById(s.classId);
-                        const adminClassName = adminCls ? adminCls.name.toUpperCase() : "EXTERNES";
-                        const classFolderId = await DriveEngine.getOrCreateFolder(adminClassName, cRootId);
-                        const studentRootId = await DriveEngine.getOrCreateFolder(`${s.lastName.toUpperCase()} ${s.firstName.toUpperCase()}`, classFolderId);
-                        const studentSubjId = await DriveEngine.getOrCreateFolder(subjectName, studentRootId);
-                        await DriveEngine.getOrCreateFolder(homeworkName, studentSubjId);
-                        await DriveEngine.getOrCreateFolder(`${s.lastName.toUpperCase()} ${s.firstName.toUpperCase()}`, pCopiesRootId);
-                    }
-                }
-            }
-            return { master: masterHwId };
-        } catch (e) { return null; }
+        } catch (e) { console.error("❌ Synchro V58 Fail:", e.message); throw e; }
     },
 
     deleteDriveItem: async (id) => {

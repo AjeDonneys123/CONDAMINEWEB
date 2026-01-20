@@ -6,85 +6,84 @@ const StructureDrive = require('../structure/experts/structure.drive');
 
 const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
-// --- 1. ROUTES DE MAINTENANCE & DIAGNOSTIC (RÉPARÉES) ---
-router.get('/drive-check', asyncHandler(async (req, res) => {
-    const status = await AdminExpert.checkDriveStatus();
-    res.json(status);
-}));
+/**
+ * 🛡️ ROUTES ADMIN V59 - RÉPARATION ET RETOUR ÉLÈVE TEST
+ */
 
-router.get('/database-dump', asyncHandler(async (req, res) => {
-    res.json(await AdminExpert.getFullDump());
-}));
-
-// --- 2. CLASSES & GROUPES ---
 router.get('/classrooms', asyncHandler(async (req, res) => {
     res.json(await mongoose.model('Classroom').find({}).sort({ name: 1 }).lean());
 }));
 
 router.post('/classrooms', asyncHandler(async (req, res) => {
+    const Classroom = mongoose.model('Classroom');
+    const Student = mongoose.model('Student');
+    const Enrollment = mongoose.model('Enrollment');
+    const AcademicYear = mongoose.model('AcademicYear');
+
     const name = req.body.name.toUpperCase().trim();
-    const cls = await mongoose.model('Classroom').findOneAndUpdate(
-        { name }, { ...req.body, name }, { upsert: true, new: true }
+    let year = await AcademicYear.findOne({ isCurrent: true }) || await AcademicYear.create({ label: "2025-2026", isCurrent: true });
+
+    // 1. Création / Mise à jour classe
+    const cls = await Classroom.findOneAndUpdate(
+        { name }, { ...req.body, name, yearId: year._id }, { upsert: true, new: true }
     );
-    await StructureDrive.syncBaseStructure(); 
-    res.json(cls);
-}));
 
-router.delete('/classrooms/:id', asyncHandler(async (req, res) => {
-    await mongoose.model('Classroom').findByIdAndDelete(req.params.id);
-    res.json({ ok: true });
-}));
+    // 2. Gestion élève test
+    const testEmail = `test.${cls.name.toLowerCase().replace(/\s/g, '')}@condamine.local`;
+    let testStudent = await Student.findOne({ email: testEmail });
 
-// --- 3. ENSEIGNANTS ---
-router.get('/teachers', asyncHandler(async (req, res) => {
-    res.json(await mongoose.model('Teacher').find({}).sort({ lastName: 1 }).lean());
-}));
-
-router.post('/teachers', asyncHandler(async (req, res) => {
-    const result = req.body._id ? 
-        await mongoose.model('Teacher').findByIdAndUpdate(req.body._id, req.body, { new: true }) : 
-        await mongoose.model('Teacher').create(req.body);
-    await StructureDrive.syncBaseStructure();
-    res.json(result);
-}));
-
-// --- 4. ÉLÈVES ---
-router.get('/students', asyncHandler(async (req, res) => {
-    res.json(await mongoose.model('Student').find({}).sort({ lastName: 1 }).lean());
-}));
-
-router.post('/students', asyncHandler(async (req, res) => {
-    const data = { ...req.body, fullName: `${req.body.firstName} ${req.body.lastName}` };
-    const s = data._id ? await mongoose.model('Student').findByIdAndUpdate(data._id, data, { new: true }) : await mongoose.model('Student').create(data);
-    if (req.body.classId) {
-        const cls = await mongoose.model('Classroom').findById(req.body.classId);
-        if (cls) {
-            await mongoose.model('Student').findByIdAndUpdate(s._id, { currentClass: cls.name });
-            await mongoose.model('Enrollment').findOneAndUpdate({ studentId: s._id }, { studentId: s._id, classId: req.body.classId, yearId: "696d5129dc6d769124068fc0" }, { upsert: true });
-        }
+    if (!testStudent) {
+        testStudent = await Student.create({
+            firstName: "Eleve",
+            lastName: "Test",
+            fullName: `Eleve Test (${cls.name})`,
+            email: testEmail,
+            classId: cls._id,
+            currentClass: cls.name,
+            isTestAccount: true
+        });
+    } else {
+        // Sécurité : On s'assure que le flag est présent même sur les anciens
+        testStudent.isTestAccount = true;
+        testStudent.classId = cls._id;
+        await testStudent.save();
     }
+
+    await Enrollment.findOneAndUpdate(
+        { studentId: testStudent._id, classId: cls._id },
+        { studentId: testStudent._id, classId: cls._id, yearId: year._id },
+        { upsert: true }
+    );
+
+    // Sync Drive en arrière plan
+    StructureDrive.syncBaseStructure(); 
+
+    // V59 : On renvoie l'élève test avec la classe pour le front
+    res.json({ classroom: cls, testStudent });
+}));
+
+// Restauration des autres routes essentielles pour éviter les 404
+router.get('/students', asyncHandler(async (req, res) => res.json(await mongoose.model('Student').find({}).sort({ lastName: 1 }).lean())));
+router.get('/teachers', asyncHandler(async (req, res) => res.json(await mongoose.model('Teacher').find({}).sort({ lastName: 1 }).lean())));
+router.get('/teachers/:id', asyncHandler(async (req, res) => {
+    const t = await mongoose.model('Teacher').findById(req.params.id).lean() || await mongoose.model('Admin').findById(req.params.id).lean();
+    res.json(t);
+}));
+router.post('/teachers', asyncHandler(async (req, res) => {
+    const r = req.body._id ? await mongoose.model('Teacher').findByIdAndUpdate(req.body._id, req.body, { new: true }) : await mongoose.model('Teacher').create(req.body);
     await StructureDrive.syncBaseStructure();
-    res.json(s);
+    res.json(r);
 }));
-
-// --- 5. STAFF (DIRECTION) ---
-router.get('/admins', asyncHandler(async (req, res) => {
-    res.json(await mongoose.model('Admin').find({}).sort({ lastName: 1 }).lean());
-}));
-
+router.get('/admins', asyncHandler(async (req, res) => res.json(await mongoose.model('Admin').find({}).sort({ lastName: 1 }).lean())));
 router.post('/admins', asyncHandler(async (req, res) => {
-    const result = req.body._id ? await mongoose.model('Admin').findByIdAndUpdate(req.body._id, req.body, { new: true }) : await mongoose.model('Admin').create(req.body);
+    const r = req.body._id ? await mongoose.model('Admin').findByIdAndUpdate(req.body._id, req.body, { new: true }) : await mongoose.model('Admin').create(req.body);
     await StructureDrive.syncBaseStructure();
-    res.json(result);
+    res.json(r);
 }));
-
-// --- 6. MATIÈRES ---
-router.get('/subjects', asyncHandler(async (req, res) => res.json(await mongoose.model('Subject').find({}).sort({ name: 1 }).lean())));
-router.post('/subjects', asyncHandler(async (req, res) => res.json(await mongoose.model('Subject').create(req.body))));
-
-// --- 7. SUPPRESSIONS ---
+router.get('/database-dump', asyncHandler(async (req, res) => res.json(await AdminExpert.getFullDump())));
+router.get('/drive-check', asyncHandler(async (req, res) => res.json(await AdminExpert.checkDriveStatus())));
 router.delete('/:collection/:id', asyncHandler(async (req, res) => {
-    const map = { 'classrooms': 'Classroom', 'teachers': 'Teacher', 'admins': 'Admin', 'subjects': 'Subject', 'students': 'Student' };
+    const map = { 'classrooms': 'Classroom', 'teachers': 'Teacher', 'admins': 'Admin', 'students': 'Student' };
     if (map[req.params.collection]) await mongoose.model(map[req.params.collection]).findByIdAndDelete(req.params.id);
     res.json({ ok: true });
 }));

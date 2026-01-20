@@ -6,7 +6,7 @@ const StructureDrive = require('./experts/structure.drive');
 
 const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
-// --- 1. MOUCHARD DRIVE ---
+// MOUCHARD DRIVE
 router.get('/drive-tree', async (req, res) => {
     try {
         const tree = await StructureDrive.getDriveTree();
@@ -16,22 +16,18 @@ router.get('/drive-tree', async (req, res) => {
     }
 });
 
-// SYNCHRO RACINE ET DONNÉES EXISTANTES V25
+// SYNCHRO RACINE ET RÉPARATION ÉLÈVES TEST V58
 router.post('/sync-root', asyncHandler(async (req, res) => {
     const result = await StructureDrive.syncBaseStructure();
     res.json(result);
 }));
 
-router.delete('/drive/:id', async (req, res) => {
-    try {
-        const result = await StructureDrive.deleteDriveItem(req.params.id);
-        res.json(result);
-    } catch (e) {
-        res.status(200).json({ error: e.message });
-    }
-});
+router.delete('/drive/:id', asyncHandler(async (req, res) => {
+    const result = await StructureDrive.deleteDriveItem(req.params.id);
+    res.json(result);
+}));
 
-// --- 2. SECTIONS ---
+// SECTIONS
 router.post('/sections', asyncHandler(async (req, res) => {
     const { teacherId, sectionName } = req.body;
     let userDoc = await mongoose.model('Teacher').findById(teacherId) || await mongoose.model('Admin').findById(teacherId);
@@ -54,7 +50,7 @@ router.delete('/sections/:teacherId/:sectionName', asyncHandler(async (req, res)
     res.json({ ok: true });
 }));
 
-// --- 3. CHAPITRES ---
+// CHAPITRES
 router.get('/chapters', asyncHandler(async (req, res) => res.json(await StructureExpert.getChapters())));
 router.post('/chapters', asyncHandler(async (req, res) => res.json(await StructureExpert.createChapter(req.body))));
 router.patch('/chapters/:id/archive', asyncHandler(async (req, res) => {

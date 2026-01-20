@@ -49,13 +49,15 @@ export default function DriveViewer({ onClose }) {
     };
 
     const handleSync = async () => {
+        if(!confirm("Lancer l'alignement ? Cela créera les dossiers et les élèves de test manquants.")) return;
         setSyncing(true);
-        const res = await fetch('/api/structure/sync-root', { method: 'POST' });
-        const result = await res.json();
-        if (result.ok) {
-            alert(`ALIGNEMENT RÉUSSI :\n- ${result.stats.teachers} Profs\n- ${result.stats.admins} Admins\n- ${result.stats.classes} Classes`);
-            await loadTree();
-        }
+        try {
+            const res = await fetch('/api/structure/sync-root', { method: 'POST' });
+            if (res.ok) {
+                alert("ALIGNEMENT V58 RÉUSSI : Tous les élèves test sont provisionnés !");
+                await loadTree();
+            }
+        } catch (e) { alert("Erreur synchro"); }
         setSyncing(false);
     };
 
@@ -72,16 +74,21 @@ export default function DriveViewer({ onClose }) {
             <div className="drive-viewer-window" onClick={e => e.stopPropagation()}>
                 <div className="drive-viewer-header">
                     <div>
-                        <h2 className="text-xl font-black text-white uppercase tracking-tighter">Mouchard V33</h2>
-                        <p className="text-[9px] font-black text-emerald-400 tracking-widest uppercase">CONDA PROJECT</p>
+                        <h2 className="text-xl font-black text-white uppercase tracking-tighter">Mouchard V58</h2>
+                        <p className="text-[9px] font-black text-emerald-400 tracking-widest uppercase">CONDA PROJECT : Provisionnement Auto</p>
                     </div>
                     <div className="flex gap-3">
-                        <button onClick={handleSync} disabled={syncing} className="v14-sync-btn">{syncing ? 'ALIGNEMENT...' : '🔄 SYNCHRO BDD ↔ CLOUD'}</button>
+                        <button onClick={handleSync} disabled={syncing} className="v14-sync-btn">
+                            {syncing ? 'RÉPARATION...' : '🔄 ALIGNER & RÉPARER TESTERS'}
+                        </button>
                         <button onClick={onClose} className="v14-close-btn">✕</button>
                     </div>
                 </div>
                 <div className="drive-viewer-body custom-scrollbar">
                     {loading ? <div className="v14-loader"><div className="spinner"></div><span>SCAN DU DRIVE...</span></div> : tree && <DriveNode node={tree} onDelete={handleDelete} />}
+                </div>
+                <div className="p-4 bg-slate-50 text-[9px] text-slate-400 font-bold uppercase text-center border-t">
+                    Note : Cliquez sur SYNCHRO pour créer les élèves test manquants des anciennes classes.
                 </div>
             </div>
         </div>

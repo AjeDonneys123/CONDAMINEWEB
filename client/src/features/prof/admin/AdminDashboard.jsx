@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import './AdminDashboard.css';
 
 /**
- * ⚙️ DASHBOARD ADMINISTRATEUR V52
- * Interface bi-colone pour les affectations Profs : Classes vs Groupes.
+ * ⚙️ DASHBOARD ADMINISTRATEUR V59
+ * Fix de la boucle de test : Création et Login immédiat.
  */
 export default function AdminDashboard({ user, onRefresh }) {
     const [view, setView] = useState('classes'); 
@@ -13,12 +13,13 @@ export default function AdminDashboard({ user, onRefresh }) {
     const [zoomItem, setZoomItem] = useState(null);
 
     const [allClasses, setAllClasses] = useState([]);
+    const [allStudents, setAllStudents] = useState([]);
     
-    // Form states
     const [fClass, setFClass] = useState({ name: '', type: 'CLASS' });
     const [fStudent, setFStudent] = useState({ firstName: '', lastName: '', classId: '' });
     const [fUser, setFUser] = useState({ firstName: '', lastName: '', password: 'A' });
 
+    const isSuperUser = user.firstName === 'Jean' && user.lastName === 'Vuillet';
     const myId = user.id || user._id;
 
     const loadData = async () => {
@@ -28,23 +29,73 @@ export default function AdminDashboard({ user, onRefresh }) {
             const clsData = await resCls.json();
             setAllClasses(clsData);
 
+            const resSt = await fetch(`/api/admin/students`);
+            const stData = await resSt.json();
+            setAllStudents(stData);
+
             if (view === 'classes') setItems(clsData.filter(c => c.type === 'CLASS'));
             else if (view === 'groups') setItems(clsData.filter(c => c.type === 'GROUP'));
             else {
                 const map = { 'teachers': 'teachers', 'students': 'students', 'staff': 'admins' };
                 const r = await fetch(`/api/admin/${map[view]}`);
-                setItems(await r.json());
+                if (r.ok) setItems(await r.json());
             }
-        } catch (e) {}
+        } catch (e) { console.error(e); }
         setLoading(false);
     };
 
     useEffect(() => { loadData(); setShowAddForm(false); }, [view]);
 
+    // --- LOGIQUE DE TEST V59 : INSTANTANÉ ---
+    const handleTestAsStudent = async (classItem) => {
+        let testStudent = allStudents.find(s => String(s.classId) === String(classItem._id) && s.isTestAccount);
+        
+        // 1. Si l'élève manque, on le crée et on récupère son ID direct depuis le retour JSON
+        if (!testStudent) {
+            if (confirm(`Provisionner l'élève test pour ${classItem.name} et s'y connecter ?`)) {
+                setLoading(true);
+                try {
+                    const res = await fetch('/api/admin/classrooms', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(classItem)
+                    });
+                    const data = await res.json();
+                    if (data.testStudent) {
+                        testStudent = data.testStudent;
+                    } else {
+                        throw new Error("Échec création");
+                    }
+                } catch (e) {
+                    alert("Erreur de provisionnement");
+                    setLoading(false);
+                    return;
+                }
+            } else return;
+        }
+
+        // 2. Connexion immédiate avec l'ID (qu'il vienne de la liste ou de la création fraîche)
+        try {
+            const resLogin = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({ role: 'STUDENT', studentId: testStudent._id || testStudent.id })
+            });
+            const loginData = await resLogin.json();
+            if (resLogin.ok) {
+                localStorage.setItem('player', JSON.stringify(loginData.user));
+                window.location.reload();
+            }
+        } catch (e) { alert("Erreur de connexion élève"); }
+        setLoading(false);
+    };
+
     const handleCreate = async (e) => {
         e.preventDefault();
         const map = { 'classes': 'classrooms', 'groups': 'classrooms', 'teachers': 'teachers', 'staff': 'admins', 'students': 'students' };
-        const body = view === 'classes' ? fClass : (view === 'groups' ? { ...fClass, type: 'GROUP' } : fUser);
+        let body = fUser;
+        if (view === 'classes') body = fClass;
+        if (view === 'groups') body = { ...fClass, type: 'GROUP' };
         if (view === 'students') body = fStudent;
 
         const res = await fetch(`/api/admin/${map[view]}`, {
@@ -56,26 +107,11 @@ export default function AdminDashboard({ user, onRefresh }) {
     };
 
     const handleToggleMapping = async (targetId) => {
-        let updated;
-        let endpoint = '/api/admin/classrooms';
-
-        if (view === 'groups') {
-            const current = zoomItem.associatedClasses || [];
-            const next = current.includes(targetId) ? current.filter(id => id !== targetId) : [...current, targetId];
-            updated = { ...zoomItem, associatedClasses: next };
-        } else if (view === 'teachers') {
-            const current = zoomItem.assignedClasses || [];
-            const next = current.includes(targetId) ? current.filter(id => id !== targetId) : [...current, targetId];
-            updated = { ...zoomItem, assignedClasses: next };
-            endpoint = '/api/admin/teachers';
-        }
-
+        const current = zoomItem.associatedClasses || [];
+        const next = current.includes(targetId) ? current.filter(id => id !== targetId) : [...current, targetId];
+        const updated = { ...zoomItem, associatedClasses: next };
         setZoomItem(updated);
-        await fetch(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(updated)
-        });
+        await fetch('/api/admin/classrooms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) });
         loadData();
     };
 
@@ -88,60 +124,21 @@ export default function AdminDashboard({ user, onRefresh }) {
 
     return (
         <div className="admin-container animate-in fade-in">
-            
-            {/* MODAL BI-COLONE V52 */}
             {zoomItem && (
                 <div className="zoom-overlay" onClick={() => setZoomItem(null)}>
-                    <div className="zoom-card !max-w-[900px] w-[95%]" onClick={e => e.stopPropagation()}>
-                        <h2 className="text-2xl font-black mb-1 uppercase tracking-tight">Affectations : {zoomItem.name || zoomItem.firstName}</h2>
-                        <p className="text-[10px] text-slate-400 font-black mb-8 uppercase tracking-[0.2em]">Configuration du périmètre Cloud & BDD</p>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                            
-                            {/* COLONNE 1 : CLASSES (ADMIN) */}
-                            <div className="space-y-4">
-                                <h3 className="text-[11px] font-black text-indigo-500 uppercase border-b-2 border-indigo-50 pb-2 flex items-center gap-2">
-                                    <span>🏫</span> CLASSES (DIVISIONS)
-                                </h3>
-                                <div className="grid grid-cols-1 gap-2 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">
-                                    {allClasses.filter(c => c.type === 'CLASS').map(c => {
-                                        const isLinked = view === 'groups' ? zoomItem.associatedClasses?.includes(c._id) : zoomItem.assignedClasses?.includes(c._id);
-                                        return (
-                                            <button key={c._id} onClick={() => handleToggleMapping(c._id)} className={`p-4 rounded-2xl border-2 text-left flex justify-between items-center transition-all ${isLinked ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-md scale-[1.02]' : 'border-slate-100 text-slate-400 hover:border-slate-200'}`}>
-                                                <span className="font-black text-xs uppercase">{c.name}</span>
-                                                {isLinked && <span className="w-5 h-5 rounded-full bg-blue-500 text-white flex items-center justify-center text-[10px]">✓</span>}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-
-                            {/* COLONNE 2 : GROUPES (PEDAGOGIE) */}
-                            <div className="space-y-4">
-                                <h3 className="text-[11px] font-black text-orange-500 uppercase border-b-2 border-orange-50 pb-2 flex items-center gap-2">
-                                    <span>👥</span> GROUPES & OPTIONS
-                                </h3>
-                                <div className="grid grid-cols-1 gap-2 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">
-                                    {allClasses.filter(c => c.type === 'GROUP').map(c => {
-                                        // On ne peut pas lier un groupe à un autre groupe dans cette vue pour l'instant
-                                        if (view === 'groups') return null;
-                                        const isLinked = zoomItem.assignedClasses?.includes(c._id);
-                                        return (
-                                            <button key={c._id} onClick={() => handleToggleMapping(c._id)} className={`p-4 rounded-2xl border-2 text-left flex justify-between items-center transition-all ${isLinked ? 'border-orange-500 bg-orange-50 text-orange-700 shadow-md scale-[1.02]' : 'border-slate-100 text-slate-400 hover:border-slate-200'}`}>
-                                                <span className="font-black text-xs uppercase">{c.name}</span>
-                                                {isLinked && <span className="w-5 h-5 rounded-full bg-orange-500 text-white flex items-center justify-center text-[10px]">✓</span>}
-                                            </button>
-                                        );
-                                    })}
-                                    {view === 'groups' && <div className="p-10 text-center text-slate-300 font-bold italic text-xs uppercase">La liaison inter-groupes n'est pas autorisée.</div>}
-                                </div>
-                            </div>
-
+                    <div className="zoom-card" onClick={e => e.stopPropagation()}>
+                        <h2 className="text-xl font-black mb-6 uppercase">Lier le Groupe : {zoomItem.name}</h2>
+                        <div className="grid grid-cols-2 gap-3 max-h-[300px] overflow-y-auto p-1 custom-scrollbar">
+                            {allClasses.filter(c => c.type === 'CLASS').map(c => {
+                                const isLinked = zoomItem.associatedClasses?.includes(c._id);
+                                return (
+                                    <button key={c._id} onClick={() => handleToggleMapping(c._id)} className={`p-3 rounded-xl border-2 text-[10px] font-black transition-all ${isLinked ? 'border-indigo-500 bg-indigo-50 text-indigo-600 shadow-md' : 'border-slate-100 text-slate-300'}`}>
+                                        {c.name}
+                                    </button>
+                                );
+                            })}
                         </div>
-
-                        <button onClick={() => setZoomItem(null)} className="w-full mt-10 py-5 bg-slate-900 text-white font-black rounded-3xl uppercase text-[12px] tracking-[0.3em] shadow-2xl hover:bg-black transition-all active:scale-95">
-                            Valider & Synchroniser le Cloud 🚀
-                        </button>
+                        <button onClick={() => setZoomItem(null)} className="w-full mt-8 py-4 bg-slate-900 text-white font-black rounded-2xl uppercase text-xs">Terminer</button>
                     </div>
                 </div>
             )}
@@ -150,15 +147,11 @@ export default function AdminDashboard({ user, onRefresh }) {
                 <div className="flex gap-1 overflow-x-auto no-scrollbar">
                     {['classes', 'groups', 'students', 'teachers', 'staff'].map(v => (
                         <button key={v} onClick={() => setView(v)} className={`admin-tab ${view === v ? 'active' : ''}`}>
-                            {v === 'classes' && '🏫 CLASSES'}
-                            {v === 'groups' && '👥 GROUPES'}
-                            {v === 'students' && '👨‍🎓 ÉLÈVES'}
-                            {v === 'teachers' && '👨‍🏫 PROFS'}
-                            {v === 'staff' && '🛡️ DIRECTION'}
+                            {v === 'classes' ? '🏫 CLASSES' : v === 'groups' ? '👥 GROUPES' : v === 'students' ? '👨‍🎓 ÉLÈVES' : v === 'teachers' ? '👨‍🏫 PROFS' : '🛡️ DIRECTION'}
                         </button>
                     ))}
                 </div>
-                <button onClick={() => setShowAddForm(!showAddForm)} className="bg-slate-900 text-white px-6 py-2.5 rounded-2xl font-black text-[10px] uppercase shadow-lg ml-4">
+                <button onClick={() => setShowAddForm(!showAddForm)} className="bg-slate-900 text-white px-6 py-2.5 rounded-2xl font-black text-[10px] uppercase shadow-lg">
                     {showAddForm ? 'FERMER' : `+ AJOUTER`}
                 </button>
             </div>
@@ -167,14 +160,14 @@ export default function AdminDashboard({ user, onRefresh }) {
                 <div className="mb-10 p-10 bg-indigo-600 rounded-[45px] shadow-2xl animate-in slide-in-from-top-4 text-white">
                     <form onSubmit={handleCreate} className="flex flex-wrap gap-6 items-end">
                         {(view === 'classes' || view === 'groups') && (
-                            <div className="flex-1 min-w-[200px]"><label className="v1-label-mini !text-indigo-200">Nom du dossier</label><input className="admin-input !bg-white/10" value={fClass.name} onChange={e=>setFClass({...fClass, name:e.target.value})} placeholder="Ex: 2C ou LATIN..." required /></div>
+                            <div className="flex-1 min-w-[200px]"><label className="v1-label-mini !text-indigo-200">Nom</label><input className="admin-input !bg-white/10" value={fClass.name} onChange={e=>setFClass({...fClass, name:e.target.value})} required /></div>
                         )}
                         {view === 'students' && (
                             <>
                                 <input className="admin-input flex-1 !bg-white/10" placeholder="Prénom" value={fStudent.firstName} onChange={e=>setFStudent({...fStudent, firstName:e.target.value})} required />
                                 <input className="admin-input flex-1 !bg-white/10" placeholder="Nom" value={fStudent.lastName} onChange={e=>setFStudent({...fStudent, lastName:e.target.value})} required />
                                 <select className="admin-input w-[200px] !bg-white/10" value={fStudent.classId} onChange={e=>setFStudent({...fStudent, classId:e.target.value})} required>
-                                    <option value="">-- CLASSE --</option>
+                                    <option value="">-- CLASSE MAISON --</option>
                                     {allClasses.filter(c=>c.type==='CLASS').map(c=><option key={c._id} value={c._id}>{c.name}</option>)}
                                 </select>
                             </>
@@ -185,26 +178,19 @@ export default function AdminDashboard({ user, onRefresh }) {
                                 <input className="admin-input flex-1 !bg-white/10" placeholder="Nom" value={fUser.lastName} onChange={e=>setFUser({...fUser, lastName:e.target.value})} required />
                             </>
                         )}
-                        <button className="bg-white text-indigo-600 px-10 py-4 rounded-2xl font-black text-xs shadow-2xl">CRÉER & PROVISIONNER 🚀</button>
+                        <button className="bg-white text-indigo-600 px-10 py-4 rounded-2xl font-black text-xs shadow-2xl uppercase">CRÉER & PROVISIONNER DRIVE 🚀</button>
                     </form>
                 </div>
             )}
 
             <div className="bg-white rounded-[40px] border shadow-sm overflow-hidden">
                 <table className="admin-table">
-                    <thead className="bg-slate-50">
-                        <tr>
-                            <th className="p-6 text-[10px] font-black uppercase text-slate-400">Élément</th>
-                            <th className="p-6 text-[10px] font-black uppercase text-slate-400">Composition / Affectations</th>
-                            <th className="p-6 text-right">Actions</th>
-                        </tr>
-                    </thead>
                     <tbody>
                         {items.map(it => (
                             <tr key={it._id} className="border-t hover:bg-slate-50 transition-colors">
                                 <td className="p-6">
                                     <div className="font-black text-slate-700 uppercase">{it.name || `${it.firstName} ${it.lastName}`}</div>
-                                    <span className="text-[8px] font-black text-slate-300 uppercase tracking-widest">{it.type === 'CLASS' ? 'DIVISION' : (it.type === 'GROUP' ? 'GROUPE' : 'PROFIL')}</span>
+                                    <span className="text-[8px] font-black text-slate-300 uppercase">{it.type || it.role || 'PROFIL'}</span>
                                 </td>
                                 <td className="p-6">
                                     {view === 'groups' && (
@@ -212,33 +198,30 @@ export default function AdminDashboard({ user, onRefresh }) {
                                             <div className="flex flex-wrap gap-1">
                                                 {it.associatedClasses?.map(id => <span key={id} className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-600 text-[8px] font-black border border-indigo-100">{allClasses.find(c => c._id === id)?.name}</span>)}
                                             </div>
-                                            <button onClick={() => setZoomItem(it)} className="text-[9px] font-black text-indigo-500 hover:underline">+ LIER CLASSES</button>
-                                        </div>
-                                    )}
-                                    {view === 'teachers' && (
-                                        <div className="flex items-center gap-3">
-                                            <div className="flex flex-wrap gap-1">
-                                                {it.assignedClasses?.map(id => {
-                                                    const c = allClasses.find(x => x._id === id);
-                                                    if(!c) return null;
-                                                    return <span key={id} className={`px-2 py-0.5 rounded text-[8px] font-black border ${c.type === 'GROUP' ? 'bg-orange-50 text-orange-600 border-orange-100' : 'bg-blue-50 text-blue-600 border-blue-100'}`}>{c.name}</span>
-                                                })}
-                                            </div>
-                                            <button onClick={() => setZoomItem(it)} className="text-[9px] font-black text-indigo-500 hover:underline uppercase">+ Affecter</button>
+                                            <button onClick={() => setZoomItem(it)} className="text-[8px] font-black text-indigo-500 hover:underline">+ LIER CLASSES</button>
                                         </div>
                                     )}
                                     {view === 'students' && <span className="bg-indigo-50 text-indigo-600 px-3 py-1 rounded-lg text-[9px] font-black uppercase">{allClasses.find(c => c._id === it.classId)?.name}</span>}
-                                    {view === 'classes' && <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Administrative</span>}
+                                    {view === 'classes' && <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Unité Administrative</span>}
                                 </td>
                                 <td className="p-6 text-right">
-                                    {String(it._id) !== String(myId) && <button onClick={() => handleDelete(it._id)} className="w-10 h-10 rounded-2xl bg-red-50 text-red-500 font-bold hover:bg-red-500 hover:text-white transition-all">✕</button>}
+                                    <div className="flex justify-end gap-2">
+                                        {user.isDeveloper && (view === 'classes' || view === 'groups') && (
+                                            <button onClick={() => handleTestAsStudent(it)} className="bg-emerald-500 text-white px-4 py-2 rounded-xl font-black text-[10px] hover:bg-emerald-600 transition-all shadow-md active:scale-95">
+                                                🚀 TESTER
+                                            </button>
+                                        )}
+                                        {String(it._id) !== String(myId) && (
+                                            <button onClick={() => handleDelete(it._id)} className="w-10 h-10 rounded-2xl bg-red-50 text-red-500 font-bold hover:bg-red-500 hover:text-white transition-all">✕</button>
+                                        )}
+                                    </div>
                                 </td>
                             </tr>
                         ))}
                     </tbody>
                 </table>
             </div>
-            <div className="fixed bottom-4 left-4 bg-indigo-600 text-white font-black text-[10px] px-4 py-2 rounded-full shadow-2xl z-[20000]">STUDIO V52</div>
+            <div className="fixed bottom-4 left-4 bg-indigo-600 text-white font-black text-[10px] px-4 py-2 rounded-full shadow-2xl z-[20000]">STUDIO V59</div>
         </div>
     );
 }
