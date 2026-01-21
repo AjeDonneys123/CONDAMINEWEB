@@ -57,4 +57,3 @@ function run() {
     console.log(`✨ Terminé : ${OUTPUT_FILENAME} est le miroir parfait du projet.`);
 }
 run();
-// comment//

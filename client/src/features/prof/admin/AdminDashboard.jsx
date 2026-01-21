@@ -2,8 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import './AdminDashboard.css';
 
 /**
- * ⚙️ DASHBOARD ADMIN V160 (CLEAN BUTTON FIX)
- * Fix : Réintégration du bouton "NETTOYER BDD" qui avait disparu.
+ * ⚙️ DASHBOARD ADMIN V163 - IMPORT ANYWHERE
+ * UX : Le bouton "IMPORTER CSV" est maintenant disponible dans CLASSES et GROUPES.
+ * L'importation fait tout d'un coup (Classes + Groupes + Élèves).
  */
 export default function AdminDashboard({ user, onRefresh }) {
     const [view, setView] = useState('classes'); 
@@ -47,7 +48,14 @@ export default function AdminDashboard({ user, onRefresh }) {
     const handleFileSelect = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
-        if(!confirm(`Importer les élèves depuis "${file.name}" ?`)) return;
+        
+        // Message adapté au contexte
+        const contextMsg = view === 'groups' 
+            ? "Importer les GROUPES et ÉLÈVES depuis ce fichier ?" 
+            : "Importer la CLASSE et ÉLÈVES depuis ce fichier ?";
+
+        if(!confirm(`${contextMsg}\n(Le fichier doit être la liste des élèves avec leurs options)`)) return;
+        
         setImporting(true);
         const formData = new FormData();
         formData.append('file', file);
@@ -61,7 +69,7 @@ export default function AdminDashboard({ user, onRefresh }) {
     };
 
     const handleMigration = async () => {
-        if(!confirm("⚠️ NETTOYAGE BDD :\n- Suppression birthDate & isTestAccount\n- Calcul auto des niveaux manquants\n- Reset emails parents\n\nContinuer ?")) return;
+        if(!confirm("⚠️ NETTOYAGE BDD :\n- Suppression birthDate & isTestAccount\n- Calcul auto des niveaux\n- Reset emails parents\n\nContinuer ?")) return;
         setImporting(true);
         try {
             const res = await fetch('/api/admin/maintenance/migrate-students', { method: 'POST' });
@@ -137,15 +145,7 @@ export default function AdminDashboard({ user, onRefresh }) {
                             <div className="grid grid-cols-2 gap-4 border-t pt-6 h-[400px]">
                                 <div className="flex flex-col gap-2 overflow-hidden">
                                     <h4 className="text-[10px] font-black uppercase text-emerald-500">🏫 Classe Principale & Niveau</h4>
-                                    
-                                    <div className="mb-2">
-                                        <label className="text-[8px] font-black text-slate-400 uppercase">NIVEAU</label>
-                                        <select className="admin-input mt-1" value={currentItem.currentLevel || ''} onChange={e => setCurrentItem({...currentItem, currentLevel: e.target.value})}>
-                                            <option value="">-- AUTO --</option>
-                                            <option value="6">6ème</option><option value="5">5ème</option><option value="4">4ème</option><option value="3">3ème</option><option value="2">2nde</option><option value="1">1ère</option><option value="TERM">Terminale</option>
-                                        </select>
-                                    </div>
-
+                                    <div className="mb-2"><label className="text-[8px] font-black text-slate-400 uppercase">NIVEAU</label><select className="admin-input mt-1" value={currentItem.currentLevel || ''} onChange={e => setCurrentItem({...currentItem, currentLevel: e.target.value})}><option value="">-- AUTO --</option><option value="6">6ème</option><option value="5">5ème</option><option value="4">4ème</option><option value="3">3ème</option><option value="2">2nde</option><option value="1">1ère</option><option value="TERM">Terminale</option></select></div>
                                     <div className="overflow-y-auto custom-scrollbar flex-1 space-y-1 bg-slate-50 p-2 rounded-xl">
                                         {allClasses.filter(c => c.type === 'CLASS').map(c => <button key={c._id} onClick={() => setCurrentItem({...currentItem, classId: c._id})} className={`w-full text-left px-3 py-2 rounded-lg text-[10px] font-bold transition-all ${currentItem.classId === c._id ? 'bg-emerald-600 text-white shadow-md' : 'bg-white text-slate-400'}`}>{c.name}</button>)}
                                     </div>
@@ -161,10 +161,11 @@ export default function AdminDashboard({ user, onRefresh }) {
                 <div className="flex justify-between items-center bg-white p-4 rounded-[30px] shadow-sm">
                     <div className="flex gap-1 overflow-x-auto no-scrollbar">{['classes', 'groups', 'subjects', 'teachers', 'students', 'staff'].map(v => <button key={v} onClick={() => setView(v)} className={`admin-tab ${view === v ? 'active' : ''}`}>{v.toUpperCase()}</button>)}</div>
                     <div className="flex gap-2">
-                        {/* BOUTON RETROUVÉ */}
                         {view === 'students' && <button onClick={handleMigration} className="bg-orange-500 text-white px-6 py-2.5 rounded-2xl font-black text-[10px] uppercase shadow-lg">🧹 NETTOYER BDD</button>}
                         
-                        {view === 'classes' && <button onClick={() => fileInputRef.current.click()} className="bg-emerald-500 text-white px-6 py-2.5 rounded-2xl font-black text-[10px] uppercase shadow-lg">📂 IMPORTER CSV</button>}
+                        {/* V163 : BOUTON VISIBLE DANS CLASSES ET GROUPES */}
+                        {(view === 'classes' || view === 'groups') && <button onClick={() => fileInputRef.current.click()} className="bg-emerald-500 text-white px-6 py-2.5 rounded-2xl font-black text-[10px] uppercase shadow-lg">📂 IMPORTER CSV</button>}
+                        
                         <button onClick={openCreate} className="bg-slate-900 text-white px-6 py-2.5 rounded-2xl font-black text-[10px] uppercase shadow-lg">+ AJOUTER</button>
                     </div>
                 </div>
@@ -194,9 +195,7 @@ export default function AdminDashboard({ user, onRefresh }) {
                                     <td className="p-6">
                                         <div className="font-black text-slate-700 uppercase text-sm flex items-center gap-2">
                                             {it.name || `${it.firstName} ${it.lastName}`}
-                                            
                                             {['classes','groups'].includes(view) && it.level && <span className="text-[8px] bg-blue-600 text-white px-2 py-0.5 rounded font-bold shadow-sm">NIV {it.level}</span>}
-                                            
                                             {view === 'students' && (
                                                 <>
                                                     <span className="text-[8px] bg-blue-600 text-white px-2 py-0.5 rounded font-bold shadow-sm">{it.currentClass || allClasses.find(c=>c._id===it.classId)?.name}</span>
