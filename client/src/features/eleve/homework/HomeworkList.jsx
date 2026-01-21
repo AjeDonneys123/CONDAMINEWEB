@@ -3,8 +3,8 @@ import HomeworkWorkspace from './HomeworkWorkspace';
 import DashboardFolder from '../components/DashboardFolder';
 
 /**
- * 📚 LISTE DEVOIRS ÉLÈVE V80
- * Filtrage strict par classe administrative et normalisation.
+ * 📚 LISTE DEVOIRS ÉLÈVE V137 (MULTI-CLASSE FILTER)
+ * L'élève voit le devoir si sa classe est dans 'targetClassrooms'.
  */
 export default function HomeworkList({ user }) {
   const [homeworks, setHomeworks] = useState([]);
@@ -16,12 +16,19 @@ export default function HomeworkList({ user }) {
     const myId = String(user._id || user.id);
 
     fetch('/api/homework/all').then(r => r.json()).then(all => {
-        // FILTRAGE V80 : Devoirs de ma classe OU m'étant personnellement assignés
         const filtered = all.filter(hw => {
-            const hwClass = (hw.classroom || "").toUpperCase().trim();
-            const isMyClass = hwClass === myClass;
-            const isAssigned = hw.assignedStudents?.some(id => String(id) === myId);
-            return isMyClass || isAssigned;
+            // 1. Cible Classe Multiple
+            const targets = hw.targetClassrooms || (hw.classroom ? [hw.classroom] : []);
+            const isMyClassTargeted = targets.some(t => t.toUpperCase().trim() === myClass);
+            
+            // 2. Assignation Individuelle
+            const isAssignedIndividually = hw.assignedStudents?.some(id => String(id) === myId);
+            
+            // 3. Mode "Toute la classe" ou "Juste moi"
+            if (isAssignedIndividually) return true;
+            if (isMyClassTargeted && hw.isAllClass) return true;
+            
+            return false;
         });
         setHomeworks(filtered);
     });

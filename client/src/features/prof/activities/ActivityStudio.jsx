@@ -3,7 +3,7 @@ import HomeworkStudio from '../homework/HomeworkStudio';
 import GameStudio from '../games/GameStudio';
 import ProfStudioFolder from '../components/ProfStudioFolder';
 
-export default function ActivityStudio({ globalClass, globalClassId, user }) {
+export default function ActivityStudio({ globalClass, globalClassId, globalLevel, user, onRefreshRequest }) {
     const [activities, setActivities] = useState([]);
     const [chapters, setChapters] = useState([]);
     const [editingItem, setEditingItem] = useState(null);
@@ -29,7 +29,7 @@ export default function ActivityStudio({ globalClass, globalClassId, user }) {
                 ...gm.map(x => ({...x, actType: 'game', typeLabel: '🎮 JEU'}))
             ]);
             setChapters(cp || []);
-        } catch (e) { console.error("❌ ActivityStudio Load error:", e); }
+        } catch (e) { console.error("ActivityStudio Load error:", e); }
         setLoading(false);
     };
 
@@ -61,10 +61,11 @@ export default function ActivityStudio({ globalClass, globalClassId, user }) {
                     chapters={chapters} 
                     items={activities} 
                     classFilter={globalClass}
+                    levelFilter={globalLevel} // V142 PASSAGE DU NIVEAU
                     user={user}
                     onEditItem={(it) => setEditingItem({type: it.actType, data: it})}
                     onDeleteItem={handleDeleteItem}
-                    onRefresh={loadData}
+                    onRefresh={() => { loadData(); if(onRefreshRequest) onRefreshRequest(); }}
                 />
             )}
         </div>

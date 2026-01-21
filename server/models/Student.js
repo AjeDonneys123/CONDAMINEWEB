@@ -1,23 +1,28 @@
 const mongoose = require('mongoose');
 
 const StudentSchema = new mongoose.Schema({
+    // Identité
     firstName: { type: String, required: true },
     lastName: { type: String, required: true },
     fullName: { type: String }, 
-    email: { type: String, lowercase: true, trim: true },
     
-    // Classe Administrative (Maison mère) - Choix Unique
-    classId: { type: mongoose.Schema.Types.ObjectId, ref: 'Classroom' },
-    currentClass: { type: String }, 
+    // Contacts
+    email: { type: String, lowercase: true, trim: true },
+    parentEmail: { type: String, lowercase: true, trim: true }, // NOUVEAU
 
-    // Groupes Pédagogiques (Options) - Choix Multiple
+    // Scolarité
+    classId: { type: mongoose.Schema.Types.ObjectId, ref: 'Classroom' },
+    currentClass: { type: String }, // Ex: "1D"
+    currentLevel: { type: String }, // NOUVEAU (Ex: "1")
+
+    // Groupes / Options
     assignedGroups: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Classroom' }],
 
-    isTestAccount: { type: Boolean, default: false },
-
-    birthDate: { type: Date },
+    // Infos diverses
     gender: { type: String, enum: ['M', 'F', ''] },
     lastLogin: { type: Date, default: Date.now }
+    
+    // SUPPRIMÉS : birthDate, isTestAccount
 }, { collection: 'students' });
 
 module.exports = mongoose.models.Student || mongoose.model('Student', StudentSchema);

@@ -2,20 +2,16 @@ const mongoose = require('mongoose');
 
 const ChapterSchema = new mongoose.Schema({
     title: { type: String, required: true },
-    
-    // La "Section" est libre (créée par le prof), remplace l'ancienne logique "Matière Admin"
     section: { type: String, default: "Général" }, 
     
-    // Gardé pour compatibilité temporaire, mais moins utilisé
-    subject: { type: String }, 
-    
+    // Classe spécifique (ex: "6A")
     classroom: String, 
-    driveFolderId: String,
+    
+    // NOUVEAU : Niveau partagé (ex: "6" pour toutes les 6èmes, "1" pour toutes les 1ères)
+    sharedLevel: String, 
+
     teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher' },
-    
-    // [NOUVEAU] Gestion d'archivage
     isArchived: { type: Boolean, default: false },
-    
     createdAt: { type: Date, default: Date.now }
 }, { collection: 'chapters' });
 
