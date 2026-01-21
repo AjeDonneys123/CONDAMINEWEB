@@ -6,6 +6,7 @@ import ProfStudioFolder from '../components/ProfStudioFolder';
 export default function ActivityStudio({ globalClass, globalClassId, globalLevel, user, onRefreshRequest }) {
     const [activities, setActivities] = useState([]);
     const [chapters, setChapters] = useState([]);
+    const [allStudents, setAllStudents] = useState([]); // NOUVEAU V153
     const [editingItem, setEditingItem] = useState(null);
     const [loading, setLoading] = useState(false);
 
@@ -18,10 +19,12 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
                 return res.json();
             };
 
-            const [hw, gm, cp] = await Promise.all([
+            // V153 : On charge aussi les élèves pour le filtrage granulaire
+            const [hw, gm, cp, sts] = await Promise.all([
                 fetchJson('/api/homework/all'),
                 fetchJson('/api/games/all'),
-                fetchJson('/api/structure/chapters')
+                fetchJson('/api/structure/chapters'),
+                fetchJson('/api/admin/students')
             ]);
             
             setActivities([
@@ -29,6 +32,7 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
                 ...gm.map(x => ({...x, actType: 'game', typeLabel: '🎮 JEU'}))
             ]);
             setChapters(cp || []);
+            setAllStudents(sts || []);
         } catch (e) { console.error("ActivityStudio Load error:", e); }
         setLoading(false);
     };
@@ -60,8 +64,9 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
                 <ProfStudioFolder 
                     chapters={chapters} 
                     items={activities} 
+                    studentsRef={allStudents} // V153 : On passe la liste pour analyse
                     classFilter={globalClass}
-                    levelFilter={globalLevel} // V142 PASSAGE DU NIVEAU
+                    levelFilter={globalLevel}
                     user={user}
                     onEditItem={(it) => setEditingItem({type: it.actType, data: it})}
                     onDeleteItem={handleDeleteItem}

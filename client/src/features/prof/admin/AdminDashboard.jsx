@@ -2,8 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import './AdminDashboard.css';
 
 /**
- * ⚙️ DASHBOARD ADMIN V149 (MIGRATION TOOL)
- * Ajout du bouton "NETTOYER BDD" pour supprimer les vieux champs.
+ * ⚙️ DASHBOARD ADMIN V160 (CLEAN BUTTON FIX)
+ * Fix : Réintégration du bouton "NETTOYER BDD" qui avait disparu.
  */
 export default function AdminDashboard({ user, onRefresh }) {
     const [view, setView] = useState('classes'); 
@@ -60,10 +60,9 @@ export default function AdminDashboard({ user, onRefresh }) {
         e.target.value = null;
     };
 
-    // BOUTON MIGRATION
     const handleMigration = async () => {
-        if(!confirm("⚠️ NETTOYAGE BDD :\n- Suppression birthDate & isTestAccount\n- Calcul auto des niveaux\n- Reset emails parents\n\nContinuer ?")) return;
-        setImporting(true); // Affiche le loader
+        if(!confirm("⚠️ NETTOYAGE BDD :\n- Suppression birthDate & isTestAccount\n- Calcul auto des niveaux manquants\n- Reset emails parents\n\nContinuer ?")) return;
+        setImporting(true);
         try {
             const res = await fetch('/api/admin/maintenance/migrate-students', { method: 'POST' });
             const data = await res.json();
@@ -76,7 +75,7 @@ export default function AdminDashboard({ user, onRefresh }) {
     const openCreate = () => {
         const template = view === 'teachers' ? { firstName: '', lastName: '', password: 'A', taughtSubjects: [], assignedClasses: [] } : 
                          view === 'classes' ? { name: '', type: 'CLASS', level: '' } :
-                         view === 'groups' ? { name: '', type: 'GROUP' } :
+                         view === 'groups' ? { name: '', type: 'GROUP', level: '' } :
                          view === 'subjects' ? { name: '', color: '#000000' } :
                          { firstName: '', lastName: '', email: '', parentEmail: '', classId: '', currentLevel: '', assignedGroups: [] }; 
         setCurrentItem(template);
@@ -108,7 +107,7 @@ export default function AdminDashboard({ user, onRefresh }) {
     return (
         <div className="admin-container animate-in fade-in">
             <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept=".csv,.txt" style={{display:'none'}} />
-            {importing && <div className="zoom-overlay" style={{zIndex: 20000}}><div className="text-white font-black text-2xl animate-pulse text-center">🔮 TRAITEMENT EN COURS...</div></div>}
+            {importing && <div className="zoom-overlay" style={{zIndex: 20000}}><div className="text-white font-black text-2xl animate-pulse text-center">🔮 TRAITEMENT...</div></div>}
             
             {modalMode && currentItem && (
                 <div className="zoom-overlay" onClick={() => setModalMode(null)}>
@@ -117,16 +116,13 @@ export default function AdminDashboard({ user, onRefresh }) {
                         <div className="space-y-4 mb-6">
                             {['teachers', 'students', 'staff'].includes(view) && <div className="flex gap-4"><input className="admin-input" placeholder="Prénom" value={currentItem.firstName} onChange={e => setCurrentItem({...currentItem, firstName: e.target.value})} /><input className="admin-input" placeholder="Nom" value={currentItem.lastName} onChange={e => setCurrentItem({...currentItem, lastName: e.target.value})} /></div>}
                             
-                            {view === 'students' && (
-                                <div className="flex gap-4">
-                                    <input className="admin-input" placeholder="Email Élève" value={currentItem.email} onChange={e => setCurrentItem({...currentItem, email: e.target.value})} />
-                                    <input className="admin-input" placeholder="Email Parent" value={currentItem.parentEmail || ''} onChange={e => setCurrentItem({...currentItem, parentEmail: e.target.value})} />
-                                </div>
-                            )}
+                            {view === 'students' && (<div className="flex gap-4"><input className="admin-input" placeholder="Email Élève" value={currentItem.email} onChange={e => setCurrentItem({...currentItem, email: e.target.value})} /><input className="admin-input" placeholder="Email Parent" value={currentItem.parentEmail || ''} onChange={e => setCurrentItem({...currentItem, parentEmail: e.target.value})} /></div>)}
 
                             {['teachers', 'staff'].includes(view) && <input className="admin-input" placeholder="Mot de passe" value={currentItem.password} onChange={e => setCurrentItem({...currentItem, password: e.target.value})} />}
-                            {view === 'classes' && <div className="flex gap-4"><input className="admin-input flex-1" placeholder="Nom (ex: 6A)" value={currentItem.name} onChange={e => setCurrentItem({...currentItem, name: e.target.value})} /><div className="flex-1 flex flex-col gap-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-2">NIVEAU</label><select className="admin-input" value={currentItem.level || ''} onChange={e => setCurrentItem({...currentItem, level: e.target.value})}><option value="">AUTO</option><option value="6">6ème</option><option value="5">5ème</option><option value="4">4ème</option><option value="3">3ème</option><option value="2">2nde</option><option value="1">1ère</option><option value="TERM">Terminale</option></select></div></div>}
-                            {['groups', 'subjects'].includes(view) && <input className="admin-input" placeholder="Nom" value={currentItem.name} onChange={e => setCurrentItem({...currentItem, name: e.target.value})} />}
+                            
+                            {['classes', 'groups'].includes(view) && <div className="flex gap-4"><input className="admin-input flex-1" placeholder="Nom (ex: 6A)" value={currentItem.name} onChange={e => setCurrentItem({...currentItem, name: e.target.value})} /><div className="flex-1 flex flex-col gap-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-2">NIVEAU</label><select className="admin-input" value={currentItem.level || ''} onChange={e => setCurrentItem({...currentItem, level: e.target.value})}><option value="">AUTO</option><option value="6">6ème</option><option value="5">5ème</option><option value="4">4ème</option><option value="3">3ème</option><option value="2">2nde</option><option value="1">1ère</option><option value="TERM">Terminale</option></select></div></div>}
+
+                            {view === 'subjects' && <input className="admin-input" placeholder="Nom" value={currentItem.name} onChange={e => setCurrentItem({...currentItem, name: e.target.value})} />}
                         </div>
                         
                         {view === 'teachers' && (
@@ -165,7 +161,7 @@ export default function AdminDashboard({ user, onRefresh }) {
                 <div className="flex justify-between items-center bg-white p-4 rounded-[30px] shadow-sm">
                     <div className="flex gap-1 overflow-x-auto no-scrollbar">{['classes', 'groups', 'subjects', 'teachers', 'students', 'staff'].map(v => <button key={v} onClick={() => setView(v)} className={`admin-tab ${view === v ? 'active' : ''}`}>{v.toUpperCase()}</button>)}</div>
                     <div className="flex gap-2">
-                        {/* BOUTON DE MIGRATION AJOUTÉ */}
+                        {/* BOUTON RETROUVÉ */}
                         {view === 'students' && <button onClick={handleMigration} className="bg-orange-500 text-white px-6 py-2.5 rounded-2xl font-black text-[10px] uppercase shadow-lg">🧹 NETTOYER BDD</button>}
                         
                         {view === 'classes' && <button onClick={() => fileInputRef.current.click()} className="bg-emerald-500 text-white px-6 py-2.5 rounded-2xl font-black text-[10px] uppercase shadow-lg">📂 IMPORTER CSV</button>}
@@ -198,7 +194,9 @@ export default function AdminDashboard({ user, onRefresh }) {
                                     <td className="p-6">
                                         <div className="font-black text-slate-700 uppercase text-sm flex items-center gap-2">
                                             {it.name || `${it.firstName} ${it.lastName}`}
-                                            {view === 'classes' && it.level && <span className="text-[8px] bg-blue-600 text-white px-2 py-0.5 rounded font-bold shadow-sm">NIV {it.level}</span>}
+                                            
+                                            {['classes','groups'].includes(view) && it.level && <span className="text-[8px] bg-blue-600 text-white px-2 py-0.5 rounded font-bold shadow-sm">NIV {it.level}</span>}
+                                            
                                             {view === 'students' && (
                                                 <>
                                                     <span className="text-[8px] bg-blue-600 text-white px-2 py-0.5 rounded font-bold shadow-sm">{it.currentClass || allClasses.find(c=>c._id===it.classId)?.name}</span>
@@ -214,8 +212,8 @@ export default function AdminDashboard({ user, onRefresh }) {
                                                 {tGroups.length>0 && <div className="flex flex-wrap gap-1">{tGroups.map(g=><span key={g._id} className="px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded text-[8px] font-black">👥 {g.name}</span>)}</div>}
                                             </div>
                                         )}
-                                        {it.assignedGroups?.length > 0 && (
-                                            <div className="flex flex-wrap gap-1 mt-1">{it.assignedGroups.map(gid=>{const g=allClasses.find(c=>c._id===gid); return g ? <span key={gid} className="px-1.5 py-0.5 bg-orange-50 text-orange-600 text-[8px] rounded font-bold border border-orange-100">{g.name}</span> : null})}</div>
+                                        {view === 'students' && it.assignedGroups?.length > 0 && (
+                                            <div className="flex flex-wrap gap-1 mt-1">{it.assignedGroups.map(gid=>{const g=allClasses.find(c=>c._id===gid); const displayName = g ? g.name.replace(new RegExp(`^${it.currentClass}\\s+`), '') : '?'; return g ? <span key={gid} className="px-1.5 py-0.5 bg-orange-50 text-orange-600 text-[8px] rounded font-bold border border-orange-100">{displayName}</span> : null})}</div>
                                         )}
                                     </td>
                                     <td className="p-6 text-right"><button onClick={() => openEdit(it)} className="bg-slate-100 text-slate-600 px-4 py-2 rounded-xl font-bold text-[10px] hover:bg-slate-200">MODIFIER</button><button onClick={() => handleDelete(it._id)} className="ml-2 w-8 h-8 rounded-lg bg-red-50 text-red-500 font-bold hover:bg-red-100">✕</button></td>

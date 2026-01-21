@@ -7,8 +7,9 @@ const StructureDrive = require('./experts/structure.drive');
 const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
 /**
- * 🛣️ ROUTES STRUCTURE V139 - SHARED LEVELS
- * Fix : Support de la création de chapitres partagés par niveau (sharedLevel).
+ * 🛣️ ROUTES STRUCTURE V152 - NEON COLORS & STRICT UNIQUE
+ * Fix : Couleurs forcées en mode "Vif/Clair" (jamais noir).
+ * Fix : Renvoie une erreur 409 si la section existe déjà.
  */
 
 // --- ROUTES STANDARDS ---
@@ -16,20 +17,18 @@ router.get('/integrity/:homeworkId', asyncHandler(async (req, res) => res.json(a
 router.get('/drive-tree', async (req, res) => { try { res.json(await StructureDrive.getDriveTree()); } catch (e) { res.json({ name: "Conda Vault", children: [], error: e.message }); } });
 router.post('/sync-root', asyncHandler(async (req, res) => res.json(await StructureDrive.syncBaseStructure())));
 router.get('/chapters', asyncHandler(async (req, res) => res.json(await StructureExpert.getChapters())));
-
-// --- CRÉATION CHAPITRE (MISE À JOUR V139) ---
-router.post('/chapters', asyncHandler(async (req, res) => {
-    // On passe directement le body à l'expert ou au modèle
-    // Le champ sharedLevel sera pris en compte automatiquement par le modèle Mongoose
-    const result = await StructureExpert.createChapter(req.body);
-    res.json(result);
-}));
-
+router.post('/chapters', asyncHandler(async (req, res) => res.json(await StructureExpert.createChapter(req.body))));
 router.delete('/chapters/:id', asyncHandler(async (req, res) => { await StructureExpert.deleteChapter(req.params.id); res.json({ ok: true }); }));
 router.patch('/chapters/:id/archive', asyncHandler(async (req, res) => { const updated = await mongoose.model('Chapter').findByIdAndUpdate(req.params.id, { isArchived: !!req.body.isArchived }, { new: true }); res.json(updated); }));
 router.delete('/drive/:id', asyncHandler(async (req, res) => res.json(await StructureDrive.deleteDriveItem(req.params.id))));
 
-// --- SECTIONS (INCHANGÉ V136) ---
+// Helper Couleur : HSL avec Saturation haute (80%) et Luminosité haute (60%)
+// Impossible d'avoir du noir ou du gris foncé.
+const getRandomColor = () => {
+    return `hsl(${Math.floor(Math.random() * 360)}, 85%, 60%)`;
+};
+
+// --- LECTURE ---
 router.get('/sections/:teacherId', asyncHandler(async (req, res) => {
     if (!req.params.teacherId || req.params.teacherId === 'undefined') return res.json([]);
     let user = await mongoose.model('Teacher').findById(req.params.teacherId) || await mongoose.model('Admin').findById(req.params.teacherId);
@@ -37,48 +36,91 @@ router.get('/sections/:teacherId', asyncHandler(async (req, res) => {
     res.json(user.subjectSections || []);
 }));
 
+// --- CRÉATION (AVEC VÉRIF DOUBLON STRICTE) ---
 router.post('/sections', asyncHandler(async (req, res) => {
-    const { teacherId, sectionName } = req.body;
+    const { teacherId, sectionName, scope, target } = req.body;
+    
     if (!teacherId || !sectionName) return res.status(400).json({ error: "Données manquantes" });
+
     const cleanName = sectionName.toUpperCase().trim();
     let user = await mongoose.model('Teacher').findById(teacherId) || await mongoose.model('Admin').findById(teacherId);
     if (!user) return res.status(404).json({ error: "User not found" });
-    
-    // Nettoyage et Ajout
-    const getRandomColor = () => { const l='0123456789ABCDEF'; let c='#'; for(let i=0;i<6;i++) c+=l[Math.floor(Math.random()*16)]; return c; };
-    let sections = [];
-    if(user.subjectSections) sections = user.subjectSections.filter(s=>s.name); // Clean nulls
-    
-    if (sections.length === 0 && cleanName !== 'GÉNÉRAL') sections.push({ name: 'GÉNÉRAL', color: '#64748b' });
-    if (!sections.some(s => s.name === cleanName)) sections.push({ name: cleanName, color: getRandomColor() });
 
-    user.subjectSections = sections;
+    let oldSections = user.subjectSections || [];
+    let newSections = [];
+    
+    // Reconstruction propre
+    for(let s of oldSections) {
+        if(s && s.name) newSections.push({ 
+            name: s.name, 
+            color: s.color || getRandomColor(),
+            scope: s.scope || 'GLOBAL', 
+            target: s.target || null 
+        });
+    }
+
+    if (newSections.length === 0 && cleanName !== 'GÉNÉRAL') {
+        newSections.push({ name: 'GÉNÉRAL', color: '#64748b', scope: 'GLOBAL' });
+    }
+
+    // Vérification Doublon Strict
+    const isDuplicate = newSections.some(s => 
+        s.name === cleanName && 
+        s.scope === (scope || 'GLOBAL') && 
+        s.target === (target || null)
+    );
+
+    if (isDuplicate) {
+        return res.status(409).json({ error: `La section "${cleanName}" existe déjà ici !` });
+    }
+
+    // Ajout avec couleur vive
+    newSections.push({ 
+        name: cleanName, 
+        color: getRandomColor(),
+        scope: scope || 'GLOBAL',
+        target: target || null
+    });
+
+    user.subjectSections = newSections;
     user.markModified('subjectSections');
     await user.save();
     res.json(user.subjectSections);
 }));
 
+// --- SUPPRESSION ---
 router.delete('/sections', asyncHandler(async (req, res) => {
     const { teacherId, sectionName } = req.body;
     const targetName = sectionName.toUpperCase().trim();
+
     let user = await mongoose.model('Teacher').findById(teacherId) || await mongoose.model('Admin').findById(teacherId);
     if (!user) return res.status(404).json({ error: "User not found" });
 
-    let sections = user.subjectSections || [];
-    if (sections.length <= 1) return res.status(400).json({ error: "Il doit rester au moins une section." });
+    let oldSections = user.subjectSections || [];
+    let newSections = [];
 
-    sections = sections.filter(s => s.name !== targetName);
-    user.subjectSections = sections;
+    // Suppression par nom (pour l'instant simple)
+    for(let s of oldSections) {
+        if(s && s.name && s.name !== targetName) {
+            newSections.push(s);
+        }
+    }
+
+    if (newSections.length === 0) newSections.push({ name: 'GÉNÉRAL', color: '#64748b', scope: 'GLOBAL' });
+
+    user.subjectSections = newSections;
     user.markModified('subjectSections');
     await user.save();
     res.json(user.subjectSections);
 }));
 
+// --- RESET ---
 router.post('/sections/reset', asyncHandler(async (req, res) => {
     const { teacherId } = req.body;
     let user = await mongoose.model('Teacher').findById(teacherId) || await mongoose.model('Admin').findById(teacherId);
     if (!user) return res.status(404).json({ error: "User not found" });
-    user.subjectSections = [{ name: 'GÉNÉRAL', color: '#64748b' }];
+
+    user.subjectSections = [{ name: 'GÉNÉRAL', color: '#64748b', scope: 'GLOBAL' }];
     user.markModified('subjectSections');
     await user.save();
     res.json(user.subjectSections);
