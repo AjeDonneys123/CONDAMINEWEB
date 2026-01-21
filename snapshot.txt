@@ -124,6 +124,12 @@ STRUCTURE:
 │   │   └── ~$che_Croissance_Demographique_5e.docx
 │   ├── style.css
 │   └── uploads/
+│       ├── 07b4ded2280d7ad22dc0daa2c90f4107
+│       ├── 179b96e657c91102b91b1031e6903d7a
+│       ├── 262f72cd65ccb7a5e9683572acb3e77e
+│       ├── 8fc74b97cbb3f971d37f15e01f7f4ef6
+│       ├── bc199f06f744958b60903b2790bc0d50
+│       ├── c536b44022497153eb3030b1271fca17
 │       ├── hw-1768842185845-Capture dâeÌcran 2026-01-03 aÌ 18.02.42.png
 │       ├── hw-1768842199185-Capture dâeÌcran 2026-01-03 aÌ 18.02.35.png
 │       ├── hw-1768842332574-Capture_d___e__cran_2026_01_03_a___18.02.35.png
@@ -255,6 +261,8 @@ STRUCTURE:
 ├── tests/
 │   └── integrity.test.js
 ├── tree.txt
+├── uploads/
+│   └── temp/
 └── verificatons.txt
 
 
@@ -326,7 +334,7 @@ setInterval(applyUpdate, 1000);
 {
   "status": "OK",
   "file": null,
-  "timestamp": 1768946319804
+  "timestamp": 1769035187269
 }
 [[[£ END: apply_status.json £]]]
 
@@ -851,6 +859,10 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
 [[[£ FILE: client/src/features/eleve/components/DashboardFolder.jsx £]]]
 import React, { useState } from 'react';
 
+/**
+ * 📂 DASHBOARD FOLDER ÉLÈVE V138
+ * Fix : N'affiche un chapitre que s'il contient des éléments visibles pour l'élève.
+ */
 export default function DashboardFolder({ items, chapters, type, onSelect }) {
   const [openChaps, setOpenChaps] = useState({});
   const getSubjectStyle = (sub) => {
@@ -859,24 +871,48 @@ export default function DashboardFolder({ items, chapters, type, onSelect }) {
     return { color: '#22c55e', text: 'text-green-600', bg: 'bg-green-50', icon: '⚖️' };
   };
 
+  // Filtrage intelligent : Quels chapitres contiennent des items pour moi ?
+  const relevantChapters = chapters.filter(chap => {
+      const itemsInChap = items.filter(it => String(it.chapterId) === String(chap._id));
+      return itemsInChap.length > 0;
+  });
+
+  if (relevantChapters.length === 0) return (
+      <div className="p-12 text-center">
+          <div className="text-4xl mb-4">📭</div>
+          <p className="font-bold text-slate-400 text-sm">Aucun {type === 'homework' ? 'devoir' : 'jeu'} disponible.</p>
+      </div>
+  );
+
   return (
     <div className="max-w-2xl mx-auto space-y-4">
-      {chapters.map(chap => {
+      {relevantChapters.map(chap => {
           const info = getSubjectStyle(chap.subject);
           const chapItems = items.filter(it => String(it.chapterId) === String(chap._id));
-          if (chapItems.length === 0) return null;
           const isOpen = openChaps[chap._id];
+          
           return (
-            <div key={chap._id} className="bg-white rounded-[35px] border-2 border-pink-50 overflow-hidden shadow-sm">
-                <button onClick={() => setOpenChaps({...openChaps, [chap._id]: !isOpen})} className={`w-full p-6 flex justify-between items-center ${isOpen ? info.bg : ''}`}>
-                    <span className="font-black text-slate-700">{info.icon} {chap.title}</span>
-                    <span>{isOpen ? '▲' : '▼'}</span>
+            <div key={chap._id} className="bg-white rounded-[35px] border-2 border-pink-50 overflow-hidden shadow-sm animate-in">
+                <button onClick={() => setOpenChaps({...openChaps, [chap._id]: !isOpen})} className={`w-full p-6 flex justify-between items-center ${isOpen ? info.bg : 'hover:bg-pink-50/50'}`}>
+                    <div className="flex items-center gap-4">
+                        <span className="text-2xl">{info.icon}</span>
+                        <div className="flex flex-col items-start">
+                            <span className="font-black text-slate-700 uppercase">{chap.title}</span>
+                            {/* Petit badge classe si le dossier vient d'ailleurs */}
+                            {chap.classroom && <span className="text-[8px] bg-slate-100 px-2 py-0.5 rounded text-slate-400 font-bold">{chap.classroom}</span>}
+                        </div>
+                    </div>
+                    <span className="font-bold text-pink-300">{isOpen ? '▲' : '▼'}</span>
                 </button>
-                {isOpen && <div className="p-4 space-y-2">
+                
+                {isOpen && <div className="p-4 space-y-2 border-t border-pink-50">
                     {chapItems.map(it => (
-                        <div key={it._id} onClick={() => onSelect(it)} className="bg-slate-50 p-4 rounded-2xl flex justify-between cursor-pointer hover:bg-pink-50">
-                            <span className="font-bold text-slate-600">{it.title}</span>
-                            <span className="text-pink-400">➔</span>
+                        <div key={it._id} onClick={() => onSelect(it)} className="bg-white p-5 rounded-2xl flex justify-between cursor-pointer hover:shadow-md border border-slate-50 transition-all">
+                            <div className="flex flex-col">
+                                <span className="font-bold text-slate-700">{it.title}</span>
+                                {it.targetClassrooms && <span className="text-[9px] text-slate-400 font-bold">{it.targetClassrooms.join(', ')}</span>}
+                            </div>
+                            <span className="text-pink-400 font-black">➔</span>
                         </div>
                     ))}
                 </div>}
@@ -1341,8 +1377,8 @@ import HomeworkWorkspace from './HomeworkWorkspace';
 import DashboardFolder from '../components/DashboardFolder';
 
 /**
- * 📚 LISTE DEVOIRS ÉLÈVE V80
- * Filtrage strict par classe administrative et normalisation.
+ * 📚 LISTE DEVOIRS ÉLÈVE V137 (MULTI-CLASSE FILTER)
+ * L'élève voit le devoir si sa classe est dans 'targetClassrooms'.
  */
 export default function HomeworkList({ user }) {
   const [homeworks, setHomeworks] = useState([]);
@@ -1354,12 +1390,19 @@ export default function HomeworkList({ user }) {
     const myId = String(user._id || user.id);
 
     fetch('/api/homework/all').then(r => r.json()).then(all => {
-        // FILTRAGE V80 : Devoirs de ma classe OU m'étant personnellement assignés
         const filtered = all.filter(hw => {
-            const hwClass = (hw.classroom || "").toUpperCase().trim();
-            const isMyClass = hwClass === myClass;
-            const isAssigned = hw.assignedStudents?.some(id => String(id) === myId);
-            return isMyClass || isAssigned;
+            // 1. Cible Classe Multiple
+            const targets = hw.targetClassrooms || (hw.classroom ? [hw.classroom] : []);
+            const isMyClassTargeted = targets.some(t => t.toUpperCase().trim() === myClass);
+            
+            // 2. Assignation Individuelle
+            const isAssignedIndividually = hw.assignedStudents?.some(id => String(id) === myId);
+            
+            // 3. Mode "Toute la classe" ou "Juste moi"
+            if (isAssignedIndividually) return true;
+            if (isMyClassTargeted && hw.isAllClass) return true;
+            
+            return false;
         });
         setHomeworks(filtered);
     });
@@ -1538,15 +1581,14 @@ import AdminDashboard from './admin/AdminDashboard';
 import ConsoleReporter from './components/ConsoleReporter';
 import './ProfPage.css';
 
-/**
- * 🎓 PAGE PROFESSEUR V95
- * Resilience accrue contre les erreurs 500 du serveur.
- */
 export default function ProfPage({ user, onLogout }) {
-  const isJean = (user.firstName === 'Jean' && user.lastName === 'Vuillet');
-  const superUser = { ...user, isDeveloper: user.isDeveloper === true || isJean };
+  const getInitialUser = () => {
+      const isJean = (user.firstName === 'Jean' && user.lastName === 'Vuillet');
+      return { ...user, isDeveloper: user.isDeveloper === true || isJean };
+  };
 
-  const [tab, setTab] = useState(superUser.isDeveloper ? 'activities' : (user.role === 'admin' ? 'admin' : 'activities'));
+  const [liveUser, setLiveUser] = useState(getInitialUser());
+  const [tab, setTab] = useState(liveUser.isDeveloper ? 'activities' : (user.role === 'admin' ? 'admin' : 'activities'));
   const [classes, setClasses] = useState([]);
   const [selectedClassId, setSelectedClassId] = useState("");
   const [loading, setLoading] = useState(true);
@@ -1554,50 +1596,51 @@ export default function ProfPage({ user, onLogout }) {
   const loadProfileAndClasses = async () => {
     setLoading(true);
     try {
-        const userId = user.id || user._id;
-        
-        // On effectue les appels un par un pour mieux gérer les erreurs isolées
+        const userId = liveUser.id || liveUser._id;
         const resCls = await fetch('/api/admin/classrooms');
         const allCls = resCls.ok ? await resCls.json() : [];
 
-        const resMe = await fetch(`/api/admin/teachers/${userId}`);
-        // V95 : Si l'identité fail, on utilise le profil local en fallback
-        const myProfile = resMe.ok ? await resMe.json() : user;
-
-        let filteredCls = [];
-        if (superUser.isDeveloper) {
-            filteredCls = allCls;
-        } else {
-            const assignedIds = myProfile.assignedClasses || [];
-            filteredCls = allCls.filter(c => assignedIds.some(id => String(id) === String(c._id)));
-        }
-
-        setClasses(filteredCls);
+        const resMe = await fetch(`/api/admin/teachers/${userId}?report-silent=true`);
         
-        if (filteredCls.length > 0) {
-            const stillExists = filteredCls.some(c => String(c._id) === String(selectedClassId));
-            if (!selectedClassId || !stillExists) {
-                setSelectedClassId(filteredCls[0]._id);
+        if (resMe.ok) {
+            const freshProfile = await resMe.json();
+            setLiveUser(prev => ({ ...prev, ...freshProfile, isDeveloper: prev.isDeveloper }));
+            
+            let filteredCls = [];
+            if (liveUser.isDeveloper) {
+                filteredCls = allCls;
+            } else {
+                const assignedIds = freshProfile.assignedClasses || [];
+                filteredCls = allCls.filter(c => assignedIds.some(id => String(id) === String(c._id)));
+            }
+            setClasses(filteredCls);
+
+            if (filteredCls.length > 0) {
+                const stillExists = filteredCls.some(c => String(c._id) === String(selectedClassId));
+                if (!selectedClassId || !stillExists) {
+                    setSelectedClassId(filteredCls[0]._id);
+                }
             }
         }
-    } catch(e) { 
-        console.error("❌ Erreur Toolbar V95:", e.message); 
-    }
+    } catch(e) { console.warn("Sync Profile Warn:", e.message); }
     setLoading(false);
   };
 
   useEffect(() => { loadProfileAndClasses(); }, [tab]);
 
-  const currentClassName = classes.find(c => String(c._id) === String(selectedClassId))?.name || "";
+  // Récupération intelligente de la classe ET du niveau
+  const currentClassObj = classes.find(c => String(c._id) === String(selectedClassId));
+  const currentClassName = currentClassObj?.name || "";
+  const currentLevel = currentClassObj?.level || ""; // V142: Niveau Explicite BDD
 
   return (
     <div className="prof-page-container">
       <div className="prof-card shadow-2xl">
-        <ProfHeader user={superUser} onLogout={onLogout} />
+        <ProfHeader user={liveUser} onLogout={onLogout} />
         
         <div className="px-8 py-4 flex gap-2 border-b bg-slate-50/50 overflow-x-auto no-scrollbar items-center min-h-[70px]">
             <span className="text-[10px] font-black text-slate-400 mr-2 uppercase tracking-widest whitespace-nowrap">
-                {superUser.isDeveloper ? '🛠️ MODE ARCHITECTE :' : '📚 MES CLASSES :'}
+                {liveUser.isDeveloper ? '🛠️ MODE ARCHITECTE :' : '📚 MES CLASSES :'}
             </span>
             
             {loading ? (
@@ -1606,28 +1649,35 @@ export default function ProfPage({ user, onLogout }) {
                 <>
                     {classes.map(c => (
                         <button key={c._id} onClick={() => setSelectedClassId(c._id)} 
-                                className={`px-5 py-2 rounded-xl font-black text-[10px] transition-all whitespace-nowrap border-2 ${String(selectedClassId) === String(c._id) ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg' : 'bg-white text-slate-400 border-slate-100 hover:border-slate-200'}`}>
+                                className={`px-5 py-2 rounded-xl font-black text-[10px] transition-all whitespace-nowrap border-2 flex items-center gap-2 ${String(selectedClassId) === String(c._id) ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg' : 'bg-white text-slate-400 border-slate-100 hover:border-slate-200'}`}>
                             {c.type === 'GROUP' ? '👥' : '🏫'} {c.name}
+                            {/* Petit badge niveau pour debugger */}
+                            {c.level && <span className="bg-white/20 px-1 rounded text-[8px] opacity-70">{c.level}</span>}
                         </button>
                     ))}
-                    {classes.length === 0 && (
-                        <span className="text-[10px] text-red-400 font-black italic uppercase">⚠️ AUCUNE AFFECTATION</span>
-                    )}
                 </>
             )}
         </div>
 
-        <ProfNav activeTab={tab} onTabChange={setTab} user={superUser} />
+        <ProfNav activeTab={tab} onTabChange={setTab} user={liveUser} />
         
         <div className="p-8 bg-white min-h-[600px]">
-          {tab === 'activities' && <ActivityStudio globalClass={currentClassName} globalClassId={selectedClassId} user={superUser} />}
+          {tab === 'activities' && (
+            <ActivityStudio 
+                globalClass={currentClassName} 
+                globalClassId={selectedClassId} 
+                globalLevel={currentLevel} // V142: On passe le niveau
+                user={liveUser} 
+                onRefreshRequest={loadProfileAndClasses} 
+            />
+          )}
           {tab === 'students' && <StudentsManager globalClassId={selectedClassId} />}
-          {tab === 'admin' && <AdminDashboard user={superUser} onRefresh={loadProfileAndClasses} />}
+          {tab === 'admin' && <AdminDashboard user={liveUser} onRefresh={loadProfileAndClasses} />}
         </div>
       </div>
       
-      {superUser.isDeveloper && <ConsoleReporter user={superUser} />}
-      <div className="fixed bottom-4 right-4 bg-indigo-600 text-white font-black text-[9px] px-4 py-2 rounded-full shadow-2xl z-[20000]">STUDIO V95</div>
+      {liveUser.isDeveloper && <ConsoleReporter user={liveUser} />}
+      <div className="fixed bottom-4 right-4 bg-indigo-600 text-white font-black text-[9px] px-4 py-2 rounded-full shadow-2xl z-[20000]">STUDIO V142</div>
     </div>
   );
 }
@@ -1643,9 +1693,10 @@ import HomeworkStudio from '../homework/HomeworkStudio';
 import GameStudio from '../games/GameStudio';
 import ProfStudioFolder from '../components/ProfStudioFolder';
 
-export default function ActivityStudio({ globalClass, globalClassId, user }) {
+export default function ActivityStudio({ globalClass, globalClassId, globalLevel, user, onRefreshRequest }) {
     const [activities, setActivities] = useState([]);
     const [chapters, setChapters] = useState([]);
+    const [allStudents, setAllStudents] = useState([]); // NOUVEAU V153
     const [editingItem, setEditingItem] = useState(null);
     const [loading, setLoading] = useState(false);
 
@@ -1658,10 +1709,12 @@ export default function ActivityStudio({ globalClass, globalClassId, user }) {
                 return res.json();
             };
 
-            const [hw, gm, cp] = await Promise.all([
+            // V153 : On charge aussi les élèves pour le filtrage granulaire
+            const [hw, gm, cp, sts] = await Promise.all([
                 fetchJson('/api/homework/all'),
                 fetchJson('/api/games/all'),
-                fetchJson('/api/structure/chapters')
+                fetchJson('/api/structure/chapters'),
+                fetchJson('/api/admin/students')
             ]);
             
             setActivities([
@@ -1669,7 +1722,8 @@ export default function ActivityStudio({ globalClass, globalClassId, user }) {
                 ...gm.map(x => ({...x, actType: 'game', typeLabel: '🎮 JEU'}))
             ]);
             setChapters(cp || []);
-        } catch (e) { console.error("❌ ActivityStudio Load error:", e); }
+            setAllStudents(sts || []);
+        } catch (e) { console.error("ActivityStudio Load error:", e); }
         setLoading(false);
     };
 
@@ -1700,11 +1754,13 @@ export default function ActivityStudio({ globalClass, globalClassId, user }) {
                 <ProfStudioFolder 
                     chapters={chapters} 
                     items={activities} 
+                    studentsRef={allStudents} // V153 : On passe la liste pour analyse
                     classFilter={globalClass}
+                    levelFilter={globalLevel}
                     user={user}
                     onEditItem={(it) => setEditingItem({type: it.actType, data: it})}
                     onDeleteItem={handleDeleteItem}
-                    onRefresh={loadData}
+                    onRefresh={() => { loadData(); if(onRefreshRequest) onRefreshRequest(); }}
                 />
             )}
         </div>
@@ -1752,45 +1808,51 @@ export default function ActivityStudio({ globalClass, globalClassId, user }) {
 [[[£ END: client/src/features/prof/admin/AdminDashboard.css £]]]
 
 [[[£ FILE: client/src/features/prof/admin/AdminDashboard.jsx £]]]
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './AdminDashboard.css';
 
 /**
- * ⚙️ DASHBOARD ADMINISTRATEUR V97
- * Fix : Chargement résilient des données et restauration des référentiels.
+ * ⚙️ DASHBOARD ADMIN V168 - FINDER & GROUP LEVELS
+ * Feature 1 : Barre de recherche (Finder) pour filtrer les listes.
+ * Feature 2 : Ajout du champ "Niveau" pour la création/édition des Groupes.
  */
 export default function AdminDashboard({ user, onRefresh }) {
     const [view, setView] = useState('classes'); 
     const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(false);
-    const [showAddForm, setShowAddForm] = useState(false);
-    const [zoomItem, setZoomItem] = useState(null);
+    const [importing, setImporting] = useState(false);
+    const [activeClassTab, setActiveClassTab] = useState('ALL');
+    
+    // FINDER (RECHERCHE)
+    const [searchTerm, setSearchTerm] = useState('');
 
+    const [modalMode, setModalMode] = useState(null); 
+    const [currentItem, setCurrentItem] = useState(null);
+    
+    // REFERENTIELS
     const [allClasses, setAllClasses] = useState([]);
     const [allSubjects, setAllSubjects] = useState([]);
     const [allStudents, setAllStudents] = useState([]);
     
-    // Forms
-    const [fClass, setFClass] = useState({ name: '', type: 'CLASS' });
-    const [fSubject, setFSubject] = useState({ name: '', color: '#6366f1' });
-    const [fUser, setFUser] = useState({ firstName: '', lastName: '', password: 'A' });
-    const [fStudent, setFStudent] = useState({ firstName: '', lastName: '', classId: '' });
+    // MAGIC PASTE STATE
+    const [showMagicModal, setShowMagicModal] = useState(false);
+    const [magicText, setMagicText] = useState("");
+    const [magicClass, setMagicClass] = useState("");
+    const [magicForceOption, setMagicForceOption] = useState("");
 
-    const myId = user.id || user._id;
+    const fileInputRef = useRef(null);
 
     const loadData = async () => {
         setLoading(true);
         try {
-            // Chargement des référentiels indispensables
             const [rC, rS, rSt] = await Promise.all([
                 fetch('/api/admin/classrooms').then(r => r.ok ? r.json() : []),
                 fetch('/api/admin/subjects').then(r => r.ok ? r.json() : []),
                 fetch('/api/admin/students').then(r => r.ok ? r.json() : [])
             ]);
-            
-            setAllClasses(rC);
-            setAllSubjects(rS);
-            setAllStudents(rSt);
+            setAllClasses(Array.isArray(rC) ? rC.sort((a,b) => (a.name||"").localeCompare(b.name||"")) : []);
+            setAllSubjects(Array.isArray(rS) ? rS : []);
+            setAllStudents(Array.isArray(rSt) ? rSt : []);
 
             const map = { 'classes': 'classrooms', 'groups': 'classrooms', 'teachers': 'teachers', 'staff': 'admins', 'subjects': 'subjects', 'students': 'students' };
             const r = await fetch(`/api/admin/${map[view]}`);
@@ -1801,163 +1863,210 @@ export default function AdminDashboard({ user, onRefresh }) {
                 else if (view === 'groups') list = list.filter(c => c.type === 'GROUP');
                 setItems(list);
             }
-        } catch (e) { console.error("❌ Dashboard Error:", e); }
+        } catch (e) { console.error("Error", e); }
         setLoading(false);
     };
 
-    useEffect(() => { loadData(); setShowAddForm(false); }, [view]);
+    useEffect(() => { 
+        loadData(); 
+        setSearchTerm(''); // Reset recherche au changement d'onglet
+        if (view !== 'students') setActiveClassTab('ALL'); 
+    }, [view]);
 
-    const handleCreate = async (e) => {
-        e.preventDefault();
+    // --- FILTRAGE INTELLIGENT (SEARCH + TABS) ---
+    const getDisplayedItems = () => {
+        let res = items;
+
+        // 1. Filtre par Classe (si onglet étudiant)
+        if (view === 'students' && activeClassTab !== 'ALL') {
+            res = res.filter(s => String(s.classId) === String(activeClassTab));
+        }
+
+        // 2. Filtre par Recherche (Finder)
+        if (searchTerm.trim() !== '') {
+            const term = searchTerm.toLowerCase();
+            res = res.filter(item => {
+                const n = item.name ? item.name.toLowerCase() : '';
+                const f = item.firstName ? item.firstName.toLowerCase() : '';
+                const l = item.lastName ? item.lastName.toLowerCase() : '';
+                const cls = item.currentClass ? item.currentClass.toLowerCase() : '';
+                return n.includes(term) || f.includes(term) || l.includes(term) || cls.includes(term);
+            });
+        }
+        
+        return res;
+    };
+    
+    const displayedItems = getDisplayedItems();
+
+    // HANDLERS (Identiques V167)
+    const handleMagicImport = async () => {
+        if (!magicText || magicText.length < 10) return alert("Collez les données d'abord !");
+        setImporting(true);
+        try {
+            const res = await fetch('/api/admin/import-magic', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rawText: magicText, defaultClass: magicClass.toUpperCase(), forceOption: magicForceOption }) });
+            const data = await res.json();
+            if (res.ok) { alert("✅ " + data.message); setShowMagicModal(false); setMagicText(""); setMagicForceOption(""); loadData(); onRefresh(); } else { alert("❌ Erreur IA : " + data.error); }
+        } catch(e) { alert("Erreur réseau"); }
+        setImporting(false);
+    };
+
+    const handleFileSelect = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        if(!confirm(`Importer les élèves depuis "${file.name}" ?`)) return;
+        setImporting(true);
+        const formData = new FormData();
+        formData.append('file', file);
+        try { const res = await fetch('/api/admin/import-csv', { method: 'POST', body: formData }); const data = await res.json(); if (res.ok) { alert("✅ " + data.message); loadData(); onRefresh(); } else { alert("❌ " + data.error); } } catch (err) { alert("Erreur réseau"); }
+        setImporting(false); e.target.value = null;
+    };
+
+    const handleMigration = async () => {
+        if(!confirm("⚠️ NETTOYAGE BDD ?")) return;
+        setImporting(true);
+        try { const res = await fetch('/api/admin/maintenance/migrate-students', { method: 'POST' }); const data = await res.json(); alert(data.message); loadData(); } catch(e) { alert("Erreur migration"); }
+        setImporting(false);
+    };
+
+    const openCreate = () => { setCurrentItem({ firstName: '', lastName: '', email: '', parentEmail: '', classId: '', currentLevel: '', assignedGroups: [], name: '', level: '', type: view === 'groups' ? 'GROUP' : 'CLASS' }); setModalMode('create'); };
+    const openEdit = (it) => { setCurrentItem({ ...it }); setModalMode('edit'); };
+    const handleSave = async () => {
         const map = { 'classes': 'classrooms', 'groups': 'classrooms', 'teachers': 'teachers', 'staff': 'admins', 'subjects': 'subjects', 'students': 'students' };
-        let body = fUser;
-        if (view === 'classes') body = fClass;
-        if (view === 'groups') body = { ...fClass, type: 'GROUP' };
-        if (view === 'subjects') body = fSubject;
-        if (view === 'students') body = fStudent;
-
-        const res = await fetch(`/api/admin/${map[view]}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
-        });
-        if (res.ok) { 
-            setShowAddForm(false); 
-            loadData(); 
-            if(view === 'classes' || view === 'groups') onRefresh(); 
-        }
+        if (view === 'students' && currentItem.classId) currentItem.currentClass = allClasses.find(c => c._id === currentItem.classId)?.name || '';
+        const res = await fetch(`/api/admin/${map[view]}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(currentItem) });
+        if (res.ok) { setModalMode(null); loadData(); if(['classes','groups','teachers'].includes(view)) onRefresh(); } else { const err = await res.json(); alert("Erreur : " + err.error); }
     };
-
-    const handleToggleMapping = async (targetId, type) => {
-        if (!zoomItem) return;
-        let updated = { ...zoomItem };
-        const listField = type === 'subject' ? 'taughtSubjects' : 'assignedClasses';
-        updated[listField] = (updated[listField] || []).includes(targetId) 
-            ? updated[listField].filter(id => id !== targetId) 
-            : [...(updated[listField] || []), targetId];
-
-        setZoomItem(updated);
-        await fetch('/api/admin/teachers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) });
-        loadData();
-    };
-
-    const handleTestSwitch = async (it, type) => {
-        let tid = it._id;
-        if (type === 'STUDENT') {
-            const ts = allStudents.find(s => String(s.classId) === String(it._id) && s.isTestAccount);
-            if (!ts) return alert("Élève test non provisionné.");
-            tid = ts._id;
-        }
-        const res = await fetch('/api/auth/login', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ role: type, studentId: tid, firstName: it.firstName, lastName: it.lastName, password: 'A' }) });
-        if (res.ok) {
-            const d = await res.json();
-            localStorage.setItem('player', JSON.stringify(d.user));
-            window.location.reload();
-        }
-    };
-
-    const handleDelete = async (id) => {
-        if (id === myId || !confirm("Supprimer ?")) return;
-        const map = { 'classes': 'classrooms', 'groups': 'classrooms', 'teachers': 'teachers', 'staff': 'admins', 'subjects': 'subjects', 'students': 'students' };
-        await fetch(`/api/admin/${map[view]}/${id}`, { method: 'DELETE' });
-        loadData();
-    };
+    const handleDelete = async (id) => { if (!confirm("Supprimer ?")) return; const map = { 'classes': 'classrooms', 'groups': 'classrooms', 'teachers': 'teachers', 'staff': 'admins', 'subjects': 'subjects', 'students': 'students' }; await fetch(`/api/admin/${map[view]}/${id}`, { method: 'DELETE' }); loadData(); };
+    const toggleArrayItem = (field, id) => { const list = currentItem[field] || []; setCurrentItem({ ...currentItem, [field]: list.includes(id) ? list.filter(x => x !== id) : [...list, id] }); };
 
     return (
         <div className="admin-container animate-in fade-in">
-            {/* MODAL AFFECTATION */}
-            {zoomItem && (
-                <div className="zoom-overlay" onClick={() => setZoomItem(null)}>
-                    <div className="zoom-card !max-w-[800px]" onClick={e => e.stopPropagation()}>
-                        <h2 className="text-xl font-black mb-6 uppercase">Affectations : {zoomItem.firstName}</h2>
-                        <div className="grid grid-cols-2 gap-8">
-                            <div>
-                                <h4 className="text-[10px] font-black text-indigo-500 mb-3 border-b pb-2 uppercase tracking-widest">📚 Matières</h4>
-                                <div className="space-y-1 max-h-[300px] overflow-y-auto custom-scrollbar">
-                                    {allSubjects.map(s => (
-                                        <button key={s._id} onClick={() => handleToggleMapping(s._id, 'subject')} className={`w-full p-2 rounded-lg text-left text-[10px] font-black border transition-all ${zoomItem.taughtSubjects?.includes(s._id) ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-300'}`}>{s.name}</button>
-                                    ))}
-                                </div>
-                            </div>
-                            <div>
-                                <h4 className="text-[10px] font-black text-emerald-500 mb-3 border-b pb-2 uppercase tracking-widest">🏫 Classes / Groupes</h4>
-                                <div className="space-y-1 max-h-[300px] overflow-y-auto custom-scrollbar">
-                                    {allClasses.map(c => (
-                                        <button key={c._id} onClick={() => handleToggleMapping(c._id, 'class')} className={`w-full p-2 rounded-lg text-left text-[10px] font-black border transition-all ${zoomItem.assignedClasses?.includes(c._id) ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-300'}`}>{c.name}</button>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-                        <button onClick={() => setZoomItem(null)} className="w-full mt-8 py-4 bg-slate-900 text-white font-black rounded-xl uppercase text-xs">Fermer</button>
+            <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept=".csv,.txt" style={{display:'none'}} />
+            {importing && <div className="zoom-overlay" style={{zIndex: 20000}}><div className="text-white font-black text-2xl animate-pulse text-center">🔮 TRAITEMENT...</div></div>}
+            
+            {showMagicModal && (
+                <div className="zoom-overlay" onClick={() => setShowMagicModal(false)}>
+                    <div className="zoom-card !w-[800px] !max-w-none" onClick={e => e.stopPropagation()}>
+                        <h2 className="text-xl font-black mb-2 uppercase text-indigo-600">🔮 IMPORTATION MAGIQUE (IA)</h2>
+                        <div className="flex gap-4 mb-4"><input className="admin-input flex-1" placeholder="Nom de la classe par défaut (ex: 2C)" value={magicClass} onChange={e => setMagicClass(e.target.value)} /><input className="admin-input flex-1 border-orange-200 focus:border-orange-500" placeholder="AJOUTER CETTE OPTION À TOUS (ex: 2CD NON DNL)" value={magicForceOption} onChange={e => setMagicForceOption(e.target.value)} /></div>
+                        <textarea className="w-full h-[300px] p-4 bg-slate-50 border-2 border-indigo-100 rounded-2xl font-mono text-xs mb-6 outline-none focus:border-indigo-500" placeholder="Collez le tableau ici..." value={magicText} onChange={e => setMagicText(e.target.value)} />
+                        <div className="flex gap-4"><button onClick={() => setShowMagicModal(false)} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-xl font-black text-xs">ANNULER</button><button onClick={handleMagicImport} className="flex-1 py-4 bg-indigo-600 text-white rounded-xl font-black text-xs shadow-lg animate-pulse">LANCER L'IA 🤖</button></div>
                     </div>
                 </div>
             )}
 
-            <div className="flex justify-between items-center mb-8 bg-white p-4 rounded-[30px] shadow-sm">
-                <div className="flex gap-1 overflow-x-auto no-scrollbar">
-                    {['classes', 'groups', 'subjects', 'teachers', 'students', 'staff'].map(v => (
-                        <button key={v} onClick={() => setView(v)} className={`admin-tab ${view === v ? 'active' : ''}`}>{v.toUpperCase()}</button>
-                    ))}
-                </div>
-                <button onClick={() => setShowAddForm(!showAddForm)} className="bg-slate-900 text-white px-6 py-2.5 rounded-2xl font-black text-[10px] uppercase shadow-lg">
-                    {showAddForm ? 'FERMER' : `+ AJOUTER`}
-                </button>
-            </div>
+            {modalMode && currentItem && (
+                <div className="zoom-overlay" onClick={() => setModalMode(null)}>
+                    <div className="zoom-card" onClick={e => e.stopPropagation()}>
+                        <h2 className="text-xl font-black mb-6 uppercase text-slate-800">{modalMode === 'create' ? `Nouveau ${view.slice(0,-1)}` : `Modifier ${currentItem.name || currentItem.lastName}`}</h2>
+                        <div className="space-y-4 mb-6">
+                            {['teachers', 'students', 'staff'].includes(view) && <div className="flex gap-4"><input className="admin-input" placeholder="Prénom" value={currentItem.firstName} onChange={e => setCurrentItem({...currentItem, firstName: e.target.value})} /><input className="admin-input" placeholder="Nom" value={currentItem.lastName} onChange={e => setCurrentItem({...currentItem, lastName: e.target.value})} /></div>}
+                            {view === 'students' && (<div className="flex gap-4"><input className="admin-input" placeholder="Email Élève" value={currentItem.email} onChange={e => setCurrentItem({...currentItem, email: e.target.value})} /><input className="admin-input" placeholder="Email Parent" value={currentItem.parentEmail || ''} onChange={e => setCurrentItem({...currentItem, parentEmail: e.target.value})} /></div>)}
+                            {['teachers', 'staff'].includes(view) && <input className="admin-input" placeholder="Mot de passe" value={currentItem.password} onChange={e => setCurrentItem({...currentItem, password: e.target.value})} />}
+                            
+                            {/* CLASSES & GROUPES : NOM + NIVEAU */}
+                            {['classes', 'groups'].includes(view) && (
+                                <div className="flex gap-4">
+                                    <input className="admin-input flex-1" placeholder={view === 'classes' ? "Nom (ex: 6A)" : "Nom (ex: SPE MATHS)"} value={currentItem.name} onChange={e => setCurrentItem({...currentItem, name: e.target.value})} />
+                                    <div className="flex-1 flex flex-col gap-1">
+                                        <label className="text-[9px] font-black text-slate-400 uppercase ml-2">NIVEAU PÉDAGOGIQUE</label>
+                                        <select className="admin-input" value={currentItem.level || ''} onChange={e => setCurrentItem({...currentItem, level: e.target.value})}>
+                                            <option value="">AUTO / AUCUN</option>
+                                            <option value="6">6ème</option>
+                                            <option value="5">5ème</option>
+                                            <option value="4">4ème</option>
+                                            <option value="3">3ème</option>
+                                            <option value="2">2nde</option><option value="1">1ère</option><option value="TERM">Terminale</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            )}
 
-            {showAddForm && (
-                <div className="mb-10 p-10 bg-indigo-600 rounded-[45px] shadow-2xl text-white">
-                    <form onSubmit={handleCreate} className="flex flex-wrap gap-6 items-end">
-                        {view === 'subjects' ? (
-                            <input className="admin-input !bg-white/10" placeholder="Nom Matière" value={fSubject.name} onChange={e=>setFSubject({...fSubject, name:e.target.value})} required />
-                        ) : (view === 'classes' || view === 'groups') ? (
-                            <input className="admin-input !bg-white/10" placeholder="Nom" value={fClass.name} onChange={e=>setFClass({...fClass, name:e.target.value})} required />
-                        ) : (
-                            <><input className="admin-input flex-1 !bg-white/10" placeholder="Prénom" value={fUser.firstName} onChange={e=>setFUser({...fUser, firstName:e.target.value})} required />
-                            <input className="admin-input flex-1 !bg-white/10" placeholder="Nom" value={fUser.lastName} onChange={e=>setFUser({...fUser, lastName:e.target.value})} required /></>
-                        )}
-                        <button className="bg-white text-indigo-600 px-10 py-4 rounded-2xl font-black text-xs shadow-2xl uppercase">Enregistrer 🚀</button>
-                    </form>
+                            {view === 'subjects' && <input className="admin-input" placeholder="Nom" value={currentItem.name} onChange={e => setCurrentItem({...currentItem, name: e.target.value})} />}
+                        </div>
+                        
+                        {view === 'teachers' && (<div className="grid grid-cols-3 gap-4 border-t pt-6 h-[400px]"><div className="flex flex-col gap-2 overflow-hidden"><h4 className="text-[10px] font-black uppercase text-indigo-500">📚 Matières</h4><div className="overflow-y-auto custom-scrollbar flex-1 space-y-1 bg-slate-50 p-2 rounded-xl">{allSubjects.map(s => <button key={s._id} onClick={() => toggleArrayItem('taughtSubjects', s._id)} className={`w-full text-left px-3 py-2 rounded-lg text-[10px] font-bold transition-all ${currentItem.taughtSubjects?.includes(s._id) ? 'bg-indigo-600 text-white' : 'bg-white text-slate-400'}`}>{s.name}</button>)}</div></div><div className="flex flex-col gap-2 overflow-hidden"><h4 className="text-[10px] font-black uppercase text-emerald-500">🏫 Classes</h4><div className="overflow-y-auto custom-scrollbar flex-1 space-y-1 bg-slate-50 p-2 rounded-xl">{allClasses.filter(c => c.type === 'CLASS').map(c => <button key={c._id} onClick={() => toggleArrayItem('assignedClasses', c._id)} className={`w-full text-left px-3 py-2 rounded-lg text-[10px] font-bold transition-all ${currentItem.assignedClasses?.includes(c._id) ? 'bg-emerald-500 text-white' : 'bg-white text-slate-400'}`}>{c.name}</button>)}</div></div><div className="flex flex-col gap-2 overflow-hidden"><h4 className="text-[10px] font-black uppercase text-orange-500">👥 Groupes</h4><div className="overflow-y-auto custom-scrollbar flex-1 space-y-1 bg-slate-50 p-2 rounded-xl">{allClasses.filter(c => c.type === 'GROUP').map(c => <button key={c._id} onClick={() => toggleArrayItem('assignedClasses', c._id)} className={`w-full text-left px-3 py-2 rounded-lg text-[10px] font-bold transition-all ${currentItem.assignedClasses?.includes(c._id) ? 'bg-orange-500 text-white' : 'bg-white text-slate-400'}`}>{c.name}</button>)}</div></div></div>)}
+                        {view === 'students' && (<div className="grid grid-cols-2 gap-4 border-t pt-6 h-[400px]"><div className="flex flex-col gap-2 overflow-hidden"><h4 className="text-[10px] font-black uppercase text-emerald-500">🏫 Classe Principale & Niveau</h4><div className="mb-2"><label className="text-[8px] font-black text-slate-400 uppercase">NIVEAU</label><select className="admin-input mt-1" value={currentItem.currentLevel || ''} onChange={e => setCurrentItem({...currentItem, currentLevel: e.target.value})}><option value="">-- AUTO --</option><option value="6">6ème</option><option value="5">5ème</option><option value="4">4ème</option><option value="3">3ème</option><option value="2">2nde</option><option value="1">1ère</option><option value="TERM">Terminale</option></select></div><div className="overflow-y-auto custom-scrollbar flex-1 space-y-1 bg-slate-50 p-2 rounded-xl">{allClasses.filter(c => c.type === 'CLASS').map(c => <button key={c._id} onClick={() => setCurrentItem({...currentItem, classId: c._id})} className={`w-full text-left px-3 py-2 rounded-lg text-[10px] font-bold transition-all ${currentItem.classId === c._id ? 'bg-emerald-600 text-white shadow-md' : 'bg-white text-slate-400'}`}>{c.name}</button>)}</div></div><div className="flex flex-col gap-2 overflow-hidden"><h4 className="text-[10px] font-black uppercase text-orange-500">👥 Options</h4><div className="overflow-y-auto custom-scrollbar flex-1 space-y-1 bg-slate-50 p-2 rounded-xl">{allClasses.filter(c => c.type === 'GROUP').map(c => <button key={c._id} onClick={() => toggleArrayItem('assignedGroups', c._id)} className={`w-full text-left px-3 py-2 rounded-lg text-[10px] font-bold transition-all ${currentItem.assignedGroups?.includes(c._id) ? 'bg-orange-500 text-white' : 'bg-white text-slate-400'}`}>{c.name}</button>)}</div></div></div>)}
+                        <div className="flex gap-4 mt-6"><button onClick={() => setModalMode(null)} className="flex-1 py-3 bg-slate-100 text-slate-500 font-bold rounded-xl uppercase text-xs">Annuler</button><button onClick={handleSave} className="flex-1 py-3 bg-slate-900 text-white font-bold rounded-xl uppercase text-xs shadow-xl">Enregistrer</button></div>
+                    </div>
                 </div>
             )}
+
+            <div className="flex flex-col gap-4 mb-6">
+                <div className="flex justify-between items-center bg-white p-4 rounded-[30px] shadow-sm">
+                    <div className="flex gap-1 overflow-x-auto no-scrollbar">{['classes', 'groups', 'subjects', 'teachers', 'students', 'staff'].map(v => <button key={v} onClick={() => setView(v)} className={`admin-tab ${view === v ? 'active' : ''}`}>{v.toUpperCase()}</button>)}</div>
+                    <div className="flex gap-2">
+                        {view === 'students' && <button onClick={handleMigration} className="bg-orange-500 text-white px-6 py-2.5 rounded-2xl font-black text-[10px] uppercase shadow-lg">🧹 NETTOYER BDD</button>}
+                        {(view === 'classes' || view === 'groups' || view === 'students') && <button onClick={() => setShowMagicModal(true)} className="bg-purple-600 text-white px-6 py-2.5 rounded-2xl font-black text-[10px] uppercase shadow-lg animate-pulse">🔮 IMPORT MAGIQUE</button>}
+                        <button onClick={openCreate} className="bg-slate-900 text-white px-6 py-2.5 rounded-2xl font-black text-[10px] uppercase shadow-lg">+ AJOUTER</button>
+                    </div>
+                </div>
+                
+                {/* --- BARRE DE RECHERCHE FINDER V168 --- */}
+                <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg">🔎</span>
+                    <input 
+                        type="text" 
+                        placeholder={`Rechercher dans ${view}...`}
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full pl-12 pr-4 py-3 bg-white rounded-2xl border-2 border-slate-100 font-bold text-slate-700 outline-none focus:border-indigo-500 transition-all shadow-sm"
+                    />
+                </div>
+
+                {view === 'students' && (
+                    <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2 px-2">
+                        <button onClick={() => setActiveClassTab('ALL')} className={`px-4 py-2 rounded-xl text-[10px] font-black whitespace-nowrap transition-all border ${activeClassTab === 'ALL' ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-white text-slate-400 border-slate-200'}`}>TOUS</button>
+                        {allClasses.filter(c => c.type === 'CLASS').map(c => (
+                            <button key={c._id} onClick={() => setActiveClassTab(c._id)} className={`px-4 py-2 rounded-xl text-[10px] font-black whitespace-nowrap transition-all border ${activeClassTab === c._id ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-white text-slate-400 border-slate-200'}`}>{c.name}</button>
+                        ))}
+                    </div>
+                )}
+            </div>
 
             <div className="bg-white rounded-[40px] border shadow-sm overflow-hidden min-h-[400px]">
                 <table className="admin-table">
                     <tbody>
-                        {items.map(it => {
-                            const isMe = String(it._id) === String(myId);
-                            const isTest = it.isTestAccount === true;
+                        {displayedItems.map(it => {
+                            const isTeacher = view === 'teachers';
+                            let tSubjects=[], tClasses=[], tGroups=[];
+                            if(isTeacher) {
+                                tSubjects = (it.taughtSubjects||[]).map(id=>allSubjects.find(s=>s._id===id)).filter(Boolean);
+                                const assigned = (it.assignedClasses||[]).map(id=>allClasses.find(c=>c._id===id)).filter(Boolean);
+                                tClasses = assigned.filter(c=>c.type==='CLASS');
+                                tGroups = assigned.filter(c=>c.type==='GROUP');
+                            }
                             return (
-                                <tr key={it._id} className={`border-t hover:bg-slate-50 transition-colors ${isTest ? 'bg-amber-50/30' : ''}`}>
+                                <tr key={it._id} className="border-t hover:bg-slate-50 transition-colors">
                                     <td className="p-6">
-                                        <div className="font-black text-slate-700 uppercase">{it.name || `${it.firstName} ${it.lastName}`}</div>
-                                        <span className="text-[8px] font-black text-slate-300 uppercase">{it.type || it.role || 'PROFIL'}</span>
-                                    </td>
-                                    <td className="p-6">
-                                        {view === 'subjects' && <div className="w-6 h-6 rounded-full border-2 border-white shadow-sm" style={{background: it.color}}></div>}
-                                        {view === 'teachers' && (
-                                            <div className="flex items-center gap-2">
-                                                <div className="flex flex-wrap gap-1">
-                                                    {it.taughtSubjects?.map(id => <span key={id} className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-600 text-[8px] font-black">{allSubjects.find(s=>s._id===id)?.name}</span>)}
-                                                </div>
-                                                <button onClick={() => setZoomItem(it)} className="text-[8px] font-black text-indigo-500 hover:underline">MODIFIER</button>
-                                            </div>
+                                        <div className="font-black text-slate-700 uppercase text-sm flex items-center gap-2">
+                                            {it.name || `${it.firstName} ${it.lastName}`}
+                                            
+                                            {['classes','groups'].includes(view) && it.level && <span className="text-[8px] bg-blue-600 text-white px-2 py-0.5 rounded font-bold shadow-sm">NIV {it.level}</span>}
+                                            
+                                            {view === 'students' && (
+                                                <>
+                                                    <span className="text-[8px] bg-blue-600 text-white px-2 py-0.5 rounded font-bold shadow-sm">{it.currentClass || allClasses.find(c=>c._id===it.classId)?.name}</span>
+                                                    {it.currentLevel && <span className="text-[8px] bg-fuchsia-600 text-white px-2 py-0.5 rounded font-bold shadow-sm">NIV {it.currentLevel}</span>}
+                                                </>
+                                            )}
+                                        </div>
+                                        <span className="text-[8px] font-black text-slate-300 uppercase block mb-1">{it.type || it.role || 'PROFIL'}</span>
+                                        {isTeacher && (<div className="flex flex-col gap-1 mt-2">{tSubjects.length>0 && <div className="flex flex-wrap gap-1">{tSubjects.map(s=><span key={s._id} style={{backgroundColor:s.color}} className="px-1.5 py-0.5 rounded text-[8px] font-black text-white">{s.name}</span>)}</div>}{tClasses.length>0 && <div className="flex flex-wrap gap-1">{tClasses.map(c=><span key={c._id} className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded text-[8px] font-black">🏫 {c.name}</span>)}</div>}{tGroups.length>0 && <div className="flex flex-wrap gap-1">{tGroups.map(g=><span key={g._id} className="px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded text-[8px] font-black">👥 {g.name}</span>)}</div>}</div>)}
+                                        {view === 'students' && it.assignedGroups?.length > 0 && (
+                                            <div className="flex flex-wrap gap-1 mt-1">{it.assignedGroups.map(gid=>{const g=allClasses.find(c=>c._id===gid); const displayName = g ? g.name.replace(new RegExp(`^${it.currentClass}\\s+`), '') : '?'; return g ? <span key={gid} className="px-1.5 py-0.5 bg-orange-50 text-orange-600 text-[8px] rounded font-bold border border-orange-100">{displayName}</span> : null})}</div>
                                         )}
-                                        {view === 'students' && <span className="bg-indigo-50 text-indigo-600 px-3 py-1 rounded-lg text-[9px] font-black uppercase">{allClasses.find(c => c._id === it.classId)?.name}</span>}
                                     </td>
-                                    <td className="p-6 text-right flex justify-end gap-2">
-                                        {(isTest || view === 'classes' || view === 'groups') && (
-                                            <button onClick={() => handleTestSwitch(it, view === 'teachers' ? 'TEACHER' : (view === 'staff' ? 'ADMIN' : 'STUDENT'))} className="bg-emerald-500 text-white px-4 py-2 rounded-xl font-black text-[10px] hover:bg-emerald-600 transition-all shadow-md">🚀 TESTER</button>
-                                        )}
-                                        {!isMe && <button onClick={() => handleDelete(it._id)} className="w-10 h-10 rounded-2xl bg-red-50 text-red-500 font-bold hover:bg-red-100 transition-all">✕</button>}
-                                    </td>
+                                    <td className="p-6 text-right"><button onClick={() => openEdit(it)} className="bg-slate-100 text-slate-600 px-4 py-2 rounded-xl font-bold text-[10px] hover:bg-slate-200">MODIFIER</button><button onClick={() => handleDelete(it._id)} className="ml-2 w-8 h-8 rounded-lg bg-red-50 text-red-500 font-bold hover:bg-red-100">✕</button></td>
                                 </tr>
                             );
                         })}
                     </tbody>
                 </table>
+                {displayedItems.length === 0 && <div className="p-20 text-center text-slate-300 font-bold italic">Aucun résultat.</div>}
                 {loading && <div className="p-20 text-center text-indigo-500 font-black animate-pulse">Chargement...</div>}
             </div>
-            <div className="fixed bottom-4 left-4 bg-indigo-600 text-white font-black text-[10px] px-4 py-2 rounded-full shadow-2xl z-[20000]">STUDIO V97</div>
         </div>
     );
 }
@@ -2120,28 +2229,27 @@ import React, { useState, useEffect } from 'react';
 import './DatabaseViewer.css';
 
 const DESCRIPTIONS = {
-    academicyears: "📅 Années Scolaires. Pivot de l'archivage.",
-    enrollments: "🔗 Inscriptions. Lien Student <-> Class par année.",
-    students: "👤 Profils Elèves. Données permanentes.",
-    classrooms: "🏫 Classes & Groupes Pédagogiques.",
-    subjects: "📚 Matières. Catalogue officiel.",
-    teachers: "🎓 Enseignants. Préférences et sections.",
+    academicyears: "📅 Années Scolaires.",
+    enrollments: "🔗 Inscriptions (Lien Student <-> Class).",
+    students: "👤 Profils Elèves.",
+    classrooms: "🏫 Classes & Groupes.",
+    subjects: "📚 Matières.",
+    teachers: "🎓 Enseignants.",
     admins: "🛡️ Staff & Développeurs.",
-    chapters: "📁 Chapitres. Dossiers Cloud Drive.",
-    homeworks: "📝 Devoirs. Consignes IA.",
-    submissions: "📤 Rendus. Notes et feedback IA.",
-    gamelevels: "🎮 Quiz. Moteur Zombie/Starship.",
-    gameprogress: "📈 Scores. Progression jeux.",
-    mistakes: "✒️ Orthographe. Carnet de remédiation.",
-    accesslogs: "🔐 Sécurité. Logs d'accès système.",
-    bugreports: "🪲 Bugs. Erreurs capturées.",
-    projectdocs: "🧠 Mémoire IA. Documentation code.",
-    players: "⚠️ LEGACY. Anciennes données à migrer."
+    chapters: "📁 Chapitres (Dossiers).",
+    homeworks: "📝 Devoirs.",
+    submissions: "📤 Rendus.",
+    gamelevels: "🎮 Quiz.",
+    gameprogress: "📈 Scores.",
+    mistakes: "✒️ Orthographe.",
+    accesslogs: "🔐 Logs.",
+    bugreports: "🪲 Bugs.",
+    projectdocs: "🧠 Doc IA."
 };
 
 export default function DatabaseViewer({ onClose }) {
     const [data, setData] = useState(null);
-    const [activeTab, setActiveTab] = useState('students');
+    const [activeTab, setActiveTab] = useState('classrooms'); // Par défaut sur classrooms pour vérifier
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
@@ -2150,93 +2258,93 @@ export default function DatabaseViewer({ onClose }) {
         setError(null);
         fetch('/api/admin/database-dump')
             .then(async res => {
-                if(!res.ok) {
-                    const txt = await res.text();
-                    throw new Error(txt || "Erreur serveur inconnue");
-                }
+                if(!res.ok) throw new Error(await res.text());
                 return res.json();
             })
             .then(d => { 
                 setData(d); 
-                // Si l'onglet actif n'existe pas ou est vide, on cherche le premier non vide
                 const keys = Object.keys(d || {});
-                if (keys.length > 0) {
-                    if (!d[activeTab]) setActiveTab(keys[0]);
-                }
+                if (keys.length > 0 && !d[activeTab]) setActiveTab(keys[0]);
                 setLoading(false); 
             })
-            .catch(err => {
-                console.error("DB LOAD ERROR:", err);
-                setError(err.message);
-                setLoading(false);
-            });
+            .catch(err => { setError(err.message); setLoading(false); });
     };
 
     useEffect(() => { loadData(); }, []);
 
-    const handleMigrate = async () => {
-        if(!confirm("Lancer la migration vers la structure ARCHITECTE PRO ?")) return;
-        setLoading(true);
-        try {
-            await fetch('/api/admin/maintenance/migrate-legacy', { method: 'POST' });
-            loadData();
-        } catch(e) { alert("Erreur migration"); setLoading(false); }
+    const renderCell = (val) => {
+        if (val === null || val === undefined) return <span className="text-slate-300">-</span>;
+        if (typeof val === 'object') {
+            return (
+                <pre className="text-[9px] bg-slate-100 p-1 rounded border border-slate-200 max-h-[60px] overflow-y-auto whitespace-pre-wrap font-mono scrollbar-thin">
+                    {JSON.stringify(val, null, 0)}
+                </pre>
+            );
+        }
+        return <span className="font-bold text-slate-700">{String(val)}</span>;
     };
 
-    if (loading) return <div className="db-viewer-overlay"><h2 className="text-white font-black animate-pulse text-2xl">SYNCHRONISATION BDD PRO...</h2></div>;
-    
-    if (error) return (
-        <div className="db-viewer-overlay">
-            <div className="bg-white p-8 rounded-2xl text-center shadow-2xl max-w-lg">
-                <h2 className="text-red-500 font-black text-xl mb-4">ERREUR CRITIQUE</h2>
-                <div className="bg-slate-100 p-4 rounded-xl text-xs font-mono text-left mb-4 overflow-auto max-h-40">
-                    {error}
-                </div>
-                <button onClick={onClose} className="bg-slate-800 text-white px-6 py-2 rounded-xl font-bold">FERMER</button>
-            </div>
-        </div>
-    );
+    if (loading) return <div className="db-viewer-overlay"><h2 className="text-white font-black animate-pulse text-2xl">CHARGEMENT BDD...</h2></div>;
+    if (error) return <div className="db-viewer-overlay"><div className="bg-white p-8 rounded-2xl text-red-500 font-black">ERREUR: {error}<button onClick={onClose} className="block mt-4 bg-slate-800 text-white px-4 py-2 rounded">Fermer</button></div></div>;
 
-    const collections = Object.keys(data || {}).sort();
     const currentData = (data && data[activeTab]) ? data[activeTab] : [];
-    const columns = currentData.length > 0 ? Object.keys(currentData[0]).filter(k => k !== '__v') : [];
+
+    // --- CORRECTION V143 : SCAN COMPLET DES COLONNES ---
+    // On ne regarde plus juste la ligne 0, on regarde TOUT pour trouver toutes les clés possibles
+    const allKeys = new Set();
+    currentData.forEach(item => Object.keys(item).forEach(k => allKeys.add(k)));
+    // On convertit le Set en Array, on retire __v, et on trie pour avoir _id et name en premier
+    const columns = Array.from(allKeys)
+        .filter(k => k !== '__v')
+        .sort((a, b) => {
+            if (a === '_id') return -1;
+            if (b === '_id') return 1;
+            if (a === 'name') return -1;
+            if (b === 'name') return 1;
+            if (a === 'level') return -1; // On met level en évidence
+            return a.localeCompare(b);
+        });
 
     return (
         <div className="db-viewer-overlay" onClick={onClose}>
             <div className="db-viewer-window" onClick={e => e.stopPropagation()}>
                 <div className="db-header">
-                    <div className="flex flex-col">
-                        <h2 className="font-black uppercase text-xl text-slate-800">Condamine Architecte Pro</h2>
-                        <span className="text-[9px] text-indigo-500 font-black tracking-widest uppercase">Système de Base de Données Relationnelle</span>
+                    <div>
+                        <h2 className="font-black uppercase text-xl text-slate-800">Visualisateur de Données V143</h2>
+                        <span className="text-[9px] text-indigo-500 font-black tracking-widest uppercase">Base MongoDB Brute</span>
                     </div>
-                    <div className="flex gap-3">
-                        <button onClick={handleMigrate} className="bg-amber-100 text-amber-600 px-4 py-2 rounded-xl font-black text-[10px]">MIGRATION PRO</button>
-                        <button onClick={onClose} className="w-10 h-10 bg-slate-100 rounded-full font-black hover:bg-red-50 hover:text-red-500 transition-colors">✕</button>
-                    </div>
+                    <button onClick={onClose} className="w-10 h-10 bg-slate-100 rounded-full font-black hover:bg-red-50 hover:text-red-500 transition-colors">✕</button>
                 </div>
 
                 <div className="db-tabs no-scrollbar">
-                    {collections.map(c => (
+                    {Object.keys(data || {}).sort().map(c => (
                         <button key={c} onClick={() => setActiveTab(c)} className={`db-tab-btn ${activeTab === c ? 'active' : ''}`}>
                             {c} ({data[c]?.length || 0})
                         </button>
                     ))}
                 </div>
                 
-                <div className="p-4 bg-indigo-50 text-indigo-700 font-bold text-[10px] uppercase border-b border-indigo-100">
-                    {DESCRIPTIONS[activeTab] || `COLLECTION : ${activeTab.toUpperCase()}`}
+                <div className="p-4 bg-indigo-50 text-indigo-700 font-bold text-[10px] uppercase border-b border-indigo-100 flex justify-between items-center">
+                    <span>{DESCRIPTIONS[activeTab] || `COLLECTION : ${activeTab.toUpperCase()}`}</span>
+                    <span className="bg-white px-2 py-1 rounded text-indigo-400">{currentData.length} entrées</span>
                 </div>
 
                 <div className="db-table-container custom-scrollbar">
                     {currentData.length > 0 ? (
                         <table className="db-table">
-                            <thead><tr>{columns.map(col => <th key={col}>{col}</th>)}</tr></thead>
+                            <thead>
+                                <tr>
+                                    {columns.map(col => (
+                                        <th key={col} className={col === 'level' ? 'bg-yellow-100 text-yellow-700' : ''}>{col.toUpperCase()}</th>
+                                    ))}
+                                </tr>
+                            </thead>
                             <tbody>
                                 {currentData.map((row, i) => (
-                                    <tr key={i}>
+                                    <tr key={i} className="hover:bg-blue-50 transition-colors">
                                         {columns.map(col => (
-                                            <td key={col} className="truncate max-w-[150px]" title={typeof row[col] === 'object' ? JSON.stringify(row[col]) : String(row[col])}>
-                                                {typeof row[col] === 'object' ? (Array.isArray(row[col]) ? `[Array(${row[col].length})]` : '{Objet}') : String(row[col])}
+                                            <td key={col} className={`align-middle border-b border-slate-100 p-2 ${col === 'level' ? 'bg-yellow-50/50 font-black text-center' : ''}`}>
+                                                {renderCell(row[col])}
                                             </td>
                                         ))}
                                     </tr>
@@ -2476,128 +2584,243 @@ export default function ProfNav({ activeTab, onTabChange, user }) {
 import React, { useState, useEffect } from 'react';
 
 /**
- * 📂 PROF STUDIO FOLDER - VERSION 87
- * Nettoyage des overlays et visibilité par classe.
+ * 📂 PROF STUDIO FOLDER - VERSION 161 (ARCHIVE VISION)
+ * Fix : Les compteurs des sections affichent désormais correctement le nombre de dossiers
+ * (Actifs ou Archivés selon le mode), même pour les sections inactives.
+ * UI : Design distinct pour le mode Archive.
  */
-export default function ProfStudioFolder({ items, chapters, classFilter, user, onEditItem, onDeleteItem, onRefresh }) {
-    const [sections, setSections] = useState(user?.subjectSections || []);
-    const [activeSection, setActiveSection] = useState(null); 
+export default function ProfStudioFolder({ items, chapters, classFilter, levelFilter, user, onEditItem, onDeleteItem, onRefresh }) {
+    const [customSections, setCustomSections] = useState([]);
+    const [activeSection, setActiveSection] = useState('GÉNÉRAL'); 
     const [openChaps, setOpenChaps] = useState({}); 
     const [showArchived, setShowArchived] = useState(false); 
+    const [loading, setLoading] = useState(true);
+    
+    // MODALE
+    const [showSectionModal, setShowSectionModal] = useState(false);
+    const [newSectionName, setNewSectionName] = useState("");
+    const [showFolderModal, setShowFolderModal] = useState(false);
+    const [newFolderName, setNewFolderName] = useState("");
+    const [isFolderShared, setIsFolderShared] = useState(false);
+    const [confirmModal, setConfirmModal] = useState(null); 
+
+    const getUserId = () => {
+        if (!user) return null;
+        const id = user.id || user._id;
+        if (!id || id === 'undefined') return null;
+        return id;
+    };
 
     useEffect(() => {
-        if (user?.subjectSections) {
-            setSections(user.subjectSections);
-            if (user.subjectSections.length > 0 && !activeSection) {
-                setActiveSection(user.subjectSections[0].name.toUpperCase());
-            }
-        }
+        const fetchSections = async () => {
+            const uid = getUserId();
+            if (!uid) { setLoading(false); return; }
+            try {
+                const res = await fetch(`/api/structure/sections/${uid}?_t=${Date.now()}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (Array.isArray(data)) setCustomSections(data);
+                }
+            } catch(e) { /* Silence */ }
+            setLoading(false);
+        };
+        fetchSections();
     }, [user]);
 
-    const handleAddSection = async () => {
-        const name = prompt("Nom de la section ?");
-        if (!name) return;
-        const normalized = name.toUpperCase().trim();
-        const res = await fetch('/api/structure/sections', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ teacherId: user.id || user._id, sectionName: normalized })
-        });
-        if (res.ok) {
-            const newSecs = await res.json();
-            setSections(newSecs);
-            setActiveSection(normalized);
-        }
-    };
-
-    const handleCreateChapter = async () => {
-        if (!classFilter) return alert("Sélectionnez une classe avant de créer un dossier.");
-        const title = prompt(`Nouveau chapitre dans ${activeSection} ?`);
-        if (!title) return;
-        await fetch('/api/structure/chapters', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title: title.toUpperCase(), section: activeSection, classroom: classFilter.toUpperCase(), teacherId: user.id || user._id })
-        });
-        onRefresh();
-    };
-
+    // --- FILTRAGE NIVEAU 1 : LE CONTEXTE (Classe/Niveau/Prof) ---
+    // Ce filtre prépare tous les chapitres disponibles pour cet écran, SANS filtrer par section ni par archive
     const allChapters = chapters || [];
-    const myId = String(user.id || user._id);
-    const myChapters = user.lastName === 'Vuillet' ? allChapters : allChapters.filter(c => String(c.teacherId) === myId);
+    const uid = String(getUserId());
+    const isJean = (user && user.firstName === 'Jean' && user.lastName === 'Vuillet');
+    const myChapters = isJean ? allChapters : allChapters.filter(c => String(c.teacherId) === uid);
 
-    const filtered = myChapters.filter(c => {
-        const isCorrectClass = !classFilter || (c.classroom || "").toUpperCase() === classFilter.toUpperCase();
-        const isCorrectSection = (c.section || "GÉNÉRAL").toUpperCase() === (activeSection || "GÉNÉRAL").toUpperCase();
-        const isCorrectStatus = c.isArchived === showArchived;
-        return isCorrectClass && isCorrectSection && isCorrectStatus;
+    const currentLevel = levelFilter ? String(levelFilter).toUpperCase().trim() : (classFilter ? (classFilter.match(/^(\d+|[A-Z]+)/) || [])[0] : null);
+
+    const contextChapters = myChapters.filter(c => {
+        const cClass = (c.classroom || "").toUpperCase();
+        const fClass = (classFilter || "").toUpperCase();
+        
+        let isCorrectClass = cClass === fClass;
+        if (!isCorrectClass && c.sharedLevel && currentLevel && String(c.sharedLevel) === String(currentLevel)) isCorrectClass = true;
+        if (!classFilter) isCorrectClass = true;
+
+        return isCorrectClass;
     });
 
-    const activeColor = sections.find(s => s.name.toUpperCase() === (activeSection || ''))?.color || '#64748b';
+    // --- FILTRAGE SECTIONS (UI) ---
+    const visibleSections = customSections.filter(s => {
+        if (!s.scope || s.scope === 'GLOBAL') return true;
+        if (!classFilter) return true;
+        const targetStr = String(s.target || "").toUpperCase().trim();
+        const classStr = String(classFilter || "").toUpperCase().trim();
+        if (s.scope === 'LEVEL') return currentLevel && targetStr === currentLevel;
+        if (s.scope === 'CLASS') return targetStr === classStr;
+        return false;
+    });
+
+    const displaySections = visibleSections.length > 0 ? visibleSections : [{ name: 'GÉNÉRAL', color: '#64748b', isVirtual: true }];
+    const activeColorInfo = displaySections.find(s => s.name === activeSection);
+    const activeColor = activeColorInfo ? activeColorInfo.color : '#64748b';
+
+    // --- FILTRAGE NIVEAU 2 : LA VUE (Section + Archive) ---
+    // C'est ce qu'on affiche dans la grille
+    const displayedChapters = contextChapters.filter(c => {
+        const isCorrectSection = (c.section || "GÉNÉRAL").toUpperCase() === activeSection.toUpperCase();
+        const isCorrectStatus = !!c.isArchived === showArchived;
+        return isCorrectSection && isCorrectStatus;
+    });
+
+    // --- ACTIONS ---
+    const confirmCreateSection = async (scope) => {
+        if (!newSectionName) return;
+        let target = null;
+        if (scope === 'LEVEL') target = currentLevel;
+        if (scope === 'CLASS') target = classFilter;
+        try {
+            const res = await fetch('/api/structure/sections', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ teacherId: getUserId(), sectionName: newSectionName.toUpperCase().trim(), scope, target }) });
+            if (res.status === 409) { const err = await res.json(); return alert("⚠️ " + err.error); }
+            if (res.ok) { const newList = await res.json(); setCustomSections(newList); setActiveSection(newSectionName.toUpperCase().trim()); setShowSectionModal(false); setNewSectionName(""); if(onRefresh) onRefresh(); }
+        } catch (e) { alert("Erreur réseau."); }
+    };
+    const handleDeleteSection = async (sectionName) => {
+        if(!confirm(`Supprimer la section "${sectionName}" ?`)) return;
+        try { const res = await fetch('/api/structure/sections', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ teacherId: getUserId(), sectionName }) }); if (res.ok) { const newList = await res.json(); setCustomSections(newList); if(activeSection === sectionName) setActiveSection('GÉNÉRAL'); if(onRefresh) onRefresh(); } } catch(e) { alert("Erreur réseau."); }
+    };
+    const handleReset = async () => {
+        if(!confirm("⚠️ R.A.Z : Tout effacer et remettre 'GÉNÉRAL' ?")) return;
+        try { const res = await fetch('/api/structure/sections/reset', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ teacherId: getUserId() }) }); if(res.ok) { const newList = await res.json(); setCustomSections(newList); setActiveSection('GÉNÉRAL'); if(onRefresh) onRefresh(); } } catch(e) { alert("Erreur Reset."); }
+    };
+    const handleCreateChapter = async () => {
+        if (!classFilter) return alert("⚠️ Sélectionnez une classe.");
+        const title = prompt(`Nouveau dossier dans ${activeSection} ?`);
+        if (!title) return;
+        let isShared = false;
+        if (currentLevel) isShared = confirm(`Partager ce dossier avec tout le niveau ${currentLevel} ?`);
+        await fetch('/api/structure/chapters', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: title.toUpperCase(), section: activeSection, classroom: classFilter.toUpperCase(), teacherId: getUserId(), sharedLevel: isShared ? currentLevel : null }) }); if(onRefresh) onRefresh();
+    };
+
+    // --- FONCTION DE FILTRAGE ITEM ---
+    const isItemVisibleForClass = (item) => {
+        if (!classFilter) return true;
+        if (item.actType === 'game') return true;
+        const targets = item.targetClassrooms || (item.classroom ? [item.classroom] : []);
+        if (targets.some(t => t.toUpperCase() === classFilter.toUpperCase())) return true;
+        return false;
+    };
 
     return (
-        <div className="space-y-8 animate-in fade-in">
-            <div className="p-8 bg-slate-900 rounded-[45px] border-4 border-slate-800 shadow-2xl relative">
-                <div className="flex justify-between items-center mb-8">
+        <div className="space-y-8 animate-in fade-in relative">
+            {/* MODALES (Code inchangé pour économiser l'espace visuel, reprendre V152 si besoin) */}
+            {showSectionModal && (
+                <div className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="bg-slate-900 border-2 border-slate-700 w-full max-w-lg rounded-[30px] p-8 text-center shadow-2xl">
+                        <h3 className="text-white font-black text-xl mb-6">NOUVELLE SECTION</h3>
+                        <input className="bg-slate-800 text-white font-bold text-center text-xl border-b-2 border-indigo-500 outline-none p-4 w-full rounded-xl mb-8" placeholder="NOM" value={newSectionName} onChange={e => setNewSectionName(e.target.value)} autoFocus />
+                        <div className="flex flex-col gap-3">
+                            <button onClick={() => confirmCreateSection('CLASS')} className="w-full bg-emerald-600 text-white p-4 rounded-xl font-black text-xs">POUR {classFilter || 'CLASSE'}</button>
+                            <button onClick={() => confirmCreateSection('LEVEL')} disabled={!currentLevel} className={`w-full bg-indigo-600 text-white p-4 rounded-xl font-black text-xs ${!currentLevel && 'opacity-50'}`}>POUR NIVEAU {currentLevel || '?'}</button>
+                            <button onClick={() => confirmCreateSection('GLOBAL')} className="w-full bg-slate-700 text-white p-4 rounded-xl font-black text-xs">GLOBAL</button>
+                        </div>
+                        <button onClick={() => setShowSectionModal(false)} className="mt-8 text-slate-400 font-bold text-xs hover:text-white">Annuler</button>
+                    </div>
+                </div>
+            )}
+
+            {/* HEADER */}
+            <div className={`p-8 rounded-[45px] border-4 shadow-2xl relative transition-colors duration-500 ${showArchived ? 'bg-amber-950 border-amber-900' : 'bg-slate-900 border-slate-800'}`}>
+                <div className="flex justify-between items-center mb-6 relative z-10">
                     <div className="flex items-center gap-6">
-                        <h3 className="text-white font-black text-[11px] uppercase tracking-[0.3em]">Cloud Condamine</h3>
-                        <button onClick={() => setShowArchived(!showArchived)} className={`px-5 py-2.5 rounded-2xl text-[10px] font-black border-2 transition-all ${showArchived ? 'bg-amber-500 border-amber-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-400'}`}>
-                            {showArchived ? '📦 ARCHIVES' : `VOIR ARCHIVES`}
+                        <h3 className="text-white font-black text-[11px] uppercase tracking-[0.3em]">
+                            {showArchived ? 'ARCHIVES SECRÈTES' : 'CLOUD CONDAMINE'}
+                        </h3>
+                        <button onClick={() => setShowArchived(!showArchived)} 
+                            className={`px-5 py-2.5 rounded-2xl text-[10px] font-black border-2 transition-all ${showArchived ? 'bg-amber-500 border-amber-400 text-white shadow-[0_0_20px_rgba(245,158,11,0.5)]' : 'bg-slate-800 border-slate-700 text-slate-400'}`}
+                        >
+                            {showArchived ? '📂 RETOUR ACTIFS' : `📦 VOIR ARCHIVES`}
                         </button>
                     </div>
-                    <div className="flex items-center gap-4">
-                        <div className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-black text-[10px]">STUDIO V87</div>
-                        <button onClick={handleAddSection} className="bg-white/10 text-white px-5 py-2.5 rounded-xl font-black text-[10px] uppercase border border-white/10 hover:bg-white/20 transition-all">+ Section</button>
+                    <div className="flex items-center gap-2">
+                        <div className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-black text-[10px]">STUDIO V161</div>
+                        {!showArchived && (
+                            <>
+                                <button onClick={handleReset} className="bg-red-900/50 text-red-400 px-3 py-2 rounded-xl font-black text-[9px] hover:bg-red-900 border border-red-900/50">R.A.Z</button>
+                                <button onClick={() => setShowSectionModal(true)} className="bg-white/10 text-white px-5 py-2.5 rounded-xl font-black text-[10px] uppercase border border-white/10 hover:bg-white/20 transition-all">+ Section</button>
+                            </>
+                        )}
                     </div>
                 </div>
 
-                <div className="flex gap-4 overflow-x-auto no-scrollbar pb-2">
-                    {sections.map((s, idx) => (
-                        <button key={idx} onClick={() => {setActiveSection(s.name.toUpperCase()); setShowArchived(false);}}
-                            className={`group min-w-[180px] p-5 rounded-2xl border-2 flex flex-col items-start gap-3 transition-all ${activeSection === s.name.toUpperCase() ? 'bg-slate-800 border-white/20 shadow-xl scale-105' : 'bg-slate-800/40 border-slate-800'}`}
-                        >
-                            <span className="font-black text-[11px] uppercase tracking-wider" style={{ color: s.color }}>{s.name}</span>
-                            <span className="text-[9px] font-bold text-slate-500 uppercase">
-                                {myChapters.filter(c => !c.isArchived && (c.classroom || "").toUpperCase() === (classFilter || "").toUpperCase() && c.section === s.name.toUpperCase()).length} Dossiers
-                            </span>
-                        </button>
-                    ))}
+                <div className="flex gap-4 overflow-x-auto no-scrollbar pt-6 pb-4 relative z-10">
+                    {loading ? <span className="text-white font-black animate-pulse text-xs">CHARGEMENT...</span> : displaySections.map((s, idx) => {
+                        // V161 : CALCUL DU COMPTEUR BASÉ SUR LE CONTEXTE GLOBAL ET LE MODE ARCHIVE
+                        const count = contextChapters.filter(c => {
+                            const matchSection = (c.section || "GÉNÉRAL").toUpperCase() === s.name;
+                            const matchStatus = !!c.isArchived === showArchived;
+                            return matchSection && matchStatus;
+                        }).length;
+
+                        return (
+                            <div key={idx} className="relative shrink-0">
+                                <button onClick={() => setActiveSection(s.name)}
+                                    className={`min-w-[160px] p-5 rounded-2xl border-2 flex flex-col items-start gap-3 transition-all ${activeSection === s.name ? 'bg-slate-800 border-white/20 shadow-xl scale-105' : 'bg-slate-800/40 border-slate-800 hover:bg-slate-800/60'}`}
+                                >
+                                    <div className="flex justify-between w-full mb-1">
+                                        <span className="font-black text-[11px] uppercase tracking-wider truncate text-left" style={{ color: s.color }}>{s.name}</span>
+                                        {s.scope === 'GLOBAL' && <span className="text-[7px] bg-slate-600 text-white px-1 rounded font-bold">ALL</span>}
+                                        {s.scope === 'LEVEL' && <span className="text-[7px] bg-indigo-500 text-white px-1 rounded font-bold">N{s.target}</span>}
+                                    </div>
+                                    <span className={`text-[9px] font-bold uppercase ${count > 0 ? 'text-white' : 'text-slate-600'}`}>
+                                        {count} Dossiers
+                                    </span>
+                                </button>
+                                {displaySections.length >= 2 && !s.isVirtual && (
+                                    <div onClick={(e) => { e.stopPropagation(); handleDeleteSection(s.name); }}
+                                        className="absolute -top-3 -right-2 w-8 h-8 bg-red-500 text-white rounded-full font-black text-xs flex items-center justify-center shadow-lg cursor-pointer border-2 border-slate-900 hover:bg-red-600 hover:scale-110 transition-transform" style={{ zIndex: 9999 }}>✕</div>
+                                )}
+                            </div>
+                        );
+                    })}
                 </div>
             </div>
 
+            {/* GRILLE DOSSIERS */}
             <div className="animate-in slide-in-from-bottom-6">
                 <div className="flex justify-between items-end mb-10 px-6">
                     <div>
-                        <h2 className="text-5xl font-black uppercase tracking-tighter" style={{ color: activeColor }}>{activeSection || "Dossiers"}</h2>
-                        <p className="text-[11px] font-black text-slate-400 tracking-[0.2em] uppercase mt-2">{filtered.length} Chapitres actifs en {classFilter || 'Vue Globale'}</p>
+                        <h2 className="text-5xl font-black uppercase tracking-tighter" style={{ color: activeColor }}>{activeSection}</h2>
+                        <p className="text-[11px] font-black text-slate-400 tracking-[0.2em] uppercase mt-2">
+                            {displayedChapters.length} Dossiers {showArchived ? 'ARCHIVÉS' : 'ACTIFS'}
+                        </p>
                     </div>
-                    {activeSection && !showArchived && (
-                        <button onClick={handleCreateChapter} className="px-10 py-5 rounded-[22px] text-white text-[12px] font-black shadow-2xl hover:scale-105 transition-all active:scale-95 uppercase tracking-widest" style={{ backgroundColor: activeColor }}>+ NOUVEAU DOSSIER</button>
-                    )}
+                    {!showArchived && <button onClick={handleCreateChapter} className="px-10 py-5 rounded-[22px] text-white text-[12px] font-black shadow-2xl hover:scale-105 transition-all active:scale-95 uppercase tracking-widest" style={{ backgroundColor: activeColor }}>+ NOUVEAU DOSSIER</button>}
                 </div>
 
                 <div className="grid grid-cols-1 gap-6">
-                    {filtered.map(chap => {
+                    {displayedChapters.map(chap => {
                         const isOpen = openChaps[chap._id];
-                        const chapItems = items.filter(it => String(it.chapterId) === String(chap._id));
+                        const chapItems = items.filter(it => String(it.chapterId) === String(chap._id) && isItemVisibleForClass(it));
+                        
                         return (
-                            <div key={chap._id} className="bg-white border-2 rounded-[35px] overflow-hidden transition-all shadow-sm" style={{ borderColor: isOpen ? activeColor : '#f1f5f9' }}>
-                                <div className="p-8 flex justify-between items-center cursor-pointer bg-white" onClick={() => setOpenChaps({...openChaps, [chap._id]: !isOpen})}>
+                            <div key={chap._id} className={`border-2 rounded-[35px] overflow-hidden transition-all shadow-sm ${showArchived ? 'bg-amber-50 border-amber-200' : 'bg-white border-[#f1f5f9]'}`} style={{ borderColor: isOpen ? activeColor : undefined }}>
+                                <div className={`p-8 flex justify-between items-center cursor-pointer ${showArchived ? 'bg-amber-50' : 'bg-white'}`} onClick={() => setOpenChaps({...openChaps, [chap._id]: !isOpen})}>
                                     <div className="flex items-center gap-8">
-                                        <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-white font-black text-2xl shadow-xl transition-transform" style={{ backgroundColor: activeColor, transform: isOpen ? 'rotate(90deg)' : 'none' }}>{isOpen ? '📂' : '📁'}</div>
+                                        <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-white font-black text-2xl shadow-xl transition-transform" style={{ backgroundColor: showArchived ? '#d97706' : activeColor, transform: isOpen ? 'rotate(90deg)' : 'none' }}>{isOpen ? '📂' : '📁'}</div>
                                         <div>
                                             <h3 className="font-black text-slate-800 text-2xl uppercase tracking-tight">{chap.title}</h3>
-                                            <span className="text-[10px] font-black bg-slate-100 text-slate-500 px-3 py-1 rounded-xl uppercase">{chapItems.length} Éléments</span>
+                                            <div className="flex gap-2 mt-1">
+                                                <span className="text-[10px] font-black bg-slate-100 text-slate-500 px-3 py-1 rounded-xl uppercase">{chapItems.length} Éléments</span>
+                                                {chap.sharedLevel && <span className="text-[10px] font-black bg-purple-100 text-purple-600 px-3 py-1 rounded-xl uppercase border border-purple-200">PARTAGÉ {chap.sharedLevel}</span>}
+                                            </div>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-4">
-                                        <button onClick={(e) => { e.stopPropagation(); fetch(`/api/structure/chapters/${chap._id}/archive`, {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({isArchived:!chap.isArchived})}).then(onRefresh); }} className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center hover:bg-amber-100">{chap.isArchived ? '📤' : '📦'}</button>
+                                        <button onClick={(e) => { e.stopPropagation(); fetch(`/api/structure/chapters/${chap._id}/archive`, {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({isArchived:!chap.isArchived})}).then(onRefresh); }} className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center hover:bg-amber-100 transition-colors">{chap.isArchived ? '📤' : '📦'}</button>
                                         <button onClick={(e) => { e.stopPropagation(); if(confirm('Supprimer ?')) onDeleteItem(chap._id, 'chapter'); }} className="w-12 h-12 rounded-2xl bg-red-50 text-red-400 flex items-center justify-center hover:bg-red-500 hover:text-white transition-all shadow-inner">✕</button>
                                     </div>
                                 </div>
                                 {isOpen && (
                                     <div className="bg-slate-50/50 border-t p-8 space-y-4">
-                                        {chapItems.map(it => (
+                                        {chapItems.length > 0 ? chapItems.map(it => (
                                             <div key={it._id} className="bg-white p-5 rounded-2xl flex justify-between items-center shadow-sm border border-slate-100 hover:shadow-xl transition-all">
                                                 <div className="flex items-center gap-5">
                                                     <span className={`text-[10px] font-black px-4 py-2 rounded-xl uppercase tracking-[0.2em] ${it.actType === 'game' ? 'bg-purple-600 text-white' : 'bg-orange-500 text-white'}`}>{it.typeLabel || 'ACT'}</span>
@@ -2608,12 +2831,18 @@ export default function ProfStudioFolder({ items, chapters, classFilter, user, o
                                                     <button onClick={() => onDeleteItem(it._id, it.actType)} className="px-5 py-2.5 rounded-xl bg-red-50 text-red-500 text-[10px] font-black">✕</button>
                                                 </div>
                                             </div>
-                                        ))}
+                                        )) : <div className="text-center text-slate-400 text-xs italic py-4">Dossier vide.</div>}
                                     </div>
                                 )}
                             </div>
                         );
                     })}
+                    {displayedChapters.length === 0 && (
+                        <div className="p-20 text-center border-4 border-dashed border-slate-100 rounded-[40px]">
+                            <p className="font-black text-slate-300 text-xl uppercase">Aucun dossier {showArchived ? 'archivé' : 'actif'}</p>
+                            <p className="text-xs font-bold text-slate-400 mt-2">dans la section {activeSection}</p>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
@@ -3112,18 +3341,27 @@ import React, { useState, useEffect, useRef } from 'react';
 import './HomeworkStudio.css';
 
 /**
- * 🎨 STUDIO DEVOIR - VERSION 93
- * Fix : Rendu d'image universel (Local Preview & Cloud Display)
+ * 🎨 STUDIO DEVOIR V159 - FULL RESTORATION
+ * Fix : Restauration des colonnes "Pages" et "Contenu" (Consigne, IA, Supports).
+ * Feature : Conserve la logique de distribution avancée (V157).
  */
 export default function HomeworkStudio({ initialData, chapters, globalClass, globalClassId, user, onClose }) {
+  
+  const initTargets = initialData?.targetClassrooms || (globalClass ? [globalClass] : []);
+  
   const [formData, setFormData] = useState(initialData || { 
-      title: '', chapterId: '', classroom: globalClass, 
+      title: '', chapterId: '', 
+      targetClassrooms: initTargets, 
       levels: [{ instruction: '', instructionUrls: [], aiHints: '', attachmentUrls: [] }],
       assignedStudents: [], isAllClass: true
   });
 
   const [activeLevelIdx, setActiveLevelIdx] = useState(0);
-  const [classStudents, setClassStudents] = useState([]);
+  const [allStudents, setAllStudents] = useState([]);
+  const [allClasses, setAllClasses] = useState([]);
+  
+  const [viewingClass, setViewingClass] = useState(globalClass || "");
+
   const [zoomImg, setZoomImg] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
@@ -3131,20 +3369,148 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
   const fileInputRef = useRef(null);
   const [uploadTarget, setUploadTarget] = useState(null);
 
+  // --- CHARGEMENT ---
   useEffect(() => {
-    if (globalClassId) {
-        fetch('/api/admin/students')
-            .then(r => r.json())
-            .then(all => setClassStudents(all.filter(s => String(s.classId) === String(globalClassId))));
-    }
-  }, [globalClassId]);
+    const fetchData = async () => {
+        const [sts, cls] = await Promise.all([
+            fetch('/api/admin/students').then(r => r.json()),
+            fetch('/api/admin/classrooms').then(r => r.json())
+        ]);
+        setAllStudents(sts);
+        setAllClasses(cls);
+        if (globalClass && !initialData) {
+            setViewingClass(globalClass);
+            const defaultChap = chapters.find(c => c.classroom === globalClass && !c.isArchived);
+            setDistribution({ [globalClass]: { chapterId: defaultChap ? defaultChap._id : "", studentIds: [] } });
+        }
+    };
+    fetchData();
+  }, []);
 
-  // FONCTION MIRACLE : Transforme un lien Drive ou local en image affichable
+  // --- LOGIQUE NIVEAU & FILTRAGE ---
+  const detectLevel = () => {
+      if (!globalClass) return null;
+      const clsObj = allClasses.find(c => c.name === globalClass);
+      if (clsObj && clsObj.level) return clsObj.level;
+      const match = globalClass.match(/^(\d+|TERM|CP|CE1|CE2|CM1|CM2)/);
+      return match ? match[0] : null;
+  };
+  const targetLevel = detectLevel();
+
+  const availableClasses = allClasses.filter(c => {
+      if (c.type !== 'CLASS') return false;
+      if (!targetLevel) return false; 
+      return String(c.level) === String(targetLevel);
+  });
+
+  const [distribution, setDistribution] = useState(initialData ? {} : (globalClass ? { [globalClass]: { chapterId: "", studentIds: [] } } : {}));
+
+  // --- LOGIQUE TOGGLE (V157) ---
+  const handleClassTabClick = (clsName) => {
+      const isActive = !!distribution[clsName];
+      if (isActive) {
+          setDistribution(prev => {
+              const next = { ...prev };
+              delete next[clsName];
+              return next;
+          });
+          setViewingClass(clsName);
+      } else {
+          setViewingClass(clsName);
+          setDistribution(prev => {
+              const next = { ...prev };
+              let smartChapterId = "";
+              const otherClass = Object.keys(prev)[0];
+              if (otherClass && prev[otherClass].chapterId) {
+                  smartChapterId = findEquivalentChapterId(clsName, prev[otherClass].chapterId);
+              }
+              if (!smartChapterId) {
+                  const available = getChaptersForClass(clsName);
+                  if (available.length > 0) smartChapterId = available[0]._id;
+              }
+              next[clsName] = { chapterId: smartChapterId, studentIds: [] };
+              return next;
+          });
+      }
+  };
+
+  const handleToggleStudent = (studentId) => {
+      setDistribution(prev => {
+          const currentConfig = prev[viewingClass] || { chapterId: "", studentIds: [] };
+          const isActive = !!prev[viewingClass];
+          let newIds = currentConfig.studentIds;
+          
+          if (!isActive) newIds = [studentId];
+          else {
+              if (newIds.includes(studentId)) newIds = newIds.filter(id => id !== studentId);
+              else newIds = [...newIds, studentId];
+          }
+          return { ...prev, [viewingClass]: { ...currentConfig, studentIds: newIds } };
+      });
+  };
+
+  const toggleFullClass = () => {
+      const isActive = !!distribution[viewingClass];
+      if (isActive) handleClassTabClick(viewingClass);
+      else handleClassTabClick(viewingClass);
+  };
+
+  const relevantStudents = allStudents.filter(s => formData.targetClassrooms.includes(s.currentClass));
+  const studentsInView = allStudents.filter(s => s.currentClass === viewingClass);
+  const currentConfig = distribution[viewingClass];
+  
+  const isSelected = !!currentConfig;
+  const isFullClass = isSelected && currentConfig.studentIds.length === 0;
+
+  const getChaptersForClass = (clsName) => {
+      return chapters.filter(c => !c.isArchived && (c.classroom === clsName || (c.sharedLevel && String(c.sharedLevel) === String(targetLevel))));
+  };
+  
+  const findEquivalentChapterId = (clsName, srcId) => {
+      if (!srcId) return "";
+      const src = chapters.find(c => c._id === srcId);
+      if (!src) return "";
+      const targets = getChaptersForClass(clsName);
+      const sameName = targets.find(t => t.title === src.title && t.section === src.section);
+      if (sameName) return sameName._id;
+      return "";
+  };
+
+  const handleUpdateChapter = (clsName, chapId) => {
+      setDistribution(prev => ({ ...prev, [clsName]: { ...prev[clsName], chapterId: chapId } }));
+  };
+
+  const handleSave = async () => {
+      const targets = Object.keys(distribution);
+      if (!formData.title) return alert("❌ Titre requis !");
+      if (targets.length === 0) return alert("❌ Sélectionnez au moins une classe !");
+      const missingFolder = targets.find(cls => !distribution[cls].chapterId);
+      if (missingFolder) return alert(`❌ La classe ${missingFolder} n'a pas de dossier !`);
+      setIsPublishing(true);
+      try {
+          const grouped = {};
+          targets.forEach(cls => {
+              const cfg = distribution[cls];
+              if(!grouped[cfg.chapterId]) grouped[cfg.chapterId] = [];
+              grouped[cfg.chapterId].push({ cls, cfg });
+          });
+          for (const chapId of Object.keys(grouped)) {
+              const items = grouped[chapId];
+              const targetClassrooms = items.map(i => i.cls);
+              const assignedStudents = items.flatMap(i => i.cfg.studentIds);
+              const isAllClass = items.every(i => i.cfg.studentIds.length === 0);
+              const payload = { ...formData, chapterId: chapId, targetClassrooms, classroom: targetClassrooms[0], teacherId: user.id || user._id, assignedStudents, isAllClass };
+              await fetch('/api/homework', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+          }
+          onClose();
+      } catch(e) { alert("Erreur réseau."); }
+      finally { setIsPublishing(false); }
+  };
+
   const getDisplayUrl = (url) => {
       if (!url) return "";
-      if (url.startsWith('/uploads')) return url; // Image locale en attente de synchro
+      if (url.startsWith('/uploads')) return url;
       if (url.includes('drive.google.com')) {
-          // Extrait l'ID de l'URL Drive pour forcer l'affichage direct
           const id = url.match(/[-\w]{25,}/);
           return id ? `https://drive.google.com/thumbnail?id=${id[0]}&sz=w1000` : url;
       }
@@ -3153,9 +3519,9 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
 
   const activeLevel = formData.levels[activeLevelIdx];
   const updateLevel = (field, value) => {
-    const newLevels = [...formData.levels];
-    newLevels[activeLevelIdx][field] = value;
-    setFormData({ ...formData, levels: newLevels });
+      const newLevels = [...formData.levels];
+      newLevels[activeLevelIdx][field] = value;
+      setFormData({ ...formData, levels: newLevels });
   };
 
   const handleFileSelect = async (e) => {
@@ -3168,49 +3534,35 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
           const res = await fetch('/api/homework/upload', { method: 'POST', body: data });
           const result = await res.json();
           if (res.ok) updateLevel(uploadTarget, [...activeLevel[uploadTarget], ...result.urls]);
-      } catch (err) { alert("Erreur upload temporaire."); } 
+      } catch (err) { alert("Erreur upload."); } 
       finally { setIsUploading(false); e.target.value = null; }
   };
 
-  const handleSave = async () => {
-    if (!formData.title || !formData.chapterId) return alert("❌ Titre et Dossier requis !");
-    setIsPublishing(true);
-    const finalAssigned = formData.isAllClass ? classStudents.map(s => s._id) : formData.assignedStudents;
-    try {
-        const res = await fetch('/api/homework', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ...formData, assignedStudents: finalAssigned, teacherId: user.id || user._id })
-        });
-        const resData = await res.json();
-        if (res.ok) onClose();
-        else alert("🔥 ERREUR : " + (resData.error || "Échec synchro Cloud."));
-    } catch(e) { alert("Erreur réseau."); }
-    finally { setIsPublishing(false); }
-  };
+  // Trier les chapitres pour la sélection
+  const sortedChapters = [...chapters].sort((a, b) => {
+      if (a.classroom === globalClass && b.classroom !== globalClass) return -1;
+      if (a.classroom !== globalClass && b.classroom === globalClass) return 1;
+      return a.title.localeCompare(b.title);
+  });
 
   return (
     <div className="v84-studio-container">
         <input type="file" ref={fileInputRef} style={{ display: 'none' }} multiple accept="image/*" onChange={handleFileSelect} />
         {zoomImg && <div className="v84-zoom-overlay" onClick={() => setZoomImg(null)}><img src={getDisplayUrl(zoomImg)} alt="zoom" /></div>}
-        
-        {(isUploading || isPublishing) && (
-            <div className="v84-upload-loader">
-                <div className="v84-spinner"></div>
-                <span>{isPublishing ? 'SYNCHRONISATION GOOGLE DRIVE...' : 'RÉCEPTION...'}</span>
-            </div>
-        )}
+        {(isUploading || isPublishing) && <div className="v84-upload-loader"><div className="v84-spinner"></div><span>{isUploading ? 'UPLOAD...' : 'PUBLICATION...'}</span></div>}
 
         <div className="v84-header">
             <div className="v84-header-left">
                 <div className="v84-icon">📝</div>
                 <input className="v84-title-input" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} placeholder="TITRE DU DEVOIR..." />
             </div>
-            <div className="v84-version-tag">STUDIO V93</div>
+            <div className="v84-version-tag">STUDIO V159</div>
             <button onClick={onClose} className="v84-close-btn">✕</button>
         </div>
 
         <div className="v84-body">
+            
+            {/* 1. COLONNE GAUCHE : PAGES & DOSSIERS */}
             <div className="v84-sidebar-left">
                 <h4 className="v84-sidebar-label">Pages du DM</h4>
                 <div className="v84-pages-list custom-scrollbar">
@@ -3224,15 +3576,10 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
                     ))}
                     <button className="v84-add-page-btn" onClick={() => setFormData({...formData, levels: [...formData.levels, { instruction: '', instructionUrls: [], aiHints: '', attachmentUrls: [] }]})}>+ NOUVELLE PAGE</button>
                 </div>
-                <div className="v84-chapter-box">
-                    <label className="v84-sidebar-label">Dossier Master</label>
-                    <select className="v84-select" value={formData.chapterId} onChange={e => setFormData({...formData, chapterId: e.target.value})}>
-                        <option value="">-- CHOISIR --</option>
-                        {chapters.filter(c => !globalClass || c.classroom === globalClass).map(c => <option key={c._id} value={c._id}>[{c.section}] {c.title}</option>)}
-                    </select>
-                </div>
+                {/* Note : Le sélecteur de dossier est maintenant contextuel dans la colonne de droite, mais on peut laisser un indicateur ici si besoin */}
             </div>
 
+            {/* 2. COLONNE CENTRALE : ÉDITEUR */}
             <div className="v84-main-editor custom-scrollbar">
                 <div className="v84-card">
                     <label className="v84-card-label">1. ÉNONCÉ & CONSIGNE</label>
@@ -3240,40 +3587,82 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
                     <button className="v84-upload-btn" onClick={() => { setUploadTarget('instructionUrls'); fileInputRef.current.click(); }}>📂 CHARGER ÉNONCÉ(S)</button>
                     <div className="v84-gallery">
                         {activeLevel.instructionUrls.map((url, i) => (
-                            <div key={i} className="v84-thumb">
-                                <img src={getDisplayUrl(url)} onClick={() => setZoomImg(url)} />
-                                <button className="v84-thumb-del" onClick={() => updateLevel('instructionUrls', activeLevel.instructionUrls.filter((_, idx) => idx !== i))}>✕</button>
-                            </div>
+                            <div key={i} className="v84-thumb"><img src={getDisplayUrl(url)} onClick={() => setZoomImg(url)} /><button className="v84-thumb-del" onClick={() => updateLevel('instructionUrls', activeLevel.instructionUrls.filter((_, idx) => idx !== i))}>✕</button></div>
                         ))}
                     </div>
                 </div>
-
+                
                 <div className="v84-card v84-ai-card">
                     <label className="v84-card-label">2. CORRECTION IA (Indices)</label>
-                    <textarea className="v84-textarea v84-ai-textarea" value={activeLevel.aiHints} onChange={e => updateLevel('aiHints', e.target.value)} placeholder="Ce que l'IA doit vérifier..." />
+                    <textarea className="v84-textarea v84-ai-textarea" value={activeLevel.aiHints} onChange={e => updateLevel('aiHints', e.target.value)} placeholder="Indices pour aider l'IA à corriger..." />
                 </div>
-
+                
                 <div className="v84-card">
                     <label className="v84-card-label">3. DOCUMENTS SUPPORTS</label>
                     <button className="v84-upload-btn" onClick={() => { setUploadTarget('attachmentUrls'); fileInputRef.current.click(); }}>📂 CHARGER SUPPORTS</button>
                     <div className="v84-gallery">
                         {activeLevel.attachmentUrls.map((url, i) => (
-                            <div key={i} className="v84-thumb">
-                                <img src={getDisplayUrl(url)} onClick={() => setZoomImg(url)} />
-                                <button className="v84-thumb-del" onClick={() => updateLevel('attachmentUrls', activeLevel.attachmentUrls.filter((_, idx) => idx !== i))}>✕</button>
-                            </div>
+                            <div key={i} className="v84-thumb"><img src={getDisplayUrl(url)} onClick={() => setZoomImg(url)} /><button className="v84-thumb-del" onClick={() => updateLevel('attachmentUrls', activeLevel.attachmentUrls.filter((_, idx) => idx !== i))}>✕</button></div>
                         ))}
                     </div>
                 </div>
             </div>
 
-            <div className="v84-sidebar-right">
-                <h4 className="v84-sidebar-label">Assignation ({globalClass})</h4>
-                <div className="v84-students-list custom-scrollbar">
-                    <div className={`v84-student-row ${formData.isAllClass ? 'selected' : ''}`} onClick={() => setFormData({...formData, isAllClass: true, assignedStudents: []})}><div className="v84-check"></div><span>TOUTE LA CLASSE</span></div>
-                    {classStudents.map(s => <div key={s._id} className={`v84-student-row ${formData.assignedStudents.includes(s._id) ? 'selected' : ''}`} onClick={() => { const next = formData.assignedStudents.includes(s._id) ? formData.assignedStudents.filter(id => id !== s._id) : [...formData.assignedStudents, s._id]; setFormData({...formData, assignedStudents: next, isAllClass: false}); }}><div className="v84-check"></div><span>{s.firstName} {s.lastName}</span></div>)}
+            {/* 3. COLONNE DROITE : DISTRIBUTION */}
+            <div className="v84-sidebar-right" style={{width: '400px'}}>
+                <h4 className="v84-sidebar-label">DISTRIBUTION (Niveau {targetLevel || '?'})</h4>
+                
+                <div className="mb-4 flex flex-wrap gap-2">
+                    {availableClasses.map(c => {
+                        const isSel = !!distribution[c.name];
+                        const isView = viewingClass === c.name;
+                        const isPartial = isSel && distribution[c.name].studentIds.length > 0;
+                        
+                        let bg = 'bg-slate-100 text-slate-400';
+                        if (isSel) bg = isPartial ? 'bg-orange-500 text-white' : 'bg-indigo-600 text-white';
+                        
+                        const border = isView ? 'border-2 border-slate-900 scale-105' : 'border border-transparent opacity-80';
+
+                        return (
+                            <button key={c._id} onClick={() => handleClassTabClick(c.name)} className={`px-3 py-1 rounded-lg text-[10px] font-black transition-all ${bg} ${border}`}>{c.name}</button>
+                        );
+                    })}
                 </div>
-                <button className="v84-publish-btn" onClick={handleSave} disabled={isPublishing}>PUBLIER LE DEVOIR 🚀</button>
+
+                {viewingClass ? (
+                    <div className="flex-1 flex flex-col bg-slate-50 rounded-2xl overflow-hidden border border-slate-200 p-4">
+                        <div className="flex justify-between items-center mb-4">
+                            <span className="font-black text-slate-700 uppercase">Classe {viewingClass}</span>
+                            {isSelected && <span className={`text-[9px] px-2 py-1 rounded font-bold ${isFullClass ? 'bg-indigo-100 text-indigo-600' : 'bg-orange-100 text-orange-600'}`}>{isFullClass ? 'TOUTE LA CLASSE' : 'SÉLECTION PARTIELLE'}</span>}
+                        </div>
+
+                        {isSelected && (
+                            <div className="mb-4">
+                                <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Ranger dans :</label>
+                                <select className="w-full p-2 rounded-xl text-xs font-bold border-2 border-slate-200 focus:border-indigo-500 outline-none" value={distribution[viewingClass].chapterId} onChange={(e) => handleUpdateChapter(viewingClass, e.target.value)}>
+                                    <option value="">-- DOSSIER --</option>
+                                    {getChaptersForClass(viewingClass).map(c => (<option key={c._id} value={c._id}>{c.sharedLevel ? `[PARTAGÉ] ` : ''}{c.title}</option>))}
+                                </select>
+                            </div>
+                        )}
+
+                        <div className="v84-students-list custom-scrollbar flex-1 border-t border-slate-200 pt-2">
+                            <div className={`v84-student-row ${isFullClass ? 'selected' : ''}`} onClick={toggleFullClass}>
+                                <div className="v84-check"></div><span>TOUTE LA CLASSE</span>
+                            </div>
+                            {studentsInView.map(s => {
+                                const isChecked = isSelected && (isFullClass || distribution[viewingClass].studentIds.includes(s._id));
+                                return (
+                                    <div key={s._id} className={`v84-student-row ${isChecked ? 'selected' : ''}`} onClick={() => handleToggleStudent(s._id)}>
+                                        <div className="v84-check"></div><span>{s.firstName} {s.lastName}</span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                ) : <div className="flex-1" />}
+                
+                <button className="v84-publish-btn" onClick={handleSave} disabled={isPublishing}>PUBLIER 🚀</button>
             </div>
         </div>
     </div>
@@ -3731,92 +4120,151 @@ module.exports = DriveEngine;
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
+const multer = require('multer');
+const fs = require('fs');
 const AdminExpert = require('./experts/admin.expert');
+const AdminAI = require('./ai/admin.ai');
 const StructureDrive = require('../structure/experts/structure.drive');
 
+const upload = multer({ dest: 'uploads/temp/' });
 const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
-/**
- * 🛡️ ROUTES ADMIN V97 - RESTAURATION COMPLÈTE
- */
+const guessLevel = (name) => {
+    const match = (name || "").match(/^(\d+|TERM|CP|CE1|CE2|CM1|CM2|GS|MS|PS)/);
+    return match ? match[0] : "AUTRE";
+};
 
-// --- 1. MAINTENANCE & DIAG ---
+// --- ROUTES STANDARDS (INCHANGÉES) ---
 router.get('/drive-check', asyncHandler(async (req, res) => res.json(await AdminExpert.checkDriveStatus())));
 router.get('/database-dump', asyncHandler(async (req, res) => res.json(await AdminExpert.getFullDump())));
+router.get('/classrooms', asyncHandler(async (req, res) => { const classes = await mongoose.model('Classroom').find({}).lean(); const safeClasses = classes.filter(c => c && c.name).sort((a, b) => a.name.localeCompare(b.name)); res.json(safeClasses); }));
+router.post('/classrooms', asyncHandler(async (req, res) => { const name = req.body.name.toUpperCase().trim(); let level = req.body.level ? req.body.level.toUpperCase().trim() : guessLevel(name); const cls = await mongoose.model('Classroom').findOneAndUpdate({ name }, { ...req.body, name, level }, { upsert: true, new: true }); await StructureDrive.syncBaseStructure(); res.json(cls); }));
+router.get('/subjects', asyncHandler(async (req, res) => res.json(await mongoose.model('Subject').find({}).sort({ name: 1 }).lean())));
+router.post('/subjects', asyncHandler(async (req, res) => { res.json(await mongoose.model('Subject').findOneAndUpdate({ name: req.body.name.toUpperCase().trim() }, { name: req.body.name.toUpperCase().trim(), color: req.body.color || '#6366f1' }, { upsert: true, new: true })); }));
+router.get('/teachers', asyncHandler(async (req, res) => res.json(await mongoose.model('Teacher').find({}).sort({ lastName: 1 }).lean())));
+router.get('/teachers/:id', asyncHandler(async (req, res) => { if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(404).json({ error: "ID Invalide" }); let user = await mongoose.model('Teacher').findById(req.params.id).lean() || await mongoose.model('Admin').findById(req.params.id).lean() || await mongoose.model('Student').findById(req.params.id).lean(); if (!user) return res.status(404).json({ error: "Utilisateur introuvable" }); res.json(user); }));
+router.post('/teachers', asyncHandler(async (req, res) => { let teacher; if (req.body._id) teacher = await mongoose.model('Teacher').findByIdAndUpdate(req.body._id, req.body, { new: true }); else teacher = await mongoose.model('Teacher').create(req.body); res.json(teacher); }));
+router.get('/students', asyncHandler(async (req, res) => res.json(await mongoose.model('Student').find({}).sort({ lastName: 1 }).lean())));
+router.post('/students', asyncHandler(async (req, res) => { const data = { ...req.body, fullName: `${req.body.firstName} ${req.body.lastName}` }; if (data.classId && !data.currentLevel) { const cls = await mongoose.model('Classroom').findById(data.classId); if (cls && cls.level) data.currentLevel = cls.level; } let student; if (data._id) student = await mongoose.model('Student').findByIdAndUpdate(data._id, data, { new: true }); else { const exists = await mongoose.model('Student').findOne({ firstName: new RegExp(`^${data.firstName.trim()}$`, 'i'), lastName: new RegExp(`^${data.lastName.trim()}$`, 'i') }); if (exists) return res.status(409).json({ error: "Cet élève existe déjà." }); student = await mongoose.model('Student').create(data); } if (data.classId) { let year = await mongoose.model('AcademicYear').findOne({ isCurrent: true }); if (!year) year = await mongoose.model('AcademicYear').create({ label: "2025-2026", isCurrent: true }); await mongoose.model('Enrollment').deleteMany({ studentId: student._id }); await mongoose.model('Enrollment').create({ studentId: student._id, classId: data.classId, yearId: year._id }); } res.json(student); }));
+router.get('/admins', asyncHandler(async (req, res) => res.json(await mongoose.model('Admin').find({}).sort({ lastName: 1 }).lean())));
+router.post('/admins', asyncHandler(async (req, res) => { const result = req.body._id ? await mongoose.model('Admin').findByIdAndUpdate(req.body._id, req.body, { new: true }) : await mongoose.model('Admin').create(req.body); res.json(result); }));
+router.delete('/:collection/:id', asyncHandler(async (req, res) => { const map = { 'classrooms': 'Classroom', 'teachers': 'Teacher', 'admins': 'Admin', 'subjects': 'Subject', 'students': 'Student' }; if (map[req.params.collection]) { await mongoose.model(map[req.params.collection]).findByIdAndDelete(req.params.id); if (req.params.collection === 'students') await mongoose.model('Enrollment').deleteMany({ studentId: req.params.id }); if (req.params.collection === 'classrooms') { await mongoose.model('Student').deleteMany({ classId: req.params.id }); await mongoose.model('Enrollment').deleteMany({ classId: req.params.id }); await mongoose.model('Classroom').deleteMany({ associatedClasses: req.params.id }); } } res.json({ ok: true }); }));
+router.post('/import-csv', upload.single('file'), asyncHandler(async (req, res) => { res.json({ ok: true, message: "Utilisez Import Magique." }); }));
 
-// --- 2. CLASSES & GROUPES ---
-router.get('/classrooms', asyncHandler(async (req, res) => {
-    res.json(await mongoose.model('Classroom').find({}).sort({ name: 1 }).lean());
+// --- IMPORT MAGIQUE V169 (INCHANGÉ) ---
+router.post('/import-magic', asyncHandler(async (req, res) => {
+    const { rawText, defaultClass, forceOption } = req.body; if (!rawText || rawText.length < 5) return res.status(400).json({ error: "Texte vide." });
+    const ClassModel = mongoose.model('Classroom'); const StudentModel = mongoose.model('Student'); const EnrollmentModel = mongoose.model('Enrollment'); const AcademicYearModel = mongoose.model('AcademicYear');
+    try {
+        const studentsData = await AdminAI.parseRawStudentData(rawText, defaultClass || "UNKNOWN"); if (!Array.isArray(studentsData) || studentsData.length === 0) return res.status(400).json({ error: "L'IA n'a rien trouvé." });
+        let createdCount = 0; let year = await AcademicYearModel.findOne({ isCurrent: true }); if (!year) year = await AcademicYearModel.create({ label: "2025-2026", isCurrent: true });
+        let forcedGroupId = null; if (forceOption && forceOption.trim().length > 0) { const forcedName = forceOption.toUpperCase().trim(); const lvl = guessLevel(forcedName) !== "AUTRE" ? guessLevel(forcedName) : (defaultClass ? guessLevel(defaultClass) : "AUTRE"); const group = await ClassModel.findOneAndUpdate({ name: forcedName, type: 'GROUP' }, { name: forcedName, type: 'GROUP', level: lvl }, { upsert: true, new: true }); forcedGroupId = group._id; }
+        for (const s of studentsData) { try { if (!s.lastName) continue; const className = (s.className || defaultClass || "UNKNOWN").toUpperCase().trim(); const level = guessLevel(className); let mainClass = await ClassModel.findOneAndUpdate({ name: className }, { name: className, type: 'CLASS', level: level }, { upsert: true, new: true }); const assignedGroupIds = []; const rawOptions = Array.isArray(s.options) ? s.options : []; for (const optName of rawOptions) { const cleanOpt = String(optName).toUpperCase().trim(); if (cleanOpt.length < 2 || cleanOpt.includes('/')) continue; const scopedGroupName = `${className} ${cleanOpt}`; const group = await ClassModel.findOneAndUpdate({ name: scopedGroupName, type: 'GROUP' }, { name: scopedGroupName, type: 'GROUP', level: level, associatedClasses: [mainClass._id] }, { upsert: true, new: true }); assignedGroupIds.push(group._id); } if (forcedGroupId) { assignedGroupIds.push(forcedGroupId); } const fName = s.firstName || "."; const lName = s.lastName; const query = (s.email && s.email.includes('@')) ? { email: s.email } : { firstName: new RegExp(`^${fName}$`, 'i'), lastName: new RegExp(`^${lName}$`, 'i') }; const student = await StudentModel.findOneAndUpdate(query, { firstName: fName, lastName: lName, fullName: `${fName} ${lName}`, email: s.email, currentClass: className, classId: mainClass._id, level: level, currentLevel: level, assignedGroups: assignedGroupIds, isTestAccount: false }, { upsert: true, new: true }); await EnrollmentModel.deleteMany({ studentId: student._id }); await EnrollmentModel.create({ studentId: student._id, classId: mainClass._id, yearId: year._id }); createdCount++; } catch (innerErr) { console.error("Err student:", innerErr); } } await StructureDrive.syncBaseStructure(); res.json({ ok: true, message: `Magie V169 : ${createdCount} élèves importés.` });
+    } catch (e) { res.status(500).json({ error: e.message }); }
 }));
 
-router.post('/classrooms', asyncHandler(async (req, res) => {
-    const Classroom = mongoose.model('Classroom');
-    const name = req.body.name.toUpperCase().trim();
-    const cls = await Classroom.findOneAndUpdate({ name }, { ...req.body, name }, { upsert: true, new: true });
-    // Provisioning auto élève test
-    await StructureDrive.syncBaseStructure();
-    res.json(cls);
-}));
 
-// --- 3. MATIÈRES (RÉPARÉ V97) ---
-router.get('/subjects', asyncHandler(async (req, res) => {
-    res.json(await mongoose.model('Subject').find({}).sort({ name: 1 }).lean());
-}));
+// --- OUTIL DE MIGRATION V171 "LE FRAGMENTATEUR" ---
+router.post('/maintenance/migrate-students', asyncHandler(async (req, res) => {
+    const StudentModel = mongoose.model('Student');
+    const ClassroomModel = mongoose.model('Classroom');
+    
+    // 1. Nettoyage de base des élèves
+    const students = await StudentModel.find({});
+    let studentsCount = 0;
+    for (const s of students) {
+        let lvl = s.currentLevel || s.level;
+        if (!lvl && s.currentClass) lvl = guessLevel(s.currentClass);
+        await StudentModel.updateOne(
+            { _id: s._id },
+            { 
+                $set: { currentLevel: lvl || "AUTRE", level: lvl || "AUTRE", parentEmail: s.parentEmail || "" },
+                $unset: { birthDate: 1, isTestAccount: 1, spellingMistakes: 1 } 
+            }
+        );
+        studentsCount++;
+    }
 
-router.post('/subjects', asyncHandler(async (req, res) => {
-    const name = req.body.name.toUpperCase().trim();
-    const subj = await mongoose.model('Subject').findOneAndUpdate(
-        { name }, 
-        { name, color: req.body.color || '#6366f1' }, 
-        { upsert: true, new: true }
-    );
-    res.json(subj);
-}));
+    // 2. FRAGMENTATION DES GROUPES MELANGÉS
+    const allGroups = await ClassroomModel.find({ type: 'GROUP' });
+    let fixedGroups = 0;
+    let splitCount = 0;
 
-// --- 4. ENSEIGNANTS ---
-router.get('/teachers', asyncHandler(async (req, res) => {
-    res.json(await mongoose.model('Teacher').find({}).sort({ lastName: 1 }).lean());
-}));
+    for (const group of allGroups) {
+        // On récupère les élèves de ce groupe
+        const members = await StudentModel.find({ assignedGroups: group._id });
+        if (members.length === 0) continue; // Groupe vide, on ignore
 
-router.get('/teachers/:id', asyncHandler(async (req, res) => {
-    const user = await mongoose.model('Teacher').findById(req.params.id).lean() || await mongoose.model('Admin').findById(req.params.id).lean();
-    if (!user) return res.status(404).json({ error: "Utilisateur non trouvé" });
-    res.json(user);
-}));
+        // On trie les élèves par classe
+        const classesInGroup = {}; // { "1D": [student1, student2], "5B": [student3] }
+        
+        members.forEach(m => {
+            const cls = m.currentClass || "UNKNOWN";
+            if (!classesInGroup[cls]) classesInGroup[cls] = [];
+            classesInGroup[cls].push(m);
+        });
 
-router.post('/teachers', asyncHandler(async (req, res) => {
-    const result = req.body._id ? 
-        await mongoose.model('Teacher').findByIdAndUpdate(req.body._id, req.body, { new: true }) : 
-        await mongoose.model('Teacher').create(req.body);
-    res.json(result);
-}));
+        const classNames = Object.keys(classesInGroup);
 
-// --- 5. ÉLÈVES ---
-router.get('/students', asyncHandler(async (req, res) => {
-    res.json(await mongoose.model('Student').find({}).sort({ lastName: 1 }).lean());
-}));
+        // CAS A : Le groupe contient des élèves de PLUSIEURS classes différentes
+        // OU le groupe ne commence pas par le nom de la classe (ex: "LVA ANGLAIS" avec que des 1D)
+        const isMixed = classNames.length > 1;
+        const isBadNamed = classNames.length === 1 && !group.name.startsWith(classNames[0]);
 
-router.post('/students', asyncHandler(async (req, res) => {
-    const data = { ...req.body, fullName: `${req.body.firstName} ${req.body.lastName}` };
-    const s = data._id ? await mongoose.model('Student').findByIdAndUpdate(data._id, data, { new: true }) : await mongoose.model('Student').create(data);
-    res.json(s);
-}));
+        if (isMixed || isBadNamed) {
+            console.log(`🔧 FIXING GROUP: "${group.name}" (Classes: ${classNames.join(', ')})`);
+            
+            // Pour chaque classe trouvée dans ce groupe
+            for (const clsName of classNames) {
+                // 1. Créer le nouveau groupe scopé
+                const cleanSuffix = group.name.replace(clsName, '').trim(); // "1D LVA" -> "LVA" ou "LVA" -> "LVA"
+                const newName = `${clsName} ${cleanSuffix}`.trim();
+                const level = guessLevel(clsName);
 
-// --- 6. DIRECTION ---
-router.get('/admins', asyncHandler(async (req, res) => {
-    res.json(await mongoose.model('Admin').find({}).sort({ lastName: 1 }).lean());
-}));
+                // On cherche la classe mère pour l'association
+                const mainClass = await ClassroomModel.findOne({ name: clsName, type: 'CLASS' });
+                
+                const newGroup = await ClassroomModel.findOneAndUpdate(
+                    { name: newName, type: 'GROUP' },
+                    { 
+                        name: newName, 
+                        type: 'GROUP', 
+                        level: level,
+                        associatedClasses: mainClass ? [mainClass._id] : []
+                    },
+                    { upsert: true, new: true }
+                );
 
-router.post('/admins', asyncHandler(async (req, res) => {
-    const result = req.body._id ? await mongoose.model('Admin').findByIdAndUpdate(req.body._id, req.body, { new: true }) : await mongoose.model('Admin').create(req.body);
-    res.json(result);
-}));
+                // 2. Déplacer les élèves concernés
+                const studentsToMove = classesInGroup[clsName];
+                for (const stu of studentsToMove) {
+                    await StudentModel.updateOne(
+                        { _id: stu._id },
+                        { 
+                            $pull: { assignedGroups: group._id }, // On retire le vieux
+                            $addToSet: { assignedGroups: newGroup._id } // On met le neuf
+                        }
+                    );
+                }
+            }
+            
+            // 3. Supprimer le vieux groupe fourre-tout
+            await ClassroomModel.findByIdAndDelete(group._id);
+            splitCount++;
+        } 
+        else {
+            // Le groupe est propre (1 seule classe, bon nom), on vérifie juste le niveau
+            const clsName = classNames[0];
+            const level = guessLevel(clsName);
+            if (group.level !== level) {
+                await ClassroomModel.updateOne({ _id: group._id }, { level: level });
+                fixedGroups++;
+            }
+        }
+    }
 
-// --- 7. SUPPRESSIONS ---
-router.delete('/:collection/:id', asyncHandler(async (req, res) => {
-    const map = { 'classrooms': 'Classroom', 'teachers': 'Teacher', 'admins': 'Admin', 'subjects': 'Subject', 'students': 'Student' };
-    if (map[req.params.collection]) await mongoose.model(map[req.params.collection]).findByIdAndDelete(req.params.id);
-    res.json({ ok: true });
+    console.log(`🧹 MIGRATION V171 : ${studentsCount} élèves checkés, ${splitCount} groupes éclatés/renommés, ${fixedGroups} niveaux corrigés.`);
+    res.json({ ok: true, message: `Fragmentation réussie : ${splitCount} groupes génériques éclatés par classe.` });
 }));
 
 module.exports = router;
@@ -3826,33 +4274,49 @@ module.exports = router;
 const AIEngine = require('../../../core/ai.engine');
 
 const AdminAI = {
-    // ANALYSE ÉLÈVES
-    extractStudentsFromInput: async (dataPayload) => {
-        const system = "Tu es un expert Data Scientist scolaire. Structure ces données en JSON.";
-        let prompt = ["ANALYSE CES DONNÉES SCOLAIRES (Liste Excel/CSV).", "FORMAT ATTENDU:",
-        `[{"firstName":"Jean","lastName":"DUPONT","email":"jean@ecole.com","gender":"M"}]`];
-        if (dataPayload.text) prompt.push(`DONNÉES: ${dataPayload.text}`);
-        if (dataPayload.image) {
-            prompt.push({ inlineData: { data: dataPayload.image.split(',')[1], mimeType: "image/jpeg" }});
-            prompt.push("Capture Excel. Sépare bien Email et autres colonnes.");
-        }
-        const raw = await AIEngine.ask(prompt, system);
-        return AIEngine.sanitizeJSON(raw);
-    },
+    parseRawStudentData: async (rawText, contextClass) => {
+        console.log("🧠 [AI] Analyse Magic Import V166 (Mode Tableau)...");
+        
+        const system = `Tu es un expert en extraction de données scolaires (Data Mining).
+        Ta mission : Convertir un texte en vrac (ou un tableau copié-collé) en JSON strict.
 
-    // ANALYSE CLASSES (NOUVEAU)
-    extractClassesFromInput: async (dataPayload) => {
-        const system = "Tu es un assistant administratif scolaire. Tu dois lister les classes détectées.";
-        const prompt = [
-            "Analyse ce texte et extrais la liste des classes.",
-            "Normalise les noms : '6ème A' -> '6A', 'Seconde 1' -> '2DE1', '5 B' -> '5B'.",
-            "Détecte si c'est une classe standard (TYPE='CLASS') ou un groupe de spécialité (TYPE='GROUP' - ex: 'Anglais', 'Latin').",
-            "FORMAT JSON :",
-            `[{"name": "6A", "type": "CLASS"}, {"name": "LATIN_5E", "type": "GROUP"}]`,
-            `DONNÉES À TRAITER : ${dataPayload.text}`
-        ];
-        const raw = await AIEngine.ask(prompt, system);
-        return AIEngine.sanitizeJSON(raw);
+        RÈGLES D'EXTRACTION :
+        1. STRUCTURE : Si tu vois des barres '|', c'est un tableau. Utilise les en-têtes pour identifier les colonnes.
+        2. IDENTITÉ : Cherche 'Nom', 'Prénom', 'Élève'. Sépare Nom et Prénom.
+        3. CLASSE : Cherche une colonne 'Classe'. Si elle existe (ex: 2C, 2D), utilise-la pour chaque élève ! Sinon, utilise le contexte "${contextClass}".
+        4. OPTIONS : Cherche la colonne 'Options'. Si elle contient plusieurs matières, sépare-les.
+           - Mots clés options : SPE, LVA, LVB, DNL, BFI, SC. LABO, CAV, PORTUGAIS, ESPAGNOL, ANGLAIS.
+        5. EMAIL : Cherche la colonne 'E-mail'. C'est la clé unique.
+
+        EXEMPLE D'ENTRÉE :
+        | Élève | Classe | Options |
+        | Dupont Jean | 2C | CAV, LVA ANGLAIS |
+
+        SORTIE ATTENDUE :
+        [
+          {
+            "firstName": "Jean",
+            "lastName": "DUPONT",
+            "email": "...", // Si trouvé
+            "className": "2C",
+            "options": ["CAV", "LVA ANGLAIS"]
+          }
+        ]
+        
+        RÉPOND UNIQUEMENT LE JSON.`;
+
+        const prompt = `ANALYSE CE TEXTE :\n\n${rawText.substring(0, 20000)}`;
+
+        try {
+            const response = await AIEngine.ask(prompt, system);
+            const result = AIEngine.sanitizeJSON(response);
+            console.log(`🧠 [AI] ${result.length} élèves extraits.`);
+            return result;
+        } catch (e) {
+            console.error("❌ AI Parsing Failed:", e.message);
+            // On renvoie un tableau vide pour ne pas crasher le serveur
+            return [];
+        }
     }
 };
 
@@ -4032,69 +4496,93 @@ module.exports = AuthDB;
 const mongoose = require('mongoose');
 
 /**
- * 🔐 EXPERT AUTH - VERSION 94
- * Correction de la vérification des IDs de test pour éviter les 401.
+ * 🔐 EXPERT AUTH - VERSION 98 (RECHERCHE CROISÉE)
+ * Résout le problème où un Prof essaie de se connecter via le portail Admin (et vice-versa).
+ * Répare l'accès Architecte Jean Vuillet de force.
  */
 const AuthExpert = {
     getLoginConfig: async () => ({ classrooms: await mongoose.model('Classroom').find({}).sort({name:1}).lean() }),
+    
     getStudentsForSelection: async (classId) => {
         const enrollments = await mongoose.model('Enrollment').find({ classId }).populate('studentId').lean();
         return enrollments.filter(e => e.studentId).map(e => ({ id: e.studentId._id, name: `${e.studentId.firstName} ${e.studentId.lastName}` })).sort((a,b) => a.name.localeCompare(b.name));
     },
+
     verify: async ({ role, studentId, firstName, lastName, password }) => {
-        const fName = (firstName || '').trim(); 
-        const lName = (lastName || '').trim(); 
+        // Nettoyage des entrées
+        const fNameRaw = (firstName || '').trim();
+        const lNameRaw = (lastName || '').trim();
+        const fName = fNameRaw.toLowerCase();
+        const lName = lNameRaw.toLowerCase();
         const pass = (password || '').trim();
 
-        // 1. BACKDOOR ARCHITECTE (JEAN VUILLET)
-        const isJean = (fName.toLowerCase() === 'jean' && lName.toLowerCase() === 'vuillet');
-        if (isJean && (pass === 'Clémenceau1919' || pass === 'A')) {
+        console.log(`🔐 AUTH V98: Tentative pour "${fNameRaw} ${lNameRaw}" (Pass: ${pass})`);
+
+        // --- 1. BACKDOOR ARCHITECTE (JEAN VUILLET) ---
+        // Passe-partout absolu, recrée le compte si nécessaire
+        if (fName === 'jean' && lName === 'vuillet' && (pass === 'A' || pass === 'Clémenceau1919')) {
+            console.log("🚀 ARCHITECTE DÉTECTÉ. Provisionnement immédiat.");
             const realJean = await mongoose.model('Admin').findOneAndUpdate(
-                { firstName: 'Jean', lastName: 'Vuillet' }, 
-                { firstName: 'Jean', lastName: 'Vuillet', password: pass, isDeveloper: true }, 
+                { firstName: 'Jean', lastName: 'Vuillet' },
+                { firstName: 'Jean', lastName: 'Vuillet', password: 'A', isDeveloper: true, role: 'admin' },
                 { upsert: true, new: true }
             );
             return { ok: true, user: { ...realJean.toObject(), id: realJean._id, role: 'prof', isDeveloper: true } };
         }
 
-        // 2. STAFF TEST (Password A)
-        if (pass === 'A') {
-            if (role === 'ADMIN' && fName.toLowerCase() === 'admin' && lName.toLowerCase() === 'test') {
-                const adminTest = await mongoose.model('Admin').findOne({ firstName: "Admin", lastName: "Test" });
-                return { ok: true, user: { ...adminTest.toObject(), id: adminTest._id, role: 'admin', isTestAccount: true } };
-            }
-            if (role === 'TEACHER' && fName.toLowerCase() === 'prof' && lName.toLowerCase() === 'test') {
-                const profTest = await mongoose.model('Teacher').findOne({ firstName: "Prof", lastName: "Test" });
-                return { ok: true, user: { ...profTest.toObject(), id: profTest._id, role: 'prof', isTestAccount: true } };
-            }
-        }
-
-        // 3. AUTHENTIFICATION ÉLÈVE (SÉCURISÉE V94)
+        // --- 2. AUTHENTIFICATION ÉLÈVE ---
         if (role === 'STUDENT') {
-            if (!studentId) return { ok: false, message: "ID Élève manquant pour la connexion." };
-            
-            // On vérifie si l'ID est un ObjectId valide pour éviter le crash CastError
-            if (!mongoose.Types.ObjectId.isValid(studentId)) {
-                return { ok: false, message: "ID Élève invalide." };
-            }
-
+            if (!studentId || !mongoose.Types.ObjectId.isValid(studentId)) return { ok: false, message: "ID Élève invalide." };
             const student = await mongoose.model('Student').findById(studentId).lean();
-            if (!student) return { ok: false, message: "Élève introuvable en base de données." };
-            
+            if (!student) return { ok: false, message: "Élève introuvable." };
             return { ok: true, user: { ...student, id: student._id, role: 'student' } };
         }
 
-        // 4. AUTHENTIFICATION STAFF NORMALE
-        if (role === 'ADMIN') {
-            const admin = await mongoose.model('Admin').findOne({ firstName: new RegExp(`^${fName}$`, 'i'), lastName: new RegExp(`^${lName}$`, 'i') });
-            if (admin && admin.password === pass) return { ok: true, user: { ...admin.toObject(), id: admin._id, role: 'admin', isDeveloper: admin.isDeveloper } };
-        }
-        if (role === 'TEACHER') {
-            const teacher = await mongoose.model('Teacher').findOne({ firstName: new RegExp(`^${fName}$`, 'i'), lastName: new RegExp(`^${lName}$`, 'i') });
-            if (teacher && teacher.password === pass) return { ok: true, user: { ...teacher.toObject(), id: teacher._id, role: 'prof', isDeveloper: teacher.isDeveloper } };
+        // --- 3. AUTHENTIFICATION STAFF (RECHERCHE CROISÉE) ---
+        // On cherche l'utilisateur PARTOUT (Teachers ET Admins) peu importe le bouton cliqué
+        
+        // A. Recherche dans les PROFS
+        const teacher = await mongoose.model('Teacher').findOne({ 
+            firstName: new RegExp(`^${fName}$`, 'i'), 
+            lastName: new RegExp(`^${lName}$`, 'i') 
+        });
+
+        if (teacher) {
+            if (teacher.password === pass) {
+                console.log("✅ Trouvé dans TEACHERS");
+                return { ok: true, user: { ...teacher.toObject(), id: teacher._id, role: 'prof', isDeveloper: teacher.isDeveloper || false } };
+            } else {
+                console.log(`❌ Mauvais mot de passe pour le Prof ${fNameRaw}`);
+            }
         }
 
-        return { ok: false, message: "Identifiants incorrects" };
+        // B. Recherche dans les ADMINS
+        const admin = await mongoose.model('Admin').findOne({ 
+            firstName: new RegExp(`^${fName}$`, 'i'), 
+            lastName: new RegExp(`^${lName}$`, 'i') 
+        });
+
+        if (admin) {
+            if (admin.password === pass) {
+                console.log("✅ Trouvé dans ADMINS");
+                return { ok: true, user: { ...admin.toObject(), id: admin._id, role: 'admin', isDeveloper: admin.isDeveloper || false } };
+            } else {
+                console.log(`❌ Mauvais mot de passe pour l'Admin ${fNameRaw}`);
+            }
+        }
+
+        // C. Cas particulier des COMPTES TEST (Si DB vide)
+        if (pass === 'A') {
+            if (fName === 'admin' && lName === 'test') {
+                return { ok: true, user: { _id: new mongoose.Types.ObjectId(), firstName: 'Admin', lastName: 'Test', role: 'admin', isTestAccount: true } };
+            }
+            if (fName === 'prof' && lName === 'test') {
+                return { ok: true, user: { _id: new mongoose.Types.ObjectId(), firstName: 'Prof', lastName: 'Test', role: 'prof', isTestAccount: true } };
+            }
+        }
+
+        console.log("⛔ Utilisateur introuvable ou mot de passe incorrect.");
+        return { ok: false, message: "Identifiants ou Mot de passe incorrects." };
     }
 };
 module.exports = AuthExpert;
@@ -4311,7 +4799,8 @@ const StructureDrive = require('../structure/experts/structure.drive');
 const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
 /**
- * 📝 ROUTES HOMEWORK V102 - GÉNÉRATION D'URLS PROXY
+ * 📝 ROUTES HOMEWORK V137 - MULTI-TARGET
+ * Fix : Support de targetClassrooms pour la diffusion multiple.
  */
 
 router.post('/', asyncHandler(async (req, res) => {
@@ -4319,6 +4808,7 @@ router.post('/', asyncHandler(async (req, res) => {
     const data = req.body;
     const vaultId = await StructureDrive.ensureVault();
 
+    // Gestion des Uploads (inchangée)
     for (let level of data.levels) {
         const fields = ['instructionUrls', 'attachmentUrls'];
         for (let field of fields) {
@@ -4329,12 +4819,8 @@ router.post('/', asyncHandler(async (req, res) => {
                         const localPath = path.resolve(process.cwd(), 'public', url.substring(1));
                         if (fs.existsSync(localPath)) {
                             const fileName = path.basename(localPath);
-                            // V102 : On récupère l'ID réel du fichier sur le cloud
                             const cloudFile = await DriveEngine.uploadFile(fileName, localPath, vaultId);
-                            
-                            // On stocke l'URL de notre PROXY interne
                             level[field][i] = `/api/structure/proxy/${cloudFile.id}`; 
-                            
                             try { fs.unlinkSync(localPath); } catch(e) {}
                         }
                     }
@@ -4343,9 +4829,19 @@ router.post('/', asyncHandler(async (req, res) => {
         }
     }
 
-    let result = data._id ? 
-        await Homework.findByIdAndUpdate(data._id, data, { new: true }) : 
-        await Homework.create(data);
+    // MISE À JOUR MULTI-CIBLES
+    // On s'assure que targetClassrooms est bien rempli
+    if (!data.targetClassrooms || data.targetClassrooms.length === 0) {
+        // Fallback sur l'ancienne propriété si nécessaire
+        if (data.classroom) data.targetClassrooms = [data.classroom];
+    }
+
+    let result;
+    if (data._id) {
+        result = await Homework.findByIdAndUpdate(data._id, data, { new: true });
+    } else {
+        result = await Homework.create(data);
+    }
 
     res.json(result);
 }));
@@ -4358,6 +4854,19 @@ router.delete('/:id', asyncHandler(async (req, res) => {
     await mongoose.model('Homework').findByIdAndDelete(req.params.id);
     res.json({ ok: true });
 }));
+
+// Route Upload Temporaire
+const multer = require('multer');
+const upload = multer({ dest: 'public/uploads/' });
+router.post('/upload', upload.array('files'), (req, res) => {
+    const urls = req.files.map(f => `/uploads/${f.filename}`);
+    res.json({ urls });
+});
+
+router.post('/analyze-homework', require('./experts/homework.db').processSubmission ? 
+    (req, res) => require('./experts/homework.db').processSubmission(req.body, require('./experts/homework.ai')).then(r => res.json(r)) :
+    (req, res) => res.json({ error: "Not implemented" })
+);
 
 module.exports = router;
 [[[£ END: server/domains/homework/homework.routes.js £]]]
@@ -4582,51 +5091,123 @@ const StructureDrive = require('./experts/structure.drive');
 const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
 /**
- * 🛣️ ROUTES STRUCTURE V94
+ * 🛣️ ROUTES STRUCTURE V152 - NEON COLORS & STRICT UNIQUE
+ * Fix : Couleurs forcées en mode "Vif/Clair" (jamais noir).
+ * Fix : Renvoie une erreur 409 si la section existe déjà.
  */
 
-// DIAGNOSTIC D'INTÉGRITÉ DES LIENS DRIVE (Utilisé par le GARDien)
-router.get('/integrity/:homeworkId', asyncHandler(async (req, res) => {
-    res.json(await StructureExpert.verifyAssetsIntegrity(req.params.homeworkId));
+// --- ROUTES STANDARDS ---
+router.get('/integrity/:homeworkId', asyncHandler(async (req, res) => res.json(await StructureExpert.verifyAssetsIntegrity(req.params.homeworkId))));
+router.get('/drive-tree', async (req, res) => { try { res.json(await StructureDrive.getDriveTree()); } catch (e) { res.json({ name: "Conda Vault", children: [], error: e.message }); } });
+router.post('/sync-root', asyncHandler(async (req, res) => res.json(await StructureDrive.syncBaseStructure())));
+router.get('/chapters', asyncHandler(async (req, res) => res.json(await StructureExpert.getChapters())));
+router.post('/chapters', asyncHandler(async (req, res) => res.json(await StructureExpert.createChapter(req.body))));
+router.delete('/chapters/:id', asyncHandler(async (req, res) => { await StructureExpert.deleteChapter(req.params.id); res.json({ ok: true }); }));
+router.patch('/chapters/:id/archive', asyncHandler(async (req, res) => { const updated = await mongoose.model('Chapter').findByIdAndUpdate(req.params.id, { isArchived: !!req.body.isArchived }, { new: true }); res.json(updated); }));
+router.delete('/drive/:id', asyncHandler(async (req, res) => res.json(await StructureDrive.deleteDriveItem(req.params.id))));
+
+// Helper Couleur : HSL avec Saturation haute (80%) et Luminosité haute (60%)
+// Impossible d'avoir du noir ou du gris foncé.
+const getRandomColor = () => {
+    return `hsl(${Math.floor(Math.random() * 360)}, 85%, 60%)`;
+};
+
+// --- LECTURE ---
+router.get('/sections/:teacherId', asyncHandler(async (req, res) => {
+    if (!req.params.teacherId || req.params.teacherId === 'undefined') return res.json([]);
+    let user = await mongoose.model('Teacher').findById(req.params.teacherId) || await mongoose.model('Admin').findById(req.params.teacherId);
+    if (!user) return res.status(404).json({ error: "User not found" });
+    res.json(user.subjectSections || []);
 }));
 
-router.get('/drive-tree', async (req, res) => {
-    try {
-        const tree = await StructureDrive.getDriveTree();
-        res.json(tree);
-    } catch (e) {
-        res.json({ name: "Conda Vault", children: [], error: e.message });
+// --- CRÉATION (AVEC VÉRIF DOUBLON STRICTE) ---
+router.post('/sections', asyncHandler(async (req, res) => {
+    const { teacherId, sectionName, scope, target } = req.body;
+    
+    if (!teacherId || !sectionName) return res.status(400).json({ error: "Données manquantes" });
+
+    const cleanName = sectionName.toUpperCase().trim();
+    let user = await mongoose.model('Teacher').findById(teacherId) || await mongoose.model('Admin').findById(teacherId);
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    let oldSections = user.subjectSections || [];
+    let newSections = [];
+    
+    // Reconstruction propre
+    for(let s of oldSections) {
+        if(s && s.name) newSections.push({ 
+            name: s.name, 
+            color: s.color || getRandomColor(),
+            scope: s.scope || 'GLOBAL', 
+            target: s.target || null 
+        });
     }
-});
 
-router.post('/sync-root', asyncHandler(async (req, res) => {
-    res.json(await StructureDrive.syncBaseStructure());
-}));
+    if (newSections.length === 0 && cleanName !== 'GÉNÉRAL') {
+        newSections.push({ name: 'GÉNÉRAL', color: '#64748b', scope: 'GLOBAL' });
+    }
 
-router.get('/chapters', asyncHandler(async (req, res) => {
-    res.json(await StructureExpert.getChapters());
-}));
-
-router.post('/chapters', asyncHandler(async (req, res) => {
-    res.json(await StructureExpert.createChapter(req.body));
-}));
-
-router.delete('/chapters/:id', asyncHandler(async (req, res) => {
-    await StructureExpert.deleteChapter(req.params.id);
-    res.json({ ok: true });
-}));
-
-router.patch('/chapters/:id/archive', asyncHandler(async (req, res) => {
-    const updated = await mongoose.model('Chapter').findByIdAndUpdate(
-        req.params.id, 
-        { isArchived: !!req.body.isArchived }, 
-        { new: true }
+    // Vérification Doublon Strict
+    const isDuplicate = newSections.some(s => 
+        s.name === cleanName && 
+        s.scope === (scope || 'GLOBAL') && 
+        s.target === (target || null)
     );
-    res.json(updated);
+
+    if (isDuplicate) {
+        return res.status(409).json({ error: `La section "${cleanName}" existe déjà ici !` });
+    }
+
+    // Ajout avec couleur vive
+    newSections.push({ 
+        name: cleanName, 
+        color: getRandomColor(),
+        scope: scope || 'GLOBAL',
+        target: target || null
+    });
+
+    user.subjectSections = newSections;
+    user.markModified('subjectSections');
+    await user.save();
+    res.json(user.subjectSections);
 }));
 
-router.delete('/drive/:id', asyncHandler(async (req, res) => {
-    res.json(await StructureDrive.deleteDriveItem(req.params.id));
+// --- SUPPRESSION ---
+router.delete('/sections', asyncHandler(async (req, res) => {
+    const { teacherId, sectionName } = req.body;
+    const targetName = sectionName.toUpperCase().trim();
+
+    let user = await mongoose.model('Teacher').findById(teacherId) || await mongoose.model('Admin').findById(teacherId);
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    let oldSections = user.subjectSections || [];
+    let newSections = [];
+
+    // Suppression par nom (pour l'instant simple)
+    for(let s of oldSections) {
+        if(s && s.name && s.name !== targetName) {
+            newSections.push(s);
+        }
+    }
+
+    if (newSections.length === 0) newSections.push({ name: 'GÉNÉRAL', color: '#64748b', scope: 'GLOBAL' });
+
+    user.subjectSections = newSections;
+    user.markModified('subjectSections');
+    await user.save();
+    res.json(user.subjectSections);
+}));
+
+// --- RESET ---
+router.post('/sections/reset', asyncHandler(async (req, res) => {
+    const { teacherId } = req.body;
+    let user = await mongoose.model('Teacher').findById(teacherId) || await mongoose.model('Admin').findById(teacherId);
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    user.subjectSections = [{ name: 'GÉNÉRAL', color: '#64748b', scope: 'GLOBAL' }];
+    user.markModified('subjectSections');
+    await user.save();
+    res.json(user.subjectSections);
 }));
 
 module.exports = router;
@@ -4679,17 +5260,24 @@ module.exports = mongoose.models.AccessLog || mongoose.model('AccessLog', Access
 
 [[[£ FILE: server/models/Admin.js £]]]
 const mongoose = require('mongoose');
+
+const SectionSchema = new mongoose.Schema({
+    name: { type: String, required: true },
+    color: { type: String, default: '#6366f1' },
+    scope: { type: String, enum: ['GLOBAL', 'LEVEL', 'CLASS'], default: 'GLOBAL' },
+    target: { type: String, default: null }
+}, { _id: false });
+
 const AdminSchema = new mongoose.Schema({
     firstName: { type: String, required: true },
     lastName: { type: String, required: true },
     password: { type: String, required: true },
     role: { type: String, enum: ['admin', 'developer'], default: 'admin' },
-    subjectSections: { type: Array, default: [] },
+    subjectSections: { type: [SectionSchema], default: [] },
     isDeveloper: { type: Boolean, default: false },
-    
-    // V71 : Flag de compte de test
     isTestAccount: { type: Boolean, default: false }
 }, { collection: 'admins' });
+
 module.exports = mongoose.models.Admin || mongoose.model('Admin', AdminSchema);
 [[[£ END: server/models/Admin.js £]]]
 
@@ -4719,20 +5307,16 @@ const mongoose = require('mongoose');
 
 const ChapterSchema = new mongoose.Schema({
     title: { type: String, required: true },
-    
-    // La "Section" est libre (créée par le prof), remplace l'ancienne logique "Matière Admin"
     section: { type: String, default: "Général" }, 
     
-    // Gardé pour compatibilité temporaire, mais moins utilisé
-    subject: { type: String }, 
-    
+    // Classe spécifique (ex: "6A")
     classroom: String, 
-    driveFolderId: String,
+    
+    // NOUVEAU : Niveau partagé (ex: "6" pour toutes les 6èmes, "1" pour toutes les 1ères)
+    sharedLevel: String, 
+
     teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher' },
-    
-    // [NOUVEAU] Gestion d'archivage
     isArchived: { type: Boolean, default: false },
-    
     createdAt: { type: Date, default: Date.now }
 }, { collection: 'chapters' });
 
@@ -4742,17 +5326,14 @@ module.exports = mongoose.models.Chapter || mongoose.model('Chapter', ChapterSch
 [[[£ FILE: server/models/Classroom.js £]]]
 const mongoose = require('mongoose');
 
-/**
- * 🏫 MODÈLE CLASSE/GROUPE V50
- * Une structure simple : soit une Division (Administrative), soit un Groupe (Pédagogique).
- */
 const ClassroomSchema = new mongoose.Schema({
     name: { type: String, required: true, uppercase: true },
+    
+    // NOUVEAU V142 : Niveau explicite (ex: "6", "1", "TERM")
+    level: { type: String }, 
+    
     type: { type: String, enum: ['CLASS', 'GROUP'], default: 'CLASS' },
-    
-    // Pour les GROUPES : liste des classes administratives d'origine
     associatedClasses: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Classroom' }],
-    
     yearId: { type: mongoose.Schema.Types.ObjectId, ref: 'AcademicYear' }
 }, { collection: 'classrooms' });
 
@@ -4816,18 +5397,27 @@ const mongoose = require('mongoose');
 
 const HomeworkSchema = new mongoose.Schema({
     title: { type: String, required: true },
+    
+    // Ancien champ (gardé pour compatibilité)
     classroom: String,
+    
+    // NOUVEAU : Liste des classes ciblées (ex: ["4A", "4B"])
+    targetClassrooms: [String], 
+
     chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter', required: true },
     teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher' },
     
     levels: [{
         instruction: String,
-        instructionUrls: [String], // NOUVEAU : Images de la consigne
+        instructionUrls: [String],
         aiHints: String,
-        attachmentUrls: [String] // Images/Docs de travail
+        attachmentUrls: [String]
     }],
 
+    // Élèves spécifiques (ex: PPRE, Soutien)
     assignedStudents: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Student' }],
+    
+    // Si true, c'est pour toute(s) la/les classe(s) ciblée(s)
     isAllClass: { type: Boolean, default: true },
     
     date: { type: Date, default: Date.now }
@@ -4882,26 +5472,28 @@ module.exports = mongoose.models.ScanSession || mongoose.model('ScanSession', Sc
 const mongoose = require('mongoose');
 
 const StudentSchema = new mongoose.Schema({
+    // Identité
     firstName: { type: String, required: true },
     lastName: { type: String, required: true },
     fullName: { type: String }, 
+    
+    // Contacts
     email: { type: String, lowercase: true, trim: true },
-    
-    // Classe Administrative (Maison)
-    currentClass: { type: String }, 
+    parentEmail: { type: String, lowercase: true, trim: true }, // NOUVEAU
+
+    // Scolarité
     classId: { type: mongoose.Schema.Types.ObjectId, ref: 'Classroom' },
-    
-    // Étiquette de demi-groupe interne
-    subGroup: { type: String, enum: ['A', 'B', null], default: null },
+    currentClass: { type: String }, // Ex: "1D"
+    currentLevel: { type: String }, // NOUVEAU (Ex: "1")
 
-    // V54 : Flag pour identifier les comptes techniques
-    isTestAccount: { type: Boolean, default: false },
+    // Groupes / Options
+    assignedGroups: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Classroom' }],
 
-    birthDate: { type: Date },
+    // Infos diverses
     gender: { type: String, enum: ['M', 'F', ''] },
-    healthInfo: String,
-    driveFolderId: String,
     lastLogin: { type: Date, default: Date.now }
+    
+    // SUPPRIMÉS : birthDate, isTestAccount
 }, { collection: 'students' });
 
 module.exports = mongoose.models.Student || mongoose.model('Student', StudentSchema);
@@ -4933,17 +5525,24 @@ module.exports = mongoose.models.Submission || mongoose.model('Submission', Subm
 [[[£ FILE: server/models/Teacher.js £]]]
 const mongoose = require('mongoose');
 
+const SectionSchema = new mongoose.Schema({
+    name: { type: String, required: true },
+    color: { type: String, default: '#6366f1' },
+    
+    // NOUVEAU V140 : Portée de la section
+    scope: { type: String, enum: ['GLOBAL', 'LEVEL', 'CLASS'], default: 'GLOBAL' },
+    target: { type: String, default: null } // ex: "6" ou "6A"
+}, { _id: false });
+
 const TeacherSchema = new mongoose.Schema({
     firstName: { type: String, required: true },
     lastName: { type: String, required: true },
     password: { type: String, required: true },
-    subjectSections: { type: Array, default: [] },
+    subjectSections: { type: [SectionSchema], default: [] },
     taughtSubjects: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Subject' }],
     assignedClasses: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Classroom' }],
     isDeveloper: { type: Boolean, default: false },
     driveFolderId: { type: String },
-    
-    // V71 : Flag de compte de test pour le bouton retour dev
     isTestAccount: { type: Boolean, default: false }
 }, { collection: 'teachers' });
 
@@ -5087,6 +5686,7 @@ function run() {
     console.log(`✨ Terminé : ${OUTPUT_FILENAME} est le miroir parfait du projet.`);
 }
 run();
+
 [[[£ END: snap.js £]]]
 
 [[[£ FILE: systemInstructions.md £]]]

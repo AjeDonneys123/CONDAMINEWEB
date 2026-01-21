@@ -1,33 +1,49 @@
 const AIEngine = require('../../../core/ai.engine');
 
 const AdminAI = {
-    // ANALYSE ÉLÈVES
-    extractStudentsFromInput: async (dataPayload) => {
-        const system = "Tu es un expert Data Scientist scolaire. Structure ces données en JSON.";
-        let prompt = ["ANALYSE CES DONNÉES SCOLAIRES (Liste Excel/CSV).", "FORMAT ATTENDU:",
-        `[{"firstName":"Jean","lastName":"DUPONT","email":"jean@ecole.com","gender":"M"}]`];
-        if (dataPayload.text) prompt.push(`DONNÉES: ${dataPayload.text}`);
-        if (dataPayload.image) {
-            prompt.push({ inlineData: { data: dataPayload.image.split(',')[1], mimeType: "image/jpeg" }});
-            prompt.push("Capture Excel. Sépare bien Email et autres colonnes.");
-        }
-        const raw = await AIEngine.ask(prompt, system);
-        return AIEngine.sanitizeJSON(raw);
-    },
+    parseRawStudentData: async (rawText, contextClass) => {
+        console.log("🧠 [AI] Analyse Magic Import V166 (Mode Tableau)...");
+        
+        const system = `Tu es un expert en extraction de données scolaires (Data Mining).
+        Ta mission : Convertir un texte en vrac (ou un tableau copié-collé) en JSON strict.
 
-    // ANALYSE CLASSES (NOUVEAU)
-    extractClassesFromInput: async (dataPayload) => {
-        const system = "Tu es un assistant administratif scolaire. Tu dois lister les classes détectées.";
-        const prompt = [
-            "Analyse ce texte et extrais la liste des classes.",
-            "Normalise les noms : '6ème A' -> '6A', 'Seconde 1' -> '2DE1', '5 B' -> '5B'.",
-            "Détecte si c'est une classe standard (TYPE='CLASS') ou un groupe de spécialité (TYPE='GROUP' - ex: 'Anglais', 'Latin').",
-            "FORMAT JSON :",
-            `[{"name": "6A", "type": "CLASS"}, {"name": "LATIN_5E", "type": "GROUP"}]`,
-            `DONNÉES À TRAITER : ${dataPayload.text}`
-        ];
-        const raw = await AIEngine.ask(prompt, system);
-        return AIEngine.sanitizeJSON(raw);
+        RÈGLES D'EXTRACTION :
+        1. STRUCTURE : Si tu vois des barres '|', c'est un tableau. Utilise les en-têtes pour identifier les colonnes.
+        2. IDENTITÉ : Cherche 'Nom', 'Prénom', 'Élève'. Sépare Nom et Prénom.
+        3. CLASSE : Cherche une colonne 'Classe'. Si elle existe (ex: 2C, 2D), utilise-la pour chaque élève ! Sinon, utilise le contexte "${contextClass}".
+        4. OPTIONS : Cherche la colonne 'Options'. Si elle contient plusieurs matières, sépare-les.
+           - Mots clés options : SPE, LVA, LVB, DNL, BFI, SC. LABO, CAV, PORTUGAIS, ESPAGNOL, ANGLAIS.
+        5. EMAIL : Cherche la colonne 'E-mail'. C'est la clé unique.
+
+        EXEMPLE D'ENTRÉE :
+        | Élève | Classe | Options |
+        | Dupont Jean | 2C | CAV, LVA ANGLAIS |
+
+        SORTIE ATTENDUE :
+        [
+          {
+            "firstName": "Jean",
+            "lastName": "DUPONT",
+            "email": "...", // Si trouvé
+            "className": "2C",
+            "options": ["CAV", "LVA ANGLAIS"]
+          }
+        ]
+        
+        RÉPOND UNIQUEMENT LE JSON.`;
+
+        const prompt = `ANALYSE CE TEXTE :\n\n${rawText.substring(0, 20000)}`;
+
+        try {
+            const response = await AIEngine.ask(prompt, system);
+            const result = AIEngine.sanitizeJSON(response);
+            console.log(`🧠 [AI] ${result.length} élèves extraits.`);
+            return result;
+        } catch (e) {
+            console.error("❌ AI Parsing Failed:", e.message);
+            // On renvoie un tableau vide pour ne pas crasher le serveur
+            return [];
+        }
     }
 };
 
