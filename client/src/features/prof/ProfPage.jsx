@@ -8,8 +8,8 @@ import ConsoleReporter from './components/ConsoleReporter';
 import './ProfPage.css';
 
 /**
- * 🎓 PAGE PROFESSEUR V95
- * Resilience accrue contre les erreurs 500 du serveur.
+ * 🎓 PAGE PROFESSEUR V107
+ * Fix: "Silent Check" pour éviter l'erreur 404 au démarrage si le token est périmé.
  */
 export default function ProfPage({ user, onLogout }) {
   const isJean = (user.firstName === 'Jean' && user.lastName === 'Vuillet');
@@ -25,12 +25,13 @@ export default function ProfPage({ user, onLogout }) {
     try {
         const userId = user.id || user._id;
         
-        // On effectue les appels un par un pour mieux gérer les erreurs isolées
+        // V107 : Ajout du paramètre '?report-silent=true' pour que ConsoleReporter ignore l'erreur si l'ID est introuvable
         const resCls = await fetch('/api/admin/classrooms');
         const allCls = resCls.ok ? await resCls.json() : [];
 
-        const resMe = await fetch(`/api/admin/teachers/${userId}`);
-        // V95 : Si l'identité fail, on utilise le profil local en fallback
+        const resMe = await fetch(`/api/admin/teachers/${userId}?report-silent=true`);
+        
+        // Si l'identité fail (404 car ID périmé), on utilise le profil local (localStorage) en fallback silencieux
         const myProfile = resMe.ok ? await resMe.json() : user;
 
         let filteredCls = [];
@@ -50,7 +51,7 @@ export default function ProfPage({ user, onLogout }) {
             }
         }
     } catch(e) { 
-        console.error("❌ Erreur Toolbar V95:", e.message); 
+        console.warn("⚠️ Toolbar Warn:", e.message); 
     }
     setLoading(false);
   };
@@ -96,7 +97,7 @@ export default function ProfPage({ user, onLogout }) {
       </div>
       
       {superUser.isDeveloper && <ConsoleReporter user={superUser} />}
-      <div className="fixed bottom-4 right-4 bg-indigo-600 text-white font-black text-[9px] px-4 py-2 rounded-full shadow-2xl z-[20000]">STUDIO V95</div>
+      <div className="fixed bottom-4 right-4 bg-indigo-600 text-white font-black text-[9px] px-4 py-2 rounded-full shadow-2xl z-[20000]">STUDIO V107</div>
     </div>
   );
 }

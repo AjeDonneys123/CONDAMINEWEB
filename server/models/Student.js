@@ -6,20 +6,17 @@ const StudentSchema = new mongoose.Schema({
     fullName: { type: String }, 
     email: { type: String, lowercase: true, trim: true },
     
-    // Classe Administrative (Maison)
-    currentClass: { type: String }, 
+    // Classe Administrative (Maison mère) - Choix Unique
     classId: { type: mongoose.Schema.Types.ObjectId, ref: 'Classroom' },
-    
-    // Étiquette de demi-groupe interne
-    subGroup: { type: String, enum: ['A', 'B', null], default: null },
+    currentClass: { type: String }, 
 
-    // V54 : Flag pour identifier les comptes techniques
+    // Groupes Pédagogiques (Options) - Choix Multiple
+    assignedGroups: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Classroom' }],
+
     isTestAccount: { type: Boolean, default: false },
 
     birthDate: { type: Date },
     gender: { type: String, enum: ['M', 'F', ''] },
-    healthInfo: String,
-    driveFolderId: String,
     lastLogin: { type: Date, default: Date.now }
 }, { collection: 'students' });
 
