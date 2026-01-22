@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react';
 import './Homework.css';
 
 /**
- * 📖 LISEUSE ÉLÈVE V102
- * Affichage robuste via Proxy interne.
+ * 📖 LISEUSE ÉLÈVE V193 - FIX BOUTON RETOUR & IMAGE
  */
 export default function HomeworkWorkspace({ homework, user, onQuit }) {
   const [pageIdx, setPageIdx] = useState(0);
@@ -46,6 +45,10 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
 
   return (
     <div className="homework-container v8-liseuse">
+      
+      {/* BOUTON QUITTER V193 */}
+      <button onClick={onQuit} className="v8-quit-btn">⬅ QUITTER LE DEVOIR</button>
+
       <div 
         className="viewer-top-area" 
         onMouseDown={(e) => { setIsDragging(true); setStartPos({ x: e.clientX - offset.x, y: e.clientY - offset.y }); }}
@@ -64,7 +67,14 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
 
           <div className="v8-pan-container" style={{ transform: `translate(${offset.x}px, ${offset.y}px)` }}>
               {workDocs.length > 0 ? (
-                  <img key={workDocs[activeDocIdx]} src={workDocs[activeDocIdx]} className="v8-main-img" draggable="false" alt="Support" />
+                  <img 
+                    key={workDocs[activeDocIdx]} 
+                    src={workDocs[activeDocIdx]} 
+                    className="v8-main-img" 
+                    draggable="false" 
+                    alt="Support de travail" 
+                    onError={(e) => { e.target.style.display='none'; alert("Erreur chargement image : " + workDocs[activeDocIdx]); }}
+                  />
               ) : <div className="text-slate-700 font-black opacity-20">AUCUN SUPPORT DE TRAVAIL</div>}
           </div>
       </div>

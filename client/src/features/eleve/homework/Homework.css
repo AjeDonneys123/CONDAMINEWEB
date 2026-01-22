@@ -21,6 +21,31 @@
     border-bottom: 4px solid #f97316;
 }
 
+/* BOUTON QUITTER V193 */
+.v8-quit-btn {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    z-index: 100;
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 900;
+    font-size: 11px;
+    padding: 10px 20px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    cursor: pointer;
+    backdrop-filter: blur(5px);
+    transition: all 0.2s;
+    text-transform: uppercase;
+}
+.v8-quit-btn:hover {
+    background: #dc2626;
+    border-color: #dc2626;
+    transform: scale(1.05);
+}
+
 .v8-pan-container {
     display: flex;
     align-items: center;
