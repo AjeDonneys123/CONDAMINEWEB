@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from 'react';
 
 /**
- * 📂 PROF STUDIO FOLDER - VERSION 198 (SMART MIXED DISPLAY)
- * Fix : Affichage intelligent des élèves.
- * Si toute la classe est sélectionnée (count == total), on n'affiche que le nom de la classe.
- * Si sélection partielle, on affiche les noms.
+ * 📂 PROF STUDIO FOLDER - VERSION 202 (COMPACT NAMES)
+ * Fix : Affichage simplifié des noms (1er mot prénom + 1er mot nom).
  */
 export default function ProfStudioFolder({ items, chapters, classFilter, levelFilter, user, onEditItem, onDeleteItem, onRefresh, studentsRef }) {
     const [customSections, setCustomSections] = useState([]);
@@ -39,6 +37,13 @@ export default function ProfStudioFolder({ items, chapters, classFilter, levelFi
         };
         fetchSections();
     }, [user]);
+
+    // --- UTILS : FORMATAGE NOM COURT ---
+    const formatSimpleName = (first, last) => {
+        const f = (first || "").split(' ')[0];
+        const l = (last || "").split(' ')[0];
+        return `${f} ${l}`;
+    };
 
     // --- FILTRAGE NIVEAU 1 ---
     const allChapters = chapters || [];
@@ -105,7 +110,7 @@ export default function ProfStudioFolder({ items, chapters, classFilter, levelFi
                             <button onClick={() => confirmCreateSection('LEVEL')} disabled={!currentLevel} className={`w-full bg-indigo-600 text-white p-4 rounded-xl font-black text-xs ${!currentLevel && 'opacity-50'}`}>POUR NIVEAU {currentLevel || '?'}</button>
                             <button onClick={() => confirmCreateSection('GLOBAL')} className="w-full bg-slate-700 text-white p-4 rounded-xl font-black text-xs">GLOBAL</button>
                         </div>
-                        <button onClick={() => setShowSectionModal(false)} className="mt-8 text-slate-400 font-bold text-xs hover:text-white">Annuler</button>
+                        <button onClick={() => setShowSectionModal(false)} className="mt-4 text-slate-400 font-bold text-xs hover:text-white">Annuler</button>
                     </div>
                 </div>
             )}
@@ -117,7 +122,7 @@ export default function ProfStudioFolder({ items, chapters, classFilter, levelFi
                         <button onClick={() => setShowArchived(!showArchived)} className={`px-5 py-2.5 rounded-2xl text-[10px] font-black border-2 transition-all ${showArchived ? 'bg-amber-500 border-amber-400 text-white shadow-[0_0_20px_rgba(245,158,11,0.5)]' : 'bg-slate-800 border-slate-700 text-slate-400'}`}>{showArchived ? '📂 RETOUR ACTIFS' : `📦 VOIR ARCHIVES`}</button>
                     </div>
                     <div className="flex items-center gap-2">
-                        <div className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-black text-[10px]">STUDIO V198</div>
+                        <div className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-black text-[10px]">STUDIO V202</div>
                         {!showArchived && (<><button onClick={handleReset} className="bg-red-900/50 text-red-400 px-3 py-2 rounded-xl font-black text-[9px] hover:bg-red-900 border border-red-900/50">R.A.Z</button><button onClick={() => setShowSectionModal(true)} className="bg-white/10 text-white px-5 py-2.5 rounded-xl font-black text-[10px] uppercase border border-white/10 hover:bg-white/20 transition-all">+ Section</button></>)}
                     </div>
                 </div>
@@ -156,7 +161,7 @@ export default function ProfStudioFolder({ items, chapters, classFilter, levelFi
                                     <div className="bg-slate-50/50 border-t p-8 space-y-4">
                                         {chapItems.length > 0 ? chapItems.map(it => {
                                             
-                                            // --- V198 : LOGIQUE D'AFFICHAGE COMPTÉE ---
+                                            // --- V202 : LOGIQUE D'AFFICHAGE COMPACTE ET INTELLIGENTE ---
                                             let subTitle = "Chargement...";
                                             let subtitleColor = "text-slate-400";
 
@@ -164,7 +169,6 @@ export default function ProfStudioFolder({ items, chapters, classFilter, levelFi
                                                 const assignedIds = it.assignedStudents || [];
                                                 const targets = it.targetClassrooms || [it.classroom];
 
-                                                // 1. On compte les totaux de chaque classe
                                                 const totalPerClass = {};
                                                 if (studentsRef) {
                                                     studentsRef.forEach(s => {
@@ -173,34 +177,31 @@ export default function ProfStudioFolder({ items, chapters, classFilter, levelFi
                                                     });
                                                 }
 
-                                                // 2. On groupe les assignés par classe
                                                 const assignedByClass = {};
                                                 if (studentsRef && assignedIds.length > 0) {
                                                     studentsRef.forEach(s => {
                                                         if (assignedIds.some(id => String(id) === String(s._id))) {
                                                             const c = s.currentClass;
                                                             if (!assignedByClass[c]) assignedByClass[c] = [];
-                                                            assignedByClass[c].push(`${s.firstName} ${s.lastName}`);
+                                                            // ICI : UTILISATION DE formatSimpleName pour raccourcir
+                                                            assignedByClass[c].push(formatSimpleName(s.firstName, s.lastName));
                                                         }
                                                     });
                                                 }
 
-                                                // 3. On construit la string
                                                 const parts = [];
                                                 targets.forEach(cls => {
                                                     const assignedCount = (assignedByClass[cls] || []).length;
                                                     const totalCount = totalPerClass[cls] || 0;
 
-                                                    // Si "isAllClass" est true, on fait confiance au flag
                                                     if (it.isAllClass === true) {
                                                         parts.push(cls);
                                                     } 
-                                                    // Sinon, on compare les compteurs
                                                     else if (totalCount > 0 && assignedCount >= totalCount) {
-                                                        parts.push(cls); // Toute la classe
+                                                        parts.push(cls);
                                                     } 
                                                     else if (assignedCount > 0) {
-                                                        parts.push(`${cls}: ${assignedByClass[cls].join(', ')}`); // Partiel
+                                                        parts.push(`${cls}: ${assignedByClass[cls].join(', ')}`);
                                                     } 
                                                     else {
                                                         parts.push(`${cls} (0)`);

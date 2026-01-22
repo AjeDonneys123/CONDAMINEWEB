@@ -5,8 +5,8 @@ import DashboardFolder from '../components/DashboardFolder';
 import './GamesGrid.css';
 
 /**
- * 🎮 GRILLE JEUX ÉLÈVE V80
- * Filtrage par classe avec normalisation de casse.
+ * 🎮 GRILLE JEUX ÉLÈVE V205 (STATUS CHECK)
+ * Fix : Récupère la progression pour marquer les jeux comme faits.
  */
 export default function GamesGrid({ user }) {
   const [quizzes, setQuizzes] = useState([]);
@@ -14,23 +14,44 @@ export default function GamesGrid({ user }) {
   const [selectedQuiz, setSelectedQuiz] = useState(null);
   const [activeGame, setActiveGame] = useState(null);
 
-  useEffect(() => {
+  const loadData = async () => {
     const myClass = (user.currentClass || "").toUpperCase().trim();
+    const myId = String(user._id || user.id);
 
-    fetch('/api/games/all').then(r => r.json()).then(all => {
-        // FILTRAGE V80 : Quiz de ma classe
-        const filtered = all.filter(q => {
+    try {
+        const [allGames, allProgs] = await Promise.all([
+            fetch('/api/games/all').then(r => r.json()),
+            fetch('/api/games/progress').then(r => r.json())
+        ]);
+
+        // Quels jeux j'ai déjà touchés ?
+        const myPlayedGameIds = allProgs
+            .filter(p => String(p.studentId) === myId)
+            .map(p => String(p.gameId)); // Attention: gameId stocké comme string ou ObjectId ? A vérifier
+
+        const filtered = allGames.filter(q => {
             const qClass = (q.classroom || "").toUpperCase().trim();
             return qClass === myClass;
-        });
-        setQuizzes(filtered);
-    });
+        }).map(g => ({
+            ...g,
+            isDone: myPlayedGameIds.includes(String(g._id))
+        }));
 
+        setQuizzes(filtered);
+    } catch(e) { console.error(e); }
+  };
+
+  useEffect(() => {
+    loadData();
     fetch('/api/structure/chapters').then(r => r.json()).then(setChapters);
   }, [user]);
 
   if (activeGame && selectedQuiz) {
-      const close = () => { setActiveGame(null); setSelectedQuiz(null); };
+      const close = () => { 
+          setActiveGame(null); 
+          setSelectedQuiz(null);
+          loadData(); // Recharge pour la pastille
+      };
       return activeGame === 'zombie' ? <ZombieWrapper user={user} level={selectedQuiz} onClose={close} /> : <StarshipWrapper user={user} level={selectedQuiz} onClose={close} />;
   }
 

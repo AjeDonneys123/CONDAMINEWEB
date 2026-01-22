@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 
 /**
- * 📂 DASHBOARD FOLDER ÉLÈVE V138
- * Fix : N'affiche un chapitre que s'il contient des éléments visibles pour l'élève.
+ * 📂 DASHBOARD FOLDER ÉLÈVE V205 - STATUS BADGES
+ * Ajout des pastilles Vertes/Rouges selon le statut 'done' passé dans les items.
  */
 export default function DashboardFolder({ items, chapters, type, onSelect }) {
   const [openChaps, setOpenChaps] = useState({});
@@ -12,7 +12,6 @@ export default function DashboardFolder({ items, chapters, type, onSelect }) {
     return { color: '#22c55e', text: 'text-green-600', bg: 'bg-green-50', icon: '⚖️' };
   };
 
-  // Filtrage intelligent : Quels chapitres contiennent des items pour moi ?
   const relevantChapters = chapters.filter(chap => {
       const itemsInChap = items.filter(it => String(it.chapterId) === String(chap._id));
       return itemsInChap.length > 0;
@@ -39,7 +38,6 @@ export default function DashboardFolder({ items, chapters, type, onSelect }) {
                         <span className="text-2xl">{info.icon}</span>
                         <div className="flex flex-col items-start">
                             <span className="font-black text-slate-700 uppercase">{chap.title}</span>
-                            {/* Petit badge classe si le dossier vient d'ailleurs */}
                             {chap.classroom && <span className="text-[8px] bg-slate-100 px-2 py-0.5 rounded text-slate-400 font-bold">{chap.classroom}</span>}
                         </div>
                     </div>
@@ -48,12 +46,22 @@ export default function DashboardFolder({ items, chapters, type, onSelect }) {
                 
                 {isOpen && <div className="p-4 space-y-2 border-t border-pink-50">
                     {chapItems.map(it => (
-                        <div key={it._id} onClick={() => onSelect(it)} className="bg-white p-5 rounded-2xl flex justify-between cursor-pointer hover:shadow-md border border-slate-50 transition-all">
+                        <div key={it._id} onClick={() => onSelect(it)} className="bg-white p-5 rounded-2xl flex justify-between items-center cursor-pointer hover:shadow-md border border-slate-50 transition-all">
                             <div className="flex flex-col">
                                 <span className="font-bold text-slate-700">{it.title}</span>
                                 {it.targetClassrooms && <span className="text-[9px] text-slate-400 font-bold">{it.targetClassrooms.join(', ')}</span>}
                             </div>
-                            <span className="text-pink-400 font-black">➔</span>
+                            
+                            {/* --- STATUS PASTILLE --- */}
+                            {it.isDone ? (
+                                <span className="px-3 py-1 bg-green-100 text-green-600 rounded-full text-[10px] font-black border border-green-200">
+                                    ✅ FAIT
+                                </span>
+                            ) : (
+                                <span className="px-3 py-1 bg-red-50 text-red-400 rounded-full text-[10px] font-black border border-red-100 animate-pulse">
+                                    ⭕ À FAIRE
+                                </span>
+                            )}
                         </div>
                     ))}
                 </div>}

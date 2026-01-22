@@ -1,2 +1,76 @@
-.students-table { width: 100%; border-collapse: collapse; }
-.students-table td { padding: 1.5rem; border-bottom: 1px solid #f8fafc; font-weight: 700; }
+.students-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+.students-table th { position: sticky; top: 0; z-index: 20; }
+
+/* --- MODALE CORRECTION (V210) --- */
+.correction-overlay {
+    position: fixed; inset: 0; z-index: 30000;
+    background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(5px);
+    display: flex; align-items: center; justify-content: center;
+}
+
+.correction-card {
+    background: white; width: 95vw; max-width: 1400px; height: 90vh;
+    border-radius: 25px; overflow: hidden; display: flex; flex-direction: column;
+    box-shadow: 0 50px 100px -20px rgba(0,0,0,0.8);
+}
+
+.corr-header {
+    padding: 1.5rem; background: #1e293b; color: white;
+    display: flex; justify-content: space-between; align-items: center;
+}
+
+.corr-body {
+    flex: 1; display: flex; overflow: hidden;
+}
+
+/* GAUCHE : TRAVAIL ÉLÈVE */
+.corr-panel-student {
+    flex: 1; padding: 2rem; background: #f8fafc; border-right: 2px solid #e2e8f0;
+    overflow-y: auto; display: flex; flex-direction: column; gap: 10px;
+}
+
+/* DROITE : CORRECTION PROF/IA */
+.corr-panel-prof {
+    flex: 1; padding: 2rem; background: white;
+    overflow-y: auto; display: flex; flex-direction: column; gap: 20px;
+}
+
+.corr-label {
+    font-size: 0.7rem; font-weight: 900; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px;
+}
+
+.corr-textarea {
+    width: 100%; min-height: 300px; padding: 1.5rem;
+    border: 2px solid #e2e8f0; border-radius: 15px;
+    font-size: 1rem; line-height: 1.6; color: #334155;
+    outline: none; resize: none; transition: border-color 0.2s;
+}
+.corr-textarea.student { background: white; border-color: #cbd5e1; font-family: 'Courier New', monospace; }
+.corr-textarea.feedback { background: #f0f9ff; border-color: #bae6fd; color: #0369a1; }
+.corr-textarea:focus { border-color: #2563eb; }
+
+.corr-grade-box {
+    background: #fdf2f8; padding: 1.5rem; border-radius: 20px; border: 2px solid #fbcfe8;
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+}
+.corr-grade-input {
+    font-size: 3rem; font-weight: 900; text-align: center; color: #db2777;
+    background: transparent; border: none; outline: none; width: 150px;
+}
+
+.corr-footer {
+    padding: 1.5rem; background: white; border-top: 1px solid #e2e8f0;
+    display: flex; justify-content: flex-end; gap: 15px;
+}
+
+.corr-btn-save {
+    padding: 1rem 3rem; background: #16a34a; color: white; border-radius: 15px;
+    font-weight: 900; font-size: 1rem; border: none; cursor: pointer;
+    box-shadow: 0 10px 20px -5px rgba(22, 163, 74, 0.4);
+    transition: transform 0.1s;
+}
+.corr-btn-save:active { transform: scale(0.98); }
+.corr-btn-cancel {
+    padding: 1rem 2rem; background: #f1f5f9; color: #64748b; border-radius: 15px;
+    font-weight: 800; border: none; cursor: pointer;
+}
