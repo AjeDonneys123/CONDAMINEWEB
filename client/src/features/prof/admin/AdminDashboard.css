@@ -8,47 +8,63 @@
 .admin-table td { font-size: 0.85rem; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 
-/* --- MODALE FLEXBOX ROBUSTE (V181) --- */
+/* --- MODALE CENTRÉE PARFAITE (V184) --- */
 .zoom-overlay { 
-    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; 
-    z-index: 20000; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(5px); 
-    display: flex; align-items: center; justify-content: center; overflow: hidden; 
+    position: fixed; 
+    top: 0; left: 0; right: 0; bottom: 0; 
+    z-index: 20000; 
+    background: rgba(15, 23, 42, 0.85); 
+    backdrop-filter: blur(5px); 
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+    overflow: hidden; /* Empêche le scroll de la page derrière */
+    padding: 20px; /* Marge de sécurité pour mobile */
 }
 .zoom-overlay.level-2 { z-index: 20001; }
 
 .zoom-card { 
-    background: white; width: 90%; max-width: 900px; /* Plus large pour les colonnes */
+    background: white; 
+    width: 100%; 
+    max-width: 950px; /* Largeur confortable */
     border-radius: 30px; 
-    box-shadow: 0 50px 100px -20px rgba(0, 0, 0, 0.5); 
-    animation: zoomIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); 
+    box-shadow: 0 50px 100px -20px rgba(0, 0, 0, 0.6); 
+    animation: zoomIn 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275); 
     
+    /* GESTION DE la HAUTEUR ET DU SCROLL INTERNE */
+    max-height: 90vh; /* Ne dépasse jamais 90% de l'écran */
     display: flex; 
     flex-direction: column; 
-    max-height: 90vh; /* Limite hauteur écran */
-    overflow: hidden; /* Important pour le flex interne */
+    overflow: hidden; /* Coupe ce qui dépasse */
 }
 
-/* HEADER FIXE */
-.z-header { flex-shrink: 0; padding: 2rem 2.5rem 1rem 2.5rem; background: white; z-index: 20; border-bottom: 1px solid transparent; }
+/* HEADER FIXE EN HAUT */
+.z-header { 
+    flex-shrink: 0; 
+    padding: 2rem 2.5rem 1rem 2.5rem; 
+    background: white; 
+    z-index: 20; 
+}
 
-/* CORPS FLEXIBLE ET SCROLLABLE */
+/* CORPS FLEXIBLE QUI PREND LA PLACE RESTANTE */
 .z-body { 
     flex: 1; 
-    overflow-y: auto; /* Scroll global si besoin (petits écrans) */
-    padding: 0 2.5rem; 
+    overflow-y: auto; /* C'EST ICI QUE CA SCROLLE */
+    padding: 0 2.5rem 1rem 2.5rem; 
+    min-height: 0; /* Fix crucial pour Firefox/Flex */
 }
 
-/* FOOTER FIXE */
+/* FOOTER FIXE EN BAS */
 .z-footer { 
     flex-shrink: 0; 
-    padding: 1.5rem 2.5rem 2rem 2.5rem; 
+    padding: 1.5rem 2.5rem; 
     background: white; 
     border-top: 1px solid #f1f5f9; 
     z-index: 10;
     display: flex; gap: 15px;
 }
 
-@keyframes zoomIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes zoomIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
 /* UTILS */
 .dev-shortcuts { display: flex; gap: 10px; margin-bottom: 2rem; background: #1e293b; padding: 10px; border-radius: 20px; align-items: center; overflow-x: auto; }

@@ -2,9 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import './AdminDashboard.css';
 
 /**
- * ⚙️ DASHBOARD ADMIN V182 - FINDERS DANS MODALES
- * Feature : Ajout de barres de recherche (Finders) à l'intérieur des colonnes de la modale Teacher.
- * Fix : Les listes sont scrollables individuellement et filtrables.
+ * ⚙️ DASHBOARD ADMIN V184 - LAYOUT FINAL
+ * La modale est maintenant parfaitement centrée (max-height: 90vh) et scrollable en interne.
+ * Les listes ont leurs propres scrollbars dans des conteneurs flex.
  */
 export default function AdminDashboard({ user, onRefresh }) {
     const [view, setView] = useState('classes'); 
@@ -29,7 +29,7 @@ export default function AdminDashboard({ user, onRefresh }) {
     const [manageItem, setManageItem] = useState(null); 
     const [memberSearch, setMemberSearch] = useState(""); 
 
-    // MINI FINDERS (POUR LA MODALE TEACHER)
+    // FINDERS INTERNES MODALE
     const [filterSub, setFilterSub] = useState("");
     const [filterClass, setFilterClass] = useState("");
     const [filterGroup, setFilterGroup] = useState("");
@@ -63,13 +63,8 @@ export default function AdminDashboard({ user, onRefresh }) {
 
     useEffect(() => { loadData(); setSearchTerm(''); if (view !== 'students') setActiveClassTab('ALL'); }, [view]);
 
-    // Reset des filtres à l'ouverture d'une modale
     useEffect(() => {
-        if (modalMode) {
-            setFilterSub("");
-            setFilterClass("");
-            setFilterGroup("");
-        }
+        if (modalMode) { setFilterSub(""); setFilterClass(""); setFilterGroup(""); }
     }, [modalMode]);
 
     const getDisplayedItems = () => {
@@ -229,11 +224,8 @@ export default function AdminDashboard({ user, onRefresh }) {
                                     </div>
                                 )}
                                 
-                                {/* FIX V183 : COLONNES AVEC FINDERS ET CADRES SCROLLABLES */}
                                 {view === 'teachers' && (
                                     <div className="grid grid-cols-3 gap-4 border-t pt-6 h-[400px]">
-                                        
-                                        {/* COL 1 : MATIERES */}
                                         <div className="flex flex-col gap-2 overflow-hidden h-full">
                                             <div className="flex flex-col gap-1">
                                                 <h4 className="text-[10px] font-black uppercase text-indigo-500">📚 Matières</h4>
@@ -243,8 +235,6 @@ export default function AdminDashboard({ user, onRefresh }) {
                                                 {allSubjects.filter(s=>s.name.toLowerCase().includes(filterSub.toLowerCase())).map(s => <button key={s._id} onClick={() => toggleArrayItem('taughtSubjects', s._id)} className={`w-full text-left px-3 py-2 rounded-lg text-[10px] font-bold transition-all ${currentItem.taughtSubjects?.includes(s._id) ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'}`}>{s.name}</button>)}
                                             </div>
                                         </div>
-
-                                        {/* COL 2 : CLASSES */}
                                         <div className="flex flex-col gap-2 overflow-hidden h-full">
                                             <div className="flex flex-col gap-1">
                                                 <h4 className="text-[10px] font-black uppercase text-emerald-500">🏫 Classes</h4>
@@ -254,8 +244,6 @@ export default function AdminDashboard({ user, onRefresh }) {
                                                 {allClasses.filter(c => c.type === 'CLASS' && c.name.toLowerCase().includes(filterClass.toLowerCase())).map(c => <button key={c._id} onClick={() => toggleArrayItem('assignedClasses', c._id)} className={`w-full text-left px-3 py-2 rounded-lg text-[10px] font-bold transition-all ${currentItem.assignedClasses?.includes(c._id) ? 'bg-emerald-500 text-white' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'}`}>{c.name}</button>)}
                                             </div>
                                         </div>
-
-                                        {/* COL 3 : GROUPES */}
                                         <div className="flex flex-col gap-2 overflow-hidden h-full">
                                             <div className="flex flex-col gap-1">
                                                 <h4 className="text-[10px] font-black uppercase text-orange-500">👥 Groupes</h4>
