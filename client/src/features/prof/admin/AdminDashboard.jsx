@@ -2,9 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import './AdminDashboard.css';
 
 /**
- * ⚙️ DASHBOARD ADMIN V184 - LAYOUT FINAL
- * La modale est maintenant parfaitement centrée (max-height: 90vh) et scrollable en interne.
- * Les listes ont leurs propres scrollbars dans des conteneurs flex.
+ * ⚙️ DASHBOARD ADMIN V187 - FULL FLEX LAYOUT
+ * Fix : Suppression des hauteurs fixes (h-400px).
+ * Utilisation de flex-1 pour que les listes occupent l'espace restant dynamiquement.
+ * Les boutons "Annuler/Enregistrer" sont garantis visibles.
  */
 export default function AdminDashboard({ user, onRefresh }) {
     const [view, setView] = useState('classes'); 
@@ -212,8 +213,10 @@ export default function AdminDashboard({ user, onRefresh }) {
                             <h2 className="text-xl font-black uppercase text-slate-800">{modalMode === 'create' ? `Nouveau ${view.slice(0,-1)}` : `Modifier ${currentItem.name || currentItem.lastName}`}</h2>
                         </div>
                         
+                        {/* CORPS FLEXIBLE ET SCROLLABLE */}
                         <div className="z-body">
-                            <div className="space-y-4 mb-6">
+                            {/* PARTIE HAUTE (Inputs) - Fixe dans le flux */}
+                            <div className="space-y-4 mb-6 flex-shrink-0">
                                 {['teachers', 'students', 'staff'].includes(view) && <div className="flex gap-4"><input className="admin-input" placeholder="Prénom" value={currentItem.firstName} onChange={e => setCurrentItem({...currentItem, firstName: e.target.value})} /><input className="admin-input" placeholder="Nom" value={currentItem.lastName} onChange={e => setCurrentItem({...currentItem, lastName: e.target.value})} /></div>}
                                 {view === 'students' && (<div className="flex gap-4"><input className="admin-input" placeholder="Email Élève" value={currentItem.email} onChange={e => setCurrentItem({...currentItem, email: e.target.value})} /><input className="admin-input" placeholder="Email Parent" value={currentItem.parentEmail || ''} onChange={e => setCurrentItem({...currentItem, parentEmail: e.target.value})} /></div>)}
                                 {['teachers', 'staff'].includes(view) && <input className="admin-input" placeholder="Mot de passe" value={currentItem.password} onChange={e => setCurrentItem({...currentItem, password: e.target.value})} />}
@@ -223,42 +226,62 @@ export default function AdminDashboard({ user, onRefresh }) {
                                         <div className="flex-1 flex flex-col gap-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-2">NIVEAU</label><select className="admin-input" value={currentItem.level || ''} onChange={e => setCurrentItem({...currentItem, level: e.target.value})}><option value="">AUTO / AUCUN</option><option value="6">6ème</option><option value="5">5ème</option><option value="4">4ème</option><option value="3">3ème</option><option value="2">2nde</option><option value="1">1ère</option><option value="TERM">Terminale</option></select></div>
                                     </div>
                                 )}
-                                
-                                {view === 'teachers' && (
-                                    <div className="grid grid-cols-3 gap-4 border-t pt-6 h-[400px]">
-                                        <div className="flex flex-col gap-2 overflow-hidden h-full">
-                                            <div className="flex flex-col gap-1">
-                                                <h4 className="text-[10px] font-black uppercase text-indigo-500">📚 Matières</h4>
-                                                <input className="w-full p-2 text-[10px] font-bold border-2 border-indigo-50 rounded-xl bg-slate-50 focus:bg-white focus:border-indigo-400 outline-none transition-colors" placeholder="🔎 Filtrer..." value={filterSub} onChange={e=>setFilterSub(e.target.value)} />
-                                            </div>
-                                            <div className="flex-1 overflow-y-auto bg-white p-2 rounded-xl border-2 border-slate-100 custom-scrollbar flex flex-col gap-1 shadow-inner">
-                                                {allSubjects.filter(s=>s.name.toLowerCase().includes(filterSub.toLowerCase())).map(s => <button key={s._id} onClick={() => toggleArrayItem('taughtSubjects', s._id)} className={`w-full text-left px-3 py-2 rounded-lg text-[10px] font-bold transition-all ${currentItem.taughtSubjects?.includes(s._id) ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'}`}>{s.name}</button>)}
-                                            </div>
-                                        </div>
-                                        <div className="flex flex-col gap-2 overflow-hidden h-full">
-                                            <div className="flex flex-col gap-1">
-                                                <h4 className="text-[10px] font-black uppercase text-emerald-500">🏫 Classes</h4>
-                                                <input className="w-full p-2 text-[10px] font-bold border-2 border-emerald-50 rounded-xl bg-slate-50 focus:bg-white focus:border-emerald-400 outline-none transition-colors" placeholder="🔎 Filtrer..." value={filterClass} onChange={e=>setFilterClass(e.target.value)} />
-                                            </div>
-                                            <div className="flex-1 overflow-y-auto bg-white p-2 rounded-xl border-2 border-slate-100 custom-scrollbar flex flex-col gap-1 shadow-inner">
-                                                {allClasses.filter(c => c.type === 'CLASS' && c.name.toLowerCase().includes(filterClass.toLowerCase())).map(c => <button key={c._id} onClick={() => toggleArrayItem('assignedClasses', c._id)} className={`w-full text-left px-3 py-2 rounded-lg text-[10px] font-bold transition-all ${currentItem.assignedClasses?.includes(c._id) ? 'bg-emerald-500 text-white' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'}`}>{c.name}</button>)}
-                                            </div>
-                                        </div>
-                                        <div className="flex flex-col gap-2 overflow-hidden h-full">
-                                            <div className="flex flex-col gap-1">
-                                                <h4 className="text-[10px] font-black uppercase text-orange-500">👥 Groupes</h4>
-                                                <input className="w-full p-2 text-[10px] font-bold border-2 border-orange-50 rounded-xl bg-slate-50 focus:bg-white focus:border-orange-400 outline-none transition-colors" placeholder="🔎 Filtrer..." value={filterGroup} onChange={e=>setFilterGroup(e.target.value)} />
-                                            </div>
-                                            <div className="flex-1 overflow-y-auto bg-white p-2 rounded-xl border-2 border-slate-100 custom-scrollbar flex flex-col gap-1 shadow-inner">
-                                                {allClasses.filter(c => c.type === 'GROUP' && c.name.toLowerCase().includes(filterGroup.toLowerCase())).map(c => <button key={c._id} onClick={() => toggleArrayItem('assignedClasses', c._id)} className={`w-full text-left px-3 py-2 rounded-lg text-[10px] font-bold transition-all ${currentItem.assignedClasses?.includes(c._id) ? 'bg-orange-500 text-white' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'}`}>{c.name}</button>)}
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-                                
-                                {view === 'students' && (<div className="grid grid-cols-2 gap-4 border-t pt-6"><div className="flex flex-col gap-2 overflow-hidden"><h4 className="text-[10px] font-black uppercase text-emerald-500">🏫 Classe Principale & Niveau</h4><div className="mb-2"><label className="text-[8px] font-black text-slate-400 uppercase">NIVEAU</label><select className="admin-input mt-1" value={currentItem.currentLevel || ''} onChange={e => setCurrentItem({...currentItem, currentLevel: e.target.value})}><option value="">-- AUTO --</option><option value="6">6ème</option><option value="5">5ème</option><option value="4">4ème</option><option value="3">3ème</option><option value="2">2nde</option><option value="1">1ère</option><option value="TERM">Terminale</option></select></div><div className="flex-1 overflow-y-auto max-h-[250px] custom-scrollbar flex flex-col gap-1 bg-slate-50 p-2 rounded-xl">{allClasses.filter(c => c.type === 'CLASS').map(c => <button key={c._id} onClick={() => setCurrentItem({...currentItem, classId: c._id})} className={`w-full text-left px-3 py-2 rounded-lg text-[10px] font-bold transition-all ${currentItem.classId === c._id ? 'bg-emerald-600 text-white shadow-md' : 'bg-white text-slate-400 border border-slate-100'}`}>{c.name}</button>)}</div></div><div className="flex flex-col gap-2 overflow-hidden"><h4 className="text-[10px] font-black uppercase text-orange-500">👥 Options</h4><div className="flex-1 overflow-y-auto max-h-[300px] bg-slate-50 p-2 rounded-xl border border-slate-100 custom-scrollbar flex flex-col gap-1">{allClasses.filter(c => c.type === 'GROUP').map(c => <button key={c._id} onClick={() => toggleArrayItem('assignedGroups', c._id)} className={`w-full text-left px-3 py-2 rounded-lg text-[10px] font-bold transition-all ${currentItem.assignedGroups?.includes(c._id) ? 'bg-orange-500 text-white' : 'bg-white text-slate-400 border border-slate-100'}`}>{c.name}</button>)}</div></div></div>)}
                                 {view === 'subjects' && <input className="admin-input" placeholder="Nom" value={currentItem.name} onChange={e => setCurrentItem({...currentItem, name: e.target.value})} />}
                             </div>
+                            
+                            {/* PARTIE BASSE (Listes) - Prend tout le reste de l'espace */}
+                            {view === 'teachers' && (
+                                <div className="grid grid-cols-3 gap-4 border-t pt-4 flex-1 min-h-0">
+                                    <div className="flex flex-col gap-2 h-full overflow-hidden">
+                                        <div className="flex flex-col gap-1">
+                                            <h4 className="text-[10px] font-black uppercase text-indigo-500">📚 Matières</h4>
+                                            <input className="w-full p-2 text-[10px] font-bold border-2 border-indigo-50 rounded-xl bg-slate-50 focus:bg-white focus:border-indigo-400 outline-none transition-colors" placeholder="🔎 Filtrer..." value={filterSub} onChange={e=>setFilterSub(e.target.value)} />
+                                        </div>
+                                        <div className="flex-1 overflow-y-auto bg-white p-2 rounded-xl border-2 border-slate-100 custom-scrollbar flex flex-col gap-1 shadow-inner">
+                                            {allSubjects.filter(s=>s.name.toLowerCase().includes(filterSub.toLowerCase())).map(s => <button key={s._id} onClick={() => toggleArrayItem('taughtSubjects', s._id)} className={`w-full text-left px-3 py-2 rounded-lg text-[10px] font-bold transition-all ${currentItem.taughtSubjects?.includes(s._id) ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'}`}>{s.name}</button>)}
+                                        </div>
+                                    </div>
+                                    <div className="flex flex-col gap-2 h-full overflow-hidden">
+                                        <div className="flex flex-col gap-1">
+                                            <h4 className="text-[10px] font-black uppercase text-emerald-500">🏫 Classes</h4>
+                                            <input className="w-full p-2 text-[10px] font-bold border-2 border-emerald-50 rounded-xl bg-slate-50 focus:bg-white focus:border-emerald-400 outline-none transition-colors" placeholder="🔎 Filtrer..." value={filterClass} onChange={e=>setFilterClass(e.target.value)} />
+                                        </div>
+                                        <div className="flex-1 overflow-y-auto bg-white p-2 rounded-xl border-2 border-slate-100 custom-scrollbar flex flex-col gap-1 shadow-inner">
+                                            {allClasses.filter(c => c.type === 'CLASS' && c.name.toLowerCase().includes(filterClass.toLowerCase())).map(c => <button key={c._id} onClick={() => toggleArrayItem('assignedClasses', c._id)} className={`w-full text-left px-3 py-2 rounded-lg text-[10px] font-bold transition-all ${currentItem.assignedClasses?.includes(c._id) ? 'bg-emerald-500 text-white' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'}`}>{c.name}</button>)}
+                                        </div>
+                                    </div>
+                                    <div className="flex flex-col gap-2 h-full overflow-hidden">
+                                        <div className="flex flex-col gap-1">
+                                            <h4 className="text-[10px] font-black uppercase text-orange-500">👥 Groupes</h4>
+                                            <input className="w-full p-2 text-[10px] font-bold border-2 border-orange-50 rounded-xl bg-slate-50 focus:bg-white focus:border-orange-400 outline-none transition-colors" placeholder="🔎 Filtrer..." value={filterGroup} onChange={e=>setFilterGroup(e.target.value)} />
+                                        </div>
+                                        <div className="flex-1 overflow-y-auto bg-white p-2 rounded-xl border-2 border-slate-100 custom-scrollbar flex flex-col gap-1 shadow-inner">
+                                            {allClasses.filter(c => c.type === 'GROUP' && c.name.toLowerCase().includes(filterGroup.toLowerCase())).map(c => <button key={c._id} onClick={() => toggleArrayItem('assignedClasses', c._id)} className={`w-full text-left px-3 py-2 rounded-lg text-[10px] font-bold transition-all ${currentItem.assignedClasses?.includes(c._id) ? 'bg-orange-500 text-white' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'}`}>{c.name}</button>)}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                            
+                            {view === 'students' && (
+                                <div className="grid grid-cols-2 gap-4 border-t pt-4 flex-1 min-h-0">
+                                    <div className="flex flex-col gap-2 h-full overflow-hidden">
+                                        <h4 className="text-[10px] font-black uppercase text-emerald-500">🏫 Classe Principale & Niveau</h4>
+                                        <div className="mb-1 flex-shrink-0">
+                                            <label className="text-[8px] font-black text-slate-400 uppercase">NIVEAU</label>
+                                            <select className="admin-input mt-1" value={currentItem.currentLevel || ''} onChange={e => setCurrentItem({...currentItem, currentLevel: e.target.value})}><option value="">-- AUTO --</option><option value="6">6ème</option><option value="5">5ème</option><option value="4">4ème</option><option value="3">3ème</option><option value="2">2nde</option><option value="1">1ère</option><option value="TERM">Terminale</option></select>
+                                        </div>
+                                        <div className="flex-1 overflow-y-auto bg-white p-2 rounded-xl border-2 border-slate-100 custom-scrollbar flex flex-col gap-1 shadow-inner">
+                                            {allClasses.filter(c => c.type === 'CLASS').map(c => <button key={c._id} onClick={() => setCurrentItem({...currentItem, classId: c._id})} className={`w-full text-left px-3 py-2 rounded-lg text-[10px] font-bold transition-all ${currentItem.classId === c._id ? 'bg-emerald-600 text-white shadow-md' : 'bg-white text-slate-400 border border-slate-100'}`}>{c.name}</button>)}
+                                        </div>
+                                    </div>
+                                    <div className="flex flex-col gap-2 h-full overflow-hidden">
+                                        <h4 className="text-[10px] font-black uppercase text-orange-500">👥 Options</h4>
+                                        <div className="flex-1 overflow-y-auto bg-white p-2 rounded-xl border-2 border-slate-100 custom-scrollbar flex flex-col gap-1 shadow-inner">
+                                            {allClasses.filter(c => c.type === 'GROUP').map(c => <button key={c._id} onClick={() => toggleArrayItem('assignedGroups', c._id)} className={`w-full text-left px-3 py-2 rounded-lg text-[10px] font-bold transition-all ${currentItem.assignedGroups?.includes(c._id) ? 'bg-orange-500 text-white' : 'bg-white text-slate-400 border border-slate-100'}`}>{c.name}</button>)}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         <div className="z-footer">
