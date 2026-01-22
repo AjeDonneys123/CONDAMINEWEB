@@ -8,64 +8,57 @@
 .admin-table td { font-size: 0.85rem; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 
-/* --- CORRECTION POSITION MODALE (V177) --- */
-/* On force le positionnement par rapport à la fenêtre (viewport) et non au document */
+/* --- MODALE FLEXBOX ROBUSTE (V181) --- */
 .zoom-overlay { 
-    position: fixed; 
-    top: 0; 
-    left: 0; 
-    width: 100vw; 
-    height: 100vh; 
-    z-index: 20000; /* Très haut pour passer au dessus de tout */
-    background: rgba(15, 23, 42, 0.85); 
-    backdrop-filter: blur(5px); 
-    display: flex; 
-    align-items: center; 
-    justify-content: center; 
-    overflow: hidden; /* Empêche le scroll derrière */
+    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; 
+    z-index: 20000; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(5px); 
+    display: flex; align-items: center; justify-content: center; overflow: hidden; 
 }
-
-/* Z-INDEX SUPÉRIEUR POUR LE ZOOM ÉLÈVE PAR DESSUS LA LISTE DE CLASSE */
 .zoom-overlay.level-2 { z-index: 20001; }
 
 .zoom-card { 
-    background: white; 
-    width: 90%; 
-    max-width: 600px; 
+    background: white; width: 90%; max-width: 900px; /* Plus large pour les colonnes */
     border-radius: 30px; 
-    padding: 2.5rem; 
     box-shadow: 0 50px 100px -20px rgba(0, 0, 0, 0.5); 
     animation: zoomIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); 
-    position: relative; 
-    max-height: 90vh; 
+    
     display: flex; 
-    flex-direction: column;
-    overflow-y: auto; /* Scroll interne si la modale est trop haute */
+    flex-direction: column; 
+    max-height: 90vh; /* Limite hauteur écran */
+    overflow: hidden; /* Important pour le flex interne */
+}
+
+/* HEADER FIXE */
+.z-header { flex-shrink: 0; padding: 2rem 2.5rem 1rem 2.5rem; background: white; z-index: 20; border-bottom: 1px solid transparent; }
+
+/* CORPS FLEXIBLE ET SCROLLABLE */
+.z-body { 
+    flex: 1; 
+    overflow-y: auto; /* Scroll global si besoin (petits écrans) */
+    padding: 0 2.5rem; 
+}
+
+/* FOOTER FIXE */
+.z-footer { 
+    flex-shrink: 0; 
+    padding: 1.5rem 2.5rem 2rem 2.5rem; 
+    background: white; 
+    border-top: 1px solid #f1f5f9; 
+    z-index: 10;
+    display: flex; gap: 15px;
 }
 
 @keyframes zoomIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
-/* [NOUVEAU] BARRE DEVOPS QUICK SWITCH */
-.dev-shortcuts {
-    display: flex; gap: 10px; margin-bottom: 2rem; 
-    background: #1e293b; padding: 10px; border-radius: 20px;
-    align-items: center; overflow-x: auto;
-}
-
+/* UTILS */
+.dev-shortcuts { display: flex; gap: 10px; margin-bottom: 2rem; background: #1e293b; padding: 10px; border-radius: 20px; align-items: center; overflow-x: auto; }
 .dev-label { font-size: 10px; color: #64748b; text-transform: uppercase; margin-right: 10px; white-space: nowrap; font-weight: 900; }
-.btn-shortcut {
-    padding: 8px 16px; border-radius: 12px; border: none; cursor: pointer;
-    font-size: 10px; font-weight: 900; color: white; text-transform: uppercase;
-    transition: transform 0.1s; white-space: nowrap;
-}
+.btn-shortcut { padding: 8px 16px; border-radius: 12px; border: none; cursor: pointer; font-size: 10px; font-weight: 900; color: white; text-transform: uppercase; transition: transform 0.1s; white-space: nowrap; }
 .btn-shortcut:hover { transform: scale(1.05); }
-.sc-admin { background: #f43f5e; } /* Rose/Rouge */
-.sc-prof { background: #8b5cf6; } /* Violet */
-.sc-eleve { background: #f97316; } /* Orange */
-.sc-jean { background: #3b82f6; border: 2px solid #60a5fa; } /* Bleu Jean */
+.sc-admin { background: #f43f5e; } .sc-prof { background: #8b5cf6; } .sc-eleve { background: #f97316; } .sc-jean { background: #3b82f6; border: 2px solid #60a5fa; }
 
-/* LISTE DES MEMBRES */
-.member-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; margin-bottom: 20px; border: 1px solid #f1f5f9; border-radius: 15px; padding: 10px; background: #f8fafc; min-height: 100px; }
+/* LISTE MEMBRES */
+.member-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; margin-bottom: 20px; border: 1px solid #f1f5f9; border-radius: 15px; padding: 10px; background: #f8fafc; min-height: 100px; max-height: 300px; }
 .member-row { display: flex; justify-content: space-between; align-items: center; background: white; padding: 10px 15px; border-radius: 10px; font-size: 0.8rem; font-weight: 700; color: #475569; border: 1px solid transparent; transition: all 0.2s; }
 .member-row:hover { border-color: #cbd5e1; }
 .member-btn-remove { width: 25px; height: 25px; display: flex; align-items: center; justify-content: center; background: #fee2e2; color: #ef4444; border-radius: 8px; cursor: pointer; border: none; font-weight: 900; }

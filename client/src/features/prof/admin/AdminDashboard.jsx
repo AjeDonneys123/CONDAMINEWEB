@@ -2,8 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import './AdminDashboard.css';
 
 /**
- * ⚙️ DASHBOARD ADMIN V178 - CONTEXTE IMPORT
- * Fix : La modale d'import change selon l'onglet (Classe vs Groupe).
+ * ⚙️ DASHBOARD ADMIN V182 - FINDERS DANS MODALES
+ * Feature : Ajout de barres de recherche (Finders) à l'intérieur des colonnes de la modale Teacher.
+ * Fix : Les listes sont scrollables individuellement et filtrables.
  */
 export default function AdminDashboard({ user, onRefresh }) {
     const [view, setView] = useState('classes'); 
@@ -18,15 +19,20 @@ export default function AdminDashboard({ user, onRefresh }) {
     const [allSubjects, setAllSubjects] = useState([]);
     const [allStudents, setAllStudents] = useState([]); 
     
-    // MAGIC PASTE STATE
+    // MAGIC PASTE
     const [showMagicModal, setShowMagicModal] = useState(false);
     const [magicText, setMagicText] = useState("");
     const [magicClass, setMagicClass] = useState("");
     const [magicForceOption, setMagicForceOption] = useState("");
     
-    // GESTION DES MEMBRES
+    // GESTION MEMBRES
     const [manageItem, setManageItem] = useState(null); 
     const [memberSearch, setMemberSearch] = useState(""); 
+
+    // MINI FINDERS (POUR LA MODALE TEACHER)
+    const [filterSub, setFilterSub] = useState("");
+    const [filterClass, setFilterClass] = useState("");
+    const [filterGroup, setFilterGroup] = useState("");
     
     const fileInputRef = useRef(null);
 
@@ -55,17 +61,20 @@ export default function AdminDashboard({ user, onRefresh }) {
         setLoading(false);
     };
 
-    useEffect(() => { 
-        loadData(); 
-        setSearchTerm(''); 
-        if (view !== 'students') setActiveClassTab('ALL'); 
-    }, [view]);
+    useEffect(() => { loadData(); setSearchTerm(''); if (view !== 'students') setActiveClassTab('ALL'); }, [view]);
+
+    // Reset des filtres à l'ouverture d'une modale
+    useEffect(() => {
+        if (modalMode) {
+            setFilterSub("");
+            setFilterClass("");
+            setFilterGroup("");
+        }
+    }, [modalMode]);
 
     const getDisplayedItems = () => {
         let res = items;
-        if (view === 'students' && activeClassTab !== 'ALL') {
-            res = res.filter(s => String(s.classId) === String(activeClassTab));
-        }
+        if (view === 'students' && activeClassTab !== 'ALL') res = res.filter(s => String(s.classId) === String(activeClassTab));
         if (searchTerm.trim() !== '') {
             const term = searchTerm.toLowerCase();
             res = res.filter(item => {
@@ -98,11 +107,8 @@ export default function AdminDashboard({ user, onRefresh }) {
 
     const handleOpenMagic = () => {
         const context = getActiveContext();
-        if (context) setMagicClass(context.name);
-        else setMagicClass("");
-        setMagicForceOption("");
-        setMagicText("");
-        setShowMagicModal(true);
+        if (context) setMagicClass(context.name); else setMagicClass("");
+        setMagicForceOption(""); setMagicText(""); setShowMagicModal(true);
     };
 
     const handleMagicImport = async () => {
@@ -150,40 +156,22 @@ export default function AdminDashboard({ user, onRefresh }) {
             {showMagicModal && (
                 <div className="zoom-overlay" onClick={() => setShowMagicModal(false)}>
                     <div className="zoom-card !w-[800px] !max-w-none" onClick={e => e.stopPropagation()}>
-                        
-                        {/* HEADER DYNAMIQUE SELON LE CONTEXTE */}
-                        <div className="mb-4">
-                            <h2 className={`text-xl font-black mb-1 uppercase ${isGroupMode ? 'text-orange-500' : 'text-indigo-600'}`}>
-                                {isGroupMode ? '🔮 IMPORTATION GROUPE & ÉLÈVES' : '🔮 IMPORTATION CLASSE & ÉLÈVES'}
-                            </h2>
+                        <div className="z-header">
+                            <h2 className={`text-xl font-black mb-1 uppercase ${isGroupMode ? 'text-orange-500' : 'text-indigo-600'}`}>{isGroupMode ? '🔮 IMPORTATION GROUPE & ÉLÈVES' : '🔮 IMPORTATION CLASSE & ÉLÈVES'}</h2>
                             <p className="text-[10px] text-slate-400 font-bold uppercase">Copiez un tableau Excel/Sheets (Nom, Prénom, etc.)</p>
                         </div>
-
-                        {/* INPUTS CONTEXTUELS */}
-                        {isGroupMode ? (
-                            <div className="flex gap-4 mb-4">
-                                <div className="flex-1">
-                                    <label className="text-[9px] font-black text-slate-400 uppercase ml-2">CLASSE DE RATTACHEMENT (Obligatoire)</label>
-                                    <input className="admin-input border-indigo-100 focus:border-indigo-500" placeholder="ex: 6D, T1..." value={magicClass} onChange={e => setMagicClass(e.target.value)} />
+                        <div className="z-body">
+                            {isGroupMode ? (
+                                <div className="flex gap-4 mb-4">
+                                    <div className="flex-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-2">CLASSE DE RATTACHEMENT (Obligatoire)</label><input className="admin-input border-indigo-100 focus:border-indigo-500" placeholder="ex: 6D, T1..." value={magicClass} onChange={e => setMagicClass(e.target.value)} /></div>
+                                    <div className="flex-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-2">NOM DU GROUPE (Option forcée)</label><input className="admin-input border-orange-200 focus:border-orange-500 bg-orange-50" placeholder="ex: ANGLAIS LVA, CHORALE..." value={magicForceOption} onChange={e => setMagicForceOption(e.target.value)} /></div>
                                 </div>
-                                <div className="flex-1">
-                                    <label className="text-[9px] font-black text-slate-400 uppercase ml-2">NOM DU GROUPE (Option forcée)</label>
-                                    <input className="admin-input border-orange-200 focus:border-orange-500 bg-orange-50" placeholder="ex: ANGLAIS LVA, CHORALE..." value={magicForceOption} onChange={e => setMagicForceOption(e.target.value)} />
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="flex gap-4 mb-4">
-                                <div className="flex-1">
-                                    <label className="text-[9px] font-black text-slate-400 uppercase ml-2">NOM DE LA CLASSE PAR DÉFAUT</label>
-                                    <input className="admin-input border-indigo-100 focus:border-indigo-500" placeholder="ex: 6D, T1 (Le niveau est auto-détecté)" value={magicClass} onChange={e => setMagicClass(e.target.value)} />
-                                </div>
-                                {/* Pas de deuxième input pour les classes simples pour éviter la confusion */}
-                            </div>
-                        )}
-
-                        <textarea className="w-full h-[300px] p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-mono text-xs mb-6 outline-none focus:border-slate-300 transition-all" placeholder="Collez le tableau ici..." value={magicText} onChange={e => setMagicText(e.target.value)} />
-                        
-                        <div className="flex gap-4">
+                            ) : (
+                                <div className="flex gap-4 mb-4"><div className="flex-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-2">NOM DE LA CLASSE PAR DÉFAUT</label><input className="admin-input border-indigo-100 focus:border-indigo-500" placeholder="ex: 6D, T1" value={magicClass} onChange={e => setMagicClass(e.target.value)} /></div></div>
+                            )}
+                            <textarea className="w-full h-[300px] p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-mono text-xs mb-6 outline-none focus:border-slate-300 transition-all" placeholder="Collez le tableau ici..." value={magicText} onChange={e => setMagicText(e.target.value)} />
+                        </div>
+                        <div className="z-footer">
                             <button onClick={() => fileInputRef.current.click()} className="flex-1 py-4 bg-emerald-50 text-emerald-600 rounded-xl font-black text-xs border border-emerald-100 hover:bg-emerald-100 transition-colors">📂 UPLOAD CSV / TXT</button>
                             <button onClick={() => setShowMagicModal(false)} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-xl font-black text-xs">ANNULER</button>
                             <button onClick={handleMagicImport} className={`flex-1 py-4 text-white rounded-xl font-black text-xs shadow-lg animate-pulse ${isGroupMode ? 'bg-orange-500' : 'bg-indigo-600'}`}>LANCER L'IA 🤖</button>
@@ -195,23 +183,29 @@ export default function AdminDashboard({ user, onRefresh }) {
             {manageItem && (
                 <div className="zoom-overlay" onClick={() => setManageItem(null)}>
                     <div className="zoom-card" onClick={e => e.stopPropagation()}>
-                        <h2 className="text-xl font-black mb-1 uppercase text-slate-800">{manageItem.type === 'CLASS' ? '🏫' : '👥'} {manageItem.name}</h2>
-                        <p className="text-[10px] font-bold text-slate-400 mb-4 uppercase">GESTION DES EFFECTIFS ({getMembersOf(manageItem).length} Élèves)</p>
-                        <div className="member-list custom-scrollbar">
-                            {getMembersOf(manageItem).map(m => (
-                                <div key={m._id} className="member-row"><span>{m.firstName} {m.lastName} <span className="text-[9px] text-slate-400">({m.currentClass})</span></span><button onClick={() => handleMembership('remove', m._id)} className="member-btn-remove" title="Retirer">✕</button></div>
-                            ))}
-                            {getMembersOf(manageItem).length === 0 && <div className="p-4 text-center text-slate-300 italic text-xs">Aucun élève.</div>}
+                        <div className="z-header">
+                            <h2 className="text-xl font-black mb-1 uppercase text-slate-800">{manageItem.type === 'CLASS' ? '🏫' : '👥'} {manageItem.name}</h2>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase">GESTION DES EFFECTIFS ({getMembersOf(manageItem).length} Élèves)</p>
                         </div>
-                        <div className="member-add-box">
-                            <input className="admin-input" placeholder="🔎 Ajouter un élève..." value={memberSearch} onChange={e => setMemberSearch(e.target.value)} />
-                            {memberSearch.length > 1 && (
-                                <div className="finder-results-mini custom-scrollbar">
-                                    {potentialMembers.map(p => (<div key={p._id} className="finder-row-mini" onClick={() => { handleMembership('add', p._id); setMemberSearch(""); }}><span>{p.firstName} {p.lastName} <span className="opacity-50 text-[8px]">({p.currentClass})</span></span><span className="text-green-600 font-black">+</span></div>))}
-                                </div>
-                            )}
+                        <div className="z-body">
+                            <div className="member-list custom-scrollbar">
+                                {getMembersOf(manageItem).map(m => (
+                                    <div key={m._id} className="member-row"><span>{m.firstName} {m.lastName} <span className="text-[9px] text-slate-400">({m.currentClass})</span></span><button onClick={() => handleMembership('remove', m._id)} className="member-btn-remove" title="Retirer">✕</button></div>
+                                ))}
+                                {getMembersOf(manageItem).length === 0 && <div className="p-4 text-center text-slate-300 italic text-xs">Aucun élève.</div>}
+                            </div>
+                            <div className="member-add-box">
+                                <input className="admin-input" placeholder="🔎 Ajouter un élève..." value={memberSearch} onChange={e => setMemberSearch(e.target.value)} />
+                                {memberSearch.length > 1 && (
+                                    <div className="finder-results-mini custom-scrollbar">
+                                        {potentialMembers.map(p => (<div key={p._id} className="finder-row-mini" onClick={() => { handleMembership('add', p._id); setMemberSearch(""); }}><span>{p.firstName} {p.lastName} <span className="opacity-50 text-[8px]">({p.currentClass})</span></span><span className="text-green-600 font-black">+</span></div>))}
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                        <button onClick={() => setManageItem(null)} className="mt-4 w-full py-3 bg-slate-900 text-white font-bold rounded-xl text-xs">FERMER</button>
+                        <div className="z-footer">
+                            <button onClick={() => setManageItem(null)} className="w-full py-3 bg-slate-900 text-white font-bold rounded-xl text-xs">FERMER</button>
+                        </div>
                     </div>
                 </div>
             )}
@@ -219,22 +213,70 @@ export default function AdminDashboard({ user, onRefresh }) {
             {modalMode && currentItem && (
                 <div className="zoom-overlay" onClick={() => setModalMode(null)}>
                     <div className="zoom-card" onClick={e => e.stopPropagation()}>
-                        <h2 className="text-xl font-black mb-6 uppercase text-slate-800">{modalMode === 'create' ? `Nouveau ${view.slice(0,-1)}` : `Modifier ${currentItem.name || currentItem.lastName}`}</h2>
-                        <div className="space-y-4 mb-6">
-                            {['teachers', 'students', 'staff'].includes(view) && <div className="flex gap-4"><input className="admin-input" placeholder="Prénom" value={currentItem.firstName} onChange={e => setCurrentItem({...currentItem, firstName: e.target.value})} /><input className="admin-input" placeholder="Nom" value={currentItem.lastName} onChange={e => setCurrentItem({...currentItem, lastName: e.target.value})} /></div>}
-                            {view === 'students' && (<div className="flex gap-4"><input className="admin-input" placeholder="Email Élève" value={currentItem.email} onChange={e => setCurrentItem({...currentItem, email: e.target.value})} /><input className="admin-input" placeholder="Email Parent" value={currentItem.parentEmail || ''} onChange={e => setCurrentItem({...currentItem, parentEmail: e.target.value})} /></div>)}
-                            {['teachers', 'staff'].includes(view) && <input className="admin-input" placeholder="Mot de passe" value={currentItem.password} onChange={e => setCurrentItem({...currentItem, password: e.target.value})} />}
-                            {['classes', 'groups'].includes(view) && (
-                                <div className="flex gap-4">
-                                    <input className="admin-input flex-1" placeholder={view === 'classes' ? "Nom (ex: 6A)" : "Nom (ex: SPE MATHS)"} value={currentItem.name} onChange={e => setCurrentItem({...currentItem, name: e.target.value})} />
-                                    <div className="flex-1 flex flex-col gap-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-2">NIVEAU</label><select className="admin-input" value={currentItem.level || ''} onChange={e => setCurrentItem({...currentItem, level: e.target.value})}><option value="">AUTO / AUCUN</option><option value="6">6ème</option><option value="5">5ème</option><option value="4">4ème</option><option value="3">3ème</option><option value="2">2nde</option><option value="1">1ère</option><option value="TERM">Terminale</option></select></div>
-                                </div>
-                            )}
-                            {view === 'teachers' && (<div className="grid grid-cols-3 gap-4 border-t pt-6 h-[400px]"><div className="flex flex-col gap-2 overflow-hidden"><h4 className="text-[10px] font-black uppercase text-indigo-500">📚 Matières</h4><div className="overflow-y-auto custom-scrollbar flex-1 space-y-1 bg-slate-50 p-2 rounded-xl">{allSubjects.map(s => <button key={s._id} onClick={() => toggleArrayItem('taughtSubjects', s._id)} className={`w-full text-left px-3 py-2 rounded-lg text-[10px] font-bold transition-all ${currentItem.taughtSubjects?.includes(s._id) ? 'bg-indigo-600 text-white' : 'bg-white text-slate-400'}`}>{s.name}</button>)}</div></div><div className="flex flex-col gap-2 overflow-hidden"><h4 className="text-[10px] font-black uppercase text-emerald-500">🏫 Classes</h4><div className="overflow-y-auto custom-scrollbar flex-1 space-y-1 bg-slate-50 p-2 rounded-xl">{allClasses.filter(c => c.type === 'CLASS').map(c => <button key={c._id} onClick={() => toggleArrayItem('assignedClasses', c._id)} className={`w-full text-left px-3 py-2 rounded-lg text-[10px] font-bold transition-all ${currentItem.assignedClasses?.includes(c._id) ? 'bg-emerald-500 text-white' : 'bg-white text-slate-400'}`}>{c.name}</button>)}</div></div><div className="flex flex-col gap-2 overflow-hidden"><h4 className="text-[10px] font-black uppercase text-orange-500">👥 Groupes</h4><div className="overflow-y-auto custom-scrollbar flex-1 space-y-1 bg-slate-50 p-2 rounded-xl">{allClasses.filter(c => c.type === 'GROUP').map(c => <button key={c._id} onClick={() => toggleArrayItem('assignedClasses', c._id)} className={`w-full text-left px-3 py-2 rounded-lg text-[10px] font-bold transition-all ${currentItem.assignedClasses?.includes(c._id) ? 'bg-orange-500 text-white' : 'bg-white text-slate-400'}`}>{c.name}</button>)}</div></div></div>)}
-                            {view === 'students' && (<div className="grid grid-cols-2 gap-4 border-t pt-6 h-[400px]"><div className="flex flex-col gap-2 overflow-hidden"><h4 className="text-[10px] font-black uppercase text-emerald-500">🏫 Classe Principale & Niveau</h4><div className="mb-2"><label className="text-[8px] font-black text-slate-400 uppercase">NIVEAU</label><select className="admin-input mt-1" value={currentItem.currentLevel || ''} onChange={e => setCurrentItem({...currentItem, currentLevel: e.target.value})}><option value="">-- AUTO --</option><option value="6">6ème</option><option value="5">5ème</option><option value="4">4ème</option><option value="3">3ème</option><option value="2">2nde</option><option value="1">1ère</option><option value="TERM">Terminale</option></select></div><div className="overflow-y-auto custom-scrollbar flex-1 space-y-1 bg-slate-50 p-2 rounded-xl">{allClasses.filter(c => c.type === 'CLASS').map(c => <button key={c._id} onClick={() => setCurrentItem({...currentItem, classId: c._id})} className={`w-full text-left px-3 py-2 rounded-lg text-[10px] font-bold transition-all ${currentItem.classId === c._id ? 'bg-emerald-600 text-white shadow-md' : 'bg-white text-slate-400'}`}>{c.name}</button>)}</div></div><div className="flex flex-col gap-2 overflow-hidden"><h4 className="text-[10px] font-black uppercase text-orange-500">👥 Options</h4><div className="overflow-y-auto custom-scrollbar flex-1 space-y-1 bg-slate-50 p-2 rounded-xl">{allClasses.filter(c => c.type === 'GROUP').map(c => <button key={c._id} onClick={() => toggleArrayItem('assignedGroups', c._id)} className={`w-full text-left px-3 py-2 rounded-lg text-[10px] font-bold transition-all ${currentItem.assignedGroups?.includes(c._id) ? 'bg-orange-500 text-white' : 'bg-white text-slate-400'}`}>{c.name}</button>)}</div></div></div>)}
-                            {view === 'subjects' && <input className="admin-input" placeholder="Nom" value={currentItem.name} onChange={e => setCurrentItem({...currentItem, name: e.target.value})} />}
+                        <div className="z-header">
+                            <h2 className="text-xl font-black uppercase text-slate-800">{modalMode === 'create' ? `Nouveau ${view.slice(0,-1)}` : `Modifier ${currentItem.name || currentItem.lastName}`}</h2>
                         </div>
-                        <div className="flex gap-4 mt-6"><button onClick={() => setModalMode(null)} className="flex-1 py-3 bg-slate-100 text-slate-500 font-bold rounded-xl uppercase text-xs">Annuler</button><button onClick={handleSave} className="flex-1 py-3 bg-slate-900 text-white font-bold rounded-xl uppercase text-xs shadow-xl">Enregistrer</button></div>
+                        
+                        <div className="z-body">
+                            <div className="space-y-4 mb-6">
+                                {['teachers', 'students', 'staff'].includes(view) && <div className="flex gap-4"><input className="admin-input" placeholder="Prénom" value={currentItem.firstName} onChange={e => setCurrentItem({...currentItem, firstName: e.target.value})} /><input className="admin-input" placeholder="Nom" value={currentItem.lastName} onChange={e => setCurrentItem({...currentItem, lastName: e.target.value})} /></div>}
+                                {view === 'students' && (<div className="flex gap-4"><input className="admin-input" placeholder="Email Élève" value={currentItem.email} onChange={e => setCurrentItem({...currentItem, email: e.target.value})} /><input className="admin-input" placeholder="Email Parent" value={currentItem.parentEmail || ''} onChange={e => setCurrentItem({...currentItem, parentEmail: e.target.value})} /></div>)}
+                                {['teachers', 'staff'].includes(view) && <input className="admin-input" placeholder="Mot de passe" value={currentItem.password} onChange={e => setCurrentItem({...currentItem, password: e.target.value})} />}
+                                {['classes', 'groups'].includes(view) && (
+                                    <div className="flex gap-4">
+                                        <input className="admin-input flex-1" placeholder={view === 'classes' ? "Nom (ex: 6A)" : "Nom (ex: SPE MATHS)"} value={currentItem.name} onChange={e => setCurrentItem({...currentItem, name: e.target.value})} />
+                                        <div className="flex-1 flex flex-col gap-1"><label className="text-[9px] font-black text-slate-400 uppercase ml-2">NIVEAU</label><select className="admin-input" value={currentItem.level || ''} onChange={e => setCurrentItem({...currentItem, level: e.target.value})}><option value="">AUTO / AUCUN</option><option value="6">6ème</option><option value="5">5ème</option><option value="4">4ème</option><option value="3">3ème</option><option value="2">2nde</option><option value="1">1ère</option><option value="TERM">Terminale</option></select></div>
+                                    </div>
+                                )}
+                                
+                                {/* FIX V183 : COLONNES AVEC FINDERS ET CADRES SCROLLABLES */}
+                                {view === 'teachers' && (
+                                    <div className="grid grid-cols-3 gap-4 border-t pt-6 h-[400px]">
+                                        
+                                        {/* COL 1 : MATIERES */}
+                                        <div className="flex flex-col gap-2 overflow-hidden h-full">
+                                            <div className="flex flex-col gap-1">
+                                                <h4 className="text-[10px] font-black uppercase text-indigo-500">📚 Matières</h4>
+                                                <input className="w-full p-2 text-[10px] font-bold border-2 border-indigo-50 rounded-xl bg-slate-50 focus:bg-white focus:border-indigo-400 outline-none transition-colors" placeholder="🔎 Filtrer..." value={filterSub} onChange={e=>setFilterSub(e.target.value)} />
+                                            </div>
+                                            <div className="flex-1 overflow-y-auto bg-white p-2 rounded-xl border-2 border-slate-100 custom-scrollbar flex flex-col gap-1 shadow-inner">
+                                                {allSubjects.filter(s=>s.name.toLowerCase().includes(filterSub.toLowerCase())).map(s => <button key={s._id} onClick={() => toggleArrayItem('taughtSubjects', s._id)} className={`w-full text-left px-3 py-2 rounded-lg text-[10px] font-bold transition-all ${currentItem.taughtSubjects?.includes(s._id) ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'}`}>{s.name}</button>)}
+                                            </div>
+                                        </div>
+
+                                        {/* COL 2 : CLASSES */}
+                                        <div className="flex flex-col gap-2 overflow-hidden h-full">
+                                            <div className="flex flex-col gap-1">
+                                                <h4 className="text-[10px] font-black uppercase text-emerald-500">🏫 Classes</h4>
+                                                <input className="w-full p-2 text-[10px] font-bold border-2 border-emerald-50 rounded-xl bg-slate-50 focus:bg-white focus:border-emerald-400 outline-none transition-colors" placeholder="🔎 Filtrer..." value={filterClass} onChange={e=>setFilterClass(e.target.value)} />
+                                            </div>
+                                            <div className="flex-1 overflow-y-auto bg-white p-2 rounded-xl border-2 border-slate-100 custom-scrollbar flex flex-col gap-1 shadow-inner">
+                                                {allClasses.filter(c => c.type === 'CLASS' && c.name.toLowerCase().includes(filterClass.toLowerCase())).map(c => <button key={c._id} onClick={() => toggleArrayItem('assignedClasses', c._id)} className={`w-full text-left px-3 py-2 rounded-lg text-[10px] font-bold transition-all ${currentItem.assignedClasses?.includes(c._id) ? 'bg-emerald-500 text-white' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'}`}>{c.name}</button>)}
+                                            </div>
+                                        </div>
+
+                                        {/* COL 3 : GROUPES */}
+                                        <div className="flex flex-col gap-2 overflow-hidden h-full">
+                                            <div className="flex flex-col gap-1">
+                                                <h4 className="text-[10px] font-black uppercase text-orange-500">👥 Groupes</h4>
+                                                <input className="w-full p-2 text-[10px] font-bold border-2 border-orange-50 rounded-xl bg-slate-50 focus:bg-white focus:border-orange-400 outline-none transition-colors" placeholder="🔎 Filtrer..." value={filterGroup} onChange={e=>setFilterGroup(e.target.value)} />
+                                            </div>
+                                            <div className="flex-1 overflow-y-auto bg-white p-2 rounded-xl border-2 border-slate-100 custom-scrollbar flex flex-col gap-1 shadow-inner">
+                                                {allClasses.filter(c => c.type === 'GROUP' && c.name.toLowerCase().includes(filterGroup.toLowerCase())).map(c => <button key={c._id} onClick={() => toggleArrayItem('assignedClasses', c._id)} className={`w-full text-left px-3 py-2 rounded-lg text-[10px] font-bold transition-all ${currentItem.assignedClasses?.includes(c._id) ? 'bg-orange-500 text-white' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'}`}>{c.name}</button>)}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                                
+                                {view === 'students' && (<div className="grid grid-cols-2 gap-4 border-t pt-6"><div className="flex flex-col gap-2 overflow-hidden"><h4 className="text-[10px] font-black uppercase text-emerald-500">🏫 Classe Principale & Niveau</h4><div className="mb-2"><label className="text-[8px] font-black text-slate-400 uppercase">NIVEAU</label><select className="admin-input mt-1" value={currentItem.currentLevel || ''} onChange={e => setCurrentItem({...currentItem, currentLevel: e.target.value})}><option value="">-- AUTO --</option><option value="6">6ème</option><option value="5">5ème</option><option value="4">4ème</option><option value="3">3ème</option><option value="2">2nde</option><option value="1">1ère</option><option value="TERM">Terminale</option></select></div><div className="flex-1 overflow-y-auto max-h-[250px] custom-scrollbar flex flex-col gap-1 bg-slate-50 p-2 rounded-xl">{allClasses.filter(c => c.type === 'CLASS').map(c => <button key={c._id} onClick={() => setCurrentItem({...currentItem, classId: c._id})} className={`w-full text-left px-3 py-2 rounded-lg text-[10px] font-bold transition-all ${currentItem.classId === c._id ? 'bg-emerald-600 text-white shadow-md' : 'bg-white text-slate-400 border border-slate-100'}`}>{c.name}</button>)}</div></div><div className="flex flex-col gap-2 overflow-hidden"><h4 className="text-[10px] font-black uppercase text-orange-500">👥 Options</h4><div className="flex-1 overflow-y-auto max-h-[300px] bg-slate-50 p-2 rounded-xl border border-slate-100 custom-scrollbar flex flex-col gap-1">{allClasses.filter(c => c.type === 'GROUP').map(c => <button key={c._id} onClick={() => toggleArrayItem('assignedGroups', c._id)} className={`w-full text-left px-3 py-2 rounded-lg text-[10px] font-bold transition-all ${currentItem.assignedGroups?.includes(c._id) ? 'bg-orange-500 text-white' : 'bg-white text-slate-400 border border-slate-100'}`}>{c.name}</button>)}</div></div></div>)}
+                                {view === 'subjects' && <input className="admin-input" placeholder="Nom" value={currentItem.name} onChange={e => setCurrentItem({...currentItem, name: e.target.value})} />}
+                            </div>
+                        </div>
+
+                        <div className="z-footer">
+                            <button onClick={() => setModalMode(null)} className="flex-1 py-3 bg-slate-100 text-slate-500 font-bold rounded-xl uppercase text-xs">Annuler</button>
+                            <button onClick={handleSave} className="flex-1 py-3 bg-slate-900 text-white font-bold rounded-xl uppercase text-xs shadow-xl">Enregistrer</button>
+                        </div>
                     </div>
                 </div>
             )}
