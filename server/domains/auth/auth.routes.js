@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const AuthExpert = require('./experts/auth.expert');
 
-// 1. Configuration (Liste des classes pour le menu déroulant)
+// 1. Configuration (Liste des classes pour le menu déroulant) - GARDE POUR COMPATIBILITÉ
 router.get('/config', async (req, res) => {
     try {
         const config = await AuthExpert.getLoginConfig();
@@ -12,7 +12,15 @@ router.get('/config', async (req, res) => {
     }
 });
 
-// 2. Liste des élèves d'une classe (Pour la recherche)
+// 2. DONNÉES FINDER LÉGÈRES (ID, Nom, Prénom, Classe)
+router.get('/finder-data', async (req, res) => {
+    try {
+        const list = await AuthExpert.getAllStudentsForFinder();
+        res.json(list);
+    } catch (e) { res.status(500).json([]); }
+});
+
+// 3. Liste des élèves d'une classe (Legacy)
 router.get('/students/:classId', async (req, res) => {
     try {
         const list = await AuthExpert.getStudentsForSelection(req.params.classId);
@@ -20,7 +28,7 @@ router.get('/students/:classId', async (req, res) => {
     } catch (e) { res.status(500).json([]); }
 });
 
-// 3. Login Unique (Prof ou Élève)
+// 4. Login Unique (Prof ou Élève)
 router.post('/login', async (req, res) => {
     try {
         const result = await AuthExpert.verify(req.body);

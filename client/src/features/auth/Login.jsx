@@ -2,17 +2,18 @@ import React, { useState, useEffect } from 'react';
 import './Login.css';
 
 export default function Login({ onLoginSuccess }) {
-  const [mode, setMode] = useState(null); // 'student', 'teacher', 'admin'
-  const [classes, setClasses] = useState([]);
-  const [students, setStudents] = useState([]);
+  const [mode, setMode] = useState(null);
   
-  // Student Form
-  const [selectedClassId, setSelectedClassId] = useState('');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [showFinder, setShowFinder] = useState(false);
+  // --- FINDER STATE ---
+  const [allStudentsData, setAllStudentsData] = useState([]); // Données brutes légères
+  const [inputClass, setInputClass] = useState('');
+  const [inputLast, setInputLast] = useState('');
+  const [inputFirst, setInputFirst] = useState('');
   const [selectedStudent, setSelectedStudent] = useState(null);
+  const [suggestions, setSuggestions] = useState([]);
+  const [activeField, setActiveField] = useState(null);
 
-  // Staff Form
+  // --- STAFF STATE ---
   const [fName, setFName] = useState('');
   const [lName, setLName] = useState('');
   const [password, setPassword] = useState('');
@@ -20,30 +21,65 @@ export default function Login({ onLoginSuccess }) {
   
   const [loading, setLoading] = useState(false);
 
+  // Charger la liste légère au montage si mode élève
   useEffect(() => {
-    fetch('/api/auth/config')
-        .then(res => res.ok ? res.json() : { classrooms: [] })
-        .then(data => setClasses(data.classrooms || []))
-        .catch(e => console.error("Config fail", e));
-  }, []);
-
-  useEffect(() => {
-    if (selectedClassId) {
-        fetch(`/api/auth/students/${selectedClassId}`)
-            .then(res => res.ok ? res.json() : [])
-            .then(setStudents)
-            .catch(() => setStudents([]));
-        setSelectedStudent(null);
-        setSearchTerm('');
+    if (mode === 'student') {
+        setLoading(true);
+        fetch('/api/auth/finder-data')
+            .then(res => res.json())
+            .then(data => {
+                setAllStudentsData(data);
+                setLoading(false);
+            })
+            .catch(() => setLoading(false));
     }
-  }, [selectedClassId]);
+  }, [mode]);
+
+  // --- MOTEUR DE RECHERCHE CROISÉ ---
+  useEffect(() => {
+    if (selectedStudent) return; // Si déjà choisi, pas de suggestions
+
+    const clean = (str) => str.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    
+    const sClass = clean(inputClass);
+    const sLast = clean(inputLast);
+    const sFirst = clean(inputFirst);
+
+    if (!sClass && !sLast && !sFirst) {
+        setSuggestions([]);
+        return;
+    }
+
+    const matches = allStudentsData.filter(s => {
+        const matchClass = s.className ? clean(s.className).includes(sClass) : true;
+        const matchLast = s.lastName ? clean(s.lastName).includes(sLast) : true;
+        const matchFirst = s.firstName ? clean(s.firstName).includes(sFirst) : true;
+        return matchClass && matchLast && matchFirst;
+    });
+
+    setSuggestions(matches.slice(0, 8)); // Max 8 suggestions
+  }, [inputClass, inputLast, inputFirst, allStudentsData, selectedStudent]);
+
+  const handleSelectSuggestion = (s) => {
+      setSelectedStudent(s);
+      setInputClass(s.className || '');
+      setInputLast(s.lastName);
+      setInputFirst(s.firstName);
+      setSuggestions([]);
+  };
+
+  const handleReset = () => {
+      setSelectedStudent(null);
+      setInputClass('');
+      setInputLast('');
+      setInputFirst('');
+      setSuggestions([]);
+  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
     
-    // MODIF CRUCIALE : On envoie le rôle exact (TEACHER ou ADMIN)
-    // Au lieu de grouper tout le monde sous 'PROF'
     let roleToSend = 'STUDENT';
     if (mode === 'teacher') roleToSend = 'TEACHER';
     if (mode === 'admin') roleToSend = 'ADMIN';
@@ -64,14 +100,11 @@ export default function Login({ onLoginSuccess }) {
             localStorage.setItem('player', JSON.stringify(data.user));
             onLoginSuccess(data.user);
         } else {
-            // Message d'erreur spécifique du backend
             alert(data.message || "Identifiants incorrects");
         }
     } catch(e) { alert("Le serveur est injoignable."); }
     setLoading(false);
   };
-
-  const filteredStudents = students.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
   // 1. ÉCRAN DE SÉLECTION DU RÔLE
   if (!mode) {
@@ -99,13 +132,11 @@ export default function Login({ onLoginSuccess }) {
     );
   }
 
-  // 2. FORMULAIRES DE CONNEXION
+  // 2. FORMULAIRES
   return (
     <div className="login-screen">
       <div className="login-card narrow">
-        <button onClick={() => { setMode(null); setSelectedClassId(''); setFName(''); }} className="back-btn">
-            ⬅ Changer de rôle
-        </button>
+        <button onClick={() => { setMode(null); handleReset(); }} className="back-btn">⬅ Changer de rôle</button>
         
         <h2 className="app-logo">
             {mode === 'student' ? 'Espace Élève' : (mode === 'teacher' ? 'Espace Prof' : 'Administration')}
@@ -113,45 +144,67 @@ export default function Login({ onLoginSuccess }) {
 
         <form onSubmit={handleLogin} className="login-inputs mt-6">
             
-            {/* --- MODE ÉLÈVE --- */}
+            {/* --- MODE ÉLÈVE (NOUVEAU FINDER 3 CHAMPS) --- */}
             {mode === 'student' && (
                 <>
-                    <select className="login-field" value={selectedClassId} onChange={e => setSelectedClassId(e.target.value)} required>
-                        <option value="">-- CHOISIR MA CLASSE --</option>
-                        {classes.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
-                    </select>
-
-                    {selectedClassId && (
-                        <div>
-                            {!selectedStudent ? (
-                                <>
-                                    <input className="login-field" placeholder="🔎 Chercher mon nom..." value={searchTerm}
-                                        onChange={e => { setSearchTerm(e.target.value); setShowFinder(true); }}
-                                        onFocus={() => setShowFinder(true)}
+                    {!selectedStudent ? (
+                        <div className="finder-wrapper">
+                            {/* LIGNE 1 : CLASSE */}
+                            <input 
+                                className="login-field" 
+                                placeholder="Classe (ex: 6A)" 
+                                value={inputClass}
+                                onChange={e => setInputClass(e.target.value)}
+                                onFocus={() => setActiveField('class')}
+                            />
+                            
+                            {/* LIGNE 2 : NOM & PRENOM */}
+                            <div className="finder-row">
+                                <div className="finder-col-name">
+                                    <input 
+                                        className="login-field" 
+                                        placeholder="Nom" 
+                                        value={inputLast}
+                                        onChange={e => setInputLast(e.target.value)}
+                                        onFocus={() => setActiveField('last')}
                                     />
-                                    {showFinder && searchTerm.length > 0 && (
-                                        <div className="finder-results">
-                                            {filteredStudents.map(s => (
-                                                <div key={s.id} className="finder-item" onClick={() => { setSelectedStudent(s); setShowFinder(false); }}>
-                                                    {s.name}
-                                                </div>
-                                            ))}
-                                            {filteredStudents.length === 0 && <div className="p-4 text-slate-400 text-sm">Aucun élève trouvé.</div>}
+                                </div>
+                                <div className="finder-col-name">
+                                    <input 
+                                        className="login-field" 
+                                        placeholder="Prénom" 
+                                        value={inputFirst}
+                                        onChange={e => setInputFirst(e.target.value)}
+                                        onFocus={() => setActiveField('first')}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* LISTE DE SUGGESTIONS INTELLIGENTE */}
+                            {suggestions.length > 0 && (
+                                <div className="suggestions-box custom-scrollbar">
+                                    {suggestions.map(s => (
+                                        <div key={s.id} className="suggestion-item" onClick={() => handleSelectSuggestion(s)}>
+                                            <span>{s.firstName} <strong>{s.lastName}</strong></span>
+                                            <span className="suggestion-detail">{s.className}</span>
                                         </div>
-                                    )}
-                                </>
-                            ) : (
-                                <div className="bg-orange-50 p-4 rounded-xl flex justify-between items-center border border-orange-100">
-                                    <span className="font-bold text-orange-700">👤 {selectedStudent.name}</span>
-                                    <button type="button" onClick={() => setSelectedStudent(null)} className="font-black text-orange-400 hover:text-orange-600">✕</button>
+                                    ))}
                                 </div>
                             )}
+                            {suggestions.length === 0 && (inputClass || inputLast || inputFirst) && (
+                                <div className="text-xs text-slate-400 text-center italic">Aucun élève trouvé.</div>
+                            )}
+                        </div>
+                    ) : (
+                        <div className="selected-student-card animate-in">
+                            <span>✅ {selectedStudent.firstName} {selectedStudent.lastName} ({selectedStudent.className})</span>
+                            <button type="button" onClick={handleReset} className="reset-selection-btn">✕</button>
                         </div>
                     )}
                 </>
             )}
 
-            {/* --- MODE STAFF (PROF & ADMIN) --- */}
+            {/* --- MODE STAFF --- */}
             {(mode === 'teacher' || mode === 'admin') && (
                 <div className="space-y-4">
                     <input className="login-field" placeholder="Prénom" value={fName} onChange={e=>setFName(e.target.value)} required />

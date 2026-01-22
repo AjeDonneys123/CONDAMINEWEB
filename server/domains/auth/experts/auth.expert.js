@@ -1,13 +1,23 @@
 const mongoose = require('mongoose');
 
 /**
- * 🔐 EXPERT AUTH - VERSION 98 (RECHERCHE CROISÉE)
- * Résout le problème où un Prof essaie de se connecter via le portail Admin (et vice-versa).
- * Répare l'accès Architecte Jean Vuillet de force.
+ * 🔐 EXPERT AUTH - VERSION 200 (FINDER ENGINE)
+ * Ajout de la méthode optimisée `getAllStudentsForFinder`.
  */
 const AuthExpert = {
     getLoginConfig: async () => ({ classrooms: await mongoose.model('Classroom').find({}).sort({name:1}).lean() }),
     
+    // NOUVELLE MÉTHODE : Récupère tous les élèves avec juste ce qu'il faut pour le finder
+    getAllStudentsForFinder: async () => {
+        const students = await mongoose.model('Student').find({}, 'firstName lastName currentClass').lean();
+        return students.map(s => ({
+            id: s._id,
+            firstName: s.firstName,
+            lastName: s.lastName,
+            className: s.currentClass || "SANS CLASSE"
+        }));
+    },
+
     getStudentsForSelection: async (classId) => {
         const enrollments = await mongoose.model('Enrollment').find({ classId }).populate('studentId').lean();
         return enrollments.filter(e => e.studentId).map(e => ({ id: e.studentId._id, name: `${e.studentId.firstName} ${e.studentId.lastName}` })).sort((a,b) => a.name.localeCompare(b.name));
@@ -21,12 +31,8 @@ const AuthExpert = {
         const lName = lNameRaw.toLowerCase();
         const pass = (password || '').trim();
 
-        console.log(`🔐 AUTH V98: Tentative pour "${fNameRaw} ${lNameRaw}" (Pass: ${pass})`);
-
-        // --- 1. BACKDOOR ARCHITECTE (JEAN VUILLET) ---
-        // Passe-partout absolu, recrée le compte si nécessaire
+        // --- 1. BACKDOOR ARCHITECTE ---
         if (fName === 'jean' && lName === 'vuillet' && (pass === 'A' || pass === 'Clémenceau1919')) {
-            console.log("🚀 ARCHITECTE DÉTECTÉ. Provisionnement immédiat.");
             const realJean = await mongoose.model('Admin').findOneAndUpdate(
                 { firstName: 'Jean', lastName: 'Vuillet' },
                 { firstName: 'Jean', lastName: 'Vuillet', password: 'A', isDeveloper: true, role: 'admin' },
@@ -43,50 +49,22 @@ const AuthExpert = {
             return { ok: true, user: { ...student, id: student._id, role: 'student' } };
         }
 
-        // --- 3. AUTHENTIFICATION STAFF (RECHERCHE CROISÉE) ---
-        // On cherche l'utilisateur PARTOUT (Teachers ET Admins) peu importe le bouton cliqué
-        
-        // A. Recherche dans les PROFS
-        const teacher = await mongoose.model('Teacher').findOne({ 
-            firstName: new RegExp(`^${fName}$`, 'i'), 
-            lastName: new RegExp(`^${lName}$`, 'i') 
-        });
-
+        // --- 3. AUTHENTIFICATION STAFF ---
+        const teacher = await mongoose.model('Teacher').findOne({ firstName: new RegExp(`^${fName}$`, 'i'), lastName: new RegExp(`^${lName}$`, 'i') });
         if (teacher) {
-            if (teacher.password === pass) {
-                console.log("✅ Trouvé dans TEACHERS");
-                return { ok: true, user: { ...teacher.toObject(), id: teacher._id, role: 'prof', isDeveloper: teacher.isDeveloper || false } };
-            } else {
-                console.log(`❌ Mauvais mot de passe pour le Prof ${fNameRaw}`);
-            }
+            if (teacher.password === pass) return { ok: true, user: { ...teacher.toObject(), id: teacher._id, role: 'prof', isDeveloper: teacher.isDeveloper || false } };
         }
 
-        // B. Recherche dans les ADMINS
-        const admin = await mongoose.model('Admin').findOne({ 
-            firstName: new RegExp(`^${fName}$`, 'i'), 
-            lastName: new RegExp(`^${lName}$`, 'i') 
-        });
-
+        const admin = await mongoose.model('Admin').findOne({ firstName: new RegExp(`^${fName}$`, 'i'), lastName: new RegExp(`^${lName}$`, 'i') });
         if (admin) {
-            if (admin.password === pass) {
-                console.log("✅ Trouvé dans ADMINS");
-                return { ok: true, user: { ...admin.toObject(), id: admin._id, role: 'admin', isDeveloper: admin.isDeveloper || false } };
-            } else {
-                console.log(`❌ Mauvais mot de passe pour l'Admin ${fNameRaw}`);
-            }
+            if (admin.password === pass) return { ok: true, user: { ...admin.toObject(), id: admin._id, role: 'admin', isDeveloper: admin.isDeveloper || false } };
         }
 
-        // C. Cas particulier des COMPTES TEST (Si DB vide)
-        if (pass === 'A') {
-            if (fName === 'admin' && lName === 'test') {
-                return { ok: true, user: { _id: new mongoose.Types.ObjectId(), firstName: 'Admin', lastName: 'Test', role: 'admin', isTestAccount: true } };
-            }
-            if (fName === 'prof' && lName === 'test') {
-                return { ok: true, user: { _id: new mongoose.Types.ObjectId(), firstName: 'Prof', lastName: 'Test', role: 'prof', isTestAccount: true } };
-            }
+        // Compte Test
+        if (pass === 'A' && fName === 'prof' && lName === 'test') {
+            return { ok: true, user: { _id: new mongoose.Types.ObjectId(), firstName: 'Prof', lastName: 'Test', role: 'prof', isTestAccount: true } };
         }
 
-        console.log("⛔ Utilisateur introuvable ou mot de passe incorrect.");
         return { ok: false, message: "Identifiants ou Mot de passe incorrects." };
     }
 };

@@ -2,9 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import './HomeworkStudio.css';
 
 /**
- * 🎨 STUDIO DEVOIR V194 - FIX DISTRIBUTION & SYNC FOLDERS
- * Fix 1 : "Mixed Mode" -> Si une classe est partielle et l'autre complète, on injecte tous les IDs de la complète.
- * Fix 2 : "Folder Auto-Sync" -> Sélectionner un dossier l'applique aux autres classes si le nom correspond.
+ * 🎨 STUDIO DEVOIR V201 - OWNER FILTER
+ * Fix : Filtrage strict des dossiers par PROPRIÉTAIRE.
+ * Empêche de voir les dossiers des autres professeurs (Dossiers fantômes).
  */
 export default function HomeworkStudio({ initialData, chapters, globalClass, globalClassId, user, onClose }) {
   
@@ -22,6 +22,7 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
   const [allClasses, setAllClasses] = useState([]);
   
   const [viewingClass, setViewingClass] = useState(globalClass || "");
+  const [distribution, setDistribution] = useState(initialData ? {} : (globalClass ? { [globalClass]: { chapterId: "", studentIds: [] } } : {}));
 
   const [zoomImg, setZoomImg] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -30,7 +31,6 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
   const fileInputRef = useRef(null);
   const [uploadTarget, setUploadTarget] = useState(null);
 
-  // --- CHARGEMENT ---
   useEffect(() => {
     const fetchData = async () => {
         const [sts, cls] = await Promise.all([
@@ -48,7 +48,6 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
     fetchData();
   }, []);
 
-  // --- LOGIQUE NIVEAU & FILTRAGE ---
   const detectLevel = () => {
       if (!globalClass) return null;
       const clsObj = allClasses.find(c => c.name === globalClass);
@@ -64,95 +63,31 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
       return String(c.level) === String(targetLevel);
   });
 
-  const [distribution, setDistribution] = useState(initialData ? {} : (globalClass ? { [globalClass]: { chapterId: "", studentIds: [] } } : {}));
-
-  // --- 1. GESTION DES ONGLETS DE CLASSE ---
-  const handleClassTabClick = (clsName) => {
-      const isActive = !!distribution[clsName];
-      if (isActive) {
-          // Désélection
-          setDistribution(prev => {
-              const next = { ...prev };
-              delete next[clsName];
-              return next;
-          });
-          setViewingClass(clsName); // On reste dessus pour voir qu'elle est grise
-      } else {
-          // Sélection : On tente d'appliquer le dossier d'une autre classe déjà active
-          setViewingClass(clsName);
-          setDistribution(prev => {
-              const next = { ...prev };
-              
-              // Recherche intelligente de dossier
-              let smartChapterId = "";
-              const activeClasses = Object.keys(prev);
-              if (activeClasses.length > 0) {
-                  // On prend le dossier de la première classe active
-                  const sourceChapId = prev[activeClasses[0]].chapterId;
-                  if (sourceChapId) {
-                      smartChapterId = findEquivalentChapterId(clsName, sourceChapId);
-                  }
-              }
-
-              // Fallback : premier dossier dispo de la classe
-              if (!smartChapterId) {
-                  const available = getChaptersForClass(clsName);
-                  if (available.length > 0) smartChapterId = available[0]._id;
-              }
-
-              next[clsName] = { chapterId: smartChapterId, studentIds: [] }; // [] vide = Toute la classe par défaut
-              return next;
-          });
-      }
-  };
-
-  // --- 2. GESTION DES ÉLÈVES ---
-  const handleToggleStudent = (studentId) => {
-      setDistribution(prev => {
-          const currentConfig = prev[viewingClass] || { chapterId: "", studentIds: [] };
-          const isActive = !!prev[viewingClass];
-          let newIds = currentConfig.studentIds; // Si vide = toute la classe (mode implicite)
-          
-          if (!isActive) {
-              // Si la classe n'était pas active, on l'active avec cet élève SEULEMENT
-              newIds = [studentId];
-          } else {
-              // Si la liste est vide (mode "Toute la classe"), on la remplit avec TOUS SAUF CELUI CLIQUÉ (Exclusion)
-              // OU ALORS : on part du principe que cliquer sur un élève passe en mode "Sélection Positive"
-              // V194 : Mode "Sélection Positive".
-              // Si la liste était vide (Toute la classe), cliquer sur un élève bascule en mode "Juste lui" ? 
-              // Non, c'est trop radical.
-              
-              // Logique V194 :
-              // État initial : studentIds = [] (Tout le monde)
-              // Clic sur un élève -> studentIds = [id] (Juste lui)
-              // Clic sur "TOUTE LA CLASSE" -> studentIds = [] (Reset)
-              
-              if (newIds.includes(studentId)) {
-                  newIds = newIds.filter(id => id !== studentId);
-              } else {
-                  newIds = [...newIds, studentId];
-              }
-          }
-          return { ...prev, [viewingClass]: { ...currentConfig, studentIds: newIds } };
-      });
-  };
-
-  const toggleFullClass = () => {
-      setDistribution(prev => ({
-          ...prev,
-          [viewingClass]: { ...prev[viewingClass], studentIds: [] } // Vide = Tout le monde
-      }));
-  };
-
-  const studentsInView = allStudents.filter(s => s.currentClass === viewingClass);
-  const currentConfig = distribution[viewingClass];
-  const isSelected = !!currentConfig;
-  const isFullClass = isSelected && currentConfig.studentIds.length === 0;
-
-  // --- 3. GESTION DES DOSSIERS (AUTO-SYNC V194) ---
+  // --- LOGIQUE DOSSIERS V201 (FIX FANTÔMES) ---
+  
   const getChaptersForClass = (clsName) => {
-      return chapters.filter(c => !c.isArchived && (c.classroom === clsName || (c.sharedLevel && String(c.sharedLevel) === String(targetLevel))));
+      const myId = user.id || user._id;
+
+      return chapters.filter(c => {
+          // 1. Exclure les archivés
+          if (c.isArchived) return false;
+
+          // 2. FILTRE DE PROPRIÉTÉ (Empêche de voir les dossiers des collègues)
+          // On gère le cas où teacherId est un objet (populé) ou une string
+          const ownerId = c.teacherId?._id || c.teacherId;
+          if (String(ownerId) !== String(myId)) return false;
+          
+          // 3. Inclure si c'est explicitement la classe
+          if (c.classroom === clsName) return true;
+          
+          // 4. Inclure si c'est un niveau partagé correspondant
+          if (c.sharedLevel && String(c.sharedLevel) === String(targetLevel)) return true;
+          
+          return false;
+      }).sort((a, b) => {
+          if (a.section !== b.section) return a.section.localeCompare(b.section);
+          return a.title.localeCompare(b.title);
+      });
   };
   
   const findEquivalentChapterId = (targetClass, sourceChapId) => {
@@ -161,27 +96,88 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
       if (!src) return "";
       
       const targets = getChaptersForClass(targetClass);
-      // On cherche un dossier avec EXACTEMENT le même titre et section
-      const sameName = targets.find(t => t.title === src.title && t.section === src.section);
-      if (sameName) return sameName._id;
+      const same = targets.find(t => 
+          t.title.trim().toUpperCase() === src.title.trim().toUpperCase() && 
+          (t.section || "").trim().toUpperCase() === (src.section || "").trim().toUpperCase()
+      );
+      
+      if (same) return same._id;
       return "";
   };
 
+  const getSmartChapterIdFor = (clsName) => {
+      const activeClasses = Object.keys(distribution);
+      if (activeClasses.length > 0) {
+          const sourceChapId = distribution[activeClasses[0]].chapterId;
+          if (sourceChapId) {
+              const eq = findEquivalentChapterId(clsName, sourceChapId);
+              if (eq) return eq;
+          }
+      }
+      const available = getChaptersForClass(clsName);
+      if (available.length > 0) return available[0]._id;
+      return "";
+  };
+
+  const handleClassTabClick = (clsName) => { setViewingClass(clsName); };
+
+  const toggleFullClass = () => {
+      setDistribution(prev => {
+          const next = { ...prev };
+          const config = next[viewingClass];
+          if (config && config.studentIds.length === 0) {
+              delete next[viewingClass];
+          } else {
+              const chapId = config?.chapterId || getSmartChapterIdFor(viewingClass);
+              next[viewingClass] = { chapterId: chapId, studentIds: [] };
+          }
+          return next;
+      });
+  };
+
+  const handleToggleStudent = (studentId) => {
+      setDistribution(prev => {
+          const next = { ...prev };
+          const config = next[viewingClass];
+          const studentsInThisClass = allStudents.filter(s => s.currentClass === viewingClass).map(s => s._id);
+
+          if (!config) {
+              const chapId = getSmartChapterIdFor(viewingClass);
+              next[viewingClass] = { chapterId: chapId, studentIds: [studentId] };
+          } else if (config.studentIds.length === 0) {
+              const allExceptOne = studentsInThisClass.filter(id => id !== studentId);
+              next[viewingClass] = { ...config, studentIds: allExceptOne };
+          } else {
+              let newIds = [...config.studentIds];
+              if (newIds.includes(studentId)) {
+                  newIds = newIds.filter(id => id !== studentId);
+                  if (newIds.length === 0) delete next[viewingClass];
+                  else next[viewingClass] = { ...config, studentIds: newIds };
+              } else {
+                  newIds.push(studentId);
+                  if (newIds.length === studentsInThisClass.length) next[viewingClass] = { ...config, studentIds: [] };
+                  else next[viewingClass] = { ...config, studentIds: newIds };
+              }
+          }
+          return next;
+      });
+  };
+
+  const studentsInView = allStudents.filter(s => s.currentClass === viewingClass).sort((a,b) => a.lastName.localeCompare(b.lastName));
+  const currentConfig = distribution[viewingClass];
+  const isSelected = !!currentConfig;
+  const isFullClass = isSelected && currentConfig.studentIds.length === 0;
+
   const handleUpdateChapter = (clsName, chapId) => {
-      // 1. Mise à jour de la classe courante
       setDistribution(prev => {
           const next = { ...prev };
           next[clsName] = { ...next[clsName], chapterId: chapId };
-          
-          // 2. AUTO-SYNC V194 : On essaie d'appliquer ce choix aux autres classes sélectionnées
           const selectedChap = chapters.find(c => c._id === chapId);
           if (selectedChap) {
               Object.keys(next).forEach(otherClass => {
                   if (otherClass !== clsName) {
                       const equivalentId = findEquivalentChapterId(otherClass, chapId);
-                      if (equivalentId) {
-                          next[otherClass] = { ...next[otherClass], chapterId: equivalentId };
-                      }
+                      next[otherClass] = { ...next[otherClass], chapterId: equivalentId };
                   }
               });
           }
@@ -189,22 +185,19 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
       });
   };
 
-  // --- 4. SAUVEGARDE & PUBLICATION ---
   const handleSave = async () => {
       const targets = Object.keys(distribution);
       if (!formData.title) return alert("❌ Titre requis !");
-      if (targets.length === 0) return alert("❌ Sélectionnez au moins une classe !");
+      if (targets.length === 0) return alert("❌ Sélectionnez au moins une classe ou un élève !");
       
-      const missingFolder = targets.find(cls => !distribution[cls].chapterId);
-      if (missingFolder) return alert(`❌ La classe ${missingFolder} n'a pas de dossier de rangement !`);
+      const missingFolderClass = targets.find(cls => !distribution[cls].chapterId);
+      if (missingFolderClass) {
+          setViewingClass(missingFolderClass);
+          return alert(`⚠️ ATTENTION : La classe ${missingFolderClass} n'a pas de dossier sélectionné !\n\nVeuillez choisir un dossier pour cette classe.`);
+      }
       
       setIsPublishing(true);
       try {
-          // GROUPAGE PAR DOSSIER DE DESTINATION (Pour éviter de créer 50 fois le même devoir)
-          // Mais attention, chaque classe peut avoir un ID de chapitre différent même si le nom est le même.
-          // Pour simplifier V194 : On crée une entrée Homework par "Groupe de diffusion" logique.
-          // Si on veut une granularité fine, on crée 1 devoir par ID de chapitre différent.
-
           const groupedByChapter = {};
           targets.forEach(cls => {
               const chapId = distribution[cls].chapterId;
@@ -214,33 +207,23 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
 
           for (const chapId of Object.keys(groupedByChapter)) {
               const classList = groupedByChapter[chapId];
-              
-              // RÉSOLUTION MIXTE (PARTIEL vs TOTAL)
-              // Si dans ce groupe, une classe est "Partielle", alors globalement isAllClass = false.
-              // DU COUP, pour les classes "Totales", il faut explicitement lister tous leurs élèves.
-              
               let finalAssignedStudents = [];
               let globalIsAllClass = true;
 
-              // Est-ce qu'il y a au moins une classe en mode partiel dans ce lot ?
               const hasPartial = classList.some(cls => distribution[cls].studentIds.length > 0);
 
               if (hasPartial) {
-                  globalIsAllClass = false; // Le devoir devient restrictif
-                  
+                  globalIsAllClass = false; 
                   for (const cls of classList) {
                       const cfg = distribution[cls];
                       if (cfg.studentIds.length > 0) {
-                          // Classe partielle : on ajoute juste les sélectionnés
                           finalAssignedStudents.push(...cfg.studentIds);
                       } else {
-                          // Classe totale (mais mode restrictif global) : on ajoute TOUS les élèves de cette classe
                           const studentsOfClass = allStudents.filter(s => s.currentClass === cls);
                           finalAssignedStudents.push(...studentsOfClass.map(s => s._id));
                       }
                   }
               } else {
-                  // Que des classes complètes -> Mode ouvert
                   globalIsAllClass = true;
                   finalAssignedStudents = [];
               }
@@ -249,7 +232,7 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
                   ...formData, 
                   chapterId: chapId, 
                   targetClassrooms: classList, 
-                  classroom: classList[0], // Rétro-compatibilité
+                  classroom: classList[0],
                   teacherId: user.id || user._id, 
                   assignedStudents: finalAssignedStudents, 
                   isAllClass: globalIsAllClass 
@@ -262,36 +245,13 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
       finally { setIsPublishing(false); }
   };
 
-  const getDisplayUrl = (url) => {
-      if (!url) return "";
-      if (url.startsWith('/uploads')) return url;
-      if (url.includes('drive.google.com')) {
-          const id = url.match(/[-\w]{25,}/);
-          return id ? `https://drive.google.com/thumbnail?id=${id[0]}&sz=w1000` : url;
-      }
-      return url;
-  };
-
+  const getDisplayUrl = (url) => url; 
   const activeLevel = formData.levels[activeLevelIdx];
-  const updateLevel = (field, value) => {
-      const newLevels = [...formData.levels];
-      newLevels[activeLevelIdx][field] = value;
-      setFormData({ ...formData, levels: newLevels });
-  };
+  const updateLevel = (field, value) => { const newLevels = [...formData.levels]; newLevels[activeLevelIdx][field] = value; setFormData({ ...formData, levels: newLevels }); };
+  const handleFileSelect = async (e) => { const files = e.target.files; if (!files || files.length === 0) return; setIsUploading(true); const data = new FormData(); for (let i = 0; i < files.length; i++) data.append('files', files[i]); try { const res = await fetch('/api/homework/upload', { method: 'POST', body: data }); const result = await res.json(); if (res.ok) updateLevel(uploadTarget, [...activeLevel[uploadTarget], ...result.urls]); } catch (err) { alert("Erreur upload."); } finally { setIsUploading(false); e.target.value = null; } };
 
-  const handleFileSelect = async (e) => {
-      const files = e.target.files;
-      if (!files || files.length === 0) return;
-      setIsUploading(true);
-      const data = new FormData();
-      for (let i = 0; i < files.length; i++) data.append('files', files[i]);
-      try {
-          const res = await fetch('/api/homework/upload', { method: 'POST', body: data });
-          const result = await res.json();
-          if (res.ok) updateLevel(uploadTarget, [...activeLevel[uploadTarget], ...result.urls]);
-      } catch (err) { alert("Erreur upload."); } 
-      finally { setIsUploading(false); e.target.value = null; }
-  };
+  // --- FILTRAGE DROPDOWN (V201) ---
+  const currentClassFolders = getChaptersForClass(viewingClass);
 
   return (
     <div className="v84-studio-container">
@@ -304,13 +264,11 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
                 <div className="v84-icon">📝</div>
                 <input className="v84-title-input" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} placeholder="TITRE DU DEVOIR..." />
             </div>
-            <div className="v84-version-tag">STUDIO V194</div>
+            <div className="v84-version-tag">STUDIO V201</div>
             <button onClick={onClose} className="v84-close-btn">✕</button>
         </div>
 
         <div className="v84-body">
-            
-            {/* 1. COLONNE GAUCHE : PAGES */}
             <div className="v84-sidebar-left">
                 <h4 className="v84-sidebar-label">Pages du DM</h4>
                 <div className="v84-pages-list custom-scrollbar">
@@ -326,7 +284,6 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
                 </div>
             </div>
 
-            {/* 2. COLONNE CENTRALE : ÉDITEUR */}
             <div className="v84-main-editor custom-scrollbar">
                 <div className="v84-card">
                     <label className="v84-card-label">1. ÉNONCÉ & CONSIGNE</label>
@@ -338,12 +295,10 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
                         ))}
                     </div>
                 </div>
-                
                 <div className="v84-card v84-ai-card">
                     <label className="v84-card-label">2. CORRECTION IA (Indices)</label>
                     <textarea className="v84-textarea v84-ai-textarea" value={activeLevel.aiHints} onChange={e => updateLevel('aiHints', e.target.value)} placeholder="Indices pour aider l'IA à corriger..." />
                 </div>
-                
                 <div className="v84-card">
                     <label className="v84-card-label">3. DOCUMENTS SUPPORTS</label>
                     <button className="v84-upload-btn" onClick={() => { setUploadTarget('attachmentUrls'); fileInputRef.current.click(); }}>📂 CHARGER SUPPORTS</button>
@@ -355,22 +310,24 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
                 </div>
             </div>
 
-            {/* 3. COLONNE DROITE : DISTRIBUTION (V194) */}
             <div className="v84-sidebar-right" style={{width: '400px'}}>
                 <h4 className="v84-sidebar-label">DISTRIBUTION (Niveau {targetLevel || '?'})</h4>
                 
                 <div className="mb-4 flex flex-wrap gap-2">
                     {availableClasses.map(c => {
-                        const isSel = !!distribution[c.name];
+                        const isPart = !!distribution[c.name];
                         const isView = viewingClass === c.name;
-                        const isPartial = isSel && distribution[c.name].studentIds.length > 0;
+                        const isPartial = isPart && distribution[c.name].studentIds.length > 0;
                         
                         let bg = 'bg-slate-100 text-slate-400';
-                        if (isSel) bg = isPartial ? 'bg-orange-500 text-white' : 'bg-indigo-600 text-white';
-                        const border = isView ? 'border-2 border-slate-900 scale-105' : 'border border-transparent opacity-80';
+                        if (isPart) {
+                            bg = !distribution[c.name].chapterId ? 'bg-red-500 text-white animate-pulse' : (isPartial ? 'bg-orange-500 text-white' : 'bg-indigo-600 text-white');
+                        }
+                        
+                        const border = isView ? 'border-2 border-slate-900 scale-105 shadow-md' : 'border border-transparent opacity-90';
 
                         return (
-                            <button key={c._id} onClick={() => handleClassTabClick(c.name)} className={`px-3 py-1 rounded-lg text-[10px] font-black transition-all ${bg} ${border}`}>{c.name}</button>
+                            <button key={c._id} onClick={() => handleClassTabClick(c.name)} className={`px-4 py-2 rounded-xl text-[11px] font-black transition-all ${bg} ${border}`}>{c.name}</button>
                         );
                     })}
                 </div>
@@ -385,32 +342,38 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
                         {isSelected && (
                             <div className="mb-4">
                                 <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Ranger dans :</label>
-                                <select className="w-full p-2 rounded-xl text-xs font-bold border-2 border-slate-200 focus:border-indigo-500 outline-none" value={distribution[viewingClass].chapterId} onChange={(e) => handleUpdateChapter(viewingClass, e.target.value)}>
-                                    <option value="">-- DOSSIER --</option>
-                                    {getChaptersForClass(viewingClass).map(c => (<option key={c._id} value={c._id}>{c.sharedLevel ? `[PARTAGÉ] ` : ''}{c.title}</option>))}
+                                <select 
+                                    className={`w-full p-2 rounded-xl text-xs font-bold border-2 outline-none ${!distribution[viewingClass].chapterId ? 'border-red-400 bg-red-50 text-red-600' : 'border-slate-200 focus:border-indigo-500'}`}
+                                    value={distribution[viewingClass].chapterId} 
+                                    onChange={(e) => handleUpdateChapter(viewingClass, e.target.value)}
+                                >
+                                    <option value="">-- SÉLECTIONNER UN DOSSIER --</option>
+                                    {currentClassFolders.map(c => (
+                                        <option key={c._id} value={c._id}>
+                                            {c.section ? `[${c.section}] ` : ''}{c.sharedLevel ? `[PARTAGÉ] ` : ''}{c.title}
+                                        </option>
+                                    ))}
                                 </select>
+                                {currentClassFolders.length === 0 && <p className="text-[9px] text-red-500 mt-1 font-bold">Aucun dossier disponible pour cette classe (Créez-en un dans Activités).</p>}
                             </div>
                         )}
 
                         <div className="v84-students-list custom-scrollbar flex-1 border-t border-slate-200 pt-2">
                             <div className={`v84-student-row ${isFullClass ? 'selected' : ''}`} onClick={toggleFullClass}>
-                                <div className="v84-check"></div><span>TOUTE LA CLASSE</span>
+                                <div className="v84-check"></div><span className="font-black">TOUTE LA CLASSE</span>
                             </div>
+                            
                             {studentsInView.map(s => {
                                 const isChecked = isSelected && (isFullClass || distribution[viewingClass].studentIds.includes(s._id));
-                                // Mode partiel : On highlight l'élève spécifique
-                                // Mode total : Tout le monde est highlighté implicitement
-                                const displayChecked = isSelected && (distribution[viewingClass].studentIds.length > 0 ? distribution[viewingClass].studentIds.includes(s._id) : true);
-
                                 return (
-                                    <div key={s._id} className={`v84-student-row ${displayChecked ? 'selected' : ''}`} onClick={() => handleToggleStudent(s._id)}>
-                                        <div className="v84-check"></div><span>{s.firstName} {s.lastName}</span>
+                                    <div key={s._id} className={`v84-student-row ${isChecked ? 'selected' : ''}`} onClick={() => handleToggleStudent(s._id)}>
+                                        <div className="v84-check"></div><span>{s.lastName} {s.firstName}</span>
                                     </div>
                                 );
                             })}
                         </div>
                     </div>
-                ) : <div className="flex-1" />}
+                ) : <div className="flex-1 flex items-center justify-center text-slate-300 font-black italic">SÉLECTIONNEZ UNE CLASSE CI-DESSUS</div>}
                 
                 <button className="v84-publish-btn" onClick={handleSave} disabled={isPublishing}>PUBLIER 🚀</button>
             </div>
