@@ -4,10 +4,6 @@ import StarshipWrapper from './starship/StarshipWrapper';
 import DashboardFolder from '../components/DashboardFolder';
 import './GamesGrid.css';
 
-/**
- * 🎮 GRILLE JEUX ÉLÈVE V216 (ULTRA ROBUST)
- * Fix : Normalisation des noms de classe pour matcher à 100%.
- */
 export default function GamesGrid({ user }) {
   const [quizzes, setQuizzes] = useState([]);
   const [chapters, setChapters] = useState([]);
@@ -15,7 +11,7 @@ export default function GamesGrid({ user }) {
   const [activeGame, setActiveGame] = useState(null);
 
   const loadData = async () => {
-    const myClass = (user.currentClass || "").trim().toUpperCase(); // Normalisation
+    const myClass = (user.currentClass || "").trim().toUpperCase();
     const myId = String(user._id || user.id);
 
     try {
@@ -24,30 +20,32 @@ export default function GamesGrid({ user }) {
             fetch('/api/games/progress').then(r => r.json())
         ]);
 
-        const myPlayedGameIds = allProgs
-            .filter(p => String(p.studentId) === myId)
-            .map(p => String(p.gameId));
-
+        // On filtre les jeux qui concernent l'élève
         const filtered = allGames.filter(g => {
             const targets = g.targetClassrooms || (g.classroom ? [g.classroom] : []);
             const assignedIds = g.assignedStudents || [];
 
-            // MATCH AVEC NORMALISATION
             const isMyClassTargeted = targets.some(t => t.trim().toUpperCase() === myClass);
             const isAssignedIndividually = assignedIds.some(id => String(id) === myId);
             
             if (isAssignedIndividually) return true;
-
             if (isMyClassTargeted) {
                 if (g.isAllClass === true) return true;
-                if (g.isAllClass === undefined && assignedIds.length === 0) return true; // Legacy
+                if (g.isAllClass === undefined && assignedIds.length === 0) return true; 
+            }
+            return false;
+        }).map(g => {
+            // CALCUL DU STATUT (3 ÉTATS)
+            const prog = allProgs.find(p => String(p.studentId) === myId && String(p.gameId) === String(g._id));
+            
+            let status = 'todo'; // Par défaut : À FAIRE (Rouge)
+            if (prog) {
+                if (prog.levelReached >= 1) status = 'done'; // FAIT (Vert/Violet)
+                else status = 'inprogress'; // EN COURS / RATÉ (Bleu)
             }
 
-            return false;
-        }).map(g => ({
-            ...g,
-            isDone: myPlayedGameIds.includes(String(g._id))
-        }));
+            return { ...g, status };
+        });
 
         setQuizzes(filtered);
     } catch(e) { console.error(e); }

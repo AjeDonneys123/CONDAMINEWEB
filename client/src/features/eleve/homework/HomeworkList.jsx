@@ -2,17 +2,12 @@ import React, { useState, useEffect } from 'react';
 import HomeworkWorkspace from './HomeworkWorkspace';
 import DashboardFolder from '../components/DashboardFolder';
 
-/**
- * 📚 LISTE DEVOIRS ÉLÈVE V206 - ROBUST ID CHECK
- * Fix : Comparaison d'IDs blindée pour l'affichage de la pastille verte.
- */
 export default function HomeworkList({ user }) {
   const [homeworks, setHomeworks] = useState([]);
   const [chapters, setChapters] = useState([]);
   const [selectedHw, setSelectedHw] = useState(null);
 
   const loadData = async () => {
-    // Normalisation de l'ID utilisateur
     const myId = String(user._id || user.id);
     const myClass = (user.currentClass || "").toUpperCase().trim();
 
@@ -22,9 +17,8 @@ export default function HomeworkList({ user }) {
             fetch('/api/homework/submissions').then(r => r.json())
         ]);
 
-        // Récupération robuste des IDs des devoirs faits
         const myDoneHwIds = allSubs
-            .filter(s => s.studentId && String(s.studentId) === myId) // Vérif s.studentId existe (fix bug orphelin)
+            .filter(s => s.studentId && String(s.studentId) === myId)
             .map(s => String(s.homeworkId));
 
         const filtered = allHw.filter(hw => {
@@ -37,7 +31,8 @@ export default function HomeworkList({ user }) {
             return false;
         }).map(hw => ({
             ...hw,
-            isDone: myDoneHwIds.includes(String(hw._id))
+            // Standardisation du status pour DashboardFolder
+            status: myDoneHwIds.includes(String(hw._id)) ? 'done' : 'todo'
         }));
 
         setHomeworks(filtered);

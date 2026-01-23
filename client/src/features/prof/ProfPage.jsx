@@ -5,7 +5,8 @@ import StudentsManager from './students/StudentsManager';
 import ActivityStudio from './activities/ActivityStudio';
 import AdminDashboard from './admin/AdminDashboard';
 import ConsoleReporter from './components/ConsoleReporter';
-import StudioDashboard from './studio/StudioDashboard'; // IMPORT
+import StudioDashboard from './studio/StudioDashboard'; 
+import ClassroomManager from './classroom/ClassroomManager'; 
 import './ProfPage.css';
 
 export default function ProfPage({ user, onLogout }) {
@@ -15,44 +16,37 @@ export default function ProfPage({ user, onLogout }) {
   };
 
   const [liveUser, setLiveUser] = useState(getInitialUser());
-  const [tab, setTab] = useState('activities'); // Default
+  const [tab, setTab] = useState('activities');
   const [classes, setClasses] = useState([]);
   const [selectedClassId, setSelectedClassId] = useState("");
   const [loading, setLoading] = useState(true);
 
+  // ... (Code chargement profil inchangé) ...
   const loadProfileAndClasses = async () => {
     setLoading(true);
     try {
         const userId = liveUser.id || liveUser._id;
         const resCls = await fetch('/api/admin/classrooms');
         const allCls = resCls.ok ? await resCls.json() : [];
-
         const resMe = await fetch(`/api/admin/teachers/${userId}?report-silent=true`);
-        
         if (resMe.ok) {
             const freshProfile = await resMe.json();
             setLiveUser(prev => ({ ...prev, ...freshProfile, isDeveloper: prev.isDeveloper }));
-            
             let filteredCls = [];
-            if (liveUser.isDeveloper) {
-                filteredCls = allCls;
-            } else {
+            if (liveUser.isDeveloper) filteredCls = allCls;
+            else {
                 const assignedIds = freshProfile.assignedClasses || [];
                 filteredCls = allCls.filter(c => assignedIds.some(id => String(id) === String(c._id)));
             }
             setClasses(filteredCls);
-
             if (filteredCls.length > 0) {
                 const stillExists = filteredCls.some(c => String(c._id) === String(selectedClassId));
-                if (!selectedClassId || !stillExists) {
-                    setSelectedClassId(filteredCls[0]._id);
-                }
+                if (!selectedClassId || !stillExists) setSelectedClassId(filteredCls[0]._id);
             }
         }
     } catch(e) { console.warn("Sync Profile Warn:", e.message); }
     setLoading(false);
   };
-
   useEffect(() => { loadProfileAndClasses(); }, [tab]);
 
   const currentClassObj = classes.find(c => String(c._id) === String(selectedClassId));
@@ -68,9 +62,7 @@ export default function ProfPage({ user, onLogout }) {
             <span className="text-[10px] font-black text-slate-400 mr-2 uppercase tracking-widest whitespace-nowrap">
                 {liveUser.isDeveloper ? '🛠️ MODE ARCHITECTE :' : '📚 MES CLASSES :'}
             </span>
-            {loading ? (
-                <span className="text-[10px] text-slate-300 font-black animate-pulse">CHARGEMENT...</span>
-            ) : (
+            {loading ? <span className="text-[10px] text-slate-300 font-black animate-pulse">CHARGEMENT...</span> : (
                 <>
                     {classes.map(c => (
                         <button key={c._id} onClick={() => setSelectedClassId(c._id)} 
@@ -86,23 +78,16 @@ export default function ProfPage({ user, onLogout }) {
         <ProfNav activeTab={tab} onTabChange={setTab} user={liveUser} />
         
         <div className="p-8 bg-white min-h-[600px]">
-          {tab === 'activities' && (
-            <ActivityStudio 
-                globalClass={currentClassName} 
-                globalClassId={selectedClassId} 
-                globalLevel={currentLevel} 
-                user={liveUser} 
-                onRefreshRequest={loadProfileAndClasses} 
-            />
-          )}
-          {/* NOUVEAU COMPOSANT STUDIO */}
-          {tab === 'studio' && <StudioDashboard user={liveUser} />}
+          {tab === 'activities' && <ActivityStudio globalClass={currentClassName} globalClassId={selectedClassId} globalLevel={currentLevel} user={liveUser} onRefreshRequest={loadProfileAndClasses} />}
           
+          {/* PASSAGE DE L'USER AU COMPOSANT CLASSE */}
+          {tab === 'classroom' && <ClassroomManager globalClassId={selectedClassId} user={liveUser} />}
+
+          {tab === 'studio' && <StudioDashboard user={liveUser} />}
           {tab === 'students' && <StudentsManager globalClassId={selectedClassId} />}
           {tab === 'admin' && <AdminDashboard user={liveUser} onRefresh={loadProfileAndClasses} />}
         </div>
       </div>
-      
       {liveUser.isDeveloper && <ConsoleReporter user={liveUser} />}
     </div>
   );

@@ -7,9 +7,10 @@ export default function ProfNav({ activeTab, onTabChange, user }) {
   if (user.isDeveloper) {
       tabs = [
           { id: 'activities', label: '⚡ ACTIVITÉS', color: 'bg-purple-600' },
-          { id: 'studio', label: '🎬 STUDIO', color: 'bg-pink-600' }, // NOUVEAU
+          { id: 'classroom', label: '🎓 CLASSE', color: 'bg-emerald-600' }, // NOUVEAU
+          { id: 'studio', label: '🎬 STUDIO', color: 'bg-pink-600' }, 
           { id: 'students', label: '👥 ÉLÈVES', color: 'bg-blue-600' },
-          { id: 'admin', label: '⚙️ DÉVELOPPEUR', color: 'bg-slate-900' }
+          { id: 'admin', label: '⚙️ DEV', color: 'bg-slate-900' }
       ];
   } 
   else if (user.role === 'admin') {
@@ -18,7 +19,8 @@ export default function ProfNav({ activeTab, onTabChange, user }) {
   else {
       tabs = [
           { id: 'activities', label: '⚡ ACTIVITÉS', color: 'bg-purple-600' },
-          { id: 'studio', label: '🎬 STUDIO', color: 'bg-pink-600' }, // NOUVEAU AUSSI POUR PROF
+          { id: 'classroom', label: '🎓 CLASSE', color: 'bg-emerald-600' }, // NOUVEAU
+          { id: 'studio', label: '🎬 STUDIO', color: 'bg-pink-600' },
           { id: 'students', label: '👥 ÉLÈVES', color: 'bg-blue-600' }
       ];
   }

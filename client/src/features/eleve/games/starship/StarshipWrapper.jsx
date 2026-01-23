@@ -4,23 +4,40 @@ import './starship_style.css';
 
 export default function StarshipWrapper({ user, level, onClose }) {
     const boxRef = useRef(null);
-    const engineRef = useRef(null);
+
+    const saveProgress = async (score, lvl) => {
+        if (!user || !level) return;
+        try {
+            await fetch('/api/games/save-progress', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    studentId: user._id || user.id,
+                    gameId: level._id,
+                    score: score,
+                    levelReached: lvl
+                })
+            });
+        } catch (e) { console.error("Save fail", e); }
+    };
+
+    const handleGameFinish = (score, success) => {
+        saveProgress(score, success ? 1 : 0);
+        onClose();
+    };
 
     useEffect(() => {
         if (level && boxRef.current) {
-            // Lancement du moteur avec nettoyage
-            const engine = initStarshipGame(boxRef.current, { level, user }, onClose);
-            engineRef.current = engine;
+            // 1. SIGNAL DE DÉPART (Pastille Bleue)
+            saveProgress(0, 0);
+
+            // 2. Moteur
+            const engine = initStarshipGame(boxRef.current, { level, user, onFinish: handleGameFinish }, onClose);
+            return () => engine.destroy();
         }
-        
-        return () => {
-            if (engineRef.current) engineRef.current.destroy();
-        };
     }, [level]);
 
     return (
-        // CONTENEUR PLEIN ÉCRAN FORCÉ (z-index max, fond noir)
-        // C'est ce style qui manquait et qui causait l'écran gris/vide
         <div className="fixed inset-0 bg-black z-[9999] flex flex-col w-full h-full">
             <div id="starship-root" ref={boxRef} className="w-full h-full relative overflow-hidden"></div>
         </div>

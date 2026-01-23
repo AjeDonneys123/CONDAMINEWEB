@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
 
 /**
- * 📂 DASHBOARD FOLDER ÉLÈVE V205 - STATUS BADGES
- * Ajout des pastilles Vertes/Rouges selon le statut 'done' passé dans les items.
+ * 📂 DASHBOARD FOLDER ÉLÈVE V218
+ * Supporte maintenant 3 états :
+ * - Vert : 'done' (Fait / Gagné)
+ * - Bleu : 'inprogress' (En cours / Essayé)
+ * - Rouge : 'todo' (À faire)
  */
 export default function DashboardFolder({ items, chapters, type, onSelect }) {
   const [openChaps, setOpenChaps] = useState({});
@@ -53,12 +56,16 @@ export default function DashboardFolder({ items, chapters, type, onSelect }) {
                             </div>
                             
                             {/* --- STATUS PASTILLE --- */}
-                            {it.isDone ? (
+                            {it.status === 'done' || it.isDone === true ? (
                                 <span className="px-3 py-1 bg-green-100 text-green-600 rounded-full text-[10px] font-black border border-green-200">
                                     ✅ FAIT
                                 </span>
+                            ) : it.status === 'inprogress' ? (
+                                <span className="px-3 py-1 bg-blue-100 text-blue-600 rounded-full text-[10px] font-black border border-blue-200 animate-pulse">
+                                    🔄 EN COURS
+                                </span>
                             ) : (
-                                <span className="px-3 py-1 bg-red-50 text-red-400 rounded-full text-[10px] font-black border border-red-100 animate-pulse">
+                                <span className="px-3 py-1 bg-red-50 text-red-400 rounded-full text-[10px] font-black border border-red-100">
                                     ⭕ À FAIRE
                                 </span>
                             )}

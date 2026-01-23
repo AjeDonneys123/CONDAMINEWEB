@@ -30,6 +30,8 @@
 │   │   │   │   ├── ElevePage.css
 │   │   │   │   ├── ElevePage.jsx
 │   │   │   │   ├── components/
+│   │   │   │   │   ├── BehaviorTimer.css
+│   │   │   │   │   ├── BehaviorTimer.jsx
 │   │   │   │   │   ├── DashboardFolder.jsx
 │   │   │   │   │   ├── EleveHeader.css
 │   │   │   │   │   └── EleveHeader.jsx
@@ -67,6 +69,9 @@
 │   │   │       │   └── AdminDashboard.jsx
 │   │   │       ├── chapters/
 │   │   │       │   └── ChapterManager.jsx
+│   │   │       ├── classroom/
+│   │   │       │   ├── ClassroomManager.css
+│   │   │       │   └── ClassroomManager.jsx
 │   │   │       ├── components/
 │   │   │       │   ├── ConsoleHUD.jsx
 │   │   │       │   ├── ConsoleReporter.css
@@ -126,6 +131,7 @@
 │   │   └── ~$che_Croissance_Demographique_5e.docx
 │   ├── style.css
 │   └── uploads/
+│       ├── 052ab3c8f8468e7f52ed76c06b28b36c
 │       ├── 0717c54fc34cd56505db1ada55b5a128
 │       ├── 07b4ded2280d7ad22dc0daa2c90f4107
 │       ├── 179b96e657c91102b91b1031e6903d7a
@@ -179,6 +185,26 @@
 │       ├── hw-1768930471304-758162697.png
 │       ├── hw-1768930471305-399548601.png
 │       ├── hw-1768930494157-614117768.png
+│       ├── studio-1769191920520-2043.jpg
+│       ├── studio-1769192516290-6814.jpg
+│       ├── studio-1769193745171-4536.jpg
+│       ├── studio-1769193797546-165.jpg
+│       ├── studio_1769198134006-222869832.png
+│       ├── studio_1769198134010-937784732.png
+│       ├── studio_1769198134012-756464366.png
+│       ├── studio_1769198134013-594476183.png
+│       ├── studio_1769198134016-848496616.png
+│       ├── studio_1769198134027-39263879.png
+│       ├── studio_1769198134058-561747833.png
+│       ├── studio_1769198134061-396103129.png
+│       ├── studio_1769198134069-632386481.png
+│       ├── studio_1769198134070-91215709.png
+│       ├── studio_1769198134080-256767984.png
+│       ├── studio_1769198134090-925171104.png
+│       ├── studio_1769198134109-414501045.png
+│       ├── studio_1769198134112-187639441.png
+│       ├── studio_1769198134114-566663002.png
+│       ├── studio_1769198134120-622948676.png
 │       ├── temp/
 │       ├── temp-1768930953731-74258377.png
 │       ├── temp-1768930953739-334352580.png
@@ -221,6 +247,12 @@
 │   │   │   │   └── auth.db.js
 │   │   │   └── experts/
 │   │   │       └── auth.expert.js
+│   │   ├── classroom/
+│   │   │   ├── ai/
+│   │   │   │   └── plan.ai.js
+│   │   │   ├── classroom.routes.js
+│   │   │   └── experts/
+│   │   │       └── classroom.expert.js
 │   │   ├── games/
 │   │   │   ├── ai/
 │   │   │   │   ├── games.ai.js

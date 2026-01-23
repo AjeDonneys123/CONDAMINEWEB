@@ -15,10 +15,44 @@ router.get('/all', asyncHandler(async (req, res) => {
     res.json(await mongoose.model('GameLevel').find({}).lean());
 }));
 
-// --- NOUVEAU V205 : RÉCUPÉRER TOUS LES PROGRÈS ---
 router.get('/progress', asyncHandler(async (req, res) => {
     const progs = await mongoose.model('GameProgress').find({}, 'studentId gameId levelReached lastScore').lean();
     res.json(progs);
+}));
+
+// --- CORRECTION SAUVEGARDE SCORE ---
+router.post('/save-progress', asyncHandler(async (req, res) => {
+    const { studentId, gameId, score, levelReached } = req.body;
+    const GameProgress = mongoose.model('GameProgress');
+
+    // 1. On cherche s'il y a déjà une progression
+    const existing = await GameProgress.findOne({ studentId, gameId });
+
+    if (existing) {
+        // On ne met à jour le niveau que si on fait mieux (pour ne pas perdre le statut "Violet" si on rejoue et perd)
+        // Mais on met toujours à jour le score et la date (pour le suivi)
+        const newLevel = Math.max(existing.levelReached || 0, levelReached);
+        
+        await GameProgress.updateOne(
+            { _id: existing._id },
+            { 
+                lastScore: score, 
+                levelReached: newLevel,
+                updatedAt: new Date() 
+            }
+        );
+    } else {
+        // Première fois : on crée l'entrée (Bleu si 0, Violet si 1)
+        await GameProgress.create({
+            studentId,
+            gameId,
+            lastScore: score,
+            levelReached: levelReached, // Accepte 0 explicitement maintenant
+            updatedAt: new Date()
+        });
+    }
+    
+    res.json({ ok: true });
 }));
 
 router.post('/', asyncHandler(async (req, res) => {
@@ -30,7 +64,6 @@ router.post('/', asyncHandler(async (req, res) => {
 }));
 
 router.delete('/:id', asyncHandler(async (req, res) => {
-    console.log(`🗑️ [API] Suppression Quiz : ${req.params.id}`);
     await mongoose.model('GameLevel').findByIdAndDelete(req.params.id);
     res.json({ ok: true });
 }));

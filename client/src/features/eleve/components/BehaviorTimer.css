@@ -1,0 +1,141 @@
+.behavior-timer-wrapper {
+    background: white;
+    border-radius: 30px;
+    padding: 0;
+    margin-bottom: 2rem;
+    box-shadow: 0 15px 40px -10px rgba(0, 0, 0, 0.1);
+    border: 1px solid #e2e8f0;
+    overflow: hidden;
+    animation: slideDown 0.5s ease-out;
+    display: flex;
+    flex-direction: column;
+}
+
+/* SECTION COMMUNE */
+.bt-section {
+    padding: 1.5rem 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* --- ZONE SANCTIONS (HAUT) --- */
+.bt-section.sanctions {
+    background: linear-gradient(to bottom, #fff, #fef2f2);
+    border-bottom: 2px dashed #fecaca;
+}
+
+.bt-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 5px;
+}
+
+.bt-title {
+    font-weight: 950;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    letter-spacing: 1px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.bt-title.red { color: #ef4444; }
+.bt-title.green { color: #10b981; }
+
+/* CROIX ET ÉTOILES VISUELLES */
+.bt-icons-container {
+    display: flex;
+    gap: 10px;
+    height: 40px;
+    align-items: center;
+}
+
+.bt-icon-slot {
+    width: 35px;
+    height: 35px;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.5);
+    border: 2px solid rgba(0,0,0,0.05);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    transition: all 0.3s;
+}
+
+.bt-icon-slot.filled-cross {
+    background: #fee2e2;
+    border-color: #ef4444;
+    box-shadow: 0 4px 10px rgba(239, 68, 68, 0.2);
+    animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.bt-icon-slot.filled-star {
+    background: #f0fdf4;
+    border-color: #10b981;
+    box-shadow: 0 4px 10px rgba(16, 185, 129, 0.2);
+    animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+/* BARRES DE PROGRESSION */
+.bt-bar-container {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.bt-label-mini {
+    font-size: 0.65rem;
+    font-weight: 800;
+    color: #94a3b8;
+    text-transform: uppercase;
+    display: flex;
+    justify-content: space-between;
+}
+
+.bt-progress-track {
+    width: 100%;
+    height: 10px;
+    background: #f1f5f9;
+    border-radius: 10px;
+    overflow: hidden;
+    position: relative;
+    border: 1px solid rgba(0,0,0,0.05);
+}
+
+.bt-progress-fill {
+    height: 100%;
+    border-radius: 10px;
+    transition: width 1s ease-in-out;
+}
+.bt-progress-fill.red { background: linear-gradient(90deg, #ef4444, #f87171); }
+.bt-progress-fill.gold { background: linear-gradient(90deg, #fbbf24, #f59e0b); }
+
+/* --- ZONE BONUS (BAS) --- */
+.bt-section.bonus {
+    background: linear-gradient(to bottom, #f0fdf4, #fff);
+}
+
+.bt-aplus-badge {
+    background: #fbbf24;
+    color: white;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-weight: 900;
+    font-size: 0.7rem;
+    box-shadow: 0 4px 10px rgba(251, 191, 36, 0.4);
+    text-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+@keyframes popIn {
+    0% { transform: scale(0); opacity: 0; }
+    80% { transform: scale(1.2); opacity: 1; }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes slideDown {
+    from { opacity: 0; transform: translateY(-20px); }
+    to { opacity: 1; transform: translateY(0); }
+}

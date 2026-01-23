@@ -19,12 +19,12 @@ const port = process.env.PORT || 3000;
 const SERVER_BOOT_ID = Date.now();
 
 // CHARGEMENT MODÈLES
-const models = ['AcademicYear', 'Admin', 'Classroom', 'Subject', 'Teacher', 'Student', 'Enrollment', 'Chapter', 'Homework', 'Submission', 'GameLevel', 'GameProgress', 'MistakesBook', 'AccessLog', 'BugReport', 'ProjectDoc', 'Player', 'StudioProject'];
+const models = ['AcademicYear', 'Admin', 'Classroom', 'Subject', 'Teacher', 'Student', 'Enrollment', 'Chapter', 'Homework', 'Submission', 'GameLevel', 'GameProgress', 'MistakesBook', 'AccessLog', 'BugReport', 'ProjectDoc', 'Player', 'StudioProject', 'Sanction'];
 models.forEach(m => { try { require(`./models/${m}`); } catch (e) { console.error(`Err Model ${m}:`, e.message); } });
 
 app.use(express.json({ limit: '100mb' }));
 
-// SERVEUR STATIQUE (Pour servir les images uploadées)
+// SERVEUR STATIQUE
 const uploadsPath = path.resolve(process.cwd(), 'public', 'uploads');
 if (!fs.existsSync(uploadsPath)) fs.mkdirSync(uploadsPath, { recursive: true });
 app.use('/uploads', express.static(uploadsPath));
@@ -35,8 +35,9 @@ app.use('/api/admin', require('./domains/admin/admin.routes'));
 app.use('/api/structure', require('./domains/structure/structure.routes'));
 app.use('/api/games', require('./domains/games/games.routes'));
 app.use('/api/homework', require('./domains/homework/homework.routes')); 
-// C'EST ICI QUE CA SE JOUE :
 app.use('/api/studio', require('./domains/studio/studio.routes'));
+// NOUVEAU
+app.use('/api/classroom', require('./domains/classroom/classroom.routes'));
 
 app.get('/api/check-deploy', (req, res) => res.json({ bootId: SERVER_BOOT_ID, status: "OK" }));
 
@@ -55,4 +56,4 @@ if (fs.existsSync(distPath)) {
         res.sendFile(path.join(distPath, 'index.html'));
     });
 }
-app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V104 UP | PORT ${port}`));
+app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V105 UP | PORT ${port}`));

@@ -1,5 +1,20 @@
 const mongoose = require('mongoose');
 
+// Schéma pour les croix/bonus
+const BehaviorRecordSchema = new mongoose.Schema({
+    teacherId: { type: String, required: true },
+    crosses: { type: Number, default: 0 },
+    bonuses: { type: Number, default: 0 },
+    lastCrossDate: { type: Date, default: null },
+    weeksToRedemption: { type: Number, default: 3 }
+}, { _id: false });
+
+// Schéma pour les notes prof (séparé pour éviter les conflits)
+const NoteSchema = new mongoose.Schema({
+    teacherId: { type: String, required: true },
+    text: { type: String, default: "" }
+}, { _id: false });
+
 const StudentSchema = new mongoose.Schema({
     // Identité
     firstName: { type: String, required: true },
@@ -8,21 +23,25 @@ const StudentSchema = new mongoose.Schema({
     
     // Contacts
     email: { type: String, lowercase: true, trim: true },
-    parentEmail: { type: String, lowercase: true, trim: true }, // NOUVEAU
+    parentEmail: { type: String, lowercase: true, trim: true },
 
     // Scolarité
     classId: { type: mongoose.Schema.Types.ObjectId, ref: 'Classroom' },
-    currentClass: { type: String }, // Ex: "1D"
-    currentLevel: { type: String }, // NOUVEAU (Ex: "1")
-
-    // Groupes / Options
+    currentClass: { type: String }, 
+    currentLevel: { type: String }, 
     assignedGroups: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Classroom' }],
 
-    // Infos diverses
-    gender: { type: String, enum: ['M', 'F', ''] },
-    lastLogin: { type: Date, default: Date.now }
+    // Plan de classe (Coordonnées)
+    seatX: { type: Number, default: 0 }, 
+    seatY: { type: Number, default: 0 }, 
     
-    // SUPPRIMÉS : birthDate, isTestAccount
+    // Vie scolaire (Tableaux de sous-documents)
+    behaviorRecords: { type: [BehaviorRecordSchema], default: [] },
+    teacherNotes: { type: [NoteSchema], default: [] },
+
+    // Système
+    isTestAccount: { type: Boolean, default: false },
+    lastLogin: { type: Date, default: Date.now }
 }, { collection: 'students' });
 
 module.exports = mongoose.models.Student || mongoose.model('Student', StudentSchema);
