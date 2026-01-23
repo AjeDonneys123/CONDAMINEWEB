@@ -2,10 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import './AdminDashboard.css';
 
 /**
- * ⚙️ DASHBOARD ADMIN V192 - FIX MODAL CONTEXT
- * Fix critique : Les modales (Overlay) sont sorties du conteneur "animate-in".
- * Cela empêche que le `position: fixed` soit piégé par le `transform` de l'animation CSS.
- * Résultat : La modale s'affiche bien en plein écran par-dessus tout.
+ * ⚙️ DASHBOARD ADMIN V215 - FIX IMPORT
+ * Correction de l'upload CSV qui pouvait échouer silencieusement.
  */
 export default function AdminDashboard({ user, onRefresh }) {
     const [view, setView] = useState('classes'); 
@@ -132,8 +130,23 @@ export default function AdminDashboard({ user, onRefresh }) {
         formData.append('file', file);
         formData.append('defaultClass', magicClass.toUpperCase());
         formData.append('forceOption', magicForceOption);
-        try { const res = await fetch('/api/admin/import-csv', { method: 'POST', body: formData }); const data = await res.json(); if (res.ok) { alert("✅ " + data.message); setShowMagicModal(false); loadData(); onRefresh(); } else { alert("❌ " + data.error); } } catch (err) { alert("Erreur réseau"); }
-        setImporting(false); e.target.value = null;
+        
+        try { 
+            const res = await fetch('/api/admin/import-csv', { method: 'POST', body: formData }); 
+            const data = await res.json(); 
+            if (res.ok) { 
+                alert("✅ " + data.message); 
+                setShowMagicModal(false); 
+                loadData(); 
+                onRefresh(); 
+            } else { 
+                alert("❌ " + data.error); 
+            } 
+        } catch (err) { 
+            alert("Erreur réseau lors de l'upload."); 
+        }
+        setImporting(false); 
+        e.target.value = null; // Reset input
     };
 
     const handleMigration = async () => { if(!confirm("⚠️ NETTOYAGE BDD ?")) return; setImporting(true); try { const res = await fetch('/api/admin/maintenance/migrate-students', { method: 'POST' }); const data = await res.json(); alert(data.message); loadData(); } catch(e) {} setImporting(false); };
@@ -162,8 +175,6 @@ export default function AdminDashboard({ user, onRefresh }) {
     return (
         <>
             <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept=".csv,.txt" style={{display:'none'}} />
-            
-            {/* --- LES MODALES SONT MAINTENANT ICI, HORS DU FLUX ANIMÉ --- */}
             
             {importing && <div className="zoom-overlay level-2"><div className="text-white font-black text-2xl animate-pulse text-center">🔮 TRAITEMENT...</div></div>}
             

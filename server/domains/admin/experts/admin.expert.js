@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 const DriveEngine = require('../../../core/drive.engine');
 
 /**
- * 🧠 EXPERT ADMIN - VERSION 81
+ * 🧠 EXPERT ADMIN - VERSION 82 (CLEANED)
  * Fonctions de maintenance et diagnostic système.
  */
 const AdminExpert = {
@@ -20,7 +20,7 @@ const AdminExpert = {
         const models = [
             'AcademicYear', 'Admin', 'Classroom', 'Subject', 
             'Teacher', 'Student', 'Enrollment', 'Chapter', 
-            'Homework', 'Submission'
+            'Homework', 'Submission', 'StudioProject'
         ];
         const dump = {};
         for (const m of models) {

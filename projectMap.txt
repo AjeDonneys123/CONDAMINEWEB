@@ -93,9 +93,12 @@
 │   │   │       ├── scans/
 │   │   │       │   ├── ScansStudio.css
 │   │   │       │   └── ScansStudio.jsx
-│   │   │       └── students/
-│   │   │           ├── StudentsManager.css
-│   │   │           └── StudentsManager.jsx
+│   │   │       ├── students/
+│   │   │       │   ├── StudentsManager.css
+│   │   │       │   └── StudentsManager.jsx
+│   │   │       └── studio/
+│   │   │           ├── StudioDashboard.css
+│   │   │           └── StudioDashboard.jsx
 │   │   ├── index.css
 │   │   ├── main.jsx
 │   │   ├── services/
@@ -123,12 +126,31 @@
 │   │   └── ~$che_Croissance_Demographique_5e.docx
 │   ├── style.css
 │   └── uploads/
+│       ├── 0717c54fc34cd56505db1ada55b5a128
 │       ├── 07b4ded2280d7ad22dc0daa2c90f4107
 │       ├── 179b96e657c91102b91b1031e6903d7a
+│       ├── 187f36a3832211a9ac5609451dbcc07e
 │       ├── 262f72cd65ccb7a5e9683572acb3e77e
+│       ├── 46b781ca6b50d61e08289ac3528b2a37
+│       ├── 78441ed55f78839508d6cbe6140901fb
+│       ├── 8dfabdc4f70fe54049c0fa14e2fad9c3
 │       ├── 8fc74b97cbb3f971d37f15e01f7f4ef6
+│       ├── 9ea4d0bf219b361d2bf2929996c4f304
+│       ├── ai-1769124390020.jpg
+│       ├── ai-1769124788771.jpg
+│       ├── ai-1769124836695.jpg
+│       ├── ai-1769124938381.jpg
+│       ├── ai-1769125037098.jpg
+│       ├── ai-1769125110210.jpg
+│       ├── b4cff4272b9a06cccc9d9ec9e7097354
+│       ├── b8ac0517684936d20dc47eb7d4c722d7
+│       ├── ba2ecae20864307e22d433eaaa4e35b5
 │       ├── bc199f06f744958b60903b2790bc0d50
 │       ├── c536b44022497153eb3030b1271fca17
+│       ├── d1e99c4392a90046d1deeacea6cf25a1
+│       ├── f091edfce30ee30223bb59ea7c6f0dfa
+│       ├── fb305669f9570391964e533741582fff
+│       ├── fbcaf74c48169980d99220f61a4e0825
 │       ├── hw-1768842185845-Capture dâeÌcran 2026-01-03 aÌ 18.02.42.png
 │       ├── hw-1768842199185-Capture dâeÌcran 2026-01-03 aÌ 18.02.35.png
 │       ├── hw-1768842332574-Capture_d___e__cran_2026_01_03_a___18.02.35.png
@@ -157,6 +179,7 @@
 │       ├── hw-1768930471304-758162697.png
 │       ├── hw-1768930471305-399548601.png
 │       ├── hw-1768930494157-614117768.png
+│       ├── temp/
 │       ├── temp-1768930953731-74258377.png
 │       ├── temp-1768930953739-334352580.png
 │       ├── temp-1768930953739-999763234.png
@@ -227,9 +250,17 @@
 │   │   │   │   ├── structure.drive.js
 │   │   │   │   └── structure.expert.js
 │   │   │   └── structure.routes.js
-│   │   └── students/
-│   │       └── experts/
-│   │           └── student.drive.js
+│   │   ├── students/
+│   │   │   └── experts/
+│   │   │       └── student.drive.js
+│   │   └── studio/
+│   │       ├── ai/
+│   │       │   └── studio.ai.js
+│   │       ├── db/
+│   │       │   └── studio.db.js
+│   │       ├── experts/
+│   │       │   └── studio.expert.js
+│   │       └── studio.routes.js
 │   ├── models/
 │   │   ├── AcademicYear.js
 │   │   ├── AccessLog.js
@@ -249,6 +280,7 @@
 │   │   ├── ProjectDoc.js
 │   │   ├── ScanSession.js
 │   │   ├── Student.js
+│   │   ├── StudioProject.js
 │   │   ├── Subject.js
 │   │   ├── Submission.js
 │   │   ├── Teacher.js

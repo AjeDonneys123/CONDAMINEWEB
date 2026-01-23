@@ -4,7 +4,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 
-// POLYFILLS POUR LE SDK GOOGLE AI (Node < 18)
+// POLYFILLS
 if (!global.fetch) {
     const fetch = require('node-fetch');
     global.fetch = fetch;
@@ -19,12 +19,12 @@ const port = process.env.PORT || 3000;
 const SERVER_BOOT_ID = Date.now();
 
 // CHARGEMENT MODÈLES
-const models = ['AcademicYear', 'Admin', 'Classroom', 'Subject', 'Teacher', 'Student', 'Enrollment', 'Chapter', 'Homework', 'Submission', 'GameLevel', 'GameProgress', 'MistakesBook', 'AccessLog', 'BugReport', 'ProjectDoc', 'Player'];
+const models = ['AcademicYear', 'Admin', 'Classroom', 'Subject', 'Teacher', 'Student', 'Enrollment', 'Chapter', 'Homework', 'Submission', 'GameLevel', 'GameProgress', 'MistakesBook', 'AccessLog', 'BugReport', 'ProjectDoc', 'Player', 'StudioProject'];
 models.forEach(m => { try { require(`./models/${m}`); } catch (e) { console.error(`Err Model ${m}:`, e.message); } });
 
 app.use(express.json({ limit: '100mb' }));
 
-// SERVEUR STATIQUE UPLOADS (Indispensable pour voir les images avant publication)
+// SERVEUR STATIQUE (Pour servir les images uploadées)
 const uploadsPath = path.resolve(process.cwd(), 'public', 'uploads');
 if (!fs.existsSync(uploadsPath)) fs.mkdirSync(uploadsPath, { recursive: true });
 app.use('/uploads', express.static(uploadsPath));
@@ -35,10 +35,11 @@ app.use('/api/admin', require('./domains/admin/admin.routes'));
 app.use('/api/structure', require('./domains/structure/structure.routes'));
 app.use('/api/games', require('./domains/games/games.routes'));
 app.use('/api/homework', require('./domains/homework/homework.routes')); 
+// C'EST ICI QUE CA SE JOUE :
+app.use('/api/studio', require('./domains/studio/studio.routes'));
 
 app.get('/api/check-deploy', (req, res) => res.json({ bootId: SERVER_BOOT_ID, status: "OK" }));
 
-// GESTION ERREURS GLOBALE
 app.use((err, req, res, next) => {
     console.error("🔥 [SERVER_ERROR]:", err.message);
     res.status(500).json({ error: err.message || "Erreur serveur" });
@@ -54,4 +55,4 @@ if (fs.existsSync(distPath)) {
         res.sendFile(path.join(distPath, 'index.html'));
     });
 }
-app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V101 UP | PORT ${port}`));
+app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V104 UP | PORT ${port}`));

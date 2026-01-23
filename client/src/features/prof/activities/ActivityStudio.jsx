@@ -6,7 +6,7 @@ import ProfStudioFolder from '../components/ProfStudioFolder';
 export default function ActivityStudio({ globalClass, globalClassId, globalLevel, user, onRefreshRequest }) {
     const [activities, setActivities] = useState([]);
     const [chapters, setChapters] = useState([]);
-    const [allStudents, setAllStudents] = useState([]); // NOUVEAU V153
+    const [allStudents, setAllStudents] = useState([]);
     const [editingItem, setEditingItem] = useState(null);
     const [loading, setLoading] = useState(false);
 
@@ -19,7 +19,6 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
                 return res.json();
             };
 
-            // V153 : On charge aussi les élèves pour le filtrage granulaire
             const [hw, gm, cp, sts] = await Promise.all([
                 fetchJson('/api/homework/all'),
                 fetchJson('/api/games/all'),
@@ -47,8 +46,28 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
     };
 
     if (editingItem) {
-        if (editingItem.type === 'homework') return <HomeworkStudio initialData={editingItem.data} chapters={chapters} globalClass={globalClass} globalClassId={globalClassId} user={user} onClose={() => {setEditingItem(null); loadData();}} />;
-        return <GameStudio initialData={editingItem.data} chapters={chapters} classFilter={globalClass} onClose={() => {setEditingItem(null); loadData();}} />;
+        if (editingItem.type === 'homework') {
+            return (
+                <HomeworkStudio 
+                    initialData={editingItem.data} 
+                    chapters={chapters} 
+                    globalClass={globalClass} 
+                    globalClassId={globalClassId} 
+                    user={user} 
+                    onClose={() => {setEditingItem(null); loadData();}} 
+                />
+            );
+        }
+        // FIX: Ajout de user={user} ici pour éviter le crash "reading id of undefined"
+        return (
+            <GameStudio 
+                initialData={editingItem.data} 
+                chapters={chapters} 
+                classFilter={globalClass} 
+                user={user} 
+                onClose={() => {setEditingItem(null); loadData();}} 
+            />
+        );
     }
 
     return (
@@ -64,7 +83,7 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
                 <ProfStudioFolder 
                     chapters={chapters} 
                     items={activities} 
-                    studentsRef={allStudents} // V153 : On passe la liste pour analyse
+                    studentsRef={allStudents}
                     classFilter={globalClass}
                     levelFilter={globalLevel}
                     user={user}

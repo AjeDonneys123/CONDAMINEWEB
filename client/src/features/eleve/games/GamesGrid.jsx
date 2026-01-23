@@ -5,8 +5,8 @@ import DashboardFolder from '../components/DashboardFolder';
 import './GamesGrid.css';
 
 /**
- * 🎮 GRILLE JEUX ÉLÈVE V205 (STATUS CHECK)
- * Fix : Récupère la progression pour marquer les jeux comme faits.
+ * 🎮 GRILLE JEUX ÉLÈVE V216 (ULTRA ROBUST)
+ * Fix : Normalisation des noms de classe pour matcher à 100%.
  */
 export default function GamesGrid({ user }) {
   const [quizzes, setQuizzes] = useState([]);
@@ -15,7 +15,7 @@ export default function GamesGrid({ user }) {
   const [activeGame, setActiveGame] = useState(null);
 
   const loadData = async () => {
-    const myClass = (user.currentClass || "").toUpperCase().trim();
+    const myClass = (user.currentClass || "").trim().toUpperCase(); // Normalisation
     const myId = String(user._id || user.id);
 
     try {
@@ -24,14 +24,26 @@ export default function GamesGrid({ user }) {
             fetch('/api/games/progress').then(r => r.json())
         ]);
 
-        // Quels jeux j'ai déjà touchés ?
         const myPlayedGameIds = allProgs
             .filter(p => String(p.studentId) === myId)
-            .map(p => String(p.gameId)); // Attention: gameId stocké comme string ou ObjectId ? A vérifier
+            .map(p => String(p.gameId));
 
-        const filtered = allGames.filter(q => {
-            const qClass = (q.classroom || "").toUpperCase().trim();
-            return qClass === myClass;
+        const filtered = allGames.filter(g => {
+            const targets = g.targetClassrooms || (g.classroom ? [g.classroom] : []);
+            const assignedIds = g.assignedStudents || [];
+
+            // MATCH AVEC NORMALISATION
+            const isMyClassTargeted = targets.some(t => t.trim().toUpperCase() === myClass);
+            const isAssignedIndividually = assignedIds.some(id => String(id) === myId);
+            
+            if (isAssignedIndividually) return true;
+
+            if (isMyClassTargeted) {
+                if (g.isAllClass === true) return true;
+                if (g.isAllClass === undefined && assignedIds.length === 0) return true; // Legacy
+            }
+
+            return false;
         }).map(g => ({
             ...g,
             isDone: myPlayedGameIds.includes(String(g._id))
@@ -50,7 +62,7 @@ export default function GamesGrid({ user }) {
       const close = () => { 
           setActiveGame(null); 
           setSelectedQuiz(null);
-          loadData(); // Recharge pour la pastille
+          loadData(); 
       };
       return activeGame === 'zombie' ? <ZombieWrapper user={user} level={selectedQuiz} onClose={close} /> : <StarshipWrapper user={user} level={selectedQuiz} onClose={close} />;
   }

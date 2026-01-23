@@ -4,9 +4,22 @@ import './zombie_style.css';
 
 export default function ZombieWrapper({ user, level, onClose }) {
     const boxRef = useRef(null);
+    
     useEffect(() => {
+        // Sécurité si le niveau n'est pas chargé
+        if (!level || !boxRef.current) return;
+
+        // Lancement du moteur
         const engine = initZombieGame(boxRef.current, { level, user }, onClose);
+        
+        // Nettoyage en quittant
         return () => engine.destroy();
     }, [level]);
-    return <div className="fixed inset-0 bg-black z-[2000] flex items-center justify-center p-4"><div id="zombie-root" ref={boxRef}></div></div>;
+
+    return (
+        // CONTENEUR PLEIN ÉCRAN FORCÉ (z-index très haut, fond noir)
+        <div className="fixed inset-0 bg-black z-[9999] flex flex-col">
+            <div id="zombie-root" ref={boxRef} className="w-full h-full"></div>
+        </div>
+    );
 }

@@ -5,6 +5,7 @@ import StudentsManager from './students/StudentsManager';
 import ActivityStudio from './activities/ActivityStudio';
 import AdminDashboard from './admin/AdminDashboard';
 import ConsoleReporter from './components/ConsoleReporter';
+import StudioDashboard from './studio/StudioDashboard'; // IMPORT
 import './ProfPage.css';
 
 export default function ProfPage({ user, onLogout }) {
@@ -14,7 +15,7 @@ export default function ProfPage({ user, onLogout }) {
   };
 
   const [liveUser, setLiveUser] = useState(getInitialUser());
-  const [tab, setTab] = useState(liveUser.isDeveloper ? 'activities' : (user.role === 'admin' ? 'admin' : 'activities'));
+  const [tab, setTab] = useState('activities'); // Default
   const [classes, setClasses] = useState([]);
   const [selectedClassId, setSelectedClassId] = useState("");
   const [loading, setLoading] = useState(true);
@@ -54,10 +55,9 @@ export default function ProfPage({ user, onLogout }) {
 
   useEffect(() => { loadProfileAndClasses(); }, [tab]);
 
-  // Récupération intelligente de la classe ET du niveau
   const currentClassObj = classes.find(c => String(c._id) === String(selectedClassId));
   const currentClassName = currentClassObj?.name || "";
-  const currentLevel = currentClassObj?.level || ""; // V142: Niveau Explicite BDD
+  const currentLevel = currentClassObj?.level || "";
 
   return (
     <div className="prof-page-container">
@@ -68,7 +68,6 @@ export default function ProfPage({ user, onLogout }) {
             <span className="text-[10px] font-black text-slate-400 mr-2 uppercase tracking-widest whitespace-nowrap">
                 {liveUser.isDeveloper ? '🛠️ MODE ARCHITECTE :' : '📚 MES CLASSES :'}
             </span>
-            
             {loading ? (
                 <span className="text-[10px] text-slate-300 font-black animate-pulse">CHARGEMENT...</span>
             ) : (
@@ -77,7 +76,6 @@ export default function ProfPage({ user, onLogout }) {
                         <button key={c._id} onClick={() => setSelectedClassId(c._id)} 
                                 className={`px-5 py-2 rounded-xl font-black text-[10px] transition-all whitespace-nowrap border-2 flex items-center gap-2 ${String(selectedClassId) === String(c._id) ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg' : 'bg-white text-slate-400 border-slate-100 hover:border-slate-200'}`}>
                             {c.type === 'GROUP' ? '👥' : '🏫'} {c.name}
-                            {/* Petit badge niveau pour debugger */}
                             {c.level && <span className="bg-white/20 px-1 rounded text-[8px] opacity-70">{c.level}</span>}
                         </button>
                     ))}
@@ -92,18 +90,20 @@ export default function ProfPage({ user, onLogout }) {
             <ActivityStudio 
                 globalClass={currentClassName} 
                 globalClassId={selectedClassId} 
-                globalLevel={currentLevel} // V142: On passe le niveau
+                globalLevel={currentLevel} 
                 user={liveUser} 
                 onRefreshRequest={loadProfileAndClasses} 
             />
           )}
+          {/* NOUVEAU COMPOSANT STUDIO */}
+          {tab === 'studio' && <StudioDashboard user={liveUser} />}
+          
           {tab === 'students' && <StudentsManager globalClassId={selectedClassId} />}
           {tab === 'admin' && <AdminDashboard user={liveUser} onRefresh={loadProfileAndClasses} />}
         </div>
       </div>
       
       {liveUser.isDeveloper && <ConsoleReporter user={liveUser} />}
-      <div className="fixed bottom-4 right-4 bg-indigo-600 text-white font-black text-[9px] px-4 py-2 rounded-full shadow-2xl z-[20000]">STUDIO V142</div>
     </div>
   );
 }

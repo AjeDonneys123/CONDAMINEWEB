@@ -1,1 +1,67 @@
-.game-studio-overlay { position: fixed; inset: 0; background: #f8fafc; z-index: 6000; display: flex; flex-direction: column; }
+.v84-game-container {
+    position: fixed; inset: 0; background: #f8fafc; z-index: 9500;
+    display: flex; flex-direction: column; font-family: 'Inter', sans-serif;
+}
+
+/* HEADER STYLE JEU (Violet) */
+.v84-game-header {
+    height: 90px; background: white; border-bottom: 2px solid #f1f5f9;
+    display: flex; align-items: center; padding: 0 40px; justify-content: space-between;
+}
+.v84-game-icon { font-size: 2rem; background: #9333ea; color: white; padding: 10px; border-radius: 18px; box-shadow: 0 8px 15px rgba(147, 51, 234, 0.3); }
+.v84-game-title-input { border: none; font-size: 1.8rem; font-weight: 950; color: #0f172a; outline: none; width: 100%; text-transform: uppercase; margin-left: 20px; }
+
+/* LAYOUT */
+.v84-game-body { flex: 1; display: flex; overflow: hidden; }
+
+/* QUESTIONS LIST (LEFT) */
+.v84-q-list-sidebar {
+    width: 280px; background: white; padding: 20px; display: flex; flex-direction: column; border-right: 2px solid #f1f5f9;
+}
+.v84-q-item {
+    padding: 15px; background: #f8fafc; border-radius: 16px; border: 2px solid transparent; 
+    cursor: pointer; transition: all 0.2s; margin-bottom: 8px;
+}
+.v84-q-item.active { background: #f3e8ff; border-color: #a855f7; box-shadow: 0 4px 12px rgba(168, 85, 247, 0.15); }
+.v84-q-preview { font-weight: 800; font-size: 11px; color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.v84-q-sub { font-size: 9px; color: #94a3b8; font-weight: 700; margin-top: 4px; }
+
+.v84-add-q-btn { margin-top: 10px; padding: 15px; border: 2px dashed #e2e8f0; border-radius: 20px; color: #94a3b8; font-weight: 900; font-size: 10px; cursor: pointer; background: none; transition: all 0.2s; }
+.v84-add-q-btn:hover { border-color: #a855f7; color: #a855f7; background: #f3e8ff; }
+
+/* EDITOR (CENTER) */
+.v84-game-editor { flex: 1; padding: 40px; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; background: #f8fafc; }
+
+.v84-q-card { background: white; border-radius: 30px; padding: 30px; border: 1px solid #e2e8f0; box-shadow: 0 10px 30px -10px rgba(0,0,0,0.05); }
+.v84-field-label { font-size: 10px; font-weight: 950; color: #94a3b8; text-transform: uppercase; margin-bottom: 10px; display: block; letter-spacing: 0.05em; }
+
+.v84-q-input { 
+    width: 100%; padding: 20px; border-radius: 20px; background: #f8fafc; border: 2px solid #f1f5f9;
+    font-size: 1.1rem; font-weight: 700; color: #1e293b; outline: none; transition: border-color 0.2s;
+}
+.v84-q-input:focus { border-color: #a855f7; background: white; }
+
+.v84-answers-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 10px; }
+.v84-ans-row { display: flex; align-items: center; gap: 10px; background: #f8fafc; padding: 5px 15px 5px 5px; border-radius: 18px; border: 2px solid transparent; transition: all 0.2s; }
+.v84-ans-row.correct { background: #dcfce7; border-color: #22c55e; }
+
+.v84-correct-radio {
+    width: 40px; height: 40px; border-radius: 14px; background: white; border: 2px solid #cbd5e1;
+    display: flex; align-items: center; justify-content: center; cursor: pointer; font-weight: 900; color: #cbd5e1; font-size: 14px;
+}
+.v84-ans-row.correct .v84-correct-radio { background: #22c55e; border-color: #22c55e; color: white; }
+.v84-ans-input { flex: 1; background: transparent; border: none; padding: 10px; font-weight: 700; font-size: 0.9rem; outline: none; }
+
+/* AI WIDGET */
+.v84-ai-widget { background: #7e22ce; color: white; padding: 20px; border-radius: 25px; margin-bottom: 20px; display: flex; gap: 15px; align-items: center; box-shadow: 0 10px 25px rgba(126, 34, 206, 0.3); }
+.v84-ai-input { flex: 1; background: rgba(255,255,255,0.2); border: none; padding: 12px 20px; border-radius: 15px; color: white; font-weight: 700; placeholder-color: rgba(255,255,255,0.5); outline: none; }
+.v84-ai-btn { background: white; color: #7e22ce; border: none; padding: 12px 25px; border-radius: 15px; font-weight: 950; font-size: 10px; cursor: pointer; text-transform: uppercase; }
+
+/* RIGHT SIDEBAR (DISTRIBUTION - Identique Homework mais ajusté couleurs) */
+.v84-dist-sidebar { width: 350px; background: white; border-left: 2px solid #f1f5f9; padding: 30px; display: flex; flex-direction: column; }
+.v84-tab-btn-game { padding: 8px 16px; border-radius: 12px; font-size: 10px; font-weight: 900; transition: all 0.2s; border: 1px solid transparent; }
+.v84-tab-btn-game.active { background: #9333ea; color: white; shadow: 0 4px 10px rgba(147, 51, 234, 0.3); }
+.v84-tab-btn-game.inactive { background: #f1f5f9; color: #94a3b8; }
+
+.v84-game-publish-btn { width: 100%; padding: 20px; background: #9333ea; color: white; font-weight: 950; border-radius: 20px; border: none; margin-top: 20px; font-size: 12px; text-transform: uppercase; cursor: pointer; box-shadow: 0 10px 30px rgba(147, 51, 234, 0.3); transition: transform 0.1s; }
+.v84-game-publish-btn:hover { transform: translateY(-2px); }

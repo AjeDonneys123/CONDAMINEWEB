@@ -1,2 +1,130 @@
-#starship-root { width: 100%; height: 100%; background: #020617; position: relative; border-radius: 20px; overflow: hidden; }
-.s-ship { position: absolute; bottom: 20px; font-size: 3rem; transform: translateX(-50%); transition: left 0.1s; }
+/* DESIGN SPACE INVADERS */
+.s-game-wrapper {
+    position: relative; width: 100%; height: 100%;
+    background: #000; /* Espace noir */
+    font-family: 'Orbitron', sans-serif;
+    color: white; overflow: hidden;
+    user-select: none;
+}
+
+/* Étoiles fond (CSS pur) */
+.s-stars {
+    position: absolute; inset: 0;
+    background-image: 
+        radial-gradient(white 1px, transparent 1px),
+        radial-gradient(white 1px, transparent 1px);
+    background-size: 50px 50px, 100px 100px;
+    background-position: 0 0, 25px 25px;
+    opacity: 0.5;
+}
+
+/* HUD */
+.s-hud {
+    position: absolute; top: 0; width: 100%; height: 60px;
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 0 20px; background: rgba(0,0,0,0.8);
+    border-bottom: 1px solid #333; z-index: 50;
+}
+.s-lives { font-size: 1.2rem; letter-spacing: 2px; }
+.s-quit-btn {
+    background: #ef4444; border: 1px solid #f87171; color: white;
+    border-radius: 4px; padding: 5px 10px; cursor: pointer;
+    font-family: inherit; font-weight: bold;
+}
+
+/* BARRES PROGRESSION */
+.s-bars-container { display: flex; gap: 6px; }
+.s-mini-bar-box {
+    display: flex; gap: 2px; padding: 2px;
+    border: 1px solid #333; border-radius: 2px;
+}
+.s-mini-bar-box.active { border-color: #06b6d4; box-shadow: 0 0 5px #06b6d4; }
+.s-bar-seg {
+    width: 10px; height: 6px; background: #1e293b;
+}
+.s-bar-seg.filled { background: #06b6d4; box-shadow: 0 0 5px #06b6d4; }
+
+/* BANNER QUESTION */
+.s-question-banner {
+    position: absolute; top: 70px; width: 100%; text-align: center;
+    font-size: 1.3rem; font-weight: 900; color: #facc15;
+    text-shadow: 0 0 10px #facc15; z-index: 10;
+    padding: 0 20px;
+}
+
+/* PLAY AREA */
+.s-play-area {
+    position: absolute; inset: 0;
+}
+
+/* VAISSEAU */
+.s-ship {
+    position: absolute; bottom: 30px; 
+    font-size: 3rem; transform: translateX(-50%);
+    text-shadow: 0 0 20px #3b82f6;
+    transition: left 0.05s linear;
+    z-index: 20;
+}
+
+/* ENNEMIS (Réponses) */
+.s-enemy {
+    position: absolute; 
+    background: #1e293b; border: 2px solid #ef4444; color: white;
+    padding: 8px 12px; border-radius: 6px; 
+    font-size: 0.9rem; font-weight: bold;
+    transform: translateX(-50%);
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+    white-space: nowrap; z-index: 15;
+}
+/* Juste pour debug visuel (optionnel) */
+/* .s-correct-target { border-color: #22c55e; } */
+
+.s-projectile {
+    position: absolute; width: 4px; height: 15px;
+    background: #06b6d4; box-shadow: 0 0 8px #06b6d4;
+    transform: translateX(-50%); z-index: 18;
+}
+
+/* BOSS */
+.s-boss {
+    position: absolute; font-size: 5rem;
+    transform: translateX(-50%);
+    text-shadow: 0 0 30px #a855f7; z-index: 25;
+}
+
+/* BOSS INPUT UI */
+.s-boss-interface {
+    position: absolute; bottom: 100px; width: 100%;
+    display: flex; gap: 10px; justify-content: center;
+    z-index: 60;
+}
+.s-boss-input {
+    background: rgba(0,0,0,0.8); border: 2px solid #a855f7;
+    color: #a855f7; padding: 10px; font-family: inherit; font-size: 1.2rem;
+    text-transform: uppercase; text-align: center;
+}
+.s-nuke-btn {
+    background: #a855f7; color: white; border: none; padding: 0 20px;
+    font-weight: bold; cursor: pointer;
+}
+
+/* FEEDBACK */
+.s-feedback {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    font-size: 3rem; color: #ef4444; font-weight: 900;
+    text-shadow: 0 0 20px red; pointer-events: none; z-index: 100;
+}
+
+.s-nuke-flash {
+    position: fixed; inset: 0; background: white; z-index: 200;
+    animation: flash 0.8s ease-out forwards;
+}
+@keyframes flash { from { opacity: 1; } to { opacity: 0; } }
+
+.s-mobile-shoot {
+    position: absolute; bottom: 20px; right: 20px;
+    width: 70px; height: 70px; background: rgba(255,255,255,0.1);
+    border: 2px solid rgba(255,255,255,0.3); border-radius: 50%;
+    font-size: 2rem; display: flex; align-items: center; justify-content: center;
+    color: white; z-index: 50;
+}

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 
 /**
- * 📂 PROF STUDIO FOLDER - VERSION 202 (COMPACT NAMES)
- * Fix : Affichage simplifié des noms (1er mot prénom + 1er mot nom).
+ * 📂 PROF STUDIO FOLDER - VERSION 214 (UNIFIED DISPLAY)
+ * MAJ : L'affichage des cibles (Classes/Élèves) s'applique maintenant aux JEUX comme aux DEVOIRS.
+ * Fini le "JEU OUVERT À TOUS" en dur.
  */
 export default function ProfStudioFolder({ items, chapters, classFilter, levelFilter, user, onEditItem, onDeleteItem, onRefresh, studentsRef }) {
     const [customSections, setCustomSections] = useState([]);
@@ -92,8 +93,13 @@ export default function ProfStudioFolder({ items, chapters, classFilter, levelFi
 
     const isItemVisibleForClass = (item) => {
         if (!classFilter) return true;
-        if (item.actType === 'game') return true;
+        // Maintenant que les jeux sont ciblés, on peut filtrer aussi
         const targets = item.targetClassrooms || (item.classroom ? [item.classroom] : []);
+        
+        // Si c'est un jeu sans cible explicite (vieux jeux), on l'affiche partout par sécurité (ou on filtre, au choix)
+        // Ici : on l'affiche si targets est vide OU si la classe est dedans
+        if (item.actType === 'game' && targets.length === 0) return true;
+
         if (targets.some(t => t.toUpperCase() === classFilter.toUpperCase())) return true;
         return false;
     };
@@ -122,7 +128,7 @@ export default function ProfStudioFolder({ items, chapters, classFilter, levelFi
                         <button onClick={() => setShowArchived(!showArchived)} className={`px-5 py-2.5 rounded-2xl text-[10px] font-black border-2 transition-all ${showArchived ? 'bg-amber-500 border-amber-400 text-white shadow-[0_0_20px_rgba(245,158,11,0.5)]' : 'bg-slate-800 border-slate-700 text-slate-400'}`}>{showArchived ? '📂 RETOUR ACTIFS' : `📦 VOIR ARCHIVES`}</button>
                     </div>
                     <div className="flex items-center gap-2">
-                        <div className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-black text-[10px]">STUDIO V202</div>
+                        <div className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-black text-[10px]">STUDIO V214</div>
                         {!showArchived && (<><button onClick={handleReset} className="bg-red-900/50 text-red-400 px-3 py-2 rounded-xl font-black text-[9px] hover:bg-red-900 border border-red-900/50">R.A.Z</button><button onClick={() => setShowSectionModal(true)} className="bg-white/10 text-white px-5 py-2.5 rounded-xl font-black text-[10px] uppercase border border-white/10 hover:bg-white/20 transition-all">+ Section</button></>)}
                     </div>
                 </div>
@@ -161,14 +167,19 @@ export default function ProfStudioFolder({ items, chapters, classFilter, levelFi
                                     <div className="bg-slate-50/50 border-t p-8 space-y-4">
                                         {chapItems.length > 0 ? chapItems.map(it => {
                                             
-                                            // --- V202 : LOGIQUE D'AFFICHAGE COMPACTE ET INTELLIGENTE ---
+                                            // --- V214 : LOGIQUE UNIFIÉE JEUX & DEVOIRS ---
                                             let subTitle = "Chargement...";
                                             let subtitleColor = "text-slate-400";
 
-                                            if (it.actType === 'homework') {
-                                                const assignedIds = it.assignedStudents || [];
-                                                const targets = it.targetClassrooms || [it.classroom];
+                                            // On récupère les données de ciblage (fallback sur classroom pour legacy)
+                                            const targets = (it.targetClassrooms && it.targetClassrooms.length > 0) ? it.targetClassrooms : (it.classroom ? [it.classroom] : []);
+                                            const assignedIds = it.assignedStudents || [];
 
+                                            // Si vraiment aucune info
+                                            if (targets.length === 0) {
+                                                subTitle = (it.actType === 'game') ? "🎮 JEU OUVERT (LEGACY)" : "⚠️ AUCUNE CIBLE";
+                                            } else {
+                                                // 1. Calcul totaux BDD (pour savoir si c'est toute la classe)
                                                 const totalPerClass = {};
                                                 if (studentsRef) {
                                                     studentsRef.forEach(s => {
@@ -177,13 +188,13 @@ export default function ProfStudioFolder({ items, chapters, classFilter, levelFi
                                                     });
                                                 }
 
+                                                // 2. Noms des élèves assignés
                                                 const assignedByClass = {};
                                                 if (studentsRef && assignedIds.length > 0) {
                                                     studentsRef.forEach(s => {
                                                         if (assignedIds.some(id => String(id) === String(s._id))) {
                                                             const c = s.currentClass;
                                                             if (!assignedByClass[c]) assignedByClass[c] = [];
-                                                            // ICI : UTILISATION DE formatSimpleName pour raccourcir
                                                             assignedByClass[c].push(formatSimpleName(s.firstName, s.lastName));
                                                         }
                                                     });
@@ -194,11 +205,14 @@ export default function ProfStudioFolder({ items, chapters, classFilter, levelFi
                                                     const assignedCount = (assignedByClass[cls] || []).length;
                                                     const totalCount = totalPerClass[cls] || 0;
 
-                                                    if (it.isAllClass === true) {
+                                                    // Est-ce un jeu legacy qui était "ouvert à tous" par défaut ?
+                                                    const isGameLegacyFull = (it.actType === 'game' && assignedIds.length === 0);
+
+                                                    if (it.isAllClass === true || isGameLegacyFull) {
                                                         parts.push(cls);
                                                     } 
                                                     else if (totalCount > 0 && assignedCount >= totalCount) {
-                                                        parts.push(cls);
+                                                        parts.push(cls); // Tous cochés manuellement
                                                     } 
                                                     else if (assignedCount > 0) {
                                                         parts.push(`${cls}: ${assignedByClass[cls].join(', ')}`);
@@ -214,8 +228,6 @@ export default function ProfStudioFolder({ items, chapters, classFilter, levelFi
                                                 } else {
                                                     subTitle = "⚠️ AUCUN ÉLÈVE";
                                                 }
-                                            } else {
-                                                subTitle = "🎮 JEU OUVERT À TOUS";
                                             }
 
                                             return (

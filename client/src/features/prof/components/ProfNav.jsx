@@ -1,31 +1,24 @@
 import React from 'react';
 
-/**
- * 🧭 NAVIGATION PROF/ADMIN V30
- * Gère l'affichage des onglets selon le statut isDeveloper et le Rôle.
- */
 export default function ProfNav({ activeTab, onTabChange, user }) {
   
   let tabs = [];
 
-  // 1. DÉVELOPPEUR (Jean ou promu) : Accès Total
   if (user.isDeveloper) {
       tabs = [
           { id: 'activities', label: '⚡ ACTIVITÉS', color: 'bg-purple-600' },
+          { id: 'studio', label: '🎬 STUDIO', color: 'bg-pink-600' }, // NOUVEAU
           { id: 'students', label: '👥 ÉLÈVES', color: 'bg-blue-600' },
           { id: 'admin', label: '⚙️ DÉVELOPPEUR', color: 'bg-slate-900' }
       ];
   } 
-  // 2. ADMIN STAFF PUR (Proviseur) : Accès Gestion
   else if (user.role === 'admin') {
-      tabs = [
-          { id: 'admin', label: '🛡️ ADMINISTRATION', color: 'bg-slate-800' }
-      ];
+      tabs = [ { id: 'admin', label: '🛡️ ADMINISTRATION', color: 'bg-slate-800' } ];
   } 
-  // 3. PROF PUR : Accès Pédagogique
   else {
       tabs = [
           { id: 'activities', label: '⚡ ACTIVITÉS', color: 'bg-purple-600' },
+          { id: 'studio', label: '🎬 STUDIO', color: 'bg-pink-600' }, // NOUVEAU AUSSI POUR PROF
           { id: 'students', label: '👥 ÉLÈVES', color: 'bg-blue-600' }
       ];
   }
