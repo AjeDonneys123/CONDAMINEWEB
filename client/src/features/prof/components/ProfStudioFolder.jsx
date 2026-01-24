@@ -83,12 +83,9 @@ export default function ProfStudioFolder({ items, chapters, classFilter, levelFi
     const handleReset = async () => { if(!confirm("⚠️ R.A.Z : Tout effacer et remettre 'GÉNÉRAL' ?")) return; try { const res = await fetch('/api/structure/sections/reset', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ teacherId: getUserId() }) }); if(res.ok) { const newList = await res.json(); setCustomSections(newList); setActiveSection('GÉNÉRAL'); if(onRefresh) onRefresh(); } } catch(e) { alert("Erreur Reset."); } };
     const handleCreateChapter = async () => { if (!classFilter) return alert("⚠️ Sélectionnez une classe."); const title = prompt(`Nouveau dossier dans ${activeSection} ?`); if (!title) return; let isShared = false; if (currentLevel) isShared = confirm(`Partager ce dossier avec tout le niveau ${currentLevel} ?`); await fetch('/api/structure/chapters', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: title.toUpperCase(), section: activeSection, classroom: classFilter.toUpperCase(), teacherId: getUserId(), sharedLevel: isShared ? currentLevel : null }) }); if(onRefresh) onRefresh(); };
 
-    // --- LOGIQUE VISIBILITÉ ---
     const isItemVisibleForClass = (item) => {
         if (!classFilter) return true;
-        // Scan : pas de filtre classe explicite, on affiche tout ce qui est dans le dossier
         if (item.actType === 'scan') return true; 
-
         const targets = item.targetClassrooms || (item.classroom ? [item.classroom] : []);
         if (item.actType === 'game' && targets.length === 0) return true;
         if (targets.some(t => t.toUpperCase() === classFilter.toUpperCase())) return true;
@@ -133,7 +130,13 @@ export default function ProfStudioFolder({ items, chapters, classFilter, levelFi
 
             <div className="animate-in slide-in-from-bottom-6">
                 <div className="flex justify-between items-end mb-10 px-6">
-                    <div><h2 className="text-5xl font-black uppercase tracking-tighter" style={{ color: activeColor }}>{activeSection}</h2><p className="text-[11px] font-black text-slate-400 tracking-[0.2em] uppercase mt-2">{displayedChapters.length} Dossiers {showArchived ? 'ARCHIVÉS' : 'ACTIFS'}</p></div>
+                    <div>
+                        {/* TITRE RESPONSIVE : Petit sur mobile, Grand sur PC */}
+                        <h2 className="text-2xl md:text-5xl font-black uppercase tracking-tighter break-words" style={{ color: activeColor }}>
+                            {activeSection}
+                        </h2>
+                        <p className="text-[11px] font-black text-slate-400 tracking-[0.2em] uppercase mt-2">{displayedChapters.length} Dossiers {showArchived ? 'ARCHIVÉS' : 'ACTIFS'}</p>
+                    </div>
                     {!showArchived && <button onClick={handleCreateChapter} className="px-10 py-5 rounded-[22px] text-white text-[12px] font-black shadow-2xl hover:scale-105 transition-all active:scale-95 uppercase tracking-widest" style={{ backgroundColor: activeColor }}>+ NOUVEAU DOSSIER</button>}
                 </div>
 
@@ -158,18 +161,15 @@ export default function ProfStudioFolder({ items, chapters, classFilter, levelFi
                                     <div className="bg-slate-50/50 border-t p-8 space-y-4">
                                         {chapItems.length > 0 ? chapItems.map(it => {
                                             
-                                            // --- GESTION AFFICHAGE SELON TYPE (DC vs DM/JEU) ---
                                             let subTitle = "Chargement...";
                                             let subtitleColor = "text-slate-400";
                                             let badgeColor = it.actType === 'game' ? 'bg-purple-600' : (it.actType === 'scan' ? 'bg-teal-500' : 'bg-orange-500');
 
                                             if (it.actType === 'scan') {
-                                                // --- SPÉCIAL SCAN : Affichage du nombre de copies ---
                                                 const copyCount = (it.copyUrls || []).length;
                                                 subTitle = `${copyCount} COPIES SCANNÉES`;
                                                 subtitleColor = "text-teal-600";
                                             } else {
-                                                // --- DM / JEU : Affichage des cibles ---
                                                 const targets = (it.targetClassrooms && it.targetClassrooms.length > 0) ? it.targetClassrooms : (it.classroom ? [it.classroom] : []);
                                                 const assignedIds = it.assignedStudents || [];
 

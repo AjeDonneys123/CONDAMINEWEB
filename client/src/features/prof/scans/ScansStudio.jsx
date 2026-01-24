@@ -1,25 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './ScansStudio.css';
 
-export default function ScansStudio({ user }) {
+export default function ScansStudio({ user, globalClass }) {
     const [sessions, setSessions] = useState([]);
     const [chapters, setChapters] = useState([]);
     
     // UI STATES
     const [activePanels, setActivePanels] = useState({});
     const [collapsedSessions, setCollapsedSessions] = useState({});
-    
-    // FILE D'ATTENTE LOCALE
     const [snapQueue, setSnapQueue] = useState([]); 
-    
-    // DRIVE STATE
     const [selectedFolderId, setSelectedFolderId] = useState("");
 
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
     const [stream, setStream] = useState(null);
 
-    // INSTRUCTIONS IA PAR DÉFAUT
     const [instructions, setInstructions] = useState("Corrige l'orthographe et la syntaxe. Sois précis.");
 
     useEffect(() => { 
@@ -40,6 +35,46 @@ export default function ScansStudio({ user }) {
             if(res.ok) setChapters(await res.json());
         } catch(e) { console.error(e); }
     };
+
+    // --- FILTRAGE ROBUSTE ---
+    const getFilteredChapters = () => {
+        const myId = String(user._id || user.id);
+        if (!myId) return [];
+
+        let currentLevel = "";
+        if (globalClass) {
+            const match = globalClass.match(/^(\d+|TERM|CP|CE1|CE2|CM1|CM2)/);
+            if (match) currentLevel = match[0];
+        }
+
+        return chapters.filter(c => {
+            // 1. PROPRIÉTAIRE (Strict)
+            const ownerId = c.teacherId?._id || c.teacherId;
+            if (String(ownerId) !== myId) return false;
+
+            // 2. ARCHIVES
+            if (c.isArchived) return false;
+
+            // 3. CONTEXTE CLASSE / NIVEAU
+            if (globalClass) {
+                const cClass = (c.classroom || "").trim().toUpperCase();
+                const gClass = globalClass.trim().toUpperCase();
+                
+                // Est-ce le dossier de CETTE classe ?
+                const isExactClass = cClass === gClass;
+                
+                // Est-ce un dossier partagé avec CE niveau ?
+                const isSharedLevel = c.sharedLevel && String(c.sharedLevel) === currentLevel;
+                
+                return isExactClass || isSharedLevel;
+            }
+
+            // Si hors contexte classe, on affiche tout ce qui est actif
+            return true;
+        }).sort((a, b) => a.title.localeCompare(b.title));
+    };
+
+    const relevantChapters = getFilteredChapters();
 
     // --- 1. CRÉATION ---
     const handleCreateDC = async () => {
@@ -68,8 +103,13 @@ export default function ScansStudio({ user }) {
         });
 
         if (panelType === 'DRIVE_SELECTION') {
-            if (currentChapterId) setSelectedFolderId(currentChapterId);
-            else if (chapters.length > 0) setSelectedFolderId(chapters[0]._id);
+            if (currentChapterId && relevantChapters.some(c => c._id === currentChapterId)) {
+                setSelectedFolderId(currentChapterId);
+            } else if (relevantChapters.length > 0) {
+                setSelectedFolderId(relevantChapters[0]._id);
+            } else {
+                setSelectedFolderId("");
+            }
         }
 
         if (panelType === 'CAMERA_SUBJECT' || panelType === 'CAMERA_COPY') {
@@ -127,18 +167,17 @@ export default function ScansStudio({ user }) {
         }, 'image/jpeg', 0.85);
     };
 
-    // --- 4. CORRECTION IA (MISE À JOUR) ---
+    // --- 4. CORRECTION IA ---
     const launchCorrection = async (sessionId) => {
-        if(!confirm("Lancer l'IA EXPERTE sur toutes les copies ?\n(Identification élève + Correction Rouge + Note)")) return;
-        alert("Correction lancée en tâche de fond. Le serveur analyse les copies...");
-        
+        if(!confirm("Lancer l'IA EXPERTE sur toutes les copies ?")) return;
+        alert("Correction lancée en tâche de fond...");
         try {
             await fetch(`/api/scans/correct/${sessionId}`, {
                 method: 'POST', headers: {'Content-Type':'application/json'},
                 body: JSON.stringify({ instructions })
             });
             loadSessions();
-        } catch(e) { alert("Erreur lors de la correction IA."); }
+        } catch(e) { alert("Erreur IA."); }
     };
 
     const deleteSession = async (id) => {
@@ -147,13 +186,12 @@ export default function ScansStudio({ user }) {
         loadSessions();
     };
 
-    // Helper pour la couleur de la note
     const getGradeColorClass = (grade) => {
         if (!grade) return 'bg-gray-400';
         if (grade.includes('A+')) return 'grade-A-plus';
         if (grade.includes('A')) return 'grade-A';
         if (grade.includes('B')) return 'grade-B';
-        return 'grade-C'; // Rouge par défaut (C, D, E, Insuffisant)
+        return 'grade-C';
     };
 
     return (
@@ -196,8 +234,6 @@ export default function ScansStudio({ user }) {
 
                                 {activePanel && (
                                     <div className="dc-content-area">
-                                        
-                                        {/* (CODES CAMERA ET GALERIE IDENTIQUES QU'AVANT, JE FOCUS SUR LA CORRECTION) */}
                                         {(activePanel === 'CAMERA_SUBJECT' || activePanel === 'CAMERA_COPY') && (
                                             <div className="flex flex-col items-center">
                                                 <div className="cam-wrapper">
@@ -217,40 +253,23 @@ export default function ScansStudio({ user }) {
                                             </div>
                                         )}
 
-                                        {/* CORRECTION AMÉLIORÉE */}
                                         {activePanel === 'CORRECTION' && (
                                             <div className="correction-box">
                                                 <h3 className="font-black text-slate-700 uppercase">Instructions pour l'IA</h3>
                                                 <textarea className="ai-instr-input" value={instructions} onChange={e => setInstructions(e.target.value)} />
                                                 <button className="btn-launch-ia" onClick={() => launchCorrection(s._id)}>LANCER CORRECTION ({copyImages.length} COPIES)</button>
-                                                
                                                 <div className="results-grid">
                                                     {(s.corrections || []).map((c, idx) => (
                                                         <div key={idx} className="result-card">
                                                             <div className="result-header">
-                                                                <div className="result-student">
-                                                                    <span className="student-icon">🎓</span>
-                                                                    {c.studentName || "ÉLÈVE INCONNU"}
-                                                                </div>
-                                                                <div className={`grade-badge ${getGradeColorClass(c.grade)}`}>
-                                                                    NOTE : {c.grade}
-                                                                </div>
+                                                                <div className="result-student"><span className="student-icon">🎓</span>{c.studentName || "INCONNU"}</div>
+                                                                <div className={`grade-badge ${getGradeColorClass(c.grade)}`}>NOTE : {c.grade}</div>
                                                             </div>
-                                                            
                                                             <div className="result-img-box"><img src={c.originalUrl} className="result-img" /></div>
-                                                            
                                                             <div className="result-body">
-                                                                <div className="appreciation-box">
-                                                                    <strong>APPRÉCIATION :</strong> {c.appreciation || "Aucune appréciation."}
-                                                                </div>
-                                                                
+                                                                <div className="appreciation-box"><strong>APPRÉCIATION :</strong> {c.appreciation || "Aucune."}</div>
                                                                 <div className="transcription-box" dangerouslySetInnerHTML={{__html: c.transcription}}></div>
-                                                                
-                                                                {c.mistakes?.length > 0 && (
-                                                                    <div className="mistakes-list">
-                                                                        {c.mistakes.map((m, i) => <span key={i} className="mistake-tag">{m}</span>)}
-                                                                    </div>
-                                                                )}
+                                                                {c.mistakes?.length > 0 && <div className="mistakes-list">{c.mistakes.map((m, i) => <span key={i} className="mistake-tag">{m}</span>)}</div>}
                                                             </div>
                                                         </div>
                                                     ))}
@@ -258,23 +277,34 @@ export default function ScansStudio({ user }) {
                                             </div>
                                         )}
 
-                                        {/* DRIVE ET GALERIE (Code standard caché pour gain de place dans la réponse, inchangé) */}
                                         {activePanel === 'DRIVE_SELECTION' && (
                                             <div className="drive-box animate-in">
-                                                <h3 className="font-black text-slate-700 uppercase text-center">📁 LIER À UN DOSSIER</h3>
-                                                <select className="drive-select" value={selectedFolderId} onChange={(e) => setSelectedFolderId(e.target.value)}>
-                                                    <option value="">-- SÉLECTIONNER UN DOSSIER --</option>
-                                                    {chapters.map(c => <option key={c._id} value={c._id}>{c.title} ({c.classroom || '?'})</option>)}
-                                                </select>
-                                                <button className="btn-save-drive" onClick={() => handleLinkDrive(s._id)}>SAUVEGARDER LE LIEN</button>
+                                                <h3 className="font-black text-slate-700 uppercase text-center">📂 RANGER DANS UN DOSSIER ({globalClass || 'Tout'})</h3>
+                                                
+                                                {relevantChapters.length > 0 ? (
+                                                    <select className="drive-select" value={selectedFolderId} onChange={(e) => setSelectedFolderId(e.target.value)}>
+                                                        <option value="">-- CHOISIR UN DOSSIER --</option>
+                                                        {relevantChapters.map(c => (
+                                                            <option key={c._id} value={c._id}>
+                                                                {c.title} {c.sharedLevel ? `[NIV ${c.sharedLevel}]` : (c.classroom ? `[${c.classroom}]` : '[GLOBAL]')}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                ) : (
+                                                    <div className="text-center text-red-400 font-bold text-xs py-4">
+                                                        Aucun dossier actif pour {globalClass} (ou global) appartenant à ce prof.<br/>Créez-en un dans l'onglet "ACTIVITÉS".
+                                                    </div>
+                                                )}
+
+                                                <button className="btn-save-drive" onClick={() => handleLinkDrive(s._id)} disabled={!selectedFolderId}>SAUVEGARDER LE LIEN</button>
                                             </div>
                                         )}
+
                                         {activePanel === 'GALLERY' && (
                                             <div className="gallery-grid">
                                                 {copyImages.map((u, i) => <div key={i} className="gallery-item"><img src={u} className="gallery-img" /><div className="gallery-tag">COPIE {i+1}</div></div>)}
                                             </div>
                                         )}
-
                                     </div>
                                 )}
                             </>

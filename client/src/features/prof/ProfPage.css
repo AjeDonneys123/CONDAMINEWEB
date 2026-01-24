@@ -1,2 +1,23 @@
-.prof-page-container { max-width: 1200px; margin: 0 auto; padding: 1rem; }
-.prof-card { background: white; border-radius: 30px; overflow: hidden; border: 1px solid #f1f5f9; min-height: 90vh; }
+/* ... (Code existant) ... */
+
+/* --- AJOUTS DE SÉCURITÉ RESPONSIVE --- */
+
+/* Force le masquage du Desktop Header sur mobile */
+@media (max-width: 768px) {
+    .desktop-only-header {
+        display: none !important;
+    }
+    .mobile-only-header {
+        display: flex !important;
+    }
+}
+
+/* Force le masquage du Mobile Header sur Desktop */
+@media (min-width: 769px) {
+    .desktop-only-header {
+        display: flex !important;
+    }
+    .mobile-only-header {
+        display: none !important;
+    }
+}

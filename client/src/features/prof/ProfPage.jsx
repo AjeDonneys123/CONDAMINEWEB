@@ -20,49 +20,33 @@ export default function ProfPage({ user, onLogout }) {
   const [tab, setTab] = useState('activities');
   const [classes, setClasses] = useState([]);
   const [selectedClassId, setSelectedClassId] = useState("");
-  
-  // ÉTATS DE CHARGEMENT ET D'ERREUR
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState(null);
 
   const loadProfileAndClasses = async () => {
     setLoading(true);
-    setFetchError(null); // Reset de l'erreur avant tentative
-    
+    setFetchError(null);
     try {
         const userId = liveUser.id || liveUser._id;
-        
-        // 1. Récupération des classes
         const resCls = await fetch('/api/admin/classrooms');
         if (!resCls.ok) throw new Error("Erreur chargement classes");
         const allCls = await resCls.json();
-
-        // 2. Récupération du profil prof (pour les assignations)
         const resMe = await fetch(`/api/admin/teachers/${userId}?report-silent=true`);
         if (!resMe.ok) throw new Error("Erreur chargement profil");
-        
         const freshProfile = await resMe.json();
         setLiveUser(prev => ({ ...prev, ...freshProfile, isDeveloper: prev.isDeveloper }));
-        
         let filteredCls = [];
         if (liveUser.isDeveloper) filteredCls = allCls;
         else {
             const assignedIds = freshProfile.assignedClasses || [];
             filteredCls = allCls.filter(c => assignedIds.some(id => String(id) === String(c._id)));
         }
-        
         setClasses(filteredCls);
-        
-        // Sélection par défaut intelligente
         if (filteredCls.length > 0) {
             const stillExists = filteredCls.some(c => String(c._id) === String(selectedClassId));
             if (!selectedClassId || !stillExists) setSelectedClassId(filteredCls[0]._id);
         }
-
-    } catch(e) { 
-        console.error("Sync Profile Error:", e.message);
-        setFetchError("ÉCHEC CONNEXION"); // On capture l'erreur pour l'interface
-    }
+    } catch(e) { console.error("Sync Profile Error:", e.message); setFetchError("ÉCHEC CONNEXION"); }
     setLoading(false);
   };
 
@@ -81,19 +65,13 @@ export default function ProfPage({ user, onLogout }) {
             <span className="text-[10px] font-black text-slate-400 mr-2 uppercase tracking-widest whitespace-nowrap">
                 {liveUser.isDeveloper ? '🛠️ MODE ARCHITECTE :' : '📚 MES CLASSES :'}
             </span>
-            
             {loading ? (
                 <span className="text-[10px] text-slate-300 font-black animate-pulse">CHARGEMENT EN COURS...</span>
             ) : fetchError ? (
-                // BOUTON ROUGE SI ERREUR INTERNET
-                <button onClick={loadProfileAndClasses} className="bg-red-500 text-white px-4 py-2 rounded-xl font-black text-[10px] shadow-lg animate-bounce flex items-center gap-2 hover:bg-red-600 transition-colors">
-                    ⚠️ {fetchError} • RÉESSAYER
-                </button>
+                <button onClick={loadProfileAndClasses} className="bg-red-500 text-white px-4 py-2 rounded-xl font-black text-[10px] shadow-lg animate-bounce flex items-center gap-2 hover:bg-red-600 transition-colors">⚠️ {fetchError} • RÉESSAYER</button>
             ) : classes.length === 0 ? (
-                // CAS AUCUNE CLASSE TROUVÉE MAIS CONNEXION OK
                 <span className="text-[10px] text-slate-400 font-bold italic bg-slate-100 px-3 py-1 rounded">Aucune classe assignée.</span>
             ) : (
-                // LISTE DES CLASSES NORMALE
                 <>
                     {classes.map(c => (
                         <button key={c._id} onClick={() => setSelectedClassId(c._id)} 
@@ -108,8 +86,8 @@ export default function ProfPage({ user, onLogout }) {
 
         <ProfNav activeTab={tab} onTabChange={setTab} user={liveUser} />
         
-        <div className="p-8 bg-white min-h-[600px]">
-          {/* SI ERREUR OU PAS DE CLASSE SÉLECTIONNÉE, ON AFFICHE UN MESSAGE */}
+        {/* MODIFICATION ICI : On enlève le padding 'p-8' sur mobile (md:p-8) pour que la grille touche les bords */}
+        <div className="md:p-8 p-0 bg-white min-h-[600px]">
           {!selectedClassId && !loading && !fetchError ? (
              <div className="flex flex-col items-center justify-center h-[400px] text-slate-300">
                 <span className="text-4xl mb-4">👈</span>
