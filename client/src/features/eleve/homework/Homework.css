@@ -1,32 +1,162 @@
-/* ... CSS Existant (V8-Liseuse) ... */
-
 /* DÉTECTEUR DE TRICHE (CHEAT ALERT) */
 .cheat-alert-box {
     position: absolute;
-    top: 30px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: #dc2626;
-    color: white;
-    padding: 15px 30px;
-    border-radius: 50px;
-    font-family: 'JetBrains Mono', monospace;
-    font-weight: 900;
-    font-size: 1.2rem;
-    text-transform: uppercase;
+    top: 30px; left: 50%; transform: translateX(-50%);
+    background: #dc2626; color: white; padding: 15px 30px;
+    border-radius: 50px; font-family: 'JetBrains Mono', monospace;
+    font-weight: 900; font-size: 1.2rem; text-transform: uppercase;
     box-shadow: 0 20px 50px rgba(220, 38, 38, 0.5);
-    z-index: 20000;
-    animation: dropIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    border: 3px solid #fecaca;
-    white-space: nowrap;
+    z-index: 20000; animation: dropIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    border: 3px solid #fecaca; white-space: nowrap; pointer-events: none;
+}
+@keyframes dropIn { 0% { transform: translate(-50%, -100px); opacity: 0; } 100% { transform: translate(-50%, 0); opacity: 1; } }
+
+.homework-container.v8-liseuse {
+    background: #020617; height: 100vh; display: flex; flex-direction: column; overflow: hidden; position: fixed; inset: 0; z-index: 9999;
+}
+
+/* --- ZONE DU HAUT (SUJET) --- */
+.viewer-top-area {
+    flex: 65; /* Un peu moins de place pour laisser respirer le bas */
+    position: relative; background: #0f172a; overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+    border-bottom: 4px solid #f97316;
+    background-image: radial-gradient(#1e293b 1px, transparent 1px);
+    background-size: 20px 20px;
+}
+
+/* BOUTON QUITTER */
+.v8-quit-btn {
+    position: absolute; top: 20px; left: 20px; z-index: 100;
+    background: rgba(255, 255, 255, 0.1); color: white;
+    font-family: 'JetBrains Mono', monospace; font-weight: 900; font-size: 11px;
+    padding: 10px 20px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.2);
+    cursor: pointer; backdrop-filter: blur(5px); transition: all 0.2s; text-transform: uppercase;
+}
+.v8-quit-btn:hover { background: #dc2626; border-color: #dc2626; transform: scale(1.05); }
+
+/* CONTENEUR PANORAMIQUE COMMUN */
+.v8-pan-container {
+    display: flex; align-items: center; justify-content: center;
+    height: 100%; width: 100%;
+    transform-origin: center;
+    cursor: grab;
+    will-change: transform;
+}
+.v8-pan-container:active { cursor: grabbing; }
+
+.v8-main-img {
+    height: 90%; width: auto; object-fit: contain;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.8);
+    border: 1px solid rgba(255,255,255,0.1);
+    pointer-events: none; /* Important pour le drag */
+}
+
+/* --- CONTRÔLES ZOOM (NOUVEAU) --- */
+.v8-zoom-controls {
+    position: absolute; bottom: 20px; right: 20px; z-index: 50;
+    display: flex; flex-direction: column; gap: 5px;
+    background: rgba(0, 0, 0, 0.6); padding: 5px; border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(4px);
+}
+.btn-zoom {
+    width: 35px; height: 35px; background: rgba(255,255,255,0.1); color: white;
+    border: none; border-radius: 8px; font-weight: 900; font-size: 1.2rem;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    transition: background 0.2s;
+}
+.btn-zoom:hover { background: rgba(255,255,255,0.3); }
+
+/* NAVIGATION ARROWS */
+.v8-nav-arrow {
+    position: absolute; top: 50%; transform: translateY(-50%); z-index: 10;
+    background: rgba(15, 23, 42, 0.6); color: white;
+    border: 2px solid rgba(255,255,255,0.2); width: 60px; height: 60px;
+    border-radius: 50%; font-size: 24px; cursor: pointer; transition: all 0.2s;
+    display: flex; align-items: center; justify-content: center;
+}
+.v8-nav-arrow:hover { background: #f97316; border-color: white; transform: translateY(-50%) scale(1.1); }
+.v8-nav-arrow.left { left: 30px; }
+.v8-nav-arrow.right { right: 30px; }
+
+.v8-doc-counter {
+    position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: rgba(0,0,0,0.8); color: white; padding: 6px 20px;
+    border-radius: 20px; font-size: 11px; font-weight: 900; letter-spacing: 0.1em;
+}
+
+/* --- ZONE DU BAS (CONSIGNE + RÉPONSE) --- */
+.interaction-bottom-area {
+    flex: 35; /* Plus d'espace pour la consigne */
+    background: white; display: flex; min-height: 0; /* Important pour le scroll interne */
+}
+
+/* PANNEAU CONSIGNE (GAUCHE) */
+.question-panel {
+    width: 40%;
+    display: flex; flex-direction: column;
+    border-right: 4px solid #f1f5f9;
+    position: relative;
+    background: #f8fafc;
+    overflow: hidden; /* Pour le pan/zoom */
+}
+
+.question-header {
+    padding: 10px 15px; background: white; border-bottom: 2px solid #e2e8f0;
+    display: flex; justify-content: space-between; align-items: center;
+    z-index: 10; flex-shrink: 0;
+}
+
+.v8-instruction-text-mini {
+    font-size: 11px; color: #334155; font-weight: 600; 
+    max-height: 40px; overflow-y: auto; line-height: 1.2;
+}
+
+.v8-instruction-viewer {
+    flex: 1; position: relative; overflow: hidden;
+    background-image: radial-gradient(#cbd5e1 1px, transparent 1px);
+    background-size: 15px 15px;
+    cursor: grab;
+}
+.v8-instruction-viewer:active { cursor: grabbing; }
+
+.v8-instr-img {
+    max-width: 90%; max-height: 90%;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.1);
     pointer-events: none;
 }
 
-@keyframes dropIn {
-    0% { transform: translate(-50%, -100px); opacity: 0; }
-    100% { transform: translate(-50%, 0); opacity: 1; }
+.v8-page-badge {
+    font-size: 9px; font-weight: 950; background: #f1f5f9; color: #64748b;
+    padding: 4px 10px; border-radius: 6px; text-transform: uppercase;
 }
 
-/* ... Reste du CSS existant ... */
-.homework-container.v8-liseuse {
-/* ... */
+/* PANNEAU RÉPONSE (DROITE) */
+.answer-panel {
+    width: 60%; padding: 20px; display: flex; flex-direction: column; gap: 15px;
+}
+
+.answer-input {
+    flex: 1; border: 2px solid #f1f5f9; border-radius: 20px; padding: 20px;
+    font-size: 16px; font-weight: 600; outline: none; resize: none;
+    transition: border-color 0.2s; background: #f8fafc;
+}
+.answer-input:focus { border-color: #2563eb; background: white; }
+
+.v8-footer-actions { display: flex; justify-content: space-between; align-items: center; }
+.v8-progress { font-weight: 950; font-size: 12px; color: #cbd5e1; text-transform: uppercase; }
+
+.btn-send-ai {
+    background: #2563eb; color: white; border: none; padding: 14px 30px;
+    border-radius: 18px; font-weight: 950; font-size: 13px; cursor: pointer;
+    transition: all 0.2s; box-shadow: 0 10px 15px -3px rgba(37, 99, 235, 0.3);
+}
+.btn-send-ai:hover { transform: translateY(-2px); background: #1d4ed8; }
+
+/* MODALE FEEDBACK */
+.ai-modal-overlay { position: fixed; inset: 0; z-index: 20000; background: rgba(15, 23, 42, 0.9); backdrop-filter: blur(5px); display: flex; align-items: center; justify-content: center; }
+.ai-modal-box { background: white; border-radius: 30px; padding: 40px; max-width: 600px; width: 90%; text-align: center; box-shadow: 0 50px 100px -20px rgba(0,0,0,0.5); }
+.v8-grade-badge { width: 80px; height: 80px; background: #2563eb; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 32px; font-weight: 950; margin: 0 auto 20px; box-shadow: 0 10px 25px rgba(37, 99, 235, 0.4); }
+.v8-feedback-content { background: #f8fafc; padding: 20px; border-radius: 20px; max-height: 250px; overflow-y: auto; font-size: 15px; line-height: 1.6; color: #475569; margin-bottom: 25px; text-align: left; border: 1px solid #e2e8f0; }
+.v8-next-page-btn { width: 100%; padding: 20px; background: #1e293b; color: white; border-radius: 20px; font-weight: 950; font-size: 14px; border: none; cursor: pointer; transition: background 0.2s; }
+.v8-next-page-btn:hover { background: #0f172a; }
