@@ -1,10 +1,5 @@
 import React, { useState, useEffect } from 'react';
 
-/**
- * 📂 PROF STUDIO FOLDER - VERSION 214 (UNIFIED DISPLAY)
- * MAJ : L'affichage des cibles (Classes/Élèves) s'applique maintenant aux JEUX comme aux DEVOIRS.
- * Fini le "JEU OUVERT À TOUS" en dur.
- */
 export default function ProfStudioFolder({ items, chapters, classFilter, levelFilter, user, onEditItem, onDeleteItem, onRefresh, studentsRef }) {
     const [customSections, setCustomSections] = useState([]);
     const [activeSection, setActiveSection] = useState('GÉNÉRAL'); 
@@ -39,14 +34,12 @@ export default function ProfStudioFolder({ items, chapters, classFilter, levelFi
         fetchSections();
     }, [user]);
 
-    // --- UTILS : FORMATAGE NOM COURT ---
     const formatSimpleName = (first, last) => {
         const f = (first || "").split(' ')[0];
         const l = (last || "").split(' ')[0];
         return `${f} ${l}`;
     };
 
-    // --- FILTRAGE NIVEAU 1 ---
     const allChapters = chapters || [];
     const uid = String(getUserId());
     const isJean = (user && user.firstName === 'Jean' && user.lastName === 'Vuillet');
@@ -85,21 +78,19 @@ export default function ProfStudioFolder({ items, chapters, classFilter, levelFi
         return isCorrectSection && isCorrectStatus;
     });
 
-    // --- ACTIONS ---
     const confirmCreateSection = async (scope) => { if (!newSectionName) return; let target = null; if (scope === 'LEVEL') target = currentLevel; if (scope === 'CLASS') target = classFilter; try { const res = await fetch('/api/structure/sections', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ teacherId: getUserId(), sectionName: newSectionName.toUpperCase().trim(), scope, target }) }); if (res.status === 409) { const err = await res.json(); return alert("⚠️ " + err.error); } if (res.ok) { const newList = await res.json(); setCustomSections(newList); setActiveSection(newSectionName.toUpperCase().trim()); setShowSectionModal(false); setNewSectionName(""); if(onRefresh) onRefresh(); } } catch (e) { alert("Erreur réseau."); } };
     const handleDeleteSection = async (sectionName) => { if(!confirm(`Supprimer la section "${sectionName}" ?`)) return; try { const res = await fetch('/api/structure/sections', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ teacherId: getUserId(), sectionName }) }); if (res.ok) { const newList = await res.json(); setCustomSections(newList); if(activeSection === sectionName) setActiveSection('GÉNÉRAL'); if(onRefresh) onRefresh(); } } catch(e) { alert("Erreur réseau."); } };
     const handleReset = async () => { if(!confirm("⚠️ R.A.Z : Tout effacer et remettre 'GÉNÉRAL' ?")) return; try { const res = await fetch('/api/structure/sections/reset', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ teacherId: getUserId() }) }); if(res.ok) { const newList = await res.json(); setCustomSections(newList); setActiveSection('GÉNÉRAL'); if(onRefresh) onRefresh(); } } catch(e) { alert("Erreur Reset."); } };
     const handleCreateChapter = async () => { if (!classFilter) return alert("⚠️ Sélectionnez une classe."); const title = prompt(`Nouveau dossier dans ${activeSection} ?`); if (!title) return; let isShared = false; if (currentLevel) isShared = confirm(`Partager ce dossier avec tout le niveau ${currentLevel} ?`); await fetch('/api/structure/chapters', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: title.toUpperCase(), section: activeSection, classroom: classFilter.toUpperCase(), teacherId: getUserId(), sharedLevel: isShared ? currentLevel : null }) }); if(onRefresh) onRefresh(); };
 
+    // --- LOGIQUE VISIBILITÉ ---
     const isItemVisibleForClass = (item) => {
         if (!classFilter) return true;
-        // Maintenant que les jeux sont ciblés, on peut filtrer aussi
-        const targets = item.targetClassrooms || (item.classroom ? [item.classroom] : []);
-        
-        // Si c'est un jeu sans cible explicite (vieux jeux), on l'affiche partout par sécurité (ou on filtre, au choix)
-        // Ici : on l'affiche si targets est vide OU si la classe est dedans
-        if (item.actType === 'game' && targets.length === 0) return true;
+        // Scan : pas de filtre classe explicite, on affiche tout ce qui est dans le dossier
+        if (item.actType === 'scan') return true; 
 
+        const targets = item.targetClassrooms || (item.classroom ? [item.classroom] : []);
+        if (item.actType === 'game' && targets.length === 0) return true;
         if (targets.some(t => t.toUpperCase() === classFilter.toUpperCase())) return true;
         return false;
     };
@@ -167,73 +158,50 @@ export default function ProfStudioFolder({ items, chapters, classFilter, levelFi
                                     <div className="bg-slate-50/50 border-t p-8 space-y-4">
                                         {chapItems.length > 0 ? chapItems.map(it => {
                                             
-                                            // --- V214 : LOGIQUE UNIFIÉE JEUX & DEVOIRS ---
+                                            // --- GESTION AFFICHAGE SELON TYPE (DC vs DM/JEU) ---
                                             let subTitle = "Chargement...";
                                             let subtitleColor = "text-slate-400";
+                                            let badgeColor = it.actType === 'game' ? 'bg-purple-600' : (it.actType === 'scan' ? 'bg-teal-500' : 'bg-orange-500');
 
-                                            // On récupère les données de ciblage (fallback sur classroom pour legacy)
-                                            const targets = (it.targetClassrooms && it.targetClassrooms.length > 0) ? it.targetClassrooms : (it.classroom ? [it.classroom] : []);
-                                            const assignedIds = it.assignedStudents || [];
-
-                                            // Si vraiment aucune info
-                                            if (targets.length === 0) {
-                                                subTitle = (it.actType === 'game') ? "🎮 JEU OUVERT (LEGACY)" : "⚠️ AUCUNE CIBLE";
+                                            if (it.actType === 'scan') {
+                                                // --- SPÉCIAL SCAN : Affichage du nombre de copies ---
+                                                const copyCount = (it.copyUrls || []).length;
+                                                subTitle = `${copyCount} COPIES SCANNÉES`;
+                                                subtitleColor = "text-teal-600";
                                             } else {
-                                                // 1. Calcul totaux BDD (pour savoir si c'est toute la classe)
-                                                const totalPerClass = {};
-                                                if (studentsRef) {
-                                                    studentsRef.forEach(s => {
-                                                        const c = s.currentClass;
-                                                        if(c) totalPerClass[c] = (totalPerClass[c] || 0) + 1;
-                                                    });
-                                                }
+                                                // --- DM / JEU : Affichage des cibles ---
+                                                const targets = (it.targetClassrooms && it.targetClassrooms.length > 0) ? it.targetClassrooms : (it.classroom ? [it.classroom] : []);
+                                                const assignedIds = it.assignedStudents || [];
 
-                                                // 2. Noms des élèves assignés
-                                                const assignedByClass = {};
-                                                if (studentsRef && assignedIds.length > 0) {
-                                                    studentsRef.forEach(s => {
-                                                        if (assignedIds.some(id => String(id) === String(s._id))) {
-                                                            const c = s.currentClass;
-                                                            if (!assignedByClass[c]) assignedByClass[c] = [];
-                                                            assignedByClass[c].push(formatSimpleName(s.firstName, s.lastName));
-                                                        }
-                                                    });
-                                                }
-
-                                                const parts = [];
-                                                targets.forEach(cls => {
-                                                    const assignedCount = (assignedByClass[cls] || []).length;
-                                                    const totalCount = totalPerClass[cls] || 0;
-
-                                                    // Est-ce un jeu legacy qui était "ouvert à tous" par défaut ?
-                                                    const isGameLegacyFull = (it.actType === 'game' && assignedIds.length === 0);
-
-                                                    if (it.isAllClass === true || isGameLegacyFull) {
-                                                        parts.push(cls);
-                                                    } 
-                                                    else if (totalCount > 0 && assignedCount >= totalCount) {
-                                                        parts.push(cls); // Tous cochés manuellement
-                                                    } 
-                                                    else if (assignedCount > 0) {
-                                                        parts.push(`${cls}: ${assignedByClass[cls].join(', ')}`);
-                                                    } 
-                                                    else {
-                                                        parts.push(`${cls} (0)`);
-                                                    }
-                                                });
-
-                                                if (parts.length > 0) {
-                                                    subTitle = `👤 ${parts.join(' | ')}`;
-                                                    subtitleColor = "text-indigo-500";
+                                                if (targets.length === 0) {
+                                                    subTitle = (it.actType === 'game') ? "🎮 JEU OUVERT (LEGACY)" : "⚠️ AUCUNE CIBLE";
                                                 } else {
-                                                    subTitle = "⚠️ AUCUN ÉLÈVE";
+                                                    const totalPerClass = {};
+                                                    if (studentsRef) { studentsRef.forEach(s => { const c = s.currentClass; if(c) totalPerClass[c] = (totalPerClass[c] || 0) + 1; }); }
+                                                    const assignedByClass = {};
+                                                    if (studentsRef && assignedIds.length > 0) { studentsRef.forEach(s => { if (assignedIds.some(id => String(id) === String(s._id))) { const c = s.currentClass; if (!assignedByClass[c]) assignedByClass[c] = []; assignedByClass[c].push(formatSimpleName(s.firstName, s.lastName)); } }); }
+
+                                                    const parts = [];
+                                                    targets.forEach(cls => {
+                                                        const assignedCount = (assignedByClass[cls] || []).length;
+                                                        const totalCount = totalPerClass[cls] || 0;
+                                                        const isGameLegacyFull = (it.actType === 'game' && assignedIds.length === 0);
+
+                                                        if (it.isAllClass === true || isGameLegacyFull) { parts.push(cls); } 
+                                                        else if (totalCount > 0 && assignedCount >= totalCount) { parts.push(cls); } 
+                                                        else if (assignedCount > 0) { parts.push(`${cls}: ${assignedByClass[cls].join(', ')}`); } 
+                                                        else { parts.push(`${cls} (0)`); }
+                                                    });
+
+                                                    if (parts.length > 0) { subTitle = `👤 ${parts.join(' | ')}`; subtitleColor = "text-indigo-500"; } 
+                                                    else { subTitle = "⚠️ AUCUN ÉLÈVE"; }
                                                 }
                                             }
 
                                             return (
                                                 <div key={it._id} className="bg-white p-5 rounded-2xl flex justify-between items-center shadow-sm border border-slate-100 hover:shadow-xl transition-all">
                                                     <div className="flex items-center gap-5">
-                                                        <span className={`text-[10px] font-black px-4 py-2 rounded-xl uppercase tracking-[0.2em] ${it.actType === 'game' ? 'bg-purple-600 text-white' : 'bg-orange-500 text-white'}`}>{it.typeLabel || 'ACT'}</span>
+                                                        <span className={`text-[10px] font-black px-4 py-2 rounded-xl uppercase tracking-[0.2em] text-white ${badgeColor}`}>{it.typeLabel || 'ACT'}</span>
                                                         <div className="flex flex-col items-start">
                                                             <span className="font-black text-slate-700 uppercase">{it.title}</span>
                                                             <span className={`text-[9px] font-bold uppercase mt-0.5 ${subtitleColor}`}>{subTitle}</span>

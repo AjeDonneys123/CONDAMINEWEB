@@ -19,7 +19,7 @@ const port = process.env.PORT || 3000;
 const SERVER_BOOT_ID = Date.now();
 
 // CHARGEMENT MODÈLES
-const models = ['AcademicYear', 'Admin', 'Classroom', 'Subject', 'Teacher', 'Student', 'Enrollment', 'Chapter', 'Homework', 'Submission', 'GameLevel', 'GameProgress', 'MistakesBook', 'AccessLog', 'BugReport', 'ProjectDoc', 'Player', 'StudioProject', 'Sanction'];
+const models = ['AcademicYear', 'Admin', 'Classroom', 'Subject', 'Teacher', 'Student', 'Enrollment', 'Chapter', 'Homework', 'Submission', 'GameLevel', 'GameProgress', 'MistakesBook', 'AccessLog', 'BugReport', 'ProjectDoc', 'Player', 'StudioProject', 'Sanction', 'ScanSession']; // Ajout ScanSession
 models.forEach(m => { try { require(`./models/${m}`); } catch (e) { console.error(`Err Model ${m}:`, e.message); } });
 
 app.use(express.json({ limit: '100mb' }));
@@ -36,8 +36,8 @@ app.use('/api/structure', require('./domains/structure/structure.routes'));
 app.use('/api/games', require('./domains/games/games.routes'));
 app.use('/api/homework', require('./domains/homework/homework.routes')); 
 app.use('/api/studio', require('./domains/studio/studio.routes'));
-// NOUVEAU
 app.use('/api/classroom', require('./domains/classroom/classroom.routes'));
+app.use('/api/scans', require('./domains/scans/scans.routes')); // NOUVELLE ROUTE
 
 app.get('/api/check-deploy', (req, res) => res.json({ bootId: SERVER_BOOT_ID, status: "OK" }));
 
@@ -56,4 +56,4 @@ if (fs.existsSync(distPath)) {
         res.sendFile(path.join(distPath, 'index.html'));
     });
 }
-app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V105 UP | PORT ${port}`));
+app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V106 UP | PORT ${port}`));

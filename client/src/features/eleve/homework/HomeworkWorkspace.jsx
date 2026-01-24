@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import './Homework.css';
 
 /**
- * 📖 LISEUSE ÉLÈVE V193 - FIX BOUTON RETOUR & IMAGE
+ * 📖 LISEUSE ÉLÈVE V221 - ANTI-TRICHE
+ * Ajout du détecteur de variation de texte suspecte (Copier/Coller).
  */
 export default function HomeworkWorkspace({ homework, user, onQuit }) {
   const [pageIdx, setPageIdx] = useState(0);
@@ -10,6 +11,9 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
   const [answer, setAnswer] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [aiResult, setAiResult] = useState(null);
+
+  // --- ANTI-TRICHE STATE ---
+  const [showCheatAlert, setShowCheatAlert] = useState(false);
 
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -23,6 +27,21 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
     setOffset({ x: 0, y: 0 });
     setActiveDocIdx(0);
   }, [pageIdx]);
+
+  // --- DÉTECTION INTELLIGENTE DU COLLAGE ---
+  const handleInputCheck = (e) => {
+      const newValue = e.target.value;
+      const diff = newValue.length - answer.length;
+
+      // Si plus de 5 caractères sont ajoutés d'un coup -> C'est un collage
+      if (diff > 5) {
+          setShowCheatAlert(true);
+          // On cache après 4 secondes
+          setTimeout(() => setShowCheatAlert(false), 4000);
+      }
+      
+      setAnswer(newValue);
+  };
 
   const submitToIA = async () => {
       if(!answer.trim()) return;
@@ -46,6 +65,13 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
   return (
     <div className="homework-container v8-liseuse">
       
+      {/* ALERTE TRICHE */}
+      {showCheatAlert && (
+          <div className="cheat-alert-box">
+              🚨 TRICHER, C'EST MAL ! 😡
+          </div>
+      )}
+
       {/* BOUTON QUITTER V193 */}
       <button onClick={onQuit} className="v8-quit-btn">⬅ QUITTER LE DEVOIR</button>
 
@@ -91,7 +117,12 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
           </div>
 
           <div className="answer-panel">
-              <textarea className="answer-input" value={answer} onChange={e => setAnswer(e.target.value)} placeholder="Votre réponse ici..." />
+              <textarea 
+                className="answer-input" 
+                value={answer} 
+                onChange={handleInputCheck} 
+                placeholder="Votre réponse ici..." 
+              />
               <div className="v8-footer-actions">
                   <div className="v8-progress">PAGE {pageIdx + 1} / {homework.levels.length}</div>
                   <button onClick={submitToIA} disabled={submitting} className="btn-send-ai">{submitting ? 'ANALYSE...' : 'ENVOYER 🤖'}</button>

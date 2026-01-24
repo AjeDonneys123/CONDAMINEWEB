@@ -19,16 +19,20 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
                 return res.json();
             };
 
-            const [hw, gm, cp, sts] = await Promise.all([
+            // AJOUT DE L'APPEL AUX SCANS
+            const [hw, gm, sc, cp, sts] = await Promise.all([
                 fetchJson('/api/homework/all'),
                 fetchJson('/api/games/all'),
+                fetchJson('/api/scans/sessions'), // <-- Récupération des scans
                 fetchJson('/api/structure/chapters'),
                 fetchJson('/api/admin/students')
             ]);
             
+            // FUSION DES TYPES D'ACTIVITÉS
             setActivities([
                 ...hw.map(x => ({...x, actType: 'homework', typeLabel: '📝 DM'})), 
-                ...gm.map(x => ({...x, actType: 'game', typeLabel: '🎮 JEU'}))
+                ...gm.map(x => ({...x, actType: 'game', typeLabel: '🎮 JEU'})),
+                ...sc.map(x => ({...x, actType: 'scan', typeLabel: '📸 DC', title: x.title || 'Scan sans titre'})) // <-- Mapping Scan
             ]);
             setChapters(cp || []);
             setAllStudents(sts || []);
@@ -40,7 +44,12 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
 
     const handleDeleteItem = async (id, type) => {
         if (!confirm(`⚠️ Supprimer cet élément ?`)) return;
-        const url = type === 'game' ? `/api/games/${id}` : (type === 'homework' ? `/api/homework/${id}` : `/api/structure/chapters/${id}`);
+        // ROUTAGE DE LA SUPPRESSION SELON LE TYPE
+        const url = type === 'game' ? `/api/games/${id}` 
+                  : (type === 'homework' ? `/api/homework/${id}` 
+                  : (type === 'scan' ? `/api/scans/sessions/${id}` // <-- Route delete scan
+                  : `/api/structure/chapters/${id}`));
+                  
         const res = await fetch(url, { method: 'DELETE' });
         if (res.ok) loadData();
     };
@@ -58,16 +67,23 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
                 />
             );
         }
-        // FIX: Ajout de user={user} ici pour éviter le crash "reading id of undefined"
-        return (
-            <GameStudio 
-                initialData={editingItem.data} 
-                chapters={chapters} 
-                classFilter={globalClass} 
-                user={user} 
-                onClose={() => {setEditingItem(null); loadData();}} 
-            />
-        );
+        if (editingItem.type === 'game') {
+            return (
+                <GameStudio 
+                    initialData={editingItem.data} 
+                    chapters={chapters} 
+                    classFilter={globalClass} 
+                    user={user} 
+                    onClose={() => {setEditingItem(null); loadData();}} 
+                />
+            );
+        }
+        // Pour les scans, on ne permet pas l'édition ici pour l'instant (ça redirige vers l'onglet Scan)
+        if (editingItem.type === 'scan') {
+            alert("Pour modifier ce DC, veuillez passer par l'onglet 📸 SCAN.");
+            setEditingItem(null);
+            return null;
+        }
     }
 
     return (
