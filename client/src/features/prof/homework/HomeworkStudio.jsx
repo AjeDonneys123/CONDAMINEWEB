@@ -2,9 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import './HomeworkStudio.css';
 
 /**
- * 🎨 STUDIO DEVOIR V213 (LEVEL LOGIC + SELECT ALL)
- * - Filtrage par niveau strict.
- * - Ajout bouton "TOUT LE NIVEAU".
+ * 🎨 STUDIO DEVOIR V219 - GÉNÉRATEUR DE GRILLE AUTO
+ * - Analyse multimodal des documents (Énoncés + Supports).
+ * - Remplissage automatique des indices IA pour la correction.
  */
 export default function HomeworkStudio({ initialData, chapters, globalClass, globalClassId, user, onClose }) {
   
@@ -27,6 +27,7 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
   const [zoomImg, setZoomImg] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
+  const [isGeneratingHints, setIsGeneratingHints] = useState(false);
   
   const fileInputRef = useRef(null);
   const [uploadTarget, setUploadTarget] = useState(null);
@@ -49,12 +50,9 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
 
                 const newDist = {};
                 targets.forEach(clsName => {
-                    let classStudentIds = [];
-                    if (!isAll) {
-                        classStudentIds = sts
-                            .filter(s => s.currentClass === clsName && assignedIds.includes(s._id))
-                            .map(s => s._id);
-                    }
+                    let classStudentIds = sts
+                        .filter(s => (s.currentClass || "").trim().toUpperCase() === clsName.trim().toUpperCase() && (assignedIds || []).includes(s._id))
+                        .map(s => s._id);
                     newDist[clsName] = { chapterId: chapId, studentIds: classStudentIds };
                 });
                 setDistribution(newDist);
@@ -70,6 +68,52 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
     fetchData();
   }, []);
 
+  // --- 🤖 LOGIQUE GÉNÉRATION GRILLE AUTO ---
+  const handleAutoGenerateGrid = async () => {
+    const current = formData.levels[activeLevelIdx];
+    const allAssets = [...current.instructionUrls, ...current.attachmentUrls];
+    
+    if (allAssets.length === 0) {
+        return alert("Veuillez charger au moins une image (énoncé ou support) pour l'analyse.");
+    }
+
+    setIsGeneratingHints(true);
+    try {
+        const res = await fetch('/api/homework/generate-hints', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                instruction: current.instruction,
+                assets: allAssets 
+            })
+        });
+        const data = await res.json();
+        if (data.hints) {
+            updateLevel('aiHints', data.hints);
+        } else {
+            alert("L'IA n'a pas pu générer de grille.");
+        }
+    } catch (e) { alert("Erreur serveur lors de l'analyse."); }
+    setIsGeneratingHints(false);
+  };
+
+  const activeLevel = formData.levels[activeLevelIdx];
+  const updateLevel = (field, value) => { const newLevels = [...formData.levels]; newLevels[activeLevelIdx][field] = value; setFormData({ ...formData, levels: newLevels }); };
+  
+  const handleFileSelect = async (e) => { 
+    const files = e.target.files; 
+    if (!files || files.length === 0) return; 
+    setIsUploading(true); 
+    const data = new FormData(); 
+    for (let i = 0; i < files.length; i++) data.append('files', files[i]); 
+    try { 
+        const res = await fetch('/api/homework/upload', { method: 'POST', body: data }); 
+        const result = await res.json(); 
+        if (res.ok) updateLevel(uploadTarget, [...activeLevel[uploadTarget], ...result.urls]); 
+    } catch (err) { alert("Erreur upload."); } 
+    finally { setIsUploading(false); e.target.value = null; } 
+  };
+
   const detectLevel = () => {
       const refClass = viewingClass || globalClass || (initialData?.targetClassrooms ? initialData.targetClassrooms[0] : null);
       if (!refClass) return null;
@@ -82,7 +126,7 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
 
   const availableClasses = allClasses.filter(c => {
       if (c.type !== 'CLASS') return false;
-      if (!targetLevel) return true; // fallback
+      if (!targetLevel) return true;
       return String(c.level) === String(targetLevel);
   }).sort((a,b) => a.name.localeCompare(b.name));
 
@@ -98,75 +142,27 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
       }).sort((a, b) => (a.section || "Z").localeCompare(b.section || "Z"));
   };
   
-  const findEquivalentChapterId = (targetClass, sourceChapId) => {
-      if (!sourceChapId) return "";
-      const src = chapters.find(c => c._id === sourceChapId);
-      if (!src) return "";
-      const targets = getChaptersForClass(targetClass);
-      const same = targets.find(t => 
-          t.title.trim().toUpperCase() === src.title.trim().toUpperCase() && 
-          (t.section || "").trim().toUpperCase() === (src.section || "").trim().toUpperCase()
-      );
-      return same ? same._id : "";
-  };
-
-  const getSmartChapterIdFor = (clsName) => {
-      const activeClasses = Object.keys(distribution);
-      if (activeClasses.length > 0) {
-          const sourceChapId = distribution[activeClasses[0]].chapterId;
-          if (sourceChapId) {
-              const eq = findEquivalentChapterId(clsName, sourceChapId);
-              if (eq) return eq;
-          }
-      }
-      const available = getChaptersForClass(clsName);
-      return available.length > 0 ? available[0]._id : "";
-  };
-
   const handleClassTabClick = (clsName) => { setViewingClass(clsName); };
-
   const isAllLevelSelected = availableClasses.length > 0 && availableClasses.every(c => distribution[c.name]);
 
   const toggleAllLevel = () => {
-        if (isAllLevelSelected) {
-            setDistribution(prev => {
-                const next = { ...prev };
-                availableClasses.forEach(c => delete next[c.name]);
-                return next;
-            });
-        } else {
-            setDistribution(prev => {
-                const next = { ...prev };
-                let sourceChap = "";
-                const currentlySelected = Object.keys(next);
-                if (currentlySelected.length > 0) sourceChap = next[currentlySelected[0]].chapterId;
-
-                availableClasses.forEach(c => {
-                    if (!next[c.name]) {
-                        let smartChap = "";
-                        if (sourceChap) smartChap = findEquivalentChapterId(c.name, sourceChap);
-                        if (!smartChap) {
-                            const chaps = getChaptersForClass(c.name);
-                            smartChap = chaps.length > 0 ? chaps[0]._id : "";
-                        }
-                        next[c.name] = { chapterId: smartChap, studentIds: [] };
-                    }
-                });
-                return next;
-            });
-        }
+    if (isAllLevelSelected) {
+        setDistribution(prev => { const next = { ...prev }; availableClasses.forEach(c => delete next[c.name]); return next; });
+    } else {
+        setDistribution(prev => {
+            const next = { ...prev };
+            availableClasses.forEach(c => { if (!next[c.name]) next[c.name] = { chapterId: getChaptersForClass(c.name)[0]?._id || "", studentIds: [] }; });
+            return next;
+        });
+    }
   };
 
   const toggleFullClass = () => {
       setDistribution(prev => {
           const next = { ...prev };
           const config = next[viewingClass];
-          if (config && config.studentIds.length === 0) {
-              delete next[viewingClass];
-          } else {
-              const chapId = config?.chapterId || getSmartChapterIdFor(viewingClass);
-              next[viewingClass] = { chapterId: chapId, studentIds: [] };
-          }
+          if (config && config.studentIds.length === 0) delete next[viewingClass];
+          else next[viewingClass] = { chapterId: getChaptersForClass(viewingClass)[0]?._id || "", studentIds: [] };
           return next;
       });
   };
@@ -175,41 +171,13 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
       setDistribution(prev => {
           const next = { ...prev };
           const config = next[viewingClass];
-          const studentsInThisClass = allStudents.filter(s => s.currentClass === viewingClass).map(s => s._id);
-
-          if (!config) {
-              const chapId = getSmartChapterIdFor(viewingClass);
-              next[viewingClass] = { chapterId: chapId, studentIds: [studentId] };
-          } else if (config.studentIds.length === 0) {
-              const allExceptOne = studentsInThisClass.filter(id => id !== studentId);
-              next[viewingClass] = { ...config, studentIds: allExceptOne };
-          } else {
-              let newIds = [...config.studentIds];
-              if (newIds.includes(studentId)) {
-                  newIds = newIds.filter(id => id !== studentId);
-                  if (newIds.length === 0) delete next[viewingClass];
-                  else next[viewingClass] = { ...config, studentIds: newIds };
-              } else {
-                  newIds.push(studentId);
-                  if (newIds.length === studentsInThisClass.length) next[viewingClass] = { ...config, studentIds: [] };
-                  else next[viewingClass] = { ...config, studentIds: newIds };
-              }
-          }
-          return next;
-      });
-  };
-
-  const handleUpdateChapter = (clsName, chapId) => {
-      setDistribution(prev => {
-          const next = { ...prev };
-          next[clsName] = { ...next[clsName], chapterId: chapId };
-          if (chapId) {
-              Object.keys(next).forEach(otherClass => {
-                  if (otherClass !== clsName) {
-                      const equivalentId = findEquivalentChapterId(otherClass, chapId);
-                      if (equivalentId) next[otherClass] = { ...next[otherClass], chapterId: equivalentId };
-                  }
-              });
+          const allS = allStudents.filter(s => s.currentClass === viewingClass).map(s => s._id);
+          if (!config) next[viewingClass] = { chapterId: getChaptersForClass(viewingClass)[0]?._id || "", studentIds: [studentId] };
+          else {
+              let newIds = config.studentIds.length === 0 ? allS.filter(id => id !== studentId) : (config.studentIds.includes(studentId) ? config.studentIds.filter(id => id !== studentId) : [...config.studentIds, studentId]);
+              if (newIds.length === 0) delete next[viewingClass];
+              else if (newIds.length === allS.length) next[viewingClass] = { ...config, studentIds: [] };
+              else next[viewingClass] = { ...config, studentIds: newIds };
           }
           return next;
       });
@@ -217,74 +185,31 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
 
   const handleSave = async () => {
       const targets = Object.keys(distribution);
-      if (!formData.title) return alert("❌ Titre requis !");
-      if (targets.length === 0) return alert("❌ Sélectionnez au moins une classe ou un élève !");
-      const missingFolderClass = targets.find(cls => !distribution[cls].chapterId);
-      if (missingFolderClass) {
-          setViewingClass(missingFolderClass);
-          return alert(`⚠️ ATTENTION : La classe ${missingFolderClass} n'a pas de dossier sélectionné !`);
-      }
-      
+      if (!formData.title || targets.length === 0) return alert("❌ Titre et Classe requis !");
       setIsPublishing(true);
       try {
-          const groupedByChapter = {};
-          targets.forEach(cls => {
-              const chapId = distribution[cls].chapterId;
-              if (!groupedByChapter[chapId]) groupedByChapter[chapId] = [];
-              groupedByChapter[chapId].push(cls);
-          });
-
-          for (const chapId of Object.keys(groupedByChapter)) {
-              const classList = groupedByChapter[chapId];
-              let finalAssignedStudents = [];
-              let globalIsAllClass = true;
-
-              const hasPartial = classList.some(cls => distribution[cls].studentIds.length > 0);
-
-              if (hasPartial) {
-                  globalIsAllClass = false; 
-                  for (const cls of classList) {
-                      const cfg = distribution[cls];
-                      if (cfg.studentIds.length > 0) finalAssignedStudents.push(...cfg.studentIds);
-                      else {
-                          const studentsOfClass = allStudents.filter(s => s.currentClass === cls);
-                          finalAssignedStudents.push(...studentsOfClass.map(s => s._id));
-                      }
-                  }
-              } else {
-                  globalIsAllClass = true;
-                  finalAssignedStudents = [];
-              }
-
-              const payload = { ...formData, chapterId: chapId, targetClassrooms: classList, classroom: classList[0], teacherId: user.id || user._id, assignedStudents: finalAssignedStudents, isAllClass: globalIsAllClass };
+          for (const cls of targets) {
+              const cfg = distribution[cls];
+              const payload = { ...formData, chapterId: cfg.chapterId, targetClassrooms: [cls], classroom: cls, teacherId: user.id || user._id, assignedStudents: cfg.studentIds, isAllClass: cfg.studentIds.length === 0 };
               await fetch('/api/homework', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
           }
           onClose();
-      } catch(e) { console.error(e); alert("Erreur réseau."); }
-      finally { setIsPublishing(false); }
+      } catch(e) { alert("Erreur sauvegarde."); }
+      setIsPublishing(false);
   };
 
-  const studentsInView = allStudents.filter(s => s.currentClass === viewingClass).sort((a,b) => a.lastName.localeCompare(b.lastName));
-  const currentConfig = distribution[viewingClass];
-  const isSelected = !!currentConfig;
-  const isFullClass = isSelected && currentConfig.studentIds.length === 0;
-  const currentClassFolders = getChaptersForClass(viewingClass);
-
-  // Common UI helpers
-  const getDisplayUrl = (url) => url; 
-  const activeLevel = formData.levels[activeLevelIdx];
-  const updateLevel = (field, value) => { const newLevels = [...formData.levels]; newLevels[activeLevelIdx][field] = value; setFormData({ ...formData, levels: newLevels }); };
-  const handleFileSelect = async (e) => { const files = e.target.files; if (!files || files.length === 0) return; setIsUploading(true); const data = new FormData(); for (let i = 0; i < files.length; i++) data.append('files', files[i]); try { const res = await fetch('/api/homework/upload', { method: 'POST', body: data }); const result = await res.json(); if (res.ok) updateLevel(uploadTarget, [...activeLevel[uploadTarget], ...result.urls]); } catch (err) { alert("Erreur upload."); } finally { setIsUploading(false); e.target.value = null; } };
+  const isSelected = !!distribution[viewingClass];
+  const isFullClass = isSelected && distribution[viewingClass].studentIds.length === 0;
 
   return (
     <div className="v84-studio-container">
         <input type="file" ref={fileInputRef} style={{ display: 'none' }} multiple accept="image/*" onChange={handleFileSelect} />
-        {zoomImg && <div className="v84-zoom-overlay" onClick={() => setZoomImg(null)}><img src={getDisplayUrl(zoomImg)} alt="zoom" /></div>}
-        {(isUploading || isPublishing) && <div className="v84-upload-loader"><div className="v84-spinner"></div><span>{isUploading ? 'UPLOAD...' : 'PUBLICATION...'}</span></div>}
+        {zoomImg && <div className="v84-zoom-overlay" onClick={() => setZoomImg(null)}><img src={zoomImg} alt="zoom" /></div>}
+        {(isUploading || isPublishing || isGeneratingHints) && <div className="v84-upload-loader"><div className="v84-spinner"></div><span>{isUploading ? 'UPLOAD...' : (isPublishing ? 'PUBLICATION...' : 'ANALYSE IA...')}</span></div>}
 
         <div className="v84-header">
             <div className="v84-header-left"><div className="v84-icon">📝</div><input className="v84-title-input" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} placeholder="TITRE DU DEVOIR..." /></div>
-            <div className="v84-version-tag">STUDIO V213</div>
+            <div className="v84-version-tag">STUDIO V219</div>
             <button onClick={onClose} className="v84-close-btn">✕</button>
         </div>
 
@@ -302,57 +227,55 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
             </div>
 
             <div className="v84-main-editor custom-scrollbar">
-                <div className="v84-card"><label className="v84-card-label">1. ÉNONCÉ & CONSIGNE</label><textarea className="v84-textarea" value={activeLevel.instruction} onChange={e => updateLevel('instruction', e.target.value)} placeholder="Consigne textuelle..." /><button className="v84-upload-btn" onClick={() => { setUploadTarget('instructionUrls'); fileInputRef.current.click(); }}>📂 CHARGER ÉNONCÉ(S)</button><div className="v84-gallery">{activeLevel.instructionUrls.map((url, i) => (<div key={i} className="v84-thumb"><img src={getDisplayUrl(url)} onClick={() => setZoomImg(url)} /><button className="v84-thumb-del" onClick={() => updateLevel('instructionUrls', activeLevel.instructionUrls.filter((_, idx) => idx !== i))}>✕</button></div>))}</div></div>
-                <div className="v84-card v84-ai-card"><label className="v84-card-label">2. CORRECTION IA (Indices)</label><textarea className="v84-textarea v84-ai-textarea" value={activeLevel.aiHints} onChange={e => updateLevel('aiHints', e.target.value)} placeholder="Indices pour aider l'IA à corriger..." /></div>
-                <div className="v84-card"><label className="v84-card-label">3. DOCUMENTS SUPPORTS</label><button className="v84-upload-btn" onClick={() => { setUploadTarget('attachmentUrls'); fileInputRef.current.click(); }}>📂 CHARGER SUPPORTS</button><div className="v84-gallery">{activeLevel.attachmentUrls.map((url, i) => (<div key={i} className="v84-thumb"><img src={getDisplayUrl(url)} onClick={() => setZoomImg(url)} /><button className="v84-thumb-del" onClick={() => updateLevel('attachmentUrls', activeLevel.attachmentUrls.filter((_, idx) => idx !== i))}>✕</button></div>))}</div></div>
+                {/* 1. ÉNONCÉ */}
+                <div className="v84-card">
+                    <label className="v84-card-label">1. ÉNONCÉ & CONSIGNE</label>
+                    <textarea className="v84-textarea" value={activeLevel.instruction} onChange={e => updateLevel('instruction', e.target.value)} placeholder="Consigne textuelle..." />
+                    <button className="v84-upload-btn" onClick={() => { setUploadTarget('instructionUrls'); fileInputRef.current.click(); }}>📂 CHARGER ÉNONCÉ(S)</button>
+                    <div className="v84-gallery">{activeLevel.instructionUrls.map((url, i) => (<div key={i} className="v84-thumb"><img src={url} onClick={() => setZoomImg(url)} /><button className="v84-thumb-del" onClick={() => updateLevel('instructionUrls', activeLevel.instructionUrls.filter((_, idx) => idx !== i))}>✕</button></div>))}</div>
+                </div>
+                
+                {/* 2. CORRECTION IA (MULTIMODAL) */}
+                <div className="v84-card v84-ai-card">
+                    <div className="flex justify-between items-center mb-4">
+                        <label className="v84-card-label !mb-0">2. CORRECTION IA (Grille attendue)</label>
+                        <button 
+                            onClick={handleAutoGenerateGrid} 
+                            disabled={isGeneratingHints}
+                            className="bg-sky-600 hover:bg-sky-700 text-white px-4 py-2 rounded-xl font-black text-[9px] uppercase shadow-lg transition-all flex items-center gap-2"
+                        >
+                            <span>✨ GÉNÉRER GRILLE AUTO</span>
+                        </button>
+                    </div>
+                    <textarea 
+                        className="v84-textarea v84-ai-textarea" 
+                        value={activeLevel.aiHints} 
+                        onChange={e => updateLevel('aiHints', e.target.value)} 
+                        placeholder="Chargez vos documents au-dessus ou en-dessous, puis cliquez sur 'GÉNÉRER GRILLE AUTO'..." 
+                    />
+                </div>
+
+                {/* 3. SUPPORTS */}
+                <div className="v84-card">
+                    <label className="v84-card-label">3. DOCUMENTS SUPPORTS</label>
+                    <button className="v84-upload-btn" onClick={() => { setUploadTarget('attachmentUrls'); fileInputRef.current.click(); }}>📂 CHARGER SUPPORTS</button>
+                    <div className="v84-gallery">{activeLevel.attachmentUrls.map((url, i) => (<div key={i} className="v84-thumb"><img src={url} onClick={() => setZoomImg(url)} /><button className="v84-thumb-del" onClick={() => updateLevel('attachmentUrls', activeLevel.attachmentUrls.filter((_, idx) => idx !== i))}>✕</button></div>))}</div>
+                </div>
             </div>
 
             <div className="v84-sidebar-right" style={{width: '400px'}}>
                 <h4 className="v84-sidebar-label">DISTRIBUTION (Niveau {targetLevel || '?'})</h4>
-                
-                <button onClick={toggleAllLevel} className={`w-full py-3 mb-4 rounded-xl font-black text-xs uppercase transition-all ${isAllLevelSelected ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>
-                    {isAllLevelSelected ? '✕ TOUT DÉSACTIVER' : '✓ TOUT LE NIVEAU'}
-                </button>
-
-                <div className="mb-4 flex flex-wrap gap-2">
-                    {availableClasses.map(c => {
-                        const isPart = !!distribution[c.name];
-                        const isView = viewingClass === c.name;
-                        const isPartial = isPart && distribution[c.name].studentIds.length > 0;
-                        let bg = 'bg-slate-100 text-slate-400';
-                        if (isPart) bg = !distribution[c.name].chapterId ? 'bg-red-500 text-white animate-pulse' : (isPartial ? 'bg-pink-500 text-white' : 'bg-indigo-600 text-white');
-                        const border = isView ? 'border-2 border-slate-900 scale-105 shadow-md' : 'border border-transparent opacity-90';
-                        return <button key={c._id} onClick={() => handleClassTabClick(c.name)} className={`px-4 py-2 rounded-xl text-[11px] font-black transition-all ${bg} ${border}`}>{c.name}</button>;
-                    })}
-                </div>
-
-                {viewingClass ? (
+                <button onClick={toggleAllLevel} className={`w-full py-3 mb-4 rounded-xl font-black text-xs uppercase transition-all ${isAllLevelSelected ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>{isAllLevelSelected ? '✕ TOUT DÉSACTIVER' : '✓ TOUT LE NIVEAU'}</button>
+                <div className="mb-4 flex flex-wrap gap-2">{availableClasses.map(c => <button key={c._id} onClick={() => handleClassTabClick(c.name)} className={`px-4 py-2 rounded-xl text-[11px] font-black transition-all ${distribution[c.name] ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'} ${viewingClass === c.name ? 'border-2 border-slate-900 scale-105' : ''}`}>{c.name}</button>)}</div>
+                {viewingClass && (
                     <div className="flex-1 flex flex-col bg-slate-50 rounded-2xl overflow-hidden border border-slate-200 p-4">
-                        <div className="flex justify-between items-center mb-4">
-                            <span className="font-black text-slate-700 uppercase">Classe {viewingClass}</span>
-                            {isSelected && <span className={`text-[9px] px-2 py-1 rounded font-bold ${isFullClass ? 'bg-indigo-100 text-indigo-600' : 'bg-pink-100 text-pink-600'}`}>{isFullClass ? 'TOUTE LA CLASSE' : 'SÉLECTION PARTIELLE'}</span>}
-                        </div>
-
+                        <div className="flex justify-between items-center mb-4"><span className="font-black text-slate-700 uppercase">Classe {viewingClass}</span>{isSelected && <span className={`text-[9px] px-2 py-1 rounded font-bold ${isFullClass ? 'bg-indigo-100 text-indigo-600' : 'bg-pink-100 text-pink-600'}`}>{isFullClass ? 'TOUTE LA CLASSE' : 'SÉLECTION PARTIELLE'}</span>}</div>
                         {isSelected && (
-                            <div className="mb-4">
-                                <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Ranger dans :</label>
-                                <select className={`w-full p-2 rounded-xl text-xs font-bold border-2 outline-none ${!distribution[viewingClass].chapterId ? 'border-red-400 bg-red-50 text-red-600' : 'border-slate-200 focus:border-indigo-500'}`} value={distribution[viewingClass].chapterId} onChange={(e) => handleUpdateChapter(viewingClass, e.target.value)}>
-                                    <option value="">-- SÉLECTIONNER UN DOSSIER --</option>
-                                    {currentClassFolders.map(c => <option key={c._id} value={c._id}>{c.section ? `[${c.section}] ` : ''}{c.sharedLevel ? `[PARTAGÉ] ` : ''}{c.title}</option>)}
-                                </select>
-                            </div>
+                            <div className="mb-4"><label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Ranger dans :</label><select className="w-full p-2 rounded-xl text-xs font-bold border-2 outline-none border-slate-200" value={distribution[viewingClass].chapterId} onChange={(e) => { const n={...distribution}; n[viewingClass].chapterId=e.target.value; setDistribution(n); }}><option value="">-- SÉLECTIONNER UN DOSSIER --</option>{getChaptersForClass(viewingClass).map(c => <option key={c._id} value={c._id}>{c.title}</option>)}</select></div>
                         )}
-
-                        <div className="v84-students-list custom-scrollbar flex-1 border-t border-slate-200 pt-2">
-                            <div className={`v84-student-row ${isFullClass ? 'selected' : ''}`} onClick={toggleFullClass}><div className="v84-check"></div><span className="font-black">TOUTE LA CLASSE</span></div>
-                            {studentsInView.map(s => {
-                                const isChecked = isSelected && (isFullClass || distribution[viewingClass].studentIds.includes(s._id));
-                                return <div key={s._id} className={`v84-student-row ${isChecked ? 'selected' : ''}`} onClick={() => handleToggleStudent(s._id)}><div className="v84-check"></div><span>{s.lastName} {s.firstName}</span></div>;
-                            })}
-                        </div>
+                        <div className="v84-students-list custom-scrollbar flex-1 border-t border-slate-200 pt-2"><div className={`v84-student-row ${isFullClass ? 'selected' : ''}`} onClick={toggleFullClass}><div className="v84-check"></div><span className="font-black">TOUTE LA CLASSE</span></div>{allStudents.filter(s => (s.currentClass || "").trim().toUpperCase() === viewingClass.trim().toUpperCase()).sort((a,b)=>a.lastName.localeCompare(b.lastName)).map(s => <div key={s._id} className={`v84-student-row ${distribution[viewingClass]?.studentIds.includes(s._id) ? 'selected' : ''}`} onClick={() => handleToggleStudent(s._id)}><div className="v84-check"></div><span>{s.lastName} {s.firstName}</span></div>)}</div>
                     </div>
-                ) : <div className="flex-1 flex items-center justify-center text-slate-300 font-black italic">SÉLECTIONNEZ UNE CLASSE CI-DESSUS</div>}
-                
+                )}
                 <button className="v84-publish-btn" onClick={handleSave} disabled={isPublishing}>PUBLIER 🚀</button>
             </div>
         </div>

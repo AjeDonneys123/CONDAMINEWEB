@@ -3,16 +3,21 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const path = require('path');
 const fs = require('fs');
-const DriveEngine = require('../../core/drive.engine');
-const StructureDrive = require('../structure/experts/structure.drive');
-const HomeworkDB = require('./experts/homework.db'); // Import de l'expert
+const HomeworkDB = require('./experts/homework.db');
+const HomeworkAI = require('./experts/homework.ai');
 
 const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
-// --- ROUTES EXISTANTES ---
+// --- 🤖 NOUVELLE ROUTE : GÉNÉRER GRILLE DE CORRECTION ---
+router.post('/generate-hints', asyncHandler(async (req, res) => {
+    const { instruction, assets } = req.body;
+    if (!assets || assets.length === 0) return res.status(400).json({ error: "Aucun document chargé." });
+    
+    const hints = await HomeworkAI.generateHintsFromAssets(instruction, assets);
+    res.json({ hints });
+}));
+
 router.post('/', asyncHandler(async (req, res) => {
-    // ... (Code upload inchangé, voir version précédente pour gain de place) ...
-    // Je remets le code court pour la snippet, le serveur ne change pas cette partie
     const Homework = mongoose.model('Homework');
     const data = req.body;
     let result;
@@ -26,21 +31,16 @@ router.get('/all', asyncHandler(async (req, res) => {
 }));
 
 router.get('/submissions', asyncHandler(async (req, res) => {
-    // On renvoie l'ID de la soumission (_id) pour pouvoir cliquer dessus
     const subs = await mongoose.model('Submission').find({}, 'studentId homeworkId grade createdAt').lean();
     res.json(subs);
 }));
 
-// --- NOUVEAU V210 : GESTION DES CORRECTIONS ---
-
-// 1. Lire le détail d'une copie (Texte + Feedback)
 router.get('/submission/:id', asyncHandler(async (req, res) => {
     const sub = await HomeworkDB.getSubmissionDetails(req.params.id);
     if (!sub) return res.status(404).json({ error: "Copie introuvable" });
     res.json(sub);
 }));
 
-// 2. Mettre à jour une copie (Note, Feedback, Texte)
 router.put('/submission/:id', asyncHandler(async (req, res) => {
     const updated = await HomeworkDB.updateSubmission(req.params.id, req.body);
     res.json(updated);
@@ -58,6 +58,6 @@ router.post('/upload', upload.array('files'), (req, res) => {
     res.json({ urls });
 });
 
-router.post('/analyze-homework', (req, res) => HomeworkDB.processSubmission(req.body, require('./experts/homework.ai')).then(r => res.json(r)));
+router.post('/analyze-homework', (req, res) => HomeworkDB.processSubmission(req.body, HomeworkAI).then(r => res.json(r)));
 
 module.exports = router;
