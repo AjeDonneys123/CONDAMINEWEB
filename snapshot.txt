@@ -138,11 +138,17 @@ STRUCTURE:
 │       ├── 179b96e657c91102b91b1031e6903d7a
 │       ├── 187f36a3832211a9ac5609451dbcc07e
 │       ├── 262f72cd65ccb7a5e9683572acb3e77e
+│       ├── 3fa4df6f9df4d3adf97df942093c70b2
 │       ├── 46b781ca6b50d61e08289ac3528b2a37
 │       ├── 78441ed55f78839508d6cbe6140901fb
+│       ├── 7e7b5a674ea0ef272a0095b11ecb3521
 │       ├── 8dfabdc4f70fe54049c0fa14e2fad9c3
 │       ├── 8fc74b97cbb3f971d37f15e01f7f4ef6
+│       ├── 92641164cb332ab43552b5de9e8c4af1
+│       ├── 95b6e11513d1e1bf2146f1edd2f37e10
+│       ├── 9e02a1e0c5937d5dc9b5b3bf41d67128
 │       ├── 9ea4d0bf219b361d2bf2929996c4f304
+│       ├── a4f70d13fdfc2a1b44c5f77c5a78c044
 │       ├── ai-1769124390020.jpg
 │       ├── ai-1769124788771.jpg
 │       ├── ai-1769124836695.jpg
@@ -154,6 +160,7 @@ STRUCTURE:
 │       ├── ba2ecae20864307e22d433eaaa4e35b5
 │       ├── bc199f06f744958b60903b2790bc0d50
 │       ├── c536b44022497153eb3030b1271fca17
+│       ├── d0a87000b759379834f99b8c9a4df6c9
 │       ├── d1e99c4392a90046d1deeacea6cf25a1
 │       ├── f091edfce30ee30223bb59ea7c6f0dfa
 │       ├── fb305669f9570391964e533741582fff
@@ -206,6 +213,38 @@ STRUCTURE:
 │       ├── studio_1769198134112-187639441.png
 │       ├── studio_1769198134114-566663002.png
 │       ├── studio_1769198134120-622948676.png
+│       ├── studio_1769212412693-91284378.png
+│       ├── studio_1769212412699-452486225.png
+│       ├── studio_1769212412701-586705440.png
+│       ├── studio_1769212412705-136057589.png
+│       ├── studio_1769212412727-278311843.png
+│       ├── studio_1769212412732-717637994.png
+│       ├── studio_1769212412735-176507695.png
+│       ├── studio_1769212412754-789285101.png
+│       ├── studio_1769212412771-933056836.png
+│       ├── studio_1769212412776-959789731.png
+│       ├── studio_1769212412790-512526583.png
+│       ├── studio_1769212412809-929788064.png
+│       ├── studio_1769212412812-787599283.png
+│       ├── studio_1769212412820-916918492.png
+│       ├── studio_1769212412824-344221292.png
+│       ├── studio_1769212412830-370566478.png
+│       ├── studio_1769213855791-88787683.png
+│       ├── studio_1769213855792-20039475.png
+│       ├── studio_1769213855793-36017550.png
+│       ├── studio_1769213855795-341052217.png
+│       ├── studio_1769213855807-719319689.png
+│       ├── studio_1769213855817-848689105.png
+│       ├── studio_1769213855860-229811711.png
+│       ├── studio_1769213855862-168986176.png
+│       ├── studio_1769213855863-325183899.png
+│       ├── studio_1769213855876-759387937.png
+│       ├── studio_1769213855881-969210674.png
+│       ├── studio_1769213855890-99286334.png
+│       ├── studio_1769213855893-33501019.png
+│       ├── studio_1769213855894-101454023.png
+│       ├── studio_1769213855899-658573476.png
+│       ├── studio_1769213855907-567277804.png
 │       ├── temp/
 │       ├── temp-1768930953731-74258377.png
 │       ├── temp-1768930953739-334352580.png
@@ -398,7 +437,7 @@ setInterval(applyUpdate, 1000);
 {
   "status": "OK",
   "file": null,
-  "timestamp": 1769211653557
+  "timestamp": 1769215204276
 }
 [[[£ END: apply_status.json £]]]
 
@@ -3694,7 +3733,7 @@ export default function ChapterManager() { return <div>Gestion des chapitres</di
 .student-card-drag.dragging { opacity: 0.5; }
 .student-card-drag.punished { border-color: #ef4444; background: #fef2f2; }
 
-/* INDICATORS (Mise à jour couleurs) */
+/* INDICATORS */
 .sc-indicators {
     position: absolute; left: 8px; top: 50%; transform: translateY(-50%);
     display: flex; flex-direction: column; gap: 5px; z-index: 50; pointer-events: none;
@@ -3705,14 +3744,12 @@ export default function ChapterManager() { return <div>Gestion des chapitres</di
     border: 2px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.3);
     transition: transform 0.2s;
 }
-.indicator-dot:hover { transform: scale(1.3); }
 
-/* --- COULEURS MISES À JOUR --- */
-.indicator-homework-done { background: #22c55e; } /* VERT (Devoir fait) */
-.indicator-homework-todo { background: #ef4444; } /* ROUGE (Devoir à faire) */
-.indicator-game-done { background: #9333ea; } /* VIOLET (Jeu Gagné) */
-.indicator-game-failed { background: #3b82f6; } /* BLEU (Jeu Perdu/Essayé) */
-.indicator-game-todo { background: #f472b6; } /* ROSE (Jeu Pas Touché) */
+.indicator-homework-done { background: #22c55e; } 
+.indicator-homework-todo { background: #ef4444; } 
+.indicator-game-done { background: #9333ea; } 
+.indicator-game-failed { background: #3b82f6; } 
+.indicator-game-todo { background: #f472b6; } 
 
 /* BADGES */
 .sc-badge { position: absolute; top: -8px; right: -8px; background: #1e293b; color: #fbbf24; font-size: 0.55rem; font-weight: 950; padding: 2px 6px; border-radius: 8px; border: 2px solid white; z-index: 6; }
@@ -3722,23 +3759,38 @@ export default function ChapterManager() { return <div>Gestion des chapitres</di
 .sc-name { font-size: 0.65rem; font-weight: 800; color: #334155; text-align: center; line-height: 1.1; }
 .sc-counters { display: flex; gap: 4px; margin-top: 2px; font-size: 0.6rem; font-weight: 900; }
 
+/* DRAWER ACTION V2 */
 .action-drawer { position: fixed; bottom: 0; left: 0; right: 0; background: white; padding: 20px; border-radius: 30px 30px 0 0; box-shadow: 0 -10px 40px rgba(0,0,0,0.15); z-index: 100; transform: translateY(100%); transition: transform 0.3s; }
 .action-drawer.open { transform: translateY(0); }
 .drawer-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
 .drawer-name { font-size: 1.2rem; font-weight: 900; color: #0f172a; }
 .drawer-close { background: #f1f5f9; border: none; width: 35px; height: 35px; border-radius: 50%; font-weight: bold; cursor: pointer; }
-.drawer-grid-complex { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 20px; }
+
+/* GRILLE 2 COLONNES */
+.drawer-grid-complex { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 10px; }
+
 .act-btn { padding: 12px; border-radius: 12px; font-weight: 900; border: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 0.7rem; text-transform: uppercase; }
 .act-btn:active { transform: scale(0.95); }
+
 .btn-cross { background: #fee2e2; color: #ef4444; border: 2px solid #fecaca; }
 .btn-rem-cross { background: white; color: #94a3b8; border: 2px dashed #e2e8f0; }
 .btn-bonus { background: #dcfce7; color: #16a34a; border: 2px solid #bbf7d0; }
 .btn-rem-bonus { background: white; color: #94a3b8; border: 2px dashed #e2e8f0; }
-.btn-note { background: #f1f5f9; color: #475569; border: 2px solid #e2e8f0; grid-column: span 3; display: flex; flex-direction: row; justify-content: center; gap: 10px; }
+
+.btn-note { 
+    background: #f1f5f9; color: #475569; border: 2px solid #e2e8f0; 
+    grid-column: span 2; display: flex; flex-direction: row !important; justify-content: center; gap: 10px; 
+}
+.btn-move-full { 
+    background: #f8fafc; color: #64748b; border: 2px solid #f1f5f9;
+    grid-column: span 2; display: flex; flex-direction: row !important; justify-content: center; gap: 10px; 
+}
+
 .note-area-wrapper { animation: fadeIn 0.2s; margin-bottom: 10px; }
 .note-textarea { width: 100%; height: 80px; padding: 10px; border-radius: 12px; border: 2px solid #e2e8f0; font-family: sans-serif; font-size: 0.9rem; outline: none; }
 .note-textarea:focus { border-color: #3b82f6; }
 .btn-save-note { width: 100%; padding: 10px; background: #3b82f6; color: white; font-weight: 900; border: none; border-radius: 10px; margin-top: 5px; cursor: pointer; }
+
 .ia-loader { position: fixed; inset: 0; background: rgba(15,23,42,0.9); z-index: 2000; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; }
 .spinner-ia { width: 50px; height: 50px; border: 5px solid rgba(255,255,255,0.2); border-top-color: #a855f7; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px; }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -3749,9 +3801,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import './ClassroomManager.css';
 
 /**
- * 🎓 GESTION DE CLASSE V9 (FIX PASTILLES)
- * - Correction : Rechargement auto quand l'ID du prof est disponible.
- * - Indicateurs visuels activés.
+ * 🎓 GESTION DE CLASSE V10 - NOUVELLE INTERFACE ACTIONS
+ * - Réorganisation du tiroir d'attribution (2 colonnes).
+ * - Suppression sous l'ajout.
+ * - Support du mode déplacement manuel.
  */
 export default function ClassroomManager({ globalClassId, user }) {
     const [students, setStudents] = useState([]);
@@ -3764,6 +3817,7 @@ export default function ClassroomManager({ globalClassId, user }) {
     // UI Drawer States
     const [showNoteInput, setShowNoteInput] = useState(false);
     const [currentNote, setCurrentNote] = useState("");
+    const [swapSource, setSwapSource] = useState(null);
 
     // Drag States
     const [draggingId, setDraggingId] = useState(null);
@@ -3771,24 +3825,16 @@ export default function ClassroomManager({ globalClassId, user }) {
 
     const fileInputRef = useRef(null);
     
-    // SÉCURITÉ ID : On s'assure d'avoir un ID valide
     const myId = user ? (user._id || user.id) : null;
 
     const loadData = async () => {
         if (!globalClassId) return;
-        // On ne met pas setLoading(true) ici pour éviter le clignotement si c'est juste un refresh d'ID
-        
         try {
-            // 1. Config Layout
             const resClass = await fetch(`/api/classroom/${globalClassId}`);
             if (resClass.ok) {
                 const clsInfo = await resClass.json();
                 if (clsInfo.layout && clsInfo.layout.separators) setSeparators(clsInfo.layout.separators);
             }
-
-            // 2. Plan + Indicateurs
-            // Si myId est null, le backend renverra les élèves sans pastilles.
-            // Dès que myId arrive, le useEffect relance cette fonction avec le bon ID.
             const queryParams = myId ? `?teacherId=${myId}` : '';
             const res = await fetch(`/api/classroom/plan/${globalClassId}${queryParams}`);
             
@@ -3808,12 +3854,8 @@ export default function ClassroomManager({ globalClassId, user }) {
         setLoading(false);
     };
 
-    // FIX : On recharge les données quand globalClassId change OU quand myId est enfin disponible
-    useEffect(() => { 
-        loadData(); 
-    }, [globalClassId, myId]);
+    useEffect(() => { loadData(); }, [globalClassId, myId]);
 
-    // ... (Reste des fonctions inchangées)
     const toggleSeparator = async (colIndex) => { let newSeps = [...separators]; if (newSeps.includes(colIndex)) newSeps = newSeps.filter(s => s !== colIndex); else newSeps.push(colIndex); setSeparators(newSeps); try { await fetch('/api/classroom/layout', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ classId: globalClassId, separators: newSeps }) }); } catch(e){} };
     const changeGrid = (dC, dR) => { setGridSize(p => ({ cols: Math.max(2, p.cols + dC), rows: Math.max(2, p.rows + dR) })); };
     const handleDragStart = (e, sId) => { setDraggingId(sId); e.dataTransfer.setData("text/plain", sId); e.dataTransfer.effectAllowed = "move"; };
@@ -3821,8 +3863,9 @@ export default function ClassroomManager({ globalClassId, user }) {
     const handleDrop = async (e, x, y) => { e.preventDefault(); setDragOverCell(null); const sId = draggingId; if (!sId) return; const targetStudent = students.find(s => s.seatX === x && s.seatY === y); const movedStudent = students.find(s => s._id === sId); if (targetStudent && targetStudent._id !== sId) { const oldX = movedStudent.seatX; const oldY = movedStudent.seatY; setStudents(prev => prev.map(s => { if (s._id === sId) return { ...s, seatX: x, seatY: y }; if (s._id === targetStudent._id) return { ...s, seatX: oldX, seatY: oldY }; return s; })); } else { setStudents(prev => prev.map(s => s._id === sId ? { ...s, seatX: x, seatY: y } : s)); } try { await fetch('/api/classroom/move', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ studentId: sId, x, y }) }); } catch(err) { loadData(); } setDraggingId(null); };
     const handleFileSelect = async (e) => { const file = e.target.files[0]; if (!file) return; if(!confirm(`📸 Analyser ${file.name} ?`)) return; setIaLoading(true); const formData = new FormData(); formData.append('file', file); formData.append('classId', globalClassId); try { await fetch('/api/classroom/import-plan', { method: 'POST', body: formData }); await loadData(); } catch(e) { alert("Erreur IA"); } setIaLoading(false); e.target.value = null; };
     const getMyStats = (stu) => { if (!stu.behaviorRecords) return { crosses: 0, bonuses: 0, weeksToRedemption: 3 }; return stu.behaviorRecords.find(r => r.teacherId === myId) || { crosses: 0, bonuses: 0, weeksToRedemption: 3 }; };
-    const handleOpenStudent = (stu) => { setSelectedStudent(stu); setCurrentNote(stu.myNote || ""); setShowNoteInput(false); };
+    const handleOpenStudent = (stu) => { if (swapSource) { moveStudentTo(swapSource._id, stu.seatX, stu.seatY); setSwapSource(null); return; } setSelectedStudent(stu); setCurrentNote(stu.myNote || ""); setShowNoteInput(false); };
     const addBehavior = async (type, extraData = null) => { if (!selectedStudent || !myId) return; await fetch('/api/classroom/behavior', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ studentId: selectedStudent._id, type, teacherId: myId, extraData }) }); if (type === 'SAVE_NOTE') { setStudents(prev => prev.map(s => s._id === selectedStudent._id ? { ...s, myNote: extraData } : s)); setShowNoteInput(false); } else { loadData(); if (['SAVE_NOTE', 'REMOVE_CROSS', 'REMOVE_BONUS'].includes(type)) setSelectedStudent(null); } };
+    const moveStudentTo = async (sid, x, y) => { try { await fetch('/api/classroom/move', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ studentId: sid, x, y }) }); await loadData(); } catch(e){} };
 
     if (!globalClassId) return <div className="p-10 text-center text-slate-400 font-black">SÉLECTIONNEZ UNE CLASSE</div>;
 
@@ -3834,19 +3877,16 @@ export default function ClassroomManager({ globalClassId, user }) {
                 const isOver = dragOverCell === `${x}-${y}`;
                 const hasSep = separators.includes(x);
                 cells.push(
-                    <div key={`${x}-${y}`} className={`grid-cell-wrapper ${isOver ? 'drag-over' : ''} ${hasSep ? 'has-separator' : ''}`} style={{ gridColumn: x + 1, gridRow: y + 1, width: '100px', height: '100px' }} onDragOver={(e) => handleDragOver(e, x, y)} onDrop={(e) => handleDrop(e, x, y)}>
+                    <div key={`${x}-${y}`} className={`grid-cell-wrapper ${isOver ? 'drag-over' : ''} ${hasSep ? 'has-separator' : ''}`} style={{ gridColumn: x + 1, gridRow: y + 1, width: '100px', height: '100px' }} onDragOver={(e) => handleDragOver(e, x, y)} onDrop={(e) => handleDrop(e, x, y)} onClick={() => !student && swapSource && moveStudentTo(swapSource._id, x, y) && setSwapSource(null)}>
                         {student ? (
-                            <div className={`student-card-drag ${draggingId === student._id ? 'dragging' : ''} ${getMyStats(student).crosses >= 3 ? 'punished' : ''}`} draggable="true" onDragStart={(e) => handleDragStart(e, student._id)} onClick={() => handleOpenStudent(student)}>
+                            <div className={`student-card-drag ${draggingId === student._id ? 'dragging' : ''} ${getMyStats(student).crosses >= 3 ? 'punished' : ''}`} draggable="true" onDragStart={(e) => handleDragStart(e, student._id)} onClick={(e) => { e.stopPropagation(); handleOpenStudent(student); }}>
                                 {getMyStats(student).crosses > 0 && <div className="sc-badge">⏳ {getMyStats(student).weeksToRedemption}</div>}
                                 {student.myNote && <div className="sc-note-badge">N</div>}
-                                
-                                {/* INDICATEURS (PASTILLES) */}
                                 <div className="sc-indicators">
                                     {(student.indicators || []).map((ind, i) => (
                                         <div key={i} className={`indicator-dot indicator-${ind.type}-${ind.status}`} title={`${ind.type} : ${ind.status}`}></div>
                                     ))}
                                 </div>
-
                                 <div className="sc-avatar">{student.gender === 'F' ? '👧' : '👦'}</div>
                                 <div className="sc-name">{student.firstName}<br/>{student.lastName.slice(0,1)}.</div>
                                 <div className="sc-counters"><span style={{color:'#ef4444'}}>❌{getMyStats(student).crosses}</span><span style={{color:'#10b981'}}>⭐{getMyStats(student).bonuses}</span></div>
@@ -3876,7 +3916,7 @@ export default function ClassroomManager({ globalClassId, user }) {
             <input type="file" ref={fileInputRef} style={{display:'none'}} accept="image/*" onChange={handleFileSelect} />
             {iaLoading && <div className="ia-loader"><div className="spinner-ia"></div><span>IA ACTIVE...</span></div>}
             <div className="cm-header">
-                <span className="cm-title">PLAN DE CLASSE</span>
+                <span className="cm-title">PLAN DE CLASSE {swapSource && <span className="text-orange-500 text-sm ml-4 animate-pulse">| DÉPLACEMENT DE {swapSource.firstName}...</span>}</span>
                 <div className="cm-toolbar">
                     <button className="cm-btn purple" onClick={() => fileInputRef.current.click()}>🔮 IMPORT IA</button>
                     <div className="w-px h-6 bg-slate-200 mx-2"></div>
@@ -3893,9 +3933,21 @@ export default function ClassroomManager({ globalClassId, user }) {
                     <>
                         <div className="drawer-header"><span className="drawer-name">{selectedStudent.firstName} {selectedStudent.lastName}</span><button className="drawer-close" onClick={() => setSelectedStudent(null)}>✕</button></div>
                         <div className="drawer-grid-complex">
-                            <button className="act-btn btn-cross" onClick={() => addBehavior('CROSS')}>❌ AJOUTER CROIX</button><button className="act-btn btn-rem-cross" onClick={() => addBehavior('REMOVE_CROSS')}>RETIRER CROIX</button>
-                            <button className="act-btn btn-bonus" onClick={() => addBehavior('BONUS')}>⭐ AJOUTER BONUS</button><button className="act-btn btn-rem-bonus" onClick={() => addBehavior('REMOVE_BONUS')}>RETIRER BONUS</button>
+                            {/* COLONNE 1 : CROIX */}
+                            <button className="act-btn btn-cross" onClick={() => addBehavior('CROSS')}>❌ AJOUTER CROIX</button>
+                            {/* COLONNE 2 : BONUS */}
+                            <button className="act-btn btn-bonus" onClick={() => addBehavior('BONUS')}>⭐ AJOUTER BONUS</button>
+                            
+                            {/* LIGNE 2 COL 1 : REMOVE CROIX */}
+                            <button className="act-btn btn-rem-cross" onClick={() => addBehavior('REMOVE_CROSS')}>RETIRER CROIX</button>
+                            {/* LIGNE 2 COL 2 : REMOVE BONUS */}
+                            <button className="act-btn btn-rem-bonus" onClick={() => addBehavior('REMOVE_BONUS')}>RETIRER BONUS</button>
+                            
+                            {/* LIGNE 3 : NOTES (Full Width) */}
                             <button className="act-btn btn-note" onClick={() => setShowNoteInput(!showNoteInput)}>📝 NOTES PERSONNELLES {showNoteInput ? '▲' : '▼'}</button>
+                            
+                            {/* LIGNE 4 : DÉPLACER (Full Width) */}
+                            <button className="act-btn btn-move-full" onClick={() => { setSwapSource(selectedStudent); setSelectedStudent(null); }}>🔄 DÉMARRER DÉPLACEMENT</button>
                         </div>
                         {showNoteInput && (
                             <div className="note-area-wrapper">
@@ -3903,9 +3955,6 @@ export default function ClassroomManager({ globalClassId, user }) {
                                 <button className="btn-save-note" onClick={() => addBehavior('SAVE_NOTE', currentNote)}>ENREGISTRER LA NOTE</button>
                             </div>
                         )}
-                        <div style={{textAlign:'center', marginTop:'10px'}}>
-                            <button className="cm-btn slate" style={{width:'100%'}} onClick={() => { setSwapSource(selectedStudent); setSelectedStudent(null); }}>🔄 DÉMARRER DÉPLACEMENT</button>
-                        </div>
                     </>
                 )}
             </div>
@@ -5423,9 +5472,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import './HomeworkStudio.css';
 
 /**
- * 🎨 STUDIO DEVOIR V213 (LEVEL LOGIC + SELECT ALL)
- * - Filtrage par niveau strict.
- * - Ajout bouton "TOUT LE NIVEAU".
+ * 🎨 STUDIO DEVOIR V219 - GÉNÉRATEUR DE GRILLE AUTO
+ * - Analyse multimodal des documents (Énoncés + Supports).
+ * - Remplissage automatique des indices IA pour la correction.
  */
 export default function HomeworkStudio({ initialData, chapters, globalClass, globalClassId, user, onClose }) {
   
@@ -5448,6 +5497,7 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
   const [zoomImg, setZoomImg] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
+  const [isGeneratingHints, setIsGeneratingHints] = useState(false);
   
   const fileInputRef = useRef(null);
   const [uploadTarget, setUploadTarget] = useState(null);
@@ -5470,12 +5520,9 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
 
                 const newDist = {};
                 targets.forEach(clsName => {
-                    let classStudentIds = [];
-                    if (!isAll) {
-                        classStudentIds = sts
-                            .filter(s => s.currentClass === clsName && assignedIds.includes(s._id))
-                            .map(s => s._id);
-                    }
+                    let classStudentIds = sts
+                        .filter(s => (s.currentClass || "").trim().toUpperCase() === clsName.trim().toUpperCase() && (assignedIds || []).includes(s._id))
+                        .map(s => s._id);
                     newDist[clsName] = { chapterId: chapId, studentIds: classStudentIds };
                 });
                 setDistribution(newDist);
@@ -5491,6 +5538,52 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
     fetchData();
   }, []);
 
+  // --- 🤖 LOGIQUE GÉNÉRATION GRILLE AUTO ---
+  const handleAutoGenerateGrid = async () => {
+    const current = formData.levels[activeLevelIdx];
+    const allAssets = [...current.instructionUrls, ...current.attachmentUrls];
+    
+    if (allAssets.length === 0) {
+        return alert("Veuillez charger au moins une image (énoncé ou support) pour l'analyse.");
+    }
+
+    setIsGeneratingHints(true);
+    try {
+        const res = await fetch('/api/homework/generate-hints', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                instruction: current.instruction,
+                assets: allAssets 
+            })
+        });
+        const data = await res.json();
+        if (data.hints) {
+            updateLevel('aiHints', data.hints);
+        } else {
+            alert("L'IA n'a pas pu générer de grille.");
+        }
+    } catch (e) { alert("Erreur serveur lors de l'analyse."); }
+    setIsGeneratingHints(false);
+  };
+
+  const activeLevel = formData.levels[activeLevelIdx];
+  const updateLevel = (field, value) => { const newLevels = [...formData.levels]; newLevels[activeLevelIdx][field] = value; setFormData({ ...formData, levels: newLevels }); };
+  
+  const handleFileSelect = async (e) => { 
+    const files = e.target.files; 
+    if (!files || files.length === 0) return; 
+    setIsUploading(true); 
+    const data = new FormData(); 
+    for (let i = 0; i < files.length; i++) data.append('files', files[i]); 
+    try { 
+        const res = await fetch('/api/homework/upload', { method: 'POST', body: data }); 
+        const result = await res.json(); 
+        if (res.ok) updateLevel(uploadTarget, [...activeLevel[uploadTarget], ...result.urls]); 
+    } catch (err) { alert("Erreur upload."); } 
+    finally { setIsUploading(false); e.target.value = null; } 
+  };
+
   const detectLevel = () => {
       const refClass = viewingClass || globalClass || (initialData?.targetClassrooms ? initialData.targetClassrooms[0] : null);
       if (!refClass) return null;
@@ -5503,7 +5596,7 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
 
   const availableClasses = allClasses.filter(c => {
       if (c.type !== 'CLASS') return false;
-      if (!targetLevel) return true; // fallback
+      if (!targetLevel) return true;
       return String(c.level) === String(targetLevel);
   }).sort((a,b) => a.name.localeCompare(b.name));
 
@@ -5519,75 +5612,27 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
       }).sort((a, b) => (a.section || "Z").localeCompare(b.section || "Z"));
   };
   
-  const findEquivalentChapterId = (targetClass, sourceChapId) => {
-      if (!sourceChapId) return "";
-      const src = chapters.find(c => c._id === sourceChapId);
-      if (!src) return "";
-      const targets = getChaptersForClass(targetClass);
-      const same = targets.find(t => 
-          t.title.trim().toUpperCase() === src.title.trim().toUpperCase() && 
-          (t.section || "").trim().toUpperCase() === (src.section || "").trim().toUpperCase()
-      );
-      return same ? same._id : "";
-  };
-
-  const getSmartChapterIdFor = (clsName) => {
-      const activeClasses = Object.keys(distribution);
-      if (activeClasses.length > 0) {
-          const sourceChapId = distribution[activeClasses[0]].chapterId;
-          if (sourceChapId) {
-              const eq = findEquivalentChapterId(clsName, sourceChapId);
-              if (eq) return eq;
-          }
-      }
-      const available = getChaptersForClass(clsName);
-      return available.length > 0 ? available[0]._id : "";
-  };
-
   const handleClassTabClick = (clsName) => { setViewingClass(clsName); };
-
   const isAllLevelSelected = availableClasses.length > 0 && availableClasses.every(c => distribution[c.name]);
 
   const toggleAllLevel = () => {
-        if (isAllLevelSelected) {
-            setDistribution(prev => {
-                const next = { ...prev };
-                availableClasses.forEach(c => delete next[c.name]);
-                return next;
-            });
-        } else {
-            setDistribution(prev => {
-                const next = { ...prev };
-                let sourceChap = "";
-                const currentlySelected = Object.keys(next);
-                if (currentlySelected.length > 0) sourceChap = next[currentlySelected[0]].chapterId;
-
-                availableClasses.forEach(c => {
-                    if (!next[c.name]) {
-                        let smartChap = "";
-                        if (sourceChap) smartChap = findEquivalentChapterId(c.name, sourceChap);
-                        if (!smartChap) {
-                            const chaps = getChaptersForClass(c.name);
-                            smartChap = chaps.length > 0 ? chaps[0]._id : "";
-                        }
-                        next[c.name] = { chapterId: smartChap, studentIds: [] };
-                    }
-                });
-                return next;
-            });
-        }
+    if (isAllLevelSelected) {
+        setDistribution(prev => { const next = { ...prev }; availableClasses.forEach(c => delete next[c.name]); return next; });
+    } else {
+        setDistribution(prev => {
+            const next = { ...prev };
+            availableClasses.forEach(c => { if (!next[c.name]) next[c.name] = { chapterId: getChaptersForClass(c.name)[0]?._id || "", studentIds: [] }; });
+            return next;
+        });
+    }
   };
 
   const toggleFullClass = () => {
       setDistribution(prev => {
           const next = { ...prev };
           const config = next[viewingClass];
-          if (config && config.studentIds.length === 0) {
-              delete next[viewingClass];
-          } else {
-              const chapId = config?.chapterId || getSmartChapterIdFor(viewingClass);
-              next[viewingClass] = { chapterId: chapId, studentIds: [] };
-          }
+          if (config && config.studentIds.length === 0) delete next[viewingClass];
+          else next[viewingClass] = { chapterId: getChaptersForClass(viewingClass)[0]?._id || "", studentIds: [] };
           return next;
       });
   };
@@ -5596,41 +5641,13 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
       setDistribution(prev => {
           const next = { ...prev };
           const config = next[viewingClass];
-          const studentsInThisClass = allStudents.filter(s => s.currentClass === viewingClass).map(s => s._id);
-
-          if (!config) {
-              const chapId = getSmartChapterIdFor(viewingClass);
-              next[viewingClass] = { chapterId: chapId, studentIds: [studentId] };
-          } else if (config.studentIds.length === 0) {
-              const allExceptOne = studentsInThisClass.filter(id => id !== studentId);
-              next[viewingClass] = { ...config, studentIds: allExceptOne };
-          } else {
-              let newIds = [...config.studentIds];
-              if (newIds.includes(studentId)) {
-                  newIds = newIds.filter(id => id !== studentId);
-                  if (newIds.length === 0) delete next[viewingClass];
-                  else next[viewingClass] = { ...config, studentIds: newIds };
-              } else {
-                  newIds.push(studentId);
-                  if (newIds.length === studentsInThisClass.length) next[viewingClass] = { ...config, studentIds: [] };
-                  else next[viewingClass] = { ...config, studentIds: newIds };
-              }
-          }
-          return next;
-      });
-  };
-
-  const handleUpdateChapter = (clsName, chapId) => {
-      setDistribution(prev => {
-          const next = { ...prev };
-          next[clsName] = { ...next[clsName], chapterId: chapId };
-          if (chapId) {
-              Object.keys(next).forEach(otherClass => {
-                  if (otherClass !== clsName) {
-                      const equivalentId = findEquivalentChapterId(otherClass, chapId);
-                      if (equivalentId) next[otherClass] = { ...next[otherClass], chapterId: equivalentId };
-                  }
-              });
+          const allS = allStudents.filter(s => s.currentClass === viewingClass).map(s => s._id);
+          if (!config) next[viewingClass] = { chapterId: getChaptersForClass(viewingClass)[0]?._id || "", studentIds: [studentId] };
+          else {
+              let newIds = config.studentIds.length === 0 ? allS.filter(id => id !== studentId) : (config.studentIds.includes(studentId) ? config.studentIds.filter(id => id !== studentId) : [...config.studentIds, studentId]);
+              if (newIds.length === 0) delete next[viewingClass];
+              else if (newIds.length === allS.length) next[viewingClass] = { ...config, studentIds: [] };
+              else next[viewingClass] = { ...config, studentIds: newIds };
           }
           return next;
       });
@@ -5638,74 +5655,31 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
 
   const handleSave = async () => {
       const targets = Object.keys(distribution);
-      if (!formData.title) return alert("❌ Titre requis !");
-      if (targets.length === 0) return alert("❌ Sélectionnez au moins une classe ou un élève !");
-      const missingFolderClass = targets.find(cls => !distribution[cls].chapterId);
-      if (missingFolderClass) {
-          setViewingClass(missingFolderClass);
-          return alert(`⚠️ ATTENTION : La classe ${missingFolderClass} n'a pas de dossier sélectionné !`);
-      }
-      
+      if (!formData.title || targets.length === 0) return alert("❌ Titre et Classe requis !");
       setIsPublishing(true);
       try {
-          const groupedByChapter = {};
-          targets.forEach(cls => {
-              const chapId = distribution[cls].chapterId;
-              if (!groupedByChapter[chapId]) groupedByChapter[chapId] = [];
-              groupedByChapter[chapId].push(cls);
-          });
-
-          for (const chapId of Object.keys(groupedByChapter)) {
-              const classList = groupedByChapter[chapId];
-              let finalAssignedStudents = [];
-              let globalIsAllClass = true;
-
-              const hasPartial = classList.some(cls => distribution[cls].studentIds.length > 0);
-
-              if (hasPartial) {
-                  globalIsAllClass = false; 
-                  for (const cls of classList) {
-                      const cfg = distribution[cls];
-                      if (cfg.studentIds.length > 0) finalAssignedStudents.push(...cfg.studentIds);
-                      else {
-                          const studentsOfClass = allStudents.filter(s => s.currentClass === cls);
-                          finalAssignedStudents.push(...studentsOfClass.map(s => s._id));
-                      }
-                  }
-              } else {
-                  globalIsAllClass = true;
-                  finalAssignedStudents = [];
-              }
-
-              const payload = { ...formData, chapterId: chapId, targetClassrooms: classList, classroom: classList[0], teacherId: user.id || user._id, assignedStudents: finalAssignedStudents, isAllClass: globalIsAllClass };
+          for (const cls of targets) {
+              const cfg = distribution[cls];
+              const payload = { ...formData, chapterId: cfg.chapterId, targetClassrooms: [cls], classroom: cls, teacherId: user.id || user._id, assignedStudents: cfg.studentIds, isAllClass: cfg.studentIds.length === 0 };
               await fetch('/api/homework', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
           }
           onClose();
-      } catch(e) { console.error(e); alert("Erreur réseau."); }
-      finally { setIsPublishing(false); }
+      } catch(e) { alert("Erreur sauvegarde."); }
+      setIsPublishing(false);
   };
 
-  const studentsInView = allStudents.filter(s => s.currentClass === viewingClass).sort((a,b) => a.lastName.localeCompare(b.lastName));
-  const currentConfig = distribution[viewingClass];
-  const isSelected = !!currentConfig;
-  const isFullClass = isSelected && currentConfig.studentIds.length === 0;
-  const currentClassFolders = getChaptersForClass(viewingClass);
-
-  // Common UI helpers
-  const getDisplayUrl = (url) => url; 
-  const activeLevel = formData.levels[activeLevelIdx];
-  const updateLevel = (field, value) => { const newLevels = [...formData.levels]; newLevels[activeLevelIdx][field] = value; setFormData({ ...formData, levels: newLevels }); };
-  const handleFileSelect = async (e) => { const files = e.target.files; if (!files || files.length === 0) return; setIsUploading(true); const data = new FormData(); for (let i = 0; i < files.length; i++) data.append('files', files[i]); try { const res = await fetch('/api/homework/upload', { method: 'POST', body: data }); const result = await res.json(); if (res.ok) updateLevel(uploadTarget, [...activeLevel[uploadTarget], ...result.urls]); } catch (err) { alert("Erreur upload."); } finally { setIsUploading(false); e.target.value = null; } };
+  const isSelected = !!distribution[viewingClass];
+  const isFullClass = isSelected && distribution[viewingClass].studentIds.length === 0;
 
   return (
     <div className="v84-studio-container">
         <input type="file" ref={fileInputRef} style={{ display: 'none' }} multiple accept="image/*" onChange={handleFileSelect} />
-        {zoomImg && <div className="v84-zoom-overlay" onClick={() => setZoomImg(null)}><img src={getDisplayUrl(zoomImg)} alt="zoom" /></div>}
-        {(isUploading || isPublishing) && <div className="v84-upload-loader"><div className="v84-spinner"></div><span>{isUploading ? 'UPLOAD...' : 'PUBLICATION...'}</span></div>}
+        {zoomImg && <div className="v84-zoom-overlay" onClick={() => setZoomImg(null)}><img src={zoomImg} alt="zoom" /></div>}
+        {(isUploading || isPublishing || isGeneratingHints) && <div className="v84-upload-loader"><div className="v84-spinner"></div><span>{isUploading ? 'UPLOAD...' : (isPublishing ? 'PUBLICATION...' : 'ANALYSE IA...')}</span></div>}
 
         <div className="v84-header">
             <div className="v84-header-left"><div className="v84-icon">📝</div><input className="v84-title-input" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} placeholder="TITRE DU DEVOIR..." /></div>
-            <div className="v84-version-tag">STUDIO V213</div>
+            <div className="v84-version-tag">STUDIO V219</div>
             <button onClick={onClose} className="v84-close-btn">✕</button>
         </div>
 
@@ -5723,57 +5697,55 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
             </div>
 
             <div className="v84-main-editor custom-scrollbar">
-                <div className="v84-card"><label className="v84-card-label">1. ÉNONCÉ & CONSIGNE</label><textarea className="v84-textarea" value={activeLevel.instruction} onChange={e => updateLevel('instruction', e.target.value)} placeholder="Consigne textuelle..." /><button className="v84-upload-btn" onClick={() => { setUploadTarget('instructionUrls'); fileInputRef.current.click(); }}>📂 CHARGER ÉNONCÉ(S)</button><div className="v84-gallery">{activeLevel.instructionUrls.map((url, i) => (<div key={i} className="v84-thumb"><img src={getDisplayUrl(url)} onClick={() => setZoomImg(url)} /><button className="v84-thumb-del" onClick={() => updateLevel('instructionUrls', activeLevel.instructionUrls.filter((_, idx) => idx !== i))}>✕</button></div>))}</div></div>
-                <div className="v84-card v84-ai-card"><label className="v84-card-label">2. CORRECTION IA (Indices)</label><textarea className="v84-textarea v84-ai-textarea" value={activeLevel.aiHints} onChange={e => updateLevel('aiHints', e.target.value)} placeholder="Indices pour aider l'IA à corriger..." /></div>
-                <div className="v84-card"><label className="v84-card-label">3. DOCUMENTS SUPPORTS</label><button className="v84-upload-btn" onClick={() => { setUploadTarget('attachmentUrls'); fileInputRef.current.click(); }}>📂 CHARGER SUPPORTS</button><div className="v84-gallery">{activeLevel.attachmentUrls.map((url, i) => (<div key={i} className="v84-thumb"><img src={getDisplayUrl(url)} onClick={() => setZoomImg(url)} /><button className="v84-thumb-del" onClick={() => updateLevel('attachmentUrls', activeLevel.attachmentUrls.filter((_, idx) => idx !== i))}>✕</button></div>))}</div></div>
+                {/* 1. ÉNONCÉ */}
+                <div className="v84-card">
+                    <label className="v84-card-label">1. ÉNONCÉ & CONSIGNE</label>
+                    <textarea className="v84-textarea" value={activeLevel.instruction} onChange={e => updateLevel('instruction', e.target.value)} placeholder="Consigne textuelle..." />
+                    <button className="v84-upload-btn" onClick={() => { setUploadTarget('instructionUrls'); fileInputRef.current.click(); }}>📂 CHARGER ÉNONCÉ(S)</button>
+                    <div className="v84-gallery">{activeLevel.instructionUrls.map((url, i) => (<div key={i} className="v84-thumb"><img src={url} onClick={() => setZoomImg(url)} /><button className="v84-thumb-del" onClick={() => updateLevel('instructionUrls', activeLevel.instructionUrls.filter((_, idx) => idx !== i))}>✕</button></div>))}</div>
+                </div>
+                
+                {/* 2. CORRECTION IA (MULTIMODAL) */}
+                <div className="v84-card v84-ai-card">
+                    <div className="flex justify-between items-center mb-4">
+                        <label className="v84-card-label !mb-0">2. CORRECTION IA (Grille attendue)</label>
+                        <button 
+                            onClick={handleAutoGenerateGrid} 
+                            disabled={isGeneratingHints}
+                            className="bg-sky-600 hover:bg-sky-700 text-white px-4 py-2 rounded-xl font-black text-[9px] uppercase shadow-lg transition-all flex items-center gap-2"
+                        >
+                            <span>✨ GÉNÉRER GRILLE AUTO</span>
+                        </button>
+                    </div>
+                    <textarea 
+                        className="v84-textarea v84-ai-textarea" 
+                        value={activeLevel.aiHints} 
+                        onChange={e => updateLevel('aiHints', e.target.value)} 
+                        placeholder="Chargez vos documents au-dessus ou en-dessous, puis cliquez sur 'GÉNÉRER GRILLE AUTO'..." 
+                    />
+                </div>
+
+                {/* 3. SUPPORTS */}
+                <div className="v84-card">
+                    <label className="v84-card-label">3. DOCUMENTS SUPPORTS</label>
+                    <button className="v84-upload-btn" onClick={() => { setUploadTarget('attachmentUrls'); fileInputRef.current.click(); }}>📂 CHARGER SUPPORTS</button>
+                    <div className="v84-gallery">{activeLevel.attachmentUrls.map((url, i) => (<div key={i} className="v84-thumb"><img src={url} onClick={() => setZoomImg(url)} /><button className="v84-thumb-del" onClick={() => updateLevel('attachmentUrls', activeLevel.attachmentUrls.filter((_, idx) => idx !== i))}>✕</button></div>))}</div>
+                </div>
             </div>
 
             <div className="v84-sidebar-right" style={{width: '400px'}}>
                 <h4 className="v84-sidebar-label">DISTRIBUTION (Niveau {targetLevel || '?'})</h4>
-                
-                <button onClick={toggleAllLevel} className={`w-full py-3 mb-4 rounded-xl font-black text-xs uppercase transition-all ${isAllLevelSelected ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>
-                    {isAllLevelSelected ? '✕ TOUT DÉSACTIVER' : '✓ TOUT LE NIVEAU'}
-                </button>
-
-                <div className="mb-4 flex flex-wrap gap-2">
-                    {availableClasses.map(c => {
-                        const isPart = !!distribution[c.name];
-                        const isView = viewingClass === c.name;
-                        const isPartial = isPart && distribution[c.name].studentIds.length > 0;
-                        let bg = 'bg-slate-100 text-slate-400';
-                        if (isPart) bg = !distribution[c.name].chapterId ? 'bg-red-500 text-white animate-pulse' : (isPartial ? 'bg-pink-500 text-white' : 'bg-indigo-600 text-white');
-                        const border = isView ? 'border-2 border-slate-900 scale-105 shadow-md' : 'border border-transparent opacity-90';
-                        return <button key={c._id} onClick={() => handleClassTabClick(c.name)} className={`px-4 py-2 rounded-xl text-[11px] font-black transition-all ${bg} ${border}`}>{c.name}</button>;
-                    })}
-                </div>
-
-                {viewingClass ? (
+                <button onClick={toggleAllLevel} className={`w-full py-3 mb-4 rounded-xl font-black text-xs uppercase transition-all ${isAllLevelSelected ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>{isAllLevelSelected ? '✕ TOUT DÉSACTIVER' : '✓ TOUT LE NIVEAU'}</button>
+                <div className="mb-4 flex flex-wrap gap-2">{availableClasses.map(c => <button key={c._id} onClick={() => handleClassTabClick(c.name)} className={`px-4 py-2 rounded-xl text-[11px] font-black transition-all ${distribution[c.name] ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'} ${viewingClass === c.name ? 'border-2 border-slate-900 scale-105' : ''}`}>{c.name}</button>)}</div>
+                {viewingClass && (
                     <div className="flex-1 flex flex-col bg-slate-50 rounded-2xl overflow-hidden border border-slate-200 p-4">
-                        <div className="flex justify-between items-center mb-4">
-                            <span className="font-black text-slate-700 uppercase">Classe {viewingClass}</span>
-                            {isSelected && <span className={`text-[9px] px-2 py-1 rounded font-bold ${isFullClass ? 'bg-indigo-100 text-indigo-600' : 'bg-pink-100 text-pink-600'}`}>{isFullClass ? 'TOUTE LA CLASSE' : 'SÉLECTION PARTIELLE'}</span>}
-                        </div>
-
+                        <div className="flex justify-between items-center mb-4"><span className="font-black text-slate-700 uppercase">Classe {viewingClass}</span>{isSelected && <span className={`text-[9px] px-2 py-1 rounded font-bold ${isFullClass ? 'bg-indigo-100 text-indigo-600' : 'bg-pink-100 text-pink-600'}`}>{isFullClass ? 'TOUTE LA CLASSE' : 'SÉLECTION PARTIELLE'}</span>}</div>
                         {isSelected && (
-                            <div className="mb-4">
-                                <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Ranger dans :</label>
-                                <select className={`w-full p-2 rounded-xl text-xs font-bold border-2 outline-none ${!distribution[viewingClass].chapterId ? 'border-red-400 bg-red-50 text-red-600' : 'border-slate-200 focus:border-indigo-500'}`} value={distribution[viewingClass].chapterId} onChange={(e) => handleUpdateChapter(viewingClass, e.target.value)}>
-                                    <option value="">-- SÉLECTIONNER UN DOSSIER --</option>
-                                    {currentClassFolders.map(c => <option key={c._id} value={c._id}>{c.section ? `[${c.section}] ` : ''}{c.sharedLevel ? `[PARTAGÉ] ` : ''}{c.title}</option>)}
-                                </select>
-                            </div>
+                            <div className="mb-4"><label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Ranger dans :</label><select className="w-full p-2 rounded-xl text-xs font-bold border-2 outline-none border-slate-200" value={distribution[viewingClass].chapterId} onChange={(e) => { const n={...distribution}; n[viewingClass].chapterId=e.target.value; setDistribution(n); }}><option value="">-- SÉLECTIONNER UN DOSSIER --</option>{getChaptersForClass(viewingClass).map(c => <option key={c._id} value={c._id}>{c.title}</option>)}</select></div>
                         )}
-
-                        <div className="v84-students-list custom-scrollbar flex-1 border-t border-slate-200 pt-2">
-                            <div className={`v84-student-row ${isFullClass ? 'selected' : ''}`} onClick={toggleFullClass}><div className="v84-check"></div><span className="font-black">TOUTE LA CLASSE</span></div>
-                            {studentsInView.map(s => {
-                                const isChecked = isSelected && (isFullClass || distribution[viewingClass].studentIds.includes(s._id));
-                                return <div key={s._id} className={`v84-student-row ${isChecked ? 'selected' : ''}`} onClick={() => handleToggleStudent(s._id)}><div className="v84-check"></div><span>{s.lastName} {s.firstName}</span></div>;
-                            })}
-                        </div>
+                        <div className="v84-students-list custom-scrollbar flex-1 border-t border-slate-200 pt-2"><div className={`v84-student-row ${isFullClass ? 'selected' : ''}`} onClick={toggleFullClass}><div className="v84-check"></div><span className="font-black">TOUTE LA CLASSE</span></div>{allStudents.filter(s => (s.currentClass || "").trim().toUpperCase() === viewingClass.trim().toUpperCase()).sort((a,b)=>a.lastName.localeCompare(b.lastName)).map(s => <div key={s._id} className={`v84-student-row ${distribution[viewingClass]?.studentIds.includes(s._id) ? 'selected' : ''}`} onClick={() => handleToggleStudent(s._id)}><div className="v84-check"></div><span>{s.lastName} {s.firstName}</span></div>)}</div>
                     </div>
-                ) : <div className="flex-1 flex items-center justify-center text-slate-300 font-black italic">SÉLECTIONNEZ UNE CLASSE CI-DESSUS</div>}
-                
+                )}
                 <button className="v84-publish-btn" onClick={handleSave} disabled={isPublishing}>PUBLIER 🚀</button>
             </div>
         </div>
@@ -7910,13 +7882,57 @@ module.exports = HomeworkDB;
 
 [[[£ FILE: server/domains/homework/experts/homework.ai.js £]]]
 const AIEngine = require('../../../core/ai.engine');
+const fs = require('fs');
+const path = require('path');
 
+/**
+ * 🧠 EXPERT IA DEVOIRS - VERSION 219 (MULTIMODAL)
+ */
 const HomeworkAI = {
+    // Analyse classique d'une réponse texte
     analyze: async (userText, instruction, aiHints) => {
         const system = "Tu es un professeur correcteur. Analyse la réponse de l'élève par rapport à la consigne.";
         const prompt = `Consigne: ${instruction}. Aide IA: ${aiHints}. Réponse élève: "${userText}". Réponds en JSON: { "grade": "A/B/C", "feedback_fond": "...", "mistakes": [] }`;
         const res = await AIEngine.ask(prompt, system);
         return AIEngine.sanitizeJSON(res);
+    },
+
+    /**
+     * 📸 GÉNÉRATION DE GRILLE DE CORRECTION (MULTIMODAL)
+     * Lit les fichiers images sur le disque et les envoie à Gemini.
+     */
+    generateHintsFromAssets: async (instruction, imageUrls) => {
+        console.log("🧠 [AI-HINTS] Analyse multimodal des documents...");
+        
+        const system = "Tu es un expert pédagogique. Ta mission est de rédiger une GRILLE DE CORRECTION précise (points clés, dates, chiffres attendus) basée sur les documents fournis pour que l'IA puisse corriger l'élève plus tard.";
+        
+        const promptParts = [
+            { text: `CONSIGNE DU PROFESSEUR : ${instruction || "Non précisée"}\n\nMISSION : Analyse les images jointes et rédige une grille de correction structurée (points de vigilance, éléments de réponse) pour l'IA.` }
+        ];
+
+        // Intégration des images dans le prompt
+        imageUrls.forEach(url => {
+            const fileName = url.split('/').pop();
+            const filePath = path.join(process.cwd(), 'public', 'uploads', fileName);
+            
+            if (fs.existsSync(filePath)) {
+                const buffer = fs.readFileSync(filePath);
+                promptParts.push({
+                    inlineData: {
+                        mimeType: "image/png",
+                        data: buffer.toString('base64')
+                    }
+                });
+            }
+        });
+
+        try {
+            const response = await AIEngine.ask(promptParts, system);
+            return response; // Texte brut pour le textarea
+        } catch (e) {
+            console.error("❌ [AI-HINTS] Erreur:", e.message);
+            throw new Error("L'IA n'a pas pu analyser les images.");
+        }
     }
 };
 
@@ -7980,16 +7996,21 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const path = require('path');
 const fs = require('fs');
-const DriveEngine = require('../../core/drive.engine');
-const StructureDrive = require('../structure/experts/structure.drive');
-const HomeworkDB = require('./experts/homework.db'); // Import de l'expert
+const HomeworkDB = require('./experts/homework.db');
+const HomeworkAI = require('./experts/homework.ai');
 
 const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
-// --- ROUTES EXISTANTES ---
+// --- 🤖 NOUVELLE ROUTE : GÉNÉRER GRILLE DE CORRECTION ---
+router.post('/generate-hints', asyncHandler(async (req, res) => {
+    const { instruction, assets } = req.body;
+    if (!assets || assets.length === 0) return res.status(400).json({ error: "Aucun document chargé." });
+    
+    const hints = await HomeworkAI.generateHintsFromAssets(instruction, assets);
+    res.json({ hints });
+}));
+
 router.post('/', asyncHandler(async (req, res) => {
-    // ... (Code upload inchangé, voir version précédente pour gain de place) ...
-    // Je remets le code court pour la snippet, le serveur ne change pas cette partie
     const Homework = mongoose.model('Homework');
     const data = req.body;
     let result;
@@ -8003,21 +8024,16 @@ router.get('/all', asyncHandler(async (req, res) => {
 }));
 
 router.get('/submissions', asyncHandler(async (req, res) => {
-    // On renvoie l'ID de la soumission (_id) pour pouvoir cliquer dessus
     const subs = await mongoose.model('Submission').find({}, 'studentId homeworkId grade createdAt').lean();
     res.json(subs);
 }));
 
-// --- NOUVEAU V210 : GESTION DES CORRECTIONS ---
-
-// 1. Lire le détail d'une copie (Texte + Feedback)
 router.get('/submission/:id', asyncHandler(async (req, res) => {
     const sub = await HomeworkDB.getSubmissionDetails(req.params.id);
     if (!sub) return res.status(404).json({ error: "Copie introuvable" });
     res.json(sub);
 }));
 
-// 2. Mettre à jour une copie (Note, Feedback, Texte)
 router.put('/submission/:id', asyncHandler(async (req, res) => {
     const updated = await HomeworkDB.updateSubmission(req.params.id, req.body);
     res.json(updated);
@@ -8035,7 +8051,7 @@ router.post('/upload', upload.array('files'), (req, res) => {
     res.json({ urls });
 });
 
-router.post('/analyze-homework', (req, res) => HomeworkDB.processSubmission(req.body, require('./experts/homework.ai')).then(r => res.json(r)));
+router.post('/analyze-homework', (req, res) => HomeworkDB.processSubmission(req.body, HomeworkAI).then(r => res.json(r)));
 
 module.exports = router;
 [[[£ END: server/domains/homework/homework.routes.js £]]]

@@ -3,10 +3,13 @@ const mongoose = require('mongoose');
 const HomeworkSchema = new mongoose.Schema({
     title: { type: String, required: true },
     
+    // NOUVEAU : Mode Punition
+    isPunishment: { type: Boolean, default: false },
+
     // Ancien champ (gardé pour compatibilité)
     classroom: String,
     
-    // NOUVEAU : Liste des classes ciblées (ex: ["4A", "4B"])
+    // Liste des classes ciblées
     targetClassrooms: [String], 
 
     chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter', required: true },
@@ -19,10 +22,10 @@ const HomeworkSchema = new mongoose.Schema({
         attachmentUrls: [String]
     }],
 
-    // Élèves spécifiques (ex: PPRE, Soutien)
+    // Élèves assignés (pour les punitions, c'est ici qu'ils atterrissent dynamiquement)
     assignedStudents: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Student' }],
     
-    // Si true, c'est pour toute(s) la/les classe(s) ciblée(s)
+    // Si true, c'est pour toute(s) la/les classe(s) ciblée(s) (SAUF SI PUNITION)
     isAllClass: { type: Boolean, default: true },
     
     date: { type: Date, default: Date.now }

@@ -5,8 +5,6 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
   const isJean = user.firstName === 'Jean' && user.lastName === 'Vuillet';
 
   // --- LOGIQUE STATS ---
-  // On récupère le dernier enregistrement actif (celui avec des croix ou des bonus)
-  // Ou par défaut un objet vide.
   const record = (user.behaviorRecords && user.behaviorRecords.length > 0) 
       ? user.behaviorRecords[user.behaviorRecords.length - 1] 
       : { crosses: 0, bonuses: 0, weeksToRedemption: 3 };
@@ -18,12 +16,47 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
   const currentBonuses = totalBonuses % 4; // 0, 1, 2, 3
   const nextAPlus = 4 - currentBonuses;
 
-  // Génération des visuels (X et V)
-  const crossVisual = "❌".repeat(crosses) + ".".repeat(3 - crosses); // Ex: ❌❌.
-  const bonusVisual = "🌟".repeat(currentBonuses) + ".".repeat(4 - currentBonuses); // Ex: 🌟🌟..
+  const crossVisual = "❌".repeat(crosses) + ".".repeat(3 - crosses);
+  const bonusVisual = "🌟".repeat(currentBonuses) + ".".repeat(4 - currentBonuses);
+
+  // --- LOGIQUE PUNITION (COMPTE À REBOURS) ---
+  let punishmentAlert = null;
+  
+  if (user.punishmentStatus === 'PENDING' || user.punishmentStatus === 'LATE') {
+      const dueDate = user.punishmentDueDate ? new Date(user.punishmentDueDate) : new Date();
+      const now = new Date();
+      
+      // Calcul différence en jours (arrondi supérieur)
+      const diffTime = dueDate - now;
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      const isLate = diffDays < 0 || user.punishmentStatus === 'LATE';
+
+      punishmentAlert = (
+          <div className={`punishment-alert ${isLate ? 'late' : ''}`}>
+              <span className="text-2xl">{isLate ? '🚨' : '⚖️'}</span>
+              <div className="flex flex-col">
+                  <span>{isLate ? "PUNITION EN RETARD !" : "PUNITION EN COURS"}</span>
+                  <span className="text-[10px] opacity-80 uppercase font-bold">
+                      {isLate ? "Rendez votre travail immédiatement." : "Travail à rendre dans la section Devoirs."}
+                  </span>
+              </div>
+              {!isLate && (
+                  <div className="flex items-center gap-2 ml-4">
+                      <span className="text-xs font-bold opacity-60">IL RESTE</span>
+                      <span className="punishment-days">{diffDays}j</span>
+                  </div>
+              )}
+          </div>
+      );
+  }
 
   return (
     <div className="header-wrapper">
+      
+      {/* BANDEAU PUNITION SI ACTIF */}
+      {punishmentAlert}
+
       {/* 1. TOP BAR (Identité) */}
       <div className="top-bar">
         <div className="flex items-center gap-4">

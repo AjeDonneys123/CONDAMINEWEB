@@ -9,7 +9,7 @@ const BehaviorRecordSchema = new mongoose.Schema({
     weeksToRedemption: { type: Number, default: 3 }
 }, { _id: false });
 
-// Schéma pour les notes prof (séparé pour éviter les conflits)
+// Schéma pour les notes prof
 const NoteSchema = new mongoose.Schema({
     teacherId: { type: String, required: true },
     text: { type: String, default: "" }
@@ -35,9 +35,14 @@ const StudentSchema = new mongoose.Schema({
     seatX: { type: Number, default: 0 }, 
     seatY: { type: Number, default: 0 }, 
     
-    // Vie scolaire (Tableaux de sous-documents)
+    // Vie scolaire
     behaviorRecords: { type: [BehaviorRecordSchema], default: [] },
     teacherNotes: { type: [NoteSchema], default: [] },
+
+    // --- SYSTÈME PUNITIONS V3 ---
+    punishmentStatus: { type: String, enum: ['NONE', 'PENDING', 'LATE'], default: 'NONE' },
+    punishmentDueDate: { type: Date }, // Date limite pour rendre la punition
+    totalPunishments: { type: Number, default: 0 }, // Historique compteur
 
     // Système
     isTestAccount: { type: Boolean, default: false },

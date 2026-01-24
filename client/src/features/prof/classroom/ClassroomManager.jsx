@@ -2,10 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import './ClassroomManager.css';
 
 /**
- * 🎓 GESTION DE CLASSE V10 - NOUVELLE INTERFACE ACTIONS
- * - Réorganisation du tiroir d'attribution (2 colonnes).
- * - Suppression sous l'ajout.
- * - Support du mode déplacement manuel.
+ * 🎓 GESTION DE CLASSE V220 - BADGE PUNITION "P"
+ * Ajout du badge visuel P (Rose/Rouge) sur la carte élève.
  */
 export default function ClassroomManager({ globalClassId, user }) {
     const [students, setStudents] = useState([]);
@@ -83,6 +81,14 @@ export default function ClassroomManager({ globalClassId, user }) {
                             <div className={`student-card-drag ${draggingId === student._id ? 'dragging' : ''} ${getMyStats(student).crosses >= 3 ? 'punished' : ''}`} draggable="true" onDragStart={(e) => handleDragStart(e, student._id)} onClick={(e) => { e.stopPropagation(); handleOpenStudent(student); }}>
                                 {getMyStats(student).crosses > 0 && <div className="sc-badge">⏳ {getMyStats(student).weeksToRedemption}</div>}
                                 {student.myNote && <div className="sc-note-badge">N</div>}
+                                
+                                {/* BADGE PUNITION "P" */}
+                                {student.punishmentStatus && student.punishmentStatus !== 'NONE' && (
+                                    <div className={`sc-punishment-badge ${student.punishmentStatus === 'LATE' ? 'late' : 'pending'}`}>
+                                        P
+                                    </div>
+                                )}
+
                                 <div className="sc-indicators">
                                     {(student.indicators || []).map((ind, i) => (
                                         <div key={i} className={`indicator-dot indicator-${ind.type}-${ind.status}`} title={`${ind.type} : ${ind.status}`}></div>
@@ -134,20 +140,11 @@ export default function ClassroomManager({ globalClassId, user }) {
                     <>
                         <div className="drawer-header"><span className="drawer-name">{selectedStudent.firstName} {selectedStudent.lastName}</span><button className="drawer-close" onClick={() => setSelectedStudent(null)}>✕</button></div>
                         <div className="drawer-grid-complex">
-                            {/* COLONNE 1 : CROIX */}
                             <button className="act-btn btn-cross" onClick={() => addBehavior('CROSS')}>❌ AJOUTER CROIX</button>
-                            {/* COLONNE 2 : BONUS */}
                             <button className="act-btn btn-bonus" onClick={() => addBehavior('BONUS')}>⭐ AJOUTER BONUS</button>
-                            
-                            {/* LIGNE 2 COL 1 : REMOVE CROIX */}
                             <button className="act-btn btn-rem-cross" onClick={() => addBehavior('REMOVE_CROSS')}>RETIRER CROIX</button>
-                            {/* LIGNE 2 COL 2 : REMOVE BONUS */}
                             <button className="act-btn btn-rem-bonus" onClick={() => addBehavior('REMOVE_BONUS')}>RETIRER BONUS</button>
-                            
-                            {/* LIGNE 3 : NOTES (Full Width) */}
                             <button className="act-btn btn-note" onClick={() => setShowNoteInput(!showNoteInput)}>📝 NOTES PERSONNELLES {showNoteInput ? '▲' : '▼'}</button>
-                            
-                            {/* LIGNE 4 : DÉPLACER (Full Width) */}
                             <button className="act-btn btn-move-full" onClick={() => { setSwapSource(selectedStudent); setSelectedStudent(null); }}>🔄 DÉMARRER DÉPLACEMENT</button>
                         </div>
                         {showNoteInput && (

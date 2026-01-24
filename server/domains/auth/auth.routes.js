@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const mongoose = require('mongoose'); // Nécessaire pour la nouvelle route
+const mongoose = require('mongoose'); 
 const AuthExpert = require('./experts/auth.expert');
 
 // 1. Configuration (Liste des classes pour le menu déroulant)
@@ -38,11 +38,12 @@ router.post('/login', async (req, res) => {
     } catch (e) { res.status(500).json({ error: "Erreur technique login" }); }
 });
 
-// 5. NOUVEAU : Récupération fraîche des données élève (pour le compteur de croix)
+// 5. UPDATE V3 : Récupération fraîche incluant le statut de punition
 router.get('/student-fresh/:id', async (req, res) => {
     try {
         if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(400).json({error: "ID Invalide"});
-        const student = await mongoose.model('Student').findById(req.params.id, 'behaviorRecords firstName lastName');
+        // AJOUT DES CHAMPS PUNITIONS DANS LA REQUÊTE
+        const student = await mongoose.model('Student').findById(req.params.id, 'behaviorRecords firstName lastName punishmentStatus punishmentDueDate');
         res.json(student);
     } catch (e) { res.status(500).json({ error: "Erreur fetch student" }); }
 });

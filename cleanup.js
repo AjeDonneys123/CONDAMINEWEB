@@ -1,53 +1,32 @@
 const fs = require('fs');
 const path = require('path');
 
-const FILES_TO_DELETE = [
-    // Fichiers de test / Junk
-    'client/src/test_ok.txt',
-    'client/src/test_token_crash.js',
-    'client/src/test_token_valid.txt',
-    'verificatons.txt',
-    
-    // Ancienne feature "Project Tree" (Architecte V1) obsolète
-    'client/src/features/prof/components/ProjectTreeViewer.jsx',
-    'client/src/features/prof/components/ProjectTreeViewer.css',
-    'server/models/ProjectDoc.js',
-    'server/domains/admin/ai/project-doc.ai.js'
-];
-
 const DIRS_TO_CLEAN = [
-    '.',
-    'client/src/features/prof/components'
+    'public/uploads',
+    'public/uploads/temp'
 ];
 
-console.log("🧹 NETTOYAGE DU PROJET...");
+console.log("🧹 NETTOYAGE DES FICHIERS TEMPORAIRES...");
 
-FILES_TO_DELETE.forEach(file => {
-    const fullPath = path.join(__dirname, file);
+function cleanDir(directory) {
+    const fullPath = path.join(__dirname, directory);
     if (fs.existsSync(fullPath)) {
-        try {
-            fs.unlinkSync(fullPath);
-            console.log(`✅ Supprimé : ${file}`);
-        } catch (e) {
-            console.error(`❌ Erreur suppression ${file}:`, e.message);
+        const files = fs.readdirSync(fullPath);
+        for (const file of files) {
+            if (file === '.gitkeep') continue;
+            try {
+                fs.unlinkSync(path.join(fullPath, file));
+                console.log(`   🗑️ Supprimé : ${file}`);
+            } catch (e) {
+                console.error(`   ❌ Erreur suppression ${file}`);
+            }
         }
-    }
-});
-
-// Nettoyage des dossiers vides
-function cleanEmptyDirs(dir) {
-    if (!fs.existsSync(dir)) return;
-    const items = fs.readdirSync(dir);
-    items.forEach(item => {
-        const fullPath = path.join(dir, item);
-        if (fs.statSync(fullPath).isDirectory() && item !== 'node_modules' && item !== '.git') {
-            cleanEmptyDirs(fullPath);
-        }
-    });
-    if (dir !== '.' && fs.readdirSync(dir).length === 0) {
-        try { fs.rmdirSync(dir); } catch (e) {}
+    } else {
+        // Création si inexistant pour éviter crash
+        fs.mkdirSync(fullPath, { recursive: true });
     }
 }
 
-cleanEmptyDirs('.');
-console.log("✨ PROJET PROPRE.");
+DIRS_TO_CLEAN.forEach(dir => cleanDir(dir));
+
+console.log("✨ DOSSIER UPLOADS VIDÉ (Fichiers inutiles supprimés).");
