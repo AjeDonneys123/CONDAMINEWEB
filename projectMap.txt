@@ -136,11 +136,20 @@
 │       ├── 07b4ded2280d7ad22dc0daa2c90f4107
 │       ├── 179b96e657c91102b91b1031e6903d7a
 │       ├── 187f36a3832211a9ac5609451dbcc07e
+│       ├── 1f8bb989dcddf547b87d29823748eaec
+│       ├── 25ae4a24457eb6085b6acfac3a088927
 │       ├── 262f72cd65ccb7a5e9683572acb3e77e
+│       ├── 3314c59868ed0fdaf43713663e092ee2
+│       ├── 39e59123b81f986d90689b3d9ba307a6
 │       ├── 3fa4df6f9df4d3adf97df942093c70b2
 │       ├── 46b781ca6b50d61e08289ac3528b2a37
+│       ├── 5362fd2b26409028107cb2bf0b6e183f
+│       ├── 7318f9d346d09a948e2b1091362844ba
 │       ├── 78441ed55f78839508d6cbe6140901fb
+│       ├── 7917645a7cb6159d05cd1d60493ecd3a
+│       ├── 7d343cb08b23bb58b187ff750d791b97
 │       ├── 7e7b5a674ea0ef272a0095b11ecb3521
+│       ├── 87b083483c4ab06d99b78c3688e349e0
 │       ├── 8dfabdc4f70fe54049c0fa14e2fad9c3
 │       ├── 8fc74b97cbb3f971d37f15e01f7f4ef6
 │       ├── 92641164cb332ab43552b5de9e8c4af1
@@ -148,6 +157,7 @@
 │       ├── 9e02a1e0c5937d5dc9b5b3bf41d67128
 │       ├── 9ea4d0bf219b361d2bf2929996c4f304
 │       ├── a4f70d13fdfc2a1b44c5f77c5a78c044
+│       ├── a8bca3310ba3a8072b5a54e8d2f2c83d
 │       ├── ai-1769124390020.jpg
 │       ├── ai-1769124788771.jpg
 │       ├── ai-1769124836695.jpg
@@ -155,15 +165,31 @@
 │       ├── ai-1769125037098.jpg
 │       ├── ai-1769125110210.jpg
 │       ├── b4cff4272b9a06cccc9d9ec9e7097354
+│       ├── b50cd7e78c26e7316e45656c98743e75
+│       ├── b705e0b2fe6c124755c5c7b6d999975e
 │       ├── b8ac0517684936d20dc47eb7d4c722d7
 │       ├── ba2ecae20864307e22d433eaaa4e35b5
 │       ├── bc199f06f744958b60903b2790bc0d50
+│       ├── bca5f21524fde8c5583641c838b4ecc6
 │       ├── c536b44022497153eb3030b1271fca17
+│       ├── c781c10d33c99b504c143c0420572726
+│       ├── c94f62c0b4c3b419fd30c32bdc4b567e
+│       ├── cd6a47b1a3833f4f51f5aa3919557f98
+│       ├── cfff13574e6c6cb4f8e6bc9cd65ef85b
 │       ├── d0a87000b759379834f99b8c9a4df6c9
 │       ├── d1e99c4392a90046d1deeacea6cf25a1
+│       ├── d22151e5aa0ef7543e24fa79004161a3
+│       ├── deabfabd437271b22d6bd1b206e255a5
+│       ├── dffe2204bd1c8e6b5e20afa76e551b59
+│       ├── e7c2d8d1268ccea15c1920e5554ded5e
+│       ├── ef71d5f09f26309ba5b7cc48f06616df
 │       ├── f091edfce30ee30223bb59ea7c6f0dfa
+│       ├── f632acc0575231c503e392ad9d3193e2
+│       ├── fa8d7a7fac887bd021a688bfb9f9408c
+│       ├── fb06a55d64aad030b305716b76cc31f5
 │       ├── fb305669f9570391964e533741582fff
 │       ├── fbcaf74c48169980d99220f61a4e0825
+│       ├── ff932e78b518c269162589592cbbc99f
 │       ├── hw-1768842185845-Capture dâeÌcran 2026-01-03 aÌ 18.02.42.png
 │       ├── hw-1768842199185-Capture dâeÌcran 2026-01-03 aÌ 18.02.35.png
 │       ├── hw-1768842332574-Capture_d___e__cran_2026_01_03_a___18.02.35.png
@@ -311,6 +337,10 @@
 │   │   │   │   ├── homework.ai.js
 │   │   │   │   └── homework.db.js
 │   │   │   └── homework.routes.js
+│   │   ├── scans/
+│   │   │   ├── ai/
+│   │   │   │   └── scan.ai.js
+│   │   │   └── scans.routes.js
 │   │   ├── structure/
 │   │   │   ├── db/
 │   │   │   │   └── structure.db.js

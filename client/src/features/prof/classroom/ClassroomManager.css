@@ -52,22 +52,74 @@
 .student-card-drag:active { cursor: grabbing; transform: scale(1.05); z-index: 10; }
 .student-card-drag.punished { border-color: #ef4444; background: #fef2f2; }
 
-/* INDICATORS PC */
-.sc-indicators { position: absolute; left: 4px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 3px; z-index: 50; pointer-events: none; }
+/* --- INDICATORS POSITIONING --- */
+
+/* 1. PASTILLES GAUCHE (Devoirs/Jeux) : Empilement haut -> bas */
+.sc-indicators { 
+    position: absolute; 
+    left: 4px; 
+    top: 4px; /* Ancré en haut */
+    bottom: auto;
+    transform: none; /* Pas de centrage vertical */
+    display: flex; 
+    flex-direction: column; /* Empilement vertical */
+    gap: 3px; 
+    z-index: 50; 
+    pointer-events: none; 
+}
 .indicator-dot { width: 10px; height: 10px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.3); transition: transform 0.2s; }
 .indicator-homework-done { background: #22c55e; } .indicator-homework-todo { background: #ef4444; } .indicator-game-done { background: #9333ea; } .indicator-game-failed { background: #3b82f6; } .indicator-game-todo { background: #f472b6; }
-.sc-badge { position: absolute; top: -5px; right: -5px; background: #1e293b; color: #fbbf24; font-size: 0.55rem; font-weight: 950; padding: 2px 6px; border-radius: 8px; border: 2px solid white; z-index: 6; }
-.sc-note-badge { position: absolute; top: -5px; left: -5px; background: #dc2626; color: white; font-size: 0.55rem; font-weight: 900; width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid white; z-index: 6; }
-.sc-punishment-badge { position: absolute; bottom: 2px; right: 2px; width: 16px; height: 16px; border-radius: 50%; color: white; font-weight: 900; font-size: 0.6rem; display: flex; align-items: center; justify-content: center; border: 1px solid white; z-index: 20; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+
+/* 2. SABLIER (Haut Droite) */
+.sc-badge { 
+    position: absolute; 
+    top: 4px; /* Descendu un peu */
+    right: 4px; /* Bien à l'intérieur */
+    background: #1e293b; color: #fbbf24; 
+    font-size: 0.55rem; font-weight: 950; 
+    padding: 2px 6px; border-radius: 8px; 
+    border: 2px solid white; z-index: 6; 
+}
+
+/* 3. NOTE 'N' (Milieu Droite) */
+.sc-note-badge { 
+    position: absolute; 
+    top: 40%; /* Un peu plus haut que le milieu pour laisser place au P */
+    right: 4px; /* Poussé vers la gauche pour être aligné */
+    transform: translateY(-50%);
+    background: #dc2626; color: white; 
+    font-size: 0.55rem; font-weight: 900; 
+    width: 18px; height: 18px; 
+    border-radius: 50%; 
+    display: flex; align-items: center; justify-content: center; 
+    border: 2px solid white; 
+    z-index: 25; 
+}
+
+/* 4. PUNITION 'P' (Bas Droite) */
+.sc-punishment-badge { 
+    position: absolute; 
+    bottom: 4px; 
+    right: 4px; 
+    width: 16px; height: 16px; 
+    border-radius: 50%; 
+    color: white; font-weight: 900; font-size: 0.6rem; 
+    display: flex; align-items: center; justify-content: center; 
+    border: 1px solid white; 
+    z-index: 20; 
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2); 
+}
 .sc-punishment-badge.pending { background: #f472b6; animation: pulse-pink 2s infinite; }
 .sc-punishment-badge.late { background: #dc2626; animation: pulse-red 1s infinite; }
+
 .sc-avatar { font-size: 1.4rem; margin-bottom: 2px; }
 .sc-name { font-size: 0.65rem; font-weight: 800; color: #334155; text-align: center; line-height: 1.1; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sc-counters { display: flex; gap: 4px; margin-top: 2px; font-size: 0.6rem; font-weight: 900; }
+
 @keyframes pulse-pink { 0% { box-shadow: 0 0 0 0 rgba(244, 114, 182, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(244, 114, 182, 0); } 100% { box-shadow: 0 0 0 0 rgba(244, 114, 182, 0); } }
 @keyframes pulse-red { 0% { transform: scale(1); } 50% { transform: scale(1.2); } 100% { transform: scale(1); } }
 
-/* --- VERSION MOBILE (OPTIMISATION TOTALE) --- */
+/* --- VERSION MOBILE --- */
 @media (max-width: 768px) {
     .classroom-wrapper {
         padding: 0 !important;
@@ -84,22 +136,20 @@
     .cm-title, .cm-toolbar { display: none; }
     .view-switcher { margin: 0; width: 100%; }
 
-    /* CONTENEUR GRILLE : PLEINE LARGEUR SANS PADDING */
+    /* CONTENEUR GRILLE : PLEINE LARGEUR */
     .grid-container {
         padding: 0 !important;
         margin: 0 !important;
         background: #e2e8f0;
-        width: 100% !important; /* Force le 100% du parent */
-        align-items: stretch; /* Étire le contenu */
+        width: 100% !important;
+        align-items: stretch;
     }
 
     /* GRILLE : DIVISION MATHÉMATIQUE PARFAITE */
     .grid-header-row, .interactive-grid {
         gap: 0px;
         padding: 0;
-        width: 100% !important; /* Prend toute la largeur dispo */
-        
-        /* C'EST ICI QUE LA MAGIE OPÈRE : Division égale selon le nombre de cols */
+        width: 100% !important;
         grid-template-columns: repeat(var(--grid-cols, 6), 1fr) !important;
     }
     
@@ -107,15 +157,14 @@
         background: transparent;
         box-shadow: none;
         margin-bottom: 60px;
-        /* Hauteur automatique pour remplir */
         grid-template-rows: auto !important; 
     }
 
-    /* CELLULE : CARRÉ PARFAIT */
+    /* CELLULE : PLUS HAUTE (Ratio 0.7) */
     .grid-cell-wrapper {
-        width: 100% !important; /* Prend la place du 1fr */
+        width: 100% !important;
         height: auto !important;
-        aspect-ratio: 1 / 1; /* Force le carré */
+        aspect-ratio: 0.7; 
         min-width: 0; min-height: 0;
         border-bottom: 1px solid #cbd5e1;
         border-right: 1px solid #cbd5e1;
@@ -125,16 +174,16 @@
         border-right: 2px solid #1e293b; padding: 0; margin: 0;
     }
 
-    /* CONTENU CARTE : INVERSION HIÉRARCHIE */
+    /* CONTENU CARTE MOBILE */
     .student-card-drag {
-        padding: 0;
+        padding: 4px 2px;
         border-radius: 0;
         border: none;
-        justify-content: center;
-        gap: 2px;
+        justify-content: space-evenly;
+        gap: 0px;
     }
     
-    /* AVATAR DÉCORATIF (PETIT) */
+    /* AVATAR */
     .sc-avatar { 
         font-size: 0.7rem; 
         margin: 0; 
@@ -142,23 +191,54 @@
         line-height: 1;
     }
     
-    /* NOM ROI (GROS) */
+    /* NOM */
     .sc-name { 
-        font-size: 0.65rem; /* Plus lisible */
+        font-size: 0.6rem; 
         font-weight: 950;
         margin: 0; 
         max-width: 100%;
-        line-height: 0.9;
+        line-height: 1;
         white-space: normal;
         color: #0f172a;
-        overflow: visible; /* Laisse le nom s'étaler si besoin */
+        overflow: visible;
     }
     
-    .sc-counters { display: none; }
+    /* COMPTEURS (Croix/Bonus) */
+    .sc-counters { 
+        display: flex !important;
+        font-size: 0.55rem;
+        gap: 2px;
+        margin-top: 1px;
+    }
+    
+    /* PASTILLES GAUCHE (Plus petites sur mobile) */
     .indicator-dot { width: 4px; height: 4px; border-width: 0; }
-    .sc-indicators { gap: 1px; left: 1px; top: 2px; transform: none; }
-    .sc-badge { display: none; } 
-    .sc-punishment-badge { width: 8px; height: 8px; font-size: 0; top: 2px; right: 2px; bottom: auto; }
+    .sc-indicators { gap: 2px; left: 2px; top: 4px; transform: none; }
+    
+    /* BADGES DROITE (Ajustés pour mobile) */
+    
+    .sc-badge { /* Sablier */
+        display: block !important; 
+        padding: 1px 3px; 
+        font-size: 0.45rem; 
+        top: 2px; right: 2px; 
+        border-width: 1px; 
+    }
+    
+    .sc-note-badge { /* Note */
+        width: 12px; height: 12px; 
+        font-size: 0.45rem; 
+        top: 40%;
+        right: 2px; 
+        border-width: 1px; 
+    }
+    
+    .sc-punishment-badge { /* Punition */
+        width: 10px; height: 10px; 
+        font-size: 0; 
+        bottom: 2px; right: 2px; 
+        border-width: 1px; 
+    }
 }
 
 /* LISTES ET DRAWER (Inchangés) */
