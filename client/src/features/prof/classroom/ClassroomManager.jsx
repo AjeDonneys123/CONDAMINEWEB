@@ -19,6 +19,8 @@ export default function ClassroomManager({ globalClassId, user }) {
     const [draggingId, setDraggingId] = useState(null);
     const [dragOverCell, setDragOverCell] = useState(null);
     const fileInputRef = useRef(null);
+    
+    // SÉCURITÉ ID PROF
     const myId = user ? (user._id || user.id) : null;
 
     const loadData = async () => {
@@ -58,26 +60,52 @@ export default function ClassroomManager({ globalClassId, user }) {
     const handleFileSelect = async (e) => { const file = e.target.files[0]; if (!file) return; if(!confirm(`📸 Analyser ${file.name} ?`)) return; setIaLoading(true); const formData = new FormData(); formData.append('file', file); formData.append('classId', globalClassId); try { await fetch('/api/classroom/import-plan', { method: 'POST', body: formData }); await loadData(); } catch(e) { alert("Erreur IA"); } setIaLoading(false); e.target.value = null; };
     const getMyStats = (stu) => { if (!stu.behaviorRecords) return { crosses: 0, bonuses: 0, weeksToRedemption: 3 }; return stu.behaviorRecords.find(r => r.teacherId === myId) || { crosses: 0, bonuses: 0, weeksToRedemption: 3 }; };
     const handleOpenStudent = (stu) => { if (swapSource) { moveStudentTo(swapSource._id, stu.seatX, stu.seatY); setSwapSource(null); return; } setSelectedStudent(stu); setCurrentNote(stu.myNote || ""); setShowNoteInput(false); };
+    
+    // --- ACTIONS RAPIDES CORRIGÉES ---
     const addBehavior = async (sid, type, extra = null) => { 
-        if (!myId) return; 
+        if (!myId) return alert("Erreur: ID Professeur introuvable. Rechargez la page.");
+
+        // 1. MISE À JOUR OPTIMISTE (Pour que ça réagisse tout de suite à l'écran)
+        setStudents(prev => prev.map(s => {
+            if (s._id !== sid) return s;
+            const newS = { ...s, behaviorRecords: [...(s.behaviorRecords || [])] };
+            
+            // Trouver ou créer le record pour CE prof
+            let rIdx = newS.behaviorRecords.findIndex(r => r.teacherId === myId);
+            if(rIdx === -1) {
+                newS.behaviorRecords.push({ teacherId: myId, crosses: 0, bonuses: 0, weeksToRedemption: 3 });
+                rIdx = newS.behaviorRecords.length - 1;
+            }
+            
+            const r = { ...newS.behaviorRecords[rIdx] }; // Copie pour muter sans risque
+            if (type === 'CROSS') r.crosses++;
+            if (type === 'BONUS') r.bonuses++;
+            if (type === 'REMOVE_CROSS') r.crosses = Math.max(0, r.crosses - 1);
+            if (type === 'REMOVE_BONUS') r.bonuses = Math.max(0, r.bonuses - 1);
+            
+            newS.behaviorRecords[rIdx] = r;
+            return newS;
+        }));
+
+        // 2. APPEL SERVEUR + RECHARGEMENT (Pour valider les punitions 3 croix)
         try {
-            await fetch('/api/classroom/behavior', { 
+            const res = await fetch('/api/classroom/behavior', { 
                 method: 'POST', 
                 headers: {'Content-Type':'application/json'}, 
                 body: JSON.stringify({ studentId: sid, type, teacherId: myId, extraData: extra }) 
             });
-            setStudents(prev => prev.map(s => {
-                if (s._id !== sid) return s;
-                const newS = JSON.parse(JSON.stringify(s));
-                if(!newS.behaviorRecords) newS.behaviorRecords = [];
-                let r = newS.behaviorRecords.find(x => x.teacherId === myId);
-                if(!r) { r = { teacherId: myId, crosses: 0, bonuses: 0 }; newS.behaviorRecords.push(r); }
-                if (type === 'CROSS') r.crosses++; if (type === 'BONUS') r.bonuses++; if (type === 'REMOVE_CROSS') r.crosses = Math.max(0, r.crosses - 1); if (type === 'REMOVE_BONUS') r.bonuses = Math.max(0, r.bonuses - 1);
-                return newS;
-            }));
-            if (['SAVE_NOTE'].includes(type)) { loadData(); setSelectedStudent(null); }
-        } catch(e) { loadData(); }
+
+            if (res.ok) {
+                // On recharge pour avoir l'état officiel (ex: si l'élève est passé en Punition)
+                await loadData();
+                if (['SAVE_NOTE'].includes(type)) setSelectedStudent(null);
+            }
+        } catch(e) { 
+            console.error("Erreur API", e);
+            loadData(); // Rollback en cas d'erreur
+        }
     };
+
     const moveStudentTo = async (sid, x, y) => { try { await fetch('/api/classroom/move', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ studentId: sid, x, y }) }); await loadData(); } catch(e){} };
 
     if (!globalClassId) return <div className="p-10 text-center text-slate-400 font-black">SÉLECTIONNEZ UNE CLASSE</div>;
@@ -90,7 +118,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                 const isOver = dragOverCell === `${x}-${y}`;
                 const hasSep = separators.includes(x);
                 cells.push(
-                    <div key={`${x}-${y}`} className={`grid-cell-wrapper ${isOver ? 'drag-over' : ''} ${hasSep ? 'has-separator' : ''}`} style={{ gridColumn: x + 1, gridRow: y + 1, width: 'var(--cell-size, 100px)', height: 'var(--cell-size, 100px)' }} onDragOver={(e) => handleDragOver(e, x, y)} onDrop={(e) => handleDrop(e, x, y)} onClick={() => !student && swapSource && moveStudentTo(swapSource._id, x, y) && setSwapSource(null)}>
+                    <div key={`${x}-${y}`} className={`grid-cell-wrapper ${isOver ? 'drag-over' : ''} ${hasSep ? 'has-separator' : ''}`} style={{ gridColumn: x + 1, gridRow: y + 1 }} onDragOver={(e) => handleDragOver(e, x, y)} onDrop={(e) => handleDrop(e, x, y)} onClick={() => !student && swapSource && moveStudentTo(swapSource._id, x, y) && setSwapSource(null)}>
                         {student ? (
                             <div className={`student-card-drag ${draggingId === student._id ? 'dragging' : ''} ${getMyStats(student).crosses >= 3 ? 'punished' : ''}`} draggable="true" onDragStart={(e) => handleDragStart(e, student._id)} onClick={(e) => { e.stopPropagation(); handleOpenStudent(student); }}>
                                 {getMyStats(student).crosses > 0 && <div className="sc-badge">⏳ {getMyStats(student).weeksToRedemption}</div>}
@@ -140,11 +168,7 @@ export default function ClassroomManager({ globalClassId, user }) {
     };
 
     return (
-        // UPDATE : Passage des variables CSS dynamiques
-        <div className="classroom-wrapper" style={{ 
-            '--grid-cols': gridSize.cols, 
-            '--grid-rows': gridSize.rows 
-        }}>
+        <div className="classroom-wrapper" style={{ '--grid-cols': gridSize.cols }}>
             <input type="file" ref={fileInputRef} style={{display:'none'}} accept="image/*" onChange={handleFileSelect} />
             {iaLoading && <div className="ia-loader"><div className="spinner-ia"></div><span>IA ACTIVE...</span></div>}
             
