@@ -9,32 +9,47 @@ const AssetThumb = ({ url, className, fallbackEmoji, style }) => {
 };
 
 export default function StudioDashboard({ user }) {
+    if (!user) return <div className="p-10 text-white font-bold">Chargement profil...</div>;
 
     const [project, setProject] = useState({
         _id: null,
         title: "Nouveau Jeu IA",
-        teacherId: user.id || user._id,
-        scenes: [{ id: 1, name: "Scène Principale", actors: [], timeline: [] }],
+        teacherId: user.id || user._id, 
+        scenes: [{ name: "Scène Principale", actors: [], timeline: [] }],
         generatedCode: ""
     });
 
     const [activeSceneIdx, setActiveSceneIdx] = useState(0);
     const [selectedActorId, setSelectedActorId] = useState(null);
-    
-    // UI STATES
     const [viewMode, setViewMode] = useState('DESIGN'); 
     const [processingMsg, setProcessingMsg] = useState("");
-    const [gameIdea, setGameIdea] = useState("");
+    
+    // --- ETATS IA ---
+    const [aiPrompt, setAiPrompt] = useState(""); 
+    const [consoleInput, setConsoleInput] = useState(""); 
     const [gameInstance, setGameInstance] = useState(null);
+    const [logs, setLogs] = useState([]);
 
     const fileInputRef = useRef(null);
     const remixInputRef = useRef(null);
     const directImportRef = useRef(null);
+    const consoleEndRef = useRef(null); 
 
     const activeScene = project.scenes[activeSceneIdx];
     const selectedActor = activeScene.actors.find(a => a.id === selectedActorId);
 
-    // --- UPLOAD & PERSISTENCE ---
+    const addLog = (msg, type = 'info') => {
+        const time = new Date().toLocaleTimeString().split(' ')[0];
+        setLogs(prev => [...prev, { time, msg: String(msg), type }].slice(-50));
+        if (type === 'error') {
+            setAiPrompt(prev => prev.includes(String(msg)) ? prev : `Corrige cette erreur : ${msg}`);
+        }
+    };
+
+    useEffect(() => {
+        consoleEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, [logs]);
+
     const uploadBlob = async (blob, filename) => {
         const formData = new FormData();
         formData.append('file', blob, filename);
@@ -45,36 +60,29 @@ export default function StudioDashboard({ user }) {
         } catch (e) { console.error(e); return null; }
     };
 
-    // SAUVEGARDE ROBUSTE ET NETTOYÉE
     const saveProject = async (silent = false) => {
         if (!silent) setProcessingMsg("Sauvegarde...");
         try {
-            const payload = { ...project, teacherId: user.id || user._id };
+            const tId = user.id || user._id;
+            const payload = JSON.parse(JSON.stringify({ ...project, teacherId: tId }));
             
-            // NETTOYAGE CRITIQUE : Si l'ID est null ou "null", on le vire totalement
-            if (!payload._id || payload._id === 'null') delete payload._id;
-
-            const res = await fetch('/api/studio/projects', { 
-                method: 'POST', 
-                headers: {'Content-Type': 'application/json'}, 
-                body: JSON.stringify(payload) 
-            });
-            
-            if(!res.ok) {
-                const errTxt = await res.text();
-                throw new Error("Erreur serveur: " + errTxt);
+            if (!payload._id || payload._id === 'null' || payload._id.length < 10) delete payload._id;
+            if (payload.scenes && Array.isArray(payload.scenes)) {
+                payload.scenes = payload.scenes.map(s => {
+                    if (s._id && (typeof s._id !== 'string' || s._id.length !== 24)) delete s._id;
+                    if (s.id && (typeof s.id !== 'string' || s.id.length !== 24)) delete s.id;
+                    return s;
+                });
             }
+
+            const res = await fetch('/api/studio/projects', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
+            if(!res.ok) throw new Error("Erreur serveur");
             
             const data = await res.json();
-            
-            // Mise à jour immédiate
             const newId = data._id;
             setProject(prev => ({ ...prev, _id: newId }));
             
-            if (!silent) {
-                setProcessingMsg("");
-                alert("Sauvegardé ! 💾");
-            }
+            if (!silent) { setProcessingMsg(""); alert("Sauvegardé ! 💾"); }
             return newId;
         } catch (e) { 
             console.error("SAVE ERROR:", e);
@@ -84,90 +92,102 @@ export default function StudioDashboard({ user }) {
         }
     };
 
-    // --- IMPORT DIRECT ---
-    const handleDirectImport = async (e) => {
-        const file = e.target.files[0];
-        if (!file || !selectedActor) return;
-        setProcessingMsg("Importation...");
-        const url = await uploadBlob(file, file.name);
-        if (url) injectCostumes([url], "Import");
-        else alert("Erreur upload");
-        setProcessingMsg("");
-        e.target.value = null;
-    };
-
-    // --- AI GENERATION ---
-    const handleRemix = async (e) => {
-        const file = e.target.files[0];
-        if(!file || !selectedActor) return;
-        setProcessingMsg("Remix IA (Vision + Gen)...");
-        const fd = new FormData(); fd.append('file', file);
-        try {
-            const res = await fetch('/api/studio/remix-asset', { method: 'POST', body: fd });
-            const data = await res.json();
-            if(data.ok) injectCostumes([data.url], "Remix");
-        } catch(e) { alert("Erreur Remix"); }
-        setProcessingMsg("");
-        e.target.value = null;
-    };
-
-    const generateGameCode = async () => {
-        if (!gameIdea) return alert("Décrivez votre idée de jeu !");
-        if (activeScene.actors.length === 0) return alert("Ajoutez au moins un acteur !");
+    // --- MOTEUR IA CENTRAL (GÉNÉRATION OU FIX) ---
+    const handleAiAction = async () => {
+        if (!aiPrompt) return alert("Écrivez une idée ou une correction !");
         
-        setProcessingMsg("Sauvegarde & Génération...");
-
-        // 1. FORCER LA SAUVEGARDE
-        const targetId = await saveProject(true);
-        
-        if (!targetId) {
+        // 1. MODE RÉPARATION
+        if (project.generatedCode && project.generatedCode.length > 50) {
+            setProcessingMsg("Réparation / Modification par l'IA...");
+            try {
+                const res = await fetch('/api/studio/fix-code', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ 
+                        code: project.generatedCode, 
+                        error: aiPrompt, 
+                        instruction: aiPrompt 
+                    })
+                });
+                const data = await res.json();
+                // NOUVEAU : Lecture du message IA
+                if (data.ok && data.code.code) {
+                    setProject(prev => ({ ...prev, generatedCode: data.code.code }));
+                    setAiPrompt(""); 
+                    addLog("IA : " + (data.code.message || "Code réparé."), "info"); // Le message de l'IA s'affiche ici
+                    runGame(); 
+                } else {
+                    addLog("L'IA n'a pas renvoyé de code valide.", "error");
+                }
+            } catch(e) { addLog("Erreur Réparation : " + e.message, "error"); }
             setProcessingMsg("");
-            return alert("Erreur critique : Impossible de sauvegarder avant génération. Vérifiez la console.");
+            return;
         }
+
+        // 2. MODE CRÉATION
+        if (activeScene.actors.length === 0) return alert("Ajoutez au moins un acteur !");
+        setProcessingMsg("Génération du Jeu...");
+        const targetId = await saveProject(true);
+        if (!targetId) { setProcessingMsg(""); return; }
         
-        // 2. APPEL IA
         try {
             const res = await fetch('/api/studio/generate-code', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ projectId: targetId, gameIdea })
+                body: JSON.stringify({ projectId: targetId, gameIdea: aiPrompt })
             });
-            
-            if (!res.ok) {
-                const err = await res.json();
-                throw new Error(err.error || "Erreur serveur IA");
-            }
-
             const data = await res.json();
-            if (data.ok) {
-                setProject(prev => ({ ...prev, generatedCode: data.code }));
+            // NOUVEAU : Lecture du message IA
+            if (data.ok && data.code.code) {
+                setProject(prev => ({ ...prev, generatedCode: data.code.code }));
                 setViewMode('CODE');
+                setAiPrompt("");
+                addLog("IA : " + (data.code.message || "Jeu généré."), "success"); // Le message de l'IA s'affiche ici
+                runGame();
+            } else {
+                addLog("L'IA n'a pas renvoyé de code valide.", "error");
             }
         } catch(e) { 
-            console.error(e);
-            alert("Erreur IA : " + e.message); 
+            addLog("Erreur Génération : " + e.message, "error");
         }
         setProcessingMsg("");
     };
 
-    // --- PLAY ENGINE ---
+    const handleConsoleFix = async () => {
+        if (!consoleInput) return;
+        setAiPrompt(consoleInput); 
+        setConsoleInput("");
+        setTimeout(handleAiAction, 100); 
+    };
+
     const runGame = () => {
         if (!project.generatedCode) return alert("Aucun code généré !");
         setViewMode('PLAY');
+        setLogs([]);
+        addLog("Initialisation...", "info");
+
         setTimeout(() => {
             const canvas = document.getElementById('game-canvas');
             if (!canvas) return;
             const assets = {};
             let loaded = 0;
             const actors = activeScene.actors;
-            if(actors.length === 0) return alert("Pas d'acteurs !");
+            
+            if(actors.length === 0) return launch(canvas, assets);
+            
             const checkStart = () => { if (loaded === actors.length) launch(canvas, assets); };
+            
             actors.forEach(a => {
                 const url = (a.costumes && a.costumes[0]) ? a.costumes[0].url : null;
                 if (url) {
-                    const img = new Image(); img.src = url;
+                    const img = new Image(); 
+                    img.crossOrigin = "Anonymous"; 
+                    img.src = url;
                     img.onload = () => { assets[a.id] = img; loaded++; checkStart(); };
-                    img.onerror = () => { loaded++; checkStart(); };
+                    img.onerror = () => { 
+                        addLog(`Asset manquant : ${a.name} (ID: ${a.id})`, "warn");
+                        loaded++; checkStart(); 
+                    };
                 } else { loaded++; checkStart(); }
             });
         }, 100);
@@ -176,21 +196,40 @@ export default function StudioDashboard({ user }) {
     const launch = (canvas, assets) => {
         try {
             if (gameInstance && gameInstance.destroy) gameInstance.destroy();
+
             const code = project.generatedCode;
             const safeCode = code.replace(/window\.|document\.|alert\(|eval\(/g, '//blocked');
             const factory = new Function(` ${safeCode} return MiniGame; `);
             const GameClass = factory();
+            
             const game = new GameClass(canvas, assets);
+            game.log = (msg) => addLog(msg, "info"); 
+
             setGameInstance(game);
+            addLog("Moteur démarré.", "success");
+            
             let lastTime = 0;
+            let frameId;
+
             const loop = (time) => {
-                const dt = (time - lastTime) / 1000; lastTime = time;
-                if (game.update) game.update(dt);
-                if (game.draw) game.draw(canvas.getContext('2d'));
-                if (document.getElementById('game-canvas')) requestAnimationFrame(loop);
+                try {
+                    const dt = (time - lastTime) / 1000; 
+                    lastTime = time;
+                    if (game.update) game.update(dt);
+                    if (game.draw) game.draw(canvas.getContext('2d'));
+                    if (document.getElementById('game-canvas')) {
+                        frameId = requestAnimationFrame(loop);
+                    }
+                } catch (runtimeErr) {
+                    addLog(runtimeErr.message, "error");
+                    cancelAnimationFrame(frameId);
+                }
             };
-            requestAnimationFrame(loop);
-        } catch (e) { alert("Erreur code :\n" + e.message); }
+            frameId = requestAnimationFrame(loop);
+
+        } catch (e) { 
+            addLog("Erreur Code : " + e.message, "error");
+        }
     };
 
     const injectCostumes = (urls, baseName) => {
@@ -223,6 +262,35 @@ export default function StudioDashboard({ user }) {
         });
     };
 
+    const handleDirectImport = async (e) => {
+        const file = e.target.files[0];
+        if (!file || !selectedActor) return;
+        setProcessingMsg("Importation...");
+        const url = await uploadBlob(file, file.name);
+        if (url) injectCostumes([url], "Import");
+        else alert("Erreur upload");
+        setProcessingMsg("");
+        e.target.value = null;
+    };
+
+    const handleRemix = async (e) => {
+        const file = e.target.files[0];
+        if(!file || !selectedActor) return;
+        setProcessingMsg("Remix IA...");
+        const fd = new FormData(); fd.append('file', file);
+        try {
+            const res = await fetch('/api/studio/remix-asset', { method: 'POST', body: fd });
+            const data = await res.json();
+            if(data.ok) injectCostumes([data.url], "Remix");
+        } catch(e) { alert("Erreur Remix"); }
+        setProcessingMsg("");
+        e.target.value = null;
+    };
+
+    const hasCode = project.generatedCode && project.generatedCode.length > 50;
+    const buttonLabel = hasCode ? "RÉPARER / MODIFIER 🔧" : "GÉNÉRER LE CODE 🚀";
+    const buttonColor = hasCode ? "bg-orange-500 hover:bg-orange-600" : "bg-pink-600 hover:bg-pink-500";
+
     return (
         <div className="studio-wrapper">
             <input type="file" ref={remixInputRef} style={{display:'none'}} onChange={handleRemix} accept="image/*" />
@@ -230,7 +298,6 @@ export default function StudioDashboard({ user }) {
             
             {processingMsg && <div className="overlay"><div className="modal-box"><h3 className="animate-pulse">{processingMsg}</h3></div></div>}
 
-            {/* GAUCHE */}
             <div className="studio-sidebar">
                 <div className="panel-header">ACTEURS</div>
                 <div className="scroll-area">
@@ -250,11 +317,10 @@ export default function StudioDashboard({ user }) {
                 )}
             </div>
 
-            {/* CENTRE */}
             <div className="studio-center">
                 <div className="stage-toolbar gap-4">
-                    <button onClick={() => setViewMode('DESIGN')} className={viewMode==='DESIGN'?'text-white':'text-slate-500'}>🎨 DESIGN</button>
-                    <button onClick={() => setViewMode('CODE')} className={viewMode==='CODE'?'text-white':'text-slate-500'}>💻 CODE</button>
+                    <button onClick={() => setViewMode('DESIGN')} className={viewMode==='DESIGN'?'active':''}>🎨 DESIGN</button>
+                    <button onClick={() => setViewMode('CODE')} className={viewMode==='CODE'?'active':''}>💻 CODE</button>
                     <button onClick={runGame} className="bg-green-500 text-white px-4 py-1 rounded font-bold">▶ JOUER</button>
                     <button onClick={() => saveProject(false)} className="bg-blue-600 text-white px-4 py-1 rounded font-bold ml-auto">💾 SAUVER</button>
                 </div>
@@ -282,20 +348,49 @@ export default function StudioDashboard({ user }) {
                 )}
 
                 {viewMode === 'PLAY' && (
-                    <div className="flex-1 bg-black flex items-center justify-center">
-                        <canvas id="game-canvas" width="640" height="360" className="bg-white shadow-2xl rounded" />
+                    <div className="flex-1 bg-black flex flex-col items-center justify-center p-4">
+                        <canvas id="game-canvas" width="640" height="360" className="bg-white shadow-2xl rounded mb-0" />
+                        
+                        {/* CONSOLE INTERACTIVE */}
+                        <div className="studio-console-wrapper">
+                            <div className="studio-console-logs custom-scrollbar">
+                                {logs.length === 0 && <span className="text-slate-600 italic">Console prête. Lancez le jeu pour voir les logs.</span>}
+                                {logs.map((l, i) => (
+                                    <div key={i} className={`console-line ${l.type}`}>
+                                        <span className="opacity-50">[{l.time}]</span> {l.msg}
+                                    </div>
+                                ))}
+                                <div ref={consoleEndRef} />
+                            </div>
+                            <div className="studio-console-input-area">
+                                <input 
+                                    className="console-input" 
+                                    placeholder="Décrivez le bug ou l'amélioration (ex: 'Le joueur tombe à travers le sol')..." 
+                                    value={consoleInput}
+                                    onChange={e => setConsoleInput(e.target.value)}
+                                    onKeyDown={e => e.key === 'Enter' && handleConsoleFix()}
+                                />
+                                <button className="btn-console-fix" onClick={handleConsoleFix}>RÉPARER 🔧</button>
+                            </div>
+                        </div>
                     </div>
                 )}
 
-                <div className="h-[120px] bg-slate-900 border-t border-slate-700 p-4 flex flex-col gap-2">
-                    <span className="text-xs font-bold text-slate-400 uppercase">GÉNÉRATEUR DE JEU (GEMINI 2.0)</span>
-                    <div className="flex gap-2">
-                        <input className="flex-1 bg-slate-800 border border-slate-600 rounded p-2 text-white text-sm" 
-                               placeholder="Décrivez votre jeu (ex: Le héros doit éviter les zombies et attraper les pièces...)" 
-                               value={gameIdea} onChange={e => setGameIdea(e.target.value)} />
-                        <button onClick={generateGameCode} className="bg-pink-600 text-white px-6 rounded font-black text-sm hover:bg-pink-500 transition-colors">GÉNÉRER LE CODE 🚀</button>
+                {viewMode !== 'PLAY' && (
+                    <div className="h-[120px] bg-slate-900 border-t border-slate-700 p-4 flex flex-col gap-2">
+                        <span className="text-xs font-bold text-slate-400 uppercase">
+                            {hasCode ? "ASSISTANT DE RÉPARATION & MODIFICATION" : "GÉNÉRATEUR DE JEU (GEMINI 2.0)"}
+                        </span>
+                        <div className="flex gap-2">
+                            <input className={`flex-1 bg-slate-800 border rounded p-2 text-white text-sm ${logs.some(l => l.type==='error') ? 'border-red-500 animate-pulse' : 'border-slate-600'}`}
+                                   placeholder={hasCode ? "Décrivez le bug ou la modification (ex: 'Fais sauter plus haut')..." : "Décrivez votre jeu..."}
+                                   value={aiPrompt} onChange={e => setAiPrompt(e.target.value)} />
+                            <button onClick={handleAiAction} className={`${buttonColor} text-white px-6 rounded font-black text-xs transition-colors uppercase`}>
+                                {buttonLabel}
+                            </button>
+                        </div>
                     </div>
-                </div>
+                )}
             </div>
 
             {/* DROITE */}

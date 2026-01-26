@@ -2,16 +2,27 @@ const mongoose = require('mongoose');
 
 const ActionSchema = new mongoose.Schema({
     type: { type: String, enum: ['WAIT', 'MOVE', 'SAY', 'PLAY_SOUND', 'ASK_CHOICE', 'ASK_INPUT'], required: true },
-    targetId: String, // ID de l'acteur concerné
-    params: mongoose.Schema.Types.Mixed // { text: "Bonjour", x: 50, audio: "..." }
+    targetId: String, 
+    params: mongoose.Schema.Types.Mixed 
 });
 
+// DEFINITION COSTUME
+const CostumeSchema = new mongoose.Schema({
+    id: String,
+    name: String,
+    url: String
+}, { _id: false });
+
 const ActorSchema = new mongoose.Schema({
-    id: String, // ex: "actor_1"
-    name: String, // ex: "Mario"
-    spriteUrl: String, // URL de l'image
-    initialX: Number, // %
-    initialY: Number, // %
+    id: String, 
+    name: String, 
+    
+    // V451 : Ajout explicite des costumes (Indispensable pour le Studio)
+    costumes: { type: [CostumeSchema], default: [] },
+    currentCostumeIdx: { type: Number, default: 0 },
+    
+    initialX: Number, 
+    initialY: Number, 
     scale: { type: Number, default: 1 }
 });
 
@@ -19,14 +30,15 @@ const SceneSchema = new mongoose.Schema({
     name: String,
     backgroundUrl: String,
     actors: [ActorSchema],
-    timeline: [ActionSchema] // Liste séquentielle des actions
+    timeline: [ActionSchema] 
 });
 
 const StudioProjectSchema = new mongoose.Schema({
     title: { type: String, required: true },
     teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher' },
     scenes: [SceneSchema],
-    isPublic: { type: Boolean, default: false }, // Pour partager entre profs
+    generatedCode: String,
+    isPublic: { type: Boolean, default: false }, 
     createdAt: { type: Date, default: Date.now }
 }, { collection: 'studioprojects' });
 

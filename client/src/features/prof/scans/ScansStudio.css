@@ -1,26 +1,6 @@
-/* MISE À JOUR CAMERA WYSIWYG ET TAILLE */
-.cam-wrapper {
-    position: relative; 
-    width: 100%; 
-    max-width: 1200px; /* BEAUCOUP PLUS GRAND */
-    aspect-ratio: 16/9; /* Ratio écran moderne */
-    margin: 0 auto; 
-    border-radius: 20px; 
-    overflow: hidden; 
-    border: 4px solid #334155; 
-    background: black;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.cam-video { 
-    width: 100%; 
-    height: 100%; 
-    object-fit: contain; /* ESSENTIEL : On voit tout ce que la caméra voit, pas de crop */
-}
-
-/* Le reste du CSS... */
+/* ... (CSS Existant pour cam, toolbar etc.) ... */
+.cam-wrapper { position: relative; width: 100%; max-width: 1200px; aspect-ratio: 16/9; margin: 0 auto; border-radius: 20px; overflow: hidden; border: 4px solid #334155; background: black; display: flex; align-items: center; justify-content: center; }
+.cam-video { width: 100%; height: 100%; object-fit: contain; }
 .scan-page { padding: 2rem; background: #f1f5f9; min-height: 100%; display: flex; flex-direction: column; gap: 2rem; }
 .create-dc-btn { background: #fff; border: 3px dashed #cbd5e1; border-radius: 25px; padding: 30px; text-align: center; cursor: pointer; transition: all 0.2s; display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .create-dc-btn:hover { border-color: #3b82f6; background: #eff6ff; transform: translateY(-2px); }
@@ -38,5 +18,39 @@
 .cam-trigger { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); width: 70px; height: 70px; background: white; border: 4px solid rgba(0,0,0,0.3); border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 2rem; transition: transform 0.1s; z-index: 20; }
 .snap-queue-strip { display: flex; gap: 10px; margin-top: 15px; padding-bottom: 5px; overflow-x: auto; justify-content: center; min-height: 80px; }
 .queue-thumb { width: 70px; height: 70px; border-radius: 12px; object-fit: cover; border: 4px solid transparent; transition: all 0.3s; animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+
+/* --- NOUVEAU CSS CORRECTION --- */
+.scan-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.9); z-index: 10000; display: flex; align-items: center; justify-content: center; }
+.scan-modal { background: white; width: 600px; padding: 30px; border-radius: 25px; display: flex; flex-direction: column; gap: 20px; }
+.scan-modal h3 { margin: 0; font-weight: 900; color: #1e293b; }
+.scan-instr-input { width: 100%; height: 300px; padding: 15px; border-radius: 15px; border: 2px solid #e2e8f0; font-family: monospace; font-size: 14px; line-height: 1.5; resize: none; outline: none; }
+.scan-instr-input:focus { border-color: #3b82f6; }
+.scan-modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+.btn-cancel { padding: 15px; background: #f1f5f9; border: none; border-radius: 12px; font-weight: 900; cursor: pointer; color: #64748b; }
+.btn-launch { padding: 15px 30px; background: #3b82f6; border: none; border-radius: 12px; font-weight: 900; cursor: pointer; color: white; box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4); }
+.btn-launch:disabled { background: #94a3b8; cursor: not-allowed; }
+
+/* --- AFFICHAGE RESULTATS --- */
+.corrections-container {
+    padding: 20px; background: #f1f5f9; display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 20px;
+}
+.correction-card {
+    background: white; border-radius: 20px; overflow: hidden; display: flex;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.05); border: 1px solid #e2e8f0;
+}
+.correction-img-box {
+    width: 150px; background: #000; display: flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.correction-img-box img { width: 100%; height: 100%; object-fit: cover; opacity: 0.8; transition: opacity 0.2s; }
+.correction-img-box:hover img { opacity: 1; }
+
+.correction-info-box { flex: 1; padding: 15px; display: flex; flex-direction: column; }
+.ci-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #f1f5f9; padding-bottom: 10px; margin-bottom: 10px; }
+.ci-name { font-weight: 900; font-size: 14px; text-transform: uppercase; color: #1e293b; }
+.ci-grade { background: #3b82f6; color: white; padding: 4px 10px; border-radius: 8px; font-weight: 900; font-size: 12px; }
+.ci-body { flex: 1; max-height: 200px; overflow-y: auto; font-size: 12px; color: #475569; }
+.ci-label { font-weight: 900; color: #94a3b8; font-size: 10px; margin-bottom: 2px; }
+.ci-text { line-height: 1.4; margin-bottom: 10px; white-space: pre-wrap; }
+
 @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes popIn { from { transform: scale(0); } to { transform: scale(1); } }

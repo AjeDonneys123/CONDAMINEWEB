@@ -11,21 +11,33 @@ const StudioDB = {
         
         // 1. Nettoyage de l'objet pour éviter les injections d'ID null
         const cleanData = { ...data };
-        if (!cleanData._id || cleanData._id === 'null' || cleanData._id === '') {
+        
+        // Nettoyage ID principal
+        if (!cleanData._id || cleanData._id === 'null' || cleanData._id === 'undefined') {
             delete cleanData._id;
+        }
+
+        // NETTOYAGE DES SCÈNES (CÔTÉ SERVEUR AUSSI)
+        if (cleanData.scenes && Array.isArray(cleanData.scenes)) {
+            cleanData.scenes = cleanData.scenes.map(s => {
+                // Si l'ID n'est pas valide (pas un ObjectId), on le supprime pour que Mongoose en génère un nouveau
+                if (s._id && !mongoose.Types.ObjectId.isValid(s._id)) {
+                    delete s._id;
+                }
+                return s;
+            });
         }
 
         // 2. Tentative de mise à jour SI on a un ID valide
         if (cleanData._id && mongoose.Types.ObjectId.isValid(cleanData._id)) {
             const updated = await Model.findByIdAndUpdate(cleanData._id, cleanData, { new: true });
-            // SI trouvé et mis à jour, on le renvoie
             if (updated) return updated;
             
-            // SINON (ID introuvable en base), on le supprime pour forcer une création propre
+            // SINON (ID introuvable), on le supprime pour forcer une création
             delete cleanData._id;
         }
         
-        // 3. Création (Si pas d'ID ou ID introuvable)
+        // 3. Création
         return await Model.create(cleanData);
     },
 

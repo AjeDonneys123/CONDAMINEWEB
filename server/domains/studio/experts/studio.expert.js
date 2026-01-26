@@ -2,13 +2,13 @@ const fs = require('fs');
 const path = require('path');
 const https = require('https');
 const StudioAI = require('../ai/studio.ai');
-const GameGeneratorAI = require('../ai/game-generator.ai'); // Nouveau
+const GameGeneratorAI = require('../ai/game-generator.ai'); 
 const StudioDB = require('../db/studio.db');
-const StudioDrive = require('./studio.drive'); // Nouveau
+const StudioDrive = require('./studio.drive'); 
 
 /**
- * 🛠️ EXPERT STUDIO (V2.1)
- * Sécurisé contre les projets vides.
+ * 🛠️ EXPERT STUDIO (V2.2 - FIX GENERATION)
+ * Gère correctement le format Code + Message de l'IA.
  */
 const StudioExpert = {
     
@@ -72,12 +72,19 @@ const StudioExpert = {
 
         if (allActors.length === 0) throw new Error("Aucun acteur trouvé dans ce projet. Ajoutez des personnages.");
 
-        const jsCode = await GameGeneratorAI.generateGameCode(gameIdea, allActors);
+        // L'IA renvoie maintenant : { code: "...", message: "..." }
+        const aiResult = await GameGeneratorAI.generateGameCode(gameIdea, allActors);
         
-        project.generatedCode = jsCode;
+        // CORRECTION CRITIQUE : On ne sauvegarde QUE le code (String) en BDD
+        // Si aiResult est un objet (nouveau format), on prend .code
+        // Sinon (format legacy ou erreur), on prend tel quel ou chaine vide
+        const codeToSave = (typeof aiResult === 'object' && aiResult.code) ? aiResult.code : "";
+        
+        project.generatedCode = codeToSave;
         await StudioDB.upsertProject(project);
         
-        return jsCode;
+        // Mais on renvoie l'objet complet au Client pour avoir le message
+        return aiResult;
     },
 
     saveProject: async (projectData) => await StudioDB.upsertProject(projectData),
