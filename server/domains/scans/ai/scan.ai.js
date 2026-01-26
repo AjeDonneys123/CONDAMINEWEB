@@ -12,34 +12,27 @@ const streamToBuffer = async (stream) => {
 
 const ScanAI = {
     correctCopy: async (copyUrl, subjectUrls, instructions, studentList) => {
-        console.log("👁️ [SCAN-AI] Correction V115 (Prompt Militaire)...");
+        console.log("👁️ [SCAN-AI] Correction V117 (Prompt Anti-Liste)...");
 
-        // On nettoie la liste des élèves pour économiser des tokens et éviter la confusion
         const rosterText = studentList.map(s => `${s.firstName} ${s.lastName}`).join(', ');
 
-        const system = `Tu es un robot d'analyse de données JSON. Tu n'es PAS un assistant conversationnel.
+        const system = `Tu es un professeur correcteur.
         
-        TA TÂCHE :
-        1. Analyser les images fournies (Sujet + Copie).
-        2. Identifier l'élève si son nom est écrit sur la copie, parmi cette liste : [${rosterText}].
-        3. Évaluer le travail selon les consignes : "${instructions}".
+        ⚠️ RÈGLE ABSOLUE : TU DOIS RENVOYER UN OBJET JSON UNIQUE {...}, PAS UN TABLEAU [...].
         
-        RÈGLES DE SORTIE (STRICTES) :
-        - TU NE DOIS PAS ÉCRIRE DE TEXTE EN DEHORS DU JSON.
-        - Pas de "Voici l'analyse", pas de Markdown, pas de gras.
-        - Uniquement un objet JSON valide.
-        
-        STRUCTURE JSON OBLIGATOIRE :
+        FORMAT CIBLE :
         {
-            "studentName": "Nom Prénom (ou 'Inconnu')",
-            "grade": "Note/20 (ex: 12/20)",
-            "appreciation": "Court résumé global (2 phrases max)",
-            "transcription": "Analyse détaillée, points forts et faibles. Tu peux utiliser des retours à la ligne \\n mais pas de Markdown complexe.",
-            "mistakes": ["Erreur majeure 1", "Erreur majeure 2"]
-        }`;
+            "studentName": "Nom trouvé ou Inconnu",
+            "grade": "Note/20",
+            "appreciation": "Synthèse globale en 2 phrases",
+            "transcription": "Ici, tu mets tout le détail : analyse point par point, corrections, suggestions. Utilise des sauts de ligne \\n.",
+            "mistakes": ["Liste des fautes majeures"]
+        }
+        
+        Si tu veux faire une liste de points, mets-la SOUS FORME DE TEXTE dans le champ 'transcription', pas comme des objets séparés.`;
 
         const promptParts = [
-            { text: "GÉNÈRE LE JSON MAINTENANT." }
+            { text: `INSTRUCTIONS : ${instructions}` }
         ];
 
         const getImageData = async (url) => {
@@ -53,50 +46,42 @@ const ScanAI = {
                 }
                 return null;
             } catch (e) {
-                console.error(`❌ [AI] Erreur image: ${e.message}`);
+                console.error(`❌ [AI] Err Img : ${e.message}`);
                 return null;
             }
         };
 
         try {
-            // Sujets
             if (subjectUrls) {
                 for (const url of subjectUrls) {
                     const b64 = await getImageData(url);
-                    if (b64) {
-                        promptParts.push({ inlineData: { mimeType: "image/jpeg", data: b64 } });
-                        promptParts.push({ text: "CONTEXTE : IMAGE DU SUJET/CONSIGNE" });
-                    }
+                    if (b64) promptParts.push({ inlineData: { mimeType: "image/jpeg", data: b64 } });
                 }
             }
 
-            // Copie
             const copyB64 = await getImageData(copyUrl);
             if (copyB64) {
                 promptParts.push({ inlineData: { mimeType: "image/jpeg", data: copyB64 } });
-                promptParts.push({ text: "CIBLE : IMAGE DE LA COPIE À CORRIGER" });
+                promptParts.push({ text: "CORRIGE CETTE COPIE." });
             } else {
                 return {
-                    studentName: "Image Illisible",
-                    grade: "0/20",
-                    appreciation: "Impossible de lire le fichier depuis le Drive.",
-                    transcription: "Erreur technique.",
+                    studentName: "Perdu",
+                    grade: "0",
+                    appreciation: "Image inaccessible.",
+                    transcription: "Erreur technique Drive.",
                     mistakes: []
                 };
             }
 
-            // Appel IA
             const rawText = await AIEngine.ask(promptParts, system);
-            
-            // Le moteur V12 nettoiera le JSON s'il y a encore des résidus
             return AIEngine.sanitizeJSON(rawText);
 
         } catch (e) {
             return { 
-                studentName: "Erreur Système", 
+                studentName: "Crash", 
                 grade: "?", 
-                appreciation: "Erreur interne code : " + e.message, 
-                transcription: "", 
+                appreciation: "Erreur code.", 
+                transcription: e.message, 
                 mistakes: [] 
             };
         }
