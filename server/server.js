@@ -31,25 +31,6 @@ const uploadsPath = path.join(publicPath, 'uploads');
 if (!fs.existsSync(publicPath)) fs.mkdirSync(publicPath, { recursive: true });
 if (!fs.existsSync(uploadsPath)) fs.mkdirSync(uploadsPath, { recursive: true });
 
-// --- ROUTE DIAGNOSTIC (POUR SAVOIR CE QU'IL Y A SUR LE DISQUE) ---
-// Ouvre ton navigateur sur /debug-files pour voir la liste réelle des fichiers
-app.get('/debug-files', (req, res) => {
-    try {
-        const files = fs.readdirSync(uploadsPath);
-        const details = files.map(f => {
-            const stats = fs.statSync(path.join(uploadsPath, f));
-            return { name: f, size: stats.size, time: stats.mtime };
-        });
-        res.json({ 
-            count: files.length, 
-            path: uploadsPath, 
-            files: details.sort((a,b) => b.time - a.time) // Plus récents en haut
-        });
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
-});
-
 // 1. SERVICE STATIQUE NATIF
 app.use('/uploads', express.static(uploadsPath));
 
@@ -61,7 +42,6 @@ app.get('/uploads/:filename', (req, res) => {
 
     if (fs.existsSync(filePath)) return res.sendFile(filePath);
 
-    // Recherche extensions
     const extensions = ['.jpg', '.jpeg', '.png', '.webp', '.blob'];
     for (const ext of extensions) {
         if (fs.existsSync(filePath + ext)) return res.sendFile(filePath + ext);
@@ -69,6 +49,11 @@ app.get('/uploads/:filename', (req, res) => {
 
     console.error(`❌ [IMG-404] Fichier physiquement absent : ${cleanName}`);
     res.status(404).send('Fichier introuvable sur le disque serveur.');
+});
+
+// --- ROUTE DE TEST VERSION (POUR VÉRIFIER LE DÉPLOIEMENT) ---
+app.get('/version-check', (req, res) => {
+    res.send(`<h1>SERVEUR ACTIF V111</h1><p>Si vous voyez ceci, le code est à jour.</p><p><a href="/api/auth/google/login">CLIQUEZ ICI POUR CONNECTER LE DRIVE</a></p>`);
 });
 
 // ROUTES API
@@ -98,4 +83,4 @@ if (fs.existsSync(distPath)) {
         res.sendFile(path.join(distPath, 'index.html'));
     });
 }
-app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V110 (DEBUGGER ACTIF) UP | PORT ${port}`));
+app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V111 (VERSION CHECK) UP | PORT ${port}`));
