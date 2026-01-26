@@ -1,8 +1,8 @@
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+const { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } = require("@google/generative-ai");
 
 /**
- * 🤖 MOTEUR IA - V16 (SCRAPER DE NOTE RENFORCÉ)
- * Trouve la note même dans le désordre.
+ * 🤖 MOTEUR IA - V17 (SAFETY OFF)
+ * Désactivation explicite des filtres de sécurité pour autoriser la lecture de copies.
  */
 const AIEngine = {
     normalizeKeys: (obj) => {
@@ -15,7 +15,7 @@ const AIEngine = {
     },
 
     sanitizeJSON: (text) => {
-        if (!text) return { grade: "?", appreciation: "Silence IA.", transcription: "Rien." };
+        if (!text) return { grade: "?", appreciation: "IA Muette.", transcription: "Rien." };
 
         let clean = text.replace(/```json/gi, "").replace(/```/gi, "").trim();
         
@@ -23,15 +23,12 @@ const AIEngine = {
             const start = clean.indexOf('{');
             const end = clean.lastIndexOf('}');
             let parsed = null;
-
             if (start !== -1 && end !== -1) {
                 parsed = JSON.parse(clean.substring(start, end + 1));
             } else {
                 throw new Error("No JSON");
             }
-
             const norm = AIEngine.normalizeKeys(parsed);
-
             return {
                 studentname: norm.studentname || "Inconnu",
                 grade: norm.grade || norm.note || "?",
@@ -39,27 +36,18 @@ const AIEngine = {
                 transcription: norm.transcription || norm.analyse || "Pas de détail.",
                 mistakes: norm.mistakes || []
             };
-
         } catch (e) { 
-            // MODE SECOURS RENFORCÉ
-            console.warn("⚠️ [AI-ENGINE] Mode RAW + Scraper.");
-            
+            // MODE SECOURS
             let extractedGrade = "?";
-            // Regex 1 : Cherche "grade": "A" dans le texte brut (si JSON mal formé)
-            let match = text.match(/"grade"\s*:\s*"([A-C]\+?)"/i);
-            if (!match) match = text.match(/"note"\s*:\s*"([A-C]\+?)"/i);
-            // Regex 2 : Cherche Note : A dans le texte humain
-            if (!match) match = text.match(/(?:Note|Grade)\s*[:=]\s*([A-C]\+?)/i);
-            
+            let match = text.match(/(?:Note|Grade)\s*[:=]\s*([A-C]\+?)/i);
             if (match) extractedGrade = match[1].toUpperCase();
 
-            // Si l'IA a fait du markdown au lieu du HTML, on convertit basiquement pour l'affichage
             let cleanText = text.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
 
             return {
                 studentName: "Format Texte",
-                grade: extractedGrade, // On renvoie la note trouvée par regex
-                appreciation: "L'IA a répondu en texte libre.",
+                grade: extractedGrade,
+                appreciation: "Mode Texte Brut (Fallback)",
                 transcription: cleanText, 
                 mistakes: []
             };
@@ -77,13 +65,22 @@ const AIEngine = {
             const model = genAI.getGenerativeModel({ 
                 model: targetModel,
                 systemInstruction: systemInstruction,
-                // On baisse la température pour rendre l'IA moins "créative" et plus "robot"
-                generationConfig: { temperature: 0.2 }
+                // --- DÉSACTIVATION DES FILTRES DE SÉCURITÉ ---
+                safetySettings: [
+                    { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                    { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+                    { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                    { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                ]
             });
+            
             const result = await model.generateContent(prompt);
-            return result.response.text();
+            const response = await result.response;
+            return response.text();
         } catch (e) {
             console.error(`💥 CRASH GOOGLE :`, e.message);
+            // Si l'IA refuse pour "Safety", on renvoie un message clair
+            if (e.message.includes("SAFETY")) return "REFUS SÉCURITÉ GOOGLE : L'image est considérée comme sensible.";
             return `ERREUR: ${e.message}`;
         }
     }

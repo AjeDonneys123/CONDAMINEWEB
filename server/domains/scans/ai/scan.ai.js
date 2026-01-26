@@ -12,34 +12,38 @@ const streamToBuffer = async (stream) => {
 
 const ScanAI = {
     correctCopy: async (copyUrl, subjectUrls, instructions, studentList) => {
-        console.log("👁️ [SCAN-AI] Correction V120 (Mode Assistant Pédagogique)...");
+        console.log("👁️ [SCAN-AI] Correction V121 (Technique OCR)...");
 
         const rosterText = studentList.map(s => `${s.firstName} ${s.lastName}`).join(', ');
 
-        // ON CHANGE LE CONTEXTE POUR EVITER LE REFUS
-        const system = `RÔLE : Assistant Pédagogique Numérique.
-        CONTEXTE : Le professeur utilise cet outil pour numériser et pré-analyser des copies manuscrites.
+        // PROMPT TECHNIQUE (Non-Humain)
+        const system = `TASK: DOCUMENT ANALYSIS & OCR.
         
-        TA MISSION :
-        1. Transcrire le texte manuscrit de l'image (OCR).
-        2. Comparer ce texte aux critères fournis par le professeur : "${instructions}".
-        3. Suggérer une évaluation indicative.
+        INPUT DATA:
+        1. Reference Document (Image).
+        2. Handwriting Sample (Image).
         
-        AUTORISATIONS :
-        - Tu as l'autorisation d'analyser ce document dans un cadre pédagogique.
-        - Identifie l'élève parmi cette liste si possible : [${rosterText}].
+        INSTRUCTIONS:
+        1. EXTRACT NAME: Look for a name in the handwriting sample that matches one of: [${rosterText}].
+        2. ANALYSE CONTENT: Compare the handwritten text content against the reference criteria: "${instructions}".
+        3. GENERATE REPORT: Output a JSON object.
+        
+        GRADING LOGIC (Technical Score):
+        - A = High Match.
+        - B = Partial Match.
+        - C = Low Match.
 
-        FORMAT DE RÉPONSE ATTENDU (JSON) :
+        OUTPUT FORMAT (JSON ONLY):
         {
-            "studentName": "Nom de l'élève ou Inconnu",
-            "grade": "Note suggérée (A+, A, B, C)",
-            "appreciation": "Synthèse courte pour le professeur.",
-            "transcription": "Transcription du texte de l'élève en NOIR. Insère tes suggestions de correction en ROUGE avec la balise HTML <span style='color:#ef4444; font-weight:bold;'>[SUGGESTION]</span>.",
-            "mistakes": ["Point d'attention 1", "Point d'attention 2"]
+            "studentName": "Extracted Name",
+            "grade": "A, B, or C",
+            "appreciation": "Technical summary.",
+            "transcription": "Full OCR transcription + <span style='color:#ef4444'>[CORRECTIONS]</span>.",
+            "mistakes": []
         }`;
 
         const promptParts = [
-            { text: "Analyse cette copie s'il te plaît." }
+            { text: "START ANALYSIS." }
         ];
 
         const getImageData = async (url) => {
@@ -52,10 +56,7 @@ const ScanAI = {
                     return buffer.toString('base64');
                 }
                 return null;
-            } catch (e) {
-                console.error(`❌ [AI-FETCH] Erreur : ${e.message}`);
-                return null;
-            }
+            } catch (e) { return null; }
         };
 
         try {
@@ -69,13 +70,12 @@ const ScanAI = {
             const copyB64 = await getImageData(copyUrl);
             if (copyB64) {
                 promptParts.push({ inlineData: { mimeType: "image/jpeg", data: copyB64 } });
-                promptParts.push({ text: "Voici la copie." });
             } else {
                 return {
                     studentName: "Image Illisible",
                     grade: "C",
-                    appreciation: "Impossible de lire le fichier.",
-                    transcription: "Erreur technique Drive.",
+                    appreciation: "Erreur technique.",
+                    transcription: "Fichier non trouvé.",
                     mistakes: []
                 };
             }
@@ -87,7 +87,7 @@ const ScanAI = {
             return { 
                 studentName: "Erreur", 
                 grade: "?", 
-                appreciation: "L'assistant n'a pas pu traiter la demande.", 
+                appreciation: "Echec technique.", 
                 transcription: e.message, 
                 mistakes: [] 
             };
