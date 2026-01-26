@@ -1,26 +1,26 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
-console.log("------------------------------------------------");
-console.log("✅ MOTEUR IA V12 (DEBUG FORCE) CHARGÉ");
-console.log("------------------------------------------------");
-
 /**
- * 🤖 MOTEUR IA - V12 (INCASSABLE)
- * Ce fichier ne contient PLUS le message "Parsing Failed".
- * S'il échoue, il renvoie le texte brut.
+ * 🤖 MOTEUR IA - V13 (NORMALISATEUR DE CLÉS)
+ * Répare les problèmes de majuscules/minuscules dans le JSON de l'IA.
  */
 const AIEngine = {
-    sanitizeJSON: (text) => {
-        // Sécurité anti-vide
-        if (!text) return { 
-            studentName: "Erreur Vide", 
-            grade: "?", 
-            appreciation: "L'IA est restée muette.", 
-            transcription: "Aucune réponse reçue de Google.", 
-            mistakes: [] 
-        };
+    // Fonction utilitaire pour tout mettre en minuscule
+    normalizeKeys: (obj) => {
+        if (typeof obj !== 'object' || obj === null) return obj;
+        if (Array.isArray(obj)) return obj.map(AIEngine.normalizeKeys);
+        
+        return Object.keys(obj).reduce((acc, key) => {
+            // On transforme "StudentName" ou "studentname" en "studentname"
+            const cleanKey = key.toLowerCase().trim();
+            // On garde le contenu tel quel
+            acc[cleanKey] = AIEngine.normalizeKeys(obj[key]);
+            return acc;
+        }, {});
+    },
 
-        console.log("📝 [AI-ENGINE] Texte reçu à nettoyer :", text.substring(0, 50) + "...");
+    sanitizeJSON: (text) => {
+        if (!text) return { grade: "?", appreciation: "IA Muette", transcription: "Rien." };
 
         let clean = text
             .replace(/```json/gi, "")
@@ -28,38 +28,47 @@ const AIEngine = {
             .trim();
         
         try {
-            // Tentative 1 : Parsing direct
-            return JSON.parse(clean);
-        } catch (e1) {
-            try {
-                // Tentative 2 : Extraction { ... }
-                const start = clean.indexOf('{');
-                const end = clean.lastIndexOf('}');
-                if (start !== -1 && end !== -1) {
-                    return JSON.parse(clean.substring(start, end + 1));
-                }
-                throw new Error("Pas de JSON détectable");
-            } catch (e2) {
-                // ÉCHEC TOTAL : ON RENVOIE LE TEXTE BRUT
-                // C'est ici que l'ancien code plantait. Maintenant, on renvoie un objet valide.
-                console.warn("⚠️ [AI-ENGINE] JSON cassé. Mode RAW activé.");
-                return {
-                    studentName: "IA Confuse",
-                    grade: "?/20",
-                    appreciation: "L'IA a répondu mais le format est incorrect. Voir Analyse Détaillée.",
-                    transcription: "🔴 CONTENU BRUT DE L'IA (V12) :\n\n" + text, 
-                    mistakes: ["Erreur Technique JSON"]
-                };
+            let parsed = null;
+            // 1. Parsing
+            const start = clean.indexOf('{');
+            const end = clean.lastIndexOf('}');
+            if (start !== -1 && end !== -1) {
+                parsed = JSON.parse(clean.substring(start, end + 1));
+            } else {
+                throw new Error("Pas de JSON");
             }
+
+            // 2. NORMALISATION (C'est la nouveauté V13)
+            // Si l'IA renvoie { "Grade": "12" }, on transforme en { "grade": "12" }
+            const normalized = AIEngine.normalizeKeys(parsed);
+
+            // 3. Vérification des champs vitaux (Fallback si manquant)
+            return {
+                studentname: normalized.studentname || "Inconnu",
+                grade: normalized.grade || normalized.note || "?/20",
+                appreciation: normalized.appreciation || normalized.avis || "Non renseigné.",
+                transcription: normalized.transcription || normalized.analyse || normalized.details || "Pas de détail fourni.",
+                mistakes: normalized.mistakes || normalized.erreurs || []
+            };
+
+        } catch (e) { 
+            console.warn("⚠️ [AI-ENGINE] JSON Fail -> Mode RAW.");
+            return {
+                studentName: "Erreur Format",
+                grade: "?",
+                appreciation: "L'IA a répondu hors format JSON.",
+                transcription: "🔴 CONTENU BRUT :\n\n" + text, 
+                mistakes: []
+            };
         }
     },
 
     ask: async (prompt, systemInstruction = "") => {
         const apiKey = process.env.GEMINI_API_KEY;
         const targetModel = "gemini-2.0-flash"; 
-
-        if (!apiKey) return "ERREUR CRITIQUE : Clé API manquante dans Render.";
         
+        if (!apiKey) return "ERREUR CLÉ API";
+
         try {
             const genAI = new GoogleGenerativeAI(apiKey);
             const model = genAI.getGenerativeModel({ 
@@ -69,14 +78,10 @@ const AIEngine = {
             
             const result = await model.generateContent(prompt);
             const response = await result.response;
-            const finalText = response.text();
-            
-            console.log("Testing AI response length:", finalText.length);
-            return finalText;
-
+            return response.text();
         } catch (e) {
-            console.error(`💥 CRASH GOOGLE API :`, e.message);
-            return `ERREUR FATALE GOOGLE : ${e.message}`;
+            console.error(`💥 CRASH GOOGLE :`, e.message);
+            return `ERREUR GOOGLE: ${e.message}`;
         }
     }
 };
