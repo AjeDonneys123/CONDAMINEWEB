@@ -1,8 +1,8 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 /**
- * 🤖 MOTEUR IA - V14 (ADAPTATEUR DE TABLEAUX)
- * Si l'IA renvoie une liste (Array), on la convertit en Objet standard.
+ * 🤖 MOTEUR IA - V15 (EXTRACTION NOTE INTELLIGENTE)
+ * Si le JSON échoue, on cherche la note dans le texte brut.
  */
 const AIEngine = {
     normalizeKeys: (obj) => {
@@ -20,63 +20,40 @@ const AIEngine = {
         let clean = text.replace(/```json/gi, "").replace(/```/gi, "").trim();
         
         try {
-            let parsed = null;
-            // 1. Détection structure (Objet {} ou Tableau [])
-            const startObj = clean.indexOf('{');
-            const startArr = clean.indexOf('[');
-            
-            // Si c'est un tableau qui arrive en premier
-            if (startArr !== -1 && (startObj === -1 || startArr < startObj)) {
-                const endArr = clean.lastIndexOf(']');
-                if (endArr !== -1) {
-                    parsed = JSON.parse(clean.substring(startArr, endArr + 1));
-                    
-                    // --- MAGIE V14 : CONVERSION TABLEAU -> OBJET ---
-                    // On transforme la liste de points en un beau texte
-                    console.log("⚠️ [AI-ENGINE] Tableau détecté, conversion en Objet...");
-                    let formattedText = parsed.map(item => {
-                        const pt = item.point || item.question || "•";
-                        const corr = item.correction || item.reponse || "";
-                        const sugg = item.suggestion || item.conseil || "";
-                        return `📌 Point ${pt} :\nCorrection : ${corr}\n💡 Conseil : ${sugg}`;
-                    }).join('\n\n');
-
-                    return {
-                        studentname: "Non précisé",
-                        grade: "?/20",
-                        appreciation: "Correction détaillée point par point (voir ci-dessous).",
-                        transcription: formattedText,
-                        mistakes: []
-                    };
-                }
-            }
-            
-            // Sinon, traitement standard Objet
+            // Tentative standard
             const start = clean.indexOf('{');
             const end = clean.lastIndexOf('}');
+            let parsed = null;
+
             if (start !== -1 && end !== -1) {
                 parsed = JSON.parse(clean.substring(start, end + 1));
             } else {
-                throw new Error("Ni Objet ni Tableau JSON trouvé");
+                throw new Error("No JSON");
             }
 
-            const normalized = AIEngine.normalizeKeys(parsed);
+            const norm = AIEngine.normalizeKeys(parsed);
 
             return {
-                studentname: normalized.studentname || "Inconnu",
-                grade: normalized.grade || normalized.note || "?/20",
-                appreciation: normalized.appreciation || normalized.avis || "Non renseigné.",
-                transcription: normalized.transcription || normalized.analyse || normalized.details || JSON.stringify(parsed, null, 2),
-                mistakes: normalized.mistakes || []
+                studentname: norm.studentname || "Inconnu",
+                grade: norm.grade || norm.note || "?", // L'IA doit mettre A, B...
+                appreciation: norm.appreciation || "Pas d'avis.",
+                transcription: norm.transcription || norm.analyse || "Pas de détail.",
+                mistakes: norm.mistakes || []
             };
 
         } catch (e) { 
-            console.warn("⚠️ [AI-ENGINE] Mode RAW activé.");
+            // MODE SECOURS : ON CHERCHE LA NOTE DANS LE TEXTE
+            // Ex: "Note: B" ou "Grade: A+"
+            let extractedGrade = "?";
+            const gradeMatch = text.match(/(?:Note|Grade)\s*:\s*([A-C]\+?)/i);
+            if (gradeMatch) extractedGrade = gradeMatch[1].toUpperCase();
+
+            console.warn("⚠️ [AI-ENGINE] Mode RAW + Extraction Note.");
             return {
                 studentName: "Format Texte",
-                grade: "?",
+                grade: extractedGrade,
                 appreciation: "L'IA a répondu en texte libre.",
-                transcription: text, 
+                transcription: text, // On renvoie tout le texte brut
                 mistakes: []
             };
         }

@@ -101,36 +101,21 @@ export default function ScansStudio({ user }) {
 
     const openCorrectionModal = (sessionId) => {
         setCorrectionModal(sessionId);
-        setInstructions("Compare la copie au SUJET fourni. Note sur 20. Sois bienveillant mais précis sur les erreurs.");
+        setInstructions("Compare la copie au SUJET fourni. Note selon le barème (A+, A, B, C).");
     };
 
-    // --- LE CŒUR DU DEBUG ESPION ---
     const launchCorrection = async () => {
         if(!correctionModal) return;
         setProcessing(true);
-        console.log("🚀 LANCEMENT CORRECTION...");
         try {
-            const res = await fetch(`/api/scans/correct/${correctionModal}`, { 
+            await fetch(`/api/scans/correct/${correctionModal}`, { 
                 method: 'POST', 
                 headers: {'Content-Type':'application/json'}, 
                 body: JSON.stringify({ instructions }) 
             });
-            
-            const data = await res.json();
-            
-            // --- ESPION CONSOLE ---
-            console.log("🔥 RÉPONSE DU SERVEUR REÇUE :", data);
-            if (data.corrections && data.corrections.length > 0) {
-                console.log("📝 TRANSCRIPTION IA PREMIÈRE COPIE :", data.corrections[0].transcription);
-            }
-            // ---------------------
-
             await loadSessions();
             setCorrectionModal(null);
-        } catch(e) { 
-            console.error("❌ ERREUR FRONTEND :", e);
-            alert("Erreur IA"); 
-        }
+        } catch(e) { alert("Erreur IA"); }
         setProcessing(false);
     };
 
@@ -142,7 +127,13 @@ export default function ScansStudio({ user }) {
                         <div className="corr-header">
                             <div>
                                 <h2 className="text-xl font-black uppercase text-white">{viewingCorrection.studentName}</h2>
-                                <span className="text-xs font-bold text-emerald-400">NOTE : {viewingCorrection.grade}</span>
+                                <span className={`text-sm font-black px-3 py-1 rounded-full ${
+                                    (viewingCorrection.grade || "").includes("A") ? "bg-green-500 text-white" :
+                                    (viewingCorrection.grade || "").includes("B") ? "bg-yellow-500 text-white" :
+                                    "bg-red-500 text-white"
+                                }`}>
+                                    NOTE : {viewingCorrection.grade}
+                                </span>
                             </div>
                             <button onClick={() => setViewingCorrection(null)} className="text-white text-2xl">✕</button>
                         </div>
@@ -155,11 +146,12 @@ export default function ScansStudio({ user }) {
                                 <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-xl text-indigo-900 font-medium mb-6">
                                     {viewingCorrection.appreciation}
                                 </div>
-                                <h4 className="text-sm font-black text-slate-400 uppercase mb-2">Analyse Détaillée</h4>
-                                <div className="prose prose-sm text-slate-600 whitespace-pre-wrap font-mono text-xs">
-                                    {/* ON AFFICHE TOUJOURS QUELQUE CHOSE ICI */}
-                                    {viewingCorrection.transcription || "⚠️ Aucune transcription disponible."}
-                                </div>
+                                <h4 className="text-sm font-black text-slate-400 uppercase mb-2">Analyse Détaillée (Rouge = IA / Noir = Élève)</h4>
+                                {/* MODIFICATION CRITIQUE : Support du HTML pour les couleurs */}
+                                <div 
+                                    className="prose prose-sm text-slate-800 whitespace-pre-wrap font-mono text-xs p-4 bg-slate-50 border rounded-xl"
+                                    dangerouslySetInnerHTML={{ __html: viewingCorrection.transcription }}
+                                />
                             </div>
                         </div>
                     </div>
@@ -169,8 +161,8 @@ export default function ScansStudio({ user }) {
             {correctionModal && (
                 <div className="scan-overlay animate-in">
                     <div className="scan-modal">
-                        <h3>🤖 CONFIGURATION CORRECTION</h3>
-                        <p className="text-xs text-slate-400 mb-2">L'IA va utiliser les images "SUJET" comme référence.</p>
+                        <h3>🤖 CORRECTION (Barème A+/A/B/C)</h3>
+                        <p className="text-xs text-slate-400 mb-2">L'IA va transcrire le texte en noir et commenter en rouge.</p>
                         <textarea className="scan-instr-input" value={instructions} onChange={e => setInstructions(e.target.value)} />
                         <div className="scan-modal-actions">
                             <button onClick={() => setCorrectionModal(null)} className="btn-cancel">ANNULER</button>
@@ -208,7 +200,7 @@ export default function ScansStudio({ user }) {
                                 {s.subjectUrls?.length > 0 && (
                                     <div className="mb-6"><h4 className="font-bold mb-2 uppercase text-xs text-indigo-300">SUJETS</h4><div className="snap-queue-strip custom-scrollbar justify-start">{s.subjectUrls.map((url, i) => (<SecureImage key={i} src={url} className="queue-thumb border-indigo-500 border-2" onClick={() => window.open(url, '_blank')} />))}</div></div>
                                 )}
-                                <div><h4 className="font-bold mb-2 uppercase text-xs text-emerald-300">COPIES ({s.copyUrls.length})</h4><div className="snap-queue-strip custom-scrollbar justify-start flex-wrap">{s.copyUrls.map((url, i) => { const correction = s.corrections?.find(c => c.originalUrl === url); return (<div key={i} className="relative group cursor-pointer" onClick={() => { if(correction) setViewingCorrection(correction); else window.open(url, '_blank'); }}><SecureImage src={url} className={`queue-thumb ${correction ? 'border-green-500' : 'border-slate-500'} border-2`} />{correction && <div className="absolute top-0 right-0 bg-green-500 text-white text-[8px] font-black px-1 rounded-bl">OK</div>}</div>); })}</div></div>
+                                <div><h4 className="font-bold mb-2 uppercase text-xs text-emerald-300">COPIES ({s.copyUrls.length})</h4><div className="snap-queue-strip custom-scrollbar justify-start flex-wrap">{s.copyUrls.map((url, i) => { const correction = s.corrections?.find(c => c.originalUrl === url); return (<div key={i} className="relative group cursor-pointer" onClick={() => { if(correction) setViewingCorrection(correction); else window.open(url, '_blank'); }}><SecureImage src={url} className={`queue-thumb ${correction ? 'border-green-500' : 'border-slate-500'} border-2`} />{correction && <div className="absolute top-0 right-0 bg-green-500 text-white text-[8px] font-black px-1 rounded-bl">{correction.grade || "OK"}</div>}</div>); })}</div></div>
                             </div>
                         )}
 
