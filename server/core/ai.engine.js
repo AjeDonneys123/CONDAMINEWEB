@@ -1,31 +1,56 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 /**
- * 🤖 MOTEUR IA CENTRALISÉ - V4 (GESTION ERREUR CLÉ)
- * Intercepte les clés expirées pour prévenir l'utilisateur.
+ * 🤖 MOTEUR IA CENTRALISÉ - V5 (JSON ROBUSTE)
+ * Capable d'extraire le JSON même si l'IA ajoute du texte autour.
  */
 const AIEngine = {
     sanitizeJSON: (text) => {
+        // 1. Nettoyage basique Markdown
+        let clean = text.replace(/```json/gi, "").replace(/```/gi, "").trim();
+        
         try {
-            let clean = text.replace(/```json/gi, "").replace(/```/gi, "").trim();
-            const startArray = clean.indexOf('[');
-            const startObj = clean.indexOf('{');
-            let startIdx = -1;
-            let endIdx = -1;
-
-            if (startArray !== -1 && (startObj === -1 || startArray < startObj)) {
-                startIdx = startArray;
-                endIdx = clean.lastIndexOf(']') + 1;
-            } else if (startObj !== -1) {
-                startIdx = startObj;
-                endIdx = clean.lastIndexOf('}') + 1;
+            // 2. Extraction chirurgicale du JSON (Cherche la première { ou [ et la dernière } ou ])
+            const firstOpenBrace = clean.indexOf('{');
+            const firstOpenBracket = clean.indexOf('[');
+            
+            let startIndex = -1;
+            
+            // On détermine si c'est un Objet {} ou un Array [] qui commence en premier
+            if (firstOpenBrace !== -1 && (firstOpenBracket === -1 || firstOpenBrace < firstOpenBracket)) {
+                startIndex = firstOpenBrace;
+            } else if (firstOpenBracket !== -1) {
+                startIndex = firstOpenBracket;
             }
 
-            if (startIdx === -1) throw new Error("Format JSON introuvable");
-            return JSON.parse(clean.substring(startIdx, endIdx));
+            if (startIndex === -1) {
+                console.error("🔥 [AI-CORE] Pas de structure JSON détectée dans:", text.substring(0, 100));
+                throw new Error("Aucune donnée structurée trouvée dans la réponse IA.");
+            }
+
+            // On cherche la fin correspondante
+            // Si ça commence par {, on cherche la dernière }
+            // Si ça commence par [, on cherche le dernier ]
+            let endIndex = -1;
+            if (clean[startIndex] === '{') {
+                endIndex = clean.lastIndexOf('}');
+            } else {
+                endIndex = clean.lastIndexOf(']');
+            }
+
+            if (endIndex === -1 || endIndex <= startIndex) {
+                throw new Error("JSON incomplet ou malformé.");
+            }
+
+            // On extrait uniquement la partie JSON valide
+            const jsonString = clean.substring(startIndex, endIndex + 1);
+            
+            return JSON.parse(jsonString);
+
         } catch (e) { 
-            console.error("🔥 [AI-CORE] Échec parsing JSON. Brut :", text.substring(0, 100) + "...");
-            throw new Error("L'IA a renvoyé un format illisible."); 
+            console.error("🔥 [AI-CORE] Échec parsing JSON. Texte reçu complet :\n", text);
+            // On renvoie une erreur plus douce pour l'interface
+            throw new Error("L'IA a renvoyé un format illisible (Parsing Failed)."); 
         }
     },
 
@@ -65,7 +90,6 @@ const AIEngine = {
         } catch (e) {
             console.error(`💥 [AI-CORE] CRASH GOOGLE :`, e.message);
             
-            // DÉTECTION SPÉCIFIQUE CLÉ EXPIRÉE
             if (e.message.includes('API key expired') || e.message.includes('API_KEY_INVALID') || e.status === 400) {
                 throw new Error("⚠️ VOTRE CLÉ API EST PÉRIMÉE. Changez-la dans le fichier .env !");
             }
