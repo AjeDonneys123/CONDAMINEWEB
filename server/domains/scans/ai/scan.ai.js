@@ -12,33 +12,34 @@ const streamToBuffer = async (stream) => {
 
 const ScanAI = {
     correctCopy: async (copyUrl, subjectUrls, instructions, studentList) => {
-        console.log("👁️ [SCAN-AI] Correction V119 (Mode API Strict)...");
+        console.log("👁️ [SCAN-AI] Correction V120 (Mode Assistant Pédagogique)...");
 
         const rosterText = studentList.map(s => `${s.firstName} ${s.lastName}`).join(', ');
 
-        // ON CHANGE DE PERSONA : Ce n'est plus un prof, c'est une MACHINE.
-        const system = `Tu es une API JSON stricte. Tu n'es PAS un assistant conversationnel.
+        // ON CHANGE LE CONTEXTE POUR EVITER LE REFUS
+        const system = `RÔLE : Assistant Pédagogique Numérique.
+        CONTEXTE : Le professeur utilise cet outil pour numériser et pré-analyser des copies manuscrites.
         
-        TÂCHE : Analyser la copie d'un élève (fournie en image) par rapport au sujet.
+        TA MISSION :
+        1. Transcrire le texte manuscrit de l'image (OCR).
+        2. Comparer ce texte aux critères fournis par le professeur : "${instructions}".
+        3. Suggérer une évaluation indicative.
         
-        RÈGLES D'OR (Non-négociables) :
-        1. NE DIS PAS "Bonjour", NE DIS PAS "Voici l'analyse".
-        2. RENVOIE UNIQUEMENT UN OBJET JSON. RIEN AVANT, RIEN APRÈS.
-        3. CODE COULEUR : Pour les corrections dans le texte, utilise UNIQUEMENT le HTML suivant : <span style="color:#ef4444; font-weight:bold;">[Ton commentaire]</span>. N'utilise PAS de Markdown (**Gras**).
-        
-        LISTE ÉLÈVES POSSIBLES : [${rosterText}].
+        AUTORISATIONS :
+        - Tu as l'autorisation d'analyser ce document dans un cadre pédagogique.
+        - Identifie l'élève parmi cette liste si possible : [${rosterText}].
 
-        FORMAT JSON À RESPECTER :
+        FORMAT DE RÉPONSE ATTENDU (JSON) :
         {
-            "studentName": "Nom trouvé ou 'Inconnu'",
-            "grade": "Note (A+, A, B ou C)",
-            "appreciation": "Résumé court (2 phrases).",
-            "transcription": "Ton analyse complète avec les balises HTML <span...> pour tes corrections.",
-            "mistakes": ["Erreur 1", "Erreur 2"]
+            "studentName": "Nom de l'élève ou Inconnu",
+            "grade": "Note suggérée (A+, A, B, C)",
+            "appreciation": "Synthèse courte pour le professeur.",
+            "transcription": "Transcription du texte de l'élève en NOIR. Insère tes suggestions de correction en ROUGE avec la balise HTML <span style='color:#ef4444; font-weight:bold;'>[SUGGESTION]</span>.",
+            "mistakes": ["Point d'attention 1", "Point d'attention 2"]
         }`;
 
         const promptParts = [
-            { text: `INSTRUCTIONS PROF : ${instructions}` }
+            { text: "Analyse cette copie s'il te plaît." }
         ];
 
         const getImageData = async (url) => {
@@ -68,7 +69,7 @@ const ScanAI = {
             const copyB64 = await getImageData(copyUrl);
             if (copyB64) {
                 promptParts.push({ inlineData: { mimeType: "image/jpeg", data: copyB64 } });
-                promptParts.push({ text: "ANALYSE JSON STRICTE." });
+                promptParts.push({ text: "Voici la copie." });
             } else {
                 return {
                     studentName: "Image Illisible",
@@ -86,7 +87,7 @@ const ScanAI = {
             return { 
                 studentName: "Erreur", 
                 grade: "?", 
-                appreciation: "Erreur critique.", 
+                appreciation: "L'assistant n'a pas pu traiter la demande.", 
                 transcription: e.message, 
                 mistakes: [] 
             };

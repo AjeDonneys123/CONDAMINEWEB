@@ -37,11 +37,11 @@ app.get('/uploads/:filename', (req, res) => {
     res.status(404).send('Fichier introuvable (Disque éphémère).');
 });
 
-// ROUTE VERSION V115
+// VERSION V120 (SAFETY BYPASS)
 app.get('/api/check-deploy', (req, res) => {
     res.json({ 
         status: "OK", 
-        version: "V115_MILITARY_PROMPT", 
+        version: "V120_DIPLOMATIC_PROMPT", 
         bootId: SERVER_BOOT_ID 
     });
 });
@@ -70,4 +70,4 @@ if (fs.existsSync(distPath)) {
         res.sendFile(path.join(distPath, 'index.html'));
     });
 }
-app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V115 (PROMPT STRICT) UP`));
+app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V120 UP`));
