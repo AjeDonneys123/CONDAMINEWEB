@@ -4,7 +4,6 @@ const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 
-// POLYFILLS
 if (!global.fetch) {
     const fetch = require('node-fetch');
     global.fetch = fetch;
@@ -18,42 +17,36 @@ const app = express();
 const port = process.env.PORT || 3000;
 const SERVER_BOOT_ID = Date.now();
 
-// CHARGEMENT MODÈLES (Blindage anti-crash si un fichier manque)
 const models = ['AcademicYear', 'Admin', 'Classroom', 'Subject', 'Teacher', 'Student', 'Enrollment', 'Chapter', 'Homework', 'Submission', 'GameLevel', 'GameProgress', 'MistakesBook', 'AccessLog', 'BugReport', 'ProjectDoc', 'Player', 'StudioProject', 'Sanction', 'ScanSession'];
-models.forEach(m => { 
-    try { require(`./models/${m}`); } 
-    catch (e) { console.warn(`⚠️ Modèle optionnel manquant : ${m} (${e.message})`); } 
-});
+models.forEach(m => { try { require(`./models/${m}`); } catch (e) { console.warn(`⚠️ Modèle manquant : ${m}`); } });
 
 app.use(express.json({ limit: '100mb' }));
 
-// --- CONFIGURATION DES CHEMINS ---
 const publicPath = path.resolve(process.cwd(), 'public');
 const uploadsPath = path.join(publicPath, 'uploads');
-
 if (!fs.existsSync(publicPath)) fs.mkdirSync(publicPath, { recursive: true });
 if (!fs.existsSync(uploadsPath)) fs.mkdirSync(uploadsPath, { recursive: true });
 
-// 1. SERVICE STATIQUE
 app.use('/uploads', express.static(uploadsPath));
 
-// 2. FALLBACK DÉTECTIVE
+// DÉTECTIVE V114
 app.get('/uploads/:filename', (req, res) => {
     const requestedFile = req.params.filename;
     const cleanName = decodeURIComponent(requestedFile).split('?')[0]; 
     const filePath = path.join(uploadsPath, cleanName);
-
     if (fs.existsSync(filePath)) return res.sendFile(filePath);
-
-    const extensions = ['.jpg', '.jpeg', '.png', '.webp', '.blob'];
-    for (const ext of extensions) {
-        if (fs.existsSync(filePath + ext)) return res.sendFile(filePath + ext);
-    }
-
-    res.status(404).send('Fichier introuvable sur le disque serveur.');
+    res.status(404).send('Fichier introuvable (Disque éphémère).');
 });
 
-// ROUTES API
+// ROUTE VERSION
+app.get('/api/check-deploy', (req, res) => {
+    res.json({ 
+        status: "OK", 
+        version: "V114_STRICT_DRIVE", 
+        bootId: SERVER_BOOT_ID 
+    });
+});
+
 app.use('/api/auth', require('./domains/auth/auth.routes'));
 app.use('/api/admin', require('./domains/admin/admin.routes'));
 app.use('/api/structure', require('./domains/structure/structure.routes'));
@@ -63,22 +56,12 @@ app.use('/api/studio', require('./domains/studio/studio.routes'));
 app.use('/api/classroom', require('./domains/classroom/classroom.routes'));
 app.use('/api/scans', require('./domains/scans/scans.routes'));
 
-// --- VÉRIFICATION VERSION ---
-app.get('/api/check-deploy', (req, res) => {
-    res.json({ 
-        status: "OK", 
-        version: "V113_FINAL_FIX", 
-        bootId: SERVER_BOOT_ID,
-        message: "Code V113 Actif. Si tu vois ça, les correctifs IA sont chargés."
-    });
-});
-
 app.use((err, req, res, next) => {
-    console.error("🔥 [SERVER_ERROR]:", err.message);
-    res.status(500).json({ error: err.message || "Erreur serveur" });
+    console.error("🔥 SERVER ERROR:", err.message);
+    res.status(500).json({ error: err.message });
 });
 
-mongoose.connect(process.env.MONGODB_URI).then(() => console.log('✅ BDD CONNECTÉE & MODÈLES PRÊTS'));
+mongoose.connect(process.env.MONGODB_URI).then(() => console.log('✅ BDD CONNECTÉE'));
 
 const distPath = path.resolve(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) {
@@ -88,4 +71,4 @@ if (fs.existsSync(distPath)) {
         res.sendFile(path.join(distPath, 'index.html'));
     });
 }
-app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V113 (SYNC CHECK) UP | PORT ${port}`));
+app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V114 (STRICT DRIVE) UP`));
