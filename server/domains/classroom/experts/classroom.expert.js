@@ -22,19 +22,15 @@ const ClassroomExpert = {
         const submissions = await Submission.find({ studentId: { $in: studentIds }, homeworkId: { $in: activeHomeworks.map(h => h._id) } }, 'studentId homeworkId').lean();
         const progresses = await GameProgress.find({ studentId: { $in: studentIds }, gameId: { $in: activeGames.map(g => g._id) } }, 'studentId gameId levelReached').lean();
 
-        // CHECK DES RETARDS DE PUNITION
         const now = new Date();
-        const studentsToUpdate = [];
 
         return Promise.all(students.map(async s => {
             const sId = String(s._id);
             const indicators = [];
 
-            // Update PENDING -> LATE si date dépassée
             if (s.punishmentStatus === 'PENDING' && s.punishmentDueDate && new Date(s.punishmentDueDate) < now) {
-                // On update en BDD direct (ou on le marque pour update)
                 await Student.findByIdAndUpdate(s._id, { punishmentStatus: 'LATE' });
-                s.punishmentStatus = 'LATE'; // Pour l'affichage immédiat
+                s.punishmentStatus = 'LATE';
             }
 
             activeHomeworks.forEach(hw => {
@@ -60,7 +56,6 @@ const ClassroomExpert = {
         }));
     },
 
-    // --- LOGIQUE DES CROIX & PUNITIONS ---
     addBehavior: async (sid, type, tid, extra) => {
         const Student = mongoose.model('Student');
         const Homework = mongoose.model('Homework');
@@ -79,42 +74,38 @@ const ClassroomExpert = {
         else if(type==='CROSS') {
             r.crosses++;
             r.weeksToRedemption=3;
-            
-            // --- DÉCLENCHEMENT DE LA PUNITION À 3 CROIX ---
             if(r.crosses >= 3) {
-                r.crosses = 0; // Remise à zéro
+                r.crosses = 0;
                 s.punishmentStatus = 'PENDING';
-                
-                // Date limite = Maintenant + 7 jours
                 const dueDate = new Date();
                 dueDate.setDate(dueDate.getDate() + 7);
                 s.punishmentDueDate = dueDate;
 
-                // Trouver le devoir PUNITION du niveau/prof
-                // On cherche un Homework isPunishment=true créé par ce prof, et qui cible cette classe (ou le niveau)
-                // Comme targetClassrooms est un array de strings, on check si la classe de l'élève est dedans
-                const punishments = await Homework.find({ 
-                    isPunishment: true, 
-                    teacherId: tid 
-                });
-
-                // On filtre pour trouver celui qui correspond à la classe de l'élève
-                // On suppose qu'il n'y en a qu'un par classe/niveau
+                const punishments = await Homework.find({ isPunishment: true, teacherId: tid });
                 const validPunishment = punishments.find(p => p.targetClassrooms.includes(s.currentClass));
 
                 if (validPunishment) {
-                    // On assigne l'élève à ce devoir (ce qui le fait apparaître dans son interface)
                     if (!validPunishment.assignedStudents.includes(s._id)) {
                         validPunishment.assignedStudents.push(s._id);
                         await validPunishment.save();
                     }
-                } else {
-                    console.log("⚠️ Aucune punition configurée pour cette classe !");
                 }
             }
         } 
         else if(type==='REMOVE_CROSS') r.crosses=Math.max(0,r.crosses-1);
         else if(type==='SAVE_NOTE') n.text=extra||"";
+        
+        // --- NOUVEAU CAS : LEVER LA PUNITION ---
+        else if (type === 'REMOVE_PUNISHMENT') {
+            s.punishmentStatus = 'NONE';
+            s.punishmentDueDate = null;
+            // On retire l'élève de TOUTES les punitions actives assignées par ce prof
+            const punishments = await Homework.find({ isPunishment: true, teacherId: tid, assignedStudents: sid });
+            for (const p of punishments) {
+                p.assignedStudents = p.assignedStudents.filter(id => String(id) !== String(sid));
+                await p.save();
+            }
+        }
 
         s.markModified('behaviorRecords');
         s.markModified('teacherNotes');

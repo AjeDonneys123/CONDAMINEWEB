@@ -20,7 +20,6 @@ export default function ClassroomManager({ globalClassId, user }) {
     const [dragOverCell, setDragOverCell] = useState(null);
     const fileInputRef = useRef(null);
     
-    // SÉCURITÉ ID PROF
     const myId = user ? (user._id || user.id) : null;
 
     const loadData = async () => {
@@ -61,33 +60,32 @@ export default function ClassroomManager({ globalClassId, user }) {
     const getMyStats = (stu) => { if (!stu.behaviorRecords) return { crosses: 0, bonuses: 0, weeksToRedemption: 3 }; return stu.behaviorRecords.find(r => r.teacherId === myId) || { crosses: 0, bonuses: 0, weeksToRedemption: 3 }; };
     const handleOpenStudent = (stu) => { if (swapSource) { moveStudentTo(swapSource._id, stu.seatX, stu.seatY); setSwapSource(null); return; } setSelectedStudent(stu); setCurrentNote(stu.myNote || ""); setShowNoteInput(false); };
     
-    // --- ACTIONS RAPIDES CORRIGÉES ---
+    // --- GESTION DES ACTIONS ---
     const addBehavior = async (sid, type, extra = null) => { 
-        if (!myId) return alert("Erreur: ID Professeur introuvable. Rechargez la page.");
+        if (!myId) return alert("Erreur: ID Professeur introuvable.");
 
-        // 1. MISE À JOUR OPTIMISTE (Pour que ça réagisse tout de suite à l'écran)
+        // Optimistic UI Update
         setStudents(prev => prev.map(s => {
             if (s._id !== sid) return s;
             const newS = { ...s, behaviorRecords: [...(s.behaviorRecords || [])] };
-            
-            // Trouver ou créer le record pour CE prof
             let rIdx = newS.behaviorRecords.findIndex(r => r.teacherId === myId);
-            if(rIdx === -1) {
-                newS.behaviorRecords.push({ teacherId: myId, crosses: 0, bonuses: 0, weeksToRedemption: 3 });
-                rIdx = newS.behaviorRecords.length - 1;
-            }
+            if(rIdx === -1) { newS.behaviorRecords.push({ teacherId: myId, crosses: 0, bonuses: 0, weeksToRedemption: 3 }); rIdx = newS.behaviorRecords.length - 1; }
             
-            const r = { ...newS.behaviorRecords[rIdx] }; // Copie pour muter sans risque
+            const r = { ...newS.behaviorRecords[rIdx] };
             if (type === 'CROSS') r.crosses++;
             if (type === 'BONUS') r.bonuses++;
             if (type === 'REMOVE_CROSS') r.crosses = Math.max(0, r.crosses - 1);
             if (type === 'REMOVE_BONUS') r.bonuses = Math.max(0, r.bonuses - 1);
             
+            // Mise à jour visuelle immédiate pour la punition supprimée
+            if (type === 'REMOVE_PUNISHMENT') {
+                newS.punishmentStatus = 'NONE';
+            }
+
             newS.behaviorRecords[rIdx] = r;
             return newS;
         }));
 
-        // 2. APPEL SERVEUR + RECHARGEMENT (Pour valider les punitions 3 croix)
         try {
             const res = await fetch('/api/classroom/behavior', { 
                 method: 'POST', 
@@ -96,14 +94,10 @@ export default function ClassroomManager({ globalClassId, user }) {
             });
 
             if (res.ok) {
-                // On recharge pour avoir l'état officiel (ex: si l'élève est passé en Punition)
                 await loadData();
-                if (['SAVE_NOTE'].includes(type)) setSelectedStudent(null);
+                if (['SAVE_NOTE', 'REMOVE_PUNISHMENT'].includes(type)) setSelectedStudent(null);
             }
-        } catch(e) { 
-            console.error("Erreur API", e);
-            loadData(); // Rollback en cas d'erreur
-        }
+        } catch(e) { console.error("Erreur API", e); loadData(); }
     };
 
     const moveStudentTo = async (sid, x, y) => { try { await fetch('/api/classroom/move', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ studentId: sid, x, y }) }); await loadData(); } catch(e){} };
@@ -206,7 +200,11 @@ export default function ClassroomManager({ globalClassId, user }) {
                             <button className="act-btn btn-rem-cross" onClick={() => addBehavior(selectedStudent._id, 'REMOVE_CROSS')}>RETIRER CROIX</button>
                             <button className="act-btn btn-rem-bonus" onClick={() => addBehavior(selectedStudent._id, 'REMOVE_BONUS')}>RETIRER BONUS</button>
                             <button className="act-btn btn-note" onClick={() => setShowNoteInput(!showNoteInput)}>📝 NOTES PERSONNELLES {showNoteInput ? '▲' : '▼'}</button>
-                            <button className="act-btn btn-move-full" onClick={() => { setSwapSource(selectedStudent); setSelectedStudent(null); }}>🔄 DÉMARRER DÉPLACEMENT</button>
+                            
+                            {/* BOUTON REMPLACÉ : SUPPRIMER PUNITION */}
+                            <button className="act-btn btn-cancel-punish" onClick={() => addBehavior(selectedStudent._id, 'REMOVE_PUNISHMENT')}>
+                                ⚖️ LEVER PUNITION
+                            </button>
                         </div>
                         {showNoteInput && (
                             <div className="note-area-wrapper">

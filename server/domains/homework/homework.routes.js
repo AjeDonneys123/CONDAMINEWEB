@@ -8,11 +8,28 @@ const HomeworkAI = require('./experts/homework.ai');
 
 const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
-// --- 🤖 NOUVELLE ROUTE : GÉNÉRER GRILLE DE CORRECTION ---
+// --- NOUVELLE ROUTE : ANNULER UNE PUNITION ---
+router.post('/remove-punishment', asyncHandler(async (req, res) => {
+    const { homeworkId, studentId } = req.body;
+    
+    // 1. Retirer l'élève du devoir Punition
+    await mongoose.model('Homework').findByIdAndUpdate(homeworkId, {
+        $pull: { assignedStudents: studentId }
+    });
+
+    // 2. Remettre le statut de l'élève à la normale
+    await mongoose.model('Student').findByIdAndUpdate(studentId, {
+        punishmentStatus: 'NONE',
+        punishmentDueDate: null
+    });
+
+    res.json({ ok: true, message: "Punition annulée." });
+}));
+
+// --- ROUTE : GÉNÉRER GRILLE DE CORRECTION ---
 router.post('/generate-hints', asyncHandler(async (req, res) => {
     const { instruction, assets } = req.body;
     if (!assets || assets.length === 0) return res.status(400).json({ error: "Aucun document chargé." });
-    
     const hints = await HomeworkAI.generateHintsFromAssets(instruction, assets);
     res.json({ hints });
 }));
