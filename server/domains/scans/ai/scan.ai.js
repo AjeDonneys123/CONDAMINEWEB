@@ -13,7 +13,7 @@ const streamToBuffer = async (stream) => {
 
 const ScanAI = {
     correctCopy: async (copyUrl, subjectUrls, instructions, studentList) => {
-        console.log("👁️ [SCAN-AI] Correction V6...");
+        console.log("👁️ [SCAN-AI] Correction V7 (Mode Nucléaire)...");
 
         const rosterText = studentList.map(s => `${s.firstName} ${s.lastName}`).join(', ');
 
@@ -28,7 +28,7 @@ const ScanAI = {
             "mistakes": []
         }
         
-        Si tu ne peux pas lire l'image, réponds quand même en JSON en disant "Image illisible" dans l'appréciation.`;
+        Si tu ne peux pas lire l'image, dis-le dans l'appréciation.`;
 
         const promptParts = [
             { text: `INSTRUCTIONS : ${instructions}` }
@@ -40,12 +40,12 @@ const ScanAI = {
                     const fileId = url.split('/proxy/')[1];
                     const stream = await StructureDrive.getFileStream(fileId);
                     const buffer = await streamToBuffer(stream);
-                    if (buffer.length < 100) throw new Error("Fichier vide");
+                    if (buffer.length < 100) throw new Error("Fichier trop petit (corrompu)");
                     return buffer.toString('base64');
                 }
                 return null;
             } catch (e) {
-                console.error(`❌ [AI-FETCH] Erreur : ${e.message}`);
+                console.error(`❌ [AI-FETCH] Erreur Drive : ${e.message}`);
                 return null;
             }
         };
@@ -68,27 +68,28 @@ const ScanAI = {
                 promptParts.push({ inlineData: { mimeType: "image/jpeg", data: copyB64 } });
                 promptParts.push({ text: "[IMAGE COPIE ÉLÈVE]" });
             } else {
+                // Si l'image est introuvable, on force l'IA à le dire
                 return {
-                    studentName: "Image Manquante",
+                    studentName: "Image Introuvable",
                     grade: "0",
-                    appreciation: "Le fichier n'a pas pu être téléchargé du Drive pour l'analyse.",
+                    appreciation: "Le fichier n'est pas accessible sur le Drive (Lien cassé ou problème de droits).",
                     transcription: "URL testée : " + copyUrl,
                     mistakes: []
                 };
             }
 
-            // 3. Appel IA
+            // 3. Appel IA (Sécurisé par AIEngine V11)
             const rawText = await AIEngine.ask(promptParts, system);
             
-            // Le moteur se charge maintenant de renvoyer le texte brut si le JSON échoue
+            // Le moteur V11 ne plante JAMAIS, il renvoie toujours un objet
             return AIEngine.sanitizeJSON(rawText);
 
         } catch (e) {
             return { 
-                studentName: "Erreur Critique", 
+                studentName: "Crash Système", 
                 grade: "?", 
-                appreciation: "Erreur Code : " + e.message, 
-                transcription: "", 
+                appreciation: "Erreur critique dans le code de correction.", 
+                transcription: e.message, 
                 mistakes: [] 
             };
         }
