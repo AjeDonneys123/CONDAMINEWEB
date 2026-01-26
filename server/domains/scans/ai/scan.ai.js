@@ -1,35 +1,43 @@
 const AIEngine = require('../../../core/ai.engine');
 const StructureDrive = require('../../structure/experts/structure.drive'); 
 
+// Helper : Convertit un Stream en Buffer
+const streamToBuffer = async (stream) => {
+    const chunks = [];
+    return new Promise((resolve, reject) => {
+        stream.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+        stream.on('error', (err) => reject(err));
+        stream.on('end', () => resolve(Buffer.concat(chunks)));
+    });
+};
+
 const ScanAI = {
     correctCopy: async (copyUrl, subjectUrls, instructions, studentList) => {
-        console.log("👁️ [SCAN-AI] Correction via Drive...");
+        console.log("👁️ [SCAN-AI] Correction Expert V4 (Mode Survie)...");
 
         const rosterText = studentList.map(s => `${s.firstName} ${s.lastName}`).join(', ');
 
         const system = `Tu es un professeur correcteur expert.
         
-        INPUT :
-        1. Une ou plusieurs images de l'ÉNONCÉ (SUJET).
-        2. Une image de la COPIE de l'élève.
-        
         TES OBJECTIFS :
-        1. **ANALYSE SUJET** : Comprends d'abord ce qui était demandé.
-        2. **IDENTIFICATION** : Trouve le nom de l'élève sur la copie parmi : [${rosterText}]. Si doute, dis "Inconnu".
-        3. **CORRECTION** : Vérifie les réponses.
-        4. **NOTE** : Attribue une note sur 20.
+        1. Identifie l'élève parmi : [${rosterText}]. (Si inconnu, mets "Inconnu").
+        2. Corrige la copie en comparant au sujet.
+        3. Donne une note sur 20.
+        4. Donne une appréciation constructive.
 
-        FORMAT JSON ATTENDU (STRICTEMENT CE JSON, RIEN D'AUTRE) :
+        FORMAT DE RÉPONSE OBLIGATOIRE (JSON RAW) :
         {
-            "studentName": "Nom Trouvé",
-            "transcription": "Texte court résumé",
-            "appreciation": "Ton avis pédagogique",
+            "studentName": "Nom Prénom",
+            "transcription": "Résumé des points clés vus dans la copie...",
+            "appreciation": "Ton avis global pour l'élève...",
             "grade": "15/20",
             "mistakes": ["Erreur 1", "Erreur 2"]
-        }`;
+        }
+        
+        IMPORTANT : Ne mets PAS de Markdown. Juste le JSON.`;
 
         const promptParts = [
-            { text: `INSTRUCTIONS PROF : ${instructions}\n\nVoici d'abord l'énoncé, puis la copie.` }
+            { text: `INSTRUCTIONS PROF : ${instructions}` }
         ];
 
         // --- FONCTION : RÉCUPÉRATION STREAM DRIVE -> BUFFER ---
@@ -37,29 +45,21 @@ const ScanAI = {
             try {
                 if (url.includes('/proxy/')) {
                     const fileId = url.split('/proxy/')[1];
-                    console.log(`☁️ [AI-FETCH] Récupération Drive ID: ${fileId}`);
-                    
-                    // On utilise le stream de l'expert Structure
+                    // console.log(`☁️ [AI-FETCH] Download ID: ${fileId}`);
                     const stream = await StructureDrive.getFileStream(fileId);
-                    
-                    // Conversion Stream -> Buffer pour Gemini
-                    const chunks = [];
-                    for await (const chunk of stream) {
-                        chunks.push(chunk);
-                    }
-                    const buffer = Buffer.concat(chunks);
-                    
+                    const buffer = await streamToBuffer(stream);
+                    if (buffer.length < 100) throw new Error("Fichier vide");
                     return buffer.toString('base64');
                 }
                 return null;
             } catch (e) {
-                console.error(`❌ [AI-FETCH] Erreur lecture Drive : ${e.message}`);
+                console.error(`❌ [AI-FETCH] Erreur : ${e.message}`);
                 return null;
             }
         };
 
         try {
-            // 1. Sujets (Drive Uniquement)
+            // 1. Sujets
             if (subjectUrls && subjectUrls.length > 0) {
                 for (const url of subjectUrls) {
                     const b64 = await getImageData(url);
@@ -70,32 +70,44 @@ const ScanAI = {
                 }
             }
 
-            // 2. Copie (Drive Uniquement)
+            // 2. Copie
             const copyB64 = await getImageData(copyUrl);
             if (copyB64) {
                 promptParts.push({ inlineData: { mimeType: "image/jpeg", data: copyB64 } });
                 promptParts.push({ text: "[IMAGE COPIE ÉLÈVE]" });
             } else {
-                // Si on n'a pas pu récupérer l'image (fichier supprimé ou erreur Drive)
                 return {
                     studentName: "Image Illisible",
                     grade: "0/20",
-                    appreciation: "Impossible d'accéder à l'image sur le Google Drive.",
-                    transcription: "Erreur de chargement.",
+                    appreciation: "Impossible de lire l'image depuis le Drive.",
+                    transcription: "Erreur technique de téléchargement.",
                     mistakes: []
                 };
             }
 
-            // 3. Appel IA
-            const raw = await AIEngine.ask(promptParts, system);
-            return AIEngine.sanitizeJSON(raw);
+            // 3. Appel IA + Gestion Erreur Format
+            const rawText = await AIEngine.ask(promptParts, system);
+            
+            try {
+                return AIEngine.sanitizeJSON(rawText);
+            } catch (jsonError) {
+                console.warn("⚠️ [SCAN-AI] JSON invalide, passage en mode RAW TEXT.");
+                // FALLBACK : On retourne le texte brut pour que le prof puisse quand même lire
+                return {
+                    studentName: "Nom à vérifier",
+                    grade: "?/20",
+                    appreciation: "⚠️ Format IA non-standard (voir détail)",
+                    transcription: rawText.replace("PARSING_FAILED: ", ""), // On affiche toute la réponse de l'IA ici
+                    mistakes: ["Erreur de formatage automatique"]
+                };
+            }
 
         } catch (e) {
             console.error("❌ Scan AI Fatal Error:", e.message);
             return { 
                 studentName: "Erreur IA", 
                 grade: "?", 
-                appreciation: "Erreur lors de l'analyse IA : " + e.message, 
+                appreciation: "Erreur critique : " + e.message, 
                 transcription: "", 
                 mistakes: [] 
             };

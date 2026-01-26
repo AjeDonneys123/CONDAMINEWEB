@@ -1,42 +1,44 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 /**
- * 🤖 MOTEUR IA CENTRALISÉ - V6 (ROBUSTESSE MAXIMALE)
- * Cherche le JSON partout, même si l'IA bavarde.
+ * 🤖 MOTEUR IA CENTRALISÉ - V7 (CHIRURGIE JSON & CLEANER)
+ * Nettoie agressivement la réponse pour extraire le JSON valide.
  */
 const AIEngine = {
     sanitizeJSON: (text) => {
-        let clean = text.replace(/```json/gi, "").replace(/```/gi, "").trim();
+        if (!text) throw new Error("Réponse vide de l'IA");
+
+        // 1. Nettoyage des balises Markdown courantes
+        let clean = text
+            .replace(/```json/gi, "")
+            .replace(/```/gi, "")
+            .trim();
         
         try {
-            // Recherche du bloc JSON le plus large possible
+            // 2. Recherche chirurgicale du bloc JSON
             const firstOpenBrace = clean.indexOf('{');
             const lastCloseBrace = clean.lastIndexOf('}');
-            const firstOpenBracket = clean.indexOf('[');
-            const lastCloseBracket = clean.lastIndexOf(']');
-
-            let start = -1;
-            let end = -1;
-
-            // Détection Objet vs Array
-            if (firstOpenBrace !== -1 && (firstOpenBracket === -1 || firstOpenBrace < firstOpenBracket)) {
-                start = firstOpenBrace;
-                end = lastCloseBrace;
-            } else if (firstOpenBracket !== -1) {
-                start = firstOpenBracket;
-                end = lastCloseBracket;
+            
+            // Si on trouve des accolades, on coupe tout ce qu'il y a avant et après
+            if (firstOpenBrace !== -1 && lastCloseBrace !== -1) {
+                clean = clean.substring(firstOpenBrace, lastCloseBrace + 1);
+            } 
+            // Si pas d'accolades, c'est peut-être un tableau []
+            else {
+                const firstOpenBracket = clean.indexOf('[');
+                const lastCloseBracket = clean.lastIndexOf(']');
+                if (firstOpenBracket !== -1 && lastCloseBracket !== -1) {
+                    clean = clean.substring(firstOpenBracket, lastCloseBracket + 1);
+                }
             }
 
-            if (start !== -1 && end !== -1 && end > start) {
-                clean = clean.substring(start, end + 1);
-            } else {
-                throw new Error("Aucune structure JSON trouvée.");
-            }
-
+            // 3. Tentative de Parsing
             return JSON.parse(clean);
+
         } catch (e) { 
-            console.error("🔥 [AI-CORE] Échec parsing JSON. Texte reçu :\n", text);
-            throw new Error("L'IA a renvoyé un format illisible (Parsing Failed)."); 
+            console.error("🔥 [AI-CORE] Échec Parsing JSON. Brut reçu :", text.substring(0, 200) + "...");
+            // On renvoie l'erreur pour que l'appelant puisse décider (Fallback)
+            throw new Error("PARSING_FAILED: " + text); 
         }
     },
 
@@ -50,7 +52,9 @@ const AIEngine = {
             const genAI = new GoogleGenerativeAI(apiKey);
             const model = genAI.getGenerativeModel({ 
                 model: targetModel,
-                systemInstruction: systemInstruction 
+                systemInstruction: systemInstruction,
+                // On force la température à 0.4 pour avoir des réponses plus "carrées"
+                generationConfig: { temperature: 0.4 }
             });
             
             const result = await model.generateContent(prompt);
