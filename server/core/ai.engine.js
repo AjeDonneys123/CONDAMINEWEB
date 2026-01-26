@@ -1,8 +1,8 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 /**
- * 🤖 MOTEUR IA CENTRALISÉ - V3 (GEMINI 2.0 FLASH + FIX LOGS)
- * Supporte le mode Multimodal (Texte + Image) sans crasher.
+ * 🤖 MOTEUR IA CENTRALISÉ - V4 (GESTION ERREUR CLÉ)
+ * Intercepte les clés expirées pour prévenir l'utilisateur.
  */
 const AIEngine = {
     sanitizeJSON: (text) => {
@@ -31,14 +31,13 @@ const AIEngine = {
 
     ask: async (prompt, systemInstruction = "") => {
         const apiKey = process.env.GEMINI_API_KEY;
-        const targetModel = "gemini-2.0-flash"; // ✅ ON RESTE SUR LE 2.0 FLASH
+        const targetModel = "gemini-2.0-flash"; 
 
-        if (!apiKey) {
-            console.error("❌ [AI-CORE] Erreur : GEMINI_API_KEY manquante.");
-            throw new Error("Clé API manquante");
+        if (!apiKey || apiKey.includes('VOTRE_CLE')) {
+            console.error("❌ [AI-CORE] Clé API manquante ou par défaut.");
+            throw new Error("CLÉ API MANQUANTE DANS LE FICHIER .ENV");
         }
         
-        // ✅ FIX CRASH : On vérifie si le prompt est une String ou un Array (Multimodal)
         let logPrompt = "";
         if (typeof prompt === 'string') {
             logPrompt = prompt.substring(0, 50);
@@ -65,6 +64,12 @@ const AIEngine = {
             return text;
         } catch (e) {
             console.error(`💥 [AI-CORE] CRASH GOOGLE :`, e.message);
+            
+            // DÉTECTION SPÉCIFIQUE CLÉ EXPIRÉE
+            if (e.message.includes('API key expired') || e.message.includes('API_KEY_INVALID') || e.status === 400) {
+                throw new Error("⚠️ VOTRE CLÉ API EST PÉRIMÉE. Changez-la dans le fichier .env !");
+            }
+            
             throw e;
         }
     }
