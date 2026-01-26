@@ -1,14 +1,42 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './ScansStudio.css';
 
+// COMPOSANT IMAGE SECURISE (Gère les 404)
+const SecureImage = ({ src, className, onClick }) => {
+    const [error, setError] = useState(false);
+
+    // Si l'URL est locale (/uploads/...) sur un serveur cloud, c'est risqué.
+    // Si c'est un lien Proxy (/api/structure/proxy/...), c'est sécurisé (Drive).
+    const isLocal = src && src.startsWith('/uploads/');
+
+    if (error) {
+        return (
+            <div className={`${className} bg-slate-100 flex flex-col items-center justify-center border-2 border-red-200 text-red-400 p-2 text-center`} title="Fichier effacé par le redémarrage serveur">
+                <span className="text-xl">⚠️</span>
+                <span className="text-[8px] font-black uppercase">Fichier Perdu</span>
+            </div>
+        );
+    }
+
+    return (
+        <img 
+            src={src} 
+            className={className} 
+            onClick={onClick} 
+            onError={() => setError(true)} 
+            alt="Scan"
+        />
+    );
+};
+
 export default function ScansStudio({ user }) {
     const [sessions, setSessions] = useState([]);
     const [chapters, setChapters] = useState([]);
     const [activePanels, setActivePanels] = useState({});
     
     // ETATS MODALE & WORKFLOW
-    const [correctionModal, setCorrectionModal] = useState(null); // ID Session pour lancer correction
-    const [viewingCorrection, setViewingCorrection] = useState(null); // Objet correction pour affichage résultats
+    const [correctionModal, setCorrectionModal] = useState(null); 
+    const [viewingCorrection, setViewingCorrection] = useState(null); 
     const [instructions, setInstructions] = useState("");
     const [processing, setProcessing] = useState(false);
 
@@ -50,17 +78,25 @@ export default function ScansStudio({ user }) {
         cvs.toBlob(async (blob) => {
             const localUrl = URL.createObjectURL(blob);
             const snapId = Date.now();
+            // On affiche temporairement l'image locale (Blob) pour la fluidité
             setSnapQueue(prev => [...prev, { id: snapId, url: localUrl, status: 'uploading' }]);
+            
             const formData = new FormData();
-            formData.append('file', blob, `snap_${snapId}.jpg`);
+            formData.append('file', blob, `scan_${snapId}.jpg`);
             formData.append('sessionId', sessionId);
-            // DISTINCTION CRUCIALE : SUJET ou COPIE
             formData.append('type', type === 'CAMERA_SUBJECT' ? 'SUBJECT' : 'COPY');
+            
             try {
-                await fetch('/api/scans/upload', { method: 'POST', body: formData });
+                const res = await fetch('/api/scans/upload', { method: 'POST', body: formData });
+                if (!res.ok) throw new Error("Erreur Upload");
+                
+                // Une fois uploadé, on rafraîchit la session pour avoir l'URL Drive
                 setSnapQueue(prev => prev.map(s => s.id === snapId ? { ...s, status: 'done' } : s));
                 loadSessions(); 
-            } catch(e) { /* Error */ }
+            } catch(e) { 
+                alert("Échec de l'upload vers le Drive. Vérifiez votre connexion.");
+                setSnapQueue(prev => prev.filter(s => s.id !== snapId)); // On retire si échec
+            }
         }, 'image/jpeg', 0.95);
     };
 
@@ -99,17 +135,6 @@ export default function ScansStudio({ user }) {
         setProcessing(false);
     };
 
-    // --- VISUALISATION ---
-    const handleViewCopy = (session, copyUrl) => {
-        // Chercher si une correction existe pour cette URL
-        const correction = session.corrections?.find(c => c.originalUrl === copyUrl);
-        if (correction) {
-            setViewingCorrection(correction); // Ouvre la modale Split View
-        } else {
-            window.open(copyUrl, '_blank'); // Juste l'image
-        }
-    };
-
     return (
         <div className="scan-page">
             
@@ -125,9 +150,9 @@ export default function ScansStudio({ user }) {
                             <button onClick={() => setViewingCorrection(null)} className="text-white text-2xl">✕</button>
                         </div>
                         <div className="corr-body flex">
-                            {/* GAUCHE : IMAGE */}
+                            {/* GAUCHE : IMAGE (Utilise SecureImage aussi) */}
                             <div className="flex-1 bg-black flex items-center justify-center p-4">
-                                <img src={viewingCorrection.originalUrl} className="max-h-full max-w-full object-contain border-2 border-slate-700 rounded-lg" />
+                                <SecureImage src={viewingCorrection.originalUrl} className="max-h-full max-w-full object-contain border-2 border-slate-700 rounded-lg" />
                             </div>
                             {/* DROITE : CORRECTION */}
                             <div className="flex-1 bg-white p-8 overflow-y-auto">
@@ -164,7 +189,6 @@ export default function ScansStudio({ user }) {
             
             {sessions.map(s => {
                 const active = activePanels[s._id];
-                const folderName = chapters.find(c => c._id === s.chapterId)?.title || "AUCUN DOSSIER";
                 const correctedCount = s.corrections ? s.corrections.length : 0;
 
                 return (
@@ -195,7 +219,12 @@ export default function ScansStudio({ user }) {
                                         <h4 className="font-bold mb-2 uppercase text-xs text-indigo-300">ÉNONCÉS / SUJETS DE RÉFÉRENCE</h4>
                                         <div className="snap-queue-strip custom-scrollbar justify-start">
                                             {s.subjectUrls.map((url, i) => (
-                                                <img key={i} src={url} className="queue-thumb border-indigo-500 border-2" onClick={() => window.open(url, '_blank')} />
+                                                <SecureImage 
+                                                    key={i} 
+                                                    src={url} 
+                                                    className="queue-thumb border-indigo-500 border-2" 
+                                                    onClick={() => window.open(url, '_blank')} 
+                                                />
                                             ))}
                                         </div>
                                     </div>
@@ -206,10 +235,14 @@ export default function ScansStudio({ user }) {
                                     <h4 className="font-bold mb-2 uppercase text-xs text-emerald-300">COPIES ÉLÈVES ({s.copyUrls.length})</h4>
                                     <div className="snap-queue-strip custom-scrollbar justify-start flex-wrap">
                                         {s.copyUrls.map((url, i) => {
-                                            const isCorrected = s.corrections?.some(c => c.originalUrl === url);
+                                            const correction = s.corrections?.find(c => c.originalUrl === url);
+                                            const isCorrected = !!correction;
                                             return (
-                                                <div key={i} className="relative group cursor-pointer" onClick={() => handleViewCopy(s, url)}>
-                                                    <img src={url} className={`queue-thumb ${isCorrected ? 'border-green-500' : 'border-slate-500'} border-2`} />
+                                                <div key={i} className="relative group cursor-pointer" onClick={() => {
+                                                    if (correction) setViewingCorrection(correction);
+                                                    else window.open(url, '_blank');
+                                                }}>
+                                                    <SecureImage src={url} className={`queue-thumb ${isCorrected ? 'border-green-500' : 'border-slate-500'} border-2`} />
                                                     {isCorrected && <div className="absolute top-0 right-0 bg-green-500 text-white text-[8px] font-black px-1 rounded-bl">OK</div>}
                                                 </div>
                                             );

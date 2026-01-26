@@ -25,7 +25,7 @@ router.get('/sessions', asyncHandler(async (req, res) => { const sessions = awai
 router.post('/sessions', asyncHandler(async (req, res) => { const { title, teacherId } = req.body; const session = await mongoose.model('ScanSession').create({ title: title || `Scan ${new Date().toLocaleDateString('fr-FR')}`, teacherId }); res.json(session); }));
 router.patch('/sessions/:id', asyncHandler(async (req, res) => { const { title, chapterId } = req.body; const updateData = {}; if (title) updateData.title = title; if (chapterId) updateData.chapterId = chapterId; const session = await mongoose.model('ScanSession').findByIdAndUpdate(req.params.id, { $set: updateData }, { new: true }); res.json(session); }));
 
-// --- UPLOAD STRICT DRIVE (V3) ---
+// --- UPLOAD STRICT DRIVE V4 (GARANTI SANS LOCAL) ---
 router.post('/upload', upload.single('file'), asyncHandler(async (req, res) => { 
     if (!req.file) return res.status(400).json({ error: "No file" }); 
     
@@ -33,26 +33,23 @@ router.post('/upload', upload.single('file'), asyncHandler(async (req, res) => {
     let finalUrl = "";
 
     try {
-        console.log(`☁️ [SCAN] Upload vers Drive en cours : ${req.file.filename}`);
+        console.log(`☁️ [SCAN] Upload Drive FORCÉ : ${req.file.filename}`);
         
-        // 1. Destination Drive
         const scansFolderId = await DriveEngine.getOrCreateFolder("SCANS_ARCHIVE");
-        
-        // 2. Transfert
         const driveFile = await DriveEngine.uploadFile(req.file.filename, req.file.path, scansFolderId);
         
-        // 3. URL PROXY OBLIGATOIRE
         finalUrl = `/api/structure/proxy/${driveFile.id}`;
         
-        console.log(`✅ [SCAN] Succès Drive. ID: ${driveFile.id}`);
+        console.log(`✅ [SCAN] Drive OK : ${finalUrl}`);
 
-        // 4. Nettoyage immédiat du fichier local (pour éviter la confusion)
+        // SUPPRESSION LOCALE IMMÉDIATE
         try { fs.unlinkSync(req.file.path); } catch(e) {}
 
     } catch (e) {
-        console.error("❌ ECHEC UPLOAD DRIVE :", e.message);
-        // En prod, on refuse l'upload si le Drive ne marche pas (pour ne pas créer de liens morts)
-        return res.status(500).json({ error: "Erreur connexion Drive. Upload annulé." });
+        console.error("❌ ECHEC DRIVE :", e.message);
+        // ON REFUSE L'UPLOAD SI LE DRIVE ÉCHOUE
+        // Cela force à régler le problème Drive plutôt que de créer des liens morts
+        return res.status(500).json({ error: "Echec Connexion Drive. Vérifiez les logs serveur." });
     }
 
     const update = {}; 
@@ -65,7 +62,6 @@ router.post('/upload', upload.single('file'), asyncHandler(async (req, res) => {
 
 router.delete('/sessions/:id', asyncHandler(async (req, res) => { await mongoose.model('ScanSession').findByIdAndDelete(req.params.id); res.json({ ok: true }); }));
 
-// --- CORRECTION FILTRÉE ---
 router.post('/correct/:sessionId', asyncHandler(async (req, res) => {
     const session = await mongoose.model('ScanSession').findById(req.params.sessionId);
     if (!session) return res.status(404).json({ error: "Session introuvable" });
@@ -81,27 +77,23 @@ router.post('/correct/:sessionId', asyncHandler(async (req, res) => {
     const finalResults = [];
     
     for (const copyUrl of session.copyUrls) {
-        // 1. CAS DÉJÀ CORRIGÉ
         if (existingCorrectionsMap.has(copyUrl)) {
             finalResults.push(existingCorrectionsMap.get(copyUrl));
             continue;
         }
 
-        // 2. SÉCURITÉ : SI C'EST UN LIEN LOCAL (/uploads/...), ON SAUTE
-        // Car on sait qu'il sera 404 sur le serveur Cloud
-        if (copyUrl.startsWith('/uploads/')) {
-            console.warn(`⚠️ [SCAN] Ignoré car lien local fragile : ${copyUrl}`);
+        // PROTECTION ANTI-CRASH : On ignore les fichiers locaux (perdus)
+        if (!copyUrl.includes('/proxy/')) {
             finalResults.push({
                 originalUrl: copyUrl,
                 studentName: "Fichier Perdu",
                 grade: "N/A",
-                appreciation: "Ce scan a été perdu lors du redémarrage serveur. Veuillez re-scanner.",
+                appreciation: "Fichier local introuvable (Serveur redémarré).",
                 mistakes: []
             });
             continue;
         }
 
-        // 3. LANCEMENT IA SUR LIEN DRIVE (/proxy/...)
         try {
             const aiResult = await ScanAI.correctCopy(copyUrl, session.subjectUrls, session.aiInstructions, students);
             finalResults.push({ 
@@ -113,8 +105,7 @@ router.post('/correct/:sessionId', asyncHandler(async (req, res) => {
                 mistakes: aiResult.mistakes
             });
         } catch (e) {
-            console.error("Erreur IA sur copie:", e);
-            finalResults.push({ originalUrl: copyUrl, studentName: "Erreur IA", grade: "?", appreciation: "Erreur technique IA" });
+            finalResults.push({ originalUrl: copyUrl, studentName: "Erreur IA", grade: "?", appreciation: "Erreur technique" });
         }
     }
 
