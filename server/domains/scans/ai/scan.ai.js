@@ -13,39 +13,33 @@ const streamToBuffer = async (stream) => {
 
 const ScanAI = {
     correctCopy: async (copyUrl, subjectUrls, instructions, studentList) => {
-        console.log("👁️ [SCAN-AI] Correction Expert V4 (Mode Survie)...");
+        console.log("👁️ [SCAN-AI] Correction Expert V5...");
 
         const rosterText = studentList.map(s => `${s.firstName} ${s.lastName}`).join(', ');
 
         const system = `Tu es un professeur correcteur expert.
         
         TES OBJECTIFS :
-        1. Identifie l'élève parmi : [${rosterText}]. (Si inconnu, mets "Inconnu").
-        2. Corrige la copie en comparant au sujet.
-        3. Donne une note sur 20.
-        4. Donne une appréciation constructive.
-
-        FORMAT DE RÉPONSE OBLIGATOIRE (JSON RAW) :
+        1. Identifie l'élève parmi : [${rosterText}].
+        2. Corrige la copie.
+        
+        FORMAT DE RÉPONSE OBLIGATOIRE (JSON) :
         {
             "studentName": "Nom Prénom",
-            "transcription": "Résumé des points clés vus dans la copie...",
-            "appreciation": "Ton avis global pour l'élève...",
-            "grade": "15/20",
+            "transcription": "Détail de la correction...",
+            "appreciation": "Avis global...",
+            "grade": "Note/20",
             "mistakes": ["Erreur 1", "Erreur 2"]
-        }
-        
-        IMPORTANT : Ne mets PAS de Markdown. Juste le JSON.`;
+        }`;
 
         const promptParts = [
-            { text: `INSTRUCTIONS PROF : ${instructions}` }
+            { text: `INSTRUCTIONS : ${instructions}` }
         ];
 
-        // --- FONCTION : RÉCUPÉRATION STREAM DRIVE -> BUFFER ---
         const getImageData = async (url) => {
             try {
                 if (url.includes('/proxy/')) {
                     const fileId = url.split('/proxy/')[1];
-                    // console.log(`☁️ [AI-FETCH] Download ID: ${fileId}`);
                     const stream = await StructureDrive.getFileStream(fileId);
                     const buffer = await streamToBuffer(stream);
                     if (buffer.length < 100) throw new Error("Fichier vide");
@@ -79,36 +73,23 @@ const ScanAI = {
                 return {
                     studentName: "Image Illisible",
                     grade: "0/20",
-                    appreciation: "Impossible de lire l'image depuis le Drive.",
-                    transcription: "Erreur technique de téléchargement.",
+                    appreciation: "Image non chargée depuis le Drive.",
+                    transcription: "Erreur technique.",
                     mistakes: []
                 };
             }
 
-            // 3. Appel IA + Gestion Erreur Format
+            // 3. Appel IA (Le moteur se charge de sécuriser le JSON maintenant)
             const rawText = await AIEngine.ask(promptParts, system);
-            
-            try {
-                return AIEngine.sanitizeJSON(rawText);
-            } catch (jsonError) {
-                console.warn("⚠️ [SCAN-AI] JSON invalide, passage en mode RAW TEXT.");
-                // FALLBACK : On retourne le texte brut pour que le prof puisse quand même lire
-                return {
-                    studentName: "Nom à vérifier",
-                    grade: "?/20",
-                    appreciation: "⚠️ Format IA non-standard (voir détail)",
-                    transcription: rawText.replace("PARSING_FAILED: ", ""), // On affiche toute la réponse de l'IA ici
-                    mistakes: ["Erreur de formatage automatique"]
-                };
-            }
+            return AIEngine.sanitizeJSON(rawText);
 
         } catch (e) {
-            console.error("❌ Scan AI Fatal Error:", e.message);
+            // Filet de sécurité ultime
             return { 
-                studentName: "Erreur IA", 
+                studentName: "Erreur Critique", 
                 grade: "?", 
-                appreciation: "Erreur critique : " + e.message, 
-                transcription: "", 
+                appreciation: "Erreur interne code.", 
+                transcription: e.message, 
                 mistakes: [] 
             };
         }

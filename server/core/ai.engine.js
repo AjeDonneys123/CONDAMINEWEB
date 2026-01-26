@@ -1,30 +1,27 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 /**
- * 🤖 MOTEUR IA CENTRALISÉ - V7 (CHIRURGIE JSON & CLEANER)
- * Nettoie agressivement la réponse pour extraire le JSON valide.
+ * 🤖 MOTEUR IA CENTRALISÉ - V8 (ZERO CRASH STRATEGY)
+ * Si le JSON casse, on retourne un objet valide contenant le texte brut.
  */
 const AIEngine = {
     sanitizeJSON: (text) => {
-        if (!text) throw new Error("Réponse vide de l'IA");
+        if (!text) return { grade: "?", appreciation: "IA Muette.", transcription: "Aucune réponse générée." };
 
-        // 1. Nettoyage des balises Markdown courantes
         let clean = text
             .replace(/```json/gi, "")
             .replace(/```/gi, "")
             .trim();
         
         try {
-            // 2. Recherche chirurgicale du bloc JSON
+            // 1. Tentative chirurgicale standard
             const firstOpenBrace = clean.indexOf('{');
             const lastCloseBrace = clean.lastIndexOf('}');
             
-            // Si on trouve des accolades, on coupe tout ce qu'il y a avant et après
             if (firstOpenBrace !== -1 && lastCloseBrace !== -1) {
                 clean = clean.substring(firstOpenBrace, lastCloseBrace + 1);
-            } 
-            // Si pas d'accolades, c'est peut-être un tableau []
-            else {
+            } else {
+                // Fallback tableaux
                 const firstOpenBracket = clean.indexOf('[');
                 const lastCloseBracket = clean.lastIndexOf(']');
                 if (firstOpenBracket !== -1 && lastCloseBracket !== -1) {
@@ -32,13 +29,21 @@ const AIEngine = {
                 }
             }
 
-            // 3. Tentative de Parsing
             return JSON.parse(clean);
 
         } catch (e) { 
-            console.error("🔥 [AI-CORE] Échec Parsing JSON. Brut reçu :", text.substring(0, 200) + "...");
-            // On renvoie l'erreur pour que l'appelant puisse décider (Fallback)
-            throw new Error("PARSING_FAILED: " + text); 
+            console.warn("⚠️ [AI-CORE] JSON Invalide. Passage en mode TEXTE BRUT.");
+            
+            // C'EST ICI LA RÉPARATION :
+            // Au lieu de planter (throw), on retourne un objet de secours valide
+            // On met tout le texte de l'IA dans "transcription" pour que tu puisses le lire.
+            return {
+                studentName: "Nom à vérifier",
+                grade: "?/20",
+                appreciation: "⚠️ Le formatage automatique a échoué, mais voici le contenu brut ci-dessous :",
+                transcription: text, // <--- ON SAUVE LE TEXTE ICI
+                mistakes: ["Erreur de formatage JSON"]
+            };
         }
     },
 
@@ -53,7 +58,6 @@ const AIEngine = {
             const model = genAI.getGenerativeModel({ 
                 model: targetModel,
                 systemInstruction: systemInstruction,
-                // On force la température à 0.4 pour avoir des réponses plus "carrées"
                 generationConfig: { temperature: 0.4 }
             });
             
@@ -62,7 +66,14 @@ const AIEngine = {
             return response.text();
         } catch (e) {
             console.error(`💥 [AI-CORE] CRASH GOOGLE :`, e.message);
-            throw e;
+            // Même en cas de crash Google, on renvoie du texte pour ne pas casser l'UI
+            return JSON.stringify({
+                studentName: "Erreur Google",
+                grade: "0",
+                appreciation: "L'API Google ne répond pas.",
+                transcription: e.message,
+                mistakes: []
+            });
         }
     }
 };
