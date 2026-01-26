@@ -1,7 +1,7 @@
 const AIEngine = require('../../../core/ai.engine');
 const StructureDrive = require('../../structure/experts/structure.drive'); 
 
-// Helper : Convertit un Stream en Buffer (Indispensable pour le Drive)
+// Helper Stream -> Buffer
 const streamToBuffer = async (stream) => {
     const chunks = [];
     return new Promise((resolve, reject) => {
@@ -13,13 +13,15 @@ const streamToBuffer = async (stream) => {
 
 const ScanAI = {
     correctCopy: async (copyUrl, subjectUrls, instructions, studentList) => {
-        console.log("👁️ [SCAN-AI] Correction V12...");
+        console.log("👁️ [SCAN-AI] Correction V113 (Verbose)...");
 
         const rosterText = studentList.map(s => `${s.firstName} ${s.lastName}`).join(', ');
 
         const system = `Tu es un professeur correcteur.
+        Si l'image est illisible, dis-le.
+        Si l'image est lisible, corrige.
         
-        FORMAT JSON OBLIGATOIRE :
+        FORMAT JSON :
         {
             "studentName": "Nom",
             "transcription": "...",
@@ -36,16 +38,16 @@ const ScanAI = {
             try {
                 if (url.includes('/proxy/')) {
                     const fileId = url.split('/proxy/')[1];
-                    console.log(`☁️ Download Drive ID: ${fileId}`);
+                    console.log(`☁️ [SCAN] Fetch Drive ID: ${fileId}`);
                     const stream = await StructureDrive.getFileStream(fileId);
                     const buffer = await streamToBuffer(stream);
                     if (buffer.length < 100) throw new Error("Fichier vide");
                     return buffer.toString('base64');
                 }
-                console.log("⚠️ Lien non-proxy ignoré:", url);
+                console.log("⚠️ [SCAN] Lien non-proxy ignoré (Local):", url);
                 return null;
             } catch (e) {
-                console.error(`❌ Erreur Image : ${e.message}`);
+                console.error(`❌ [SCAN] Erreur Drive : ${e.message}`);
                 return null;
             }
         };
@@ -71,22 +73,24 @@ const ScanAI = {
                 return {
                     studentName: "Image Perdue",
                     grade: "0",
-                    appreciation: "Impossible de récupérer l'image sur le Drive.",
-                    transcription: "URL: " + copyUrl,
+                    appreciation: "Le fichier image n'est pas accessible sur le Drive.",
+                    transcription: "URL testée : " + copyUrl,
                     mistakes: []
                 };
             }
 
-            // Appel IA via le Moteur V12
+            // Appel IA
             const rawText = await AIEngine.ask(promptParts, system);
+            
+            // Le moteur V12 (celui qui est sur ton PC) ne plante jamais.
             return AIEngine.sanitizeJSON(rawText);
 
         } catch (e) {
             return { 
-                studentName: "Bug Critique", 
+                studentName: "Crash V113", 
                 grade: "?", 
-                appreciation: "Erreur Scan AI : " + e.message, 
-                transcription: "", 
+                appreciation: "Erreur critique dans le code.", 
+                transcription: e.message, 
                 mistakes: [] 
             };
         }

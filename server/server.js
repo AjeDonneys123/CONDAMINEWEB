@@ -16,11 +16,14 @@ if (!global.fetch) {
 dotenv.config();
 const app = express();
 const port = process.env.PORT || 3000;
-const SERVER_BOOT_ID = Date.now(); // ID unique du démarrage
+const SERVER_BOOT_ID = Date.now();
 
-// CHARGEMENT MODÈLES
+// CHARGEMENT MODÈLES (Blindage anti-crash si un fichier manque)
 const models = ['AcademicYear', 'Admin', 'Classroom', 'Subject', 'Teacher', 'Student', 'Enrollment', 'Chapter', 'Homework', 'Submission', 'GameLevel', 'GameProgress', 'MistakesBook', 'AccessLog', 'BugReport', 'ProjectDoc', 'Player', 'StudioProject', 'Sanction', 'ScanSession'];
-models.forEach(m => { try { require(`./models/${m}`); } catch (e) { console.error(`Err Model ${m}:`, e.message); } });
+models.forEach(m => { 
+    try { require(`./models/${m}`); } 
+    catch (e) { console.warn(`⚠️ Modèle optionnel manquant : ${m} (${e.message})`); } 
+});
 
 app.use(express.json({ limit: '100mb' }));
 
@@ -42,13 +45,11 @@ app.get('/uploads/:filename', (req, res) => {
 
     if (fs.existsSync(filePath)) return res.sendFile(filePath);
 
-    // Recherche extensions
     const extensions = ['.jpg', '.jpeg', '.png', '.webp', '.blob'];
     for (const ext of extensions) {
         if (fs.existsSync(filePath + ext)) return res.sendFile(filePath + ext);
     }
 
-    console.error(`❌ [IMG-404] Fichier physiquement absent : ${cleanName}`);
     res.status(404).send('Fichier introuvable sur le disque serveur.');
 });
 
@@ -62,13 +63,13 @@ app.use('/api/studio', require('./domains/studio/studio.routes'));
 app.use('/api/classroom', require('./domains/classroom/classroom.routes'));
 app.use('/api/scans', require('./domains/scans/scans.routes'));
 
-// --- ROUTE DE VÉRIFICATION DE VERSION ---
+// --- VÉRIFICATION VERSION ---
 app.get('/api/check-deploy', (req, res) => {
     res.json({ 
         status: "OK", 
-        version: "V112_NUCLEAR_DEBUG", 
+        version: "V113_FINAL_FIX", 
         bootId: SERVER_BOOT_ID,
-        message: "Si tu vois ça, le nouveau code est actif." 
+        message: "Code V113 Actif. Si tu vois ça, les correctifs IA sont chargés."
     });
 });
 
@@ -87,4 +88,4 @@ if (fs.existsSync(distPath)) {
         res.sendFile(path.join(distPath, 'index.html'));
     });
 }
-app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V112 (NUCLEAR) UP | PORT ${port}`));
+app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V113 (SYNC CHECK) UP | PORT ${port}`));
