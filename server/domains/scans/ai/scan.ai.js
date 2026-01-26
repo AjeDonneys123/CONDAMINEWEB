@@ -1,7 +1,6 @@
 const AIEngine = require('../../../core/ai.engine');
 const StructureDrive = require('../../structure/experts/structure.drive'); 
 
-// Helper Stream -> Buffer
 const streamToBuffer = async (stream) => {
     const chunks = [];
     return new Promise((resolve, reject) => {
@@ -13,41 +12,48 @@ const streamToBuffer = async (stream) => {
 
 const ScanAI = {
     correctCopy: async (copyUrl, subjectUrls, instructions, studentList) => {
-        console.log("👁️ [SCAN-AI] Correction V113 (Verbose)...");
+        console.log("👁️ [SCAN-AI] Correction V115 (Prompt Militaire)...");
 
+        // On nettoie la liste des élèves pour économiser des tokens et éviter la confusion
         const rosterText = studentList.map(s => `${s.firstName} ${s.lastName}`).join(', ');
 
-        const system = `Tu es un professeur correcteur.
-        Si l'image est illisible, dis-le.
-        Si l'image est lisible, corrige.
+        const system = `Tu es un robot d'analyse de données JSON. Tu n'es PAS un assistant conversationnel.
         
-        FORMAT JSON :
+        TA TÂCHE :
+        1. Analyser les images fournies (Sujet + Copie).
+        2. Identifier l'élève si son nom est écrit sur la copie, parmi cette liste : [${rosterText}].
+        3. Évaluer le travail selon les consignes : "${instructions}".
+        
+        RÈGLES DE SORTIE (STRICTES) :
+        - TU NE DOIS PAS ÉCRIRE DE TEXTE EN DEHORS DU JSON.
+        - Pas de "Voici l'analyse", pas de Markdown, pas de gras.
+        - Uniquement un objet JSON valide.
+        
+        STRUCTURE JSON OBLIGATOIRE :
         {
-            "studentName": "Nom",
-            "transcription": "...",
-            "appreciation": "...",
-            "grade": "15/20",
-            "mistakes": []
+            "studentName": "Nom Prénom (ou 'Inconnu')",
+            "grade": "Note/20 (ex: 12/20)",
+            "appreciation": "Court résumé global (2 phrases max)",
+            "transcription": "Analyse détaillée, points forts et faibles. Tu peux utiliser des retours à la ligne \\n mais pas de Markdown complexe.",
+            "mistakes": ["Erreur majeure 1", "Erreur majeure 2"]
         }`;
 
         const promptParts = [
-            { text: `INSTRUCTIONS : ${instructions}` }
+            { text: "GÉNÈRE LE JSON MAINTENANT." }
         ];
 
         const getImageData = async (url) => {
             try {
                 if (url.includes('/proxy/')) {
                     const fileId = url.split('/proxy/')[1];
-                    console.log(`☁️ [SCAN] Fetch Drive ID: ${fileId}`);
                     const stream = await StructureDrive.getFileStream(fileId);
                     const buffer = await streamToBuffer(stream);
                     if (buffer.length < 100) throw new Error("Fichier vide");
                     return buffer.toString('base64');
                 }
-                console.log("⚠️ [SCAN] Lien non-proxy ignoré (Local):", url);
                 return null;
             } catch (e) {
-                console.error(`❌ [SCAN] Erreur Drive : ${e.message}`);
+                console.error(`❌ [AI] Erreur image: ${e.message}`);
                 return null;
             }
         };
@@ -59,7 +65,7 @@ const ScanAI = {
                     const b64 = await getImageData(url);
                     if (b64) {
                         promptParts.push({ inlineData: { mimeType: "image/jpeg", data: b64 } });
-                        promptParts.push({ text: "[SUJET]" });
+                        promptParts.push({ text: "CONTEXTE : IMAGE DU SUJET/CONSIGNE" });
                     }
                 }
             }
@@ -68,13 +74,13 @@ const ScanAI = {
             const copyB64 = await getImageData(copyUrl);
             if (copyB64) {
                 promptParts.push({ inlineData: { mimeType: "image/jpeg", data: copyB64 } });
-                promptParts.push({ text: "[COPIE]" });
+                promptParts.push({ text: "CIBLE : IMAGE DE LA COPIE À CORRIGER" });
             } else {
                 return {
-                    studentName: "Image Perdue",
-                    grade: "0",
-                    appreciation: "Le fichier image n'est pas accessible sur le Drive.",
-                    transcription: "URL testée : " + copyUrl,
+                    studentName: "Image Illisible",
+                    grade: "0/20",
+                    appreciation: "Impossible de lire le fichier depuis le Drive.",
+                    transcription: "Erreur technique.",
                     mistakes: []
                 };
             }
@@ -82,15 +88,15 @@ const ScanAI = {
             // Appel IA
             const rawText = await AIEngine.ask(promptParts, system);
             
-            // Le moteur V12 (celui qui est sur ton PC) ne plante jamais.
+            // Le moteur V12 nettoiera le JSON s'il y a encore des résidus
             return AIEngine.sanitizeJSON(rawText);
 
         } catch (e) {
             return { 
-                studentName: "Crash V113", 
+                studentName: "Erreur Système", 
                 grade: "?", 
-                appreciation: "Erreur critique dans le code.", 
-                transcription: e.message, 
+                appreciation: "Erreur interne code : " + e.message, 
+                transcription: "", 
                 mistakes: [] 
             };
         }
