@@ -12,38 +12,38 @@ const streamToBuffer = async (stream) => {
 
 const ScanAI = {
     correctCopy: async (copyUrl, subjectUrls, instructions, studentList) => {
-        console.log("👁️ [SCAN-AI] Correction V121 (Technique OCR)...");
+        console.log("👁️ [SCAN-AI] Correction V122 (Dictature JSON)...");
 
         const rosterText = studentList.map(s => `${s.firstName} ${s.lastName}`).join(', ');
 
-        // PROMPT TECHNIQUE (Non-Humain)
-        const system = `TASK: DOCUMENT ANALYSIS & OCR.
+        // PROMPT BASÉ SUR L'EXEMPLE (One-Shot Learning)
+        const system = `Tu es un automate de conversion JSON.
         
-        INPUT DATA:
-        1. Reference Document (Image).
-        2. Handwriting Sample (Image).
-        
-        INSTRUCTIONS:
-        1. EXTRACT NAME: Look for a name in the handwriting sample that matches one of: [${rosterText}].
-        2. ANALYSE CONTENT: Compare the handwritten text content against the reference criteria: "${instructions}".
-        3. GENERATE REPORT: Output a JSON object.
-        
-        GRADING LOGIC (Technical Score):
-        - A = High Match.
-        - B = Partial Match.
-        - C = Low Match.
+        TA TÂCHE :
+        1. Lis le texte manuscrit sur l'image.
+        2. Recopie-le mot pour mot.
+        3. Insère tes corrections en ROUGE directement dans le texte.
+        4. Donne une note (A, B, C).
 
-        OUTPUT FORMAT (JSON ONLY):
+        RÈGLE DE COULEUR OBLIGATOIRE :
+        Utilise EXCLUSIVEMENT cette balise HTML pour tes commentaires : <span style="color:#ef4444; font-weight:bold;">[TON COMMENTAIRE ICI]</span>.
+        
+        EXEMPLE DE SORTIE ATTENDUE (Tu dois respecter ce format JSON strictement) :
+        \`\`\`json
         {
-            "studentName": "Extracted Name",
-            "grade": "A, B, or C",
-            "appreciation": "Technical summary.",
-            "transcription": "Full OCR transcription + <span style='color:#ef4444'>[CORRECTIONS]</span>.",
-            "mistakes": []
-        }`;
+            "studentName": "Jean Dupont",
+            "grade": "B",
+            "appreciation": "Bon travail global, attention à l'orthographe.",
+            "transcription": "La capitale de la France est <span style=\\"color:#ef4444; font-weight:bold;\\">[Erreur: Paris, pas Lyon]</span> Lyon. Il y a beaucoup de monuments.",
+            "mistakes": ["Géographie", "Orthographe"]
+        }
+        \`\`\`
+
+        Liste des élèves : [${rosterText}].
+        Consigne Prof : "${instructions}".`;
 
         const promptParts = [
-            { text: "START ANALYSIS." }
+            { text: "GÉNÈRE LE JSON MAINTENANT." }
         ];
 
         const getImageData = async (url) => {
@@ -56,7 +56,10 @@ const ScanAI = {
                     return buffer.toString('base64');
                 }
                 return null;
-            } catch (e) { return null; }
+            } catch (e) {
+                console.error(`❌ [AI] Erreur : ${e.message}`);
+                return null;
+            }
         };
 
         try {
@@ -70,12 +73,13 @@ const ScanAI = {
             const copyB64 = await getImageData(copyUrl);
             if (copyB64) {
                 promptParts.push({ inlineData: { mimeType: "image/jpeg", data: copyB64 } });
+                promptParts.push({ text: "IMAGE À TRAITER :" });
             } else {
                 return {
-                    studentName: "Image Illisible",
+                    studentName: "Image Perdue",
                     grade: "C",
-                    appreciation: "Erreur technique.",
-                    transcription: "Fichier non trouvé.",
+                    appreciation: "Fichier illisible.",
+                    transcription: "Erreur technique.",
                     mistakes: []
                 };
             }
@@ -85,9 +89,9 @@ const ScanAI = {
 
         } catch (e) {
             return { 
-                studentName: "Erreur", 
+                studentName: "Crash", 
                 grade: "?", 
-                appreciation: "Echec technique.", 
+                appreciation: "Erreur critique.", 
                 transcription: e.message, 
                 mistakes: [] 
             };

@@ -1,9 +1,5 @@
-const { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } = require("@google/generative-ai");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 
-/**
- * 🤖 MOTEUR IA - V17 (SAFETY OFF)
- * Désactivation explicite des filtres de sécurité pour autoriser la lecture de copies.
- */
 const AIEngine = {
     normalizeKeys: (obj) => {
         if (typeof obj !== 'object' || obj === null) return obj;
@@ -15,7 +11,7 @@ const AIEngine = {
     },
 
     sanitizeJSON: (text) => {
-        if (!text) return { grade: "?", appreciation: "IA Muette.", transcription: "Rien." };
+        if (!text) return { grade: "?", appreciation: "Vide.", transcription: "Rien." };
 
         let clean = text.replace(/```json/gi, "").replace(/```/gi, "").trim();
         
@@ -23,32 +19,43 @@ const AIEngine = {
             const start = clean.indexOf('{');
             const end = clean.lastIndexOf('}');
             let parsed = null;
+
             if (start !== -1 && end !== -1) {
                 parsed = JSON.parse(clean.substring(start, end + 1));
             } else {
                 throw new Error("No JSON");
             }
+
             const norm = AIEngine.normalizeKeys(parsed);
+
             return {
                 studentname: norm.studentname || "Inconnu",
                 grade: norm.grade || norm.note || "?",
                 appreciation: norm.appreciation || "Pas d'avis.",
-                transcription: norm.transcription || norm.analyse || "Pas de détail.",
+                transcription: norm.transcription || norm.analyse || norm.details || "Pas de détail.",
                 mistakes: norm.mistakes || []
             };
-        } catch (e) { 
-            // MODE SECOURS
-            let extractedGrade = "?";
-            let match = text.match(/(?:Note|Grade)\s*[:=]\s*([A-C]\+?)/i);
-            if (match) extractedGrade = match[1].toUpperCase();
 
-            let cleanText = text.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
+        } catch (e) { 
+            console.warn("⚠️ Mode RAW.");
+            
+            // SCRAPER DE NOTE AMÉLIORÉ V18
+            let extractedGrade = "?";
+            // On cherche "Note Proposée: 12/20" ou "Grade: B"
+            const gradeMatch = text.match(/(?:Note|Grade|Evaluation)\s*(?:proposée)?\s*[:=]\s*([A-C]\+?|\d{1,2}\/20)/i);
+            if (gradeMatch) extractedGrade = gradeMatch[1].toUpperCase();
+
+            // CONVERSION MARKDOWN -> HTML pour le rouge
+            // On transforme **Rouge** en span rouge
+            let htmlText = text
+                .replace(/\*\*(.*?)\*\*/g, '<span style="color:#ef4444; font-weight:bold;">$1</span>') // Gras = Rouge
+                .replace(/\n/g, '<br/>');
 
             return {
-                studentName: "Format Texte",
+                studentName: "Mode Texte",
                 grade: extractedGrade,
-                appreciation: "Mode Texte Brut (Fallback)",
-                transcription: cleanText, 
+                appreciation: "L'IA n'a pas respecté le format JSON.",
+                transcription: htmlText, 
                 mistakes: []
             };
         }
@@ -65,22 +72,13 @@ const AIEngine = {
             const model = genAI.getGenerativeModel({ 
                 model: targetModel,
                 systemInstruction: systemInstruction,
-                // --- DÉSACTIVATION DES FILTRES DE SÉCURITÉ ---
-                safetySettings: [
-                    { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                    { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-                    { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                    { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                ]
+                // Température basse pour forcer le respect du format
+                generationConfig: { temperature: 0.1 }
             });
-            
             const result = await model.generateContent(prompt);
-            const response = await result.response;
-            return response.text();
+            return result.response.text();
         } catch (e) {
             console.error(`💥 CRASH GOOGLE :`, e.message);
-            // Si l'IA refuse pour "Safety", on renvoie un message clair
-            if (e.message.includes("SAFETY")) return "REFUS SÉCURITÉ GOOGLE : L'image est considérée comme sensible.";
             return `ERREUR: ${e.message}`;
         }
     }
