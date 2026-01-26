@@ -1,12 +1,16 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 /**
- * 🤖 MOTEUR IA CENTRALISÉ - V8 (ZERO CRASH STRATEGY)
- * Si le JSON casse, on retourne un objet valide contenant le texte brut.
+ * 🤖 MOTEUR IA - V9 (MODE TRANSPARENT)
+ * Si le JSON échoue, on renvoie le texte brut pour le voir dans l'interface.
  */
 const AIEngine = {
     sanitizeJSON: (text) => {
-        if (!text) return { grade: "?", appreciation: "IA Muette.", transcription: "Aucune réponse générée." };
+        if (!text) return { grade: "?", appreciation: "IA Muette", transcription: "Vide." };
+
+        console.log("--- 🤖 RÉPONSE BRUTE IA (DÉBUT) ---");
+        console.log(text);
+        console.log("--- 🤖 RÉPONSE BRUTE IA (FIN) ---");
 
         let clean = text
             .replace(/```json/gi, "")
@@ -14,36 +18,30 @@ const AIEngine = {
             .trim();
         
         try {
-            // 1. Tentative chirurgicale standard
-            const firstOpenBrace = clean.indexOf('{');
-            const lastCloseBrace = clean.lastIndexOf('}');
-            
-            if (firstOpenBrace !== -1 && lastCloseBrace !== -1) {
-                clean = clean.substring(firstOpenBrace, lastCloseBrace + 1);
-            } else {
-                // Fallback tableaux
-                const firstOpenBracket = clean.indexOf('[');
-                const lastCloseBracket = clean.lastIndexOf(']');
-                if (firstOpenBracket !== -1 && lastCloseBracket !== -1) {
-                    clean = clean.substring(firstOpenBracket, lastCloseBracket + 1);
-                }
-            }
-
+            // Tentative 1 : Parsing direct
             return JSON.parse(clean);
-
-        } catch (e) { 
-            console.warn("⚠️ [AI-CORE] JSON Invalide. Passage en mode TEXTE BRUT.");
-            
-            // C'EST ICI LA RÉPARATION :
-            // Au lieu de planter (throw), on retourne un objet de secours valide
-            // On met tout le texte de l'IA dans "transcription" pour que tu puisses le lire.
-            return {
-                studentName: "Nom à vérifier",
-                grade: "?/20",
-                appreciation: "⚠️ Le formatage automatique a échoué, mais voici le contenu brut ci-dessous :",
-                transcription: text, // <--- ON SAUVE LE TEXTE ICI
-                mistakes: ["Erreur de formatage JSON"]
-            };
+        } catch (e1) {
+            try {
+                // Tentative 2 : Recherche des accolades
+                const start = clean.indexOf('{');
+                const end = clean.lastIndexOf('}');
+                if (start !== -1 && end !== -1) {
+                    return JSON.parse(clean.substring(start, end + 1));
+                }
+                throw new Error("Pas de JSON détecté");
+            } catch (e2) {
+                // ÉCHEC DU PARSING : ON RENVOIE LE TEXTE BRUT DANS L'INTERFACE
+                console.warn("⚠️ JSON invalide. Renvoi du texte brut au client.");
+                
+                return {
+                    studentName: "Nom Inconnu",
+                    grade: "?/20",
+                    appreciation: "⚠️ L'IA n'a pas respecté le format JSON.",
+                    // C'EST ICI QU'ON FORCE L'AFFICHAGE DU RETOUR BRUT
+                    transcription: "🔴 RÉPONSE BRUTE DE L'IA (POUR DEBUG) :\n\n" + text, 
+                    mistakes: ["Formatage IA incorrect"]
+                };
+            }
         }
     },
 
@@ -57,22 +55,18 @@ const AIEngine = {
             const genAI = new GoogleGenerativeAI(apiKey);
             const model = genAI.getGenerativeModel({ 
                 model: targetModel,
-                systemInstruction: systemInstruction,
-                generationConfig: { temperature: 0.4 }
+                systemInstruction: systemInstruction
             });
             
             const result = await model.generateContent(prompt);
             const response = await result.response;
             return response.text();
         } catch (e) {
-            console.error(`💥 [AI-CORE] CRASH GOOGLE :`, e.message);
-            // Même en cas de crash Google, on renvoie du texte pour ne pas casser l'UI
+            console.error(`💥 CRASH GOOGLE :`, e.message);
             return JSON.stringify({
-                studentName: "Erreur Google",
                 grade: "0",
-                appreciation: "L'API Google ne répond pas.",
-                transcription: e.message,
-                mistakes: []
+                appreciation: "Erreur Connexion Google",
+                transcription: e.message
             });
         }
     }

@@ -13,24 +13,22 @@ const streamToBuffer = async (stream) => {
 
 const ScanAI = {
     correctCopy: async (copyUrl, subjectUrls, instructions, studentList) => {
-        console.log("👁️ [SCAN-AI] Correction Expert V5...");
+        console.log("👁️ [SCAN-AI] Correction V6...");
 
         const rosterText = studentList.map(s => `${s.firstName} ${s.lastName}`).join(', ');
 
-        const system = `Tu es un professeur correcteur expert.
+        const system = `Tu es un professeur.
         
-        TES OBJECTIFS :
-        1. Identifie l'élève parmi : [${rosterText}].
-        2. Corrige la copie.
-        
-        FORMAT DE RÉPONSE OBLIGATOIRE (JSON) :
+        FORMAT JSON STRICT ATTENDU :
         {
-            "studentName": "Nom Prénom",
-            "transcription": "Détail de la correction...",
-            "appreciation": "Avis global...",
-            "grade": "Note/20",
-            "mistakes": ["Erreur 1", "Erreur 2"]
-        }`;
+            "studentName": "Nom",
+            "transcription": "Analyse...",
+            "appreciation": "Avis...",
+            "grade": "15/20",
+            "mistakes": []
+        }
+        
+        Si tu ne peux pas lire l'image, réponds quand même en JSON en disant "Image illisible" dans l'appréciation.`;
 
         const promptParts = [
             { text: `INSTRUCTIONS : ${instructions}` }
@@ -71,25 +69,26 @@ const ScanAI = {
                 promptParts.push({ text: "[IMAGE COPIE ÉLÈVE]" });
             } else {
                 return {
-                    studentName: "Image Illisible",
-                    grade: "0/20",
-                    appreciation: "Image non chargée depuis le Drive.",
-                    transcription: "Erreur technique.",
+                    studentName: "Image Manquante",
+                    grade: "0",
+                    appreciation: "Le fichier n'a pas pu être téléchargé du Drive pour l'analyse.",
+                    transcription: "URL testée : " + copyUrl,
                     mistakes: []
                 };
             }
 
-            // 3. Appel IA (Le moteur se charge de sécuriser le JSON maintenant)
+            // 3. Appel IA
             const rawText = await AIEngine.ask(promptParts, system);
+            
+            // Le moteur se charge maintenant de renvoyer le texte brut si le JSON échoue
             return AIEngine.sanitizeJSON(rawText);
 
         } catch (e) {
-            // Filet de sécurité ultime
             return { 
                 studentName: "Erreur Critique", 
                 grade: "?", 
-                appreciation: "Erreur interne code.", 
-                transcription: e.message, 
+                appreciation: "Erreur Code : " + e.message, 
+                transcription: "", 
                 mistakes: [] 
             };
         }
