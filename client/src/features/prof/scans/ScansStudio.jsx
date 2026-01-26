@@ -1,32 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './ScansStudio.css';
 
-// COMPOSANT IMAGE SECURISE (Gère les 404)
 const SecureImage = ({ src, className, onClick }) => {
     const [error, setError] = useState(false);
-
-    // Si l'URL est locale (/uploads/...) sur un serveur cloud, c'est risqué.
-    // Si c'est un lien Proxy (/api/structure/proxy/...), c'est sécurisé (Drive).
-    const isLocal = src && src.startsWith('/uploads/');
-
     if (error) {
         return (
-            <div className={`${className} bg-slate-100 flex flex-col items-center justify-center border-2 border-red-200 text-red-400 p-2 text-center`} title="Fichier effacé par le redémarrage serveur">
+            <div className={`${className} bg-slate-100 flex flex-col items-center justify-center border-2 border-red-200 text-red-400 p-2 text-center`} title="Fichier perdu">
                 <span className="text-xl">⚠️</span>
-                <span className="text-[8px] font-black uppercase">Fichier Perdu</span>
+                <span className="text-[8px] font-black uppercase">Perdu</span>
             </div>
         );
     }
-
-    return (
-        <img 
-            src={src} 
-            className={className} 
-            onClick={onClick} 
-            onError={() => setError(true)} 
-            alt="Scan"
-        />
-    );
+    return <img src={src} className={className} onClick={onClick} onError={() => setError(true)} alt="Scan" />;
 };
 
 export default function ScansStudio({ user }) {
@@ -34,7 +19,6 @@ export default function ScansStudio({ user }) {
     const [chapters, setChapters] = useState([]);
     const [activePanels, setActivePanels] = useState({});
     
-    // ETATS MODALE & WORKFLOW
     const [correctionModal, setCorrectionModal] = useState(null); 
     const [viewingCorrection, setViewingCorrection] = useState(null); 
     const [instructions, setInstructions] = useState("");
@@ -78,7 +62,6 @@ export default function ScansStudio({ user }) {
         cvs.toBlob(async (blob) => {
             const localUrl = URL.createObjectURL(blob);
             const snapId = Date.now();
-            // On affiche temporairement l'image locale (Blob) pour la fluidité
             setSnapQueue(prev => [...prev, { id: snapId, url: localUrl, status: 'uploading' }]);
             
             const formData = new FormData();
@@ -89,13 +72,11 @@ export default function ScansStudio({ user }) {
             try {
                 const res = await fetch('/api/scans/upload', { method: 'POST', body: formData });
                 if (!res.ok) throw new Error("Erreur Upload");
-                
-                // Une fois uploadé, on rafraîchit la session pour avoir l'URL Drive
                 setSnapQueue(prev => prev.map(s => s.id === snapId ? { ...s, status: 'done' } : s));
                 loadSessions(); 
             } catch(e) { 
-                alert("Échec de l'upload vers le Drive. Vérifiez votre connexion.");
-                setSnapQueue(prev => prev.filter(s => s.id !== snapId)); // On retire si échec
+                alert("Échec upload Drive.");
+                setSnapQueue(prev => prev.filter(s => s.id !== snapId));
             }
         }, 'image/jpeg', 0.95);
     };
@@ -107,7 +88,7 @@ export default function ScansStudio({ user }) {
     };
 
     const handleDeleteSession = async (id) => {
-        if(!confirm("Supprimer ce dossier de scan ?")) return;
+        if(!confirm("Supprimer ?")) return;
         await fetch(`/api/scans/sessions/${id}`, { method: 'DELETE' });
         loadSessions();
     };
@@ -118,27 +99,43 @@ export default function ScansStudio({ user }) {
         loadSessions();
     };
 
-    // --- IA CORRECTION ---
     const openCorrectionModal = (sessionId) => {
         setCorrectionModal(sessionId);
         setInstructions("Compare la copie au SUJET fourni. Note sur 20. Sois bienveillant mais précis sur les erreurs.");
     };
 
+    // --- LE CŒUR DU DEBUG ESPION ---
     const launchCorrection = async () => {
         if(!correctionModal) return;
         setProcessing(true);
+        console.log("🚀 LANCEMENT CORRECTION...");
         try {
-            await fetch(`/api/scans/correct/${correctionModal}`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ instructions }) });
+            const res = await fetch(`/api/scans/correct/${correctionModal}`, { 
+                method: 'POST', 
+                headers: {'Content-Type':'application/json'}, 
+                body: JSON.stringify({ instructions }) 
+            });
+            
+            const data = await res.json();
+            
+            // --- ESPION CONSOLE ---
+            console.log("🔥 RÉPONSE DU SERVEUR REÇUE :", data);
+            if (data.corrections && data.corrections.length > 0) {
+                console.log("📝 TRANSCRIPTION IA PREMIÈRE COPIE :", data.corrections[0].transcription);
+            }
+            // ---------------------
+
             await loadSessions();
             setCorrectionModal(null);
-        } catch(e) { alert("Erreur IA"); }
+        } catch(e) { 
+            console.error("❌ ERREUR FRONTEND :", e);
+            alert("Erreur IA"); 
+        }
         setProcessing(false);
     };
 
     return (
         <div className="scan-page">
-            
-            {/* MODALE RESULTAT SPLIT VIEW */}
             {viewingCorrection && (
                 <div className="correction-overlay" onClick={() => setViewingCorrection(null)}>
                     <div className="correction-card !w-[90vw] !max-w-6xl !h-[90vh]" onClick={e => e.stopPropagation()}>
@@ -150,19 +147,18 @@ export default function ScansStudio({ user }) {
                             <button onClick={() => setViewingCorrection(null)} className="text-white text-2xl">✕</button>
                         </div>
                         <div className="corr-body flex">
-                            {/* GAUCHE : IMAGE (Utilise SecureImage aussi) */}
                             <div className="flex-1 bg-black flex items-center justify-center p-4">
                                 <SecureImage src={viewingCorrection.originalUrl} className="max-h-full max-w-full object-contain border-2 border-slate-700 rounded-lg" />
                             </div>
-                            {/* DROITE : CORRECTION */}
                             <div className="flex-1 bg-white p-8 overflow-y-auto">
                                 <h4 className="text-sm font-black text-slate-400 uppercase mb-2">Appréciation Globale</h4>
                                 <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-xl text-indigo-900 font-medium mb-6">
                                     {viewingCorrection.appreciation}
                                 </div>
                                 <h4 className="text-sm font-black text-slate-400 uppercase mb-2">Analyse Détaillée</h4>
-                                <div className="prose prose-sm text-slate-600 whitespace-pre-wrap">
-                                    {viewingCorrection.transcription}
+                                <div className="prose prose-sm text-slate-600 whitespace-pre-wrap font-mono text-xs">
+                                    {/* ON AFFICHE TOUJOURS QUELQUE CHOSE ICI */}
+                                    {viewingCorrection.transcription || "⚠️ Aucune transcription disponible."}
                                 </div>
                             </div>
                         </div>
@@ -170,7 +166,6 @@ export default function ScansStudio({ user }) {
                 </div>
             )}
 
-            {/* MODALE LANCEMENT IA */}
             {correctionModal && (
                 <div className="scan-overlay animate-in">
                     <div className="scan-modal">
@@ -196,9 +191,7 @@ export default function ScansStudio({ user }) {
                         <div className="dc-header">
                             <div>
                                 <h3 style={{fontWeight:900}}>{s.title}</h3>
-                                <p className="text-xs text-slate-400 font-bold">
-                                    {s.subjectUrls?.length || 0} Sujets • {s.copyUrls.length} Copies • {correctedCount} Corrigés
-                                </p>
+                                <p className="text-xs text-slate-400 font-bold">{s.subjectUrls?.length || 0} Sujets • {s.copyUrls.length} Copies • {correctedCount} Corrigés</p>
                             </div>
                             <div className="dc-toolbar">
                                 <button className="tool-btn btn-sujet" onClick={() => togglePanel(s._id, 'CAMERA_SUBJECT')}>📄 SUJET</button>
@@ -210,73 +203,28 @@ export default function ScansStudio({ user }) {
                             </div>
                         </div>
 
-                        {/* ZONE DE VISUALISATION */}
                         {active === 'SHOW_ALL' && (
                             <div className="dc-content-area text-white">
-                                {/* SECTION SUJETS */}
                                 {s.subjectUrls?.length > 0 && (
-                                    <div className="mb-6">
-                                        <h4 className="font-bold mb-2 uppercase text-xs text-indigo-300">ÉNONCÉS / SUJETS DE RÉFÉRENCE</h4>
-                                        <div className="snap-queue-strip custom-scrollbar justify-start">
-                                            {s.subjectUrls.map((url, i) => (
-                                                <SecureImage 
-                                                    key={i} 
-                                                    src={url} 
-                                                    className="queue-thumb border-indigo-500 border-2" 
-                                                    onClick={() => window.open(url, '_blank')} 
-                                                />
-                                            ))}
-                                        </div>
-                                    </div>
+                                    <div className="mb-6"><h4 className="font-bold mb-2 uppercase text-xs text-indigo-300">SUJETS</h4><div className="snap-queue-strip custom-scrollbar justify-start">{s.subjectUrls.map((url, i) => (<SecureImage key={i} src={url} className="queue-thumb border-indigo-500 border-2" onClick={() => window.open(url, '_blank')} />))}</div></div>
                                 )}
-
-                                {/* SECTION COPIES */}
-                                <div>
-                                    <h4 className="font-bold mb-2 uppercase text-xs text-emerald-300">COPIES ÉLÈVES ({s.copyUrls.length})</h4>
-                                    <div className="snap-queue-strip custom-scrollbar justify-start flex-wrap">
-                                        {s.copyUrls.map((url, i) => {
-                                            const correction = s.corrections?.find(c => c.originalUrl === url);
-                                            const isCorrected = !!correction;
-                                            return (
-                                                <div key={i} className="relative group cursor-pointer" onClick={() => {
-                                                    if (correction) setViewingCorrection(correction);
-                                                    else window.open(url, '_blank');
-                                                }}>
-                                                    <SecureImage src={url} className={`queue-thumb ${isCorrected ? 'border-green-500' : 'border-slate-500'} border-2`} />
-                                                    {isCorrected && <div className="absolute top-0 right-0 bg-green-500 text-white text-[8px] font-black px-1 rounded-bl">OK</div>}
-                                                </div>
-                                            );
-                                        })}
-                                        {s.copyUrls.length === 0 && <span className="text-sm italic opacity-50">Aucune copie scannée.</span>}
-                                    </div>
-                                </div>
+                                <div><h4 className="font-bold mb-2 uppercase text-xs text-emerald-300">COPIES ({s.copyUrls.length})</h4><div className="snap-queue-strip custom-scrollbar justify-start flex-wrap">{s.copyUrls.map((url, i) => { const correction = s.corrections?.find(c => c.originalUrl === url); return (<div key={i} className="relative group cursor-pointer" onClick={() => { if(correction) setViewingCorrection(correction); else window.open(url, '_blank'); }}><SecureImage src={url} className={`queue-thumb ${correction ? 'border-green-500' : 'border-slate-500'} border-2`} />{correction && <div className="absolute top-0 right-0 bg-green-500 text-white text-[8px] font-black px-1 rounded-bl">OK</div>}</div>); })}</div></div>
                             </div>
                         )}
 
                         {active === 'DRIVE_SELECTION' && (
                             <div className="dc-content-area flex flex-col items-center gap-4 text-white">
-                                <h3>CHOISIR LE DOSSIER DE RANGEMENT</h3>
-                                <select className="p-3 rounded text-black font-bold" value={selectedFolderId} onChange={e => setSelectedFolderId(e.target.value)}>
-                                    <option value="">-- SÉLECTION --</option>
-                                    {relevantChapters.map(c => <option key={c._id} value={c._id}>{c.title}</option>)}
-                                </select>
-                                <button className="bg-green-500 text-white px-4 py-2 rounded font-black" onClick={() => handleLinkDrive(s._id)}>VALIDER LE RANGEMENT</button>
+                                <h3>CHOISIR LE DOSSIER</h3>
+                                <select className="p-3 rounded text-black font-bold" value={selectedFolderId} onChange={e => setSelectedFolderId(e.target.value)}><option value="">-- SÉLECTION --</option>{relevantChapters.map(c => <option key={c._id} value={c._id}>{c.title}</option>)}</select>
+                                <button className="bg-green-500 text-white px-4 py-2 rounded font-black" onClick={() => handleLinkDrive(s._id)}>VALIDER</button>
                             </div>
                         )}
 
                         {active && active.startsWith('CAMERA') && (
                             <div className="dc-content-area">
-                                <h4 className="text-center text-white font-black mb-2 uppercase">
-                                    {active === 'CAMERA_SUBJECT' ? "📸 SCANNER L'ÉNONCÉ (SUJET)" : "📸 SCANNER UNE COPIE ÉLÈVE"}
-                                </h4>
-                                <div className="cam-wrapper">
-                                    <video ref={videoRef} autoPlay playsInline className="cam-video" />
-                                    <canvas ref={canvasRef} style={{display:'none'}} />
-                                    <div className={`cam-trigger ${active === 'CAMERA_SUBJECT' ? 'border-indigo-500' : 'border-emerald-500'}`} onClick={() => takeSnap(s._id, active)}>⚪</div>
-                                </div>
-                                <div className="snap-queue-strip custom-scrollbar">
-                                    {snapQueue.map(sq => <img key={sq.id} src={sq.url} className={`queue-thumb ${sq.status}`} />)}
-                                </div>
+                                <h4 className="text-center text-white font-black mb-2 uppercase">{active === 'CAMERA_SUBJECT' ? "SUJET" : "COPIE ÉLÈVE"}</h4>
+                                <div className="cam-wrapper"><video ref={videoRef} autoPlay playsInline className="cam-video" /><canvas ref={canvasRef} style={{display:'none'}} /><div className={`cam-trigger ${active === 'CAMERA_SUBJECT' ? 'border-indigo-500' : 'border-emerald-500'}`} onClick={() => takeSnap(s._id, active)}>⚪</div></div>
+                                <div className="snap-queue-strip custom-scrollbar">{snapQueue.map(sq => <img key={sq.id} src={sq.url} className={`queue-thumb ${sq.status}`} />)}</div>
                             </div>
                         )}
                     </div>
