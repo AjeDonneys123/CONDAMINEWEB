@@ -1,21 +1,9 @@
 const AIEngine = require('../../../core/ai.engine');
-const StructureDrive = require('../../structure/experts/structure.drive'); // Pour lire le Drive
-const fs = require('fs');
-const path = require('path');
-
-// Helper : Convertit un Stream (Drive) en Buffer (Mémoire)
-const streamToBuffer = async (stream) => {
-    const chunks = [];
-    return new Promise((resolve, reject) => {
-        stream.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
-        stream.on('error', (err) => reject(err));
-        stream.on('end', () => resolve(Buffer.concat(chunks)));
-    });
-};
+const StructureDrive = require('../../structure/experts/structure.drive'); 
 
 const ScanAI = {
     correctCopy: async (copyUrl, subjectUrls, instructions, studentList) => {
-        console.log("👁️ [SCAN-AI] Démarrage Correction (Mode Hybride Drive/Local)...");
+        console.log("👁️ [SCAN-AI] Correction via Drive...");
 
         const rosterText = studentList.map(s => `${s.firstName} ${s.lastName}`).join(', ');
 
@@ -44,45 +32,34 @@ const ScanAI = {
             { text: `INSTRUCTIONS PROF : ${instructions}\n\nVoici d'abord l'énoncé, puis la copie.` }
         ];
 
-        // --- FONCTION INTELLIGENTE : RÉCUPÉRATION IMAGE (Drive ou Local) ---
+        // --- FONCTION : RÉCUPÉRATION STREAM DRIVE -> BUFFER ---
         const getImageData = async (url) => {
             try {
-                // CAS 1 : C'est un lien Proxy Google Drive (/api/structure/proxy/FILE_ID)
                 if (url.includes('/proxy/')) {
                     const fileId = url.split('/proxy/')[1];
-                    console.log(`☁️ [SCAN-AI] Téléchargement depuis Drive ID: ${fileId}`);
+                    console.log(`☁️ [AI-FETCH] Récupération Drive ID: ${fileId}`);
+                    
+                    // On utilise le stream de l'expert Structure
                     const stream = await StructureDrive.getFileStream(fileId);
-                    const buffer = await streamToBuffer(stream);
+                    
+                    // Conversion Stream -> Buffer pour Gemini
+                    const chunks = [];
+                    for await (const chunk of stream) {
+                        chunks.push(chunk);
+                    }
+                    const buffer = Buffer.concat(chunks);
+                    
                     return buffer.toString('base64');
                 }
-
-                // CAS 2 : C'est un fichier local (/uploads/fichier.jpg)
-                // On nettoie l'URL pour avoir le chemin disque
-                const cleanName = url.split('/').pop().split('?')[0];
-                
-                const candidates = [
-                    path.join(process.cwd(), 'public', 'uploads', cleanName),
-                    path.join(process.cwd(), 'uploads', cleanName),
-                    path.join('/tmp', cleanName)
-                ];
-
-                for (const p of candidates) {
-                    if (fs.existsSync(p)) {
-                        console.log(`💿 [SCAN-AI] Fichier local trouvé : ${p}`);
-                        return fs.readFileSync(p).toString('base64');
-                    }
-                }
-                
-                throw new Error(`Fichier introuvable (Ni Drive, Ni Local) : ${url}`);
-
+                return null;
             } catch (e) {
-                console.error(`❌ [SCAN-AI] Erreur lecture image : ${e.message}`);
+                console.error(`❌ [AI-FETCH] Erreur lecture Drive : ${e.message}`);
                 return null;
             }
         };
 
         try {
-            // 1. Traitement des Sujets
+            // 1. Sujets (Drive Uniquement)
             if (subjectUrls && subjectUrls.length > 0) {
                 for (const url of subjectUrls) {
                     const b64 = await getImageData(url);
@@ -93,17 +70,18 @@ const ScanAI = {
                 }
             }
 
-            // 2. Traitement de la Copie
+            // 2. Copie (Drive Uniquement)
             const copyB64 = await getImageData(copyUrl);
             if (copyB64) {
                 promptParts.push({ inlineData: { mimeType: "image/jpeg", data: copyB64 } });
                 promptParts.push({ text: "[IMAGE COPIE ÉLÈVE]" });
             } else {
+                // Si on n'a pas pu récupérer l'image (fichier supprimé ou erreur Drive)
                 return {
-                    studentName: "Erreur Image",
+                    studentName: "Image Illisible",
                     grade: "0/20",
-                    appreciation: "L'image de la copie est inaccessible (supprimée du serveur ou lien cassé).",
-                    transcription: "Impossible de lire le fichier.",
+                    appreciation: "Impossible d'accéder à l'image sur le Google Drive.",
+                    transcription: "Erreur de chargement.",
                     mistakes: []
                 };
             }
