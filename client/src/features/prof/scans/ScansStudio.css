@@ -1,4 +1,4 @@
-/* ... (CSS Existant pour cam, toolbar etc.) ... */
+/* ... (CSS global existant) ... */
 .cam-wrapper { position: relative; width: 100%; max-width: 1200px; aspect-ratio: 16/9; margin: 0 auto; border-radius: 20px; overflow: hidden; border: 4px solid #334155; background: black; display: flex; align-items: center; justify-content: center; }
 .cam-video { width: 100%; height: 100%; object-fit: contain; }
 .scan-page { padding: 2rem; background: #f1f5f9; min-height: 100%; display: flex; flex-direction: column; gap: 2rem; }
@@ -9,48 +9,32 @@
 .dc-toolbar { padding: 15px 25px; display: flex; gap: 10px; flex-wrap: wrap; background: white; }
 .dc-content-area { border-top: 1px solid #e2e8f0; background: #0f172a; padding: 20px; min-height: 200px; animation: slideDown 0.3s; }
 .tool-btn { padding: 12px 18px; border-radius: 14px; border: none; font-weight: 900; font-size: 0.7rem; text-transform: uppercase; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: transform 0.1s, filter 0.1s; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-.btn-sujet { background: #e0f2fe; color: #0369a1; }
-.btn-scanner { background: #dcfce7; color: #15803d; }
-.btn-devoirs { background: #fff7ed; color: #c2410c; }
-.btn-correct { background: #f3e8ff; color: #7e22ce; flex: 1; justify-content: center; }
+
+/* COULEURS BOUTONS */
+.btn-sujet { background: #e0f2fe; color: #0369a1; } /* BLEU */
+.btn-scanner { background: #dcfce7; color: #15803d; } /* VERT */
+.btn-devoirs { background: #fff7ed; color: #c2410c; } /* ORANGE */
+.btn-correct { background: #f3e8ff; color: #7e22ce; flex: 1; justify-content: center; } /* VIOLET */
 .btn-folder { background: #f1f5f9; color: #475569; }
 .btn-delete { background: #fee2e2; color: #b91c1c; width: 40px; justify-content: center; padding: 0; }
+
 .cam-trigger { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); width: 70px; height: 70px; background: white; border: 4px solid rgba(0,0,0,0.3); border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 2rem; transition: transform 0.1s; z-index: 20; }
 .snap-queue-strip { display: flex; gap: 10px; margin-top: 15px; padding-bottom: 5px; overflow-x: auto; justify-content: center; min-height: 80px; }
 .queue-thumb { width: 70px; height: 70px; border-radius: 12px; object-fit: cover; border: 4px solid transparent; transition: all 0.3s; animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
 
-/* --- NOUVEAU CSS CORRECTION --- */
+/* MODALE CORRECTION */
+.correction-overlay { position: fixed; inset: 0; z-index: 30000; background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(5px); display: flex; align-items: center; justify-content: center; }
+.correction-card { background: white; width: 95vw; max-width: 1400px; height: 90vh; border-radius: 25px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 50px 100px -20px rgba(0,0,0,0.8); }
+.corr-header { padding: 1.5rem; background: #1e293b; color: white; display: flex; justify-content: space-between; align-items: center; }
+.corr-body { flex: 1; display: flex; overflow: hidden; }
+
+/* MODALE CONFIG IA */
 .scan-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.9); z-index: 10000; display: flex; align-items: center; justify-content: center; }
 .scan-modal { background: white; width: 600px; padding: 30px; border-radius: 25px; display: flex; flex-direction: column; gap: 20px; }
-.scan-modal h3 { margin: 0; font-weight: 900; color: #1e293b; }
-.scan-instr-input { width: 100%; height: 300px; padding: 15px; border-radius: 15px; border: 2px solid #e2e8f0; font-family: monospace; font-size: 14px; line-height: 1.5; resize: none; outline: none; }
-.scan-instr-input:focus { border-color: #3b82f6; }
+.scan-instr-input { width: 100%; height: 200px; padding: 15px; border-radius: 15px; border: 2px solid #e2e8f0; font-family: monospace; font-size: 14px; line-height: 1.5; resize: none; outline: none; }
 .scan-modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
 .btn-cancel { padding: 15px; background: #f1f5f9; border: none; border-radius: 12px; font-weight: 900; cursor: pointer; color: #64748b; }
-.btn-launch { padding: 15px 30px; background: #3b82f6; border: none; border-radius: 12px; font-weight: 900; cursor: pointer; color: white; box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4); }
-.btn-launch:disabled { background: #94a3b8; cursor: not-allowed; }
-
-/* --- AFFICHAGE RESULTATS --- */
-.corrections-container {
-    padding: 20px; background: #f1f5f9; display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 20px;
-}
-.correction-card {
-    background: white; border-radius: 20px; overflow: hidden; display: flex;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.05); border: 1px solid #e2e8f0;
-}
-.correction-img-box {
-    width: 150px; background: #000; display: flex; align-items: center; justify-content: center; cursor: pointer;
-}
-.correction-img-box img { width: 100%; height: 100%; object-fit: cover; opacity: 0.8; transition: opacity 0.2s; }
-.correction-img-box:hover img { opacity: 1; }
-
-.correction-info-box { flex: 1; padding: 15px; display: flex; flex-direction: column; }
-.ci-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #f1f5f9; padding-bottom: 10px; margin-bottom: 10px; }
-.ci-name { font-weight: 900; font-size: 14px; text-transform: uppercase; color: #1e293b; }
-.ci-grade { background: #3b82f6; color: white; padding: 4px 10px; border-radius: 8px; font-weight: 900; font-size: 12px; }
-.ci-body { flex: 1; max-height: 200px; overflow-y: auto; font-size: 12px; color: #475569; }
-.ci-label { font-weight: 900; color: #94a3b8; font-size: 10px; margin-bottom: 2px; }
-.ci-text { line-height: 1.4; margin-bottom: 10px; white-space: pre-wrap; }
+.btn-launch { padding: 15px 30px; background: #3b82f6; border: none; border-radius: 12px; font-weight: 900; cursor: pointer; color: white; }
 
 @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes popIn { from { transform: scale(0); } to { transform: scale(1); } }

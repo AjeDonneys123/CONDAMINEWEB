@@ -4,54 +4,64 @@ const path = require('path');
 
 const ScanAI = {
     correctCopy: async (copyUrl, subjectUrls, instructions, studentList) => {
-        console.log("👁️ [SCAN-AI] Correction Expert (Mode /20)...");
+        console.log("👁️ [SCAN-AI] Correction Expert (Sujet + Copie)...");
 
         const rosterText = studentList.map(s => `${s.firstName} ${s.lastName}`).join(', ');
 
-        // INSTRUCTIONS STRICTES DU PROFESSEUR
         const system = `Tu es un professeur correcteur expert.
         
-        TES OBJECTIFS (ORDRE DE PRIORITÉ) :
-        1. **IDENTIFICATION** : Trouve le nom de l'élève sur la copie parmi : [${rosterText}]. Si introuvable, dis "Inconnu".
-        2. **TRANSCRIPTION** : Retranscris le contenu manuscrit de la copie (corrige les fautes d'orthographe mineures dans la transcription mais note-les).
-        3. **COMMENTAIRES** : Donne une appréciation constructive et des conseils.
-        4. **NOTE** : Attribue une note sur 20 (ex: 14/20).
+        INPUT :
+        1. Une ou plusieurs images de l'ÉNONCÉ (SUJET).
+        2. Une image de la COPIE de l'élève.
+        
+        TES OBJECTIFS :
+        1. **ANALYSE SUJET** : Comprends d'abord ce qui était demandé dans l'énoncé.
+        2. **IDENTIFICATION** : Trouve le nom de l'élève sur la copie parmi : [${rosterText}].
+        3. **CORRECTION** : Vérifie si la copie répond correctement aux questions du sujet.
+        4. **NOTE** : Attribue une note sur 20.
 
-        FORMAT JSON ATTENDU (Sans markdown) :
+        FORMAT JSON ATTENDU :
         {
             "studentName": "Nom Trouvé",
-            "transcription": "Le texte lu...",
-            "appreciation": "Tes commentaires ici...",
+            "transcription": "Retranscription partielle et commentaires...",
+            "appreciation": "Ton feedback pédagogique...",
             "grade": "15/20",
             "mistakes": []
         }`;
 
+        // Construction du payload multimédia
         const promptParts = [
-            { text: `CONSIGNES SPÉCIFIQUES DU PROFESSEUR : ${instructions}\n\nAnalyse cette copie.` }
+            { text: `INSTRUCTIONS PROF : ${instructions}\n\nVoici d'abord l'énoncé, puis la copie.` }
         ];
 
-        try {
-            const copyPath = path.join(process.cwd(), 'public', copyUrl);
-            if (fs.existsSync(copyPath)) {
-                promptParts.push({ inlineData: { mimeType: "image/jpeg", data: fs.readFileSync(copyPath).toString('base64') } });
-            }
-            
-            if (subjectUrls && subjectUrls.length > 0) {
-                const sPath = path.join(process.cwd(), 'public', subjectUrls[0]);
+        // 1. Ajout des Sujets (En premier pour le contexte)
+        if (subjectUrls && subjectUrls.length > 0) {
+            subjectUrls.forEach(url => {
+                const sPath = path.join(process.cwd(), 'public', url);
                 if (fs.existsSync(sPath)) {
                     promptParts.push({ inlineData: { mimeType: "image/jpeg", data: fs.readFileSync(sPath).toString('base64') } });
+                    promptParts.push({ text: "[IMAGE ÉNONCÉ]" });
                 }
-            }
+            });
+        }
 
+        // 2. Ajout de la Copie
+        const copyPath = path.join(process.cwd(), 'public', copyUrl);
+        if (fs.existsSync(copyPath)) {
+            promptParts.push({ inlineData: { mimeType: "image/jpeg", data: fs.readFileSync(copyPath).toString('base64') } });
+            promptParts.push({ text: "[IMAGE COPIE ÉLÈVE]" });
+        }
+
+        try {
             const raw = await AIEngine.ask(promptParts, system);
             return AIEngine.sanitizeJSON(raw);
         } catch (e) {
             console.error("Scan AI Error:", e);
             return { 
-                studentName: "Erreur Lecture", 
-                grade: "0/20", 
-                appreciation: "L'IA n'a pas pu lire la copie. Vérifiez la qualité de la photo.", 
-                transcription: "Non disponible.", 
+                studentName: "Erreur", 
+                grade: "?/20", 
+                appreciation: "Impossible de lire les images.", 
+                transcription: "", 
                 mistakes: [] 
             };
         }

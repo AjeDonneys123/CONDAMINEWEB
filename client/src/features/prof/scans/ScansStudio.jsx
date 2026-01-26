@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './ScansStudio.css';
 
-export default function ScansStudio({ user, globalClass }) {
+export default function ScansStudio({ user }) {
     const [sessions, setSessions] = useState([]);
     const [chapters, setChapters] = useState([]);
     const [activePanels, setActivePanels] = useState({});
     
-    // MODALE CORRECTION
-    const [correctionModal, setCorrectionModal] = useState(null); // ID Session ou null
+    // ETATS MODALE & WORKFLOW
+    const [correctionModal, setCorrectionModal] = useState(null); // ID Session pour lancer correction
+    const [viewingCorrection, setViewingCorrection] = useState(null); // Objet correction pour affichage résultats
     const [instructions, setInstructions] = useState("");
     const [processing, setProcessing] = useState(false);
 
@@ -21,7 +22,6 @@ export default function ScansStudio({ user, globalClass }) {
 
     const loadSessions = async () => { try { const res = await fetch('/api/scans/sessions'); if(res.ok) setSessions(await res.json()); } catch(e) {} };
     const loadChapters = async () => { try { const res = await fetch('/api/structure/chapters'); if(res.ok) setChapters(await res.json()); } catch(e) {} };
-
     const relevantChapters = chapters.filter(c => String(c.teacherId) === String(user.id || user._id) && !c.isArchived).sort((a,b)=>a.title.localeCompare(b.title));
 
     const togglePanel = (id, type, currentChap) => {
@@ -54,6 +54,7 @@ export default function ScansStudio({ user, globalClass }) {
             const formData = new FormData();
             formData.append('file', blob, `snap_${snapId}.jpg`);
             formData.append('sessionId', sessionId);
+            // DISTINCTION CRUCIALE : SUJET ou COPIE
             formData.append('type', type === 'CAMERA_SUBJECT' ? 'SUBJECT' : 'COPY');
             try {
                 await fetch('/api/scans/upload', { method: 'POST', body: formData });
@@ -70,7 +71,7 @@ export default function ScansStudio({ user, globalClass }) {
     };
 
     const handleDeleteSession = async (id) => {
-        if(!confirm("Supprimer ce paquet de copies ?")) return;
+        if(!confirm("Supprimer ce dossier de scan ?")) return;
         await fetch(`/api/scans/sessions/${id}`, { method: 'DELETE' });
         loadSessions();
     };
@@ -81,49 +82,79 @@ export default function ScansStudio({ user, globalClass }) {
         loadSessions();
     };
 
-    // --- LOGIQUE CORRECTION ---
+    // --- IA CORRECTION ---
     const openCorrectionModal = (sessionId) => {
         setCorrectionModal(sessionId);
-        setInstructions(
-            "1. IDENTIFICATION : Trouve le nom de l'élève.\n" +
-            "2. TRANSCRIPTION : Recopie le texte de la copie.\n" +
-            "3. COMMENTAIRES : Analyse les erreurs et points forts.\n" +
-            "4. NOTE : Donne une note sur 20."
-        );
+        setInstructions("Compare la copie au SUJET fourni. Note sur 20. Sois bienveillant mais précis sur les erreurs.");
     };
 
     const launchCorrection = async () => {
         if(!correctionModal) return;
         setProcessing(true);
         try {
-            await fetch(`/api/scans/correct/${correctionModal}`, { 
-                method: 'POST', 
-                headers: {'Content-Type':'application/json'}, 
-                body: JSON.stringify({ instructions }) 
-            });
-            await loadSessions(); // Recharger pour voir les résultats
+            await fetch(`/api/scans/correct/${correctionModal}`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ instructions }) });
+            await loadSessions();
             setCorrectionModal(null);
         } catch(e) { alert("Erreur IA"); }
         setProcessing(false);
     };
 
+    // --- VISUALISATION ---
+    const handleViewCopy = (session, copyUrl) => {
+        // Chercher si une correction existe pour cette URL
+        const correction = session.corrections?.find(c => c.originalUrl === copyUrl);
+        if (correction) {
+            setViewingCorrection(correction); // Ouvre la modale Split View
+        } else {
+            window.open(copyUrl, '_blank'); // Juste l'image
+        }
+    };
+
     return (
         <div className="scan-page">
-            {/* MODALE CORRECTION */}
+            
+            {/* MODALE RESULTAT SPLIT VIEW */}
+            {viewingCorrection && (
+                <div className="correction-overlay" onClick={() => setViewingCorrection(null)}>
+                    <div className="correction-card !w-[90vw] !max-w-6xl !h-[90vh]" onClick={e => e.stopPropagation()}>
+                        <div className="corr-header">
+                            <div>
+                                <h2 className="text-xl font-black uppercase text-white">{viewingCorrection.studentName}</h2>
+                                <span className="text-xs font-bold text-emerald-400">NOTE : {viewingCorrection.grade}</span>
+                            </div>
+                            <button onClick={() => setViewingCorrection(null)} className="text-white text-2xl">✕</button>
+                        </div>
+                        <div className="corr-body flex">
+                            {/* GAUCHE : IMAGE */}
+                            <div className="flex-1 bg-black flex items-center justify-center p-4">
+                                <img src={viewingCorrection.originalUrl} className="max-h-full max-w-full object-contain border-2 border-slate-700 rounded-lg" />
+                            </div>
+                            {/* DROITE : CORRECTION */}
+                            <div className="flex-1 bg-white p-8 overflow-y-auto">
+                                <h4 className="text-sm font-black text-slate-400 uppercase mb-2">Appréciation Globale</h4>
+                                <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-xl text-indigo-900 font-medium mb-6">
+                                    {viewingCorrection.appreciation}
+                                </div>
+                                <h4 className="text-sm font-black text-slate-400 uppercase mb-2">Analyse Détaillée</h4>
+                                <div className="prose prose-sm text-slate-600 whitespace-pre-wrap">
+                                    {viewingCorrection.transcription}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* MODALE LANCEMENT IA */}
             {correctionModal && (
                 <div className="scan-overlay animate-in">
                     <div className="scan-modal">
                         <h3>🤖 CONFIGURATION CORRECTION</h3>
-                        <textarea 
-                            className="scan-instr-input"
-                            value={instructions}
-                            onChange={e => setInstructions(e.target.value)}
-                        />
+                        <p className="text-xs text-slate-400 mb-2">L'IA va utiliser les images "SUJET" comme référence.</p>
+                        <textarea className="scan-instr-input" value={instructions} onChange={e => setInstructions(e.target.value)} />
                         <div className="scan-modal-actions">
                             <button onClick={() => setCorrectionModal(null)} className="btn-cancel">ANNULER</button>
-                            <button onClick={launchCorrection} className="btn-launch" disabled={processing}>
-                                {processing ? 'TRAITEMENT EN COURS...' : 'LANCER LES CORRECTIONS 🚀'}
-                            </button>
+                            <button onClick={launchCorrection} className="btn-launch" disabled={processing}>{processing ? 'TRAITEMENT...' : 'LANCER 🚀'}</button>
                         </div>
                     </div>
                 </div>
@@ -134,58 +165,57 @@ export default function ScansStudio({ user, globalClass }) {
             {sessions.map(s => {
                 const active = activePanels[s._id];
                 const folderName = chapters.find(c => c._id === s.chapterId)?.title || "AUCUN DOSSIER";
-                const hasCorrections = s.corrections && s.corrections.length > 0;
+                const correctedCount = s.corrections ? s.corrections.length : 0;
 
                 return (
                     <div key={s._id} className="dc-card">
                         <div className="dc-header">
                             <div>
                                 <h3 style={{fontWeight:900}}>{s.title}</h3>
-                                <p className="text-xs text-slate-400 font-bold">{s.copyUrls.length} Copies • Dossier : {folderName}</p>
+                                <p className="text-xs text-slate-400 font-bold">
+                                    {s.subjectUrls?.length || 0} Sujets • {s.copyUrls.length} Copies • {correctedCount} Corrigés
+                                </p>
                             </div>
                             <div className="dc-toolbar">
-                                <button className="tool-btn btn-scanner" onClick={() => togglePanel(s._id, 'CAMERA_COPY')}>📷 SCANNER</button>
-                                <button className="tool-btn btn-devoirs" onClick={() => togglePanel(s._id, 'SHOW_COPIES')}>📚 DEVOIRS</button>
+                                <button className="tool-btn btn-sujet" onClick={() => togglePanel(s._id, 'CAMERA_SUBJECT')}>📄 SUJET</button>
+                                <button className="tool-btn btn-scanner" onClick={() => togglePanel(s._id, 'CAMERA_COPY')}>📷 COPIES</button>
+                                <button className="tool-btn btn-devoirs" onClick={() => togglePanel(s._id, 'SHOW_ALL')}>👀 VOIR TOUT</button>
                                 <button className="tool-btn btn-folder" onClick={() => togglePanel(s._id, 'DRIVE_SELECTION', s.chapterId)}>📂 RANGER</button>
                                 <button className="tool-btn btn-correct" onClick={() => openCorrectionModal(s._id)}>🤖 CORRIGER</button>
                                 <button className="tool-btn btn-delete" onClick={() => handleDeleteSession(s._id)}>✕</button>
                             </div>
                         </div>
-                        
-                        {/* RESULTATS CORRECTIONS (AFFICHAGE DIRECT) */}
-                        {hasCorrections && (
-                            <div className="corrections-container">
-                                {s.corrections.map((corr, idx) => (
-                                    <div key={idx} className="correction-card">
-                                        <div className="correction-img-box">
-                                            <img src={corr.originalUrl} alt="Copie" onClick={() => window.open(corr.originalUrl, '_blank')} />
-                                        </div>
-                                        <div className="correction-info-box">
-                                            <div className="ci-header">
-                                                <span className="ci-name">{corr.studentName || "Élève Inconnu"}</span>
-                                                <span className="ci-grade">{corr.grade}</span>
-                                            </div>
-                                            <div className="ci-body custom-scrollbar">
-                                                <p className="ci-label">APPRÉCIATION :</p>
-                                                <p className="ci-text">{corr.appreciation}</p>
-                                                <p className="ci-label mt-2">TRANSCRIPTION :</p>
-                                                <p className="ci-text italic">{corr.transcription}</p>
-                                            </div>
+
+                        {/* ZONE DE VISUALISATION */}
+                        {active === 'SHOW_ALL' && (
+                            <div className="dc-content-area text-white">
+                                {/* SECTION SUJETS */}
+                                {s.subjectUrls?.length > 0 && (
+                                    <div className="mb-6">
+                                        <h4 className="font-bold mb-2 uppercase text-xs text-indigo-300">ÉNONCÉS / SUJETS DE RÉFÉRENCE</h4>
+                                        <div className="snap-queue-strip custom-scrollbar justify-start">
+                                            {s.subjectUrls.map((url, i) => (
+                                                <img key={i} src={url} className="queue-thumb border-indigo-500 border-2" onClick={() => window.open(url, '_blank')} />
+                                            ))}
                                         </div>
                                     </div>
-                                ))}
-                            </div>
-                        )}
+                                )}
 
-                        {/* PANNEAUX OUTILS */}
-                        {active === 'SHOW_COPIES' && (
-                            <div className="dc-content-area text-white">
-                                <h4 className="font-bold mb-4 uppercase">Copies brutes ({s.copyUrls.length})</h4>
-                                <div className="snap-queue-strip custom-scrollbar">
-                                    {s.copyUrls.map((url, i) => (
-                                        <img key={i} src={url} className="queue-thumb" style={{border:'2px solid white'}} onClick={() => window.open(url, '_blank')} />
-                                    ))}
-                                    {s.copyUrls.length === 0 && <span className="text-sm italic opacity-50">Aucune copie.</span>}
+                                {/* SECTION COPIES */}
+                                <div>
+                                    <h4 className="font-bold mb-2 uppercase text-xs text-emerald-300">COPIES ÉLÈVES ({s.copyUrls.length})</h4>
+                                    <div className="snap-queue-strip custom-scrollbar justify-start flex-wrap">
+                                        {s.copyUrls.map((url, i) => {
+                                            const isCorrected = s.corrections?.some(c => c.originalUrl === url);
+                                            return (
+                                                <div key={i} className="relative group cursor-pointer" onClick={() => handleViewCopy(s, url)}>
+                                                    <img src={url} className={`queue-thumb ${isCorrected ? 'border-green-500' : 'border-slate-500'} border-2`} />
+                                                    {isCorrected && <div className="absolute top-0 right-0 bg-green-500 text-white text-[8px] font-black px-1 rounded-bl">OK</div>}
+                                                </div>
+                                            );
+                                        })}
+                                        {s.copyUrls.length === 0 && <span className="text-sm italic opacity-50">Aucune copie scannée.</span>}
+                                    </div>
                                 </div>
                             </div>
                         )}
@@ -203,12 +233,17 @@ export default function ScansStudio({ user, globalClass }) {
 
                         {active && active.startsWith('CAMERA') && (
                             <div className="dc-content-area">
+                                <h4 className="text-center text-white font-black mb-2 uppercase">
+                                    {active === 'CAMERA_SUBJECT' ? "📸 SCANNER L'ÉNONCÉ (SUJET)" : "📸 SCANNER UNE COPIE ÉLÈVE"}
+                                </h4>
                                 <div className="cam-wrapper">
                                     <video ref={videoRef} autoPlay playsInline className="cam-video" />
                                     <canvas ref={canvasRef} style={{display:'none'}} />
-                                    <div className="cam-trigger" onClick={() => takeSnap(s._id, active)}>⚪</div>
+                                    <div className={`cam-trigger ${active === 'CAMERA_SUBJECT' ? 'border-indigo-500' : 'border-emerald-500'}`} onClick={() => takeSnap(s._id, active)}>⚪</div>
                                 </div>
-                                <div className="snap-queue-strip custom-scrollbar">{snapQueue.map(sq => <img key={sq.id} src={sq.url} className={`queue-thumb ${sq.status}`} />)}</div>
+                                <div className="snap-queue-strip custom-scrollbar">
+                                    {snapQueue.map(sq => <img key={sq.id} src={sq.url} className={`queue-thumb ${sq.status}`} />)}
+                                </div>
                             </div>
                         )}
                     </div>
