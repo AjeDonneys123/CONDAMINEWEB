@@ -1,5 +1,8 @@
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+const { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } = require("@google/generative-ai");
 
+/**
+ * 🤖 MOTEUR IA - V18 (BLOCK NONE & JSON FIX)
+ */
 const AIEngine = {
     normalizeKeys: (obj) => {
         if (typeof obj !== 'object' || obj === null) return obj;
@@ -29,32 +32,28 @@ const AIEngine = {
             const norm = AIEngine.normalizeKeys(parsed);
 
             return {
-                studentname: norm.studentname || "Inconnu",
-                grade: norm.grade || norm.note || "?",
-                appreciation: norm.appreciation || "Pas d'avis.",
-                transcription: norm.transcription || norm.analyse || norm.details || "Pas de détail.",
+                studentname: norm.studentname || norm.detectedentityname || "Inconnu",
+                grade: norm.grade || norm.qualityscore || norm.note || "?",
+                appreciation: norm.appreciation || norm.technicalsummary || "Analyse terminée.",
+                transcription: norm.transcription || norm.fulltextextraction || "Texte extrait.",
                 mistakes: norm.mistakes || []
             };
 
         } catch (e) { 
             console.warn("⚠️ Mode RAW.");
             
-            // SCRAPER DE NOTE AMÉLIORÉ V18
             let extractedGrade = "?";
-            // On cherche "Note Proposée: 12/20" ou "Grade: B"
-            const gradeMatch = text.match(/(?:Note|Grade|Evaluation)\s*(?:proposée)?\s*[:=]\s*([A-C]\+?|\d{1,2}\/20)/i);
+            const gradeMatch = text.match(/(?:Note|Grade|Score)\s*[:=]\s*([A-C]\+?|\d{1,2}\/20)/i);
             if (gradeMatch) extractedGrade = gradeMatch[1].toUpperCase();
 
-            // CONVERSION MARKDOWN -> HTML pour le rouge
-            // On transforme **Rouge** en span rouge
             let htmlText = text
-                .replace(/\*\*(.*?)\*\*/g, '<span style="color:#ef4444; font-weight:bold;">$1</span>') // Gras = Rouge
+                .replace(/\*\*(.*?)\*\*/g, '<span style="color:#ef4444; font-weight:bold;">$1</span>')
                 .replace(/\n/g, '<br/>');
 
             return {
                 studentName: "Mode Texte",
                 grade: extractedGrade,
-                appreciation: "L'IA n'a pas respecté le format JSON.",
+                appreciation: "Format brut (JSON invalide).",
                 transcription: htmlText, 
                 mistakes: []
             };
@@ -72,7 +71,13 @@ const AIEngine = {
             const model = genAI.getGenerativeModel({ 
                 model: targetModel,
                 systemInstruction: systemInstruction,
-                // Température basse pour forcer le respect du format
+                // --- SÉCURITÉ DÉSACTIVÉE ---
+                safetySettings: [
+                    { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                    { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+                    { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                    { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                ],
                 generationConfig: { temperature: 0.1 }
             });
             const result = await model.generateContent(prompt);
