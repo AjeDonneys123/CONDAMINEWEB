@@ -37,11 +37,11 @@ app.get('/uploads/:filename', (req, res) => {
     res.status(404).send('Fichier introuvable.');
 });
 
-// V123 : SAFETY BYPASS TOTAL
+// ROUTE V126
 app.get('/api/check-deploy', (req, res) => {
     res.json({ 
         status: "OK", 
-        version: "V123_OCR_CAMOUFLAGE", 
+        version: "V126_BACK_TO_BASICS", 
         bootId: SERVER_BOOT_ID 
     });
 });
@@ -70,4 +70,4 @@ if (fs.existsSync(distPath)) {
         res.sendFile(path.join(distPath, 'index.html'));
     });
 }
-app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V123 UP`));
+app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V126 UP`));
