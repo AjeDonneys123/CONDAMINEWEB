@@ -24,43 +24,43 @@ models.forEach(m => { try { require(`./models/${m}`); } catch (e) { console.erro
 
 app.use(express.json({ limit: '100mb' }));
 
-// --- SERVEUR D'IMAGES INTELLIGENT (SMART STATIC) ---
+// --- SERVEUR D'IMAGES INTELLIGENT V2 (DÉTECTIVE) ---
 const uploadsPath = path.resolve(process.cwd(), 'public', 'uploads');
 if (!fs.existsSync(uploadsPath)) fs.mkdirSync(uploadsPath, { recursive: true });
 
-// Cette route intercepte toutes les demandes d'images
 app.get('/uploads/:filename', (req, res) => {
     const requestedFile = req.params.filename;
-    const filePath = path.join(uploadsPath, requestedFile);
+    const cleanName = requestedFile.split('?')[0]; // Enlève les paramètres d'URL éventuels
+    const filePath = path.join(uploadsPath, cleanName);
 
-    // 1. Cas idéal : Le fichier existe tel quel
-    if (fs.existsSync(filePath)) {
-        return res.sendFile(filePath);
+    // 1. Recherche Exacte
+    if (fs.existsSync(filePath)) return res.sendFile(filePath);
+
+    // 2. Recherche avec extensions (si l'URL n'en a pas ou si c'est la mauvaise)
+    const extensions = ['.jpg', '.jpeg', '.png', '.webp', '.blob'];
+    for (const ext of extensions) {
+        if (fs.existsSync(filePath + ext)) {
+            // console.log(`🔍 [SMART-IMG] Retrouvé avec extension : ${cleanName}${ext}`);
+            return res.sendFile(filePath + ext);
+        }
     }
 
-    // 2. Cas "Ancien Scan" : On essaie d'ajouter .jpg
-    if (fs.existsSync(filePath + '.jpg')) {
-        return res.sendFile(filePath + '.jpg');
-    }
-
-    // 3. Cas "Capture d'écran" : On essaie d'ajouter .png
-    if (fs.existsSync(filePath + '.png')) {
-        return res.sendFile(filePath + '.png');
-    }
-
-    // 4. Cas désespéré : On cherche un fichier qui commence par cet ID
-    // (Utile si le nom a été tronqué ou modifié)
+    // 3. Recherche approximative (Si le nom a été tronqué)
+    // On cherche un fichier qui commence par le même ID (ex: "scan-12345...")
     try {
-        const files = fs.readdirSync(uploadsPath);
-        const match = files.find(f => f.startsWith(requestedFile));
+        const dirFiles = fs.readdirSync(uploadsPath);
+        // On suppose que le fichier commence par "scan-" ou "hw-" ou "studio-"
+        const prefix = cleanName.split('.')[0]; 
+        const match = dirFiles.find(f => f.startsWith(prefix));
         if (match) {
+            // console.log(`🔍 [SMART-IMG] Correspondance approximative : ${match}`);
             return res.sendFile(path.join(uploadsPath, match));
         }
-    } catch (e) {}
+    } catch(e) {}
 
-    // Si vraiment introuvable
-    console.error(`❌ Image introuvable : ${requestedFile}`);
-    res.status(404).send('Image non trouvée sur le serveur.');
+    // ÉCHEC
+    console.error(`❌ [IMG-404] Introuvable sur le disque : ${cleanName}`);
+    res.status(404).send('Fichier introuvable');
 });
 
 // ROUTES API
@@ -86,9 +86,8 @@ const distPath = path.resolve(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
-        // On laisse passer les uploads vers notre gestionnaire intelligent
         if (req.url.startsWith('/uploads/')) return next();
         res.sendFile(path.join(distPath, 'index.html'));
     });
 }
-app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V107 (SMART IMAGES) UP | PORT ${port}`));
+app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V108 (FILE DETECTIVE) UP | PORT ${port}`));

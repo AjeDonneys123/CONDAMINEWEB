@@ -7,7 +7,7 @@ const ScanAI = require('./ai/scan.ai');
 
 const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
-// CONFIGURATION MULTER AMÉLIORÉE (Extensions)
+// --- CONFIGURATION MULTER STRICTE ---
 const uploadDir = path.join(process.cwd(), 'public', 'uploads');
 
 const storage = multer.diskStorage({
@@ -15,8 +15,11 @@ const storage = multer.diskStorage({
         cb(null, uploadDir);
     },
     filename: function (req, file, cb) {
-        // On garde l'extension ou on force .jpg pour les blobs
-        const ext = path.extname(file.originalname) || '.jpg';
+        // On force l'extension .jpg si elle manque ou est bizarre
+        let ext = path.extname(file.originalname).toLowerCase();
+        if (ext !== '.png' && ext !== '.jpeg' && ext !== '.jpg' && ext !== '.webp') {
+            ext = '.jpg';
+        }
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
         cb(null, 'scan-' + uniqueSuffix + ext);
     }
@@ -31,11 +34,15 @@ router.patch('/sessions/:id', asyncHandler(async (req, res) => { const { title, 
 
 router.post('/upload', upload.single('file'), asyncHandler(async (req, res) => { 
     if (!req.file) return res.status(400).json({ error: "No file" }); 
+    
+    // On construit l'URL avec le nom de fichier EXACT généré par Multer
     const url = `/uploads/${req.file.filename}`; 
     const { sessionId, type } = req.body; 
+    
     const update = {}; 
     if (type === 'SUBJECT') update.$push = { subjectUrls: url }; 
     if (type === 'COPY') update.$push = { copyUrls: url }; 
+    
     const session = await mongoose.model('ScanSession').findByIdAndUpdate(sessionId, update, { new: true }); 
     res.json({ url, session }); 
 }));
@@ -54,7 +61,6 @@ router.post('/correct/:sessionId', asyncHandler(async (req, res) => {
     }
 
     const results = [];
-    // Limitation pour éviter timeout si trop de copies (batch de 3 par 3 idéalement, ici simple)
     for (const copyUrl of session.copyUrls) {
         try {
             const aiResult = await ScanAI.correctCopy(copyUrl, session.subjectUrls, session.aiInstructions, students);
