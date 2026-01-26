@@ -19,15 +19,49 @@ const port = process.env.PORT || 3000;
 const SERVER_BOOT_ID = Date.now();
 
 // CHARGEMENT MODÈLES
-const models = ['AcademicYear', 'Admin', 'Classroom', 'Subject', 'Teacher', 'Student', 'Enrollment', 'Chapter', 'Homework', 'Submission', 'GameLevel', 'GameProgress', 'MistakesBook', 'AccessLog', 'BugReport', 'ProjectDoc', 'Player', 'StudioProject', 'Sanction', 'ScanSession']; // Ajout ScanSession
+const models = ['AcademicYear', 'Admin', 'Classroom', 'Subject', 'Teacher', 'Student', 'Enrollment', 'Chapter', 'Homework', 'Submission', 'GameLevel', 'GameProgress', 'MistakesBook', 'AccessLog', 'BugReport', 'ProjectDoc', 'Player', 'StudioProject', 'Sanction', 'ScanSession'];
 models.forEach(m => { try { require(`./models/${m}`); } catch (e) { console.error(`Err Model ${m}:`, e.message); } });
 
 app.use(express.json({ limit: '100mb' }));
 
-// SERVEUR STATIQUE
+// --- SERVEUR D'IMAGES INTELLIGENT (SMART STATIC) ---
 const uploadsPath = path.resolve(process.cwd(), 'public', 'uploads');
 if (!fs.existsSync(uploadsPath)) fs.mkdirSync(uploadsPath, { recursive: true });
-app.use('/uploads', express.static(uploadsPath));
+
+// Cette route intercepte toutes les demandes d'images
+app.get('/uploads/:filename', (req, res) => {
+    const requestedFile = req.params.filename;
+    const filePath = path.join(uploadsPath, requestedFile);
+
+    // 1. Cas idéal : Le fichier existe tel quel
+    if (fs.existsSync(filePath)) {
+        return res.sendFile(filePath);
+    }
+
+    // 2. Cas "Ancien Scan" : On essaie d'ajouter .jpg
+    if (fs.existsSync(filePath + '.jpg')) {
+        return res.sendFile(filePath + '.jpg');
+    }
+
+    // 3. Cas "Capture d'écran" : On essaie d'ajouter .png
+    if (fs.existsSync(filePath + '.png')) {
+        return res.sendFile(filePath + '.png');
+    }
+
+    // 4. Cas désespéré : On cherche un fichier qui commence par cet ID
+    // (Utile si le nom a été tronqué ou modifié)
+    try {
+        const files = fs.readdirSync(uploadsPath);
+        const match = files.find(f => f.startsWith(requestedFile));
+        if (match) {
+            return res.sendFile(path.join(uploadsPath, match));
+        }
+    } catch (e) {}
+
+    // Si vraiment introuvable
+    console.error(`❌ Image introuvable : ${requestedFile}`);
+    res.status(404).send('Image non trouvée sur le serveur.');
+});
 
 // ROUTES API
 app.use('/api/auth', require('./domains/auth/auth.routes'));
@@ -37,7 +71,7 @@ app.use('/api/games', require('./domains/games/games.routes'));
 app.use('/api/homework', require('./domains/homework/homework.routes')); 
 app.use('/api/studio', require('./domains/studio/studio.routes'));
 app.use('/api/classroom', require('./domains/classroom/classroom.routes'));
-app.use('/api/scans', require('./domains/scans/scans.routes')); // NOUVELLE ROUTE
+app.use('/api/scans', require('./domains/scans/scans.routes'));
 
 app.get('/api/check-deploy', (req, res) => res.json({ bootId: SERVER_BOOT_ID, status: "OK" }));
 
@@ -52,8 +86,9 @@ const distPath = path.resolve(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
-        if (req.url.startsWith('/uploads')) return res.status(404).send('Not found');
+        // On laisse passer les uploads vers notre gestionnaire intelligent
+        if (req.url.startsWith('/uploads/')) return next();
         res.sendFile(path.join(distPath, 'index.html'));
     });
 }
-app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V106 UP | PORT ${port}`));
+app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V107 (SMART IMAGES) UP | PORT ${port}`));
