@@ -5,22 +5,36 @@ const mongoose = require('mongoose');
  * Accès aux projets de théâtre/jeux.
  */
 const StudioDB = {
-    // Créer ou mettre à jour un projet
+    // Créer ou mettre à jour un projet (UPSERT ROBUSTE)
     upsertProject: async (data) => {
         const Model = mongoose.model('StudioProject');
-        if (data._id) {
-            return await Model.findByIdAndUpdate(data._id, data, { new: true });
+        
+        // 1. Nettoyage de l'objet pour éviter les injections d'ID null
+        const cleanData = { ...data };
+        if (!cleanData._id || cleanData._id === 'null' || cleanData._id === '') {
+            delete cleanData._id;
         }
-        return await Model.create(data);
+
+        // 2. Tentative de mise à jour SI on a un ID valide
+        if (cleanData._id && mongoose.Types.ObjectId.isValid(cleanData._id)) {
+            const updated = await Model.findByIdAndUpdate(cleanData._id, cleanData, { new: true });
+            // SI trouvé et mis à jour, on le renvoie
+            if (updated) return updated;
+            
+            // SINON (ID introuvable en base), on le supprime pour forcer une création propre
+            delete cleanData._id;
+        }
+        
+        // 3. Création (Si pas d'ID ou ID introuvable)
+        return await Model.create(cleanData);
     },
 
-    // Récupérer les projets d'un prof
     findProjectsByTeacher: async (teacherId) => {
         return await mongoose.model('StudioProject').find({ teacherId }).sort({ updatedAt: -1 }).lean();
     },
 
-    // Récupérer un projet précis
     findProjectById: async (id) => {
+        if (!mongoose.Types.ObjectId.isValid(id)) return null;
         return await mongoose.model('StudioProject').findById(id).lean();
     },
 

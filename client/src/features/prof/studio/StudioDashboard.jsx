@@ -8,444 +8,305 @@ const AssetThumb = ({ url, className, fallbackEmoji, style }) => {
     return <img src={url} className={className} style={style} onError={() => setHasError(true)} draggable="false" alt="asset" />;
 };
 
-/**
- * 🎬 STUDIO V35 - PERSISTENCE & SCENARIO ENGINE
- * - Sauvegarde automatique des sprites découpés sur le serveur.
- * - Sauvegarde du projet JSON en BDD.
- * - Moteur de Scénario (Timeline) en bas.
- */
 export default function StudioDashboard({ user }) {
 
     const [project, setProject] = useState({
-        _id: null, // ID BDD
-        title: "Nouveau Projet",
+        _id: null,
+        title: "Nouveau Jeu IA",
         teacherId: user.id || user._id,
-        scenes: [{
-            id: 1, name: "Scène 1", bg: "#ffffff",
-            actors: [],
-            timeline: [] // LE SCÉNARIO GLOBAL
-        }]
+        scenes: [{ id: 1, name: "Scène Principale", actors: [], timeline: [] }],
+        generatedCode: ""
     });
 
     const [activeSceneIdx, setActiveSceneIdx] = useState(0);
     const [selectedActorId, setSelectedActorId] = useState(null);
     
     // UI STATES
-    const [isSequencerOpen, setIsSequencerOpen] = useState(false);
-    const [sequencerFrames, setSequencerFrames] = useState([]);
-    const [playbackId, setPlaybackId] = useState(null);
+    const [viewMode, setViewMode] = useState('DESIGN'); 
     const [processingMsg, setProcessingMsg] = useState("");
-    const [leftTab, setLeftTab] = useState('costumes');
+    const [gameIdea, setGameIdea] = useState("");
+    const [gameInstance, setGameInstance] = useState(null);
 
     const fileInputRef = useRef(null);
+    const remixInputRef = useRef(null);
+    const directImportRef = useRef(null);
+
     const activeScene = project.scenes[activeSceneIdx];
     const selectedActor = activeScene.actors.find(a => a.id === selectedActorId);
 
-    // ==================================================================================
-    // 💾 PERSISTENCE & SAUVEGARDE
-    // ==================================================================================
-
-    // 1. Upload d'un Blob (Image découpée) vers le serveur pour avoir une URL permanente
+    // --- UPLOAD & PERSISTENCE ---
     const uploadBlob = async (blob, filename) => {
         const formData = new FormData();
-        formData.append('file', blob, filename + '.png');
+        formData.append('file', blob, filename);
         try {
             const res = await fetch('/api/studio/upload', { method: 'POST', body: formData });
             const data = await res.json();
-            return data.url; // URL /uploads/studio_....png
-        } catch (e) {
-            console.error("Upload fail", e);
-            return null;
-        }
+            return data.url;
+        } catch (e) { console.error(e); return null; }
     };
 
-    // 2. Sauvegarde du Projet Complet
-    const saveProject = async () => {
-        setProcessingMsg("Sauvegarde du projet...");
+    // SAUVEGARDE ROBUSTE ET NETTOYÉE
+    const saveProject = async (silent = false) => {
+        if (!silent) setProcessingMsg("Sauvegarde...");
         try {
             const payload = { ...project, teacherId: user.id || user._id };
-            const res = await fetch('/api/studio/projects', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(payload)
+            
+            // NETTOYAGE CRITIQUE : Si l'ID est null ou "null", on le vire totalement
+            if (!payload._id || payload._id === 'null') delete payload._id;
+
+            const res = await fetch('/api/studio/projects', { 
+                method: 'POST', 
+                headers: {'Content-Type': 'application/json'}, 
+                body: JSON.stringify(payload) 
             });
+            
+            if(!res.ok) {
+                const errTxt = await res.text();
+                throw new Error("Erreur serveur: " + errTxt);
+            }
+            
             const data = await res.json();
-            setProject(prev => ({ ...prev, _id: data._id }));
-            setProcessingMsg("");
-            alert("Projet sauvegardé avec succès ! 💾");
-        } catch (e) {
-            setProcessingMsg("");
-            alert("Erreur de sauvegarde.");
+            
+            // Mise à jour immédiate
+            const newId = data._id;
+            setProject(prev => ({ ...prev, _id: newId }));
+            
+            if (!silent) {
+                setProcessingMsg("");
+                alert("Sauvegardé ! 💾");
+            }
+            return newId;
+        } catch (e) { 
+            console.error("SAVE ERROR:", e);
+            setProcessingMsg(""); 
+            if (!silent) alert("Erreur sauvegarde : " + e.message); 
+            return null; 
         }
     };
 
-    // ==================================================================================
-    // 🎬 MOTEUR DE SCÉNARIO (TIMELINE)
-    // ==================================================================================
-
-    const addScenarioEvent = (type) => {
-        if (!selectedActor && type !== 'WAIT') return alert("Sélectionnez un acteur d'abord !");
-        
-        let newEvent = { id: `evt_${Date.now()}`, type, target: selectedActor ? selectedActor.id : null };
-
-        if (type === 'MOVE') {
-            // Par défaut, bouge vers la position actuelle (pour initialiser)
-            newEvent.x = Math.round(selectedActor.x);
-            newEvent.y = Math.round(selectedActor.y);
-            newEvent.duration = 1; // secondes
-        } else if (type === 'SAY') {
-            const text = prompt("Que doit dire le personnage ?");
-            if (!text) return;
-            newEvent.text = text;
-        } else if (type === 'ACTION') {
-            if (selectedActor.actions.length === 0) return alert("Cet acteur n'a aucune action définie !");
-            // On prend la première action par défaut, ou on demande
-            // Pour faire simple : première action
-            newEvent.actionId = selectedActor.actions[0].id;
-            newEvent.actionName = selectedActor.actions[0].name;
-        }
-
-        const newScenes = [...project.scenes];
-        newScenes[activeSceneIdx].timeline.push(newEvent);
-        setProject({ ...project, scenes: newScenes });
-    };
-
-    const deleteScenarioEvent = (e, idx) => {
-        e.stopPropagation();
-        const newScenes = [...project.scenes];
-        newScenes[activeSceneIdx].timeline = newScenes[activeSceneIdx].timeline.filter((_, i) => i !== idx);
-        setProject({ ...project, scenes: newScenes });
-    };
-
-    // ==================================================================================
-    // ✂️ MOTEUR DÉCOUPAGE (MODIFIÉ POUR UPLOAD AUTO)
-    // ==================================================================================
-    const handleImportFile = (e) => {
+    // --- IMPORT DIRECT ---
+    const handleDirectImport = async (e) => {
         const file = e.target.files[0];
         if (!file || !selectedActor) return;
-        const url = URL.createObjectURL(file);
-        
-        // On demande juste "Grille" ou "Simple"
-        if (confirm(`Image chargée.\nEst-ce une planche de sprites (Grille) ?`)) {
-            const input = prompt("Format de la grille ? (ex: 4x4)", "4x4");
-            if(input) {
-                const [c, r] = input.split('x').map(Number);
-                runGridSlicer(url, file.name.substring(0, 8), c, r);
-            }
-        } else {
-            // Import direct (mais on l'upload quand même pour persistance)
-            fetch(url).then(r => r.blob()).then(blob => {
-                uploadBlob(blob, file.name).then(serverUrl => {
-                    if(serverUrl) injectCostumes([serverUrl], file.name.substring(0,8));
-                });
-            });
-        }
+        setProcessingMsg("Importation...");
+        const url = await uploadBlob(file, file.name);
+        if (url) injectCostumes([url], "Import");
+        else alert("Erreur upload");
+        setProcessingMsg("");
         e.target.value = null;
     };
 
-    const runGridSlicer = (imageUrl, baseName, cols, rows) => {
-        setProcessingMsg("Découpage & Upload...");
-        const img = new Image(); img.crossOrigin = "Anonymous"; img.src = imageUrl;
-        img.onload = () => {
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            canvas.width = img.width; canvas.height = img.height;
-            ctx.drawImage(img, 0, 0);
-
-            // Nettoyage fond
-            const idata = ctx.getImageData(0,0,img.width,img.height);
-            const d = idata.data;
-            for(let i=0; i<d.length; i+=4) {
-                if(d[i]>200 && d[i+1]>200 && d[i+2]>200) d[i+3]=0;
-            }
-            ctx.putImageData(idata, 0, 0);
-
-            const spriteW = Math.floor(img.width / cols);
-            const spriteH = Math.floor(img.height / rows);
-            const uploads = [];
-
-            for (let y = 0; y < rows; y++) {
-                for (let x = 0; x < cols; x++) {
-                    const sC = document.createElement('canvas');
-                    sC.width = spriteW; sC.height = spriteH;
-                    sC.getContext('2d').drawImage(canvas, x*spriteW, y*spriteH, spriteW, spriteH, 0, 0, spriteW, spriteH);
-                    
-                    // On crée une promesse d'upload pour chaque sprite
-                    const p = new Promise(resolve => {
-                        sC.toBlob(blob => {
-                            uploadBlob(blob, `${baseName}_${x}_${y}`).then(url => resolve(url));
-                        }, 'image/png');
-                    });
-                    uploads.push(p);
-                }
-            }
-
-            Promise.all(uploads).then(serverUrls => {
-                injectCostumes(serverUrls.filter(u=>u), baseName);
-                setProcessingMsg("");
-            });
-        };
+    // --- AI GENERATION ---
+    const handleRemix = async (e) => {
+        const file = e.target.files[0];
+        if(!file || !selectedActor) return;
+        setProcessingMsg("Remix IA (Vision + Gen)...");
+        const fd = new FormData(); fd.append('file', file);
+        try {
+            const res = await fetch('/api/studio/remix-asset', { method: 'POST', body: fd });
+            const data = await res.json();
+            if(data.ok) injectCostumes([data.url], "Remix");
+        } catch(e) { alert("Erreur Remix"); }
+        setProcessingMsg("");
+        e.target.value = null;
     };
 
-    // ==================================================================================
-    // ⚙️ HELPERS STANDARD
-    // ==================================================================================
+    const generateGameCode = async () => {
+        if (!gameIdea) return alert("Décrivez votre idée de jeu !");
+        if (activeScene.actors.length === 0) return alert("Ajoutez au moins un acteur !");
+        
+        setProcessingMsg("Sauvegarde & Génération...");
+
+        // 1. FORCER LA SAUVEGARDE
+        const targetId = await saveProject(true);
+        
+        if (!targetId) {
+            setProcessingMsg("");
+            return alert("Erreur critique : Impossible de sauvegarder avant génération. Vérifiez la console.");
+        }
+        
+        // 2. APPEL IA
+        try {
+            const res = await fetch('/api/studio/generate-code', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ projectId: targetId, gameIdea })
+            });
+            
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.error || "Erreur serveur IA");
+            }
+
+            const data = await res.json();
+            if (data.ok) {
+                setProject(prev => ({ ...prev, generatedCode: data.code }));
+                setViewMode('CODE');
+            }
+        } catch(e) { 
+            console.error(e);
+            alert("Erreur IA : " + e.message); 
+        }
+        setProcessingMsg("");
+    };
+
+    // --- PLAY ENGINE ---
+    const runGame = () => {
+        if (!project.generatedCode) return alert("Aucun code généré !");
+        setViewMode('PLAY');
+        setTimeout(() => {
+            const canvas = document.getElementById('game-canvas');
+            if (!canvas) return;
+            const assets = {};
+            let loaded = 0;
+            const actors = activeScene.actors;
+            if(actors.length === 0) return alert("Pas d'acteurs !");
+            const checkStart = () => { if (loaded === actors.length) launch(canvas, assets); };
+            actors.forEach(a => {
+                const url = (a.costumes && a.costumes[0]) ? a.costumes[0].url : null;
+                if (url) {
+                    const img = new Image(); img.src = url;
+                    img.onload = () => { assets[a.id] = img; loaded++; checkStart(); };
+                    img.onerror = () => { loaded++; checkStart(); };
+                } else { loaded++; checkStart(); }
+            });
+        }, 100);
+    };
+
+    const launch = (canvas, assets) => {
+        try {
+            if (gameInstance && gameInstance.destroy) gameInstance.destroy();
+            const code = project.generatedCode;
+            const safeCode = code.replace(/window\.|document\.|alert\(|eval\(/g, '//blocked');
+            const factory = new Function(` ${safeCode} return MiniGame; `);
+            const GameClass = factory();
+            const game = new GameClass(canvas, assets);
+            setGameInstance(game);
+            let lastTime = 0;
+            const loop = (time) => {
+                const dt = (time - lastTime) / 1000; lastTime = time;
+                if (game.update) game.update(dt);
+                if (game.draw) game.draw(canvas.getContext('2d'));
+                if (document.getElementById('game-canvas')) requestAnimationFrame(loop);
+            };
+            requestAnimationFrame(loop);
+        } catch (e) { alert("Erreur code :\n" + e.message); }
+    };
+
     const injectCostumes = (urls, baseName) => {
         if (!selectedActor) return;
         setProject(prev => {
             const next = { ...prev };
             const act = next.scenes[activeSceneIdx].actors.find(a => a.id === selectedActorId);
             if (act) {
-                urls.forEach((url, i) => {
-                    act.costumes.push({ id: `c_${Date.now()}_${i}`, url, name: `${baseName}_${act.costumes.length + 1}` });
-                });
+                urls.forEach((url, i) => act.costumes.push({ id: `c_${Date.now()}_${i}`, url, name: `${baseName}_${act.costumes.length + 1}` }));
                 if (act.costumes.length === urls.length) act.currentCostumeIdx = 0;
             }
             return next;
         });
     };
-
-    const updateActor = (key, val) => {
-        if (!selectedActor) return;
-        setProject(prev => {
-            const next = { ...prev };
-            const act = next.scenes[activeSceneIdx].actors.find(a => a.id === selectedActorId);
-            if (act) act[key] = val;
-            return next;
-        });
-    };
-
     const createActor = () => {
-        const name = prompt("Nom ?") || "Nouveau";
         const newId = `a_${Date.now()}`;
-        const newActor = {
-            id: newId, name, x: 50, y: 50, scale: 1, currentCostumeIdx: 0, 
-            costumes: [{ id: `c_def`, url: '', name: 'Base' }], 
-            actions: [], sounds: []
-        };
         setProject(prev => {
             const next = { ...prev };
-            next.scenes[activeSceneIdx].actors.push(newActor);
+            next.scenes[activeSceneIdx].actors.push({ id: newId, name: "Nouvel Acteur", x: 50, y: 50, scale: 1, currentCostumeIdx: 0, costumes: [] });
             return next;
         });
         setSelectedActorId(newId);
     };
-
-    const deleteCostume = (e, idx) => {
-        e.stopPropagation(); if(!selectedActor) return;
-        setProject(prev => {
-            const next = { ...prev }; const act = next.scenes[activeSceneIdx].actors.find(a => a.id === selectedActorId);
-            act.costumes = act.costumes.filter((_, i) => i !== idx);
-            if(act.currentCostumeIdx >= act.costumes.length) act.currentCostumeIdx = 0;
-            return next;
-        });
-    };
-
-    const deleteActor = (e, actorId) => {
-        e.stopPropagation(); if(!confirm("Supprimer ?")) return;
-        setProject(prev => {
-            const next = { ...prev }; 
-            next.scenes[activeSceneIdx].actors = next.scenes[activeSceneIdx].actors.filter(a => a.id !== actorId); 
-            return next;
-        });
-        setSelectedActorId(null);
-    };
-
-    // Sequencer Actions
-    const handleCostumeClick = (idx) => {
-        if (!selectedActor) return;
-        if (isSequencerOpen) setSequencerFrames(prev => [...prev, idx]);
-        else updateActor('currentCostumeIdx', idx);
-    };
-
-    const saveAction = () => {
-        if (sequencerFrames.length === 0) return;
-        const name = prompt("Nom de l'action ?"); if (!name) return;
-        const newAction = { id: `act_${Date.now()}`, name, frames: [...sequencerFrames], speed: 300, loop: true };
+    const updateActor = (k, v) => {
         setProject(prev => {
             const next = { ...prev };
             const act = next.scenes[activeSceneIdx].actors.find(a => a.id === selectedActorId);
-            act.actions.push(newAction);
+            if(act) act[k] = v;
             return next;
         });
-        setIsSequencerOpen(false); setSequencerFrames([]);
-    };
-
-    const runSequence = () => {
-        if (playbackId) { clearInterval(playbackId); setPlaybackId(null); return; }
-        if (sequencerFrames.length === 0) return;
-        let i = 0;
-        const id = setInterval(() => {
-            updateActor('currentCostumeIdx', sequencerFrames[i]);
-            i = (i + 1) % sequencerFrames.length;
-        }, 300);
-        setPlaybackId(id);
-    };
-
-    const handleStageDrag = (e) => {
-        if (selectedActorId && e.buttons === 1) {
-            const rect = e.currentTarget.getBoundingClientRect();
-            const x = Math.min(100, Math.max(0, ((e.clientX - rect.left) / rect.width) * 100));
-            const y = Math.min(100, Math.max(0, ((e.clientY - rect.top) / rect.height) * 100));
-            updateActor('x', x); updateActor('y', y);
-        }
-    };
-
-    const getEmoji = (name) => {
-        const n = (name || '').toLowerCase();
-        if (n.includes('mario')) return '🍄';
-        if (n.includes('zomb')) return '🧟';
-        if (n.includes('hero')) return '🧙‍♂️';
-        return '👾';
-    };
-
-    // Helper pour afficher le nom de l'acteur dans la timeline
-    const getActorName = (id) => {
-        const a = activeScene.actors.find(act => act.id === id);
-        return a ? a.name : 'Inconnu';
     };
 
     return (
         <div className="studio-wrapper">
-            <input type="file" ref={fileInputRef} style={{display:'none'}} onChange={handleImportFile} accept="image/*" />
+            <input type="file" ref={remixInputRef} style={{display:'none'}} onChange={handleRemix} accept="image/*" />
+            <input type="file" ref={directImportRef} style={{display:'none'}} onChange={handleDirectImport} accept="image/*" />
             
             {processingMsg && <div className="overlay"><div className="modal-box"><h3 className="animate-pulse">{processingMsg}</h3></div></div>}
 
             {/* GAUCHE */}
             <div className="studio-sidebar">
-                <div className="panel-header">BIBLIOTHÈQUE</div>
-                {selectedActor ? (
-                    <>
-                        <div className="sidebar-tabs">
-                            <button className="tab-btn active">COSTUMES</button>
-                            <button className="tab-btn">SONS</button>
+                <div className="panel-header">ACTEURS</div>
+                <div className="scroll-area">
+                    <div className="create-obj-full" onClick={createActor}>+ AJOUTER ACTEUR</div>
+                    {activeScene.actors.map(a => (
+                        <div key={a.id} className={`obj-card ${selectedActorId === a.id ? 'selected' : ''}`} onClick={() => setSelectedActorId(a.id)}>
+                            <div className="obj-thumb-mini"><AssetThumb url={a.costumes[0]?.url} /></div>
+                            <div className="obj-name">{a.name}</div>
                         </div>
-                        <div className="costume-list-vertical scroll-area">
-                            <div className="add-btn-box" onClick={() => fileInputRef.current.click()}>+</div>
-                            {selectedActor.costumes.map((c, i) => (
-                                <div key={c.id} className={`costume-card ${i===selectedActor.currentCostumeIdx ? 'active' : ''} ${isSequencerOpen ? 'in-sequence' : ''}`} onClick={() => handleCostumeClick(i)}>
-                                    <AssetThumb url={c.url} fallbackEmoji="🖼️" className="costume-img" />
-                                    <div className="costume-label">{c.name}</div>
-                                    <div className="delete-btn-mini" onClick={(e)=>deleteCostume(e,i)}>✕</div>
-                                </div>
-                            ))}
-                        </div>
-                        {!isSequencerOpen && (
-                            <div style={{padding:'10px', borderTop:'1px solid #334155'}}>
-                                <button style={{width:'100%', padding:'10px', background:'#3b82f6', border:'none', borderRadius:'6px', color:'white', fontWeight:'bold', fontSize:'0.7rem', cursor:'pointer'}} 
-                                        onClick={() => setIsSequencerOpen(true)}>+ CRÉER ACTION</button>
-                            </div>
-                        )}
-                    </>
-                ) : <div className="p-4 text-center text-xs text-slate-500">Sélectionnez un Objet</div>}
+                    ))}
+                </div>
+                {selectedActor && (
+                    <div className="p-4 border-t border-slate-700 flex flex-col gap-2">
+                        <button className="w-full bg-purple-600 text-white py-2 rounded font-bold text-xs" onClick={() => remixInputRef.current.click()}>✨ REMIX IMAGE (IA)</button>
+                        <button className="w-full bg-slate-600 text-white py-2 rounded font-bold text-xs" onClick={() => directImportRef.current.click()}>📂 IMPORT LOCAL</button>
+                    </div>
+                )}
             </div>
 
             {/* CENTRE */}
             <div className="studio-center">
-                <div className="stage-toolbar">
-                    <span>SCÈNE 1</span>
-                    <button onClick={saveProject} style={{background:'#10b981', color:'white', border:'none', padding:'4px 12px', borderRadius:'4px', fontWeight:'bold', fontSize:'0.7rem', cursor:'pointer'}}>💾 SAUVER PROJET</button>
-                </div>
-                
-                <div className="stage-wrapper" onClick={() => setSelectedActorId(null)}>
-                    <div className="stage-canvas" onMouseMove={handleStageDrag}>
-                        {activeScene.actors.map(actor => {
-                            const costume = actor.costumes[actor.currentCostumeIdx];
-                            return (
-                                <div key={actor.id} className={`actor-on-stage ${selectedActorId === actor.id ? 'selected' : ''}`}
-                                    style={{ left: actor.x+'%', top: actor.y+'%', transform: `translate(-50%, -50%) scale(${actor.scale})` }}
-                                    onMouseDown={(e) => { e.stopPropagation(); setSelectedActorId(actor.id); }}
-                                >
-                                    <AssetThumb url={costume ? costume.url : ''} fallbackEmoji={getEmoji(actor.name)} className="" style={{width:'100%', height:'100%', objectFit:'contain', pointerEvents:'none'}} />
-                                </div>
-                            );
-                        })}
-                    </div>
+                <div className="stage-toolbar gap-4">
+                    <button onClick={() => setViewMode('DESIGN')} className={viewMode==='DESIGN'?'text-white':'text-slate-500'}>🎨 DESIGN</button>
+                    <button onClick={() => setViewMode('CODE')} className={viewMode==='CODE'?'text-white':'text-slate-500'}>💻 CODE</button>
+                    <button onClick={runGame} className="bg-green-500 text-white px-4 py-1 rounded font-bold">▶ JOUER</button>
+                    <button onClick={() => saveProject(false)} className="bg-blue-600 text-white px-4 py-1 rounded font-bold ml-auto">💾 SAUVER</button>
                 </div>
 
-                {/* BAS : SÉQUENCEUR OU TIMELINE SCÉNARIO */}
-                {isSequencerOpen ? (
-                    <div className="sequencer-panel">
-                        <div className="seq-header">
-                            <span className="seq-title">MONTAGE ACTION ({sequencerFrames.length})</span>
-                            <div className="seq-controls">
-                                <button className="btn-seq run" onClick={runSequence}>{playbackId ? 'STOP' : '▶ TEST'}</button>
-                                <button className="btn-seq save" onClick={saveAction}>💾</button>
-                                <button className="btn-seq close" onClick={() => setIsSequencerOpen(false)}>✕</button>
-                            </div>
-                        </div>
-                        <div className="seq-strip custom-scrollbar">
-                            {sequencerFrames.map((costIdx, i) => (
-                                <div key={i} className="seq-frame" onClick={() => setSequencerFrames(prev => prev.filter((_, idx) => idx !== i))}>
-                                    <AssetThumb url={selectedActor.costumes[costIdx]?.url} fallbackEmoji="🎞️" className="" />
-                                    <span className="seq-num">{i+1}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                ) : (
-                    <div className="sequencer-panel">
-                        <div className="seq-header">
-                            <span className="seq-title">SCÉNARIO ({activeScene.timeline.length} étapes)</span>
-                            <div className="seq-controls">
-                                <button className="btn-seq" style={{background:'#6366f1', color:'white'}} onClick={() => addScenarioEvent('MOVE')}>🏃 BOUGER</button>
-                                <button className="btn-seq" style={{background:'#ec4899', color:'white'}} onClick={() => addScenarioEvent('SAY')}>💬 PARLER</button>
-                                <button className="btn-seq" style={{background:'#f59e0b', color:'white'}} onClick={() => addScenarioEvent('ACTION')}>🎬 ACTION</button>
-                            </div>
-                        </div>
-                        <div className="seq-strip custom-scrollbar" style={{justifyContent:'flex-start'}}>
-                            {activeScene.timeline.length === 0 && <div className="text-xs text-slate-500 ml-4">Ajoutez des événements pour créer l'histoire...</div>}
-                            {activeScene.timeline.map((evt, i) => (
-                                <div key={i} className="seq-frame" style={{width:'100px', flexDirection:'column', gap:'2px', padding:'5px'}} onClick={(e) => deleteScenarioEvent(e, i)}>
-                                    <span style={{fontSize:'0.55rem', fontWeight:'900', color:'#f472b6'}}>{evt.type}</span>
-                                    <span style={{fontSize:'0.6rem', color:'white', fontWeight:'bold'}}>{getActorName(evt.target)}</span>
-                                    <span style={{fontSize:'0.5rem', color:'#94a3b8', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:'100%'}}>
-                                        {evt.text || evt.actionName || `X:${evt.x} Y:${evt.y}`}
-                                    </span>
-                                    <div className="delete-btn-mini" style={{top:2, right:2}}>✕</div>
+                {viewMode === 'DESIGN' && (
+                    <div className="stage-wrapper" onClick={() => setSelectedActorId(null)}>
+                        <div className="stage-canvas relative">
+                            {activeScene.actors.map(a => (
+                                <div key={a.id} className={`actor-on-stage ${selectedActorId === a.id ? 'selected' : ''}`}
+                                     style={{ left: a.x+'%', top: a.y+'%', transform: `translate(-50%, -50%) scale(${a.scale})` }}
+                                     onMouseDown={(e) => { e.stopPropagation(); setSelectedActorId(a.id); }}>
+                                    <AssetThumb url={a.costumes[0]?.url} className="" style={{width:'100px', height:'100px', objectFit:'contain'}} />
                                 </div>
                             ))}
                         </div>
                     </div>
                 )}
+
+                {viewMode === 'CODE' && (
+                    <div className="flex-1 bg-slate-900 p-4 overflow-auto">
+                        <textarea className="w-full h-full bg-black text-green-400 font-mono text-xs p-4 rounded border border-slate-700" 
+                                  value={project.generatedCode} onChange={(e) => setProject({...project, generatedCode: e.target.value})} 
+                                  placeholder="Le code généré par l'IA apparaîtra ici..." />
+                    </div>
+                )}
+
+                {viewMode === 'PLAY' && (
+                    <div className="flex-1 bg-black flex items-center justify-center">
+                        <canvas id="game-canvas" width="640" height="360" className="bg-white shadow-2xl rounded" />
+                    </div>
+                )}
+
+                <div className="h-[120px] bg-slate-900 border-t border-slate-700 p-4 flex flex-col gap-2">
+                    <span className="text-xs font-bold text-slate-400 uppercase">GÉNÉRATEUR DE JEU (GEMINI 2.0)</span>
+                    <div className="flex gap-2">
+                        <input className="flex-1 bg-slate-800 border border-slate-600 rounded p-2 text-white text-sm" 
+                               placeholder="Décrivez votre jeu (ex: Le héros doit éviter les zombies et attraper les pièces...)" 
+                               value={gameIdea} onChange={e => setGameIdea(e.target.value)} />
+                        <button onClick={generateGameCode} className="bg-pink-600 text-white px-6 rounded font-black text-sm hover:bg-pink-500 transition-colors">GÉNÉRER LE CODE 🚀</button>
+                    </div>
+                </div>
             </div>
 
             {/* DROITE */}
             <div className="studio-right-panel">
                 <div className="panel-header">PROPRIÉTÉS</div>
-                <div className="scroll-area" style={{height:'40%', borderBottom:'1px solid #334155'}}>
-                    {selectedActor ? (
-                        <>
-                            <div className="prop-row"><label className="prop-label">NOM</label><input className="prop-input" value={selectedActor.name} onChange={e => updateActor('name', e.target.value)} /></div>
-                            <div className="prop-row"><label className="prop-label">X</label><input type="number" className="prop-input" value={Math.round(selectedActor.x)} onChange={e => updateActor('x', parseInt(e.target.value))} /></div>
-                            <div className="prop-row"><label className="prop-label">Y</label><input type="number" className="prop-input" value={Math.round(selectedActor.y)} onChange={e => updateActor('y', parseInt(e.target.value))} /></div>
-                            <div className="prop-row"><label className="prop-label">TAILLE</label><input type="number" step="0.1" className="prop-input" value={selectedActor.scale} onChange={e => updateActor('scale', parseFloat(e.target.value))} /></div>
-                            <div style={{marginTop:'15px', paddingTop:'10px', borderTop:'1px solid #334155'}}>
-                                <label className="prop-label">ACTIONS DISPO</label>
-                                {selectedActor.actions.length === 0 && <div className="text-center text-xs text-slate-600 italic">Aucune</div>}
-                                {selectedActor.actions.map(act => (
-                                    <div key={act.id} style={{background:'#020617', padding:'4px', borderRadius:'4px', marginBottom:'4px', fontSize:'0.7rem', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                                        <span>{act.name}</span><span style={{color:'#64748b'}}>{act.frames.length}f</span>
-                                    </div>
-                                ))}
-                            </div>
-                            <button style={{width:'100%', marginTop:'10px', padding:'6px', background:'#ef4444', color:'white', border:'none', borderRadius:'4px', fontWeight:'bold', fontSize:'0.6rem', cursor:'pointer'}} onClick={(e) => deleteActor(e, selectedActor.id)}>SUPPRIMER</button>
-                        </>
-                    ) : <div className="text-center text-xs text-slate-500">Aucune sélection</div>}
-                </div>
-
-                <div className="panel-header">LUTINS</div>
-                <div className="scroll-area objects-list">
-                    <div className="create-obj-full" onClick={createActor}>+ NOUVEAU</div>
-                    {activeScene.actors.map(actor => (
-                        <div key={actor.id} className={`obj-card ${selectedActorId === actor.id ? 'selected' : ''}`} onClick={() => setSelectedActorId(actor.id)}>
-                            <div className="obj-thumb-mini">
-                                <AssetThumb url={actor.costumes[0]?.url} fallbackEmoji={getEmoji(actor.name)} className="" />
-                            </div>
-                            <div className="obj-name">{actor.name}</div>
-                        </div>
-                    ))}
-                </div>
+                {selectedActor ? (
+                    <div className="p-4 space-y-2">
+                        <div className="prop-row"><label className="prop-label">NOM</label><input className="prop-input" value={selectedActor.name} onChange={e => updateActor('name', e.target.value)} /></div>
+                        <div className="prop-row"><label className="prop-label">TAILLE</label><input type="number" step="0.1" className="prop-input" value={selectedActor.scale} onChange={e => updateActor('scale', parseFloat(e.target.value))} /></div>
+                    </div>
+                ) : <div className="p-4 text-center text-xs text-slate-500">Sélectionnez un acteur</div>}
             </div>
         </div>
     );

@@ -6,6 +6,9 @@ const HomeworkSchema = new mongoose.Schema({
     // NOUVEAU : Mode Punition
     isPunishment: { type: Boolean, default: false },
 
+    // NOUVEAU : Matière (String simple pour l'affichage élève)
+    subject: { type: String, default: "Général" },
+
     // Ancien champ (gardé pour compatibilité)
     classroom: String,
     
@@ -22,10 +25,7 @@ const HomeworkSchema = new mongoose.Schema({
         attachmentUrls: [String]
     }],
 
-    // Élèves assignés (pour les punitions, c'est ici qu'ils atterrissent dynamiquement)
     assignedStudents: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Student' }],
-    
-    // Si true, c'est pour toute(s) la/les classe(s) ciblée(s) (SAUF SI PUNITION)
     isAllClass: { type: Boolean, default: true },
     
     date: { type: Date, default: Date.now }

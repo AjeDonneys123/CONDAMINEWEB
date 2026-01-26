@@ -131,29 +131,47 @@
 │   │   └── ~$che_Croissance_Demographique_5e.docx
 │   ├── style.css
 │   └── uploads/
+│       ├── 00074c1d609912c65c51155b418dabce
 │       ├── 052ab3c8f8468e7f52ed76c06b28b36c
 │       ├── 0717c54fc34cd56505db1ada55b5a128
 │       ├── 07b4ded2280d7ad22dc0daa2c90f4107
+│       ├── 1317d865b5a81abc4ffab8c95bd916a6
 │       ├── 179b96e657c91102b91b1031e6903d7a
 │       ├── 187f36a3832211a9ac5609451dbcc07e
+│       ├── 1aeb825cbd9d5c70134d755dbd67fb30
 │       ├── 1f8bb989dcddf547b87d29823748eaec
 │       ├── 25ae4a24457eb6085b6acfac3a088927
 │       ├── 262f72cd65ccb7a5e9683572acb3e77e
+│       ├── 27edd398376f5b66dbb2e8f693acafeb
+│       ├── 2e60b469304ca62fbee3ab3570d179c9
 │       ├── 3314c59868ed0fdaf43713663e092ee2
 │       ├── 39e59123b81f986d90689b3d9ba307a6
 │       ├── 3fa4df6f9df4d3adf97df942093c70b2
+│       ├── 41e8d9571f1f9cefe06c74a1d6f9d22d
+│       ├── 4606714bcf37808bf5bb4046090f8e07
+│       ├── 463ed86d6e598b9caeec4cd388cf2c41
 │       ├── 46b781ca6b50d61e08289ac3528b2a37
+│       ├── 475a9fbcb23396694d9f72993a852467
+│       ├── 48b421fe199f71b88556902ee8e07703
+│       ├── 4c36c39708a1d772537a0ebd47e3eddd
+│       ├── 535614caff7a20a0c7cd820854175c01
 │       ├── 5362fd2b26409028107cb2bf0b6e183f
+│       ├── 59105c71abdd1166db1a6e8215e1a500
+│       ├── 5fdee988fa12526b09a3279e25c03e4b
+│       ├── 66c56b4125db7dd70c0f1e1dd12afd8b
+│       ├── 67a4b68652a4244e7ce1773626d3bf8f
 │       ├── 7318f9d346d09a948e2b1091362844ba
 │       ├── 78441ed55f78839508d6cbe6140901fb
 │       ├── 7917645a7cb6159d05cd1d60493ecd3a
 │       ├── 7d343cb08b23bb58b187ff750d791b97
 │       ├── 7e7b5a674ea0ef272a0095b11ecb3521
 │       ├── 87b083483c4ab06d99b78c3688e349e0
+│       ├── 8ddbe74b35a0914e75e150b5389df420
 │       ├── 8dfabdc4f70fe54049c0fa14e2fad9c3
 │       ├── 8fc74b97cbb3f971d37f15e01f7f4ef6
 │       ├── 92641164cb332ab43552b5de9e8c4af1
 │       ├── 95b6e11513d1e1bf2146f1edd2f37e10
+│       ├── 9b0aa346caa5feac06ad153ad803052e
 │       ├── 9e02a1e0c5937d5dc9b5b3bf41d67128
 │       ├── 9ea4d0bf219b361d2bf2929996c4f304
 │       ├── a4f70d13fdfc2a1b44c5f77c5a78c044
@@ -164,19 +182,24 @@
 │       ├── ai-1769124938381.jpg
 │       ├── ai-1769125037098.jpg
 │       ├── ai-1769125110210.jpg
+│       ├── b2e95253f50fb5a724d0f8e205bb60d3
 │       ├── b4cff4272b9a06cccc9d9ec9e7097354
 │       ├── b50cd7e78c26e7316e45656c98743e75
 │       ├── b705e0b2fe6c124755c5c7b6d999975e
 │       ├── b8ac0517684936d20dc47eb7d4c722d7
 │       ├── ba2ecae20864307e22d433eaaa4e35b5
 │       ├── bc199f06f744958b60903b2790bc0d50
+│       ├── bc436827d84a92c7ec80b124e45c2669
 │       ├── bca5f21524fde8c5583641c838b4ecc6
+│       ├── c3d832b15c3b319612a86ab88fb481b3
 │       ├── c536b44022497153eb3030b1271fca17
 │       ├── c781c10d33c99b504c143c0420572726
 │       ├── c94f62c0b4c3b419fd30c32bdc4b567e
 │       ├── cd6a47b1a3833f4f51f5aa3919557f98
+│       ├── ce37872717b97074ff79aa9ef0800e95
 │       ├── cfff13574e6c6cb4f8e6bc9cd65ef85b
 │       ├── d0a87000b759379834f99b8c9a4df6c9
+│       ├── d18627deaf38f38d882572ddfab4eb39
 │       ├── d1e99c4392a90046d1deeacea6cf25a1
 │       ├── d22151e5aa0ef7543e24fa79004161a3
 │       ├── deabfabd437271b22d6bd1b206e255a5
@@ -189,6 +212,7 @@
 │       ├── fb06a55d64aad030b305716b76cc31f5
 │       ├── fb305669f9570391964e533741582fff
 │       ├── fbcaf74c48169980d99220f61a4e0825
+│       ├── fc88b53296bf75ff5b944e92693b568d
 │       ├── ff932e78b518c269162589592cbbc99f
 │       ├── hw-1768842185845-Capture dâeÌcran 2026-01-03 aÌ 18.02.42.png
 │       ├── hw-1768842199185-Capture dâeÌcran 2026-01-03 aÌ 18.02.35.png
@@ -222,6 +246,10 @@
 │       ├── studio-1769192516290-6814.jpg
 │       ├── studio-1769193745171-4536.jpg
 │       ├── studio-1769193797546-165.jpg
+│       ├── studio-1769305491929-8279.png
+│       ├── studio-1769305749890-482.png
+│       ├── studio-1769306007315-9193.png
+│       ├── studio-1769306172468-7033.png
 │       ├── studio_1769198134006-222869832.png
 │       ├── studio_1769198134010-937784732.png
 │       ├── studio_1769198134012-756464366.png
@@ -356,10 +384,12 @@
 │   │   │       └── student.drive.js
 │   │   └── studio/
 │   │       ├── ai/
+│   │       │   ├── game-generator.ai.js
 │   │       │   └── studio.ai.js
 │   │       ├── db/
 │   │       │   └── studio.db.js
 │   │       ├── experts/
+│   │       │   ├── studio.drive.js
 │   │       │   └── studio.expert.js
 │   │       └── studio.routes.js
 │   ├── models/

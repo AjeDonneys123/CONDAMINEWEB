@@ -25,11 +25,8 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
   if (user.punishmentStatus === 'PENDING' || user.punishmentStatus === 'LATE') {
       const dueDate = user.punishmentDueDate ? new Date(user.punishmentDueDate) : new Date();
       const now = new Date();
-      
-      // Calcul différence en jours (arrondi supérieur)
       const diffTime = dueDate - now;
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      
       const isLate = diffDays < 0 || user.punishmentStatus === 'LATE';
 
       punishmentAlert = (
@@ -51,10 +48,13 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
       );
   }
 
+  // GESTION DES OPTIONS (Groupes)
+  // Si assignedGroups contient des objets (peuplés par le backend), on affiche le nom.
+  const groups = Array.isArray(user.assignedGroups) ? user.assignedGroups : [];
+
   return (
     <div className="header-wrapper">
       
-      {/* BANDEAU PUNITION SI ACTIF */}
       {punishmentAlert}
 
       {/* 1. TOP BAR (Identité) */}
@@ -69,7 +69,14 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
         <div className="flex items-center gap-3">
             <div className="v80-user-info">
                 <span className="v80-user-name">{user.firstName} {user.lastName}</span>
-                <span className="v80-user-class">{user.currentClass || 'CLASSE NON DÉFINIE'}</span>
+                <div className="v80-badges-row">
+                    <span className="v80-user-class">{user.currentClass || 'CLASSE ?'}</span>
+                    {groups.map((grp, i) => (
+                        <span key={i} className="v80-user-option">
+                            {typeof grp === 'object' ? grp.name : 'OPTION'}
+                        </span>
+                    ))}
+                </div>
             </div>
             <button onClick={onLogout} className="v80-logout-btn">✕</button>
         </div>

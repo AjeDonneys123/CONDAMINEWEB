@@ -9,46 +9,57 @@ export default function GamesGrid({ user }) {
   const [chapters, setChapters] = useState([]);
   const [selectedQuiz, setSelectedQuiz] = useState(null);
   const [activeGame, setActiveGame] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const loadData = async () => {
-    const myClass = (user.currentClass || "").trim().toUpperCase();
+    setRefreshing(true);
     const myId = String(user._id || user.id);
+    const myClass = (user.currentClass || "").trim().toUpperCase();
+    
+    const rawGroups = user.assignedGroups || [];
+    const myGroupIds = rawGroups.map(g => (typeof g === 'object' && g !== null) ? String(g._id) : String(g));
 
     try {
-        const [allGames, allProgs] = await Promise.all([
+        const [allGames, allProgs, allClasses] = await Promise.all([
             fetch('/api/games/all').then(r => r.json()),
-            fetch('/api/games/progress').then(r => r.json())
+            fetch('/api/games/progress').then(r => r.json()),
+            fetch('/api/auth/config').then(r => r.json()).then(d => d.classrooms || [])
         ]);
 
-        // On filtre les jeux qui concernent l'élève
-        const filtered = allGames.filter(g => {
-            const targets = g.targetClassrooms || (g.classroom ? [g.classroom] : []);
-            const assignedIds = g.assignedStudents || [];
+        const myGroupNames = allClasses
+            .filter(c => myGroupIds.includes(String(c._id)))
+            .map(c => c.name.toUpperCase().trim());
 
-            const isMyClassTargeted = targets.some(t => t.trim().toUpperCase() === myClass);
-            const isAssignedIndividually = assignedIds.some(id => String(id) === myId);
+        const myTargets = [myClass, ...myGroupNames];
+
+        const filtered = allGames.filter(g => {
+            const targets = (g.targetClassrooms || (g.classroom ? [g.classroom] : [])).map(t => t.toUpperCase().trim());
+            const assignedIds = (g.assignedStudents || []).map(id => String(id));
+
+            if (assignedIds.includes(myId)) return true;
+
+            // Matching robuste (case insensitive, trim)
+            const isTargetedGroup = targets.some(t => myTargets.includes(t));
             
-            if (isAssignedIndividually) return true;
-            if (isMyClassTargeted) {
+            if (isTargetedGroup) {
                 if (g.isAllClass === true) return true;
-                if (g.isAllClass === undefined && assignedIds.length === 0) return true; 
+                // Si "AssignedStudents" est vide mais "isAllClass" est false (cas ambigu), on affiche quand même si cible
+                if (assignedIds.length === 0) return true;
             }
             return false;
         }).map(g => {
-            // CALCUL DU STATUT (3 ÉTATS)
             const prog = allProgs.find(p => String(p.studentId) === myId && String(p.gameId) === String(g._id));
-            
-            let status = 'todo'; // Par défaut : À FAIRE (Rouge)
+            let status = 'todo'; 
             if (prog) {
-                if (prog.levelReached >= 1) status = 'done'; // FAIT (Vert/Violet)
-                else status = 'inprogress'; // EN COURS / RATÉ (Bleu)
+                if (prog.levelReached >= 1) status = 'done'; 
+                else status = 'inprogress'; 
             }
-
             return { ...g, status };
         });
 
         setQuizzes(filtered);
-    } catch(e) { console.error(e); }
+    } catch(e) { console.error("GamesGrid Error:", e); }
+    setRefreshing(false);
   };
 
   useEffect(() => {
@@ -77,5 +88,14 @@ export default function GamesGrid({ user }) {
       </div>
   );
 
-  return <DashboardFolder items={quizzes} chapters={chapters} type="game" onSelect={setSelectedQuiz} />;
+  return (
+    <div className="flex flex-col gap-4">
+        <div className="flex justify-end">
+            <button onClick={loadData} className="text-[10px] font-black text-slate-400 bg-white px-3 py-1 rounded-xl border border-slate-200 hover:text-slate-600 transition-colors">
+                {refreshing ? '...' : '🔄 ACTUALISER'}
+            </button>
+        </div>
+        <DashboardFolder items={quizzes} chapters={chapters} type="game" onSelect={setSelectedQuiz} />
+    </div>
+  );
 }

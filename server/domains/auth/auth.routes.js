@@ -38,12 +38,17 @@ router.post('/login', async (req, res) => {
     } catch (e) { res.status(500).json({ error: "Erreur technique login" }); }
 });
 
-// 5. UPDATE V3 : Récupération fraîche incluant le statut de punition
+// 5. UPDATE V374 : Récupération fraîche AVEC LES OPTIONS POPULÉES
 router.get('/student-fresh/:id', async (req, res) => {
     try {
         if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(400).json({error: "ID Invalide"});
-        // AJOUT DES CHAMPS PUNITIONS DANS LA REQUÊTE
-        const student = await mongoose.model('Student').findById(req.params.id, 'behaviorRecords firstName lastName punishmentStatus punishmentDueDate');
+        
+        // On récupère l'élève et on POPULE les groupes pour avoir leurs noms (ex: "1D BFI")
+        const student = await mongoose.model('Student')
+            .findById(req.params.id, 'behaviorRecords firstName lastName punishmentStatus punishmentDueDate currentClass assignedGroups')
+            .populate('assignedGroups', 'name') // <-- MAGIE ICI
+            .lean();
+            
         res.json(student);
     } catch (e) { res.status(500).json({ error: "Erreur fetch student" }); }
 });

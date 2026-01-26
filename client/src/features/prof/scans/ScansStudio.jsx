@@ -4,146 +4,44 @@ import './ScansStudio.css';
 export default function ScansStudio({ user, globalClass }) {
     const [sessions, setSessions] = useState([]);
     const [chapters, setChapters] = useState([]);
-    
-    // UI STATES
     const [activePanels, setActivePanels] = useState({});
-    const [collapsedSessions, setCollapsedSessions] = useState({});
-    const [snapQueue, setSnapQueue] = useState([]); 
-    const [selectedFolderId, setSelectedFolderId] = useState("");
-
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
     const [stream, setStream] = useState(null);
+    const [snapQueue, setSnapQueue] = useState([]);
+    const [selectedFolderId, setSelectedFolderId] = useState("");
 
-    const [instructions, setInstructions] = useState("Corrige l'orthographe et la syntaxe. Sois précis.");
+    useEffect(() => { loadSessions(); loadChapters(); }, []);
 
-    useEffect(() => { 
-        loadSessions(); 
-        loadChapters();
-    }, []);
+    const loadSessions = async () => { try { const res = await fetch('/api/scans/sessions'); if(res.ok) setSessions(await res.json()); } catch(e) {} };
+    const loadChapters = async () => { try { const res = await fetch('/api/structure/chapters'); if(res.ok) setChapters(await res.json()); } catch(e) {} };
 
-    const loadSessions = async () => {
-        try {
-            const res = await fetch('/api/scans/sessions');
-            if(res.ok) setSessions(await res.json());
-        } catch(e) { console.error(e); }
-    };
+    // Filtrage des dossiers pour le prof courant
+    const relevantChapters = chapters.filter(c => String(c.teacherId) === String(user.id || user._id) && !c.isArchived).sort((a,b)=>a.title.localeCompare(b.title));
 
-    const loadChapters = async () => {
-        try {
-            const res = await fetch('/api/structure/chapters');
-            if(res.ok) setChapters(await res.json());
-        } catch(e) { console.error(e); }
-    };
-
-    // --- FILTRAGE ROBUSTE ---
-    const getFilteredChapters = () => {
-        const myId = String(user._id || user.id);
-        if (!myId) return [];
-
-        let currentLevel = "";
-        if (globalClass) {
-            const match = globalClass.match(/^(\d+|TERM|CP|CE1|CE2|CM1|CM2)/);
-            if (match) currentLevel = match[0];
-        }
-
-        return chapters.filter(c => {
-            // 1. PROPRIÉTAIRE (Strict)
-            const ownerId = c.teacherId?._id || c.teacherId;
-            if (String(ownerId) !== myId) return false;
-
-            // 2. ARCHIVES
-            if (c.isArchived) return false;
-
-            // 3. CONTEXTE CLASSE / NIVEAU
-            if (globalClass) {
-                const cClass = (c.classroom || "").trim().toUpperCase();
-                const gClass = globalClass.trim().toUpperCase();
-                
-                // Est-ce le dossier de CETTE classe ?
-                const isExactClass = cClass === gClass;
-                
-                // Est-ce un dossier partagé avec CE niveau ?
-                const isSharedLevel = c.sharedLevel && String(c.sharedLevel) === currentLevel;
-                
-                return isExactClass || isSharedLevel;
-            }
-
-            // Si hors contexte classe, on affiche tout ce qui est actif
-            return true;
-        }).sort((a, b) => a.title.localeCompare(b.title));
-    };
-
-    const relevantChapters = getFilteredChapters();
-
-    // --- 1. CRÉATION ---
-    const handleCreateDC = async () => {
-        const title = prompt("Titre du DC (ex: 24/01 MATHS) ?") || `DC ${new Date().toLocaleDateString().slice(0,5)}`;
-        try {
-            await fetch('/api/scans/sessions', {
-                method: 'POST', headers: {'Content-Type':'application/json'},
-                body: JSON.stringify({ title: title.toUpperCase(), teacherId: user._id })
-            });
-            loadSessions();
-        } catch(e) { alert("Erreur création"); }
-    };
-
-    // --- 2. GESTION DES PANNEAUX ---
-    const toggleCollapse = (sessionId) => {
-        setCollapsedSessions(prev => ({ ...prev, [sessionId]: !prev[sessionId] }));
-    };
-
-    const togglePanel = async (sessionId, panelType, currentChapterId) => {
+    const togglePanel = (id, type, currentChap) => {
         if (stream) { stream.getTracks().forEach(t => t.stop()); setStream(null); }
-        setSnapQueue([]); 
-
-        setActivePanels(prev => {
-            if (prev[sessionId] === panelType) { const copy = { ...prev }; delete copy[sessionId]; return copy; }
-            return { ...prev, [sessionId]: panelType };
-        });
-
-        if (panelType === 'DRIVE_SELECTION') {
-            if (currentChapterId && relevantChapters.some(c => c._id === currentChapterId)) {
-                setSelectedFolderId(currentChapterId);
-            } else if (relevantChapters.length > 0) {
-                setSelectedFolderId(relevantChapters[0]._id);
-            } else {
-                setSelectedFolderId("");
-            }
-        }
-
-        if (panelType === 'CAMERA_SUBJECT' || panelType === 'CAMERA_COPY') {
-            setTimeout(() => startCamera(), 100);
-        }
+        setActivePanels(prev => ({ ...prev, [id]: prev[id] === type ? null : type }));
+        if (type.startsWith('CAMERA')) setTimeout(startCamera, 100);
+        if (type === 'DRIVE_SELECTION') setSelectedFolderId(currentChap || (relevantChapters[0]?._id || ""));
     };
 
-    const handleLinkDrive = async (sessionId) => {
-        if (!selectedFolderId) return;
-        try {
-            await fetch(`/api/scans/sessions/${sessionId}`, {
-                method: 'PATCH', headers: {'Content-Type':'application/json'},
-                body: JSON.stringify({ chapterId: selectedFolderId })
-            });
-            alert("✅ Dossier lié avec succès !"); togglePanel(sessionId, null); loadSessions();
-        } catch(e) { alert("Erreur sauvegarde lien"); }
-    };
-
-    // --- 3. CAMÉRA VIDÉO ---
     const startCamera = async () => {
         try {
-            const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1920 } } });
+            const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } } });
             setStream(s);
             if (videoRef.current) videoRef.current.srcObject = s;
-        } catch (e) { alert("Impossible d'accéder à la caméra."); }
+        } catch (e) { alert("Caméra inaccessible"); }
     };
 
     const takeSnap = (sessionId, type) => {
         if (!videoRef.current || !canvasRef.current) return;
         const vid = videoRef.current;
         const cvs = canvasRef.current;
+        
         cvs.width = vid.videoWidth;
         cvs.height = vid.videoHeight;
-        cvs.getContext('2d').drawImage(vid, 0, 0);
+        cvs.getContext('2d').drawImage(vid, 0, 0, cvs.width, cvs.height);
         
         cvs.toBlob(async (blob) => {
             const localUrl = URL.createObjectURL(blob);
@@ -155,159 +53,95 @@ export default function ScansStudio({ user, globalClass }) {
             formData.append('sessionId', sessionId);
             formData.append('type', type === 'CAMERA_SUBJECT' ? 'SUBJECT' : 'COPY');
             
-            vid.style.opacity = 0.5; setTimeout(() => vid.style.opacity = 1, 100);
-
             try {
                 await fetch('/api/scans/upload', { method: 'POST', body: formData });
                 setSnapQueue(prev => prev.map(s => s.id === snapId ? { ...s, status: 'done' } : s));
                 loadSessions(); 
-            } catch(e) { 
-                setSnapQueue(prev => prev.map(s => s.id === snapId ? { ...s, status: 'error' } : s));
-            }
-        }, 'image/jpeg', 0.85);
+            } catch(e) { /* Error handling */ }
+        }, 'image/jpeg', 0.95);
     };
 
-    // --- 4. CORRECTION IA ---
-    const launchCorrection = async (sessionId) => {
-        if(!confirm("Lancer l'IA EXPERTE sur toutes les copies ?")) return;
-        alert("Correction lancée en tâche de fond...");
-        try {
-            await fetch(`/api/scans/correct/${sessionId}`, {
-                method: 'POST', headers: {'Content-Type':'application/json'},
-                body: JSON.stringify({ instructions })
-            });
-            loadSessions();
-        } catch(e) { alert("Erreur IA."); }
+    const handleCreateDC = async () => {
+        const title = prompt("Titre du DC ?") || `Scan ${new Date().toLocaleDateString()}`;
+        await fetch('/api/scans/sessions', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ title, teacherId: user.id || user._id }) });
+        loadSessions();
     };
 
-    const deleteSession = async (id) => {
-        if(!confirm("Supprimer ce DC et toutes les copies ?")) return;
+    const handleDeleteSession = async (id) => {
+        if(!confirm("Supprimer ce paquet de copies ?")) return;
         await fetch(`/api/scans/sessions/${id}`, { method: 'DELETE' });
         loadSessions();
     };
 
-    const getGradeColorClass = (grade) => {
-        if (!grade) return 'bg-gray-400';
-        if (grade.includes('A+')) return 'grade-A-plus';
-        if (grade.includes('A')) return 'grade-A';
-        if (grade.includes('B')) return 'grade-B';
-        return 'grade-C';
+    const handleLinkDrive = async (sessionId) => {
+        await fetch(`/api/scans/sessions/${sessionId}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ chapterId: selectedFolderId }) });
+        alert("✅ Dossier lié !");
+        loadSessions();
+    };
+
+    const launchCorrection = async (id) => {
+        if(!confirm("Lancer l'IA ?")) return;
+        await fetch(`/api/scans/correct/${id}`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ instructions: "Correction stricte." }) });
+        alert("Correction lancée (Processus arrière-plan)");
+        loadSessions();
     };
 
     return (
         <div className="scan-page">
-            <div className="create-dc-btn" onClick={handleCreateDC}>
-                <div className="create-icon">+</div>
-                <span className="create-label">NOUVEAU DC (DEVOIR CLASSE)</span>
-            </div>
-
-            {(sessions || []).map(s => {
-                const activePanel = activePanels[s._id];
-                const isCollapsed = collapsedSessions[s._id];
-                const subjectImages = s.subjectUrls || [];
-                const copyImages = s.copyUrls || [];
-                const linkedChapter = chapters.find(c => c._id === s.chapterId);
-                const folderName = linkedChapter ? linkedChapter.title : "AUCUN DOSSIER";
-
+            <div className="create-dc-btn" onClick={handleCreateDC}><span className="create-label">+ NOUVEAU SCAN</span></div>
+            {sessions.map(s => {
+                const active = activePanels[s._id];
+                const folderName = chapters.find(c => c._id === s.chapterId)?.title || "AUCUN DOSSIER";
                 return (
                     <div key={s._id} className="dc-card">
                         <div className="dc-header">
-                            <div className="dc-title-group">
-                                <div className={`dc-icon ${isCollapsed ? 'collapsed' : ''}`} onClick={() => toggleCollapse(s._id)}>{isCollapsed ? '📁' : '📂'}</div>
-                                <div>
-                                    <input className="dc-input" defaultValue={s.title} onBlur={(e) => { /* Update */ }} />
-                                    <div className="dc-date">{new Date(s.date).toLocaleDateString()} • {copyImages.length} Copies • Dossier : <strong>{folderName}</strong></div>
+                            <div>
+                                <h3 style={{fontWeight:900}}>{s.title}</h3>
+                                <p className="text-xs text-slate-400 font-bold">{s.copyUrls.length} Copies • Dossier : {folderName}</p>
+                            </div>
+                            <div className="dc-toolbar">
+                                {/* BOUTONS RESTAURÉS */}
+                                <button className="tool-btn btn-scanner" onClick={() => togglePanel(s._id, 'CAMERA_COPY')}>📷 SCANNER</button>
+                                <button className="tool-btn btn-devoirs" onClick={() => togglePanel(s._id, 'SHOW_COPIES')}>📚 DEVOIRS</button>
+                                <button className="tool-btn btn-folder" onClick={() => togglePanel(s._id, 'DRIVE_SELECTION', s.chapterId)}>📂 RANGER</button>
+                                <button className="tool-btn btn-correct" onClick={() => launchCorrection(s._id)}>🤖 CORRIGER</button>
+                                <button className="tool-btn btn-delete" onClick={() => handleDeleteSession(s._id)}>✕</button>
+                            </div>
+                        </div>
+                        
+                        {/* VISUALISATION DES COPIES */}
+                        {active === 'SHOW_COPIES' && (
+                            <div className="dc-content-area text-white">
+                                <h4 className="font-bold mb-4 uppercase">Copies scannées ({s.copyUrls.length})</h4>
+                                <div className="snap-queue-strip custom-scrollbar">
+                                    {s.copyUrls.map((url, i) => (
+                                        <img key={i} src={url} className="queue-thumb" style={{border:'2px solid white'}} onClick={() => window.open(url, '_blank')} />
+                                    ))}
+                                    {s.copyUrls.length === 0 && <span className="text-sm italic opacity-50">Aucune copie scannée.</span>}
                                 </div>
                             </div>
-                            <button className="tool-btn btn-delete" onClick={() => deleteSession(s._id)}>✕</button>
-                        </div>
+                        )}
 
-                        {!isCollapsed && (
-                            <>
-                                <div className="dc-toolbar">
-                                    <button className="tool-btn btn-sujet" onClick={() => togglePanel(s._id, 'CAMERA_SUBJECT')}>📸 SUJET ({subjectImages.length})</button>
-                                    <button className="tool-btn btn-scanner" onClick={() => togglePanel(s._id, 'CAMERA_COPY')}>⚡ SCANNER COPIES</button>
-                                    <button className="tool-btn btn-devoirs" onClick={() => togglePanel(s._id, 'GALLERY')}>👀 DEVOIRS RENDUS ({copyImages.length})</button>
-                                    <button className="tool-btn btn-correct" onClick={() => togglePanel(s._id, 'CORRECTION')}>🤖 CORRECTION IA</button>
-                                    <button className="tool-btn btn-folder" onClick={() => togglePanel(s._id, 'DRIVE_SELECTION', s.chapterId)}>📂 DRIVE</button>
+                        {active === 'DRIVE_SELECTION' && (
+                            <div className="dc-content-area flex flex-col items-center gap-4 text-white">
+                                <h3>CHOISIR LE DOSSIER DE RANGEMENT</h3>
+                                <select className="p-3 rounded text-black font-bold" value={selectedFolderId} onChange={e => setSelectedFolderId(e.target.value)}>
+                                    <option value="">-- SÉLECTION --</option>
+                                    {relevantChapters.map(c => <option key={c._id} value={c._id}>{c.title}</option>)}
+                                </select>
+                                <button className="bg-green-500 text-white px-4 py-2 rounded font-black" onClick={() => handleLinkDrive(s._id)}>VALIDER LE RANGEMENT</button>
+                            </div>
+                        )}
+
+                        {active && active.startsWith('CAMERA') && (
+                            <div className="dc-content-area">
+                                <div className="cam-wrapper">
+                                    <video ref={videoRef} autoPlay playsInline className="cam-video" />
+                                    <canvas ref={canvasRef} style={{display:'none'}} />
+                                    <div className="cam-trigger" onClick={() => takeSnap(s._id, active)}>⚪</div>
                                 </div>
-
-                                {activePanel && (
-                                    <div className="dc-content-area">
-                                        {(activePanel === 'CAMERA_SUBJECT' || activePanel === 'CAMERA_COPY') && (
-                                            <div className="flex flex-col items-center">
-                                                <div className="cam-wrapper">
-                                                    <div className={`absolute top-2 left-2 px-2 rounded text-xs font-bold animate-pulse text-white ${activePanel === 'CAMERA_SUBJECT' ? 'bg-blue-600' : 'bg-green-600'}`}>{activePanel === 'CAMERA_SUBJECT' ? 'MODE SUJET' : 'MODE COPIES'}</div>
-                                                    <video ref={videoRef} autoPlay playsInline className="cam-video" />
-                                                    <canvas ref={canvasRef} style={{display:'none'}} />
-                                                    <div className="cam-trigger" onClick={() => takeSnap(s._id, activePanel)}>⚪</div>
-                                                </div>
-                                                <div className="w-full mt-6">
-                                                    <span className="persistent-label">{activePanel === 'CAMERA_SUBJECT' ? `PAGES SUJET (${subjectImages.length})` : 'FILE D\'ATTENTE'}</span>
-                                                    {activePanel === 'CAMERA_SUBJECT' ? (
-                                                        <div className="persistent-strip custom-scrollbar">{subjectImages.map((u, i) => <img key={i} src={u} className="persistent-thumb" />)}</div>
-                                                    ) : (
-                                                        <div className="snap-queue-strip custom-scrollbar">{snapQueue.map(scan => <img key={scan.id} src={scan.url} className={`queue-thumb ${scan.status}`} />)}</div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {activePanel === 'CORRECTION' && (
-                                            <div className="correction-box">
-                                                <h3 className="font-black text-slate-700 uppercase">Instructions pour l'IA</h3>
-                                                <textarea className="ai-instr-input" value={instructions} onChange={e => setInstructions(e.target.value)} />
-                                                <button className="btn-launch-ia" onClick={() => launchCorrection(s._id)}>LANCER CORRECTION ({copyImages.length} COPIES)</button>
-                                                <div className="results-grid">
-                                                    {(s.corrections || []).map((c, idx) => (
-                                                        <div key={idx} className="result-card">
-                                                            <div className="result-header">
-                                                                <div className="result-student"><span className="student-icon">🎓</span>{c.studentName || "INCONNU"}</div>
-                                                                <div className={`grade-badge ${getGradeColorClass(c.grade)}`}>NOTE : {c.grade}</div>
-                                                            </div>
-                                                            <div className="result-img-box"><img src={c.originalUrl} className="result-img" /></div>
-                                                            <div className="result-body">
-                                                                <div className="appreciation-box"><strong>APPRÉCIATION :</strong> {c.appreciation || "Aucune."}</div>
-                                                                <div className="transcription-box" dangerouslySetInnerHTML={{__html: c.transcription}}></div>
-                                                                {c.mistakes?.length > 0 && <div className="mistakes-list">{c.mistakes.map((m, i) => <span key={i} className="mistake-tag">{m}</span>)}</div>}
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {activePanel === 'DRIVE_SELECTION' && (
-                                            <div className="drive-box animate-in">
-                                                <h3 className="font-black text-slate-700 uppercase text-center">📂 RANGER DANS UN DOSSIER ({globalClass || 'Tout'})</h3>
-                                                
-                                                {relevantChapters.length > 0 ? (
-                                                    <select className="drive-select" value={selectedFolderId} onChange={(e) => setSelectedFolderId(e.target.value)}>
-                                                        <option value="">-- CHOISIR UN DOSSIER --</option>
-                                                        {relevantChapters.map(c => (
-                                                            <option key={c._id} value={c._id}>
-                                                                {c.title} {c.sharedLevel ? `[NIV ${c.sharedLevel}]` : (c.classroom ? `[${c.classroom}]` : '[GLOBAL]')}
-                                                            </option>
-                                                        ))}
-                                                    </select>
-                                                ) : (
-                                                    <div className="text-center text-red-400 font-bold text-xs py-4">
-                                                        Aucun dossier actif pour {globalClass} (ou global) appartenant à ce prof.<br/>Créez-en un dans l'onglet "ACTIVITÉS".
-                                                    </div>
-                                                )}
-
-                                                <button className="btn-save-drive" onClick={() => handleLinkDrive(s._id)} disabled={!selectedFolderId}>SAUVEGARDER LE LIEN</button>
-                                            </div>
-                                        )}
-
-                                        {activePanel === 'GALLERY' && (
-                                            <div className="gallery-grid">
-                                                {copyImages.map((u, i) => <div key={i} className="gallery-item"><img src={u} className="gallery-img" /><div className="gallery-tag">COPIE {i+1}</div></div>)}
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                            </>
+                                <div className="snap-queue-strip custom-scrollbar">{snapQueue.map(sq => <img key={sq.id} src={sq.url} className={`queue-thumb ${sq.status}`} />)}</div>
+                            </div>
                         )}
                     </div>
                 );
