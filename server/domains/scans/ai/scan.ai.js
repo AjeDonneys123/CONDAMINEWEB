@@ -1,7 +1,6 @@
 const AIEngine = require('../../../core/ai.engine');
 const StructureDrive = require('../../structure/experts/structure.drive'); 
 
-// Helper : Convertit un Stream en Buffer
 const streamToBuffer = async (stream) => {
     const chunks = [];
     return new Promise((resolve, reject) => {
@@ -13,35 +12,33 @@ const streamToBuffer = async (stream) => {
 
 const ScanAI = {
     correctCopy: async (copyUrl, subjectUrls, instructions, studentList) => {
-        console.log("👁️ [SCAN-AI] Correction V118 (Mode Rouge/Noir & Notes)...");
+        console.log("👁️ [SCAN-AI] Correction V119 (Mode API Strict)...");
 
         const rosterText = studentList.map(s => `${s.firstName} ${s.lastName}`).join(', ');
 
-        const system = `Tu es un professeur correcteur expert.
+        // ON CHANGE DE PERSONA : Ce n'est plus un prof, c'est une MACHINE.
+        const system = `Tu es une API JSON stricte. Tu n'es PAS un assistant conversationnel.
         
-        BARÈME STRICT À UTILISER (Champ 'grade') :
-        - A+ : Très bien (Excellent).
-        - A : Le travail est satisfaisant.
-        - B : Compétences en cours d'acquisition (bons éléments mais ensemble incomplet).
-        - C : Ensemble insuffisant.
+        TÂCHE : Analyser la copie d'un élève (fournie en image) par rapport au sujet.
         
-        INSTRUCTIONS DE FORMATAGE (Champ 'transcription') :
-        - Tu dois transcrire ce que tu lis sur la copie en **NOIR** (texte normal).
-        - Tu dois insérer tes corrections et commentaires en **ROUGE** en utilisant EXCLUSIVEMENT la balise : <span style="color:#ef4444; font-weight:bold;"> [TON COMMENTAIRE] </span>.
-        - Exemple : "L'élève a écrit 'les chevals'. <span style="color:#ef4444; font-weight:bold;">[Attention au pluriel : chevaux]</span>."
-        - Utilise des sauts de ligne <br/> pour aérer.
+        RÈGLES D'OR (Non-négociables) :
+        1. NE DIS PAS "Bonjour", NE DIS PAS "Voici l'analyse".
+        2. RENVOIE UNIQUEMENT UN OBJET JSON. RIEN AVANT, RIEN APRÈS.
+        3. CODE COULEUR : Pour les corrections dans le texte, utilise UNIQUEMENT le HTML suivant : <span style="color:#ef4444; font-weight:bold;">[Ton commentaire]</span>. N'utilise PAS de Markdown (**Gras**).
         
-        FORMAT JSON OBLIGATOIRE :
+        LISTE ÉLÈVES POSSIBLES : [${rosterText}].
+
+        FORMAT JSON À RESPECTER :
         {
-            "studentName": "Nom trouvé ou Inconnu",
-            "grade": "A+, A, B ou C",
-            "appreciation": "Synthèse globale (2 phrases).",
-            "transcription": "Ton analyse avec le code couleur HTML (Noir = Élève, Rouge = Prof).",
-            "mistakes": ["Liste erreurs majeures"]
+            "studentName": "Nom trouvé ou 'Inconnu'",
+            "grade": "Note (A+, A, B ou C)",
+            "appreciation": "Résumé court (2 phrases).",
+            "transcription": "Ton analyse complète avec les balises HTML <span...> pour tes corrections.",
+            "mistakes": ["Erreur 1", "Erreur 2"]
         }`;
 
         const promptParts = [
-            { text: `CONSIGNES SPÉCIFIQUES : ${instructions}` }
+            { text: `INSTRUCTIONS PROF : ${instructions}` }
         ];
 
         const getImageData = async (url) => {
@@ -71,7 +68,7 @@ const ScanAI = {
             const copyB64 = await getImageData(copyUrl);
             if (copyB64) {
                 promptParts.push({ inlineData: { mimeType: "image/jpeg", data: copyB64 } });
-                promptParts.push({ text: "CORRIGE EN APPLIQUANT LE CODE COULEUR." });
+                promptParts.push({ text: "ANALYSE JSON STRICTE." });
             } else {
                 return {
                     studentName: "Image Illisible",

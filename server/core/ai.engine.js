@@ -1,8 +1,8 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 /**
- * 🤖 MOTEUR IA - V15 (EXTRACTION NOTE INTELLIGENTE)
- * Si le JSON échoue, on cherche la note dans le texte brut.
+ * 🤖 MOTEUR IA - V16 (SCRAPER DE NOTE RENFORCÉ)
+ * Trouve la note même dans le désordre.
  */
 const AIEngine = {
     normalizeKeys: (obj) => {
@@ -20,7 +20,6 @@ const AIEngine = {
         let clean = text.replace(/```json/gi, "").replace(/```/gi, "").trim();
         
         try {
-            // Tentative standard
             const start = clean.indexOf('{');
             const end = clean.lastIndexOf('}');
             let parsed = null;
@@ -35,25 +34,33 @@ const AIEngine = {
 
             return {
                 studentname: norm.studentname || "Inconnu",
-                grade: norm.grade || norm.note || "?", // L'IA doit mettre A, B...
+                grade: norm.grade || norm.note || "?",
                 appreciation: norm.appreciation || "Pas d'avis.",
                 transcription: norm.transcription || norm.analyse || "Pas de détail.",
                 mistakes: norm.mistakes || []
             };
 
         } catch (e) { 
-            // MODE SECOURS : ON CHERCHE LA NOTE DANS LE TEXTE
-            // Ex: "Note: B" ou "Grade: A+"
+            // MODE SECOURS RENFORCÉ
+            console.warn("⚠️ [AI-ENGINE] Mode RAW + Scraper.");
+            
             let extractedGrade = "?";
-            const gradeMatch = text.match(/(?:Note|Grade)\s*:\s*([A-C]\+?)/i);
-            if (gradeMatch) extractedGrade = gradeMatch[1].toUpperCase();
+            // Regex 1 : Cherche "grade": "A" dans le texte brut (si JSON mal formé)
+            let match = text.match(/"grade"\s*:\s*"([A-C]\+?)"/i);
+            if (!match) match = text.match(/"note"\s*:\s*"([A-C]\+?)"/i);
+            // Regex 2 : Cherche Note : A dans le texte humain
+            if (!match) match = text.match(/(?:Note|Grade)\s*[:=]\s*([A-C]\+?)/i);
+            
+            if (match) extractedGrade = match[1].toUpperCase();
 
-            console.warn("⚠️ [AI-ENGINE] Mode RAW + Extraction Note.");
+            // Si l'IA a fait du markdown au lieu du HTML, on convertit basiquement pour l'affichage
+            let cleanText = text.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
+
             return {
                 studentName: "Format Texte",
-                grade: extractedGrade,
+                grade: extractedGrade, // On renvoie la note trouvée par regex
                 appreciation: "L'IA a répondu en texte libre.",
-                transcription: text, // On renvoie tout le texte brut
+                transcription: cleanText, 
                 mistakes: []
             };
         }
@@ -69,7 +76,9 @@ const AIEngine = {
             const genAI = new GoogleGenerativeAI(apiKey);
             const model = genAI.getGenerativeModel({ 
                 model: targetModel,
-                systemInstruction: systemInstruction
+                systemInstruction: systemInstruction,
+                // On baisse la température pour rendre l'IA moins "créative" et plus "robot"
+                generationConfig: { temperature: 0.2 }
             });
             const result = await model.generateContent(prompt);
             return result.response.text();
