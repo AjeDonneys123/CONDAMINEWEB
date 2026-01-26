@@ -4,7 +4,7 @@ const path = require('path');
 
 const ScanAI = {
     correctCopy: async (copyUrl, subjectUrls, instructions, studentList) => {
-        console.log("👁️ [SCAN-AI] Correction Expert (Sujet + Copie)...");
+        console.log("👁️ [SCAN-AI] Démarrage Correction Expert...");
 
         const rosterText = studentList.map(s => `${s.firstName} ${s.lastName}`).join(', ');
 
@@ -33,36 +33,53 @@ const ScanAI = {
             { text: `INSTRUCTIONS PROF : ${instructions}\n\nVoici d'abord l'énoncé, puis la copie.` }
         ];
 
-        // HELPER POUR NETTOYER LE CHEMIN
-        // Transforme "/uploads/image.jpg" en "uploads/image.jpg" pour que path.join fonctionne
-        const getLocalPath = (url) => {
-            const relativePath = url.startsWith('/') ? url.slice(1) : url;
-            return path.join(process.cwd(), 'public', relativePath);
+        // --- FONCTION LIMIER (Cherche le fichier partout) ---
+        const findFileOnDisk = (url) => {
+            const cleanName = url.split('/').pop().split('?')[0]; // ex: scan-123.jpg
+            
+            // Liste des endroits probables où chercher
+            const candidates = [
+                path.join(process.cwd(), 'public', 'uploads', cleanName), // Standard
+                path.join(process.cwd(), 'uploads', cleanName),           // Racine
+                path.join('/tmp', cleanName),                             // Dossier tmp système
+                path.join(process.cwd(), 'public', url)                   // Chemin complet relatif
+            ];
+
+            for (const p of candidates) {
+                if (fs.existsSync(p)) {
+                    console.log(`✅ [SCAN-AI] Fichier trouvé ici : ${p}`);
+                    return p;
+                }
+            }
+            
+            console.error(`❌ [SCAN-AI] Fichier INTROUVABLE. J'ai cherché ici :`, candidates);
+            return null;
         };
 
         try {
             // 1. Ajout des Sujets
             if (subjectUrls && subjectUrls.length > 0) {
                 subjectUrls.forEach(url => {
-                    const sPath = getLocalPath(url);
-                    if (fs.existsSync(sPath)) {
+                    const sPath = findFileOnDisk(url);
+                    if (sPath) {
                         promptParts.push({ inlineData: { mimeType: "image/jpeg", data: fs.readFileSync(sPath).toString('base64') } });
                         promptParts.push({ text: "[IMAGE ÉNONCÉ]" });
                     } else {
-                        console.warn("⚠️ Image sujet introuvable:", sPath);
+                        console.warn("⚠️ Image sujet ignorée (non trouvée sur disque).");
                     }
                 });
             }
 
             // 2. Ajout de la Copie
-            const copyPath = getLocalPath(copyUrl);
-            if (fs.existsSync(copyPath)) {
+            const copyPath = findFileOnDisk(copyUrl);
+            if (copyPath) {
                 promptParts.push({ inlineData: { mimeType: "image/jpeg", data: fs.readFileSync(copyPath).toString('base64') } });
                 promptParts.push({ text: "[IMAGE COPIE ÉLÈVE]" });
             } else {
-                throw new Error(`Fichier copie introuvable sur le disque : ${copyPath}`);
+                throw new Error(`Fichier copie introuvable sur le disque. Voir logs serveur.`);
             }
 
+            // 3. Appel IA
             const raw = await AIEngine.ask(promptParts, system);
             return AIEngine.sanitizeJSON(raw);
 
@@ -71,7 +88,7 @@ const ScanAI = {
             return { 
                 studentName: "Erreur Technique", 
                 grade: "0/20", 
-                appreciation: "Impossible de traiter le fichier image. (Erreur serveur)", 
+                appreciation: "Le serveur n'a pas réussi à lire l'image sur le disque dur.", 
                 transcription: e.message, 
                 mistakes: [] 
             };
