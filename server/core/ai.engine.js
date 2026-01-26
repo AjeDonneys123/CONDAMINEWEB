@@ -1,19 +1,26 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
+console.log("------------------------------------------------");
+console.log("✅ MOTEUR IA V12 (DEBUG FORCE) CHARGÉ");
+console.log("------------------------------------------------");
+
 /**
- * 🤖 MOTEUR IA - V11 (IMPOSSIBLE DE PLANTER)
- * Quoi qu'il arrive, il renvoie un objet JSON valide pour l'interface.
+ * 🤖 MOTEUR IA - V12 (INCASSABLE)
+ * Ce fichier ne contient PLUS le message "Parsing Failed".
+ * S'il échoue, il renvoie le texte brut.
  */
 const AIEngine = {
     sanitizeJSON: (text) => {
-        // Cas Vide
+        // Sécurité anti-vide
         if (!text) return { 
             studentName: "Erreur Vide", 
             grade: "?", 
-            appreciation: "L'IA n'a rien renvoyé.", 
-            transcription: "Réponse vide.", 
+            appreciation: "L'IA est restée muette.", 
+            transcription: "Aucune réponse reçue de Google.", 
             mistakes: [] 
         };
+
+        console.log("📝 [AI-ENGINE] Texte reçu à nettoyer :", text.substring(0, 50) + "...");
 
         let clean = text
             .replace(/```json/gi, "")
@@ -31,16 +38,17 @@ const AIEngine = {
                 if (start !== -1 && end !== -1) {
                     return JSON.parse(clean.substring(start, end + 1));
                 }
-                throw new Error("Pas de JSON");
+                throw new Error("Pas de JSON détectable");
             } catch (e2) {
-                // ÉCHEC TOTAL : ON RENVOIE LE TEXTE BRUT DANS L'OBJET
-                console.warn("⚠️ JSON FAIL. Renvoi brut.");
+                // ÉCHEC TOTAL : ON RENVOIE LE TEXTE BRUT
+                // C'est ici que l'ancien code plantait. Maintenant, on renvoie un objet valide.
+                console.warn("⚠️ [AI-ENGINE] JSON cassé. Mode RAW activé.");
                 return {
-                    studentName: "Nom Inconnu",
+                    studentName: "IA Confuse",
                     grade: "?/20",
-                    appreciation: "⚠️ PROBLÈME FORMAT (Voir détail)",
-                    transcription: "🔴 CONTENU BRUT REÇU DE L'IA :\n\n" + text, 
-                    mistakes: ["Erreur de lecture"]
+                    appreciation: "L'IA a répondu mais le format est incorrect. Voir Analyse Détaillée.",
+                    transcription: "🔴 CONTENU BRUT DE L'IA (V12) :\n\n" + text, 
+                    mistakes: ["Erreur Technique JSON"]
                 };
             }
         }
@@ -50,7 +58,7 @@ const AIEngine = {
         const apiKey = process.env.GEMINI_API_KEY;
         const targetModel = "gemini-2.0-flash"; 
 
-        if (!apiKey) return "ERREUR: CLÉ API MANQUANTE";
+        if (!apiKey) return "ERREUR CRITIQUE : Clé API manquante dans Render.";
         
         try {
             const genAI = new GoogleGenerativeAI(apiKey);
@@ -61,10 +69,14 @@ const AIEngine = {
             
             const result = await model.generateContent(prompt);
             const response = await result.response;
-            return response.text();
+            const finalText = response.text();
+            
+            console.log("Testing AI response length:", finalText.length);
+            return finalText;
+
         } catch (e) {
-            console.error(`💥 CRASH GOOGLE :`, e.message);
-            return `ERREUR GOOGLE API: ${e.message}`;
+            console.error(`💥 CRASH GOOGLE API :`, e.message);
+            return `ERREUR FATALE GOOGLE : ${e.message}`;
         }
     }
 };

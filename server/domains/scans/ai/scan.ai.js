@@ -1,7 +1,7 @@
 const AIEngine = require('../../../core/ai.engine');
 const StructureDrive = require('../../structure/experts/structure.drive'); 
 
-// Helper : Convertit un Stream en Buffer
+// Helper : Convertit un Stream en Buffer (Indispensable pour le Drive)
 const streamToBuffer = async (stream) => {
     const chunks = [];
     return new Promise((resolve, reject) => {
@@ -13,22 +13,20 @@ const streamToBuffer = async (stream) => {
 
 const ScanAI = {
     correctCopy: async (copyUrl, subjectUrls, instructions, studentList) => {
-        console.log("👁️ [SCAN-AI] Correction V7 (Mode Nucléaire)...");
+        console.log("👁️ [SCAN-AI] Correction V12...");
 
         const rosterText = studentList.map(s => `${s.firstName} ${s.lastName}`).join(', ');
 
-        const system = `Tu es un professeur.
+        const system = `Tu es un professeur correcteur.
         
-        FORMAT JSON STRICT ATTENDU :
+        FORMAT JSON OBLIGATOIRE :
         {
             "studentName": "Nom",
-            "transcription": "Analyse...",
-            "appreciation": "Avis...",
+            "transcription": "...",
+            "appreciation": "...",
             "grade": "15/20",
             "mistakes": []
-        }
-        
-        Si tu ne peux pas lire l'image, dis-le dans l'appréciation.`;
+        }`;
 
         const promptParts = [
             { text: `INSTRUCTIONS : ${instructions}` }
@@ -38,58 +36,57 @@ const ScanAI = {
             try {
                 if (url.includes('/proxy/')) {
                     const fileId = url.split('/proxy/')[1];
+                    console.log(`☁️ Download Drive ID: ${fileId}`);
                     const stream = await StructureDrive.getFileStream(fileId);
                     const buffer = await streamToBuffer(stream);
-                    if (buffer.length < 100) throw new Error("Fichier trop petit (corrompu)");
+                    if (buffer.length < 100) throw new Error("Fichier vide");
                     return buffer.toString('base64');
                 }
+                console.log("⚠️ Lien non-proxy ignoré:", url);
                 return null;
             } catch (e) {
-                console.error(`❌ [AI-FETCH] Erreur Drive : ${e.message}`);
+                console.error(`❌ Erreur Image : ${e.message}`);
                 return null;
             }
         };
 
         try {
-            // 1. Sujets
-            if (subjectUrls && subjectUrls.length > 0) {
+            // Sujets
+            if (subjectUrls) {
                 for (const url of subjectUrls) {
                     const b64 = await getImageData(url);
                     if (b64) {
                         promptParts.push({ inlineData: { mimeType: "image/jpeg", data: b64 } });
-                        promptParts.push({ text: "[IMAGE ÉNONCÉ]" });
+                        promptParts.push({ text: "[SUJET]" });
                     }
                 }
             }
 
-            // 2. Copie
+            // Copie
             const copyB64 = await getImageData(copyUrl);
             if (copyB64) {
                 promptParts.push({ inlineData: { mimeType: "image/jpeg", data: copyB64 } });
-                promptParts.push({ text: "[IMAGE COPIE ÉLÈVE]" });
+                promptParts.push({ text: "[COPIE]" });
             } else {
-                // Si l'image est introuvable, on force l'IA à le dire
                 return {
-                    studentName: "Image Introuvable",
+                    studentName: "Image Perdue",
                     grade: "0",
-                    appreciation: "Le fichier n'est pas accessible sur le Drive (Lien cassé ou problème de droits).",
-                    transcription: "URL testée : " + copyUrl,
+                    appreciation: "Impossible de récupérer l'image sur le Drive.",
+                    transcription: "URL: " + copyUrl,
                     mistakes: []
                 };
             }
 
-            // 3. Appel IA (Sécurisé par AIEngine V11)
+            // Appel IA via le Moteur V12
             const rawText = await AIEngine.ask(promptParts, system);
-            
-            // Le moteur V11 ne plante JAMAIS, il renvoie toujours un objet
             return AIEngine.sanitizeJSON(rawText);
 
         } catch (e) {
             return { 
-                studentName: "Crash Système", 
+                studentName: "Bug Critique", 
                 grade: "?", 
-                appreciation: "Erreur critique dans le code de correction.", 
-                transcription: e.message, 
+                appreciation: "Erreur Scan AI : " + e.message, 
+                transcription: "", 
                 mistakes: [] 
             };
         }
