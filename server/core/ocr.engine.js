@@ -1,8 +1,8 @@
 const fetch = require('node-fetch');
 
 /**
- * 👁️ MOTEUR OCR DÉDIÉ (Google Cloud Vision)
- * Lit le texte pixel par pixel sans essayer de le comprendre.
+ * 👁️ MOTEUR OCR V2 (AVEC RETOUR D'ERREUR)
+ * Renvoie l'erreur exacte si Google refuse de lire.
  */
 const OCREngine = {
     extractText: async (base64Image) => {
@@ -26,23 +26,21 @@ const OCREngine = {
 
             const data = await response.json();
             
+            // SI ERREUR API (Clé invalide, API non activée...)
             if (data.error) {
                 console.error("❌ [OCR] Erreur API :", data.error.message);
-                return null;
+                return { success: false, error: data.error.message };
             }
 
             const fullText = data.responses[0]?.fullTextAnnotation?.text;
             if (!fullText) {
-                console.warn("⚠️ [OCR] Aucun texte détecté.");
-                return "";
+                return { success: true, text: "" }; // Image lue mais vide
             }
 
-            console.log("✅ [OCR] Lecture réussie.");
-            return fullText;
+            return { success: true, text: fullText };
 
         } catch (e) {
-            console.error("❌ [OCR] Crash Réseau :", e.message);
-            return null;
+            return { success: false, error: "Crash Réseau: " + e.message };
         }
     }
 };
