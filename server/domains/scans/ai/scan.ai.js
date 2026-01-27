@@ -12,34 +12,36 @@ const streamToBuffer = async (stream) => {
 
 const ScanAI = {
     correctCopy: async (copyUrl, subjectUrls, instructions, studentList) => {
-        console.log("👁️ [SCAN-AI] Correction V127 (Transcription Hardcore)...");
+        console.log("👁️ [SCAN-AI] Correction V128 (Ciblage Élève Uniquement)...");
 
         const rosterText = studentList.map(s => `${s.firstName} ${s.lastName}`).join(', ');
 
-        const system = `Tu es un automate de transcription JSON.
+        const system = `RÔLE : Correcteur de copies scolaires.
         
-        MISSION UNIQUE :
-        1. Lis le texte manuscrit sur l'image.
-        2. Recopie-le MOT POUR MOT (Transcription littérale).
-        3. Si tu vois une faute ou une erreur par rapport à la consigne "${instructions}", insère une correction.
+        INSTRUCTION CRITIQUE :
+        Tu vas recevoir des images de "SUJET" (le manuel) et une image de "COPIE ÉLÈVE" (manuscrite).
+        --> NE TRANSCIS PAS LE SUJET ! IGNORE LE TEXTE DU SUJET DANS LA SORTIE.
+        --> CONCENTRE-TOI UNIQUEMENT SUR LA COPIE MANUSCRITE DE L'ÉLÈVE.
+        
+        TA MISSION SUR LA COPIE ÉLÈVE :
+        1. Recopie le texte de l'élève tel quel (en Noir).
+        2. Si tu vois une faute (orthographe, sens, grammaire), insère une correction juste après en ROUGE.
+           Format HTML OBLIGATOIRE : <span style="color:#ef4444; font-weight:bold;"> [CORRECTION] </span>
+        3. Note la copie (A, B, C) selon la qualité des réponses par rapport au sujet.
 
-        RÈGLES DE FORMATAGE (Non négociables) :
-        - Le texte de l'élève est en texte normal (Noir par défaut).
-        - Tes corrections sont OBLIGATOIREMENT entre crochets rouges : <span style="color:#ef4444; font-weight:bold;"> [CORRECTION] </span>.
-        - INTERDICTION de faire une liste à puces pour la transcription. Garde les phrases de l'élève.
-        - INTERDICTION d'ajouter des phrases de politesse ("Voici l'analyse", "Bonjour").
-
-        FORMAT DE SORTIE JSON STRICT :
+        RÈGLES DE SORTIE JSON (INTERDICTION DE PARLER AVANT OU APRÈS) :
         {
-            "studentName": "Nom trouvé sur la copie (ou Inconnu)",
-            "grade": "Note (A+, A, B, C)",
-            "appreciation": "Bilan global en 2 phrases max.",
-            "transcription": "Le texte exact de l'élève avec tes corrections rouges insérées au fil de l'eau.",
-            "mistakes": ["Liste brève des concepts non acquis"]
-        }`;
+            "studentName": "Nom trouvé sur la COPIE (ou Inconnu)",
+            "grade": "Note (A, B, C)",
+            "appreciation": "Commentaire général sur le travail de l'élève.",
+            "transcription": "Le texte de l'élève avec tes corrections rouges insérées.",
+            "mistakes": ["Liste des erreurs principales"]
+        }
+        
+        Identifie l'élève parmi : [${rosterText}].`;
 
         const promptParts = [
-            { text: "START JSON GENERATION." }
+            { text: `CONSIGNES DE CORRECTION : ${instructions}` }
         ];
 
         const getImageData = async (url) => {
@@ -59,22 +61,28 @@ const ScanAI = {
         };
 
         try {
+            // 1. Envoi des Sujets avec étiquette CLAIRE
             if (subjectUrls) {
                 for (const url of subjectUrls) {
                     const b64 = await getImageData(url);
-                    if (b64) promptParts.push({ inlineData: { mimeType: "image/jpeg", data: b64 } });
+                    if (b64) {
+                        promptParts.push({ text: "IMAGE CONTEXTE (SUJET DU LIVRE) - NE PAS TRANSCRIRE CE TEXTE :" });
+                        promptParts.push({ inlineData: { mimeType: "image/jpeg", data: b64 } });
+                    }
                 }
             }
 
+            // 2. Envoi de la Copie avec étiquette CIBLE
             const copyB64 = await getImageData(copyUrl);
             if (copyB64) {
+                promptParts.push({ text: "IMAGE CIBLE (COPIE DE L'ÉLÈVE) - À TRANSCRIRE ET CORRIGER :" });
                 promptParts.push({ inlineData: { mimeType: "image/jpeg", data: copyB64 } });
-                promptParts.push({ text: "IMAGE À TRANSCRIRE." });
+                promptParts.push({ text: "GÉNÈRE LE JSON DE CORRECTION MAINTENANT." });
             } else {
                 return {
-                    studentName: "Image Illisible",
+                    studentName: "Erreur",
                     grade: "C",
-                    appreciation: "Fichier non trouvé.",
+                    appreciation: "Image copie illisible.",
                     transcription: "Erreur technique.",
                     mistakes: []
                 };
@@ -87,7 +95,7 @@ const ScanAI = {
             return { 
                 studentName: "Erreur", 
                 grade: "?", 
-                appreciation: "Erreur critique IA.", 
+                appreciation: "Crash IA.", 
                 transcription: e.message, 
                 mistakes: [] 
             };
