@@ -12,37 +12,34 @@ const streamToBuffer = async (stream) => {
 
 const ScanAI = {
     correctCopy: async (copyUrl, subjectUrls, instructions, studentList) => {
-        console.log("👁️ [SCAN-AI] Correction V126 (Le Retour du Prof)...");
+        console.log("👁️ [SCAN-AI] Correction V127 (Transcription Hardcore)...");
 
         const rosterText = studentList.map(s => `${s.firstName} ${s.lastName}`).join(', ');
 
-        // ON REVIENT AU PROMPT PEDAGOGIQUE EFFICACE + INSTRUCTION DE FORMATAGE
-        const system = `Tu es un Assistant Pédagogique Expert.
+        const system = `Tu es un automate de transcription JSON.
         
-        TES OBJECTIFS :
-        1. Identifier l'élève parmi : [${rosterText}].
-        2. Transcrire le texte de l'élève (OCR) et insérer tes corrections directement dedans.
-        3. Évaluer le travail selon : "${instructions}".
-        
-        FORMATAGE OBLIGATOIRE (HTML) :
-        - Le texte de l'élève doit rester normal.
-        - TES corrections/commentaires doivent être insérés là où il y a une faute, entourés de cette balise : 
-          <span style="color:#ef4444; font-weight:bold;"> [TA CORRECTION] </span>
-        - Exemple : "L'élève a écrit : Je mange <span style="color:#ef4444; font-weight:bold;">[manges -> mange]</span> une pomme."
-        
-        FORMAT DE SORTIE (JSON) :
+        MISSION UNIQUE :
+        1. Lis le texte manuscrit sur l'image.
+        2. Recopie-le MOT POUR MOT (Transcription littérale).
+        3. Si tu vois une faute ou une erreur par rapport à la consigne "${instructions}", insère une correction.
+
+        RÈGLES DE FORMATAGE (Non négociables) :
+        - Le texte de l'élève est en texte normal (Noir par défaut).
+        - Tes corrections sont OBLIGATOIREMENT entre crochets rouges : <span style="color:#ef4444; font-weight:bold;"> [CORRECTION] </span>.
+        - INTERDICTION de faire une liste à puces pour la transcription. Garde les phrases de l'élève.
+        - INTERDICTION d'ajouter des phrases de politesse ("Voici l'analyse", "Bonjour").
+
+        FORMAT DE SORTIE JSON STRICT :
         {
-            "studentName": "Nom trouvé ou Inconnu",
-            "grade": "Note (A+, A, B ou C)",
-            "appreciation": "Ton avis global en 2 phrases.",
-            "transcription": "Le texte complet de l'élève avec tes corrections en ROUGE insérées dedans.",
-            "mistakes": ["Liste des fautes principales"]
-        }
-        
-        IMPORTANT : Ne fais PAS de 'bounding box'. Fais de l'analyse de texte.`;
+            "studentName": "Nom trouvé sur la copie (ou Inconnu)",
+            "grade": "Note (A+, A, B, C)",
+            "appreciation": "Bilan global en 2 phrases max.",
+            "transcription": "Le texte exact de l'élève avec tes corrections rouges insérées au fil de l'eau.",
+            "mistakes": ["Liste brève des concepts non acquis"]
+        }`;
 
         const promptParts = [
-            { text: "ANALYSE CETTE COPIE." }
+            { text: "START JSON GENERATION." }
         ];
 
         const getImageData = async (url) => {
@@ -72,7 +69,7 @@ const ScanAI = {
             const copyB64 = await getImageData(copyUrl);
             if (copyB64) {
                 promptParts.push({ inlineData: { mimeType: "image/jpeg", data: copyB64 } });
-                promptParts.push({ text: "Voici la copie de l'élève." });
+                promptParts.push({ text: "IMAGE À TRANSCRIRE." });
             } else {
                 return {
                     studentName: "Image Illisible",

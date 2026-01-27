@@ -37,11 +37,11 @@ app.get('/uploads/:filename', (req, res) => {
     res.status(404).send('Fichier introuvable.');
 });
 
-// ROUTE V126
+// ROUTE V127 (TRANSCRIPTION FORCEE)
 app.get('/api/check-deploy', (req, res) => {
     res.json({ 
         status: "OK", 
-        version: "V126_BACK_TO_BASICS", 
+        version: "V127_PHOTOCOPIEUSE", 
         bootId: SERVER_BOOT_ID 
     });
 });
@@ -70,4 +70,4 @@ if (fs.existsSync(distPath)) {
         res.sendFile(path.join(distPath, 'index.html'));
     });
 }
-app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V126 UP`));
+app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V127 UP`));
