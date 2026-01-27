@@ -37,11 +37,11 @@ app.get('/uploads/:filename', (req, res) => {
     res.status(404).send('Fichier introuvable.');
 });
 
-// ROUTE V131 (FORCE REFRESH)
+// ROUTE V132 (FRANCOPHONE RIGIDE)
 app.get('/api/check-deploy', (req, res) => {
     res.json({ 
         status: "OK", 
-        version: "V131_FORCE_RECALC", 
+        version: "V132_FRENCH_ONLY", 
         bootId: SERVER_BOOT_ID 
     });
 });
@@ -70,4 +70,4 @@ if (fs.existsSync(distPath)) {
         res.sendFile(path.join(distPath, 'index.html'));
     });
 }
-app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V131 UP`));
+app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V132 UP`));
