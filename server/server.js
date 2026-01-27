@@ -37,11 +37,11 @@ app.get('/uploads/:filename', (req, res) => {
     res.status(404).send('Fichier introuvable.');
 });
 
-// ROUTE V141 (TRANSCRIPTION FORCEE)
+// ROUTE V142 (DEBUG MODE)
 app.get('/api/check-deploy', (req, res) => {
     res.json({ 
         status: "OK", 
-        version: "V141_FORCE_TEXT", 
+        version: "V142_DEBUG_EMPTY", 
         bootId: SERVER_BOOT_ID 
     });
 });
@@ -70,4 +70,4 @@ if (fs.existsSync(distPath)) {
         res.sendFile(path.join(distPath, 'index.html'));
     });
 }
-app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V141 (TEXTE GARANTI) UP`));
+app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V142 UP`));

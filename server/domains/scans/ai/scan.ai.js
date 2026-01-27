@@ -13,7 +13,7 @@ const streamToBuffer = async (stream) => {
 
 const ScanAI = {
     correctCopy: async (copyUrl, subjectUrls, instructions, studentList) => {
-        console.log("👁️ [SCAN-AI] Correction V141 (Sécurité Transcription)...");
+        console.log("👁️ [SCAN-AI] Correction V142 (Debug Vide)...");
 
         const rosterText = studentList.map(s => `${s.firstName} ${s.lastName}`).join(', ');
 
@@ -32,81 +32,86 @@ const ScanAI = {
 
         const copyB64 = await getImageData(copyUrl);
         if (!copyB64) {
-            return { studentName: "Erreur", grade: "?", appreciation: "Image illisible.", transcription: "", mistakes: [] };
+            return { studentName: "Erreur", grade: "?", appreciation: "Image illisible.", transcription: "Le téléchargement du Drive a échoué.", mistakes: [] };
         }
 
-        // --- 1. LECTURE PAR GOOGLE VISION ---
+        // TENTATIVE OCR VISION API
         let ocrText = await OCREngine.extractText(copyB64);
-        
+        let debugSource = "";
+
         let promptParts = [];
         let systemContext = "";
 
-        if (ocrText !== null) {
-            console.log("📝 [SCAN-AI] OCR Réussi (Taille: " + ocrText.length + " chars)");
+        if (ocrText && ocrText.length > 10) {
+            console.log("✅ OCR VISION SUCCESS");
+            debugSource = "[SOURCE: GOOGLE VISION API]";
             
-            systemContext = `Tu es un professeur correcteur scrupuleux.
-            
-            DONNÉES :
-            J'ai utilisé un scanner OCR pour extraire le texte brut de l'image. Le voici :
+            systemContext = `Tu es un assistant correcteur.
+            Voici le texte brut extrait d'une copie :
             """
             ${ocrText}
             """
             
-            TA TÂCHE PRINCIPALE (TRANSCRIPTION) :
-            1. RECOPIE INTÉGRALEMENT ce texte brut dans le champ 'transcription'.
-            2. Corrige uniquement les fautes de lecture de l'OCR (ex: 'l' au lieu de '1').
-            3. Insère tes corrections PÉDAGOGIQUES en rouge : <span style='color:#ef4444; font-weight:bold;'>[CORRECTION]</span>.
-            
-            TA TÂCHE SECONDAIRE (ÉVALUATION) :
-            4. Identifie l'élève : [${rosterText}].
-            5. Note (A-C) et commente.
+            TA TÂCHE :
+            1. Remets ce texte en forme (corrige les fautes de lecture OCR).
+            2. Identifie l'élève : [${rosterText}].
+            3. Ajoute tes corrections en rouge HTML : <span style='color:#ef4444; font-weight:bold;'>[CORRECTION]</span>.
             
             FORMAT JSON OBLIGATOIRE :
             {
                 "studentName": "Nom",
                 "grade": "Note",
                 "appreciation": "Avis",
-                "transcription": "LE TEXTE COMPLET DE L'ÉLÈVE + TES CORRECTIONS.",
+                "transcription": "Texte...",
                 "mistakes": []
             }`;
-
-            promptParts.push({ text: `CONSIGNE DU DEVOIR : "${instructions}"\n\nGÉNÈRE LE JSON MAINTENANT.` });
+            
+            promptParts.push({ text: `CONSIGNE : ${instructions}` });
 
         } else {
-            console.warn("⚠️ [SCAN-AI] Fallback Vision (OCR échoué).");
-            systemContext = `Tu es un professeur. 
-            IMPORTANT : Dans le champ 'transcription', tu DOIS recopier tout le texte que tu lis sur l'image. Ne fais pas de résumé.
+            console.warn("⚠️ OCR VISION FAILED -> GEMINI VISION");
+            debugSource = "[SOURCE: GEMINI VISION FALLBACK - OCR ECHOUÉ]";
             
-            FORMAT JSON OBLIGATOIRE :
-            { "studentName": "...", "grade": "...", "appreciation": "...", "transcription": "TEXTE COMPLET...", "mistakes": [] }`;
+            systemContext = `RÔLE : Machine de transcription OCR.
+            TA MISSION :
+            1. Transcris TOUT le texte visible sur cette image.
+            2. Si tu ne peux pas lire, écris "ILLISIBLE".
+            3. Ensuite, ajoute des corrections en rouge HTML.
+            
+            FORMAT JSON :
+            {
+                "studentName": "Nom",
+                "grade": "Note",
+                "appreciation": "Avis",
+                "transcription": "Texte...",
+                "mistakes": []
+            }`;
             
             promptParts.push({ inlineData: { mimeType: "image/jpeg", data: copyB64 } });
-            promptParts.push({ text: `CONSIGNE : ${instructions}` });
         }
 
         try {
             const rawText = await AIEngine.ask(promptParts, systemContext);
             const result = AIEngine.sanitizeJSON(rawText);
 
-            // --- FILET DE SÉCURITÉ V141 ---
-            // Si l'IA a la flemme et renvoie une transcription vide ou trop courte,
-            // on remplace par le texte brut de l'OCR. Mieux vaut du texte brut que rien.
-            if ((!result.transcription || result.transcription.length < 10) && ocrText) {
-                console.warn("⚠️ [SCAN-AI] Transcription IA vide. Injection du texte OCR brut.");
-                result.transcription = "⚠️ (Mode Brut OCR) :\n\n" + ocrText.replace(/\n/g, '<br/>');
-                if (!result.appreciation || result.appreciation === "Pas d'avis.") {
-                    result.appreciation = "L'IA n'a pas réussi à structurer la correction, mais le texte a été lu.";
-                }
+            // --- V142 : DETECTION DE VIDE ---
+            if (!result.transcription || result.transcription.length < 5 || result.transcription.includes("Pas de détail")) {
+                console.error("❌ TRANSCRIPTION VIDE DETECTÉE");
+                result.transcription = `⚠️ ECHEC TRANSCRIPTION\n\n${debugSource}\n\nL'IA a renvoyé un résultat vide. \n\nSi Google Vision était actif, voici le texte brut :\n${ocrText || "Aucun texte brut extrait."}`;
+                result.appreciation = "Erreur de traitement (Voir détail).";
+            } else {
+                // On ajoute la source pour info
+                result.transcription = `${debugSource}\n\n` + result.transcription;
             }
 
             return result;
 
         } catch (e) {
             return { 
-                studentName: "Erreur", 
+                studentName: "Crash", 
                 grade: "?", 
                 appreciation: "Crash IA.", 
-                transcription: "Erreur technique : " + e.message, 
+                transcription: `Erreur Technique : ${e.message}\n\n${debugSource}`, 
                 mistakes: [] 
             };
         }
