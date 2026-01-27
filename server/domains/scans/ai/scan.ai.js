@@ -13,7 +13,7 @@ const streamToBuffer = async (stream) => {
 
 const ScanAI = {
     correctCopy: async (copyUrl, subjectUrls, instructions, studentList) => {
-        console.log("👁️ [SCAN-AI] Correction V142 (Debug Vide)...");
+        console.log("👁️ [SCAN-AI] Correction V143 (Action Immédiate)...");
 
         const rosterText = studentList.map(s => `${s.firstName} ${s.lastName}`).join(', ');
 
@@ -31,77 +31,58 @@ const ScanAI = {
         };
 
         const copyB64 = await getImageData(copyUrl);
-        if (!copyB64) {
-            return { studentName: "Erreur", grade: "?", appreciation: "Image illisible.", transcription: "Le téléchargement du Drive a échoué.", mistakes: [] };
-        }
+        if (!copyB64) return { studentName: "Erreur", grade: "?", appreciation: "Image HS", transcription: "", mistakes: [] };
 
-        // TENTATIVE OCR VISION API
+        // --- 1. LECTURE PAR GOOGLE VISION ---
         let ocrText = await OCREngine.extractText(copyB64);
-        let debugSource = "";
-
+        
         let promptParts = [];
-        let systemContext = "";
+        let systemContext = `Tu es un MOTEUR DE TRANSCRIPTION ET CORRECTION JSON.
+        Ne parle pas. N'attends pas. Exécute.
+        
+        FORMAT JSON OBLIGATOIRE :
+        {
+            "studentName": "Nom identifié ou Inconnu",
+            "grade": "Note (A, B, C)",
+            "appreciation": "Commentaire.",
+            "transcription": "Texte élève complet avec corrections en rouge <span style='color:#ef4444; font-weight:bold;'>[CORR]</span>.",
+            "mistakes": []
+        }
+        
+        Liste élèves connus : [${rosterText}].`;
 
         if (ocrText && ocrText.length > 10) {
-            console.log("✅ OCR VISION SUCCESS");
-            debugSource = "[SOURCE: GOOGLE VISION API]";
+            console.log("✅ OCR OK. Injection directe.");
             
-            systemContext = `Tu es un assistant correcteur.
-            Voici le texte brut extrait d'une copie :
+            // ICI LE CHANGEMENT : On injecte le texte COMME UNE COMMANDE, pas comme un contexte.
+            promptParts.push({ text: `
+            VOICI LE TEXTE À CORRIGER MAINTENANT :
             """
             ${ocrText}
             """
             
-            TA TÂCHE :
-            1. Remets ce texte en forme (corrige les fautes de lecture OCR).
-            2. Identifie l'élève : [${rosterText}].
-            3. Ajoute tes corrections en rouge HTML : <span style='color:#ef4444; font-weight:bold;'>[CORRECTION]</span>.
+            CONSIGNE DU PROFESSEUR : "${instructions}"
             
-            FORMAT JSON OBLIGATOIRE :
-            {
-                "studentName": "Nom",
-                "grade": "Note",
-                "appreciation": "Avis",
-                "transcription": "Texte...",
-                "mistakes": []
-            }`;
-            
-            promptParts.push({ text: `CONSIGNE : ${instructions}` });
+            ACTION :
+            1. Nettoie ce texte (enlève les erreurs OCR).
+            2. Corrige-le selon la consigne.
+            3. Donne moi le JSON immédiatement.
+            ` });
 
         } else {
-            console.warn("⚠️ OCR VISION FAILED -> GEMINI VISION");
-            debugSource = "[SOURCE: GEMINI VISION FALLBACK - OCR ECHOUÉ]";
-            
-            systemContext = `RÔLE : Machine de transcription OCR.
-            TA MISSION :
-            1. Transcris TOUT le texte visible sur cette image.
-            2. Si tu ne peux pas lire, écris "ILLISIBLE".
-            3. Ensuite, ajoute des corrections en rouge HTML.
-            
-            FORMAT JSON :
-            {
-                "studentName": "Nom",
-                "grade": "Note",
-                "appreciation": "Avis",
-                "transcription": "Texte...",
-                "mistakes": []
-            }`;
-            
+            console.warn("⚠️ Fallback Vision.");
             promptParts.push({ inlineData: { mimeType: "image/jpeg", data: copyB64 } });
+            promptParts.push({ text: `Lis cette image et corrige le devoir selon la consigne : "${instructions}". RENVOIE LE JSON.` });
         }
 
         try {
             const rawText = await AIEngine.ask(promptParts, systemContext);
             const result = AIEngine.sanitizeJSON(rawText);
 
-            // --- V142 : DETECTION DE VIDE ---
-            if (!result.transcription || result.transcription.length < 5 || result.transcription.includes("Pas de détail")) {
-                console.error("❌ TRANSCRIPTION VIDE DETECTÉE");
-                result.transcription = `⚠️ ECHEC TRANSCRIPTION\n\n${debugSource}\n\nL'IA a renvoyé un résultat vide. \n\nSi Google Vision était actif, voici le texte brut :\n${ocrText || "Aucun texte brut extrait."}`;
-                result.appreciation = "Erreur de traitement (Voir détail).";
-            } else {
-                // On ajoute la source pour info
-                result.transcription = `${debugSource}\n\n` + result.transcription;
+            if ((!result.transcription || result.transcription.length < 5) && ocrText) {
+                result.transcription = `[SOURCE: GOOGLE VISION - IA MUETTE]\n\n${ocrText.replace(/\n/g, '<br/>')}`;
+            } else if (ocrText) {
+                 result.transcription = `[SOURCE: GOOGLE VISION + CORRECTION IA]\n\n${result.transcription}`;
             }
 
             return result;
@@ -111,7 +92,7 @@ const ScanAI = {
                 studentName: "Crash", 
                 grade: "?", 
                 appreciation: "Crash IA.", 
-                transcription: `Erreur Technique : ${e.message}\n\n${debugSource}`, 
+                transcription: e.message, 
                 mistakes: [] 
             };
         }
