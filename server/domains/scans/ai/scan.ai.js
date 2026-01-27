@@ -1,4 +1,5 @@
 const AIEngine = require('../../../core/ai.engine');
+const OCREngine = require('../../../core/ocr.engine'); 
 const StructureDrive = require('../../structure/experts/structure.drive'); 
 
 const streamToBuffer = async (stream) => {
@@ -12,32 +13,9 @@ const streamToBuffer = async (stream) => {
 
 const ScanAI = {
     correctCopy: async (copyUrl, subjectUrls, instructions, studentList) => {
-        console.log("👁️ [SCAN-AI] Correction V132 (Français Forcé)...");
+        console.log("👁️ [SCAN-AI] Correction V141 (Sécurité Transcription)...");
 
         const rosterText = studentList.map(s => `${s.firstName} ${s.lastName}`).join(', ');
-
-        // PROMPT ULTRA-DIRECTIF
-        const system = `Tu es un automate de correction FRANÇAIS.
-        
-        RÈGLES ABSOLUES (Sous peine de dysfonctionnement) :
-        1. LANGUE : TU DOIS RÉPONDRE EN FRANÇAIS UNIQUEMENT. JAMAIS D'ANGLAIS.
-        2. FORMAT : Tu dois renvoyer STRICTEMENT l'objet JSON ci-dessous.
-        3. CONTENU : Ne crée pas de sous-objets pour les questions. Mets toute la transcription dans un seul bloc de texte avec des sauts de ligne \\n.
-        
-        STRUCTURE JSON OBLIGATOIRE :
-        {
-            "studentName": "Nom trouvé (ou Inconnu)",
-            "grade": "Note (A, B, C)",
-            "appreciation": "Commentaire global en FRANÇAIS (2 phrases).",
-            "transcription": "Recopie ici tout le texte de l'élève. Insère tes corrections en rouge avec : <span style='color:#ef4444; font-weight:bold;'>[CORRECTION]</span>.",
-            "mistakes": ["Orthographe", "Grammaire", "Sens"]
-        }
-        
-        Liste élèves : [${rosterText}].`;
-
-        const promptParts = [
-            { text: `SUJET/CONSIGNE : ${instructions}` }
-        ];
 
         const getImageData = async (url) => {
             try {
@@ -45,47 +23,90 @@ const ScanAI = {
                     const fileId = url.split('/proxy/')[1];
                     const stream = await StructureDrive.getFileStream(fileId);
                     const buffer = await streamToBuffer(stream);
-                    if (buffer.length < 100) throw new Error("Fichier vide");
+                    if (buffer.length < 100) throw new Error("Vide");
                     return buffer.toString('base64');
                 }
                 return null;
-            } catch (e) {
-                console.error("Err Image", e.message);
-                return null;
-            }
+            } catch (e) { return null; }
         };
 
+        const copyB64 = await getImageData(copyUrl);
+        if (!copyB64) {
+            return { studentName: "Erreur", grade: "?", appreciation: "Image illisible.", transcription: "", mistakes: [] };
+        }
+
+        // --- 1. LECTURE PAR GOOGLE VISION ---
+        let ocrText = await OCREngine.extractText(copyB64);
+        
+        let promptParts = [];
+        let systemContext = "";
+
+        if (ocrText !== null) {
+            console.log("📝 [SCAN-AI] OCR Réussi (Taille: " + ocrText.length + " chars)");
+            
+            systemContext = `Tu es un professeur correcteur scrupuleux.
+            
+            DONNÉES :
+            J'ai utilisé un scanner OCR pour extraire le texte brut de l'image. Le voici :
+            """
+            ${ocrText}
+            """
+            
+            TA TÂCHE PRINCIPALE (TRANSCRIPTION) :
+            1. RECOPIE INTÉGRALEMENT ce texte brut dans le champ 'transcription'.
+            2. Corrige uniquement les fautes de lecture de l'OCR (ex: 'l' au lieu de '1').
+            3. Insère tes corrections PÉDAGOGIQUES en rouge : <span style='color:#ef4444; font-weight:bold;'>[CORRECTION]</span>.
+            
+            TA TÂCHE SECONDAIRE (ÉVALUATION) :
+            4. Identifie l'élève : [${rosterText}].
+            5. Note (A-C) et commente.
+            
+            FORMAT JSON OBLIGATOIRE :
+            {
+                "studentName": "Nom",
+                "grade": "Note",
+                "appreciation": "Avis",
+                "transcription": "LE TEXTE COMPLET DE L'ÉLÈVE + TES CORRECTIONS.",
+                "mistakes": []
+            }`;
+
+            promptParts.push({ text: `CONSIGNE DU DEVOIR : "${instructions}"\n\nGÉNÈRE LE JSON MAINTENANT.` });
+
+        } else {
+            console.warn("⚠️ [SCAN-AI] Fallback Vision (OCR échoué).");
+            systemContext = `Tu es un professeur. 
+            IMPORTANT : Dans le champ 'transcription', tu DOIS recopier tout le texte que tu lis sur l'image. Ne fais pas de résumé.
+            
+            FORMAT JSON OBLIGATOIRE :
+            { "studentName": "...", "grade": "...", "appreciation": "...", "transcription": "TEXTE COMPLET...", "mistakes": [] }`;
+            
+            promptParts.push({ inlineData: { mimeType: "image/jpeg", data: copyB64 } });
+            promptParts.push({ text: `CONSIGNE : ${instructions}` });
+        }
+
         try {
-            if (subjectUrls) {
-                for (const url of subjectUrls) {
-                    const b64 = await getImageData(url);
-                    if (b64) promptParts.push({ inlineData: { mimeType: "image/jpeg", data: b64 } });
+            const rawText = await AIEngine.ask(promptParts, systemContext);
+            const result = AIEngine.sanitizeJSON(rawText);
+
+            // --- FILET DE SÉCURITÉ V141 ---
+            // Si l'IA a la flemme et renvoie une transcription vide ou trop courte,
+            // on remplace par le texte brut de l'OCR. Mieux vaut du texte brut que rien.
+            if ((!result.transcription || result.transcription.length < 10) && ocrText) {
+                console.warn("⚠️ [SCAN-AI] Transcription IA vide. Injection du texte OCR brut.");
+                result.transcription = "⚠️ (Mode Brut OCR) :\n\n" + ocrText.replace(/\n/g, '<br/>');
+                if (!result.appreciation || result.appreciation === "Pas d'avis.") {
+                    result.appreciation = "L'IA n'a pas réussi à structurer la correction, mais le texte a été lu.";
                 }
             }
 
-            const copyB64 = await getImageData(copyUrl);
-            if (copyB64) {
-                promptParts.push({ inlineData: { mimeType: "image/jpeg", data: copyB64 } });
-                promptParts.push({ text: "CORRIGE CETTE COPIE EN FRANÇAIS." });
-            } else {
-                return {
-                    studentName: "Image Illisible",
-                    grade: "C",
-                    appreciation: "Fichier non trouvé.",
-                    transcription: "Erreur technique.",
-                    mistakes: []
-                };
-            }
-
-            const rawText = await AIEngine.ask(promptParts, system);
-            return AIEngine.sanitizeJSON(rawText);
+            return result;
 
         } catch (e) {
             return { 
                 studentName: "Erreur", 
                 grade: "?", 
-                appreciation: "Erreur critique IA.", 
-                transcription: e.message, 
+                appreciation: "Crash IA.", 
+                transcription: "Erreur technique : " + e.message, 
                 mistakes: [] 
             };
         }
