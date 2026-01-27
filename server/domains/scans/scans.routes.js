@@ -35,7 +35,7 @@ router.post('/upload', upload.single('file'), asyncHandler(async (req, res) => {
         finalUrl = `/api/structure/proxy/${driveFile.id}`;
         try { fs.unlinkSync(req.file.path); } catch(e) {}
     } catch (e) {
-        return res.status(500).json({ error: "Le Drive est déconnecté. Impossible de sauvegarder l'image." });
+        return res.status(500).json({ error: "Erreur Drive." });
     }
     const update = {}; 
     if (type === 'SUBJECT') update.$push = { subjectUrls: finalUrl }; 
@@ -46,7 +46,7 @@ router.post('/upload', upload.single('file'), asyncHandler(async (req, res) => {
 
 router.delete('/sessions/:id', asyncHandler(async (req, res) => { await mongoose.model('ScanSession').findByIdAndDelete(req.params.id); res.json({ ok: true }); }));
 
-// --- CORRECTION V116 (MAPPING ROBUSTE) ---
+// --- ROUTE DE CORRECTION V131 (FORCE REFRESH) ---
 router.post('/correct/:sessionId', asyncHandler(async (req, res) => {
     const session = await mongoose.model('ScanSession').findById(req.params.sessionId);
     if (!session) return res.status(404).json({ error: "Session introuvable" });
@@ -54,39 +54,39 @@ router.post('/correct/:sessionId', asyncHandler(async (req, res) => {
     const students = await mongoose.model('Student').find({}, 'firstName lastName').lean();
     if (req.body.instructions) session.aiInstructions = req.body.instructions;
 
-    const existingCorrectionsMap = new Map();
-    if (session.corrections && session.corrections.length > 0) {
-        session.corrections.forEach(c => existingCorrectionsMap.set(c.originalUrl, c));
-    }
-
+    // ICI : ON NE REGARDE PLUS CE QUI EXISTE DÉJÀ. ON ECRASE TOUT.
+    // On repart d'une feuille blanche pour les corrections de cette session.
+    console.log(`♻️ [V131] Démarrage Recorrection FORCÉE pour ${session.copyUrls.length} copies.`);
+    
     const finalResults = [];
     
     for (const copyUrl of session.copyUrls) {
-        if (existingCorrectionsMap.has(copyUrl)) {
-            finalResults.push(existingCorrectionsMap.get(copyUrl));
-            continue;
-        }
-
+        // Protection Fichiers Perdus
         if (!copyUrl.includes('/proxy/')) {
-            finalResults.push({ originalUrl: copyUrl, studentName: "Perdu (Local)", grade: "N/A", appreciation: "Fichier local perdu.", mistakes: [] });
+            finalResults.push({ 
+                originalUrl: copyUrl, 
+                studentName: "Fichier Perdu", 
+                grade: "N/A", 
+                appreciation: "Image locale non retrouvée.", 
+                mistakes: [] 
+            });
             continue;
         }
 
         try {
+            console.log(`🤖 Analyse de : ${copyUrl}`);
             const aiResult = await ScanAI.correctCopy(copyUrl, session.subjectUrls, session.aiInstructions, students);
             
-            // MAPPING DE SÉCURITÉ : On s'assure que les champs existent peu importe la casse
-            // Le moteur V13 renvoie des clés minuscules (studentname, grade...)
             finalResults.push({ 
                 originalUrl: copyUrl,
                 studentName: aiResult.studentname || aiResult.studentName || "Inconnu",
                 grade: aiResult.grade || "?",
                 appreciation: aiResult.appreciation || "Pas d'avis.",
-                transcription: aiResult.transcription || aiResult.analyse || "Pas de détail.",
+                transcription: aiResult.transcription || aiResult.analyse || "Texte brut IA : " + JSON.stringify(aiResult),
                 mistakes: aiResult.mistakes || []
             });
         } catch (e) {
-            finalResults.push({ originalUrl: copyUrl, studentName: "Erreur IA", grade: "?", appreciation: "Erreur technique" });
+            finalResults.push({ originalUrl: copyUrl, studentName: "Erreur", grade: "?", appreciation: "Erreur Technique", transcription: e.message });
         }
     }
 

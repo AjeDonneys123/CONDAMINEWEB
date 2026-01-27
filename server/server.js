@@ -37,11 +37,11 @@ app.get('/uploads/:filename', (req, res) => {
     res.status(404).send('Fichier introuvable.');
 });
 
-// ROUTE V128 (SNIPER MODE)
+// ROUTE V131 (FORCE REFRESH)
 app.get('/api/check-deploy', (req, res) => {
     res.json({ 
         status: "OK", 
-        version: "V128_SNIPER_TARGET", 
+        version: "V131_FORCE_RECALC", 
         bootId: SERVER_BOOT_ID 
     });
 });
@@ -70,4 +70,4 @@ if (fs.existsSync(distPath)) {
         res.sendFile(path.join(distPath, 'index.html'));
     });
 }
-app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V128 UP`));
+app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V131 UP`));

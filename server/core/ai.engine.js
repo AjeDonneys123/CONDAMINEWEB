@@ -1,7 +1,7 @@
 const { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } = require("@google/generative-ai");
 
 /**
- * 🤖 MOTEUR IA - V19 (ROBUSTE + CLEANER)
+ * 🤖 MOTEUR IA - V20 (TRANSPARENCE TOTALE)
  */
 const AIEngine = {
     normalizeKeys: (obj) => {
@@ -14,7 +14,7 @@ const AIEngine = {
     },
 
     sanitizeJSON: (text) => {
-        if (!text) return { grade: "?", appreciation: "Vide.", transcription: "Rien." };
+        if (!text) return { grade: "?", appreciation: "IA Muette (Retour vide).", transcription: "L'IA n'a rien renvoyé." };
 
         let clean = text.replace(/```json/gi, "").replace(/```/gi, "").trim();
         
@@ -31,32 +31,34 @@ const AIEngine = {
 
             const norm = AIEngine.normalizeKeys(parsed);
 
+            // Vérification vitale
+            const trans = norm.transcription || norm.analyse || norm.details || norm.text;
+            if (!trans) throw new Error("JSON Valide mais sans transcription");
+
             return {
                 studentname: norm.studentname || "Inconnu",
                 grade: norm.grade || norm.note || "?",
                 appreciation: norm.appreciation || "Pas d'avis.",
-                transcription: norm.transcription || norm.analyse || "Pas de détail.",
+                transcription: trans,
                 mistakes: norm.mistakes || []
             };
 
         } catch (e) { 
-            console.warn("⚠️ Mode RAW.");
+            console.warn("⚠️ Mode RAW Fallback.");
             
-            // Si le JSON échoue, on cherche la note dans le texte pour sauver l'affichage
             let extractedGrade = "?";
-            const gradeMatch = text.match(/(?:Note|Grade)\s*[:=]\s*([A-C]\+?|\d{1,2}\/20)/i);
+            const gradeMatch = text.match(/(?:Note|Grade|Score)\s*[:=]\s*([A-C]\+?|\d{1,2}\/20)/i);
             if (gradeMatch) extractedGrade = gradeMatch[1].toUpperCase();
 
-            // Conversion markdown -> HTML pour les couleurs si l'IA a désobéi
             let htmlText = text
-                .replace(/\*\*(.*?)\*\*/g, '<span style="color:#ef4444; font-weight:bold;">$1</span>')
+                .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
                 .replace(/\n/g, '<br/>');
 
             return {
                 studentName: "Mode Texte",
                 grade: extractedGrade,
-                appreciation: "Format brut.",
-                transcription: htmlText, 
+                appreciation: "⚠️ Format IA non respecté (Voir détail).",
+                transcription: "🔴 CONTENU BRUT REÇU :\n\n" + htmlText, 
                 mistakes: []
             };
         }
@@ -78,15 +80,13 @@ const AIEngine = {
                     { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
                     { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
                     { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                ],
-                // On laisse un peu de créativité pour que l'analyse soit naturelle, pas robotique
-                generationConfig: { temperature: 0.4 }
+                ]
             });
             const result = await model.generateContent(prompt);
             return result.response.text();
         } catch (e) {
             console.error(`💥 CRASH GOOGLE :`, e.message);
-            return `ERREUR: ${e.message}`;
+            return `ERREUR GOOGLE: ${e.message}`;
         }
     }
 };
