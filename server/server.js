@@ -37,11 +37,11 @@ app.get('/uploads/:filename', (req, res) => {
     res.status(404).send('Fichier introuvable.');
 });
 
-// ROUTE V144 (DIAGNOSTIC ECRAN)
+// ROUTE V145 (INJONCTION DIRECTE)
 app.get('/api/check-deploy', (req, res) => {
     res.json({ 
         status: "OK", 
-        version: "V144_ERROR_DISPLAY", 
+        version: "V145_DIRECT_COMMAND", 
         bootId: SERVER_BOOT_ID 
     });
 });
@@ -70,4 +70,4 @@ if (fs.existsSync(distPath)) {
         res.sendFile(path.join(distPath, 'index.html'));
     });
 }
-app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V144 UP`));
+app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V145 UP`));
