@@ -1,3 +1,4 @@
+// [TEST QA] Ce commentaire sert juste à redémarrer le serveur pour tester la régression.
 const path = require('path');
 const fs = require('fs');
 const express = require('express');
