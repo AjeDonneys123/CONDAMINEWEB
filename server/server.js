@@ -24,14 +24,30 @@ app.get('/api/system/apply-status', (req, res) => {
     } else { res.json({ status: 'OK' }); }
 });
 
+// --- MODIFICATION ICI : LECTURE VERSION HUMAINE ---
 app.get('/api/system/version', (req, res) => {
-    exec('git rev-parse --short HEAD', (err, stdout) => {
-        if (err) return res.json({ hash: 'DEV-MODE' });
-        res.json({ hash: stdout.trim() });
-    });
+    try {
+        // On essaie de lire version.json (géré par git-auto.js)
+        const vPath = path.join(__dirname, 'version.json');
+        if (fs.existsSync(vPath)) {
+            const vData = JSON.parse(fs.readFileSync(vPath, 'utf8'));
+            // Retourne ex: "v1.95 (b218)"
+            return res.json({ hash: `v${vData.version} (b${vData.build})` });
+        }
+        
+        // Fallback sur package.json racine
+        const pkgPath = path.join(__dirname, '../package.json');
+        if (fs.existsSync(pkgPath)) {
+            const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+            return res.json({ hash: `v${pkg.version}` });
+        }
+
+        res.json({ hash: 'DEV' });
+    } catch (e) {
+        res.json({ hash: 'UNKNOWN' });
+    }
 });
 
-// --- MODIFICATION ICI : PROMPT "TEST UTILISATEUR STRICT" ---
 app.post('/api/system/analyze-risk', async (req, res) => {
     const { missing, filePath } = req.body;
     
@@ -47,12 +63,10 @@ app.post('/api/system/analyze-risk', async (req, res) => {
     2. Si une fonction disparait -> Demande de déclencher l'action correspondante.
 
     FORMAT :
-    "🧪 TEST : [Action visuelle simple] -> [Symptôme attendu]"
-
-    Exemple ID manquant : "🧪 TEST : Regarde la page d'accueil -> Vérifie si le contenu touche les bords (perte de marges) ou si le fond a disparu."`;
+    "🧪 TEST : [Action visuelle simple] -> [Symptôme attendu]"`;
     
     try {
-        const explanation = await AIEngine.ask(prompt, "Tu es un Expert QA qui ne parle qu'aux utilisateurs finaux, pas aux devs.");
+        const explanation = await AIEngine.ask(prompt, "Tu es un Expert QA qui ne parle qu'aux utilisateurs finaux.");
         res.json({ analysis: explanation });
     } catch (e) {
         res.json({ analysis: "Analyse IA indisponible." });
@@ -79,7 +93,7 @@ if (!fs.existsSync(uploadsPath)) fs.mkdirSync(uploadsPath, { recursive: true });
 app.use('/uploads', express.static(uploadsPath));
 app.get('/uploads/:filename', (req, res) => { const requestedFile = req.params.filename; const cleanName = decodeURIComponent(requestedFile).split('?')[0]; const filePath = path.join(uploadsPath, cleanName); if (fs.existsSync(filePath)) return res.sendFile(filePath); res.status(404).send('Fichier introuvable.'); });
 
-app.get('/api/check-deploy', (req, res) => { res.json({ status: "OK", version: "V9.0_TIME_LORD", bootId: SERVER_BOOT_ID }); });
+app.get('/api/check-deploy', (req, res) => { res.json({ status: "OK", version: "V9.3_VERSION_FIX", bootId: SERVER_BOOT_ID }); });
 
 app.use('/api/auth', require('./domains/auth/auth.routes'));
 app.use('/api/admin', require('./domains/admin/admin.routes'));
@@ -96,4 +110,4 @@ mongoose.connect(process.env.MONGODB_URI).then(() => console.log('✅ BDD CONNEC
 
 const distPath = path.resolve(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) { app.use(express.static(distPath)); app.get('*', (req, res) => { if (req.url.startsWith('/uploads/')) return res.status(404).send("Not found"); res.sendFile(path.join(distPath, 'index.html')); }); }
-app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V9.3 (User Tests) UP`));
+app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V9.3 (Version Fix) UP`));
