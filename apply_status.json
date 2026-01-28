@@ -1,12 +1,7 @@
 {
-  "status": "WARNING",
-  "message": "Régression Structure : SystemStatus.jsx",
-  "details": "Perdu : askAI",
-  "context": {
-    "missing": [
-      "askAI"
-    ],
-    "filePath": "client/src/features/prof/components/SystemStatus.jsx"
-  },
-  "timestamp": 1769608618598
+  "status": "OK",
+  "message": "Code appliqué",
+  "details": "1 fichiers mis à jour.",
+  "context": null,
+  "timestamp": 1769609250164
 }

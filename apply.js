@@ -1,4 +1,4 @@
-// @signatures: applyUpdate, extractSignatures, checkCssDependency, checkDeepClassIntegrity, checkDomIntegrity, checkLogicDensity, writeStatus, snapshot, saveDiff
+// @signatures: applyUpdate, checkCssDependency, saveDiff, snapshot, writeStatus
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
@@ -7,8 +7,8 @@ const statusFile = 'apply_status.json';
 const diffFile = 'temp_diff.json';
 
 console.log("------------------------------------------------");
-console.log("🛡️ [SYSTEM] Moteur V11.0 (The Oracle)");
-console.log("    Capacité : Diff Analysis & AI Diagnosis");
+console.log("🛡️ [SYSTEM] Moteur V13.0 (GOD MODE)");
+console.log("    Stratégie : 100% Analyse IA - Zéro Trust");
 console.log("------------------------------------------------");
 
 function writeStatus(type, message, details = null, context = null) {
@@ -17,45 +17,14 @@ function writeStatus(type, message, details = null, context = null) {
 }
 
 function saveDiff(oldContent, newContent, filePath) {
-    try {
-        fs.writeFileSync(diffFile, JSON.stringify({ oldContent, newContent, filePath }));
-    } catch (e) { console.error("Diff save failed"); }
+    try { fs.writeFileSync(diffFile, JSON.stringify({ oldContent, newContent, filePath })); } catch (e) {}
 }
 
 function snapshot() {
-    try {
-        execSync('git add .');
-        execSync('git commit -m "Auto-Save Pre-Update"');
-    } catch (e) { }
+    try { execSync('git add .'); execSync('git commit -m "Auto-Save"'); } catch (e) { }
 }
 
-function extractSignatures(content) {
-    const codeBody = content.replace(/^\/\/ @signatures:.*\n/, '');
-    const sigs = new Set();
-    const patterns = [ /function\s+([a-zA-Z0-9_]+)/g, /const\s+([a-zA-Z0-9_]+)\s*=\s*(?:async\s*)?\(/g, /export\s+default\s+function\s+([a-zA-Z0-9_]+)/g, /router\.(get|post|put|delete|patch)\s*\(\s*['"]([^'"]+)['"]/g, /class\s+([a-zA-Z0-9_]+)/g ];
-    patterns.forEach(regex => { let match; while ((match = regex.exec(codeBody)) !== null) { sigs.add(match[2] ? `${match[1].toUpperCase()} ${match[2]}` : match[1]); } });
-    return sigs;
-}
-
-function checkLogicDensity(oldContent, newContent) {
-    const logicKeywords = /\b(if|else|switch|case|return|await|async|map|filter|reduce|find|create|update|delete|useEffect|useState|useRef|try|catch|throw)\b/g;
-    const countLogic = (text) => { const matches = text.match(logicKeywords); return matches ? matches.length : 0; };
-    const oldScore = countLogic(oldContent);
-    const newScore = countLogic(newContent);
-    if (oldScore > 5 && newScore < oldScore * 0.90) { // Seuil 10%
-        return { oldScore, newScore, drop: Math.round((1 - newScore/oldScore)*100) };
-    }
-    return null;
-}
-
-function checkDomIntegrity(oldContent, newContent) {
-    const getIds = (text) => { const ids = new Set(); let match; while ((match = /\sid=['"]([^'"]+)['"]/g.exec(text))) ids.add(match[1]); return ids; };
-    const oldIds = getIds(oldContent);
-    const newIds = getIds(newContent);
-    const missing = [...oldIds].filter(id => !newIds.has(id));
-    return missing.length > 0 ? missing : null;
-}
-
+// Seule vérification mécanique conservée : L'existence physique des fichiers
 function checkCssDependency(jsxPath, jsxContent, rawUpdateContent) {
     const importMatch = jsxContent.match(/import\s+['"]\.\/([^'"]+\.css)['"]/);
     if (importMatch) {
@@ -67,24 +36,8 @@ function checkCssDependency(jsxPath, jsxContent, rawUpdateContent) {
         const headerTag = `[[[£ FILE: ${relativeCssPath} £]]]`;
         const existsInUpdate = rawUpdateContent.includes(headerTag);
         if (!existsOnDisk && !existsInUpdate) return { ok: false, missing: cssFileName };
-        return { ok: true, cssPath: existsOnDisk ? cssFullPath : null };
     }
-    return { ok: true, cssPath: null };
-}
-
-function checkDeepClassIntegrity(jsxContent, cssPath) {
-    if (!cssPath || !fs.existsSync(cssPath)) return null;
-    try {
-        const cssContent = fs.readFileSync(cssPath, 'utf8');
-        const definedClasses = new Set();
-        let match;
-        while ((match = /\.([a-zA-Z0-9_-]+)(?=\s*[:\{,])/g.exec(cssContent)) !== null) definedClasses.add(match[1]);
-        const usedClasses = new Set();
-        while ((match = /className\s*=\s*['"]([^'"]+)['"]/g.exec(jsxContent)) !== null) { match[1].split(/\s+/).forEach(c => { if(c && !c.includes('{')) usedClasses.add(c); }); }
-        const missing = [...usedClasses].filter(c => !definedClasses.has(c));
-        if (missing.length > 0 && missing.length < 5) return missing;
-    } catch (e) {}
-    return null;
+    return { ok: true };
 }
 
 function applyUpdate() {
@@ -93,7 +46,7 @@ function applyUpdate() {
         const rawContent = fs.readFileSync(inputFile, 'utf8');
         if (!rawContent || rawContent.trim().length < 10) return;
 
-        fs.writeFileSync(inputFile, '');
+        fs.writeFileSync(inputFile, ''); // Flush
         snapshot();
 
         const isForced = rawContent.includes('[FORCE_REDUCTION]');
@@ -114,86 +67,50 @@ function applyUpdate() {
                 const dirPath = path.dirname(fullPath);
                 if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, { recursive: true });
 
-                if (filePath === 'history.txt') {
-                    try {
-                        const existingContent = fs.existsSync(fullPath) ? fs.readFileSync(fullPath, 'utf8') : "";
-                        fs.writeFileSync(fullPath, existingContent + "\n" + newContent + '\n');
-                        if(!warningTriggered) writeStatus('OK', 'Historique mis à jour');
-                        processedCount++;
-                        continue;
-                    } catch (e) {}
+                // Exception Logs
+                if (filePath === 'history.txt' || filePath === 'apply_status.json' || filePath === 'temp_diff.json') {
+                    if(filePath === 'history.txt') fs.appendFileSync(fullPath, "\n" + newContent + "\n");
+                    continue;
                 }
 
                 const ext = path.extname(fullPath);
-                let currentWarning = null;
+                let oldContent = "";
+                if (fs.existsSync(fullPath)) oldContent = fs.readFileSync(fullPath, 'utf8');
 
-                if (fs.existsSync(fullPath) && !isForced) {
-                    const oldContent = fs.readFileSync(fullPath, 'utf8');
-                    
-                    if (['.js', '.jsx', '.ts'].includes(ext)) {
-                        // 1. SIGNATURES
-                        const oldSigs = extractSignatures(oldContent);
-                        const newSigs = extractSignatures(newContent);
-                        const missing = [...oldSigs].filter(s => !newSigs.has(s));
-                        if (missing.length > 0) {
-                            currentWarning = { title: `Régression Structure : ${path.basename(filePath)}`, msg: `Perdu : ${missing.join(', ')}`, context: { missing, filePath } };
-                        }
-
-                        // 2. DENSITE LOGIQUE
-                        if (!currentWarning) {
-                            const logicCheck = checkLogicDensity(oldContent, newContent);
-                            if (logicCheck) {
-                                currentWarning = {
-                                    title: `Chute de Logique : ${path.basename(filePath)}`,
-                                    msg: `Densité : -${logicCheck.drop}%`,
-                                    context: { missing: [`Densité -${logicCheck.drop}%`], filePath }
-                                };
-                            }
-                        }
-                    }
-
-                    // 3. DOM
-                    if (ext === '.jsx' && !currentWarning) {
-                        const missingIds = checkDomIntegrity(oldContent, newContent);
-                        if (missingIds) {
-                            currentWarning = { title: `Structure cassée : ${path.basename(filePath)}`, msg: `IDs disparus : ${missingIds.join(', ')}`, context: { missing: missingIds, filePath } };
-                        }
-                    }
-                    
-                    // SAUVEGARDE DIFF POUR ORACLE
-                    if (currentWarning) {
-                        saveDiff(oldContent, newContent, filePath);
-                        console.warn(`⚠️ ALERTE ORACLE ACTIVÉE POUR ${filePath}`);
-                    }
+                // Si le contenu est identique, on ignore (pas de spam IA)
+                if (oldContent.trim() === newContent.trim()) {
+                    console.log(`   💤 Identique : ${filePath}`);
+                    continue;
                 }
 
-                // 4. CSS
-                if (ext === '.jsx' && !currentWarning) {
+                // CHECK 1 : CSS Physique (Le seul check local)
+                if (ext === '.jsx') {
                     const cssCheck = checkCssDependency(filePath, newContent, rawContent);
                     if (!cssCheck.ok) {
-                        currentWarning = { title: `Style manquant`, msg: `${cssCheck.missing} introuvable`, context: { missing: ["Fichier CSS"], filePath } };
+                        writeStatus('ERROR', `Style manquant`, `${cssCheck.missing} introuvable`, null);
+                        console.error(`❌ ORPHELIN: ${filePath}`);
+                        continue; // Bloque l'écriture
                     }
                 }
 
-                if (['.js', '.jsx', '.ts'].includes(ext)) {
-                    const currentSigs = [...extractSignatures(newContent)].sort();
-                    if (currentSigs.length > 0) newContent = `// @signatures: ${currentSigs.join(', ')}\n` + newContent.replace(/^\/\/ @signatures:.*\n/, '');
-                }
-                
+                // ÉCRITURE
                 fs.writeFileSync(fullPath, newContent + '\n');
                 console.log(`   ✅ ÉCRIT : ${filePath}`);
-                
-                if (currentWarning) {
-                    writeStatus('WARNING', currentWarning.title, currentWarning.msg, currentWarning.context);
+                processedCount++;
+
+                // CHECK 2 : L'ORACLE (IA)
+                // On envoie TOUT fichier JS/JSX/CSS modifié à l'IA
+                if (['.js', '.jsx', '.css', '.html'].includes(ext)) {
+                    saveDiff(oldContent, newContent, filePath);
+                    writeStatus('JUDGING', `Analyse IA en cours...`, `Vérification : ${path.basename(filePath)}`, { filePath });
                     warningTriggered = true;
                 }
-                processedCount++;
             }
         }
 
         if (processedCount > 0 && !warningTriggered) {
-            setTimeout(() => writeStatus('OK', 'Code appliqué', `${processedCount} fichiers mis à jour.`), 500);
-            console.log(`✨ SUCCÈS : ${processedCount} fichiers traités.`);
+            // Cas rare où on a écrit un fichier non surveillé (ex: .json config)
+            writeStatus('OK', 'Mise à jour effectuée', `${processedCount} fichiers.`);
         }
 
     } catch (e) {
