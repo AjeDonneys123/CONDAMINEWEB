@@ -12,7 +12,7 @@ export default function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const bootIdRef = useRef(null);
 
-  // ✅ checkUpdate est là pour ne pas trigger la densité
+  // ✅ checkUpdate est là (pour ne pas trigger l'alerte de densité tout de suite)
   useEffect(() => {
     const checkUpdate = async () => {
       try {
@@ -23,9 +23,8 @@ export default function App() {
     checkUpdate();
   }, []);
 
-  // ❌ SUPPRESSION MASSIVE DE FONCTIONS
-  // handleLogout a disparu !
-  // handleBackToDev a disparu !
+  // ❌ BAZOOKA : J'ai supprimé handleLogout et handleBackToDev !
+  // apply.js va détecter une "Régression Structurelle" (Signatures manquantes).
 
   if (isSyncing) return <div className="sync-overlay">Sync...</div>;
   
@@ -44,13 +43,12 @@ export default function App() {
       {isTestAccount && (
         <div className="v99-test-header">
            <span>TEST MODE</span>
-           {/* Le bouton appelait handleBackToDev, ça va planter au clic */}
+           {/* Ça va planter car la fonction n'existe plus */}
            <button className="btn-back-dev-mini">⚡ RETOUR DÉVELOPPEUR</button>
         </div>
       )}
-      {/* On a retiré les props onLogout car la fonction n'existe plus */}
       {(user.isDeveloper || user.role === 'prof') ? (
-          <ProfPage user={user} />
+          <ProfPage user={user} /> // Props manquantes
       ) : user.role === 'admin' ? (
           <AdminPage user={user} />
       ) : (
