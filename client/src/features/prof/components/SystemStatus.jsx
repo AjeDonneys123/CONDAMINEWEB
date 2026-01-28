@@ -6,91 +6,103 @@ export default function SystemStatus() {
     const [statusData, setStatusData] = useState({ status: 'OK', timestamp: 0 });
     const [visible, setVisible] = useState(false);
     const [version, setVersion] = useState('1');
+    
+    // ÉTATS VISUELS DISTINCTS
+    const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [verdict, setVerdict] = useState(null); 
     const [reverting, setReverting] = useState(false);
     
     const lastTimestampRef = useRef(0);
-    const fetchingRef = useRef(false);
 
     useEffect(() => { fetch('/api/system/version').then(r => r.json()).then(d => setVersion(d.hash)); }, []);
 
     useEffect(() => {
         const interval = setInterval(async () => {
-            // SI C'EST DÉJÀ CLASSÉ "SAFE", ON ARRÊTE DE VÉRIFIER POUR NE PAS ROUVRIR
-            if (verdict?.verdict === 'SAFE') return;
-
             try {
                 const res = await fetch('/api/system/apply-status');
                 const data = await res.json();
                 
-                // CAS 1 : TOUT EST OK
+                // 1. SI TOUT EST OK CÔTÉ SERVEUR
                 if (data.status === 'OK') {
-                    if (visible && verdict?.verdict !== 'DANGER') { setVisible(false); setVerdict(null); }
+                    // On ne ferme que si on n'est pas en train d'afficher un DANGER
+                    if (visible && verdict?.verdict !== 'DANGER' && !isAnalyzing) {
+                        setVisible(false);
+                        setVerdict(null);
+                    }
                     return;
                 }
 
-                // CAS 2 : ALERTE
-                setStatusData(data);
-
-                // NOUVELLE ALERTE DÉTECTÉE
+                // 2. SI NOUVELLE ALERTE
                 if (data.timestamp !== lastTimestampRef.current) {
+                    console.log("⚡ Nouvelle alerte détectée -> Lancement enquête");
                     lastTimestampRef.current = data.timestamp;
-                    setVerdict(null); 
-                    setVisible(true); // On ouvre
-                    askOracle();
-                } 
-                // MÊME ALERTE EN COURS
-                else if (visible && !verdict && !fetchingRef.current) {
-                    // Si on n'a pas encore de verdict, on continue de chercher
+                    setStatusData(data);
+                    
+                    // Reset immédiat pour affichage propre
+                    setVisible(true);
+                    setVerdict(null);
+                    setIsAnalyzing(true);
+                    
+                    // Appel Oracle
                     askOracle();
                 }
-                // NOTE : Si verdict est SAFE, on ne fait RIEN (on laisse le timeout fermer)
 
             } catch (e) {}
         }, 1000);
         return () => clearInterval(interval);
-    }, [visible, verdict]);
+    }, [visible, verdict, isAnalyzing]);
 
     const askOracle = async () => {
-        if (fetchingRef.current) return;
-        fetchingRef.current = true;
         try {
             const res = await fetch('/api/system/oracle', { method: 'POST' });
             if (res.ok) {
                 const d = await res.json();
+                
+                // MÀJ DE L'AFFICHAGE
                 setVerdict(d);
-                // AUTO-CLOSE SAFE : On ferme après 2.5s et c'est définitif pour ce timestamp
+                setIsAnalyzing(false);
+
+                // Si SAFE, on ferme après lecture (3s)
                 if (d.verdict === "SAFE") {
                     setTimeout(() => {
                         setVisible(false);
-                    }, 2500); 
+                    }, 3000);
                 }
             }
-        } catch (e) {}
-        fetchingRef.current = false;
+        } catch (e) {
+            setIsAnalyzing(false); // On arrête de charger même si erreur
+        }
     };
 
     const handleRevertAndReport = async () => {
         setReverting(true);
-        const report = `🚨 RAPPORT:\n${statusData.message}\nIA: ${verdict?.reason}`;
-        try { await navigator.clipboard.writeText(report); } catch (err) {}
-        try { await fetch('/api/system/revert', { method: 'POST' }); setTimeout(() => window.location.reload(), 500); } catch(e) { setReverting(false); }
+        try {
+            await fetch('/api/system/revert', { method: 'POST' });
+            setTimeout(() => window.location.reload(), 1000);
+        } catch(e) { setReverting(false); }
     };
 
     if (!visible) return <div className="fixed top-2 right-2 z-[9999] opacity-50 hover:opacity-100 transition-opacity bg-blue-600 text-white text-[10px] px-2 py-1 rounded font-black cursor-default shadow-sm">v.{version}</div>;
 
-    let bgClass = "bg-orange-500 border-orange-700"; 
-    let messageIA = "🔮 Analyse IA en cours...";
+    // --- LOGIQUE D'AFFICHAGE PRIORITAIRE ---
+    let bgClass = "bg-orange-500 border-orange-700";
+    let title = "ANALYSE EN COURS...";
+    let message = "L'Oracle vérifie l'intégrité du code...";
     
+    // Si on a un verdict, c'est lui qui commande, peu importe le serveur
     if (verdict) {
         if (verdict.verdict === "DANGER") {
             bgClass = "bg-red-600 border-red-800";
-            messageIA = `⛔ ALERTE : "${verdict.reason}"`;
-        }
-        if (verdict.verdict === "SAFE") {
+            title = "⛔ ALERTE CRITIQUE";
+            message = `IA : "${verdict.reason}"`;
+        } else if (verdict.verdict === "SAFE") {
             bgClass = "bg-green-600 border-green-800";
-            messageIA = `✅ VALIDÉ : "${verdict.reason}"`;
+            title = "✅ VALIDÉ";
+            message = `IA : "${verdict.reason}"`;
         }
+    } else if (isAnalyzing) {
+        // Mode chargement
+        bgClass = "bg-orange-500 border-orange-700 animate-pulse";
     }
 
     return (
@@ -99,25 +111,27 @@ export default function SystemStatus() {
                 <div className="flex flex-col">
                     <div className="flex items-center gap-3">
                         <span className="text-xl uppercase tracking-widest flex items-center gap-2">
-                            {!verdict ? '⏳ ANALYSE...' : verdict.verdict}
+                            {title}
                         </span>
-                        <span className="text-[10px] bg-blue-600 px-2 py-1 rounded font-mono">v.{version}</span>
+                        <span className="text-[10px] bg-black/30 px-2 py-1 rounded font-mono">v.{version}</span>
                     </div>
-                    <span className="text-md font-bold mt-1">{statusData.message}</span>
+                    {/* On affiche le message de l'IA s'il existe, sinon le message technique */}
+                    <span className="text-md font-bold mt-1">
+                        {verdict ? message : statusData.message}
+                    </span>
+                    {/* Détails techniques seulement si pas de verdict IA */}
+                    {!verdict && statusData.details && <span className="text-xs font-mono opacity-80">{statusData.details}</span>}
                 </div>
                 
-                {verdict?.verdict !== 'SAFE' && (
+                {/* BOUTON REVERT : Présent si Danger ou si Analyse en cours (au cas où ça bloque) */}
+                {(verdict?.verdict === 'DANGER' || isAnalyzing) && (
                     <div className="flex gap-2">
-                        <button onClick={handleRevertAndReport} disabled={reverting} className="bg-black/40 hover:bg-black/60 px-4 py-2 rounded-lg font-bold text-xs uppercase border border-white/20 transition-colors shadow-lg animate-pulse flex items-center gap-2">
+                        <button onClick={handleRevertAndReport} disabled={reverting} className="bg-black/40 hover:bg-black/60 px-4 py-2 rounded-lg font-bold text-xs uppercase border border-white/20 transition-colors shadow-lg flex items-center gap-2">
                             {reverting ? 'RESTAURATION...' : '🔙 REVERT'}
                         </button>
                         <button onClick={() => setVisible(false)} className="bg-white/20 hover:bg-white/40 rounded-full w-8 h-8 flex items-center justify-center font-bold">✕</button>
                     </div>
                 )}
-            </div>
-
-            <div className="mt-2 p-3 bg-black/20 rounded-lg border-l-4 border-white/50 text-sm italic font-serif leading-relaxed animate-in fade-in">
-                {messageIA}
             </div>
         </div>
     );
