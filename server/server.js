@@ -1,4 +1,3 @@
-// [TEST QA] Ce commentaire sert juste à redémarrer le serveur pour tester la régression.
 const path = require('path');
 const fs = require('fs');
 const express = require('express');
@@ -32,24 +31,28 @@ app.get('/api/system/version', (req, res) => {
     });
 });
 
-// --- MODIFICATION ICI : PROMPT "PROTOCOLE DE TEST" ---
+// --- MODIFICATION ICI : PROMPT "TEST UTILISATEUR STRICT" ---
 app.post('/api/system/analyze-risk', async (req, res) => {
     const { missing, filePath } = req.body;
     
-    const prompt = `CONTEXTE : Le fichier "${filePath}" a été modifié et a PERDU ces éléments techniques : [${missing.join(', ')}].
+    const prompt = `CONTEXTE : Le fichier "${filePath}" a perdu ces éléments techniques : [${missing.join(', ')}].
 
-    TA MISSION : Agis comme un Lead QA (Testeur). Donne-moi une instruction de TEST MANUEL pour prouver que ça ne marche plus.
+    TA MISSION : Rédige un TEST UTILISATEUR CONCRET (Black Box).
     
-    FORMAT STRICT OBLIGATOIRE :
-    "🧪 TEST : [Action précise à faire sur l'interface] -> [Le résultat échoué attendu]"
+    ⛔ INTERDIT DE DIRE : "Regarde le code", "Inspecte le DOM", "Cherche l'ID".
+    ✅ TU DOIS DIRE : "Regarde l'écran", "Clique ici", "Vérifie l'alignement".
 
-    Exemple 1 (checkUpdate manquant) : "🧪 TEST : Modifie un fichier dans ton code -> Le site ne se rechargera PAS automatiquement."
-    Exemple 2 (save manquant) : "🧪 TEST : Clique sur le bouton 'Enregistrer' -> Rien ne se passera (ou erreur console)."
+    RÈGLES D'INTERPRÉTATION :
+    1. Si un ID disparait (ex: #app-root) -> C'est souvent le CSS global ou le montage React qui saute. Demande de vérifier si la page est blanche ou si le style est cassé.
+    2. Si une fonction disparait -> Demande de déclencher l'action correspondante.
 
-    Sois court, impératif et concret.`;
+    FORMAT :
+    "🧪 TEST : [Action visuelle simple] -> [Symptôme attendu]"
+
+    Exemple ID manquant : "🧪 TEST : Regarde la page d'accueil -> Vérifie si le contenu touche les bords (perte de marges) ou si le fond a disparu."`;
     
     try {
-        const explanation = await AIEngine.ask(prompt, "Tu es un expert en Tests de Non-Régression.");
+        const explanation = await AIEngine.ask(prompt, "Tu es un Expert QA qui ne parle qu'aux utilisateurs finaux, pas aux devs.");
         res.json({ analysis: explanation });
     } catch (e) {
         res.json({ analysis: "Analyse IA indisponible." });
@@ -93,4 +96,4 @@ mongoose.connect(process.env.MONGODB_URI).then(() => console.log('✅ BDD CONNEC
 
 const distPath = path.resolve(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) { app.use(express.static(distPath)); app.get('*', (req, res) => { if (req.url.startsWith('/uploads/')) return res.status(404).send("Not found"); res.sendFile(path.join(distPath, 'index.html')); }); }
-app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V9.2 (QA Protocols) UP`));
+app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V9.3 (User Tests) UP`));
