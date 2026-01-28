@@ -14,7 +14,7 @@ const AssetThumb = ({ url, onClick, onDelete }) => (
 );
 
 // Composant Actor sur la scène
-const StageActor = ({ actor, isSelected, onSelect, onMove, scaleFactor }) => {
+const StageActor = ({ actor, isSelected, onSelect, onMove }) => {
     const [isDragging, setIsDragging] = useState(false);
     const [pos, setPos] = useState({ x: actor.initialX, y: actor.initialY });
 
@@ -35,8 +35,20 @@ const StageActor = ({ actor, isSelected, onSelect, onMove, scaleFactor }) => {
         const dx = e.clientX - lastPosRef.current.x;
         const dy = e.clientY - lastPosRef.current.y;
         
-        setPos(prev => ({ x: prev.x + dx, y: prev.y + dy }));
-        lastPosRef.current = { x: e.clientX, y: e.clientY };
+        setPos(prev => {
+             // L'acteur suit la souris
+             const stageRect = dragRef.current.closest('.stage-canvas').getBoundingClientRect();
+             const newXpx = prev.x + dx;
+             const newYpx = prev.y + dy;
+             
+             // Limiter la position à l'intérieur du canvas pour éviter de perdre l'acteur
+             const boundedX = Math.max(0, Math.min(stageRect.width, newXpx));
+             const boundedY = Math.max(0, Math.min(stageRect.height, newYpx));
+             
+             lastPosRef.current = { x: e.clientX, y: e.clientY };
+             
+             return { x: boundedX, y: boundedY };
+        });
     };
 
     const handleMouseUp = () => {
@@ -44,15 +56,20 @@ const StageActor = ({ actor, isSelected, onSelect, onMove, scaleFactor }) => {
             setIsDragging(false);
             // Conversion de la position en % pour l'enregistrement
             const stageRect = dragRef.current.closest('.stage-canvas').getBoundingClientRect();
+            
+            // Calcul des pourcentages des coordonnées finales stockées dans le state local 'pos'
             const newX = (pos.x / stageRect.width) * 100;
             const newY = (pos.y / stageRect.height) * 100;
+            
+            // Appel de la fonction de déplacement (critique pour la sauvegarde)
             onMove(actor.id, newX, newY);
         }
     };
 
+    // La position est maintenant calculée en % pour le style CSS
     const actorStyle = {
-        left: `${pos.x}%`, // Changé pour utiliser % du state
-        top: `${pos.y}%`,  // Changé pour utiliser % du state
+        left: `${(pos.x / dragRef.current?.closest('.stage-canvas')?.getBoundingClientRect().width || 0) * 100}%`,
+        top: `${(pos.y / dragRef.current?.closest('.stage-canvas')?.getBoundingClientRect().height || 0) * 100}%`,
         transform: `translate(-50%, -50%) scale(${actor.scale || 1})`,
         width: '100px', // Taille fixe
         height: '100px',
@@ -215,14 +232,30 @@ export default function StudioDashboard({ user }) {
         setSelectedSceneIndex(selectedProject.scenes.length);
     };
 
+    const handleDeleteScene = () => {
+        if (selectedProject.scenes.length <= 1) return alert("Au moins une scène requise.");
+        if (!confirm("Supprimer cette scène ?")) return;
+        
+        const nextProject = { ...selectedProject };
+        nextProject.scenes.splice(selectedSceneIndex, 1);
+        
+        // S'assurer que l'index sélectionné reste valide
+        const nextIndex = Math.max(0, selectedSceneIndex - 1);
+        
+        setSelectedProject(nextProject);
+        setSelectedSceneIndex(nextIndex);
+        setSelectedActorId(null);
+    };
+
     const handleAddActor = () => {
         if (!currentScene) return;
+        // La position initiale est maintenant en % du canvas
         const newActor = {
             id: `actor-${Date.now()}`,
             name: `New Actor`,
             costumes: [],
-            initialX: 50,
-            initialY: 50,
+            initialX: 50, // 50%
+            initialY: 50, // 50%
             scale: 1,
         };
         const nextProject = { ...selectedProject };
@@ -231,13 +264,15 @@ export default function StudioDashboard({ user }) {
         setSelectedActorId(newActor.id);
     };
     
-    const handleActorMove = (actorId, newX, newY) => {
+    // CORRECTION : L'ancienne version recevait des coordonnées en % du canvas
+    const handleActorMove = (actorId, newXPct, newYPct) => {
         const nextProject = { ...selectedProject };
         const actors = nextProject.scenes[selectedSceneIndex].actors;
         const actor = actors.find(a => a.id === actorId);
         if (actor) {
-            actor.initialX = newX;
-            actor.initialY = newY;
+            // Mise à jour des positions en % (pour la persistance)
+            actor.initialX = newXPct;
+            actor.initialY = newYPct;
             setSelectedProject(nextProject);
         }
     };
@@ -247,14 +282,6 @@ export default function StudioDashboard({ user }) {
         await api.delete(`/studio/${id}`);
         setSelectedProject(null);
         loadProjects();
-    };
-
-    const handleDeleteScene = () => {
-        if (selectedProject.scenes.length <= 1) return alert("Au moins une scène requise.");
-        const nextProject = { ...selectedProject };
-        nextProject.scenes.splice(selectedSceneIndex, 1);
-        setSelectedProject(nextProject);
-        setSelectedSceneIndex(Math.max(0, selectedSceneIndex - 1));
     };
 
     // --- RENDER ---
@@ -427,7 +454,7 @@ export default function StudioDashboard({ user }) {
                             
                             <h4 className="prop-label mt-4">COSTUMES</h4>
                             {selectedActor.costumes?.map((costume, index) => (
-                                <div key={costume.id} className="obj-card" onClick={() => handleChange('currentCostumeIdx', index, 'actor')}>
+                                <div key={costume.id} className={`obj-card ${selectedActor.currentCostumeIdx === index ? 'selected' : ''}`} onClick={() => handleChange('currentCostumeIdx', index, 'actor')}>
                                     <div className="obj-thumb-mini">
                                         <img src={costume.url} alt={costume.name} style={{ maxWidth: '100%', maxHeight: '100%' }} />
                                     </div>
