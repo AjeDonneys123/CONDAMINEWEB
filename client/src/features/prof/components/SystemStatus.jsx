@@ -22,11 +22,7 @@ export default function SystemStatus() {
                 const data = await res.json();
                 
                 if (data.status === 'OK') {
-                    if (visible) {
-                        setVisible(false);
-                        setVerdict(null);
-                        setIsManuallyHidden(false); 
-                    }
+                    if (visible) { setVisible(false); setVerdict(null); setIsManuallyHidden(false); }
                     return;
                 }
 
@@ -63,32 +59,22 @@ export default function SystemStatus() {
 
     const handleRevertAndReport = async () => {
         setReverting(true);
-        const report = `🚨 RAPPORT D'INCIDENT (V16)\n--------------------------------------------------\n📅 Date: ${new Date().toLocaleString()}\n🔍 Version: ${version}\n\n1️⃣ VERDICT ORACLE (IA) :\n${verdict?.reason || 'Non spécifié'}\n\n2️⃣ DÉTAILS TECHNIQUES :\n${statusData.details || '(Aucun détail)'}\n\n--------------------------------------------------\nGEMINI : Analyse ce rapport. Corrige TOUS les fichiers listés.`;
-        try { await navigator.clipboard.writeText(report); } catch (err) {}
+        // On déclenche le raccourci via un événement custom ou on réutilise la logique
+        // Ici on fait un Revert propre et on laisse l'utilisateur copier son rapport via le raccourci
         try {
             await fetch('/api/system/revert', { method: 'POST' });
-            setTimeout(() => window.location.reload(), 1000);
+            window.location.reload();
         } catch(e) { setReverting(false); }
     };
 
     const shouldShow = visible && !isManuallyHidden;
-
     let bgClass = "bg-orange-500 border-orange-700"; 
     let messageIA = "🔮 AUDIT IA EN COURS...";
     
-    if (statusData.status === 'ERROR') {
-        bgClass = "bg-red-600 border-red-800";
-        messageIA = "⛔ BLOCAGE TECHNIQUE";
-    }
+    if (statusData.status === 'ERROR') { bgClass = "bg-red-600 border-red-800"; messageIA = "⛔ BLOCAGE TECHNIQUE"; }
     else if (verdict) {
-        if (verdict.verdict === "DANGER") {
-            bgClass = "bg-red-600 border-red-800";
-            messageIA = `🤖 DANGER : "${verdict.reason}"`;
-        }
-        if (verdict.verdict === "SAFE") {
-            bgClass = "bg-green-600 border-green-800";
-            messageIA = `✅ SAIN : "${verdict.reason}"`;
-        }
+        if (verdict.verdict === "DANGER") { bgClass = "bg-red-600 border-red-800"; messageIA = `🤖 DANGER : "${verdict.reason}"`; }
+        if (verdict.verdict === "SAFE") { bgClass = "bg-green-600 border-green-800"; messageIA = `✅ SAIN : "${verdict.reason}"`; }
     }
 
     return (
@@ -105,12 +91,14 @@ export default function SystemStatus() {
                         </div>
                     )}
                 </div>
-                
                 <div className="flex items-center gap-3 shrink-0">
                     {(verdict?.verdict === 'DANGER' || statusData.status === 'ERROR') && (
-                        <button onClick={handleRevertAndReport} disabled={reverting} className="bg-black/40 hover:bg-black/60 px-4 py-2 rounded-lg font-black text-[10px] uppercase border border-white/20 transition-all shadow-lg animate-pulse">
-                            {reverting ? 'REVERT...' : '📋 COPIER & REVERT'}
-                        </button>
+                        <div className="flex gap-1">
+                            <span className="text-[9px] font-black bg-black/20 px-2 py-1 rounded">⌨️ Shift+Cmd+L pour Rapport</span>
+                            <button onClick={handleRevertAndReport} disabled={reverting} className="bg-black/40 hover:bg-black/60 px-4 py-2 rounded-lg font-black text-[10px] uppercase border border-white/20 shadow-lg animate-pulse">
+                                {reverting ? 'REVERT...' : '🚑 REVERT'}
+                            </button>
+                        </div>
                     )}
                     <button onClick={() => setIsManuallyHidden(true)} className="bg-white/10 hover:bg-white/20 w-8 h-8 rounded-full flex items-center justify-center text-xs font-black transition-all">✕</button>
                 </div>

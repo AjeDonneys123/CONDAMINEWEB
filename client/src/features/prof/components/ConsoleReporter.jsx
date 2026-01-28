@@ -5,97 +5,89 @@ import './ConsoleReporter.css';
 export default function ConsoleReporter({ user }) {
     const [errors, setErrors] = useState([]);
     const [bannerVisible, setBannerVisible] = useState(false);
-    const [copySuccess, setCopySuccess] = useState(false);
 
     useEffect(() => {
-        // 1. CAPTURE DES ERREURS CONSOLE (Local)
         const originalError = console.error;
         console.error = (...args) => {
             const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
-            if(!msg.includes('snapshot') && !msg.includes('React') && !msg.includes('key')) {
+            if(!msg.includes('snapshot') && !msg.includes('React')) {
                 setErrors(prev => [...prev, { msg, time: new Date().toLocaleTimeString() }].slice(-15));
             }
             originalError.apply(console, args);
         };
 
         const handleKeyDown = async (e) => {
-            if (e.metaKey && e.shiftKey && e.code === 'KeyL') {
+            // Shift + Cmd + L (ou Ctrl sur Windows)
+            if (e.shiftKey && (e.metaKey || e.ctrlKey) && e.code === 'KeyL') {
                 e.preventDefault();
                 await generateFullReport();
             }
         };
         window.addEventListener('keydown', handleKeyDown);
-
         return () => {
             console.error = originalError;
             window.removeEventListener('keydown', handleKeyDown);
         };
-    }, [errors]); // Dépendance errors pour avoir les logs à jour
+    }, [errors]);
 
     const generateFullReport = async () => {
-        let statusReport = "Inconnu";
-        let oracleVerdict = "Non sollicité";
-        let oracleReason = "";
+        let statusReport = "🟢 SYSTÈME SAIN";
+        let oracleVerdict = "N/A";
+        let oracleReason = "N/A";
+        let techDetails = "Aucun";
 
-        // 2. RÉCUPÉRATION DES DONNÉES SERVEUR (Ce que voit le HUD)
         try {
+            // 1. Récupérer l'état du moteur
             const resStatus = await fetch('/api/system/apply-status');
             const dataStatus = await resStatus.json();
             
             if (dataStatus.status !== 'OK') {
-                statusReport = `[${dataStatus.status}] ${dataStatus.message} (${dataStatus.details})`;
+                statusReport = `🔴 ALERTE [${dataStatus.status}] : ${dataStatus.message}`;
+                techDetails = dataStatus.details || "Inconnus";
                 
-                // Si alerte, on récupère ce que dit l'Oracle (depuis le cache serveur)
+                // 2. Récupérer le verdict de l'Oracle si disponible
                 const resOracle = await fetch('/api/system/oracle', { method: 'POST' });
                 const dataOracle = await resOracle.json();
                 oracleVerdict = dataOracle.verdict;
                 oracleReason = dataOracle.reason;
-            } else {
-                statusReport = "🟢 SYSTÈME SAIN (OK)";
             }
-        } catch (e) {
-            statusReport = "🔴 SERVEUR OFF/INJOIGNABLE";
-        }
+        } catch (e) {}
 
-        // 3. CONSTRUCTION DU RAPPORT
-        const payload = `🚨 RAPPORT D'INCIDENT (V14)
+        const report = `🚨 RAPPORT AUTOMATIQUE (REVERT TRIGGERED)
 --------------------------------------------------
 👤 Dev: ${user?.firstName || 'Inconnu'}
 📅 Date: ${new Date().toLocaleString()}
 
-1️⃣ ÉTAT DU SYSTÈME (HUD) :
+1️⃣ ÉTAT DU SYSTÈME :
 ${statusReport}
+🔍 Détails techniques : ${techDetails}
 
-2️⃣ JUGEMENT DE L'ORACLE (IA) :
+2️⃣ JUGEMENT DE L'ORACLE :
 ⚖️ Verdict : ${oracleVerdict}
 🗣️ Raison  : "${oracleReason}"
 
-3️⃣ LOGS CONSOLE (Derniers 15) :
-${errors.length > 0 ? errors.map(e => `[${e.time}] ${e.msg}`).join('\n') : "(Aucune erreur console)"}
+3️⃣ LOGS CONSOLE :
+${errors.length > 0 ? errors.map(e => `[${e.time}] ${e.msg}`).join('\n') : "(Vide)"}
 
 --------------------------------------------------
-GEMINI : Analyse ce rapport. Si le verdict est DANGER, corrige le code manquant décrit par l'Oracle.`;
+GEMINI : Le code précédent a causé une régression. Analyse la raison et renvoie le fichier CORRIGÉ.`;
 
-        // 4. COPIE
         try {
-            await navigator.clipboard.writeText(payload);
-            setCopySuccess(true);
+            await navigator.clipboard.writeText(report);
             setBannerVisible(true);
-            setTimeout(() => { setCopySuccess(false); setBannerVisible(false); }, 3000);
+            setTimeout(() => setBannerVisible(false), 3000);
         } catch (err) {
-            console.error("Échec copie presse-papier", err);
+            alert("Erreur copie : Autorisez l'accès au presse-papier.");
         }
     };
 
-    if (!bannerVisible && !copySuccess) return null;
+    if (!bannerVisible) return null;
 
     return (
-        <div className={`error-banner-minimal show copied`} onClick={() => setBannerVisible(false)}>
+        <div className="error-banner-minimal show copied">
             <div className="banner-content">
                 <span className="banner-icon">📋</span>
-                <span className="banner-text">
-                    RAPPORT COMPLET COPIÉ ! (STATUS + ORACLE + LOGS)
-                </span>
+                <span className="banner-text">RAPPORT D'INCIDENT COPIÉ !</span>
                 <span className="banner-hint">COLLE-LE DANS LE CHAT</span>
             </div>
         </div>

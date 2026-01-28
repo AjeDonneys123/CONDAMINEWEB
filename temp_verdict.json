@@ -1,1 +1,1 @@
-{"verdict":"SAFE","reason":"Added manual hide feature, logic otherwise unchanged."}
+{"verdict":"SAFE","reason":"Refactorisation de handleRevertAndReport, logique principale préservée."}
