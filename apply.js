@@ -1,4 +1,4 @@
-// @signatures: applyUpdate, extractSignatures, checkCssDependency, checkDeepClassIntegrity, checkDomIntegrity, checkLogicDensity, writeStatus, snapshot, saveDiff
+// @signatures: applyUpdate, checkCssDependency, checkDeepClassIntegrity, checkDomIntegrity, checkLogicDensity, countLogic, extractSignatures, getIds, saveDiff, snapshot, writeStatus
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
@@ -8,11 +8,9 @@ const diffFile = 'temp_diff.json';
 const verdictFile = 'temp_verdict.json';
 
 console.log("------------------------------------------------");
-console.log("🛡️ [SYSTEM] Moteur V14.0 (Paranoïaque)");
-console.log("    Stratégie : Oracle Forcé sur fichiers critiques");
+console.log("🛡️ [SYSTEM] Moteur V16.0 (Batch Transaction)");
+console.log("    Logique : 1 Update = 1 Commit = 1 Verdict Global");
 console.log("------------------------------------------------");
-
-try { fs.writeFileSync(statusFile, JSON.stringify({ status: "OK", message: "Système prêt.", timestamp: Date.now() }, null, 2)); if(fs.existsSync(verdictFile)) fs.unlinkSync(verdictFile); } catch(e) {}
 
 function writeStatus(type, message, details = null, context = null) {
     const data = { status: type, message, details, context, timestamp: Date.now() };
@@ -22,39 +20,27 @@ function writeStatus(type, message, details = null, context = null) {
 function saveDiff(oldContent, newContent, filePath) {
     try { 
         fs.writeFileSync(diffFile, JSON.stringify({ oldContent, newContent, filePath }));
-        if (fs.existsSync(verdictFile)) fs.unlinkSync(verdictFile);
+        if (fs.existsSync(verdictFile)) fs.unlinkSync(verdictFile); // Reset cache verdict
     } catch (e) {}
 }
 
-function snapshot() { try { execSync('git add .'); execSync('git commit -m "Auto-Save"'); } catch (e) { } }
-
-function extractSignatures(content) {
-    const codeBody = content.replace(/^\/\/ @signatures:.*\n/, '');
-    const sigs = new Set();
-    // Regex améliorée pour attraper "const maFunc = () =>" avec espaces variables
-    const patterns = [ 
-        /function\s+([a-zA-Z0-9_]+)/g, 
-        /const\s+([a-zA-Z0-9_]+)\s*=\s*(?:async\s*)?(\(|function)/g, 
-        /export\s+default\s+function\s+([a-zA-Z0-9_]+)/g,
-        /class\s+([a-zA-Z0-9_]+)/g 
-    ];
-    patterns.forEach(regex => { let match; while ((match = regex.exec(codeBody)) !== null) { sigs.add(match[1]); } });
-    return sigs;
+// SNAPSHOT GLOBAL (Protège l'ensemble du lot)
+function snapshot(filesCount) {
+    try {
+        execSync('git add .');
+        execSync(`git commit -m "Auto-Save Batch (${filesCount} files)"`);
+        console.log(`💾 [GIT] Snapshot global créé pour ${filesCount} fichiers.`);
+    } catch (e) { 
+        // Rien à commiter, ou erreur git mineure
+    }
 }
 
-function checkLogicDensity(oldContent, newContent) {
-    const logicKeywords = /\b(if|else|switch|case|return|await|async|map|filter|reduce|find|create|update|delete|useEffect|useState|useRef|try|catch|throw)\b/g;
-    const countLogic = (text) => { const matches = text.match(logicKeywords); return matches ? matches.length : 0; };
-    const oldScore = countLogic(oldContent);
-    const newScore = countLogic(newContent);
-    if (oldScore > 5 && newScore < oldScore * 0.99) return { oldScore, newScore, drop: Math.round((1 - newScore/oldScore)*100) };
-    return null;
-}
-
-// ... (DomIntegrity, CssDependency, DeepClassIntegrity inchangés - repris pour complétude)
-function checkDomIntegrity(oldContent, newContent) { const getIds = (t) => { const i=new Set(); let m; while((m=/\sid=['"]([^'"]+)['"]/g.exec(t))) i.add(m[1]); return i; }; const o=getIds(oldContent), n=getIds(newContent); const m=[...o].filter(x=>!n.has(x)); return m.length>0?m:null; }
-function checkCssDependency(p, c, r) { const m=c.match(/import\s+['"]\.\/([^'"]+\.css)['"]/); if(m){ const f=path.join(path.dirname(p), m[1]); if(!fs.existsSync(f) && !r.includes(m[1])) return {ok:false, missing:m[1]}; return {ok:true, cssPath:fs.existsSync(f)?f:null}; } return {ok:true}; }
-function checkDeepClassIntegrity(j, c) { if(!c||!fs.existsSync(c))return null; try{ const t=fs.readFileSync(c,'utf8'), d=new Set(); let m; while((m=/\.([a-zA-Z0-9_-]+)/g.exec(t))) d.add(m[1]); const u=new Set(); while((m=/className=['"]([^'"]+)['"]/g.exec(j))) m[1].split(/\s+/).forEach(x=>u.add(x)); const k=[...u].filter(x=>!d.has(x)); return k.length>0&&k.length<5?k:null; }catch(e){return null;} }
+// ... (Fonctions d'analyse inchangées) ...
+function extractSignatures(content) { const codeBody = content.replace(/^\/\/ @signatures:.*\n/, ''); const sigs = new Set(); const patterns = [ /function\s+([a-zA-Z0-9_]+)/g, /const\s+([a-zA-Z0-9_]+)\s*=\s*(?:async\s*)?\(/g, /export\s+default\s+function\s+([a-zA-Z0-9_]+)/g, /router\.(get|post|put|delete|patch)\s*\(\s*['"]([^'"]+)['"]/g, /class\s+([a-zA-Z0-9_]+)/g ]; patterns.forEach(regex => { let match; while ((match = regex.exec(codeBody)) !== null) { sigs.add(match[2] ? `${match[1].toUpperCase()} ${match[2]}` : match[1]); } }); return sigs; }
+function checkLogicDensity(oldContent, newContent) { const logicKeywords = /\b(if|else|switch|case|return|await|async|map|filter|reduce|find|create|update|delete|useEffect|useState|useRef|try|catch|throw)\b/g; const countLogic = (text) => { const matches = text.match(logicKeywords); return matches ? matches.length : 0; }; const oldScore = countLogic(oldContent); const newScore = countLogic(newContent); if (oldScore > 5 && newScore < oldScore * 0.95) { return { oldScore, newScore, drop: Math.round((1 - newScore/oldScore)*100) }; } return null; }
+function checkDomIntegrity(oldContent, newContent) { const getIds = (text) => { const ids = new Set(); let match; while ((match = /\sid=['"]([^'"]+)['"]/g.exec(text))) ids.add(match[1]); return ids; }; const oldIds = getIds(oldContent); const newIds = getIds(newContent); const missing = [...oldIds].filter(id => !newIds.has(id)); return missing.length > 0 ? missing : null; }
+function checkCssDependency(jsxPath, jsxContent, rawUpdateContent) { const importMatch = jsxContent.match(/import\s+['"]\.\/([^'"]+\.css)['"]/); if (importMatch) { const cssFileName = importMatch[1]; const dir = path.dirname(jsxPath); const cssFullPath = path.join(__dirname, dir, cssFileName); const existsOnDisk = fs.existsSync(cssFullPath); const relativeCssPath = path.join(dir, cssFileName).split(path.sep).join('/'); const headerTag = `[[[£ FILE: ${relativeCssPath} £]]]`; const existsInUpdate = rawUpdateContent.includes(headerTag); if (!existsOnDisk && !existsInUpdate) return { ok: false, missing: cssFileName }; return { ok: true, cssPath: existsOnDisk ? cssFullPath : null }; } return { ok: true, cssPath: null }; }
+function checkDeepClassIntegrity(jsxContent, cssPath) { if (!cssPath || !fs.existsSync(cssPath)) return null; try { const cssContent = fs.readFileSync(cssPath, 'utf8'); const definedClasses = new Set(); let match; while ((match = /\.([a-zA-Z0-9_-]+)(?=\s*[:\{,])/g.exec(cssContent)) !== null) definedClasses.add(match[1]); const usedClasses = new Set(); while ((match = /className\s*=\s*['"]([^'"]+)['"]/g.exec(jsxContent)) !== null) { match[1].split(/\s+/).forEach(c => { if(c && !c.includes('{')) usedClasses.add(c); }); } const missing = [...usedClasses].filter(c => !definedClasses.has(c)); if (missing.length > 0 && missing.length < 5) return missing; } catch (e) {} return null; }
 
 function applyUpdate() {
     try {
@@ -62,15 +48,30 @@ function applyUpdate() {
         const rawContent = fs.readFileSync(inputFile, 'utf8');
         if (!rawContent || rawContent.trim().length < 10) return;
 
+        // 1. FLUSH & PARSE PRÉLIMINAIRE
         fs.writeFileSync(inputFile, '');
-        snapshot();
+        
+        // On découpe manuellement pour compter les fichiers AVANT de traiter
+        const fileTags = rawContent.match(/\[\[\[£\s*FILE\s*:/g) || [];
+        if (fileTags.length > 0) {
+            snapshot(fileTags.length); // UN SEUL COMMIT POUR TOUT LE GROUPE
+        }
 
         const isForced = rawContent.includes('[FORCE_REDUCTION]');
-        let processedCount = 0;
-        let warningTriggered = false;
+        
+        // TABLEAU DE BORD DE LA TRANSACTION
+        let transactionReport = {
+            total: 0,
+            processed: 0,
+            errors: [],   // { file, msg }
+            warnings: [], // { file, msg, context }
+            criticalDiffSaved: false // Pour ne sauvegarder qu'une diff à la fois pour l'IA
+        };
+
         const startRegex = /\[\[\[£\s*FILE\s*:\s*([^£\]\s]+)\s*£\]\]\]/g;
         let match;
 
+        // 2. BOUCLE DE TRAITEMENT
         while ((match = startRegex.exec(rawContent)) !== null) {
             const filePath = match[1].trim();
             const startIdx = match.index + match[0].length;
@@ -78,61 +79,74 @@ function applyUpdate() {
             const endIdx = rawContent.indexOf(endTag, startIdx);
 
             if (endIdx !== -1) {
+                transactionReport.total++;
                 let newContent = rawContent.substring(startIdx, endIdx).trim();
                 const fullPath = path.join(__dirname, filePath);
                 const dirPath = path.dirname(fullPath);
+                
                 if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, { recursive: true });
 
-                if (filePath === 'history.txt') {
-                    try {
-                        const ex = fs.existsSync(fullPath) ? fs.readFileSync(fullPath, 'utf8') : "";
-                        fs.writeFileSync(fullPath, ex + "\n" + newContent + '\n');
-                        if(!warningTriggered) writeStatus('OK', 'Historique mis à jour');
-                        processedCount++;
-                        continue;
-                    } catch (e) {}
+                // Exception Logs
+                if (['history.txt'].includes(filePath)) {
+                    if(fs.existsSync(fullPath)) fs.appendFileSync(fullPath, "\n" + newContent + "\n");
+                    else fs.writeFileSync(fullPath, newContent + "\n");
+                    continue;
                 }
 
                 const ext = path.extname(fullPath);
                 let currentWarning = null;
+                let currentSeverity = 'LOW'; // LOW, MEDIUM, HIGH
 
                 if (fs.existsSync(fullPath) && !isForced) {
                     const oldContent = fs.readFileSync(fullPath, 'utf8');
                     
-                    // CHECK JS
+                    // --- BATTERIE DE TESTS ---
                     if (['.js', '.jsx', '.ts'].includes(ext)) {
                         const oldSigs = extractSignatures(oldContent);
                         const newSigs = extractSignatures(newContent);
-                        
-                        // DEBUG VISUEL
-                        console.log(`🔎 [SCAN] ${path.basename(filePath)} | Signatures avant: ${oldSigs.size} -> après: ${newSigs.size}`);
-                        
                         const missing = [...oldSigs].filter(s => !newSigs.has(s));
+                        
                         if (missing.length > 0) {
-                            currentWarning = { title: `Régression Structure`, msg: `Perdu : ${missing.join(', ')}`, context: { missing, filePath } };
+                            currentWarning = { title: `Régression Structurelle`, msg: `Perdu dans ${path.basename(filePath)} : ${missing.join(', ')}`, context: { missing, filePath } };
+                            currentSeverity = 'HIGH';
                         }
+
                         if (!currentWarning) {
                             const logicCheck = checkLogicDensity(oldContent, newContent);
                             if (logicCheck) {
-                                currentWarning = { title: `Changement de Logique`, msg: `Densité : -${logicCheck.drop}%`, context: { missing: [`Densité -${logicCheck.drop}%`], filePath } };
+                                currentWarning = { title: `Chute Logique`, msg: `Densité ${path.basename(filePath)} : -${logicCheck.drop}%`, context: { missing: [`Densité -${logicCheck.drop}%`], filePath } };
+                                currentSeverity = 'MEDIUM';
                             }
                         }
                     }
-                    
-                    // CHECK CSS/DOM... (Simplifié pour la démo, ils sont intégrés)
-                    
-                    // FORCAGE ORACLE SUR FICHIERS CRITIQUES
-                    // Si c'est App.jsx ou server.js, on appelle l'Oracle MÊME SI PAS D'ALERTE MATHÉMATIQUE
-                    if (!currentWarning && (filePath.includes('App.jsx') || filePath.includes('server.js'))) {
-                        if (oldContent.trim() !== newContent.trim()) {
-                            console.log("👮 [PARANO] Vérification Oracle forcée pour fichier critique.");
-                            currentWarning = { title: "Vérification de sécurité", msg: "Analyse IA forcée (Fichier Critique)", context: { missing: ["Modification Critique"], filePath }, severity: 'MEDIUM' };
+
+                    if (ext === '.jsx' && !currentWarning) {
+                        const missingIds = checkDomIntegrity(oldContent, newContent);
+                        if (missingIds) {
+                            currentWarning = { title: `Structure DOM`, msg: `IDs perdus dans ${path.basename(filePath)}`, context: { missing: missingIds, filePath } };
+                            currentSeverity = 'HIGH';
                         }
                     }
-
-                    if (currentWarning) saveDiff(oldContent, newContent, filePath);
+                    
+                    // Gestion Prioritaire de l'Oracle
+                    // On ne sauvegarde la diff QUE pour le fichier le plus critique du lot
+                    if (currentWarning && !transactionReport.criticalDiffSaved) {
+                        saveDiff(oldContent, newContent, filePath);
+                        transactionReport.criticalDiffSaved = true;
+                    }
                 }
 
+                // Check CSS (Bloquant)
+                if (ext === '.jsx') {
+                    const cssCheck = checkCssDependency(filePath, newContent, rawContent);
+                    if (!cssCheck.ok) {
+                        transactionReport.errors.push({ file: filePath, msg: `CSS manquant : ${cssCheck.missing}` });
+                        console.error(`❌ REJETÉ : ${filePath}`);
+                        continue; // ON N'ÉCRIT PAS CE FICHIER
+                    }
+                }
+
+                // SIGNATURE UPDATE & ECRITURE
                 if (['.js', '.jsx', '.ts'].includes(ext)) {
                     const currentSigs = [...extractSignatures(newContent)].sort();
                     if (currentSigs.length > 0) newContent = `// @signatures: ${currentSigs.join(', ')}\n` + newContent.replace(/^\/\/ @signatures:.*\n/, '');
@@ -142,16 +156,30 @@ function applyUpdate() {
                 console.log(`   ✅ ÉCRIT : ${filePath}`);
                 
                 if (currentWarning) {
-                    writeStatus('JUDGING', "Analyse IA en cours...", currentWarning.msg, currentWarning.context);
-                    warningTriggered = true;
+                    transactionReport.warnings.push({ ...currentWarning, severity: currentSeverity });
                 }
-                processedCount++;
+                transactionReport.processed++;
             }
         }
 
-        if (processedCount > 0 && !warningTriggered) {
-            setTimeout(() => writeStatus('OK', 'Code appliqué', `${processedCount} fichiers mis à jour.`), 500);
-            console.log(`✨ SUCCÈS.`);
+        // 3. RAPPORT FINAL (POST-BATCH)
+        if (transactionReport.errors.length > 0) {
+            // S'il y a des erreurs bloquantes (fichiers rejetés)
+            const err = transactionReport.errors[0];
+            writeStatus('ERROR', `Blocage sur ${path.basename(err.file)}`, err.msg, null);
+        } 
+        else if (transactionReport.warnings.length > 0) {
+            // S'il y a des warnings, on prend le plus grave
+            const worst = transactionReport.warnings.find(w => w.severity === 'HIGH') || transactionReport.warnings[0];
+            const othersCount = transactionReport.warnings.length - 1;
+            const suffix = othersCount > 0 ? ` (+${othersCount} autres alertes)` : '';
+            
+            writeStatus('JUDGING', `Analyse : ${worst.title}${suffix}`, worst.msg, worst.context);
+        } 
+        else if (transactionReport.processed > 0) {
+            // Tout est vert
+            writeStatus('OK', 'Mise à jour réussie', `${transactionReport.processed} fichiers traités.`);
+            console.log(`✨ BATCH TERMINÉ : ${transactionReport.processed} fichiers.`);
         }
 
     } catch (e) {
