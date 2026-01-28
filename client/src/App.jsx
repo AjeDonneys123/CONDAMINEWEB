@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+// @signatures: App, handleBackToDev, handleLogout
+import React, { useState, useRef } from 'react'; // ❌ MANQUE useEffect
 import Login from './features/auth/Login';
 import ProfPage from './features/prof/ProfPage';
 import ElevePage from './features/eleve/ElevePage';
@@ -11,29 +12,8 @@ export default function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const bootIdRef = useRef(null);
 
-  useEffect(() => {
-    const checkUpdate = async () => {
-      try {
-        const res = await fetch('/api/check-deploy');
-        const data = await res.json();
-        if (!bootIdRef.current) bootIdRef.current = data.bootId;
-        else if (data.bootId !== bootIdRef.current) {
-          setIsSyncing(true);
-          setTimeout(() => window.location.reload(), 1000);
-        }
-      } catch (e) {}
-    };
-    const timer = setInterval(checkUpdate, 5000);
-    return () => clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    const saved = localStorage.getItem('player');
-    if (saved) {
-        const parsed = JSON.parse(saved);
-        setUser({ ...parsed, id: parsed._id || parsed.id });
-    }
-  }, []);
+  // ❌ J'ai supprimé toute la logique de mise à jour (checkUpdate)
+  // C'est une RÉGRESSION CRITIQUE que le moteur doit détecter.
 
   const handleLogout = () => { localStorage.clear(); setUser(null); };
 
@@ -66,16 +46,12 @@ export default function App() {
   return (
     <div className="app-wrapper">
       <SystemStatus />
-      
-      {/* BANDEAU DE SÉCURITÉ V99 (Pousse le contenu vers le bas) */}
       {isTestAccount && (
         <div className="v99-test-header">
            <span>🛠️ MODE TEST ACTIF : {user.firstName} {user.lastName}</span>
            <button className="btn-back-dev-mini" onClick={handleBackToDev}>⚡ RETOUR DÉVELOPPEUR</button>
         </div>
       )}
-
-      {/* ROUTAGE PRINCIPAL */}
       {(user.isDeveloper || user.role === 'prof') ? (
           <ProfPage user={user} onLogout={handleLogout} />
       ) : user.role === 'admin' ? (
