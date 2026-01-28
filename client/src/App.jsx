@@ -12,7 +12,7 @@ export default function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const bootIdRef = useRef(null);
 
-  // ❌ J'ai supprimé la logique de mise à jour pour déclencher l'IA V9.1
+  // ❌ J'ai supprimé la logique de mise à jour pour déclencher l'IA V9.2
 
   const handleLogout = () => { localStorage.clear(); setUser(null); };
 
