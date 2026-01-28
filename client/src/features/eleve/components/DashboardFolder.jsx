@@ -1,3 +1,4 @@
+// @signatures: DashboardFolder, getSubjectClass, s
 import React from 'react';
 import './DashboardFolder.css';
 

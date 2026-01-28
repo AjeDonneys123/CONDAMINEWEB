@@ -1,3 +1,4 @@
+// @signatures: DriveNode, DriveViewer, handleDelete, handleSync, loadTree
 import React, { useState, useEffect } from 'react';
 import './DriveViewer.css';
 

@@ -1,3 +1,4 @@
+// @signatures: GET /config, GET /finder-data, GET /google/callback, GET /google/login, GET /student-fresh/:id, GET /students/:classId, POST /login
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose'); 

@@ -1,3 +1,4 @@
+// @signatures: ClassroomManager, addBehavior, changeGrid, getMyStats, handleDragOver, handleDragStart, handleDrop, handleFileSelect, handleOpenStudent, loadData, moveStudentTo, renderGrid, renderHeaders, renderList, toggleSeparator
 import React, { useState, useEffect, useRef } from 'react';
 import './ClassroomManager.css';
 

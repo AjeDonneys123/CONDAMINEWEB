@@ -1,3 +1,4 @@
+// @signatures: BehaviorTimer, bonusPct, redemptionPct
 import React from 'react';
 import './BehaviorTimer.css';
 

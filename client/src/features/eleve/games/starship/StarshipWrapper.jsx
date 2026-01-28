@@ -1,3 +1,4 @@
+// @signatures: StarshipWrapper, handleGameFinish, saveProgress
 import React, { useEffect, useRef } from 'react';
 import { initStarshipGame } from './starship_core';
 import './starship_style.css';

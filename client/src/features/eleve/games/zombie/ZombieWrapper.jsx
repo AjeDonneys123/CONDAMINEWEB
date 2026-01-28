@@ -1,3 +1,4 @@
+// @signatures: ZombieWrapper, handleGameFinish, saveProgress
 import React, { useEffect, useRef } from 'react';
 import { initZombieGame } from './zombie_core';
 import './zombie_style.css';

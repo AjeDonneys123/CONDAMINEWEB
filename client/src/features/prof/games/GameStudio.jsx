@@ -1,3 +1,4 @@
+// @signatures: GameStudio, addQuestion, deleteQuestion, detectLevel, fetchData, findDefaultChapterId, getChaptersForClass, getStudentsForViewingClass, handleAiGen, handleClassToggle, handleSave, handleUpdateChapter, isMain, myClassesIds, toggleFullClass, toggleStudent, updateOption, updateQuestion
 import React, { useState, useEffect } from 'react';
 import './GameStudio.css';
 

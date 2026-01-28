@@ -1,3 +1,4 @@
+// @signatures: HomeworkWorkspace, getModalConfig, handleInputCheck, handleModalAction, handleMouseDown, handleMouseMove, handleMouseUp, handleZoom, resolveSource, submitToIA
 import React, { useState, useEffect } from 'react';
 import './Homework.css';
 

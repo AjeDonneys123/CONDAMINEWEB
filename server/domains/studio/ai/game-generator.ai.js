@@ -1,3 +1,4 @@
+// @signatures: sprite
 const AIEngine = require('../../../core/ai.engine');
 
 const GameGeneratorAI = {

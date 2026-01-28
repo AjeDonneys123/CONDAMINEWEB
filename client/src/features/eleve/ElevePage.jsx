@@ -1,3 +1,4 @@
+// @signatures: ElevePage, fetchFreshData
 import React, { useState, useEffect } from 'react';
 import EleveHeader from './components/EleveHeader';
 import HomeworkList from './homework/HomeworkList';

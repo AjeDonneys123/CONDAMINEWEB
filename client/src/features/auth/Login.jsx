@@ -1,3 +1,4 @@
+// @signatures: Login, body, clean, handleLogin, handleReset, handleSelectSuggestion
 import React, { useState, useEffect } from 'react';
 import './Login.css';
 

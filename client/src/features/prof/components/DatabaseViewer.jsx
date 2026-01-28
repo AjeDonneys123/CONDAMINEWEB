@@ -1,3 +1,4 @@
+// @signatures: DatabaseViewer, currentData, loadData, renderCell
 import React, { useState, useEffect } from 'react';
 import './DatabaseViewer.css';
 

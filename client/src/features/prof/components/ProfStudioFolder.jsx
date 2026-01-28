@@ -1,3 +1,4 @@
+// @signatures: ProfStudioFolder, cClass, confirmCreateSection, currentActive, fClass, fetchSections, getUserId, handleCreateChapter, handleDeleteItemWrapper, handleDeleteSection, handleRenameChapter, isItemVisibleForClass, isJean, sectionName
 import React, { useState, useEffect } from 'react';
 
 export default function ProfStudioFolder({ items, chapters, classFilter, levelFilter, user, onEditItem, onDeleteItem, onCreateActivity, onRefresh }) {

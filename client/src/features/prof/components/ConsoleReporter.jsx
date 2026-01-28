@@ -1,3 +1,4 @@
+// @signatures: ConsoleReporter, copyToClipboard, handleKeyDown, handleNewError
 import React, { useState, useEffect } from 'react';
 import './ConsoleReporter.css';
 

@@ -1,3 +1,4 @@
+// @signatures: ActivityStudio, fetchJson, handleDeleteItem, loadData
 import React, { useState, useEffect } from 'react';
 import HomeworkStudio from '../homework/HomeworkStudio';
 import GameStudio from '../games/GameStudio';

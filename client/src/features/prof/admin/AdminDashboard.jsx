@@ -1,3 +1,4 @@
+// @signatures: AdminDashboard, getActiveContext, getDisplayedItems, getMembersOf, handleDelete, handleFileSelect, handleMagicImport, handleMembership, handleMigration, handleOpenCreate, handleOpenMagic, handleResetActivities, handleSave, loadData, openEdit, toggleArrayItem
 import React, { useState, useEffect, useRef } from 'react';
 import './AdminDashboard.css';
 

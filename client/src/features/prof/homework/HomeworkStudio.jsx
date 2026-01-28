@@ -1,3 +1,4 @@
+// @signatures: HomeworkStudio, detectLevel, fetchData, findDefaultChapterId, getChaptersForClass, getStudentsForViewingClass, handleFileSelect, handleSave, handleToggleStudent, handleUpdateChapter, isMain, myClassesIds, toggleFullClass, updateLevel
 import React, { useState, useEffect, useRef } from 'react';
 import './HomeworkStudio.css';
 

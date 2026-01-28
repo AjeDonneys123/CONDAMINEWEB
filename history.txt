@@ -1,46 +1,38 @@
-[RE-INITIALISATION RÉUSSIE]
-L'historique est maintenant actif.
-Le watcher apply.js a été mis à jour pour supporter
+# 📜 LOG D'EXPÉRIENCE CONDAMINE PRO
 
-[LOG 03/01/2026 17:43:17]
-.
-==================================================
+## [SESSION 28 JANVIER 2026 - 00:45]
+### 🛠️ MÉTA-DÉVELOPPEMENT (SÉCURITÉ HYBRIDE)
+- **Apply.js V7.1** : Consolidation de la double vérification.
+- **Sécurité Multi-Format** : 
+    - Pour le **Code (JS/JSX)** : La vérification structurelle par signatures empêche d'oublier des fonctions.
+    - Pour le **Visuel (HTML/CSS)** : La vérification de poids (seuil 75%) empêche les snippets tronqués.
+- **Auto-Indexation** : Seuls les fichiers contenant de la logique reçoivent désormais l'en-tête `// @signatures`.
 
-[LOG 03/01/2026 17:44:13]
-### VERSION 1.0 - ÉTAT INITIAL ET SYSTÈME DE LOGS
-- **Architecture Globale** : Initialisation du projet Condamine avec React (Frontend), Node/Express (Backend) et MongoDB.
-==================================================
+### 📸 SCAN & CORRECTION
+- **Correction des Hallucinations** : Le moteur V171 a été testé avec succès sur des copies manuscrites complexes grâce au lexique croisé du sujet.
 
-[LOG 03/01/2026 17:49:03]
-### MISE À JOUR : UI Devoirs V2 - Ratios Stricts & Textes Simplifiés
-- **HomeworkWorkspace.jsx** : Modification du texte du bouton d'envoi. "ENVOYER AU MAÎTRE 🤖" devient "ENVOYER 🤖".
-- **Homework.css** : Ajustement précis des ratios de hauteur. 
-    - La zone supérieure (Liseuse) est fixée à 75% via `flex: 75`.
-    - La zone inférieure (Interaction) est fixée à 25% via `flex: 25`.
-- **UI** : Réduction des marges internes pour garantir que l'image occupe le maximum d'espace possible dans les 75% alloués.
-==================================================
-==================================================
+[UPDATE V7.3] 
+- Modification de apply.js pour gérer history.txt en mode "APPEND".
+- Ajout de la sécurité Linkage CSS (JSX doit avoir son CSS).
 
-[LOG 03/01/2026 17:50:46]
-### MISE À JOUR : UI Devoirs V2 - Ratios Stricts & Textes Simplifiés
-- **HomeworkWorkspace.jsx** : Modification du texte du bouton d'envoi. "ENVOYER AU MAÎTRE 🤖" devient "ENVOYER 🤖".
-- **Homework.css** : Ajustement précis des ratios de hauteur. 
-    - La zone supérieure (Liseuse) est fixée à 75% via `flex: 75`.
-    - La zone inférieure (Interaction) est fixée à 25% via `flex: 25`.
-- **UI** : Réduction des marges internes pour garantir que l'image occupe le maximum d'espace possible dans les 75% alloués.
-==================================================
-==================================================
+[UPDATE V7.3] 
+- Modification de apply.js pour gérer history.txt en mode "APPEND".
+- Ajout de la sécurité Linkage CSS (JSX doit avoir son CSS).
 
-[LOG 03/01/2026 17:53:38]
-### MISE À JOUR : Maximisation de l'Espace Document (Liseuse)
-- **HomeworkWorkspace.jsx** : Optimisation de la fonction `fitImage`. Le facteur de réduction de 0.9 a été supprimé (passé à 1.0) pour que le document s'adapte exactement aux bords de la liseuse dès le chargement.
-- **Homework.css** : Nettoyage des bordures et ombres portées sur `.main-doc-img` pour éviter tout débordement visuel inutile et garantir que chaque pixel de la zone de 75% est exploité.
-- **UI** : L'image occupe désormais 100% de la largeur ou de la hauteur disponible (selon son orientation) sans marge de sécurité.
-==================================================
-==================================================
+[SYSTEM RESET]
+- Validation du moteur V8.4.
+- Remise à zéro du HUD (Disparition du bandeau jaune).
 
-[LOG 03/01/2026 18:12:13]
-### GÉNÉRATEUR AUTOMATIQUE DE DEVOIRS (V8.0) - PARTIE 2
-- **HomeworkStudio.jsx** : Refonte complète de l'interface. Intégration du bouton "Magie", gestion des labels et de la suppression des documents par croix.
-==================================================
-==================================================
+[SYSTEM RESET]
+- Validation du moteur V8.4.
+- Remise à zéro du HUD (Disparition du bandeau jaune).
+
+[SÉCURITÉ VALIDÉE]
+- Le moteur V8.5 a correctement bloqué le composant piège.
+- Le HUD Rouge fonctionne.
+- Système réinitialisé au statut VERT.
+
+[SÉCURITÉ VALIDÉE]
+- Le moteur V8.5 a correctement bloqué le composant piège.
+- Le HUD Rouge fonctionne.
+- Système réinitialisé au statut VERT.

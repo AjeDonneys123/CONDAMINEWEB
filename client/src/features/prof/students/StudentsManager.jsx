@@ -1,3 +1,4 @@
+// @signatures: StudentsManager, getStudentWorkload, handleOpenCorrection, handleRemovePunishment, handleSaveCorrection, loadMatrix
 import React, { useState, useEffect } from 'react';
 import './StudentsManager.css';
 

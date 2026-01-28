@@ -1,3 +1,4 @@
+// @signatures: HomeworkList, loadData, myClass, targets
 import React, { useState, useEffect } from 'react';
 import HomeworkWorkspace from './HomeworkWorkspace';
 import DashboardFolder from '../components/DashboardFolder';

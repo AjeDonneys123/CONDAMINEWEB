@@ -1,3 +1,4 @@
+// @signatures: AssetThumb, StudioDashboard, addLog, checkStart, createActor, dt, handleAiAction, handleConsoleFix, handleDirectImport, handleRemix, injectCostumes, launch, loop, runGame, saveProject, updateActor, uploadBlob, url
 import React, { useState, useRef, useEffect } from 'react';
 import './StudioDashboard.css';
 

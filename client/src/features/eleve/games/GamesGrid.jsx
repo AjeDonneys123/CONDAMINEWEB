@@ -1,3 +1,4 @@
+// @signatures: GamesGrid, assignedIds, close, loadData, myClass, targets
 import React, { useState, useEffect } from 'react';
 import ZombieWrapper from './zombie/ZombieWrapper';
 import StarshipWrapper from './starship/StarshipWrapper';

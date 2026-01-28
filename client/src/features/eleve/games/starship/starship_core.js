@@ -1,3 +1,4 @@
+// @signatures: clearLevel, failAction, fire, getNextQuestion, handleBossInput, handleKey, initStarshipGame, isCorrect, loadRound, moveShip, normalize, renderBars, startBossPhase, startInvaderPhase, triggerNuke, update
 import { GameProgression } from '../mainGames';
 
 export function initStarshipGame(root, api, onExit) {

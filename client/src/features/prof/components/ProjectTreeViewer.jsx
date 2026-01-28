@@ -1,3 +1,4 @@
+// @signatures: ProjectTreeViewer, TreeNode, checkDirty, loadData
 import React, { useState, useEffect } from 'react';
 import './ProjectTreeViewer.css';
 

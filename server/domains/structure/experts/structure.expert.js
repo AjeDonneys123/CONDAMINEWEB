@@ -1,3 +1,4 @@
+// @signatures: isGeneralSection, isGeneralTitle
 const StructureDB = require('../db/structure.db');
 const StructureDrive = require('./structure.drive');
 const mongoose = require('mongoose');

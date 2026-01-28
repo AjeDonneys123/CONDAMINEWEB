@@ -1,8 +1,8 @@
-const { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } = require("@google/generative-ai");
+const fetch = require('node-fetch');
 
 /**
- * 🤖 MOTEUR IA - V21 (TEMPÉRATURE ZÉRO)
- * Réglage strict pour empêcher l'IA de "délirer" en Anglais ou de changer le format.
+ * 🤖 MOTEUR IA - V31 (GEMINI 2.0)
+ * Utilise le modèle confirmé disponible sur votre compte.
  */
 const AIEngine = {
     normalizeKeys: (obj) => {
@@ -15,52 +15,44 @@ const AIEngine = {
     },
 
     sanitizeJSON: (text) => {
+        if (text && text.startsWith("ERREUR")) {
+             return {
+                studentName: "Erreur API",
+                grade: "?",
+                appreciation: "Problème technique.",
+                transcription: `🔴 ${text}`,
+                mistakes: []
+            };
+        }
+
         if (!text) return { grade: "?", appreciation: "Vide.", transcription: "Rien." };
 
         let clean = text.replace(/```json/gi, "").replace(/```/gi, "").trim();
-        
         try {
             const start = clean.indexOf('{');
             const end = clean.lastIndexOf('}');
-            let parsed = null;
-
             if (start !== -1 && end !== -1) {
-                parsed = JSON.parse(clean.substring(start, end + 1));
-            } else {
-                throw new Error("No JSON");
+                const parsed = JSON.parse(clean.substring(start, end + 1));
+                const norm = AIEngine.normalizeKeys(parsed);
+                let trans = norm.transcription || norm.text || "Pas de texte";
+                if (typeof trans === 'object') trans = JSON.stringify(trans, null, 2);
+                return {
+                    studentname: norm.studentname || "Inconnu",
+                    grade: norm.grade || "?",
+                    appreciation: norm.appreciation || "Pas d'avis",
+                    transcription: trans,
+                    mistakes: norm.mistakes || []
+                };
             }
-
-            const norm = AIEngine.normalizeKeys(parsed);
-
-            // Vérification des champs clés (si l'IA a mis "general_assessment" au lieu de "appreciation")
-            const appreciation = norm.appreciation || norm.general_assessment || norm.comment || "Pas d'avis";
-            const transcription = norm.transcription || norm.detailed_feedback || norm.text || "Pas de texte";
-            
-            // Si la transcription est un objet (le bug de tout à l'heure), on le stringify
-            let finalTrans = transcription;
-            if (typeof transcription === 'object') {
-                finalTrans = JSON.stringify(transcription, null, 2);
-            }
-
-            return {
-                studentname: norm.studentname || "Inconnu",
-                grade: norm.grade || norm.overall_grade || norm.note || "?",
-                appreciation: appreciation,
-                transcription: finalTrans,
-                mistakes: norm.mistakes || []
-            };
-
+            throw new Error("No JSON");
         } catch (e) { 
             console.warn("⚠️ Mode RAW.");
-            let htmlText = text
-                .replace(/\*\*(.*?)\*\*/g, '<span style="color:#ef4444; font-weight:bold;">$1</span>')
-                .replace(/\n/g, '<br/>');
-
+            let htmlText = text.replace(/\*\*(.*?)\*\*/g, '<span style="color:#ef4444; font-weight:bold;">$1</span>').replace(/\n/g, '<br/>');
             return {
                 studentName: "Mode Texte",
                 grade: "?",
-                appreciation: "Format IA invalide.",
-                transcription: "🔴 CONTENU BRUT :\n\n" + htmlText, 
+                appreciation: "Format brut.",
+                transcription: htmlText, 
                 mistakes: []
             };
         }
@@ -68,30 +60,60 @@ const AIEngine = {
 
     ask: async (prompt, systemInstruction = "") => {
         const apiKey = process.env.GEMINI_API_KEY;
-        const targetModel = "gemini-2.0-flash"; 
+        // LE MODÈLE CONFIRMÉ PAR VOTRE TEST :
+        const modelName = "gemini-2.0-flash"; 
 
-        if (!apiKey) return "ERREUR CLÉ";
-        
-        try {
-            const genAI = new GoogleGenerativeAI(apiKey);
-            const model = genAI.getGenerativeModel({ 
-                model: targetModel,
-                systemInstruction: systemInstruction,
-                safetySettings: [
-                    { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                    { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-                    { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                    { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                ],
-                // TEMPÉRATURE 0.1 : L'IA devient un robot logique, pas un poète.
-                // Cela réduit drastiquement le risque qu'elle parle anglais ou change le JSON.
-                generationConfig: { temperature: 0.1 }
+        if (!apiKey) return "ERREUR CLÉ API MANQUANTE";
+
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+
+        const contents = [];
+        const parts = [];
+        if (Array.isArray(prompt)) {
+            prompt.forEach(p => {
+                if (p.text) parts.push({ text: p.text });
+                if (p.inlineData) {
+                    parts.push({ inline_data: { mime_type: p.inlineData.mimeType, data: p.inlineData.data } });
+                }
             });
-            const result = await model.generateContent(prompt);
-            return result.response.text();
+        } else {
+            parts.push({ text: prompt });
+        }
+        contents.push({ role: "user", parts: parts });
+
+        const body = {
+            contents: contents,
+            systemInstruction: { parts: [{ text: systemInstruction || "Tu es un assistant." }] },
+            safetySettings: [
+                { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+                { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+                { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+                { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+            ],
+            generationConfig: { temperature: 0.2 }
+        };
+
+        try {
+            console.log(`📡 [AI-ENGINE] Appel ${modelName}...`);
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            const data = await response.json();
+
+            if (data.error) {
+                console.error("❌ ERREUR API GOOGLE :", data.error);
+                return `ERREUR GOOGLE (${data.error.code}): ${data.error.message}`;
+            }
+
+            if (data.candidates && data.candidates.length > 0 && data.candidates[0].content) {
+                return data.candidates[0].content.parts[0].text;
+            } else {
+                return "Réponse vide.";
+            }
         } catch (e) {
-            console.error(`💥 CRASH GOOGLE :`, e.message);
-            return `ERREUR: ${e.message}`;
+            return `ERREUR RÉSEAU: ${e.message}`;
         }
     }
 };

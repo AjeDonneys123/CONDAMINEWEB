@@ -1,3 +1,4 @@
+// @signatures: myNote
 const mongoose = require('mongoose');
 const ClassroomAI = require('../ai/plan.ai');
 

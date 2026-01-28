@@ -1,3 +1,4 @@
+// @signatures: DELETE /:collection/:id, DELETE /maintenance/reset-content, GET /admins, GET /classrooms, GET /database-dump, GET /drive-check, GET /students, GET /subjects, GET /teachers, GET /teachers/:id, POST /admins, POST /classrooms, POST /import-csv, POST /import-magic, POST /maintenance/migrate-students, POST /membership, POST /students, POST /subjects, POST /teachers, guessLevel, isForceClass, normalizeClassName, query
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');

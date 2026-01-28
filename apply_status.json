@@ -1,5 +1,6 @@
 {
   "status": "OK",
-  "file": null,
-  "timestamp": 1769481424138
+  "message": "Sync Terminée",
+  "details": "1 fichiers traités.",
+  "timestamp": 1769603117566
 }

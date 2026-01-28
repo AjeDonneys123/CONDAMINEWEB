@@ -1,3 +1,4 @@
+// @signatures: DELETE /:id, GET /all, GET /progress, POST /, POST /generate, POST /save-progress
 const express = require('express');
 const router = express.Router();
 const QuizCreatorExpertAI = require('./experts/quiz-creator.ai');

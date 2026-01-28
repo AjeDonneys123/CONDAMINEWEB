@@ -1,3 +1,4 @@
+// @signatures: runIntegritySuite
 /**
  * 🕵️‍♂️ SUITE DE TESTS D'INTÉGRITÉ - VERSION 69
  * Ce script valide que chaque injection de code respecte les User Stories.

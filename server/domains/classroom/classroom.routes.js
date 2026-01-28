@@ -1,3 +1,4 @@
+// @signatures: GET /:classId, GET /plan/:classId, POST /behavior, POST /import-plan, POST /layout, POST /move, POST /redemption, POST /swap
 const express = require('express');
 const router = express.Router();
 const ClassroomExpert = require('./experts/classroom.expert');

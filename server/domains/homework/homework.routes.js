@@ -1,12 +1,20 @@
+// @signatures: DELETE /:id, GET /all, GET /submission/:id, GET /submissions, POST /, POST /analyze-homework, POST /generate-hints, POST /remove-punishment, POST /upload, PUT /submission/:id
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
+const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const HomeworkDB = require('./experts/homework.db');
 const HomeworkAI = require('./experts/homework.ai');
+const DriveEngine = require('../../core/drive.engine'); // V2: Import DriveEngine
 
 const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
+// Config Multer (Stockage temporaire avant envoi Drive)
+const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'temp');
+if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+const upload = multer({ dest: uploadDir });
 
 // --- NOUVELLE ROUTE : ANNULER UNE PUNITION ---
 router.post('/remove-punishment', asyncHandler(async (req, res) => {
@@ -68,12 +76,32 @@ router.delete('/:id', asyncHandler(async (req, res) => {
     res.json({ ok: true });
 }));
 
-const multer = require('multer');
-const upload = multer({ dest: 'public/uploads/' });
-router.post('/upload', upload.array('files'), (req, res) => {
-    const urls = req.files.map(f => `/uploads/${f.filename}`);
-    res.json({ urls });
-});
+// V2: UPLOAD DRIVE CONNECTED
+router.post('/upload', upload.array('files'), asyncHandler(async (req, res) => {
+    if (!req.files || req.files.length === 0) return res.status(400).json({ error: "Fichier manquant" });
+    
+    const urls = [];
+    try {
+        // Dossier spécifique pour les assets de devoirs
+        const homeworksFolderId = await DriveEngine.getOrCreateFolder("CONDA_HOMEWORK_ASSETS");
+        
+        for (const file of req.files) {
+            // Upload vers Drive
+            const driveFile = await DriveEngine.uploadFile(file.originalname, file.path, homeworksFolderId);
+            
+            // On génère l'URL Proxy pour l'affichage frontend
+            const proxyUrl = `/api/structure/proxy/${driveFile.id}`;
+            urls.push(proxyUrl);
+            
+            // Nettoyage immédiat du fichier local
+            try { fs.unlinkSync(file.path); } catch(e) { console.error("Cleanup error:", e); }
+        }
+        res.json({ urls });
+    } catch (e) {
+        console.error("Drive Upload Error:", e);
+        res.status(500).json({ error: "Erreur lors de l'envoi vers le Drive." });
+    }
+}));
 
 router.post('/analyze-homework', (req, res) => HomeworkDB.processSubmission(req.body, HomeworkAI).then(r => res.json(r)));
 

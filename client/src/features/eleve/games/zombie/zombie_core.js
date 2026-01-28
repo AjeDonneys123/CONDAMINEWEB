@@ -1,3 +1,4 @@
+// @signatures: failAction, fireProjectile, getNextQuestion, handleInputAnswer, initZombieGame, loadRound, loop, normalize, renderBars, showFeedback, updatePositions
 export function initZombieGame(root, api, onExit) {
     // --- 1. DONNÉES & ÉTAT ---
     let questionsList = api.level.questions;

@@ -1,17 +1,11 @@
+// @signatures: ScansStudio, SecureImage, handleCreateDC, handleDeleteFile, handleDeleteSession, handleLinkDrive, launchCorrection, loadChapters, loadSessions, openCorrectionModal, startCamera, takeSnap, togglePanel
 import React, { useState, useEffect, useRef } from 'react';
 import './ScansStudio.css';
 
-const SecureImage = ({ src, className, onClick }) => {
+const SecureImage = ({ src, className, style, onClick }) => {
     const [error, setError] = useState(false);
-    if (error) {
-        return (
-            <div className={`${className} bg-slate-100 flex flex-col items-center justify-center border-2 border-red-200 text-red-400 p-2 text-center`} title="Fichier perdu">
-                <span className="text-xl">⚠️</span>
-                <span className="text-[8px] font-black uppercase">Perdu</span>
-            </div>
-        );
-    }
-    return <img src={src} className={className} onClick={onClick} onError={() => setError(true)} alt="Scan" />;
+    if (error) return <div className={`bg-slate-100 flex items-center justify-center border-2 border-red-200 text-red-400 p-4 text-center ${className}`} style={style}>⚠️ Perdu</div>;
+    return <img src={src} className={className} style={style} onClick={onClick} onError={() => setError(true)} alt="Scan" />;
 };
 
 export default function ScansStudio({ user }) {
@@ -19,10 +13,12 @@ export default function ScansStudio({ user }) {
     const [chapters, setChapters] = useState([]);
     const [activePanels, setActivePanels] = useState({});
     
+    // correctionModal stocke l'ID de la session en cours de config
     const [correctionModal, setCorrectionModal] = useState(null); 
     const [viewingCorrection, setViewingCorrection] = useState(null); 
     const [instructions, setInstructions] = useState("");
-    const [processing, setProcessing] = useState(false);
+    const [processing, setProcessing] = useState(false); 
+    const [zoomImage, setZoomImage] = useState(null);
 
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
@@ -39,7 +35,7 @@ export default function ScansStudio({ user }) {
     const togglePanel = (id, type, currentChap) => {
         if (stream) { stream.getTracks().forEach(t => t.stop()); setStream(null); }
         setActivePanels(prev => ({ ...prev, [id]: prev[id] === type ? null : type }));
-        if (type.startsWith('CAMERA')) setTimeout(startCamera, 100);
+        if (type && type.startsWith('CAMERA')) setTimeout(startCamera, 100);
         if (type === 'DRIVE_SELECTION') setSelectedFolderId(currentChap || (relevantChapters[0]?._id || ""));
     };
 
@@ -55,30 +51,53 @@ export default function ScansStudio({ user }) {
         if (!videoRef.current || !canvasRef.current) return;
         const vid = videoRef.current;
         const cvs = canvasRef.current;
-        cvs.width = vid.videoWidth;
-        cvs.height = vid.videoHeight;
+        cvs.width = vid.videoWidth; cvs.height = vid.videoHeight;
         cvs.getContext('2d').drawImage(vid, 0, 0, cvs.width, cvs.height);
-        
         cvs.toBlob(async (blob) => {
             const localUrl = URL.createObjectURL(blob);
             const snapId = Date.now();
             setSnapQueue(prev => [...prev, { id: snapId, url: localUrl, status: 'uploading' }]);
-            
             const formData = new FormData();
             formData.append('file', blob, `scan_${snapId}.jpg`);
             formData.append('sessionId', sessionId);
             formData.append('type', type === 'CAMERA_SUBJECT' ? 'SUBJECT' : 'COPY');
-            
             try {
                 const res = await fetch('/api/scans/upload', { method: 'POST', body: formData });
-                if (!res.ok) throw new Error("Erreur Upload");
-                setSnapQueue(prev => prev.map(s => s.id === snapId ? { ...s, status: 'done' } : s));
-                loadSessions(); 
-            } catch(e) { 
-                alert("Échec upload Drive.");
-                setSnapQueue(prev => prev.filter(s => s.id !== snapId));
-            }
+                if (res.ok) { setSnapQueue(prev => prev.map(s => s.id === snapId ? { ...s, status: 'done' } : s)); loadSessions(); }
+            } catch(e) { setSnapQueue(prev => prev.filter(s => s.id !== snapId)); }
         }, 'image/jpeg', 0.95);
+    };
+
+    const handleDeleteFile = async (sessionId, url, type) => {
+        if(!confirm(`Supprimer définitivement ?`)) return;
+        try {
+            const res = await fetch('/api/scans/delete-file', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ sessionId, url, type }) });
+            if(res.ok) loadSessions();
+        } catch(e) {}
+    };
+
+    const openCorrectionModal = (sessionId) => {
+        setCorrectionModal(sessionId);
+        setInstructions("Compare la copie au SUJET fourni. Identifie l'élève. Mets une appréciation globale et une lettre (A+, A, B ou C).");
+    };
+
+    const launchCorrection = async () => {
+        if(!correctionModal) return;
+        const sid = correctionModal;
+        setCorrectionModal(null); // On ferme la modale immédiatement
+        setProcessing(true);      // On affiche le sablier
+        
+        try {
+            const res = await fetch(`/api/scans/correct/${sid}`, { 
+                method: 'POST', 
+                headers: {'Content-Type':'application/json'}, 
+                body: JSON.stringify({ instructions }) 
+            });
+            if (res.ok) {
+                await loadSessions(); // Recharge les données une fois fini
+            }
+        } catch(e) { console.error(e); }
+        setProcessing(false); // On enlève le sablier
     };
 
     const handleCreateDC = async () => {
@@ -88,103 +107,85 @@ export default function ScansStudio({ user }) {
     };
 
     const handleDeleteSession = async (id) => {
-        if(!confirm("Supprimer ?")) return;
+        if(!confirm("Supprimer toute la session ?")) return;
         await fetch(`/api/scans/sessions/${id}`, { method: 'DELETE' });
         loadSessions();
     };
 
     const handleLinkDrive = async (sessionId) => {
         await fetch(`/api/scans/sessions/${sessionId}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ chapterId: selectedFolderId }) });
-        alert("✅ Dossier lié !");
-        loadSessions();
-    };
-
-    const openCorrectionModal = (sessionId) => {
-        setCorrectionModal(sessionId);
-        setInstructions("Compare la copie au SUJET fourni. Note selon le barème (A+, A, B, C).");
-    };
-
-    const launchCorrection = async () => {
-        if(!correctionModal) return;
-        setProcessing(true);
-        try {
-            await fetch(`/api/scans/correct/${correctionModal}`, { 
-                method: 'POST', 
-                headers: {'Content-Type':'application/json'}, 
-                body: JSON.stringify({ instructions }) 
-            });
-            await loadSessions();
-            setCorrectionModal(null);
-        } catch(e) { alert("Erreur IA"); }
-        setProcessing(false);
+        alert("✅ Dossier lié !"); loadSessions();
     };
 
     return (
         <div className="scan-page">
+            {processing && (
+                <div className="background-processing-indicator">
+                    <span className="sand-timer">⏳</span>
+                    <span>IA : CORRECTION EN COURS...</span>
+                </div>
+            )}
+
+            {zoomImage && (
+                <div className="fixed inset-0 z-[100000] bg-black/95 flex items-center justify-center p-4 cursor-zoom-out" onClick={() => setZoomImage(null)}>
+                    <img src={zoomImage} className="max-w-full max-h-full object-contain" alt="Zoom" />
+                </div>
+            )}
+
             {viewingCorrection && (
-                <div className="correction-overlay" onClick={() => setViewingCorrection(null)}>
-                    <div className="correction-card !w-[90vw] !max-w-6xl !h-[90vh]" onClick={e => e.stopPropagation()}>
-                        <div className="corr-header">
+                <div className="fixed inset-0 z-[90000] bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-0 md:p-4" onClick={() => setViewingCorrection(null)}>
+                    <div className="bg-white md:rounded-2xl overflow-hidden shadow-2xl flex flex-col w-full h-full md:max-w-[1000px] md:h-[95vh]" onClick={e => e.stopPropagation()}>
+                        <div className="bg-slate-800 text-white p-4 flex justify-between items-center shrink-0">
                             <div>
-                                <h2 className="text-xl font-black uppercase text-white">{viewingCorrection.studentName}</h2>
-                                <span className={`text-sm font-black px-3 py-1 rounded-full ${
-                                    (viewingCorrection.grade || "").includes("A") ? "bg-green-500 text-white" :
-                                    (viewingCorrection.grade || "").includes("B") ? "bg-yellow-500 text-white" :
-                                    "bg-red-500 text-white"
-                                }`}>
-                                    NOTE : {viewingCorrection.grade}
-                                </span>
+                                <h2 className="text-lg font-black uppercase">{viewingCorrection.studentName}</h2>
+                                <span className="text-xs font-black px-3 py-1 rounded-full bg-green-500 text-white mt-1 inline-block">NOTE : {viewingCorrection.grade}</span>
                             </div>
-                            <button onClick={() => setViewingCorrection(null)} className="text-white text-2xl">✕</button>
+                            <button onClick={() => setViewingCorrection(null)} className="text-white text-2xl font-bold">✕</button>
                         </div>
-                        <div className="corr-body flex">
-                            <div className="flex-1 bg-black flex items-center justify-center p-4">
-                                <SecureImage src={viewingCorrection.originalUrl} className="max-h-full max-w-full object-contain border-2 border-slate-700 rounded-lg" />
+                        <div className="flex flex-col flex-1 overflow-hidden">
+                            <div className="bg-slate-200 relative overflow-y-auto" style={{ height: '60%' }}>
+                                <SecureImage src={viewingCorrection.originalUrl} className="w-full h-auto block" onClick={() => setZoomImage(viewingCorrection.originalUrl)} />
                             </div>
-                            <div className="flex-1 bg-white p-8 overflow-y-auto">
-                                <h4 className="text-sm font-black text-slate-400 uppercase mb-2">Appréciation Globale</h4>
-                                <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-xl text-indigo-900 font-medium mb-6">
-                                    {viewingCorrection.appreciation}
+                            <div className="bg-white flex flex-col p-6 overflow-y-auto" style={{ height: '40%' }}>
+                                <div className="mb-4 p-4 bg-indigo-50 border-l-4 border-indigo-500 rounded-r-xl">
+                                    <h4 className="text-[10px] font-black text-indigo-400 uppercase mb-1">Synthèse IA</h4>
+                                    <p className="text-sm font-bold text-slate-700">{viewingCorrection.appreciation}</p>
                                 </div>
-                                <h4 className="text-sm font-black text-slate-400 uppercase mb-2">Analyse Détaillée (Rouge = IA / Noir = Élève)</h4>
-                                {/* MODIFICATION CRITIQUE : Support du HTML pour les couleurs */}
-                                <div 
-                                    className="prose prose-sm text-slate-800 whitespace-pre-wrap font-mono text-xs p-4 bg-slate-50 border rounded-xl"
-                                    dangerouslySetInnerHTML={{ __html: viewingCorrection.transcription }}
-                                />
+                                <div className="prose prose-sm text-slate-800 font-mono text-xs whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: viewingCorrection.transcription }} />
                             </div>
                         </div>
                     </div>
                 </div>
             )}
 
+            {/* MODALE DE CONFIGURATION IA (Apparaît quand on clique sur CORRIGER) */}
             {correctionModal && (
-                <div className="scan-overlay animate-in">
-                    <div className="scan-modal">
-                        <h3>🤖 CORRECTION (Barème A+/A/B/C)</h3>
-                        <p className="text-xs text-slate-400 mb-2">L'IA va transcrire le texte en noir et commenter en rouge.</p>
-                        <textarea className="scan-instr-input" value={instructions} onChange={e => setInstructions(e.target.value)} />
+                <div className="scan-overlay">
+                    <div className="scan-modal" onClick={e => e.stopPropagation()}>
+                        <h3 className="font-black">🤖 CONFIGURATION IA</h3>
+                        <p className="text-[11px] text-slate-400 font-bold uppercase">Instructions pour la correction :</p>
+                        <textarea 
+                            className="scan-instr-input" 
+                            value={instructions} 
+                            onChange={e => setInstructions(e.target.value)} 
+                        />
                         <div className="scan-modal-actions">
                             <button onClick={() => setCorrectionModal(null)} className="btn-cancel">ANNULER</button>
-                            <button onClick={launchCorrection} className="btn-launch" disabled={processing}>{processing ? 'TRAITEMENT...' : 'LANCER 🚀'}</button>
+                            <button onClick={launchCorrection} className="btn-launch">LANCER LA CORRECTION 🚀</button>
                         </div>
                     </div>
                 </div>
             )}
 
-            <div className="create-dc-btn" onClick={handleCreateDC}><span className="create-label">+ NOUVEAU SCAN</span></div>
+            <div className="create-dc-btn" onClick={handleCreateDC}><span>+ NOUVEAU SCAN (DC)</span></div>
             
             {sessions.map(s => {
                 const active = activePanels[s._id];
                 const correctedCount = s.corrections ? s.corrections.length : 0;
-
                 return (
                     <div key={s._id} className="dc-card">
                         <div className="dc-header">
-                            <div>
-                                <h3 style={{fontWeight:900}}>{s.title}</h3>
-                                <p className="text-xs text-slate-400 font-bold">{s.subjectUrls?.length || 0} Sujets • {s.copyUrls.length} Copies • {correctedCount} Corrigés</p>
-                            </div>
+                            <div><h3 style={{fontWeight:950, fontSize: '1.1rem'}}>{s.title}</h3><p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">{s.subjectUrls?.length || 0} Sujets • {s.copyUrls.length} Copies • {correctedCount} Corrigés</p></div>
                             <div className="dc-toolbar">
                                 <button className="tool-btn btn-sujet" onClick={() => togglePanel(s._id, 'CAMERA_SUBJECT')}>📄 SUJET</button>
                                 <button className="tool-btn btn-scanner" onClick={() => togglePanel(s._id, 'CAMERA_COPY')}>📷 COPIES</button>
@@ -194,31 +195,42 @@ export default function ScansStudio({ user }) {
                                 <button className="tool-btn btn-delete" onClick={() => handleDeleteSession(s._id)}>✕</button>
                             </div>
                         </div>
-
                         {active === 'SHOW_ALL' && (
-                            <div className="dc-content-area text-white">
-                                {s.subjectUrls?.length > 0 && (
-                                    <div className="mb-6"><h4 className="font-bold mb-2 uppercase text-xs text-indigo-300">SUJETS</h4><div className="snap-queue-strip custom-scrollbar justify-start">{s.subjectUrls.map((url, i) => (<SecureImage key={i} src={url} className="queue-thumb border-indigo-500 border-2" onClick={() => window.open(url, '_blank')} />))}</div></div>
-                                )}
-                                <div><h4 className="font-bold mb-2 uppercase text-xs text-emerald-300">COPIES ({s.copyUrls.length})</h4><div className="snap-queue-strip custom-scrollbar justify-start flex-wrap">{s.copyUrls.map((url, i) => { const correction = s.corrections?.find(c => c.originalUrl === url); return (<div key={i} className="relative group cursor-pointer" onClick={() => { if(correction) setViewingCorrection(correction); else window.open(url, '_blank'); }}><SecureImage src={url} className={`queue-thumb ${correction ? 'border-green-500' : 'border-slate-500'} border-2`} />{correction && <div className="absolute top-0 right-0 bg-green-500 text-white text-[8px] font-black px-1 rounded-bl">{correction.grade || "OK"}</div>}</div>); })}</div></div>
-                            </div>
-                        )}
-
-                        {active === 'DRIVE_SELECTION' && (
-                            <div className="dc-content-area flex flex-col items-center gap-4 text-white">
-                                <h3>CHOISIR LE DOSSIER</h3>
-                                <select className="p-3 rounded text-black font-bold" value={selectedFolderId} onChange={e => setSelectedFolderId(e.target.value)}><option value="">-- SÉLECTION --</option>{relevantChapters.map(c => <option key={c._id} value={c._id}>{c.title}</option>)}</select>
-                                <button className="bg-green-500 text-white px-4 py-2 rounded font-black" onClick={() => handleLinkDrive(s._id)}>VALIDER</button>
-                            </div>
-                        )}
-
-                        {active && active.startsWith('CAMERA') && (
                             <div className="dc-content-area">
-                                <h4 className="text-center text-white font-black mb-2 uppercase">{active === 'CAMERA_SUBJECT' ? "SUJET" : "COPIE ÉLÈVE"}</h4>
-                                <div className="cam-wrapper"><video ref={videoRef} autoPlay playsInline className="cam-video" /><canvas ref={canvasRef} style={{display:'none'}} /><div className={`cam-trigger ${active === 'CAMERA_SUBJECT' ? 'border-indigo-500' : 'border-emerald-500'}`} onClick={() => takeSnap(s._id, active)}>⚪</div></div>
-                                <div className="snap-queue-strip custom-scrollbar">{snapQueue.map(sq => <img key={sq.id} src={sq.url} className={`queue-thumb ${sq.status}`} />)}</div>
+                                {s.subjectUrls?.length > 0 && (
+                                    <div className="mb-6">
+                                        <h4 className="font-black mb-3 uppercase text-[10px] text-indigo-300 tracking-widest">SUJETS ({s.subjectUrls.length})</h4>
+                                        <div className="snap-queue-strip">
+                                            {s.subjectUrls.map((url, i) => (
+                                                <div key={i} className="queue-thumb-container">
+                                                    <SecureImage src={url} className="queue-thumb border-indigo-500 border-2" onClick={() => window.open(url, '_blank')} />
+                                                    <div className="thumb-delete-trigger" onClick={(e) => { e.stopPropagation(); handleDeleteFile(s._id, url, 'SUBJECT'); }}>✕</div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                                <div>
+                                    <h4 className="font-black mb-3 uppercase text-[10px] text-emerald-300 tracking-widest">COPIES ({s.copyUrls.length})</h4>
+                                    <div className="snap-queue-strip flex-wrap">
+                                        {s.copyUrls.map((url, i) => { 
+                                            const correction = s.corrections?.find(c => c.originalUrl === url); 
+                                            return (
+                                                <div key={i} className="queue-thumb-container">
+                                                    <div onClick={() => { if(correction) setViewingCorrection(correction); else window.open(url, '_blank'); }}>
+                                                        <SecureImage src={url} className={`queue-thumb ${correction ? 'border-green-500' : 'border-slate-500'} border-2`} />
+                                                        {correction && <div className="absolute top-0 right-0 bg-green-500 text-white text-[8px] font-black px-1 rounded-bl">{correction.grade || "OK"}</div>}
+                                                    </div>
+                                                    <div className="thumb-delete-trigger" onClick={(e) => { e.stopPropagation(); handleDeleteFile(s._id, url, 'COPY'); }}>✕</div>
+                                                </div>
+                                            ); 
+                                        })}
+                                    </div>
+                                </div>
                             </div>
                         )}
+                        {active === 'DRIVE_SELECTION' && (<div className="dc-content-area flex flex-col items-center gap-4 text-white"><h3>RANGER DANS LE DRIVE</h3><select className="p-3 rounded text-black font-bold" value={selectedFolderId} onChange={e => setSelectedFolderId(e.target.value)}><option value="">-- CHOISIR DOSSIER --</option>{relevantChapters.map(c => <option key={c._id} value={c._id}>{c.title}</option>)}</select><button className="bg-green-500 text-white px-6 py-2 rounded-xl font-black" onClick={() => handleLinkDrive(s._id)}>VALIDER</button></div>)}
+                        {active && active.startsWith('CAMERA') && (<div className="dc-content-area"><h4 className="text-center text-white font-black mb-4 uppercase tracking-widest">{active === 'CAMERA_SUBJECT' ? "📸 SCANNER LE SUJET" : "📸 SCANNER LES COPIES"}</h4><div className="cam-wrapper"><video ref={videoRef} autoPlay playsInline className="cam-video" /><canvas ref={canvasRef} style={{display:'none'}} /><div className={`cam-trigger ${active === 'CAMERA_SUBJECT' ? 'border-indigo-500' : 'border-emerald-500'}`} onClick={() => takeSnap(s._id, active)}>⚪</div></div><div className="snap-queue-strip">{(active === 'CAMERA_SUBJECT' ? s.subjectUrls : s.copyUrls).map((url, i) => (<div key={i} className="queue-thumb-container"><SecureImage src={url} className="queue-thumb border-white/20 border-2" /><div className="thumb-delete-trigger" onClick={() => handleDeleteFile(s._id, url, active === 'CAMERA_SUBJECT' ? 'SUBJECT' : 'COPY')}>✕</div></div>))}</div></div>)}
                     </div>
                 );
             })}

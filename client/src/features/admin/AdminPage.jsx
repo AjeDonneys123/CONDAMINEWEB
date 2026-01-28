@@ -1,3 +1,4 @@
+// @signatures: AdminPage, handleRefresh
 import React from 'react';
 import AdminDashboard from '../prof/admin/AdminDashboard'; // On réutilise le composant existant
 import './AdminPage.css';

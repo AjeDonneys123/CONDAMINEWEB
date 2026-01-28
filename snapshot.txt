@@ -5,6 +5,7 @@ STRUCTURE:
 ├── LOCKED_FILES.md
 ├── apply.js
 ├── apply_status.json
+├── check-google.js
 ├── cleanup.js
 ├── client/
 │   ├── .eslintrc.cjs
@@ -133,223 +134,12 @@ STRUCTURE:
 │   │   └── ~$che_Croissance_Demographique_5e.docx
 │   ├── style.css
 │   └── uploads/
-│       ├── 00074c1d609912c65c51155b418dabce
-│       ├── 052ab3c8f8468e7f52ed76c06b28b36c
-│       ├── 0717c54fc34cd56505db1ada55b5a128
-│       ├── 07b4ded2280d7ad22dc0daa2c90f4107
-│       ├── 0c0daa9f4b95728fbd6744579a949866
-│       ├── 1317d865b5a81abc4ffab8c95bd916a6
-│       ├── 179b96e657c91102b91b1031e6903d7a
-│       ├── 187f36a3832211a9ac5609451dbcc07e
-│       ├── 1aeb825cbd9d5c70134d755dbd67fb30
-│       ├── 1e0cfd7b4b9c8bf14b57cbf00d295305
-│       ├── 1f8bb989dcddf547b87d29823748eaec
-│       ├── 25ae4a24457eb6085b6acfac3a088927
-│       ├── 262f72cd65ccb7a5e9683572acb3e77e
-│       ├── 27edd398376f5b66dbb2e8f693acafeb
-│       ├── 2e60b469304ca62fbee3ab3570d179c9
-│       ├── 3314c59868ed0fdaf43713663e092ee2
-│       ├── 39e59123b81f986d90689b3d9ba307a6
-│       ├── 3fa4df6f9df4d3adf97df942093c70b2
-│       ├── 414db1aeec50cd975840251ee09952f5
-│       ├── 41e8d9571f1f9cefe06c74a1d6f9d22d
-│       ├── 4606714bcf37808bf5bb4046090f8e07
-│       ├── 463ed86d6e598b9caeec4cd388cf2c41
-│       ├── 46b781ca6b50d61e08289ac3528b2a37
-│       ├── 475a9fbcb23396694d9f72993a852467
-│       ├── 48b421fe199f71b88556902ee8e07703
-│       ├── 4a43c1df546502e0eeb7b11ecfb37566
-│       ├── 4c36c39708a1d772537a0ebd47e3eddd
-│       ├── 535614caff7a20a0c7cd820854175c01
-│       ├── 5362fd2b26409028107cb2bf0b6e183f
-│       ├── 57c379caff0c0948e8bd1759536e68d5
-│       ├── 59105c71abdd1166db1a6e8215e1a500
-│       ├── 5fdee988fa12526b09a3279e25c03e4b
-│       ├── 6124963df3f30761cd2bfecadb1eb7c9
-│       ├── 66c56b4125db7dd70c0f1e1dd12afd8b
-│       ├── 67a4b68652a4244e7ce1773626d3bf8f
-│       ├── 6d363d5dc961fe2f9d9bd834619bf42a
-│       ├── 7318f9d346d09a948e2b1091362844ba
-│       ├── 78441ed55f78839508d6cbe6140901fb
-│       ├── 7917645a7cb6159d05cd1d60493ecd3a
-│       ├── 7d343cb08b23bb58b187ff750d791b97
-│       ├── 7e7b5a674ea0ef272a0095b11ecb3521
-│       ├── 87b083483c4ab06d99b78c3688e349e0
-│       ├── 8ddbe74b35a0914e75e150b5389df420
-│       ├── 8dfabdc4f70fe54049c0fa14e2fad9c3
-│       ├── 8fc74b97cbb3f971d37f15e01f7f4ef6
-│       ├── 92641164cb332ab43552b5de9e8c4af1
-│       ├── 95b6e11513d1e1bf2146f1edd2f37e10
-│       ├── 9658cef0694494aa04e0a7144bab9160
-│       ├── 9b0aa346caa5feac06ad153ad803052e
-│       ├── 9e02a1e0c5937d5dc9b5b3bf41d67128
-│       ├── 9ea4d0bf219b361d2bf2929996c4f304
-│       ├── 9f3c04d4e50d5f63662ec145f4c40fbb
-│       ├── a4f70d13fdfc2a1b44c5f77c5a78c044
-│       ├── a8bca3310ba3a8072b5a54e8d2f2c83d
-│       ├── ai-1769124390020.jpg
-│       ├── ai-1769124788771.jpg
-│       ├── ai-1769124836695.jpg
-│       ├── ai-1769124938381.jpg
-│       ├── ai-1769125037098.jpg
-│       ├── ai-1769125110210.jpg
-│       ├── b2e95253f50fb5a724d0f8e205bb60d3
-│       ├── b4cff4272b9a06cccc9d9ec9e7097354
-│       ├── b50cd7e78c26e7316e45656c98743e75
-│       ├── b705e0b2fe6c124755c5c7b6d999975e
-│       ├── b8ac0517684936d20dc47eb7d4c722d7
-│       ├── ba2ecae20864307e22d433eaaa4e35b5
-│       ├── bc199f06f744958b60903b2790bc0d50
-│       ├── bc436827d84a92c7ec80b124e45c2669
-│       ├── bca5f21524fde8c5583641c838b4ecc6
-│       ├── bcb64ba2d4874c03ae7e8bd55d7e032b
-│       ├── bd2239f03012fbf22dcb05bf7de62b11
-│       ├── bfda63e80077af95459b2ae363cc44b2
-│       ├── c3d832b15c3b319612a86ab88fb481b3
-│       ├── c536b44022497153eb3030b1271fca17
-│       ├── c781c10d33c99b504c143c0420572726
-│       ├── c94f62c0b4c3b419fd30c32bdc4b567e
-│       ├── cb6731e49ed1c7c04e941e5ba88722d4
-│       ├── cd6a47b1a3833f4f51f5aa3919557f98
-│       ├── ce37872717b97074ff79aa9ef0800e95
-│       ├── cfff13574e6c6cb4f8e6bc9cd65ef85b
-│       ├── d0a87000b759379834f99b8c9a4df6c9
-│       ├── d18627deaf38f38d882572ddfab4eb39
-│       ├── d1e99c4392a90046d1deeacea6cf25a1
-│       ├── d22151e5aa0ef7543e24fa79004161a3
-│       ├── d95029d8faae77aed415f3b925c74bd6
-│       ├── deabfabd437271b22d6bd1b206e255a5
-│       ├── dffe2204bd1c8e6b5e20afa76e551b59
-│       ├── e7c2d8d1268ccea15c1920e5554ded5e
-│       ├── ead7ef4df14adde2405c7721afc45227
-│       ├── ef71d5f09f26309ba5b7cc48f06616df
-│       ├── f091edfce30ee30223bb59ea7c6f0dfa
-│       ├── f632acc0575231c503e392ad9d3193e2
-│       ├── fa8d7a7fac887bd021a688bfb9f9408c
-│       ├── fb06a55d64aad030b305716b76cc31f5
-│       ├── fb305669f9570391964e533741582fff
-│       ├── fbcaf74c48169980d99220f61a4e0825
-│       ├── fc88b53296bf75ff5b944e92693b568d
-│       ├── ff932e78b518c269162589592cbbc99f
-│       ├── hw-1768842185845-Capture dâeÌcran 2026-01-03 aÌ 18.02.42.png
-│       ├── hw-1768842199185-Capture dâeÌcran 2026-01-03 aÌ 18.02.35.png
-│       ├── hw-1768842332574-Capture_d___e__cran_2026_01_03_a___18.02.35.png
-│       ├── hw-1768842400075-Capture_d___e__cran_2026_01_03_a___18.03.11.png
-│       ├── hw-1768842654963-789792041.png
-│       ├── hw-1768842664226-638058245.png
-│       ├── hw-1768842664227-297622102.png
-│       ├── hw-1768842664228-560329720.png
-│       ├── hw-1768843131454-861939700.png
-│       ├── hw-1768843167449-411426516.png
-│       ├── hw-1768843167449-944076928.png
-│       ├── hw-1768843167450-303721170.png
-│       ├── hw-1768843167450-551022433.png
-│       ├── hw-1768843217201-680118374.png
-│       ├── hw-1768843223136-847471712.png
-│       ├── hw-1768929994306-182372983.png
-│       ├── hw-1768930008932-36084891.png
-│       ├── hw-1768930263345-43633593.png
-│       ├── hw-1768930270421-87854074.png
-│       ├── hw-1768930277825-50869949.png
-│       ├── hw-1768930277834-557759832.png
-│       ├── hw-1768930277835-700051807.png
-│       ├── hw-1768930277839-182489643.png
-│       ├── hw-1768930277843-623757244.png
-│       ├── hw-1768930471298-235573698.png
-│       ├── hw-1768930471304-758162697.png
-│       ├── hw-1768930471305-399548601.png
-│       ├── hw-1768930494157-614117768.png
-│       ├── scan-1769442857662-233577422.jpg
-│       ├── scan-1769442935800-339439845.jpg
-│       ├── scan-1769442940694-934050144.jpg
-│       ├── scan-1769442958244-371731746.jpg
-│       ├── scan-1769447913991-499356024.jpg
-│       ├── scan-1769447930973-599328993.jpg
-│       ├── scan-1769448031681-992915761.jpg
-│       ├── scan-1769448062214-894867719.jpg
-│       ├── scan-1769448067344-501428200.jpg
-│       ├── scan-1769448298236-135295901.jpg
-│       ├── studio-1769191920520-2043.jpg
-│       ├── studio-1769192516290-6814.jpg
-│       ├── studio-1769193745171-4536.jpg
-│       ├── studio-1769193797546-165.jpg
-│       ├── studio-1769305491929-8279.png
-│       ├── studio-1769305749890-482.png
-│       ├── studio-1769306007315-9193.png
-│       ├── studio-1769306172468-7033.png
-│       ├── studio_1769198134006-222869832.png
-│       ├── studio_1769198134010-937784732.png
-│       ├── studio_1769198134012-756464366.png
-│       ├── studio_1769198134013-594476183.png
-│       ├── studio_1769198134016-848496616.png
-│       ├── studio_1769198134027-39263879.png
-│       ├── studio_1769198134058-561747833.png
-│       ├── studio_1769198134061-396103129.png
-│       ├── studio_1769198134069-632386481.png
-│       ├── studio_1769198134070-91215709.png
-│       ├── studio_1769198134080-256767984.png
-│       ├── studio_1769198134090-925171104.png
-│       ├── studio_1769198134109-414501045.png
-│       ├── studio_1769198134112-187639441.png
-│       ├── studio_1769198134114-566663002.png
-│       ├── studio_1769198134120-622948676.png
-│       ├── studio_1769212412693-91284378.png
-│       ├── studio_1769212412699-452486225.png
-│       ├── studio_1769212412701-586705440.png
-│       ├── studio_1769212412705-136057589.png
-│       ├── studio_1769212412727-278311843.png
-│       ├── studio_1769212412732-717637994.png
-│       ├── studio_1769212412735-176507695.png
-│       ├── studio_1769212412754-789285101.png
-│       ├── studio_1769212412771-933056836.png
-│       ├── studio_1769212412776-959789731.png
-│       ├── studio_1769212412790-512526583.png
-│       ├── studio_1769212412809-929788064.png
-│       ├── studio_1769212412812-787599283.png
-│       ├── studio_1769212412820-916918492.png
-│       ├── studio_1769212412824-344221292.png
-│       ├── studio_1769212412830-370566478.png
-│       ├── studio_1769213855791-88787683.png
-│       ├── studio_1769213855792-20039475.png
-│       ├── studio_1769213855793-36017550.png
-│       ├── studio_1769213855795-341052217.png
-│       ├── studio_1769213855807-719319689.png
-│       ├── studio_1769213855817-848689105.png
-│       ├── studio_1769213855860-229811711.png
-│       ├── studio_1769213855862-168986176.png
-│       ├── studio_1769213855863-325183899.png
-│       ├── studio_1769213855876-759387937.png
-│       ├── studio_1769213855881-969210674.png
-│       ├── studio_1769213855890-99286334.png
-│       ├── studio_1769213855893-33501019.png
-│       ├── studio_1769213855894-101454023.png
-│       ├── studio_1769213855899-658573476.png
-│       ├── studio_1769213855907-567277804.png
-│       ├── temp/
-│       ├── temp-1768930953731-74258377.png
-│       ├── temp-1768930953739-334352580.png
-│       ├── temp-1768930953739-999763234.png
-│       ├── temp-1768930970208-122420991.png
-│       ├── temp-1768930995933-178348470.png
-│       ├── temp-1768930995934-231290464.png
-│       ├── temp-1768930995934-436591443.png
-│       ├── temp-1768931039002-806235743.png
-│       ├── temp-1768931039003-724912416.png
-│       ├── temp-1768931039007-504705663.png
-│       ├── temp-1768931039008-40320897.png
-│       ├── temp-1768931050617-313743097.png
-│       ├── temp-1768931050617-626599309.png
-│       ├── temp-1768931050633-635055580.png
-│       ├── temp-1768931266164-197387129.png
-│       ├── temp-1768931266166-306969703.png
-│       ├── temp-1768931266167-807528579.png
-│       ├── temp-1768931272176-142481523.png
-│       ├── temp-1768931272177-645918406.png
-│       └── temp-1768931272183-246830552.png
+│       └── temp/
 ├── server/
 │   ├── core/
 │   │   ├── ai.engine.js
-│   │   └── drive.engine.js
+│   │   ├── drive.engine.js
+│   │   └── ocr.engine.js
 │   ├── domains/
 │   │   ├── admin/
 │   │   │   ├── admin.routes.js
@@ -461,105 +251,211 @@ CODE:
 # 🔐 RÉPARER L'ERREUR INVALID_GRANT
 Si ton token expire, lance : http://localhost:3000/api/auth/google/login
 Puis colle le code dans ton .env (GOOGLE_REFRESH_TOKEN).
+
 [[[£ END: INSTRUCTIONS_OAUTH.md £]]]
 
 [[[£ FILE: LOCKED_FILES.md £]]]
 # 🔒 FICHIERS SANCTUARISÉS
 - server/server.js (Enregistrement Modèles)
 - client/src/App.jsx (Logiciel de synchronisation)
+
 [[[£ END: LOCKED_FILES.md £]]]
 
 [[[£ FILE: apply.js £]]]
+// @signatures: applyUpdate, extractSignatures
 const fs = require('fs');
 const path = require('path');
 const inputFile = 'update.txt';
-const statusFile = 'apply_status.json';
 
 console.log("------------------------------------------------");
-console.log("🤖 [CONSTITUTION] apply.js v32 actif.");
-console.log("🚀 Correction Boucle Sync - Build #369");
+console.log("🛡️ [SYSTEM] Moteur de Mise à Jour V7.1 (Hybrid)");
+console.log("    Sécurité : Signatures (JS) + Poids (Global).");
 console.log("------------------------------------------------");
 
-function setStatus(status, file = null) {
-    try { fs.writeFileSync(statusFile, JSON.stringify({ status, file, timestamp: Date.now() }, null, 2)); } catch (e) {}
+/**
+ * SCAN DE STRUCTURE (JS/JSX/TS)
+ * Cherche les ancres logiques. Pour les autres fichiers (HTML/CSS), renverra un set vide.
+ */
+function extractSignatures(content) {
+    const codeBody = content.replace(/^\/\/ @signatures:.*\n/, '');
+    const sigs = new Set();
+    const patterns = [
+        /function\s+([a-zA-Z0-9_]+)/g,
+        /const\s+([a-zA-Z0-9_]+)\s*=\s*(?:async\s*)?\(/g,
+        /export\s+default\s+function\s+([a-zA-Z0-9_]+)/g,
+        /router\.(get|post|put|delete|patch)\s*\(\s*['"]([^'"]+)['"]/g
+    ];
+
+    patterns.forEach(regex => {
+        let match;
+        while ((match = regex.exec(codeBody)) !== null) {
+            const identity = match[2] ? `${match[1].toUpperCase()} ${match[2]}` : match[1];
+            sigs.add(identity);
+        }
+    });
+    return sigs;
 }
 
 function applyUpdate() {
-    if (!fs.existsSync(inputFile)) return;
-    let rawContent = "";
-    try { rawContent = fs.readFileSync(inputFile, 'utf8'); } catch (e) { return; }
-    if (rawContent.trim().length < 10) return;
-
-    let processed = false;
-    const startRegex = /\[\[\[£\s*FILE\s*:\s*([^£\]\s]+)\s*£\]\]\]/g;
-    let startMatch;
-
-    while ((startMatch = startRegex.exec(rawContent)) !== null) {
-        const filePath = startMatch[1].trim();
-        const contentStartIndex = startMatch.index + startMatch[0].length;
-        const endTag = `[[[£ END: ${filePath} £]]]`;
-        const endIdx = rawContent.indexOf(endTag);
-
-        if (endIdx !== -1) {
-            const fileContent = rawContent.substring(contentStartIndex, endIdx).trim();
-            const fullPath = path.join(__dirname, filePath);
-            if (!fs.existsSync(path.dirname(fullPath))) fs.mkdirSync(path.dirname(fullPath), { recursive: true });
-            fs.writeFileSync(fullPath, fileContent);
-            console.log(`   ✅ ALIGNÉ : ${filePath}`);
-            processed = true;
+    try {
+        if (!fs.existsSync(inputFile)) {
+            fs.writeFileSync(inputFile, '');
+            return;
         }
-    }
-    if (processed) {
-        fs.writeFileSync(inputFile, '');
-        setStatus('OK');
-        console.log("✨ SYNC TERMINÉE.");
+
+        const rawContent = fs.readFileSync(inputFile, 'utf8');
+        if (!rawContent || rawContent.trim().length < 10) return;
+
+        const isForced = rawContent.includes('[FORCE_REDUCTION]');
+        let processed = false;
+        const startRegex = /\[\[\[£\s*FILE\s*:\s*([^£\]\s]+)\s*£\]\]\]/g;
+        let match;
+
+        while ((match = startRegex.exec(rawContent)) !== null) {
+            const filePath = match[1].trim();
+            const startIdx = match.index + match[0].length;
+            const endTag = `[[[£ END: ${filePath} £]]]`;
+            const endIdx = rawContent.indexOf(endTag, startIdx);
+
+            if (endIdx !== -1) {
+                let newContent = rawContent.substring(startIdx, endIdx).trim();
+                const fullPath = path.join(__dirname, filePath);
+
+                if (fs.existsSync(fullPath) && !isForced) {
+                    const oldContent = fs.readFileSync(fullPath, 'utf8');
+                    
+                    // 1. SÉCURITÉ STRUCTURELLE (JS/JSX)
+                    const oldSigs = extractSignatures(oldContent);
+                    const newSigs = extractSignatures(newContent);
+                    const missing = [...oldSigs].filter(s => !newSigs.has(s));
+
+                    if (missing.length > 0) {
+                        console.error(`\n❌ [BLOQUÉ - STRUCTURE] : ${filePath}`);
+                        console.error(`   ⚠️  LOGIQUE MANQUANTE : ${missing.join(', ')}`);
+                        continue;
+                    }
+                    
+                    // 2. SÉCURITÉ DE POIDS (VITAL POUR HTML/CSS)
+                    // On bloque si le fichier perd plus de 25% de sa taille sans [FORCE_REDUCTION]
+                    if (newContent.length < oldContent.length * 0.75) {
+                        console.error(`\n❌ [BLOQUÉ - POIDS] : ${filePath}`);
+                        console.error(`   Ancien: ${oldContent.length} chars | Nouveau: ${newContent.length} chars`);
+                        console.error(`   ⚠️  BAISSE DE TAILLE CRITIQUE (>25%).`);
+                        continue;
+                    }
+                }
+
+                // MISE À JOUR DE L'INDEX (@signatures) - Uniquement si signatures trouvées
+                const currentSigs = [...extractSignatures(newContent)].sort();
+                if (currentSigs.length > 0) {
+                    const sigLine = `// @signatures: ${currentSigs.join(', ')}\n`;
+                    newContent = sigLine + newContent.replace(/^\/\/ @signatures:.*\n/, '');
+                }
+
+                const dirPath = path.dirname(fullPath);
+                if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, { recursive: true });
+                
+                fs.writeFileSync(fullPath, newContent + '\n');
+                console.log(`   ✅ OK : ${filePath} (${newContent.length} chars)`);
+                processed = true;
+            }
+        }
+
+        if (processed || isForced) {
+            fs.writeFileSync(inputFile, '');
+            console.log("✨ SUCCÈS : Base de code synchronisée et protégée.\n");
+        }
+    } catch (e) {
+        console.error("☠️ ERREUR :", e.message);
     }
 }
-setStatus('OK');
-setInterval(applyUpdate, 1000);
+
+setInterval(applyUpdate, 500);
 [[[£ END: apply.js £]]]
 
 [[[£ FILE: apply_status.json £]]]
 {
   "status": "OK",
   "file": null,
-  "timestamp": 1769447808275
+  "timestamp": 1769529186335
 }
+
 [[[£ END: apply_status.json £]]]
+
+[[[£ FILE: check-google.js £]]]
+// Ce fichier sert à tester ta clé en local
+require('dotenv').config();
+const fetch = require('node-fetch');
+
+async function check() {
+    const key = process.env.GEMINI_API_KEY;
+    console.log("🔑 Clé :", key ? "PRÉSENTE" : "MANQUANTE");
+    const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${key}`;
+    try {
+        const res = await fetch(url);
+        const data = await res.json();
+        console.log("📦 Réponse Google :", JSON.stringify(data, null, 2));
+    } catch (e) {
+        console.error("❌ Erreur :", e.message);
+    }
+}
+check();
+
+[[[£ END: check-google.js £]]]
 
 [[[£ FILE: cleanup.js £]]]
 const fs = require('fs');
 const path = require('path');
 
-const DIRS_TO_CLEAN = [
-    'public/uploads',
-    'public/uploads/temp'
-];
+const UPLOADS_DIR = path.join(__dirname, 'public/uploads');
+const TEMP_DIR = path.join(__dirname, 'public/uploads/temp');
 
-console.log("🧹 NETTOYAGE DES FICHIERS TEMPORAIRES...");
+console.log("------------------------------------------------");
+console.log("🧹 NETTOYAGE PROFOND DU DOSSIER UPLOADS");
+console.log("   Cible : " + UPLOADS_DIR);
+console.log("------------------------------------------------");
 
-function cleanDir(directory) {
-    const fullPath = path.join(__dirname, directory);
-    if (fs.existsSync(fullPath)) {
-        const files = fs.readdirSync(fullPath);
-        for (const file of files) {
-            if (file === '.gitkeep') continue;
-            try {
-                fs.unlinkSync(path.join(fullPath, file));
-                console.log(`   🗑️ Supprimé : ${file}`);
-            } catch (e) {
-                console.error(`   ❌ Erreur suppression ${file}`);
-            }
-        }
-    } else {
-        // Création si inexistant pour éviter crash
-        fs.mkdirSync(fullPath, { recursive: true });
+function cleanDirectory(directory) {
+    if (!fs.existsSync(directory)) {
+        console.log(`   ⚠️ Dossier inexistant : ${directory}`);
+        return;
     }
+
+    const files = fs.readdirSync(directory);
+    let count = 0;
+
+    for (const file of files) {
+        // On ne touche pas aux dossiers (sauf temp qu'on videra spécifiquement)
+        // et on garde le .gitkeep
+        if (file === '.gitkeep') continue;
+        
+        const fullPath = path.join(directory, file);
+        const stat = fs.statSync(fullPath);
+
+        if (stat.isDirectory()) {
+            if (file === 'temp') {
+                // On vide le dossier temp mais on le garde
+                cleanDirectory(fullPath);
+            }
+            continue;
+        }
+
+        try {
+            fs.unlinkSync(fullPath);
+            count++;
+        } catch (e) {
+            console.error(`   ❌ Erreur suppression ${file}: ${e.message}`);
+        }
+    }
+    console.log(`   ✅ Nettoyé ${directory} : ${count} fichiers supprimés.`);
 }
 
-DIRS_TO_CLEAN.forEach(dir => cleanDir(dir));
+// 1. Vider le dossier uploads racine (images, scans, etc.)
+cleanDirectory(UPLOADS_DIR);
 
-console.log("✨ DOSSIER UPLOADS VIDÉ (Fichiers inutiles supprimés).");
+console.log("\n✨ NETTOYAGE TERMINÉ.");
+console.log("   Les fichiers sont désormais stockés sur le Drive.");
+
 [[[£ END: cleanup.js £]]]
 
 [[[£ FILE: client/README.md £]]]
@@ -571,6 +467,7 @@ Currently, two official plugins are available:
 
 - [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
 - [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+
 [[[£ END: client/README.md £]]]
 
 [[[£ FILE: client/index.html £]]]
@@ -587,6 +484,7 @@ Currently, two official plugins are available:
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
+
 [[[£ END: client/index.html £]]]
 
 [[[£ FILE: client/package.json £]]]
@@ -614,6 +512,7 @@ Currently, two official plugins are available:
     "vite": "^4.4.5"
   }
 }
+
 [[[£ END: client/package.json £]]]
 
 [[[£ FILE: client/src/App.css £]]]
@@ -665,6 +564,7 @@ Currently, two official plugins are available:
     display: flex; align-items: center; justify-content: center;
     z-index: 9999999;
 }
+
 [[[£ END: client/src/App.css £]]]
 
 [[[£ FILE: client/src/App.jsx £]]]
@@ -747,6 +647,7 @@ export default function App() {
     </div>
   );
 }
+
 [[[£ END: client/src/App.jsx £]]]
 
 [[[£ FILE: client/src/features/admin/AdminPage.css £]]]
@@ -773,6 +674,7 @@ export default function App() {
 .admin-content-area {
     /* Le Dashboard prend toute la place */
 }
+
 [[[£ END: client/src/features/admin/AdminPage.css £]]]
 
 [[[£ FILE: client/src/features/admin/AdminPage.jsx £]]]
@@ -805,6 +707,7 @@ export default function AdminPage({ user, onLogout }) {
     </div>
   );
 }
+
 [[[£ END: client/src/features/admin/AdminPage.jsx £]]]
 
 [[[£ FILE: client/src/features/auth/Login.css £]]]
@@ -871,6 +774,7 @@ export default function AdminPage({ user, onLogout }) {
     background: #065f46; color: white; width: 30px; height: 30px; border-radius: 50%;
     border: none; cursor: pointer; display: flex; align-items: center; justify-content: center;
 }
+
 [[[£ END: client/src/features/auth/Login.css £]]]
 
 [[[£ FILE: client/src/features/auth/Login.jsx £]]]
@@ -1102,6 +1006,7 @@ export default function Login({ onLoginSuccess }) {
     </div>
   );
 }
+
 [[[£ END: client/src/features/auth/Login.jsx £]]]
 
 [[[£ FILE: client/src/features/eleve/ElevePage.css £]]]
@@ -1109,6 +1014,7 @@ export default function Login({ onLoginSuccess }) {
 .eleve-page-container { max-width: 1100px; margin: 0 auto; padding: 2rem; }
 .animate-in { animation: fadeIn 0.5s ease-out forwards; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
 [[[£ END: client/src/features/eleve/ElevePage.css £]]]
 
 [[[£ FILE: client/src/features/eleve/ElevePage.jsx £]]]
@@ -1158,6 +1064,7 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
     </div>
   );
 }
+
 [[[£ END: client/src/features/eleve/ElevePage.jsx £]]]
 
 [[[£ FILE: client/src/features/eleve/components/BehaviorTimer.css £]]]
@@ -1302,6 +1209,7 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
     from { opacity: 0; transform: translateY(-20px); }
     to { opacity: 1; transform: translateY(0); }
 }
+
 [[[£ END: client/src/features/eleve/components/BehaviorTimer.css £]]]
 
 [[[£ FILE: client/src/features/eleve/components/BehaviorTimer.jsx £]]]
@@ -1401,6 +1309,7 @@ export default function BehaviorTimer({ studentData }) {
         </div>
     );
 }
+
 [[[£ END: client/src/features/eleve/components/BehaviorTimer.jsx £]]]
 
 [[[£ FILE: client/src/features/eleve/components/DashboardFolder.css £]]]
@@ -1531,6 +1440,7 @@ export default function BehaviorTimer({ studentData }) {
 }
 .empty-icon { font-size: 3rem; margin-bottom: 10px; display: block; }
 .empty-text { font-weight: 800; font-size: 0.9rem; text-transform: uppercase; color: #94a3b8; }
+
 [[[£ END: client/src/features/eleve/components/DashboardFolder.css £]]]
 
 [[[£ FILE: client/src/features/eleve/components/DashboardFolder.jsx £]]]
@@ -1615,6 +1525,7 @@ export default function DashboardFolder({ items, type, onSelect }) {
     </div>
   );
 }
+
 [[[£ END: client/src/features/eleve/components/DashboardFolder.jsx £]]]
 
 [[[£ FILE: client/src/features/eleve/components/EleveHeader.css £]]]
@@ -1735,6 +1646,7 @@ export default function DashboardFolder({ items, type, onSelect }) {
     .nav-tabs { overflow-x: auto; }
     .mini-stats-box { border-top: 1px solid #f1f5f9; padding-top: 10px; padding-right: 0; align-items: center; }
 }
+
 [[[£ END: client/src/features/eleve/components/EleveHeader.css £]]]
 
 [[[£ FILE: client/src/features/eleve/components/EleveHeader.jsx £]]]
@@ -1851,6 +1763,7 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
     </div>
   );
 }
+
 [[[£ END: client/src/features/eleve/components/EleveHeader.jsx £]]]
 
 [[[£ FILE: client/src/features/eleve/games/GamesGrid.css £]]]
@@ -1859,6 +1772,7 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
 .game-choice-btn { height: 180px; width: 220px; border-radius: 40px; border: none; cursor: pointer; font-weight: 900; color: white; font-size: 1.2rem; }
 .zombie-btn { background: #22c55e; margin-right: 20px; }
 .starship-btn { background: #3b82f6; }
+
 [[[£ END: client/src/features/eleve/games/GamesGrid.css £]]]
 
 [[[£ FILE: client/src/features/eleve/games/GamesGrid.jsx £]]]
@@ -1963,6 +1877,7 @@ export default function GamesGrid({ user }) {
     </div>
   );
 }
+
 [[[£ END: client/src/features/eleve/games/GamesGrid.jsx £]]]
 
 [[[£ FILE: client/src/features/eleve/games/mainGames.js £]]]
@@ -1992,6 +1907,7 @@ export class GameProgression {
     }
     getLives() { return this.lives; }
 }
+
 [[[£ END: client/src/features/eleve/games/mainGames.js £]]]
 
 [[[£ FILE: client/src/features/eleve/games/starship/StarshipWrapper.jsx £]]]
@@ -2040,6 +1956,7 @@ export default function StarshipWrapper({ user, level, onClose }) {
         </div>
     );
 }
+
 [[[£ END: client/src/features/eleve/games/starship/StarshipWrapper.jsx £]]]
 
 [[[£ FILE: client/src/features/eleve/games/starship/starship_core.js £]]]
@@ -2282,6 +2199,7 @@ export function initStarshipGame(root, api, onExit) {
 
     return { destroy: () => { cancelAnimationFrame(frameId); clearInterval(spawnInterval); document.removeEventListener('keydown', handleKey); } };
 }
+
 [[[£ END: client/src/features/eleve/games/starship/starship_core.js £]]]
 
 [[[£ FILE: client/src/features/eleve/games/starship/starship_style.css £]]]
@@ -2415,11 +2333,13 @@ export function initStarshipGame(root, api, onExit) {
     font-size: 2rem; display: flex; align-items: center; justify-content: center;
     color: white; z-index: 50;
 }
+
 [[[£ END: client/src/features/eleve/games/starship/starship_style.css £]]]
 
 [[[£ FILE: client/src/features/eleve/games/zombie/ZombieGame.css £]]]
 .z-container { width: 100%; max-width: 800px; background: white; border-radius: 30px; border: 4px solid #1e293b; overflow: hidden; }
 #zombie-arena { height: 200px; background: #1e293b; position: relative; }
+
 [[[£ END: client/src/features/eleve/games/zombie/ZombieGame.css £]]]
 
 [[[£ FILE: client/src/features/eleve/games/zombie/ZombieGame.js £]]]
@@ -2427,6 +2347,7 @@ export class ZombieGame {
     constructor(container, ctrl) { this.c = container; this.ctrl = ctrl; }
     loadQuestion(q) { this.c.querySelector('#z-q').textContent = q.q; }
 }
+
 [[[£ END: client/src/features/eleve/games/zombie/ZombieGame.js £]]]
 
 [[[£ FILE: client/src/features/eleve/games/zombie/ZombieWrapper.jsx £]]]
@@ -2479,6 +2400,7 @@ export default function ZombieWrapper({ user, level, onClose }) {
         </div>
     );
 }
+
 [[[£ END: client/src/features/eleve/games/zombie/ZombieWrapper.jsx £]]]
 
 [[[£ FILE: client/src/features/eleve/games/zombie/zombie_core.js £]]]
@@ -2726,6 +2648,7 @@ export function initZombieGame(root, api, onExit) {
 
     return { destroy: () => cancelAnimationFrame(frameId) };
 }
+
 [[[£ END: client/src/features/eleve/games/zombie/zombie_core.js £]]]
 
 [[[£ FILE: client/src/features/eleve/games/zombie/zombie_style.css £]]]
@@ -2860,6 +2783,7 @@ export function initZombieGame(root, api, onExit) {
     border: none; border-radius: 12px; font-weight: 900; font-size: 1.2rem;
     cursor: pointer; box-shadow: 0 4px 0 #991b1b;
 }
+
 [[[£ END: client/src/features/eleve/games/zombie/zombie_style.css £]]]
 
 [[[£ FILE: client/src/features/eleve/homework/Homework.css £]]]
@@ -3025,6 +2949,7 @@ export function initZombieGame(root, api, onExit) {
 .v8-feedback-content { background: #f8fafc; padding: 20px; border-radius: 20px; max-height: 250px; overflow-y: auto; font-size: 15px; line-height: 1.6; color: #475569; margin-bottom: 25px; text-align: left; border: 1px solid #e2e8f0; }
 .v8-next-page-btn { width: 100%; padding: 20px; background: #1e293b; color: white; border-radius: 20px; font-weight: 950; font-size: 14px; border: none; cursor: pointer; transition: background 0.2s; }
 .v8-next-page-btn:hover { background: #0f172a; }
+
 [[[£ END: client/src/features/eleve/homework/Homework.css £]]]
 
 [[[£ FILE: client/src/features/eleve/homework/HomeworkList.jsx £]]]
@@ -3108,6 +3033,7 @@ export default function HomeworkList({ user }) {
 
   return <DashboardFolder items={homeworks} chapters={chapters} type="homework" onSelect={setSelectedHw} />;
 }
+
 [[[£ END: client/src/features/eleve/homework/HomeworkList.jsx £]]]
 
 [[[£ FILE: client/src/features/eleve/homework/HomeworkWorkspace.jsx £]]]
@@ -3243,6 +3169,7 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
     </div>
   );
 }
+
 [[[£ END: client/src/features/eleve/homework/HomeworkWorkspace.jsx £]]]
 
 [[[£ FILE: client/src/features/eleve/mistakes/MistakesBook.jsx £]]]
@@ -3273,15 +3200,18 @@ export default function MistakesBook({ user }) {
     </div>
   );
 }
+
 [[[£ END: client/src/features/eleve/mistakes/MistakesBook.jsx £]]]
 
 [[[£ FILE: client/src/features/eleve/productions/ProductionsList.jsx £]]]
 import React from 'react';
 export default function ProductionsList() { return <div>Mes productions</div>; }
+
 [[[£ END: client/src/features/eleve/productions/ProductionsList.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/Prof.css £]]]
 .prof-table th { color: #94a3b8; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; }
+
 [[[£ END: client/src/features/prof/Prof.css £]]]
 
 [[[£ FILE: client/src/features/prof/ProfPage.css £]]]
@@ -3308,6 +3238,7 @@ export default function ProductionsList() { return <div>Mes productions</div>; }
         display: none !important;
     }
 }
+
 [[[£ END: client/src/features/prof/ProfPage.css £]]]
 
 [[[£ FILE: client/src/features/prof/ProfPage.jsx £]]]
@@ -3422,10 +3353,12 @@ export default function ProfPage({ user, onLogout }) {
     </div>
   );
 }
+
 [[[£ END: client/src/features/prof/ProfPage.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/activities/ActivityStudio.css £]]]
 .assign-card { background: #fff; padding: 1rem; border-radius: 20px; border: 1px solid #eee; }
+
 [[[£ END: client/src/features/prof/activities/ActivityStudio.css £]]]
 
 [[[£ FILE: client/src/features/prof/activities/ActivityStudio.jsx £]]]
@@ -3542,6 +3475,7 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
         </div>
     );
 }
+
 [[[£ END: client/src/features/prof/activities/ActivityStudio.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/admin/AdminDashboard.css £]]]
@@ -3621,6 +3555,7 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
 .finder-results-mini { max-height: 150px; overflow-y: auto; background: white; border: 2px solid #e2e8f0; border-radius: 12px; margin-top: 5px; }
 .finder-row-mini { padding: 8px 12px; font-size: 10px; font-weight: 700; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
 .finder-row-mini:hover { background: #eff6ff; color: #2563eb; }
+
 [[[£ END: client/src/features/prof/admin/AdminDashboard.css £]]]
 
 [[[£ FILE: client/src/features/prof/admin/AdminDashboard.jsx £]]]
@@ -3897,11 +3832,13 @@ export default function AdminDashboard({ user, onRefresh }) {
         </>
     );
 }
+
 [[[£ END: client/src/features/prof/admin/AdminDashboard.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/chapters/ChapterManager.jsx £]]]
 import React from 'react';
 export default function ChapterManager() { return <div>Gestion des chapitres</div>; }
+
 [[[£ END: client/src/features/prof/chapters/ChapterManager.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/classroom/ClassroomManager.css £]]]
@@ -4092,6 +4029,7 @@ export default function ChapterManager() { return <div>Gestion des chapitres</di
 }
 .btn-cancel-punish:hover { background: #e11d48; color: white; }
 .btn-cancel-punish:active { transform: scale(0.95); }
+
 [[[£ END: client/src/features/prof/classroom/ClassroomManager.css £]]]
 
 [[[£ FILE: client/src/features/prof/classroom/ClassroomManager.jsx £]]]
@@ -4315,6 +4253,7 @@ export default function ClassroomManager({ globalClassId, user }) {
         </div>
     );
 }
+
 [[[£ END: client/src/features/prof/classroom/ClassroomManager.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/components/ConsoleHUD.jsx £]]]
@@ -4328,6 +4267,7 @@ export default function ConsoleHUD() {
     if (logs.length === 0) return null;
     return <div className="fixed bottom-4 left-4 bg-black/80 text-green-400 p-2 rounded text-[8px] font-mono z-[9999]">{logs.map((l, i) => <div key={i}>{l}</div>)}</div>;
 }
+
 [[[£ END: client/src/features/prof/components/ConsoleHUD.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/components/ConsoleReporter.css £]]]
@@ -4347,6 +4287,7 @@ export default function ConsoleHUD() {
 .banner-icon { font-size: 18px; margin-right: 15px; }
 .banner-text { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-transform: uppercase; letter-spacing: 0.5px; }
 .banner-hint { background: rgba(0,0,0,0.3); padding: 5px 10px; border-radius: 8px; font-size: 9px; margin-left: 20px; font-weight: 950; }
+
 [[[£ END: client/src/features/prof/components/ConsoleReporter.css £]]]
 
 [[[£ FILE: client/src/features/prof/components/ConsoleReporter.jsx £]]]
@@ -4448,6 +4389,7 @@ export default function ConsoleReporter({ user }) {
         </div>
     );
 }
+
 [[[£ END: client/src/features/prof/components/ConsoleReporter.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/components/DatabaseViewer.css £]]]
@@ -4462,6 +4404,7 @@ export default function ConsoleReporter({ user }) {
 .db-table { width: 100%; border-collapse: collapse; font-family: monospace; font-size: 0.65rem; }
 .db-table th { background: #f8fafc; text-align: left; padding: 0.8rem; border-bottom: 2px solid #eee; position: sticky; top: 0; }
 .db-table td { padding: 0.6rem 0.8rem; border-bottom: 1px solid #f1f5f9; }
+
 [[[£ END: client/src/features/prof/components/DatabaseViewer.css £]]]
 
 [[[£ FILE: client/src/features/prof/components/DatabaseViewer.jsx £]]]
@@ -4597,6 +4540,7 @@ export default function DatabaseViewer({ onClose }) {
         </div>
     );
 }
+
 [[[£ END: client/src/features/prof/components/DatabaseViewer.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/components/DriveViewer.css £]]]
@@ -4624,6 +4568,7 @@ export default function DatabaseViewer({ onClose }) {
 .v14-loader { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 20px; color: #10b981; font-weight: 950; }
 .spinner { width: 40px; height: 40px; border: 4px solid #f1f5f9; border-top-color: #10b981; border-radius: 50%; animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
 [[[£ END: client/src/features/prof/components/DriveViewer.css £]]]
 
 [[[£ FILE: client/src/features/prof/components/DriveViewer.jsx £]]]
@@ -4723,6 +4668,7 @@ export default function DriveViewer({ onClose }) {
         </div>
     );
 }
+
 [[[£ END: client/src/features/prof/components/DriveViewer.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/components/ProfHeader.jsx £]]]
@@ -4789,6 +4735,7 @@ export default function ProfHeader({ user, onLogout }) {
     </>
   );
 }
+
 [[[£ END: client/src/features/prof/components/ProfHeader.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/components/ProfNav.jsx £]]]
@@ -4837,6 +4784,7 @@ export default function ProfNav({ activeTab, onTabChange, user }) {
     </div>
   );
 }
+
 [[[£ END: client/src/features/prof/components/ProfNav.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/components/ProfStudioFolder.jsx £]]]
@@ -5099,6 +5047,7 @@ export default function ProfStudioFolder({ items, chapters, classFilter, levelFi
         </div>
     );
 }
+
 [[[£ END: client/src/features/prof/components/ProfStudioFolder.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/components/ProjectTreeViewer.css £]]]
@@ -5122,6 +5071,7 @@ export default function ProfStudioFolder({ items, chapters, classFilter, levelFi
 .btn-tree.primary { background: #f97316; color: white; box-shadow: 0 4px 15px rgba(249, 115, 22, 0.4); }
 .btn-tree.secondary { background: #334155; color: #94a3b8; }
 .btn-tree:hover { transform: translateY(-2px); filter: brightness(1.1); }
+
 [[[£ END: client/src/features/prof/components/ProjectTreeViewer.css £]]]
 
 [[[£ FILE: client/src/features/prof/components/ProjectTreeViewer.jsx £]]]
@@ -5200,6 +5150,7 @@ export default function ProjectTreeViewer({ onClose }) {
         </div>
     );
 }
+
 [[[£ END: client/src/features/prof/components/ProjectTreeViewer.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/components/SystemDocs.css £]]]
@@ -5236,6 +5187,7 @@ export default function ProjectTreeViewer({ onClose }) {
 
 .btn-close-docs { background: rgba(255,255,255,0.1); color: white; width: 50px; height: 50px; border-radius: 50%; border: none; cursor: pointer; font-size: 1.5rem; transition: all 0.3s; }
 .btn-close-docs:hover { background: #ef4444; transform: rotate(90deg); }
+
 [[[£ END: client/src/features/prof/components/SystemDocs.css £]]]
 
 [[[£ FILE: client/src/features/prof/components/SystemDocs.jsx £]]]
@@ -5321,6 +5273,7 @@ export default function SystemDocs({ onClose }) {
         </div>
     );
 }
+
 [[[£ END: client/src/features/prof/components/SystemDocs.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/games/GameStudio.css £]]]
@@ -5391,6 +5344,7 @@ export default function SystemDocs({ onClose }) {
 
 .v84-game-publish-btn { width: 100%; padding: 20px; background: #9333ea; color: white; font-weight: 950; border-radius: 20px; border: none; margin-top: 20px; font-size: 12px; text-transform: uppercase; cursor: pointer; box-shadow: 0 10px 30px rgba(147, 51, 234, 0.3); transition: transform 0.1s; }
 .v84-game-publish-btn:hover { transform: translateY(-2px); }
+
 [[[£ END: client/src/features/prof/games/GameStudio.css £]]]
 
 [[[£ FILE: client/src/features/prof/games/GameStudio.jsx £]]]
@@ -5643,15 +5597,18 @@ export default function GameStudio({ initialData, chapters, classFilter, user, t
         </div>
     );
 }
+
 [[[£ END: client/src/features/prof/games/GameStudio.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/homework/HomeworkResults.css £]]]
 .results-overlay { position: fixed; inset: 0; background: white; z-index: 7000; padding: 2rem; }
+
 [[[£ END: client/src/features/prof/homework/HomeworkResults.css £]]]
 
 [[[£ FILE: client/src/features/prof/homework/HomeworkResults.jsx £]]]
 import React from 'react';
 export default function HomeworkResults({ onBack }) { return <div>Résultats devoirs <button onClick={onBack}>Retour</button></div>; }
+
 [[[£ END: client/src/features/prof/homework/HomeworkResults.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/homework/HomeworkStudio.css £]]]
@@ -5726,6 +5683,7 @@ export default function HomeworkResults({ onBack }) { return <div>Résultats dev
 .v84-upload-loader { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.8); z-index: 11000; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; gap: 20px; font-weight: 900; }
 .v84-spinner { width: 50px; height: 50px; border: 5px solid rgba(255,255,255,0.1); border-top-color: #f97316; border-radius: 50%; animation: v84-spin 1s linear infinite; }
 @keyframes v84-spin { to { transform: rotate(360deg); } }
+
 [[[£ END: client/src/features/prof/homework/HomeworkStudio.css £]]]
 
 [[[£ FILE: client/src/features/prof/homework/HomeworkStudio.jsx £]]]
@@ -5979,65 +5937,80 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, use
     </div>
   );
 }
+
 [[[£ END: client/src/features/prof/homework/HomeworkStudio.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/scans/ScansStudio.css £]]]
-/* ... (CSS global existant) ... */
-.cam-wrapper { position: relative; width: 100%; max-width: 1200px; aspect-ratio: 16/9; margin: 0 auto; border-radius: 20px; overflow: hidden; border: 4px solid #334155; background: black; display: flex; align-items: center; justify-content: center; }
-.cam-video { width: 100%; height: 100%; object-fit: contain; }
-.scan-page { padding: 2rem; background: #f1f5f9; min-height: 100%; display: flex; flex-direction: column; gap: 2rem; }
-.create-dc-btn { background: #fff; border: 3px dashed #cbd5e1; border-radius: 25px; padding: 30px; text-align: center; cursor: pointer; transition: all 0.2s; display: flex; flex-direction: column; align-items: center; gap: 10px; }
-.create-dc-btn:hover { border-color: #3b82f6; background: #eff6ff; transform: translateY(-2px); }
-.dc-card { background: white; border-radius: 25px; border: 1px solid #e2e8f0; box-shadow: 0 10px 30px -10px rgba(0,0,0,0.05); overflow: hidden; transition: all 0.3s; display: flex; flex-direction: column; }
+.scan-page { padding: 2rem; background: #f1f5f9; min-height: 100%; display: flex; flex-direction: column; gap: 2rem; position: relative; }
+
+/* CARTES DC */
+.dc-card { background: white; border-radius: 25px; border: 1px solid #e2e8f0; box-shadow: 0 10px 30px -10px rgba(0,0,0,0.05); overflow: hidden; margin-bottom: 1rem; display: flex; flex-direction: column; }
 .dc-header { padding: 20px 25px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; }
 .dc-toolbar { padding: 15px 25px; display: flex; gap: 10px; flex-wrap: wrap; background: white; }
-.dc-content-area { border-top: 1px solid #e2e8f0; background: #0f172a; padding: 20px; min-height: 200px; animation: slideDown 0.3s; }
-.tool-btn { padding: 12px 18px; border-radius: 14px; border: none; font-weight: 900; font-size: 0.7rem; text-transform: uppercase; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: transform 0.1s, filter 0.1s; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
 
-/* COULEURS BOUTONS */
-.btn-sujet { background: #e0f2fe; color: #0369a1; } /* BLEU */
-.btn-scanner { background: #dcfce7; color: #15803d; } /* VERT */
-.btn-devoirs { background: #fff7ed; color: #c2410c; } /* ORANGE */
-.btn-correct { background: #f3e8ff; color: #7e22ce; flex: 1; justify-content: center; } /* VIOLET */
+.tool-btn { padding: 12px 18px; border-radius: 14px; border: none; font-weight: 900; font-size: 0.7rem; text-transform: uppercase; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.2s; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+.btn-sujet { background: #e0f2fe; color: #0369a1; }
+.btn-scanner { background: #dcfce7; color: #15803d; }
+.btn-devoirs { background: #fff7ed; color: #c2410c; }
+.btn-correct { background: #f3e8ff; color: #7e22ce; flex: 1; justify-content: center; }
 .btn-folder { background: #f1f5f9; color: #475569; }
 .btn-delete { background: #fee2e2; color: #b91c1c; width: 40px; justify-content: center; padding: 0; }
 
-.cam-trigger { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); width: 70px; height: 70px; background: white; border: 4px solid rgba(0,0,0,0.3); border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 2rem; transition: transform 0.1s; z-index: 20; }
-.snap-queue-strip { display: flex; gap: 10px; margin-top: 15px; padding-bottom: 5px; overflow-x: auto; justify-content: center; min-height: 80px; }
-.queue-thumb { width: 70px; height: 70px; border-radius: 12px; object-fit: cover; border: 4px solid transparent; transition: all 0.3s; animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+.dc-content-area { border-top: 1px solid #e2e8f0; background: #0f172a; padding: 20px; min-height: 200px; }
 
-/* MODALE CORRECTION */
-.correction-overlay { position: fixed; inset: 0; z-index: 30000; background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(5px); display: flex; align-items: center; justify-content: center; }
-.correction-card { background: white; width: 95vw; max-width: 1400px; height: 90vh; border-radius: 25px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 50px 100px -20px rgba(0,0,0,0.8); }
-.corr-header { padding: 1.5rem; background: #1e293b; color: white; display: flex; justify-content: space-between; align-items: center; }
-.corr-body { flex: 1; display: flex; overflow: hidden; }
+/* MINIATURES */
+.snap-queue-strip { display: flex; gap: 15px; margin-top: 15px; padding: 10px; overflow-x: auto; }
+.queue-thumb-container { position: relative; flex-shrink: 0; }
+.queue-thumb { width: 80px; height: 80px; border-radius: 12px; object-fit: cover; border: 4px solid transparent; cursor: pointer; }
+.thumb-delete-trigger { position: absolute; bottom: -5px; right: -5px; width: 24px; height: 24px; background: #ef4444; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 950; cursor: pointer; border: 2px solid white; z-index: 30; }
 
-/* MODALE CONFIG IA */
-.scan-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.9); z-index: 10000; display: flex; align-items: center; justify-content: center; }
-.scan-modal { background: white; width: 600px; padding: 30px; border-radius: 25px; display: flex; flex-direction: column; gap: 20px; }
-.scan-instr-input { width: 100%; height: 200px; padding: 15px; border-radius: 15px; border: 2px solid #e2e8f0; font-family: monospace; font-size: 14px; line-height: 1.5; resize: none; outline: none; }
-.scan-modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
-.btn-cancel { padding: 15px; background: #f1f5f9; border: none; border-radius: 12px; font-weight: 900; cursor: pointer; color: #64748b; }
-.btn-launch { padding: 15px 30px; background: #3b82f6; border: none; border-radius: 12px; font-weight: 900; cursor: pointer; color: white; }
+/* FIX CRITIQUE : Z-INDEX DE LA MODALE IA V168 */
+.scan-overlay { 
+    position: fixed; inset: 0; 
+    background: rgba(15, 23, 42, 0.95); 
+    z-index: 99999 !important; /* Doit être au-dessus de tout */
+    display: flex; align-items: center; justify-content: center; 
+    backdrop-filter: blur(8px); 
+}
+.scan-modal { background: white; width: 100%; max-width: 550px; padding: 40px; border-radius: 35px; display: flex; flex-direction: column; gap: 20px; box-shadow: 0 40px 100px rgba(0,0,0,0.6); }
+.scan-instr-input { width: 100%; height: 180px; padding: 20px; border-radius: 20px; border: 2px solid #f1f5f9; font-size: 14px; font-weight: 600; resize: none; outline: none; background: #f8fafc; }
 
-@keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes popIn { from { transform: scale(0); } to { transform: scale(1); } }
+.scan-modal-actions { display: flex; gap: 15px; margin-top: 10px; }
+.btn-launch { flex: 2; padding: 18px; background: #3b82f6; border: none; border-radius: 18px; font-weight: 900; cursor: pointer; color: white; text-transform: uppercase; }
+.btn-cancel { flex: 1; padding: 18px; background: #f1f5f9; border: none; border-radius: 18px; font-weight: 800; cursor: pointer; color: #64748b; text-transform: uppercase; }
+
+/* SABLIER */
+.background-processing-indicator { position: fixed; top: 20px; right: 20px; background: #1e293b; color: white; padding: 12px 25px; border-radius: 50px; font-weight: 900; font-size: 11px; display: flex; align-items: center; gap: 12px; z-index: 100000; box-shadow: 0 10px 30px rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); }
+.sand-timer { font-size: 20px; animation: rotateTimer 2s infinite linear; display: inline-block; }
+@keyframes rotateTimer { 0% { transform: rotate(0deg); } 50% { transform: rotate(180deg); } 100% { transform: rotate(180deg); } }
+
+.cam-wrapper { position: relative; width: 100%; max-width: 800px; aspect-ratio: 4/3; margin: 0 auto; border-radius: 20px; overflow: hidden; border: 4px solid #334155; background: black; }
+.cam-video { width: 100%; height: 100%; object-fit: cover; }
+.cam-trigger { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); width: 70px; height: 70px; background: white; border: 4px solid rgba(0,0,0,0.3); border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 2rem; z-index: 20; }
+
 [[[£ END: client/src/features/prof/scans/ScansStudio.css £]]]
 
 [[[£ FILE: client/src/features/prof/scans/ScansStudio.jsx £]]]
 import React, { useState, useEffect, useRef } from 'react';
 import './ScansStudio.css';
 
+const SecureImage = ({ src, className, style, onClick }) => {
+    const [error, setError] = useState(false);
+    if (error) return <div className={`bg-slate-100 flex items-center justify-center border-2 border-red-200 text-red-400 p-4 text-center ${className}`} style={style}>⚠️ Perdu</div>;
+    return <img src={src} className={className} style={style} onClick={onClick} onError={() => setError(true)} alt="Scan" />;
+};
+
 export default function ScansStudio({ user }) {
     const [sessions, setSessions] = useState([]);
     const [chapters, setChapters] = useState([]);
     const [activePanels, setActivePanels] = useState({});
     
-    // ETATS MODALE & WORKFLOW
-    const [correctionModal, setCorrectionModal] = useState(null); // ID Session pour lancer correction
-    const [viewingCorrection, setViewingCorrection] = useState(null); // Objet correction pour affichage résultats
+    // correctionModal stocke l'ID de la session en cours de config
+    const [correctionModal, setCorrectionModal] = useState(null); 
+    const [viewingCorrection, setViewingCorrection] = useState(null); 
     const [instructions, setInstructions] = useState("");
-    const [processing, setProcessing] = useState(false);
+    const [processing, setProcessing] = useState(false); 
+    const [zoomImage, setZoomImage] = useState(null);
 
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
@@ -6054,7 +6027,7 @@ export default function ScansStudio({ user }) {
     const togglePanel = (id, type, currentChap) => {
         if (stream) { stream.getTracks().forEach(t => t.stop()); setStream(null); }
         setActivePanels(prev => ({ ...prev, [id]: prev[id] === type ? null : type }));
-        if (type.startsWith('CAMERA')) setTimeout(startCamera, 100);
+        if (type && type.startsWith('CAMERA')) setTimeout(startCamera, 100);
         if (type === 'DRIVE_SELECTION') setSelectedFolderId(currentChap || (relevantChapters[0]?._id || ""));
     };
 
@@ -6070,25 +6043,53 @@ export default function ScansStudio({ user }) {
         if (!videoRef.current || !canvasRef.current) return;
         const vid = videoRef.current;
         const cvs = canvasRef.current;
-        cvs.width = vid.videoWidth;
-        cvs.height = vid.videoHeight;
+        cvs.width = vid.videoWidth; cvs.height = vid.videoHeight;
         cvs.getContext('2d').drawImage(vid, 0, 0, cvs.width, cvs.height);
-        
         cvs.toBlob(async (blob) => {
             const localUrl = URL.createObjectURL(blob);
             const snapId = Date.now();
             setSnapQueue(prev => [...prev, { id: snapId, url: localUrl, status: 'uploading' }]);
             const formData = new FormData();
-            formData.append('file', blob, `snap_${snapId}.jpg`);
+            formData.append('file', blob, `scan_${snapId}.jpg`);
             formData.append('sessionId', sessionId);
-            // DISTINCTION CRUCIALE : SUJET ou COPIE
             formData.append('type', type === 'CAMERA_SUBJECT' ? 'SUBJECT' : 'COPY');
             try {
-                await fetch('/api/scans/upload', { method: 'POST', body: formData });
-                setSnapQueue(prev => prev.map(s => s.id === snapId ? { ...s, status: 'done' } : s));
-                loadSessions(); 
-            } catch(e) { /* Error */ }
+                const res = await fetch('/api/scans/upload', { method: 'POST', body: formData });
+                if (res.ok) { setSnapQueue(prev => prev.map(s => s.id === snapId ? { ...s, status: 'done' } : s)); loadSessions(); }
+            } catch(e) { setSnapQueue(prev => prev.filter(s => s.id !== snapId)); }
         }, 'image/jpeg', 0.95);
+    };
+
+    const handleDeleteFile = async (sessionId, url, type) => {
+        if(!confirm(`Supprimer définitivement ?`)) return;
+        try {
+            const res = await fetch('/api/scans/delete-file', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ sessionId, url, type }) });
+            if(res.ok) loadSessions();
+        } catch(e) {}
+    };
+
+    const openCorrectionModal = (sessionId) => {
+        setCorrectionModal(sessionId);
+        setInstructions("Compare la copie au SUJET fourni. Identifie l'élève. Mets une appréciation globale et une lettre (A+, A, B ou C).");
+    };
+
+    const launchCorrection = async () => {
+        if(!correctionModal) return;
+        const sid = correctionModal;
+        setCorrectionModal(null); // On ferme la modale immédiatement
+        setProcessing(true);      // On affiche le sablier
+        
+        try {
+            const res = await fetch(`/api/scans/correct/${sid}`, { 
+                method: 'POST', 
+                headers: {'Content-Type':'application/json'}, 
+                body: JSON.stringify({ instructions }) 
+            });
+            if (res.ok) {
+                await loadSessions(); // Recharge les données une fois fini
+            }
+        } catch(e) { console.error(e); }
+        setProcessing(false); // On enlève le sablier
     };
 
     const handleCreateDC = async () => {
@@ -6098,111 +6099,85 @@ export default function ScansStudio({ user }) {
     };
 
     const handleDeleteSession = async (id) => {
-        if(!confirm("Supprimer ce dossier de scan ?")) return;
+        if(!confirm("Supprimer toute la session ?")) return;
         await fetch(`/api/scans/sessions/${id}`, { method: 'DELETE' });
         loadSessions();
     };
 
     const handleLinkDrive = async (sessionId) => {
         await fetch(`/api/scans/sessions/${sessionId}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ chapterId: selectedFolderId }) });
-        alert("✅ Dossier lié !");
-        loadSessions();
-    };
-
-    // --- IA CORRECTION ---
-    const openCorrectionModal = (sessionId) => {
-        setCorrectionModal(sessionId);
-        setInstructions("Compare la copie au SUJET fourni. Note sur 20. Sois bienveillant mais précis sur les erreurs.");
-    };
-
-    const launchCorrection = async () => {
-        if(!correctionModal) return;
-        setProcessing(true);
-        try {
-            await fetch(`/api/scans/correct/${correctionModal}`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ instructions }) });
-            await loadSessions();
-            setCorrectionModal(null);
-        } catch(e) { alert("Erreur IA"); }
-        setProcessing(false);
-    };
-
-    // --- VISUALISATION ---
-    const handleViewCopy = (session, copyUrl) => {
-        // Chercher si une correction existe pour cette URL
-        const correction = session.corrections?.find(c => c.originalUrl === copyUrl);
-        if (correction) {
-            setViewingCorrection(correction); // Ouvre la modale Split View
-        } else {
-            window.open(copyUrl, '_blank'); // Juste l'image
-        }
+        alert("✅ Dossier lié !"); loadSessions();
     };
 
     return (
         <div className="scan-page">
-            
-            {/* MODALE RESULTAT SPLIT VIEW */}
+            {processing && (
+                <div className="background-processing-indicator">
+                    <span className="sand-timer">⏳</span>
+                    <span>IA : CORRECTION EN COURS...</span>
+                </div>
+            )}
+
+            {zoomImage && (
+                <div className="fixed inset-0 z-[100000] bg-black/95 flex items-center justify-center p-4 cursor-zoom-out" onClick={() => setZoomImage(null)}>
+                    <img src={zoomImage} className="max-w-full max-h-full object-contain" alt="Zoom" />
+                </div>
+            )}
+
             {viewingCorrection && (
-                <div className="correction-overlay" onClick={() => setViewingCorrection(null)}>
-                    <div className="correction-card !w-[90vw] !max-w-6xl !h-[90vh]" onClick={e => e.stopPropagation()}>
-                        <div className="corr-header">
+                <div className="fixed inset-0 z-[90000] bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-0 md:p-4" onClick={() => setViewingCorrection(null)}>
+                    <div className="bg-white md:rounded-2xl overflow-hidden shadow-2xl flex flex-col w-full h-full md:max-w-[1000px] md:h-[95vh]" onClick={e => e.stopPropagation()}>
+                        <div className="bg-slate-800 text-white p-4 flex justify-between items-center shrink-0">
                             <div>
-                                <h2 className="text-xl font-black uppercase text-white">{viewingCorrection.studentName}</h2>
-                                <span className="text-xs font-bold text-emerald-400">NOTE : {viewingCorrection.grade}</span>
+                                <h2 className="text-lg font-black uppercase">{viewingCorrection.studentName}</h2>
+                                <span className="text-xs font-black px-3 py-1 rounded-full bg-green-500 text-white mt-1 inline-block">NOTE : {viewingCorrection.grade}</span>
                             </div>
-                            <button onClick={() => setViewingCorrection(null)} className="text-white text-2xl">✕</button>
+                            <button onClick={() => setViewingCorrection(null)} className="text-white text-2xl font-bold">✕</button>
                         </div>
-                        <div className="corr-body flex">
-                            {/* GAUCHE : IMAGE */}
-                            <div className="flex-1 bg-black flex items-center justify-center p-4">
-                                <img src={viewingCorrection.originalUrl} className="max-h-full max-w-full object-contain border-2 border-slate-700 rounded-lg" />
+                        <div className="flex flex-col flex-1 overflow-hidden">
+                            <div className="bg-slate-200 relative overflow-y-auto" style={{ height: '60%' }}>
+                                <SecureImage src={viewingCorrection.originalUrl} className="w-full h-auto block" onClick={() => setZoomImage(viewingCorrection.originalUrl)} />
                             </div>
-                            {/* DROITE : CORRECTION */}
-                            <div className="flex-1 bg-white p-8 overflow-y-auto">
-                                <h4 className="text-sm font-black text-slate-400 uppercase mb-2">Appréciation Globale</h4>
-                                <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-xl text-indigo-900 font-medium mb-6">
-                                    {viewingCorrection.appreciation}
+                            <div className="bg-white flex flex-col p-6 overflow-y-auto" style={{ height: '40%' }}>
+                                <div className="mb-4 p-4 bg-indigo-50 border-l-4 border-indigo-500 rounded-r-xl">
+                                    <h4 className="text-[10px] font-black text-indigo-400 uppercase mb-1">Synthèse IA</h4>
+                                    <p className="text-sm font-bold text-slate-700">{viewingCorrection.appreciation}</p>
                                 </div>
-                                <h4 className="text-sm font-black text-slate-400 uppercase mb-2">Analyse Détaillée</h4>
-                                <div className="prose prose-sm text-slate-600 whitespace-pre-wrap">
-                                    {viewingCorrection.transcription}
-                                </div>
+                                <div className="prose prose-sm text-slate-800 font-mono text-xs whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: viewingCorrection.transcription }} />
                             </div>
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* MODALE LANCEMENT IA */}
+            {/* MODALE DE CONFIGURATION IA (Apparaît quand on clique sur CORRIGER) */}
             {correctionModal && (
-                <div className="scan-overlay animate-in">
-                    <div className="scan-modal">
-                        <h3>🤖 CONFIGURATION CORRECTION</h3>
-                        <p className="text-xs text-slate-400 mb-2">L'IA va utiliser les images "SUJET" comme référence.</p>
-                        <textarea className="scan-instr-input" value={instructions} onChange={e => setInstructions(e.target.value)} />
+                <div className="scan-overlay">
+                    <div className="scan-modal" onClick={e => e.stopPropagation()}>
+                        <h3 className="font-black">🤖 CONFIGURATION IA</h3>
+                        <p className="text-[11px] text-slate-400 font-bold uppercase">Instructions pour la correction :</p>
+                        <textarea 
+                            className="scan-instr-input" 
+                            value={instructions} 
+                            onChange={e => setInstructions(e.target.value)} 
+                        />
                         <div className="scan-modal-actions">
                             <button onClick={() => setCorrectionModal(null)} className="btn-cancel">ANNULER</button>
-                            <button onClick={launchCorrection} className="btn-launch" disabled={processing}>{processing ? 'TRAITEMENT...' : 'LANCER 🚀'}</button>
+                            <button onClick={launchCorrection} className="btn-launch">LANCER LA CORRECTION 🚀</button>
                         </div>
                     </div>
                 </div>
             )}
 
-            <div className="create-dc-btn" onClick={handleCreateDC}><span className="create-label">+ NOUVEAU SCAN</span></div>
+            <div className="create-dc-btn" onClick={handleCreateDC}><span>+ NOUVEAU SCAN (DC)</span></div>
             
             {sessions.map(s => {
                 const active = activePanels[s._id];
-                const folderName = chapters.find(c => c._id === s.chapterId)?.title || "AUCUN DOSSIER";
                 const correctedCount = s.corrections ? s.corrections.length : 0;
-
                 return (
                     <div key={s._id} className="dc-card">
                         <div className="dc-header">
-                            <div>
-                                <h3 style={{fontWeight:900}}>{s.title}</h3>
-                                <p className="text-xs text-slate-400 font-bold">
-                                    {s.subjectUrls?.length || 0} Sujets • {s.copyUrls.length} Copies • {correctedCount} Corrigés
-                                </p>
-                            </div>
+                            <div><h3 style={{fontWeight:950, fontSize: '1.1rem'}}>{s.title}</h3><p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">{s.subjectUrls?.length || 0} Sujets • {s.copyUrls.length} Copies • {correctedCount} Corrigés</p></div>
                             <div className="dc-toolbar">
                                 <button className="tool-btn btn-sujet" onClick={() => togglePanel(s._id, 'CAMERA_SUBJECT')}>📄 SUJET</button>
                                 <button className="tool-btn btn-scanner" onClick={() => togglePanel(s._id, 'CAMERA_COPY')}>📷 COPIES</button>
@@ -6212,73 +6187,49 @@ export default function ScansStudio({ user }) {
                                 <button className="tool-btn btn-delete" onClick={() => handleDeleteSession(s._id)}>✕</button>
                             </div>
                         </div>
-
-                        {/* ZONE DE VISUALISATION */}
                         {active === 'SHOW_ALL' && (
-                            <div className="dc-content-area text-white">
-                                {/* SECTION SUJETS */}
+                            <div className="dc-content-area">
                                 {s.subjectUrls?.length > 0 && (
                                     <div className="mb-6">
-                                        <h4 className="font-bold mb-2 uppercase text-xs text-indigo-300">ÉNONCÉS / SUJETS DE RÉFÉRENCE</h4>
-                                        <div className="snap-queue-strip custom-scrollbar justify-start">
+                                        <h4 className="font-black mb-3 uppercase text-[10px] text-indigo-300 tracking-widest">SUJETS ({s.subjectUrls.length})</h4>
+                                        <div className="snap-queue-strip">
                                             {s.subjectUrls.map((url, i) => (
-                                                <img key={i} src={url} className="queue-thumb border-indigo-500 border-2" onClick={() => window.open(url, '_blank')} />
+                                                <div key={i} className="queue-thumb-container">
+                                                    <SecureImage src={url} className="queue-thumb border-indigo-500 border-2" onClick={() => window.open(url, '_blank')} />
+                                                    <div className="thumb-delete-trigger" onClick={(e) => { e.stopPropagation(); handleDeleteFile(s._id, url, 'SUBJECT'); }}>✕</div>
+                                                </div>
                                             ))}
                                         </div>
                                     </div>
                                 )}
-
-                                {/* SECTION COPIES */}
                                 <div>
-                                    <h4 className="font-bold mb-2 uppercase text-xs text-emerald-300">COPIES ÉLÈVES ({s.copyUrls.length})</h4>
-                                    <div className="snap-queue-strip custom-scrollbar justify-start flex-wrap">
-                                        {s.copyUrls.map((url, i) => {
-                                            const isCorrected = s.corrections?.some(c => c.originalUrl === url);
+                                    <h4 className="font-black mb-3 uppercase text-[10px] text-emerald-300 tracking-widest">COPIES ({s.copyUrls.length})</h4>
+                                    <div className="snap-queue-strip flex-wrap">
+                                        {s.copyUrls.map((url, i) => { 
+                                            const correction = s.corrections?.find(c => c.originalUrl === url); 
                                             return (
-                                                <div key={i} className="relative group cursor-pointer" onClick={() => handleViewCopy(s, url)}>
-                                                    <img src={url} className={`queue-thumb ${isCorrected ? 'border-green-500' : 'border-slate-500'} border-2`} />
-                                                    {isCorrected && <div className="absolute top-0 right-0 bg-green-500 text-white text-[8px] font-black px-1 rounded-bl">OK</div>}
+                                                <div key={i} className="queue-thumb-container">
+                                                    <div onClick={() => { if(correction) setViewingCorrection(correction); else window.open(url, '_blank'); }}>
+                                                        <SecureImage src={url} className={`queue-thumb ${correction ? 'border-green-500' : 'border-slate-500'} border-2`} />
+                                                        {correction && <div className="absolute top-0 right-0 bg-green-500 text-white text-[8px] font-black px-1 rounded-bl">{correction.grade || "OK"}</div>}
+                                                    </div>
+                                                    <div className="thumb-delete-trigger" onClick={(e) => { e.stopPropagation(); handleDeleteFile(s._id, url, 'COPY'); }}>✕</div>
                                                 </div>
-                                            );
+                                            ); 
                                         })}
-                                        {s.copyUrls.length === 0 && <span className="text-sm italic opacity-50">Aucune copie scannée.</span>}
                                     </div>
                                 </div>
                             </div>
                         )}
-
-                        {active === 'DRIVE_SELECTION' && (
-                            <div className="dc-content-area flex flex-col items-center gap-4 text-white">
-                                <h3>CHOISIR LE DOSSIER DE RANGEMENT</h3>
-                                <select className="p-3 rounded text-black font-bold" value={selectedFolderId} onChange={e => setSelectedFolderId(e.target.value)}>
-                                    <option value="">-- SÉLECTION --</option>
-                                    {relevantChapters.map(c => <option key={c._id} value={c._id}>{c.title}</option>)}
-                                </select>
-                                <button className="bg-green-500 text-white px-4 py-2 rounded font-black" onClick={() => handleLinkDrive(s._id)}>VALIDER LE RANGEMENT</button>
-                            </div>
-                        )}
-
-                        {active && active.startsWith('CAMERA') && (
-                            <div className="dc-content-area">
-                                <h4 className="text-center text-white font-black mb-2 uppercase">
-                                    {active === 'CAMERA_SUBJECT' ? "📸 SCANNER L'ÉNONCÉ (SUJET)" : "📸 SCANNER UNE COPIE ÉLÈVE"}
-                                </h4>
-                                <div className="cam-wrapper">
-                                    <video ref={videoRef} autoPlay playsInline className="cam-video" />
-                                    <canvas ref={canvasRef} style={{display:'none'}} />
-                                    <div className={`cam-trigger ${active === 'CAMERA_SUBJECT' ? 'border-indigo-500' : 'border-emerald-500'}`} onClick={() => takeSnap(s._id, active)}>⚪</div>
-                                </div>
-                                <div className="snap-queue-strip custom-scrollbar">
-                                    {snapQueue.map(sq => <img key={sq.id} src={sq.url} className={`queue-thumb ${sq.status}`} />)}
-                                </div>
-                            </div>
-                        )}
+                        {active === 'DRIVE_SELECTION' && (<div className="dc-content-area flex flex-col items-center gap-4 text-white"><h3>RANGER DANS LE DRIVE</h3><select className="p-3 rounded text-black font-bold" value={selectedFolderId} onChange={e => setSelectedFolderId(e.target.value)}><option value="">-- CHOISIR DOSSIER --</option>{relevantChapters.map(c => <option key={c._id} value={c._id}>{c.title}</option>)}</select><button className="bg-green-500 text-white px-6 py-2 rounded-xl font-black" onClick={() => handleLinkDrive(s._id)}>VALIDER</button></div>)}
+                        {active && active.startsWith('CAMERA') && (<div className="dc-content-area"><h4 className="text-center text-white font-black mb-4 uppercase tracking-widest">{active === 'CAMERA_SUBJECT' ? "📸 SCANNER LE SUJET" : "📸 SCANNER LES COPIES"}</h4><div className="cam-wrapper"><video ref={videoRef} autoPlay playsInline className="cam-video" /><canvas ref={canvasRef} style={{display:'none'}} /><div className={`cam-trigger ${active === 'CAMERA_SUBJECT' ? 'border-indigo-500' : 'border-emerald-500'}`} onClick={() => takeSnap(s._id, active)}>⚪</div></div><div className="snap-queue-strip">{(active === 'CAMERA_SUBJECT' ? s.subjectUrls : s.copyUrls).map((url, i) => (<div key={i} className="queue-thumb-container"><SecureImage src={url} className="queue-thumb border-white/20 border-2" /><div className="thumb-delete-trigger" onClick={() => handleDeleteFile(s._id, url, active === 'CAMERA_SUBJECT' ? 'SUBJECT' : 'COPY')}>✕</div></div>))}</div></div>)}
                     </div>
                 );
             })}
         </div>
     );
 }
+
 [[[£ END: client/src/features/prof/scans/ScansStudio.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/students/StudentsManager.css £]]]
@@ -6320,6 +6271,7 @@ export default function ScansStudio({ user }) {
 .corr-footer { padding: 1.5rem; background: white; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 15px; }
 .corr-btn-save { padding: 1rem 3rem; background: #16a34a; color: white; border-radius: 15px; font-weight: 900; border: none; cursor: pointer; }
 .corr-btn-cancel { padding: 1rem 2rem; background: #f1f5f9; color: #64748b; border-radius: 15px; font-weight: 800; border: none; cursor: pointer; }
+
 [[[£ END: client/src/features/prof/students/StudentsManager.css £]]]
 
 [[[£ FILE: client/src/features/prof/students/StudentsManager.jsx £]]]
@@ -6594,6 +6546,7 @@ export default function StudentsManager({ globalClassId }) {
     </>
   );
 }
+
 [[[£ END: client/src/features/prof/students/StudentsManager.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/studio/StudioDashboard.css £]]]
@@ -6749,6 +6702,7 @@ export default function StudentsManager({ globalClassId }) {
 /* --- MODALE LOADING --- */
 .overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.85); z-index: 500; display: flex; flex-direction: column; align-items: center; justify-content: center; }
 .modal-box { background: #1e293b; padding: 25px; border-radius: 12px; border: 1px solid #475569; color: white; font-weight: 900; }
+
 [[[£ END: client/src/features/prof/studio/StudioDashboard.css £]]]
 
 [[[£ FILE: client/src/features/prof/studio/StudioDashboard.jsx £]]]
@@ -7160,6 +7114,7 @@ export default function StudioDashboard({ user }) {
         </div>
     );
 }
+
 [[[£ END: client/src/features/prof/studio/StudioDashboard.jsx £]]]
 
 [[[£ FILE: client/src/index.css £]]]
@@ -7168,11 +7123,13 @@ export default function StudioDashboard({ user }) {
 body { margin: 0; font-family: 'Inter', sans-serif; background: #f1f5f9; }
 .custom-scrollbar::-webkit-scrollbar { width: 6px; }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+
 [[[£ END: client/src/index.css £]]]
 
 [[[£ FILE: client/src/main.jsx £]]]
 import React from 'react'; import ReactDOM from 'react-dom/client'; import App from './App.jsx'; import './index.css';
 ReactDOM.createRoot(document.getElementById('root')).render(<React.StrictMode><App /></React.StrictMode>);
+
 [[[£ END: client/src/main.jsx £]]]
 
 [[[£ FILE: client/src/services/api.js £]]]
@@ -7180,6 +7137,7 @@ export const api = {
     get: (url) => fetch(`/api${url}`).then(r => r.json()),
     post: (url, data) => fetch(`/api${url}`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) }).then(r => r.json())
 };
+
 [[[£ END: client/src/services/api.js £]]]
 
 [[[£ FILE: client/src/test_token_crash.js £]]]
@@ -7190,6 +7148,7 @@ console.log("Le bandeau rouge a disparu, et le fichier est maintenant complet.")
 export default function TestTokenValid() {
     return "Tout est opérationnel chef !";
 }
+
 [[[£ END: client/src/test_token_crash.js £]]]
 
 [[[£ FILE: client/vite.config.js £]]]
@@ -7216,6 +7175,7 @@ export default defineConfig({
     }
   }
 })
+
 [[[£ END: client/vite.config.js £]]]
 
 [[[£ FILE: git-auto.js £]]]
@@ -7232,6 +7192,7 @@ async function doPush() {
     exec('git add . && git commit -m "Build #' + v.build + '" && git push');
 }
 setInterval(doPush, 600000);
+
 [[[£ END: git-auto.js £]]]
 
 [[[£ FILE: init-db.js £]]]
@@ -7243,6 +7204,7 @@ async function init() {
     process.exit();
 }
 init();
+
 [[[£ END: init-db.js £]]]
 
 [[[£ FILE: magic-paste.js £]]]
@@ -7275,31 +7237,42 @@ setInterval(async () => {
         // On ignore les erreurs de lecture (verrouillage presse-papier momentané)
     }
 }, 2000);
+
 [[[£ END: magic-paste.js £]]]
 
 [[[£ FILE: package.json £]]]
 {
   "name": "condamine-pro",
-  "version": "1.70.0",
+  "version": "1.159.0",
   "scripts": {
     "start": "node server/server.js",
     "server-dev": "nodemon --ignore 'update.txt' --ignore 'apply_status.json' server/server.js",
     "client": "npm run dev --prefix client",
     "test": "node tests/integrity.test.js",
-    "dev": "node apply.js & node magic-paste.js & npm run server-dev & npm run client",
+    "dev": "concurrently -n \"APPLY,MAGIC,SERVER,CLIENT\" -c \"green,yellow,magenta,cyan\" \"node apply.js\" \"node magic-paste.js\" \"npm run server-dev\" \"npm run client\"",
     "build": "npm install --prefix client && npm run build --prefix client"
   },
   "dependencies": {
     "@google/generative-ai": "^0.1.3",
+    "bcryptjs": "^2.4.3",
+    "concurrently": "^8.2.2",
+    "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "express-mongo-sanitize": "^2.2.0",
+    "express-rate-limit": "^7.1.5",
     "googleapis": "^126.0.0",
+    "helmet": "^7.1.0",
     "mongoose": "7.8.2",
     "node-fetch": "^2.7.0",
     "multer": "^1.4.5-lts.1",
     "clipboardy": "^4.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.3"
   }
 }
+
 [[[£ END: package.json £]]]
 
 [[[£ FILE: public/style.css £]]]
@@ -7356,87 +7329,132 @@ header h1 { font-size: 1.3rem; color: var(--primary); margin: 0; }
 .right-word { color: var(--success); font-weight: bold; }
 .correction-table { width: 100%; border-collapse: collapse; margin-top: 10px; background: white; border-radius: 10px; overflow: hidden; }
 .correction-table td { padding: 8px; border-bottom: 1px solid #eee; }
+
 [[[£ END: public/style.css £]]]
 
 [[[£ FILE: server/core/ai.engine.js £]]]
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+const fetch = require('node-fetch');
 
 /**
- * 🤖 MOTEUR IA CENTRALISÉ - V4 (GESTION ERREUR CLÉ)
- * Intercepte les clés expirées pour prévenir l'utilisateur.
+ * 🤖 MOTEUR IA - V31 (GEMINI 2.0)
+ * Utilise le modèle confirmé disponible sur votre compte.
  */
 const AIEngine = {
+    normalizeKeys: (obj) => {
+        if (typeof obj !== 'object' || obj === null) return obj;
+        if (Array.isArray(obj)) return obj.map(AIEngine.normalizeKeys);
+        return Object.keys(obj).reduce((acc, key) => {
+            acc[key.toLowerCase().trim()] = AIEngine.normalizeKeys(obj[key]);
+            return acc;
+        }, {});
+    },
+
     sanitizeJSON: (text) => {
+        if (text && text.startsWith("ERREUR")) {
+             return {
+                studentName: "Erreur API",
+                grade: "?",
+                appreciation: "Problème technique.",
+                transcription: `🔴 ${text}`,
+                mistakes: []
+            };
+        }
+
+        if (!text) return { grade: "?", appreciation: "Vide.", transcription: "Rien." };
+
+        let clean = text.replace(/```json/gi, "").replace(/```/gi, "").trim();
         try {
-            let clean = text.replace(/```json/gi, "").replace(/```/gi, "").trim();
-            const startArray = clean.indexOf('[');
-            const startObj = clean.indexOf('{');
-            let startIdx = -1;
-            let endIdx = -1;
-
-            if (startArray !== -1 && (startObj === -1 || startArray < startObj)) {
-                startIdx = startArray;
-                endIdx = clean.lastIndexOf(']') + 1;
-            } else if (startObj !== -1) {
-                startIdx = startObj;
-                endIdx = clean.lastIndexOf('}') + 1;
+            const start = clean.indexOf('{');
+            const end = clean.lastIndexOf('}');
+            if (start !== -1 && end !== -1) {
+                const parsed = JSON.parse(clean.substring(start, end + 1));
+                const norm = AIEngine.normalizeKeys(parsed);
+                let trans = norm.transcription || norm.text || "Pas de texte";
+                if (typeof trans === 'object') trans = JSON.stringify(trans, null, 2);
+                return {
+                    studentname: norm.studentname || "Inconnu",
+                    grade: norm.grade || "?",
+                    appreciation: norm.appreciation || "Pas d'avis",
+                    transcription: trans,
+                    mistakes: norm.mistakes || []
+                };
             }
-
-            if (startIdx === -1) throw new Error("Format JSON introuvable");
-            return JSON.parse(clean.substring(startIdx, endIdx));
+            throw new Error("No JSON");
         } catch (e) { 
-            console.error("🔥 [AI-CORE] Échec parsing JSON. Brut :", text.substring(0, 100) + "...");
-            throw new Error("L'IA a renvoyé un format illisible."); 
+            console.warn("⚠️ Mode RAW.");
+            let htmlText = text.replace(/\*\*(.*?)\*\*/g, '<span style="color:#ef4444; font-weight:bold;">$1</span>').replace(/\n/g, '<br/>');
+            return {
+                studentName: "Mode Texte",
+                grade: "?",
+                appreciation: "Format brut.",
+                transcription: htmlText, 
+                mistakes: []
+            };
         }
     },
 
     ask: async (prompt, systemInstruction = "") => {
         const apiKey = process.env.GEMINI_API_KEY;
-        const targetModel = "gemini-2.0-flash"; 
+        // LE MODÈLE CONFIRMÉ PAR VOTRE TEST :
+        const modelName = "gemini-2.0-flash"; 
 
-        if (!apiKey || apiKey.includes('VOTRE_CLE')) {
-            console.error("❌ [AI-CORE] Clé API manquante ou par défaut.");
-            throw new Error("CLÉ API MANQUANTE DANS LE FICHIER .ENV");
-        }
-        
-        let logPrompt = "";
-        if (typeof prompt === 'string') {
-            logPrompt = prompt.substring(0, 50);
-        } else if (Array.isArray(prompt)) {
-            logPrompt = "MULTIMODAL (Image + Texte)";
-        } else {
-            logPrompt = "Objet complexe";
-        }
+        if (!apiKey) return "ERREUR CLÉ API MANQUANTE";
 
-        console.log(`📡 [AI-CORE] Appel Google | Modèle: ${targetModel} | Prompt: ${logPrompt}...`);
-        
-        try {
-            const genAI = new GoogleGenerativeAI(apiKey);
-            const model = genAI.getGenerativeModel({ 
-                model: targetModel,
-                systemInstruction: systemInstruction 
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+
+        const contents = [];
+        const parts = [];
+        if (Array.isArray(prompt)) {
+            prompt.forEach(p => {
+                if (p.text) parts.push({ text: p.text });
+                if (p.inlineData) {
+                    parts.push({ inline_data: { mime_type: p.inlineData.mimeType, data: p.inlineData.data } });
+                }
             });
-            
-            const result = await model.generateContent(prompt);
-            const response = await result.response;
-            const text = response.text();
-            
-            if (!text) throw new Error("Réponse Google vide");
-            return text;
-        } catch (e) {
-            console.error(`💥 [AI-CORE] CRASH GOOGLE :`, e.message);
-            
-            // DÉTECTION SPÉCIFIQUE CLÉ EXPIRÉE
-            if (e.message.includes('API key expired') || e.message.includes('API_KEY_INVALID') || e.status === 400) {
-                throw new Error("⚠️ VOTRE CLÉ API EST PÉRIMÉE. Changez-la dans le fichier .env !");
+        } else {
+            parts.push({ text: prompt });
+        }
+        contents.push({ role: "user", parts: parts });
+
+        const body = {
+            contents: contents,
+            systemInstruction: { parts: [{ text: systemInstruction || "Tu es un assistant." }] },
+            safetySettings: [
+                { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+                { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+                { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+                { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+            ],
+            generationConfig: { temperature: 0.2 }
+        };
+
+        try {
+            console.log(`📡 [AI-ENGINE] Appel ${modelName}...`);
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            const data = await response.json();
+
+            if (data.error) {
+                console.error("❌ ERREUR API GOOGLE :", data.error);
+                return `ERREUR GOOGLE (${data.error.code}): ${data.error.message}`;
             }
-            
-            throw e;
+
+            if (data.candidates && data.candidates.length > 0 && data.candidates[0].content) {
+                return data.candidates[0].content.parts[0].text;
+            } else {
+                return "Réponse vide.";
+            }
+        } catch (e) {
+            return `ERREUR RÉSEAU: ${e.message}`;
         }
     }
 };
 
 module.exports = AIEngine;
+
 [[[£ END: server/core/ai.engine.js £]]]
 
 [[[£ FILE: server/core/drive.engine.js £]]]
@@ -7449,32 +7467,62 @@ let driveInstance = null;
 
 const DriveEngine = {
     oauth2Client: null,
+    
     init: () => {
         try {
             const clientID = process.env.GOOGLE_CLIENT_ID;
             const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-            const refresh = process.env.GOOGLE_REFRESH_TOKEN;
+            // On permet une redirection dynamique ou fixe
             const redirect = process.env.GOOGLE_REDIRECT_URI || "http://localhost:3000/api/auth/google/callback";
+            
             if (clientID && clientSecret) {
                 oauth2Client = new google.auth.OAuth2(clientID, clientSecret, redirect);
+                DriveEngine.oauth2Client = oauth2Client; // Stockage public pour les routes Auth
+
+                const refresh = process.env.GOOGLE_REFRESH_TOKEN;
                 if (refresh) {
                     oauth2Client.setCredentials({ refresh_token: refresh });
                     driveInstance = google.drive({ version: 'v3', auth: oauth2Client });
-                    DriveEngine.oauth2Client = oauth2Client;
-                    console.log("✅ Drive Engine Ready V100.");
+                    console.log("✅ Drive Engine Initialisé.");
+                } else {
+                    console.warn("⚠️ Drive Engine : Pas de Refresh Token dans .env");
                 }
+            } else {
+                console.error("❌ Drive Engine : Client ID/Secret manquants.");
             }
         } catch (e) { console.error("Drive Init Error", e.message); }
     },
+
+    // --- MÉTHODES OAUTH (Pour regénérer le token) ---
+    getAuthUrl: () => {
+        if (!DriveEngine.oauth2Client) throw new Error("OAuth Client non initialisé");
+        return DriveEngine.oauth2Client.generateAuthUrl({
+            access_type: 'offline', // CRUCIAL pour avoir le Refresh Token
+            scope: ['https://www.googleapis.com/auth/drive.file'],
+            prompt: 'consent' // Force la génération du refresh token
+        });
+    },
+
+    getTokenFromCode: async (code) => {
+        if (!DriveEngine.oauth2Client) throw new Error("OAuth Client non initialisé");
+        const { tokens } = await DriveEngine.oauth2Client.getToken(code);
+        return tokens;
+    },
+
+    // --- MÉTHODES MÉTIER ---
     testAuth: async () => {
-        if (!driveInstance) return { ok: false, error: "Non configuré" };
+        if (!driveInstance) return { ok: false, error: "Non configuré (Token manquant)" };
         try {
             const res = await driveInstance.about.get({ fields: 'user(emailAddress)' });
             return { ok: true, email: res.data.user.emailAddress };
-        } catch (e) { return { ok: false, error: "Session expirée" }; }
+        } catch (e) { 
+            console.error("Test Auth Fail:", e.message);
+            return { ok: false, error: "Session expirée ou invalide. Regénérez le token." }; 
+        }
     },
+
     getOrCreateFolder: async (name, parentId = null) => {
-        if (!driveInstance) throw new Error("Drive non prêt");
+        if (!driveInstance) throw new Error("Drive non connecté. Vérifiez le token.");
         const cleanName = name.toUpperCase().trim();
         try {
             let q = `name = '${cleanName.replace(/'/g, "\\'")}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
@@ -7488,17 +7536,13 @@ const DriveEngine = {
             return folder.data.id;
         } catch (e) { throw e; }
     },
-    /**
-     * V100 : UPLOAD AVEC GÉNÉRATION DE LIEN DIRECT "UC"
-     * Format : https://drive.google.com/uc?export=view&id={FILE_ID}
-     */
+
     uploadFile: async (fileName, localPath, parentFolderId) => {
-        if (!driveInstance) throw new Error("Drive Instance missing");
+        if (!driveInstance) throw new Error("Drive non connecté.");
         try {
             const fileMetadata = { name: fileName, parents: [parentFolderId] };
             const media = { body: fs.createReadStream(localPath) };
             
-            // 1. Upload du fichier
             const file = await driveInstance.files.create({
                 resource: fileMetadata,
                 media: media,
@@ -7506,26 +7550,90 @@ const DriveEngine = {
             });
 
             const fileId = file.data.id;
-
-            // 2. RENDRE LE FICHIER LISIBLE (Indispensable pour l'affichage élève)
             await driveInstance.permissions.create({
                 fileId: fileId,
                 resource: { role: 'reader', type: 'anyone' }
             });
 
-            // 3. RETOURNER L'URL DE VUE DIRECTE
-            const directUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
-            return { id: fileId, link: directUrl };
+            return { id: fileId, link: `https://drive.google.com/uc?export=view&id=${fileId}` };
 
         } catch (e) {
-            console.error("❌ Drive Upload Fail V100:", e.message);
+            console.error("❌ Drive Upload Fail:", e.message);
+            throw e;
+        }
+    },
+
+    getFileStream: async (fileId) => {
+        try {
+            // On recrée une instance légère pour le stream si besoin, ou on utilise l'existante
+            const drive = google.drive({ version: 'v3', auth: DriveEngine.oauth2Client });
+            const res = await drive.files.get(
+                { fileId: fileId, alt: 'media' },
+                { responseType: 'stream' }
+            );
+            return res.data;
+        } catch (e) {
             throw e;
         }
     }
 };
+
 DriveEngine.init();
 module.exports = DriveEngine;
+
 [[[£ END: server/core/drive.engine.js £]]]
+
+[[[£ FILE: server/core/ocr.engine.js £]]]
+const fetch = require('node-fetch');
+
+/**
+ * 👁️ MOTEUR OCR V2 (AVEC RETOUR D'ERREUR)
+ * Renvoie l'erreur exacte si Google refuse de lire.
+ */
+const OCREngine = {
+    extractText: async (base64Image) => {
+        const apiKey = process.env.GEMINI_API_KEY;
+        const url = `https://vision.googleapis.com/v1/images:annotate?key=${apiKey}`;
+
+        const body = {
+            requests: [{
+                image: { content: base64Image },
+                features: [{ type: "DOCUMENT_TEXT_DETECTION" }]
+            }]
+        };
+
+        try {
+            console.log("🔍 [OCR] Appel Google Vision...");
+            const response = await fetch(url, {
+                method: 'POST',
+                body: JSON.stringify(body),
+                headers: { 'Content-Type': 'application/json' }
+            });
+
+            const data = await response.json();
+            
+            // SI ERREUR API (Clé invalide, API non activée...)
+            if (data.error) {
+                console.error("❌ [OCR] Erreur API :", data.error.message);
+                return { success: false, error: data.error.message };
+            }
+
+            const fullText = data.responses[0]?.fullTextAnnotation?.text;
+            if (!fullText) {
+                return { success: true, text: "" }; // Image lue mais vide
+            }
+
+            return { success: true, text: fullText };
+
+        } catch (e) {
+            return { success: false, error: "Crash Réseau: " + e.message };
+        }
+    }
+};
+
+module.exports = OCREngine;
+
+[[[£ END: server/core/ocr.engine.js £]]]
 
 [[[£ FILE: server/domains/admin/admin.routes.js £]]]
 const express = require('express');
@@ -7606,6 +7714,7 @@ router.post('/import-csv', upload.single('file'), asyncHandler(async (req, res) 
 router.post('/import-magic', asyncHandler(async (req, res) => { const { rawText, defaultClass, forceOption } = req.body; if (!rawText || rawText.length < 5) return res.status(400).json({ error: "Texte vide." }); const ClassModel = mongoose.model('Classroom'); const StudentModel = mongoose.model('Student'); const EnrollmentModel = mongoose.model('Enrollment'); const AcademicYearModel = mongoose.model('AcademicYear'); try { const studentsData = await AdminAI.parseRawStudentData(rawText, defaultClass || "UNKNOWN"); if (!Array.isArray(studentsData) || studentsData.length === 0) return res.status(400).json({ error: "L'IA n'a rien trouvé." }); let createdCount = 0; let year = await AcademicYearModel.findOne({ isCurrent: true }); if (!year) year = await AcademicYearModel.create({ label: "2025-2026", isCurrent: true }); let forcedGroupId = null; if (forceOption && forceOption.trim().length > 0) { const forcedName = forceOption.toUpperCase().trim(); const lvl = guessLevel(forcedName) !== "AUTRE" ? guessLevel(forcedName) : (defaultClass ? guessLevel(defaultClass) : "AUTRE"); const group = await ClassModel.findOneAndUpdate({ name: forcedName, type: 'GROUP' }, { name: forcedName, type: 'GROUP', level: lvl }, { upsert: true, new: true }); forcedGroupId = group._id; } for (const s of studentsData) { try { if (!s.lastName) continue; let className = normalizeClassName(s.className); if (!className || className === "UNKNOWN") { if (defaultClass && defaultClass !== "UNKNOWN") className = normalizeClassName(defaultClass); else className = "UNKNOWN"; } const level = guessLevel(className); let mainClass = await ClassModel.findOneAndUpdate({ name: className }, { name: className, type: 'CLASS', level: level }, { upsert: true, new: true }); const assignedGroupIds = []; const rawOptions = Array.isArray(s.options) ? s.options : []; for (const optName of rawOptions) { const cleanOpt = String(optName).toUpperCase().trim(); if (cleanOpt.length < 2 || cleanOpt.includes('/')) continue; const scopedGroupName = `${className} ${cleanOpt}`; const group = await ClassModel.findOneAndUpdate({ name: scopedGroupName, type: 'GROUP' }, { name: scopedGroupName, type: 'GROUP', level: level, associatedClasses: [mainClass._id] }, { upsert: true, new: true }); assignedGroupIds.push(group._id); } if (forcedGroupId) assignedGroupIds.push(forcedGroupId); const fName = s.firstName || "."; const lName = s.lastName; const query = (s.email && s.email.includes('@')) ? { email: s.email } : { firstName: new RegExp(`^${fName}$`, 'i'), lastName: new RegExp(`^${lName}$`, 'i') }; const student = await StudentModel.findOneAndUpdate(query, { firstName: fName, lastName: lName, fullName: `${fName} ${lName}`, email: s.email, currentClass: className, classId: mainClass._id, level: level, currentLevel: level, assignedGroups: assignedGroupIds, isTestAccount: false }, { upsert: true, new: true }); await EnrollmentModel.deleteMany({ studentId: student._id }); await EnrollmentModel.create({ studentId: student._id, classId: mainClass._id, yearId: year._id }); createdCount++; } catch (innerErr) { console.error("Err student:", innerErr); } } await StructureDrive.syncBaseStructure(); res.json({ ok: true, message: `Magie Textuelle : ${createdCount} élèves importés.` }); } catch (e) { res.status(500).json({ error: e.message }); } }));
 
 module.exports = router;
+
 [[[£ END: server/domains/admin/admin.routes.js £]]]
 
 [[[£ FILE: server/domains/admin/ai/admin.ai.js £]]]
@@ -7659,6 +7768,7 @@ const AdminAI = {
 };
 
 module.exports = AdminAI;
+
 [[[£ END: server/domains/admin/ai/admin.ai.js £]]]
 
 [[[£ FILE: server/domains/admin/ai/project-doc.ai.js £]]]
@@ -7677,6 +7787,7 @@ const ProjectDocAI = {
     }
 };
 module.exports = ProjectDocAI;
+
 [[[£ END: server/domains/admin/ai/project-doc.ai.js £]]]
 
 [[[£ FILE: server/domains/admin/db/admin.db.js £]]]
@@ -7710,6 +7821,7 @@ const AdminDB = {
 };
 
 module.exports = AdminDB;
+
 [[[£ END: server/domains/admin/db/admin.db.js £]]]
 
 [[[£ FILE: server/domains/admin/experts/admin.db.js £]]]
@@ -7731,6 +7843,7 @@ const AdminExpert = {
     }
 };
 module.exports = AdminExpert;
+
 [[[£ END: server/domains/admin/experts/admin.db.js £]]]
 
 [[[£ FILE: server/domains/admin/experts/admin.expert.js £]]]
@@ -7772,6 +7885,7 @@ const AdminExpert = {
 };
 
 module.exports = AdminExpert;
+
 [[[£ END: server/domains/admin/experts/admin.expert.js £]]]
 
 [[[£ FILE: server/domains/auth/auth.routes.js £]]]
@@ -7779,18 +7893,17 @@ const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose'); 
 const AuthExpert = require('./experts/auth.expert');
+const DriveEngine = require('../../core/drive.engine'); // Import Engine pour OAuth
 
-// 1. Configuration (Liste des classes pour le menu déroulant)
+// 1. Configuration
 router.get('/config', async (req, res) => {
     try {
         const config = await AuthExpert.getLoginConfig();
         res.json(config);
-    } catch (e) {
-        res.status(500).json({ error: "BDD non initialisée" });
-    }
+    } catch (e) { res.status(500).json({ error: "BDD non initialisée" }); }
 });
 
-// 2. DONNÉES FINDER LÉGÈRES
+// 2. DONNÉES FINDER
 router.get('/finder-data', async (req, res) => {
     try {
         const list = await AuthExpert.getAllStudentsForFinder();
@@ -7798,7 +7911,7 @@ router.get('/finder-data', async (req, res) => {
     } catch (e) { res.status(500).json([]); }
 });
 
-// 3. Liste des élèves d'une classe
+// 3. Liste élèves classe
 router.get('/students/:classId', async (req, res) => {
     try {
         const list = await AuthExpert.getStudentsForSelection(req.params.classId);
@@ -7806,7 +7919,7 @@ router.get('/students/:classId', async (req, res) => {
     } catch (e) { res.status(500).json([]); }
 });
 
-// 4. Login Unique
+// 4. Login
 router.post('/login', async (req, res) => {
     try {
         const result = await AuthExpert.verify(req.body);
@@ -7815,22 +7928,60 @@ router.post('/login', async (req, res) => {
     } catch (e) { res.status(500).json({ error: "Erreur technique login" }); }
 });
 
-// 5. UPDATE V374 : Récupération fraîche AVEC LES OPTIONS POPULÉES
+// 5. Student Fresh
 router.get('/student-fresh/:id', async (req, res) => {
     try {
         if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(400).json({error: "ID Invalide"});
-        
-        // On récupère l'élève et on POPULE les groupes pour avoir leurs noms (ex: "1D BFI")
         const student = await mongoose.model('Student')
             .findById(req.params.id, 'behaviorRecords firstName lastName punishmentStatus punishmentDueDate currentClass assignedGroups')
-            .populate('assignedGroups', 'name') // <-- MAGIE ICI
+            .populate('assignedGroups', 'name')
             .lean();
-            
         res.json(student);
     } catch (e) { res.status(500).json({ error: "Erreur fetch student" }); }
 });
 
+// --- ROUTES OAUTH GOOGLE (POUR RECONNECTER LE DRIVE) ---
+
+// A. Lancer la connexion (Redirection vers Google)
+router.get('/google/login', (req, res) => {
+    try {
+        const url = DriveEngine.getAuthUrl();
+        res.redirect(url);
+    } catch (e) {
+        res.status(500).send("Erreur Init OAuth: " + e.message + ". Vérifiez GOOGLE_CLIENT_ID/SECRET.");
+    }
+});
+
+// B. Callback (Réception du code et affichage du Token)
+router.get('/google/callback', async (req, res) => {
+    const code = req.query.code;
+    if (!code) return res.send("Pas de code reçu.");
+
+    try {
+        const tokens = await DriveEngine.getTokenFromCode(code);
+        const refreshToken = tokens.refresh_token;
+
+        if (!refreshToken) {
+            return res.send(`
+                <h1>⚠️ Pas de Refresh Token reçu !</h1>
+                <p>Google n'a renvoyé qu'un Access Token temporaire.</p>
+                <p><strong>Solution :</strong> Allez sur <a href="https://myaccount.google.com/permissions">Google Permissions</a>, supprimez l'accès à "Condamine Pro" (ou votre app), et réessayez ce lien.</p>
+            `);
+        }
+
+        res.send(`
+            <h1 style="color:green">✅ SUCCÈS !</h1>
+            <p>Voici votre nouveau <strong>GOOGLE_REFRESH_TOKEN</strong> à copier dans Render :</p>
+            <textarea style="width:100%; height:100px; font-size:14px; font-family:monospace">${refreshToken}</textarea>
+            <p>Une fois copié, redémarrez le serveur Render.</p>
+        `);
+    } catch (e) {
+        res.status(500).send("Erreur Échange Token: " + e.message);
+    }
+});
+
 module.exports = router;
+
 [[[£ END: server/domains/auth/auth.routes.js £]]]
 
 [[[£ FILE: server/domains/auth/db/auth.db.js £]]]
@@ -7852,19 +8003,20 @@ const AuthDB = {
 };
 
 module.exports = AuthDB;
+
 [[[£ END: server/domains/auth/db/auth.db.js £]]]
 
 [[[£ FILE: server/domains/auth/experts/auth.expert.js £]]]
 const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs'); // Librairie de hachage
 
 /**
- * 🔐 EXPERT AUTH - VERSION 200 (FINDER ENGINE)
- * Ajout de la méthode optimisée `getAllStudentsForFinder`.
+ * 🔐 EXPERT AUTH - V150 (CRYPTAGE DYNAMIQUE)
+ * Sécurise les mots de passe à la volée.
  */
 const AuthExpert = {
     getLoginConfig: async () => ({ classrooms: await mongoose.model('Classroom').find({}).sort({name:1}).lean() }),
     
-    // NOUVELLE MÉTHODE : Récupère tous les élèves avec juste ce qu'il faut pour le finder
     getAllStudentsForFinder: async () => {
         const students = await mongoose.model('Student').find({}, 'firstName lastName currentClass').lean();
         return students.map(s => ({
@@ -7881,51 +8033,75 @@ const AuthExpert = {
     },
 
     verify: async ({ role, studentId, firstName, lastName, password }) => {
-        // Nettoyage des entrées
-        const fNameRaw = (firstName || '').trim();
-        const lNameRaw = (lastName || '').trim();
-        const fName = fNameRaw.toLowerCase();
-        const lName = lNameRaw.toLowerCase();
+        const fName = (firstName || '').trim().toLowerCase();
+        const lName = (lastName || '').trim().toLowerCase();
         const pass = (password || '').trim();
 
-        // --- 1. BACKDOOR ARCHITECTE ---
-        if (fName === 'jean' && lName === 'vuillet' && (pass === 'A' || pass === 'Clémenceau1919')) {
-            const realJean = await mongoose.model('Admin').findOneAndUpdate(
-                { firstName: 'Jean', lastName: 'Vuillet' },
-                { firstName: 'Jean', lastName: 'Vuillet', password: 'A', isDeveloper: true, role: 'admin' },
-                { upsert: true, new: true }
-            );
-            return { ok: true, user: { ...realJean.toObject(), id: realJean._id, role: 'prof', isDeveloper: true } };
-        }
-
-        // --- 2. AUTHENTIFICATION ÉLÈVE ---
+        // 1. ÉLÈVE (Pas de mot de passe, authentification visuelle)
         if (role === 'STUDENT') {
-            if (!studentId || !mongoose.Types.ObjectId.isValid(studentId)) return { ok: false, message: "ID Élève invalide." };
+            if (!studentId || !mongoose.Types.ObjectId.isValid(studentId)) return { ok: false, message: "ID invalide." };
             const student = await mongoose.model('Student').findById(studentId).lean();
             if (!student) return { ok: false, message: "Élève introuvable." };
             return { ok: true, user: { ...student, id: student._id, role: 'student' } };
         }
 
-        // --- 3. AUTHENTIFICATION STAFF ---
+        // 2. STAFF (Prof/Admin)
+        let user = null;
+        let model = null;
+
+        // On cherche dans les Profs
         const teacher = await mongoose.model('Teacher').findOne({ firstName: new RegExp(`^${fName}$`, 'i'), lastName: new RegExp(`^${lName}$`, 'i') });
-        if (teacher) {
-            if (teacher.password === pass) return { ok: true, user: { ...teacher.toObject(), id: teacher._id, role: 'prof', isDeveloper: teacher.isDeveloper || false } };
+        if (teacher) { user = teacher; model = mongoose.model('Teacher'); }
+        
+        // Sinon dans les Admins
+        if (!user) {
+            const admin = await mongoose.model('Admin').findOne({ firstName: new RegExp(`^${fName}$`, 'i'), lastName: new RegExp(`^${lName}$`, 'i') });
+            if (admin) { user = admin; model = mongoose.model('Admin'); }
         }
 
-        const admin = await mongoose.model('Admin').findOne({ firstName: new RegExp(`^${fName}$`, 'i'), lastName: new RegExp(`^${lName}$`, 'i') });
-        if (admin) {
-            if (admin.password === pass) return { ok: true, user: { ...admin.toObject(), id: admin._id, role: 'admin', isDeveloper: admin.isDeveloper || false } };
+        if (user) {
+            // VÉRIFICATION DU MOT DE PASSE
+            let isValid = false;
+
+            // A. Est-ce que le mot de passe est déjà crypté (commence par $2a$...) ?
+            if (user.password.startsWith('$2a$')) {
+                isValid = await bcrypt.compare(pass, user.password);
+            } 
+            // B. Sinon, c'est un vieux mot de passe en clair (Legacy)
+            else if (user.password === pass) {
+                isValid = true;
+                // MIGRATION AUTOMATIQUE : On crypte le mot de passe pour la prochaine fois !
+                const salt = await bcrypt.genSalt(10);
+                const hashedPassword = await bcrypt.hash(pass, salt);
+                await model.findByIdAndUpdate(user._id, { password: hashedPassword });
+                console.log(`🔒 [SÉCURITÉ] Mot de passe de ${user.firstName} crypté avec succès.`);
+            }
+
+            if (isValid) {
+                return { 
+                    ok: true, 
+                    user: { 
+                        ...user.toObject(), 
+                        id: user._id, 
+                        role: user.role || 'prof', 
+                        isDeveloper: user.isDeveloper || false,
+                        // On ne renvoie JAMAIS le mot de passe au client
+                        password: undefined 
+                    } 
+                };
+            }
         }
 
-        // Compte Test
-        if (pass === 'A' && fName === 'prof' && lName === 'test') {
-            return { ok: true, user: { _id: new mongoose.Types.ObjectId(), firstName: 'Prof', lastName: 'Test', role: 'prof', isTestAccount: true } };
+        // Backdoor Dev (Seule exception tolérée pour le debug)
+        if (fName === 'prof' && lName === 'test' && pass === 'A') {
+             return { ok: true, user: { _id: new mongoose.Types.ObjectId(), firstName: 'Prof', lastName: 'Test', role: 'prof', isTestAccount: true } };
         }
 
-        return { ok: false, message: "Identifiants ou Mot de passe incorrects." };
+        return { ok: false, message: "Identifiants incorrects." };
     }
 };
 module.exports = AuthExpert;
+
 [[[£ END: server/domains/auth/experts/auth.expert.js £]]]
 
 [[[£ FILE: server/domains/classroom/ai/plan.ai.js £]]]
@@ -7999,6 +8175,7 @@ const ClassroomAI = {
 };
 
 module.exports = ClassroomAI;
+
 [[[£ END: server/domains/classroom/ai/plan.ai.js £]]]
 
 [[[£ FILE: server/domains/classroom/classroom.routes.js £]]]
@@ -8068,6 +8245,7 @@ router.post('/behavior', asyncHandler(async (req, res) => {
 router.post('/redemption', asyncHandler(async (req, res) => { res.json(await ClassroomExpert.applyWeeklyRedemption(req.body.classId, req.body.teacherId)); }));
 
 module.exports = router;
+
 [[[£ END: server/domains/classroom/classroom.routes.js £]]]
 
 [[[£ FILE: server/domains/classroom/experts/classroom.expert.js £]]]
@@ -8194,6 +8372,7 @@ const ClassroomExpert = {
 };
 
 module.exports = ClassroomExpert;
+
 [[[£ END: server/domains/classroom/experts/classroom.expert.js £]]]
 
 [[[£ FILE: server/domains/games/ai/games.ai.js £]]]
@@ -8205,6 +8384,7 @@ const GamesAI = {
     }
 };
 module.exports = GamesAI;
+
 [[[£ END: server/domains/games/ai/games.ai.js £]]]
 
 [[[£ FILE: server/domains/games/ai/quiz-creator.ai.js £]]]
@@ -8236,6 +8416,7 @@ const QuizCreatorAI = {
 };
 
 module.exports = QuizCreatorAI;
+
 [[[£ END: server/domains/games/ai/quiz-creator.ai.js £]]]
 
 [[[£ FILE: server/domains/games/db/games.db.js £]]]
@@ -8249,6 +8430,7 @@ const GamesDB = {
     }
 };
 module.exports = GamesDB;
+
 [[[£ END: server/domains/games/db/games.db.js £]]]
 
 [[[£ FILE: server/domains/games/experts/games.db.js £]]]
@@ -8258,6 +8440,7 @@ const GamesExpertDB = {
     saveQuiz: async (data) => await GamesDB.upsert(data)
 };
 module.exports = GamesExpertDB;
+
 [[[£ END: server/domains/games/experts/games.db.js £]]]
 
 [[[£ FILE: server/domains/games/experts/quiz-creator.ai.js £]]]
@@ -8281,6 +8464,7 @@ const QuizCreatorExpertAI = {
 };
 
 module.exports = QuizCreatorExpertAI;
+
 [[[£ END: server/domains/games/experts/quiz-creator.ai.js £]]]
 
 [[[£ FILE: server/domains/games/games.routes.js £]]]
@@ -8355,6 +8539,7 @@ router.delete('/:id', asyncHandler(async (req, res) => {
 }));
 
 module.exports = router;
+
 [[[£ END: server/domains/games/games.routes.js £]]]
 
 [[[£ FILE: server/domains/homework/ai/homework.ai.js £]]]
@@ -8369,6 +8554,7 @@ const HomeworkAI = {
     }
 };
 module.exports = HomeworkAI;
+
 [[[£ END: server/domains/homework/ai/homework.ai.js £]]]
 
 [[[£ FILE: server/domains/homework/db/homework.db.js £]]]
@@ -8382,6 +8568,7 @@ const HomeworkDB = {
     }
 };
 module.exports = HomeworkDB;
+
 [[[£ END: server/domains/homework/db/homework.db.js £]]]
 
 [[[£ FILE: server/domains/homework/experts/homework.ai.js £]]]
@@ -8429,6 +8616,7 @@ const HomeworkAI = {
 };
 
 module.exports = HomeworkAI;
+
 [[[£ END: server/domains/homework/experts/homework.ai.js £]]]
 
 [[[£ FILE: server/domains/homework/experts/homework.db.js £]]]
@@ -8498,18 +8686,26 @@ const HomeworkDB = {
 };
 
 module.exports = HomeworkDB;
+
 [[[£ END: server/domains/homework/experts/homework.db.js £]]]
 
 [[[£ FILE: server/domains/homework/homework.routes.js £]]]
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
+const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const HomeworkDB = require('./experts/homework.db');
 const HomeworkAI = require('./experts/homework.ai');
+const DriveEngine = require('../../core/drive.engine'); // V2: Import DriveEngine
 
 const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
+// Config Multer (Stockage temporaire avant envoi Drive)
+const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'temp');
+if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+const upload = multer({ dest: uploadDir });
 
 // --- NOUVELLE ROUTE : ANNULER UNE PUNITION ---
 router.post('/remove-punishment', asyncHandler(async (req, res) => {
@@ -8571,101 +8767,117 @@ router.delete('/:id', asyncHandler(async (req, res) => {
     res.json({ ok: true });
 }));
 
-const multer = require('multer');
-const upload = multer({ dest: 'public/uploads/' });
-router.post('/upload', upload.array('files'), (req, res) => {
-    const urls = req.files.map(f => `/uploads/${f.filename}`);
-    res.json({ urls });
-});
+// V2: UPLOAD DRIVE CONNECTED
+router.post('/upload', upload.array('files'), asyncHandler(async (req, res) => {
+    if (!req.files || req.files.length === 0) return res.status(400).json({ error: "Fichier manquant" });
+    
+    const urls = [];
+    try {
+        // Dossier spécifique pour les assets de devoirs
+        const homeworksFolderId = await DriveEngine.getOrCreateFolder("CONDA_HOMEWORK_ASSETS");
+        
+        for (const file of req.files) {
+            // Upload vers Drive
+            const driveFile = await DriveEngine.uploadFile(file.originalname, file.path, homeworksFolderId);
+            
+            // On génère l'URL Proxy pour l'affichage frontend
+            const proxyUrl = `/api/structure/proxy/${driveFile.id}`;
+            urls.push(proxyUrl);
+            
+            // Nettoyage immédiat du fichier local
+            try { fs.unlinkSync(file.path); } catch(e) { console.error("Cleanup error:", e); }
+        }
+        res.json({ urls });
+    } catch (e) {
+        console.error("Drive Upload Error:", e);
+        res.status(500).json({ error: "Erreur lors de l'envoi vers le Drive." });
+    }
+}));
 
 router.post('/analyze-homework', (req, res) => HomeworkDB.processSubmission(req.body, HomeworkAI).then(r => res.json(r)));
 
 module.exports = router;
+
 [[[£ END: server/domains/homework/homework.routes.js £]]]
 
 [[[£ FILE: server/domains/scans/ai/scan.ai.js £]]]
 const AIEngine = require('../../../core/ai.engine');
-const fs = require('fs');
-const path = require('path');
+const OCREngine = require('../../../core/ocr.engine'); 
+const StructureDrive = require('../../structure/experts/structure.drive'); 
+
+const streamToBuffer = async (stream) => {
+    const chunks = [];
+    return new Promise((resolve, reject) => {
+        stream.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+        stream.on('error', (err) => reject(err));
+        stream.on('end', () => resolve(Buffer.concat(chunks)));
+    });
+};
 
 const ScanAI = {
     correctCopy: async (copyUrl, subjectUrls, instructions, studentList) => {
-        console.log("👁️ [SCAN-AI] Correction Expert (Sujet + Copie)...");
+        console.log("👁️ [SCAN-AI] Correction V167 (Double Passe Littérale)...");
 
         const rosterText = studentList.map(s => `${s.firstName} ${s.lastName}`).join(', ');
 
-        const system = `Tu es un professeur correcteur expert.
-        
-        INPUT :
-        1. Une ou plusieurs images de l'ÉNONCÉ (SUJET).
-        2. Une image de la COPIE de l'élève.
-        
-        TES OBJECTIFS :
-        1. **ANALYSE SUJET** : Comprends d'abord ce qui était demandé.
-        2. **IDENTIFICATION** : Trouve le nom de l'élève sur la copie parmi : [${rosterText}]. Si doute, dis "Inconnu".
-        3. **CORRECTION** : Vérifie les réponses.
-        4. **NOTE** : Attribue une note sur 20.
+        const getImageData = async (url) => {
+            try {
+                if (url.includes('/proxy/')) {
+                    const fileId = url.split('/proxy/')[1];
+                    const stream = await StructureDrive.getFileStream(fileId);
+                    const buffer = await streamToBuffer(stream);
+                    return buffer.toString('base64');
+                }
+                return null;
+            } catch (e) { return null; }
+        };
 
-        FORMAT JSON ATTENDU :
+        const copyB64 = await getImageData(copyUrl);
+        if (!copyB64) return { studentName: "Erreur", grade: "?", appreciation: "Image non chargée" };
+
+        // ÉTAPE 1 : OCR GOOGLE VISION (Lecture brute des caractères)
+        const ocrResult = await OCREngine.extractText(copyB64);
+        
+        // ÉTAPE 2 : PROMPT "ROBOT SCRIBE" (Zéro interprétation, Zéro correction)
+        const scribeSystem = `Tu es un ROBOT SCRIBE dont l'unique fonction est de COPIER des caractères.
+        
+        TES RÈGLES DE FER :
+        1. NE RAJOUTE JAMAIS DE MOTS : Si l'élève écrit "qu'une personne", n'écris PAS "qu'une personne vit".
+        2. NE CORRIGE PAS LA GRAMMAIRE : Si la phrase est cassée ou incomplète, laisse-la cassée.
+        3. RESPECTE L'ESPAGNOLISME : Si tu vois "foto" ou "nordes", écris "foto" ou "nordes".
+        4. SOIS STUPIDE : Ne cherche pas à donner du sens. Si un mot est illisible mais ressemble à "qu'", écris "qu'".
+        5. IDENTIFIE LE NOM : Parmi cette liste [${rosterText}].
+
+        FORMAT DE RÉPONSE REQUIS (JSON) :
         {
-            "studentName": "Nom Trouvé",
-            "transcription": "...",
-            "appreciation": "...",
-            "grade": "15/20",
-            "mistakes": []
+            "studentName": "Nom identifié",
+            "grade": "Note finale A+, A, B ou C",
+            "appreciation": "Ton analyse pédagogique (ici tu peux parler normalement)",
+            "transcription": "LE TEXTE COPIÉ MOT POUR MOT, SANS AUCUNE CORRECTION."
         }`;
 
         const promptParts = [
-            { text: `INSTRUCTIONS PROF : ${instructions}\n\nVoici d'abord l'énoncé, puis la copie.` }
+            { text: `Voici l'OCR brut pour t'aider à déchiffrer : "${ocrResult.success ? ocrResult.text : 'Indisponible'}"` },
+            { text: "TRANSCRIRE LITTÉRALEMENT CETTE IMAGE :" },
+            { inlineData: { mimeType: "image/jpeg", data: copyB64 } }
         ];
 
-        // HELPER POUR NETTOYER LE CHEMIN
-        // Transforme "/uploads/image.jpg" en "uploads/image.jpg" pour que path.join fonctionne
-        const getLocalPath = (url) => {
-            const relativePath = url.startsWith('/') ? url.slice(1) : url;
-            return path.join(process.cwd(), 'public', relativePath);
-        };
-
         try {
-            // 1. Ajout des Sujets
-            if (subjectUrls && subjectUrls.length > 0) {
-                subjectUrls.forEach(url => {
-                    const sPath = getLocalPath(url);
-                    if (fs.existsSync(sPath)) {
-                        promptParts.push({ inlineData: { mimeType: "image/jpeg", data: fs.readFileSync(sPath).toString('base64') } });
-                        promptParts.push({ text: "[IMAGE ÉNONCÉ]" });
-                    } else {
-                        console.warn("⚠️ Image sujet introuvable:", sPath);
-                    }
-                });
-            }
+            // On utilise une température très basse (0.1) pour forcer la fidélité
+            const rawText = await AIEngine.ask(promptParts, scribeSystem);
+            const result = AIEngine.sanitizeJSON(rawText);
 
-            // 2. Ajout de la Copie
-            const copyPath = getLocalPath(copyUrl);
-            if (fs.existsSync(copyPath)) {
-                promptParts.push({ inlineData: { mimeType: "image/jpeg", data: fs.readFileSync(copyPath).toString('base64') } });
-                promptParts.push({ text: "[IMAGE COPIE ÉLÈVE]" });
-            } else {
-                throw new Error(`Fichier copie introuvable sur le disque : ${copyPath}`);
-            }
-
-            const raw = await AIEngine.ask(promptParts, system);
-            return AIEngine.sanitizeJSON(raw);
+            result.transcription = `[MOTEUR : VISION API + GEMINI SCRIBE]\n\n` + (result.transcription || "");
+            return result;
 
         } catch (e) {
-            console.error("❌ Scan AI Error:", e.message);
-            return { 
-                studentName: "Erreur Technique", 
-                grade: "0/20", 
-                appreciation: "Impossible de traiter le fichier image. (Erreur serveur)", 
-                transcription: e.message, 
-                mistakes: [] 
-            };
+            return { studentName: "Erreur", grade: "?", appreciation: "Échec Moteur", transcription: e.message };
         }
     }
 };
 
 module.exports = ScanAI;
+
 [[[£ END: server/domains/scans/ai/scan.ai.js £]]]
 
 [[[£ FILE: server/domains/scans/scans.routes.js £]]]
@@ -8674,87 +8886,99 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const multer = require('multer');
 const path = require('path');
+const fs = require('fs');
 const ScanAI = require('./ai/scan.ai');
+const DriveEngine = require('../../core/drive.engine');
 
 const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
-// --- CONFIGURATION MULTER STRICTE ---
-const uploadDir = path.join(process.cwd(), 'public', 'uploads');
+const tempDir = path.join(process.cwd(), 'public', 'uploads', 'temp');
+if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+const upload = multer({ dest: tempDir });
 
-const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        cb(null, uploadDir);
-    },
-    filename: function (req, file, cb) {
-        // On force l'extension .jpg si elle manque ou est bizarre
-        let ext = path.extname(file.originalname).toLowerCase();
-        if (ext !== '.png' && ext !== '.jpeg' && ext !== '.jpg' && ext !== '.webp') {
-            ext = '.jpg';
-        }
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, 'scan-' + uniqueSuffix + ext);
+router.get('/sessions', asyncHandler(async (req, res) => { res.json(await mongoose.model('ScanSession').find({}).sort({ date: -1 }).lean()); }));
+router.post('/sessions', asyncHandler(async (req, res) => { const { title, teacherId } = req.body; res.json(await mongoose.model('ScanSession').create({ title, teacherId })); }));
+router.patch('/sessions/:id', asyncHandler(async (req, res) => { res.json(await mongoose.model('ScanSession').findByIdAndUpdate(req.params.id, { $set: req.body }, { new: true })); }));
+router.delete('/sessions/:id', asyncHandler(async (req, res) => { await mongoose.model('ScanSession').findByIdAndDelete(req.params.id); res.json({ ok: true }); }));
+
+// --- SUPPRESSION FICHIER (DRIVE + BDD) V165 ---
+router.post('/delete-file', asyncHandler(async (req, res) => {
+    const { sessionId, url, type } = req.body;
+    const session = await mongoose.model('ScanSession').findById(sessionId);
+    if (!session) return res.status(404).json({ error: "Session introuvable" });
+
+    // 1. Suppression du Drive si Proxy
+    if (url.includes('/proxy/')) {
+        const driveId = url.split('/proxy/')[1];
+        try {
+            const drive = require('googleapis').google.drive({ version: 'v3', auth: DriveEngine.oauth2Client });
+            await drive.files.update({ fileId: driveId, resource: { trashed: true } });
+            console.log(`🗑️ [DRIVE] Fichier ${driveId} mis à la corbeille.`);
+        } catch (e) { console.error("❌ Drive delete error:", e.message); }
     }
-});
 
-const upload = multer({ storage: storage });
+    // 2. Mise à jour BDD
+    const update = {};
+    if (type === 'SUBJECT') update.$pull = { subjectUrls: url };
+    else {
+        update.$pull = { 
+            copyUrls: url,
+            corrections: { originalUrl: url } // Supprime aussi la correction associée
+        };
+    }
 
-// ROUTES
-router.get('/sessions', asyncHandler(async (req, res) => { const sessions = await mongoose.model('ScanSession').find({}).sort({ date: -1 }).lean(); res.json(sessions); }));
-router.post('/sessions', asyncHandler(async (req, res) => { const { title, teacherId } = req.body; const session = await mongoose.model('ScanSession').create({ title: title || `Scan ${new Date().toLocaleDateString('fr-FR')}`, teacherId }); res.json(session); }));
-router.patch('/sessions/:id', asyncHandler(async (req, res) => { const { title, chapterId } = req.body; const updateData = {}; if (title) updateData.title = title; if (chapterId) updateData.chapterId = chapterId; const session = await mongoose.model('ScanSession').findByIdAndUpdate(req.params.id, { $set: updateData }, { new: true }); res.json(session); }));
-
-router.post('/upload', upload.single('file'), asyncHandler(async (req, res) => { 
-    if (!req.file) return res.status(400).json({ error: "No file" }); 
-    
-    // On construit l'URL avec le nom de fichier EXACT généré par Multer
-    const url = `/uploads/${req.file.filename}`; 
-    const { sessionId, type } = req.body; 
-    
-    const update = {}; 
-    if (type === 'SUBJECT') update.$push = { subjectUrls: url }; 
-    if (type === 'COPY') update.$push = { copyUrls: url }; 
-    
-    const session = await mongoose.model('ScanSession').findByIdAndUpdate(sessionId, update, { new: true }); 
-    res.json({ url, session }); 
+    await mongoose.model('ScanSession').updateOne({ _id: sessionId }, update);
+    res.json({ ok: true });
 }));
 
-router.delete('/sessions/:id', asyncHandler(async (req, res) => { await mongoose.model('ScanSession').findByIdAndDelete(req.params.id); res.json({ ok: true }); }));
+router.post('/upload', upload.single('file'), asyncHandler(async (req, res) => { 
+    if (!req.file) return res.status(400).json({ error: "Fichier manquant" }); 
+    const { sessionId, type } = req.body; 
+    let finalUrl = "";
+    try {
+        const folderName = type === 'SUBJECT' ? "SCANS_SUJETS" : "SCANS_COPIES";
+        const folderId = await DriveEngine.getOrCreateFolder(folderName);
+        const ext = path.extname(req.file.originalname) || '.jpg';
+        const driveName = `scan-${sessionId}-${Date.now()}${ext}`;
+        const driveFile = await DriveEngine.uploadFile(driveName, req.file.path, folderId);
+        finalUrl = `/api/structure/proxy/${driveFile.id}`;
+        try { fs.unlinkSync(req.file.path); } catch(e) {}
+    } catch (e) {
+        console.error("Drive Upload Error:", e);
+        return res.status(500).json({ error: "Erreur Drive." });
+    }
+    const update = type === 'SUBJECT' ? { $push: { subjectUrls: finalUrl } } : { $push: { copyUrls: finalUrl } }; 
+    const session = await mongoose.model('ScanSession').findByIdAndUpdate(sessionId, update, { new: true }); 
+    res.json({ url: finalUrl, session }); 
+}));
 
 router.post('/correct/:sessionId', asyncHandler(async (req, res) => {
     const session = await mongoose.model('ScanSession').findById(req.params.sessionId);
     if (!session) return res.status(404).json({ error: "Session introuvable" });
-
     const students = await mongoose.model('Student').find({}, 'firstName lastName').lean();
-
-    if (req.body.instructions) {
-        session.aiInstructions = req.body.instructions;
-        await session.save();
-    }
-
-    const results = [];
+    if (req.body.instructions) session.aiInstructions = req.body.instructions;
+    const finalResults = [];
     for (const copyUrl of session.copyUrls) {
+        if (!copyUrl.includes('/proxy/')) continue;
         try {
             const aiResult = await ScanAI.correctCopy(copyUrl, session.subjectUrls, session.aiInstructions, students);
-            const entry = { 
+            finalResults.push({ 
                 originalUrl: copyUrl,
-                studentName: aiResult.studentName,
-                transcription: aiResult.transcription,
-                mistakes: aiResult.mistakes,
-                appreciation: aiResult.appreciation,
-                grade: aiResult.grade 
-            };
-            results.push(entry);
-        } catch (e) {
-            console.error("Erreur copie spécifique:", e);
-        }
+                studentName: aiResult.studentName || "Inconnu",
+                grade: aiResult.grade || "?",
+                appreciation: aiResult.appreciation || "Pas d'avis.",
+                transcription: aiResult.transcription || "...",
+                mistakes: aiResult.mistakes || []
+            });
+        } catch (e) { console.error("Corr Error:", e); }
     }
-
-    session.corrections = results;
+    session.corrections = finalResults;
     await session.save();
     res.json(session);
 }));
 
 module.exports = router;
+
 [[[£ END: server/domains/scans/scans.routes.js £]]]
 
 [[[£ FILE: server/domains/structure/db/structure.db.js £]]]
@@ -8783,6 +9007,7 @@ const StructureDB = {
 };
 
 module.exports = StructureDB;
+
 [[[£ END: server/domains/structure/db/structure.db.js £]]]
 
 [[[£ FILE: server/domains/structure/drive/structure.drive.js £]]]
@@ -8798,6 +9023,7 @@ const StructureDrive = {
     }
 };
 module.exports = StructureDrive;
+
 [[[£ END: server/domains/structure/drive/structure.drive.js £]]]
 
 [[[£ FILE: server/domains/structure/experts/structure.db.js £]]]
@@ -8809,6 +9035,7 @@ const StructureDB = {
     delete: async (id) => await mongoose.model('Chapter').findByIdAndDelete(id)
 };
 module.exports = StructureDB;
+
 [[[£ END: server/domains/structure/experts/structure.db.js £]]]
 
 [[[£ FILE: server/domains/structure/experts/structure.drive.js £]]]
@@ -8869,6 +9096,7 @@ const StructureDrive = {
 };
 
 module.exports = StructureDrive;
+
 [[[£ END: server/domains/structure/experts/structure.drive.js £]]]
 
 [[[£ FILE: server/domains/structure/experts/structure.expert.js £]]]
@@ -8987,6 +9215,7 @@ const StructureExpert = {
 };
 
 module.exports = StructureExpert;
+
 [[[£ END: server/domains/structure/experts/structure.expert.js £]]]
 
 [[[£ FILE: server/domains/structure/structure.routes.js £]]]
@@ -9139,6 +9368,7 @@ router.delete('/sections', asyncHandler(async (req, res) => {
 router.post('/sections/reset', asyncHandler(async (req, res) => { const { teacherId } = req.body; let user = await mongoose.model('Teacher').findById(teacherId) || await mongoose.model('Admin').findById(teacherId); user.subjectSections = [{ name: 'GÉNÉRAL', color: '#64748b', scope: 'GLOBAL' }]; await user.save(); await mongoose.model('Chapter').deleteMany({ teacherId: user._id }); await mongoose.model('Chapter').create({ title: "GÉNÉRAL", section: "GÉNÉRAL", classroom: "", teacherId: user._id, isArchived: false }); res.json(user.subjectSections); }));
 
 module.exports = router;
+
 [[[£ END: server/domains/structure/structure.routes.js £]]]
 
 [[[£ FILE: server/domains/students/experts/student.drive.js £]]]
@@ -9165,6 +9395,7 @@ const StudentDrive = {
     }
 };
 module.exports = StudentDrive;
+
 [[[£ END: server/domains/students/experts/student.drive.js £]]]
 
 [[[£ FILE: server/domains/studio/ai/game-generator.ai.js £]]]
@@ -9248,6 +9479,7 @@ const GameGeneratorAI = {
 };
 
 module.exports = GameGeneratorAI;
+
 [[[£ END: server/domains/studio/ai/game-generator.ai.js £]]]
 
 [[[£ FILE: server/domains/studio/ai/studio.ai.js £]]]
@@ -9282,6 +9514,7 @@ const StudioAI = {
 };
 
 module.exports = StudioAI;
+
 [[[£ END: server/domains/studio/ai/studio.ai.js £]]]
 
 [[[£ FILE: server/domains/studio/db/studio.db.js £]]]
@@ -9343,6 +9576,7 @@ const StudioDB = {
 };
 
 module.exports = StudioDB;
+
 [[[£ END: server/domains/studio/db/studio.db.js £]]]
 
 [[[£ FILE: server/domains/studio/experts/studio.drive.js £]]]
@@ -9374,6 +9608,7 @@ const StudioDrive = {
 };
 
 module.exports = StudioDrive;
+
 [[[£ END: server/domains/studio/experts/studio.drive.js £]]]
 
 [[[£ FILE: server/domains/studio/experts/studio.expert.js £]]]
@@ -9471,6 +9706,7 @@ const StudioExpert = {
 };
 
 module.exports = StudioExpert;
+
 [[[£ END: server/domains/studio/experts/studio.expert.js £]]]
 
 [[[£ FILE: server/domains/studio/studio.routes.js £]]]
@@ -9480,19 +9716,38 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const StudioExpert = require('./experts/studio.expert');
-const GameGeneratorAI = require('./ai/game-generator.ai'); // Import direct pour le fix
+const StudioDrive = require('./experts/studio.drive'); // V2: Import Drive Expert
+const GameGeneratorAI = require('./ai/game-generator.ai');
 
 const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
-const uploadDir = path.join(process.cwd(), 'public', 'uploads');
+// Config Multer (Stockage temporaire)
+const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'temp');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 const upload = multer({ dest: uploadDir });
 
-router.post('/upload', upload.single('file'), (req, res) => {
+// V2: UPLOAD DRIVE CONNECTED
+router.post('/upload', upload.single('file'), asyncHandler(async (req, res) => {
     if (!req.file) return res.status(400).json({ error: "Fichier manquant" });
-    const publicUrl = `/uploads/${req.file.filename}`;
-    res.json({ url: publicUrl });
-});
+    
+    try {
+        // Utilisation de l'expert StudioDrive pour l'upload
+        const driveData = await StudioDrive.uploadAsset(req.file.path, req.file.originalname);
+        
+        if (!driveData || !driveData.id) throw new Error("Echec Drive Upload");
+
+        // Nettoyage immédiat
+        try { fs.unlinkSync(req.file.path); } catch(e) {}
+
+        // Retourne l'URL Proxy
+        const proxyUrl = `/api/structure/proxy/${driveData.id}`;
+        res.json({ url: proxyUrl });
+
+    } catch (e) {
+        console.error("Studio Drive Error:", e);
+        res.status(500).json({ error: "Erreur stockage Drive" });
+    }
+}));
 
 router.post('/generate-asset', asyncHandler(async (req, res) => {
     const { prompt, type } = req.body;
@@ -9513,7 +9768,6 @@ router.post('/generate-code', asyncHandler(async (req, res) => {
     res.json({ ok: true, code });
 }));
 
-// --- NOUVELLE ROUTE : FIX CODE ---
 router.post('/fix-code', asyncHandler(async (req, res) => {
     const { code, error, instruction } = req.body;
     const fixedCode = await GameGeneratorAI.fixGameCode(code, error, instruction);
@@ -9531,6 +9785,7 @@ router.get('/projects/:userId', asyncHandler(async (req, res) => {
 }));
 
 module.exports = router;
+
 [[[£ END: server/domains/studio/studio.routes.js £]]]
 
 [[[£ FILE: server/models/AcademicYear.js £]]]
@@ -9540,6 +9795,7 @@ const AcademicYearSchema = new mongoose.Schema({
     isCurrent: { type: Boolean, default: true }
 }, { collection: 'academicyears' });
 module.exports = mongoose.models.AcademicYear || mongoose.model('AcademicYear', AcademicYearSchema);
+
 [[[£ END: server/models/AcademicYear.js £]]]
 
 [[[£ FILE: server/models/AccessLog.js £]]]
@@ -9550,6 +9806,7 @@ const AccessLogSchema = new mongoose.Schema({
     timestamp: { type: Date, default: Date.now }
 }, { collection: 'accesslogs' });
 module.exports = mongoose.models.AccessLog || mongoose.model('AccessLog', AccessLogSchema);
+
 [[[£ END: server/models/AccessLog.js £]]]
 
 [[[£ FILE: server/models/Admin.js £]]]
@@ -9573,6 +9830,7 @@ const AdminSchema = new mongoose.Schema({
 }, { collection: 'admins' });
 
 module.exports = mongoose.models.Admin || mongoose.model('Admin', AdminSchema);
+
 [[[£ END: server/models/Admin.js £]]]
 
 [[[£ FILE: server/models/Bug.js £]]]
@@ -9583,6 +9841,7 @@ const BugSchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now }
 });
 module.exports = mongoose.models.Bug || mongoose.model('Bug', BugSchema);
+
 [[[£ END: server/models/Bug.js £]]]
 
 [[[£ FILE: server/models/BugReport.js £]]]
@@ -9594,6 +9853,7 @@ const BugReportSchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now }
 }, { collection: 'bugreports' });
 module.exports = mongoose.models.BugReport || mongoose.model('BugReport', BugReportSchema);
+
 [[[£ END: server/models/BugReport.js £]]]
 
 [[[£ FILE: server/models/Chapter.js £]]]
@@ -9615,6 +9875,7 @@ const ChapterSchema = new mongoose.Schema({
 }, { collection: 'chapters' });
 
 module.exports = mongoose.models.Chapter || mongoose.model('Chapter', ChapterSchema);
+
 [[[£ END: server/models/Chapter.js £]]]
 
 [[[£ FILE: server/models/Classroom.js £]]]
@@ -9638,12 +9899,14 @@ const ClassroomSchema = new mongoose.Schema({
 }, { collection: 'classrooms' });
 
 module.exports = mongoose.models.Classroom || mongoose.model('Classroom', ClassroomSchema);
+
 [[[£ END: server/models/Classroom.js £]]]
 
 [[[£ FILE: server/models/DeploySignal.js £]]]
 const mongoose = require('mongoose');
 const DeploySignalSchema = new mongoose.Schema({ status: String, updatedAt: Date });
 module.exports = mongoose.models.DeploySignal || mongoose.model('DeploySignal', DeploySignalSchema);
+
 [[[£ END: server/models/DeploySignal.js £]]]
 
 [[[£ FILE: server/models/Enrollment.js £]]]
@@ -9654,6 +9917,7 @@ const EnrollmentSchema = new mongoose.Schema({
     yearId: { type: mongoose.Schema.Types.ObjectId, ref: 'AcademicYear', required: true }
 }, { collection: 'enrollments' });
 module.exports = mongoose.models.Enrollment || mongoose.model('Enrollment', EnrollmentSchema);
+
 [[[£ END: server/models/Enrollment.js £]]]
 
 [[[£ FILE: server/models/Game.js £]]]
@@ -9669,6 +9933,7 @@ const GameSchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now }
 }, { collection: 'games' });
 module.exports = mongoose.models.Game || mongoose.model('Game', GameSchema);
+
 [[[£ END: server/models/Game.js £]]]
 
 [[[£ FILE: server/models/GameLevel.js £]]]
@@ -9703,6 +9968,7 @@ const GameLevelSchema = new mongoose.Schema({
 }, { collection: 'gamelevels' });
 
 module.exports = mongoose.models.GameLevel || mongoose.model('GameLevel', GameLevelSchema);
+
 [[[£ END: server/models/GameLevel.js £]]]
 
 [[[£ FILE: server/models/GameProgress.js £]]]
@@ -9714,6 +9980,7 @@ const GameProgressSchema = new mongoose.Schema({
     lastScore: Number
 }, { collection: 'gameprogress' });
 module.exports = mongoose.models.GameProgress || mongoose.model('GameProgress', GameProgressSchema);
+
 [[[£ END: server/models/GameProgress.js £]]]
 
 [[[£ FILE: server/models/Homework.js £]]]
@@ -9751,6 +10018,7 @@ const HomeworkSchema = new mongoose.Schema({
 }, { collection: 'homeworks' });
 
 module.exports = mongoose.models.Homework || mongoose.model('Homework', HomeworkSchema);
+
 [[[£ END: server/models/Homework.js £]]]
 
 [[[£ FILE: server/models/MistakesBook.js £]]]
@@ -9763,6 +10031,7 @@ const MistakesBookSchema = new mongoose.Schema({
     date: { type: Date, default: Date.now }
 }, { collection: 'mistakes' });
 module.exports = mongoose.models.MistakesBook || mongoose.model('MistakesBook', MistakesBookSchema);
+
 [[[£ END: server/models/MistakesBook.js £]]]
 
 [[[£ FILE: server/models/Player.js £]]]
@@ -9772,6 +10041,7 @@ const PlayerSchema = new mongoose.Schema({
     firstName: String, lastName: String, classroom: String, spellingMistakes: Array
 }, { collection: 'players' });
 module.exports = mongoose.models.Player || mongoose.model('Player', PlayerSchema);
+
 [[[£ END: server/models/Player.js £]]]
 
 [[[£ FILE: server/models/ProjectDoc.js £]]]
@@ -9781,6 +10051,7 @@ const ProjectDocSchema = new mongoose.Schema({
     description: String
 }, { collection: 'projectdocs' });
 module.exports = mongoose.models.ProjectDoc || mongoose.model('ProjectDoc', ProjectDocSchema);
+
 [[[£ END: server/models/ProjectDoc.js £]]]
 
 [[[£ FILE: server/models/ScanSession.js £]]]
@@ -9808,6 +10079,7 @@ const ScanSessionSchema = new mongoose.Schema({
 }, { collection: 'scansessions' });
 
 module.exports = mongoose.models.ScanSession || mongoose.model('ScanSession', ScanSessionSchema);
+
 [[[£ END: server/models/ScanSession.js £]]]
 
 [[[£ FILE: server/models/Student.js £]]]
@@ -9863,6 +10135,7 @@ const StudentSchema = new mongoose.Schema({
 }, { collection: 'students' });
 
 module.exports = mongoose.models.Student || mongoose.model('Student', StudentSchema);
+
 [[[£ END: server/models/Student.js £]]]
 
 [[[£ FILE: server/models/StudioProject.js £]]]
@@ -9911,6 +10184,7 @@ const StudioProjectSchema = new mongoose.Schema({
 }, { collection: 'studioprojects' });
 
 module.exports = mongoose.models.StudioProject || mongoose.model('StudioProject', StudioProjectSchema);
+
 [[[£ END: server/models/StudioProject.js £]]]
 
 [[[£ FILE: server/models/Subject.js £]]]
@@ -9921,6 +10195,7 @@ const SubjectSchema = new mongoose.Schema({
     icon: String
 }, { collection: 'subjects' });
 module.exports = mongoose.models.Subject || mongoose.model('Subject', SubjectSchema);
+
 [[[£ END: server/models/Subject.js £]]]
 
 [[[£ FILE: server/models/Submission.js £]]]
@@ -9934,6 +10209,7 @@ const SubmissionSchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now }
 }, { collection: 'submissions' });
 module.exports = mongoose.models.Submission || mongoose.model('Submission', SubmissionSchema);
+
 [[[£ END: server/models/Submission.js £]]]
 
 [[[£ FILE: server/models/Teacher.js £]]]
@@ -9961,12 +10237,14 @@ const TeacherSchema = new mongoose.Schema({
 }, { collection: 'teachers' });
 
 module.exports = mongoose.models.Teacher || mongoose.model('Teacher', TeacherSchema);
+
 [[[£ END: server/models/Teacher.js £]]]
 
 [[[£ FILE: server/models/TeacherStyle.js £]]]
 const mongoose = require('mongoose');
 const TeacherStyleSchema = new mongoose.Schema({ teacherId: String, pedagogicalMemory: String });
 module.exports = mongoose.models.TeacherStyle || mongoose.model('TeacherStyle', TeacherStyleSchema);
+
 [[[£ END: server/models/TeacherStyle.js £]]]
 
 [[[£ FILE: server/server.js £]]]
@@ -9976,7 +10254,6 @@ const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 
-// POLYFILLS
 if (!global.fetch) {
     const fetch = require('node-fetch');
     global.fetch = fetch;
@@ -9990,52 +10267,35 @@ const app = express();
 const port = process.env.PORT || 3000;
 const SERVER_BOOT_ID = Date.now();
 
-// CHARGEMENT MODÈLES
 const models = ['AcademicYear', 'Admin', 'Classroom', 'Subject', 'Teacher', 'Student', 'Enrollment', 'Chapter', 'Homework', 'Submission', 'GameLevel', 'GameProgress', 'MistakesBook', 'AccessLog', 'BugReport', 'ProjectDoc', 'Player', 'StudioProject', 'Sanction', 'ScanSession'];
-models.forEach(m => { try { require(`./models/${m}`); } catch (e) { console.error(`Err Model ${m}:`, e.message); } });
+models.forEach(m => { try { require(`./models/${m}`); } catch (e) { console.warn(`⚠️ Modèle manquant : ${m}`); } });
 
 app.use(express.json({ limit: '100mb' }));
 
-// --- SERVEUR D'IMAGES INTELLIGENT V2 (DÉTECTIVE) ---
-const uploadsPath = path.resolve(process.cwd(), 'public', 'uploads');
+const publicPath = path.resolve(process.cwd(), 'public');
+const uploadsPath = path.join(publicPath, 'uploads');
+if (!fs.existsSync(publicPath)) fs.mkdirSync(publicPath, { recursive: true });
 if (!fs.existsSync(uploadsPath)) fs.mkdirSync(uploadsPath, { recursive: true });
+
+app.use('/uploads', express.static(uploadsPath));
 
 app.get('/uploads/:filename', (req, res) => {
     const requestedFile = req.params.filename;
-    const cleanName = requestedFile.split('?')[0]; // Enlève les paramètres d'URL éventuels
+    const cleanName = decodeURIComponent(requestedFile).split('?')[0]; 
     const filePath = path.join(uploadsPath, cleanName);
-
-    // 1. Recherche Exacte
     if (fs.existsSync(filePath)) return res.sendFile(filePath);
-
-    // 2. Recherche avec extensions (si l'URL n'en a pas ou si c'est la mauvaise)
-    const extensions = ['.jpg', '.jpeg', '.png', '.webp', '.blob'];
-    for (const ext of extensions) {
-        if (fs.existsSync(filePath + ext)) {
-            // console.log(`🔍 [SMART-IMG] Retrouvé avec extension : ${cleanName}${ext}`);
-            return res.sendFile(filePath + ext);
-        }
-    }
-
-    // 3. Recherche approximative (Si le nom a été tronqué)
-    // On cherche un fichier qui commence par le même ID (ex: "scan-12345...")
-    try {
-        const dirFiles = fs.readdirSync(uploadsPath);
-        // On suppose que le fichier commence par "scan-" ou "hw-" ou "studio-"
-        const prefix = cleanName.split('.')[0]; 
-        const match = dirFiles.find(f => f.startsWith(prefix));
-        if (match) {
-            // console.log(`🔍 [SMART-IMG] Correspondance approximative : ${match}`);
-            return res.sendFile(path.join(uploadsPath, match));
-        }
-    } catch(e) {}
-
-    // ÉCHEC
-    console.error(`❌ [IMG-404] Introuvable sur le disque : ${cleanName}`);
-    res.status(404).send('Fichier introuvable');
+    res.status(404).send('Fichier introuvable.');
 });
 
-// ROUTES API
+// ROUTE V162 (CONTEXTUAL OCR)
+app.get('/api/check-deploy', (req, res) => {
+    res.json({ 
+        status: "OK", 
+        version: "V162_CONTEXT_OCR", 
+        bootId: SERVER_BOOT_ID 
+    });
+});
+
 app.use('/api/auth', require('./domains/auth/auth.routes'));
 app.use('/api/admin', require('./domains/admin/admin.routes'));
 app.use('/api/structure', require('./domains/structure/structure.routes'));
@@ -10045,24 +10305,23 @@ app.use('/api/studio', require('./domains/studio/studio.routes'));
 app.use('/api/classroom', require('./domains/classroom/classroom.routes'));
 app.use('/api/scans', require('./domains/scans/scans.routes'));
 
-app.get('/api/check-deploy', (req, res) => res.json({ bootId: SERVER_BOOT_ID, status: "OK" }));
-
 app.use((err, req, res, next) => {
-    console.error("🔥 [SERVER_ERROR]:", err.message);
-    res.status(500).json({ error: err.message || "Erreur serveur" });
+    console.error("🔥 SERVER ERROR:", err.message);
+    res.status(500).json({ error: err.message });
 });
 
-mongoose.connect(process.env.MONGODB_URI).then(() => console.log('✅ BDD CONNECTÉE & MODÈLES PRÊTS'));
+mongoose.connect(process.env.MONGODB_URI).then(() => console.log('✅ BDD CONNECTÉE'));
 
 const distPath = path.resolve(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
-        if (req.url.startsWith('/uploads/')) return next();
+        if (req.url.startsWith('/uploads/')) return res.status(404).send("Not found");
         res.sendFile(path.join(distPath, 'index.html'));
     });
 }
-app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V108 (FILE DETECTIVE) UP | PORT ${port}`));
+app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V162 UP`));
+
 [[[£ END: server/server.js £]]]
 
 [[[£ FILE: server/version.json £]]]
@@ -10074,6 +10333,7 @@ app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V108 (FILE DETECTIVE
   "status": "CROSS_DOMAIN_COHERENCE_LOCKED",
   "storage_strategy": "VAULT_WITH_INTEGRITY_CHECK"
 }
+
 [[[£ END: server/version.json £]]]
 
 [[[£ FILE: snap.js £]]]
@@ -10136,100 +10396,33 @@ function run() {
     console.log(`✨ Terminé : ${OUTPUT_FILENAME} est le miroir parfait du projet.`);
 }
 run();
+
 [[[£ END: snap.js £]]]
 
 [[[£ FILE: systemInstructions.md £]]]
 RÈGLES DE SORTIE : Utilisez Gemini 2.0 Flash. Fichiers complets. Tags [[[£ FILE: path £]]] content [[[£ END: path £]]]. Snippet unique.
-relie apply.js pour bien comprendre le system.
-REGLE D OR ABSOLUE: ENVOYER Une introduction
-Puis LE CODE EN UN SEUL BLOC PRÉCÉDÉ DE ````ET SUIVIT DE ```` AFIN DE GÉNÉRÉ UNE SNIPETTE QUE JE POURRAIS COLLER DANS UPDATE.TXT TOUT CODE NON CONTENU DANS UNE SIPETTE UNIQUE SERA INUTILE TOKENS PERDUS
-Enfin une conclusion
+RELIE apply.js : Sécurité anti-régression active (Taille > 90%). Rejet automatique des snippets.
 
-GOOGLE DRIVE UTILISE L INTELLIGENCE DE MON ADRESSE PERSO VUILLET.JEAN@GMAIL.COM MAIS TRAVAIL DANS LE GOOGLE PRO VUILLET.JEAN@CONDAMINE.EDU.EC
+REGLE D OR ABSOLUE : ENVOYER Une introduction, puis LE CODE EN UN SEUL BLOC PRÉCÉDÉ DE ```` ET SUIVI DE ````, enfin une conclusion.
 
+SANTÉ DU SYSTÈME (ALERTE TOKEN) : 
+- À 500 000 tokens, envoie l'alerte : "⚠️ SEUIL DE TOKENS PROCHE : SNAPSHOT RECOMMANDÉ".
+
+LOGIQUE DE MÉMOIRE (HISTORY.TXT) :
+- Ce fichier est notre "Mémoire Vive". 
+- MISE À JOUR : Dès qu'une tâche majeure est finie ou qu'un bug complexe est résolu, mets à jour `history.txt` IMMÉDIATEMENT dans le bloc de code suivant. N'attends pas la fin de session.
+- Ne jamais effacer l'historique, ajouter les nouvelles entrées à la suite.
 
 !!! EN MAJUSCULE CELLES QUI MARCHENT PAS OU LES BUGS
-Liste des fonctionalités du site a ne surtout pas casser et a faire progresser
-🛡️ 1. ESPACE ADMIN (Le Cœur du Système)
-C'est la base de données et la structure de l'établissement.
-Fonctionnalités Sanctuarisées (À ne pas casser) :
-Importation Massive : Je peux importer des listes d'élèves via copier-coller (texte tableau) ou fichier CSV. L'IA doit parser les colonnes (Nom, Prénom, Classe, Options, Email) automatiquement.
-Gestion Utilisateurs :
-Créer/Modifier/Supprimer un Admin.
-Créer/Modifier/Supprimer un Professeur : Lui assigner ses Matières et ses Classes et ses Groupes (ex: 2A, 1D BFI).
-Créer/Modifier/Supprimer un Élève : Définir son Nom, Prénom, Email, Email Parents, Classe principale et ses Groupes (Options).
-Gestion Structurelle : Créer les Classes (ex: 6A) et les Groupes (ex: 3C LVA Anglais).
-À Faire Progresser :
-Nettoyage BDD : Pouvoir archiver une année scolaire ou nettoyer les élèves sans classe d'un clic.
-Santé Système : Un tableau de bord technique pour voir si le Drive est connecté et si l'API IA répond.
-🎓 2. ESPACE PROFESSEUR (L'Outil Quotidien)
-Divisé en Gestion de Classe, Création (Studio) et Correction.
-A. Gestion de Classe & Vie Scolaire
-Fonctionnalités Sanctuarisées :
-Trombinoscope/Plan de classe : Je peux voir mes élèves sous forme de grille ou de liste.
-Comportement (Gamification) :
-Mettre une Croix (Sanction). Au bout de 3 croix -> Punition automatique (Statut PENDING): 
-!!!  A AJOUTER:COMPLETER : un devoir défini comme punition pour ce niveau est automatiquement attribué à l'élève si une punition existe pour ce niveau
-!!!  A AJOUTER:COMPLETER : Mettre un Bonus (Récompense). SI 4 BONUS AFFICHER RÉCOMPENSE A+ POUR L ÉLÈVE ET AUSSI COTÉ PROF (CET ÉLÈVE A EU UN A+)
-Voir la barre de "Rachat" (temps restant avant annulation d'une croix).
-Déplacement : Je peux déplacer les élèves sur le plan de classe par glisser-déposer.
-VOIR LES DEVOIRS/JEUX LA PARTIE DROIT DES DIV ÉLÈVE C EST DES PETITS POINTS DE COULEURS QUI CORRESPONDENT AUX DEVOIRS DONNES PAR CE PROF PASTILLE BLANCHE LE DEVOIR/JEU N EST PAS INITIÉ JAMAIS L ÉLÈVE N A CLIQUE DESSUS PASTILLE JAUNE L ÉLÈVE A OUVERT LE DEVOIR JEU ET NE L A PAS FINI (JEU NON GAGNE OU ENVOIE DU DEVOIR NON VALIDÉ PAR L IA)
-B. Studio de Création (Activités)
-Fonctionnalités Sanctuarisées :
-Création de Devoirs (Homework) :
-Définir un Titre, une Consigne textuelle, UNE CONSIGNE POUR L IA (GRILLE/INDICATIONS DE CORRECTIONS)
-Uploader des fichiers (Sujet, Pièces jointes).
-Ciblage : Assigner à une Classe entière (ex: 2A) OU à un Groupe (ex: 1D BFI).
-!!!MULTIPAGE JE PEU AJOUTER UNE NOUVELLE PAGE DE DEVOIR AVEC D AUTRES DOCUMENTS ET  D AUTRES CONSIGNES ELEVES (TAPPES EN TXT OU IMPORTE UNE IMAGE DE QUESTIONS) ET D AUTRES CONSIGNES DE CORRECTION IA POUR CETTE PAGE
-BOUTON PUNITION: DÉCLARER LE DEVOIR COMME PUNITION (IL SERA ATTRIBUE AUTOMATIQUEMENT AUX ELEVES QUI ONT 3 CROIX DE CE NIVEAU)
-Dossier : Ranger le devoir dans un Chapitre/Dossier (ex: "Géométrie").PAR DEFAUT IL SERA RANGE DANS UN DOSSIER COURRANT (NON STOCKE DANS LES ARCHIVES) AU HAZAR
-Création de Jeux (Quiz) :
-Générer des questions via IA (je peu choisir le nombre de questions generees).
-Éditer manuellement les questions/réponses.
-Publier pour une classe/groupe spécifique.
-!!!SI JE SUIS ELEVE D UNE OPTION ET QUE LE JEU A ÉTÉ CRÉÉ POUR CETTE OPTION OU GROUPE JE VOIS LE JEU PROPOSÉE SUR MON COMPTE ÉLÈVE
-À Faire Progresser :
-Mode Punition : Créer un devoir spécial "Punition" qui ne s'assigne qu'aux élèves ayant 3 croix (déjà en place, à fiabiliser).
-Sections Personnalisées : Créer des sections (ex: "TP", "Cours") pour organiser les chapitres, sans pouvoir supprimer la section "GÉNÉRAL" par erreur.
-C. Scan & Correction (Le Workflow)
-JE CRÉE UN NOUVEAU DC (DEVOIR EN CLASSE) UN DIV APPARAIT SUR DEUX LIGNES LIGNE 1 NOM DU DEVOIR DOSSIER DE RANGEMENT (PAR DÉFAUT UN DOSSIER COURRANT EST SELECTIONNÉ)
-LIGNE 2: UN BOUTON INSTRUCTION (PERMET DE SCANNER INSTRUCTIONS PHOTOS DES QUESTIONS A ENVOYER A L IA), UN BOUTON SCAN (PERMET DE SCANNER LES COPIES) UN BOUTON DEVOIR (OUVRE UN DIV AVEC TOUS LES DEVOIRS SCANNÉS ET ENVOYÉS EN BDD ET DANS LE DRIVE) UN BOUTON CORRECTION (AVEC UN DIV OU JE DONNE LES INSTRUCTIONS DE CORRECTION POUR L IA ET EN DESSOUS LES CORRECTIONS DE L IA APPARAISSENT)
-INSTRUCTIONS DE CORRETION DE BASE POUR LES SCANES:
--IDENTIFIER L L ÉLÈVE GRACE AU NOM SUR LA COPIE ET LA CLASSE COURRANTE SÉLECITONNÉE
--METTRE EN HAUT UNE APPRÉCIATION GLOBALE SUR LE TRAVAIL
--METTRE UNE LETTRE (A+ TRES BON DEVOIR A DEVOIR CORRECT OU BON L ESSENTIEL DE CE QUI ÉTAIT ATTENDU EST LA B COMPÉTENCES EN COURS D ACQUISITION CERTAINS ÉLÉMENTS ATTENDU SONT PRÉSENTS MAIS PAS LA MAJORITÉ OU C TRAVAIL INSUFFISANT TRÈS PEU D ÉLÉMENTS ATTENDUS SONT PRÉSENTS ON VOI UN MANQUE DE SÉRIEUX DANS LE TRAVAIL )
-Fonctionnalités Sanctuarisées :
-Scan Studio :
-Prendre en photo des copies via la Webcam ou le Téléphone (Interface WYSIWYG).
-Prendre en photo le Sujet de référence.
-IA Correcteur :
-Lancer l'IA sur un lot de copies scannées.
+🛡️ 1. ESPACE ADMIN : Importation massive, gestion users/classes. OK.
+🎓 2. ESPACE PROF : Plan de classe, Comportement (Croix/Bonus). OK.
+🎬 STUDIO : Création Devoirs & Jeux. OK.
+📸 SCAN & CORRECTION : 
+   - DOUBLE PASSE LITTÉRALE : Utilise le sujet + copie pour transcrire sans lisser.
+   - SABLIER : Traitement en arrière-plan.
+🎒 3. ESPACE ÉLÈVE : Dashboard, Statuts couleur, Feedback IA. OK.
+🧠 4. MOTEUR : Auth Hybride, Google Drive Proxy (Streaming). OK.
 
-Rangement Drive : Envoyer les scans et corrections vers le dossier Google Drive ET STOCKER LES ID DU SUJET POUR LA CLASSE DE LA COPIE ET SA CORRECTION POUR L ÉLÈVE
-LE PROF PEUT VOIR L ENSEMBLE DANS SON ONGLET ÉLÈVES SUR ORDI UNIQUEMENT OU SOUS FORME DE PASTILLE DE COULEUR DANS L ONGLET CLASSE 
-🎒 3. ESPACE ÉLÈVE (L'Expérience Utilisateur)
-Simplifié pour une lecture immédiate.
-Fonctionnalités Sanctuarisées :
-Dashboard Matières : Je vois mes devoirs regroupés par Matière (ex: "Maths", "Histoire") et non par dossier technique.
-Statut Devoir : Je vois clairement ce qui est "À FAIRE" (Rouge), "EN COURS" (Bleu) ou "FAIT" (Vert).
-Réalisation Devoir :
-Je peux lire la consigne et voir les documents.
-Je peux répondre par texte.
-Je reçois un feedback immédiat (Note/Conseil) si l'IA est active sur le devoir.
-SI JE RECOIS ROUGE C INSUFFISANT DANS CE CAS MA RÉPONS EST EFFACÉE ET JE DOIS LA REFAIRE SI JE RECOIS JAUNE B ALORS L IA ME DONNE QUELQUES INDICES ET JE PEU COMPLÉTER MA RÉPONSE SI JE RECOIS VERT A ALORS MA RÉPONSE EST VALIDÉE LE DEVOIR EST CONSIDÉRÉ COMME FAIT SI JE RECOIS VERT FONCÉ A+ UN MESSAGE DE FÉLICIATION M EST ENVOYÉ POUR LA QUALITÉ DE MON TRAVAIL
-Jeux de Révision :
-Je peux lancer un jeu (Zombie/Starship) associé à mon niveau.
-Mon score est enregistré.
-Carnet de Bord :
-Je vois mes Croix (Sanctions) et mes Bonus PAR MATIÈRE.
-Je vois si j'ai une Punition à rendre (Alerte Rouge).
-Je vois mon "Carnet d'Erreurs" (fautes d'orthographe récurrentes relevées par l'IA).
-🧠 4. MOTEUR & INTELLIGENCE (Invisible mais Vital)
-Fonctionnalités Sanctuarisées :
-Auth Hybride : Connexion via mot de passe simple (Prof/Admin) ou sélection visuelle (Élèves "Magic Finder").
-Google Drive Proxy : Les images stockées sur le Drive privé du prof sont visibles sur le site via un "Proxy" (le serveur fait le pont) pour éviter les images brisées.
-Sécurité des Données : Un élève ne voit jamais les données d'un autre élève (notes, croix).
-Intégrité Structurelle : Chaque utilisateur (Prof) a sa propre arborescence de dossiers qui se crée automatiquement si elle n'existe pas.
 [[[£ END: systemInstructions.md £]]]
 
 [[[£ FILE: tests/integrity.test.js £]]]
@@ -10280,4 +10473,5 @@ async function runIntegritySuite() {
 }
 
 runIntegritySuite();
+
 [[[£ END: tests/integrity.test.js £]]]

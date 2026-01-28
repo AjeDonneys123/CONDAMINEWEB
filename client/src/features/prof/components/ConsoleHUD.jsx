@@ -1,3 +1,4 @@
+// @signatures: ConsoleHUD
 import React, { useState, useEffect } from 'react';
 export default function ConsoleHUD() {
     const [logs, setLogs] = useState([]);

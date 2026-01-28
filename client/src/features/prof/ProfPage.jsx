@@ -1,3 +1,4 @@
+// @signatures: ProfPage, getInitialUser, isJean, loadProfileAndClasses
 import React, { useState, useEffect } from 'react';
 import ProfHeader from './components/ProfHeader';
 import ProfNav from './components/ProfNav';

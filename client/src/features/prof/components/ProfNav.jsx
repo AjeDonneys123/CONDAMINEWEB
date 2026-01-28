@@ -1,3 +1,4 @@
+// @signatures: ProfNav
 import React from 'react';
 
 export default function ProfNav({ activeTab, onTabChange, user }) {
