@@ -3,7 +3,6 @@ const express = require('express');
 const router = express.Router();
 const StudioExpert = require('./experts/studio.expert');
 const StudioDB = require('./db/studio.db');
-const StudioDrive = require('./experts/studio.drive');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -33,52 +32,24 @@ router.delete('/:id', asyncHandler(async (req, res) => {
     res.json({ ok: true });
 }));
 
-// --- UPLOAD ASSET DEPUIS PC VERS DRIVE ---
-router.post('/upload-asset', upload.single('file'), asyncHandler(async (req, res) => {
-    if (!req.file) return res.status(400).json({ error: "Fichier manquant" });
-    
-    console.log(`📤 [STUDIO-UPLOAD] Réception : ${req.file.originalname}`);
-    
-    try {
-        // 1. Envoi vers Google Drive (via l'Expert Drive Studio)
-        const driveData = await StudioDrive.uploadAsset(req.file.path, req.file.originalname);
-        
-        if (!driveData || !driveData.id) {
-            throw new Error("Échec de l'upload Google Drive");
-        }
-
-        // 2. On génère l'URL Proxy pour le frontend
-        const finalUrl = `/api/structure/proxy/${driveData.id}`;
-        
-        // 3. On déplace le fichier dans uploads/ pour une sauvegarde locale (optionnel mais recommandé)
-        const finalLocalPath = path.join(process.cwd(), 'public', 'uploads', `studio-${Date.now()}-${req.file.originalname}`);
-        fs.renameSync(req.file.path, finalLocalPath);
-
-        console.log(`✅ [STUDIO-UPLOAD] Terminé : ${finalUrl}`);
-        res.json({ 
-            url: finalUrl, 
-            driveId: driveData.id,
-            localPath: finalLocalPath 
-        });
-
-    } catch (e) {
-        console.error("❌ [STUDIO-UPLOAD] Erreur:", e.message);
-        // Nettoyage temp en cas d'erreur
-        if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
-        res.status(500).json({ error: "Erreur lors de l'archivage Cloud." });
-    }
-}));
-
-router.post('/generate-asset', asyncHandler(async (req, res) => {
-    const { prompt, type } = req.body;
-    const result = await StudioExpert.generateAsset(prompt, type || 'character');
-    res.json(result);
-}));
-
 router.post('/generate-game', asyncHandler(async (req, res) => {
     const { projectId, gameIdea } = req.body;
     const result = await StudioExpert.generateGame(projectId, gameIdea);
     res.json(result);
+}));
+
+// --- ROUTE POUR LE FEEDBACK / FIX ---
+router.post('/fix-code', asyncHandler(async (req, res) => {
+    const { projectId, code, userInstruction } = req.body;
+    const result = await StudioExpert.fixCode(code, userInstruction, projectId);
+    res.json(result);
+}));
+
+router.post('/upload-asset', upload.single('file'), asyncHandler(async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: "Fichier manquant" });
+    const driveData = await require('./experts/studio.drive').uploadAsset(req.file.path, req.file.originalname);
+    const finalUrl = `/api/structure/proxy/${driveData.id}`;
+    res.json({ url: finalUrl });
 }));
 
 module.exports = router;

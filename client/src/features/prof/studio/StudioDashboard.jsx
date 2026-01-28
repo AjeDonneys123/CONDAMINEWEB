@@ -1,4 +1,4 @@
-// @signatures: StageActor, StudioDashboard, executeConsole, handleActorMove, handleAddActor, handleAddScene, handleChange, handleDeleteProject, handleMouseDown, handleMouseMove, handleMouseUp, handleUploadCostume, loadProjects, saveProject
+// @signatures: GamePreview, StageActor, StudioDashboard, executeConsole, handleActorMove, handleAddActor, handleAddScene, handleChange, handleMouseDown, handleMouseMove, handleMouseUp, handleUploadCostume, loadAssets, loadProjects, saveProject
 import React, { useState, useRef, useEffect } from 'react';
 import './StudioDashboard.css';
 import { api } from '../../../services/api';
@@ -21,8 +21,6 @@ const StageActor = ({ actor, isSelected, onSelect, onMove }) => {
         if (!isDragging) return;
         const dx = e.clientX - lastPosRef.current.x;
         const dy = e.clientY - lastPosRef.current.y;
-        
-        // Calcul simple pour le mouvement fluide
         setPos(prev => ({ x: prev.x + (dx / 6), y: prev.y + (dy / 3.6) })); 
         lastPosRef.current = { x: e.clientX, y: e.clientY };
     };
@@ -52,9 +50,57 @@ const StageActor = ({ actor, isSelected, onSelect, onMove }) => {
             ) : (
                 <div className="flex flex-col items-center justify-center opacity-20">
                     <span className="text-2xl">👤</span>
-                    <span className="text-[8px] font-black uppercase">Sans Image</span>
                 </div>
             )}
+        </div>
+    );
+};
+
+// --- COMPOSANT DE PREVIEW DU JEU ---
+const GamePreview = ({ code, project, onClose }) => {
+    const canvasRef = useRef(null);
+    const engineRef = useRef(null);
+
+    useEffect(() => {
+        if (!canvasRef.current || !code) return;
+        
+        // On prépare les assets (images) pour le moteur
+        const assets = {};
+        const actors = project.scenes.flatMap(s => s.actors);
+        
+        const loadAssets = async () => {
+            const promises = actors.map(actor => {
+                const costume = actor.costumes?.[actor.currentCostumeIdx || 0];
+                if (!costume) return Promise.resolve();
+                return new Promise(resolve => {
+                    const img = new Image();
+                    img.onload = () => { assets[actor.id] = img; resolve(); };
+                    img.onerror = () => resolve();
+                    img.src = costume.url;
+                });
+            });
+            await Promise.all(promises);
+
+            try {
+                // L'IA génère une classe "MiniGame"
+                // On l'évalue proprement
+                const GameClass = new Function('assets', 'canvas', `${code}; return MiniGame;`)(assets, canvasRef.current);
+                engineRef.current = new GameClass();
+                engineRef.current.start?.();
+            } catch (e) { console.error("Game Runtime Error:", e); }
+        };
+
+        loadAssets();
+        return () => engineRef.current?.destroy?.();
+    }, [code]);
+
+    return (
+        <div className="fixed inset-0 z-[10000] bg-black/95 flex flex-col items-center justify-center p-10">
+            <div className="bg-slate-900 p-2 rounded-xl border border-white/20 relative shadow-2xl">
+                <canvas ref={canvasRef} width={800} height={450} className="bg-white rounded-lg" />
+                <button onClick={onClose} className="absolute -top-12 right-0 text-white font-black text-xl">✕ FERMER</button>
+            </div>
+            <div className="mt-6 text-white/40 font-mono text-xs uppercase tracking-widest">Contrôles : Flèches + Espace</div>
         </div>
     );
 };
@@ -65,9 +111,12 @@ export default function StudioDashboard({ user }) {
     const [selectedSceneIndex, setSelectedSceneIndex] = useState(0);
     const [selectedActorId, setSelectedActorId] = useState(null);
     const [loading, setLoading] = useState(false);
-    const [consoleLog, setConsoleLog] = useState([]);
+    const [chatHistory, setChatHistory] = useState([
+        { role: 'ai', text: "Salut ! Je suis ton assistant de développement. Décris-moi le jeu que tu veux créer avec tes personnages." }
+    ]);
     const [consoleInput, setConsoleInput] = useState('');
-    const consoleRef = useRef(null);
+    const [showPreview, setShowPreview] = useState(false);
+    const chatEndRef = useRef(null);
     const fileInputRef = useRef(null);
 
     const currentScene = selectedProject?.scenes[selectedSceneIndex];
@@ -78,13 +127,13 @@ export default function StudioDashboard({ user }) {
         try {
             const data = await api.get(`/studio/projects/${user.id || user._id}`);
             setProjects(data);
-            if (data.length > 0 && !selectedProject) { setSelectedProject(data[0]); }
+            if (data.length > 0 && !selectedProject) setSelectedProject(data[0]);
         } catch(e) { console.error(e); }
         setLoading(false);
     };
 
     useEffect(() => { loadProjects(); }, [user]);
-    useEffect(() => { if (consoleRef.current) consoleRef.current.scrollTop = consoleRef.current.scrollHeight; }, [consoleLog]);
+    useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chatHistory]);
     
     const handleChange = (field, value, targetType) => {
         const nextProject = { ...selectedProject };
@@ -97,7 +146,6 @@ export default function StudioDashboard({ user }) {
         setSelectedProject(nextProject);
     };
 
-    // --- IMPORT DEPUIS PC VERS DRIVE ---
     const handleUploadCostume = async (e) => {
         const file = e.target.files[0];
         if (!file || !selectedActorId) return;
@@ -105,28 +153,18 @@ export default function StudioDashboard({ user }) {
         const formData = new FormData();
         formData.append('file', file);
         try {
-            // 1. Envoi au serveur qui l'upload sur le Drive
             const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: formData });
-            if (!res.ok) throw new Error("Upload Drive échoué");
-            
-            const assetData = await res.json(); // { url: "/api/structure/proxy/..." }
-
-            // 2. Mise à jour locale de l'acteur
+            const assetData = await res.json();
             const nextProject = { ...selectedProject };
-            const actors = nextProject.scenes[selectedSceneIndex].actors;
-            const actor = actors.find(a => a.id === selectedActorId);
+            const actor = nextProject.scenes[selectedSceneIndex].actors.find(a => a.id === selectedActorId);
             if (actor) {
                 if (!actor.costumes) actor.costumes = [];
                 actor.costumes.push({ id: `c-${Date.now()}`, name: file.name, url: assetData.url });
                 actor.currentCostumeIdx = actor.costumes.length - 1;
                 setSelectedProject(nextProject);
-                // 3. Sauvegarde auto en BDD
                 await saveProject(nextProject);
             }
-        } catch (err) { 
-            alert("Erreur critique d'upload vers le Cloud."); 
-            console.error(err);
-        }
+        } catch (err) { alert("Erreur upload Drive"); }
         setLoading(false);
     };
     
@@ -140,6 +178,44 @@ export default function StudioDashboard({ user }) {
         } catch(e) { console.error(e); }
     };
 
+    const executeConsole = async (e) => {
+        e.preventDefault();
+        const msg = consoleInput.trim();
+        if (!msg || loading) return;
+
+        setChatHistory(prev => [...prev, { role: 'user', text: msg }]);
+        setConsoleInput('');
+        setLoading(true);
+
+        try {
+            let res;
+            if (!selectedProject.generatedCode) {
+                // Première génération
+                res = await api.post('/studio/generate-game', { projectId: selectedProject._id, gameIdea: msg });
+            } else {
+                // Correction / Feedback
+                res = await api.post('/studio/fix-code', { 
+                    projectId: selectedProject._id, 
+                    code: selectedProject.generatedCode,
+                    userInstruction: msg 
+                });
+            }
+
+            setSelectedProject(prev => ({ ...prev, generatedCode: res.code }));
+            setChatHistory(prev => [...prev, { 
+                role: 'ai', 
+                text: res.message, 
+                hasAction: true 
+            }]);
+            
+            // Sauvegarde auto du nouveau code
+            await saveProject({ ...selectedProject, generatedCode: res.code });
+        } catch(e) {
+            setChatHistory(prev => [...prev, { role: 'ai', text: "Désolé, j'ai rencontré un problème technique en écrivant le code." }]);
+        }
+        setLoading(false);
+    };
+
     const handleAddScene = () => {
         const nextProject = { ...selectedProject, scenes: [...selectedProject.scenes, { name: `Scene ${selectedProject.scenes.length + 1}`, actors: [], timeline: [] }] };
         setSelectedProject(nextProject);
@@ -147,47 +223,28 @@ export default function StudioDashboard({ user }) {
     };
 
     const handleAddActor = () => {
-        const newActor = { id: `actor-${Date.now()}`, name: `Perso ${currentScene?.actors.length + 1}`, costumes: [], initialX: 50, initialY: 50, scale: 1 };
+        const newActor = { id: `actor-${Date.now()}`, name: `Perso`, costumes: [], initialX: 50, initialY: 50, scale: 1 };
         const nextProject = { ...selectedProject };
         nextProject.scenes[selectedSceneIndex].actors.push(newActor);
         setSelectedProject(nextProject);
         setSelectedActorId(newActor.id);
     };
-
+    
     const handleActorMove = (actorId, newX, newY) => {
         const nextProject = { ...selectedProject };
         const actor = nextProject.scenes[selectedSceneIndex].actors.find(a => a.id === actorId);
         if (actor) { actor.initialX = newX; actor.initialY = newY; setSelectedProject(nextProject); }
     };
 
-    const handleDeleteProject = async (id) => { if (confirm("Supprimer ce projet ?")) { await api.delete(`/studio/${id}`); setSelectedProject(null); loadProjects(); } };
-    
-    const executeConsole = async (e) => {
-        e.preventDefault();
-        const command = consoleInput.trim();
-        if (!command) return;
-        setConsoleLog(prev => [...prev, { type: 'input', text: `> ${command}` }]);
-        setConsoleInput('');
-        if (command === 'save') saveProject();
-        if (command.startsWith('generate game')) {
-            try {
-                const res = await api.post('/studio/generate-game', { projectId: selectedProject._id, gameIdea: command.substring(13).trim() });
-                setSelectedProject(prev => ({ ...prev, generatedCode: res.code }));
-                setConsoleLog(prev => [...prev, { type: 'info', text: 'Jeu généré. Prêt à tester.' }]);
-            } catch(e) { setConsoleLog(p => [...p, {type:'error', text:'Erreur Génération'}]); }
-        }
-    };
-
-    if (loading && !selectedProject) return <div className="studio-wrapper"><div className="overlay"><div className="modal-box">☁️ SYNC DRIVE EN COURS...</div></div></div>;
+    if (loading && !selectedProject) return <div className="studio-wrapper"><div className="overlay"><div className="modal-box">Sync Drive...</div></div></div>;
     
     if (!selectedProject) {
         return (
             <div className="studio-wrapper">
                 <div className="studio-center flex-col items-center justify-center">
-                    <h1 className="text-white/10 font-black text-6xl mb-8 select-none">STUDIO</h1>
-                    <button onClick={() => setSelectedProject({ title: 'Nouveau Projet', scenes: [{ name: 'Scene 1', actors: [], timeline: [] }], teacherId: user.id || user._id })} className="bg-indigo-600 hover:bg-indigo-500 text-white px-10 py-5 rounded-2xl font-black shadow-2xl transition-all hover:scale-105 active:scale-95 uppercase tracking-widest">+ CRÉER UN PROJET</button>
+                    <button onClick={() => setSelectedProject({ title: 'Nouveau Projet', scenes: [{ name: 'Scene 1', actors: [], timeline: [] }], teacherId: user.id || user._id })} className="bg-indigo-600 text-white px-10 py-5 rounded-2xl font-black shadow-2xl uppercase">+ CRÉER UN PROJET</button>
                     <div className="mt-12 grid grid-cols-2 gap-4 w-full max-w-2xl px-10">
-                        {projects.map(p => <div key={p._id} className="obj-card !bg-slate-800/40 border-slate-700 hover:border-indigo-500 transition-all" onClick={() => setSelectedProject(p)}><span className="font-bold text-slate-300">{p.title}</span></div>)}
+                        {projects.map(p => <div key={p._id} className="obj-card" onClick={() => setSelectedProject(p)}><span className="font-bold">{p.title}</span></div>)}
                     </div>
                 </div>
             </div>
@@ -195,85 +252,60 @@ export default function StudioDashboard({ user }) {
     }
     
     return (
-        <div className="studio-wrapper animate-in fade-in">
+        <div className="studio-wrapper">
+            {showPreview && <GamePreview code={selectedProject.generatedCode} project={selectedProject} onClose={() => setShowPreview(false)} />}
             <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleUploadCostume} />
             
-            {/* PANNEAU GAUCHE : SCÈNES */}
             <div className="studio-sidebar">
                 <div className="panel-header">🎬 SCÈNES</div>
                 <div className="scroll-area custom-scrollbar">
-                    {selectedProject.scenes.map((s, i) => (
-                        <div key={i} className={`obj-card ${selectedSceneIndex === i ? 'selected' : ''}`} onClick={() => { setSelectedSceneIndex(i); setSelectedActorId(null); }}>
-                            <span>{s.name}</span>
-                        </div>
-                    ))}
+                    {selectedProject.scenes.map((s, i) => <div key={i} className={`obj-card ${selectedSceneIndex === i ? 'selected' : ''}`} onClick={() => { setSelectedSceneIndex(i); setSelectedActorId(null); }}>{s.name}</div>)}
                     <button className="create-obj-full" onClick={handleAddScene}>+ AJOUTER SCÈNE</button>
                 </div>
             </div>
 
-            {/* CENTRE : SCÈNE & CONSOLE */}
             <div className="studio-center">
                 <div className="stage-toolbar">
-                    <input type="text" value={selectedProject.title} onChange={e => handleChange('title', e.target.value, 'project')} className="bg-transparent text-white font-black text-center text-xs outline-none uppercase tracking-widest" style={{width:'300px'}} />
-                    <div className="flex gap-4 ml-auto px-4">
-                        <button onClick={() => saveProject()} className="text-[10px] font-black text-indigo-400 hover:text-white transition-colors">💾 SAUVER</button>
-                        <button onClick={() => handleDeleteProject(selectedProject._id)} className="text-[10px] font-black text-red-500 hover:text-white transition-colors">✕ SUPPRIMER</button>
-                    </div>
+                    <input type="text" value={selectedProject.title} onChange={e => handleChange('title', e.target.value, 'project')} className="bg-transparent text-white font-black text-center text-xs outline-none uppercase" style={{width:'300px'}} />
+                    <button onClick={() => saveProject()} className="ml-auto text-[10px] font-black text-indigo-400">💾 SAUVER</button>
                 </div>
                 
-                <div className="stage-wrapper">
-                    <div className="stage-canvas">
-                        {currentScene?.actors.map(a => (
-                            <StageActor key={a.id} actor={a} isSelected={selectedActorId === a.id} onSelect={setSelectedActorId} onMove={handleActorMove} />
-                        ))}
-                    </div>
-                </div>
+                <div className="stage-wrapper"><div className="stage-canvas">{currentScene?.actors.map(a => <StageActor key={a.id} actor={a} isSelected={selectedActorId === a.id} onSelect={setSelectedActorId} onMove={handleActorMove} />)}</div></div>
 
-                <div className="studio-console-wrapper">
-                    <div ref={consoleRef} className="studio-console-logs custom-scrollbar">
-                        {consoleLog.map((log, i) => <div key={i} className={`console-line ${log.type}`}>{log.text}</div>)}
+                {/* --- CHAT INTERFACE V2 --- */}
+                <div className="studio-chat-wrapper">
+                    <div className="studio-chat-messages custom-scrollbar">
+                        {chatHistory.map((msg, i) => (
+                            <div key={i} className={`chat-bubble ${msg.role}`}>
+                                <div className="chat-text">{msg.text}</div>
+                                {msg.hasAction && (
+                                    <button onClick={() => setShowPreview(true)} className="btn-test-game">▶ TESTER LE JEU</button>
+                                )}
+                            </div>
+                        ))}
+                        {loading && <div className="chat-bubble ai loading">Réflexion...</div>}
+                        <div ref={chatEndRef} />
                     </div>
-                    <form onSubmit={executeConsole} className="studio-console-input-area">
-                        <input className="console-input" placeholder="Tapez 'save' ou décrivez un jeu..." value={consoleInput} onChange={e => setConsoleInput(e.target.value)} />
-                        <button type="submit" className="btn-console-fix">FIX/GO</button>
+                    <form onSubmit={executeConsole} className="studio-chat-input-area">
+                        <input className="chat-input" placeholder="Demande une modif (ex: 'plus vite', 'ajoute un score')..." value={consoleInput} onChange={e => setConsoleInput(e.target.value)} disabled={loading} />
+                        <button type="submit" className="btn-send-chat" disabled={loading}>ENVOYER</button>
                     </form>
                 </div>
             </div>
 
-            {/* PANNEAU DROIT : ACTEURS & PROPS */}
             <div className="studio-right-panel">
                 <div className="panel-header">🎭 PERSONNAGES</div>
                 <div className="scroll-area custom-scrollbar">
-                    {currentScene?.actors.map(a => (
-                        <div key={a.id} className={`obj-card ${selectedActorId === a.id ? 'selected' : ''}`} onClick={() => setSelectedActorId(a.id)}>
-                            <span>{a.name}</span>
-                        </div>
-                    ))}
-                    <button className="create-obj-full" onClick={handleAddActor}>+ AJOUTER ACTEUR</button>
-                    
+                    {currentScene?.actors.map(a => <div key={a.id} className={`obj-card ${selectedActorId === a.id ? 'selected' : ''}`} onClick={() => setSelectedActorId(a.id)}>{a.name}</div>)}
+                    <button className="create-obj-full" onClick={handleAddActor}>+ AJOUTER</button>
                     {selectedActor && (
-                        <div className="mt-6 p-4 bg-black/40 rounded-2xl border border-white/5 animate-in slide-in-from-right-4">
-                            <label className="prop-label">NOM DU PERSONNAGE</label>
+                        <div className="mt-6 p-4 bg-black/40 rounded-2xl border border-white/5">
+                            <label className="prop-label">NOM</label>
                             <input className="prop-input mb-4" value={selectedActor.name} onChange={e => handleChange('name', e.target.value, 'actor')} />
-                            
-                            <label className="prop-label mb-2">COSTUMES (CLOUD)</label>
+                            <label className="prop-label mb-2">IMAGE (CLOUD)</label>
                             <div className="grid grid-cols-2 gap-2 mb-4">
-                                {selectedActor.costumes?.map((c, i) => (
-                                    <div key={i} className={`aspect-square bg-slate-900 rounded-xl overflow-hidden border-2 cursor-pointer transition-all ${selectedActor.currentCostumeIdx === i ? 'border-indigo-500 scale-105' : 'border-transparent opacity-60'}`} onClick={() => handleChange('currentCostumeIdx', i, 'actor')}>
-                                        <img src={c.url} className="w-full h-full object-contain" alt="costume" />
-                                    </div>
-                                ))}
-                                <button onClick={() => fileInputRef.current.click()} className="aspect-square bg-white/5 border-2 border-dashed border-white/10 rounded-xl flex flex-col items-center justify-center hover:bg-white/10 transition-all">
-                                    <span className="text-xl">📁</span>
-                                    <span className="text-[8px] font-black uppercase mt-1">Depuis PC</span>
-                                </button>
-                            </div>
-                            
-                            <div className="space-y-4 pt-4 border-t border-white/5">
-                                <div className="flex justify-between items-center">
-                                    <span className="text-[10px] font-black text-slate-500 uppercase">Taille</span>
-                                    <input type="range" min="0.1" max="3" step="0.1" value={selectedActor.scale || 1} onChange={e => handleChange('scale', parseFloat(e.target.value), 'actor')} className="w-24" />
-                                </div>
+                                {selectedActor.costumes?.map((c, i) => <div key={i} className={`aspect-square bg-slate-900 rounded-xl overflow-hidden border-2 ${selectedActor.currentCostumeIdx === i ? 'border-indigo-500' : 'border-transparent'}`} onClick={() => handleChange('currentCostumeIdx', i, 'actor')}><img src={c.url} className="w-full h-full object-contain" alt="costume" /></div>)}
+                                <button onClick={() => fileInputRef.current.click()} className="aspect-square bg-white/5 border-2 border-dashed border-white/10 rounded-xl flex flex-col items-center justify-center"><span className="text-xl">📁</span></button>
                             </div>
                         </div>
                     )}

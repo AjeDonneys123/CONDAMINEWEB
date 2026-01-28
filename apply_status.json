@@ -1,16 +1,12 @@
 {
   "status": "JUDGING",
   "message": "Analyse IA en cours...",
-  "details": "Perdu : AssetThumb, newX, newY, runGame, handleDeleteScene",
+  "details": "Perdu : codeToSave",
   "context": {
     "missing": [
-      "AssetThumb",
-      "newX",
-      "newY",
-      "runGame",
-      "handleDeleteScene"
+      "codeToSave"
     ],
-    "filePath": "client/src/features/prof/studio/StudioDashboard.jsx"
+    "filePath": "server/domains/studio/experts/studio.expert.js"
   },
-  "timestamp": 1769627325948
+  "timestamp": 1769627974081
 }
