@@ -22,12 +22,13 @@ app.get('/api/system/apply-status', (req, res) => {
     } else { res.json({ status: 'OK' }); }
 });
 
-// VERSION SIMPLIFIÉE (Entier)
+// VERSION SIMPLIFIÉE (Entier) - Lit le numéro de build
 app.get('/api/system/version', (req, res) => {
     try {
         const vPath = path.join(__dirname, 'version.json');
         if (fs.existsSync(vPath)) {
             const vData = JSON.parse(fs.readFileSync(vPath, 'utf8'));
+            // Renvoie le numéro de build incrémenté par git-auto.js
             return res.json({ hash: `${vData.build}` }); 
         }
         res.json({ hash: '1' });

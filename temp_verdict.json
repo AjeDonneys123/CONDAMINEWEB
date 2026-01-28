@@ -1,1 +1,1 @@
-{"verdict":"SAFE","reason":"Refactorisation avec exportation des utilitaires dans StudioUtils."}
+{"verdict":"SAFE","reason":"Ajout d'un commentaire pour clarifier la lecture du numéro de build."}

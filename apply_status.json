@@ -1,7 +1,12 @@
 {
-  "status": "OK",
-  "message": "Code appliqué",
-  "details": "1 fichiers mis à jour.",
-  "context": null,
-  "timestamp": 1769620267197
+  "status": "JUDGING",
+  "message": "Analyse IA en cours...",
+  "details": "Analyse IA forcée (Fichier Critique)",
+  "context": {
+    "missing": [
+      "Modification Critique"
+    ],
+    "filePath": "server/server.js"
+  },
+  "timestamp": 1769620314143
 }
