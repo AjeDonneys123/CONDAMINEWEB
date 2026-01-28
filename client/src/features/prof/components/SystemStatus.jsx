@@ -1,3 +1,4 @@
+// @signatures: SystemStatus, askOracle, handleRevert
 import React, { useState, useEffect, useRef } from 'react';
 import './SystemStatus.css';
 
@@ -8,7 +9,8 @@ export default function SystemStatus() {
     const [verdict, setVerdict] = useState(null); 
     const [reverting, setReverting] = useState(false);
     
-    // MEMOIRE : Pour ne pas redemander 100 fois la même chose
+    // MÉMOIRE ANTI-BOUCLE
+    // On stocke le timestamp de la dernière alerte traitée
     const lastTimestampRef = useRef(0);
     const fetchingRef = useRef(false);
 
@@ -20,30 +22,27 @@ export default function SystemStatus() {
                 const res = await fetch('/api/system/apply-status');
                 const data = await res.json();
                 
-                // Si tout va bien
+                // Si tout va bien, on cache
                 if (data.status === 'OK') {
-                    if (visible && !verdict) setTimeout(() => setVisible(false), 2000);
+                    if (visible) setTimeout(() => setVisible(false), 2000);
                     return;
                 }
 
-                // SI ALERTE (JUDGING, WARNING, ERROR)
+                // SI ALERTE
                 setStatusData(data);
                 setVisible(true);
 
-                // EST-CE UNE NOUVELLE ALERTE ?
+                // LOGIQUE INTELLIGENTE :
+                // On appelle l'Oracle SEULEMENT si c'est une NOUVELLE alerte (Timestamp différent)
+                // OU si on n'a pas encore de verdict (cas redémarrage page) ET qu'on ne cherche pas déjà
                 if (data.timestamp !== lastTimestampRef.current) {
-                    // Oui : On reset tout et on lance l'enquête
-                    console.log("⚡ Nouvelle alerte détectée, interrogation Oracle...");
+                    console.log("⚡ Nouvelle alerte détectée !");
                     lastTimestampRef.current = data.timestamp;
-                    setVerdict(null); 
+                    setVerdict(null); // Reset visuel
                     askOracle();
-                } else {
-                    // Non : C'est la même alerte.
-                    // Si on n'a pas encore le verdict et qu'on ne cherche pas déjà, on réessaie (cas serveur offline)
-                    if (!verdict && !fetchingRef.current) {
-                        askOracle();
-                    }
-                    // Si on a déjà le verdict (verdict !== null), ON NE FAIT RIEN. On l'affiche juste.
+                } else if (!verdict && !fetchingRef.current) {
+                    // Cas où on a rechargé la page mais l'alerte est toujours active côté serveur
+                    askOracle();
                 }
 
             } catch (e) {}
@@ -52,17 +51,18 @@ export default function SystemStatus() {
     }, [visible, verdict]);
 
     const askOracle = async () => {
+        if (fetchingRef.current) return;
         fetchingRef.current = true;
+        
         try {
             const res = await fetch('/api/system/oracle', { method: 'POST' });
             if (res.ok) {
                 const d = await res.json();
                 console.log("✅ Verdict reçu :", d.verdict);
                 setVerdict(d);
-                if (d.verdict === "SAFE") setTimeout(() => setVisible(false), 4000);
             }
         } catch (e) { 
-            // On laisse fetching à false pour réessayer au prochain tick si échec réseau
+            console.warn("Oracle injoignable, nouvel essai au prochain tick...");
         }
         fetchingRef.current = false;
     };
