@@ -20,30 +20,32 @@ export default function SystemStatus() {
                 const res = await fetch('/api/system/apply-status');
                 const data = await res.json();
                 
+                // RESET AUTO SI OK
                 if (data.status === 'OK') {
                     if (visible && verdict?.verdict !== 'DANGER') { setVisible(false); setVerdict(null); }
                     return;
                 }
 
+                // SI ALERTE
                 setStatusData(data);
                 setVisible(true);
 
-                // On ne reset le verdict que si le MESSAGE change, pas juste le timestamp
-                // Cela empêche le clignotement infini si apply.js spamme la même erreur
-                const messageChanged = data.message !== statusData.message;
-                
-                if (messageChanged) {
+                // NOUVEAU BATCH DÉTECTÉ ?
+                if (data.timestamp !== lastTimestampRef.current) {
+                    console.log("📦 Nouveau Batch détecté !");
                     lastTimestampRef.current = data.timestamp;
                     setVerdict(null); 
-                    askOracle();
-                } else if (!verdict && !fetchingRef.current) {
-                    // Si on est bloqué sans verdict, on réessaie doucement
-                    askOracle();
+                    // Si le moteur demande un jugement ("JUDGING"), on appelle l'Oracle
+                    if (data.status === 'JUDGING') askOracle();
+                } 
+                else if (data.status === 'JUDGING' && !verdict && !fetchingRef.current) {
+                    askOracle(); // Retry si pas de réponse
                 }
+
             } catch (e) {}
         }, 1000);
         return () => clearInterval(interval);
-    }, [visible, verdict, statusData]);
+    }, [visible, verdict]);
 
     const askOracle = async () => {
         if (fetchingRef.current) return;
@@ -61,7 +63,7 @@ export default function SystemStatus() {
 
     const handleRevertAndReport = async () => {
         setReverting(true);
-        const report = `🚨 RAPPORT:\n${statusData.message}\nIA: ${verdict?.reason || 'Analyse non finie'}`;
+        const report = `🚨 RAPPORT:\n${statusData.message}\nIA: ${verdict?.reason}`;
         try { await navigator.clipboard.writeText(report); } catch (err) {}
 
         try {
@@ -73,9 +75,13 @@ export default function SystemStatus() {
     if (!visible) return <div className="fixed top-2 right-2 z-[9999] opacity-50 hover:opacity-100 transition-opacity bg-blue-600 text-white text-[10px] px-2 py-1 rounded font-black cursor-default shadow-sm">v.{version}</div>;
 
     let bgClass = "bg-orange-500 border-orange-700"; 
-    let messageIA = "🔮 Analyse IA en cours...";
+    let messageIA = "🔮 Analyse Globale en cours...";
     
-    if (verdict) {
+    if (statusData.status === 'ERROR') {
+        bgClass = "bg-red-600 border-red-800";
+        messageIA = "⛔ Blocage Moteur (Fichier rejeté)";
+    }
+    else if (verdict) {
         if (verdict.verdict === "DANGER") {
             bgClass = "bg-red-600 border-red-800";
             messageIA = `⛔ ALERTE : "${verdict.reason}"`;
@@ -92,19 +98,19 @@ export default function SystemStatus() {
                 <div className="flex flex-col">
                     <div className="flex items-center gap-3">
                         <span className="text-xl uppercase tracking-widest flex items-center gap-2">
-                            {!verdict ? '⏳ ANALYSE...' : verdict.verdict}
+                            {statusData.status === 'ERROR' ? '⛔ ECHEC BATCH' : (!verdict ? '⏳ AUDIT...' : verdict.verdict)}
                         </span>
                         <span className="text-[10px] bg-black/30 px-2 py-1 rounded font-mono">v.{version}</span>
                     </div>
                     <span className="text-md font-bold mt-1">{statusData.message}</span>
-                    <span className="text-xs font-mono opacity-80">{statusData.details}</span>
+                    {statusData.details && <span className="text-xs font-mono opacity-80">{statusData.details}</span>}
                 </div>
                 
-                {/* MODIF V15.2 : LE BOUTON EST TOUJOURS LÀ SI CE N'EST PAS 'SAFE' */}
-                {verdict?.verdict !== 'SAFE' && (
+                {/* BOUTON REVERT : Annule TOUT le batch car c'était un seul commit */}
+                {(verdict?.verdict === 'DANGER' || statusData.status === 'ERROR') && (
                     <div className="flex gap-2">
                         <button onClick={handleRevertAndReport} disabled={reverting} className="bg-black/40 hover:bg-black/60 px-4 py-2 rounded-lg font-bold text-xs uppercase border border-white/20 transition-colors shadow-lg animate-pulse flex items-center gap-2">
-                            {reverting ? 'RESTAURATION...' : '🔙 REVERT D\'URGENCE'}
+                            {reverting ? 'ANNULATION...' : '🔙 REVERT BATCH'}
                         </button>
                         <button onClick={() => setVisible(false)} className="bg-white/20 hover:bg-white/40 rounded-full w-8 h-8 flex items-center justify-center font-bold">✕</button>
                     </div>
