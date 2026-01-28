@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './GameStudio.css';
 import { api } from '../../../services/api';
-// Correction du chemin d'importation: le chemin relatif était incorrect.
+// CHEMIN ET EXPORTS VÉRIFIÉS
 import { getChaptersForClass, findDefaultChapterId, getStudentsForViewingClass, SUBJECTS_LIST } from '../homework/HomeworkStudio'; 
 
 // State par défaut pour un quiz vide
