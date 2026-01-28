@@ -1,4 +1,4 @@
-// @signatures: App, checkUpdate
+// @signatures: App, handleBackToDev, handleLogout
 import React, { useState, useEffect, useRef } from 'react';
 import Login from './features/auth/Login';
 import ProfPage from './features/prof/ProfPage';
@@ -12,21 +12,39 @@ export default function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const bootIdRef = useRef(null);
 
-  // ✅ checkUpdate est là (pour ne pas trigger l'alerte de densité tout de suite)
+  // ❌ TEST V14 : LOGIQUE VIDÉE
+  // La fonction est là, mais elle ne fait plus rien.
+  // Le mode Paranoïaque DOIT déclencher l'IA car c'est un fichier critique.
   useEffect(() => {
-    const checkUpdate = async () => {
-      try {
-        const res = await fetch('/api/check-deploy');
-        if(res.ok) console.log("Check OK");
-      } catch (e) {}
-    };
-    checkUpdate();
+    console.log("Check Update désactivé pour test sécurité");
   }, []);
 
-  // ❌ BAZOOKA : J'ai supprimé handleLogout et handleBackToDev !
-  // apply.js va détecter une "Régression Structurelle" (Signatures manquantes).
+  useEffect(() => {
+    const saved = localStorage.getItem('player');
+    if (saved) {
+        const parsed = JSON.parse(saved);
+        setUser({ ...parsed, id: parsed._id || parsed.id });
+    }
+  }, []);
 
-  if (isSyncing) return <div className="sync-overlay">Sync...</div>;
+  const handleLogout = () => { localStorage.clear(); setUser(null); };
+
+  const handleBackToDev = async () => {
+      try {
+          const res = await fetch('/api/auth/login', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({ role: 'ADMIN', firstName: 'Jean', lastName: 'Vuillet', password: 'A' })
+          });
+          const data = await res.json();
+          if (res.ok) {
+              localStorage.setItem('player', JSON.stringify(data.user));
+              window.location.reload();
+          }
+      } catch(e) { console.error(e); }
+  };
+
+  if (isSyncing) return <div className="sync-overlay"><h2 style={{color:'white', fontWeight:900}}>SYNCHRONISATION...</h2></div>;
   
   if (!user) return (
       <div className="app-wrapper">
@@ -42,17 +60,16 @@ export default function App() {
       <SystemStatus />
       {isTestAccount && (
         <div className="v99-test-header">
-           <span>TEST MODE</span>
-           {/* Ça va planter car la fonction n'existe plus */}
-           <button className="btn-back-dev-mini">⚡ RETOUR DÉVELOPPEUR</button>
+           <span>🛠️ MODE TEST ACTIF : {user.firstName} {user.lastName}</span>
+           <button className="btn-back-dev-mini" onClick={handleBackToDev}>⚡ RETOUR DÉVELOPPEUR</button>
         </div>
       )}
       {(user.isDeveloper || user.role === 'prof') ? (
-          <ProfPage user={user} /> // Props manquantes
+          <ProfPage user={user} onLogout={handleLogout} />
       ) : user.role === 'admin' ? (
-          <AdminPage user={user} />
+          <AdminPage user={user} onLogout={handleLogout} />
       ) : (
-          <ElevePage user={user} />
+          <ElevePage user={user} onLogout={handleLogout} onBackToProf={() => setUser({ ...user, role: "prof" })} />
       )}
     </div>
   );
