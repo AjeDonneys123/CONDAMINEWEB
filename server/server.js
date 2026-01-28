@@ -33,47 +33,39 @@ app.get('/api/system/version', (req, res) => {
     } catch (e) { res.json({ hash: 'UNKNOWN' }); }
 });
 
-// --- L'ORACLE V13 (100% MONITORING) ---
+// --- L'ORACLE V13.1 (FAIL-SAFE) ---
 app.post('/api/system/oracle', async (req, res) => {
     const diffFile = path.join(__dirname, '../temp_diff.json');
-    if (!fs.existsSync(diffFile)) return res.json({ analysis: "Pas de données." });
+    if (!fs.existsSync(diffFile)) return res.json({ verdict: "SAFE", reason: "Pas de diff" });
 
     try {
         const { oldContent, newContent, filePath } = JSON.parse(fs.readFileSync(diffFile, 'utf8'));
         
         const prompt = `AUDIT DE SÉCURITÉ CODE (Avant vs Après) sur : ${filePath}
-
-        ANCIEN CODE (Extrait) :
-        ${oldContent.substring(0, 4000)}
-
-        NOUVEAU CODE (Extrait) :
-        ${newContent.substring(0, 4000)}
-
-        TA MISSION : Détermine si cette modification introduit une RÉGRESSION ou une PERTE DE FONCTIONNALITÉ.
-
-        CRITÈRES DE JUGEMENT :
-        🟢 SAFE : 
-        - Ajout de code.
-        - Refactoring propre (logique conservée).
-        - Nettoyage de commentaires ou logs.
-        - Changement de style CSS non destructif.
-
-        🔴 DANGER :
-        - Suppression d'une fonction entière.
-        - "Lobotomie" (fonction vidée de son contenu).
-        - Suppression d'un ID HTML ou d'une classe utilisée ailleurs.
-        - Suppression d'un import critique.
-
+        ANCIEN CODE (Extrait) : ${oldContent.substring(0, 4000)}
+        NOUVEAU CODE (Extrait) : ${newContent.substring(0, 4000)}
+        
+        TA MISSION : Détermine si c'est une RÉGRESSION ou une OPTIMISATION.
+        
         RÉPOND UNIQUEMENT EN JSON :
-        {
-            "verdict": "SAFE" ou "DANGER",
-            "reason": "Explication courte (max 15 mots). Si DANGER, donne un test manuel."
-        }`;
+        { "verdict": "SAFE" ou "DANGER", "reason": "Explication courte." }`;
 
-        const raw = await AIEngine.ask(prompt, "Tu es un Juge de Code Senior. Réponds en JSON.");
+        const raw = await AIEngine.ask(prompt, "Tu es un Juge de Code.");
+        
+        // --- FIX CRITIQUE : GESTION ERREUR 429 ---
+        if (raw.includes("ERREUR") || raw.includes("429") || raw.includes("Resource exhausted")) {
+            console.warn("⚠️ Oracle Fallback: Quota dépassé");
+            return res.json({
+                verdict: "DANGER",
+                reason: "IA HORS SERVICE (Quota). Par sécurité, considérez ce changement comme DANGEREUX."
+            });
+        }
+
         res.json(AIEngine.sanitizeJSON(raw));
+
     } catch (e) {
-        res.json({ verdict: "DANGER", reason: "Erreur analyse IA" });
+        // En cas de crash total, on bloque par sécurité
+        res.json({ verdict: "DANGER", reason: "Erreur technique serveur." });
     }
 });
 
@@ -97,7 +89,7 @@ if (!fs.existsSync(uploadsPath)) fs.mkdirSync(uploadsPath, { recursive: true });
 app.use('/uploads', express.static(uploadsPath));
 app.get('/uploads/:filename', (req, res) => { const requestedFile = req.params.filename; const cleanName = decodeURIComponent(requestedFile).split('?')[0]; const filePath = path.join(uploadsPath, cleanName); if (fs.existsSync(filePath)) return res.sendFile(filePath); res.status(404).send('Fichier introuvable.'); });
 
-app.get('/api/check-deploy', (req, res) => { res.json({ status: "OK", version: "V13.0_GOD_MODE", bootId: SERVER_BOOT_ID }); });
+app.get('/api/check-deploy', (req, res) => { res.json({ status: "OK", version: "V13.1_FAILSAFE", bootId: SERVER_BOOT_ID }); });
 
 app.use('/api/auth', require('./domains/auth/auth.routes'));
 app.use('/api/admin', require('./domains/admin/admin.routes'));
@@ -114,4 +106,4 @@ mongoose.connect(process.env.MONGODB_URI).then(() => console.log('✅ BDD CONNEC
 
 const distPath = path.resolve(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) { app.use(express.static(distPath)); app.get('*', (req, res) => { if (req.url.startsWith('/uploads/')) return res.status(404).send("Not found"); res.sendFile(path.join(distPath, 'index.html')); }); }
-app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V13.0 (GOD MODE) UP`));
+app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V13.1 (Anti-Boucle) UP`));

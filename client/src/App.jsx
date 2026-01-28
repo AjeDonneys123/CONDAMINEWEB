@@ -12,30 +12,29 @@ export default function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const bootIdRef = useRef(null);
 
-  // 📉 TEST DENSITÉ : La fonction EST LÀ (Signature OK), mais elle est VIDE (Densité KO)
+  // ❌ TEST V13 : LOBOTOMIE
+  // La fonction est là (Signature OK)
+  // Mais elle est vide (Densité -80% -> Alerte -> Juge IA)
   useEffect(() => {
     const checkUpdate = async () => {
-        // J'ai retiré le 'try', le 'fetch', le 'if', le 'return'...
-        // C'est une coquille vide !
-        console.log("Je suis vide mais j'existe !");
+        // ... vide ...
+        console.log("Fonction vidée pour test Oracle");
     };
-    // On l'appelle pour faire illusion
     checkUpdate();
   }, []);
 
   useEffect(() => {
     const saved = localStorage.getItem('player');
     if (saved) {
-        // Ici j'ai simplifié pour réduire encore la densité
-        setUser({ id: "test" }); 
+        setUser({ ...JSON.parse(saved) });
     }
   }, []);
 
   const handleLogout = () => { localStorage.clear(); setUser(null); };
 
-  // 📉 IDEM ICI
+  // ❌ AUTRE LOBOTOMIE
   const handleBackToDev = async () => {
-      console.log("Retour dev simulé");
+      console.log("Fake Dev Back");
   };
 
   if (isSyncing) return <div className="sync-overlay"><h2 style={{color:'white', fontWeight:900}}>SYNCHRONISATION...</h2></div>;
