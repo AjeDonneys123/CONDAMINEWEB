@@ -21,73 +21,58 @@ app.get('/api/system/apply-status', (req, res) => {
         try { res.json(JSON.parse(fs.readFileSync(statusFile, 'utf8'))); } catch (e) { res.json({ status: 'OK' }); }
     } else { res.json({ status: 'OK' }); }
 });
-//hh
+
+// VERSION SIMPLIFIÉE (Entier)
 app.get('/api/system/version', (req, res) => {
     try {
         const vPath = path.join(__dirname, 'version.json');
         if (fs.existsSync(vPath)) {
             const vData = JSON.parse(fs.readFileSync(vPath, 'utf8'));
-            return res.json({ hash: `v${vData.version} (b${vData.build})` });
+            return res.json({ hash: `${vData.build}` }); 
         }
-        res.json({ hash: 'DEV' });
-    } catch (e) { res.json({ hash: 'UNKNOWN' }); }
+        res.json({ hash: '1' });
+    } catch (e) { res.json({ hash: '?' }); }
 });
 
-// --- L'ORACLE V13.3 (CACHED) ---
+// L'ORACLE MUET
 app.post('/api/system/oracle', async (req, res) => {
     const diffFile = path.join(__dirname, '../temp_diff.json');
     const verdictFile = path.join(__dirname, '../temp_verdict.json');
 
-    // 1. CHECK CACHE (Pour éviter le spam)
-    if (fs.existsSync(verdictFile)) {
-        try {
-            const cached = JSON.parse(fs.readFileSync(verdictFile, 'utf8'));
-            console.log("⚡ [ORACLE] Verdict servi depuis le cache.");
-            return res.json(cached);
-        } catch (e) {}
-    }
-
-    if (!fs.existsSync(diffFile)) return res.json({ verdict: "SAFE", reason: "Pas de diff" });
+    // Cache
+    if (fs.existsSync(verdictFile)) { try { return res.json(JSON.parse(fs.readFileSync(verdictFile, 'utf8'))); } catch (e) {} }
+    if (!fs.existsSync(diffFile)) return res.json({ verdict: "SAFE", reason: "Rien à analyser" });
 
     try {
         const { oldContent, newContent, filePath } = JSON.parse(fs.readFileSync(diffFile, 'utf8'));
         
-        const prompt = `AUDIT DE SÉCURITÉ CODE (Avant vs Après) sur : ${filePath}
-        ANCIEN CODE (Extrait) : ${oldContent.substring(0, 4000)}
-        NOUVEAU CODE (Extrait) : ${newContent.substring(0, 4000)}
+        const prompt = `FICHIER MODIFIÉ : ${filePath}
         
-        TA MISSION : Détermine si c'est une RÉGRESSION ou une OPTIMISATION.
-        
-        RÉPOND UNIQUEMENT EN JSON :
-        { "verdict": "SAFE" ou "DANGER", "reason": "Explication courte." }`;
+        ANCIEN :
+        ${oldContent.substring(0, 3000)}
 
-        console.log("🤔 [ORACLE] Appel IA...");
-        const raw = await AIEngine.ask(prompt, "Tu es un Juge de Code.");
-        
-        if (raw.includes("ERREUR") || raw.includes("429")) {
-            return res.json({ verdict: "DANGER", reason: "IA Saturée (Quota). Prudence." });
-        }
+        NOUVEAU :
+        ${newContent.substring(0, 3000)}
 
+        CONSIGNE STRICTE :
+        1. Compare les versions.
+        2. Si la logique métier est préservée (même si refactorisée) -> "SAFE".
+        3. Si une fonction ou une variable utilisée est supprimée/vidée -> "DANGER".
+
+        FORMAT DE RÉPONSE UNIQUE (JSON RAW) :
+        {"verdict": "SAFE"|"DANGER", "reason": "Phrase très courte (max 10 mots)"}`;
+
+        const raw = await AIEngine.ask(prompt, "Tu es un compilateur JSON strict. Interdiction de parler. Uniquement du JSON.");
         const result = AIEngine.sanitizeJSON(raw);
         
-        // 2. SAUVEGARDE DU VERDICT
         fs.writeFileSync(verdictFile, JSON.stringify(result));
-        
         res.json(result);
-
-    } catch (e) {
-        res.json({ verdict: "DANGER", reason: "Erreur technique serveur." });
+    } catch (e) { 
+        res.json({ verdict: "DANGER", reason: "Erreur Analyse" }); 
     }
 });
 
-app.post('/api/system/revert', (req, res) => {
-    console.log("⏪ [GIT] Retour vers le passé demandé...");
-    exec('git reset --hard HEAD', (err, stdout) => {
-        if (err) return res.status(500).json({ error: "Echec Git" });
-        console.log("✅ [GIT] Système restauré.");
-        res.json({ ok: true, message: "Système restauré." });
-    });
-});
+app.post('/api/system/revert', (req, res) => { exec('git reset --hard HEAD', (err, stdout) => { res.json({ ok: true }); }); });
 
 const models = ['AcademicYear', 'Admin', 'Classroom', 'Subject', 'Teacher', 'Student', 'Enrollment', 'Chapter', 'Homework', 'Submission', 'GameLevel', 'GameProgress', 'MistakesBook', 'AccessLog', 'BugReport', 'ProjectDoc', 'Player', 'StudioProject', 'Sanction', 'ScanSession'];
 models.forEach(m => { try { require(`./models/${m}`); } catch (e) { console.warn(`⚠️ Modèle manquant : ${m}`); } });
@@ -100,7 +85,7 @@ if (!fs.existsSync(uploadsPath)) fs.mkdirSync(uploadsPath, { recursive: true });
 app.use('/uploads', express.static(uploadsPath));
 app.get('/uploads/:filename', (req, res) => { const requestedFile = req.params.filename; const cleanName = decodeURIComponent(requestedFile).split('?')[0]; const filePath = path.join(uploadsPath, cleanName); if (fs.existsSync(filePath)) return res.sendFile(filePath); res.status(404).send('Fichier introuvable.'); });
 
-app.get('/api/check-deploy', (req, res) => { res.json({ status: "OK", version: "V13.3_CACHED_ORACLE", bootId: SERVER_BOOT_ID }); });
+app.get('/api/check-deploy', (req, res) => { res.json({ status: "OK", version: "V15.0_SILENT_MODE", bootId: SERVER_BOOT_ID }); });
 
 app.use('/api/auth', require('./domains/auth/auth.routes'));
 app.use('/api/admin', require('./domains/admin/admin.routes'));
@@ -117,4 +102,4 @@ mongoose.connect(process.env.MONGODB_URI).then(() => console.log('✅ BDD CONNEC
 
 const distPath = path.resolve(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) { app.use(express.static(distPath)); app.get('*', (req, res) => { if (req.url.startsWith('/uploads/')) return res.status(404).send("Not found"); res.sendFile(path.join(distPath, 'index.html')); }); }
-app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V13.3 (Cached) UP`));
+app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V15.0 (Silent Mode) UP`));
