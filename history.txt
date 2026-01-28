@@ -58,3 +58,5 @@
 2026-01-28 13:28 - LOGIC REPAIR : Application du correctif de visibilité. Le composant SystemStatus reste monté mais se cache via CSS, préservant le cycle de monitoring.
 
 2026-01-28 13:43 - PROTOCOL SYNC : Synchronisation du ConsoleReporter avec le SystemStatus. Le raccourci Shift+Cmd+L capture désormais l'état de l'Oracle et du moteur pour un diagnostic complet.
+
+2026-01-28 14:05 - FEATURE STUDIO : Ajout de l'importation de personnages depuis l'ordinateur. Le flux PC -> Serveur -> Drive -> Proxy est opérationnel. Mise à jour de l'UI pour permettre l'upload de costumes par acteur.

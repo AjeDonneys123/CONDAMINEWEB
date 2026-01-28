@@ -1,12 +1,16 @@
 {
   "status": "JUDGING",
   "message": "Analyse IA en cours...",
-  "details": "Densité : -6%",
+  "details": "Perdu : AssetThumb, newX, newY, runGame, handleDeleteScene",
   "context": {
     "missing": [
-      "Densité -6%"
+      "AssetThumb",
+      "newX",
+      "newY",
+      "runGame",
+      "handleDeleteScene"
     ],
-    "filePath": "client/src/features/prof/components/SystemStatus.jsx"
+    "filePath": "client/src/features/prof/studio/StudioDashboard.jsx"
   },
-  "timestamp": 1769625922396
+  "timestamp": 1769627325948
 }
