@@ -5,17 +5,17 @@ const { execSync } = require('child_process');
 const inputFile = 'update.txt';
 const statusFile = 'apply_status.json';
 const diffFile = 'temp_diff.json';
+const verdictFile = 'temp_verdict.json'; // NOUVEAU
 
 console.log("------------------------------------------------");
-console.log("🛡️ [SYSTEM] Moteur V13.2 (Auto-Reset)");
-console.log("    Stratégie : Nettoyage au démarrage + Oracle");
+console.log("🛡️ [SYSTEM] Moteur V13.3 (Cache Manager)");
+console.log("    Fix : Anti-Saturation API via Cache");
 console.log("------------------------------------------------");
 
-// 1. PURGE AU DÉMARRAGE (Le Fix Vital)
-// On remet le statut à OK dès le lancement pour éviter les boucles infinies
+// Purge au démarrage
 try {
     fs.writeFileSync(statusFile, JSON.stringify({ status: "OK", message: "Système prêt.", timestamp: Date.now() }, null, 2));
-    console.log("🧹 [INIT] Statut réinitialisé à OK.");
+    if(fs.existsSync(verdictFile)) fs.unlinkSync(verdictFile); // On vide le cache au boot
 } catch(e) {}
 
 function writeStatus(type, message, details = null, context = null) {
@@ -24,7 +24,12 @@ function writeStatus(type, message, details = null, context = null) {
 }
 
 function saveDiff(oldContent, newContent, filePath) {
-    try { fs.writeFileSync(diffFile, JSON.stringify({ oldContent, newContent, filePath })); } catch (e) {}
+    try { 
+        // 1. On écrit la diff
+        fs.writeFileSync(diffFile, JSON.stringify({ oldContent, newContent, filePath }));
+        // 2. IMPORTANT : On supprime le vieux verdict pour forcer une nouvelle analyse
+        if (fs.existsSync(verdictFile)) fs.unlinkSync(verdictFile);
+    } catch (e) {}
 }
 
 function snapshot() {
@@ -133,28 +138,19 @@ function applyUpdate() {
                     const oldContent = fs.readFileSync(fullPath, 'utf8');
                     
                     if (['.js', '.jsx', '.ts'].includes(ext)) {
-                        // 1. SIGNATURES
                         const oldSigs = extractSignatures(oldContent);
                         const newSigs = extractSignatures(newContent);
                         const missing = [...oldSigs].filter(s => !newSigs.has(s));
                         if (missing.length > 0) {
                             currentWarning = { title: `Régression Structure`, msg: `Perdu : ${missing.join(', ')}`, context: { missing, filePath } };
                         }
-
-                        // 2. DENSITE LOGIQUE
                         if (!currentWarning) {
                             const logicCheck = checkLogicDensity(oldContent, newContent);
                             if (logicCheck) {
-                                currentWarning = {
-                                    title: `Changement de Logique`,
-                                    msg: `Densité : -${logicCheck.drop}%`,
-                                    context: { missing: [`Densité -${logicCheck.drop}%`], filePath }
-                                };
+                                currentWarning = { title: `Changement de Logique`, msg: `Densité : -${logicCheck.drop}%`, context: { missing: [`Densité -${logicCheck.drop}%`], filePath } };
                             }
                         }
                     }
-
-                    // 3. DOM & CSS
                     if (ext === '.jsx' && !currentWarning) {
                         const missingIds = checkDomIntegrity(oldContent, newContent);
                         if (missingIds) {
@@ -168,12 +164,7 @@ function applyUpdate() {
                     
                     if (currentWarning) {
                         saveDiff(oldContent, newContent, filePath);
-                        // SI C'EST SERVER.JS QUI CHANGE, ON NE MET PAS "JUDGING" CAR IL VA RESTART
-                        // On met OK pour éviter le blocage, mais on garde la diff pour l'historique si besoin
-                        if (filePath.includes('server.js')) {
-                            console.log("⚠️ Modification Serveur détectée (Pas d'analyse Oracle pour éviter boucle).");
-                            currentWarning = null; // On annule l'alerte bloquante
-                        }
+                        if (filePath.includes('server.js')) currentWarning = null;
                     }
                 }
 
