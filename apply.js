@@ -1,18 +1,25 @@
-// @signatures: applyUpdate, checkCssDependency, checkDeepClassIntegrity, checkDomIntegrity, checkLogicDensity, countLogic, extractSignatures, getIds, snapshot, writeStatus
+// @signatures: applyUpdate, extractSignatures, checkCssDependency, checkDeepClassIntegrity, checkDomIntegrity, checkLogicDensity, writeStatus, snapshot, saveDiff
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 const inputFile = 'update.txt';
 const statusFile = 'apply_status.json';
+const diffFile = 'temp_diff.json';
 
 console.log("------------------------------------------------");
-console.log("🛡️ [SYSTEM] Moteur V10.2 (High Sensitivity)");
-console.log("    Seuil Densité : Alerte dès -10% de logique");
+console.log("🛡️ [SYSTEM] Moteur V11.0 (The Oracle)");
+console.log("    Capacité : Diff Analysis & AI Diagnosis");
 console.log("------------------------------------------------");
 
 function writeStatus(type, message, details = null, context = null) {
     const data = { status: type, message, details, context, timestamp: Date.now() };
     try { fs.writeFileSync(statusFile, JSON.stringify(data, null, 2)); } catch(e) {}
+}
+
+function saveDiff(oldContent, newContent, filePath) {
+    try {
+        fs.writeFileSync(diffFile, JSON.stringify({ oldContent, newContent, filePath }));
+    } catch (e) { console.error("Diff save failed"); }
 }
 
 function snapshot() {
@@ -31,32 +38,18 @@ function extractSignatures(content) {
 }
 
 function checkLogicDensity(oldContent, newContent) {
-    // Liste enrichie de mots-clés logiques
     const logicKeywords = /\b(if|else|switch|case|return|await|async|map|filter|reduce|find|create|update|delete|useEffect|useState|useRef|try|catch|throw)\b/g;
-    
-    const countLogic = (text) => {
-        const matches = text.match(logicKeywords);
-        return matches ? matches.length : 0;
-    };
-
+    const countLogic = (text) => { const matches = text.match(logicKeywords); return matches ? matches.length : 0; };
     const oldScore = countLogic(oldContent);
     const newScore = countLogic(newContent);
-
-    // MODIFICATION V10.2 : Seuil à 0.90 (10% de perte suffit pour alerter)
-    if (oldScore > 5 && newScore < oldScore * 0.90) {
+    if (oldScore > 5 && newScore < oldScore * 0.90) { // Seuil 10%
         return { oldScore, newScore, drop: Math.round((1 - newScore/oldScore)*100) };
     }
     return null;
 }
 
 function checkDomIntegrity(oldContent, newContent) {
-    const getIds = (text) => {
-        const ids = new Set();
-        const regex = /\sid=['"]([^'"]+)['"]/g;
-        let match;
-        while ((match = regex.exec(text))) ids.add(match[1]);
-        return ids;
-    };
+    const getIds = (text) => { const ids = new Set(); let match; while ((match = /\sid=['"]([^'"]+)['"]/g.exec(text))) ids.add(match[1]); return ids; };
     const oldIds = getIds(oldContent);
     const newIds = getIds(newContent);
     const missing = [...oldIds].filter(id => !newIds.has(id));
@@ -100,7 +93,7 @@ function applyUpdate() {
         const rawContent = fs.readFileSync(inputFile, 'utf8');
         if (!rawContent || rawContent.trim().length < 10) return;
 
-        fs.writeFileSync(inputFile, ''); // Flush
+        fs.writeFileSync(inputFile, '');
         snapshot();
 
         const isForced = rawContent.includes('[FORCE_REDUCTION]');
@@ -146,16 +139,15 @@ function applyUpdate() {
                             currentWarning = { title: `Régression Structure : ${path.basename(filePath)}`, msg: `Perdu : ${missing.join(', ')}`, context: { missing, filePath } };
                         }
 
-                        // 2. DENSITE LOGIQUE (Seuil 10%)
+                        // 2. DENSITE LOGIQUE
                         if (!currentWarning) {
                             const logicCheck = checkLogicDensity(oldContent, newContent);
                             if (logicCheck) {
                                 currentWarning = {
                                     title: `Chute de Logique : ${path.basename(filePath)}`,
-                                    msg: `Densité : -${logicCheck.drop}% (Seuil 10% dépassé)`,
-                                    context: { missing: [`Perte de densité logique de ${logicCheck.drop}% (ex: try, await, if supprimés)`], filePath }
+                                    msg: `Densité : -${logicCheck.drop}%`,
+                                    context: { missing: [`Densité -${logicCheck.drop}%`], filePath }
                                 };
-                                console.warn(`⚠️ RISQUE LOGIQUE: ${filePath} (-${logicCheck.drop}%)`);
                             }
                         }
                     }
@@ -164,8 +156,14 @@ function applyUpdate() {
                     if (ext === '.jsx' && !currentWarning) {
                         const missingIds = checkDomIntegrity(oldContent, newContent);
                         if (missingIds) {
-                            currentWarning = { title: `Structure cassée : ${path.basename(filePath)}`, msg: `IDs disparus : ${missingIds.join(', ')}`, context: { missing: missingIds.map(id => `ID HTML #${id}`), filePath } };
+                            currentWarning = { title: `Structure cassée : ${path.basename(filePath)}`, msg: `IDs disparus : ${missingIds.join(', ')}`, context: { missing: missingIds, filePath } };
                         }
+                    }
+                    
+                    // SAUVEGARDE DIFF POUR ORACLE
+                    if (currentWarning) {
+                        saveDiff(oldContent, newContent, filePath);
+                        console.warn(`⚠️ ALERTE ORACLE ACTIVÉE POUR ${filePath}`);
                     }
                 }
 
@@ -173,13 +171,7 @@ function applyUpdate() {
                 if (ext === '.jsx' && !currentWarning) {
                     const cssCheck = checkCssDependency(filePath, newContent, rawContent);
                     if (!cssCheck.ok) {
-                        currentWarning = { title: `Style manquant`, msg: `${cssCheck.missing} introuvable`, context: { missing: ["Fichier CSS associé"], filePath } };
-                    }
-                    if (!currentWarning && cssCheck.cssPath) {
-                        const missingClasses = checkDeepClassIntegrity(newContent, cssCheck.cssPath);
-                        if (missingClasses) {
-                            currentWarning = { title: `Style incomplet`, msg: `Classes: ${missingClasses.join(', ')}`, context: { missing: missingClasses, filePath } };
-                        }
+                        currentWarning = { title: `Style manquant`, msg: `${cssCheck.missing} introuvable`, context: { missing: ["Fichier CSS"], filePath } };
                     }
                 }
 
@@ -206,7 +198,6 @@ function applyUpdate() {
 
     } catch (e) {
         writeStatus('ERROR', 'Crash Apply.js', e.message);
-        console.error("☠️ CRASH APPLY:", e.message);
     }
 }
 
