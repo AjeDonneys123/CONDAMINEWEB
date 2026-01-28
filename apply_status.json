@@ -1,12 +1,12 @@
 {
   "status": "JUDGING",
   "message": "Analyse IA en cours...",
-  "details": "Analyse IA forcée (Fichier Critique)",
+  "details": "Perdu : handleRevertOnly",
   "context": {
     "missing": [
-      "Modification Critique"
+      "handleRevertOnly"
     ],
-    "filePath": "client/src/App.jsx"
+    "filePath": "client/src/features/prof/components/SystemStatus.jsx"
   },
-  "timestamp": 1769614958089
+  "timestamp": 1769615110759
 }

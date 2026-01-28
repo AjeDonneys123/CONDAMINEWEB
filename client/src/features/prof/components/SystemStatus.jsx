@@ -1,4 +1,4 @@
-// @signatures: SystemStatus, askOracle, handleRevertAndReport, handleRevertOnly
+// @signatures: SystemStatus, askOracle, handleRevertAndReport
 import React, { useState, useEffect, useRef } from 'react';
 import './SystemStatus.css';
 
@@ -20,19 +20,28 @@ export default function SystemStatus() {
                 const res = await fetch('/api/system/apply-status');
                 const data = await res.json();
                 
+                // CAS 1 : TOUT EST RENTRÉ DANS L'ORDRE
                 if (data.status === 'OK') {
-                    if (visible) setTimeout(() => setVisible(false), 3000);
+                    // On cache immédiatement le bandeau (sauf si on est en train de lire un verdict DANGER)
+                    if (visible && verdict?.verdict !== 'DANGER') {
+                        setVisible(false);
+                        setVerdict(null);
+                    }
                     return;
                 }
 
+                // CAS 2 : ALERTE ACTIVE
                 setStatusData(data);
                 setVisible(true);
 
+                // Nouvelle alerte détectée ?
                 if (data.timestamp !== lastTimestampRef.current) {
                     lastTimestampRef.current = data.timestamp;
                     setVerdict(null); 
                     askOracle();
-                } else if (!verdict && !fetchingRef.current) {
+                } 
+                // Alerte en cours mais pas de verdict ?
+                else if (!verdict && !fetchingRef.current) {
                     askOracle();
                 }
 
@@ -49,43 +58,18 @@ export default function SystemStatus() {
             if (res.ok) {
                 const d = await res.json();
                 setVerdict(d);
-                if (d.verdict === "SAFE") setTimeout(() => setVisible(false), 3000);
+                // Si c'est SAFE, on laisse le serveur passer à OK pour fermer la fenêtre (pas de timeout ici)
             }
         } catch (e) {}
         fetchingRef.current = false;
     };
 
-    // --- MODE "ACTION IMMÉDIATE" (Sans Confirmation) ---
     const handleRevertAndReport = async () => {
         setReverting(true);
-
-        const report = `🚨 RAPPORT AUTOMATIQUE (REVERT TRIGGERED)
---------------------------------------------------
-📅 Date: ${new Date().toLocaleString()}
-🔍 Version: ${version}
-
-1️⃣ ALERTES SYSTÈME :
-${statusData.message}
-${statusData.details || ''}
-
-2️⃣ JUGEMENT ORACLE :
-⚖️ Verdict : ${verdict?.verdict || 'Inconnu'}
-🗣️ Raison  : "${verdict?.reason || 'Non spécifié'}"
-
---------------------------------------------------
-GEMINI : Analyse ce rapport. Le code précédent était défectueux. Corrige-le.`;
-
+        // Copie silencieuse
+        const report = `🚨 RAPPORT:\n${statusData.message}\nIA: ${verdict?.reason}`;
         try { await navigator.clipboard.writeText(report); } catch (err) {}
 
-        try {
-            await fetch('/api/system/revert', { method: 'POST' });
-            // Feedback visuel rapide
-            setTimeout(() => window.location.reload(), 500);
-        } catch(e) { setReverting(false); }
-    };
-
-    const handleRevertOnly = async () => {
-        setReverting(true);
         try {
             await fetch('/api/system/revert', { method: 'POST' });
             setTimeout(() => window.location.reload(), 500);
@@ -95,12 +79,17 @@ GEMINI : Analyse ce rapport. Le code précédent était défectueux. Corrige-le.
     if (!visible) return <div className="fixed top-2 right-2 z-[9999] opacity-30 hover:opacity-100 transition-opacity bg-black text-white text-[8px] px-2 py-1 rounded font-mono cursor-default">v.{version}</div>;
 
     let bgClass = "bg-orange-500 border-orange-700"; 
-    let messageIA = "🔮 L'Oracle analyse la régression...";
+    let messageIA = "🔮 Analyse IA en cours...";
     
     if (verdict) {
-        if (verdict.verdict === "DANGER") bgClass = "bg-red-600 border-red-800";
-        if (verdict.verdict === "SAFE") bgClass = "bg-green-600 border-green-800";
-        messageIA = `🤖 Juge : "${verdict.reason}"`;
+        if (verdict.verdict === "DANGER") {
+            bgClass = "bg-red-600 border-red-800";
+            messageIA = `⛔ ALERTE : "${verdict.reason}"`;
+        }
+        if (verdict.verdict === "SAFE") {
+            bgClass = "bg-green-600 border-green-800";
+            messageIA = `✅ VALIDÉ : "${verdict.reason}"`;
+        }
     }
 
     return (
@@ -109,23 +98,20 @@ GEMINI : Analyse ce rapport. Le code précédent était défectueux. Corrige-le.
                 <div className="flex flex-col">
                     <div className="flex items-center gap-3">
                         <span className="text-xl uppercase tracking-widest flex items-center gap-2">
-                            {!verdict ? '⏳ ANALYSE EN COURS...' : (verdict.verdict === 'SAFE' ? '✅ VALIDÉ' : '⛔ ALERTE CRITIQUE')}
+                            {!verdict ? '⏳ ANALYSE...' : verdict.verdict}
                         </span>
                         <span className="text-[10px] bg-black/30 px-2 py-1 rounded font-mono">v.{version}</span>
                     </div>
                     <span className="text-md font-bold mt-1">{statusData.message}</span>
-                    <span className="text-xs font-mono opacity-80">{statusData.details}</span>
                 </div>
                 
+                {/* LE BOUTON REVERT N'APPARAIT QUE SI C'EST DANGEREUX OU EN COURS */}
                 {verdict?.verdict !== 'SAFE' && (
                     <div className="flex gap-2">
                         <button onClick={handleRevertAndReport} disabled={reverting} className="bg-black/40 hover:bg-black/60 px-4 py-2 rounded-lg font-bold text-xs uppercase border border-white/20 transition-colors shadow-lg animate-pulse flex items-center gap-2">
-                            {reverting ? 'RESTAURATION...' : '📋 COPIER & REVERT'}
+                            {reverting ? 'RESTAURATION...' : '🔙 REVERT'}
                         </button>
-                        <button onClick={handleRevertOnly} disabled={reverting} className="bg-white/20 hover:bg-white/40 rounded-lg px-3 py-2 flex items-center justify-center font-bold text-xs">
-                            REVERT SIMPLE
-                        </button>
-                        <button onClick={() => setVisible(false)} className="bg-white/10 hover:bg-white/30 rounded-full w-8 h-8 flex items-center justify-center font-bold">✕</button>
+                        <button onClick={() => setVisible(false)} className="bg-white/20 hover:bg-white/40 rounded-full w-8 h-8 flex items-center justify-center font-bold">✕</button>
                     </div>
                 )}
             </div>

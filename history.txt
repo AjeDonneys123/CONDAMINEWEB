@@ -41,3 +41,9 @@
 - Suppression des confirmations (popups) pour les actions REVERT.
 - Ajout d'un bouton "REVERT SIMPLE" (sans copie presse-papier) pour les corrections rapides.
 - Système prêt pour production rapide.
+
+[UPDATE V14.3 - FINAL STABILIZATION]
+- Mode "Strict Safety" pour le HUD.
+- Les alertes VERTES (Safe) disparaissent instantanément (pilotées par le serveur).
+- Les alertes ROUGES (Danger) persistent jusqu'à action utilisateur.
+- Le système est maintenant calé pour la production.
