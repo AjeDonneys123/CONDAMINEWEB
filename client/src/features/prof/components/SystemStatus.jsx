@@ -6,13 +6,11 @@ export default function SystemStatus() {
     const [statusData, setStatusData] = useState({ status: 'OK', timestamp: 0 });
     const [visible, setVisible] = useState(false);
     const [version, setVersion] = useState('1');
-    
-    // ÉTATS VISUELS DISTINCTS
-    const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [verdict, setVerdict] = useState(null); 
     const [reverting, setReverting] = useState(false);
     
     const lastTimestampRef = useRef(0);
+    const fetchingRef = useRef(false);
 
     useEffect(() => { fetch('/api/system/version').then(r => r.json()).then(d => setVersion(d.hash)); }, []);
 
@@ -22,60 +20,62 @@ export default function SystemStatus() {
                 const res = await fetch('/api/system/apply-status');
                 const data = await res.json();
                 
-                // 1. SI TOUT EST OK CÔTÉ SERVEUR
                 if (data.status === 'OK') {
-                    // On ne ferme que si on n'est pas en train d'afficher un DANGER
-                    if (visible && verdict?.verdict !== 'DANGER' && !isAnalyzing) {
-                        setVisible(false);
-                        setVerdict(null);
-                    }
+                    if (visible && verdict?.verdict !== 'DANGER') { setVisible(false); setVerdict(null); }
                     return;
                 }
 
-                // 2. SI NOUVELLE ALERTE
+                setStatusData(data);
+                setVisible(true);
+
                 if (data.timestamp !== lastTimestampRef.current) {
-                    console.log("⚡ Nouvelle alerte détectée -> Lancement enquête");
+                    console.log("📦 Nouvelle alerte Batch");
                     lastTimestampRef.current = data.timestamp;
-                    setStatusData(data);
-                    
-                    // Reset immédiat pour affichage propre
-                    setVisible(true);
-                    setVerdict(null);
-                    setIsAnalyzing(true);
-                    
-                    // Appel Oracle
+                    setVerdict(null); 
+                    if (data.status === 'JUDGING') askOracle();
+                } 
+                else if (data.status === 'JUDGING' && !verdict && !fetchingRef.current) {
                     askOracle();
                 }
-
             } catch (e) {}
         }, 1000);
         return () => clearInterval(interval);
-    }, [visible, verdict, isAnalyzing]);
+    }, [visible, verdict]);
 
     const askOracle = async () => {
+        if (fetchingRef.current) return;
+        fetchingRef.current = true;
         try {
             const res = await fetch('/api/system/oracle', { method: 'POST' });
             if (res.ok) {
                 const d = await res.json();
-                
-                // MÀJ DE L'AFFICHAGE
                 setVerdict(d);
-                setIsAnalyzing(false);
-
-                // Si SAFE, on ferme après lecture (3s)
-                if (d.verdict === "SAFE") {
-                    setTimeout(() => {
-                        setVisible(false);
-                    }, 3000);
-                }
+                if (d.verdict === "SAFE") setTimeout(() => setVisible(false), 2500);
             }
-        } catch (e) {
-            setIsAnalyzing(false); // On arrête de charger même si erreur
-        }
+        } catch (e) {}
+        fetchingRef.current = false;
     };
 
     const handleRevertAndReport = async () => {
         setReverting(true);
+        
+        // ✅ CORRECTION V16.2 : INCLUSION DES DÉTAILS TECHNIQUES
+        const report = `🚨 RAPPORT D'INCIDENT (V16)
+--------------------------------------------------
+📅 Date: ${new Date().toLocaleString()}
+🔍 Version: ${version}
+
+1️⃣ VERDICT ORACLE (IA) :
+${verdict?.reason || 'Non spécifié'}
+
+2️⃣ DÉTAILS TECHNIQUES (FICHIERS TOUCHÉS) :
+${statusData.details || '(Aucun détail technique disponible)'}
+
+--------------------------------------------------
+GEMINI : Analyse ce rapport. Corrige TOUS les fichiers listés dans les détails techniques.`;
+
+        try { await navigator.clipboard.writeText(report); } catch (err) {}
+
         try {
             await fetch('/api/system/revert', { method: 'POST' });
             setTimeout(() => window.location.reload(), 1000);
@@ -84,52 +84,50 @@ export default function SystemStatus() {
 
     if (!visible) return <div className="fixed top-2 right-2 z-[9999] opacity-50 hover:opacity-100 transition-opacity bg-blue-600 text-white text-[10px] px-2 py-1 rounded font-black cursor-default shadow-sm">v.{version}</div>;
 
-    // --- LOGIQUE D'AFFICHAGE PRIORITAIRE ---
-    let bgClass = "bg-orange-500 border-orange-700";
-    let title = "ANALYSE EN COURS...";
-    let message = "L'Oracle vérifie l'intégrité du code...";
+    let bgClass = "bg-orange-500 border-orange-700"; 
+    let messageIA = "🔮 Analyse IA en cours...";
     
-    // Si on a un verdict, c'est lui qui commande, peu importe le serveur
-    if (verdict) {
+    if (statusData.status === 'ERROR') {
+        bgClass = "bg-red-600 border-red-800";
+        messageIA = "⛔ BLOCAGE TECHNIQUE";
+    }
+    else if (verdict) {
         if (verdict.verdict === "DANGER") {
             bgClass = "bg-red-600 border-red-800";
-            title = "⛔ ALERTE CRITIQUE";
-            message = `IA : "${verdict.reason}"`;
-        } else if (verdict.verdict === "SAFE") {
-            bgClass = "bg-green-600 border-green-800";
-            title = "✅ VALIDÉ";
-            message = `IA : "${verdict.reason}"`;
+            messageIA = `🤖 IA : "${verdict.reason}"`;
         }
-    } else if (isAnalyzing) {
-        // Mode chargement
-        bgClass = "bg-orange-500 border-orange-700 animate-pulse";
+        if (verdict.verdict === "SAFE") {
+            bgClass = "bg-green-600 border-green-800";
+            messageIA = `✅ VALIDÉ : "${verdict.reason}"`;
+        }
     }
 
     return (
         <div className={`fixed top-0 left-0 right-0 z-[100000] p-4 text-white font-black shadow-2xl flex flex-col gap-2 border-b-4 transition-all duration-300 transform translate-y-0 ${bgClass}`}>
             <div className="flex justify-between items-start">
-                <div className="flex flex-col">
+                <div className="flex flex-col flex-1 mr-4">
                     <div className="flex items-center gap-3">
                         <span className="text-xl uppercase tracking-widest flex items-center gap-2">
-                            {title}
+                            {statusData.status === 'ERROR' ? '⛔ ECHEC' : (!verdict ? '⏳ AUDIT...' : verdict.verdict)}
                         </span>
                         <span className="text-[10px] bg-black/30 px-2 py-1 rounded font-mono">v.{version}</span>
                     </div>
-                    {/* On affiche le message de l'IA s'il existe, sinon le message technique */}
-                    <span className="text-md font-bold mt-1">
-                        {verdict ? message : statusData.message}
-                    </span>
-                    {/* Détails techniques seulement si pas de verdict IA */}
-                    {!verdict && statusData.details && <span className="text-xs font-mono opacity-80">{statusData.details}</span>}
+                    <span className="text-md font-bold mt-1">{messageIA}</span>
+                    
+                    {/* ✅ AFFICHAGE DES DÉTAILS (LISTE DES FICHIERS) */}
+                    {statusData.details && (
+                        <div className="mt-2 p-2 bg-black/20 rounded text-[10px] font-mono whitespace-pre-wrap max-h-[100px] overflow-y-auto border border-white/10">
+                            {statusData.details}
+                        </div>
+                    )}
                 </div>
                 
-                {/* BOUTON REVERT : Présent si Danger ou si Analyse en cours (au cas où ça bloque) */}
-                {(verdict?.verdict === 'DANGER' || isAnalyzing) && (
-                    <div className="flex gap-2">
-                        <button onClick={handleRevertAndReport} disabled={reverting} className="bg-black/40 hover:bg-black/60 px-4 py-2 rounded-lg font-bold text-xs uppercase border border-white/20 transition-colors shadow-lg flex items-center gap-2">
-                            {reverting ? 'RESTAURATION...' : '🔙 REVERT'}
+                {(verdict?.verdict === 'DANGER' || statusData.status === 'ERROR') && (
+                    <div className="flex flex-col gap-2 shrink-0">
+                        <button onClick={handleRevertAndReport} disabled={reverting} className="bg-black/40 hover:bg-black/60 px-4 py-3 rounded-lg font-bold text-xs uppercase border border-white/20 transition-colors shadow-lg animate-pulse flex items-center gap-2 justify-center">
+                            {reverting ? '...' : '📋 COPIER & REVERT'}
                         </button>
-                        <button onClick={() => setVisible(false)} className="bg-white/20 hover:bg-white/40 rounded-full w-8 h-8 flex items-center justify-center font-bold">✕</button>
+                        <button onClick={() => setVisible(false)} className="bg-white/20 hover:bg-white/40 rounded-lg py-1 text-[10px] font-bold">FERMER</button>
                     </div>
                 )}
             </div>
