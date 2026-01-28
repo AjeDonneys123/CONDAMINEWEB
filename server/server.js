@@ -37,30 +37,45 @@ app.get('/api/system/version', (req, res) => {
 app.post('/api/system/oracle', async (req, res) => {
     const diffFile = path.join(__dirname, '../temp_diff.json');
     const verdictFile = path.join(__dirname, '../temp_verdict.json');
-    if (fs.existsSync(verdictFile)) { try { return res.json(JSON.parse(fs.readFileSync(verdictFile, 'utf8'))); } catch (e) {} }
+    
+    // Si on a déjà un verdict SAIN en cache pour ce fichier, on le renvoie
+    if (fs.existsSync(verdictFile)) {
+        try {
+            const cached = JSON.parse(fs.readFileSync(verdictFile, 'utf8'));
+            if (cached.verdict === "SAFE") return res.json(cached);
+        } catch (e) {}
+    }
+
     if (!fs.existsSync(diffFile)) return res.json({ verdict: "SAFE", reason: "Rien à analyser" });
 
     try {
         const { oldContent, newContent, filePath } = JSON.parse(fs.readFileSync(diffFile, 'utf8'));
-        const prompt = `FICHIER MODIFIÉ : ${filePath}\n\nANCIEN :\n${oldContent.substring(0, 3000)}\n\nNOUVEAU :\n${newContent.substring(0, 3000)}\n\nCONSIGNE STRICTE :\n1. Compare les versions.\n2. Si la logique métier est préservée -> "SAFE".\n3. Si une fonction ou variable est supprimée -> "DANGER".\n4. SI LA STRUCTURE HTML (wrappers, containers) EST MODIFIÉE SANS RAISON -> "DANGER".\n\nFORMAT JSON : {"verdict": "SAFE"|"DANGER", "reason": "10 mots max"}`;
-        const raw = await AIEngine.ask(prompt, "Tu es un compilateur JSON strict.");
+        const prompt = `FICHIER : ${filePath}\n\nANCIEN :\n${oldContent.substring(0, 2000)}\n\nNOUVEAU :\n${newContent.substring(0, 2000)}\n\nCONSIGNE :\n1. Si la logique métier est préservée -> "SAFE".\n2. Si une fonction/variable clé disparaît -> "DANGER".\n\nFORMAT JSON : {"verdict": "SAFE"|"DANGER", "reason": "court"}`;
+        
+        // Timeout 10s pour Gemini
+        const raw = await AIEngine.ask(prompt, "Tu es un compilateur JSON.");
         const result = AIEngine.sanitizeJSON(raw);
-        fs.writeFileSync(verdictFile, JSON.stringify(result));
-        res.json(result);
-    } catch (e) { res.json({ verdict: "DANGER", reason: "Erreur Analyse" }); }
+        
+        // On ne cache QUE les succès (verdict propre)
+        if (result && result.verdict) {
+            fs.writeFileSync(verdictFile, JSON.stringify(result));
+            res.json(result);
+        } else {
+            throw new Error("IA malformée");
+        }
+    } catch (e) { 
+        // En cas d'erreur IA, on renvoie une erreur 500 pour forcer le client à Retry
+        console.error("❌ Oracle Error:", e.message);
+        res.status(500).json({ error: "IA indisponible, réessai..." }); 
+    }
 });
 
 app.post('/api/system/revert', (req, res) => { exec('git reset --hard HEAD', (err, stdout) => { res.json({ ok: true }); }); });
 
-// CHARGEMENT DES MODÈLES (DANS L'ORDRE)
 const models = ['AcademicYear', 'Admin', 'Classroom', 'Subject', 'Teacher', 'Student', 'Enrollment', 'Chapter', 'Homework', 'Submission', 'GameLevel', 'GameProgress', 'MistakesBook', 'AccessLog', 'BugReport', 'ProjectDoc', 'Player', 'StudioProject', 'Sanction', 'ScanSession'];
 models.forEach(m => { 
     const modelPath = path.join(__dirname, 'models', `${m}.js`);
-    if (fs.existsSync(modelPath)) {
-        require(modelPath);
-    } else {
-        console.warn(`⚠️ Fichier modèle absent : server/models/${m}.js`);
-    }
+    if (fs.existsSync(modelPath)) require(modelPath);
 });
 
 const publicPath = path.resolve(process.cwd(), 'public');
@@ -71,7 +86,7 @@ if (!fs.existsSync(uploadsPath)) fs.mkdirSync(uploadsPath, { recursive: true });
 app.use('/uploads', express.static(uploadsPath));
 app.get('/uploads/:filename', (req, res) => { const requestedFile = req.params.filename; const cleanName = decodeURIComponent(requestedFile).split('?')[0]; const filePath = path.join(uploadsPath, cleanName); if (fs.existsSync(filePath)) return res.sendFile(filePath); res.status(404).send('Fichier introuvable.'); });
 
-app.get('/api/check-deploy', (req, res) => { res.json({ status: "OK", version: "V17.0_SÉCURITÉ", bootId: SERVER_BOOT_ID }); });
+app.get('/api/check-deploy', (req, res) => { res.json({ status: "OK", version: "V17.2_RETRY_STORM", bootId: SERVER_BOOT_ID }); });
 
 app.use('/api/auth', require('./domains/auth/auth.routes'));
 app.use('/api/admin', require('./domains/admin/admin.routes'));
@@ -88,4 +103,4 @@ mongoose.connect(process.env.MONGODB_URI).then(() => console.log('✅ BDD CONNEC
 
 const distPath = path.resolve(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) { app.use(express.static(distPath)); app.get('*', (req, res) => { if (req.url.startsWith('/uploads/')) return res.status(404).send("Not found"); res.sendFile(path.join(distPath, 'index.html')); }); }
-app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V17.0 (Sécurité Hybride) UP`));
+app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V17.2 UP`));
