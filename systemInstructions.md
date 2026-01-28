@@ -11,6 +11,12 @@ LOGIQUE DE MÉMOIRE (HISTORY.TXT) :
 - MISE À JOUR : Dès qu'une tâche majeure est finie ou qu'un bug complexe est résolu, mets à jour `history.txt` IMMÉDIATEMENT dans le bloc de code suivant. N'attends pas la fin de session.
 - Ne jamais effacer l'historique, ajouter les nouvelles entrées à la suite.
 
+🚨 PROTOCOLE DE RÉPARATION (RAPPORT D'INCIDENT) :
+- Si l'utilisateur colle un "RAPPORT AUTOMATIQUE (REVERT TRIGGERED)", cela signifie que :
+  1. Le code précédent a causé une régression.
+  2. L'utilisateur a DÉJÀ fait un Revert (il est revenu à la version stable).
+  3. MA MISSION : Analyser la raison du rejet (Verdict Oracle) et renvoyer le fichier CORRIGÉ qui n'aura plus le défaut détecté.
+
 !!! EN MAJUSCULE CELLES QUI MARCHENT PAS OU LES BUGS
 🛡️ 1. ESPACE ADMIN : Importation massive, gestion users/classes. OK.
 🎓 2. ESPACE PROF : Plan de classe, Comportement (Croix/Bonus). OK.
