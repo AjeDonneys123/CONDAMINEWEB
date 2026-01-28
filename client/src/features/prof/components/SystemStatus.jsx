@@ -1,4 +1,4 @@
-// @signatures: SystemStatus, askOracle, handleRevert
+// @signatures: SystemStatus, askOracle, handleRevertAndReport
 import React, { useState, useEffect, useRef } from 'react';
 import './SystemStatus.css';
 
@@ -10,7 +10,6 @@ export default function SystemStatus() {
     const [reverting, setReverting] = useState(false);
     
     // MÉMOIRE ANTI-BOUCLE
-    // On stocke le timestamp de la dernière alerte traitée
     const lastTimestampRef = useRef(0);
     const fetchingRef = useRef(false);
 
@@ -22,26 +21,19 @@ export default function SystemStatus() {
                 const res = await fetch('/api/system/apply-status');
                 const data = await res.json();
                 
-                // Si tout va bien, on cache
                 if (data.status === 'OK') {
                     if (visible) setTimeout(() => setVisible(false), 2000);
                     return;
                 }
 
-                // SI ALERTE
                 setStatusData(data);
                 setVisible(true);
 
-                // LOGIQUE INTELLIGENTE :
-                // On appelle l'Oracle SEULEMENT si c'est une NOUVELLE alerte (Timestamp différent)
-                // OU si on n'a pas encore de verdict (cas redémarrage page) ET qu'on ne cherche pas déjà
                 if (data.timestamp !== lastTimestampRef.current) {
-                    console.log("⚡ Nouvelle alerte détectée !");
                     lastTimestampRef.current = data.timestamp;
-                    setVerdict(null); // Reset visuel
+                    setVerdict(null); 
                     askOracle();
                 } else if (!verdict && !fetchingRef.current) {
-                    // Cas où on a rechargé la page mais l'alerte est toujours active côté serveur
                     askOracle();
                 }
 
@@ -53,24 +45,55 @@ export default function SystemStatus() {
     const askOracle = async () => {
         if (fetchingRef.current) return;
         fetchingRef.current = true;
-        
         try {
             const res = await fetch('/api/system/oracle', { method: 'POST' });
             if (res.ok) {
                 const d = await res.json();
-                console.log("✅ Verdict reçu :", d.verdict);
                 setVerdict(d);
             }
-        } catch (e) { 
-            console.warn("Oracle injoignable, nouvel essai au prochain tick...");
-        }
+        } catch (e) {}
         fetchingRef.current = false;
     };
 
-    const handleRevert = async () => {
-        if(!confirm("⚠️ ANNULER TOUT ? (Retour au dernier Snapshot)")) return;
+    // --- LE "ONE CLICK FIX" ---
+    const handleRevertAndReport = async () => {
+        if(!confirm("⚠️ COPIER LE RAPPORT ET RESTAURER ?")) return;
         setReverting(true);
-        try { await fetch('/api/system/revert', { method: 'POST' }); setTimeout(() => window.location.reload(), 1000); } catch(e) { setReverting(false); }
+
+        // 1. GÉNÉRATION DU RAPPORT
+        const report = `🚨 RAPPORT AUTOMATIQUE (REVERT TRIGGERED)
+--------------------------------------------------
+📅 Date: ${new Date().toLocaleString()}
+🔍 Version: ${version}
+
+1️⃣ ALERTES SYSTÈME :
+${statusData.message}
+${statusData.details || ''}
+
+2️⃣ JUGEMENT ORACLE :
+⚖️ Verdict : ${verdict?.verdict || 'Inconnu'}
+🗣️ Raison  : "${verdict?.reason || 'Non spécifié'}"
+
+--------------------------------------------------
+GEMINI : Analyse ce rapport. Le code précédent était défectueux. Corrige-le.`;
+
+        // 2. COPIE DANS LE PRESSE-PAPIER
+        try {
+            await navigator.clipboard.writeText(report);
+            console.log("📋 Rapport copié !");
+        } catch (err) {
+            console.error("Échec copie", err);
+        }
+
+        // 3. REVERT (Retour vers le futur)
+        try {
+            await fetch('/api/system/revert', { method: 'POST' });
+            // On laisse un peu de temps pour voir le feedback visuel du bouton
+            setTimeout(() => window.location.reload(), 1000);
+        } catch(e) { 
+            alert("Erreur Revert"); 
+            setReverting(false); 
+        }
     };
 
     if (!visible) return <div className="fixed top-2 right-2 z-[9999] opacity-30 hover:opacity-100 transition-opacity bg-black text-white text-[8px] px-2 py-1 rounded font-mono cursor-default">v.{version}</div>;
@@ -100,7 +123,9 @@ export default function SystemStatus() {
                 
                 {verdict?.verdict !== 'SAFE' && (
                     <div className="flex gap-2">
-                        <button onClick={handleRevert} disabled={reverting} className="bg-black/40 hover:bg-black/60 px-4 py-2 rounded-lg font-bold text-xs uppercase border border-white/20 transition-colors shadow-lg animate-pulse">{reverting ? '...' : '🔙 REVERT'}</button>
+                        <button onClick={handleRevertAndReport} disabled={reverting} className="bg-black/40 hover:bg-black/60 px-4 py-2 rounded-lg font-bold text-xs uppercase border border-white/20 transition-colors shadow-lg animate-pulse flex items-center gap-2">
+                            {reverting ? 'RESTAURATION...' : '📋 COPIER & REVERT'}
+                        </button>
                         <button onClick={() => setVisible(false)} className="bg-white/20 hover:bg-white/40 rounded-full w-8 h-8 flex items-center justify-center font-bold">✕</button>
                     </div>
                 )}

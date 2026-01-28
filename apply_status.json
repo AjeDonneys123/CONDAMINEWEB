@@ -1,13 +1,12 @@
 {
   "status": "JUDGING",
   "message": "Analyse IA en cours...",
-  "details": "Perdu : handleNewError, copyToClipboard",
+  "details": "Perdu : handleRevert",
   "context": {
     "missing": [
-      "handleNewError",
-      "copyToClipboard"
+      "handleRevert"
     ],
-    "filePath": "client/src/features/prof/components/ConsoleReporter.jsx"
+    "filePath": "client/src/features/prof/components/SystemStatus.jsx"
   },
-  "timestamp": 1769613159650
+  "timestamp": 1769613353716
 }
