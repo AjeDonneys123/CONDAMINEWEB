@@ -1,4 +1,4 @@
-// @signatures: applyUpdate, checkCssDependency, checkDeepClassIntegrity, extractSignatures, snapshot, writeStatus
+// @signatures: applyUpdate, extractSignatures, checkCssDependency, checkDeepClassIntegrity, writeStatus, snapshot
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
@@ -6,34 +6,24 @@ const inputFile = 'update.txt';
 const statusFile = 'apply_status.json';
 
 console.log("------------------------------------------------");
-console.log("🛡️ [SYSTEM] Moteur V9.0 (Time Lord)");
-console.log("    Features : Auto-Commit + AI Risk Context + Revert");
+console.log("🛡️ [SYSTEM] Moteur V9.1 (Permissif + Snapshot)");
+console.log("    Stratégie : Appliquer -> Alerter -> Revert possible");
 console.log("------------------------------------------------");
 
 function writeStatus(type, message, details = null, context = null) {
-    const data = { 
-        status: type, 
-        message: message, 
-        details: details, 
-        context: context, // Pour l'IA (ex: { missing: ['func1'], filePath: '...' })
-        timestamp: Date.now() 
-    };
+    const data = { status: type, message, details, context, timestamp: Date.now() };
     try { fs.writeFileSync(statusFile, JSON.stringify(data, null, 2)); } catch(e) {}
 }
 
 function snapshot() {
     try {
-        // Sauvegarde l'état actuel AVANT modification
-        // On ignore les erreurs (ex: rien à commiter)
+        // Sauvegarde l'état PROPRE avant de le salir
         execSync('git add .');
         execSync('git commit -m "Auto-Save Pre-Update"');
-        console.log("💾 [GIT] Point de sauvegarde créé.");
-    } catch (e) { 
-        // Silencieux si rien à commiter
-    }
+        console.log("💾 [GIT] Snapshot de sécurité créé.");
+    } catch (e) { /* Rien à commiter, c'est pas grave */ }
 }
 
-// ... (Fonctions extractSignatures, checkCssDependency, checkDeepClassIntegrity identiques à V8.4)
 function extractSignatures(content) {
     const codeBody = content.replace(/^\/\/ @signatures:.*\n/, '');
     const sigs = new Set();
@@ -41,6 +31,7 @@ function extractSignatures(content) {
     patterns.forEach(regex => { let match; while ((match = regex.exec(codeBody)) !== null) { sigs.add(match[2] ? `${match[1].toUpperCase()} ${match[2]}` : match[1]); } });
     return sigs;
 }
+
 function checkCssDependency(jsxPath, jsxContent, rawUpdateContent) {
     const importMatch = jsxContent.match(/import\s+['"]\.\/([^'"]+\.css)['"]/);
     if (importMatch) {
@@ -48,40 +39,34 @@ function checkCssDependency(jsxPath, jsxContent, rawUpdateContent) {
         const dir = path.dirname(jsxPath);
         const cssFullPath = path.join(__dirname, dir, cssFileName);
         const existsOnDisk = fs.existsSync(cssFullPath);
-        const existsInUpdate = rawUpdateContent.includes(cssFileName);
+        // On vérifie le raw content pour voir si le CSS est fourni dans le même paquet
+        const relativeCssPath = path.join(dir, cssFileName).split(path.sep).join('/');
+        const headerTag = `[[[£ FILE: ${relativeCssPath} £]]]`;
+        const existsInUpdate = rawUpdateContent.includes(headerTag);
+        
         if (!existsOnDisk && !existsInUpdate) return { ok: false, missing: cssFileName };
         return { ok: true, cssPath: existsOnDisk ? cssFullPath : null };
     }
     return { ok: true, cssPath: null };
 }
-function checkDeepClassIntegrity(jsxContent, cssPath) {
-    if (!cssPath || !fs.existsSync(cssPath)) return null;
-    try {
-        const cssContent = fs.readFileSync(cssPath, 'utf8');
-        const definedClasses = new Set();
-        let match;
-        while ((match = /\.([a-zA-Z0-9_-]+)(?=\s*[:\{,])/g.exec(cssContent)) !== null) definedClasses.add(match[1]);
-        const usedClasses = new Set();
-        while ((match = /className\s*=\s*['"]([^'"]+)['"]/g.exec(jsxContent)) !== null) { match[1].split(/\s+/).forEach(c => { if(c && !c.includes('{')) usedClasses.add(c); }); }
-        const missing = [...usedClasses].filter(c => !definedClasses.has(c));
-        if (missing.length > 0 && missing.length < 5) return missing;
-    } catch (e) {}
-    return null;
-}
 
 function applyUpdate() {
     try {
         if (!fs.existsSync(inputFile)) { fs.writeFileSync(inputFile, ''); return; }
+
         const rawContent = fs.readFileSync(inputFile, 'utf8');
         if (!rawContent || rawContent.trim().length < 10) return;
 
-        // 1. SNAPSHOT DE SÉCURITÉ
-        snapshot();
-
+        // 1. FLUSH IMMÉDIAT (Débouchage)
         fs.writeFileSync(inputFile, '');
+
+        // 2. SNAPSHOT (Filet de sécurité)
+        snapshot();
 
         const isForced = rawContent.includes('[FORCE_REDUCTION]');
         let processedCount = 0;
+        let warningTriggered = false;
+        
         const startRegex = /\[\[\[£\s*FILE\s*:\s*([^£\]\s]+)\s*£\]\]\]/g;
         let match;
 
@@ -95,20 +80,23 @@ function applyUpdate() {
                 let newContent = rawContent.substring(startIdx, endIdx).trim();
                 const fullPath = path.join(__dirname, filePath);
                 const dirPath = path.dirname(fullPath);
+                
                 if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, { recursive: true });
 
                 if (filePath === 'history.txt') {
                     try {
                         const existingContent = fs.existsSync(fullPath) ? fs.readFileSync(fullPath, 'utf8') : "";
                         fs.writeFileSync(fullPath, existingContent + "\n" + newContent + '\n');
-                        writeStatus('OK', 'Historique mis à jour');
+                        if(!warningTriggered) writeStatus('OK', 'Historique mis à jour');
                         processedCount++;
                         continue;
                     } catch (e) {}
                 }
 
                 const ext = path.extname(fullPath);
+                let currentWarning = null;
 
+                // --- ANALYSE DE RISQUE (SANS BLOCAGE) ---
                 if (fs.existsSync(fullPath) && !isForced) {
                     const oldContent = fs.readFileSync(fullPath, 'utf8');
                     
@@ -117,47 +105,49 @@ function applyUpdate() {
                         const newSigs = extractSignatures(newContent);
                         const missing = [...oldSigs].filter(s => !newSigs.has(s));
                         if (missing.length > 0) {
-                            // ERREUR CRITIQUE AVEC CONTEXTE POUR L'IA
-                            writeStatus('ERROR', `Régression : ${path.basename(filePath)}`, `Perdu : ${missing.join(', ')}`, { missing, filePath });
-                            console.error(`❌ REGRESSION JS: ${filePath}`);
-                            continue;
+                            currentWarning = {
+                                title: `Régression probable : ${path.basename(filePath)}`,
+                                msg: `Fonctions perdues : ${missing.join(', ')}`,
+                                context: { missing, filePath }
+                            };
+                            console.warn(`⚠️ RISQUE REGRESSION JS: ${filePath}`);
                         }
-                    }
-                    if (newContent.length < oldContent.length * 0.75) {
-                        writeStatus('ERROR', `Taille suspecte : ${path.basename(filePath)}`, `-25%`, { missing: ["Contenu massif"], filePath });
-                        console.error(`❌ POIDS CRITIQUE: ${filePath}`);
-                        continue;
                     }
                 }
 
-                if (ext === '.jsx') {
+                if (!currentWarning && ext === '.jsx') {
                     const cssCheck = checkCssDependency(filePath, newContent, rawContent);
                     if (!cssCheck.ok) {
-                        writeStatus('ERROR', `Style manquant`, `${cssCheck.missing} introuvable`, { missing: ["Fichier CSS associé"], filePath });
-                        console.error(`❌ ORPHELIN: ${filePath}`);
-                        continue;
-                    }
-                    if (cssCheck.cssPath) {
-                        const missingClasses = checkDeepClassIntegrity(newContent, cssCheck.cssPath);
-                        if (missingClasses) {
-                            writeStatus('WARNING', `Style incomplet`, `Classes: ${missingClasses.join(', ')}`, { missing: missingClasses, filePath });
-                        }
+                        currentWarning = {
+                            title: `Style manquant`,
+                            msg: `${cssCheck.missing} est introuvable.`,
+                            context: { missing: ["Fichier CSS associé"], filePath }
+                        };
+                        console.warn(`⚠️ RISQUE ORPHELIN: ${filePath}`);
                     }
                 }
 
+                // --- APPLICATION DU CODE (MÊME SI DANGEREUX) ---
                 if (['.js', '.jsx', '.ts'].includes(ext)) {
                     const currentSigs = [...extractSignatures(newContent)].sort();
                     if (currentSigs.length > 0) newContent = `// @signatures: ${currentSigs.join(', ')}\n` + newContent.replace(/^\/\/ @signatures:.*\n/, '');
                 }
                 
                 fs.writeFileSync(fullPath, newContent + '\n');
-                console.log(`   ✅ ÉCRIT : ${filePath}`);
+                console.log(`   ✅ ÉCRIT (Avec risques potentiels) : ${filePath}`);
+                
+                // Si on a détecté un risque, on l'affiche dans le HUD
+                if (currentWarning) {
+                    writeStatus('WARNING', currentWarning.title, currentWarning.msg, currentWarning.context);
+                    warningTriggered = true;
+                }
+                
                 processedCount++;
             }
         }
 
-        if (processedCount > 0) {
-            setTimeout(() => writeStatus('OK', 'Sync Terminée', `${processedCount} fichiers traités.`), 500);
+        if (processedCount > 0 && !warningTriggered) {
+            setTimeout(() => writeStatus('OK', 'Code appliqué', `${processedCount} fichiers mis à jour.`), 500);
             console.log(`✨ SUCCÈS : ${processedCount} fichiers traités.`);
         }
 
