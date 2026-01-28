@@ -1,5 +1,5 @@
-// @signatures: App, handleBackToDev, handleLogout
-import React, { useState, useRef } from 'react'; // ❌ MANQUE useEffect
+// @signatures: App, checkUpdate, handleBackToDev, handleLogout
+import React, { useState, useEffect, useRef } from 'react';
 import Login from './features/auth/Login';
 import ProfPage from './features/prof/ProfPage';
 import ElevePage from './features/eleve/ElevePage';
@@ -12,8 +12,30 @@ export default function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const bootIdRef = useRef(null);
 
-  // ❌ J'ai supprimé toute la logique de mise à jour (checkUpdate)
-  // C'est une RÉGRESSION CRITIQUE que le moteur doit détecter.
+  // ✅ VERSION SAINE : La logique est présente
+  useEffect(() => {
+    const checkUpdate = async () => {
+      try {
+        const res = await fetch('/api/check-deploy');
+        const data = await res.json();
+        if (!bootIdRef.current) bootIdRef.current = data.bootId;
+        else if (data.bootId !== bootIdRef.current) {
+          setIsSyncing(true);
+          setTimeout(() => window.location.reload(), 1000);
+        }
+      } catch (e) {}
+    };
+    const timer = setInterval(checkUpdate, 5000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('player');
+    if (saved) {
+        const parsed = JSON.parse(saved);
+        setUser({ ...parsed, id: parsed._id || parsed.id });
+    }
+  }, []);
 
   const handleLogout = () => { localStorage.clear(); setUser(null); };
 
