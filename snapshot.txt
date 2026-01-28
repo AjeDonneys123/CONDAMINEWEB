@@ -450,9 +450,9 @@ setInterval(applyUpdate, 500);
 {
   "status": "OK",
   "message": "Code appliqué",
-  "details": "4 fichiers mis à jour.",
+  "details": "1 fichiers mis à jour.",
   "context": null,
-  "timestamp": 1769619032776
+  "timestamp": 1769619875638
 }
 [[[£ END: apply_status.json £]]]
 
@@ -1973,6 +1973,7 @@ export default function GamesGrid({ user }) {
 [[[£ END: client/src/features/eleve/games/GamesGrid.jsx £]]]
 
 [[[£ FILE: client/src/features/eleve/games/mainGames.js £]]]
+// @signatures: GameProgression
 export class GameProgression {
     constructor(questions, maxLives = 4) {
         this.questions = questions;
@@ -2437,6 +2438,7 @@ export function initStarshipGame(root, api, onExit) {
 [[[£ END: client/src/features/eleve/games/zombie/ZombieGame.css £]]]
 
 [[[£ FILE: client/src/features/eleve/games/zombie/ZombieGame.js £]]]
+// @signatures: ZombieGame
 export class ZombieGame {
     constructor(container, ctrl) { this.c = container; this.ctrl = ctrl; }
     loadQuestion(q) { this.c.querySelector('#z-q').textContent = q.q; }
@@ -4362,6 +4364,7 @@ export default function ClassroomManager({ globalClassId, user }) {
 [[[£ END: client/src/features/prof/classroom/ClassroomManager.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/components/BadComponent.jsx £]]]
+// @signatures: BadComponent
 import React from 'react';
 import './Introuvable.css'; // <--- LE PIÈGE EST ICI (Ce fichier n'existe pas)
 
@@ -5647,23 +5650,401 @@ export default function TrapComponent() {
 [[[£ END: client/src/features/prof/games/GameStudio.css £]]]
 
 [[[£ FILE: client/src/features/prof/games/GameStudio.jsx £]]]
-// @signatures: GameStudio
-import React, { useState } from 'react';
+// @signatures: GameStudio, handleAddQuestion, handleGenerateAI, handleInput, handleSave, handleSelectClass, handleSelectQuestion, handleToggleStudent, isMain, loadData, myClassesIds, toggleAllStudents, updateQuestion
+import React, { useState, useEffect, useRef } from 'react';
 import './GameStudio.css';
+import { api } from '../../../services/api';
+// Correction de l'importation: on importe l'objet StudioUtils pour contourner le problème de cache
+import { StudioUtils } from '../homework/HomeworkStudio'; 
 
-// ❌ FICHIER 2 (RE-TRIGGER) : SABOTÉ
-// J'ai supprimé tout le formulaire.
+// State par défaut pour un quiz vide
+const DEFAULT_QUIZ_DATA = { 
+    title: '', 
+    chapterId: '', 
+    teacherId: null, 
+    targetClassrooms: [], 
+    assignedStudents: [], 
+    isAllClass: true,
+    questions: [{ q: 'Nouvelle question', options: ['', '', '', ''], a: 0 }] 
+};
 
-export default function GameStudio({ onClose }) {
+export default function GameStudio({ initialData, chapters, classFilter, user, targetSection, onClose }) {
+    // Déstructuration de l'objet utilitaire
+    const { getChaptersForClass, findDefaultChapterId, getStudentsForViewingClass, SUBJECTS_LIST } = StudioUtils;
+
+    const [formData, setFormData] = useState(initialData || { 
+        ...DEFAULT_QUIZ_DATA, 
+        teacherId: user.id || user._id, 
+        targetClassrooms: classFilter ? [classFilter] : [],
+        chapterId: findDefaultChapterId(classFilter, chapters, []) // chapters et allClasses ne sont pas encore chargés, on passe [] pour éviter le crash
+    });
+    
+    const [activeQIndex, setActiveQIndex] = useState(0);
+    const [allStudents, setAllStudents] = useState([]);
+    const [allClasses, setAllClasses] = useState([]);
+    const [distribution, setDistribution] = useState({});
+    const [viewingClass, setViewingClass] = useState(classFilter || "");
+    const [loading, setLoading] = useState(false);
+    const [aiTopic, setAiTopic] = useState('');
+    const [aiGenerating, setAiGenerating] = useState(false);
+    
+    // Récupération de données nécessaires (similaire à HomeworkStudio)
+    const loadData = async () => {
+        setLoading(true);
+        try {
+            const [sts, cls] = await Promise.all([
+                api.get('/admin/students'),
+                api.get('/admin/classrooms')
+            ]);
+            setAllStudents(sts);
+            setAllClasses(cls);
+
+            // Remplir la distribution si on est en édition
+            if (initialData) {
+                const targets = initialData.targetClassrooms || [initialData.classroom];
+                const newDist = {};
+                targets.forEach(clsName => {
+                    const clsObj = cls.find(c => c.name === clsName);
+                    const clsId = clsObj ? String(clsObj._id) : null;
+                    let classStudentIds = sts.filter(s => {
+                        const isMain = (s.currentClass||"").trim().toUpperCase() === clsName.trim().toUpperCase();
+                        const isOption = clsId && (s.assignedGroups||[]).some(gId => String(gId) === clsId);
+                        return (isMain || isOption) && (initialData.assignedStudents||[]).includes(s._id);
+                    }).map(s => s._id);
+                    newDist[clsName] = { chapterId: initialData.chapterId, studentIds: classStudentIds };
+                });
+                setDistribution(newDist);
+                if (targets.length > 0) setViewingClass(targets[0]);
+            }
+             else if (classFilter) {
+                setViewingClass(classFilter);
+                const defId = findDefaultChapterId(classFilter, chapters, allClasses);
+                setDistribution({ [classFilter]: { chapterId: defId, studentIds: [] } });
+            }
+        } catch(e) { console.error("GameStudio Load Error:", e); }
+        setLoading(false);
+    };
+
+    useEffect(() => { loadData(); }, [classFilter]);
+
+    // --- MANIPULATIONS LOCALES ---
+    
+    const handleInput = (field, value) => setFormData(p => ({ ...p, [field]: value }));
+
+    const handleSelectQuestion = (index) => setActiveQIndex(index);
+    
+    const handleAddQuestion = () => {
+        setFormData(p => ({ 
+            ...p, 
+            questions: [...p.questions, { q: `Nouvelle question ${p.questions.length + 1}`, options: ['', '', '', ''], a: 0 }] 
+        }));
+        setActiveQIndex(formData.questions.length);
+    };
+
+    const updateQuestion = (field, value, optionIndex = null) => {
+        setFormData(p => {
+            const nextQuestions = [...p.questions];
+            const currentQ = { ...nextQuestions[activeQIndex] };
+
+            if (field === 'q' || field === 'a') {
+                currentQ[field] = value;
+            } else if (field === 'options' && optionIndex !== null) {
+                const nextOptions = [...currentQ.options];
+                nextOptions[optionIndex] = value;
+                currentQ.options = nextOptions;
+            }
+            nextQuestions[activeQIndex] = currentQ;
+            return { ...p, questions: nextQuestions };
+        });
+    };
+    
+    // --- ACTIONS IA ---
+    const handleGenerateAI = async () => {
+        if (!aiTopic) return alert("Entrez un sujet pour l'IA !");
+        setAiGenerating(true);
+        try {
+            const result = await api.post('/games/generate', { topic: aiTopic, count: 5 });
+            const cleaned = Array.isArray(result) ? result : [];
+            
+            if (cleaned.length === 0) {
+                 alert("L'IA n'a pas pu générer de questions. Réessayez.");
+                 setAiGenerating(false);
+                 return;
+            }
+            
+            // On ajoute les nouvelles questions
+            setFormData(p => ({ 
+                ...p, 
+                questions: [
+                    ...p.questions, 
+                    ...cleaned.filter(q => q.q && q.options && q.options.length === 4 && q.a !== undefined)
+                ] 
+            }));
+            setActiveQIndex(formData.questions.length);
+        } catch(e) {
+            alert("Erreur de connexion à l'IA.");
+        }
+        setAiGenerating(false);
+    };
+
+    // --- LOGIQUE DE DISTRIBUTION (Réutilisation de HomeworkStudio) ---
+    const targetLevel = allClasses.find(c => c.name === viewingClass)?.level;
+    const myClassesIds = (user.assignedClasses || []).map(c => String(c._id || c));
+    
+    const availableClasses = allClasses.filter(c => { 
+        if (targetLevel) if (String(c.level) !== String(targetLevel)) return false; 
+        if (user.isDeveloper || user.role === 'admin') return true; 
+        return myClassesIds.includes(String(c._id)); 
+    }).sort((a,b) => a.name.localeCompare(b.name));
+    
+    const studentsToDisplay = getStudentsForViewingClass(viewingClass, allStudents, allClasses);
+    
+    const handleSelectClass = (name) => setViewingClass(name);
+
+    const handleToggleStudent = (sId) => {
+        setDistribution(prev => {
+            const next = { ...prev };
+            const cfg = next[viewingClass];
+            const allIds = studentsToDisplay.map(s => s._id);
+
+            if (!cfg) {
+                const defId = findDefaultChapterId(viewingClass, chapters, allClasses);
+                next[viewingClass] = { chapterId: defId, studentIds: [sId] };
+            } else {
+                let newIds = cfg.studentIds.length === 0 ? allIds.filter(id => id !== sId) : (cfg.studentIds.includes(sId) ? cfg.studentIds.filter(id => id !== sId) : [...cfg.studentIds, sId]);
+                
+                if (newIds.length === 0) delete next[viewingClass]; // Supprimer si la liste devient vide (et que ce n'était pas la liste 'all')
+                else if (newIds.length === allIds.length) next[viewingClass] = { ...cfg, studentIds: [] }; // Liste complète devient 'all'
+                else next[viewingClass] = { ...cfg, studentIds: newIds };
+            }
+            return next;
+        });
+    };
+    
+    const toggleAllStudents = () => {
+        setDistribution(prev => {
+            const next = { ...prev };
+            if (next[viewingClass]) delete next[viewingClass]; // Désélectionner = supprimer de la distribution
+            else {
+                const defId = findDefaultChapterId(viewingClass, chapters, allClasses);
+                next[viewingClass] = { chapterId: defId, studentIds: [] }; // Sélectionner tous (studentIds vide = isAllClass = true)
+            }
+            return next;
+        });
+    };
+    
+    // --- SAUVEGARDE FINALE ---
+    const handleSave = async () => {
+        const targets = Object.keys(distribution);
+        if (!formData.title || targets.length === 0) return alert("❌ Titre et Classe requis !");
+        if (formData.questions.length === 0) return alert("❌ Ajoutez des questions !");
+        
+        setLoading(true);
+        try {
+            for (const cls of targets) {
+                const cfg = distribution[cls];
+                // Récupération de l'ID de chapitre (avec fallback)
+                let realChapterId = cfg.chapterId || findDefaultChapterId(cls, chapters, allClasses);
+                
+                // Calcul des assignedStudents et isAllClass
+                let finalIds = [];
+                let isGlobal = true;
+                if (cfg.studentIds.length > 0) { 
+                    isGlobal = false; 
+                    finalIds = cfg.studentIds; 
+                } else {
+                    // Si studentIds est vide, c'est toute la classe (on injecte les IDs pour le côté serveur)
+                    isGlobal = true;
+                    finalIds = studentsToDisplay.map(s => s._id); 
+                }
+                
+                const payload = { 
+                    ...formData, 
+                    chapterId: realChapterId, 
+                    targetClassrooms: [cls], 
+                    teacherId: user.id || user._id, 
+                    assignedStudents: finalIds, 
+                    isAllClass: isGlobal,
+                    type: 'zombie' // Hardcoded pour le moment
+                };
+                
+                await api.post('/games', payload);
+            }
+            onClose();
+        } catch(e) {
+            alert("Erreur sauvegarde : " + e.message);
+        }
+        setLoading(false);
+    };
+    
+    const currentQ = formData.questions[activeQIndex];
+    const distCfg = distribution[viewingClass];
+    const isSelected = !!distribution[viewingClass];
+    
     return (
-        <div className="v84-studio-container">
-            <div className="v84-header">
-                <h2>Game Studio (HS)</h2>
-                <button onClick={onClose}>Fermer</button>
+        <div className="v84-game-container">
+            <div className="v84-game-header">
+                <div className="flex items-center">
+                    <span className="v84-game-icon">🎮</span>
+                    <input 
+                        className="v84-game-title-input" 
+                        value={formData.title} 
+                        onChange={e => handleInput('title', e.target.value)} 
+                        placeholder="TITRE DU QUIZ..."
+                        disabled={loading}
+                    />
+                </div>
+                <button onClick={onClose} className="v84-close-btn">✕</button>
             </div>
-            <div className="v84-body">
-                <p>Le formulaire a disparu.</p>
-                {/* ❌ LE BOUTON PUBLIER A DISPARU AUSSI */}
+            
+            <div className="v84-game-body">
+                {/* GAUCHE : LISTE DES QUESTIONS */}
+                <div className="v84-q-list-sidebar custom-scrollbar">
+                    <span className="v84-sidebar-label">Questions ({formData.questions.length})</span>
+                    {formData.questions.map((q, index) => (
+                        <div 
+                            key={index} 
+                            className={`v84-q-item ${activeQIndex === index ? 'active' : ''}`}
+                            onClick={() => handleSelectQuestion(index)}
+                        >
+                            <div className="v84-q-preview">Q{index + 1}: {q.q.substring(0, 30)}...</div>
+                            <div className="v84-q-sub">Rép. correcte: {q.options[q.a]}</div>
+                        </div>
+                    ))}
+                    <button className="v84-add-q-btn" onClick={handleAddQuestion} disabled={loading}>+ AJOUTER MANUELLEMENT</button>
+                </div>
+
+                {/* CENTRE : ÉDITEUR */}
+                <div className="v84-game-editor custom-scrollbar">
+                    
+                    {/* WIDGET IA */}
+                    <div className="v84-ai-widget">
+                        <span className="text-3xl">🤖</span>
+                        <input 
+                            className="v84-ai-input" 
+                            placeholder="Sujet pour générer un quiz (ex: 'Les rois de France')"
+                            value={aiTopic}
+                            onChange={e => setAiTopic(e.target.value)}
+                            disabled={aiGenerating || loading}
+                        />
+                        <button 
+                            className="v84-ai-btn" 
+                            onClick={handleGenerateAI}
+                            disabled={aiGenerating || loading}
+                        >
+                            {aiGenerating ? 'GÉNÉRATION...' : 'GÉNÉRER 5 QCM'}
+                        </button>
+                    </div>
+
+                    {/* ÉDITEUR DE QUESTION ACTIVE */}
+                    {currentQ && (
+                        <div className="v84-q-card">
+                            <span className="v84-field-label">Énoncé de la question {activeQIndex + 1}</span>
+                            <textarea 
+                                className="v84-q-input" 
+                                value={currentQ.q} 
+                                onChange={e => updateQuestion('q', e.target.value)}
+                                rows="3"
+                                disabled={loading}
+                            />
+                            
+                            <span className="v84-field-label mt-8">Réponses possibles</span>
+                            <div className="v84-answers-grid">
+                                {currentQ.options.map((opt, index) => (
+                                    <div key={index} className={`v84-ans-row ${currentQ.a === index ? 'correct' : ''}`}>
+                                        <div 
+                                            className="v84-correct-radio"
+                                            onClick={() => updateQuestion('a', index)}
+                                        >
+                                            {currentQ.a === index ? '✓' : ''}
+                                        </div>
+                                        <input 
+                                            className="v84-ans-input" 
+                                            placeholder={`Option ${index + 1}`}
+                                            value={opt}
+                                            onChange={e => updateQuestion('options', e.target.value, index)}
+                                            disabled={loading}
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* DROITE : DISTRIBUTION */}
+                <div className="v84-dist-sidebar custom-scrollbar">
+                    <span className="v84-sidebar-label">Distribution du Quiz</span>
+                    
+                    <div className="mb-4 flex flex-wrap gap-2">
+                        {availableClasses.map(c => (
+                            <button 
+                                key={c._id} 
+                                onClick={() => handleSelectClass(c.name)} 
+                                className={`v84-tab-btn-game ${distribution[c.name] ? 'active' : 'inactive'} ${viewingClass === c.name ? 'border-2 border-purple-700' : ''}`}
+                                style={c.type === 'GROUP' ? { color: '#f59e0b', borderColor: '#fcd34d' } : {}}
+                            >
+                                {c.name}
+                            </button>
+                        ))}
+                    </div>
+                    
+                    {viewingClass && (
+                        <div className="flex-1 flex flex-col bg-slate-50 rounded-2xl overflow-hidden border border-slate-200 p-4">
+                            <div 
+                                className="flex justify-between items-center mb-4 cursor-pointer" 
+                                onClick={toggleAllStudents}
+                            >
+                                <span className="font-black text-slate-700 uppercase">{viewingClass}</span>
+                                <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${isSelected ? 'bg-purple-600 border-purple-600' : 'border-slate-300'}`}>
+                                    {isSelected && <span className="text-white text-xs">✓</span>}
+                                </div>
+                            </div>
+                            
+                            {isSelected && (
+                                <>
+                                    <div className="p-3 bg-slate-50 border-b border-slate-100">
+                                        <label className="text-[9px] font-black text-slate-400 uppercase mb-1 block">Ranger dans :</label>
+                                        <select 
+                                            className="w-full p-2 rounded-lg text-xs font-bold border border-slate-300 outline-none bg-white" 
+                                            value={distCfg?.chapterId || ""} 
+                                            onChange={(e) => setDistribution(p => ({ ...p, [viewingClass]: { ...p[viewingClass], chapterId: e.target.value } }))}
+                                            disabled={loading}
+                                        >
+                                            <option value="">-- CHOISIR DOSSIER --</option>
+                                            {getChaptersForClass(viewingClass, chapters, allClasses).map(c => <option key={c._id} value={c._id}>{c.title}</option>)}
+                                        </select>
+                                    </div>
+                                    
+                                    <div className="flex-1 overflow-y-auto custom-scrollbar">
+                                        {studentsToDisplay.map(s => { 
+                                            // Si studentIds est vide, c'est 'all class', donc tout le monde est coché
+                                            const checked = isSelected && (distCfg.studentIds.length === 0 || distCfg.studentIds.includes(s._id));
+                                            return (
+                                                <div 
+                                                    key={s._id} 
+                                                    onClick={() => handleToggleStudent(s._id)} 
+                                                    className={`flex items-center gap-3 p-2 rounded cursor-pointer ${checked ? 'bg-purple-100 text-purple-700' : 'hover:bg-slate-100 text-slate-500'}`}
+                                                >
+                                                    <div className={`w-4 h-4 rounded border ${checked ? 'bg-purple-600 border-purple-600' : 'border-slate-300'}`}></div>
+                                                    <span className="text-xs font-bold">{s.lastName} {s.firstName}</span>
+                                                </div>
+                                            ); 
+                                        })}
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    )}
+                    
+                    <button 
+                        className="v84-game-publish-btn" 
+                        onClick={handleSave} 
+                        disabled={loading || formData.questions.length === 0}
+                    >
+                        {loading ? 'PUBLICATION...' : (initialData ? 'MODIFIER LE QUIZ' : 'PUBLIER LE QUIZ 🚀')}
+                    </button>
+                </div>
             </div>
         </div>
     );
@@ -6700,30 +7081,448 @@ export default function StudentsManager({ globalClassId }) {
 [[[£ END: client/src/features/prof/studio/StudioDashboard.css £]]]
 
 [[[£ FILE: client/src/features/prof/studio/StudioDashboard.jsx £]]]
-// @signatures: AssetThumb, StudioDashboard, runGame, saveProject
+// @signatures: AssetThumb, StageActor, StudioDashboard, executeConsole, handleActorMove, handleAddActor, handleAddScene, handleChange, handleDeleteProject, handleDeleteScene, handleMouseDown, handleMouseMove, handleMouseUp, loadProjects, newX, newY, runGame, saveProject
 import React, { useState, useRef, useEffect } from 'react';
 import './StudioDashboard.css';
+import { api } from '../../../services/api';
 
-// ❌ FICHIER 1 (RE-TRIGGER) : SABOTÉ
-// J'ai retiré les imports critiques et vidé la logique de sauvegarde.
+const AssetThumb = ({ url, onClick, onDelete }) => (
+    <div className="obj-card" onClick={onClick}>
+        <div className="obj-thumb-mini">
+            <img src={url} alt="asset" style={{ maxWidth: '100%', maxHeight: '100%' }} />
+        </div>
+        <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#e2e8f0' }}>Asset</span>
+        {onDelete && <button onClick={onDelete} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1.2rem' }}>✕</button>}
+    </div>
+);
 
-const AssetThumb = ({ url }) => <img src={url} alt="asset" />;
+// Composant Actor sur la scène
+const StageActor = ({ actor, isSelected, onSelect, onMove, scaleFactor }) => {
+    const [isDragging, setIsDragging] = useState(false);
+    const [pos, setPos] = useState({ x: actor.initialX, y: actor.initialY });
 
-export default function StudioDashboard({ user }) {
-    const [project, setProject] = useState(null);
+    const dragRef = useRef(null);
+    const lastPosRef = useRef(null);
 
-    // ❌ DENSITÉ -90% : La fonction est vide !
-    const saveProject = async () => {
-        console.log("Sauvegarde cassée");
+    useEffect(() => {
+        setPos({ x: actor.initialX, y: actor.initialY });
+    }, [actor.initialX, actor.initialY]);
+
+    const handleMouseDown = (e) => {
+        setIsDragging(true);
+        lastPosRef.current = { x: e.clientX, y: e.clientY };
     };
 
-    const runGame = () => { alert("Moteur introuvable"); };
+    const handleMouseMove = (e) => {
+        if (!isDragging) return;
+        const dx = e.clientX - lastPosRef.current.x;
+        const dy = e.clientY - lastPosRef.current.y;
+        
+        setPos(prev => ({ x: prev.x + dx, y: prev.y + dy }));
+        lastPosRef.current = { x: e.clientX, y: e.clientY };
+    };
+
+    const handleMouseUp = () => {
+        if (isDragging) {
+            setIsDragging(false);
+            // Conversion de la position en % pour l'enregistrement
+            const stageRect = dragRef.current.closest('.stage-canvas').getBoundingClientRect();
+            const newX = (pos.x / stageRect.width) * 100;
+            const newY = (pos.y / stageRect.height) * 100;
+            onMove(actor.id, newX, newY);
+        }
+    };
+
+    const actorStyle = {
+        left: `${pos.x}%`, // Changé pour utiliser % du state
+        top: `${pos.y}%`,  // Changé pour utiliser % du state
+        transform: `translate(-50%, -50%) scale(${actor.scale || 1})`,
+        width: '100px', // Taille fixe
+        height: '100px',
+    };
+
+    const currentCostume = actor.costumes?.[actor.currentCostumeIdx || 0];
 
     return (
+        <div 
+            ref={dragRef}
+            className={`actor-on-stage ${isSelected ? 'selected' : ''}`}
+            style={actorStyle}
+            onClick={(e) => { e.stopPropagation(); onSelect(actor.id); }}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+        >
+            {currentCostume && (
+                <img 
+                    src={currentCostume.url} 
+                    alt={actor.name} 
+                    style={{ maxWidth: '100%', maxHeight: '100%', pointerEvents: 'none' }} 
+                />
+            )}
+        </div>
+    );
+};
+
+
+export default function StudioDashboard({ user }) {
+    const [projects, setProjects] = useState([]);
+    const [selectedProject, setSelectedProject] = useState(null);
+    const [selectedSceneIndex, setSelectedSceneIndex] = useState(0);
+    const [selectedActorId, setSelectedActorId] = useState(null);
+    const [loading, setLoading] = useState(false);
+    const [consoleLog, setConsoleLog] = useState([]);
+    const [consoleInput, setConsoleInput] = useState('');
+    const consoleRef = useRef(null);
+
+    const currentScene = selectedProject?.scenes[selectedSceneIndex];
+    const selectedActor = currentScene?.actors.find(a => a.id === selectedActorId);
+
+    const loadProjects = async () => {
+        setLoading(true);
+        try {
+            const data = await api.get(`/studio/projects/${user.id || user._id}`);
+            setProjects(data);
+            if (data.length > 0 && !selectedProject) {
+                setSelectedProject(data[0]);
+                setSelectedSceneIndex(0);
+                setSelectedActorId(null);
+            }
+        } catch(e) { console.error("Load Projects Error:", e); }
+        setLoading(false);
+    };
+
+    useEffect(() => {
+        loadProjects();
+    }, [user]);
+
+    useEffect(() => {
+        if (selectedProject?.scenes.length > 0) {
+            setSelectedSceneIndex(0);
+            setSelectedActorId(null);
+        }
+    }, [selectedProject]);
+
+    // SCROLL AUTO CONSOLE
+    useEffect(() => {
+        if (consoleRef.current) {
+            consoleRef.current.scrollTop = consoleRef.current.scrollHeight;
+        }
+    }, [consoleLog]);
+    
+    const handleChange = (field, value, targetType) => {
+        const nextProject = { ...selectedProject };
+        
+        if (targetType === 'project') {
+            nextProject[field] = value;
+        } else if (targetType === 'scene') {
+            nextProject.scenes[selectedSceneIndex][field] = value;
+        } else if (targetType === 'actor') {
+            const actorIndex = nextProject.scenes[selectedSceneIndex].actors.findIndex(a => a.id === selectedActorId);
+            if (actorIndex !== -1) {
+                nextProject.scenes[selectedSceneIndex].actors[actorIndex][field] = value;
+            }
+        }
+        
+        setSelectedProject(nextProject);
+    };
+    
+    // --- MODE EXPERT : Console Interactive ---
+    const executeConsole = async (e) => {
+        e.preventDefault();
+        const command = consoleInput.trim();
+        if (!command) return;
+
+        setConsoleLog(prev => [...prev, { type: 'input', text: `> ${command}` }]);
+        setConsoleInput('');
+        
+        if (command.startsWith('run')) {
+            setConsoleLog(prev => [...prev, { type: 'info', text: 'COMMANDE : Lancement du jeu...' }]);
+            runGame();
+        } else if (command.startsWith('save')) {
+            setConsoleLog(prev => [...prev, { type: 'info', text: 'COMMANDE : Sauvegarde en cours...' }]);
+            saveProject();
+        } else if (command.startsWith('generate game')) {
+            const idea = command.substring('generate game'.length).trim();
+            setConsoleLog(prev => [...prev, { type: 'warn', text: `COMMANDE : Génération du code pour: ${idea}` }]);
+            if (!selectedProject?._id) {
+                setConsoleLog(prev => [...prev, { type: 'error', text: 'ERREUR : Projet non sauvegardé. Sauvegardez d\'abord !' }]);
+                return;
+            }
+            try {
+                const res = await api.post('/studio/generate-game', { projectId: selectedProject._id, gameIdea: idea });
+                setSelectedProject(prev => ({ ...prev, generatedCode: res.code }));
+                setConsoleLog(prev => [...prev, { type: 'info', text: `IA OK : ${res.message}` }]);
+                setConsoleLog(prev => [...prev, { type: 'info', text: 'Code généré. Tappez RUN pour tester.' }]);
+            } catch(e) {
+                setConsoleLog(prev => [...prev, { type: 'error', text: `ERREUR IA : ${e.message}` }]);
+            }
+        } else {
+            setConsoleLog(prev => [...prev, { type: 'error', text: `ERREUR : Commande inconnue: ${command}` }]);
+        }
+    };
+    
+    // --- LOGIQUE SAUVEGARDE ET EXÉCUTION (Restaurée) ---
+    const saveProject = async () => {
+        if (!selectedProject || loading) return;
+        setLoading(true);
+        try {
+            const saved = await api.post('/studio', { ...selectedProject, teacherId: user.id || user._id });
+            setSelectedProject(saved);
+            loadProjects(); // Reload projects list to update titles/meta
+            setConsoleLog(prev => [...prev, { type: 'info', text: `PROJET SAUVEGARDÉ : ${saved.title}` }]);
+        } catch(e) {
+            setConsoleLog(prev => [...prev, { type: 'error', text: `ERREUR SAUVEGARDE : ${e.message}` }]);
+        }
+        setLoading(false);
+    };
+
+    const runGame = () => {
+        if (!selectedProject?.generatedCode) {
+            setConsoleLog(prev => [...prev, { type: 'error', text: 'ERREUR : Code non généré. Lancez l\'IA !' }]);
+            return;
+        }
+        setConsoleLog(prev => [...prev, { type: 'info', text: 'JEU LANCE DANS UNE NOUVELLE FENÊTRE...' }]);
+        // NOTE: La vraie implémentation de 'run' ouvrirait une modale/iframe avec le code.
+        alert("Jeu lancé ! (Fonctionnalité complète bientôt disponible)");
+    };
+    
+    const handleAddScene = () => {
+        const newScene = { 
+            name: `Scene ${selectedProject.scenes.length + 1}`, 
+            actors: [], 
+            timeline: [] 
+        };
+        setSelectedProject(prev => ({ ...prev, scenes: [...prev.scenes, newScene] }));
+        setSelectedSceneIndex(selectedProject.scenes.length);
+    };
+
+    const handleAddActor = () => {
+        if (!currentScene) return;
+        const newActor = {
+            id: `actor-${Date.now()}`,
+            name: `New Actor`,
+            costumes: [],
+            initialX: 50,
+            initialY: 50,
+            scale: 1,
+        };
+        const nextProject = { ...selectedProject };
+        nextProject.scenes[selectedSceneIndex].actors.push(newActor);
+        setSelectedProject(nextProject);
+        setSelectedActorId(newActor.id);
+    };
+    
+    const handleActorMove = (actorId, newX, newY) => {
+        const nextProject = { ...selectedProject };
+        const actors = nextProject.scenes[selectedSceneIndex].actors;
+        const actor = actors.find(a => a.id === actorId);
+        if (actor) {
+            actor.initialX = newX;
+            actor.initialY = newY;
+            setSelectedProject(nextProject);
+        }
+    };
+    
+    const handleDeleteProject = async (id) => {
+        if (!confirm("Supprimer ce projet ?")) return;
+        await api.delete(`/studio/${id}`);
+        setSelectedProject(null);
+        loadProjects();
+    };
+
+    const handleDeleteScene = () => {
+        if (selectedProject.scenes.length <= 1) return alert("Au moins une scène requise.");
+        const nextProject = { ...selectedProject };
+        nextProject.scenes.splice(selectedSceneIndex, 1);
+        setSelectedProject(nextProject);
+        setSelectedSceneIndex(Math.max(0, selectedSceneIndex - 1));
+    };
+
+    // --- RENDER ---
+    
+    if (loading && !selectedProject) return <div className="studio-wrapper"><div className="overlay"><div className="modal-box">Chargement des projets...</div></div></div>;
+    
+    if (!selectedProject) {
+        return (
+            <div className="studio-wrapper">
+                <div className="studio-center flex-col items-center justify-center p-20">
+                    <h1 className="text-4xl font-black text-white/50 mb-4">🎬 STUDIO</h1>
+                    <button 
+                        onClick={() => setSelectedProject({ title: 'Nouveau Projet', scenes: [{ name: 'Scene 1', actors: [], timeline: [] }], teacherId: user.id || user._id, generatedCode: '' })} 
+                        className="bg-purple-600 text-white px-8 py-4 rounded-xl font-black text-sm uppercase shadow-lg hover:scale-105 transition-transform"
+                    >
+                        + NOUVEAU PROJET
+                    </button>
+                    <div className="mt-8 space-y-2 max-w-sm w-full">
+                        <h2 className="text-sm font-black uppercase text-slate-400 mb-2">MES PROJETS ({projects.length})</h2>
+                        {projects.map(p => (
+                            <div key={p._id} className="obj-card" onClick={() => setSelectedProject(p)}>
+                                <span>{p.title}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        );
+    }
+    
+    return (
         <div className="studio-wrapper">
+            
+            {/* 1. GAUCHE : Scènes et Timeline */}
+            <div className="studio-sidebar">
+                <div className="panel-header">SCÈNES</div>
+                <div className="scroll-area custom-scrollbar">
+                    {selectedProject.scenes.map((scene, index) => (
+                        <div 
+                            key={index} 
+                            className={`obj-card ${selectedSceneIndex === index ? 'selected' : ''}`}
+                            onClick={() => { setSelectedSceneIndex(index); setSelectedActorId(null); }}
+                        >
+                            <span>{scene.name}</span>
+                        </div>
+                    ))}
+                    <button className="create-obj-full" onClick={handleAddScene}>+ AJOUTER SCÈNE</button>
+                    {selectedProject.scenes.length > 1 && (
+                        <button className="create-obj-full" onClick={handleDeleteScene} style={{borderColor: '#ef4444', color: '#ef4444'}}>✕ SUPPRIMER SCÈNE</button>
+                    )}
+                </div>
+                
+                <div className="panel-header">TIMELINE</div>
+                <div className="scroll-area custom-scrollbar">
+                    {/* Logique Timeline simple ici */}
+                    <div className="text-xs text-slate-500 p-2">Timeline non implémentée...</div>
+                </div>
+            </div>
+
+            {/* 2. CENTRE : SCÈNE ET CONSOLE */}
             <div className="studio-center">
-                <h1>STUDIO CASSÉ</h1>
-                <button onClick={saveProject}>SAUVER (Fake)</button>
+                
+                {/* TOOLBAR SCENE */}
+                <div className="stage-toolbar">
+                    <input 
+                        type="text" 
+                        value={selectedProject.title} 
+                        onChange={e => handleChange('title', e.target.value, 'project')} 
+                        className="bg-transparent text-white font-black text-center text-sm outline-none" 
+                        style={{ width: '200px' }}
+                    />
+                    <div className="w-px h-full bg-slate-700 mx-4"></div>
+                    <button onClick={saveProject} disabled={loading}>{loading ? 'SAUVEGARDE...' : '💾 SAUVER PROJET'}</button>
+                    <button onClick={runGame} className="text-green-400">▶ LANCER</button>
+                    <button onClick={() => handleDeleteProject(selectedProject._id)} className="text-red-400">✕ SUPPRIMER</button>
+                </div>
+                
+                {/* SCENE */}
+                <div className="stage-wrapper">
+                    <div className="stage-canvas">
+                        {currentScene?.backgroundUrl && (
+                            <img 
+                                src={currentScene.backgroundUrl} 
+                                alt="Background" 
+                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
+                        )}
+                        {currentScene?.actors.map(actor => (
+                            <StageActor 
+                                key={actor.id} 
+                                actor={actor} 
+                                isSelected={selectedActorId === actor.id} 
+                                onSelect={setSelectedActorId}
+                                onMove={handleActorMove}
+                            />
+                        ))}
+                    </div>
+                </div>
+                
+                {/* CONSOLE */}
+                <div className="studio-console-wrapper">
+                    <div ref={consoleRef} className="studio-console-logs custom-scrollbar">
+                        {consoleLog.map((log, index) => (
+                            <div key={index} className={`console-line ${log.type === 'error' ? 'error' : log.type === 'info' ? 'info' : 'input'}`}>
+                                {log.text}
+                            </div>
+                        ))}
+                    </div>
+                    <form onSubmit={executeConsole} className="studio-console-input-area">
+                        <input
+                            type="text"
+                            className="console-input"
+                            placeholder="Entrez une commande ou une requête IA (ex: generate game idée)"
+                            value={consoleInput}
+                            onChange={e => setConsoleInput(e.target.value)}
+                        />
+                        <button type="submit" className="btn-console-fix">FIX/GO</button>
+                    </form>
+                </div>
+
+            </div>
+
+            {/* 3. DROITE : ACTEURS et PROPRIÉTÉS */}
+            <div className="studio-right-panel">
+                <div className="panel-header">ACTEURS & PROPS</div>
+                <div className="scroll-area custom-scrollbar">
+                    
+                    {/* LISTE ACTEURS */}
+                    {currentScene?.actors.map(actor => (
+                        <div 
+                            key={actor.id} 
+                            className={`obj-card ${selectedActorId === actor.id ? 'selected' : ''}`}
+                            onClick={() => setSelectedActorId(actor.id)}
+                        >
+                            <span>{actor.name}</span>
+                        </div>
+                    ))}
+                    <button className="create-obj-full" onClick={handleAddActor}>+ AJOUTER ACTEUR</button>
+                    <div style={{ height: '1px', background: '#334155', margin: '15px 0' }}></div>
+                    
+                    {/* PROPRIÉTÉS ACTEUR */}
+                    {selectedActor ? (
+                        <>
+                            <h4 className="prop-label">{selectedActor.name.toUpperCase()}</h4>
+                            <div className="prop-row">
+                                <label className="prop-label">NOM</label>
+                                <input 
+                                    className="prop-input" 
+                                    value={selectedActor.name} 
+                                    onChange={e => handleChange('name', e.target.value, 'actor')} 
+                                />
+                            </div>
+                            <div className="prop-row">
+                                <label className="prop-label">TAILLE (SCALE)</label>
+                                <input 
+                                    type="number" 
+                                    step="0.1"
+                                    className="prop-input" 
+                                    value={selectedActor.scale} 
+                                    onChange={e => handleChange('scale', parseFloat(e.target.value) || 1, 'actor')} 
+                                />
+                            </div>
+                            <div className="prop-row">
+                                <label className="prop-label">POSITION (X / Y %)</label>
+                                <div className="flex gap-2">
+                                    <input type="number" step="1" className="prop-input" value={Math.round(selectedActor.initialX)} onChange={e => handleChange('initialX', parseInt(e.target.value) || 0, 'actor')} />
+                                    <input type="number" step="1" className="prop-input" value={Math.round(selectedActor.initialY)} onChange={e => handleChange('initialY', parseInt(e.target.value) || 0, 'actor')} />
+                                </div>
+                            </div>
+                            
+                            <h4 className="prop-label mt-4">COSTUMES</h4>
+                            {selectedActor.costumes?.map((costume, index) => (
+                                <div key={costume.id} className="obj-card" onClick={() => handleChange('currentCostumeIdx', index, 'actor')}>
+                                    <div className="obj-thumb-mini">
+                                        <img src={costume.url} alt={costume.name} style={{ maxWidth: '100%', maxHeight: '100%' }} />
+                                    </div>
+                                    <span>{costume.name}</span>
+                                </div>
+                            ))}
+
+                        </>
+                    ) : (
+                        <div className="text-xs text-slate-500 p-2 text-center">Sélectionnez un acteur.</div>
+                    )}
+                </div>
             </div>
         </div>
     );
@@ -6951,6 +7750,7 @@ setInterval(async () => {
     "nodemon": "^3.0.3"
   }
 }
+
 [[[£ END: package.json £]]]
 
 [[[£ FILE: public/style.css £]]]
@@ -7258,7 +8058,7 @@ module.exports = OCREngine;
 [[[£ END: server/core/ocr.engine.js £]]]
 
 [[[£ FILE: server/domains/admin/admin.routes.js £]]]
-// @signatures: DELETE /:collection/:id, DELETE /maintenance/reset-content, GET /admins, GET /classrooms, GET /database-dump, GET /drive-check, GET /students, GET /subjects, GET /teachers, GET /teachers/:id, POST /admins, POST /classrooms, POST /import-csv, POST /import-magic, POST /maintenance/migrate-students, POST /membership, POST /students, POST /subjects, POST /teachers, guessLevel, isForceClass, normalizeClassName, query
+// @signatures: guessLevel, isForceClass, normalizeClassName, query
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
@@ -8851,7 +9651,7 @@ module.exports = StructureExpert;
 [[[£ END: server/domains/structure/experts/structure.expert.js £]]]
 
 [[[£ FILE: server/domains/structure/structure.routes.js £]]]
-// @signatures: DELETE /chapters/:id, DELETE /drive/:id, DELETE /sections, GET /chapters, GET /drive-tree, GET /integrity/:homeworkId, GET /proxy/:id, GET /sections/:teacherId, PATCH /chapters/:id, PATCH /chapters/:id/archive, POST /chapters, POST /sections, POST /sections/reset, POST /sync-root, getRandomColor
+// @signatures: getRandomColor
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
@@ -9239,19 +10039,103 @@ module.exports = StudioDrive;
 [[[£ END: server/domains/studio/experts/studio.drive.js £]]]
 
 [[[£ FILE: server/domains/studio/experts/studio.expert.js £]]]
-// ❌ FICHIER 4 (RE-TRIGGER) : SABOTÉ
+// @signatures: codeToSave
+const fs = require('fs');
+const path = require('path');
+const https = require('https');
 const StudioAI = require('../ai/studio.ai');
+const GameGeneratorAI = require('../ai/game-generator.ai'); 
+const StudioDB = require('../db/studio.db');
+const StudioDrive = require('./studio.drive'); 
 
+/**
+ * 🛠️ EXPERT STUDIO (V2.2 - FIX GENERATION)
+ * Gère correctement le format Code + Message de l'IA.
+ */
 const StudioExpert = {
     
-    generateAsset: async (prompt) => {
-        return { url: "http://fake.url" };
+    generateAsset: async (userPrompt, type) => {
+        const optimizedPrompt = await StudioAI.optimizeAssetPrompt(userPrompt, type);
+        return await StudioExpert._downloadAndStore(optimizedPrompt, userPrompt);
     },
 
-    // ❌ RENOMMAGE SAUVAGE
-    generateGame_DEPRECATED_DO_NOT_USE: async (id) => {
-        throw new Error("Cette fonction n'existe plus");
-    }
+    remixAsset: async (file) => {
+        const buffer = fs.readFileSync(file.path);
+        const promptFromImage = await GameGeneratorAI.remixAssetDescription(buffer);
+        return await StudioExpert._downloadAndStore(promptFromImage, "Remix IA");
+    },
+
+    _downloadAndStore: async (prompt, originalName) => {
+        const encodedPrompt = encodeURIComponent(prompt);
+        const seed = Math.floor(Math.random() * 10000);
+        const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=512&height=512&seed=${seed}&nologo=true`;
+
+        const fileName = `studio-${Date.now()}-${seed}.png`;
+        const uploadDir = path.join(process.cwd(), 'public', 'uploads');
+        if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+        const localPath = path.join(uploadDir, fileName);
+        const file = fs.createWriteStream(localPath);
+
+        return new Promise((resolve, reject) => {
+            https.get(imageUrl, (response) => {
+                if (response.statusCode !== 200) { reject(new Error(`Pollinations Error: ${response.statusCode}`)); return; }
+                response.pipe(file);
+                file.on('finish', async () => {
+                    file.close();
+                    let driveLink = null;
+                    try {
+                        const driveData = await StudioDrive.uploadAsset(localPath, fileName);
+                        if (driveData) driveLink = driveData.link;
+                    } catch(e) { console.error("Drive upload failed but local is ok"); }
+
+                    resolve({
+                        url: `/uploads/${fileName}`,
+                        driveUrl: driveLink,
+                        prompt: prompt,
+                        name: originalName.substring(0, 15)
+                    });
+                });
+            }).on('error', reject);
+        });
+    },
+
+    generateGame: async (projectId, gameIdea) => {
+        const project = await StudioDB.findProjectById(projectId);
+        if (!project) throw new Error("Projet introuvable (ID Invalide)");
+
+        let allActors = [];
+        if (project.scenes && Array.isArray(project.scenes)) {
+            project.scenes.forEach(s => {
+                if (s.actors && Array.isArray(s.actors)) {
+                    allActors.push(...s.actors);
+                }
+            });
+        }
+
+        if (allActors.length === 0) throw new Error("Aucun acteur trouvé dans ce projet. Ajoutez des personnages.");
+
+        // L'IA renvoie maintenant : { code: "...", message: "..." }
+        const aiResult = await GameGeneratorAI.generateGameCode(gameIdea, allActors);
+        
+        // CORRECTION CRITIQUE : On ne sauvegarde QUE le code (String) en BDD
+        // Si aiResult est un objet (nouveau format), on prend .code
+        // Sinon (format legacy ou erreur), on prend tel quel ou chaine vide
+        const codeToSave = (typeof aiResult === 'object' && aiResult.code) ? aiResult.code : "";
+        
+        project.generatedCode = codeToSave;
+        await StudioDB.upsertProject(project);
+        
+        // Mais on renvoie l'objet complet au Client pour avoir le message
+        return aiResult;
+    },
+    
+    // --- NOUVELLE FONCTION FIX CODE ---
+    fixCode: async (currentCode, errorLog, userInstruction) => {
+        return await GameGeneratorAI.fixGameCode(currentCode, errorLog, userInstruction);
+    },
+
+    saveProject: async (projectData) => await StudioDB.upsertProject(projectData),
+    getUserProjects: async (userId) => await StudioDB.findProjectsByTeacher(userId)
 };
 
 module.exports = StudioExpert;
@@ -9259,16 +10143,65 @@ module.exports = StudioExpert;
 [[[£ END: server/domains/studio/experts/studio.expert.js £]]]
 
 [[[£ FILE: server/domains/studio/studio.routes.js £]]]
+// @signatures: DELETE /:id, GET /:id, GET /projects/:userId, POST /, POST /fix-code, POST /generate-asset, POST /generate-game, POST /remix-asset
 const express = require('express');
 const router = express.Router();
-// ❌ FICHIER 3 (RE-TRIGGER) : SABOTÉ
-// J'ai supprimé les imports d'experts.
+const StudioExpert = require('./experts/studio.expert');
+const StudioDB = require('./db/studio.db');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 
-router.get('/projects/:userId', (req, res) => {
-    res.json([]);
-});
+const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
-// ❌ ROUTES SUPPRIMÉES
+const tempDir = path.join(process.cwd(), 'public', 'uploads', 'temp');
+if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+const upload = multer({ dest: tempDir });
+
+router.get('/projects/:userId', asyncHandler(async (req, res) => {
+    res.json(await StudioExpert.getUserProjects(req.params.userId));
+}));
+
+router.get('/:id', asyncHandler(async (req, res) => {
+    const project = await StudioDB.findProjectById(req.params.id);
+    if (!project) return res.status(404).json({ error: "Project not found" });
+    res.json(project);
+}));
+
+router.post('/', asyncHandler(async (req, res) => {
+    res.json(await StudioExpert.saveProject(req.body));
+}));
+
+router.delete('/:id', asyncHandler(async (req, res) => {
+    await StudioDB.deleteProject(req.params.id);
+    res.json({ ok: true });
+}));
+
+// ASSETS & IA
+router.post('/generate-asset', asyncHandler(async (req, res) => {
+    const { prompt, type } = req.body;
+    const result = await StudioExpert.generateAsset(prompt, type || 'character');
+    res.json(result);
+}));
+
+router.post('/remix-asset', upload.single('file'), asyncHandler(async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: "Fichier manquant" });
+    const result = await StudioExpert.remixAsset(req.file);
+    try { fs.unlinkSync(req.file.path); } catch(e) {}
+    res.json(result);
+}));
+
+router.post('/generate-game', asyncHandler(async (req, res) => {
+    const { projectId, gameIdea } = req.body;
+    const result = await StudioExpert.generateGame(projectId, gameIdea);
+    res.json(result);
+}));
+
+router.post('/fix-code', asyncHandler(async (req, res) => {
+    const { code, errorLog, userInstruction } = req.body;
+    const result = await StudioExpert.fixCode(code, errorLog, userInstruction);
+    res.json(result);
+}));
 
 module.exports = router;
 
@@ -9947,10 +10880,12 @@ LOGIQUE DE MÉMOIRE (HISTORY.TXT) :
 
 [[[£ FILE: temp_diff.json £]]]
 {"oldContent":"// @signatures: codeToSave\nconst fs = require('fs');\nconst path = require('path');\nconst https = require('https');\nconst StudioAI = require('../ai/studio.ai');\nconst GameGeneratorAI = require('../ai/game-generator.ai'); \nconst StudioDB = require('../db/studio.db');\nconst StudioDrive = require('./studio.drive'); \n\n/**\n * 🛠️ EXPERT STUDIO (V2.2 - FIX GENERATION)\n * Gère correctement le format Code + Message de l'IA.\n */\nconst StudioExpert = {\n    \n    generateAsset: async (userPrompt, type) => {\n        const optimizedPrompt = await StudioAI.optimizeAssetPrompt(userPrompt, type);\n        return await StudioExpert._downloadAndStore(optimizedPrompt, userPrompt);\n    },\n\n    remixAsset: async (file) => {\n        const buffer = fs.readFileSync(file.path);\n        const promptFromImage = await GameGeneratorAI.remixAssetDescription(buffer);\n        return await StudioExpert._downloadAndStore(promptFromImage, \"Remix IA\");\n    },\n\n    _downloadAndStore: async (prompt, originalName) => {\n        const encodedPrompt = encodeURIComponent(prompt);\n        const seed = Math.floor(Math.random() * 10000);\n        const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=512&height=512&seed=${seed}&nologo=true`;\n\n        const fileName = `studio-${Date.now()}-${seed}.png`;\n        const uploadDir = path.join(process.cwd(), 'public', 'uploads');\n        if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });\n        const localPath = path.join(uploadDir, fileName);\n        const file = fs.createWriteStream(localPath);\n\n        return new Promise((resolve, reject) => {\n            https.get(imageUrl, (response) => {\n                if (response.statusCode !== 200) { reject(new Error(`Pollinations Error: ${response.statusCode}`)); return; }\n                response.pipe(file);\n                file.on('finish', async () => {\n                    file.close();\n                    let driveLink = null;\n                    try {\n                        const driveData = await StudioDrive.uploadAsset(localPath, fileName);\n                        if (driveData) driveLink = driveData.link;\n                    } catch(e) { console.error(\"Drive upload failed but local is ok\"); }\n\n                    resolve({\n                        url: `/uploads/${fileName}`,\n                        driveUrl: driveLink,\n                        prompt: prompt,\n                        name: originalName.substring(0, 15)\n                    });\n                });\n            }).on('error', reject);\n        });\n    },\n\n    generateGame: async (projectId, gameIdea) => {\n        const project = await StudioDB.findProjectById(projectId);\n        if (!project) throw new Error(\"Projet introuvable (ID Invalide)\");\n\n        let allActors = [];\n        if (project.scenes && Array.isArray(project.scenes)) {\n            project.scenes.forEach(s => {\n                if (s.actors && Array.isArray(s.actors)) {\n                    allActors.push(...s.actors);\n                }\n            });\n        }\n\n        if (allActors.length === 0) throw new Error(\"Aucun acteur trouvé dans ce projet. Ajoutez des personnages.\");\n\n        // L'IA renvoie maintenant : { code: \"...\", message: \"...\" }\n        const aiResult = await GameGeneratorAI.generateGameCode(gameIdea, allActors);\n        \n        // CORRECTION CRITIQUE : On ne sauvegarde QUE le code (String) en BDD\n        // Si aiResult est un objet (nouveau format), on prend .code\n        // Sinon (format legacy ou erreur), on prend tel quel ou chaine vide\n        const codeToSave = (typeof aiResult === 'object' && aiResult.code) ? aiResult.code : \"\";\n        \n        project.generatedCode = codeToSave;\n        await StudioDB.upsertProject(project);\n        \n        // Mais on renvoie l'objet complet au Client pour avoir le message\n        return aiResult;\n    },\n\n    saveProject: async (projectData) => await StudioDB.upsertProject(projectData),\n    getUserProjects: async (userId) => await StudioDB.findProjectsByTeacher(userId)\n};\n\nmodule.exports = StudioExpert;\n","newContent":"// ❌ FICHIER 4 : SABOTÉ\nconst StudioAI = require('../ai/studio.ai');\n\nconst StudioExpert = {\n    \n    generateAsset: async (prompt) => {\n        return { url: \"http://fake.url\" };\n    },\n\n    // ❌ RENOMMAGE SAUVAGE (Casse les dépendances)\n    generateGame_DEPRECATED_DO_NOT_USE: async (id) => {\n        throw new Error(\"Cette fonction n'existe plus\");\n    }\n};\n\nmodule.exports = StudioExpert;","filePath":"server/domains/studio/experts/studio.expert.js"}
+
 [[[£ END: temp_diff.json £]]]
 
 [[[£ FILE: temp_verdict.json £]]]
 {"verdict":"DANGER","reason":"Fonctions clés supprimées ou sabotées (generateGame, remixAsset)."}
+
 [[[£ END: temp_verdict.json £]]]
 
 [[[£ FILE: tests/integrity.test.js £]]]
