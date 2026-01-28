@@ -1,9 +1,9 @@
 {
   "name": "condamine-pro",
-  "version": "1.160.0",
+  "version": "1.161.0",
   "scripts": {
     "start": "node server/server.js",
-    "server-dev": "nodemon --ignore 'update.txt' --ignore 'apply_status.json' server/server.js",
+    "server-dev": "nodemon --ignore 'update.txt' --ignore 'apply_status.json' --ignore 'temp_diff.json' server/server.js",
     "client": "npm run dev --prefix client",
     "test": "node tests/integrity.test.js",
     "dev": "concurrently -n \"APPLY,MAGIC,SERVER,CLIENT\" -c \"green,yellow,magenta,cyan\" \"node apply.js\" \"node magic-paste.js\" \"npm run server-dev\" \"npm run client\"",

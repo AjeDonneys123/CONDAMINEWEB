@@ -15,8 +15,6 @@ const SERVER_BOOT_ID = Date.now();
 
 app.use(express.json({ limit: '100mb' }));
 
-// --- API SYSTÈME AVANCÉE (TIME LORD + ORACLE) ---
-
 app.get('/api/system/apply-status', (req, res) => {
     const statusFile = path.join(__dirname, '../apply_status.json');
     if (fs.existsSync(statusFile)) {
@@ -35,33 +33,47 @@ app.get('/api/system/version', (req, res) => {
     } catch (e) { res.json({ hash: 'UNKNOWN' }); }
 });
 
-// --- NOUVEAU : L'ORACLE (ANALYSE COMPARATIVE) ---
+// --- L'ORACLE V13 (100% MONITORING) ---
 app.post('/api/system/oracle', async (req, res) => {
     const diffFile = path.join(__dirname, '../temp_diff.json');
-    if (!fs.existsSync(diffFile)) return res.json({ analysis: "Pas de données de différence." });
+    if (!fs.existsSync(diffFile)) return res.json({ analysis: "Pas de données." });
 
     try {
         const { oldContent, newContent, filePath } = JSON.parse(fs.readFileSync(diffFile, 'utf8'));
         
-        const prompt = `ANALYSE DE RÉGRESSION CRITIQUE sur le fichier : ${filePath}
+        const prompt = `AUDIT DE SÉCURITÉ CODE (Avant vs Après) sur : ${filePath}
 
-        VERSION PRÉCÉDENTE (Fonctionnelle) :
-        ${oldContent.substring(0, 5000)} ...
+        ANCIEN CODE (Extrait) :
+        ${oldContent.substring(0, 4000)}
 
-        NOUVELLE VERSION (Suspecte) :
-        ${newContent.substring(0, 5000)} ...
+        NOUVEAU CODE (Extrait) :
+        ${newContent.substring(0, 4000)}
 
-        TA MISSION :
-        Compare les deux versions. Identifie précisément quelle LOGIQUE MÉTIER ou FONCTIONNALITÉ a été supprimée ou altérée.
-        Ne parle pas de syntaxe ("il manque une accolade"). Parle d'impact ("La sauvegarde ne se fait plus").
+        TA MISSION : Détermine si cette modification introduit une RÉGRESSION ou une PERTE DE FONCTIONNALITÉ.
 
-        RÉPONSE (1 phrase courte) :
-        "⚠️ RÉGRESSION : [Explication précise de ce qui a disparu]"`;
+        CRITÈRES DE JUGEMENT :
+        🟢 SAFE : 
+        - Ajout de code.
+        - Refactoring propre (logique conservée).
+        - Nettoyage de commentaires ou logs.
+        - Changement de style CSS non destructif.
 
-        const explanation = await AIEngine.ask(prompt, "Tu es un Senior Lead Developer qui fait une Code Review sévère.");
-        res.json({ analysis: explanation });
+        🔴 DANGER :
+        - Suppression d'une fonction entière.
+        - "Lobotomie" (fonction vidée de son contenu).
+        - Suppression d'un ID HTML ou d'une classe utilisée ailleurs.
+        - Suppression d'un import critique.
+
+        RÉPOND UNIQUEMENT EN JSON :
+        {
+            "verdict": "SAFE" ou "DANGER",
+            "reason": "Explication courte (max 15 mots). Si DANGER, donne un test manuel."
+        }`;
+
+        const raw = await AIEngine.ask(prompt, "Tu es un Juge de Code Senior. Réponds en JSON.");
+        res.json(AIEngine.sanitizeJSON(raw));
     } catch (e) {
-        res.json({ analysis: "L'Oracle est indisponible." });
+        res.json({ verdict: "DANGER", reason: "Erreur analyse IA" });
     }
 });
 
@@ -70,7 +82,7 @@ app.post('/api/system/revert', (req, res) => {
     exec('git reset --hard HEAD', (err, stdout) => {
         if (err) return res.status(500).json({ error: "Echec Git" });
         console.log("✅ [GIT] Système restauré.");
-        res.json({ ok: true, message: "Système restauré à la dernière version saine." });
+        res.json({ ok: true, message: "Système restauré." });
     });
 });
 
@@ -85,7 +97,7 @@ if (!fs.existsSync(uploadsPath)) fs.mkdirSync(uploadsPath, { recursive: true });
 app.use('/uploads', express.static(uploadsPath));
 app.get('/uploads/:filename', (req, res) => { const requestedFile = req.params.filename; const cleanName = decodeURIComponent(requestedFile).split('?')[0]; const filePath = path.join(uploadsPath, cleanName); if (fs.existsSync(filePath)) return res.sendFile(filePath); res.status(404).send('Fichier introuvable.'); });
 
-app.get('/api/check-deploy', (req, res) => { res.json({ status: "OK", version: "V9.3_ORACLE", bootId: SERVER_BOOT_ID }); });
+app.get('/api/check-deploy', (req, res) => { res.json({ status: "OK", version: "V13.0_GOD_MODE", bootId: SERVER_BOOT_ID }); });
 
 app.use('/api/auth', require('./domains/auth/auth.routes'));
 app.use('/api/admin', require('./domains/admin/admin.routes'));
@@ -102,4 +114,4 @@ mongoose.connect(process.env.MONGODB_URI).then(() => console.log('✅ BDD CONNEC
 
 const distPath = path.resolve(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) { app.use(express.static(distPath)); app.get('*', (req, res) => { if (req.url.startsWith('/uploads/')) return res.status(404).send("Not found"); res.sendFile(path.join(distPath, 'index.html')); }); }
-app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V11.0 (Oracle) UP`));
+app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V13.0 (GOD MODE) UP`));
