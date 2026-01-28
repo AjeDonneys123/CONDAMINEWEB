@@ -1,5 +1,7 @@
 {
   "status": "OK",
-  "message": "Système prêt.",
-  "timestamp": 1769611569675
+  "message": "Code appliqué",
+  "details": "1 fichiers mis à jour.",
+  "context": null,
+  "timestamp": 1769611574144
 }
