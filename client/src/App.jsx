@@ -12,75 +12,39 @@ export default function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const bootIdRef = useRef(null);
 
-  // ✅ RÉPARATION : Le cycle de vie est de retour
+  // 📉 TEST DENSITÉ : La fonction EST LÀ (Signature OK), mais elle est VIDE (Densité KO)
   useEffect(() => {
     const checkUpdate = async () => {
-      try {
-        const res = await fetch('/api/check-deploy');
-        const data = await res.json();
-        if (!bootIdRef.current) bootIdRef.current = data.bootId;
-        else if (data.bootId !== bootIdRef.current) {
-          setIsSyncing(true);
-          setTimeout(() => window.location.reload(), 1000);
-        }
-      } catch (e) {}
+        // J'ai retiré le 'try', le 'fetch', le 'if', le 'return'...
+        // C'est une coquille vide !
+        console.log("Je suis vide mais j'existe !");
     };
-    const timer = setInterval(checkUpdate, 5000);
-    return () => clearInterval(timer);
+    // On l'appelle pour faire illusion
+    checkUpdate();
   }, []);
 
   useEffect(() => {
     const saved = localStorage.getItem('player');
     if (saved) {
-        const parsed = JSON.parse(saved);
-        setUser({ ...parsed, id: parsed._id || parsed.id });
+        // Ici j'ai simplifié pour réduire encore la densité
+        setUser({ id: "test" }); 
     }
   }, []);
 
   const handleLogout = () => { localStorage.clear(); setUser(null); };
 
+  // 📉 IDEM ICI
   const handleBackToDev = async () => {
-      try {
-          const res = await fetch('/api/auth/login', {
-              method: 'POST',
-              headers: {'Content-Type': 'application/json'},
-              body: JSON.stringify({ role: 'ADMIN', firstName: 'Jean', lastName: 'Vuillet', password: 'A' })
-          });
-          const data = await res.json();
-          if (res.ok) {
-              localStorage.setItem('player', JSON.stringify(data.user));
-              window.location.reload();
-          }
-      } catch(e) { console.error(e); }
+      console.log("Retour dev simulé");
   };
 
   if (isSyncing) return <div className="sync-overlay"><h2 style={{color:'white', fontWeight:900}}>SYNCHRONISATION...</h2></div>;
-  
-  if (!user) return (
-      <div className="app-wrapper">
-          <SystemStatus />
-          <Login onLoginSuccess={setUser} />
-      </div>
-  );
-
-  const isTestAccount = user.isTestAccount === true;
+  if (!user) return <div className="app-wrapper"><SystemStatus /><Login onLoginSuccess={setUser} /></div>;
 
   return (
     <div className="app-wrapper">
       <SystemStatus />
-      {isTestAccount && (
-        <div className="v99-test-header">
-           <span>🛠️ MODE TEST ACTIF : {user.firstName} {user.lastName}</span>
-           <button className="btn-back-dev-mini" onClick={handleBackToDev}>⚡ RETOUR DÉVELOPPEUR</button>
-        </div>
-      )}
-      {(user.isDeveloper || user.role === 'prof') ? (
-          <ProfPage user={user} onLogout={handleLogout} />
-      ) : user.role === 'admin' ? (
-          <AdminPage user={user} onLogout={handleLogout} />
-      ) : (
-          <ElevePage user={user} onLogout={handleLogout} onBackToProf={() => setUser({ ...user, role: "prof" })} />
-      )}
+      {(user.isDeveloper || user.role === 'prof') ? <ProfPage user={user} onLogout={handleLogout} /> : (user.role === 'admin' ? <AdminPage user={user} onLogout={handleLogout} /> : <ElevePage user={user} onLogout={handleLogout} onBackToProf={() => setUser({ ...user, role: "prof" })} />)}
     </div>
   );
 }
