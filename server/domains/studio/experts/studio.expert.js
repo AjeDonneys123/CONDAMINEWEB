@@ -8,8 +8,8 @@ const StudioDB = require('../db/studio.db');
 const StudioDrive = require('./studio.drive'); 
 
 /**
- * 🛠️ EXPERT STUDIO (V2.2 - FIX GENERATION)
- * Gère correctement le format Code + Message de l'IA.
+ * 🛠️ EXPERT STUDIO (V2.2 - RESTAURATION COMPLÈTE)
+ * Gère la génération d'assets, le remixage et la création de code de jeu.
  */
 const StudioExpert = {
     
@@ -73,22 +73,18 @@ const StudioExpert = {
 
         if (allActors.length === 0) throw new Error("Aucun acteur trouvé dans ce projet. Ajoutez des personnages.");
 
-        // L'IA renvoie maintenant : { code: "...", message: "..." }
+        // L'IA renvoie : { code: "...", message: "..." }
         const aiResult = await GameGeneratorAI.generateGameCode(gameIdea, allActors);
         
-        // CORRECTION CRITIQUE : On ne sauvegarde QUE le code (String) en BDD
-        // Si aiResult est un objet (nouveau format), on prend .code
-        // Sinon (format legacy ou erreur), on prend tel quel ou chaine vide
+        // On ne sauvegarde QUE le code (String) en BDD
         const codeToSave = (typeof aiResult === 'object' && aiResult.code) ? aiResult.code : "";
         
         project.generatedCode = codeToSave;
         await StudioDB.upsertProject(project);
         
-        // Mais on renvoie l'objet complet au Client pour avoir le message
         return aiResult;
     },
     
-    // --- NOUVELLE FONCTION FIX CODE ---
     fixCode: async (currentCode, errorLog, userInstruction) => {
         return await GameGeneratorAI.fixGameCode(currentCode, errorLog, userInstruction);
     },

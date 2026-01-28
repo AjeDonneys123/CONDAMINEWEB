@@ -1,1 +1,1 @@
-{"verdict":"DANGER","reason":"Fonctions clés supprimées ou sabotées (generateGame, remixAsset)."}
+{"verdict":"SAFE","reason":"Refactorisation avec exportation des utilitaires dans StudioUtils."}
