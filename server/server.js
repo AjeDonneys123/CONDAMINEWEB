@@ -3,8 +3,8 @@ const fs = require('fs');
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
-const { exec } = require('child_process'); // Nécessaire pour Git
-const AIEngine = require('./core/ai.engine'); // Pour l'analyse de risque
+const { exec } = require('child_process');
+const AIEngine = require('./core/ai.engine');
 
 if (!global.fetch) { const fetch = require('node-fetch'); global.fetch = fetch; global.Headers = fetch.Headers; global.Request = fetch.Request; global.Response = fetch.Response; }
 
@@ -17,7 +17,6 @@ app.use(express.json({ limit: '100mb' }));
 
 // --- API SYSTÈME AVANCÉE (TIME LORD) ---
 
-// 1. Lire le statut (HUD)
 app.get('/api/system/apply-status', (req, res) => {
     const statusFile = path.join(__dirname, '../apply_status.json');
     if (fs.existsSync(statusFile)) {
@@ -25,7 +24,6 @@ app.get('/api/system/apply-status', (req, res) => {
     } else { res.json({ status: 'OK' }); }
 });
 
-// 2. Version actuelle (Git Hash)
 app.get('/api/system/version', (req, res) => {
     exec('git rev-parse --short HEAD', (err, stdout) => {
         if (err) return res.json({ hash: 'DEV-MODE' });
@@ -33,34 +31,28 @@ app.get('/api/system/version', (req, res) => {
     });
 });
 
-// 3. Analyse de Risque IA
+// MODIFICATION DU PROMPT ICI POUR L'IMPACT FONCTIONNEL
 app.post('/api/system/analyze-risk', async (req, res) => {
     const { missing, filePath } = req.body;
-    const prompt = `ALERTE CODE : Dans le fichier "${filePath}", les fonctions/variables suivantes ont disparu : [${missing.join(', ')}].
-    Explique en UNE SEULE PHRASE courte et percutante (style avertissement militaire) quel est le risque fonctionnel pour l'application.`;
+    const prompt = `ALERTE CODE : Dans le fichier "${filePath}", les éléments suivants ont disparu : [${missing.join(', ')}].
+    
+    TA MISSION : Explique à un humain quelles fonctionnalités de l'application vont cesser de fonctionner.
+    Ne parle pas de code ("variable undefined"), parle d'USAGE ("L'utilisateur ne pourra plus...").
+    
+    Exemple : Si 'checkUpdate' manque -> "La mise à jour automatique du site ne fonctionnera plus."
+    
+    Réponse en une phrase courte et alarmiste.`;
     
     try {
-        const explanation = await AIEngine.ask(prompt, "Tu es un expert en sécurité de code.");
+        const explanation = await AIEngine.ask(prompt, "Tu es un expert en fiabilité logicielle.");
         res.json({ analysis: explanation });
     } catch (e) {
         res.json({ analysis: "Analyse IA indisponible." });
     }
 });
 
-// 4. Machine à Remonter le Temps (Revert)
 app.post('/api/system/revert', (req, res) => {
     console.log("⏪ [GIT] Retour vers le passé demandé...");
-    // On annule tout ce qui n'est pas commité et on revient au commit précédent si nécessaire
-    // Ici on fait un hard reset sur le dernier commit VALIDE (HEAD)
-    // Comme apply.js commit AVANT de toucher, HEAD est la version "saine" avant la tentative
-    // Ou HEAD^ si on veut annuler le dernier commit réussi.
-    
-    // Stratégie : On suppose que apply.js a fait un commit "Pre-Update".
-    // Si on veut annuler ce que l'utilisateur vient de faire (qui a peut être été bloqué ou appliqué partiellement)
-    // On fait un reset hard sur HEAD (pour virer les changements non stagés)
-    // Si on veut annuler le dernier commit enregistré, c'est HEAD^.
-    
-    // Pour la sécurité : On fait un hard reset à HEAD (état propre dernier commit).
     exec('git reset --hard HEAD', (err, stdout) => {
         if (err) return res.status(500).json({ error: "Echec Git" });
         console.log("✅ [GIT] Système restauré.");
@@ -68,7 +60,6 @@ app.post('/api/system/revert', (req, res) => {
     });
 });
 
-// ... (Le reste du fichier server.js ne change pas, juste les imports/routes au dessus)
 const models = ['AcademicYear', 'Admin', 'Classroom', 'Subject', 'Teacher', 'Student', 'Enrollment', 'Chapter', 'Homework', 'Submission', 'GameLevel', 'GameProgress', 'MistakesBook', 'AccessLog', 'BugReport', 'ProjectDoc', 'Player', 'StudioProject', 'Sanction', 'ScanSession'];
 models.forEach(m => { try { require(`./models/${m}`); } catch (e) { console.warn(`⚠️ Modèle manquant : ${m}`); } });
 
