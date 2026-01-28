@@ -1,12 +1,12 @@
 {
   "status": "JUDGING",
   "message": "Analyse IA en cours...",
-  "details": "Perdu : sprite",
+  "details": "Densité : -2%",
   "context": {
     "missing": [
-      "sprite"
+      "Densité -2%"
     ],
-    "filePath": "server/domains/studio/ai/game-generator.ai.js"
+    "filePath": "client/src/features/prof/components/SystemStatus.jsx"
   },
-  "timestamp": 1769617463972
+  "timestamp": 1769617652194
 }

@@ -5,7 +5,7 @@ import './SystemStatus.css';
 export default function SystemStatus() {
     const [statusData, setStatusData] = useState({ status: 'OK', timestamp: 0 });
     const [visible, setVisible] = useState(false);
-    const [version, setVersion] = useState('...');
+    const [version, setVersion] = useState('1');
     const [verdict, setVerdict] = useState(null); 
     const [reverting, setReverting] = useState(false);
     
@@ -16,31 +16,35 @@ export default function SystemStatus() {
 
     useEffect(() => {
         const interval = setInterval(async () => {
+            // SI C'EST DÉJÀ CLASSÉ "SAFE", ON ARRÊTE DE VÉRIFIER POUR NE PAS ROUVRIR
+            if (verdict?.verdict === 'SAFE') return;
+
             try {
                 const res = await fetch('/api/system/apply-status');
                 const data = await res.json();
                 
-                // RESET AUTO SI OK
+                // CAS 1 : TOUT EST OK
                 if (data.status === 'OK') {
                     if (visible && verdict?.verdict !== 'DANGER') { setVisible(false); setVerdict(null); }
                     return;
                 }
 
-                // SI ALERTE
+                // CAS 2 : ALERTE
                 setStatusData(data);
-                setVisible(true);
 
-                // NOUVEAU BATCH DÉTECTÉ ?
+                // NOUVELLE ALERTE DÉTECTÉE
                 if (data.timestamp !== lastTimestampRef.current) {
-                    console.log("📦 Nouveau Batch détecté !");
                     lastTimestampRef.current = data.timestamp;
                     setVerdict(null); 
-                    // Si le moteur demande un jugement ("JUDGING"), on appelle l'Oracle
-                    if (data.status === 'JUDGING') askOracle();
+                    setVisible(true); // On ouvre
+                    askOracle();
                 } 
-                else if (data.status === 'JUDGING' && !verdict && !fetchingRef.current) {
-                    askOracle(); // Retry si pas de réponse
+                // MÊME ALERTE EN COURS
+                else if (visible && !verdict && !fetchingRef.current) {
+                    // Si on n'a pas encore de verdict, on continue de chercher
+                    askOracle();
                 }
+                // NOTE : Si verdict est SAFE, on ne fait RIEN (on laisse le timeout fermer)
 
             } catch (e) {}
         }, 1000);
@@ -55,7 +59,12 @@ export default function SystemStatus() {
             if (res.ok) {
                 const d = await res.json();
                 setVerdict(d);
-                if (d.verdict === "SAFE") setTimeout(() => setVisible(false), 2500);
+                // AUTO-CLOSE SAFE : On ferme après 2.5s et c'est définitif pour ce timestamp
+                if (d.verdict === "SAFE") {
+                    setTimeout(() => {
+                        setVisible(false);
+                    }, 2500); 
+                }
             }
         } catch (e) {}
         fetchingRef.current = false;
@@ -65,23 +74,15 @@ export default function SystemStatus() {
         setReverting(true);
         const report = `🚨 RAPPORT:\n${statusData.message}\nIA: ${verdict?.reason}`;
         try { await navigator.clipboard.writeText(report); } catch (err) {}
-
-        try {
-            await fetch('/api/system/revert', { method: 'POST' });
-            setTimeout(() => window.location.reload(), 500);
-        } catch(e) { setReverting(false); }
+        try { await fetch('/api/system/revert', { method: 'POST' }); setTimeout(() => window.location.reload(), 500); } catch(e) { setReverting(false); }
     };
 
     if (!visible) return <div className="fixed top-2 right-2 z-[9999] opacity-50 hover:opacity-100 transition-opacity bg-blue-600 text-white text-[10px] px-2 py-1 rounded font-black cursor-default shadow-sm">v.{version}</div>;
 
     let bgClass = "bg-orange-500 border-orange-700"; 
-    let messageIA = "🔮 Analyse Globale en cours...";
+    let messageIA = "🔮 Analyse IA en cours...";
     
-    if (statusData.status === 'ERROR') {
-        bgClass = "bg-red-600 border-red-800";
-        messageIA = "⛔ Blocage Moteur (Fichier rejeté)";
-    }
-    else if (verdict) {
+    if (verdict) {
         if (verdict.verdict === "DANGER") {
             bgClass = "bg-red-600 border-red-800";
             messageIA = `⛔ ALERTE : "${verdict.reason}"`;
@@ -98,19 +99,17 @@ export default function SystemStatus() {
                 <div className="flex flex-col">
                     <div className="flex items-center gap-3">
                         <span className="text-xl uppercase tracking-widest flex items-center gap-2">
-                            {statusData.status === 'ERROR' ? '⛔ ECHEC BATCH' : (!verdict ? '⏳ AUDIT...' : verdict.verdict)}
+                            {!verdict ? '⏳ ANALYSE...' : verdict.verdict}
                         </span>
-                        <span className="text-[10px] bg-black/30 px-2 py-1 rounded font-mono">v.{version}</span>
+                        <span className="text-[10px] bg-blue-600 px-2 py-1 rounded font-mono">v.{version}</span>
                     </div>
                     <span className="text-md font-bold mt-1">{statusData.message}</span>
-                    {statusData.details && <span className="text-xs font-mono opacity-80">{statusData.details}</span>}
                 </div>
                 
-                {/* BOUTON REVERT : Annule TOUT le batch car c'était un seul commit */}
-                {(verdict?.verdict === 'DANGER' || statusData.status === 'ERROR') && (
+                {verdict?.verdict !== 'SAFE' && (
                     <div className="flex gap-2">
                         <button onClick={handleRevertAndReport} disabled={reverting} className="bg-black/40 hover:bg-black/60 px-4 py-2 rounded-lg font-bold text-xs uppercase border border-white/20 transition-colors shadow-lg animate-pulse flex items-center gap-2">
-                            {reverting ? 'ANNULATION...' : '🔙 REVERT BATCH'}
+                            {reverting ? 'RESTAURATION...' : '🔙 REVERT'}
                         </button>
                         <button onClick={() => setVisible(false)} className="bg-white/20 hover:bg-white/40 rounded-full w-8 h-8 flex items-center justify-center font-bold">✕</button>
                     </div>
