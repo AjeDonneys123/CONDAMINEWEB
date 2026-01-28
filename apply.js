@@ -1,4 +1,4 @@
-// @signatures: applyUpdate, extractSignatures, checkCssDependency, checkDeepClassIntegrity, checkDomIntegrity, checkLogicDensity, writeStatus, snapshot
+// @signatures: applyUpdate, checkCssDependency, checkDeepClassIntegrity, checkDomIntegrity, checkLogicDensity, countLogic, extractSignatures, getIds, snapshot, writeStatus
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
