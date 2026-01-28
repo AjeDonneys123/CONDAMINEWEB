@@ -62,3 +62,5 @@
 2026-01-28 14:05 - FEATURE STUDIO : Ajout de l'importation de personnages depuis l'ordinateur. Le flux PC -> Serveur -> Drive -> Proxy est opérationnel. Mise à jour de l'UI pour permettre l'upload de costumes par acteur.
 
 2026-01-28 14:18 - STUDIO EVOLUTION : Transformation de la console en interface de Chat. Ajout d'un moteur de Preview de jeu intégré. L'IA peut désormais recevoir du feedback, modifier le code et expliquer ses changements via les bulles de chat.
+
+2026-01-28 14:35 - SYSTEM REINFORCEMENT : Upgrade de apply.js (V17) avec détection mathématique de régression DOM et signature JS. Réparation structurelle du StudioDashboard (JSX/CSS) pour corriger les chevauchements visuels.

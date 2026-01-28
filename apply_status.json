@@ -1,12 +1,12 @@
 {
   "status": "JUDGING",
   "message": "Analyse IA en cours...",
-  "details": "Perdu : codeToSave",
+  "details": "Densité : -1%",
   "context": {
     "missing": [
-      "codeToSave"
+      "Densité -1%"
     ],
-    "filePath": "server/domains/studio/experts/studio.expert.js"
+    "filePath": "client/src/features/prof/studio/StudioDashboard.jsx"
   },
-  "timestamp": 1769627974081
+  "timestamp": 1769628388649
 }
