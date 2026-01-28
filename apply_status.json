@@ -1,7 +1,12 @@
 {
-  "status": "OK",
-  "message": "Code appliqué",
-  "details": "1 fichiers mis à jour.",
-  "context": null,
-  "timestamp": 1769618636326
+  "status": "JUDGING",
+  "message": "Analyse IA en cours...",
+  "details": "Perdu : codeToSave",
+  "context": {
+    "missing": [
+      "codeToSave"
+    ],
+    "filePath": "server/domains/studio/experts/studio.expert.js"
+  },
+  "timestamp": 1769618671781
 }
