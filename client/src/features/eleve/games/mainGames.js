@@ -1,3 +1,4 @@
+// @signatures: GameProgression
 export class GameProgression {
     constructor(questions, maxLives = 4) {
         this.questions = questions;

@@ -1,4 +1,4 @@
-// @signatures: DELETE /chapters/:id, DELETE /drive/:id, DELETE /sections, GET /chapters, GET /drive-tree, GET /integrity/:homeworkId, GET /proxy/:id, GET /sections/:teacherId, PATCH /chapters/:id, PATCH /chapters/:id/archive, POST /chapters, POST /sections, POST /sections/reset, POST /sync-root, getRandomColor
+// @signatures: getRandomColor
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');

@@ -1,3 +1,4 @@
+// @signatures: BadComponent
 import React from 'react';
 import './Introuvable.css'; // <--- LE PIÈGE EST ICI (Ce fichier n'existe pas)
 
