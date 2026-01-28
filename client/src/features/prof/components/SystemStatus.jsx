@@ -20,9 +20,8 @@ export default function SystemStatus() {
                 const res = await fetch('/api/system/apply-status');
                 const data = await res.json();
                 
-                // CAS 1 : TOUT EST RENTRÉ DANS L'ORDRE
+                // CAS 1 : STATUS OK (Reset total)
                 if (data.status === 'OK') {
-                    // On cache immédiatement le bandeau (sauf si on est en train de lire un verdict DANGER)
                     if (visible && verdict?.verdict !== 'DANGER') {
                         setVisible(false);
                         setVerdict(null);
@@ -30,18 +29,18 @@ export default function SystemStatus() {
                     return;
                 }
 
-                // CAS 2 : ALERTE ACTIVE
+                // CAS 2 : STATUS ALERTE (Judging/Warning/Error)
                 setStatusData(data);
-                setVisible(true);
-
-                // Nouvelle alerte détectée ?
+                
+                // Si c'est une nouvelle alerte, on l'affiche et on reset le verdict
                 if (data.timestamp !== lastTimestampRef.current) {
                     lastTimestampRef.current = data.timestamp;
                     setVerdict(null); 
+                    setVisible(true);
                     askOracle();
                 } 
-                // Alerte en cours mais pas de verdict ?
-                else if (!verdict && !fetchingRef.current) {
+                // Si le bandeau est visible mais qu'on a pas de verdict, on réessaie
+                else if (visible && !verdict && !fetchingRef.current) {
                     askOracle();
                 }
 
@@ -58,7 +57,14 @@ export default function SystemStatus() {
             if (res.ok) {
                 const d = await res.json();
                 setVerdict(d);
-                // Si c'est SAFE, on laisse le serveur passer à OK pour fermer la fenêtre (pas de timeout ici)
+                
+                // ✅ FIX V14.4 : SI SAFE, ON FERME AUTOMATIQUEMENT
+                if (d.verdict === "SAFE") {
+                    setTimeout(() => {
+                        setVisible(false);
+                        // On ne reset pas le verdict tout de suite pour éviter un clignotement
+                    }, 2500); 
+                }
             }
         } catch (e) {}
         fetchingRef.current = false;
@@ -105,7 +111,7 @@ export default function SystemStatus() {
                     <span className="text-md font-bold mt-1">{statusData.message}</span>
                 </div>
                 
-                {/* LE BOUTON REVERT N'APPARAIT QUE SI C'EST DANGEREUX OU EN COURS */}
+                {/* BOUTON REVERT (Seulement si Danger) */}
                 {verdict?.verdict !== 'SAFE' && (
                     <div className="flex gap-2">
                         <button onClick={handleRevertAndReport} disabled={reverting} className="bg-black/40 hover:bg-black/60 px-4 py-2 rounded-lg font-bold text-xs uppercase border border-white/20 transition-colors shadow-lg animate-pulse flex items-center gap-2">
