@@ -1,12 +1,12 @@
 {
   "status": "JUDGING",
   "message": "Analyse IA en cours...",
-  "details": "Analyse IA forcée (Fichier Critique)",
+  "details": "Perdu : handleActorMove",
   "context": {
     "missing": [
-      "Modification Critique"
+      "handleActorMove"
     ],
-    "filePath": "server/server.js"
+    "filePath": "client/src/features/prof/studio/StudioDashboard.jsx"
   },
-  "timestamp": 1769628881427
+  "timestamp": 1769629640715
 }

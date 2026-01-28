@@ -1,4 +1,4 @@
-// @signatures: GamePreview, StageActor, StudioDashboard, executeConsole, handleActorMove, handleAddActor, handleAddScene, handleChange, handleDeleteProject, handleMouseDown, handleMouseMove, handleMouseUp, handleUploadCostume, loadAssets, loadProjects, saveProject
+// @signatures: GamePreview, StageActor, StudioDashboard, executeConsole, handleAddActor, handleAddScene, handleChange, handleDeleteProject, handleMouseDown, handleMouseMove, handleMouseUp, handleUploadCostume, loadAssets, loadProjects, saveProject
 import React, { useState, useRef, useEffect } from 'react';
 import './StudioDashboard.css';
 import { api } from '../../../services/api';
@@ -56,41 +56,77 @@ const StageActor = ({ actor, isSelected, onSelect, onMove }) => {
     );
 };
 
+// --- MOTEUR DE PREVIEW V3 (STABLE) ---
 const GamePreview = ({ code, project, onClose }) => {
     const canvasRef = useRef(null);
     const engineRef = useRef(null);
+    const [error, setError] = useState(null);
 
     useEffect(() => {
         if (!canvasRef.current || !code) return;
+        
         const assets = {};
         const actors = project.scenes.flatMap(s => s.actors);
+        
         const loadAssets = async () => {
-            const promises = actors.map(actor => {
-                const costume = actor.costumes?.[actor.currentCostumeIdx || 0];
-                if (!costume) return Promise.resolve();
-                return new Promise(resolve => {
-                    const img = new Image();
-                    img.onload = () => { assets[actor.id] = img; resolve(); };
-                    img.onerror = () => resolve();
-                    img.src = costume.url;
-                });
-            });
-            await Promise.all(promises);
             try {
-                const GameClass = new Function('assets', 'canvas', `${code}; return MiniGame;`)(assets, canvasRef.current);
-                engineRef.current = new GameClass();
-                engineRef.current.start?.();
-            } catch (e) { console.error(e); }
+                const promises = actors.map(actor => {
+                    const costume = actor.costumes?.[actor.currentCostumeIdx || 0];
+                    if (!costume) return Promise.resolve();
+                    return new Promise(resolve => {
+                        const img = new Image();
+                        img.crossOrigin = "anonymous";
+                        img.onload = () => { assets[actor.id] = img; resolve(); };
+                        img.onerror = () => resolve();
+                        img.src = costume.url;
+                    });
+                });
+                await Promise.all(promises);
+
+                // INJECTION DU CODE DANS LA CLASSE
+                const fullScript = `${code}; return MiniGame;`;
+                const GameClass = new Function('canvas', 'assets', fullScript)(canvasRef.current, assets);
+                
+                engineRef.current = new GameClass(canvasRef.current, assets);
+                engineRef.current.start();
+            } catch (e) {
+                console.error("Game Launch Error:", e);
+                setError(e.message);
+            }
         };
+
         loadAssets();
-        return () => engineRef.current?.destroy?.();
-    }, [code]);
+        return () => {
+            if (engineRef.current?.destroy) engineRef.current.destroy();
+        };
+    }, [code, project]);
 
     return (
-        <div className="fixed inset-0 z-[10000] bg-black/95 flex flex-col items-center justify-center p-10">
-            <div className="bg-slate-900 p-2 rounded-xl border border-white/20 relative shadow-2xl">
-                <canvas ref={canvasRef} width={800} height={450} className="bg-white rounded-lg" />
-                <button onClick={onClose} className="absolute -top-12 right-0 text-white font-black text-xl">✕ FERMER</button>
+        <div className="fixed inset-0 z-[20000] bg-slate-950 flex flex-col items-center justify-center p-6">
+            <div className="w-full max-w-4xl bg-slate-900 rounded-3xl p-4 border border-white/10 shadow-2xl relative">
+                <div className="flex justify-between items-center mb-4 px-2">
+                    <span className="text-xs font-black text-indigo-400 uppercase tracking-widest">Console de Test Live</span>
+                    <button onClick={onClose} className="text-white hover:text-red-500 font-black">✕ FERMER</button>
+                </div>
+                
+                {error ? (
+                    <div className="aspect-video bg-red-950/20 border border-red-500/50 rounded-xl flex items-center justify-center p-10">
+                        <div className="text-center">
+                            <span className="text-4xl block mb-4">💥</span>
+                            <code className="text-red-400 text-xs">{error}</code>
+                        </div>
+                    </div>
+                ) : (
+                    <canvas ref={canvasRef} width={800} height={450} className="w-full h-auto bg-black rounded-xl shadow-inner border border-white/5" />
+                )}
+                
+                <div className="mt-4 flex gap-4 justify-center">
+                    <div className="flex items-center gap-2 px-3 py-1 bg-white/5 rounded-full">
+                        <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                        <span className="text-[10px] font-bold text-slate-400">ENGINE ACTIVE</span>
+                    </div>
+                    <span className="text-[10px] font-bold text-slate-500 uppercase">Flèches pour bouger • Espace pour sauter</span>
+                </div>
             </div>
         </div>
     );
@@ -102,10 +138,11 @@ export default function StudioDashboard({ user }) {
     const [selectedSceneIndex, setSelectedSceneIndex] = useState(0);
     const [selectedActorId, setSelectedActorId] = useState(null);
     const [loading, setLoading] = useState(false);
-    const [chatHistory, setChatHistory] = useState([{ role: 'ai', text: "Salut ! Je suis ton assistant. Décris-moi ton jeu." }]);
+    const [chatHistory, setChatHistory] = useState([
+        { role: 'ai', text: "Bonjour ! Je suis ton ingénieur de jeu. Ajoute des personnages, puis décris-moi le gameplay pour que je puisse coder le jeu." }
+    ]);
     const [consoleInput, setConsoleInput] = useState('');
     const [showPreview, setShowPreview] = useState(false);
-    
     const chatEndRef = useRef(null);
     const fileInputRef = useRef(null);
 
@@ -154,7 +191,7 @@ export default function StudioDashboard({ user }) {
                 setSelectedProject(nextProject);
                 await saveProject(nextProject);
             }
-        } catch (err) { alert("Erreur upload"); }
+        } catch (err) { alert("Erreur upload Drive"); }
         setLoading(false);
     };
     
@@ -172,17 +209,24 @@ export default function StudioDashboard({ user }) {
         e.preventDefault();
         const msg = consoleInput.trim();
         if (!msg || loading) return;
+
         setChatHistory(prev => [...prev, { role: 'user', text: msg }]);
         setConsoleInput('');
         setLoading(true);
+
         try {
             const endpoint = !selectedProject.generatedCode ? '/studio/generate-game' : '/studio/fix-code';
-            const payload = !selectedProject.generatedCode ? { projectId: selectedProject._id, gameIdea: msg } : { projectId: selectedProject._id, code: selectedProject.generatedCode, userInstruction: msg };
+            const payload = !selectedProject.generatedCode 
+                ? { projectId: selectedProject._id, gameIdea: msg } 
+                : { projectId: selectedProject._id, code: selectedProject.generatedCode, userInstruction: msg };
+
             const res = await api.post(endpoint, payload);
             setSelectedProject(prev => ({ ...prev, generatedCode: res.code }));
             setChatHistory(prev => [...prev, { role: 'ai', text: res.message, hasAction: true }]);
             await saveProject({ ...selectedProject, generatedCode: res.code });
-        } catch(e) { setChatHistory(prev => [...prev, { role: 'ai', text: "Erreur technique." }]); }
+        } catch(e) {
+            setChatHistory(prev => [...prev, { role: 'ai', text: "Je n'ai pas réussi à compiler le code. Réessaie avec une consigne simple." }]);
+        }
         setLoading(false);
     };
 
@@ -193,17 +237,11 @@ export default function StudioDashboard({ user }) {
     };
 
     const handleAddActor = () => {
-        const newActor = { id: `actor-${Date.now()}`, name: `Perso`, costumes: [], initialX: 50, initialY: 50, scale: 1 };
+        const newActor = { id: `actor-${Date.now()}`, name: `Nouveau`, costumes: [], initialX: 50, initialY: 50, scale: 1 };
         const next = { ...selectedProject };
         next.scenes[selectedSceneIndex].actors.push(newActor);
         setSelectedProject(next);
         setSelectedActorId(newActor.id);
-    };
-    
-    const handleActorMove = (actorId, newX, newY) => {
-        const next = { ...selectedProject };
-        const actor = next.scenes[selectedSceneIndex].actors.find(a => a.id === actorId);
-        if (actor) { actor.initialX = newX; actor.initialY = newY; setSelectedProject(next); }
     };
 
     const handleDeleteProject = async (id) => { if (confirm("Supprimer ?")) { await api.delete(`/studio/${id}`); setSelectedProject(null); loadProjects(); } };
@@ -211,8 +249,8 @@ export default function StudioDashboard({ user }) {
     if (!selectedProject) return (
         <div className="studio-wrapper">
             <div className="studio-center flex-col items-center justify-center p-20">
-                <h1 className="text-4xl font-black text-white/20 mb-8 uppercase tracking-widest">Studio de Création</h1>
-                <button onClick={() => setSelectedProject({ title: 'Nouveau Projet', scenes: [{ name: 'Scene Principale', actors: [], timeline: [] }], teacherId: user.id || user._id })} className="bg-indigo-600 text-white px-10 py-5 rounded-2xl font-black shadow-xl hover:scale-105 transition-all">+ CRÉER UN PROJET</button>
+                <h1 className="text-4xl font-black text-white/10 mb-8 uppercase tracking-widest">Studio Créatif</h1>
+                <button onClick={() => setSelectedProject({ title: 'Nouveau Projet', scenes: [{ name: 'Scène Principale', actors: [], timeline: [] }], teacherId: user.id || user._id })} className="bg-indigo-600 text-white px-10 py-5 rounded-2xl font-black shadow-xl hover:scale-105 transition-all">+ CRÉER UN PROJET</button>
                 <div className="mt-10 grid grid-cols-2 gap-4 w-full max-w-xl">
                     {projects.map(p => <div key={p._id} className="obj-card !bg-slate-800/50 border-slate-700" onClick={() => setSelectedProject(p)}><span className="font-bold">{p.title}</span></div>)}
                 </div>
@@ -221,12 +259,11 @@ export default function StudioDashboard({ user }) {
     );
 
     return (
-        <div className="studio-wrapper" id="studio-root">
+        <div className="studio-wrapper">
             {showPreview && <GamePreview code={selectedProject.generatedCode} project={selectedProject} onClose={() => setShowPreview(false)} />}
             <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleUploadCostume} />
             
-            {/* GAUCHE : SCÈNES */}
-            <div className="studio-sidebar" id="sidebar-scenes">
+            <div className="studio-sidebar">
                 <div className="panel-header">🎬 SCÈNES</div>
                 <div className="scroll-area">
                     {selectedProject.scenes.map((s, i) => <div key={i} className={`obj-card ${selectedSceneIndex === i ? 'selected' : ''}`} onClick={() => { setSelectedSceneIndex(i); setSelectedActorId(null); }}>{s.name}</div>)}
@@ -234,19 +271,19 @@ export default function StudioDashboard({ user }) {
                 </div>
             </div>
 
-            {/* CENTRE : ÉCRAN & CHAT */}
             <div className="studio-center">
                 <div className="stage-toolbar">
                     <input type="text" value={selectedProject.title} onChange={e => handleChange('title', e.target.value, 'project')} className="bg-transparent text-white font-black text-xs outline-none uppercase w-64" />
-                    <div className="flex gap-4 ml-auto px-4">
-                        <button onClick={() => saveProject()} className="text-[10px] font-black text-indigo-400">💾 SAUVER</button>
-                        <button onClick={() => handleDeleteProject(selectedProject._id)} className="text-[10px] font-black text-red-500">✕</button>
-                    </div>
+                    <button onClick={() => saveProject()} className="ml-auto text-[10px] font-black text-indigo-400">💾 SAUVER</button>
                 </div>
                 
-                <div className="stage-wrapper" id="stage-viewport">
+                <div className="stage-wrapper">
                     <div className="stage-canvas">
-                        {currentScene?.actors.map(a => <StageActor key={a.id} actor={a} isSelected={selectedActorId === a.id} onSelect={setSelectedActorId} onMove={handleActorMove} />)}
+                        {currentScene?.actors.map(a => <StageActor key={a.id} actor={a} isSelected={selectedActorId === a.id} onSelect={setSelectedActorId} onMove={(id, x, y) => {
+                             const next = { ...selectedProject };
+                             const actor = next.scenes[selectedSceneIndex].actors.find(ac => ac.id === id);
+                             if (actor) { actor.initialX = x; actor.initialY = y; setSelectedProject(next); }
+                        }} />)}
                     </div>
                 </div>
 
@@ -255,45 +292,37 @@ export default function StudioDashboard({ user }) {
                         {chatHistory.map((msg, i) => (
                             <div key={i} className={`chat-bubble ${msg.role}`}>
                                 <div className="chat-text">{msg.text}</div>
-                                {msg.hasAction && <button onClick={() => setShowPreview(true)} className="btn-test-game">▶ TESTER LE JEU</button>}
+                                {msg.hasAction && <button onClick={() => setShowPreview(true)} className="btn-test-game">▶ LANCER LE JEU</button>}
                             </div>
                         ))}
-                        {loading && <div className="chat-bubble ai opacity-50 italic">IA en cours...</div>}
+                        {loading && <div className="chat-bubble ai opacity-50 italic">Ingénieur en cours d'écriture...</div>}
                         <div ref={chatEndRef} />
                     </div>
                     <form onSubmit={executeConsole} className="studio-chat-input-area">
-                        <input className="chat-input" placeholder="Décris une modification..." value={consoleInput} onChange={e => setConsoleInput(e.target.value)} disabled={loading} />
+                        <input className="chat-input" placeholder="Décris le jeu ou une modif..." value={consoleInput} onChange={e => setConsoleInput(e.target.value)} disabled={loading} />
                         <button type="submit" className="btn-send-chat" disabled={loading}>ENVOYER</button>
                     </form>
                 </div>
             </div>
 
-            {/* DROITE : ACTEURS */}
-            <div className="studio-right-panel" id="sidebar-actors">
+            <div className="studio-right-panel">
                 <div className="panel-header">🎭 PERSONNAGES</div>
                 <div className="scroll-area">
                     {currentScene?.actors.map(a => <div key={a.id} className={`obj-card ${selectedActorId === a.id ? 'selected' : ''}`} onClick={() => setSelectedActorId(a.id)}>{a.name}</div>)}
-                    <button className="create-obj-full" onClick={handleAddActor}>+ AJOUTER ACTEUR</button>
+                    <button className="create-obj-full" onClick={handleAddActor}>+ AJOUTER</button>
                     
                     {selectedActor && (
-                        <div className="mt-6 p-4 bg-black/40 rounded-2xl border border-white/5 animate-in slide-in-from-right-4">
+                        <div className="mt-6 p-4 bg-black/40 rounded-2xl border border-white/5">
                             <label className="prop-label">NOM</label>
                             <input className="prop-input mb-4" value={selectedActor.name} onChange={e => handleChange('name', e.target.value, 'actor')} />
-                            <label className="prop-label mb-2">IMAGE (CLOUD)</label>
+                            <label className="prop-label mb-2">COSTUMES</label>
                             <div className="grid grid-cols-2 gap-2 mb-4">
-                                {selectedActor.costumes?.map((c, i) => (
-                                    <div key={i} className={`aspect-square bg-slate-900 rounded-xl overflow-hidden border-2 cursor-pointer transition-all ${selectedActor.currentCostumeIdx === i ? 'border-indigo-500 scale-105' : 'border-transparent'}`} onClick={() => handleChange('currentCostumeIdx', i, 'actor')}>
-                                        <img src={c.url} className="w-full h-full object-contain" alt="costume" />
-                                    </div>
-                                ))}
-                                <button onClick={() => fileInputRef.current.click()} className="aspect-square bg-white/5 border-2 border-dashed border-white/10 rounded-xl flex flex-col items-center justify-center hover:bg-white/10 transition-all">
-                                    <span className="text-xl">📁</span>
-                                    <span className="text-[8px] font-black uppercase mt-1">PC</span>
-                                </button>
+                                {selectedActor.costumes?.map((c, i) => <div key={i} className={`aspect-square bg-slate-900 rounded-xl overflow-hidden border-2 ${selectedActor.currentCostumeIdx === i ? 'border-indigo-500' : 'border-transparent'}`} onClick={() => handleChange('currentCostumeIdx', i, 'actor')}><img src={c.url} className="w-full h-full object-contain" alt="costume" /></div>)}
+                                <button onClick={() => fileInputRef.current.click()} className="aspect-square bg-white/5 border-2 border-dashed border-white/10 rounded-xl flex items-center justify-center"><span className="text-xl">📁</span></button>
                             </div>
                             <div className="flex justify-between items-center pt-4 border-t border-white/5">
                                 <span className="text-[10px] font-black text-slate-500 uppercase">Taille</span>
-                                <input type="range" min="0.1" max="3" step="0.1" value={selectedActor.scale || 1} onChange={e => handleChange('scale', parseFloat(e.target.value), 'actor')} className="w-24" />
+                                <input type="range" min="0.1" max="3" step="0.1" value={selectedActor.scale || 1} onChange={e => handleChange('scale', parseFloat(e.target.value), 'actor')} className="w-20" />
                             </div>
                         </div>
                     )}

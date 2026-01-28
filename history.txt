@@ -68,3 +68,5 @@
 2026-01-28 14:40 - SYSTEM CLEANUP : Création du modèle Sanction manquant pour supprimer l'alerte console. Mise à jour de server.js pour renforcer la détection de sabotage DOM par l'Oracle. Le système est désormais 100% propre dans les logs.
 
 2026-01-28 15:02 - SYSTEM RESILIENCE : Ajout d'une boucle de Retry automatique pour l'Audit IA. Si l'Oracle échoue ou timeout, le client retente la requête toutes les 2 secondes au lieu de rester bloqué en orange.
+
+2026-01-28 14:52 - STUDIO ENGINE REPAIR : Correction du moteur de Preview. Le code généré par l'IA doit maintenant respecter le contrat de classe 'MiniGame' avec constructeur (canvas, assets). Ajout de la gestion des collisions et de la gravité par défaut pour les jeux de plateforme.

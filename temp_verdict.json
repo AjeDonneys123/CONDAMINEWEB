@@ -1,1 +1,1 @@
-{"verdict":"SAFE","reason":"Ajout d'un cache pour les verdicts SAFE, amélioration des performances."}
+{"verdict":"SAFE","reason":"Ajout de AssetThumb et handleDeleteScene dans les signatures, pas de perte de fonctionnalité."}

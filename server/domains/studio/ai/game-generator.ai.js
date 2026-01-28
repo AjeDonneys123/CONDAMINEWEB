@@ -5,29 +5,27 @@ const GameGeneratorAI = {
     generateGameCode: async (gameIdea, actors) => {
         console.log("🕹️ [GAME-GEN] Nouvelle Création...");
 
-        const actorsContext = actors.map((a) => {
-            return `- ID: "${a.id}", Nom: "${a.name}"`;
-        }).join('\n');
+        const actorsContext = actors.map((a) => `- ID: "${a.id}", Nom: "${a.name}"`).join('\n');
 
-        const system = `Tu es un développeur de jeux expert. Tu écris du code HTML5 Canvas JavaScript.
+        const system = `Tu es un développeur de jeux expert en JavaScript HTML5 Canvas.
         
-        RÈGLES TECHNIQUES :
-        1. Tu dois créer une classe 'MiniGame'.
-        2. Les images sont déjà chargées dans 'this.assets[ID_ACTEUR]'.
-        3. 'this.canvas' est disponible dans la classe.
-        4. Méthodes obligatoires : start(), destroy(), et une boucle d'update via requestAnimationFrame.
-        5. L'axe Y est inversé (0 en haut).
-        6. Pour un Mario-like : Gère la gravité, les collisions avec les bords et les ennemis.
+        CONTRAT TECHNIQUE OBLIGATOIRE :
+        1. Crée une classe nommée 'MiniGame'.
+        2. Le constructeur doit être : constructor(canvas, assets) { this.canvas = canvas; this.ctx = canvas.getContext('2d'); this.assets = assets; }
+        3. Méthodes requises : start() { ... }, update() { ... }, draw() { ... }, destroy() { ... }.
+        4. Loop : Utilise requestAnimationFrame dans update().
+        5. Assets : Pour dessiner un acteur, utilise this.assets['ID_DE_L_ACTEUR'].
+        6. Input : Gère this.keys = {} pour le clavier.
+        7. VISUELS : Si un acteur est une plateforme ou n'a pas d'image, dessine des blocs de couleur (ctx.fillRect) pour éviter un écran vide.
 
-        RÈGLES DE DIALOGUE :
-        Dans ton champ 'message', explique tes choix de gameplay et comment tester.`;
+        RÈGLES DE JEU (Mario-like) :
+        - Gravité : y += velocityY.
+        - Collision Plateforme : Empêche de tomber.
+        - Scrolling : Simule une progression vers la droite.
 
-        const prompt = `CRÉATION DE JEU : "${gameIdea}"
-        
-        ACTEURS DISPONIBLES :
-        ${actorsContext}
+        RÉPONDS UNIQUEMENT EN JSON : { "code": "Le code JS complet", "message": "Résumé des fonctionnalités" }`;
 
-        RENVOIE UN JSON : { "code": "...", "message": "..." }`;
+        const prompt = `CRÉE LE JEU : "${gameIdea}"\nACTEURS : ${actorsContext}`;
 
         try {
             const raw = await AIEngine.ask(prompt, system);
@@ -36,27 +34,16 @@ const GameGeneratorAI = {
     },
 
     fixGameCode: async (currentCode, userInstruction, actors) => {
-        console.log("🔧 [GAME-FIX] Modification en cours...");
+        console.log("🔧 [GAME-FIX] Modification...");
 
         const actorsContext = actors.map((a) => `- ID: "${a.id}", Nom: "${a.name}"`).join('\n');
 
-        const system = `Tu es un développeur de jeux expert. Modifie le code existant.
-        
-        RÈGLES :
-        1. Garde la structure de la classe 'MiniGame'.
-        2. Utilise les IDs d'acteurs pour les images.
-        3. Dans 'message', liste exactement ce que tu as mis à jour.`;
+        const system = `Tu es un expert JS Canvas. Modifie la classe MiniGame existante selon les instructions.
+        Respecte scrupuleusement le constructeur(canvas, assets).
+        Liste les changements dans le champ 'message'.
+        RÉPONDS UNIQUEMENT EN JSON.`;
 
-        const prompt = `CODE ACTUEL :
-        ${currentCode}
-
-        DEMANDE DE MISE À JOUR :
-        "${userInstruction}"
-
-        ACTEURS :
-        ${actorsContext}
-
-        RENVOIE UN JSON : { "code": "...", "message": "..." }`;
+        const prompt = `CODE ACTUEL :\n${currentCode}\n\nMODIFICATION DEMANDÉE : "${userInstruction}"\nACTEURS : ${actorsContext}`;
 
         try {
             const raw = await AIEngine.ask(prompt, system);
