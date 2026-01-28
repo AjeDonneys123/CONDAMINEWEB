@@ -1,4 +1,3 @@
-// @signatures: sprite
 const AIEngine = require('../../../core/ai.engine');
 
 const GameGeneratorAI = {
@@ -6,38 +5,37 @@ const GameGeneratorAI = {
     generateGameCode: async (gameIdea, actors) => {
         console.log("🕹️ [GAME-GEN] Génération du code de jeu...");
 
+        // On prépare une liste explicite pour l'IA
         const actorsContext = actors.map((a, i) => {
-            const sprite = (a.costumes && a.costumes.length > 0) ? a.costumes[0].url : "";
-            return `Actor ${i+1}: Name="${a.name}", ID="${a.id}", SpriteURL="${sprite}"`;
+            return `ACTOR ${i+1} : 
+            - Name: "${a.name}"
+            - ID: "${a.id}" (UTILISE CET ID POUR L'ASSET !)
+            - Role: ${i === 0 ? 'Player' : 'Enemy/Object'}`;
         }).join('\n');
 
-        const system = `Tu es un expert en développement de jeux HTML5 Canvas (2D).
+        const system = `Tu es un expert en développement de jeux HTML5 Canvas.
         
-        TES OBJECTIFS :
-        1. Générer une classe JavaScript 'MiniGame'.
-        2. Expliquer brièvement ce que tu as fait ou corrigé.
+        RÈGLES D'OR DU MOTEUR DE JEU :
+        1. Les images sont dans l'objet 'assets'.
+        2. LA CLÉ DE L'IMAGE EST L'ID DE L'ACTEUR, PAS SON NOM.
+           Exemple : ctx.drawImage(this.assets['${actors[0]?.id || 'xxx'}'], x, y, w, h);
+        3. Gestion Clavier : Utilise e.preventDefault() sur la barre d'espace.
+        4. Nettoyage : destroy() doit tout arrêter.
+        5. Rendu : Efface le canvas (clearRect) à chaque frame avant de dessiner.
 
-        CONTRAINTES TECHNIQUES STRICTES :
-        - La classe doit avoir : constructor(canvas, assets), update(dt), draw(ctx), destroy().
-        - GESTION CLAVIER : Pour la barre d'espace ('Space' ou ' '), tu DOIS utiliser e.preventDefault() pour empêcher le défilement de la page.
-        - NETTOYAGE : destroy() doit supprimer tous les event listeners.
-        - ROBUSTESSE : Pas de crash si une image manque.
-        - PAS D'ALERT() : Dessine le Game Over sur le canvas.
+        Génère une classe 'MiniGame' complète.`;
 
-        FORMAT DE RÉPONSE ATTENDU (JSON STRICT) :
-        {
-            "code": "Le code JavaScript complet de la classe...",
-            "message": "Une explication courte (1 phrase) de ce que tu as implémenté ou corrigé pour le créateur."
-        }`;
+        const prompt = `CRÉE CE JEU : "${gameIdea}"
+        
+        LISTE DES ACTEURS ET LEURS IDs (A UTILISER POUR LES IMAGES) :
+        ${actorsContext}
 
-        const prompt = `IDÉE DU JEU : "${gameIdea}"\nACTEURS : ${actorsContext}\n\nGénère le code et le message explicatif.`;
+        FORMAT JSON : { "code": "...", "message": "..." }`;
 
         try {
             const raw = await AIEngine.ask(prompt, system);
             return AIEngine.sanitizeJSON(raw);
         } catch (e) { 
-            console.error(e);
-            // Fallback si l'IA plante le JSON
             return { code: "", message: "Erreur de génération IA." }; 
         }
     },
@@ -45,24 +43,19 @@ const GameGeneratorAI = {
     fixGameCode: async (currentCode, errorLog, userInstruction) => {
         console.log("🔧 [GAME-FIX] Réparation du code...");
 
-        const system = `Tu es un expert en débogage JavaScript pour jeux Canvas.
+        const system = `Tu es un expert en débogage JavaScript Canvas.
+        Ton but est de réparer le code fourni selon l'erreur ou la demande.
         
-        FORMAT DE RÉPONSE ATTENDU (JSON STRICT) :
-        {
-            "code": "Le code corrigé...",
-            "message": "Explication de la correction (ex: 'J'ai ajouté preventDefault sur la barre d'espace')."
-        }
-        
-        RÈGLE D'OR : Si le problème concerne la barre d'espace qui fait scroller ou reload, ajoute 'e.preventDefault()' dans l'écouteur d'événement.`;
+        RAPPEL IMPORTANT : Les images sont accessibles via this.assets['ID_ACTEUR'].
+        Si l'utilisateur dit "on ne voit rien", vérifie que le drawImage utilise bien les bons IDs d'assets.`;
 
-        const prompt = `
-        CODE ACTUEL :
+        const prompt = `CODE ACTUEL :
         ${currentCode}
 
-        ERREUR / DEMANDE :
+        PROBLÈME / DEMANDE :
         "${errorLog || userInstruction}"
 
-        Corrige le code et explique pourquoi.`;
+        Renvoie le code corrigé en JSON : { "code": "...", "message": "..." }`;
 
         try {
             const raw = await AIEngine.ask(prompt, system);
