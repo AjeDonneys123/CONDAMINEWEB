@@ -1,12 +1,12 @@
 {
   "status": "JUDGING",
   "message": "Analyse IA en cours...",
-  "details": "Perdu : scheduleHide",
+  "details": "Perdu : isVisible",
   "context": {
     "missing": [
-      "scheduleHide"
+      "isVisible"
     ],
     "filePath": "client/src/features/prof/components/SystemStatus.jsx"
   },
-  "timestamp": 1769620883378
+  "timestamp": 1769624729049
 }

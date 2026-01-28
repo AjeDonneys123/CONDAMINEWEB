@@ -52,3 +52,5 @@
 - Correction du conflit Intervalle/Timeout.
 - Si le verdict est SAFE, l'intervalle de surveillance se met en pause pour laisser la fenêtre se fermer.
 - Fin des bandeaux verts persistants.
+
+2026-01-28 12:20 - UI FIX : Le bandeau SystemStatus est passé de 'fixed' à 'relative'. Il est désormais intégré au sommet du flux HTML et pousse tout le site vers le bas pour ne plus cacher les éléments d'interface.
