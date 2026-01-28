@@ -1,4 +1,4 @@
-// @signatures: applyUpdate, extractSignatures, checkCssDependency, checkDeepClassIntegrity, writeStatus, snapshot
+// @signatures: applyUpdate, extractSignatures, checkCssDependency, checkDeepClassIntegrity, checkDomIntegrity, writeStatus, snapshot
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
@@ -6,8 +6,8 @@ const inputFile = 'update.txt';
 const statusFile = 'apply_status.json';
 
 console.log("------------------------------------------------");
-console.log("🛡️ [SYSTEM] Moteur V9.1 (Permissif + Snapshot)");
-console.log("    Stratégie : Appliquer -> Alerter -> Revert possible");
+console.log("🛡️ [SYSTEM] Moteur V10.0 (Full Spectrum)");
+console.log("    Securité : JS + CSS + DOM (IDs) + Snapshot");
 console.log("------------------------------------------------");
 
 function writeStatus(type, message, details = null, context = null) {
@@ -17,11 +17,10 @@ function writeStatus(type, message, details = null, context = null) {
 
 function snapshot() {
     try {
-        // Sauvegarde l'état PROPRE avant de le salir
         execSync('git add .');
         execSync('git commit -m "Auto-Save Pre-Update"');
         console.log("💾 [GIT] Snapshot de sécurité créé.");
-    } catch (e) { /* Rien à commiter, c'est pas grave */ }
+    } catch (e) { }
 }
 
 function extractSignatures(content) {
@@ -32,6 +31,25 @@ function extractSignatures(content) {
     return sigs;
 }
 
+// NOUVEAU : RADAR DOM (IDs HTML)
+function checkDomIntegrity(oldContent, newContent) {
+    const getIds = (text) => {
+        const ids = new Set();
+        // Capture id="mon-id" ou id='mon-id'
+        const regex = /\sid=['"]([^'"]+)['"]/g;
+        let match;
+        while ((match = regex.exec(text))) ids.add(match[1]);
+        return ids;
+    };
+
+    const oldIds = getIds(oldContent);
+    const newIds = getIds(newContent);
+    
+    // On cherche ce qui a disparu
+    const missing = [...oldIds].filter(id => !newIds.has(id));
+    return missing.length > 0 ? missing : null;
+}
+
 function checkCssDependency(jsxPath, jsxContent, rawUpdateContent) {
     const importMatch = jsxContent.match(/import\s+['"]\.\/([^'"]+\.css)['"]/);
     if (importMatch) {
@@ -39,7 +57,6 @@ function checkCssDependency(jsxPath, jsxContent, rawUpdateContent) {
         const dir = path.dirname(jsxPath);
         const cssFullPath = path.join(__dirname, dir, cssFileName);
         const existsOnDisk = fs.existsSync(cssFullPath);
-        // On vérifie le raw content pour voir si le CSS est fourni dans le même paquet
         const relativeCssPath = path.join(dir, cssFileName).split(path.sep).join('/');
         const headerTag = `[[[£ FILE: ${relativeCssPath} £]]]`;
         const existsInUpdate = rawUpdateContent.includes(headerTag);
@@ -50,23 +67,33 @@ function checkCssDependency(jsxPath, jsxContent, rawUpdateContent) {
     return { ok: true, cssPath: null };
 }
 
+function checkDeepClassIntegrity(jsxContent, cssPath) {
+    if (!cssPath || !fs.existsSync(cssPath)) return null;
+    try {
+        const cssContent = fs.readFileSync(cssPath, 'utf8');
+        const definedClasses = new Set();
+        let match;
+        while ((match = /\.([a-zA-Z0-9_-]+)(?=\s*[:\{,])/g.exec(cssContent)) !== null) definedClasses.add(match[1]);
+        const usedClasses = new Set();
+        while ((match = /className\s*=\s*['"]([^'"]+)['"]/g.exec(jsxContent)) !== null) { match[1].split(/\s+/).forEach(c => { if(c && !c.includes('{')) usedClasses.add(c); }); }
+        const missing = [...usedClasses].filter(c => !definedClasses.has(c));
+        if (missing.length > 0 && missing.length < 5) return missing;
+    } catch (e) {}
+    return null;
+}
+
 function applyUpdate() {
     try {
         if (!fs.existsSync(inputFile)) { fs.writeFileSync(inputFile, ''); return; }
-
         const rawContent = fs.readFileSync(inputFile, 'utf8');
         if (!rawContent || rawContent.trim().length < 10) return;
 
-        // 1. FLUSH IMMÉDIAT (Débouchage)
-        fs.writeFileSync(inputFile, '');
-
-        // 2. SNAPSHOT (Filet de sécurité)
+        fs.writeFileSync(inputFile, ''); // Flush
         snapshot();
 
         const isForced = rawContent.includes('[FORCE_REDUCTION]');
         let processedCount = 0;
         let warningTriggered = false;
-        
         const startRegex = /\[\[\[£\s*FILE\s*:\s*([^£\]\s]+)\s*£\]\]\]/g;
         let match;
 
@@ -80,7 +107,6 @@ function applyUpdate() {
                 let newContent = rawContent.substring(startIdx, endIdx).trim();
                 const fullPath = path.join(__dirname, filePath);
                 const dirPath = path.dirname(fullPath);
-                
                 if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, { recursive: true });
 
                 if (filePath === 'history.txt') {
@@ -96,52 +122,61 @@ function applyUpdate() {
                 const ext = path.extname(fullPath);
                 let currentWarning = null;
 
-                // --- ANALYSE DE RISQUE (SANS BLOCAGE) ---
                 if (fs.existsSync(fullPath) && !isForced) {
                     const oldContent = fs.readFileSync(fullPath, 'utf8');
                     
+                    // 1. CHECK JS (Fonctions)
                     if (['.js', '.jsx', '.ts'].includes(ext)) {
                         const oldSigs = extractSignatures(oldContent);
                         const newSigs = extractSignatures(newContent);
                         const missing = [...oldSigs].filter(s => !newSigs.has(s));
                         if (missing.length > 0) {
-                            currentWarning = {
-                                title: `Régression probable : ${path.basename(filePath)}`,
-                                msg: `Fonctions perdues : ${missing.join(', ')}`,
-                                context: { missing, filePath }
+                            currentWarning = { title: `Régression JS : ${path.basename(filePath)}`, msg: `Perdu : ${missing.join(', ')}`, context: { missing, filePath } };
+                            console.warn(`⚠️ RISQUE JS: ${filePath}`);
+                        }
+                    }
+
+                    // 2. CHECK DOM (NOUVEAU V10)
+                    if (ext === '.jsx' && !currentWarning) {
+                        const missingIds = checkDomIntegrity(oldContent, newContent);
+                        if (missingIds) {
+                            currentWarning = { 
+                                title: `Structure cassée : ${path.basename(filePath)}`, 
+                                msg: `IDs disparus : ${missingIds.join(', ')}`, 
+                                // On préfixe pour que l'IA comprenne que ce sont des IDs DOM
+                                context: { missing: missingIds.map(id => `ID HTML #${id}`), filePath } 
                             };
-                            console.warn(`⚠️ RISQUE REGRESSION JS: ${filePath}`);
+                            console.warn(`⚠️ RISQUE DOM: ${filePath}`);
                         }
                     }
                 }
 
-                if (!currentWarning && ext === '.jsx') {
+                // 3. CHECK CSS (Styles)
+                if (ext === '.jsx' && !currentWarning) {
                     const cssCheck = checkCssDependency(filePath, newContent, rawContent);
                     if (!cssCheck.ok) {
-                        currentWarning = {
-                            title: `Style manquant`,
-                            msg: `${cssCheck.missing} est introuvable.`,
-                            context: { missing: ["Fichier CSS associé"], filePath }
-                        };
-                        console.warn(`⚠️ RISQUE ORPHELIN: ${filePath}`);
+                        currentWarning = { title: `Style manquant`, msg: `${cssCheck.missing} introuvable`, context: { missing: ["Fichier CSS associé"], filePath } };
+                    }
+                    if (!currentWarning && cssCheck.cssPath) {
+                        const missingClasses = checkDeepClassIntegrity(newContent, cssCheck.cssPath);
+                        if (missingClasses) {
+                            currentWarning = { title: `Style incomplet`, msg: `Classes: ${missingClasses.join(', ')}`, context: { missing: missingClasses, filePath } };
+                        }
                     }
                 }
 
-                // --- APPLICATION DU CODE (MÊME SI DANGEREUX) ---
                 if (['.js', '.jsx', '.ts'].includes(ext)) {
                     const currentSigs = [...extractSignatures(newContent)].sort();
                     if (currentSigs.length > 0) newContent = `// @signatures: ${currentSigs.join(', ')}\n` + newContent.replace(/^\/\/ @signatures:.*\n/, '');
                 }
                 
                 fs.writeFileSync(fullPath, newContent + '\n');
-                console.log(`   ✅ ÉCRIT (Avec risques potentiels) : ${filePath}`);
+                console.log(`   ✅ ÉCRIT : ${filePath}`);
                 
-                // Si on a détecté un risque, on l'affiche dans le HUD
                 if (currentWarning) {
                     writeStatus('WARNING', currentWarning.title, currentWarning.msg, currentWarning.context);
                     warningTriggered = true;
                 }
-                
                 processedCount++;
             }
         }
