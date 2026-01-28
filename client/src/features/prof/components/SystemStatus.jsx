@@ -1,4 +1,4 @@
-// @signatures: SystemStatus, askOracle, handleRevertAndReport
+// @signatures: SystemStatus, askOracle, handleRevertAndReport, scheduleHide
 import React, { useState, useEffect, useRef } from 'react';
 import './SystemStatus.css';
 
@@ -11,8 +11,18 @@ export default function SystemStatus() {
     
     const lastTimestampRef = useRef(0);
     const fetchingRef = useRef(false);
+    const hideTimeoutRef = useRef(null); // Référence pour le timeout de masquage
 
     useEffect(() => { fetch('/api/system/version').then(r => r.json()).then(d => setVersion(d.hash)); }, []);
+
+    // Fonction de masquage sécurisé (pour annuler si une nouvelle alerte arrive)
+    const scheduleHide = (delay = 4000) => {
+        if (hideTimeoutRef.current) clearTimeout(hideTimeoutRef.current);
+        hideTimeoutRef.current = setTimeout(() => {
+            setVisible(false);
+            setVerdict(null); 
+        }, delay);
+    };
 
     useEffect(() => {
         const interval = setInterval(async () => {
@@ -21,26 +31,38 @@ export default function SystemStatus() {
                 const data = await res.json();
                 
                 if (data.status === 'OK') {
-                    if (visible && verdict?.verdict !== 'DANGER') { setVisible(false); setVerdict(null); }
+                    // Si l'état redevient OK après avoir été visible, on masque
+                    if (visible && statusData.status !== 'OK') scheduleHide(1000); 
                     return;
                 }
 
                 setStatusData(data);
                 setVisible(true);
 
+                // Nouvelle alerte ou alerte en attente de jugement
                 if (data.timestamp !== lastTimestampRef.current) {
                     console.log("📦 Nouvelle alerte Batch");
                     lastTimestampRef.current = data.timestamp;
                     setVerdict(null); 
+                    // Annule tout masquage précédent
+                    if (hideTimeoutRef.current) clearTimeout(hideTimeoutRef.current);
+
                     if (data.status === 'JUDGING') askOracle();
                 } 
                 else if (data.status === 'JUDGING' && !verdict && !fetchingRef.current) {
                     askOracle();
                 }
+                
+                // Masquer automatiquement si l'IA a validé
+                if (verdict?.verdict === "SAFE") scheduleHide(4000);
+                
             } catch (e) {}
         }, 1000);
-        return () => clearInterval(interval);
-    }, [visible, verdict]);
+        return () => { 
+            clearInterval(interval); 
+            if (hideTimeoutRef.current) clearTimeout(hideTimeoutRef.current);
+        };
+    }, [visible, verdict, statusData.status]);
 
     const askOracle = async () => {
         if (fetchingRef.current) return;
@@ -50,7 +72,8 @@ export default function SystemStatus() {
             if (res.ok) {
                 const d = await res.json();
                 setVerdict(d);
-                if (d.verdict === "SAFE") setTimeout(() => setVisible(false), 2500);
+                // On planifie le masquage si SAFE
+                if (d.verdict === "SAFE") scheduleHide(4000);
             }
         } catch (e) {}
         fetchingRef.current = false;
@@ -59,7 +82,6 @@ export default function SystemStatus() {
     const handleRevertAndReport = async () => {
         setReverting(true);
         
-        // ✅ CORRECTION V16.2 : INCLUSION DES DÉTAILS TECHNIQUES
         const report = `🚨 RAPPORT D'INCIDENT (V16)
 --------------------------------------------------
 📅 Date: ${new Date().toLocaleString()}
@@ -122,14 +144,15 @@ GEMINI : Analyse ce rapport. Corrige TOUS les fichiers listés dans les détails
                     )}
                 </div>
                 
-                {(verdict?.verdict === 'DANGER' || statusData.status === 'ERROR') && (
-                    <div className="flex flex-col gap-2 shrink-0">
+                {/* ACTIONS & BOUTON FERMER */}
+                <div className="flex flex-col gap-2 shrink-0">
+                    {(verdict?.verdict === 'DANGER' || statusData.status === 'ERROR') && (
                         <button onClick={handleRevertAndReport} disabled={reverting} className="bg-black/40 hover:bg-black/60 px-4 py-3 rounded-lg font-bold text-xs uppercase border border-white/20 transition-colors shadow-lg animate-pulse flex items-center gap-2 justify-center">
                             {reverting ? '...' : '📋 COPIER & REVERT'}
                         </button>
-                        <button onClick={() => setVisible(false)} className="bg-white/20 hover:bg-white/40 rounded-lg py-1 text-[10px] font-bold">FERMER</button>
-                    </div>
-                )}
+                    )}
+                    <button onClick={() => setVisible(false)} className="bg-white/20 hover:bg-white/40 rounded-lg py-1 text-[10px] font-bold">✕ FERMER</button>
+                </div>
             </div>
         </div>
     );

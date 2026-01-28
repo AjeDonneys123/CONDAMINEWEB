@@ -1,14 +1,7 @@
 {
-  "status": "JUDGING",
-  "message": "Analyse IA en cours...",
-  "details": "Perdu : getChaptersForClass, findDefaultChapterId, getStudentsForViewingClass",
-  "context": {
-    "missing": [
-      "getChaptersForClass",
-      "findDefaultChapterId",
-      "getStudentsForViewingClass"
-    ],
-    "filePath": "client/src/features/prof/homework/HomeworkStudio.jsx"
-  },
-  "timestamp": 1769620146473
+  "status": "OK",
+  "message": "Code appliqué",
+  "details": "1 fichiers mis à jour.",
+  "context": null,
+  "timestamp": 1769620267197
 }
