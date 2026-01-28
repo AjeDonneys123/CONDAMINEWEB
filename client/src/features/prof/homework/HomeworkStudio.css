@@ -11,7 +11,6 @@
 .v84-header-left { flex: 1; display: flex; align-items: center; gap: 20px; }
 .v84-icon { font-size: 2rem; background: #f97316; padding: 10px; border-radius: 18px; box-shadow: 0 8px 15px rgba(249, 115, 22, 0.2); }
 .v84-title-input { border: none; font-size: 1.8rem; font-weight: 950; color: #0f172a; outline: none; width: 100%; text-transform: uppercase; }
-.v84-version-tag { background: #6366f1; color: white; padding: 10px 20px; border-radius: 50px; font-weight: 900; font-size: 11px; letter-spacing: 1px; }
 .v84-close-btn { background: none; border: none; font-size: 2.5rem; color: #cbd5e1; cursor: pointer; font-weight: 200; margin-left: 20px; }
 
 .v84-body { flex: 1; display: flex; overflow: hidden; }
@@ -29,22 +28,22 @@
 .v84-page-item { padding: 15px; background: #f8fafc; border-radius: 20px; border: 2px solid transparent; cursor: pointer; transition: all 0.2s; }
 .v84-page-item.active { background: #fff7ed; border-color: #f97316; box-shadow: 0 4px 12px rgba(249, 115, 22, 0.1); }
 .v84-page-name { font-weight: 950; font-size: 11px; color: #475569; }
-.v84-page-preview { font-size: 9px; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 4px; }
 .v84-add-page-btn { margin-top: 10px; padding: 15px; border: 2px dashed #e2e8f0; border-radius: 20px; color: #94a3b8; font-weight: 900; font-size: 10px; cursor: pointer; background: none; }
-
-.v84-chapter-box { margin-top: 20px; padding-top: 20px; border-top: 1px solid #f1f5f9; }
-.v84-select { width: 100%; padding: 12px; border-radius: 15px; border: 2px solid #f1f5f9; font-weight: 800; font-size: 11px; outline: none; }
 
 /* EDITOR */
 .v84-main-editor { flex: 1; padding: 40px; overflow-y: auto; display: flex; flex-direction: column; gap: 30px; }
 .v84-card { background: white; border-radius: 40px; padding: 40px; border: 1px solid #f1f5f9; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02); }
 .v84-card-label { font-size: 12px; font-weight: 950; color: #1e293b; margin-bottom: 20px; display: block; }
 .v84-textarea { width: 100%; height: 120px; border: none; outline: none; resize: none; font-size: 16px; font-weight: 600; color: #334155; background: #f8fafc; padding: 20px; border-radius: 25px; }
-.v84-ai-card { background: #f0f9ff; border: 1px solid #bae6fd; }
-.v84-ai-textarea { background: transparent; color: #0369a1; }
 
-.v84-upload-btn { margin-top: 20px; background: #1e293b; color: white; border: none; padding: 15px 25px; border-radius: 15px; font-weight: 900; font-size: 10px; cursor: pointer; transition: transform 0.1s; }
+/* NOUVEAU : Champ IA (Violet) */
+.v84-ai-box { margin-top: 20px; background: #f5f3ff; border: 2px solid #ddd6fe; border-radius: 25px; padding: 20px; }
+.v84-ai-label { color: #7c3aed; font-weight: 950; font-size: 10px; uppercase; margin-bottom: 10px; display: flex; align-items: center; gap: 5px; }
+.v84-ai-textarea { width: 100%; background: white; border: none; padding: 15px; border-radius: 15px; font-size: 13px; color: #5b21b6; min-height: 80px; outline: none; }
+
+.v84-upload-btn { margin-top: 20px; background: #1e293b; color: white; border: none; padding: 15px 25px; border-radius: 15px; font-weight: 900; font-size: 10px; cursor: pointer; transition: transform 0.1s; margin-right: 10px; }
 .v84-upload-btn:active { transform: scale(0.98); }
+.v84-upload-btn.secondary { background: #cbd5e1; color: #475569; }
 
 .v84-gallery { display: flex; flex-wrap: wrap; gap: 15px; margin-top: 20px; }
 .v84-thumb { width: 110px; height: 110px; border-radius: 18px; overflow: hidden; position: relative; border: 3px solid #fff; box-shadow: 0 4px 10px rgba(0,0,0,0.1); background: #f1f5f9; }
@@ -61,11 +60,3 @@
 .v84-student-row.selected .v84-check::after { content: '✓'; color: white; position: absolute; top: -1px; left: 3px; font-size: 12px; }
 
 .v84-publish-btn { width: 100%; padding: 22px; border-radius: 25px; background: #f97316; color: white; border: none; font-weight: 950; font-size: 14px; cursor: pointer; box-shadow: 0 10px 25px rgba(249, 115, 22, 0.4); text-transform: uppercase; margin-top: 20px; }
-
-/* OVERLAYS */
-.v84-zoom-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 40px; }
-.v84-zoom-overlay img { max-width: 100%; max-height: 100%; border-radius: 20px; border: 5px solid white; }
-
-.v84-upload-loader { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.8); z-index: 11000; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; gap: 20px; font-weight: 900; }
-.v84-spinner { width: 50px; height: 50px; border: 5px solid rgba(255,255,255,0.1); border-top-color: #f97316; border-radius: 50%; animation: v84-spin 1s linear infinite; }
-@keyframes v84-spin { to { transform: rotate(360deg); } }
