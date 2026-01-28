@@ -1,5 +1,5 @@
 // @signatures: App, checkUpdate, handleBackToDev, handleLogout
-import React, { useState, useEffect, useRef } from 'react'; // useRef est importé mais pas utilisé correctement
+import React, { useState, useEffect, useRef } from 'react';
 import Login from './features/auth/Login';
 import ProfPage from './features/prof/ProfPage';
 import ElevePage from './features/eleve/ElevePage';
@@ -9,27 +9,25 @@ import './App.css';
 
 export default function App() {
   const [user, setUser] = useState(null);
-  // ❌ OUBLI 1 : isSyncing n'est plus déclaré
-  // ❌ OUBLI 2 : bootIdRef n'est plus déclaré
+  const [isSyncing, setIsSyncing] = useState(false);
+  const bootIdRef = useRef(null);
 
+  // ✅ RETOUR À LA NORMALE
   useEffect(() => {
     const checkUpdate = async () => {
       try {
         const res = await fetch('/api/check-deploy');
         const data = await res.json();
-        
-        // ❌ BUG : Utilisation de bootIdRef qui n'existe pas dans le scope
         if (!bootIdRef.current) bootIdRef.current = data.bootId;
         else if (data.bootId !== bootIdRef.current) {
-           // ❌ BUG : Utilisation de setIsSyncing qui n'existe pas
-           setIsSyncing(true);
-           setTimeout(() => window.location.reload(), 1000);
+          setIsSyncing(true);
+          setTimeout(() => window.location.reload(), 1000);
         }
       } catch (e) {}
     };
     const timer = setInterval(checkUpdate, 5000);
     return () => clearInterval(timer);
-  }, []); // bootIdRef manquant dans les dépendances aussi
+  }, []);
 
   useEffect(() => {
     const saved = localStorage.getItem('player');
@@ -43,8 +41,7 @@ export default function App() {
 
   const handleBackToDev = async () => {
       try {
-          // ❌ ERREUR 3 : URL imaginaire
-          const res = await fetch('/api/auth/LOGIN_V2_BETA', {
+          const res = await fetch('/api/auth/login', {
               method: 'POST',
               headers: {'Content-Type': 'application/json'},
               body: JSON.stringify({ role: 'ADMIN', firstName: 'Jean', lastName: 'Vuillet', password: 'A' })
@@ -57,7 +54,6 @@ export default function App() {
       } catch(e) { console.error(e); }
   };
 
-  // ❌ BUG : isSyncing est undefined ici -> Crash immédiat de l'interface
   if (isSyncing) return <div className="sync-overlay"><h2 style={{color:'white', fontWeight:900}}>SYNCHRONISATION...</h2></div>;
   
   if (!user) return (
