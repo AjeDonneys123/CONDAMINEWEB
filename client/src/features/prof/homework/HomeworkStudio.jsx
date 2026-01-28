@@ -16,16 +16,13 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, use
   const fileInputRef = useRef(null);
   const [uploadTarget, setUploadTarget] = useState(null);
 
-  // V445 : FILTRAGE STRICT PAR SECTION
+  // FILTRAGE SECTION
   const getChaptersForClass = (clsName) => {
       const targetLvl = allClasses.find(c => c.name === clsName)?.level;
       return chapters.filter(c => {
           if (c.isArchived) return false;
           if (String(c.teacherId) !== String(user.id || user._id)) return false;
-          
-          // FILTRE SECTION CRITIQUE
           if (targetSection && c.section !== targetSection) return false;
-
           if (c.classroom === clsName) return true;
           if (c.sharedLevel && targetLvl && String(c.sharedLevel) === String(targetLvl)) return true;
           if (c.classroom === "" && c.section === "GÉNÉRAL") return true;
@@ -35,10 +32,8 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, use
 
   const findDefaultChapterId = (clsName) => {
       const available = getChaptersForClass(clsName);
-      // 1. Priorité au chapitre "CH1" de cette section
       const ch1 = available.find(c => c.title === "CH1");
       if (ch1) return ch1._id;
-      // 2. Sinon le plus récent
       if (available.length > 0) return available[0]._id;
       return "";
   };
@@ -92,7 +87,6 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, use
     fetchData();
   }, []);
 
-  // ... (Logique inchangée pour le reste) ...
   const detectLevel = () => { const r=viewingClass||globalClass||(initialData?.targetClassrooms?initialData.targetClassrooms[0]:null); if(!r)return null; const o=allClasses.find(c=>c.name===r); if(o&&o.level)return o.level; const m=r.match(/^(\d+|TERM|CP|CE1|CE2|CM1|CM2)/); return m?m[0]:null; };
   const targetLevel = detectLevel();
   const myClassesIds = (user.assignedClasses||[]).map(c=>String(c._id||c));
@@ -131,12 +125,7 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, use
       });
   };
 
-  const handleUpdateChapter = (cls, cId) => {
-      setDistribution(prev => ({
-          ...prev,
-          [cls]: { ...prev[cls], chapterId: cId }
-      }));
-  };
+  const handleUpdateChapter = (cls, cId) => { setDistribution(prev => ({ ...prev, [cls]: { ...prev[cls], chapterId: cId } })); };
 
   const activeLevel = formData.levels[activeLevelIdx];
   const updateLevel = (f, v) => { const n=[...formData.levels]; n[activeLevelIdx][f]=v; setFormData({...formData, levels:n}); };
@@ -149,33 +138,14 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, use
       try {
           for (const cls of targets) {
               const cfg = distribution[cls];
-              let realChapterId = cfg.chapterId;
-              if (!realChapterId) {
-                  const defId = findDefaultChapterId(cls);
-                  if (defId) realChapterId = defId;
-                  else {
-                      // Fallback création CH1 si rien trouvé (très rare)
-                      const res = await fetch('/api/structure/chapters', {
-                          method: 'POST', headers: {'Content-Type':'application/json'},
-                          body: JSON.stringify({ title: "CH1", classroom: cls, teacherId: user.id || user._id, section: targetSection || "GÉNÉRAL" })
-                      });
-                      const newChap = await res.json();
-                      realChapterId = newChap._id;
-                  }
-              }
+              let realChapterId = cfg.chapterId || (await (async()=>{const d=findDefaultChapterId(cls); if(d)return d; const r=await fetch('/api/structure/chapters',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:"CH1",classroom:cls,teacherId:user.id||user._id,section:targetSection||"GÉNÉRAL"})}); return (await r.json())._id;})());
               let finalIds = [];
               let isGlobal = true;
-              if (cfg.studentIds.length > 0) {
-                  isGlobal = false;
-                  finalIds = cfg.studentIds;
-              } else {
+              if (cfg.studentIds.length > 0) { isGlobal = false; finalIds = cfg.studentIds; } 
+              else {
                   const clsObj = allClasses.find(c => c.name === cls);
                   const clsId = clsObj ? String(clsObj._id) : null;
-                  finalIds = allStudents.filter(s => {
-                      const isMain = (s.currentClass || "").trim().toUpperCase() === cls.trim().toUpperCase();
-                      const isOption = clsId && (s.assignedGroups || []).some(gId => String(gId) === clsId);
-                      return isMain || isOption;
-                  }).map(s => s._id);
+                  finalIds = allStudents.filter(s => { const isMain = (s.currentClass || "").trim().toUpperCase() === cls.trim().toUpperCase(); const isOption = clsId && (s.assignedGroups || []).some(gId => String(gId) === clsId); return isMain || isOption; }).map(s => s._id);
               }
               const payload = { ...formData, chapterId: realChapterId, targetClassrooms: [cls], classroom: cls, teacherId: user.id || user._id, assignedStudents: formData.isPunishment ? [] : finalIds, isAllClass: formData.isPunishment ? false : isGlobal };
               await fetch('/api/homework', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
@@ -200,7 +170,31 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, use
         </div>
         <div className="v84-body">
             <div className="v84-sidebar-left"><h4 className="v84-sidebar-label">Contenu</h4><div className="v84-pages-list custom-scrollbar">{formData.levels.map((lvl, idx) => (<div key={idx} className={`v84-page-item ${activeLevelIdx === idx ? 'active' : ''}`} onClick={() => setActiveLevelIdx(idx)}><div className="v84-page-name">PAGE {idx + 1}</div></div>))}<button className="v84-add-page-btn" onClick={() => setFormData({...formData, levels: [...formData.levels, { instruction: '', instructionUrls: [], aiHints: '', attachmentUrls: [] }]})}>+ PAGE</button></div></div>
-            <div className="v84-main-editor custom-scrollbar"><div className="v84-card"><label className="v84-card-label">CONSIGNE & DOCUMENTS</label><textarea className="v84-textarea" value={formData.levels[activeLevelIdx].instruction} onChange={e => { const l=[...formData.levels]; l[activeLevelIdx].instruction=e.target.value; setFormData({...formData, levels:l}); }} placeholder="Écrivez la consigne..." /><div className="flex gap-2 mt-4"><button className="v84-upload-btn" onClick={() => { setUploadTarget('instructionUrls'); fileInputRef.current.click(); }}>📂 ÉNONCÉS</button><button className="v84-upload-btn bg-slate-500" onClick={() => { setUploadTarget('attachmentUrls'); fileInputRef.current.click(); }}>📎 PIÈCES JOINTES</button></div>{activeLevel.instructionUrls.length > 0 && (<div className="mt-6"><h5 className="text-[10px] font-black text-indigo-500 uppercase mb-2">📚 ÉNONCÉS CHARGÉS</h5><div className="v84-gallery">{activeLevel.instructionUrls.map((url, i) => (<div key={i} className="v84-thumb"><img src={url} /><button className="v84-thumb-del" onClick={() => updateLevel('instructionUrls', activeLevel.instructionUrls.filter((_, idx) => idx !== i))}>✕</button></div>))}</div></div>)}{activeLevel.attachmentUrls.length > 0 && (<div className="mt-6"><h5 className="text-[10px] font-black text-slate-500 uppercase mb-2">📎 PIÈCES JOINTES CHARGÉES</h5><div className="v84-gallery">{activeLevel.attachmentUrls.map((url, i) => (<div key={i} className="v84-thumb"><img src={url} /><button className="v84-thumb-del" onClick={() => updateLevel('attachmentUrls', activeLevel.attachmentUrls.filter((_, idx) => idx !== i))}>✕</button></div>))}</div></div>)}</div></div>
+            
+            {/* --- EDITOR AREA --- */}
+            <div className="v84-main-editor custom-scrollbar">
+                <div className="v84-card">
+                    <label className="v84-card-label">CONSIGNE & DOCUMENTS</label>
+                    <textarea className="v84-textarea" value={formData.levels[activeLevelIdx].instruction} onChange={e => updateLevel('instruction', e.target.value)} placeholder="Écrivez la consigne pour l'élève..." />
+                    
+                    {/* --- AJOUT CHAMP IA --- */}
+                    <div className="v84-ai-box">
+                        <div className="v84-ai-label">
+                            <span className="text-xl">🤖</span> CONSIGNES DE CORRECTION (IA)
+                        </div>
+                        <textarea 
+                            className="v84-ai-textarea" 
+                            value={formData.levels[activeLevelIdx].aiHints || ''} 
+                            onChange={e => updateLevel('aiHints', e.target.value)} 
+                            placeholder="Ex: Sois sévère sur la grammaire. Vérifie que la date 1789 est citée. Si réponse courte, mets C." 
+                        />
+                    </div>
+
+                    <div className="flex gap-2 mt-4"><button className="v84-upload-btn" onClick={() => { setUploadTarget('instructionUrls'); fileInputRef.current.click(); }}>📂 ÉNONCÉS</button><button className="v84-upload-btn secondary" onClick={() => { setUploadTarget('attachmentUrls'); fileInputRef.current.click(); }}>📎 PIÈCES JOINTES</button></div>
+                    {activeLevel.instructionUrls.length > 0 && (<div className="mt-6"><h5 className="text-[10px] font-black text-indigo-500 uppercase mb-2">📚 ÉNONCÉS CHARGÉS</h5><div className="v84-gallery">{activeLevel.instructionUrls.map((url, i) => (<div key={i} className="v84-thumb"><img src={url} /><button className="v84-thumb-del" onClick={() => updateLevel('instructionUrls', activeLevel.instructionUrls.filter((_, idx) => idx !== i))}>✕</button></div>))}</div></div>)}
+                    {activeLevel.attachmentUrls.length > 0 && (<div className="mt-6"><h5 className="text-[10px] font-black text-slate-500 uppercase mb-2">📎 PIÈCES JOINTES CHARGÉES</h5><div className="v84-gallery">{activeLevel.attachmentUrls.map((url, i) => (<div key={i} className="v84-thumb"><img src={url} /><button className="v84-thumb-del" onClick={() => updateLevel('attachmentUrls', activeLevel.attachmentUrls.filter((_, idx) => idx !== i))}>✕</button></div>))}</div></div>)}
+                </div>
+            </div>
 
             <div className="v84-sidebar-right" style={{width: '400px'}}>
                 <h4 className="v84-sidebar-label">CIBLAGE (Niveau {targetLevel || '?'})</h4>
