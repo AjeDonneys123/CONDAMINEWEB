@@ -2,8 +2,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './GameStudio.css';
 import { api } from '../../../services/api';
-// Import des fonctions nécessaires du HomeworkStudio
-import { getChaptersForClass, findDefaultChapterId, getStudentsForViewingClass, SUBJECTS_LIST } from '../../homework/HomeworkStudio'; 
+// Correction du chemin d'importation: le chemin relatif était incorrect.
+import { getChaptersForClass, findDefaultChapterId, getStudentsForViewingClass, SUBJECTS_LIST } from '../homework/HomeworkStudio'; 
 
 // State par défaut pour un quiz vide
 const DEFAULT_QUIZ_DATA = { 
@@ -63,7 +63,7 @@ export default function GameStudio({ initialData, chapters, classFilter, user, t
             }
              else if (classFilter) {
                 setViewingClass(classFilter);
-                const defId = findDefaultChapterId(classFilter, chapters, cls);
+                const defId = findDefaultChapterId(classFilter, chapters, allClasses);
                 setDistribution({ [classFilter]: { chapterId: defId, studentIds: [] } });
             }
         } catch(e) { console.error("GameStudio Load Error:", e); }
