@@ -1,12 +1,12 @@
 {
   "status": "JUDGING",
   "message": "Analyse IA en cours...",
-  "details": "Perdu : isVisible",
+  "details": "Densité : -2%",
   "context": {
     "missing": [
-      "isVisible"
+      "Densité -2%"
     ],
     "filePath": "client/src/features/prof/components/SystemStatus.jsx"
   },
-  "timestamp": 1769624729049
+  "timestamp": 1769624919489
 }

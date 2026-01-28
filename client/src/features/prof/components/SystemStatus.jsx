@@ -5,6 +5,7 @@ import './SystemStatus.css';
 export default function SystemStatus() {
     const [statusData, setStatusData] = useState({ status: 'OK', timestamp: 0 });
     const [visible, setVisible] = useState(false);
+    const [isManuallyHidden, setIsManuallyHidden] = useState(false); 
     const [version, setVersion] = useState('1');
     const [verdict, setVerdict] = useState(null); 
     const [reverting, setReverting] = useState(false);
@@ -21,16 +22,21 @@ export default function SystemStatus() {
                 const data = await res.json();
                 
                 if (data.status === 'OK') {
-                    if (visible && verdict?.verdict !== 'DANGER') { setVisible(false); setVerdict(null); }
+                    if (visible) {
+                        setVisible(false);
+                        setVerdict(null);
+                        setIsManuallyHidden(false); 
+                    }
                     return;
                 }
 
                 setStatusData(data);
-                setVisible(true);
-
+                
                 if (data.timestamp !== lastTimestampRef.current) {
                     lastTimestampRef.current = data.timestamp;
-                    setVerdict(null); 
+                    setVerdict(null);
+                    setIsManuallyHidden(false); 
+                    setVisible(true);
                     if (data.status === 'JUDGING') askOracle();
                 } 
                 else if (data.status === 'JUDGING' && !verdict && !fetchingRef.current) {
@@ -65,8 +71,7 @@ export default function SystemStatus() {
         } catch(e) { setReverting(false); }
     };
 
-    // SI RIEN À SIGNALER : On affiche juste un tag discret ou rien
-    if (!visible) return null;
+    const shouldShow = visible && !isManuallyHidden;
 
     let bgClass = "bg-orange-500 border-orange-700"; 
     let messageIA = "🔮 AUDIT IA EN COURS...";
@@ -87,7 +92,7 @@ export default function SystemStatus() {
     }
 
     return (
-        <div className={`system-status-banner-flow ${bgClass} animate-in fade-in`}>
+        <div className={`system-status-banner-flow ${bgClass} ${shouldShow ? 'show' : 'hide'}`}>
             <div className="system-status-content-wrapper">
                 <div className="flex flex-col flex-1">
                     <div className="flex items-center gap-2">
@@ -107,7 +112,7 @@ export default function SystemStatus() {
                             {reverting ? 'REVERT...' : '📋 COPIER & REVERT'}
                         </button>
                     )}
-                    <button onClick={() => setVisible(false)} className="bg-white/10 hover:bg-white/20 w-8 h-8 rounded-full flex items-center justify-center text-xs font-black transition-all">✕</button>
+                    <button onClick={() => setIsManuallyHidden(true)} className="bg-white/10 hover:bg-white/20 w-8 h-8 rounded-full flex items-center justify-center text-xs font-black transition-all">✕</button>
                 </div>
             </div>
         </div>

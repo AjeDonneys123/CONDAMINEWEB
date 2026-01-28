@@ -54,3 +54,5 @@
 - Fin des bandeaux verts persistants.
 
 2026-01-28 12:20 - UI FIX : Le bandeau SystemStatus est passé de 'fixed' à 'relative'. Il est désormais intégré au sommet du flux HTML et pousse tout le site vers le bas pour ne plus cacher les éléments d'interface.
+
+2026-01-28 13:28 - LOGIC REPAIR : Application du correctif de visibilité. Le composant SystemStatus reste monté mais se cache via CSS, préservant le cycle de monitoring.

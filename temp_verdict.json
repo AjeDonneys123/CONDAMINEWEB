@@ -1,1 +1,1 @@
-{"verdict":"DANGER","reason":"Suppression de isManuallyHidden, logique d'affichage modifiée."}
+{"verdict":"SAFE","reason":"Added manual hide feature, logic otherwise unchanged."}
