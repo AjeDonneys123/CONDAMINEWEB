@@ -31,20 +31,24 @@ app.get('/api/system/version', (req, res) => {
     });
 });
 
-// MODIFICATION DU PROMPT ICI POUR L'IMPACT FONCTIONNEL
+// --- MODIFICATION ICI : PROMPT "BROKEN USER STORY" ---
 app.post('/api/system/analyze-risk', async (req, res) => {
     const { missing, filePath } = req.body;
-    const prompt = `ALERTE CODE : Dans le fichier "${filePath}", les éléments suivants ont disparu : [${missing.join(', ')}].
     
-    TA MISSION : Explique à un humain quelles fonctionnalités de l'application vont cesser de fonctionner.
-    Ne parle pas de code ("variable undefined"), parle d'USAGE ("L'utilisateur ne pourra plus...").
+    const prompt = `CONTEXTE : Le fichier "${filePath}" vient d'être modifié et a perdu ces éléments clés : [${missing.join(', ')}].
+
+    TA MISSION : Rédige une "USER STORY CASSÉE" pour qu'un testeur puisse vérifier la régression.
     
-    Exemple : Si 'checkUpdate' manque -> "La mise à jour automatique du site ne fonctionnera plus."
-    
-    Réponse en une phrase courte et alarmiste.`;
+    FORMAT STRICT OBLIGATOIRE :
+    "❌ En tant que [Utilisateur/Prof/Élève], je ne peux plus [Action précise]..."
+
+    Exemple 1 (checkUpdate manquant) : "❌ En tant qu'utilisateur, je ne reçois plus les mises à jour en temps réel."
+    Exemple 2 (save manquant) : "❌ En tant que Prof, je ne peux plus sauvegarder mes modifications."
+
+    Sois court (Max 20 mots), précis et fataliste.`;
     
     try {
-        const explanation = await AIEngine.ask(prompt, "Tu es un expert en fiabilité logicielle.");
+        const explanation = await AIEngine.ask(prompt, "Tu es un expert QA (Quality Assurance) pessimiste.");
         res.json({ analysis: explanation });
     } catch (e) {
         res.json({ analysis: "Analyse IA indisponible." });
@@ -88,4 +92,4 @@ mongoose.connect(process.env.MONGODB_URI).then(() => console.log('✅ BDD CONNEC
 
 const distPath = path.resolve(process.cwd(), 'client', 'dist');
 if (fs.existsSync(distPath)) { app.use(express.static(distPath)); app.get('*', (req, res) => { if (req.url.startsWith('/uploads/')) return res.status(404).send("Not found"); res.sendFile(path.join(distPath, 'index.html')); }); }
-app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V9.0 UP`));
+app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V9.1 (QA Mode) UP`));
