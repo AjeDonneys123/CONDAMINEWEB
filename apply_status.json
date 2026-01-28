@@ -1,12 +1,13 @@
 {
   "status": "JUDGING",
   "message": "Analyse IA en cours...",
-  "details": "Perdu : handleActorMove",
+  "details": "Perdu : loadAssets, handleDeleteProject",
   "context": {
     "missing": [
-      "handleActorMove"
+      "loadAssets",
+      "handleDeleteProject"
     ],
     "filePath": "client/src/features/prof/studio/StudioDashboard.jsx"
   },
-  "timestamp": 1769629640715
+  "timestamp": 1769632642678
 }

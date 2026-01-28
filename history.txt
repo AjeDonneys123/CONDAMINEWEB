@@ -70,3 +70,5 @@
 2026-01-28 15:02 - SYSTEM RESILIENCE : Ajout d'une boucle de Retry automatique pour l'Audit IA. Si l'Oracle échoue ou timeout, le client retente la requête toutes les 2 secondes au lieu de rester bloqué en orange.
 
 2026-01-28 14:52 - STUDIO ENGINE REPAIR : Correction du moteur de Preview. Le code généré par l'IA doit maintenant respecter le contrat de classe 'MiniGame' avec constructeur (canvas, assets). Ajout de la gestion des collisions et de la gravité par défaut pour les jeux de plateforme.
+
+2026-01-28 15:37 - AI STUDIO STABILIZATION : Recadrage du prompt de l'IA de Studio pour interdire les excuses techniques et forcer l'inclusion de la méthode start(). Renforcement de la Factory Function côté client pour détecter les erreurs de classe manquante.

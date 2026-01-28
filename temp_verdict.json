@@ -1,1 +1,1 @@
-{"verdict":"SAFE","reason":"Ajout de AssetThumb et handleDeleteScene dans les signatures, pas de perte de fonctionnalité."}
+{"verdict":"SAFE","reason":"Ajout d'un rendu conditionnel pour l'image du costume de l'acteur."}
