@@ -60,6 +60,7 @@
 │   │   │   │   └── productions/
 │   │   │   │       └── ProductionsList.jsx
 │   │   │   └── prof/
+│   │   │       ├── .DS_Store
 │   │   │       ├── Prof.css
 │   │   │       ├── ProfPage.css
 │   │   │       ├── ProfPage.jsx
@@ -75,6 +76,8 @@
 │   │   │       │   ├── ClassroomManager.css
 │   │   │       │   └── ClassroomManager.jsx
 │   │   │       ├── components/
+│   │   │       │   ├── .DS_Store
+│   │   │       │   ├── BadComponent.jsx
 │   │   │       │   ├── ConsoleHUD.jsx
 │   │   │       │   ├── ConsoleReporter.css
 │   │   │       │   ├── ConsoleReporter.jsx
@@ -88,7 +91,10 @@
 │   │   │       │   ├── ProjectTreeViewer.css
 │   │   │       │   ├── ProjectTreeViewer.jsx
 │   │   │       │   ├── SystemDocs.css
-│   │   │       │   └── SystemDocs.jsx
+│   │   │       │   ├── SystemDocs.jsx
+│   │   │       │   ├── SystemStatus.css
+│   │   │       │   ├── SystemStatus.jsx
+│   │   │       │   └── TrapComponent.jsx
 │   │   │       ├── games/
 │   │   │       │   ├── GameStudio.css
 │   │   │       │   └── GameStudio.jsx
@@ -236,9 +242,12 @@
 │   └── version.json
 ├── snap.js
 ├── systemInstructions.md
+├── temp_diff.json
+├── temp_verdict.json
 ├── tests/
 │   └── integrity.test.js
 ├── tree.txt
 ├── uploads/
 │   └── temp/
-└── verificatons.txt
+├── verificatons.txt
+└── zz.txt

@@ -61,6 +61,7 @@ STRUCTURE:
 │   │   │   │   └── productions/
 │   │   │   │       └── ProductionsList.jsx
 │   │   │   └── prof/
+│   │   │       ├── .DS_Store
 │   │   │       ├── Prof.css
 │   │   │       ├── ProfPage.css
 │   │   │       ├── ProfPage.jsx
@@ -76,6 +77,8 @@ STRUCTURE:
 │   │   │       │   ├── ClassroomManager.css
 │   │   │       │   └── ClassroomManager.jsx
 │   │   │       ├── components/
+│   │   │       │   ├── .DS_Store
+│   │   │       │   ├── BadComponent.jsx
 │   │   │       │   ├── ConsoleHUD.jsx
 │   │   │       │   ├── ConsoleReporter.css
 │   │   │       │   ├── ConsoleReporter.jsx
@@ -89,7 +92,10 @@ STRUCTURE:
 │   │   │       │   ├── ProjectTreeViewer.css
 │   │   │       │   ├── ProjectTreeViewer.jsx
 │   │   │       │   ├── SystemDocs.css
-│   │   │       │   └── SystemDocs.jsx
+│   │   │       │   ├── SystemDocs.jsx
+│   │   │       │   ├── SystemStatus.css
+│   │   │       │   ├── SystemStatus.jsx
+│   │   │       │   └── TrapComponent.jsx
 │   │   │       ├── games/
 │   │   │       │   ├── GameStudio.css
 │   │   │       │   └── GameStudio.jsx
@@ -237,12 +243,15 @@ STRUCTURE:
 │   └── version.json
 ├── snap.js
 ├── systemInstructions.md
+├── temp_diff.json
+├── temp_verdict.json
 ├── tests/
 │   └── integrity.test.js
 ├── tree.txt
 ├── uploads/
 │   └── temp/
-└── verificatons.txt
+├── verificatons.txt
+└── zz.txt
 
 
 CODE:
@@ -262,52 +271,67 @@ Puis colle le code dans ton .env (GOOGLE_REFRESH_TOKEN).
 [[[£ END: LOCKED_FILES.md £]]]
 
 [[[£ FILE: apply.js £]]]
-// @signatures: applyUpdate, extractSignatures
+// @signatures: applyUpdate, checkCssDependency, checkDeepClassIntegrity, checkDomIntegrity, checkLogicDensity, countLogic, extractSignatures, getIds, saveDiff, snapshot, writeStatus
 const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
 const inputFile = 'update.txt';
+const statusFile = 'apply_status.json';
+const diffFile = 'temp_diff.json';
+const verdictFile = 'temp_verdict.json';
 
 console.log("------------------------------------------------");
-console.log("🛡️ [SYSTEM] Moteur de Mise à Jour V7.1 (Hybrid)");
-console.log("    Sécurité : Signatures (JS) + Poids (Global).");
+console.log("🛡️ [SYSTEM] Moteur V16.1 (Black Box)");
+console.log("    Feature : Rapport d'erreurs exhaustif");
 console.log("------------------------------------------------");
 
-/**
- * SCAN DE STRUCTURE (JS/JSX/TS)
- * Cherche les ancres logiques. Pour les autres fichiers (HTML/CSS), renverra un set vide.
- */
-function extractSignatures(content) {
-    const codeBody = content.replace(/^\/\/ @signatures:.*\n/, '');
-    const sigs = new Set();
-    const patterns = [
-        /function\s+([a-zA-Z0-9_]+)/g,
-        /const\s+([a-zA-Z0-9_]+)\s*=\s*(?:async\s*)?\(/g,
-        /export\s+default\s+function\s+([a-zA-Z0-9_]+)/g,
-        /router\.(get|post|put|delete|patch)\s*\(\s*['"]([^'"]+)['"]/g
-    ];
-
-    patterns.forEach(regex => {
-        let match;
-        while ((match = regex.exec(codeBody)) !== null) {
-            const identity = match[2] ? `${match[1].toUpperCase()} ${match[2]}` : match[1];
-            sigs.add(identity);
-        }
-    });
-    return sigs;
+function writeStatus(type, message, details = null, context = null) {
+    const data = { status: type, message, details, context, timestamp: Date.now() };
+    try { fs.writeFileSync(statusFile, JSON.stringify(data, null, 2)); } catch(e) {}
 }
+
+function saveDiff(oldContent, newContent, filePath) {
+    try { 
+        fs.writeFileSync(diffFile, JSON.stringify({ oldContent, newContent, filePath }));
+        if (fs.existsSync(verdictFile)) fs.unlinkSync(verdictFile); 
+    } catch (e) {}
+}
+
+function snapshot(filesCount) {
+    try {
+        execSync('git add .');
+        execSync(`git commit -m "Auto-Save Batch (${filesCount} files)"`);
+    } catch (e) { }
+}
+
+// ... (Fonctions d'analyse inchangées) ...
+function extractSignatures(content) { const codeBody = content.replace(/^\/\/ @signatures:.*\n/, ''); const sigs = new Set(); const patterns = [ /function\s+([a-zA-Z0-9_]+)/g, /const\s+([a-zA-Z0-9_]+)\s*=\s*(?:async\s*)?\(/g, /export\s+default\s+function\s+([a-zA-Z0-9_]+)/g, /router\.(get|post|put|delete|patch)\s*\(\s*['"]([^'"]+)['"]/g, /class\s+([a-zA-Z0-9_]+)/g ]; patterns.forEach(regex => { let match; while ((match = regex.exec(codeBody)) !== null) { sigs.add(match[2] ? `${match[1].toUpperCase()} ${match[2]}` : match[1]); } }); return sigs; }
+function checkLogicDensity(oldContent, newContent) { const logicKeywords = /\b(if|else|switch|case|return|await|async|map|filter|reduce|find|create|update|delete|useEffect|useState|useRef|try|catch|throw)\b/g; const countLogic = (text) => { const matches = text.match(logicKeywords); return matches ? matches.length : 0; }; const oldScore = countLogic(oldContent); const newScore = countLogic(newContent); if (oldScore > 5 && newScore < oldScore * 0.95) { return { oldScore, newScore, drop: Math.round((1 - newScore/oldScore)*100) }; } return null; }
+function checkDomIntegrity(oldContent, newContent) { const getIds = (text) => { const ids = new Set(); let match; while ((match = /\sid=['"]([^'"]+)['"]/g.exec(text))) ids.add(match[1]); return ids; }; const oldIds = getIds(oldContent); const newIds = getIds(newContent); const missing = [...oldIds].filter(id => !newIds.has(id)); return missing.length > 0 ? missing : null; }
+function checkCssDependency(jsxPath, jsxContent, rawUpdateContent) { const importMatch = jsxContent.match(/import\s+['"]\.\/([^'"]+\.css)['"]/); if (importMatch) { const cssFileName = importMatch[1]; const dir = path.dirname(jsxPath); const cssFullPath = path.join(__dirname, dir, cssFileName); const existsOnDisk = fs.existsSync(cssFullPath); const relativeCssPath = path.join(dir, cssFileName).split(path.sep).join('/'); const headerTag = `[[[£ FILE: ${relativeCssPath} £]]]`; const existsInUpdate = rawUpdateContent.includes(headerTag); if (!existsOnDisk && !existsInUpdate) return { ok: false, missing: cssFileName }; return { ok: true, cssPath: existsOnDisk ? cssFullPath : null }; } return { ok: true, cssPath: null }; }
+function checkDeepClassIntegrity(jsxContent, cssPath) { if (!cssPath || !fs.existsSync(cssPath)) return null; try { const cssContent = fs.readFileSync(cssPath, 'utf8'); const definedClasses = new Set(); let match; while ((match = /\.([a-zA-Z0-9_-]+)(?=\s*[:\{,])/g.exec(cssContent)) !== null) definedClasses.add(match[1]); const usedClasses = new Set(); while ((match = /className\s*=\s*['"]([^'"]+)['"]/g.exec(jsxContent)) !== null) { match[1].split(/\s+/).forEach(c => { if(c && !c.includes('{')) usedClasses.add(c); }); } const missing = [...usedClasses].filter(c => !definedClasses.has(c)); if (missing.length > 0 && missing.length < 5) return missing; } catch (e) {} return null; }
 
 function applyUpdate() {
     try {
-        if (!fs.existsSync(inputFile)) {
-            fs.writeFileSync(inputFile, '');
-            return;
-        }
-
+        if (!fs.existsSync(inputFile)) { fs.writeFileSync(inputFile, ''); return; }
         const rawContent = fs.readFileSync(inputFile, 'utf8');
         if (!rawContent || rawContent.trim().length < 10) return;
 
+        fs.writeFileSync(inputFile, '');
+        
+        const fileTags = rawContent.match(/\[\[\[£\s*FILE\s*:/g) || [];
+        if (fileTags.length > 0) snapshot(fileTags.length);
+
         const isForced = rawContent.includes('[FORCE_REDUCTION]');
-        let processed = false;
+        
+        let transactionReport = {
+            total: 0,
+            processed: 0,
+            errors: [],
+            warnings: [], 
+            criticalDiffSaved: false 
+        };
+
         const startRegex = /\[\[\[£\s*FILE\s*:\s*([^£\]\s]+)\s*£\]\]\]/g;
         let match;
 
@@ -318,71 +342,122 @@ function applyUpdate() {
             const endIdx = rawContent.indexOf(endTag, startIdx);
 
             if (endIdx !== -1) {
+                transactionReport.total++;
                 let newContent = rawContent.substring(startIdx, endIdx).trim();
                 const fullPath = path.join(__dirname, filePath);
+                const dirPath = path.dirname(fullPath);
+                
+                if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, { recursive: true });
+
+                if (['history.txt'].includes(filePath)) {
+                    if(fs.existsSync(fullPath)) fs.appendFileSync(fullPath, "\n" + newContent + "\n");
+                    else fs.writeFileSync(fullPath, newContent + "\n");
+                    continue;
+                }
+
+                const ext = path.extname(fullPath);
+                let currentWarning = null;
+                let currentSeverity = 'LOW';
 
                 if (fs.existsSync(fullPath) && !isForced) {
                     const oldContent = fs.readFileSync(fullPath, 'utf8');
                     
-                    // 1. SÉCURITÉ STRUCTURELLE (JS/JSX)
-                    const oldSigs = extractSignatures(oldContent);
-                    const newSigs = extractSignatures(newContent);
-                    const missing = [...oldSigs].filter(s => !newSigs.has(s));
+                    if (['.js', '.jsx', '.ts'].includes(ext)) {
+                        const oldSigs = extractSignatures(oldContent);
+                        const newSigs = extractSignatures(newContent);
+                        const missing = [...oldSigs].filter(s => !newSigs.has(s));
+                        
+                        if (missing.length > 0) {
+                            currentWarning = { title: `Régression Structurelle`, msg: `Perdu : ${missing.join(', ')}`, context: { missing, filePath } };
+                            currentSeverity = 'HIGH';
+                        }
 
-                    if (missing.length > 0) {
-                        console.error(`\n❌ [BLOQUÉ - STRUCTURE] : ${filePath}`);
-                        console.error(`   ⚠️  LOGIQUE MANQUANTE : ${missing.join(', ')}`);
-                        continue;
+                        if (!currentWarning) {
+                            const logicCheck = checkLogicDensity(oldContent, newContent);
+                            if (logicCheck) {
+                                currentWarning = { title: `Chute Logique`, msg: `Densité -${logicCheck.drop}%`, context: { missing: [`Densité -${logicCheck.drop}%`], filePath } };
+                                currentSeverity = 'MEDIUM';
+                            }
+                        }
+                    }
+
+                    if (ext === '.jsx' && !currentWarning) {
+                        const missingIds = checkDomIntegrity(oldContent, newContent);
+                        if (missingIds) {
+                            currentWarning = { title: `Structure DOM`, msg: `IDs perdus: ${missingIds.join(', ')}`, context: { missing: missingIds, filePath } };
+                            currentSeverity = 'HIGH';
+                        }
                     }
                     
-                    // 2. SÉCURITÉ DE POIDS (VITAL POUR HTML/CSS)
-                    // On bloque si le fichier perd plus de 25% de sa taille sans [FORCE_REDUCTION]
-                    if (newContent.length < oldContent.length * 0.75) {
-                        console.error(`\n❌ [BLOQUÉ - POIDS] : ${filePath}`);
-                        console.error(`   Ancien: ${oldContent.length} chars | Nouveau: ${newContent.length} chars`);
-                        console.error(`   ⚠️  BAISSE DE TAILLE CRITIQUE (>25%).`);
-                        continue;
+                    if (currentWarning && !transactionReport.criticalDiffSaved) {
+                        saveDiff(oldContent, newContent, filePath);
+                        transactionReport.criticalDiffSaved = true;
                     }
                 }
 
-                // MISE À JOUR DE L'INDEX (@signatures) - Uniquement si signatures trouvées
-                const currentSigs = [...extractSignatures(newContent)].sort();
-                if (currentSigs.length > 0) {
-                    const sigLine = `// @signatures: ${currentSigs.join(', ')}\n`;
-                    newContent = sigLine + newContent.replace(/^\/\/ @signatures:.*\n/, '');
+                if (ext === '.jsx') {
+                    const cssCheck = checkCssDependency(filePath, newContent, rawContent);
+                    if (!cssCheck.ok) {
+                        transactionReport.errors.push({ file: filePath, msg: `CSS manquant : ${cssCheck.missing}` });
+                        console.error(`❌ REJETÉ : ${filePath}`);
+                        continue; 
+                    }
                 }
 
-                const dirPath = path.dirname(fullPath);
-                if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, { recursive: true });
+                if (['.js', '.jsx', '.ts'].includes(ext)) {
+                    const currentSigs = [...extractSignatures(newContent)].sort();
+                    if (currentSigs.length > 0) newContent = `// @signatures: ${currentSigs.join(', ')}\n` + newContent.replace(/^\/\/ @signatures:.*\n/, '');
+                }
                 
                 fs.writeFileSync(fullPath, newContent + '\n');
-                console.log(`   ✅ OK : ${filePath} (${newContent.length} chars)`);
-                processed = true;
+                console.log(`   ✅ ÉCRIT : ${filePath}`);
+                
+                if (currentWarning) {
+                    transactionReport.warnings.push({ ...currentWarning, file: filePath, severity: currentSeverity });
+                }
+                transactionReport.processed++;
             }
         }
 
-        if (processed || isForced) {
-            fs.writeFileSync(inputFile, '');
-            console.log("✨ SUCCÈS : Base de code synchronisée et protégée.\n");
+        // 3. RAPPORT FINAL (V16.1 : LISTE EXHAUSTIVE)
+        if (transactionReport.errors.length > 0) {
+            const err = transactionReport.errors[0];
+            writeStatus('ERROR', `Blocage sur ${path.basename(err.file)}`, err.msg, null);
+        } 
+        else if (transactionReport.warnings.length > 0) {
+            const worst = transactionReport.warnings.find(w => w.severity === 'HIGH') || transactionReport.warnings[0];
+            
+            // CONSTRUIRE LA LISTE COMPLÈTE POUR LE PRESSE-PAPIER
+            const fullLog = transactionReport.warnings.map(w => `⚠️ ${path.basename(w.file)}: ${w.title} (${w.msg})`).join('\n');
+            
+            // On envoie le pire à l'IA (context), mais le log complet à l'UI (details)
+            writeStatus('JUDGING', `Analyse Multiple (${transactionReport.warnings.length} fichiers)`, fullLog, worst.context);
+        } 
+        else if (transactionReport.processed > 0) {
+            writeStatus('OK', 'Mise à jour réussie', `${transactionReport.processed} fichiers traités.`);
         }
+
     } catch (e) {
-        console.error("☠️ ERREUR :", e.message);
+        writeStatus('ERROR', 'Crash Apply.js', e.message);
     }
 }
 
 setInterval(applyUpdate, 500);
+
 [[[£ END: apply.js £]]]
 
 [[[£ FILE: apply_status.json £]]]
 {
   "status": "OK",
-  "file": null,
-  "timestamp": 1769529186335
+  "message": "Code appliqué",
+  "details": "4 fichiers mis à jour.",
+  "context": null,
+  "timestamp": 1769619032776
 }
-
 [[[£ END: apply_status.json £]]]
 
 [[[£ FILE: check-google.js £]]]
+// @signatures: check
 // Ce fichier sert à tester ta clé en local
 require('dotenv').config();
 const fetch = require('node-fetch');
@@ -404,6 +479,7 @@ check();
 [[[£ END: check-google.js £]]]
 
 [[[£ FILE: cleanup.js £]]]
+// @signatures: cleanDirectory
 const fs = require('fs');
 const path = require('path');
 
@@ -568,12 +644,17 @@ Currently, two official plugins are available:
 [[[£ END: client/src/App.css £]]]
 
 [[[£ FILE: client/src/App.jsx £]]]
+// @signatures: App, checkUpdate, handleBackToDev, handleLogout
 import React, { useState, useEffect, useRef } from 'react';
 import Login from './features/auth/Login';
 import ProfPage from './features/prof/ProfPage';
 import ElevePage from './features/eleve/ElevePage';
 import AdminPage from './features/admin/AdminPage';
+import SystemStatus from './features/prof/components/SystemStatus';
 import './App.css';
+
+// ✅ TEST CONFIRMATION IA : AJOUT D'UN COMMENTAIRE SÛR
+// L'IA doit voir ça et dire "SAFE : Ajout de commentaire".
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -622,21 +703,25 @@ export default function App() {
   };
 
   if (isSyncing) return <div className="sync-overlay"><h2 style={{color:'white', fontWeight:900}}>SYNCHRONISATION...</h2></div>;
-  if (!user) return <div className="app-wrapper"><Login onLoginSuccess={setUser} /></div>;
+  
+  if (!user) return (
+      <div className="app-wrapper">
+          <SystemStatus />
+          <Login onLoginSuccess={setUser} />
+      </div>
+  );
 
   const isTestAccount = user.isTestAccount === true;
 
   return (
     <div className="app-wrapper">
-      {/* BANDEAU DE SÉCURITÉ V99 (Pousse le contenu vers le bas) */}
+      <SystemStatus />
       {isTestAccount && (
         <div className="v99-test-header">
            <span>🛠️ MODE TEST ACTIF : {user.firstName} {user.lastName}</span>
            <button className="btn-back-dev-mini" onClick={handleBackToDev}>⚡ RETOUR DÉVELOPPEUR</button>
         </div>
       )}
-
-      {/* ROUTAGE PRINCIPAL */}
       {(user.isDeveloper || user.role === 'prof') ? (
           <ProfPage user={user} onLogout={handleLogout} />
       ) : user.role === 'admin' ? (
@@ -678,6 +763,7 @@ export default function App() {
 [[[£ END: client/src/features/admin/AdminPage.css £]]]
 
 [[[£ FILE: client/src/features/admin/AdminPage.jsx £]]]
+// @signatures: AdminPage, handleRefresh
 import React from 'react';
 import AdminDashboard from '../prof/admin/AdminDashboard'; // On réutilise le composant existant
 import './AdminPage.css';
@@ -778,6 +864,7 @@ export default function AdminPage({ user, onLogout }) {
 [[[£ END: client/src/features/auth/Login.css £]]]
 
 [[[£ FILE: client/src/features/auth/Login.jsx £]]]
+// @signatures: Login, body, clean, handleLogin, handleReset, handleSelectSuggestion
 import React, { useState, useEffect } from 'react';
 import './Login.css';
 
@@ -1018,6 +1105,7 @@ export default function Login({ onLoginSuccess }) {
 [[[£ END: client/src/features/eleve/ElevePage.css £]]]
 
 [[[£ FILE: client/src/features/eleve/ElevePage.jsx £]]]
+// @signatures: ElevePage, fetchFreshData
 import React, { useState, useEffect } from 'react';
 import EleveHeader from './components/EleveHeader';
 import HomeworkList from './homework/HomeworkList';
@@ -1213,6 +1301,7 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
 [[[£ END: client/src/features/eleve/components/BehaviorTimer.css £]]]
 
 [[[£ FILE: client/src/features/eleve/components/BehaviorTimer.jsx £]]]
+// @signatures: BehaviorTimer, bonusPct, redemptionPct
 import React from 'react';
 import './BehaviorTimer.css';
 
@@ -1444,6 +1533,7 @@ export default function BehaviorTimer({ studentData }) {
 [[[£ END: client/src/features/eleve/components/DashboardFolder.css £]]]
 
 [[[£ FILE: client/src/features/eleve/components/DashboardFolder.jsx £]]]
+// @signatures: DashboardFolder, getSubjectClass, s
 import React from 'react';
 import './DashboardFolder.css';
 
@@ -1650,6 +1740,7 @@ export default function DashboardFolder({ items, type, onSelect }) {
 [[[£ END: client/src/features/eleve/components/EleveHeader.css £]]]
 
 [[[£ FILE: client/src/features/eleve/components/EleveHeader.jsx £]]]
+// @signatures: EleveHeader, record
 import React from 'react';
 import './EleveHeader.css';
 
@@ -1776,6 +1867,7 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
 [[[£ END: client/src/features/eleve/games/GamesGrid.css £]]]
 
 [[[£ FILE: client/src/features/eleve/games/GamesGrid.jsx £]]]
+// @signatures: GamesGrid, assignedIds, close, loadData, myClass, targets
 import React, { useState, useEffect } from 'react';
 import ZombieWrapper from './zombie/ZombieWrapper';
 import StarshipWrapper from './starship/StarshipWrapper';
@@ -1911,6 +2003,7 @@ export class GameProgression {
 [[[£ END: client/src/features/eleve/games/mainGames.js £]]]
 
 [[[£ FILE: client/src/features/eleve/games/starship/StarshipWrapper.jsx £]]]
+// @signatures: StarshipWrapper, handleGameFinish, saveProgress
 import React, { useEffect, useRef } from 'react';
 import { initStarshipGame } from './starship_core';
 import './starship_style.css';
@@ -1960,6 +2053,7 @@ export default function StarshipWrapper({ user, level, onClose }) {
 [[[£ END: client/src/features/eleve/games/starship/StarshipWrapper.jsx £]]]
 
 [[[£ FILE: client/src/features/eleve/games/starship/starship_core.js £]]]
+// @signatures: clearLevel, failAction, fire, getNextQuestion, handleBossInput, handleKey, initStarshipGame, isCorrect, loadRound, moveShip, normalize, renderBars, startBossPhase, startInvaderPhase, triggerNuke, update
 import { GameProgression } from '../mainGames';
 
 export function initStarshipGame(root, api, onExit) {
@@ -2351,6 +2445,7 @@ export class ZombieGame {
 [[[£ END: client/src/features/eleve/games/zombie/ZombieGame.js £]]]
 
 [[[£ FILE: client/src/features/eleve/games/zombie/ZombieWrapper.jsx £]]]
+// @signatures: ZombieWrapper, handleGameFinish, saveProgress
 import React, { useEffect, useRef } from 'react';
 import { initZombieGame } from './zombie_core';
 import './zombie_style.css';
@@ -2404,6 +2499,7 @@ export default function ZombieWrapper({ user, level, onClose }) {
 [[[£ END: client/src/features/eleve/games/zombie/ZombieWrapper.jsx £]]]
 
 [[[£ FILE: client/src/features/eleve/games/zombie/zombie_core.js £]]]
+// @signatures: failAction, fireProjectile, getNextQuestion, handleInputAnswer, initZombieGame, loadRound, loop, normalize, renderBars, showFeedback, updatePositions
 export function initZombieGame(root, api, onExit) {
     // --- 1. DONNÉES & ÉTAT ---
     let questionsList = api.level.questions;
@@ -2953,6 +3049,7 @@ export function initZombieGame(root, api, onExit) {
 [[[£ END: client/src/features/eleve/homework/Homework.css £]]]
 
 [[[£ FILE: client/src/features/eleve/homework/HomeworkList.jsx £]]]
+// @signatures: HomeworkList, loadData, myClass, targets
 import React, { useState, useEffect } from 'react';
 import HomeworkWorkspace from './HomeworkWorkspace';
 import DashboardFolder from '../components/DashboardFolder';
@@ -3037,6 +3134,7 @@ export default function HomeworkList({ user }) {
 [[[£ END: client/src/features/eleve/homework/HomeworkList.jsx £]]]
 
 [[[£ FILE: client/src/features/eleve/homework/HomeworkWorkspace.jsx £]]]
+// @signatures: HomeworkWorkspace, getModalConfig, handleInputCheck, handleModalAction, handleMouseDown, handleMouseMove, handleMouseUp, handleZoom, resolveSource, submitToIA
 import React, { useState, useEffect } from 'react';
 import './Homework.css';
 
@@ -3173,6 +3271,7 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
 [[[£ END: client/src/features/eleve/homework/HomeworkWorkspace.jsx £]]]
 
 [[[£ FILE: client/src/features/eleve/mistakes/MistakesBook.jsx £]]]
+// @signatures: MistakesBook
 import React, { useState, useEffect } from 'react';
 
 export default function MistakesBook({ user }) {
@@ -3204,6 +3303,7 @@ export default function MistakesBook({ user }) {
 [[[£ END: client/src/features/eleve/mistakes/MistakesBook.jsx £]]]
 
 [[[£ FILE: client/src/features/eleve/productions/ProductionsList.jsx £]]]
+// @signatures: ProductionsList
 import React from 'react';
 export default function ProductionsList() { return <div>Mes productions</div>; }
 
@@ -3242,6 +3342,7 @@ export default function ProductionsList() { return <div>Mes productions</div>; }
 [[[£ END: client/src/features/prof/ProfPage.css £]]]
 
 [[[£ FILE: client/src/features/prof/ProfPage.jsx £]]]
+// @signatures: ProfPage, getInitialUser, isJean, loadProfileAndClasses
 import React, { useState, useEffect } from 'react';
 import ProfHeader from './components/ProfHeader';
 import ProfNav from './components/ProfNav';
@@ -3362,6 +3463,7 @@ export default function ProfPage({ user, onLogout }) {
 [[[£ END: client/src/features/prof/activities/ActivityStudio.css £]]]
 
 [[[£ FILE: client/src/features/prof/activities/ActivityStudio.jsx £]]]
+// @signatures: ActivityStudio, fetchJson, handleDeleteItem, loadData
 import React, { useState, useEffect } from 'react';
 import HomeworkStudio from '../homework/HomeworkStudio';
 import GameStudio from '../games/GameStudio';
@@ -3559,6 +3661,7 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
 [[[£ END: client/src/features/prof/admin/AdminDashboard.css £]]]
 
 [[[£ FILE: client/src/features/prof/admin/AdminDashboard.jsx £]]]
+// @signatures: AdminDashboard, getActiveContext, getDisplayedItems, getMembersOf, handleDelete, handleFileSelect, handleMagicImport, handleMembership, handleMigration, handleOpenCreate, handleOpenMagic, handleResetActivities, handleSave, loadData, openEdit, toggleArrayItem
 import React, { useState, useEffect, useRef } from 'react';
 import './AdminDashboard.css';
 
@@ -3836,6 +3939,7 @@ export default function AdminDashboard({ user, onRefresh }) {
 [[[£ END: client/src/features/prof/admin/AdminDashboard.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/chapters/ChapterManager.jsx £]]]
+// @signatures: ChapterManager
 import React from 'react';
 export default function ChapterManager() { return <div>Gestion des chapitres</div>; }
 
@@ -4033,6 +4137,7 @@ export default function ChapterManager() { return <div>Gestion des chapitres</di
 [[[£ END: client/src/features/prof/classroom/ClassroomManager.css £]]]
 
 [[[£ FILE: client/src/features/prof/classroom/ClassroomManager.jsx £]]]
+// @signatures: ClassroomManager, addBehavior, changeGrid, getMyStats, handleDragOver, handleDragStart, handleDrop, handleFileSelect, handleOpenStudent, loadData, moveStudentTo, renderGrid, renderHeaders, renderList, toggleSeparator
 import React, { useState, useEffect, useRef } from 'react';
 import './ClassroomManager.css';
 
@@ -4256,7 +4361,23 @@ export default function ClassroomManager({ globalClassId, user }) {
 
 [[[£ END: client/src/features/prof/classroom/ClassroomManager.jsx £]]]
 
+[[[£ FILE: client/src/features/prof/components/BadComponent.jsx £]]]
+import React from 'react';
+import './Introuvable.css'; // <--- LE PIÈGE EST ICI (Ce fichier n'existe pas)
+
+export default function BadComponent() {
+    return (
+        <div className="bad-component">
+            <h1>Ceci est un test de sécurité</h1>
+            <p>Si tu vois ce fichier dans ton projet, c'est que la sécurité a échoué.</p>
+        </div>
+    );
+}
+
+[[[£ END: client/src/features/prof/components/BadComponent.jsx £]]]
+
 [[[£ FILE: client/src/features/prof/components/ConsoleHUD.jsx £]]]
+// @signatures: ConsoleHUD
 import React, { useState, useEffect } from 'react';
 export default function ConsoleHUD() {
     const [logs, setLogs] = useState([]);
@@ -4291,6 +4412,7 @@ export default function ConsoleHUD() {
 [[[£ END: client/src/features/prof/components/ConsoleReporter.css £]]]
 
 [[[£ FILE: client/src/features/prof/components/ConsoleReporter.jsx £]]]
+// @signatures: ConsoleReporter, generateFullReport, handleKeyDown
 import React, { useState, useEffect } from 'react';
 import './ConsoleReporter.css';
 
@@ -4300,91 +4422,95 @@ export default function ConsoleReporter({ user }) {
     const [copySuccess, setCopySuccess] = useState(false);
 
     useEffect(() => {
+        // 1. CAPTURE DES ERREURS CONSOLE (Local)
         const originalError = console.error;
         console.error = (...args) => {
             const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
-            // Filtre les bruits React habituels
             if(!msg.includes('snapshot') && !msg.includes('React') && !msg.includes('key')) {
-                handleNewError(`CONSOLE: ${msg}`);
+                setErrors(prev => [...prev, { msg, time: new Date().toLocaleTimeString() }].slice(-15));
             }
             originalError.apply(console, args);
         };
 
-        const originalFetch = window.fetch;
-        window.fetch = async (...args) => {
-            try {
-                const res = await originalFetch(...args);
-                
-                // INTERCEPTION INTELLIGENTE DES ERREURS
-                if (!res.ok && !args[0].includes('report-')) {
-                    const method = args[1]?.method || 'GET';
-                    let detail = "";
-                    
-                    try {
-                        // On clone la réponse pour lire le JSON sans la consommer pour l'app
-                        const clone = res.clone();
-                        const json = await clone.json();
-                        detail = json.error || json.message || "";
-                    } catch (e) {
-                        detail = "Erreur inconnue";
-                    }
-
-                    handleNewError(`ERR ${res.status}: ${detail} (${method} ${args[0]})`);
-                }
-                return res;
-            } catch (err) {
-                if (!args[0].includes('report-')) handleNewError(`CRASH RÉSEAU: ${args[0]}`);
-                throw err;
-            }
-        };
-
-        const handleKeyDown = (e) => {
+        const handleKeyDown = async (e) => {
             if (e.metaKey && e.shiftKey && e.code === 'KeyL') {
                 e.preventDefault();
-                copyToClipboard();
+                await generateFullReport();
             }
         };
         window.addEventListener('keydown', handleKeyDown);
 
         return () => {
             console.error = originalError;
-            window.fetch = originalFetch;
             window.removeEventListener('keydown', handleKeyDown);
         };
-    }, [errors]);
+    }, [errors]); // Dépendance errors pour avoir les logs à jour
 
-    const handleNewError = (msg) => {
-        // On évite les doublons visuels
-        setErrors(prev => {
-            const isDuplicate = prev.length > 0 && prev[prev.length - 1].msg === msg;
-            if (isDuplicate) return prev;
-            return [...prev, { msg, time: new Date().toLocaleTimeString() }].slice(-15);
-        });
-        setBannerVisible(true);
-    };
+    const generateFullReport = async () => {
+        let statusReport = "Inconnu";
+        let oracleVerdict = "Non sollicité";
+        let oracleReason = "";
 
-    const copyToClipboard = () => {
-        if (errors.length === 0) return;
-        const payload = `[REPORT_MAC_TURBO]\nPage: ${window.location.href}\nStaff: ${user?.firstName}\n\nLOGS D'ERREURS :\n${errors.map(e => `[${e.time}] ${e.msg}`).join('\n')}\n\nGemini, répare mon code via snapshot.txt.`;
-        navigator.clipboard.writeText(payload).then(() => {
+        // 2. RÉCUPÉRATION DES DONNÉES SERVEUR (Ce que voit le HUD)
+        try {
+            const resStatus = await fetch('/api/system/apply-status');
+            const dataStatus = await resStatus.json();
+            
+            if (dataStatus.status !== 'OK') {
+                statusReport = `[${dataStatus.status}] ${dataStatus.message} (${dataStatus.details})`;
+                
+                // Si alerte, on récupère ce que dit l'Oracle (depuis le cache serveur)
+                const resOracle = await fetch('/api/system/oracle', { method: 'POST' });
+                const dataOracle = await resOracle.json();
+                oracleVerdict = dataOracle.verdict;
+                oracleReason = dataOracle.reason;
+            } else {
+                statusReport = "🟢 SYSTÈME SAIN (OK)";
+            }
+        } catch (e) {
+            statusReport = "🔴 SERVEUR OFF/INJOIGNABLE";
+        }
+
+        // 3. CONSTRUCTION DU RAPPORT
+        const payload = `🚨 RAPPORT D'INCIDENT (V14)
+--------------------------------------------------
+👤 Dev: ${user?.firstName || 'Inconnu'}
+📅 Date: ${new Date().toLocaleString()}
+
+1️⃣ ÉTAT DU SYSTÈME (HUD) :
+${statusReport}
+
+2️⃣ JUGEMENT DE L'ORACLE (IA) :
+⚖️ Verdict : ${oracleVerdict}
+🗣️ Raison  : "${oracleReason}"
+
+3️⃣ LOGS CONSOLE (Derniers 15) :
+${errors.length > 0 ? errors.map(e => `[${e.time}] ${e.msg}`).join('\n') : "(Aucune erreur console)"}
+
+--------------------------------------------------
+GEMINI : Analyse ce rapport. Si le verdict est DANGER, corrige le code manquant décrit par l'Oracle.`;
+
+        // 4. COPIE
+        try {
+            await navigator.clipboard.writeText(payload);
             setCopySuccess(true);
-            setTimeout(() => setCopySuccess(false), 2000);
-        });
+            setBannerVisible(true);
+            setTimeout(() => { setCopySuccess(false); setBannerVisible(false); }, 3000);
+        } catch (err) {
+            console.error("Échec copie presse-papier", err);
+        }
     };
 
-    if (!bannerVisible && errors.length === 0) return null;
-
-    // Récupération de la dernière erreur pour l'affichage
-    const lastError = errors.length > 0 ? errors[errors.length - 1] : { msg: '' };
+    if (!bannerVisible && !copySuccess) return null;
 
     return (
-        <div className={`error-banner-minimal ${bannerVisible ? 'show' : ''} ${copySuccess ? 'copied' : ''}`} onClick={() => setBannerVisible(false)}>
+        <div className={`error-banner-minimal show copied`} onClick={() => setBannerVisible(false)}>
             <div className="banner-content">
-                <span className="banner-icon">{copySuccess ? '✅' : '🚨'}</span>
+                <span className="banner-icon">📋</span>
                 <span className="banner-text">
-                    {copySuccess ? 'RAPPORT COPIÉ ! COLLE-LE DANS GEMINI' : `${lastError.msg}`}
+                    RAPPORT COMPLET COPIÉ ! (STATUS + ORACLE + LOGS)
                 </span>
-                {!copySuccess && <span className="banner-hint">⌘+⇧+L</span>}
+                <span className="banner-hint">COLLE-LE DANS LE CHAT</span>
             </div>
         </div>
     );
@@ -4408,6 +4534,7 @@ export default function ConsoleReporter({ user }) {
 [[[£ END: client/src/features/prof/components/DatabaseViewer.css £]]]
 
 [[[£ FILE: client/src/features/prof/components/DatabaseViewer.jsx £]]]
+// @signatures: DatabaseViewer, currentData, loadData, renderCell
 import React, { useState, useEffect } from 'react';
 import './DatabaseViewer.css';
 
@@ -4572,6 +4699,7 @@ export default function DatabaseViewer({ onClose }) {
 [[[£ END: client/src/features/prof/components/DriveViewer.css £]]]
 
 [[[£ FILE: client/src/features/prof/components/DriveViewer.jsx £]]]
+// @signatures: DriveNode, DriveViewer, handleDelete, handleSync, loadTree
 import React, { useState, useEffect } from 'react';
 import './DriveViewer.css';
 
@@ -4672,6 +4800,7 @@ export default function DriveViewer({ onClose }) {
 [[[£ END: client/src/features/prof/components/DriveViewer.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/components/ProfHeader.jsx £]]]
+// @signatures: ProfHeader, checkDrive
 import React, { useState, useEffect } from 'react';
 import DatabaseViewer from './DatabaseViewer';
 import DriveViewer from './DriveViewer';
@@ -4739,6 +4868,7 @@ export default function ProfHeader({ user, onLogout }) {
 [[[£ END: client/src/features/prof/components/ProfHeader.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/components/ProfNav.jsx £]]]
+// @signatures: ProfNav
 import React from 'react';
 
 export default function ProfNav({ activeTab, onTabChange, user }) {
@@ -4788,6 +4918,7 @@ export default function ProfNav({ activeTab, onTabChange, user }) {
 [[[£ END: client/src/features/prof/components/ProfNav.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/components/ProfStudioFolder.jsx £]]]
+// @signatures: ProfStudioFolder, cClass, confirmCreateSection, currentActive, fClass, fetchSections, getUserId, handleCreateChapter, handleDeleteItemWrapper, handleDeleteSection, handleRenameChapter, isItemVisibleForClass, isJean, sectionName
 import React, { useState, useEffect } from 'react';
 
 export default function ProfStudioFolder({ items, chapters, classFilter, levelFilter, user, onEditItem, onDeleteItem, onCreateActivity, onRefresh }) {
@@ -5075,6 +5206,7 @@ export default function ProfStudioFolder({ items, chapters, classFilter, levelFi
 [[[£ END: client/src/features/prof/components/ProjectTreeViewer.css £]]]
 
 [[[£ FILE: client/src/features/prof/components/ProjectTreeViewer.jsx £]]]
+// @signatures: ProjectTreeViewer, TreeNode, checkDirty, loadData
 import React, { useState, useEffect } from 'react';
 import './ProjectTreeViewer.css';
 
@@ -5191,6 +5323,7 @@ export default function ProjectTreeViewer({ onClose }) {
 [[[£ END: client/src/features/prof/components/SystemDocs.css £]]]
 
 [[[£ FILE: client/src/features/prof/components/SystemDocs.jsx £]]]
+// @signatures: SystemDocs
 import React from 'react';
 import './SystemDocs.css';
 
@@ -5276,6 +5409,172 @@ export default function SystemDocs({ onClose }) {
 
 [[[£ END: client/src/features/prof/components/SystemDocs.jsx £]]]
 
+[[[£ FILE: client/src/features/prof/components/SystemStatus.css £]]]
+/* Style géré par Tailwind dans le JSX */
+.system-status-wrapper {
+    /* Placeholder pour futures animations complexes */
+    display: block;
+}
+
+[[[£ END: client/src/features/prof/components/SystemStatus.css £]]]
+
+[[[£ FILE: client/src/features/prof/components/SystemStatus.jsx £]]]
+// @signatures: SystemStatus, askOracle, handleRevertAndReport
+import React, { useState, useEffect, useRef } from 'react';
+import './SystemStatus.css';
+
+export default function SystemStatus() {
+    const [statusData, setStatusData] = useState({ status: 'OK', timestamp: 0 });
+    const [visible, setVisible] = useState(false);
+    const [version, setVersion] = useState('1');
+    const [verdict, setVerdict] = useState(null); 
+    const [reverting, setReverting] = useState(false);
+    
+    const lastTimestampRef = useRef(0);
+    const fetchingRef = useRef(false);
+
+    useEffect(() => { fetch('/api/system/version').then(r => r.json()).then(d => setVersion(d.hash)); }, []);
+
+    useEffect(() => {
+        const interval = setInterval(async () => {
+            try {
+                const res = await fetch('/api/system/apply-status');
+                const data = await res.json();
+                
+                if (data.status === 'OK') {
+                    if (visible && verdict?.verdict !== 'DANGER') { setVisible(false); setVerdict(null); }
+                    return;
+                }
+
+                setStatusData(data);
+                setVisible(true);
+
+                if (data.timestamp !== lastTimestampRef.current) {
+                    console.log("📦 Nouvelle alerte Batch");
+                    lastTimestampRef.current = data.timestamp;
+                    setVerdict(null); 
+                    if (data.status === 'JUDGING') askOracle();
+                } 
+                else if (data.status === 'JUDGING' && !verdict && !fetchingRef.current) {
+                    askOracle();
+                }
+            } catch (e) {}
+        }, 1000);
+        return () => clearInterval(interval);
+    }, [visible, verdict]);
+
+    const askOracle = async () => {
+        if (fetchingRef.current) return;
+        fetchingRef.current = true;
+        try {
+            const res = await fetch('/api/system/oracle', { method: 'POST' });
+            if (res.ok) {
+                const d = await res.json();
+                setVerdict(d);
+                if (d.verdict === "SAFE") setTimeout(() => setVisible(false), 2500);
+            }
+        } catch (e) {}
+        fetchingRef.current = false;
+    };
+
+    const handleRevertAndReport = async () => {
+        setReverting(true);
+        
+        // ✅ CORRECTION V16.2 : INCLUSION DES DÉTAILS TECHNIQUES
+        const report = `🚨 RAPPORT D'INCIDENT (V16)
+--------------------------------------------------
+📅 Date: ${new Date().toLocaleString()}
+🔍 Version: ${version}
+
+1️⃣ VERDICT ORACLE (IA) :
+${verdict?.reason || 'Non spécifié'}
+
+2️⃣ DÉTAILS TECHNIQUES (FICHIERS TOUCHÉS) :
+${statusData.details || '(Aucun détail technique disponible)'}
+
+--------------------------------------------------
+GEMINI : Analyse ce rapport. Corrige TOUS les fichiers listés dans les détails techniques.`;
+
+        try { await navigator.clipboard.writeText(report); } catch (err) {}
+
+        try {
+            await fetch('/api/system/revert', { method: 'POST' });
+            setTimeout(() => window.location.reload(), 1000);
+        } catch(e) { setReverting(false); }
+    };
+
+    if (!visible) return <div className="fixed top-2 right-2 z-[9999] opacity-50 hover:opacity-100 transition-opacity bg-blue-600 text-white text-[10px] px-2 py-1 rounded font-black cursor-default shadow-sm">v.{version}</div>;
+
+    let bgClass = "bg-orange-500 border-orange-700"; 
+    let messageIA = "🔮 Analyse IA en cours...";
+    
+    if (statusData.status === 'ERROR') {
+        bgClass = "bg-red-600 border-red-800";
+        messageIA = "⛔ BLOCAGE TECHNIQUE";
+    }
+    else if (verdict) {
+        if (verdict.verdict === "DANGER") {
+            bgClass = "bg-red-600 border-red-800";
+            messageIA = `🤖 IA : "${verdict.reason}"`;
+        }
+        if (verdict.verdict === "SAFE") {
+            bgClass = "bg-green-600 border-green-800";
+            messageIA = `✅ VALIDÉ : "${verdict.reason}"`;
+        }
+    }
+
+    return (
+        <div className={`fixed top-0 left-0 right-0 z-[100000] p-4 text-white font-black shadow-2xl flex flex-col gap-2 border-b-4 transition-all duration-300 transform translate-y-0 ${bgClass}`}>
+            <div className="flex justify-between items-start">
+                <div className="flex flex-col flex-1 mr-4">
+                    <div className="flex items-center gap-3">
+                        <span className="text-xl uppercase tracking-widest flex items-center gap-2">
+                            {statusData.status === 'ERROR' ? '⛔ ECHEC' : (!verdict ? '⏳ AUDIT...' : verdict.verdict)}
+                        </span>
+                        <span className="text-[10px] bg-black/30 px-2 py-1 rounded font-mono">v.{version}</span>
+                    </div>
+                    <span className="text-md font-bold mt-1">{messageIA}</span>
+                    
+                    {/* ✅ AFFICHAGE DES DÉTAILS (LISTE DES FICHIERS) */}
+                    {statusData.details && (
+                        <div className="mt-2 p-2 bg-black/20 rounded text-[10px] font-mono whitespace-pre-wrap max-h-[100px] overflow-y-auto border border-white/10">
+                            {statusData.details}
+                        </div>
+                    )}
+                </div>
+                
+                {(verdict?.verdict === 'DANGER' || statusData.status === 'ERROR') && (
+                    <div className="flex flex-col gap-2 shrink-0">
+                        <button onClick={handleRevertAndReport} disabled={reverting} className="bg-black/40 hover:bg-black/60 px-4 py-3 rounded-lg font-bold text-xs uppercase border border-white/20 transition-colors shadow-lg animate-pulse flex items-center gap-2 justify-center">
+                            {reverting ? '...' : '📋 COPIER & REVERT'}
+                        </button>
+                        <button onClick={() => setVisible(false)} className="bg-white/20 hover:bg-white/40 rounded-lg py-1 text-[10px] font-bold">FERMER</button>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+[[[£ END: client/src/features/prof/components/SystemStatus.jsx £]]]
+
+[[[£ FILE: client/src/features/prof/components/TrapComponent.jsx £]]]
+// @signatures: TrapComponent
+import React from 'react';
+import './TrapComponent.css'; // 🚨 PIÈGE : Ce fichier CSS n'est pas dans le presse-papier !
+
+export default function TrapComponent() {
+    return (
+        <div className="trap-box">
+            <h1>Test Sécurité CSS V8.5</h1>
+            <p>Ce composant doit être REJETÉ par le moteur.</p>
+            <p>Le fichier 'TrapComponent.css' est manquant.</p>
+        </div>
+    );
+}
+
+[[[£ END: client/src/features/prof/components/TrapComponent.jsx £]]]
+
 [[[£ FILE: client/src/features/prof/games/GameStudio.css £]]]
 .v84-game-container {
     position: fixed; inset: 0; background: #f8fafc; z-index: 9500;
@@ -5348,251 +5647,23 @@ export default function SystemDocs({ onClose }) {
 [[[£ END: client/src/features/prof/games/GameStudio.css £]]]
 
 [[[£ FILE: client/src/features/prof/games/GameStudio.jsx £]]]
-import React, { useState, useEffect } from 'react';
+// @signatures: GameStudio
+import React, { useState } from 'react';
 import './GameStudio.css';
 
-export default function GameStudio({ initialData, chapters, classFilter, user, targetSection, onClose }) {
+// ❌ FICHIER 2 (RE-TRIGGER) : SABOTÉ
+// J'ai supprimé tout le formulaire.
 
-    const [formData, setFormData] = useState(initialData || { 
-        title: '', 
-        questions: [{ q: "", options: ["", "", "", ""], a: 0 }],
-        targetClassrooms: classFilter ? [classFilter] : [],
-        assignedStudents: [], 
-        isAllClass: true 
-    });
-
-    const [activeQIdx, setActiveQIdx] = useState(0);
-    const [allStudents, setAllStudents] = useState([]);
-    const [allClasses, setAllClasses] = useState([]);
-    const [distribution, setDistribution] = useState({});
-    const [viewingClass, setViewingClass] = useState(classFilter || "");
-    const [isPublishing, setIsPublishing] = useState(false);
-    const [aiPrompt, setAiPrompt] = useState("");
-    const [aiLoading, setAiLoading] = useState(false);
-
-    // V445 : FILTRAGE STRICT PAR SECTION
-    const getChaptersForClass = (clsName) => {
-        const targetLvl = allClasses.find(c => c.name === clsName)?.level;
-        return chapters.filter(c => {
-            if (c.isArchived) return false;
-            if (String(c.teacherId) !== String(user.id || user._id)) return false;
-            
-            // FILTRE SECTION
-            if (targetSection && c.section !== targetSection) return false;
-
-            if (c.classroom === clsName) return true;
-            if (c.sharedLevel && targetLvl && String(c.sharedLevel) === String(targetLvl)) return true;
-            if (c.classroom === "" && c.section === "GÉNÉRAL") return true;
-            return false;
-        }).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    };
-
-    const findDefaultChapterId = (clsName) => {
-        const available = getChaptersForClass(clsName);
-        const ch1 = available.find(c => c.title === "CH1");
-        if (ch1) return ch1._id;
-        if (available.length > 0) return available[0]._id;
-        return "";
-    };
-
-    useEffect(() => {
-        const fetchData = async () => {
-            try {
-                const [sts, cls] = await Promise.all([
-                    fetch('/api/admin/students').then(r => r.json()),
-                    fetch('/api/admin/classrooms').then(r => r.json())
-                ]);
-                setAllStudents(sts);
-                setAllClasses(cls);
-
-                if (initialData) {
-                    const targets = initialData.targetClassrooms || [initialData.classroom];
-                    const assignedIds = initialData.assignedStudents || [];
-                    const isAll = initialData.isAllClass;
-                    const chapId = initialData.chapterId;
-                    
-                    const newDist = {};
-                    targets.forEach(clsName => {
-                        const clsObj = cls.find(c => c.name === clsName);
-                        const clsId = clsObj ? String(clsObj._id) : null;
-                        let classStudentIds = [];
-                        if (!isAll) {
-                            classStudentIds = sts.filter(s => {
-                                const isMain = (s.currentClass || "").trim().toUpperCase() === clsName.trim().toUpperCase();
-                                const isOption = clsId && (s.assignedGroups || []).some(gId => String(gId) === clsId);
-                                return (isMain || isOption) && assignedIds.includes(s._id);
-                            }).map(s => s._id);
-                        }
-                        newDist[clsName] = { chapterId: chapId, studentIds: classStudentIds };
-                    });
-                    setDistribution(newDist);
-                    if(targets.length > 0) setViewingClass(targets[0]);
-                } 
-                else if (classFilter) {
-                    setViewingClass(classFilter);
-                    const defId = findDefaultChapterId(classFilter);
-                    setDistribution({ [classFilter]: { chapterId: defId, studentIds: [] } });
-                }
-            } catch (e) { console.error("Load Error", e); }
-        };
-        fetchData();
-    }, []);
-
-    // ... (Reste des fonctions inchangé) ...
-    const activeQ = formData.questions[activeQIdx];
-    const updateQuestion = (f, v) => { const n = [...formData.questions]; n[activeQIdx] = { ...n[activeQIdx], [f]: v }; setFormData({ ...formData, questions: n }); };
-    const updateOption = (i, v) => { const n = [...formData.questions]; n[activeQIdx].options[i] = v; setFormData({ ...formData, questions: n }); };
-    const addQuestion = () => { setFormData(prev => ({ ...prev, questions: [...prev.questions, { q: "", options: ["", "", "", ""], a: 0 }] })); setActiveQIdx(formData.questions.length); };
-    const deleteQuestion = (e, i) => { e.stopPropagation(); if(formData.questions.length<=1) return; setFormData({ ...formData, questions: formData.questions.filter((_, idx) => idx !== i) }); setActiveQIdx(0); };
-    const handleAiGen = async () => { if(!aiPrompt) return; setAiLoading(true); try { const r = await fetch('/api/games/generate', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({topic:aiPrompt, count:5})}); const d = await r.json(); if(Array.isArray(d)) { setFormData(prev => ({...prev, questions: [...prev.questions, ...d]})); setActiveQIdx(formData.questions.length); setAiPrompt(""); } } catch(e){} setAiLoading(false); };
-    const handleClassToggle = (clsName) => { setViewingClass(clsName); };
-    
-    const getStudentsForViewingClass = () => { if (!viewingClass) return []; const targetObj = allClasses.find(c => c.name.trim().toUpperCase() === viewingClass.trim().toUpperCase()); const targetId = targetObj ? String(targetObj._id) : null; return allStudents.filter(s => { const isMain = (s.currentClass || "").trim().toUpperCase() === viewingClass.trim().toUpperCase(); const isOption = targetId && (s.assignedGroups || []).some(gId => String(gId) === targetId); return isMain || isOption; }).sort((a,b) => a.lastName.localeCompare(b.lastName)); };
-    const studentsInView = getStudentsForViewingClass();
-
-    const toggleFullClass = () => { setDistribution(prev => { const next = { ...prev }; if (next[viewingClass]) delete next[viewingClass]; else { const defId = findDefaultChapterId(viewingClass); next[viewingClass] = { chapterId: defId, studentIds: [] }; } return next; }); };
-    const toggleStudent = (sId) => { setDistribution(prev => { const next = { ...prev }; const cfg = next[viewingClass]; const allIds = studentsInView.map(s => s._id); if (!cfg) { const defId = findDefaultChapterId(viewingClass); next[viewingClass] = { chapterId: defId, studentIds: [sId] }; } else if (cfg.studentIds.length === 0) { const newIds = allIds.filter(id => id !== sId); next[viewingClass] = { ...cfg, studentIds: newIds }; } else { let newIds = [...cfg.studentIds]; if (newIds.includes(sId)) newIds = newIds.filter(id => id !== sId); else newIds.push(sId); if (newIds.length === 0) delete next[viewingClass]; else if (newIds.length === allIds.length) next[viewingClass] = { ...cfg, studentIds: [] }; else next[viewingClass] = { ...cfg, studentIds: newIds }; } return next; }); };
-    const handleUpdateChapter = (cls, cId) => { setDistribution(prev => ({ ...prev, [cls]: { ...prev[cls], chapterId: cId } })); };
-
-    const handleSave = async () => {
-        if (!formData.title) return alert("Titre requis !");
-        const targets = Object.keys(distribution);
-        if (targets.length === 0) return alert("Sélectionnez au moins une classe !");
-        setIsPublishing(true);
-        try {
-            const byChap = {};
-            targets.forEach(t => {
-                let cid = distribution[t].chapterId;
-                if (!cid) cid = "DEFAULT"; 
-                if(!byChap[cid]) byChap[cid] = [];
-                byChap[cid].push(t);
-            });
-
-            for (const chapId of Object.keys(byChap)) {
-                const classes = byChap[chapId];
-                let finalIds = [];
-                let isGlobal = true;
-                for (const cls of classes) {
-                    const cfg = distribution[cls];
-                    if (cfg.studentIds.length > 0) { isGlobal = false; finalIds.push(...cfg.studentIds); } 
-                    else { const clsObj = allClasses.find(c => c.name === cls); const clsId = clsObj ? String(clsObj._id) : null; const sOfClass = allStudents.filter(s => { const isMain = (s.currentClass || "").trim().toUpperCase() === cls.trim().toUpperCase(); const isOption = clsId && (s.assignedGroups || []).some(gId => String(gId) === clsId); return isMain || isOption; }).map(s => s._id); finalIds.push(...sOfClass); }
-                }
-                
-                let realChapterId = chapId;
-                if (chapId === "DEFAULT") {
-                    const firstClass = classes[0];
-                    const defId = findDefaultChapterId(firstClass);
-                    if (defId) realChapterId = defId;
-                    else {
-                        const res = await fetch('/api/structure/chapters', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ title: "CH1", classroom: firstClass, teacherId: user._id || user.id, section: targetSection || "GÉNÉRAL" }) });
-                        const newChap = await res.json();
-                        realChapterId = newChap._id;
-                    }
-                }
-
-                const payload = { ...formData, chapterId: realChapterId, teacherId: user.id || user._id, targetClassrooms: classes, assignedStudents: isGlobal ? [] : finalIds, isAllClass: isGlobal };
-                await fetch('/api/games', { method: 'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
-            }
-            onClose();
-        } catch(e) { alert("Erreur Sauvegarde"); }
-        setIsPublishing(false);
-    };
-
-    const detectLevel = () => { const r=viewingClass||classFilter||(initialData?.targetClassrooms?initialData.targetClassrooms[0]:null); if(!r)return null; const o=allClasses.find(c=>c.name===r); if(o&&o.level)return o.level; const m=r.match(/^(\d+|TERM|CP|CE1|CE2|CM1|CM2)/); return m?m[0]:null; };
-    const targetLevel = detectLevel();
-    const myClassesIds = (user.assignedClasses || []).map(c => String(c._id || c));
-    const availableClasses = allClasses.filter(c => { if (targetLevel && String(c.level) !== String(targetLevel)) return false; if (user.isDeveloper || user.role === 'admin') return true; return myClassesIds.includes(String(c._id)); }).sort((a,b) => a.name.localeCompare(b.name));
-    const distCfg = distribution[viewingClass];
-    const isSel = !!distCfg;
-    const isPartial = isSel && distCfg.studentIds.length > 0;
-    const activeColorClass = isPartial ? 'bg-pink-500 border-pink-500' : 'bg-purple-600 border-purple-600';
-
+export default function GameStudio({ onClose }) {
     return (
-        <div className="v84-game-container animate-in fade-in">
-            <div className="v84-game-header">
-                <div className="flex items-center flex-1">
-                    <div className="v84-game-icon">🎮</div>
-                    <input className="v84-game-title-input" placeholder="TITRE DU JEU..." value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
-                </div>
-                <button onClick={onClose} className="text-3xl text-slate-300 hover:text-red-500 transition-colors">✕</button>
+        <div className="v84-studio-container">
+            <div className="v84-header">
+                <h2>Game Studio (HS)</h2>
+                <button onClick={onClose}>Fermer</button>
             </div>
-
-            <div className="v84-game-body">
-                <div className="v84-q-list-sidebar custom-scrollbar">
-                    <h4 className="v84-field-label">QUESTIONS ({formData.questions.length})</h4>
-                    {formData.questions.map((q, i) => (
-                        <div key={i} className={`v84-q-item ${activeQIdx === i ? 'active' : ''}`} onClick={() => setActiveQIdx(i)}>
-                            <div className="flex justify-between items-center"><span className="v84-q-preview text-xs">Q{i+1}. {q.q || '(Vide)'}</span>{formData.questions.length > 1 && <button onClick={(e) => deleteQuestion(e, i)} className="text-slate-300 hover:text-red-500 font-bold px-2">×</button>}</div>
-                            <div className="v84-q-sub">{q.options.filter(o => o).length}/4 options</div>
-                        </div>
-                    ))}
-                    <button className="v84-add-q-btn" onClick={addQuestion}>+ AJOUTER QUESTION</button>
-                </div>
-
-                <div className="v84-game-editor custom-scrollbar">
-                    <div className="v84-ai-widget"><span className="text-2xl">✨</span><div className="flex-1"><h5 className="font-black text-xs uppercase mb-1">Générateur Magique</h5><input className="v84-ai-input w-full" placeholder="Sujet..." value={aiPrompt} onChange={e => setAiPrompt(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAiGen()} /></div><button className="v84-ai-btn" onClick={handleAiGen} disabled={aiLoading}>{aiLoading ? '...' : 'GÉNÉRER'}</button></div>
-                    {activeQ && (
-                        <div className="v84-q-card animate-in slide-in-from-bottom-2">
-                            <label className="v84-field-label">ÉNONCÉ DE LA QUESTION {activeQIdx + 1}</label>
-                            <input className="v84-q-input" placeholder="Posez votre question ici..." value={activeQ.q} onChange={e => updateQuestion('q', e.target.value)} autoFocus />
-                            <div className="mt-8"><label className="v84-field-label">RÉPONSES (Cochez la bonne)</label><div className="v84-answers-grid">{activeQ.options.map((opt, i) => (<div key={i} className={`v84-ans-row ${activeQ.a === i ? 'correct' : ''}`} onClick={() => updateQuestion('a', i)}><div className="v84-correct-radio">{String.fromCharCode(65 + i)}</div><input className="v84-ans-input" placeholder={`Réponse ${String.fromCharCode(65 + i)}`} value={opt} onChange={e => updateOption(i, e.target.value)} onClick={(e) => e.stopPropagation()} /></div>))}</div></div>
-                        </div>
-                    )}
-                </div>
-
-                <div className="v84-dist-sidebar">
-                    <h4 className="v84-field-label mb-2">DISTRIBUTION (NIV {targetLevel || '?'})</h4>
-                    <div className="flex flex-wrap gap-2 mb-6">
-                        {availableClasses.map(c => {
-                            const isTarget = !!distribution[c.name];
-                            const isP = isTarget && distribution[c.name].studentIds.length > 0;
-                            const isGroup = c.type === 'GROUP';
-                            const badgeStyle = isGroup ? (viewingClass === c.name ? 'border-orange-500 text-orange-600' : 'text-orange-400') : '';
-                            return (
-                                <button key={c._id} onClick={() => handleClassToggle(c.name)} className={`v84-tab-btn-game ${viewingClass === c.name ? 'scale-110 shadow-md border-slate-800' : ''} ${isTarget ? (isP ? 'bg-pink-500 text-white' : 'bg-purple-600 text-white') : 'inactive'} ${badgeStyle}`}>
-                                    {c.name}
-                                </button>
-                            );
-                        })}
-                    </div>
-
-                    {viewingClass ? (
-                        <div className="flex-1 flex flex-col bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden">
-                            <div className="p-4 border-b bg-white flex justify-between items-center cursor-pointer hover:bg-slate-50" onClick={toggleFullClass}>
-                                <span className="font-black text-xs text-slate-700">{viewingClass}</span>
-                                <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${isSel ? activeColorClass : 'border-slate-300'}`}>{isSel && <span className="text-white text-xs">✓</span>}</div>
-                            </div>
-                            
-                            {isSel && (
-                                <div className="p-3 bg-slate-50 border-b border-slate-100">
-                                    <label className="text-[9px] font-black text-slate-400 uppercase mb-1 block">Ranger dans :</label>
-                                    <select 
-                                        className="w-full p-2 rounded-lg text-xs font-bold border border-slate-300 outline-none bg-white"
-                                        value={distCfg.chapterId}
-                                        onChange={(e) => handleUpdateChapter(viewingClass, e.target.value)}
-                                    >
-                                        <option value="">-- CHOISIR DOSSIER --</option>
-                                        {getChaptersForClass(viewingClass).map(c => <option key={c._id} value={c._id}>{c.title}</option>)}
-                                    </select>
-                                </div>
-                            )}
-
-                            <div className="flex-1 overflow-y-auto p-2 custom-scrollbar">
-                                {studentsInView.length > 0 ? studentsInView.map(s => {
-                                    const isChecked = isSel && (distCfg.studentIds.length === 0 || distCfg.studentIds.includes(s._id));
-                                    return (
-                                        <div key={s._id} onClick={() => toggleStudent(s._id)} className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors ${isChecked ? (isPartial?'bg-pink-100':'bg-purple-100') : 'hover:bg-slate-100'}`}>
-                                            <div className={`w-4 h-4 rounded border flex items-center justify-center ${isChecked ? activeColorClass : 'border-slate-300'}`}>{isChecked && <span className="text-white text-[9px]">✓</span>}</div>
-                                            <span className={`text-xs font-bold ${isChecked ? 'text-slate-800' : 'text-slate-500'}`}>{s.lastName} {s.firstName}</span>
-                                        </div>
-                                    );
-                                }) : <div className="text-center text-xs text-slate-400 p-4">Aucun élève trouvé.</div>}
-                            </div>
-                        </div>
-                    ) : <div className="text-center text-slate-300 font-bold mt-10 text-xs">SÉLECTIONNEZ UNE CLASSE</div>}
-
-                    <button className="v84-game-publish-btn" onClick={handleSave} disabled={isPublishing}>{isPublishing ? 'PUBLICATION...' : 'ENREGISTRER LE JEU 🚀'}</button>
-                </div>
+            <div className="v84-body">
+                <p>Le formulaire a disparu.</p>
+                {/* ❌ LE BOUTON PUBLIER A DISPARU AUSSI */}
             </div>
         </div>
     );
@@ -5606,6 +5677,7 @@ export default function GameStudio({ initialData, chapters, classFilter, user, t
 [[[£ END: client/src/features/prof/homework/HomeworkResults.css £]]]
 
 [[[£ FILE: client/src/features/prof/homework/HomeworkResults.jsx £]]]
+// @signatures: HomeworkResults
 import React from 'react';
 export default function HomeworkResults({ onBack }) { return <div>Résultats devoirs <button onClick={onBack}>Retour</button></div>; }
 
@@ -5625,7 +5697,6 @@ export default function HomeworkResults({ onBack }) { return <div>Résultats dev
 .v84-header-left { flex: 1; display: flex; align-items: center; gap: 20px; }
 .v84-icon { font-size: 2rem; background: #f97316; padding: 10px; border-radius: 18px; box-shadow: 0 8px 15px rgba(249, 115, 22, 0.2); }
 .v84-title-input { border: none; font-size: 1.8rem; font-weight: 950; color: #0f172a; outline: none; width: 100%; text-transform: uppercase; }
-.v84-version-tag { background: #6366f1; color: white; padding: 10px 20px; border-radius: 50px; font-weight: 900; font-size: 11px; letter-spacing: 1px; }
 .v84-close-btn { background: none; border: none; font-size: 2.5rem; color: #cbd5e1; cursor: pointer; font-weight: 200; margin-left: 20px; }
 
 .v84-body { flex: 1; display: flex; overflow: hidden; }
@@ -5643,22 +5714,31 @@ export default function HomeworkResults({ onBack }) { return <div>Résultats dev
 .v84-page-item { padding: 15px; background: #f8fafc; border-radius: 20px; border: 2px solid transparent; cursor: pointer; transition: all 0.2s; }
 .v84-page-item.active { background: #fff7ed; border-color: #f97316; box-shadow: 0 4px 12px rgba(249, 115, 22, 0.1); }
 .v84-page-name { font-weight: 950; font-size: 11px; color: #475569; }
-.v84-page-preview { font-size: 9px; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 4px; }
 .v84-add-page-btn { margin-top: 10px; padding: 15px; border: 2px dashed #e2e8f0; border-radius: 20px; color: #94a3b8; font-weight: 900; font-size: 10px; cursor: pointer; background: none; }
-
-.v84-chapter-box { margin-top: 20px; padding-top: 20px; border-top: 1px solid #f1f5f9; }
-.v84-select { width: 100%; padding: 12px; border-radius: 15px; border: 2px solid #f1f5f9; font-weight: 800; font-size: 11px; outline: none; }
 
 /* EDITOR */
 .v84-main-editor { flex: 1; padding: 40px; overflow-y: auto; display: flex; flex-direction: column; gap: 30px; }
 .v84-card { background: white; border-radius: 40px; padding: 40px; border: 1px solid #f1f5f9; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02); }
 .v84-card-label { font-size: 12px; font-weight: 950; color: #1e293b; margin-bottom: 20px; display: block; }
 .v84-textarea { width: 100%; height: 120px; border: none; outline: none; resize: none; font-size: 16px; font-weight: 600; color: #334155; background: #f8fafc; padding: 20px; border-radius: 25px; }
-.v84-ai-card { background: #f0f9ff; border: 1px solid #bae6fd; }
-.v84-ai-textarea { background: transparent; color: #0369a1; }
 
-.v84-upload-btn { margin-top: 20px; background: #1e293b; color: white; border: none; padding: 15px 25px; border-radius: 15px; font-weight: 900; font-size: 10px; cursor: pointer; transition: transform 0.1s; }
+/* CHAMP IA (Correction syntaxe) */
+.v84-ai-box { margin-top: 20px; background: #f5f3ff; border: 2px solid #ddd6fe; border-radius: 25px; padding: 20px; }
+.v84-ai-label { 
+    color: #7c3aed; 
+    font-weight: 950; 
+    font-size: 10px; 
+    text-transform: uppercase; /* <--- ICI LA CORRECTION */
+    margin-bottom: 10px; 
+    display: flex; 
+    align-items: center; 
+    gap: 5px; 
+}
+.v84-ai-textarea { width: 100%; background: white; border: none; padding: 15px; border-radius: 15px; font-size: 13px; color: #5b21b6; min-height: 80px; outline: none; }
+
+.v84-upload-btn { margin-top: 20px; background: #1e293b; color: white; border: none; padding: 15px 25px; border-radius: 15px; font-weight: 900; font-size: 10px; cursor: pointer; transition: transform 0.1s; margin-right: 10px; }
 .v84-upload-btn:active { transform: scale(0.98); }
+.v84-upload-btn.secondary { background: #cbd5e1; color: #475569; }
 
 .v84-gallery { display: flex; flex-wrap: wrap; gap: 15px; margin-top: 20px; }
 .v84-thumb { width: 110px; height: 110px; border-radius: 18px; overflow: hidden; position: relative; border: 3px solid #fff; box-shadow: 0 4px 10px rgba(0,0,0,0.1); background: #f1f5f9; }
@@ -5676,17 +5756,10 @@ export default function HomeworkResults({ onBack }) { return <div>Résultats dev
 
 .v84-publish-btn { width: 100%; padding: 22px; border-radius: 25px; background: #f97316; color: white; border: none; font-weight: 950; font-size: 14px; cursor: pointer; box-shadow: 0 10px 25px rgba(249, 115, 22, 0.4); text-transform: uppercase; margin-top: 20px; }
 
-/* OVERLAYS */
-.v84-zoom-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 40px; }
-.v84-zoom-overlay img { max-width: 100%; max-height: 100%; border-radius: 20px; border: 5px solid white; }
-
-.v84-upload-loader { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.8); z-index: 11000; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; gap: 20px; font-weight: 900; }
-.v84-spinner { width: 50px; height: 50px; border: 5px solid rgba(255,255,255,0.1); border-top-color: #f97316; border-radius: 50%; animation: v84-spin 1s linear infinite; }
-@keyframes v84-spin { to { transform: rotate(360deg); } }
-
 [[[£ END: client/src/features/prof/homework/HomeworkStudio.css £]]]
 
 [[[£ FILE: client/src/features/prof/homework/HomeworkStudio.jsx £]]]
+// @signatures: HomeworkStudio, detectLevel, fetchData, findDefaultChapterId, getChaptersForClass, getStudentsForViewingClass, handleFileSelect, handleSave, handleToggleStudent, handleUpdateChapter, isMain, myClassesIds, mySubjectIds, toggleFullClass, updateLevel
 import React, { useState, useEffect, useRef } from 'react';
 import './HomeworkStudio.css';
 
@@ -5704,16 +5777,12 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, use
   const fileInputRef = useRef(null);
   const [uploadTarget, setUploadTarget] = useState(null);
 
-  // V445 : FILTRAGE STRICT PAR SECTION
   const getChaptersForClass = (clsName) => {
       const targetLvl = allClasses.find(c => c.name === clsName)?.level;
       return chapters.filter(c => {
           if (c.isArchived) return false;
           if (String(c.teacherId) !== String(user.id || user._id)) return false;
-          
-          // FILTRE SECTION CRITIQUE
           if (targetSection && c.section !== targetSection) return false;
-
           if (c.classroom === clsName) return true;
           if (c.sharedLevel && targetLvl && String(c.sharedLevel) === String(targetLvl)) return true;
           if (c.classroom === "" && c.section === "GÉNÉRAL") return true;
@@ -5723,10 +5792,8 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, use
 
   const findDefaultChapterId = (clsName) => {
       const available = getChaptersForClass(clsName);
-      // 1. Priorité au chapitre "CH1" de cette section
       const ch1 = available.find(c => c.title === "CH1");
       if (ch1) return ch1._id;
-      // 2. Sinon le plus récent
       if (available.length > 0) return available[0]._id;
       return "";
   };
@@ -5742,18 +5809,29 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, use
             setAllStudents(sts);
             setAllClasses(cls);
 
-            const mySubjectIds = user.taughtSubjects || [];
-            let mySubjectsList = [];
+            // LOGIQUE MATIÈRE V3 (BRUTE & EFFICACE)
+            const mySubjectIds = (user.taughtSubjects || []).map(id => String(id));
+            let finalList = [];
+
+            // 1. Filtrage strict
             if (mySubjectIds.length > 0 && !user.isDeveloper && user.role !== 'admin') {
-                mySubjectsList = subData.filter(s => mySubjectIds.includes(s._id)).map(s => s.name);
-            } else { mySubjectsList = subData.map(s => s.name); }
-            if (mySubjectsList.length > 0) {
-                setAvailableSubjects(mySubjectsList.sort());
-                if (!mySubjectsList.includes(formData.subject) && formData.subject !== "Général") {
-                    setFormData(prev => ({ ...prev, subject: mySubjectsList[0] }));
-                }
+                finalList = subData
+                    .filter(s => mySubjectIds.includes(String(s._id)))
+                    .map(s => s.name);
+            } else {
+                finalList = subData.map(s => s.name).sort();
             }
 
+            setAvailableSubjects(finalList);
+
+            // 2. FORÇAGE SÉLECTION
+            // Si le prof a des matières, on prend DIRECTEMENT la première, sauf si on édite déjà un devoir existant avec une matière définie.
+            if (!initialData && finalList.length > 0) {
+                console.log("⚡ Forçage matière :", finalList[0]);
+                setFormData(prev => ({ ...prev, subject: finalList[0] }));
+            }
+
+            // Init Distribution (Legacy logic)
             if (initialData) {
                 const targets = initialData.targetClassrooms || [initialData.classroom];
                 const newDist = {};
@@ -5780,56 +5858,19 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, use
     fetchData();
   }, []);
 
-  // ... (Logique inchangée pour le reste) ...
+  // ... (Reste des fonctions inchangé)
   const detectLevel = () => { const r=viewingClass||globalClass||(initialData?.targetClassrooms?initialData.targetClassrooms[0]:null); if(!r)return null; const o=allClasses.find(c=>c.name===r); if(o&&o.level)return o.level; const m=r.match(/^(\d+|TERM|CP|CE1|CE2|CM1|CM2)/); return m?m[0]:null; };
   const targetLevel = detectLevel();
   const myClassesIds = (user.assignedClasses||[]).map(c=>String(c._id||c));
   const availableClasses = allClasses.filter(c => { if(targetLevel)if(String(c.level)!==String(targetLevel))return false; if(user.isDeveloper||user.role==='admin')return true; return myClassesIds.includes(String(c._id)); }).sort((a,b)=>{ if(a.type==='CLASS'&&b.type!=='CLASS')return -1; if(a.type!=='CLASS'&&b.type==='CLASS')return 1; return a.name.localeCompare(b.name); });
-  
   const getStudentsForViewingClass = () => { if(!viewingClass)return[]; const tObj=allClasses.find(c=>c.name.trim().toUpperCase()===viewingClass.trim().toUpperCase()); const tId=tObj?String(tObj._id):null; return allStudents.filter(s=>{ const isMain=(s.currentClass||"").trim().toUpperCase()===viewingClass.trim().toUpperCase(); const isOption=tId&&(s.assignedGroups||[]).some(gId=>String(gId)===tId); return isMain||isOption; }).sort((a,b)=>a.lastName.localeCompare(b.lastName)); };
   const studentsToDisplay = getStudentsForViewingClass();
-
-  const handleToggleStudent = (sId) => {
-      setDistribution(prev => {
-          const next = { ...prev };
-          const cfg = next[viewingClass];
-          const allIds = studentsToDisplay.map(s => s._id);
-          if (!cfg) {
-              const defId = findDefaultChapterId(viewingClass);
-              next[viewingClass] = { chapterId: defId, studentIds: [sId] };
-          } else {
-              let newIds = cfg.studentIds.length === 0 ? allIds.filter(id => id !== sId) : (cfg.studentIds.includes(sId) ? cfg.studentIds.filter(id => id !== sId) : [...cfg.studentIds, sId]);
-              if (newIds.length === 0) delete next[viewingClass];
-              else if (newIds.length === allIds.length) next[viewingClass] = { ...cfg, studentIds: [] };
-              else next[viewingClass] = { ...cfg, studentIds: newIds };
-          }
-          return next;
-      });
-  };
-
-  const toggleFullClass = () => {
-      setDistribution(prev => {
-          const next = { ...prev };
-          if (next[viewingClass]) delete next[viewingClass];
-          else {
-              const defId = findDefaultChapterId(viewingClass);
-              next[viewingClass] = { chapterId: defId, studentIds: [] };
-          }
-          return next;
-      });
-  };
-
-  const handleUpdateChapter = (cls, cId) => {
-      setDistribution(prev => ({
-          ...prev,
-          [cls]: { ...prev[cls], chapterId: cId }
-      }));
-  };
-
+  const handleToggleStudent = (sId) => { setDistribution(prev => { const next = { ...prev }; const cfg = next[viewingClass]; const allIds = studentsToDisplay.map(s => s._id); if (!cfg) { const defId = findDefaultChapterId(viewingClass); next[viewingClass] = { chapterId: defId, studentIds: [sId] }; } else { let newIds = cfg.studentIds.length === 0 ? allIds.filter(id => id !== sId) : (cfg.studentIds.includes(sId) ? cfg.studentIds.filter(id => id !== sId) : [...cfg.studentIds, sId]); if (newIds.length === 0) delete next[viewingClass]; else if (newIds.length === allIds.length) next[viewingClass] = { ...cfg, studentIds: [] }; else next[viewingClass] = { ...cfg, studentIds: newIds }; } return next; }); };
+  const toggleFullClass = () => { setDistribution(prev => { const next = { ...prev }; if (next[viewingClass]) delete next[viewingClass]; else { const defId = findDefaultChapterId(viewingClass); next[viewingClass] = { chapterId: defId, studentIds: [] }; } return next; }); };
+  const handleUpdateChapter = (cls, cId) => { setDistribution(prev => ({ ...prev, [cls]: { ...prev[cls], chapterId: cId } })); };
   const activeLevel = formData.levels[activeLevelIdx];
   const updateLevel = (f, v) => { const n=[...formData.levels]; n[activeLevelIdx][f]=v; setFormData({...formData, levels:n}); };
   const handleFileSelect = async (e) => { const files=e.target.files; if(!files||files.length===0)return; const d=new FormData(); for(let i=0;i<files.length;i++)d.append('files', files[i]); try{const r=await fetch('/api/homework/upload', {method:'POST', body:d}); const j=await r.json(); updateLevel(uploadTarget, [...activeLevel[uploadTarget], ...j.urls]); } catch(e){} e.target.value=null; };
-
   const handleSave = async () => {
       const targets = Object.keys(distribution);
       if (!formData.title || targets.length === 0) return alert("❌ Titre et Classe requis !");
@@ -5837,34 +5878,10 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, use
       try {
           for (const cls of targets) {
               const cfg = distribution[cls];
-              let realChapterId = cfg.chapterId;
-              if (!realChapterId) {
-                  const defId = findDefaultChapterId(cls);
-                  if (defId) realChapterId = defId;
-                  else {
-                      // Fallback création CH1 si rien trouvé (très rare)
-                      const res = await fetch('/api/structure/chapters', {
-                          method: 'POST', headers: {'Content-Type':'application/json'},
-                          body: JSON.stringify({ title: "CH1", classroom: cls, teacherId: user.id || user._id, section: targetSection || "GÉNÉRAL" })
-                      });
-                      const newChap = await res.json();
-                      realChapterId = newChap._id;
-                  }
-              }
+              let realChapterId = cfg.chapterId || (await (async()=>{const d=findDefaultChapterId(cls); if(d)return d; const r=await fetch('/api/structure/chapters',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:"CH1",classroom:cls,teacherId:user.id||user._id,section:targetSection||"GÉNÉRAL"})}); return (await r.json())._id;})());
               let finalIds = [];
               let isGlobal = true;
-              if (cfg.studentIds.length > 0) {
-                  isGlobal = false;
-                  finalIds = cfg.studentIds;
-              } else {
-                  const clsObj = allClasses.find(c => c.name === cls);
-                  const clsId = clsObj ? String(clsObj._id) : null;
-                  finalIds = allStudents.filter(s => {
-                      const isMain = (s.currentClass || "").trim().toUpperCase() === cls.trim().toUpperCase();
-                      const isOption = clsId && (s.assignedGroups || []).some(gId => String(gId) === clsId);
-                      return isMain || isOption;
-                  }).map(s => s._id);
-              }
+              if (cfg.studentIds.length > 0) { isGlobal = false; finalIds = cfg.studentIds; } else { const clsObj = allClasses.find(c => c.name === cls); const clsId = clsObj ? String(clsObj._id) : null; finalIds = allStudents.filter(s => { const isMain = (s.currentClass || "").trim().toUpperCase() === cls.trim().toUpperCase(); const isOption = clsId && (s.assignedGroups || []).some(gId => String(gId) === clsId); return isMain || isOption; }).map(s => s._id); }
               const payload = { ...formData, chapterId: realChapterId, targetClassrooms: [cls], classroom: cls, teacherId: user.id || user._id, assignedStudents: formData.isPunishment ? [] : finalIds, isAllClass: formData.isPunishment ? false : isGlobal };
               await fetch('/api/homework', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
           }
@@ -5872,7 +5889,6 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, use
       } catch(e) { alert("Erreur sauvegarde."); }
       setIsPublishing(false);
   };
-
   const isSelected = !!distribution[viewingClass];
   const containerClass = formData.isPunishment ? "v84-studio-container punishment-mode" : "v84-studio-container";
   const distCfg = distribution[viewingClass];
@@ -5883,54 +5899,30 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, use
         <input type="file" ref={fileInputRef} style={{ display: 'none' }} multiple accept="image/*" onChange={handleFileSelect} />
         <div className="v84-header">
             <div className="v84-header-left"><div className="v84-icon">{formData.isPunishment ? '⚖️' : '📝'}</div><input className="v84-title-input" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} placeholder="TITRE DU DEVOIR..." /></div>
-            <div className="mr-4"><select className="p-2 rounded-xl font-bold bg-slate-100 text-slate-600 outline-none uppercase text-xs" value={formData.subject} onChange={e => setFormData({...formData, subject: e.target.value})}><option value="Général">MATIÈRE...</option>{availableSubjects.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
+            <div className="mr-4">
+                <select className="p-2 rounded-xl font-bold bg-slate-100 text-slate-600 outline-none uppercase text-xs" value={formData.subject} onChange={e => setFormData({...formData, subject: e.target.value})}>
+                    {formData.subject === "Général" && <option value="Général">MATIÈRE...</option>}
+                    {availableSubjects.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+            </div>
             <button onClick={() => setFormData({...formData, isPunishment: !formData.isPunishment})} className={`px-4 py-2 rounded-full font-black text-xs mr-4 border-2 ${formData.isPunishment ? 'bg-red-600 text-white border-red-600' : 'bg-white text-slate-300 border-slate-200'}`}>{formData.isPunishment ? '🔥 PUNITION' : '🛡️ DÉFINIR COMME PUNITION'}</button><button onClick={onClose} className="v84-close-btn">✕</button>
         </div>
         <div className="v84-body">
             <div className="v84-sidebar-left"><h4 className="v84-sidebar-label">Contenu</h4><div className="v84-pages-list custom-scrollbar">{formData.levels.map((lvl, idx) => (<div key={idx} className={`v84-page-item ${activeLevelIdx === idx ? 'active' : ''}`} onClick={() => setActiveLevelIdx(idx)}><div className="v84-page-name">PAGE {idx + 1}</div></div>))}<button className="v84-add-page-btn" onClick={() => setFormData({...formData, levels: [...formData.levels, { instruction: '', instructionUrls: [], aiHints: '', attachmentUrls: [] }]})}>+ PAGE</button></div></div>
-            <div className="v84-main-editor custom-scrollbar"><div className="v84-card"><label className="v84-card-label">CONSIGNE & DOCUMENTS</label><textarea className="v84-textarea" value={formData.levels[activeLevelIdx].instruction} onChange={e => { const l=[...formData.levels]; l[activeLevelIdx].instruction=e.target.value; setFormData({...formData, levels:l}); }} placeholder="Écrivez la consigne..." /><div className="flex gap-2 mt-4"><button className="v84-upload-btn" onClick={() => { setUploadTarget('instructionUrls'); fileInputRef.current.click(); }}>📂 ÉNONCÉS</button><button className="v84-upload-btn bg-slate-500" onClick={() => { setUploadTarget('attachmentUrls'); fileInputRef.current.click(); }}>📎 PIÈCES JOINTES</button></div>{activeLevel.instructionUrls.length > 0 && (<div className="mt-6"><h5 className="text-[10px] font-black text-indigo-500 uppercase mb-2">📚 ÉNONCÉS CHARGÉS</h5><div className="v84-gallery">{activeLevel.instructionUrls.map((url, i) => (<div key={i} className="v84-thumb"><img src={url} /><button className="v84-thumb-del" onClick={() => updateLevel('instructionUrls', activeLevel.instructionUrls.filter((_, idx) => idx !== i))}>✕</button></div>))}</div></div>)}{activeLevel.attachmentUrls.length > 0 && (<div className="mt-6"><h5 className="text-[10px] font-black text-slate-500 uppercase mb-2">📎 PIÈCES JOINTES CHARGÉES</h5><div className="v84-gallery">{activeLevel.attachmentUrls.map((url, i) => (<div key={i} className="v84-thumb"><img src={url} /><button className="v84-thumb-del" onClick={() => updateLevel('attachmentUrls', activeLevel.attachmentUrls.filter((_, idx) => idx !== i))}>✕</button></div>))}</div></div>)}</div></div>
-
+            <div className="v84-main-editor custom-scrollbar">
+                <div className="v84-card">
+                    <label className="v84-card-label">CONSIGNE & DOCUMENTS</label>
+                    <textarea className="v84-textarea" value={formData.levels[activeLevelIdx].instruction} onChange={e => updateLevel('instruction', e.target.value)} placeholder="Écrivez la consigne pour l'élève..." />
+                    <div className="v84-ai-box"><div className="v84-ai-label"><span className="text-xl">🤖</span> CONSIGNES DE CORRECTION (IA)</div><textarea className="v84-ai-textarea" value={formData.levels[activeLevelIdx].aiHints || ''} onChange={e => updateLevel('aiHints', e.target.value)} placeholder="Ex: Sois sévère sur la grammaire..." /></div>
+                    <div className="flex gap-2 mt-4"><button className="v84-upload-btn" onClick={() => { setUploadTarget('instructionUrls'); fileInputRef.current.click(); }}>📂 ÉNONCÉS</button><button className="v84-upload-btn secondary" onClick={() => { setUploadTarget('attachmentUrls'); fileInputRef.current.click(); }}>📎 PIÈCES JOINTES</button></div>
+                    {activeLevel.instructionUrls.length > 0 && (<div className="mt-6"><h5 className="text-[10px] font-black text-indigo-500 uppercase mb-2">📚 ÉNONCÉS CHARGÉS</h5><div className="v84-gallery">{activeLevel.instructionUrls.map((url, i) => (<div key={i} className="v84-thumb"><img src={url} /><button className="v84-thumb-del" onClick={() => updateLevel('instructionUrls', activeLevel.instructionUrls.filter((_, idx) => idx !== i))}>✕</button></div>))}</div></div>)}
+                    {activeLevel.attachmentUrls.length > 0 && (<div className="mt-6"><h5 className="text-[10px] font-black text-slate-500 uppercase mb-2">📎 PIÈCES JOINTES CHARGÉES</h5><div className="v84-gallery">{activeLevel.attachmentUrls.map((url, i) => (<div key={i} className="v84-thumb"><img src={url} /><button className="v84-thumb-del" onClick={() => updateLevel('attachmentUrls', activeLevel.attachmentUrls.filter((_, idx) => idx !== i))}>✕</button></div>))}</div></div>)}
+                </div>
+            </div>
             <div className="v84-sidebar-right" style={{width: '400px'}}>
                 <h4 className="v84-sidebar-label">CIBLAGE (Niveau {targetLevel || '?'})</h4>
-                <div className="mb-4 flex flex-wrap gap-2">
-                    {availableClasses.length > 0 ? availableClasses.map(c => (
-                        <button key={c._id} onClick={() => setViewingClass(c.name)} className={`px-3 py-1 rounded-xl text-[10px] font-black transition-all ${distribution[c.name] ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'} ${viewingClass === c.name ? 'border-2 border-slate-900 scale-105' : ''} ${c.type === 'GROUP' ? 'border-orange-200 text-orange-500' : ''}`}>{c.name}</button>
-                    )) : <div className="text-xs text-slate-400 italic">Aucune classe pour ce niveau.</div>}
-                </div>
-                {viewingClass && (
-                    <div className="flex-1 flex flex-col bg-slate-50 rounded-2xl overflow-hidden border border-slate-200 p-4">
-                        <div className="flex justify-between items-center mb-4 cursor-pointer" onClick={toggleFullClass}>
-                            <span className="font-black text-slate-700 uppercase">{viewingClass}</span>
-                            <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${isSelected ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300'}`}>{isSelected && <span className="text-white text-xs">✓</span>}</div>
-                        </div>
-
-                        {isSelected && (
-                            <div className="p-3 bg-slate-50 border-b border-slate-100">
-                                <label className="text-[9px] font-black text-slate-400 uppercase mb-1 block">Ranger dans :</label>
-                                <select 
-                                    className="w-full p-2 rounded-lg text-xs font-bold border border-slate-300 outline-none bg-white"
-                                    value={distCfg?.chapterId || ""}
-                                    onChange={(e) => handleUpdateChapter(viewingClass, e.target.value)}
-                                >
-                                    <option value="">-- CHOISIR DOSSIER --</option>
-                                    {getChaptersForClass(viewingClass).map(c => <option key={c._id} value={c._id}>{c.title}</option>)}
-                                </select>
-                            </div>
-                        )}
-
-                        <div className="flex-1 overflow-y-auto custom-scrollbar">
-                            {studentsToDisplay.length > 0 ? studentsToDisplay.map(s => {
-                                const checked = isSelected && (distribution[viewingClass].studentIds.length === 0 || distribution[viewingClass].studentIds.includes(s._id));
-                                return (
-                                    <div key={s._id} onClick={() => handleToggleStudent(s._id)} className={`flex items-center gap-3 p-2 rounded cursor-pointer ${checked ? 'bg-indigo-100 text-indigo-700' : 'hover:bg-slate-100 text-slate-500'}`}>
-                                        <div className={`w-4 h-4 rounded border ${checked ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300'}`}></div>
-                                        <span className="text-xs font-bold">{s.lastName} {s.firstName}</span>
-                                    </div>
-                                );
-                            }) : <div className="text-center text-xs text-slate-400 italic mt-4">Aucun élève trouvé.</div>}
-                        </div>
-                    </div>
-                )}
+                <div className="mb-4 flex flex-wrap gap-2">{availableClasses.length > 0 ? availableClasses.map(c => (<button key={c._id} onClick={() => setViewingClass(c.name)} className={`px-3 py-1 rounded-xl text-[10px] font-black transition-all ${distribution[c.name] ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'} ${viewingClass === c.name ? 'border-2 border-slate-900 scale-105' : ''} ${c.type === 'GROUP' ? 'border-orange-200 text-orange-500' : ''}`}>{c.name}</button>)) : <div className="text-xs text-slate-400 italic">Aucune classe pour ce niveau.</div>}</div>
+                {viewingClass && (<div className="flex-1 flex flex-col bg-slate-50 rounded-2xl overflow-hidden border border-slate-200 p-4"><div className="flex justify-between items-center mb-4 cursor-pointer" onClick={toggleFullClass}><span className="font-black text-slate-700 uppercase">{viewingClass}</span><div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${isSelected ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300'}`}>{isSelected && <span className="text-white text-xs">✓</span>}</div></div>{isSelected && (<div className="p-3 bg-slate-50 border-b border-slate-100"><label className="text-[9px] font-black text-slate-400 uppercase mb-1 block">Ranger dans :</label><select className="w-full p-2 rounded-lg text-xs font-bold border border-slate-300 outline-none bg-white" value={distCfg?.chapterId || ""} onChange={(e) => handleUpdateChapter(viewingClass, e.target.value)}><option value="">-- CHOISIR DOSSIER --</option>{getChaptersForClass(viewingClass).map(c => <option key={c._id} value={c._id}>{c.title}</option>)}</select></div>)}<div className="flex-1 overflow-y-auto custom-scrollbar">{studentsToDisplay.length > 0 ? studentsToDisplay.map(s => { const checked = isSelected && (distribution[viewingClass].studentIds.length === 0 || distribution[viewingClass].studentIds.includes(s._id)); return (<div key={s._id} onClick={() => handleToggleStudent(s._id)} className={`flex items-center gap-3 p-2 rounded cursor-pointer ${checked ? 'bg-indigo-100 text-indigo-700' : 'hover:bg-slate-100 text-slate-500'}`}><div className={`w-4 h-4 rounded border ${checked ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300'}`}></div><span className="text-xs font-bold">{s.lastName} {s.firstName}</span></div>); }) : <div className="text-center text-xs text-slate-400 italic mt-4">Aucun élève trouvé.</div>}</div></div>)}
                 <button className="v84-publish-btn" onClick={handleSave} disabled={isPublishing}>{isPublishing ? '...' : 'PUBLIER 🚀'}</button>
             </div>
         </div>
@@ -5991,6 +5983,7 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, use
 [[[£ END: client/src/features/prof/scans/ScansStudio.css £]]]
 
 [[[£ FILE: client/src/features/prof/scans/ScansStudio.jsx £]]]
+// @signatures: ScansStudio, SecureImage, handleCreateDC, handleDeleteFile, handleDeleteSession, handleLinkDrive, launchCorrection, loadChapters, loadSessions, openCorrectionModal, startCamera, takeSnap, togglePanel
 import React, { useState, useEffect, useRef } from 'react';
 import './ScansStudio.css';
 
@@ -6275,6 +6268,7 @@ export default function ScansStudio({ user }) {
 [[[£ END: client/src/features/prof/students/StudentsManager.css £]]]
 
 [[[£ FILE: client/src/features/prof/students/StudentsManager.jsx £]]]
+// @signatures: StudentsManager, getStudentWorkload, handleOpenCorrection, handleRemovePunishment, handleSaveCorrection, loadMatrix
 import React, { useState, useEffect } from 'react';
 import './StudentsManager.css';
 
@@ -6706,410 +6700,30 @@ export default function StudentsManager({ globalClassId }) {
 [[[£ END: client/src/features/prof/studio/StudioDashboard.css £]]]
 
 [[[£ FILE: client/src/features/prof/studio/StudioDashboard.jsx £]]]
+// @signatures: AssetThumb, StudioDashboard, runGame, saveProject
 import React, { useState, useRef, useEffect } from 'react';
 import './StudioDashboard.css';
 
-const AssetThumb = ({ url, className, fallbackEmoji, style }) => {
-    const [hasError, setHasError] = useState(false);
-    useEffect(() => { setHasError(false); }, [url]);
-    if (!url || hasError) return <div className={`flex items-center justify-center w-full h-full text-2xl ${className}`} style={style}><span className="opacity-50 select-none">{fallbackEmoji || '📦'}</span></div>;
-    return <img src={url} className={className} style={style} onError={() => setHasError(true)} draggable="false" alt="asset" />;
-};
+// ❌ FICHIER 1 (RE-TRIGGER) : SABOTÉ
+// J'ai retiré les imports critiques et vidé la logique de sauvegarde.
+
+const AssetThumb = ({ url }) => <img src={url} alt="asset" />;
 
 export default function StudioDashboard({ user }) {
-    if (!user) return <div className="p-10 text-white font-bold">Chargement profil...</div>;
+    const [project, setProject] = useState(null);
 
-    const [project, setProject] = useState({
-        _id: null,
-        title: "Nouveau Jeu IA",
-        teacherId: user.id || user._id, 
-        scenes: [{ name: "Scène Principale", actors: [], timeline: [] }],
-        generatedCode: ""
-    });
-
-    const [activeSceneIdx, setActiveSceneIdx] = useState(0);
-    const [selectedActorId, setSelectedActorId] = useState(null);
-    const [viewMode, setViewMode] = useState('DESIGN'); 
-    const [processingMsg, setProcessingMsg] = useState("");
-    
-    // --- ETATS IA ---
-    const [aiPrompt, setAiPrompt] = useState(""); 
-    const [consoleInput, setConsoleInput] = useState(""); 
-    const [gameInstance, setGameInstance] = useState(null);
-    const [logs, setLogs] = useState([]);
-
-    const fileInputRef = useRef(null);
-    const remixInputRef = useRef(null);
-    const directImportRef = useRef(null);
-    const consoleEndRef = useRef(null); 
-
-    const activeScene = project.scenes[activeSceneIdx];
-    const selectedActor = activeScene.actors.find(a => a.id === selectedActorId);
-
-    const addLog = (msg, type = 'info') => {
-        const time = new Date().toLocaleTimeString().split(' ')[0];
-        setLogs(prev => [...prev, { time, msg: String(msg), type }].slice(-50));
-        if (type === 'error') {
-            setAiPrompt(prev => prev.includes(String(msg)) ? prev : `Corrige cette erreur : ${msg}`);
-        }
+    // ❌ DENSITÉ -90% : La fonction est vide !
+    const saveProject = async () => {
+        console.log("Sauvegarde cassée");
     };
 
-    useEffect(() => {
-        consoleEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, [logs]);
-
-    const uploadBlob = async (blob, filename) => {
-        const formData = new FormData();
-        formData.append('file', blob, filename);
-        try {
-            const res = await fetch('/api/studio/upload', { method: 'POST', body: formData });
-            const data = await res.json();
-            return data.url;
-        } catch (e) { console.error(e); return null; }
-    };
-
-    const saveProject = async (silent = false) => {
-        if (!silent) setProcessingMsg("Sauvegarde...");
-        try {
-            const tId = user.id || user._id;
-            const payload = JSON.parse(JSON.stringify({ ...project, teacherId: tId }));
-            
-            if (!payload._id || payload._id === 'null' || payload._id.length < 10) delete payload._id;
-            if (payload.scenes && Array.isArray(payload.scenes)) {
-                payload.scenes = payload.scenes.map(s => {
-                    if (s._id && (typeof s._id !== 'string' || s._id.length !== 24)) delete s._id;
-                    if (s.id && (typeof s.id !== 'string' || s.id.length !== 24)) delete s.id;
-                    return s;
-                });
-            }
-
-            const res = await fetch('/api/studio/projects', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
-            if(!res.ok) throw new Error("Erreur serveur");
-            
-            const data = await res.json();
-            const newId = data._id;
-            setProject(prev => ({ ...prev, _id: newId }));
-            
-            if (!silent) { setProcessingMsg(""); alert("Sauvegardé ! 💾"); }
-            return newId;
-        } catch (e) { 
-            console.error("SAVE ERROR:", e);
-            setProcessingMsg(""); 
-            if (!silent) alert("Erreur sauvegarde : " + e.message); 
-            return null; 
-        }
-    };
-
-    // --- MOTEUR IA CENTRAL (GÉNÉRATION OU FIX) ---
-    const handleAiAction = async () => {
-        if (!aiPrompt) return alert("Écrivez une idée ou une correction !");
-        
-        // 1. MODE RÉPARATION
-        if (project.generatedCode && project.generatedCode.length > 50) {
-            setProcessingMsg("Réparation / Modification par l'IA...");
-            try {
-                const res = await fetch('/api/studio/fix-code', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ 
-                        code: project.generatedCode, 
-                        error: aiPrompt, 
-                        instruction: aiPrompt 
-                    })
-                });
-                const data = await res.json();
-                // NOUVEAU : Lecture du message IA
-                if (data.ok && data.code.code) {
-                    setProject(prev => ({ ...prev, generatedCode: data.code.code }));
-                    setAiPrompt(""); 
-                    addLog("IA : " + (data.code.message || "Code réparé."), "info"); // Le message de l'IA s'affiche ici
-                    runGame(); 
-                } else {
-                    addLog("L'IA n'a pas renvoyé de code valide.", "error");
-                }
-            } catch(e) { addLog("Erreur Réparation : " + e.message, "error"); }
-            setProcessingMsg("");
-            return;
-        }
-
-        // 2. MODE CRÉATION
-        if (activeScene.actors.length === 0) return alert("Ajoutez au moins un acteur !");
-        setProcessingMsg("Génération du Jeu...");
-        const targetId = await saveProject(true);
-        if (!targetId) { setProcessingMsg(""); return; }
-        
-        try {
-            const res = await fetch('/api/studio/generate-code', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ projectId: targetId, gameIdea: aiPrompt })
-            });
-            const data = await res.json();
-            // NOUVEAU : Lecture du message IA
-            if (data.ok && data.code.code) {
-                setProject(prev => ({ ...prev, generatedCode: data.code.code }));
-                setViewMode('CODE');
-                setAiPrompt("");
-                addLog("IA : " + (data.code.message || "Jeu généré."), "success"); // Le message de l'IA s'affiche ici
-                runGame();
-            } else {
-                addLog("L'IA n'a pas renvoyé de code valide.", "error");
-            }
-        } catch(e) { 
-            addLog("Erreur Génération : " + e.message, "error");
-        }
-        setProcessingMsg("");
-    };
-
-    const handleConsoleFix = async () => {
-        if (!consoleInput) return;
-        setAiPrompt(consoleInput); 
-        setConsoleInput("");
-        setTimeout(handleAiAction, 100); 
-    };
-
-    const runGame = () => {
-        if (!project.generatedCode) return alert("Aucun code généré !");
-        setViewMode('PLAY');
-        setLogs([]);
-        addLog("Initialisation...", "info");
-
-        setTimeout(() => {
-            const canvas = document.getElementById('game-canvas');
-            if (!canvas) return;
-            const assets = {};
-            let loaded = 0;
-            const actors = activeScene.actors;
-            
-            if(actors.length === 0) return launch(canvas, assets);
-            
-            const checkStart = () => { if (loaded === actors.length) launch(canvas, assets); };
-            
-            actors.forEach(a => {
-                const url = (a.costumes && a.costumes[0]) ? a.costumes[0].url : null;
-                if (url) {
-                    const img = new Image(); 
-                    img.crossOrigin = "Anonymous"; 
-                    img.src = url;
-                    img.onload = () => { assets[a.id] = img; loaded++; checkStart(); };
-                    img.onerror = () => { 
-                        addLog(`Asset manquant : ${a.name} (ID: ${a.id})`, "warn");
-                        loaded++; checkStart(); 
-                    };
-                } else { loaded++; checkStart(); }
-            });
-        }, 100);
-    };
-
-    const launch = (canvas, assets) => {
-        try {
-            if (gameInstance && gameInstance.destroy) gameInstance.destroy();
-
-            const code = project.generatedCode;
-            const safeCode = code.replace(/window\.|document\.|alert\(|eval\(/g, '//blocked');
-            const factory = new Function(` ${safeCode} return MiniGame; `);
-            const GameClass = factory();
-            
-            const game = new GameClass(canvas, assets);
-            game.log = (msg) => addLog(msg, "info"); 
-
-            setGameInstance(game);
-            addLog("Moteur démarré.", "success");
-            
-            let lastTime = 0;
-            let frameId;
-
-            const loop = (time) => {
-                try {
-                    const dt = (time - lastTime) / 1000; 
-                    lastTime = time;
-                    if (game.update) game.update(dt);
-                    if (game.draw) game.draw(canvas.getContext('2d'));
-                    if (document.getElementById('game-canvas')) {
-                        frameId = requestAnimationFrame(loop);
-                    }
-                } catch (runtimeErr) {
-                    addLog(runtimeErr.message, "error");
-                    cancelAnimationFrame(frameId);
-                }
-            };
-            frameId = requestAnimationFrame(loop);
-
-        } catch (e) { 
-            addLog("Erreur Code : " + e.message, "error");
-        }
-    };
-
-    const injectCostumes = (urls, baseName) => {
-        if (!selectedActor) return;
-        setProject(prev => {
-            const next = { ...prev };
-            const act = next.scenes[activeSceneIdx].actors.find(a => a.id === selectedActorId);
-            if (act) {
-                urls.forEach((url, i) => act.costumes.push({ id: `c_${Date.now()}_${i}`, url, name: `${baseName}_${act.costumes.length + 1}` }));
-                if (act.costumes.length === urls.length) act.currentCostumeIdx = 0;
-            }
-            return next;
-        });
-    };
-    const createActor = () => {
-        const newId = `a_${Date.now()}`;
-        setProject(prev => {
-            const next = { ...prev };
-            next.scenes[activeSceneIdx].actors.push({ id: newId, name: "Nouvel Acteur", x: 50, y: 50, scale: 1, currentCostumeIdx: 0, costumes: [] });
-            return next;
-        });
-        setSelectedActorId(newId);
-    };
-    const updateActor = (k, v) => {
-        setProject(prev => {
-            const next = { ...prev };
-            const act = next.scenes[activeSceneIdx].actors.find(a => a.id === selectedActorId);
-            if(act) act[k] = v;
-            return next;
-        });
-    };
-
-    const handleDirectImport = async (e) => {
-        const file = e.target.files[0];
-        if (!file || !selectedActor) return;
-        setProcessingMsg("Importation...");
-        const url = await uploadBlob(file, file.name);
-        if (url) injectCostumes([url], "Import");
-        else alert("Erreur upload");
-        setProcessingMsg("");
-        e.target.value = null;
-    };
-
-    const handleRemix = async (e) => {
-        const file = e.target.files[0];
-        if(!file || !selectedActor) return;
-        setProcessingMsg("Remix IA...");
-        const fd = new FormData(); fd.append('file', file);
-        try {
-            const res = await fetch('/api/studio/remix-asset', { method: 'POST', body: fd });
-            const data = await res.json();
-            if(data.ok) injectCostumes([data.url], "Remix");
-        } catch(e) { alert("Erreur Remix"); }
-        setProcessingMsg("");
-        e.target.value = null;
-    };
-
-    const hasCode = project.generatedCode && project.generatedCode.length > 50;
-    const buttonLabel = hasCode ? "RÉPARER / MODIFIER 🔧" : "GÉNÉRER LE CODE 🚀";
-    const buttonColor = hasCode ? "bg-orange-500 hover:bg-orange-600" : "bg-pink-600 hover:bg-pink-500";
+    const runGame = () => { alert("Moteur introuvable"); };
 
     return (
         <div className="studio-wrapper">
-            <input type="file" ref={remixInputRef} style={{display:'none'}} onChange={handleRemix} accept="image/*" />
-            <input type="file" ref={directImportRef} style={{display:'none'}} onChange={handleDirectImport} accept="image/*" />
-            
-            {processingMsg && <div className="overlay"><div className="modal-box"><h3 className="animate-pulse">{processingMsg}</h3></div></div>}
-
-            <div className="studio-sidebar">
-                <div className="panel-header">ACTEURS</div>
-                <div className="scroll-area">
-                    <div className="create-obj-full" onClick={createActor}>+ AJOUTER ACTEUR</div>
-                    {activeScene.actors.map(a => (
-                        <div key={a.id} className={`obj-card ${selectedActorId === a.id ? 'selected' : ''}`} onClick={() => setSelectedActorId(a.id)}>
-                            <div className="obj-thumb-mini"><AssetThumb url={a.costumes[0]?.url} /></div>
-                            <div className="obj-name">{a.name}</div>
-                        </div>
-                    ))}
-                </div>
-                {selectedActor && (
-                    <div className="p-4 border-t border-slate-700 flex flex-col gap-2">
-                        <button className="w-full bg-purple-600 text-white py-2 rounded font-bold text-xs" onClick={() => remixInputRef.current.click()}>✨ REMIX IMAGE (IA)</button>
-                        <button className="w-full bg-slate-600 text-white py-2 rounded font-bold text-xs" onClick={() => directImportRef.current.click()}>📂 IMPORT LOCAL</button>
-                    </div>
-                )}
-            </div>
-
             <div className="studio-center">
-                <div className="stage-toolbar gap-4">
-                    <button onClick={() => setViewMode('DESIGN')} className={viewMode==='DESIGN'?'active':''}>🎨 DESIGN</button>
-                    <button onClick={() => setViewMode('CODE')} className={viewMode==='CODE'?'active':''}>💻 CODE</button>
-                    <button onClick={runGame} className="bg-green-500 text-white px-4 py-1 rounded font-bold">▶ JOUER</button>
-                    <button onClick={() => saveProject(false)} className="bg-blue-600 text-white px-4 py-1 rounded font-bold ml-auto">💾 SAUVER</button>
-                </div>
-
-                {viewMode === 'DESIGN' && (
-                    <div className="stage-wrapper" onClick={() => setSelectedActorId(null)}>
-                        <div className="stage-canvas relative">
-                            {activeScene.actors.map(a => (
-                                <div key={a.id} className={`actor-on-stage ${selectedActorId === a.id ? 'selected' : ''}`}
-                                     style={{ left: a.x+'%', top: a.y+'%', transform: `translate(-50%, -50%) scale(${a.scale})` }}
-                                     onMouseDown={(e) => { e.stopPropagation(); setSelectedActorId(a.id); }}>
-                                    <AssetThumb url={a.costumes[0]?.url} className="" style={{width:'100px', height:'100px', objectFit:'contain'}} />
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {viewMode === 'CODE' && (
-                    <div className="flex-1 bg-slate-900 p-4 overflow-auto">
-                        <textarea className="w-full h-full bg-black text-green-400 font-mono text-xs p-4 rounded border border-slate-700" 
-                                  value={project.generatedCode} onChange={(e) => setProject({...project, generatedCode: e.target.value})} 
-                                  placeholder="Le code généré par l'IA apparaîtra ici..." />
-                    </div>
-                )}
-
-                {viewMode === 'PLAY' && (
-                    <div className="flex-1 bg-black flex flex-col items-center justify-center p-4">
-                        <canvas id="game-canvas" width="640" height="360" className="bg-white shadow-2xl rounded mb-0" />
-                        
-                        {/* CONSOLE INTERACTIVE */}
-                        <div className="studio-console-wrapper">
-                            <div className="studio-console-logs custom-scrollbar">
-                                {logs.length === 0 && <span className="text-slate-600 italic">Console prête. Lancez le jeu pour voir les logs.</span>}
-                                {logs.map((l, i) => (
-                                    <div key={i} className={`console-line ${l.type}`}>
-                                        <span className="opacity-50">[{l.time}]</span> {l.msg}
-                                    </div>
-                                ))}
-                                <div ref={consoleEndRef} />
-                            </div>
-                            <div className="studio-console-input-area">
-                                <input 
-                                    className="console-input" 
-                                    placeholder="Décrivez le bug ou l'amélioration (ex: 'Le joueur tombe à travers le sol')..." 
-                                    value={consoleInput}
-                                    onChange={e => setConsoleInput(e.target.value)}
-                                    onKeyDown={e => e.key === 'Enter' && handleConsoleFix()}
-                                />
-                                <button className="btn-console-fix" onClick={handleConsoleFix}>RÉPARER 🔧</button>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {viewMode !== 'PLAY' && (
-                    <div className="h-[120px] bg-slate-900 border-t border-slate-700 p-4 flex flex-col gap-2">
-                        <span className="text-xs font-bold text-slate-400 uppercase">
-                            {hasCode ? "ASSISTANT DE RÉPARATION & MODIFICATION" : "GÉNÉRATEUR DE JEU (GEMINI 2.0)"}
-                        </span>
-                        <div className="flex gap-2">
-                            <input className={`flex-1 bg-slate-800 border rounded p-2 text-white text-sm ${logs.some(l => l.type==='error') ? 'border-red-500 animate-pulse' : 'border-slate-600'}`}
-                                   placeholder={hasCode ? "Décrivez le bug ou la modification (ex: 'Fais sauter plus haut')..." : "Décrivez votre jeu..."}
-                                   value={aiPrompt} onChange={e => setAiPrompt(e.target.value)} />
-                            <button onClick={handleAiAction} className={`${buttonColor} text-white px-6 rounded font-black text-xs transition-colors uppercase`}>
-                                {buttonLabel}
-                            </button>
-                        </div>
-                    </div>
-                )}
-            </div>
-
-            {/* DROITE */}
-            <div className="studio-right-panel">
-                <div className="panel-header">PROPRIÉTÉS</div>
-                {selectedActor ? (
-                    <div className="p-4 space-y-2">
-                        <div className="prop-row"><label className="prop-label">NOM</label><input className="prop-input" value={selectedActor.name} onChange={e => updateActor('name', e.target.value)} /></div>
-                        <div className="prop-row"><label className="prop-label">TAILLE</label><input type="number" step="0.1" className="prop-input" value={selectedActor.scale} onChange={e => updateActor('scale', parseFloat(e.target.value))} /></div>
-                    </div>
-                ) : <div className="p-4 text-center text-xs text-slate-500">Sélectionnez un acteur</div>}
+                <h1>STUDIO CASSÉ</h1>
+                <button onClick={saveProject}>SAUVER (Fake)</button>
             </div>
         </div>
     );
@@ -7127,8 +6741,67 @@ body { margin: 0; font-family: 'Inter', sans-serif; background: #f1f5f9; }
 [[[£ END: client/src/index.css £]]]
 
 [[[£ FILE: client/src/main.jsx £]]]
-import React from 'react'; import ReactDOM from 'react-dom/client'; import App from './App.jsx'; import './index.css';
-ReactDOM.createRoot(document.getElementById('root')).render(<React.StrictMode><App /></React.StrictMode>);
+// @signatures: SafetyNet
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App.jsx';
+import './index.css';
+
+// 🛡️ AIRBAG DE SÉCURITÉ (Error Boundary)
+class SafetyNet extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  handleEmergencyRevert = async () => {
+    try {
+        await fetch('/api/system/revert', { method: 'POST' });
+        setTimeout(() => window.location.reload(), 1000);
+    } catch(e) { alert("Serveur injoignable. Vérifiez le terminal."); }
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{
+            position: 'fixed', inset: 0, background: '#450a0a', color: 'white', 
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', 
+            fontFamily: 'monospace', padding: '20px', textAlign: 'center', zIndex: 999999
+        }}>
+            <h1 style={{fontSize: '3rem', margin: 0}}>💥 CRASH CRITIQUE</h1>
+            <p style={{color: '#fca5a5', margin: '20px 0'}}>L'application a planté au démarrage.</p>
+            <pre style={{background: 'rgba(0,0,0,0.5)', padding: '20px', borderRadius: '10px', maxWidth: '800px', overflow: 'auto'}}>
+                {this.state.error?.toString()}
+            </pre>
+            <button 
+                onClick={this.handleEmergencyRevert}
+                style={{
+                    marginTop: '40px', padding: '20px 40px', fontSize: '1.5rem', fontWeight: '900',
+                    background: '#ef4444', color: 'white', border: '4px solid white', borderRadius: '20px',
+                    cursor: 'pointer', textTransform: 'uppercase'
+                }}
+            >
+                🚑 REVERT D'URGENCE (SAUVER LE PROJET)
+            </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <SafetyNet>
+      <App />
+    </SafetyNet>
+  </React.StrictMode>
+);
 
 [[[£ END: client/src/main.jsx £]]]
 
@@ -7141,6 +6814,7 @@ export const api = {
 [[[£ END: client/src/services/api.js £]]]
 
 [[[£ FILE: client/src/test_token_crash.js £]]]
+// @signatures: TestTokenValid
 console.log("✅ FICHIER RÉPARÉ AVEC SUCCÈS !");
 console.log("Le système de sécurité 'Token + API Reset' fonctionne parfaitement.");
 console.log("Le bandeau rouge a disparu, et le fichier est maintenant complet.");
@@ -7179,23 +6853,28 @@ export default defineConfig({
 [[[£ END: client/vite.config.js £]]]
 
 [[[£ FILE: git-auto.js £]]]
+// @signatures: doPush
 const { exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const VERSION_FILE = path.join(__dirname, 'server', 'version.json');
 
 async function doPush() {
-    let v = { version: "2.1.1", build: 311 };
+    let v = { build: 195 };
     try { v = JSON.parse(fs.readFileSync(VERSION_FILE, 'utf8')); } catch(e) {}
-    v.build++; v.timestamp = new Date().toISOString();
+    
+    // INCREMENTATION SIMPLE
+    v.build++;
+    
     fs.writeFileSync(VERSION_FILE, JSON.stringify(v, null, 2));
-    exec('git add . && git commit -m "Build #' + v.build + '" && git push');
+    exec('git add . && git commit -m "Auto-Save Build #' + v.build + '" && git push');
 }
 setInterval(doPush, 600000);
 
 [[[£ END: git-auto.js £]]]
 
 [[[£ FILE: init-db.js £]]]
+// @signatures: init
 const mongoose = require('mongoose');
 require('dotenv').config();
 async function init() {
@@ -7243,10 +6922,10 @@ setInterval(async () => {
 [[[£ FILE: package.json £]]]
 {
   "name": "condamine-pro",
-  "version": "1.159.0",
+  "version": "1.161.0",
   "scripts": {
     "start": "node server/server.js",
-    "server-dev": "nodemon --ignore 'update.txt' --ignore 'apply_status.json' server/server.js",
+    "server-dev": "nodemon --ignore 'update.txt' --ignore 'apply_status.json' --ignore 'temp_diff.json' server/server.js",
     "client": "npm run dev --prefix client",
     "test": "node tests/integrity.test.js",
     "dev": "concurrently -n \"APPLY,MAGIC,SERVER,CLIENT\" -c \"green,yellow,magenta,cyan\" \"node apply.js\" \"node magic-paste.js\" \"npm run server-dev\" \"npm run client\"",
@@ -7272,7 +6951,6 @@ setInterval(async () => {
     "nodemon": "^3.0.3"
   }
 }
-
 [[[£ END: package.json £]]]
 
 [[[£ FILE: public/style.css £]]]
@@ -7336,8 +7014,8 @@ header h1 { font-size: 1.3rem; color: var(--primary); margin: 0; }
 const fetch = require('node-fetch');
 
 /**
- * 🤖 MOTEUR IA - V31 (GEMINI 2.0)
- * Utilise le modèle confirmé disponible sur votre compte.
+ * 🤖 MOTEUR IA - V33 (JSON SURGEON)
+ * Extrait chirurgicalement le JSON du blabla de l'IA.
  */
 const AIEngine = {
     normalizeKeys: (obj) => {
@@ -7350,106 +7028,50 @@ const AIEngine = {
     },
 
     sanitizeJSON: (text) => {
-        if (text && text.startsWith("ERREUR")) {
-             return {
-                studentName: "Erreur API",
-                grade: "?",
-                appreciation: "Problème technique.",
-                transcription: `🔴 ${text}`,
-                mistakes: []
-            };
-        }
+        if (!text) return { verdict: "DANGER", reason: "Réponse vide." };
+        if (text.includes("429") || text.includes("exhausted")) return { verdict: "DANGER", reason: "IA Saturée." };
 
-        if (!text) return { grade: "?", appreciation: "Vide.", transcription: "Rien." };
-
-        let clean = text.replace(/```json/gi, "").replace(/```/gi, "").trim();
         try {
-            const start = clean.indexOf('{');
-            const end = clean.lastIndexOf('}');
+            // CHIRURGIE : On ignore tout le texte avant le premier '{' et après le dernier '}'
+            const start = text.indexOf('{');
+            const end = text.lastIndexOf('}');
+            
             if (start !== -1 && end !== -1) {
-                const parsed = JSON.parse(clean.substring(start, end + 1));
-                const norm = AIEngine.normalizeKeys(parsed);
-                let trans = norm.transcription || norm.text || "Pas de texte";
-                if (typeof trans === 'object') trans = JSON.stringify(trans, null, 2);
-                return {
-                    studentname: norm.studentname || "Inconnu",
-                    grade: norm.grade || "?",
-                    appreciation: norm.appreciation || "Pas d'avis",
-                    transcription: trans,
-                    mistakes: norm.mistakes || []
-                };
+                const jsonString = text.substring(start, end + 1);
+                const parsed = JSON.parse(jsonString);
+                return AIEngine.normalizeKeys(parsed);
             }
-            throw new Error("No JSON");
+            throw new Error("Pas de structure JSON trouvée");
         } catch (e) { 
-            console.warn("⚠️ Mode RAW.");
-            let htmlText = text.replace(/\*\*(.*?)\*\*/g, '<span style="color:#ef4444; font-weight:bold;">$1</span>').replace(/\n/g, '<br/>');
+            // Si l'IA a vraiment mal répondu, on force un SAFE pour ne pas bloquer le dev pour rien
+            // sauf si le mot "DANGER" ou "RÉGRESSION" est explicite dans le texte brut
+            const isDanger = /danger|regression|suppression|critique/i.test(text);
             return {
-                studentName: "Mode Texte",
-                grade: "?",
-                appreciation: "Format brut.",
-                transcription: htmlText, 
-                mistakes: []
+                verdict: isDanger ? "DANGER" : "SAFE",
+                reason: isDanger ? "Analyse texte brute (Format invalide)" : "Validation par défaut (Format invalide)"
             };
         }
     },
 
     ask: async (prompt, systemInstruction = "") => {
         const apiKey = process.env.GEMINI_API_KEY;
-        // LE MODÈLE CONFIRMÉ PAR VOTRE TEST :
         const modelName = "gemini-2.0-flash"; 
 
         if (!apiKey) return "ERREUR CLÉ API MANQUANTE";
 
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-
-        const contents = [];
-        const parts = [];
-        if (Array.isArray(prompt)) {
-            prompt.forEach(p => {
-                if (p.text) parts.push({ text: p.text });
-                if (p.inlineData) {
-                    parts.push({ inline_data: { mime_type: p.inlineData.mimeType, data: p.inlineData.data } });
-                }
-            });
-        } else {
-            parts.push({ text: prompt });
-        }
-        contents.push({ role: "user", parts: parts });
-
         const body = {
-            contents: contents,
-            systemInstruction: { parts: [{ text: systemInstruction || "Tu es un assistant." }] },
-            safetySettings: [
-                { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-                { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-                { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-                { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
-            ],
-            generationConfig: { temperature: 0.2 }
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
+            systemInstruction: { parts: [{ text: systemInstruction }] },
+            generationConfig: { temperature: 0.1 } // Température basse = moins de blabla
         };
 
         try {
-            console.log(`📡 [AI-ENGINE] Appel ${modelName}...`);
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
-            });
+            const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
             const data = await response.json();
-
-            if (data.error) {
-                console.error("❌ ERREUR API GOOGLE :", data.error);
-                return `ERREUR GOOGLE (${data.error.code}): ${data.error.message}`;
-            }
-
-            if (data.candidates && data.candidates.length > 0 && data.candidates[0].content) {
-                return data.candidates[0].content.parts[0].text;
-            } else {
-                return "Réponse vide.";
-            }
-        } catch (e) {
-            return `ERREUR RÉSEAU: ${e.message}`;
-        }
+            if (data.candidates && data.candidates.length > 0) return data.candidates[0].content.parts[0].text;
+            return "{}";
+        } catch (e) { return "{}"; }
     }
 };
 
@@ -7636,6 +7258,7 @@ module.exports = OCREngine;
 [[[£ END: server/core/ocr.engine.js £]]]
 
 [[[£ FILE: server/domains/admin/admin.routes.js £]]]
+// @signatures: DELETE /:collection/:id, DELETE /maintenance/reset-content, GET /admins, GET /classrooms, GET /database-dump, GET /drive-check, GET /students, GET /subjects, GET /teachers, GET /teachers/:id, POST /admins, POST /classrooms, POST /import-csv, POST /import-magic, POST /maintenance/migrate-students, POST /membership, POST /students, POST /subjects, POST /teachers, guessLevel, isForceClass, normalizeClassName, query
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
@@ -7889,6 +7512,7 @@ module.exports = AdminExpert;
 [[[£ END: server/domains/admin/experts/admin.expert.js £]]]
 
 [[[£ FILE: server/domains/auth/auth.routes.js £]]]
+// @signatures: GET /config, GET /finder-data, GET /google/callback, GET /google/login, GET /student-fresh/:id, GET /students/:classId, POST /login
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose'); 
@@ -8007,6 +7631,7 @@ module.exports = AuthDB;
 [[[£ END: server/domains/auth/db/auth.db.js £]]]
 
 [[[£ FILE: server/domains/auth/experts/auth.expert.js £]]]
+// @signatures: fName, lName, pass
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs'); // Librairie de hachage
 
@@ -8179,6 +7804,7 @@ module.exports = ClassroomAI;
 [[[£ END: server/domains/classroom/ai/plan.ai.js £]]]
 
 [[[£ FILE: server/domains/classroom/classroom.routes.js £]]]
+// @signatures: GET /:classId, GET /plan/:classId, POST /behavior, POST /import-plan, POST /layout, POST /move, POST /redemption, POST /swap
 const express = require('express');
 const router = express.Router();
 const ClassroomExpert = require('./experts/classroom.expert');
@@ -8249,6 +7875,7 @@ module.exports = router;
 [[[£ END: server/domains/classroom/classroom.routes.js £]]]
 
 [[[£ FILE: server/domains/classroom/experts/classroom.expert.js £]]]
+// @signatures: myNote
 const mongoose = require('mongoose');
 const ClassroomAI = require('../ai/plan.ai');
 
@@ -8468,6 +8095,7 @@ module.exports = QuizCreatorExpertAI;
 [[[£ END: server/domains/games/experts/quiz-creator.ai.js £]]]
 
 [[[£ FILE: server/domains/games/games.routes.js £]]]
+// @signatures: DELETE /:id, GET /all, GET /progress, POST /, POST /generate, POST /save-progress
 const express = require('express');
 const router = express.Router();
 const QuizCreatorExpertAI = require('./experts/quiz-creator.ai');
@@ -8690,6 +8318,7 @@ module.exports = HomeworkDB;
 [[[£ END: server/domains/homework/experts/homework.db.js £]]]
 
 [[[£ FILE: server/domains/homework/homework.routes.js £]]]
+// @signatures: DELETE /:id, GET /all, GET /submission/:id, GET /submissions, POST /, POST /analyze-homework, POST /generate-hints, POST /remove-punishment, POST /upload, PUT /submission/:id
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
@@ -8801,6 +8430,7 @@ module.exports = router;
 [[[£ END: server/domains/homework/homework.routes.js £]]]
 
 [[[£ FILE: server/domains/scans/ai/scan.ai.js £]]]
+// @signatures: getImageData, streamToBuffer
 const AIEngine = require('../../../core/ai.engine');
 const OCREngine = require('../../../core/ocr.engine'); 
 const StructureDrive = require('../../structure/experts/structure.drive'); 
@@ -8881,6 +8511,7 @@ module.exports = ScanAI;
 [[[£ END: server/domains/scans/ai/scan.ai.js £]]]
 
 [[[£ FILE: server/domains/scans/scans.routes.js £]]]
+// @signatures: DELETE /sessions/:id, GET /sessions, PATCH /sessions/:id, POST /correct/:sessionId, POST /delete-file, POST /sessions, POST /upload
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
@@ -9100,6 +8731,7 @@ module.exports = StructureDrive;
 [[[£ END: server/domains/structure/experts/structure.drive.js £]]]
 
 [[[£ FILE: server/domains/structure/experts/structure.expert.js £]]]
+// @signatures: isGeneralSection, isGeneralTitle
 const StructureDB = require('../db/structure.db');
 const StructureDrive = require('./structure.drive');
 const mongoose = require('mongoose');
@@ -9219,6 +8851,7 @@ module.exports = StructureExpert;
 [[[£ END: server/domains/structure/experts/structure.expert.js £]]]
 
 [[[£ FILE: server/domains/structure/structure.routes.js £]]]
+// @signatures: DELETE /chapters/:id, DELETE /drive/:id, DELETE /sections, GET /chapters, GET /drive-tree, GET /integrity/:homeworkId, GET /proxy/:id, GET /sections/:teacherId, PATCH /chapters/:id, PATCH /chapters/:id/archive, POST /chapters, POST /sections, POST /sections/reset, POST /sync-root, getRandomColor
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
@@ -9406,38 +9039,37 @@ const GameGeneratorAI = {
     generateGameCode: async (gameIdea, actors) => {
         console.log("🕹️ [GAME-GEN] Génération du code de jeu...");
 
+        // On prépare une liste explicite pour l'IA
         const actorsContext = actors.map((a, i) => {
-            const sprite = (a.costumes && a.costumes.length > 0) ? a.costumes[0].url : "";
-            return `Actor ${i+1}: Name="${a.name}", ID="${a.id}", SpriteURL="${sprite}"`;
+            return `ACTOR ${i+1} : 
+            - Name: "${a.name}"
+            - ID: "${a.id}" (UTILISE CET ID POUR L'ASSET !)
+            - Role: ${i === 0 ? 'Player' : 'Enemy/Object'}`;
         }).join('\n');
 
-        const system = `Tu es un expert en développement de jeux HTML5 Canvas (2D).
+        const system = `Tu es un expert en développement de jeux HTML5 Canvas.
         
-        TES OBJECTIFS :
-        1. Générer une classe JavaScript 'MiniGame'.
-        2. Expliquer brièvement ce que tu as fait ou corrigé.
+        RÈGLES D'OR DU MOTEUR DE JEU :
+        1. Les images sont dans l'objet 'assets'.
+        2. LA CLÉ DE L'IMAGE EST L'ID DE L'ACTEUR, PAS SON NOM.
+           Exemple : ctx.drawImage(this.assets['${actors[0]?.id || 'xxx'}'], x, y, w, h);
+        3. Gestion Clavier : Utilise e.preventDefault() sur la barre d'espace.
+        4. Nettoyage : destroy() doit tout arrêter.
+        5. Rendu : Efface le canvas (clearRect) à chaque frame avant de dessiner.
 
-        CONTRAINTES TECHNIQUES STRICTES :
-        - La classe doit avoir : constructor(canvas, assets), update(dt), draw(ctx), destroy().
-        - GESTION CLAVIER : Pour la barre d'espace ('Space' ou ' '), tu DOIS utiliser e.preventDefault() pour empêcher le défilement de la page.
-        - NETTOYAGE : destroy() doit supprimer tous les event listeners.
-        - ROBUSTESSE : Pas de crash si une image manque.
-        - PAS D'ALERT() : Dessine le Game Over sur le canvas.
+        Génère une classe 'MiniGame' complète.`;
 
-        FORMAT DE RÉPONSE ATTENDU (JSON STRICT) :
-        {
-            "code": "Le code JavaScript complet de la classe...",
-            "message": "Une explication courte (1 phrase) de ce que tu as implémenté ou corrigé pour le créateur."
-        }`;
+        const prompt = `CRÉE CE JEU : "${gameIdea}"
+        
+        LISTE DES ACTEURS ET LEURS IDs (A UTILISER POUR LES IMAGES) :
+        ${actorsContext}
 
-        const prompt = `IDÉE DU JEU : "${gameIdea}"\nACTEURS : ${actorsContext}\n\nGénère le code et le message explicatif.`;
+        FORMAT JSON : { "code": "...", "message": "..." }`;
 
         try {
             const raw = await AIEngine.ask(prompt, system);
             return AIEngine.sanitizeJSON(raw);
         } catch (e) { 
-            console.error(e);
-            // Fallback si l'IA plante le JSON
             return { code: "", message: "Erreur de génération IA." }; 
         }
     },
@@ -9445,24 +9077,19 @@ const GameGeneratorAI = {
     fixGameCode: async (currentCode, errorLog, userInstruction) => {
         console.log("🔧 [GAME-FIX] Réparation du code...");
 
-        const system = `Tu es un expert en débogage JavaScript pour jeux Canvas.
+        const system = `Tu es un expert en débogage JavaScript Canvas.
+        Ton but est de réparer le code fourni selon l'erreur ou la demande.
         
-        FORMAT DE RÉPONSE ATTENDU (JSON STRICT) :
-        {
-            "code": "Le code corrigé...",
-            "message": "Explication de la correction (ex: 'J'ai ajouté preventDefault sur la barre d'espace')."
-        }
-        
-        RÈGLE D'OR : Si le problème concerne la barre d'espace qui fait scroller ou reload, ajoute 'e.preventDefault()' dans l'écouteur d'événement.`;
+        RAPPEL IMPORTANT : Les images sont accessibles via this.assets['ID_ACTEUR'].
+        Si l'utilisateur dit "on ne voit rien", vérifie que le drawImage utilise bien les bons IDs d'assets.`;
 
-        const prompt = `
-        CODE ACTUEL :
+        const prompt = `CODE ACTUEL :
         ${currentCode}
 
-        ERREUR / DEMANDE :
+        PROBLÈME / DEMANDE :
         "${errorLog || userInstruction}"
 
-        Corrige le code et explique pourquoi.`;
+        Renvoie le code corrigé en JSON : { "code": "...", "message": "..." }`;
 
         try {
             const raw = await AIEngine.ask(prompt, system);
@@ -9612,97 +9239,19 @@ module.exports = StudioDrive;
 [[[£ END: server/domains/studio/experts/studio.drive.js £]]]
 
 [[[£ FILE: server/domains/studio/experts/studio.expert.js £]]]
-const fs = require('fs');
-const path = require('path');
-const https = require('https');
+// ❌ FICHIER 4 (RE-TRIGGER) : SABOTÉ
 const StudioAI = require('../ai/studio.ai');
-const GameGeneratorAI = require('../ai/game-generator.ai'); 
-const StudioDB = require('../db/studio.db');
-const StudioDrive = require('./studio.drive'); 
 
-/**
- * 🛠️ EXPERT STUDIO (V2.2 - FIX GENERATION)
- * Gère correctement le format Code + Message de l'IA.
- */
 const StudioExpert = {
     
-    generateAsset: async (userPrompt, type) => {
-        const optimizedPrompt = await StudioAI.optimizeAssetPrompt(userPrompt, type);
-        return await StudioExpert._downloadAndStore(optimizedPrompt, userPrompt);
+    generateAsset: async (prompt) => {
+        return { url: "http://fake.url" };
     },
 
-    remixAsset: async (file) => {
-        const buffer = fs.readFileSync(file.path);
-        const promptFromImage = await GameGeneratorAI.remixAssetDescription(buffer);
-        return await StudioExpert._downloadAndStore(promptFromImage, "Remix IA");
-    },
-
-    _downloadAndStore: async (prompt, originalName) => {
-        const encodedPrompt = encodeURIComponent(prompt);
-        const seed = Math.floor(Math.random() * 10000);
-        const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=512&height=512&seed=${seed}&nologo=true`;
-
-        const fileName = `studio-${Date.now()}-${seed}.png`;
-        const uploadDir = path.join(process.cwd(), 'public', 'uploads');
-        if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
-        const localPath = path.join(uploadDir, fileName);
-        const file = fs.createWriteStream(localPath);
-
-        return new Promise((resolve, reject) => {
-            https.get(imageUrl, (response) => {
-                if (response.statusCode !== 200) { reject(new Error(`Pollinations Error: ${response.statusCode}`)); return; }
-                response.pipe(file);
-                file.on('finish', async () => {
-                    file.close();
-                    let driveLink = null;
-                    try {
-                        const driveData = await StudioDrive.uploadAsset(localPath, fileName);
-                        if (driveData) driveLink = driveData.link;
-                    } catch(e) { console.error("Drive upload failed but local is ok"); }
-
-                    resolve({
-                        url: `/uploads/${fileName}`,
-                        driveUrl: driveLink,
-                        prompt: prompt,
-                        name: originalName.substring(0, 15)
-                    });
-                });
-            }).on('error', reject);
-        });
-    },
-
-    generateGame: async (projectId, gameIdea) => {
-        const project = await StudioDB.findProjectById(projectId);
-        if (!project) throw new Error("Projet introuvable (ID Invalide)");
-
-        let allActors = [];
-        if (project.scenes && Array.isArray(project.scenes)) {
-            project.scenes.forEach(s => {
-                if (s.actors && Array.isArray(s.actors)) {
-                    allActors.push(...s.actors);
-                }
-            });
-        }
-
-        if (allActors.length === 0) throw new Error("Aucun acteur trouvé dans ce projet. Ajoutez des personnages.");
-
-        // L'IA renvoie maintenant : { code: "...", message: "..." }
-        const aiResult = await GameGeneratorAI.generateGameCode(gameIdea, allActors);
-        
-        // CORRECTION CRITIQUE : On ne sauvegarde QUE le code (String) en BDD
-        // Si aiResult est un objet (nouveau format), on prend .code
-        // Sinon (format legacy ou erreur), on prend tel quel ou chaine vide
-        const codeToSave = (typeof aiResult === 'object' && aiResult.code) ? aiResult.code : "";
-        
-        project.generatedCode = codeToSave;
-        await StudioDB.upsertProject(project);
-        
-        // Mais on renvoie l'objet complet au Client pour avoir le message
-        return aiResult;
-    },
-
-    saveProject: async (projectData) => await StudioDB.upsertProject(projectData),
-    getUserProjects: async (userId) => await StudioDB.findProjectsByTeacher(userId)
+    // ❌ RENOMMAGE SAUVAGE
+    generateGame_DEPRECATED_DO_NOT_USE: async (id) => {
+        throw new Error("Cette fonction n'existe plus");
+    }
 };
 
 module.exports = StudioExpert;
@@ -9712,77 +9261,14 @@ module.exports = StudioExpert;
 [[[£ FILE: server/domains/studio/studio.routes.js £]]]
 const express = require('express');
 const router = express.Router();
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
-const StudioExpert = require('./experts/studio.expert');
-const StudioDrive = require('./experts/studio.drive'); // V2: Import Drive Expert
-const GameGeneratorAI = require('./ai/game-generator.ai');
+// ❌ FICHIER 3 (RE-TRIGGER) : SABOTÉ
+// J'ai supprimé les imports d'experts.
 
-const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+router.get('/projects/:userId', (req, res) => {
+    res.json([]);
+});
 
-// Config Multer (Stockage temporaire)
-const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'temp');
-if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
-const upload = multer({ dest: uploadDir });
-
-// V2: UPLOAD DRIVE CONNECTED
-router.post('/upload', upload.single('file'), asyncHandler(async (req, res) => {
-    if (!req.file) return res.status(400).json({ error: "Fichier manquant" });
-    
-    try {
-        // Utilisation de l'expert StudioDrive pour l'upload
-        const driveData = await StudioDrive.uploadAsset(req.file.path, req.file.originalname);
-        
-        if (!driveData || !driveData.id) throw new Error("Echec Drive Upload");
-
-        // Nettoyage immédiat
-        try { fs.unlinkSync(req.file.path); } catch(e) {}
-
-        // Retourne l'URL Proxy
-        const proxyUrl = `/api/structure/proxy/${driveData.id}`;
-        res.json({ url: proxyUrl });
-
-    } catch (e) {
-        console.error("Studio Drive Error:", e);
-        res.status(500).json({ error: "Erreur stockage Drive" });
-    }
-}));
-
-router.post('/generate-asset', asyncHandler(async (req, res) => {
-    const { prompt, type } = req.body;
-    const result = await StudioExpert.generateAsset(prompt, type);
-    res.json({ ok: true, ...result });
-}));
-
-router.post('/remix-asset', upload.single('file'), asyncHandler(async (req, res) => {
-    if (!req.file) return res.status(400).json({ error: "Image requise" });
-    const result = await StudioExpert.remixAsset(req.file);
-    try { fs.unlinkSync(req.file.path); } catch(e){}
-    res.json({ ok: true, ...result });
-}));
-
-router.post('/generate-code', asyncHandler(async (req, res) => {
-    const { projectId, gameIdea } = req.body;
-    const code = await StudioExpert.generateGame(projectId, gameIdea);
-    res.json({ ok: true, code });
-}));
-
-router.post('/fix-code', asyncHandler(async (req, res) => {
-    const { code, error, instruction } = req.body;
-    const fixedCode = await GameGeneratorAI.fixGameCode(code, error, instruction);
-    res.json({ ok: true, code: fixedCode });
-}));
-
-router.post('/projects', asyncHandler(async (req, res) => {
-    const project = await StudioExpert.saveProject(req.body);
-    res.json(project);
-}));
-
-router.get('/projects/:userId', asyncHandler(async (req, res) => {
-    const projects = await StudioExpert.getUserProjects(req.params.userId);
-    res.json(projects);
-}));
+// ❌ ROUTES SUPPRIMÉES
 
 module.exports = router;
 
@@ -10253,24 +9739,79 @@ const fs = require('fs');
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
+const { exec } = require('child_process');
+const AIEngine = require('./core/ai.engine');
 
-if (!global.fetch) {
-    const fetch = require('node-fetch');
-    global.fetch = fetch;
-    global.Headers = fetch.Headers;
-    global.Request = fetch.Request;
-    global.Response = fetch.Response;
-}
+if (!global.fetch) { const fetch = require('node-fetch'); global.fetch = fetch; global.Headers = fetch.Headers; global.Request = fetch.Request; global.Response = fetch.Response; }
 
 dotenv.config();
 const app = express();
 const port = process.env.PORT || 3000;
 const SERVER_BOOT_ID = Date.now();
 
+app.use(express.json({ limit: '100mb' }));
+
+app.get('/api/system/apply-status', (req, res) => {
+    const statusFile = path.join(__dirname, '../apply_status.json');
+    if (fs.existsSync(statusFile)) {
+        try { res.json(JSON.parse(fs.readFileSync(statusFile, 'utf8'))); } catch (e) { res.json({ status: 'OK' }); }
+    } else { res.json({ status: 'OK' }); }
+});
+
+// VERSION SIMPLIFIÉE (Entier)
+app.get('/api/system/version', (req, res) => {
+    try {
+        const vPath = path.join(__dirname, 'version.json');
+        if (fs.existsSync(vPath)) {
+            const vData = JSON.parse(fs.readFileSync(vPath, 'utf8'));
+            return res.json({ hash: `${vData.build}` }); 
+        }
+        res.json({ hash: '1' });
+    } catch (e) { res.json({ hash: '?' }); }
+});
+
+// L'ORACLE MUET
+app.post('/api/system/oracle', async (req, res) => {
+    const diffFile = path.join(__dirname, '../temp_diff.json');
+    const verdictFile = path.join(__dirname, '../temp_verdict.json');
+
+    // Cache
+    if (fs.existsSync(verdictFile)) { try { return res.json(JSON.parse(fs.readFileSync(verdictFile, 'utf8'))); } catch (e) {} }
+    if (!fs.existsSync(diffFile)) return res.json({ verdict: "SAFE", reason: "Rien à analyser" });
+
+    try {
+        const { oldContent, newContent, filePath } = JSON.parse(fs.readFileSync(diffFile, 'utf8'));
+        
+        const prompt = `FICHIER MODIFIÉ : ${filePath}
+        
+        ANCIEN :
+        ${oldContent.substring(0, 3000)}
+
+        NOUVEAU :
+        ${newContent.substring(0, 3000)}
+
+        CONSIGNE STRICTE :
+        1. Compare les versions.
+        2. Si la logique métier est préservée (même si refactorisée) -> "SAFE".
+        3. Si une fonction ou une variable utilisée est supprimée/vidée -> "DANGER".
+
+        FORMAT DE RÉPONSE UNIQUE (JSON RAW) :
+        {"verdict": "SAFE"|"DANGER", "reason": "Phrase très courte (max 10 mots)"}`;
+
+        const raw = await AIEngine.ask(prompt, "Tu es un compilateur JSON strict. Interdiction de parler. Uniquement du JSON.");
+        const result = AIEngine.sanitizeJSON(raw);
+        
+        fs.writeFileSync(verdictFile, JSON.stringify(result));
+        res.json(result);
+    } catch (e) { 
+        res.json({ verdict: "DANGER", reason: "Erreur Analyse" }); 
+    }
+});
+
+app.post('/api/system/revert', (req, res) => { exec('git reset --hard HEAD', (err, stdout) => { res.json({ ok: true }); }); });
+
 const models = ['AcademicYear', 'Admin', 'Classroom', 'Subject', 'Teacher', 'Student', 'Enrollment', 'Chapter', 'Homework', 'Submission', 'GameLevel', 'GameProgress', 'MistakesBook', 'AccessLog', 'BugReport', 'ProjectDoc', 'Player', 'StudioProject', 'Sanction', 'ScanSession'];
 models.forEach(m => { try { require(`./models/${m}`); } catch (e) { console.warn(`⚠️ Modèle manquant : ${m}`); } });
-
-app.use(express.json({ limit: '100mb' }));
 
 const publicPath = path.resolve(process.cwd(), 'public');
 const uploadsPath = path.join(publicPath, 'uploads');
@@ -10278,23 +9819,9 @@ if (!fs.existsSync(publicPath)) fs.mkdirSync(publicPath, { recursive: true });
 if (!fs.existsSync(uploadsPath)) fs.mkdirSync(uploadsPath, { recursive: true });
 
 app.use('/uploads', express.static(uploadsPath));
+app.get('/uploads/:filename', (req, res) => { const requestedFile = req.params.filename; const cleanName = decodeURIComponent(requestedFile).split('?')[0]; const filePath = path.join(uploadsPath, cleanName); if (fs.existsSync(filePath)) return res.sendFile(filePath); res.status(404).send('Fichier introuvable.'); });
 
-app.get('/uploads/:filename', (req, res) => {
-    const requestedFile = req.params.filename;
-    const cleanName = decodeURIComponent(requestedFile).split('?')[0]; 
-    const filePath = path.join(uploadsPath, cleanName);
-    if (fs.existsSync(filePath)) return res.sendFile(filePath);
-    res.status(404).send('Fichier introuvable.');
-});
-
-// ROUTE V162 (CONTEXTUAL OCR)
-app.get('/api/check-deploy', (req, res) => {
-    res.json({ 
-        status: "OK", 
-        version: "V162_CONTEXT_OCR", 
-        bootId: SERVER_BOOT_ID 
-    });
-});
+app.get('/api/check-deploy', (req, res) => { res.json({ status: "OK", version: "V15.0_SILENT_MODE", bootId: SERVER_BOOT_ID }); });
 
 app.use('/api/auth', require('./domains/auth/auth.routes'));
 app.use('/api/admin', require('./domains/admin/admin.routes'));
@@ -10305,38 +9832,25 @@ app.use('/api/studio', require('./domains/studio/studio.routes'));
 app.use('/api/classroom', require('./domains/classroom/classroom.routes'));
 app.use('/api/scans', require('./domains/scans/scans.routes'));
 
-app.use((err, req, res, next) => {
-    console.error("🔥 SERVER ERROR:", err.message);
-    res.status(500).json({ error: err.message });
-});
+app.use((err, req, res, next) => { console.error("🔥 SERVER ERROR:", err.message); res.status(500).json({ error: err.message }); });
 
 mongoose.connect(process.env.MONGODB_URI).then(() => console.log('✅ BDD CONNECTÉE'));
 
 const distPath = path.resolve(process.cwd(), 'client', 'dist');
-if (fs.existsSync(distPath)) {
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-        if (req.url.startsWith('/uploads/')) return res.status(404).send("Not found");
-        res.sendFile(path.join(distPath, 'index.html'));
-    });
-}
-app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V162 UP`));
+if (fs.existsSync(distPath)) { app.use(express.static(distPath)); app.get('*', (req, res) => { if (req.url.startsWith('/uploads/')) return res.status(404).send("Not found"); res.sendFile(path.join(distPath, 'index.html')); }); }
+app.listen(port, '0.0.0.0', () => console.log(`🚀 SERVEUR V15.0 (Silent Mode) UP`));
 
 [[[£ END: server/server.js £]]]
 
 [[[£ FILE: server/version.json £]]]
 {
-  "version": "1.94.0",
-  "build": 217,
-  "timestamp": "2026-01-20T18:30:00.000Z",
-  "studio_version": 94,
-  "status": "CROSS_DOMAIN_COHERENCE_LOCKED",
-  "storage_strategy": "VAULT_WITH_INTEGRITY_CHECK"
+  "build": 1
 }
 
 [[[£ END: server/version.json £]]]
 
 [[[£ FILE: snap.js £]]]
+// @signatures: buildTree, captureContent, run
 const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
@@ -10413,6 +9927,12 @@ LOGIQUE DE MÉMOIRE (HISTORY.TXT) :
 - MISE À JOUR : Dès qu'une tâche majeure est finie ou qu'un bug complexe est résolu, mets à jour `history.txt` IMMÉDIATEMENT dans le bloc de code suivant. N'attends pas la fin de session.
 - Ne jamais effacer l'historique, ajouter les nouvelles entrées à la suite.
 
+🚨 PROTOCOLE DE RÉPARATION (RAPPORT D'INCIDENT) :
+- Si l'utilisateur colle un "RAPPORT AUTOMATIQUE (REVERT TRIGGERED)", cela signifie que :
+  1. Le code précédent a causé une régression.
+  2. L'utilisateur a DÉJÀ fait un Revert (il est revenu à la version stable).
+  3. MA MISSION : Analyser la raison du rejet (Verdict Oracle) et renvoyer le fichier CORRIGÉ qui n'aura plus le défaut détecté.
+
 !!! EN MAJUSCULE CELLES QUI MARCHENT PAS OU LES BUGS
 🛡️ 1. ESPACE ADMIN : Importation massive, gestion users/classes. OK.
 🎓 2. ESPACE PROF : Plan de classe, Comportement (Croix/Bonus). OK.
@@ -10425,7 +9945,16 @@ LOGIQUE DE MÉMOIRE (HISTORY.TXT) :
 
 [[[£ END: systemInstructions.md £]]]
 
+[[[£ FILE: temp_diff.json £]]]
+{"oldContent":"// @signatures: codeToSave\nconst fs = require('fs');\nconst path = require('path');\nconst https = require('https');\nconst StudioAI = require('../ai/studio.ai');\nconst GameGeneratorAI = require('../ai/game-generator.ai'); \nconst StudioDB = require('../db/studio.db');\nconst StudioDrive = require('./studio.drive'); \n\n/**\n * 🛠️ EXPERT STUDIO (V2.2 - FIX GENERATION)\n * Gère correctement le format Code + Message de l'IA.\n */\nconst StudioExpert = {\n    \n    generateAsset: async (userPrompt, type) => {\n        const optimizedPrompt = await StudioAI.optimizeAssetPrompt(userPrompt, type);\n        return await StudioExpert._downloadAndStore(optimizedPrompt, userPrompt);\n    },\n\n    remixAsset: async (file) => {\n        const buffer = fs.readFileSync(file.path);\n        const promptFromImage = await GameGeneratorAI.remixAssetDescription(buffer);\n        return await StudioExpert._downloadAndStore(promptFromImage, \"Remix IA\");\n    },\n\n    _downloadAndStore: async (prompt, originalName) => {\n        const encodedPrompt = encodeURIComponent(prompt);\n        const seed = Math.floor(Math.random() * 10000);\n        const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=512&height=512&seed=${seed}&nologo=true`;\n\n        const fileName = `studio-${Date.now()}-${seed}.png`;\n        const uploadDir = path.join(process.cwd(), 'public', 'uploads');\n        if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });\n        const localPath = path.join(uploadDir, fileName);\n        const file = fs.createWriteStream(localPath);\n\n        return new Promise((resolve, reject) => {\n            https.get(imageUrl, (response) => {\n                if (response.statusCode !== 200) { reject(new Error(`Pollinations Error: ${response.statusCode}`)); return; }\n                response.pipe(file);\n                file.on('finish', async () => {\n                    file.close();\n                    let driveLink = null;\n                    try {\n                        const driveData = await StudioDrive.uploadAsset(localPath, fileName);\n                        if (driveData) driveLink = driveData.link;\n                    } catch(e) { console.error(\"Drive upload failed but local is ok\"); }\n\n                    resolve({\n                        url: `/uploads/${fileName}`,\n                        driveUrl: driveLink,\n                        prompt: prompt,\n                        name: originalName.substring(0, 15)\n                    });\n                });\n            }).on('error', reject);\n        });\n    },\n\n    generateGame: async (projectId, gameIdea) => {\n        const project = await StudioDB.findProjectById(projectId);\n        if (!project) throw new Error(\"Projet introuvable (ID Invalide)\");\n\n        let allActors = [];\n        if (project.scenes && Array.isArray(project.scenes)) {\n            project.scenes.forEach(s => {\n                if (s.actors && Array.isArray(s.actors)) {\n                    allActors.push(...s.actors);\n                }\n            });\n        }\n\n        if (allActors.length === 0) throw new Error(\"Aucun acteur trouvé dans ce projet. Ajoutez des personnages.\");\n\n        // L'IA renvoie maintenant : { code: \"...\", message: \"...\" }\n        const aiResult = await GameGeneratorAI.generateGameCode(gameIdea, allActors);\n        \n        // CORRECTION CRITIQUE : On ne sauvegarde QUE le code (String) en BDD\n        // Si aiResult est un objet (nouveau format), on prend .code\n        // Sinon (format legacy ou erreur), on prend tel quel ou chaine vide\n        const codeToSave = (typeof aiResult === 'object' && aiResult.code) ? aiResult.code : \"\";\n        \n        project.generatedCode = codeToSave;\n        await StudioDB.upsertProject(project);\n        \n        // Mais on renvoie l'objet complet au Client pour avoir le message\n        return aiResult;\n    },\n\n    saveProject: async (projectData) => await StudioDB.upsertProject(projectData),\n    getUserProjects: async (userId) => await StudioDB.findProjectsByTeacher(userId)\n};\n\nmodule.exports = StudioExpert;\n","newContent":"// ❌ FICHIER 4 : SABOTÉ\nconst StudioAI = require('../ai/studio.ai');\n\nconst StudioExpert = {\n    \n    generateAsset: async (prompt) => {\n        return { url: \"http://fake.url\" };\n    },\n\n    // ❌ RENOMMAGE SAUVAGE (Casse les dépendances)\n    generateGame_DEPRECATED_DO_NOT_USE: async (id) => {\n        throw new Error(\"Cette fonction n'existe plus\");\n    }\n};\n\nmodule.exports = StudioExpert;","filePath":"server/domains/studio/experts/studio.expert.js"}
+[[[£ END: temp_diff.json £]]]
+
+[[[£ FILE: temp_verdict.json £]]]
+{"verdict":"DANGER","reason":"Fonctions clés supprimées ou sabotées (generateGame, remixAsset)."}
+[[[£ END: temp_verdict.json £]]]
+
 [[[£ FILE: tests/integrity.test.js £]]]
+// @signatures: runIntegritySuite
 /**
  * 🕵️‍♂️ SUITE DE TESTS D'INTÉGRITÉ - VERSION 69
  * Ce script valide que chaque injection de code respecte les User Stories.

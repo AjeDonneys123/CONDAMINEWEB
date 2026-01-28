@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import './StudioDashboard.css';
 
-// ❌ FICHIER 1 : SABOTÉ
+// ❌ FICHIER 1 (RE-TRIGGER) : SABOTÉ
 // J'ai retiré les imports critiques et vidé la logique de sauvegarde.
 
 const AssetThumb = ({ url }) => <img src={url} alt="asset" />;

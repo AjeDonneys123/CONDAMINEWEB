@@ -2,8 +2,8 @@
 import React, { useState } from 'react';
 import './GameStudio.css';
 
-// ❌ FICHIER 2 : SABOTÉ
-// J'ai supprimé tout le formulaire de création de questions.
+// ❌ FICHIER 2 (RE-TRIGGER) : SABOTÉ
+// J'ai supprimé tout le formulaire.
 
 export default function GameStudio({ onClose }) {
     return (
