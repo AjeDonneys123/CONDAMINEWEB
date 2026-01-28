@@ -21,7 +21,7 @@ app.get('/api/system/apply-status', (req, res) => {
         try { res.json(JSON.parse(fs.readFileSync(statusFile, 'utf8'))); } catch (e) { res.json({ status: 'OK' }); }
     } else { res.json({ status: 'OK' }); }
 });
-
+//hh
 app.get('/api/system/version', (req, res) => {
     try {
         const vPath = path.join(__dirname, 'version.json');
