@@ -1,12 +1,7 @@
 {
-  "status": "JUDGING",
-  "message": "Analyse IA en cours...",
-  "details": "Densité : -13%",
-  "context": {
-    "missing": [
-      "Densité -13%"
-    ],
-    "filePath": "server/server.js"
-  },
-  "timestamp": 1769616611496
+  "status": "OK",
+  "message": "Code appliqué",
+  "details": "1 fichiers mis à jour.",
+  "context": null,
+  "timestamp": 1769616894835
 }
