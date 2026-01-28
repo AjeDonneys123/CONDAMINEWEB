@@ -8,8 +8,8 @@ const diffFile = 'temp_diff.json';
 const verdictFile = 'temp_verdict.json';
 
 console.log("------------------------------------------------");
-console.log("🛡️ [SYSTEM] Moteur V16.0 (Batch Transaction)");
-console.log("    Logique : 1 Update = 1 Commit = 1 Verdict Global");
+console.log("🛡️ [SYSTEM] Moteur V16.1 (Black Box)");
+console.log("    Feature : Rapport d'erreurs exhaustif");
 console.log("------------------------------------------------");
 
 function writeStatus(type, message, details = null, context = null) {
@@ -20,19 +20,15 @@ function writeStatus(type, message, details = null, context = null) {
 function saveDiff(oldContent, newContent, filePath) {
     try { 
         fs.writeFileSync(diffFile, JSON.stringify({ oldContent, newContent, filePath }));
-        if (fs.existsSync(verdictFile)) fs.unlinkSync(verdictFile); // Reset cache verdict
+        if (fs.existsSync(verdictFile)) fs.unlinkSync(verdictFile); 
     } catch (e) {}
 }
 
-// SNAPSHOT GLOBAL (Protège l'ensemble du lot)
 function snapshot(filesCount) {
     try {
         execSync('git add .');
         execSync(`git commit -m "Auto-Save Batch (${filesCount} files)"`);
-        console.log(`💾 [GIT] Snapshot global créé pour ${filesCount} fichiers.`);
-    } catch (e) { 
-        // Rien à commiter, ou erreur git mineure
-    }
+    } catch (e) { }
 }
 
 // ... (Fonctions d'analyse inchangées) ...
@@ -48,30 +44,24 @@ function applyUpdate() {
         const rawContent = fs.readFileSync(inputFile, 'utf8');
         if (!rawContent || rawContent.trim().length < 10) return;
 
-        // 1. FLUSH & PARSE PRÉLIMINAIRE
         fs.writeFileSync(inputFile, '');
         
-        // On découpe manuellement pour compter les fichiers AVANT de traiter
         const fileTags = rawContent.match(/\[\[\[£\s*FILE\s*:/g) || [];
-        if (fileTags.length > 0) {
-            snapshot(fileTags.length); // UN SEUL COMMIT POUR TOUT LE GROUPE
-        }
+        if (fileTags.length > 0) snapshot(fileTags.length);
 
         const isForced = rawContent.includes('[FORCE_REDUCTION]');
         
-        // TABLEAU DE BORD DE LA TRANSACTION
         let transactionReport = {
             total: 0,
             processed: 0,
-            errors: [],   // { file, msg }
-            warnings: [], // { file, msg, context }
-            criticalDiffSaved: false // Pour ne sauvegarder qu'une diff à la fois pour l'IA
+            errors: [],
+            warnings: [], 
+            criticalDiffSaved: false 
         };
 
         const startRegex = /\[\[\[£\s*FILE\s*:\s*([^£\]\s]+)\s*£\]\]\]/g;
         let match;
 
-        // 2. BOUCLE DE TRAITEMENT
         while ((match = startRegex.exec(rawContent)) !== null) {
             const filePath = match[1].trim();
             const startIdx = match.index + match[0].length;
@@ -86,7 +76,6 @@ function applyUpdate() {
                 
                 if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, { recursive: true });
 
-                // Exception Logs
                 if (['history.txt'].includes(filePath)) {
                     if(fs.existsSync(fullPath)) fs.appendFileSync(fullPath, "\n" + newContent + "\n");
                     else fs.writeFileSync(fullPath, newContent + "\n");
@@ -95,26 +84,25 @@ function applyUpdate() {
 
                 const ext = path.extname(fullPath);
                 let currentWarning = null;
-                let currentSeverity = 'LOW'; // LOW, MEDIUM, HIGH
+                let currentSeverity = 'LOW';
 
                 if (fs.existsSync(fullPath) && !isForced) {
                     const oldContent = fs.readFileSync(fullPath, 'utf8');
                     
-                    // --- BATTERIE DE TESTS ---
                     if (['.js', '.jsx', '.ts'].includes(ext)) {
                         const oldSigs = extractSignatures(oldContent);
                         const newSigs = extractSignatures(newContent);
                         const missing = [...oldSigs].filter(s => !newSigs.has(s));
                         
                         if (missing.length > 0) {
-                            currentWarning = { title: `Régression Structurelle`, msg: `Perdu dans ${path.basename(filePath)} : ${missing.join(', ')}`, context: { missing, filePath } };
+                            currentWarning = { title: `Régression Structurelle`, msg: `Perdu : ${missing.join(', ')}`, context: { missing, filePath } };
                             currentSeverity = 'HIGH';
                         }
 
                         if (!currentWarning) {
                             const logicCheck = checkLogicDensity(oldContent, newContent);
                             if (logicCheck) {
-                                currentWarning = { title: `Chute Logique`, msg: `Densité ${path.basename(filePath)} : -${logicCheck.drop}%`, context: { missing: [`Densité -${logicCheck.drop}%`], filePath } };
+                                currentWarning = { title: `Chute Logique`, msg: `Densité -${logicCheck.drop}%`, context: { missing: [`Densité -${logicCheck.drop}%`], filePath } };
                                 currentSeverity = 'MEDIUM';
                             }
                         }
@@ -123,30 +111,26 @@ function applyUpdate() {
                     if (ext === '.jsx' && !currentWarning) {
                         const missingIds = checkDomIntegrity(oldContent, newContent);
                         if (missingIds) {
-                            currentWarning = { title: `Structure DOM`, msg: `IDs perdus dans ${path.basename(filePath)}`, context: { missing: missingIds, filePath } };
+                            currentWarning = { title: `Structure DOM`, msg: `IDs perdus: ${missingIds.join(', ')}`, context: { missing: missingIds, filePath } };
                             currentSeverity = 'HIGH';
                         }
                     }
                     
-                    // Gestion Prioritaire de l'Oracle
-                    // On ne sauvegarde la diff QUE pour le fichier le plus critique du lot
                     if (currentWarning && !transactionReport.criticalDiffSaved) {
                         saveDiff(oldContent, newContent, filePath);
                         transactionReport.criticalDiffSaved = true;
                     }
                 }
 
-                // Check CSS (Bloquant)
                 if (ext === '.jsx') {
                     const cssCheck = checkCssDependency(filePath, newContent, rawContent);
                     if (!cssCheck.ok) {
                         transactionReport.errors.push({ file: filePath, msg: `CSS manquant : ${cssCheck.missing}` });
                         console.error(`❌ REJETÉ : ${filePath}`);
-                        continue; // ON N'ÉCRIT PAS CE FICHIER
+                        continue; 
                     }
                 }
 
-                // SIGNATURE UPDATE & ECRITURE
                 if (['.js', '.jsx', '.ts'].includes(ext)) {
                     const currentSigs = [...extractSignatures(newContent)].sort();
                     if (currentSigs.length > 0) newContent = `// @signatures: ${currentSigs.join(', ')}\n` + newContent.replace(/^\/\/ @signatures:.*\n/, '');
@@ -156,30 +140,28 @@ function applyUpdate() {
                 console.log(`   ✅ ÉCRIT : ${filePath}`);
                 
                 if (currentWarning) {
-                    transactionReport.warnings.push({ ...currentWarning, severity: currentSeverity });
+                    transactionReport.warnings.push({ ...currentWarning, file: filePath, severity: currentSeverity });
                 }
                 transactionReport.processed++;
             }
         }
 
-        // 3. RAPPORT FINAL (POST-BATCH)
+        // 3. RAPPORT FINAL (V16.1 : LISTE EXHAUSTIVE)
         if (transactionReport.errors.length > 0) {
-            // S'il y a des erreurs bloquantes (fichiers rejetés)
             const err = transactionReport.errors[0];
             writeStatus('ERROR', `Blocage sur ${path.basename(err.file)}`, err.msg, null);
         } 
         else if (transactionReport.warnings.length > 0) {
-            // S'il y a des warnings, on prend le plus grave
             const worst = transactionReport.warnings.find(w => w.severity === 'HIGH') || transactionReport.warnings[0];
-            const othersCount = transactionReport.warnings.length - 1;
-            const suffix = othersCount > 0 ? ` (+${othersCount} autres alertes)` : '';
             
-            writeStatus('JUDGING', `Analyse : ${worst.title}${suffix}`, worst.msg, worst.context);
+            // CONSTRUIRE LA LISTE COMPLÈTE POUR LE PRESSE-PAPIER
+            const fullLog = transactionReport.warnings.map(w => `⚠️ ${path.basename(w.file)}: ${w.title} (${w.msg})`).join('\n');
+            
+            // On envoie le pire à l'IA (context), mais le log complet à l'UI (details)
+            writeStatus('JUDGING', `Analyse Multiple (${transactionReport.warnings.length} fichiers)`, fullLog, worst.context);
         } 
         else if (transactionReport.processed > 0) {
-            // Tout est vert
             writeStatus('OK', 'Mise à jour réussie', `${transactionReport.processed} fichiers traités.`);
-            console.log(`✨ BATCH TERMINÉ : ${transactionReport.processed} fichiers.`);
         }
 
     } catch (e) {
