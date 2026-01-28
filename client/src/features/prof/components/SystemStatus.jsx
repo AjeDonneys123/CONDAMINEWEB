@@ -5,7 +5,7 @@ import './SystemStatus.css';
 export default function SystemStatus() {
     const [statusData, setStatusData] = useState({ status: 'OK', timestamp: 0 });
     const [visible, setVisible] = useState(false);
-    const [version, setVersion] = useState('...');
+    const [version, setVersion] = useState('1'); // Défaut à 1
     const [verdict, setVerdict] = useState(null); 
     const [reverting, setReverting] = useState(false);
     
@@ -20,7 +20,6 @@ export default function SystemStatus() {
                 const res = await fetch('/api/system/apply-status');
                 const data = await res.json();
                 
-                // CAS 1 : STATUS OK (Reset total)
                 if (data.status === 'OK') {
                     if (visible && verdict?.verdict !== 'DANGER') {
                         setVisible(false);
@@ -29,21 +28,16 @@ export default function SystemStatus() {
                     return;
                 }
 
-                // CAS 2 : STATUS ALERTE (Judging/Warning/Error)
                 setStatusData(data);
-                
-                // Si c'est une nouvelle alerte, on l'affiche et on reset le verdict
+                setVisible(true);
+
                 if (data.timestamp !== lastTimestampRef.current) {
                     lastTimestampRef.current = data.timestamp;
                     setVerdict(null); 
-                    setVisible(true);
                     askOracle();
-                } 
-                // Si le bandeau est visible mais qu'on a pas de verdict, on réessaie
-                else if (visible && !verdict && !fetchingRef.current) {
+                } else if (!verdict && !fetchingRef.current) {
                     askOracle();
                 }
-
             } catch (e) {}
         }, 1000);
         return () => clearInterval(interval);
@@ -57,13 +51,8 @@ export default function SystemStatus() {
             if (res.ok) {
                 const d = await res.json();
                 setVerdict(d);
-                
-                // ✅ FIX V14.4 : SI SAFE, ON FERME AUTOMATIQUEMENT
                 if (d.verdict === "SAFE") {
-                    setTimeout(() => {
-                        setVisible(false);
-                        // On ne reset pas le verdict tout de suite pour éviter un clignotement
-                    }, 2500); 
+                    setTimeout(() => setVisible(false), 2500); 
                 }
             }
         } catch (e) {}
@@ -72,7 +61,6 @@ export default function SystemStatus() {
 
     const handleRevertAndReport = async () => {
         setReverting(true);
-        // Copie silencieuse
         const report = `🚨 RAPPORT:\n${statusData.message}\nIA: ${verdict?.reason}`;
         try { await navigator.clipboard.writeText(report); } catch (err) {}
 
@@ -82,7 +70,8 @@ export default function SystemStatus() {
         } catch(e) { setReverting(false); }
     };
 
-    if (!visible) return <div className="fixed top-2 right-2 z-[9999] opacity-30 hover:opacity-100 transition-opacity bg-black text-white text-[8px] px-2 py-1 rounded font-mono cursor-default">v.{version}</div>;
+    // BADGE BLEU (bg-blue-600)
+    if (!visible) return <div className="fixed top-2 right-2 z-[9999] opacity-80 hover:opacity-100 transition-opacity bg-blue-600 text-white text-[10px] px-3 py-1 rounded-full font-black cursor-default shadow-lg border border-blue-400">v.{version}</div>;
 
     let bgClass = "bg-orange-500 border-orange-700"; 
     let messageIA = "🔮 Analyse IA en cours...";
@@ -106,12 +95,13 @@ export default function SystemStatus() {
                         <span className="text-xl uppercase tracking-widest flex items-center gap-2">
                             {!verdict ? '⏳ ANALYSE...' : verdict.verdict}
                         </span>
-                        <span className="text-[10px] bg-black/30 px-2 py-1 rounded font-mono">v.{version}</span>
+                        {/* BADGE BLEU AUSSI ICI */}
+                        <span className="text-[10px] bg-blue-600 text-white px-2 py-1 rounded font-black border border-blue-400">v.{version}</span>
                     </div>
                     <span className="text-md font-bold mt-1">{statusData.message}</span>
+                    <span className="text-xs font-mono opacity-80">{statusData.details}</span>
                 </div>
                 
-                {/* BOUTON REVERT (Seulement si Danger) */}
                 {verdict?.verdict !== 'SAFE' && (
                     <div className="flex gap-2">
                         <button onClick={handleRevertAndReport} disabled={reverting} className="bg-black/40 hover:bg-black/60 px-4 py-2 rounded-lg font-bold text-xs uppercase border border-white/20 transition-colors shadow-lg animate-pulse flex items-center gap-2">
