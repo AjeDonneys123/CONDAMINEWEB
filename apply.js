@@ -6,8 +6,8 @@ const inputFile = 'update.txt';
 const statusFile = 'apply_status.json';
 
 console.log("------------------------------------------------");
-console.log("🛡️ [SYSTEM] Moteur V10.1 (Logic Sentinel)");
-console.log("    Securité : Signatures + DOM + Densité Logique");
+console.log("🛡️ [SYSTEM] Moteur V10.2 (High Sensitivity)");
+console.log("    Seuil Densité : Alerte dès -10% de logique");
 console.log("------------------------------------------------");
 
 function writeStatus(type, message, details = null, context = null) {
@@ -30,10 +30,9 @@ function extractSignatures(content) {
     return sigs;
 }
 
-// NOUVEAU : CHECK DENSITÉ LOGIQUE
 function checkLogicDensity(oldContent, newContent) {
-    // On compte les mots-clés qui définissent la logique "intelligente"
-    const logicKeywords = /\b(if|else|switch|case|return|await|async|map|filter|reduce|find|create|update|delete|useEffect|useState)\b/g;
+    // Liste enrichie de mots-clés logiques
+    const logicKeywords = /\b(if|else|switch|case|return|await|async|map|filter|reduce|find|create|update|delete|useEffect|useState|useRef|try|catch|throw)\b/g;
     
     const countLogic = (text) => {
         const matches = text.match(logicKeywords);
@@ -43,8 +42,8 @@ function checkLogicDensity(oldContent, newContent) {
     const oldScore = countLogic(oldContent);
     const newScore = countLogic(newContent);
 
-    // Si le score de logique chute de plus de 30% alors que le fichier n'est pas vide
-    if (oldScore > 5 && newScore < oldScore * 0.7) {
+    // MODIFICATION V10.2 : Seuil à 0.90 (10% de perte suffit pour alerter)
+    if (oldScore > 5 && newScore < oldScore * 0.90) {
         return { oldScore, newScore, drop: Math.round((1 - newScore/oldScore)*100) };
     }
     return null;
@@ -139,7 +138,7 @@ function applyUpdate() {
                     const oldContent = fs.readFileSync(fullPath, 'utf8');
                     
                     if (['.js', '.jsx', '.ts'].includes(ext)) {
-                        // 1. CHECK SIGNATURES (Fonctions disparues)
+                        // 1. SIGNATURES
                         const oldSigs = extractSignatures(oldContent);
                         const newSigs = extractSignatures(newContent);
                         const missing = [...oldSigs].filter(s => !newSigs.has(s));
@@ -147,21 +146,21 @@ function applyUpdate() {
                             currentWarning = { title: `Régression Structure : ${path.basename(filePath)}`, msg: `Perdu : ${missing.join(', ')}`, context: { missing, filePath } };
                         }
 
-                        // 2. CHECK LOGIC DENSITY (Lobotomie) - NOUVEAU
+                        // 2. DENSITE LOGIQUE (Seuil 10%)
                         if (!currentWarning) {
                             const logicCheck = checkLogicDensity(oldContent, newContent);
                             if (logicCheck) {
                                 currentWarning = {
                                     title: `Chute de Logique : ${path.basename(filePath)}`,
-                                    msg: `Densité de code : -${logicCheck.drop}% (Perte potentielle de traitement)`,
-                                    context: { missing: [`Densité logique -${logicCheck.drop}% (ex: if, await, return disparus)`], filePath }
+                                    msg: `Densité : -${logicCheck.drop}% (Seuil 10% dépassé)`,
+                                    context: { missing: [`Perte de densité logique de ${logicCheck.drop}% (ex: try, await, if supprimés)`], filePath }
                                 };
                                 console.warn(`⚠️ RISQUE LOGIQUE: ${filePath} (-${logicCheck.drop}%)`);
                             }
                         }
                     }
 
-                    // 3. CHECK DOM (IDs disparus)
+                    // 3. DOM
                     if (ext === '.jsx' && !currentWarning) {
                         const missingIds = checkDomIntegrity(oldContent, newContent);
                         if (missingIds) {
@@ -170,7 +169,7 @@ function applyUpdate() {
                     }
                 }
 
-                // 4. CHECK CSS
+                // 4. CSS
                 if (ext === '.jsx' && !currentWarning) {
                     const cssCheck = checkCssDependency(filePath, newContent, rawContent);
                     if (!cssCheck.ok) {
