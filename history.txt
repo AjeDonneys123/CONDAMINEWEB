@@ -36,3 +36,8 @@
 - Le moteur V8.5 a correctement bloqué le composant piège.
 - Le HUD Rouge fonctionne.
 - Système réinitialisé au statut VERT.
+
+[UPDATE V14.2 - FLUIDITÉ HUD]
+- Suppression des confirmations (popups) pour les actions REVERT.
+- Ajout d'un bouton "REVERT SIMPLE" (sans copie presse-papier) pour les corrections rapides.
+- Système prêt pour production rapide.

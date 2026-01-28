@@ -1,4 +1,4 @@
-// @signatures: SystemStatus, askOracle, handleRevertAndReport
+// @signatures: SystemStatus, askOracle, handleRevertAndReport, handleRevertOnly
 import React, { useState, useEffect, useRef } from 'react';
 import './SystemStatus.css';
 
@@ -20,16 +20,11 @@ export default function SystemStatus() {
                 const res = await fetch('/api/system/apply-status');
                 const data = await res.json();
                 
-                // CAS 1 : TOUT VA BIEN (Le serveur a fini et dit OK)
                 if (data.status === 'OK') {
-                    if (visible) {
-                        // Délai de 3 secondes avant disparition
-                        setTimeout(() => setVisible(false), 3000);
-                    }
+                    if (visible) setTimeout(() => setVisible(false), 3000);
                     return;
                 }
 
-                // CAS 2 : ALERTE
                 setStatusData(data);
                 setVisible(true);
 
@@ -54,15 +49,14 @@ export default function SystemStatus() {
             if (res.ok) {
                 const d = await res.json();
                 setVerdict(d);
-                // Si l'IA dit que c'est SAFE, on cache après 3 secondes
                 if (d.verdict === "SAFE") setTimeout(() => setVisible(false), 3000);
             }
         } catch (e) {}
         fetchingRef.current = false;
     };
 
+    // --- MODE "ACTION IMMÉDIATE" (Sans Confirmation) ---
     const handleRevertAndReport = async () => {
-        if(!confirm("⚠️ COPIER LE RAPPORT ET RESTAURER ?")) return;
         setReverting(true);
 
         const report = `🚨 RAPPORT AUTOMATIQUE (REVERT TRIGGERED)
@@ -85,7 +79,16 @@ GEMINI : Analyse ce rapport. Le code précédent était défectueux. Corrige-le.
 
         try {
             await fetch('/api/system/revert', { method: 'POST' });
-            setTimeout(() => window.location.reload(), 1000);
+            // Feedback visuel rapide
+            setTimeout(() => window.location.reload(), 500);
+        } catch(e) { setReverting(false); }
+    };
+
+    const handleRevertOnly = async () => {
+        setReverting(true);
+        try {
+            await fetch('/api/system/revert', { method: 'POST' });
+            setTimeout(() => window.location.reload(), 500);
         } catch(e) { setReverting(false); }
     };
 
@@ -119,7 +122,10 @@ GEMINI : Analyse ce rapport. Le code précédent était défectueux. Corrige-le.
                         <button onClick={handleRevertAndReport} disabled={reverting} className="bg-black/40 hover:bg-black/60 px-4 py-2 rounded-lg font-bold text-xs uppercase border border-white/20 transition-colors shadow-lg animate-pulse flex items-center gap-2">
                             {reverting ? 'RESTAURATION...' : '📋 COPIER & REVERT'}
                         </button>
-                        <button onClick={() => setVisible(false)} className="bg-white/20 hover:bg-white/40 rounded-full w-8 h-8 flex items-center justify-center font-bold">✕</button>
+                        <button onClick={handleRevertOnly} disabled={reverting} className="bg-white/20 hover:bg-white/40 rounded-lg px-3 py-2 flex items-center justify-center font-bold text-xs">
+                            REVERT SIMPLE
+                        </button>
+                        <button onClick={() => setVisible(false)} className="bg-white/10 hover:bg-white/30 rounded-full w-8 h-8 flex items-center justify-center font-bold">✕</button>
                     </div>
                 )}
             </div>

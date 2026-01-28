@@ -1,12 +1,7 @@
 {
-  "status": "JUDGING",
-  "message": "Analyse IA en cours...",
-  "details": "Perdu : handleBackToDev",
-  "context": {
-    "missing": [
-      "handleBackToDev"
-    ],
-    "filePath": "client/src/App.jsx"
-  },
-  "timestamp": 1769613812657
+  "status": "OK",
+  "message": "Code appliqué",
+  "details": "2 fichiers mis à jour.",
+  "context": null,
+  "timestamp": 1769614068982
 }
