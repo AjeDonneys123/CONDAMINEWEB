@@ -1,5 +1,5 @@
 // @signatures: App, handleBackToDev, handleLogout
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react'; // TEST CRASH FINAL (ID: 999)
 import Login from './features/auth/Login';
 import ProfPage from './features/prof/ProfPage';
 import ElevePage from './features/eleve/ElevePage';
@@ -12,65 +12,26 @@ export default function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const bootIdRef = useRef(null);
 
-  // ❌ TEST V14 : LOGIQUE VIDÉE
-  // La fonction est là, mais elle ne fait plus rien.
-  // Le mode Paranoïaque DOIT déclencher l'IA car c'est un fichier critique.
+  // ❌ LOBOTOMIE TOTALE : La fonction est là, mais vide.
+  // Le moteur V14 va détecter ça via l'Oracle forcé.
   useEffect(() => {
-    console.log("Check Update désactivé pour test sécurité");
-  }, []);
-
-  useEffect(() => {
-    const saved = localStorage.getItem('player');
-    if (saved) {
-        const parsed = JSON.parse(saved);
-        setUser({ ...parsed, id: parsed._id || parsed.id });
-    }
+    // Vide.
   }, []);
 
   const handleLogout = () => { localStorage.clear(); setUser(null); };
 
+  // ❌ FONCTION VIDÉE AUSSI
   const handleBackToDev = async () => {
-      try {
-          const res = await fetch('/api/auth/login', {
-              method: 'POST',
-              headers: {'Content-Type': 'application/json'},
-              body: JSON.stringify({ role: 'ADMIN', firstName: 'Jean', lastName: 'Vuillet', password: 'A' })
-          });
-          const data = await res.json();
-          if (res.ok) {
-              localStorage.setItem('player', JSON.stringify(data.user));
-              window.location.reload();
-          }
-      } catch(e) { console.error(e); }
+      console.log("Rien.");
   };
 
-  if (isSyncing) return <div className="sync-overlay"><h2 style={{color:'white', fontWeight:900}}>SYNCHRONISATION...</h2></div>;
-  
-  if (!user) return (
-      <div className="app-wrapper">
-          <SystemStatus />
-          <Login onLoginSuccess={setUser} />
-      </div>
-  );
-
-  const isTestAccount = user.isTestAccount === true;
+  if (isSyncing) return <div className="sync-overlay">...</div>;
+  if (!user) return <div className="app-wrapper"><SystemStatus /><Login onLoginSuccess={setUser} /></div>;
 
   return (
     <div className="app-wrapper">
       <SystemStatus />
-      {isTestAccount && (
-        <div className="v99-test-header">
-           <span>🛠️ MODE TEST ACTIF : {user.firstName} {user.lastName}</span>
-           <button className="btn-back-dev-mini" onClick={handleBackToDev}>⚡ RETOUR DÉVELOPPEUR</button>
-        </div>
-      )}
-      {(user.isDeveloper || user.role === 'prof') ? (
-          <ProfPage user={user} onLogout={handleLogout} />
-      ) : user.role === 'admin' ? (
-          <AdminPage user={user} onLogout={handleLogout} />
-      ) : (
-          <ElevePage user={user} onLogout={handleLogout} onBackToProf={() => setUser({ ...user, role: "prof" })} />
-      )}
+      {(user.isDeveloper || user.role === 'prof') ? <ProfPage user={user} onLogout={handleLogout} /> : (user.role === 'admin' ? <AdminPage user={user} onLogout={handleLogout} /> : <ElevePage user={user} onLogout={handleLogout} />)}
     </div>
   );
 }
