@@ -1,4 +1,4 @@
-// @signatures: applyUpdate, extractSignatures, checkCssDependency, checkDeepClassIntegrity, checkDomIntegrity, writeStatus, snapshot
+// @signatures: applyUpdate, extractSignatures, checkCssDependency, checkDeepClassIntegrity, checkDomIntegrity, checkLogicDensity, writeStatus, snapshot
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
@@ -6,8 +6,8 @@ const inputFile = 'update.txt';
 const statusFile = 'apply_status.json';
 
 console.log("------------------------------------------------");
-console.log("🛡️ [SYSTEM] Moteur V10.0 (Full Spectrum)");
-console.log("    Securité : JS + CSS + DOM (IDs) + Snapshot");
+console.log("🛡️ [SYSTEM] Moteur V10.1 (Logic Sentinel)");
+console.log("    Securité : Signatures + DOM + Densité Logique");
 console.log("------------------------------------------------");
 
 function writeStatus(type, message, details = null, context = null) {
@@ -19,7 +19,6 @@ function snapshot() {
     try {
         execSync('git add .');
         execSync('git commit -m "Auto-Save Pre-Update"');
-        console.log("💾 [GIT] Snapshot de sécurité créé.");
     } catch (e) { }
 }
 
@@ -31,21 +30,36 @@ function extractSignatures(content) {
     return sigs;
 }
 
-// NOUVEAU : RADAR DOM (IDs HTML)
+// NOUVEAU : CHECK DENSITÉ LOGIQUE
+function checkLogicDensity(oldContent, newContent) {
+    // On compte les mots-clés qui définissent la logique "intelligente"
+    const logicKeywords = /\b(if|else|switch|case|return|await|async|map|filter|reduce|find|create|update|delete|useEffect|useState)\b/g;
+    
+    const countLogic = (text) => {
+        const matches = text.match(logicKeywords);
+        return matches ? matches.length : 0;
+    };
+
+    const oldScore = countLogic(oldContent);
+    const newScore = countLogic(newContent);
+
+    // Si le score de logique chute de plus de 30% alors que le fichier n'est pas vide
+    if (oldScore > 5 && newScore < oldScore * 0.7) {
+        return { oldScore, newScore, drop: Math.round((1 - newScore/oldScore)*100) };
+    }
+    return null;
+}
+
 function checkDomIntegrity(oldContent, newContent) {
     const getIds = (text) => {
         const ids = new Set();
-        // Capture id="mon-id" ou id='mon-id'
         const regex = /\sid=['"]([^'"]+)['"]/g;
         let match;
         while ((match = regex.exec(text))) ids.add(match[1]);
         return ids;
     };
-
     const oldIds = getIds(oldContent);
     const newIds = getIds(newContent);
-    
-    // On cherche ce qui a disparu
     const missing = [...oldIds].filter(id => !newIds.has(id));
     return missing.length > 0 ? missing : null;
 }
@@ -60,7 +74,6 @@ function checkCssDependency(jsxPath, jsxContent, rawUpdateContent) {
         const relativeCssPath = path.join(dir, cssFileName).split(path.sep).join('/');
         const headerTag = `[[[£ FILE: ${relativeCssPath} £]]]`;
         const existsInUpdate = rawUpdateContent.includes(headerTag);
-        
         if (!existsOnDisk && !existsInUpdate) return { ok: false, missing: cssFileName };
         return { ok: true, cssPath: existsOnDisk ? cssFullPath : null };
     }
@@ -125,33 +138,39 @@ function applyUpdate() {
                 if (fs.existsSync(fullPath) && !isForced) {
                     const oldContent = fs.readFileSync(fullPath, 'utf8');
                     
-                    // 1. CHECK JS (Fonctions)
                     if (['.js', '.jsx', '.ts'].includes(ext)) {
+                        // 1. CHECK SIGNATURES (Fonctions disparues)
                         const oldSigs = extractSignatures(oldContent);
                         const newSigs = extractSignatures(newContent);
                         const missing = [...oldSigs].filter(s => !newSigs.has(s));
                         if (missing.length > 0) {
-                            currentWarning = { title: `Régression JS : ${path.basename(filePath)}`, msg: `Perdu : ${missing.join(', ')}`, context: { missing, filePath } };
-                            console.warn(`⚠️ RISQUE JS: ${filePath}`);
+                            currentWarning = { title: `Régression Structure : ${path.basename(filePath)}`, msg: `Perdu : ${missing.join(', ')}`, context: { missing, filePath } };
+                        }
+
+                        // 2. CHECK LOGIC DENSITY (Lobotomie) - NOUVEAU
+                        if (!currentWarning) {
+                            const logicCheck = checkLogicDensity(oldContent, newContent);
+                            if (logicCheck) {
+                                currentWarning = {
+                                    title: `Chute de Logique : ${path.basename(filePath)}`,
+                                    msg: `Densité de code : -${logicCheck.drop}% (Perte potentielle de traitement)`,
+                                    context: { missing: [`Densité logique -${logicCheck.drop}% (ex: if, await, return disparus)`], filePath }
+                                };
+                                console.warn(`⚠️ RISQUE LOGIQUE: ${filePath} (-${logicCheck.drop}%)`);
+                            }
                         }
                     }
 
-                    // 2. CHECK DOM (NOUVEAU V10)
+                    // 3. CHECK DOM (IDs disparus)
                     if (ext === '.jsx' && !currentWarning) {
                         const missingIds = checkDomIntegrity(oldContent, newContent);
                         if (missingIds) {
-                            currentWarning = { 
-                                title: `Structure cassée : ${path.basename(filePath)}`, 
-                                msg: `IDs disparus : ${missingIds.join(', ')}`, 
-                                // On préfixe pour que l'IA comprenne que ce sont des IDs DOM
-                                context: { missing: missingIds.map(id => `ID HTML #${id}`), filePath } 
-                            };
-                            console.warn(`⚠️ RISQUE DOM: ${filePath}`);
+                            currentWarning = { title: `Structure cassée : ${path.basename(filePath)}`, msg: `IDs disparus : ${missingIds.join(', ')}`, context: { missing: missingIds.map(id => `ID HTML #${id}`), filePath } };
                         }
                     }
                 }
 
-                // 3. CHECK CSS (Styles)
+                // 4. CHECK CSS
                 if (ext === '.jsx' && !currentWarning) {
                     const cssCheck = checkCssDependency(filePath, newContent, rawContent);
                     if (!cssCheck.ok) {
