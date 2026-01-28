@@ -2,8 +2,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './GameStudio.css';
 import { api } from '../../../services/api';
-// CHEMIN ET EXPORTS VÉRIFIÉS
-import { getChaptersForClass, findDefaultChapterId, getStudentsForViewingClass, SUBJECTS_LIST } from '../homework/HomeworkStudio'; 
+// Correction de l'importation: on importe l'objet StudioUtils pour contourner le problème de cache
+import { StudioUtils } from '../homework/HomeworkStudio'; 
 
 // State par défaut pour un quiz vide
 const DEFAULT_QUIZ_DATA = { 
@@ -17,6 +17,9 @@ const DEFAULT_QUIZ_DATA = {
 };
 
 export default function GameStudio({ initialData, chapters, classFilter, user, targetSection, onClose }) {
+    // Déstructuration de l'objet utilitaire
+    const { getChaptersForClass, findDefaultChapterId, getStudentsForViewingClass, SUBJECTS_LIST } = StudioUtils;
+
     const [formData, setFormData] = useState(initialData || { 
         ...DEFAULT_QUIZ_DATA, 
         teacherId: user.id || user._id, 
