@@ -1,4 +1,4 @@
-// @signatures: ConsoleReporter, copyToClipboard, handleKeyDown, handleNewError
+// @signatures: ConsoleReporter, generateFullReport, handleKeyDown
 import React, { useState, useEffect } from 'react';
 import './ConsoleReporter.css';
 
@@ -8,91 +8,95 @@ export default function ConsoleReporter({ user }) {
     const [copySuccess, setCopySuccess] = useState(false);
 
     useEffect(() => {
+        // 1. CAPTURE DES ERREURS CONSOLE (Local)
         const originalError = console.error;
         console.error = (...args) => {
             const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
-            // Filtre les bruits React habituels
             if(!msg.includes('snapshot') && !msg.includes('React') && !msg.includes('key')) {
-                handleNewError(`CONSOLE: ${msg}`);
+                setErrors(prev => [...prev, { msg, time: new Date().toLocaleTimeString() }].slice(-15));
             }
             originalError.apply(console, args);
         };
 
-        const originalFetch = window.fetch;
-        window.fetch = async (...args) => {
-            try {
-                const res = await originalFetch(...args);
-                
-                // INTERCEPTION INTELLIGENTE DES ERREURS
-                if (!res.ok && !args[0].includes('report-')) {
-                    const method = args[1]?.method || 'GET';
-                    let detail = "";
-                    
-                    try {
-                        // On clone la réponse pour lire le JSON sans la consommer pour l'app
-                        const clone = res.clone();
-                        const json = await clone.json();
-                        detail = json.error || json.message || "";
-                    } catch (e) {
-                        detail = "Erreur inconnue";
-                    }
-
-                    handleNewError(`ERR ${res.status}: ${detail} (${method} ${args[0]})`);
-                }
-                return res;
-            } catch (err) {
-                if (!args[0].includes('report-')) handleNewError(`CRASH RÉSEAU: ${args[0]}`);
-                throw err;
-            }
-        };
-
-        const handleKeyDown = (e) => {
+        const handleKeyDown = async (e) => {
             if (e.metaKey && e.shiftKey && e.code === 'KeyL') {
                 e.preventDefault();
-                copyToClipboard();
+                await generateFullReport();
             }
         };
         window.addEventListener('keydown', handleKeyDown);
 
         return () => {
             console.error = originalError;
-            window.fetch = originalFetch;
             window.removeEventListener('keydown', handleKeyDown);
         };
-    }, [errors]);
+    }, [errors]); // Dépendance errors pour avoir les logs à jour
 
-    const handleNewError = (msg) => {
-        // On évite les doublons visuels
-        setErrors(prev => {
-            const isDuplicate = prev.length > 0 && prev[prev.length - 1].msg === msg;
-            if (isDuplicate) return prev;
-            return [...prev, { msg, time: new Date().toLocaleTimeString() }].slice(-15);
-        });
-        setBannerVisible(true);
-    };
+    const generateFullReport = async () => {
+        let statusReport = "Inconnu";
+        let oracleVerdict = "Non sollicité";
+        let oracleReason = "";
 
-    const copyToClipboard = () => {
-        if (errors.length === 0) return;
-        const payload = `[REPORT_MAC_TURBO]\nPage: ${window.location.href}\nStaff: ${user?.firstName}\n\nLOGS D'ERREURS :\n${errors.map(e => `[${e.time}] ${e.msg}`).join('\n')}\n\nGemini, répare mon code via snapshot.txt.`;
-        navigator.clipboard.writeText(payload).then(() => {
+        // 2. RÉCUPÉRATION DES DONNÉES SERVEUR (Ce que voit le HUD)
+        try {
+            const resStatus = await fetch('/api/system/apply-status');
+            const dataStatus = await resStatus.json();
+            
+            if (dataStatus.status !== 'OK') {
+                statusReport = `[${dataStatus.status}] ${dataStatus.message} (${dataStatus.details})`;
+                
+                // Si alerte, on récupère ce que dit l'Oracle (depuis le cache serveur)
+                const resOracle = await fetch('/api/system/oracle', { method: 'POST' });
+                const dataOracle = await resOracle.json();
+                oracleVerdict = dataOracle.verdict;
+                oracleReason = dataOracle.reason;
+            } else {
+                statusReport = "🟢 SYSTÈME SAIN (OK)";
+            }
+        } catch (e) {
+            statusReport = "🔴 SERVEUR OFF/INJOIGNABLE";
+        }
+
+        // 3. CONSTRUCTION DU RAPPORT
+        const payload = `🚨 RAPPORT D'INCIDENT (V14)
+--------------------------------------------------
+👤 Dev: ${user?.firstName || 'Inconnu'}
+📅 Date: ${new Date().toLocaleString()}
+
+1️⃣ ÉTAT DU SYSTÈME (HUD) :
+${statusReport}
+
+2️⃣ JUGEMENT DE L'ORACLE (IA) :
+⚖️ Verdict : ${oracleVerdict}
+🗣️ Raison  : "${oracleReason}"
+
+3️⃣ LOGS CONSOLE (Derniers 15) :
+${errors.length > 0 ? errors.map(e => `[${e.time}] ${e.msg}`).join('\n') : "(Aucune erreur console)"}
+
+--------------------------------------------------
+GEMINI : Analyse ce rapport. Si le verdict est DANGER, corrige le code manquant décrit par l'Oracle.`;
+
+        // 4. COPIE
+        try {
+            await navigator.clipboard.writeText(payload);
             setCopySuccess(true);
-            setTimeout(() => setCopySuccess(false), 2000);
-        });
+            setBannerVisible(true);
+            setTimeout(() => { setCopySuccess(false); setBannerVisible(false); }, 3000);
+        } catch (err) {
+            console.error("Échec copie presse-papier", err);
+        }
     };
 
-    if (!bannerVisible && errors.length === 0) return null;
-
-    // Récupération de la dernière erreur pour l'affichage
-    const lastError = errors.length > 0 ? errors[errors.length - 1] : { msg: '' };
+    if (!bannerVisible && !copySuccess) return null;
 
     return (
-        <div className={`error-banner-minimal ${bannerVisible ? 'show' : ''} ${copySuccess ? 'copied' : ''}`} onClick={() => setBannerVisible(false)}>
+        <div className={`error-banner-minimal show copied`} onClick={() => setBannerVisible(false)}>
             <div className="banner-content">
-                <span className="banner-icon">{copySuccess ? '✅' : '🚨'}</span>
+                <span className="banner-icon">📋</span>
                 <span className="banner-text">
-                    {copySuccess ? 'RAPPORT COPIÉ ! COLLE-LE DANS GEMINI' : `${lastError.msg}`}
+                    RAPPORT COMPLET COPIÉ ! (STATUS + ORACLE + LOGS)
                 </span>
-                {!copySuccess && <span className="banner-hint">⌘+⇧+L</span>}
+                <span className="banner-hint">COLLE-LE DANS LE CHAT</span>
             </div>
         </div>
     );
