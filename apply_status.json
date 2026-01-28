@@ -1,7 +1,12 @@
 {
-  "status": "OK",
-  "message": "Code appliqué",
-  "details": "1 fichiers mis à jour.",
-  "context": null,
-  "timestamp": 1769604756455
+  "status": "WARNING",
+  "message": "Régression probable : App.jsx",
+  "details": "Fonctions perdues : checkUpdate",
+  "context": {
+    "missing": [
+      "checkUpdate"
+    ],
+    "filePath": "client/src/App.jsx"
+  },
+  "timestamp": 1769604920186
 }
