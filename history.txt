@@ -64,3 +64,5 @@
 2026-01-28 14:18 - STUDIO EVOLUTION : Transformation de la console en interface de Chat. Ajout d'un moteur de Preview de jeu intégré. L'IA peut désormais recevoir du feedback, modifier le code et expliquer ses changements via les bulles de chat.
 
 2026-01-28 14:35 - SYSTEM REINFORCEMENT : Upgrade de apply.js (V17) avec détection mathématique de régression DOM et signature JS. Réparation structurelle du StudioDashboard (JSX/CSS) pour corriger les chevauchements visuels.
+
+2026-01-28 14:40 - SYSTEM CLEANUP : Création du modèle Sanction manquant pour supprimer l'alerte console. Mise à jour de server.js pour renforcer la détection de sabotage DOM par l'Oracle. Le système est désormais 100% propre dans les logs.
