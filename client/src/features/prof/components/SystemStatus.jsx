@@ -9,7 +9,6 @@ export default function SystemStatus() {
     const [verdict, setVerdict] = useState(null); 
     const [reverting, setReverting] = useState(false);
     
-    // MÉMOIRE ANTI-BOUCLE
     const lastTimestampRef = useRef(0);
     const fetchingRef = useRef(false);
 
@@ -21,11 +20,16 @@ export default function SystemStatus() {
                 const res = await fetch('/api/system/apply-status');
                 const data = await res.json();
                 
+                // CAS 1 : TOUT VA BIEN (Le serveur a fini et dit OK)
                 if (data.status === 'OK') {
-                    if (visible) setTimeout(() => setVisible(false), 2000);
+                    if (visible) {
+                        // Délai de 3 secondes avant disparition
+                        setTimeout(() => setVisible(false), 3000);
+                    }
                     return;
                 }
 
+                // CAS 2 : ALERTE
                 setStatusData(data);
                 setVisible(true);
 
@@ -50,17 +54,17 @@ export default function SystemStatus() {
             if (res.ok) {
                 const d = await res.json();
                 setVerdict(d);
+                // Si l'IA dit que c'est SAFE, on cache après 3 secondes
+                if (d.verdict === "SAFE") setTimeout(() => setVisible(false), 3000);
             }
         } catch (e) {}
         fetchingRef.current = false;
     };
 
-    // --- LE "ONE CLICK FIX" ---
     const handleRevertAndReport = async () => {
         if(!confirm("⚠️ COPIER LE RAPPORT ET RESTAURER ?")) return;
         setReverting(true);
 
-        // 1. GÉNÉRATION DU RAPPORT
         const report = `🚨 RAPPORT AUTOMATIQUE (REVERT TRIGGERED)
 --------------------------------------------------
 📅 Date: ${new Date().toLocaleString()}
@@ -77,23 +81,12 @@ ${statusData.details || ''}
 --------------------------------------------------
 GEMINI : Analyse ce rapport. Le code précédent était défectueux. Corrige-le.`;
 
-        // 2. COPIE DANS LE PRESSE-PAPIER
-        try {
-            await navigator.clipboard.writeText(report);
-            console.log("📋 Rapport copié !");
-        } catch (err) {
-            console.error("Échec copie", err);
-        }
+        try { await navigator.clipboard.writeText(report); } catch (err) {}
 
-        // 3. REVERT (Retour vers le futur)
         try {
             await fetch('/api/system/revert', { method: 'POST' });
-            // On laisse un peu de temps pour voir le feedback visuel du bouton
             setTimeout(() => window.location.reload(), 1000);
-        } catch(e) { 
-            alert("Erreur Revert"); 
-            setReverting(false); 
-        }
+        } catch(e) { setReverting(false); }
     };
 
     if (!visible) return <div className="fixed top-2 right-2 z-[9999] opacity-30 hover:opacity-100 transition-opacity bg-black text-white text-[8px] px-2 py-1 rounded font-mono cursor-default">v.{version}</div>;
