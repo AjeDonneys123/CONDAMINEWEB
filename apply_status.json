@@ -1,13 +1,9 @@
 {
   "status": "JUDGING",
-  "message": "Analyse IA en cours...",
-  "details": "Perdu : loadAssets, handleDeleteProject",
+  "message": "ALERTE STRUCTURELLE : ProfStudioFolder.jsx",
+  "details": "Fonctions perdues: isJean, cClass, fClass, sectionName, currentActive, handleDeleteSection, handleDeleteItemWrapper",
   "context": {
-    "missing": [
-      "loadAssets",
-      "handleDeleteProject"
-    ],
-    "filePath": "client/src/features/prof/studio/StudioDashboard.jsx"
+    "filePath": "client/src/features/prof/components/ProfStudioFolder.jsx"
   },
-  "timestamp": 1769632642678
+  "timestamp": 1769889611899
 }

@@ -1,74 +1,10 @@
-# 📜 LOG D'EXPÉRIENCE CONDAMINE PRO
-
-## [SESSION 28 JANVIER 2026 - 00:45]
-### 🛠️ MÉTA-DÉVELOPPEMENT (SÉCURITÉ HYBRIDE)
-- **Apply.js V7.1** : Consolidation de la double vérification.
-- **Sécurité Multi-Format** : 
-    - Pour le **Code (JS/JSX)** : La vérification structurelle par signatures empêche d'oublier des fonctions.
-    - Pour le **Visuel (HTML/CSS)** : La vérification de poids (seuil 75%) empêche les snippets tronqués.
-- **Auto-Indexation** : Seuls les fichiers contenant de la logique reçoivent désormais l'en-tête `// @signatures`.
-
-### 📸 SCAN & CORRECTION
-- **Correction des Hallucinations** : Le moteur V171 a été testé avec succès sur des copies manuscrites complexes grâce au lexique croisé du sujet.
-
-[UPDATE V7.3] 
-- Modification de apply.js pour gérer history.txt en mode "APPEND".
-- Ajout de la sécurité Linkage CSS (JSX doit avoir son CSS).
-
-[UPDATE V7.3] 
-- Modification de apply.js pour gérer history.txt en mode "APPEND".
-- Ajout de la sécurité Linkage CSS (JSX doit avoir son CSS).
-
-[SYSTEM RESET]
-- Validation du moteur V8.4.
-- Remise à zéro du HUD (Disparition du bandeau jaune).
-
-[SYSTEM RESET]
-- Validation du moteur V8.4.
-- Remise à zéro du HUD (Disparition du bandeau jaune).
-
-[SÉCURITÉ VALIDÉE]
-- Le moteur V8.5 a correctement bloqué le composant piège.
-- Le HUD Rouge fonctionne.
-- Système réinitialisé au statut VERT.
-
-[SÉCURITÉ VALIDÉE]
-- Le moteur V8.5 a correctement bloqué le composant piège.
-- Le HUD Rouge fonctionne.
-- Système réinitialisé au statut VERT.
-
-[UPDATE V14.2 - FLUIDITÉ HUD]
-- Suppression des confirmations (popups) pour les actions REVERT.
-- Ajout d'un bouton "REVERT SIMPLE" (sans copie presse-papier) pour les corrections rapides.
-- Système prêt pour production rapide.
-
-[UPDATE V14.3 - FINAL STABILIZATION]
-- Mode "Strict Safety" pour le HUD.
-- Les alertes VERTES (Safe) disparaissent instantanément (pilotées par le serveur).
-- Les alertes ROUGES (Danger) persistent jusqu'à action utilisateur.
-- Le système est maintenant calé pour la production.
-
-[FIX V15.3 - HUD LOGIC]
-- Correction du conflit Intervalle/Timeout.
-- Si le verdict est SAFE, l'intervalle de surveillance se met en pause pour laisser la fenêtre se fermer.
-- Fin des bandeaux verts persistants.
-
-2026-01-28 12:20 - UI FIX : Le bandeau SystemStatus est passé de 'fixed' à 'relative'. Il est désormais intégré au sommet du flux HTML et pousse tout le site vers le bas pour ne plus cacher les éléments d'interface.
-
-2026-01-28 13:28 - LOGIC REPAIR : Application du correctif de visibilité. Le composant SystemStatus reste monté mais se cache via CSS, préservant le cycle de monitoring.
-
-2026-01-28 13:43 - PROTOCOL SYNC : Synchronisation du ConsoleReporter avec le SystemStatus. Le raccourci Shift+Cmd+L capture désormais l'état de l'Oracle et du moteur pour un diagnostic complet.
-
-2026-01-28 14:05 - FEATURE STUDIO : Ajout de l'importation de personnages depuis l'ordinateur. Le flux PC -> Serveur -> Drive -> Proxy est opérationnel. Mise à jour de l'UI pour permettre l'upload de costumes par acteur.
-
-2026-01-28 14:18 - STUDIO EVOLUTION : Transformation de la console en interface de Chat. Ajout d'un moteur de Preview de jeu intégré. L'IA peut désormais recevoir du feedback, modifier le code et expliquer ses changements via les bulles de chat.
-
-2026-01-28 14:35 - SYSTEM REINFORCEMENT : Upgrade de apply.js (V17) avec détection mathématique de régression DOM et signature JS. Réparation structurelle du StudioDashboard (JSX/CSS) pour corriger les chevauchements visuels.
-
-2026-01-28 14:40 - SYSTEM CLEANUP : Création du modèle Sanction manquant pour supprimer l'alerte console. Mise à jour de server.js pour renforcer la détection de sabotage DOM par l'Oracle. Le système est désormais 100% propre dans les logs.
-
-2026-01-28 15:02 - SYSTEM RESILIENCE : Ajout d'une boucle de Retry automatique pour l'Audit IA. Si l'Oracle échoue ou timeout, le client retente la requête toutes les 2 secondes au lieu de rester bloqué en orange.
-
-2026-01-28 14:52 - STUDIO ENGINE REPAIR : Correction du moteur de Preview. Le code généré par l'IA doit maintenant respecter le contrat de classe 'MiniGame' avec constructeur (canvas, assets). Ajout de la gestion des collisions et de la gravité par défaut pour les jeux de plateforme.
-
-2026-01-28 15:37 - AI STUDIO STABILIZATION : Recadrage du prompt de l'IA de Studio pour interdire les excuses techniques et forcer l'inclusion de la méthode start(). Renforcement de la Factory Function côté client pour détecter les erreurs de classe manquante.
+2026-01-31 13:15 - Initial Snapshot - Système Condamine Pro V8.1 stable.
+2026-01-31 14:10 - FEATURE: Logique de "Promotion de Section".
+2026-01-31 14:32 - FEATURE: Gestion avancée des dossiers (Renommer, Supprimer, Déplacer).
+2026-01-31 14:50 - FIX: Remplacement des prompts par des modales de création.
+2026-01-31 15:20 - FEATURE: Système d'archivage des dossiers.
+2026-01-31 15:45 - BUGFIX: Tri naturel (CH1 < CH2 < CH10).
+2026-01-31 16:55 - FIX: Restauration du calcul dynamique des pastilles.
+2026-01-31 18:50 - EMERGENCY STABILIZATION: Fix TypeError et Erreurs 500.
+2026-01-31 19:45 - FIX 404: Routes Système stabilisées.
+2026-01-31 20:00 - UI RECOVERY: Restauration complète des boutons d'action (Éditer, Renommer, Archiver, Déplacer) et du bouton "+" d'ouverture des dossiers. Tri naturel validé.
