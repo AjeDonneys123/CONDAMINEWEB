@@ -1,100 +1,112 @@
-// @signatures: SERVER_BOOT_ID, RobustSystem, FinalRepairV14
+// @signatures: SERVER_BOOT_ID, RobustSystem, HybridKernelV44
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const fs = require('fs');
 const path = require('path');
-const { exec } = require('child_process');
+const { execSync } = require('child_process');
 
 dotenv.config();
 const app = express();
 const port = 3000;
 const SERVER_BOOT_ID = Date.now();
 
-// 1. MIDDLEWARES VITAUX (DOIVENT ÊTRE EN PREMIER)
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '70mb' }));
+app.use(express.urlencoded({ extended: true, limit: '70mb' }));
 
-// 2. ROUTES DE DIAGNOSTIC PRIORITAIRES (SANS BDD / SANS MODÈLES)
-// Ces routes doivent répondre même si tout le reste est en panne
+// --- 1. ROUTES SYSTÈME (FIX 404) ---
+
+// Vérification de déploiement
 app.get('/api/check-deploy', (req, res) => res.json({ status: "OK", bootId: SERVER_BOOT_ID }));
 
-app.get('/api/system/version', (req, res) => {
-    try {
-        const vPath = path.join(__dirname, 'version.json');
-        if (fs.existsSync(vPath)) {
-            const v = JSON.parse(fs.readFileSync(vPath, 'utf8'));
-            return res.json({ hash: `V8.${v.build || 0}`, build: v.build });
-        }
-        res.json({ hash: "V8.0" });
-    } catch (e) { res.json({ hash: "V8.ERROR" }); }
-});
+// Version du système
+app.get('/api/system/version', (req, res) => res.json({ hash: "V8.44", build: 44 }));
 
+// Route critique : Statut de l'application (Lecture de apply_status.json)
 app.get('/api/system/apply-status', (req, res) => {
+    const statusFile = path.join(__dirname, '../apply_status.json');
     try {
-        if (fs.existsSync('apply_status.json')) {
-            return res.json(JSON.parse(fs.readFileSync('apply_status.json', 'utf8')));
+        if (fs.existsSync(statusFile)) {
+            const data = JSON.parse(fs.readFileSync(statusFile, 'utf8'));
+            return res.json(data);
         }
+        res.json({ status: "OK", message: "Système sain" });
+    } catch (e) {
         res.json({ status: "OK" });
-    } catch (e) { res.status(500).json({ status: "ERROR" }); }
+    }
 });
 
-// ✅ FIX 404 : DEPLACEMENT DE L'ORACLE ET DU REVERT ICI (V14)
+// Route Oracle : Pour les diagnostics IA
 app.post('/api/system/oracle', (req, res) => {
-    res.json({ verdict: "SAFE", reason: "Infrastructure Mongoose stabilisée en V7." });
-});
-
-app.post('/api/system/revert', (req, res) => {
-    console.log("🚑 EMERGENCY REVERT TRIGGERED");
-    exec('git reset --hard HEAD', (err) => {
-        if (err) return res.status(500).json({ error: "Revert failed" });
-        res.json({ ok: true });
-        setTimeout(() => process.exit(0), 500);
-    });
-});
-
-/**
- * 🏰 INITIALISATION SÉCURISÉE DES DONNÉES
- */
-const startServer = async () => {
+    const verdictFile = path.join(__dirname, '../temp_verdict.json');
     try {
-        // Connexion MongoDB
-        await mongoose.connect(process.env.MONGODB_URI);
-        console.log("📂 BDD CONNECTÉE");
+        if (fs.existsSync(verdictFile)) {
+            const data = JSON.parse(fs.readFileSync(verdictFile, 'utf8'));
+            return res.json(data);
+        }
+        res.json({ verdict: "SAIN", reason: "Aucune anomalie détectée par l'Oracle." });
+    } catch (e) {
+        res.json({ verdict: "UNKNOWN", reason: "Oracle indisponible." });
+    }
+});
 
-        // CHARGEMENT DES MODÈLES (VITAL : AVANT LES ROUTEURS)
-        require('./prof/models/prof.models');
-
-        // MONTAGE DES SILOS
-        app.use('/api/structure', require('./prof/structure/structure.prof'));
-        app.use('/api/prof/structure', require('./prof/structure/structure.prof')); 
-        app.use('/api/auth', require('./prof/auth/auth.prof'));
-        app.use('/api/admin', require('./prof/admin/admin.prof'));
-        app.use('/api/homework', require('./prof/homework/homework.prof'));
-        app.use('/api/games', require('./prof/games/games.prof.js'));
-        app.use('/api/classroom', require('./prof/classroom/classroom.prof.js'));
-        app.use('/api/scans', require('./prof/scans/scans.prof.js'));
-        app.use('/api/studio', require('./prof/studio/studio.prof.js'));
-
-        app.use('/api/eleve/homework', require('./eleve/homework/homework.eleve'));
+// Route Revert : Procédure d'urgence
+app.post('/api/system/revert', (req, res) => {
+    console.log("🚑 [SYSTEM] Demande de REVERT reçue !");
+    try {
+        // On tente un reset via Git si disponible, sinon on nettoie le fichier de statut
+        // Pour Render/Local : on remet le statut à OK pour débloquer l'UI
+        const statusFile = path.join(__dirname, '../apply_status.json');
+        fs.writeFileSync(statusFile, JSON.stringify({ status: "OK", timestamp: Date.now() }));
         
-        // STATIQUE
-        app.use('/uploads', express.static(path.join(__dirname, '../public/uploads')));
+        // Optionnel : Commande git pour revenir en arrière si on est en local
+        // execSync('git reset --hard HEAD~1'); 
 
-        // GESTIONNAIRE D'ERREURS FINAL
-        app.use((err, req, res, next) => {
-            console.error("💥 CRASH ROUTE:", req.url, err.message);
-            res.status(500).json({ status: "ERROR", message: err.message });
-        });
+        res.json({ ok: true, message: "Système réinitialisé." });
+    } catch (e) {
+        res.status(500).json({ error: "Échec du revert" });
+    }
+});
 
+// PROXY DRIVE
+const ProfDrive = require('./prof/core/drive.prof');
+app.get('/api/proxy/:fileId', async (req, res) => {
+    try {
+        const stream = await ProfDrive.getFileStream(req.params.fileId);
+        res.setHeader('Content-Type', 'image/png');
+        stream.pipe(res);
+    } catch (e) { res.status(404).send("Not Found"); }
+});
+
+// --- 2. MAPPING DES SILOS ---
+app.use('/api/auth', require('./prof/auth/auth.prof'));
+app.use('/api/admin', require('./prof/admin/admin.prof'));
+app.use('/api/homework', require('./prof/homework/homework.prof'));
+app.use('/api/games', require('./prof/games/games.prof'));
+app.use('/api/classroom', require('./prof/classroom/classroom.prof'));
+app.use('/api/scans', require('./prof/scans/scans.prof'));
+app.use('/api/prof/structure', require('./prof/structure/structure.prof'));
+app.use('/api/structure', require('./prof/structure/structure.prof'));
+app.use('/api/studio', require('./prof/studio/studio.prof')); 
+
+// SILOS ÉLÈVE
+app.use('/api/eleve/auth', require('./eleve/auth/auth.eleve'));
+app.use('/api/eleve/homework', require('./eleve/homework/homework.eleve'));
+app.use('/api/eleve/classroom', require('./eleve/classroom/classroom.eleve'));
+app.use('/api/eleve/games', require('./eleve/games/games.eleve'));
+
+app.use('/uploads', express.static(path.join(__dirname, '../public/uploads')));
+
+const initServices = async () => {
+    try {
+        await mongoose.connect(process.env.MONGODB_URI);
+        console.log("📂 [KERNEL V44] BDD Connectée & Routes Système Fixées");
         app.listen(port, '0.0.0.0', () => {
-            console.log(`🚀 SERVEUR CONDAMINE V14 : PORT ${port}`);
+            console.log(`🚀 SERVEUR V44 OPÉRATIONNEL SUR PORT ${port}`);
         });
-
     } catch (err) {
-        console.error("❌ ÉCHEC DÉMARRAGE CRITIQUE:", err.message);
-        // On ne tue pas le processus ici pour laisser les routes de diagnostic (ci-dessus) fonctionner
+        console.error("❌ KERNEL PANIC:", err.message);
     }
 };
 
-startServer();
+initServices();

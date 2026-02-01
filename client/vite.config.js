@@ -6,17 +6,14 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     port: 5173,
+    strictPort: true,
     proxy: {
+      // UTILISATION DE 127.0.0.1 POUR ÉVITER LES CONFLITS DE RÉSOLUTION DNS
       '/api': {
-        target: 'http://localhost:3000',
+        target: 'http://127.0.0.1:3000',
         changeOrigin: true,
         secure: false,
-      },
-      // ROUTE CRITIQUE : Tout ce qui commence par /uploads est géré par le serveur Node (server.js)
-      '/uploads': {
-        target: 'http://localhost:3000',
-        changeOrigin: true,
-        secure: false,
+        ws: true
       }
     }
   }

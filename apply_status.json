@@ -1,9 +1,9 @@
 {
   "status": "JUDGING",
-  "message": "ALERTE STRUCTURELLE : ProfStudioFolder.jsx",
-  "details": "Fonctions perdues: isJean, cClass, fClass, sectionName, currentActive, handleDeleteSection, handleDeleteItemWrapper",
+  "message": "ALERTE STRUCTURELLE : StudioDashboard.jsx",
+  "details": "Fonctions perdues: actorMappingText",
   "context": {
-    "filePath": "client/src/features/prof/components/ProfStudioFolder.jsx"
+    "filePath": "client/src/features/prof/studio/StudioDashboard.jsx"
   },
-  "timestamp": 1769889611899
+  "timestamp": 1769980083511
 }

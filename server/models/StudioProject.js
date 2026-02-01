@@ -1,36 +1,31 @@
 const mongoose = require('mongoose');
 
-const ActionSchema = new mongoose.Schema({
-    type: { type: String, enum: ['WAIT', 'MOVE', 'SAY', 'PLAY_SOUND', 'ASK_CHOICE', 'ASK_INPUT'], required: true },
-    targetId: String, 
-    params: mongoose.Schema.Types.Mixed 
-});
+const FrameSchema = new mongoose.Schema({
+    url: String,
+    name: String
+}, { _id: false });
 
-// DEFINITION COSTUME
-const CostumeSchema = new mongoose.Schema({
-    id: String,
-    name: String,
-    url: String
+const ActionSchema = new mongoose.Schema({
+    name: { type: String, default: "Nouvelle Action" },
+    frames: { type: [FrameSchema], default: [] }
 }, { _id: false });
 
 const ActorSchema = new mongoose.Schema({
     id: String, 
     name: String, 
-    
-    // V451 : Ajout explicite des costumes (Indispensable pour le Studio)
-    costumes: { type: [CostumeSchema], default: [] },
-    currentCostumeIdx: { type: Number, default: 0 },
-    
-    initialX: Number, 
-    initialY: Number, 
-    scale: { type: Number, default: 1 }
+    actions: { type: [ActionSchema], default: [] },
+    currentAction: { type: String, default: "" },
+    initialX: { type: Number, default: 50 }, 
+    initialY: { type: Number, default: 50 }, 
+    scale: { type: Number, default: 1 },
+    direction: { type: Number, default: 0 }
 });
 
 const SceneSchema = new mongoose.Schema({
     name: String,
-    backgroundUrl: String,
-    actors: [ActorSchema],
-    timeline: [ActionSchema] 
+    backdrops: [{ name: String, url: String }],
+    currentBackdropIdx: { type: Number, default: 0 },
+    actors: [ActorSchema]
 });
 
 const StudioProjectSchema = new mongoose.Schema({
@@ -38,7 +33,6 @@ const StudioProjectSchema = new mongoose.Schema({
     teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher' },
     scenes: [SceneSchema],
     generatedCode: String,
-    isPublic: { type: Boolean, default: false }, 
     createdAt: { type: Date, default: Date.now }
 }, { collection: 'studioprojects' });
 

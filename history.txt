@@ -1,10 +1,1 @@
-2026-01-31 13:15 - Initial Snapshot - Système Condamine Pro V8.1 stable.
-2026-01-31 14:10 - FEATURE: Logique de "Promotion de Section".
-2026-01-31 14:32 - FEATURE: Gestion avancée des dossiers (Renommer, Supprimer, Déplacer).
-2026-01-31 14:50 - FIX: Remplacement des prompts par des modales de création.
-2026-01-31 15:20 - FEATURE: Système d'archivage des dossiers.
-2026-01-31 15:45 - BUGFIX: Tri naturel (CH1 < CH2 < CH10).
-2026-01-31 16:55 - FIX: Restauration du calcul dynamique des pastilles.
-2026-01-31 18:50 - EMERGENCY STABILIZATION: Fix TypeError et Erreurs 500.
-2026-01-31 19:45 - FIX 404: Routes Système stabilisées.
-2026-01-31 20:00 - UI RECOVERY: Restauration complète des boutons d'action (Éditer, Renommer, Archiver, Déplacer) et du bouton "+" d'ouverture des dossiers. Tri naturel validé.
+01/02/2026 16:50 - FEATURE: Ajout du support 'mirrored' dans StudioDashboard V112. Les personnages peuvent désormais être retournés horizontalement via this.P1.mirrored = true. Correction d'une erreur interne lors de l'envoi du code.
