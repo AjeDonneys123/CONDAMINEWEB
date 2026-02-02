@@ -1,1 +1,1 @@
-01/02/2026 16:50 - FEATURE: Ajout du support 'mirrored' dans StudioDashboard V112. Les personnages peuvent désormais être retournés horizontalement via this.P1.mirrored = true. Correction d'une erreur interne lors de l'envoi du code.
+01/02/2026 17:10 - FEATURE: StudioDashboard V115. Amélioration de la rotation à 360° pour les jeux vus de dessus. Le moteur prend désormais en compte les angles négatifs et positifs pour une orientation précise.

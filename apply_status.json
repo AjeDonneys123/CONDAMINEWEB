@@ -1,9 +1,9 @@
 {
   "status": "JUDGING",
   "message": "ALERTE STRUCTURELLE : StudioDashboard.jsx",
-  "details": "Fonctions perdues: actorMappingText",
+  "details": "Fonctions perdues: getImgUrl, handleCenterActor, handleAddFrame, handleDeleteActor",
   "context": {
     "filePath": "client/src/features/prof/studio/StudioDashboard.jsx"
   },
-  "timestamp": 1769980083511
+  "timestamp": 1769997226992
 }
