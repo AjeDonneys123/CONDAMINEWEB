@@ -307,3 +307,31 @@
 
 03/02/2026 07:45 - Paquet CORE : SUPPORT UTILISATEUR.
 03/02/2026 08:00 - Paquet CORE : DEBUG OAUTH. Ajout de logs ultra-détaillés dans drive.prof.js pour afficher l'URL de redirection générée. Objectif : résoudre l'erreur Google 400 en vérifiant la conformité des paramètres envoyés.
+
+03/02/2026 12:45 - Paquet STUDIO : Restauration visuelle complète du panneau d'actions.
+03/02/2026 13:00 - CORE/RECOVERY : Restauration après reset manuel. Rétablissement de la version V123 Stable (Moteur résilient, Z-index auto, Animation scène, Layout 3 colonnes). Suppression de la fonctionnalité instable de nettoyage de fond.
+
+03/02/2026 09:20 - Paquet STUDIO : Implémentation du séquenceur d'images sous les actions.
+03/02/2026 09:45 - Paquet STUDIO : Ajout d'un moteur de prévisualisation d'animation dans le séquenceur. Bouton Play/Stop ajouté avec défilement automatique des sprites toutes les 0.3s et mise en surbrillance de la frame active.
+
+03/02/2026 09:45 - Paquet STUDIO : Ajout d'un moteur de prévisualisation d'animation.
+03/02/2026 10:10 - Paquet STUDIO : Mise à jour majeure de la scène centrale. Rétablissement du Drag & Drop pour positionner les acteurs. Implémentation du système de Z-Index auto (le dernier cliqué passe devant). L'animation Play du séquenceur s'affiche désormais directement sur le personnage sélectionné sur la scène.
+
+03/02/2026 08:30 - Paquet STUDIO : Amélioration de l'interface.
+03/02/2026 09:45 - Paquet STUDIO : Ajout d'un moteur de prévisualisation d'animation.
+03/02/2026 10:15 - Paquet STUDIO : FIX MOTEUR & Z-INDEX. Refonte du LiveEngine pour supporter le réordonnancement dynamique (Z-Index). Rétablissement du Drag & Drop sur la scène centrale. Synchronisation de l'animation preview sur l'acteur sélectionné au centre.
+
+03/02/2026 10:15 - Paquet STUDIO : FIX MOTEUR & Z-INDEX.
+03/02/2026 10:40 - Paquet STUDIO : Restauration de l'interface visuelle (Action Cards, Dashed Buttons). Alignement du design avec le moteur V120. Maintien de l'animation en temps réel sur la scène et du Drag & Drop.
+
+03/02/2026 10:40 - Paquet STUDIO : Restauration de l'interface visuelle.
+03/02/2026 11:15 - Paquet STUDIO : Uniformisation de la taille des sprites dans le séquenceur (object-fit). Ajout d'un contrôleur de vitesse d'animation (+/- 50ms) avec mise à jour dynamique du délai de prévisualisation.
+
+03/02/2026 11:15 - Paquet STUDIO : Uniformisation de la taille des sprites et contrôleur de vitesse.
+03/02/2026 11:50 - Paquet STUDIO : FIX LAYOUT CRITIQUE. Rétablissement de la structure en 3 colonnes (le centre n'est plus écrasé). Sanctuarisation de la scène centrale. Taille des vignettes fixée à 70px.
+
+03/02/2026 12:15 - Paquet CORE : Rétablissement de la visibilité du bandeau de santé.
+03/02/2026 12:45 - Paquet STUDIO : Restauration visuelle complète du panneau d'actions. Rétablissement des Action Cards (arrondis 20px, ombres) et du bouton d'ajout stylisé (Dashed). Fixation des dimensions pour éviter tout décalage visuel.
+
+03/02/2026 13:05 - Paquet CORE : Évolution de snap.js.
+03/02/2026 13:20 - Paquet STUDIO : FEATURE MAJEURE. Ajout de la fonction "Supprimer Backgrounds". Implémentation d'un algorithme de Chroma Key côté client (Canvas) pour rendre transparentes les couleurs dominantes de tous les sprites du projet. Traitement par lots et ré-upload automatique.

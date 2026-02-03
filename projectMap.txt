@@ -360,6 +360,7 @@
 │   ├── server.js
 │   └── version.json
 ├── snap.js
+├── studio.txt
 ├── systemInstructions.md
 ├── temp_diff.json
 ├── tests/
