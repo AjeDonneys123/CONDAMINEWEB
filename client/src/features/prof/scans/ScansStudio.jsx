@@ -1,155 +1,215 @@
+// @signatures: ScansStudio, handleCapture, handleUploadQueue, handleLaunchCorrection, handleOpenResult
 import React, { useState, useEffect, useRef } from 'react';
+import './ScansStudio.css';
 
-export default function ScansStudio() {
-    const [view, setView] = useState("list");
+export default function ScansStudio({ user, globalClass }) {
+    const [sessions, setSessions] = useState([]);
+    const [activeSession, setActiveSession] = useState(null);
+    const [view, setView] = useState('list'); 
+    const [localQueue, setLocalQueue] = useState([]);
+    const [activeResult, setActiveResult] = useState(null);
     const [loading, setLoading] = useState(false);
     const [status, setStatus] = useState("");
-    const [scans, setScans] = useState([]);
-    const [queue, setQueue] = useState([]);
-    const [manualTarget, setManualTarget] = useState(null);
-    const [manualText, setManualText] = useState("");
-    
-    const [hwConfig, setHwConfig] = useState({ 
-        title: "Trimestre 2", 
-        classroom: "all", 
-        teacherPrompt: "", // Sera chargé depuis la BDD
-        questionsUrls: [] 
-    });
-    
-    const [showSettings, setShowSettings] = useState(false);
+
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
 
-    // --- CHARGEMENT DE LA MÉMOIRE AU DÉMARRAGE ---
-    const loadTeacherMemory = async () => {
-        const res = await fetch('/api/teacher-style').then(r => r.json());
-        if (res.pedagogicalMemory) {
-            setHwConfig(prev => ({ ...prev, teacherPrompt: res.pedagogicalMemory }));
+    const loadSessions = async () => {
+        const res = await fetch('/api/scans/sessions');
+        const data = await res.json();
+        setSessions(data);
+        if (activeSession) {
+            const updated = data.find(s => s._id === activeSession._id);
+            setActiveSession(updated);
         }
     };
+
+    useEffect(() => { loadSessions(); }, []);
 
     useEffect(() => {
-        loadTeacherMemory();
-        if(view === "list") {
-            fetch('/api/scans').then(r => r.json()).then(setScans);
+        if ((view === 'sujets' || view === 'scan') && !loading) {
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+                .then(stream => { if (videoRef.current) videoRef.current.srcObject = stream; })
+                .catch(err => console.error("Camera error", err));
         }
-    }, [view]);
+        return () => {
+            if (videoRef.current && videoRef.current.srcObject) {
+                videoRef.current.srcObject.getTracks().forEach(track => track.stop());
+            }
+        };
+    }, [view, loading]);
 
-    const takeSnap = () => {
+    const handleCapture = () => {
         const video = videoRef.current;
         const canvas = canvasRef.current;
-        canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+        if (!video || !canvas) return;
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
         canvas.getContext('2d').drawImage(video, 0, 0);
         canvas.toBlob(blob => {
-            const file = new File([blob], `snap_${Date.now()}.jpg`, { type: "image/jpeg" });
-            // On stocke aussi une transcription temporaire vide pour l'apprentissage
-            setQueue(prev => [...prev, { file, preview: URL.createObjectURL(blob), id: Math.random() }]);
-        }, 'image/jpeg', 0.85);
+            const url = URL.createObjectURL(blob);
+            setLocalQueue(prev => [...prev, { blob, url, id: Date.now() }]);
+        }, 'image/jpeg', 0.9);
     };
 
-    const saveManualCorrection = async () => {
+    const handleUploadQueue = async () => {
+        if (localQueue.length === 0) return;
         setLoading(true);
-        setStatus("L'IA apprend de toi...");
-        try {
-            const res = await fetch('/api/ia-learn-style', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    originalText: "Texte détecté sur la copie", 
-                    teacherCorrection: manualText
-                })
-            }).then(r => r.json());
+        setStatus("Téléchargement vers le Drive...");
+        const type = view === 'sujets' ? 'SUBJECT' : 'COPY';
 
-            if (res.ok) {
-                setHwConfig(prev => ({ ...prev, teacherPrompt: res.newPrompt }));
-                setQueue(queue.filter(q => q.id !== manualTarget.id));
-                setManualTarget(null);
-                setManualText("");
-                setStatus("Mémoire IA mise à jour ! 🧠");
-            }
-        } catch (e) { setStatus("Erreur apprentissage."); }
+        for (const item of localQueue) {
+            const formData = new FormData();
+            formData.append('file', item.blob, `scan_${Date.now()}.jpg`);
+            formData.append('sessionId', activeSession._id);
+            formData.append('type', type);
+            await fetch('/api/scans/upload', { method: 'POST', body: formData });
+        }
+
+        setLocalQueue([]);
+        await loadSessions();
+        setLoading(false);
+        setView('list');
+    };
+
+    const handleLaunchCorrection = async (sessionId) => {
+        setLoading(true);
+        setStatus("L'IA analyse les copies...");
+        try {
+            await fetch(`/api/scans/correct/${sessionId}`, { method: 'POST' });
+            await loadSessions();
+            setView('list'); // On revient à la liste pour voir les résultats sur la carte
+        } catch (e) { alert("Erreur IA"); }
         setLoading(false);
     };
 
-    if (view === "list") return (
-        <div className="p-6 space-y-6">
-            <button onClick={() => setView("editor")} className="w-full p-8 bg-indigo-600 text-white rounded-[40px] font-black text-2xl shadow-xl">+ NOUVELLE SESSION</button>
-            <div className="space-y-3">{scans.map(s => <div key={s._id} className="bg-white p-4 rounded-2xl border shadow-sm flex justify-between"><b>Note: {s.grade}</b><span>{new Date(s.createdAt).toLocaleDateString()}</span></div>)}</div>
-        </div>
-    );
+    const handleDeleteSession = async (id) => {
+        if(!confirm("Supprimer cette session ?")) return;
+        await fetch(`/api/scans/sessions/${id}`, { method: 'DELETE' });
+        loadSessions();
+    };
 
-    return (
-        <div className="min-h-screen bg-slate-50 flex flex-col">
-            {/* HEADER COMPACT */}
-            <div className="bg-white p-4 border-b-4 border-indigo-600 flex justify-between items-center sticky top-0 z-[100] gap-2">
-                <button onClick={() => setView("list")} className="text-[10px] font-black text-slate-400 bg-slate-100 p-2 rounded-lg">ANNULER</button>
-                <div className="flex-1 px-2 border-x text-center font-black text-indigo-600 uppercase text-sm truncate">{hwConfig.title}</div>
-                <button onClick={() => setShowSettings(!showSettings)} className={`w-10 h-10 rounded-full flex items-center justify-center text-xl shadow-sm ${showSettings ? 'bg-indigo-600 text-white' : 'bg-white text-slate-400'}`}>⚙️</button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-32">
-                {showSettings && (
-                    <div className="bg-white p-6 rounded-[35px] shadow-xl border-4 border-indigo-500 space-y-4 animate-in zoom-in">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Mémoire Pédagogique (Cumulative)</label>
-                        <div className="bg-indigo-50 p-4 rounded-2xl text-xs text-indigo-900 leading-relaxed italic border border-indigo-100">
-                            {hwConfig.teacherPrompt || "L'IA attend tes premières corrections pour apprendre ton style..."}
-                        </div>
-                        <button onClick={() => setHwConfig({...hwConfig, teacherPrompt: ""})} className="w-full text-[9px] font-black text-red-400 uppercase">Réinitialiser le cerveau</button>
+    if (activeSession && view !== 'list') {
+        return (
+            <div className="scan-workspace animate-in">
+                {loading && (
+                    <div className="scan-loading-overlay">
+                        <div className="scan-spinner"></div>
+                        <span className="font-black text-white uppercase tracking-widest">{status}</span>
                     </div>
                 )}
 
-                {/* MODE CORRECTION MANUELLE */}
-                {manualTarget ? (
-                    <div className="flex flex-col gap-4 animate-in slide-in-from-bottom">
-                        <img src={manualTarget.preview} className="w-full h-64 object-contain rounded-2xl bg-white border shadow-inner" />
-                        <div className="bg-white p-6 rounded-[35px] shadow-lg border-2 border-emerald-400 space-y-4">
-                            <h3 className="text-sm font-black text-emerald-600 uppercase">Enseigner ma méthode</h3>
-                            <textarea 
-                                className="w-full h-48 bg-slate-50 p-4 rounded-2xl text-sm outline-none"
-                                placeholder="Tape ta correction ici. Gemini va l'analyser pour enrichir sa mémoire pédagogique..."
-                                value={manualText}
-                                onChange={e => setManualText(e.target.value)}
-                                autoFocus
-                            />
-                            <div className="flex gap-2">
-                                <button onClick={() => setManualTarget(null)} className="flex-1 p-4 bg-slate-100 text-slate-400 rounded-2xl font-black text-xs">ANNULER</button>
-                                <button onClick={saveManualCorrection} className="flex-2 p-4 bg-emerald-500 text-white rounded-2xl font-black text-xs">SAUVEGARDER & ENSEIGNER ✨</button>
+                <div className="workspace-header">
+                    <button onClick={() => setView('list')} className="ws-back-btn">⬅ RETOUR</button>
+                    <div className="ws-title-box">
+                        <h2 className="ws-title">{activeSession.title}</h2>
+                        <span className="ws-subtitle">{view.toUpperCase()}</span>
+                    </div>
+                    {localQueue.length > 0 && (
+                        <button onClick={handleUploadQueue} className="ws-save-btn">SAUVEGARDER ({localQueue.length})</button>
+                    )}
+                </div>
+
+                <div className="workspace-content">
+                    {(view === 'sujets' || view === 'scan') && (
+                        <div className="camera-view">
+                            <div className="cam-wrapper">
+                                <video ref={videoRef} autoPlay playsInline className="cam-video" />
+                                <button onClick={handleCapture} className="cam-trigger" />
+                                <canvas ref={canvasRef} className="hidden" />
+                            </div>
+                            <div className="capture-strip custom-scrollbar">
+                                {localQueue.map(img => (
+                                    <div key={img.id} className="capture-thumb">
+                                        <img src={img.url} />
+                                        <button onClick={() => setLocalQueue(localQueue.filter(i => i.id !== img.id))} className="thumb-del">✕</button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {view === 'results' && (
+                        <div className="results-view">
+                            <div className="results-grid">
+                                {activeSession.corrections?.map((corr, i) => (
+                                    <div key={i} className="res-card" onClick={() => setActiveResult(corr)}>
+                                        <div className="res-card-top">
+                                            <span className="res-name">{corr.studentName}</span>
+                                            <span className={`res-grade grade-${corr.grade[0]}`}>{corr.grade}</span>
+                                        </div>
+                                        <p className="res-text">{corr.appreciation}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {activeResult && (
+                    <div className="v132-correction-overlay animate-in fade-in" onClick={() => setActiveResult(null)}>
+                        <div className="v132-modal-window" onClick={e => e.stopPropagation()}>
+                            <button className="v132-close-btn" onClick={() => setActiveResult(null)}>✕</button>
+                            <div className="v132-image-container custom-scrollbar">
+                                <img src={activeResult.originalUrl} className="v132-copy-img" />
+                            </div>
+                            <div className="v132-text-panel custom-scrollbar">
+                                <div className="v132-info-row">
+                                    <h3 className="v132-student-name">{activeResult.studentName}</h3>
+                                    <div className={`v132-grade-badge grade-${activeResult.grade[0]}`}>{activeResult.grade}</div>
+                                </div>
+                                <div className="v132-content-box">
+                                    <h4 className="v132-label">📝 TRANSCRIPTION & CORRECTIONS</h4>
+                                    <div className="v132-main-text" dangerouslySetInnerHTML={{ __html: activeResult.transcription }} />
+                                    <h4 className="v132-label mt-8">🤖 APPRÉCIATION GÉNÉRALE</h4>
+                                    <div className="v132-appreciation-box">{activeResult.appreciation}</div>
+                                </div>
                             </div>
                         </div>
                     </div>
-                ) : (
-                    <>
-                        {/* SCANNER */}
-                        <div className="relative rounded-[40px] overflow-hidden bg-black aspect-[3/4] shadow-2xl">
-                            <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
-                            <div className="absolute inset-x-0 bottom-6 flex justify-center"><button onClick={takeSnap} className="w-16 h-16 bg-white rounded-full border-4 border-white/20 active:scale-90 shadow-xl"></button></div>
-                            <canvas ref={canvasRef} className="hidden" />
-                        </div>
-
-                        {/* FILE D'ATTENTE */}
-                        <div className="flex gap-3 overflow-x-auto pb-4">
-                            {queue.map(q => (
-                                <div key={q.id} className="relative flex-shrink-0" onClick={() => setManualTarget(q)}>
-                                    <img src={q.preview} className="w-20 h-28 object-cover rounded-xl border-2 border-white shadow-md active:opacity-50" />
-                                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                        <span className="bg-emerald-500/80 text-white text-[8px] font-black px-1 rounded">✍️ ÉDITER</span>
-                                    </div>
-                                    <button onClick={(e) => { e.stopPropagation(); setQueue(queue.filter(x => x.id !== q.id)); }} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 text-xs">✕</button>
-                                </div>
-                            ))}
-                        </div>
-                    </>
                 )}
             </div>
+        );
+    }
 
-            {/* ACTION FINALE IA */}
-            {!manualTarget && (
-                <div className="p-6 bg-white border-t-2 border-slate-100 sticky bottom-0 z-[100]">
-                    <button onClick={() => setStatus("Lancement Correction Automatique...")} disabled={loading || queue.length === 0} className="w-full py-6 bg-indigo-600 text-white rounded-[30px] font-black text-xl shadow-xl">
-                        {loading ? status : `CORRIGER IA (${queue.length})`}
-                    </button>
+    return (
+        <div className="scan-page animate-in fade-in">
+            <div className="flex justify-between items-center mb-10">
+                <div>
+                    <h2 className="text-4xl font-black text-slate-800 uppercase tracking-tighter">Correction Vision 📸</h2>
+                    <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">Scanner et corriger via le Drive Pro</p>
                 </div>
-            )}
+                <button onClick={async () => {
+                    const title = prompt("Titre de l'évaluation :");
+                    if (!title) return;
+                    await fetch('/api/scans/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, teacherId: user.id || user._id }) });
+                    loadSessions();
+                }} className="bg-indigo-600 text-white px-8 py-5 rounded-[25px] font-black text-sm shadow-xl hover:scale-105 transition-transform">
+                    + NOUVELLE SESSION
+                </button>
+            </div>
+
+            <div className="sessions-list">
+                {sessions.map(s => (
+                    <div key={s._id} className="session-card">
+                        <div className="session-card-info">
+                            <h3 className="s-title">{s.title}</h3>
+                            <div className="s-meta">
+                                <span className="s-date">{new Date(s.date).toLocaleDateString()}</span>
+                                <span className="s-divider">•</span>
+                                <span className="s-count">{s.copyUrls?.length || 0} COPIES</span>
+                            </div>
+                        </div>
+                        <div className="session-card-actions">
+                            <button onClick={() => { setActiveSession(s); setView('sujets'); }} className="act-btn btn-sujet">Sujets</button>
+                            <button onClick={() => { setActiveSession(s); setView('scan'); }} className="act-btn btn-scan">Scan</button>
+                            <button onClick={() => { setActiveSession(s); setView('results'); }} className="act-btn btn-results">Résultats</button>
+                            <button onClick={() => handleLaunchCorrection(s._id)} className="act-btn btn-ia">Lancer IA</button>
+                            <button onClick={() => handleDeleteSession(s._id)} className="act-btn btn-delete">✕</button>
+                        </div>
+                    </div>
+                ))}
+            </div>
         </div>
     );
 }

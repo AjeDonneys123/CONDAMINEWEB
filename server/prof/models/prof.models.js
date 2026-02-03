@@ -1,17 +1,12 @@
 // @signatures: ProfModels, UnifiedSingleton, getModel
 const mongoose = require('mongoose');
 
-/**
- * 🏰 SOURCE DE VÉRITÉ UNIQUE V7 - IMMUTABLE
- * Ce fichier définit les schémas ET exporte les modèles déjà compilés.
- */
-
 const SectionSchema = new mongoose.Schema({
     name: { type: String, required: true },
     color: { type: String, default: '#6366f1' },
     scope: { type: String, enum: ['GLOBAL', 'LEVEL', 'CLASS'], default: 'GLOBAL' },
     target: { type: String, default: null },
-    hiddenIn: { type: [String], default: [] }
+    hiddenIn: { type: [String], default: [] } 
 }, { _id: false });
 
 const Schemas = {
@@ -21,7 +16,8 @@ const Schemas = {
         classroom: { type: String, default: "" }, 
         sharedLevel: { type: String, default: "" }, 
         teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher' }, 
-        isArchived: { type: Boolean, default: false } 
+        isArchived: { type: Boolean, default: false },
+        hiddenIn: { type: [String], default: [] } // NOUVEAU
     }, { timestamps: true }),
 
     Classroom: new mongoose.Schema({ 
@@ -66,7 +62,8 @@ const Schemas = {
         levels: { type: Array, default: [] }, 
         assignedStudents: [mongoose.Schema.Types.ObjectId], 
         isAllClass: { type: Boolean, default: true }, 
-        date: { type: Date, default: Date.now } 
+        date: { type: Date, default: Date.now },
+        hiddenIn: { type: [String], default: [] } // NOUVEAU
     }),
 
     GameLevel: new mongoose.Schema({ 
@@ -76,7 +73,8 @@ const Schemas = {
         targetClassrooms: { type: [String], default: [] }, 
         questions: { type: Array, default: [] }, 
         assignedStudents: [mongoose.Schema.Types.ObjectId],
-        isAllClass: { type: Boolean, default: true } 
+        isAllClass: { type: Boolean, default: true },
+        hiddenIn: { type: [String], default: [] } // NOUVEAU
     }),
 
     ScanSession: new mongoose.Schema({ 
@@ -133,10 +131,8 @@ const Schemas = {
     }, { timestamps: true })
 };
 
-// Fonction de création sécurisée pour éviter OverwriteModelError
 const getModel = (name) => mongoose.models[name] || mongoose.model(name, Schemas[name]);
 
-// On exporte les modèles déjà compilés
 module.exports = {
     Chapter: getModel('Chapter'),
     Classroom: getModel('Classroom'),

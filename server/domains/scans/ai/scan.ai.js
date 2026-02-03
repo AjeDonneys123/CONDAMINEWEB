@@ -14,7 +14,7 @@ const streamToBuffer = async (stream) => {
 
 const ScanAI = {
     correctCopy: async (copyUrl, subjectUrls, instructions, studentList) => {
-        console.log("👁️ [SCAN-AI] Correction V167 (Double Passe Littérale)...");
+        console.log("👁️ [SCAN-AI] Correction V132 (Fusion Transcription/Correction)...");
 
         const rosterText = studentList.map(s => `${s.firstName} ${s.lastName}`).join(', ');
 
@@ -33,43 +33,40 @@ const ScanAI = {
         const copyB64 = await getImageData(copyUrl);
         if (!copyB64) return { studentName: "Erreur", grade: "?", appreciation: "Image non chargée" };
 
-        // ÉTAPE 1 : OCR GOOGLE VISION (Lecture brute des caractères)
         const ocrResult = await OCREngine.extractText(copyB64);
         
-        // ÉTAPE 2 : PROMPT "ROBOT SCRIBE" (Zéro interprétation, Zéro correction)
-        const scribeSystem = `Tu es un ROBOT SCRIBE dont l'unique fonction est de COPIER des caractères.
+        // --- NOUVEAU SYSTÈME DE SCRIBE HYBRIDE ---
+        const scribeSystem = `Tu es un PROFESSEUR CORRECTEUR. Ta mission est de retranscrire la copie de l'élève tout en y insérant tes corrections.
         
-        TES RÈGLES DE FER :
-        1. NE RAJOUTE JAMAIS DE MOTS : Si l'élève écrit "qu'une personne", n'écris PAS "qu'une personne vit".
-        2. NE CORRIGE PAS LA GRAMMAIRE : Si la phrase est cassée ou incomplète, laisse-la cassée.
-        3. RESPECTE L'ESPAGNOLISME : Si tu vois "foto" ou "nordes", écris "foto" ou "nordes".
-        4. SOIS STUPIDE : Ne cherche pas à donner du sens. Si un mot est illisible mais ressemble à "qu'", écris "qu'".
-        5. IDENTIFIE LE NOM : Parmi cette liste [${rosterText}].
+        RÈGLES DE RENDU (TRÈS IMPORTANT) :
+        1. TRANSCRIPTION : Écris le texte original de l'élève en noir (texte brut).
+        2. CORRECTIONS : Dès que tu vois une faute (orthographe, grammaire, syntaxe) ou une erreur de fond, entoure ta correction par <span class="ai-red-mark">...</span>.
+        3. FUSION : Ne sépare pas la transcription et la correction. La correction doit être insérée immédiatement après l'erreur ou remplacer l'erreur si elle est illisible.
+        4. APPRÉCIATION : Finis toujours par une courte appréciation globale.
+        5. IDENTITÉ : Trouve le nom parmi cette liste : [${rosterText}].
 
-        FORMAT DE RÉPONSE REQUIS (JSON) :
+        EXEMPLE DE SORTIE DANS LE CHAMP 'transcription' :
+        "Le chat <span class="ai-red-mark">mange</span> (au lieu de manj) sa souris. C'était une <span class="ai-red-mark">belle</span> journée."
+
+        FORMAT JSON REQUIS :
         {
-            "studentName": "Nom identifié",
-            "grade": "Note finale A+, A, B ou C",
-            "appreciation": "Ton analyse pédagogique (ici tu peux parler normalement)",
-            "transcription": "LE TEXTE COPIÉ MOT POUR MOT, SANS AUCUNE CORRECTION."
+            "studentName": "Nom",
+            "grade": "A+, A, B ou C",
+            "appreciation": "Ton avis global ici",
+            "transcription": "LE TEXTE COMPLET AVEC LES BALISES HTML ROUGES"
         }`;
 
         const promptParts = [
-            { text: `Voici l'OCR brut pour t'aider à déchiffrer : "${ocrResult.success ? ocrResult.text : 'Indisponible'}"` },
-            { text: "TRANSCRIRE LITTÉRALEMENT CETTE IMAGE :" },
+            { text: `Consignes du prof : "${instructions}"` },
+            { text: `OCR de base pour aide : "${ocrResult.success ? ocrResult.text : 'Non disponible'}"` },
             { inlineData: { mimeType: "image/jpeg", data: copyB64 } }
         ];
 
         try {
-            // On utilise une température très basse (0.1) pour forcer la fidélité
             const rawText = await AIEngine.ask(promptParts, scribeSystem);
-            const result = AIEngine.sanitizeJSON(rawText);
-
-            result.transcription = `[MOTEUR : VISION API + GEMINI SCRIBE]\n\n` + (result.transcription || "");
-            return result;
-
+            return AIEngine.sanitizeJSON(rawText);
         } catch (e) {
-            return { studentName: "Erreur", grade: "?", appreciation: "Échec Moteur", transcription: e.message };
+            return { studentName: "Erreur", grade: "?", appreciation: "Échec analyse", transcription: "Impossible de générer la correction." };
         }
     }
 };

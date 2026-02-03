@@ -5,7 +5,6 @@ import './HomeworkStudio.css';
 const SUBJECTS_LIST = ["MATHS", "FRANÇAIS", "HISTOIRE-GÉO", "ANGLAIS", "ESPAGNOL", "ALLEMAND", "SVT", "PHYSIQUE-CHIMIE", "TECHNOLOGIE", "ARTS PLASTIQUES", "MUSIQUE", "EPS", "LATIN", "GREC", "PHILOSOPHIE", "SES", "NSI"];
 
 export const StudioUtils = {
-    // ✅ FIX : RÉTABLISSEMENT DE LA FONCTIONgetChaptersForContext
     getChaptersForContext: (selectedClasses, chapters, user, targetSection, allClasses) => {
         if (!selectedClasses || selectedClasses.length === 0) return [];
         const uid = String(user.id || user._id);
@@ -31,6 +30,7 @@ export const StudioUtils = {
         const commonChapters = chaptersPerClass[0]
             .filter(c => commonTitles.includes(c.title))
             .sort((a, b) => a.title.localeCompare(b.title, undefined, { numeric: true }));
+        
         if (commonChapters.length === 0) {
             return (chapters || []).filter(c => !c.isArchived && c.classroom === "" && c.sharedLevel === "" && c.section === "GÉNÉRAL");
         }
@@ -39,7 +39,17 @@ export const StudioUtils = {
 
     findDefaultChapterId: (selectedClasses, chapters, user, targetSection, allClasses) => {
         const available = StudioUtils.getChaptersForContext(selectedClasses, chapters, user, targetSection, allClasses);
-        if (available.length > 0) return available[0]._id;
+        
+        // V18:45 - RÈGLE DE SÉLECTION INTELLIGENTE :
+        // On exclut le dossier racine "GÉNÉRAL" si d'autres dossiers sont disponibles.
+        const specific = available.filter(c => !(c.section === "GÉNÉRAL" && c.title === "GÉNÉRAL"));
+        
+        // Si on a des dossiers spécifiques, on prend le plus récent (le dernier créé)
+        if (specific.length > 0) return String(specific[specific.length - 1]._id);
+        
+        // Sinon fallback sur le premier disponible (souvent la racine)
+        if (available.length > 0) return String(available[0]._id);
+        
         return "";
     },
 
@@ -80,13 +90,14 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, use
             ]);
             setAllStudents(sts);
             setAllClasses(cls);
+            
             const mySubjectIds = (user.taughtSubjects || []).map(id => String(id));
             let finalList = [];
             if (mySubjectIds.length > 0 && !user.isDeveloper && user.role !== 'admin') {
                 finalList = subData.filter(s => mySubjectIds.includes(String(s._id))).map(s => s.name);
             } else { finalList = subData.map(s => s.name).sort(); }
             setAvailableSubjects(finalList);
-            if (!initialData && finalList.length > 0) setFormData(prev => ({ ...prev, subject: finalList[0] }));
+
             if (initialData) {
                 const targets = initialData.targetClassrooms || [initialData.classroom];
                 const newDist = {};
@@ -105,8 +116,10 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, use
             }
             else if (globalClass) {
                 setViewingClass(globalClass);
+                // V18:45 - APPEL LOGIQUE SÉLECTION AUTO
                 const defId = StudioUtils.findDefaultChapterId([globalClass], chapters, user, targetSection, cls);
                 setDistribution({ [globalClass]: { chapterId: defId, studentIds: [] } });
+                setFormData(prev => ({ ...prev, chapterId: defId, subject: finalList[0] || "Général" }));
             }
         } catch(e) { console.error("Load Error", e); }
     };
@@ -219,7 +232,11 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, use
 
                         <div className="p-3 bg-white rounded-xl border border-slate-200 mb-4">
                             <label className="text-[9px] font-black text-slate-400 uppercase mb-1 block">Ranger dans :</label>
-                            <select className="w-full p-2 rounded-lg text-xs font-bold border border-slate-100 outline-none bg-slate-50" value={distCfg?.chapterId || StudioUtils.findDefaultChapterId([viewingClass], chapters, user, targetSection, allClasses)} onChange={(e) => handleUpdateChapter(viewingClass, e.target.value)}>
+                            <select 
+                                className="w-full p-2 rounded-lg text-xs font-bold border border-slate-100 outline-none bg-slate-50" 
+                                value={distCfg?.chapterId || StudioUtils.findDefaultChapterId([viewingClass], chapters, user, targetSection, allClasses)} 
+                                onChange={(e) => handleUpdateChapter(viewingClass, e.target.value)}
+                            >
                                 <option value="">-- CHOISIR DOSSIER --</option>
                                 {availableChapters.map(c => <option key={c._id} value={c._id}>{c.title}</option>)}
                             </select>

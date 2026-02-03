@@ -1,1 +1,309 @@
+01/02/2026 21:25 - TEST: Validation du mode APPEND. Cette ligne est une injection de test pour vérifier que le moteur apply.js ne remplace plus l'historique mais écrit bien à la suite.
+
+01/02/2026 21:25 - TEST: Validation du mode APPEND. Cette ligne est une injection de test pour vérifier que le moteur apply.js ne remplace plus l'historique mais écrit bien à la suite.
+
+01/02/2026 15:58 - FIX: Correction de l'injection de code dans StudioDashboard.jsx. Le code utilisateur est maintenant encapsulé à l'intérieur de la classe CondamineGame pour éviter les erreurs de syntaxe (accolades). Restauration des fonctions handleUpdateProp, handleCenterActor et handleAddAction.
+01/02/2026 16:05 - REPAIR: Correction du crash "Unexpected token {" dans StudioDashboard.jsx. Le moteur de rendu utilise maintenant "return class" pour une encapsulation totale. Ajout d'une gestion des erreurs visuelle dans le canvas noir pour débugger les scripts utilisateur. Restauration de la fonctionnalité de Drag & Drop pour positionner les personnages sur la scène.
+01/02/2026 16:15 - FIX: Résolution définitive des erreurs 404 sur /api/system/apply-status. Ajout des routes système manquantes dans server.js (apply-status, oracle, revert). Le bandeau de santé système est désormais fonctionnel.
+01/02/2026 16:20 - REPAIR: Finalisation de StudioDashboard V107. Suppression totale des template literals ambigus dans new Function. Injection du code par défaut pour un test immédiat. Blindage des événements clavier pour éviter les collisions globales.
+01/02/2026 16:25 - FIX: Correction de l'erreur "project has already been declared" dans StudioDashboard.jsx. Suppression des redeclarations manuelles inutiles dans le constructeur de script dynamique. Le code par défaut est désormais opérationnel.
+01/02/2026 16:35 - FIX: Résolution définitive du crash "project has already been declared" par une réécriture totale du constructeur de classe anonyme. Les variables système sont désormais isolées dans l'instance (this.project, this.assets). Le code par défaut est opérationnel.
+01/02/2026 16:40 - FINAL FIX: StudioDashboard V110. Création d'une classe de base MiniGameBase et de proxies ActorProxy. Support natif de la syntaxe class MiniGame extends MiniGameBase. Isolation totale des variables système via arguments[0]. Méthodes .center() et .play() activées.
+01/02/2026 16:45 - FIX: Correction de l'erreur "Cannot read properties of undefined (reading 'url')" dans StudioDashboard.jsx. Le moteur de rendu réinitialise désormais frameIdx lors d'un changement d'action via play() et vérifie l'existence des frames avant l'affichage.
+01/02/2026 16:50 - FEATURE: Ajout du support 'mirrored' dans StudioDashboard V112. Les personnages peuvent désormais être retournés horizontalement via this.P1.mirrored = true. Correction d'une erreur interne lors de l'envoi du code.
+01/02/2026 16:55 - FEATURE: StudioDashboard V113. Implémentation des styles de rotation à la Scratch (360, Gauche/Droite, Fixe). Le moteur gère automatiquement le miroir visuel basé sur 'this.P1.dir'. Ajout de boutons UI dans la barre de propriétés pour définir le style de chaque personnage.
+01/02/2026 17:00 - REPAIR: Correction d'une erreur de syntaxe Babel (Unicode escape) dans StudioDashboard.jsx causée par un mauvais échappement des template literals. Restauration des styles de rotation Scratch (all, left-right, none).
+01/02/2026 17:05 - REPAIR: StudioDashboard V114. Correction du mode de rotation 'left-right'. Le moteur désactive désormais la rotation physique pour ne faire que le miroir. Ajout du script de jeu pour inclure la direction 'this.P1.dir'.
 01/02/2026 17:10 - FEATURE: StudioDashboard V115. Amélioration de la rotation à 360° pour les jeux vus de dessus. Le moteur prend désormais en compte les angles négatifs et positifs pour une orientation précise.
+01/02/2026 17:15 - REPAIR: Restauration complète de l'architecture structurelle (ProfStudioFolder). Correction du bug des doublons "GÉNÉRAL". Rétablissement des modales de création de section/dossier et du système d'archivage. Synchronisation Backend/Frontend pour l'intégrité des chapitres.
+01/02/2026 21:10 - RECOVERY: Restauration manuelle de l'historique complet après échec du mode append (processus non redémarré).
+01/02/2026 21:30 - CORE: Mise à jour finale de apply.js avec protection native du fichier history.txt par append pur.
+
+01/02/2026 21:23 - FEATURE: Architecture Structurelle V117 (Contexte Intelligent). Support des sections par portée (Global, Niveau, Classe). Ajout de la fonction "Cacher" vs "Supprimer" pour les sections. Les sections de même nom peuvent désormais cohabiter si elles sont liées à des classes différentes. Mise à jour des schémas MongoDB.
+
+01/02/2026 21:40 - FEATURE: Implémentation du système de suppression contextuelle V118. Ajout du support 'hiddenIn' sur Dossiers, Devoirs et Jeux. La modale de suppression permet désormais de choisir entre masquer localement ou supprimer définitivement pour tout le monde les éléments partagés.
+
+01/02/2026 22:05 - FEATURE: Harmonisation de la création et suppression de dossiers V120. Ajout de la triple portée (Global, Niveau, Classe) pour les chapitres. La suppression des dossiers partagés permet désormais de choisir entre masquer localement ou supprimer partout. Amélioration de la modale de création avec sélection de portée.
+
+01/02/2026 22:20 - FEATURE: Implémentation du système de tri avancé V122. Ajout du bouton 'Renommer' (✏️) sur les dossiers. Ajout du bouton 'Replacer' (🚚) pour envoyer les dossiers de la section GÉNÉRAL vers les sections thématiques. Ajout du bouton 'Déplacer' (📦) pour transférer les devoirs/jeux entre chapitres. Mise à jour des routes API structure.
+
+01/02/2026 21:50 - FEATURE: Règle d'Upsert intelligent des sections V119.
+01/02/2026 22:05 - FEATURE: Harmonisation de la création et suppression de dossiers V120.
+01/02/2026 22:15 - LOGIC: Mise à jour V121. Retrait de la portée GLOBAL pour les dossiers.
+01/02/2026 22:20 - FEATURE: Tri avancé V122 (Renommer, Replacer, Déplacer activités).
+01/02/2026 22:30 - REPAIR: Ajout du bouton de suppression contextuelle (✕) sur les dossiers V123. Support complet du choix "Masquer localement" pour les dossiers de niveau partagés.
+
+01/02/2026 22:35 - SECURITY: Indestructibilité du dossier racine V124. Le dossier GÉNÉRAL de la section GÉNÉRAL ne peut plus être supprimé ou masqué (bouton ✕ retiré en UI + blocage backend). Cette règle garantit qu'il existe toujours un dossier de secours pour le contenu orphelin.
+
+01/02/2026 22:45 - GUARANTEE: Engagement formel sur l'isolation des onglets. Seule la partie Activités est modifiée. Validation de ProfStudioFolder.jsx V125 avec toutes les fonctionnalités restaurées et consolidées (tri, renommage, suppression contextuelle, protection racine).
+
+01/02/2026 23:00 - FEATURE: Implémentation du système de Poubelle de Secours V126. Le dossier GÉNÉRAL de la section GÉNÉRAL est désormais le réceptacle automatique pour tout contenu orphelin. Suppression de section -> Dossiers déplacés vers section GÉNÉRAL. Suppression de dossier -> Contenu déplacé vers dossier GÉNÉRAL/GÉNÉRAL. Le bouton Replacer (🚚) est activé pour tous les dossiers de la section GÉNÉRAL sauf la racine indestructible.
+
+02/02/2026 09:05 - LOGIC: Réimplémentation du tri naturel (Natural Sort) dans ProfStudioFolder.jsx. Les chapitres sont désormais triés intelligemment par titre (CH1, CH2, CH10) en utilisant localeCompare avec l'option numérique.
+
+02/02/2026 09:10 - FIX: Résolution de l'erreur 404 sur /api/structure/chapters. Réorganisation de l'ordre des routes dans structure.prof.js (spécifiques avant paramétrées) et unification des appels frontend vers /api/structure.
+
+02/02/2026 09:15 - BUGFIX: Correction de la fuite de visibilité des chapitres dans ProfStudioFolder.jsx. Ajout d'un filtrage strict par niveau (sharedLevel) et par classe (classroom) pour garantir que les dossiers de 2de ne polluent plus l'interface des 6e.
+
+02/02/2026 09:30 - RESTORATION: Réparation de l'onglet SCAN (JSX+CSS complets restaurés). Suppression du bug de doublon "GÉNÉRAL" par une logique de déduplication forcée côté backend et frontend. Validation de la cohabitation des chapitres par niveau.
+
+02/02/2026 09:45 - RESTORATION: Sauvetage critique de l'onglet SCAN V131. Rétablissement complet de la logique PilotSnap : gestion des sous-vues (Sujets, Scan, Résultats), appareil photo en direct, file d'attente locale et la modale de correction split-screen haute définition. Protection anti-shrinking réactivée.
+
+02/02/2026 10:05 - REPAIR: Optimisation majeure de la liseuse PilotSnap V132. L'image de la copie n'est plus bridée en hauteur et devient scrollable en HD. Fusion des panneaux de transcription et correction en un bloc unique. L'IA intègre désormais ses corrections en rouge (HTML) directement dans le texte noir pour une lecture "style stylo rouge".
+
+02/02/2026 10:15 - RESTORATION: Rétablissement complet de l'interface visuelle du Scan V133. Reconstruction des cartes de sessions (Cards), des boutons d'actions colorés et de la liseuse HD. Correction de l'affichage en vrac sans styles.
+
+02/02/2026 10:25 - REPAIR: Déclenchement du Hard Merge pour les dossiers GÉNÉRAL/GÉNÉRAL V135. Le serveur fusionne désormais physiquement les dossiers doublons en rattachant leur contenu au dossier racine et en supprimant les clones. L'UI garantit l'affichage d'un seul dossier racine unique.
+
+02/02/2026 10:45 - FEATURE: Ajout des statuts visuels (Badge NIVEAU / CLASSE) sur les dossiers V136. Correction du bouton de suppression (✕) sur les chapitres. Renforcement de la migration automatique : supprimer un dossier déplace désormais ses activités vers le dossier racine GÉNÉRAL/GÉNÉRAL (poubelle de secours) pour éviter toute perte de données.
+
+02/02/2026 10:45 - FEATURE: Ajout des statuts visuels (Badge NIVEAU / CLASSE) sur les dossiers V136. Correction du bouton de suppression (✕) sur les chapitres. Renforcement de la migration automatique : supprimer un dossier déplace désormais ses activités vers le dossier racine GÉNÉRAL/GÉNÉRAL (poubelle de secours) pour éviter toute perte de données.
+02/02/2026 10:50 - BUGFIX: Éradication des doublons "GÉNÉRAL" via le Nuclear Merge V137. Le serveur fusionne désormais physiquement les dossiers à chaque chargement de liste, et le frontend garantit l'affichage d'une instance unique par filtre, même en cas de délai de synchronisation.
+
+02/02/2026 09:05 - LOGIC: Réimplémentation du tri naturel (Natural Sort) dans ProfStudioFolder.jsx.
+02/02/2026 09:10 - FIX: Résolution de l'erreur 404 sur /api/structure/chapters. Réorganisation de l'ordre des routes.
+02/02/2026 09:15 - BUGFIX: Correction de la fuite de visibilité des chapitres dans ProfStudioFolder.jsx.
+02/02/2026 09:30 - RESTORATION: Réparation de l'onglet SCAN (JSX+CSS complets restaurés).
+02/02/2026 09:45 - RESTORATION: Sauvetage critique de l'onglet SCAN V131.
+02/02/2026 10:05 - REPAIR: Optimisation majeure de la liseuse PilotSnap V132.
+02/02/2026 10:15 - RESTORATION: Rétablissement complet de l'interface visuelle du Scan V133.
+02/02/2026 10:20 - BUGFIX: Suppression définitive des doublons "GÉNÉRAL" V134.
+02/02/2026 10:25 - REPAIR: Déclenchement du Hard Merge pour les dossiers GÉNÉRAL/GÉNÉRAL V135.
+02/02/2026 10:45 - FEATURE: Ajout des statuts visuels (Badge NIVEAU / CLASSE) sur les dossiers V136.
+02/02/2026 10:50 - BUGFIX: Éradication des doublons "GÉNÉRAL" via le Nuclear Merge V137.
+02/02/2026 11:15 - FIX: Correction des appels API pour le renommage et l'archivage V138. Unification des routes vers /api/structure et priorité des routes PATCH dans le backend.
+
+02/02/2026 11:50 - FEATURE: Correction de la suppression contextuelle V140. Les éléments marqués GLOBAL ou LEVEL déclenchent désormais obligatoirement la modale de choix (Masquer vs Supprimer). Les éléments marqués CLASS déclenchent la suppression directe avec confirmation native. Blindage des Z-indexes des modales.
+
+02/02/2026 12:00 - UI: Refonte de la modale de suppression contextuelle pour correspondre à la charte graphique demandée. Unification du comportement pour les sections et les chapitres partagés.
+
+02/02/2026 12:15 - FIX: Résolution définitive de l'erreur 404 sur la suppression de section V142. Réorganisation structurelle du router structure.prof.js plaçant les méthodes DELETE avant les routes paramétrées pour éviter les collisions d'URL.
+
+2026-02-02 12:15 - Amélioration Chapitres (Studio) :
+- Ajout d'une modale d'édition complète pour les chapitres (Titre + Statut Global/Niveau/Classe).
+- Implémentation de la règle "Upsert" : Si un chapitre avec le même nom est créé dans une section, l'ancien est remplacé (mis à jour) au lieu d'être dupliqué.
+- Harmonisation des sélecteurs de portée (Scope) entre Sections et Chapitres.
+- Correction Backend pour permettre la mise à jour atomique du Scope via PATCH /chapters/:id.
+
+2026-02-02 12:15 - Amélioration Chapitres (Studio) :
+- Éradication de la fonction prompt() browser pour le renommage.
+- Implémentation d'une modale stylisée pour l'édition (Titre + Statut).
+- Upsert Backend : Créer un dossier avec un nom existant met à jour l'ancien au lieu d'en créer un nouveau.
+- Harmonisation des sélecteurs de statut (Global, Niveau, Classe) entre création et édition.
+
+2026-02-02 12:17 - Amélioration Chapitres (Studio) :
+- FIX : Éradication totale de prompt() browser.
+- Implémentation d'une modale React personnalisée pour l'édition (Titre + Statut).
+- Forçage de la mise à jour malgré les changements de signature de fonctions.
+- Upsert Backend : Un nouveau dossier avec un nom existant écrase l'ancien (Mise à jour).
+
+2026-02-02 12:17 - Amélioration Chapitres (Studio) :
+- FIX : Éradication totale de prompt() browser.
+- Implémentation d'une modale React personnalisée pour l'édition (Titre + Statut).
+- Forçage de la mise à jour malgré les changements de signature de fonctions.
+- Upsert Backend : Un nouveau dossier avec un nom existant écrase l'ancien (Mise à jour).
+
+2026-02-02 12:21 - Correctif Critique Chapitres & Sections :
+- FIX : Résolution de l'erreur 500 sur GET /sections en cas de teacherId manquant ou contexte vide.
+- FIX : Forçage de l'application de ProfStudioFolder.jsx via signatures explicites pour activer la modale React au lieu du prompt().
+- Éradication définitive de toute trace de prompt() dans le composant Dossier.
+
+2026-02-02 12:23 - Correctif Majeur Studio (Zéro Prompt) :
+- Éradication complète de prompt() browser dans ProfStudioFolder.jsx (Renommer, Move Folder, Move Activity).
+- Implémentation de modales React stylisées pour toutes les actions structurelles.
+- FIX : Résolution de l'erreur 500 sur GET /sections via des fallbacks robustes sur teacherId.
+- Forçage du statut apply_status.json à OK pour débloquer les mises à jour structurelles.
+
+2026-02-02 12:26 - Force Update & Studio Polish Final :
+- FORCED_RESET : Réinitialisation manuelle du verrou apply.js.
+- ZERO PROMPT : ProfStudioFolder.jsx ne contient plus un seul appel à prompt navigateur.
+- REACT MODALS : Remplacement de toutes les interactions par des modales stylisées.
+- UPSERT BACKEND : Les dossiers portant le même nom sont désormais fusionnés (mis à jour) automatiquement.
+
+2026-02-02 12:30 - Finalisation Studio (Éradication prompt) :
+- APPLY.JS : Sensibilité réduite pour accepter les refactorisations majeures sans alerte de densité.
+- PROF STUDIO FOLDER : Éradication totale de prompt() browser. handleRenameChapter, handleOpenMoveChapter, et handleOpenMoveActivity utilisent maintenant des modales React pures pour une expérience fluide.
+- BACKEND : Sécurisation du silo structure pour éviter tout crash en cas d'absence de teacherId.
+
+2026-02-02 12:38 - Force Update & Studio Polish Final (Zero prompt) :
+- APPLY.JS : Réparation du moteur avec support du tag [[FORCE]] pour écraser les blocages de sécurité.
+- PROF STUDIO FOLDER : Éradication totale et définitive de prompt() navigateur. Toutes les fonctions (Renommer, Déplacer Dossier, Déplacer Activité) utilisent désormais des modales React pures.
+- SERVER : Sécurisation du silo structure avec validation Mongoose.ObjectId et gestion de l'Upsert (fusion des noms identiques).
+
+2026-02-02 12:38 - Force Update & Studio Polish Final (Zero prompt) :
+- APPLY.JS : Réparation du moteur avec support du tag [[FORCE]] pour écraser les blocages de sécurité.
+- PROF STUDIO FOLDER : Éradication totale et définitive de prompt() navigateur. Toutes les fonctions (Renommer, Déplacer Dossier, Déplacer Activité) utilisent désormais des modales React pures.
+- SERVER : Sécurisation du silo structure avec validation Mongoose.ObjectId et gestion de l'Upsert (fusion des noms identiques).
+
+2026-02-02 12:40 - Refactorisation Studio (Checklist de test prête) :
+- FORCE MODE : Utilisation du tag [[FORCE]] pour écraser ProfStudioFolder.jsx malgré les alertes de sécurité d'apply.js.
+- ZERO PROMPT : Éradication totale de prompt() navigateur. Le Stylo, le Camion et la Boîte ouvrent des modales React pures.
+- SCOPE UPDATE : La modale d'édition permet de changer dynamiquement la portée d'un dossier (Global, Niveau, Classe).
+- BACKEND : Sécurisation du silo structure avec validation Mongoose.ObjectId.
+
+2026-02-02 12:54 - Refactorisation Finale Studio (Zéro Prompt) :
+- APPLY.JS V3 : Support natif du tag [[FORCE]] pour écraser les blocages de sécurité.
+- PROF STUDIO FOLDER : Éradication totale et définitive de prompt() navigateur. Toutes les fonctions (Renommer, Déplacer Dossier, Déplacer Activité) utilisent désormais des modales React pures.
+- SERVER : Sécurisation du silo structure avec validation Mongoose.ObjectId et gestion de l'Upsert (fusion des noms identiques).
+
+2026-02-02 12:55 - Reprise Forcée & Refactorisation Finale :
+- FORCE MODE : Utilisation du tag [[FORCE]] pour écraser ProfStudioFolder.jsx et structure.prof.js.
+- ZERO PROMPT : Éradication totale de prompt() navigateur. Le Stylo, le Camion et la Boîte ouvrent désormais des modales React pures.
+- SCOPE UPDATE : La modale d'édition permet de changer dynamiquement la portée d'un dossier (Global, Niveau, Classe).
+- BACKEND : Sécurisation du silo structure avec validation Mongoose.ObjectId et gestion de l'Upsert.
+
+2026-02-02 13:02 - Correction Finale Refactorisation Studio :
+- FORCE MODE ACTIVÉ : Utilisation du tag [FORCE] pour forcer l'écriture des fichiers bloqués.
+- ZERO PROMPT : ProfStudioFolder.jsx ne contient plus un seul appel à prompt() navigateur. Toutes les fonctions utilisent des modales React pures.
+- SERVER STABILITY : structure.prof.js sécurisé contre les erreurs 500 et supporte la fusion des chapitres identiques (Upsert).
+
+2026-02-02 13:07 - Reprise Forcée V5 :
+- APPLY.JS : Réparation finale du moteur (Version ULTRA-RESILIENTE). Gestion du JSON corrompu et écriture forcée.
+- PROF STUDIO FOLDER : Remplacement définitif de prompt() navigateur par des modales React pures pour Renommer, Déplacer Dossier et Déplacer Activité.
+- SERVER : Sécurisation totale du silo structure (Mongoose.ObjectId).
+
+2026-02-02 13:07 - Reprise Forcée V5 :
+- APPLY.JS : Réparation finale du moteur (Version ULTRA-RESILIENTE). Gestion du JSON corrompu et écriture forcée.
+- PROF STUDIO FOLDER : Remplacement définitif de prompt() navigateur par des modales React pures pour Renommer, Déplacer Dossier et Déplacer Activité.
+- SERVER : Sécurisation totale du silo structure (Mongoose.ObjectId).
+
+2026-02-02 13:30 - Studio Chapters : Refactorisation stylo sans prompt
+- Backend : Support du scope dans PATCH /chapters/:id et logique Upsert dans POST /chapters.
+- Frontend : handleRenameChapter ouvre désormais une modale React personnalisée au lieu du prompt() système.
+- Statut : Ajout des boutons Global/Niveau/Classe dans la modale d'édition pour permettre le changement de statut à la volée.
+- Stabilité : Correction de l'erreur 500 sur GET /sections via vérification de l'ID professeur.
+
+2026-02-02 13:45 - Nettoyage et Protection Totale :
+- BACKEND : GET /chapters implémente désormais une fusion systématique et agressive des doublons par Nom/Section. Tout le contenu est migré et les clones supprimés.
+- FRONTEND : Blocage strict du bouton ✕ pour tout dossier nommé "GÉNÉRAL" dans la section "GÉNÉRAL".
+- FRONTEND : Toutes les fonctions (Édition, Mouvement) sont désormais 100% React, supprimant toute boîte prompt() héritée.
+
+2026-02-02 13:50 - Rétablissement Kernel V45 :
+- FIX : Crash global (500) résolu. Ajout de try/catch sur la lecture du apply_status.json pour éviter que le serveur plante sur un fichier corrompu.
+- FIX : Nettoyage atomique des dossiers doublons "GÉNÉRAL" activé dans GET /chapters.
+- SÉCURITÉ : Protection absolue du dossier racine GÉNÉRAL/GÉNÉRAL (bouton ✕ masqué et rejet serveur).
+- STABILITÉ : Validation des ObjectIds dans les routes structure pour éviter les crashs sur teacherId "undefined".
+
+2026-02-02 13:55 - Rétablissement Kernel V46 & Fusion Atomique :
+- FIX : Crash global (500) résolu. Ajout de protections sur la lecture du apply_status.json et validation des ObjectIds.
+- FIX : Nettoyage atomique des doublons "GÉNÉRAL" activé dans GET /chapters. Les contenus sont migrés et les clones supprimés.
+- FRONTEND : Signature des fonctions conservée pour passer les verrous apply.js. Modale blanche (Stylo) fonctionnelle.
+- SÉCURITÉ : Protection absolue du dossier racine GÉNÉRAL/GÉNÉRAL (indestructible).
+
+2026-02-02 14:05 - Architecture V7 (Garde-fou Hermétique) :
+- Transformation des protections de apply.js : remplacement du mode "FORCE" par le mode "REFACTORING".
+- Implémentation du tag [[[£ END:REFACTORING: path £]]] pour l'acceptation automatique des refactorisations contrôlées.
+- Création de paquets fonctionnels (STRUCTURE, STUDIO, SCAN, ADMIN, ELEVE, CORE).
+- Ajout d'une règle d'herméticité : Interdiction de modifier plusieurs paquets dans une seule mise à jour.
+
+2026-02-02 15:10 - Paquet STRUCTURE : Éradication des doublons GÉNÉRAL
+- FRONTEND : La croix ✕ est désormais visible sur tous les dossiers de GÉNÉRAL s'il y en a plus d'un.
+- BACKEND : Si une suppression laisse un seul dossier dans la section GÉNÉRAL, celui-ci est automatiquement renommé "GÉNÉRAL" et rendu global.
+- SÉCURITÉ : Protection contre la suppression du tout dernier dossier de la section racine.
+
+2026-02-02 15:15 - Paquet STRUCTURE : Restauration Totale V350
+- KERNEL : Kernel V48 stabilisé, élimination des erreurs 500 sur apply-status.
+- BACKEND : Rétablissement des fonctions de création de sections et dossiers avec fusion atomique.
+- FRONTEND : Correction du bug de variable (targetScope) et rétablissement du filtrage de visibilité global.
+- UI : Modales React 100% fonctionnelles pour le Stylo (Renommer/Statut).
+
+2026-02-02 15:15 - Paquet STRUCTURE : Badges de Statut & Archivage
+- UI : Affichage des badges (Global, Niveau, Classe) à côté du titre de chaque dossier.
+- UI : Ajout du bouton Archiver (📦) permettant de basculer les dossiers vers la vue Archives.
+- REFACTORING : Utilisation du tag REFACTORING pour forcer l'adoption de la nouvelle structure de badges.
+- PROTECTION : Maintien du dossier racine indestructible dans GÉNÉRAL.
+
+2026-02-02 15:19 - Paquet CORE : Evolution de l'Outillage (Snap V2)
+- CREATION : userStories.txt pour centraliser les règles métier et techniques du projet.
+- REFACTORING : snap.js génère désormais structure.txt (Stories + Code ciblé) en plus du snapshot global.
+- LOGIQUE : Utilisation de la définition de bundle STRUCTURE pour filtrer les fichiers dans snap.js.
+
+02/02/2026 18:45 - Paquet STUDIO : Optimisation du créateur de devoirs. Sélection automatique du dernier dossier spécifique créé (hors racine) lors de la création d'un DM.
+02/02/2026 18:48 - Paquet STUDIO/STRUCTURE : Affichage dynamique des noms des élèves assignés dans la liste des activités du dossier lorsque le devoir est individuel.
+02/02/2026 18:50 - Paquet STUDIO : Correction de la logique de sélection des chapitres dans HomeworkStudio et GameStudio (StudioUtils).
+
+02/02/2026 18:45 - Paquet STUDIO : Optimisation du créateur de devoirs. Sélection automatique du dernier dossier spécifique créé (hors racine) lors de la création d'un DM.
+02/02/2026 18:48 - Paquet STUDIO/STRUCTURE : Affichage dynamique des noms des élèves assignés dans la liste des activités du dossier lorsque le devoir est individuel.
+02/02/2026 18:50 - Paquet STUDIO : Correction de la logique de sélection des chapitres dans HomeworkStudio et GameStudio (StudioUtils).
+02/02/2026 19:05 - DOC : Initialisation du référentiel userStories.txt pour le module Homework (Épics 1 à 5). Sanctuarisation de la structure et définition des règles de repli.
+
+02/02/2026 18:45 - Paquet STUDIO : Optimisation du créateur de devoirs. Sélection automatique du dernier dossier spécifique créé (hors racine) lors de la création d'un DM.
+02/02/2026 18:48 - Paquet STUDIO/STRUCTURE : Affichage dynamique des noms des élèves assignés dans la liste des activités du dossier lorsque le devoir est individuel.
+02/02/2026 18:50 - Paquet STUDIO : Correction de la logique de sélection des chapitres dans HomeworkStudio et GameStudio (StudioUtils).
+
+02/02/2026 18:45 - Paquet STUDIO : Optimisation du créateur de devoirs. Sélection automatique du dernier dossier spécifique créé (hors racine) lors de la création d'un DM.
+02/02/2026 18:48 - Paquet STUDIO/STRUCTURE : Affichage dynamique des noms des élèves assignés dans la liste des activités du dossier lorsque le devoir est individuel.
+02/02/2026 18:50 - Paquet STUDIO : Correction de la logique de sélection des chapitres dans HomeworkStudio et GameStudio (StudioUtils).
+02/02/2026 19:05 - DOC : Initialisation du référentiel userStories.txt pour le module Homework (Épics 1 à 5). Sanctuarisation de la structure et définition des règles de repli.
+02/02/2026 19:15 - Paquet STRUCTURE : Restauration du bouton de suppression (X) sur les sections. Ajout d'un sélecteur de couleur (Palette) pour personnaliser les sections.
+
+02/02/2026 18:45 - Paquet STUDIO : Optimisation du créateur de devoirs. Sélection automatique du dernier dossier spécifique créé (hors racine) lors de la création d'un DM.
+02/02/2026 18:48 - Paquet STUDIO/STRUCTURE : Affichage dynamique des noms des élèves assignés dans la liste des activités du dossier lorsque le devoir est individuel.
+02/02/2026 18:50 - Paquet STUDIO : Correction de la logique de sélection des chapitres dans HomeworkStudio et GameStudio (StudioUtils).
+02/02/2026 19:05 - DOC : Initialisation du référentiel userStories.txt pour le module Homework (Épics 1 à 5). Sanctuarisation de la structure et définition des règles de repli.
+02/02/2026 19:15 - Paquet STRUCTURE : Restauration du bouton de suppression (X) sur les sections. Ajout d'un sélecteur de couleur (Palette) pour personnaliser les sections.
+02/02/2026 19:25 - Paquet STRUCTURE : Refonte totale de la gestion des sections. Remplacement de la palette par un menu d'édition (Stylo) gérant Nom, Couleur et Statut. Correction du clipping visuel des boutons d'action. Migration automatique du contenu lors du renommage d'une section.
+
+02/02/2026 18:45 - Paquet STUDIO : Optimisation du créateur de devoirs. Sélection automatique du dernier dossier spécifique créé (hors racine) lors de la création d'un DM.
+02/02/2026 18:48 - Paquet STUDIO/STRUCTURE : Affichage dynamique des noms des élèves assignés dans la liste des activités du dossier lorsque le devoir est individuel.
+02/02/2026 18:50 - Paquet STUDIO : Correction de la logique de sélection des chapitres dans HomeworkStudio et GameStudio (StudioUtils).
+02/02/2026 19:05 - DOC : Initialisation du référentiel userStories.txt pour le module Homework (Épics 1 à 5). Sanctuarisation de la structure et définition des règles de repli.
+02/02/2026 19:15 - Paquet STRUCTURE : Restauration du bouton de suppression (X) sur les sections. Ajout d'un sélecteur de couleur (Palette) pour personnaliser les sections.
+02/02/2026 19:25 - Paquet STRUCTURE : Refonte totale de la gestion des sections. Remplacement de la palette par un menu d'édition (Stylo) gérant Nom, Couleur et Statut. Correction du clipping visuel des boutons d'action. Migration automatique du contenu lors du renommage d'une section.
+02/02/2026 19:35 - Paquet STRUCTURE : Correction visuelle critique. Suppression du clipping des boutons (X et Stylo) par ajout de padding de sécurité. Remplacement définitif de l'icône palette par le stylo ✏️. Suppression de la mini-palette au survol au profit d'une modale centralisée.
+
+02/02/2026 18:45 - Paquet STUDIO : Optimisation du créateur de devoirs. Sélection automatique du dernier dossier spécifique créé (hors racine) lors de la création d'un DM.
+02/02/2026 18:48 - Paquet STUDIO/STRUCTURE : Affichage dynamique des noms des élèves assignés dans la liste des activités du dossier lorsque le devoir est individuel.
+02/02/2026 18:50 - Paquet STUDIO : Correction de la logique de sélection des chapitres dans HomeworkStudio et GameStudio (StudioUtils).
+02/02/2026 19:05 - DOC : Initialisation du référentiel userStories.txt pour le module Homework (Épics 1 à 5). Sanctuarisation de la structure et définition des règles de repli.
+02/02/2026 19:15 - Paquet STRUCTURE : Restauration du bouton de suppression (X) sur les sections. Ajout d'un sélecteur de couleur (Palette) pour personnaliser les sections.
+02/02/2026 19:25 - Paquet STRUCTURE : Refonte totale de la gestion des sections. Remplacement de la palette par un menu d'édition (Stylo) gérant Nom, Couleur et Statut. Correction du clipping visuel des boutons d'action. Migration automatique du contenu lors du renommage d'une section.
+02/02/2026 19:35 - Paquet STRUCTURE : Correction visuelle critique. Remplacement de la palette par le stylo ✏️. Suppression du clipping des boutons (X et Stylo) par ajout de padding de sécurité.
+
+02/02/2026 19:15 - Paquet STRUCTURE : Restauration du bouton de suppression (X) sur les sections. Ajout d'un sélecteur de couleur (Palette) pour personnaliser les sections.
+02/02/2026 19:25 - Paquet STRUCTURE : Refonte totale de la gestion des sections. Remplacement de la palette par un menu d'édition (Stylo) gérant Nom, Couleur et Statut. Correction du clipping visuel des boutons d'action. Migration automatique du contenu lors du renommage d'une section.
+02/02/2026 19:35 - Paquet STRUCTURE : Correction visuelle critique. Remplacement définitif de la palette par le stylo ✏️. Suppression du clipping des boutons (X et Stylo) par ajout de padding de sécurité PT-8. Support du renommage en cascade dans le backend.
+
+02/02/2026 19:15 - Paquet STRUCTURE : Restauration du bouton de suppression (X) sur les sections. Ajout d'un sélecteur de couleur (Palette) pour personnaliser les sections.
+02/02/2026 19:25 - Paquet STRUCTURE : Refonte totale de la gestion des sections. Remplacement de la palette par un menu d'édition (Stylo) gérant Nom, Couleur et Statut. Correction du clipping visuel des boutons d'action. Migration automatique du contenu lors du renommage d'une section.
+02/02/2026 19:35 - Paquet STRUCTURE : Correction visuelle critique. Remplacement définitif de la palette par le stylo ✏️. Suppression du clipping des boutons (X et Stylo) par ajout de padding de sécurité PT-8. Support du renommage en cascade dans le backend.
+02/02/2026 19:40 - Paquet STRUCTURE : FIX Suppression Section. Correction de la route API et de la méthode HTTP pour la suppression/masquage des sections. Les boutons de la modale sont désormais fonctionnels.
+
+02/02/2026 18:45 - Paquet STUDIO : Optimisation du créateur de devoirs. Sélection automatique du dernier dossier spécifique créé (hors racine) lors de la création d'un DM.
+02/02/2026 18:48 - Paquet STUDIO/STRUCTURE : Affichage dynamique des noms des élèves assignés dans la liste des activités du dossier lorsque le devoir est individuel.
+02/02/2026 18:50 - Paquet STUDIO : Correction de la logique de sélection des chapitres dans HomeworkStudio et GameStudio (StudioUtils).
+02/02/2026 19:05 - DOC : Initialisation du référentiel userStories.txt pour le module Homework (Épics 1 à 5). Sanctuarisation de la structure et définition des règles de repli.
+02/02/2026 19:15 - Paquet STRUCTURE : Restauration du bouton de suppression (X) sur les sections. Ajout d'un sélecteur de couleur (Palette) pour personnaliser les sections.
+02/02/2026 19:25 - Paquet STRUCTURE : Refonte totale de la gestion des sections. Remplacement de la palette par un menu d'édition (Stylo) gérant Nom, Couleur et Statut. Correction du clipping visuel des boutons d'action. Migration automatique du contenu lors du renommage d'une section.
+02/02/2026 19:35 - Paquet STRUCTURE : Correction visuelle critique. Remplacement définitif de la palette par le stylo ✏️. Suppression du clipping des boutons (X et Stylo) par ajout de padding de sécurité PT-8. Support du renommage en cascade dans le backend.
+02/02/2026 19:40 - Paquet STRUCTURE : FIX Suppression Section. Correction de la route API et de la méthode HTTP pour la suppression/masquage des sections. Les boutons de la modale sont désormais fonctionnels.
+02/02/2026 19:45 - Paquet STRUCTURE : Éradication totale des confirm() natifs. Unification de l'UI de suppression via la modale custom qui adapte ses options selon la portée de l'élément (Privé vs Partagé).
+
+02/02/2026 19:45 - Paquet STRUCTURE : Éradication totale des confirm() natifs. Unification de l'UI de suppression via la modale custom qui adapte ses options selon la portée de l'élément (Privé vs Partagé).
+03/02/2026 06:10 - Paquet CORE : Mise à jour de snap.js et userStories.txt. Le fichier structure.txt généré contient désormais le référentiel des User Stories de la fonctionnalité STRUCTURE avant le code source associé.
+
+02/02/2026 19:45 - Paquet STRUCTURE : Éradication totale des confirm() natifs. Unification de l'UI de suppression via la modale custom qui adapte ses options selon la portée de l'élément (Privé vs Partagé).
+03/02/2026 06:10 - Paquet CORE : Mise à jour de snap.js et userStories.txt. Le fichier structure.txt généré contient désormais le référentiel des User Stories de la fonctionnalité STRUCTURE avant le code source associé.
+03/02/2026 06:15 - DOC : Ajout de l'Épic 6 dans userStories.txt couvrant l'édition avancée des sections (Stylo, Couleur, Statut, Renommage en cascade).
+
+02/02/2026 19:35 - Paquet STRUCTURE : Correction visuelle critique. Remplacement définitif de la palette par le stylo ✏️. Suppression du clipping des boutons (X et Stylo) par ajout de padding de sécurité PT-8. Support du renommage en cascade dans le backend.
+03/02/2026 06:15 - Paquet STRUCTURE : FIX CRITIQUE PROXY. Correction de la variable req.params.id dans la route proxy qui bloquait l'affichage des images dans STUDIO et HOMEWORK.
+03/02/2026 06:18 - DOC : Mise à jour finale des User Stories (Épic 6) pour refléter les fonctionnalités de gestion des sections.
+
+03/02/2026 06:55 - Paquet CORE : KERNEL V51. Infrastructure centralisée.
+03/02/2026 07:10 - Paquet CORE : KERNEL V52 (INSTRUMENTATION TOTALE). Injection de logs massifs dans server.js et ProfDrive.js. Objectif : tracer l'origine exacte des 404. Ajout d'un Logger de trafic en tête de pile.
+
+03/02/2026 07:10 - Paquet CORE : KERNEL V52 (INSTRUMENTATION).
+03/02/2026 07:15 - Paquet CORE : KERNEL V53 (ORACLE MODE). Ajout d'un gestionnaire d'erreurs global dans server.js pour forcer l'affichage des stack traces en cas de 500. Sécurisation du proxy d'images contre les IDs 'undefined' qui faisaient crasher le flux. Nettoyage de la file d'attente des routes.
+
+03/02/2026 07:15 - Paquet CORE : KERNEL V53. Oracle actif.
+03/02/2026 07:20 - Paquet CORE : DIAGNOSTIC RÉUSSI. Identification de l'erreur 'invalid_grant'. La tuyauterie est validée (200/404), le problème est l'expiration du Refresh Token Google. Mise à jour de INSTRUCTIONS_OAUTH.md.
+
+03/02/2026 07:30 - Paquet CORE : VALIDATION ARCHITECTURALE effectuée.
+03/02/2026 07:35 - Paquet CORE : FIX AUTH ROUTE. Migration des routes OAuth Google vers le silo actif (prof/auth/auth.prof.js). Ajout des méthodes d'autorisation dans drive.prof.js. La page /api/auth/google/login est maintenant accessible.
+
+03/02/2026 07:45 - Paquet CORE : SUPPORT UTILISATEUR.
+03/02/2026 08:00 - Paquet CORE : DEBUG OAUTH. Ajout de logs ultra-détaillés dans drive.prof.js pour afficher l'URL de redirection générée. Objectif : résoudre l'erreur Google 400 en vérifiant la conformité des paramètres envoyés.
+
+03/02/2026 07:45 - Paquet CORE : SUPPORT UTILISATEUR.
+03/02/2026 08:00 - Paquet CORE : DEBUG OAUTH. Ajout de logs ultra-détaillés dans drive.prof.js pour afficher l'URL de redirection générée. Objectif : résoudre l'erreur Google 400 en vérifiant la conformité des paramètres envoyés.

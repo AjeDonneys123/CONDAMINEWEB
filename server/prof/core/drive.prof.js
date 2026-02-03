@@ -1,4 +1,4 @@
-// @signatures: ProfDrive, getAuth, getOrCreateFolder, uploadFile, getFileStream
+// @signatures: ProfDrive, getAuth, getOrCreateFolder, uploadFile, getFileStream, getAuthUrl, getTokenFromCode
 const { google } = require('googleapis');
 const fs = require('fs');
 
@@ -6,15 +6,51 @@ let oauth2Client = null;
 
 const ProfDrive = {
     init: () => {
-        if (!process.env.GOOGLE_CLIENT_ID) return;
-        oauth2Client = new google.auth.OAuth2(
-            process.env.GOOGLE_CLIENT_ID, 
-            process.env.GOOGLE_CLIENT_SECRET, 
-            "http://localhost:3000/api/auth/google/callback"
-        );
-        if (process.env.GOOGLE_REFRESH_TOKEN) {
-            oauth2Client.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
+        const clientId = (process.env.GOOGLE_CLIENT_ID || "").trim();
+        const clientSecret = (process.env.GOOGLE_CLIENT_SECRET || "").trim();
+        const redirectUri = "http://localhost:3000/api/auth/google/callback";
+
+        if (!clientId || !clientSecret) {
+            console.error("❌ [DRIVE-CORE] Client ID ou Secret manquant dans .env");
+            return;
         }
+
+        oauth2Client = new google.auth.OAuth2(clientId, clientSecret, redirectUri);
+        
+        if (process.env.GOOGLE_REFRESH_TOKEN) {
+            oauth2Client.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN.trim() });
+            console.log("✅ [DRIVE-CORE] Client initialisé avec Refresh Token.");
+        }
+    },
+
+    getAuthUrl: () => {
+        if (!oauth2Client) throw new Error("Client OAuth non initialisé. Vérifiez votre .env.");
+        
+        const url = oauth2Client.generateAuthUrl({
+            access_type: 'offline',
+            // Utilisation d'un scope plus large pour tester la compatibilité
+            scope: [
+                'https://www.googleapis.com/auth/drive.file',
+                'https://www.googleapis.com/auth/drive.readonly'
+            ],
+            prompt: 'consent'
+        });
+
+        console.log("================================================");
+        console.log("🔗 URL DE CONNEXION GÉNÉRÉE :");
+        console.log(url);
+        console.log("------------------------------------------------");
+        console.log("👉 Vérifiez que 'redirect_uri' dans l'URL ci-dessus");
+        console.log("   est EXACTEMENT celui déclaré dans Google Cloud.");
+        console.log("================================================");
+        
+        return url;
+    },
+
+    getTokenFromCode: async (code) => {
+        console.log("⏳ [DRIVE-CORE] Échange du code contre token...");
+        const { tokens } = await oauth2Client.getToken(code);
+        return tokens;
     },
 
     getOrCreateFolder: async (name, parentId = null) => {
@@ -50,5 +86,6 @@ const ProfDrive = {
     }
 };
 
+// Auto-init au chargement
 ProfDrive.init();
 module.exports = ProfDrive;

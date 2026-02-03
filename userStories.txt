@@ -1,0 +1,88 @@
+================================================================================
+📜 RÉFÉRENTIEL DES USER STORIES - FONCTIONNALITÉ STRUCTURE 
+================================================================================
+
+Épic 1 — Structure des dossiers (sanctuarisée)
+--------------------------------------------------------------------------------
+US1 — Structure sanctuarisée (non modifiable)
+En tant qu’utilisateur, je veux que la structure globale des dossiers soit sanctuarisée afin de ne plus risquer de casser l’organisation existante.
+
+Critères d’acceptation :
+- La structure de base ne peut pas être modifiée (pas de renommage/déplacement/suppression des éléments “structurels”).
+- L’utilisateur peut toujours créer des devoirs et les ranger dans un dossier existant.
+
+Épic 2 — Sélection automatique du dossier dans le créateur de DM (Homework)
+--------------------------------------------------------------------------------
+US2 — Pré-sélection automatique du bon dossier
+En tant qu’utilisateur, je veux que le créateur de DM pré-sélectionne automatiquement un dossier non archivé afin de gagner du temps à chaque création de devoir.
+
+Règles :
+1. S’il existe un dossier non archivé autre que Général/Général, alors ce dossier est sélectionné par défaut.
+2. S’il existe plusieurs dossiers non archivés, alors le dernier (le plus récent) est sélectionné par défaut.
+3. Si aucun dossier non archivé n’existe (hors Général/Général), alors Général/Général est sélectionné par défaut.
+
+Critères d’acceptation :
+- À l’ouverture du créateur de DM, un dossier est déjà sélectionné selon les règles ci-dessus.
+- Général/Général n’est sélectionné par défaut que si aucune autre option non archivée n’existe.
+
+US3 — Changer de dossier via le Finder (sélection manuelle)
+En tant qu’utilisateur, je veux pouvoir choisir un autre dossier dans le Finder afin de ranger le devoir dans le dossier que je veux avant de le créer.
+
+Critères d’acceptation :
+- Le Finder affiche les dossiers disponibles (dont l’état archivé/non archivé).
+- Je peux sélectionner manuellement un dossier différent de celui pré-sélectionné.
+- Le dossier choisi dans le Finder devient le dossier actif pour la création du devoir.
+
+Épic 3 — Création et rangement du devoir
+--------------------------------------------------------------------------------
+US4 — Ranger le devoir dans le dossier sélectionné et aux classes sélectionnées
+En tant qu’utilisateur, je veux que le devoir créé soit rangé automatiquement dans le dossier sélectionné et lié aux classes sélectionnées afin de retrouver le devoir au bon endroit et pour les bons groupes.
+
+Critères d’acceptation :
+- À la validation de création, le devoir apparaît dans le dossier sélectionné.
+- Le devoir est associé aux classes sélectionnées (il apparaît bien dans leur vue/liste).
+
+US5 — Afficher les élèves ciblés si devoir attribué à un sous-groupe
+En tant qu’utilisateur, je veux voir le nom des élèves si le devoir n’est attribué qu’à certains élèves afin de vérifier rapidement qui est concerné.
+
+Critères d’acceptation :
+- Si l’attribution = “certains élèves seulement”, alors le devoir affiche la liste des noms des élèves concernés (dans l’UI du dossier/devoir).
+- Si l’attribution = “classe entière”, alors aucune liste de noms n’est affichée (ou un libellé type “Toute la classe”).
+
+Épic 4 — Suppression d’un devoir (icône X)
+--------------------------------------------------------------------------------
+US6 — Supprimer un devoir via le X
+En tant qu’utilisateur, je veux pouvoir supprimer un devoir via un bouton “X” afin de retirer facilement un devoir inutile ou créé par erreur.
+
+Critères d’acceptation :
+- Chaque devoir affiche un “X”.
+- Cliquer sur “X” supprime le devoir (avec confirmation).
+- Le devoir supprimé n’apparaît plus dans le dossier ni dans les classes.
+
+Épic 5 — Suppression de dossier et comportement de repli
+--------------------------------------------------------------------------------
+US7 — Replacer automatiquement les devoirs si le dossier est supprimé
+En tant qu’utilisateur, je veux que si un dossier est supprimé, les devoirs qu’il contient ne soient pas perdus afin de conserver les devoirs en les envoyant dans Général/Général.
+
+Critères d’acceptation :
+- Quand un dossier contenant des devoirs est supprimé, tous les devoirs de ce dossier sont automatiquement déplacés vers le dossier Général de la section Général (Général/Général).
+- Les devoirs conservent leurs attributs (classes associées, élèves ciblés, etc.).
+- Aucun devoir n’est supprimé automatiquement à cause de la suppression du dossier.
+
+Épic 6 — Gestion des Sections (Matières)
+--------------------------------------------------------------------------------
+US8 — Édition complète d'une section (Stylo)
+En tant qu'utilisateur, je veux pouvoir cliquer sur un stylo au survol d'une section pour modifier son nom et sa couleur de thème.
+
+Critères d’acceptation :
+- Un bouton stylo (✏️) est visible au survol de chaque section (sauf "GÉNÉRAL").
+- Le clic ouvre une modale permettant de renommer la section.
+- Une palette de couleurs prédéfinies permet de changer l'identité visuelle de la section.
+- Le renommage d'une section met à jour automatiquement tous les dossiers (Chapters) qu'elle contient en base de données (renommage en cascade).
+
+US9 — Définition de la portée (Statut) de la section
+En tant qu'utilisateur, je veux pouvoir définir si une section est visible pour tous, pour un niveau ou pour une classe spécifique.
+
+Critères d’acceptation :
+- La modale d'édition propose 3 statuts : GÉNÉRAL (Global), NIVEAU (Toutes les classes du même niveau), ou CETTE CLASSE.
+- Le changement de statut est enregistré immédiatement et filtre l'affichage selon le contexte de navigation.

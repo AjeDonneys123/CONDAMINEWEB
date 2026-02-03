@@ -1,116 +1,47 @@
-// @signatures: ProfStructureRouter, chapters, sections, deleteSection, proxy
+// @signatures: ProfStructureRouter, chapters, sections, deleteChapterRequest, moveChapter, moveActivity, proxy
 const express = require('express');
 const router = express.Router();
-const { Chapter, Teacher, Admin, Classroom } = require('../models/prof.models');
+const { Chapter, Teacher, Admin, Classroom, Homework, GameLevel } = require('../models/prof.models');
 const ProfDrive = require('../core/drive.prof');
+const mongoose = require('mongoose');
 
 /**
- * 🛠️ BLOC STRUCTURE PROF : GESTION DES SECTIONS ET DOSSIERS
+ * 🛠️ BLOC STRUCTURE PROF V450 - RÉPARÉ (FIX PROXY)
+ * RÔLE : Gestion des sections et dossiers + Proxy d'images partagé.
  */
 
-router.get('/chapters', async (req, res) => {
-    try {
-        // On renvoie TOUS les chapitres (le filtrage isArchived se fait côté front selon le mode)
-        const chapters = await Chapter.find({}).sort({ createdAt: -1 }).lean();
-        res.json(chapters.map(c => ({
-            ...c, _id: String(c._id),
-            section: (c.section || "GÉNÉRAL").toUpperCase().trim(),
-            classroom: c.classroom ? c.classroom.toUpperCase().trim() : ""
-        })));
-    } catch (e) { res.status(500).json([]); }
-});
+const getRandomColor = () => `hsl(${Math.floor(Math.random() * 360)}, 85%, 60%)`;
 
-router.post('/chapters', async (req, res) => {
-    try {
-        const { title, section, classroom, sharedLevel, teacherId } = req.body;
-        const newChap = await Chapter.create({
-            title: title.toUpperCase().trim(),
-            section: section.toUpperCase().trim(),
-            classroom: sharedLevel ? "" : (classroom || "").toUpperCase().trim(),
-            sharedLevel: sharedLevel || "",
-            teacherId,
-            isArchived: false
-        });
-        res.json(newChap);
-    } catch (e) { res.status(500).send(e.message); }
-});
-
-// ✅ MISE À JOUR DOSSIER (Renommer / Déplacer / Archiver)
-router.patch('/chapters/:id', async (req, res) => {
-    try {
-        const updateData = {};
-        if (req.body.title) updateData.title = req.body.title.toUpperCase().trim();
-        if (req.body.section) updateData.section = req.body.section.toUpperCase().trim();
-        if (req.body.isArchived !== undefined) updateData.isArchived = req.body.isArchived;
-        
-        const updated = await Chapter.findByIdAndUpdate(req.params.id, updateData, { new: true });
-        res.json(updated);
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-router.delete('/chapters/:id', async (req, res) => {
-    try {
-        await Chapter.findByIdAndDelete(req.params.id);
-        res.json({ ok: true });
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-router.get('/sections/:teacherId', async (req, res) => {
-    try {
-        const { classContext } = req.query; 
-        const user = await Teacher.findById(req.params.teacherId).lean() || await Admin.findById(req.params.teacherId).lean();
-        if (!user || !user.subjectSections) return res.json([]);
-
-        if (classContext) {
-            const cls = await Classroom.findOne({ name: classContext }).lean();
-            const currentLevel = cls?.level;
-
-            const filtered = user.subjectSections.filter(s => {
-                if (s.name === "GÉNÉRAL") return true;
-                if (s.hiddenIn && s.hiddenIn.includes(classContext)) return false;
-                if (s.scope === 'GLOBAL') return true;
-                if (s.scope === 'LEVEL' && String(s.target) === String(currentLevel)) return true;
-                if (s.scope === 'CLASS' && s.target === classContext) return true;
-                return false;
-            });
-            return res.json(filtered);
-        }
-        res.json(user.subjectSections);
-    } catch (e) { res.status(500).json([]); }
-});
+// --- 1. SECTIONS ---
 
 router.post('/sections', async (req, res) => {
     try {
-        const { teacherId, sectionName, scope, target } = req.body;
-        let user = await Teacher.findById(teacherId) || await Admin.findById(teacherId);
-        if (!user) return res.status(404).send("User not found");
-        if (!user.subjectSections) user.subjectSections = [];
+        const { teacherId, oldName, sectionName, color, scope, target } = req.body;
+        const user = await Teacher.findById(teacherId) || await Admin.findById(teacherId);
+        if (!user) return res.status(404).json({ error: "Prof introuvable" });
+
         const name = sectionName.toUpperCase().trim();
-        if (scope === 'GLOBAL') {
-            user.subjectSections = user.subjectSections.filter(s => s.name !== name);
-            user.subjectSections.push({ name, scope: 'GLOBAL', target: null, hiddenIn: [] });
-        } 
-        else if (scope === 'LEVEL') {
-            if (user.subjectSections.find(s => s.name === name && s.scope === 'GLOBAL')) return res.json(user.subjectSections);
-            const classesOfLevel = await Classroom.find({ level: target }).select('name');
-            const classNames = classesOfLevel.map(c => c.name);
-            user.subjectSections = user.subjectSections.filter(s => {
-                if (s.name !== name) return true;
-                if (s.scope === 'CLASS' && classNames.includes(s.target)) return false;
-                if (s.scope === 'LEVEL' && s.target === target) return false;
-                return true;
-            });
-            user.subjectSections.push({ name, scope: 'LEVEL', target, hiddenIn: [] });
-        }
-        else if (scope === 'CLASS') {
-            const cls = await Classroom.findOne({ name: target }).lean();
-            const level = cls?.level;
-            const hasGlobal = user.subjectSections.find(s => s.name === name && s.scope === 'GLOBAL');
-            const hasLevel = user.subjectSections.find(s => s.name === name && s.scope === 'LEVEL' && String(s.target) === String(level));
-            if (hasGlobal || hasLevel) return res.json(user.subjectSections);
-            const alreadyExistsForThisClass = user.subjectSections.find(s => s.name === name && s.scope === 'CLASS' && s.target === target);
-            if (!alreadyExistsForThisClass) {
-                user.subjectSections.push({ name, scope: 'CLASS', target, hiddenIn: [] });
+        if (name === "GÉNÉRAL") return res.json(user.subjectSections);
+
+        if (!user.subjectSections) user.subjectSections = [];
+
+        if (oldName && oldName.toUpperCase() !== name) {
+            const idx = user.subjectSections.findIndex(s => s.name === oldName.toUpperCase());
+            if (idx !== -1) {
+                user.subjectSections[idx].name = name;
+                if (color) user.subjectSections[idx].color = color;
+                if (scope) user.subjectSections[idx].scope = scope;
+                if (target) user.subjectSections[idx].target = target;
+                await Chapter.updateMany({ teacherId: user._id, section: oldName.toUpperCase() }, { $set: { section: name } });
+            }
+        } else {
+            const existingIdx = user.subjectSections.findIndex(s => s.name === name);
+            if (existingIdx !== -1) {
+                if (color) user.subjectSections[existingIdx].color = color;
+                if (scope) user.subjectSections[existingIdx].scope = scope;
+                if (target) user.subjectSections[existingIdx].target = target;
+            } else {
+                user.subjectSections.push({ name, color: color || getRandomColor(), scope: scope || 'GLOBAL', target: target || null, hiddenIn: [] });
             }
         }
         await user.save();
@@ -118,16 +49,17 @@ router.post('/sections', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.delete('/sections', async (req, res) => {
+router.post('/sections/delete-request', async (req, res) => {
     try {
         const { teacherId, sectionName, permanent, classId } = req.body;
-        let user = await Teacher.findById(teacherId) || await Admin.findById(teacherId);
-        if (!user) return res.status(404).json({ error: "Utilisateur non trouvé" });
+        const user = await Teacher.findById(teacherId) || await Admin.findById(teacherId);
+        if (!user) return res.status(404).json({ error: "Prof introuvable" });
+
         if (permanent) {
-            user.subjectSections = user.subjectSections.filter(s => s.name !== sectionName);
-            await Chapter.updateMany({ teacherId: user._id, section: sectionName }, { $set: { section: "GÉNÉRAL" } });
+            await Chapter.updateMany({ teacherId: user._id, section: sectionName.toUpperCase() }, { $set: { section: "GÉNÉRAL" } });
+            user.subjectSections = user.subjectSections.filter(s => s.name !== sectionName.toUpperCase());
         } else {
-            const section = user.subjectSections.find(s => s.name === sectionName);
+            const section = user.subjectSections.find(s => s.name === sectionName.toUpperCase());
             if (section) {
                 if (!section.hiddenIn) section.hiddenIn = [];
                 if (!section.hiddenIn.includes(classId)) section.hiddenIn.push(classId);
@@ -138,12 +70,108 @@ router.delete('/sections', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// --- 2. CHAPITRES ---
+
+router.get('/chapters', async (req, res) => {
+    try {
+        const { teacherId, classContext } = req.query;
+        const isValidId = teacherId && teacherId !== 'undefined' && mongoose.Types.ObjectId.isValid(teacherId);
+        
+        if (isValidId) {
+            const root = await Chapter.findOne({ teacherId, section: "GÉNÉRAL", title: "GÉNÉRAL" });
+            if (!root) await Chapter.create({ title: "GÉNÉRAL", section: "GÉNÉRAL", teacherId, isArchived: false });
+            const allChaps = await Chapter.find({ teacherId }).sort({ createdAt: 1 });
+            const registry = {}; const toDelete = [];
+            for (const c of allChaps) {
+                const key = `${c.section}_${c.title}`.toUpperCase().trim();
+                if (!registry[key]) registry[key] = c._id;
+                else { await Homework.updateMany({ chapterId: c._id }, { chapterId: registry[key] }); await GameLevel.updateMany({ chapterId: c._id }, { chapterId: registry[key] }); toDelete.push(c._id); }
+            }
+            if (toDelete.length > 0) await Chapter.deleteMany({ _id: { $in: toDelete } });
+        }
+        const query = isValidId ? { teacherId } : {};
+        if (classContext) query.hiddenIn = { $ne: classContext };
+        const chapters = await Chapter.find(query).sort({ createdAt: -1 }).lean();
+        res.json(chapters.map(c => ({ ...c, _id: String(c._id) })));
+    } catch (e) { res.json([]); }
+});
+
+router.post('/chapters', async (req, res) => {
+    try {
+        const { title, section, scope, target, teacherId } = req.body;
+        const cleanTitle = (title || "NOUVEAU").toUpperCase().trim();
+        const cleanSection = (section || "GÉNÉRAL").toUpperCase().trim();
+        const existing = await Chapter.findOne({ teacherId, section: cleanSection, title: cleanTitle });
+        if (existing) {
+            existing.classroom = scope === 'CLASS' ? target : "";
+            existing.sharedLevel = scope === 'LEVEL' ? target : "";
+            await existing.save();
+            return res.json(existing);
+        }
+        const newChap = await Chapter.create({ title: cleanTitle, section: cleanSection, classroom: scope === 'CLASS' ? target : "", sharedLevel: scope === 'LEVEL' ? target : "", teacherId, isArchived: false });
+        res.json(newChap);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.patch('/chapters/:id', async (req, res) => {
+    try {
+        const { title, scope, target, isArchived } = req.body;
+        const up = {};
+        if (title) up.title = title.toUpperCase().trim();
+        if (scope) { up.classroom = scope === 'CLASS' ? target : ""; up.sharedLevel = scope === 'LEVEL' ? target : ""; }
+        if (isArchived !== undefined) up.isArchived = isArchived;
+        const updated = await Chapter.findByIdAndUpdate(req.params.id, up, { new: true });
+        res.json(updated);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/chapters/delete-request', async (req, res) => {
+    try {
+        const { chapterId, classId, permanent, teacherId } = req.body;
+        const target = await Chapter.findById(chapterId);
+        if (permanent) {
+            await Chapter.findByIdAndDelete(chapterId);
+            if (target.section.toUpperCase() === "GÉNÉRAL") {
+                const remaining = await Chapter.find({ teacherId, section: "GÉNÉRAL" });
+                if (remaining.length === 0) await Chapter.create({ title: "GÉNÉRAL", section: "GÉNÉRAL", teacherId, isArchived: false });
+            }
+        } else {
+            await Chapter.findByIdAndUpdate(chapterId, { $addToSet: { hiddenIn: classId } });
+        }
+        res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/sections/:teacherId', async (req, res) => {
+    try {
+        const { teacherId } = req.params;
+        const { classContext } = req.query;
+        if (!teacherId || teacherId === 'undefined' || !mongoose.Types.ObjectId.isValid(teacherId)) return res.json([{ name: 'GÉNÉRAL', color: '#64748b', scope: 'GLOBAL' }]);
+        const user = await Teacher.findById(teacherId).lean() || await Admin.findById(teacherId).lean();
+        const cls = classContext ? await Classroom.findOne({ name: classContext }).lean() : null;
+        let sections = (user.subjectSections || []).filter(s => s.name.toUpperCase() !== "GÉNÉRAL");
+        const filtered = sections.filter(s => {
+            if (s.hiddenIn && s.hiddenIn.includes(classContext)) return false;
+            if (s.scope === 'GLOBAL') return true;
+            if (s.scope === 'LEVEL' && cls && String(s.target) === String(cls.level)) return true;
+            if (s.scope === 'CLASS' && s.target === classContext) return true;
+            return false;
+        });
+        filtered.unshift({ name: 'GÉNÉRAL', color: '#64748b', scope: 'GLOBAL' });
+        res.json(filtered);
+    } catch (e) { res.json([{ name: 'GÉNÉRAL', color: '#64748b', scope: 'GLOBAL' }]); }
+});
+
 router.get('/proxy/:id', async (req, res) => {
     try {
+        // 🚀 FIX CRITIQUE : Utilisation du bon paramètre :id
         const stream = await ProfDrive.getFileStream(req.params.id);
         res.setHeader('Content-Type', 'image/png');
         stream.pipe(res);
-    } catch (e) { res.status(404).send("Drive Error"); }
+    } catch (e) { 
+        console.error("❌ Proxy Error:", e.message);
+        res.status(404).send("Drive Error"); 
+    }
 });
 
 module.exports = router;
