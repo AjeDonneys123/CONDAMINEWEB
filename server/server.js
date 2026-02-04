@@ -1,132 +1,109 @@
-// @signatures: SERVER_BOOT_ID, GlobalInfrastructure, KernelV53, OracleMiddleware
+// @signatures: SERVER_BOOT_ID, GlobalInfrastructure, KernelV54_DEBUG
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const fs = require('fs');
 const path = require('path');
 
+console.log("------------------------------------------------");
+console.log("🚀 DÉMARRAGE DU SERVEUR (MODE DEBUG V54)");
+console.log("------------------------------------------------");
+
 dotenv.config();
 const app = express();
 const port = 3000;
 const SERVER_BOOT_ID = Date.now();
 
-// SÉCURITÉ MONGOOSE (Éviter les avertissements de dépréciation)
 mongoose.set('strictQuery', false);
 
 app.use(express.json({ limit: '70mb' }));
 app.use(express.urlencoded({ extended: true, limit: '70mb' }));
 
-// ==========================================================
-// 🛰️ 1. LOGGER DE TRAFIC (OBSERVABILITÉ)
-// ==========================================================
+// 1. LOGGER
 app.use((req, res, next) => {
-    const start = Date.now();
-    res.on('finish', () => {
-        const duration = Date.now() - start;
-        if (res.statusCode >= 400) {
-            console.error(`🔴 [${res.statusCode}] ${req.method} ${req.url} - ${duration}ms`);
-        } else {
-            console.log(`🟢 [${res.statusCode}] ${req.method} ${req.url} - ${duration}ms`);
-        }
-    });
+    console.log(`📥 REQ: ${req.method} ${req.url}`);
     next();
 });
 
-// ==========================================================
-// 🏗️ 2. SERVICES CORE (L'INFRASTRUCTURE)
-// ==========================================================
-
-app.get('/api/check-deploy', (req, res) => res.json({ status: "OK", bootId: SERVER_BOOT_ID }));
-
-app.get('/api/system/version', (req, res) => {
-    res.json({ hash: "V53-ORACLE", build: 161, mode: "DEBUG_ACTIVE" });
+// 2. ROUTES SYSTÈME (Doivent marcher même si le reste plante)
+app.get('/api/check-deploy', (req, res) => {
+    console.log("✅ Check-Deploy OK");
+    res.json({ status: "OK", bootId: SERVER_BOOT_ID });
 });
 
+app.get('/api/system/version', (req, res) => res.json({ hash: "V54-DEBUG", build: 162 }));
+
 app.get('/api/system/apply-status', (req, res) => {
-    const statusFile = path.join(__dirname, '../apply_status.json');
     try {
-        if (fs.existsSync(statusFile)) {
-            const content = fs.readFileSync(statusFile, 'utf8').trim();
-            if (content && content.startsWith('{')) return res.json(JSON.parse(content));
-        }
-        res.json({ status: "OK" });
+        const p = path.join(__dirname, '../apply_status.json');
+        if (fs.existsSync(p)) res.json(JSON.parse(fs.readFileSync(p, 'utf8')));
+        else res.json({ status: "OK" });
     } catch (e) { res.json({ status: "OK" }); }
 });
 
-// 🚀 PROXY CLOUD CENTRAL (BOULEVARD UNIFIÉ)
-const ProfDrive = require('./prof/core/drive.prof');
-app.get(['/api/proxy/:id', '/api/structure/proxy/:id'], async (req, res) => {
-    const fileId = req.params.id;
-    
-    if (!fileId || fileId === 'undefined' || fileId === 'null') {
-        return res.status(400).send("ID Drive invalide.");
-    }
-
+// 3. CHARGEMENT DES SILOS (Avec Logs)
+const loadRoute = (pathRel, routeName) => {
     try {
-        const stream = await ProfDrive.getFileStream(fileId);
-        res.setHeader('Content-Type', 'image/png');
-        stream.pipe(res);
-        
-        stream.on('error', (err) => {
-            console.error(`💥 Erreur de flux pour ${fileId}:`, err.message);
-        });
+        console.log(`⏳ Chargement ${routeName}...`);
+        const r = require(pathRel);
+        app.use(`/api/${routeName}`, r);
+        console.log(`   ✅ ${routeName} chargé.`);
     } catch (e) {
-        console.error(`❌ Échec Proxy pour ${fileId}:`, e.message);
-        res.status(404).send("Cloud error");
+        console.error(`   ❌ ÉCHEC ${routeName}:`, e.message);
+        console.error(e.stack);
     }
-});
+};
 
-// ==========================================================
-// 📂 3. CHARGEMENT DES SILOS MÉTIERS
-// ==========================================================
+try {
+    // Modèles
+    require('./prof/models/prof.models');
+    console.log("✅ Modèles chargés.");
 
-// SÉCURITÉ : On s'assure que les modèles sont chargés AVANT les routes
-require('./prof/models/prof.models');
+    // Routes
+    loadRoute('./prof/auth/auth.prof', 'auth');
+    loadRoute('./prof/admin/admin.prof', 'admin');
+    loadRoute('./prof/homework/homework.prof', 'homework');
+    loadRoute('./prof/games/games.prof', 'games');      // <--- C'EST SOUVENT LUI
+    loadRoute('./prof/classroom/classroom.prof', 'classroom');
+    loadRoute('./prof/scans/scans.prof', 'scans');
+    loadRoute('./prof/structure/structure.prof', 'structure');
+    loadRoute('./prof/studio/studio.prof', 'studio');
+    
+    // Routes Elève
+    loadRoute('./eleve/auth/auth.eleve', 'eleve/auth');
+    loadRoute('./eleve/homework/homework.eleve', 'eleve/homework');
+    loadRoute('./eleve/classroom/classroom.eleve', 'eleve/classroom');
+    loadRoute('./eleve/games/games.eleve', 'eleve/games');
 
-app.use('/api/auth', require('./prof/auth/auth.prof'));
-app.use('/api/admin', require('./prof/admin/admin.prof'));
-app.use('/api/homework', require('./prof/homework/homework.prof'));
-app.use('/api/games', require('./prof/games/games.prof'));
-app.use('/api/classroom', require('./prof/classroom/classroom.prof'));
-app.use('/api/scans', require('./prof/scans/scans.prof'));
-app.use('/api/structure', require('./prof/structure/structure.prof'));
-app.use('/api/studio', require('./prof/studio/studio.prof')); 
-
-app.use('/api/eleve/auth', require('./eleve/auth/auth.eleve'));
-app.use('/api/eleve/homework', require('./eleve/homework/homework.eleve'));
-app.use('/api/eleve/classroom', require('./eleve/classroom/classroom.eleve'));
-app.use('/api/eleve/games', require('./eleve/games/games.eleve'));
+} catch (globalErr) {
+    console.error("💥 CRASH GLOBAL CHARGEMENT:", globalErr);
+}
 
 app.use('/uploads', express.static(path.join(__dirname, '../public/uploads')));
 
-// ==========================================================
-// ⚖️ 4. L'ORACLE (GESTIONNAIRE D'ERREURS GLOBAL)
-// Rôle : Capturer tout crash et l'afficher dans le terminal.
-// ==========================================================
+// 4. L'ORACLE (VERSION BAVARDE)
 app.use((err, req, res, next) => {
-    console.error("================================================");
-    console.error("🔥 CRASH DÉTECTÉ PAR L'ORACLE");
-    console.error(`URL: ${req.method} ${req.url}`);
-    console.error("MESSAGE:", err.message);
-    console.error("STACK:", err.stack);
-    console.error("================================================");
+    console.error("🔥 ERREUR 500 CATCHÉE :");
+    console.error(err);
     
+    // On renvoie l'erreur au client pour que tu puisses la lire dans l'inspecteur
     res.status(500).json({
-        error: "Erreur Interne du Serveur",
+        error: "CRASH SERVEUR",
         message: err.message,
-        stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+        stack: err.stack,
+        where: "Middleware Global Oracle"
     });
 });
 
 const initServices = async () => {
     try {
         await mongoose.connect(process.env.MONGODB_URI);
-        console.log("📂 [DB] MongoDB Connecté.");
+        console.log("📂 MongoDB Connecté.");
         app.listen(port, '0.0.0.0', () => {
-            console.log(`🚀 [KERNEL V53] OPÉRATIONNEL SUR PORT ${port}`);
+            console.log(`🏁 SERVEUR PRÊT SUR LE PORT ${port}`);
         });
     } catch (err) {
-        console.error("❌ KERNEL PANIC DURANT LE BOOT:", err.message);
+        console.error("❌ ECHEC CONNEXION DB:", err.message);
     }
 };
 

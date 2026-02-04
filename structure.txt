@@ -87,7 +87,6 @@ Critères d’acceptation :
 - La modale d'édition propose 3 statuts : GÉNÉRAL (Global), NIVEAU (Toutes les classes du même niveau), ou CETTE CLASSE.
 - Le changement de statut est enregistré immédiatement et filtre l'affichage selon le contexte de navigation.
 
-
 ================================================================================
 💻 CODE SOURCE - MODULE STRUCTURE
 ================================================================================

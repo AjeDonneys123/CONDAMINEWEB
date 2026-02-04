@@ -141,6 +141,25 @@
     cursor: pointer;
 }
 
+/* BOUTON MIROIR (NOUVEAU) */
+.btn-mirror {
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    padding: 6px 12px;
+    font-size: 10px;
+    font-weight: 900;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-right: 5px;
+}
+.btn-mirror:hover {
+    background: #e2e8f0;
+    color: #1e293b;
+    transform: scale(1.05);
+}
+
 .btn-preview-play {
     background: #6366f1;
     color: white;
@@ -168,15 +187,23 @@
     border: 2px solid #e2e8f0;
     border-radius: 12px;
     position: relative;
-    cursor: grab;
+    cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     overflow: hidden;
 }
+
 .frame-card.active-preview { 
     border-color: #6366f1; 
     box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+}
+
+.frame-card.selected-for-clean {
+    border-color: #3b82f6 !important;
+    border-style: solid !important;
+    border-width: 3px !important;
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.3) !important;
 }
 
 .frame-img {
@@ -184,6 +211,20 @@
     height: 100%;
     object-fit: contain;
     padding: 5px;
+    pointer-events: none;
+}
+
+.frame-del {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    background: #ef4444;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 8px;
+    cursor: pointer;
+    z-index: 20;
 }
 
 /* CENTRE (SCÈNE) */
@@ -213,7 +254,18 @@
     transform: translate(-50%, -50%);
     cursor: grab;
     z-index: 10;
+    width: 150px;
+    height: 150px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
+.actor-on-stage img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+
 .actor-on-stage.selected {
     outline: 3px solid #6366f1;
     outline-offset: 5px;
@@ -221,7 +273,22 @@
     z-index: 100;
 }
 
-/* PANNEAU DROITE */
+.actor-label-tag {
+    position: absolute;
+    top: -20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.6);
+    color: white;
+    font-size: 8px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 900;
+    pointer-events: none;
+    white-space: nowrap;
+}
+
+/* PANNEAU DROITE (BIBLIOTHÈQUE) */
 .studio-library-panel {
     width: 250px;
     min-width: 250px;
@@ -231,67 +298,181 @@
     flex-direction: column;
 }
 
-/* 🚀 HEADER PERSONNAGES AVEC BOUTON NETTOYAGE */
+/* SECTION HEADERS */
 .library-section-header {
-    padding: 15px;
+    padding: 12px 15px;
     background: #f8fafc;
     border-bottom: 1px solid #e2e8f0;
+}
+
+.lib-header-top {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    margin-bottom: 8px;
+}
+
+.lib-section-title {
+    font-weight: 950;
+    font-size: 10px;
+    text-transform: uppercase;
+    color: #94a3b8;
+    letter-spacing: 0.05em;
+}
+
+.lib-actions-row {
+    display: flex;
+    gap: 5px;
 }
 
 .btn-clean-bgs {
+    flex: 1;
     background: #10b981;
     color: white;
     border: none;
-    padding: 6px 12px;
-    border-radius: 8px;
+    padding: 8px;
+    border-radius: 10px;
     font-weight: 950;
     font-size: 8px;
     text-transform: uppercase;
     cursor: pointer;
-    box-shadow: 0 4px 10px rgba(16, 185, 129, 0.2);
 }
-.btn-clean-bgs:disabled { background: #cbd5e1; opacity: 0.5; }
+
+.btn-ai-clean {
+    background: #6366f1;
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 10px;
+    font-weight: 950;
+    font-size: 8px;
+    text-transform: uppercase;
+    cursor: pointer;
+    box-shadow: 0 4px 10px rgba(99, 102, 241, 0.2);
+}
+
+/* SCROLLABLE GRIDS */
+.library-scroll-area {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
 
 .library-grid {
     display: grid;
-    grid-template-columns: 1fr;
-    gap: 12px;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
     padding: 15px;
-    overflow-y: auto;
 }
 
+/* CARDS */
 .item-card {
     background: #f8fafc;
     border: 2px solid transparent;
     border-radius: 16px;
-    padding: 12px;
+    padding: 8px;
     cursor: pointer;
     text-align: center;
+    transition: all 0.2s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative; /* Crucial pour le bouton X */
 }
+.item-card:hover { background: #f1f5f9; border-color: #cbd5e1; }
 .item-card.active { border-color: #6366f1; background: #eef2ff; }
+
+/* ❌ BOUTON SUPPRESSION ITEM (AMÉLIORÉ) */
+.item-del-btn {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    width: 22px;
+    height: 22px;
+    background: #ef4444;
+    color: white;
+    border: 2px solid white;
+    border-radius: 50%;
+    font-size: 12px;
+    font-weight: 950;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    opacity: 0;
+    transform: scale(0.8);
+    transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    z-index: 100;
+    box-shadow: 0 4px 10px rgba(239, 68, 68, 0.3);
+}
+.item-card:hover .item-del-btn { 
+    opacity: 1; 
+    transform: scale(1);
+}
+.item-del-btn:hover {
+    background: #dc2626;
+    transform: scale(1.1) !important;
+}
 
 .item-img-container {
     width: 100%;
-    height: 70px;
+    height: 55px;
     display: flex;
     align-items: center;
     justify-content: center;
     background: white;
-    border-radius: 12px;
-    margin-bottom: 8px;
+    border-radius: 10px;
+    margin-bottom: 6px;
+    overflow: hidden;
+}
+
+.item-img {
+    max-width: 90%;
+    max-height: 90%;
+    object-fit: contain;
+}
+
+.item-name-tag {
+    font-weight: 900;
+    font-size: 8px;
+    color: #475569;
+    text-transform: uppercase;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
+}
+
+/* SECTION BACKGROUNDS FIXE EN BAS */
+.library-bg-section {
+    border-top: 1px solid #e2e8f0;
+    background: white;
+    height: 220px;
+    display: flex;
+    flex-direction: column;
 }
 
 .v115-prop-bar {
     display: flex;
     align-items: center;
-    gap: 15px;
+    gap: 12px;
     background: white;
-    padding: 10px 20px;
+    padding: 8px 15px;
     border-radius: 18px;
     border: 1px solid #e2e8f0;
+    flex-wrap: wrap;
+}
+
+.prop-input-mini {
+    background: #f1f5f9;
+    border: none;
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-weight: 900;
+    font-size: 11px;
+    color: #1e293b;
+    outline: none;
 }
 
 .compact-code-editor {

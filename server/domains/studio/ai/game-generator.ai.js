@@ -14,8 +14,8 @@ const GameGeneratorAI = {
         1. Tu dois retourner un objet JSON : { "code": "...", "message": "..." }.
         2. Le code DOIT contenir 'class MiniGame { ... }'.
         3. Le constructeur DOIT être : 'constructor(canvas, assets) { ... }'.
-        4. La méthode 'start()' est OBLIGATOIRE. Elle lance la boucle de jeu.
-        5. La méthode 'destroy()' est OBLIGATOIRE. Elle nettoie les events et arrête le loop.
+        4. La méthode 'start()' est OBLIGATORY. Elle lance la boucle de jeu.
+        5. La méthode 'destroy()' est OBLIGATORY. Elle nettoie les events et arrête le loop.
         6. Utilise 'this.assets[ID_ACTEUR]' pour dessiner les personnages.
         
         INTERDICTION :

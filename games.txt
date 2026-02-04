@@ -1,0 +1,1552 @@
+================================================================================
+📜 RÉFÉRENTIEL DES USER STORYS: FONCTIONALITÉ GAMES
+================================================================================
+-Dans le menu activité, quand je clique sur +jeu une modale s ouvre qui me permet de créér des quizz (qcm)
+Je peux y nomer le quizz (en mettant des espaces entre les mots du tire)
+-Je peu ajouter une nouvel question en écrivant la question et les 4 réponses proposées et coliquer sur celle su sera la 
+bonne et recommencer l opération pour créér un quizz manuel
+-je peu mettre un sujet et envoyer a l ia pour générer un quizz automatique
+-dans la partie droite je peu attribuer un quizz a une classe a plusieurs classes ou a certains élèves d une classe
+le modèle de sélectionest identique que celui de Homwork (Devoirs Maison)
+
+================================================================================
+💻 CODE SOURCE - MODULE GAMES
+================================================================================
+
+[[[£ FILE: client/src/features/eleve/games/GamesGrid.css £]]]
+.game-selector-overlay { position: fixed; inset: 0; z-index: 9999; background: rgba(253, 242, 248, 0.95); display: flex; align-items: center; justify-content: center; }
+.selector-card { background: white; padding: 3rem; border-radius: 60px; text-align: center; border: 8px solid #fbcfe8; }
+.game-choice-btn { height: 180px; width: 220px; border-radius: 40px; border: none; cursor: pointer; font-weight: 900; color: white; font-size: 1.2rem; }
+.zombie-btn { background: #22c55e; margin-right: 20px; }
+.starship-btn { background: #3b82f6; }
+
+[[[£ END: client/src/features/eleve/games/GamesGrid.css £]]]
+
+[[[£ FILE: client/src/features/eleve/games/GamesGrid.jsx £]]]
+// @signatures: GamesGrid, assignedIds, close, loadData, myClass, targets
+import React, { useState, useEffect } from 'react';
+import ZombieWrapper from './zombie/ZombieWrapper';
+import StarshipWrapper from './starship/StarshipWrapper';
+import DashboardFolder from '../components/DashboardFolder';
+import './GamesGrid.css';
+
+export default function GamesGrid({ user }) {
+  const [quizzes, setQuizzes] = useState([]);
+  const [chapters, setChapters] = useState([]);
+  const [selectedQuiz, setSelectedQuiz] = useState(null);
+  const [activeGame, setActiveGame] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const loadData = async () => {
+    setRefreshing(true);
+    const myId = String(user._id || user.id);
+    const myClass = (user.currentClass || "").trim().toUpperCase();
+    
+    const rawGroups = user.assignedGroups || [];
+    const myGroupIds = rawGroups.map(g => (typeof g === 'object' && g !== null) ? String(g._id) : String(g));
+
+    try {
+        const [allGames, allProgs, allClasses] = await Promise.all([
+            fetch('/api/games/all').then(r => r.json()),
+            fetch('/api/games/progress').then(r => r.json()),
+            fetch('/api/auth/config').then(r => r.json()).then(d => d.classrooms || [])
+        ]);
+
+        const myGroupNames = allClasses
+            .filter(c => myGroupIds.includes(String(c._id)))
+            .map(c => c.name.toUpperCase().trim());
+
+        const myTargets = [myClass, ...myGroupNames];
+
+        const filtered = allGames.filter(g => {
+            const targets = (g.targetClassrooms || (g.classroom ? [g.classroom] : [])).map(t => t.toUpperCase().trim());
+            const assignedIds = (g.assignedStudents || []).map(id => String(id));
+
+            if (assignedIds.includes(myId)) return true;
+
+            // Matching robuste (case insensitive, trim)
+            const isTargetedGroup = targets.some(t => myTargets.includes(t));
+            
+            if (isTargetedGroup) {
+                if (g.isAllClass === true) return true;
+                // Si "AssignedStudents" est vide mais "isAllClass" est false (cas ambigu), on affiche quand même si cible
+                if (assignedIds.length === 0) return true;
+            }
+            return false;
+        }).map(g => {
+            const prog = allProgs.find(p => String(p.studentId) === myId && String(p.gameId) === String(g._id));
+            let status = 'todo'; 
+            if (prog) {
+                if (prog.levelReached >= 1) status = 'done'; 
+                else status = 'inprogress'; 
+            }
+            return { ...g, status };
+        });
+
+        setQuizzes(filtered);
+    } catch(e) { console.error("GamesGrid Error:", e); }
+    setRefreshing(false);
+  };
+
+  useEffect(() => {
+    loadData();
+    fetch('/api/structure/chapters').then(r => r.json()).then(setChapters);
+  }, [user]);
+
+  if (activeGame && selectedQuiz) {
+      const close = () => { 
+          setActiveGame(null); 
+          setSelectedQuiz(null);
+          loadData(); 
+      };
+      return activeGame === 'zombie' ? <ZombieWrapper user={user} level={selectedQuiz} onClose={close} /> : <StarshipWrapper user={user} level={selectedQuiz} onClose={close} />;
+  }
+
+  if (selectedQuiz) return (
+      <div className="game-selector-overlay">
+          <div className="selector-card">
+              <div className="flex gap-4">
+                  <button onClick={() => setActiveGame('zombie')} className="game-choice-btn zombie-btn">🧟 ZOMBIE</button>
+                  <button onClick={() => setActiveGame('starship')} className="game-choice-btn starship-btn">🚀 STARSHIP</button>
+              </div>
+              <button onClick={() => setSelectedQuiz(null)} className="mt-8 font-black text-pink-300 border-none bg-transparent cursor-pointer">RETOUR</button>
+          </div>
+      </div>
+  );
+
+  return (
+    <div className="flex flex-col gap-4">
+        <div className="flex justify-end">
+            <button onClick={loadData} className="text-[10px] font-black text-slate-400 bg-white px-3 py-1 rounded-xl border border-slate-200 hover:text-slate-600 transition-colors">
+                {refreshing ? '...' : '🔄 ACTUALISER'}
+            </button>
+        </div>
+        <DashboardFolder items={quizzes} chapters={chapters} type="game" onSelect={setSelectedQuiz} />
+    </div>
+  );
+}
+
+[[[£ END: client/src/features/eleve/games/GamesGrid.jsx £]]]
+
+[[[£ FILE: client/src/features/eleve/games/mainGames.js £]]]
+// @signatures: GameProgression
+export class GameProgression {
+    constructor(questions, maxLives = 4) {
+        this.questions = questions;
+        this.lives = maxLives;
+        this.states = questions.map(() => ({ level: 0, done: false }));
+    }
+    normalize(str) { return str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, ""); }
+    getNextActiveQuestion() {
+        const idx = this.states.findIndex(s => !s.done);
+        return idx === -1 ? null : { q: this.questions[idx], idx, level: this.states[idx].level };
+    }
+    submitAnswer(qIdx, answer) {
+        const q = this.questions[qIdx];
+        const state = this.states[qIdx];
+        let success = state.level < 2 ? (parseInt(answer) === q.a) : (this.normalize(answer) === this.normalize(q.options[q.a]));
+        if (success) { state.level++; if (state.level >= 3) state.done = true; }
+        else if (state.level > 0) state.level--;
+        return { success, isDone: state.done };
+    }
+    loseLife(qIdx) { this.lives--; if (this.states[qIdx].level > 0) this.states[qIdx].level--; return { lives: this.lives, isDead: this.lives <= 0 }; }
+    getTrackerData() {
+        const current = this.states.reduce((acc, s) => acc + Math.min(s.level, 3), 0);
+        return { dots: this.states.map(s => ({ pct: (s.level/3)*100, done: s.done })), globalPct: (current / (this.states.length * 3)) * 100 };
+    }
+    getLives() { return this.lives; }
+}
+
+[[[£ END: client/src/features/eleve/games/mainGames.js £]]]
+
+[[[£ FILE: client/src/features/eleve/games/starship/StarshipWrapper.jsx £]]]
+// @signatures: StarshipWrapper, handleGameFinish, saveProgress
+import React, { useEffect, useRef } from 'react';
+import { initStarshipGame } from './starship_core';
+import './starship_style.css';
+
+export default function StarshipWrapper({ user, level, onClose }) {
+    const boxRef = useRef(null);
+
+    const saveProgress = async (score, lvl) => {
+        if (!user || !level) return;
+        try {
+            await fetch('/api/games/save-progress', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    studentId: user._id || user.id,
+                    gameId: level._id,
+                    score: score,
+                    levelReached: lvl
+                })
+            });
+        } catch (e) { console.error("Save fail", e); }
+    };
+
+    const handleGameFinish = (score, success) => {
+        saveProgress(score, success ? 1 : 0);
+        onClose();
+    };
+
+    useEffect(() => {
+        if (level && boxRef.current) {
+            // 1. SIGNAL DE DÉPART (Pastille Bleue)
+            saveProgress(0, 0);
+
+            // 2. Moteur
+            const engine = initStarshipGame(boxRef.current, { level, user, onFinish: handleGameFinish }, onClose);
+            return () => engine.destroy();
+        }
+    }, [level]);
+
+    return (
+        <div className="fixed inset-0 bg-black z-[9999] flex flex-col w-full h-full">
+            <div id="starship-root" ref={boxRef} className="w-full h-full relative overflow-hidden"></div>
+        </div>
+    );
+}
+
+[[[£ END: client/src/features/eleve/games/starship/StarshipWrapper.jsx £]]]
+
+[[[£ FILE: client/src/features/eleve/games/starship/starship_core.js £]]]
+// @signatures: clearLevel, failAction, fire, getNextQuestion, handleBossInput, handleKey, initStarshipGame, isCorrect, loadRound, moveShip, normalize, renderBars, startBossPhase, startInvaderPhase, triggerNuke, update
+import { GameProgression } from '../mainGames';
+
+export function initStarshipGame(root, api, onExit) {
+    let questionsList = api.level.questions || [{ q: "Erreur", options: ["Bug"], a: 0 }];
+    const questionStates = questionsList.map(() => 0);
+    
+    let currentQIndex = -1;
+    let currentQ = null; 
+    let lives = 4;
+    
+    let shipX = 50; 
+    let projectiles = []; 
+    let enemies = []; 
+    let spawnInterval;
+    let isPaused = false;
+    let frameId;
+    
+    root.innerHTML = `
+        <div class="s-game-wrapper">
+            <div class="s-stars"></div>
+            <div class="s-hud">
+                <div class="s-lives">❤️❤️❤️❤️</div>
+                <div class="s-bars-container" id="s-bars"></div>
+                <button class="s-quit-btn">QUITTER</button>
+            </div>
+            <div id="s-q-banner" class="s-question-banner">Prêt ?</div>
+            <div class="s-play-area" id="s-area">
+                <div id="s-ship" class="s-ship">🚀</div>
+                <div id="s-projectiles-layer"></div>
+                <div id="s-enemies-layer"></div>
+            </div>
+            <div class="s-boss-interface" id="s-boss-ui" style="display:none">
+                <input type="text" id="s-boss-input" class="s-boss-input" placeholder="CODE DE TIR !" autocomplete="off">
+                <button id="s-nuke-btn" class="s-nuke-btn">☢️ NUKE</button>
+            </div>
+            <button class="s-mobile-shoot" id="s-mobile-fire">🔥</button>
+        </div>
+    `;
+
+    const els = {
+        ship: root.querySelector('#s-ship'),
+        area: root.querySelector('#s-area'),
+        pLayer: root.querySelector('#s-projectiles-layer'),
+        eLayer: root.querySelector('#s-enemies-layer'),
+        qText: root.querySelector('#s-q-banner'),
+        bars: root.querySelector('#s-bars'),
+        lives: root.querySelector('.s-lives'),
+        bossUI: root.querySelector('#s-boss-ui'),
+        bossInput: root.querySelector('#s-boss-input'),
+        nukeBtn: root.querySelector('#s-nuke-btn')
+    };
+
+    const renderBars = () => {
+        els.bars.innerHTML = '';
+        questionStates.forEach((score, i) => {
+            const box = document.createElement('div');
+            box.className = 's-mini-bar-box';
+            if (i === currentQIndex) box.classList.add('active');
+            for(let s=0; s<3; s++) {
+                const seg = document.createElement('div');
+                seg.className = 's-bar-seg';
+                if (score > s) seg.classList.add('filled');
+                box.appendChild(seg);
+            }
+            els.bars.appendChild(box);
+        });
+    };
+
+    const normalize = (str) => (str || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
+
+    const failAction = (msg) => {
+        lives--;
+        els.lives.innerText = "❤️".repeat(lives);
+        if (questionStates[currentQIndex] > 0) questionStates[currentQIndex]--;
+
+        const fb = document.createElement('div');
+        fb.className = 's-feedback';
+        fb.innerText = msg || "IMPACT !";
+        root.appendChild(fb);
+        setTimeout(() => fb.remove(), 1500);
+
+        if (lives <= 0) {
+            alert("VAISSEAU DÉTRUIT !");
+            if (api.onFinish) api.onFinish(0, true); 
+            else onExit();
+        } else {
+            loadRound(); 
+        }
+    };
+
+    const triggerNuke = () => {
+        isPaused = true;
+        const flash = document.createElement('div');
+        flash.className = 's-nuke-flash';
+        root.appendChild(flash);
+        setTimeout(() => { flash.remove(); isPaused = false; loadRound(); }, 800);
+    };
+
+    const handleBossInput = () => {
+        if (isPaused) return;
+        const qData = questionsList[currentQIndex];
+        const correctTxt = qData.options[qData.a];
+        if (normalize(els.bossInput.value) === normalize(correctTxt)) {
+            questionStates[currentQIndex]++;
+            triggerNuke();
+        } else {
+            failAction(`Non ! C'était : ${correctTxt}`);
+        }
+    };
+
+    const moveShip = (delta) => { if (!isPaused) { shipX = Math.max(5, Math.min(95, shipX + delta)); els.ship.style.left = shipX + '%'; } };
+
+    const fire = () => {
+        if (isPaused || questionStates[currentQIndex] >= 2) return;
+        const p = document.createElement('div');
+        p.className = 's-projectile';
+        p.style.left = shipX + '%';
+        p.style.bottom = '80px'; 
+        els.pLayer.appendChild(p);
+        projectiles.push({ div: p, xPct: shipX, y: 80 });
+    };
+
+    const startBossPhase = () => {
+        const boss = document.createElement('div');
+        boss.className = 's-boss';
+        boss.innerText = "🛸"; 
+        boss.style.left = '50%';
+        boss.style.top = '10%';
+        els.eLayer.appendChild(boss);
+        enemies.push({ div: boss, xPct: 50, y: 50, speed: 0.2, isCorrect: true, type: 'boss' });
+    };
+
+    const startInvaderPhase = () => {
+        const qData = questionsList[currentQIndex];
+        spawnInterval = setInterval(() => {
+            if (isPaused || enemies.length > 6) return;
+            const opts = qData.options;
+            const rIdx = Math.floor(Math.random() * opts.length);
+            const isCorrect = (rIdx === qData.a);
+            const el = document.createElement('div');
+            el.className = isCorrect ? 's-enemy s-correct-target' : 's-enemy';
+            el.innerText = opts[rIdx];
+            const startX = 10 + Math.random() * 80;
+            el.style.left = startX + '%';
+            el.style.top = '-60px';
+            els.eLayer.appendChild(el);
+            enemies.push({ div: el, xPct: startX, y: -60, speed: 1.5 + (Math.random() * 1), isCorrect: isCorrect, type: 'invader' });
+        }, 1500);
+    };
+
+    const clearLevel = () => {
+        clearInterval(spawnInterval);
+        enemies.forEach(e => e.div.remove()); enemies = [];
+        projectiles.forEach(p => p.div.remove()); projectiles = [];
+    };
+
+    const getNextQuestion = () => {
+        if (currentQIndex !== -1 && questionStates[currentQIndex] < 3) return currentQIndex;
+        const available = questionStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
+        if (available.length === 0) return null;
+        return available[Math.floor(Math.random() * available.length)];
+    };
+
+    const loadRound = () => {
+        clearLevel();
+        const nextIdx = getNextQuestion();
+        if (nextIdx === null) {
+            alert("GALAXIE SAUVÉE !");
+            if (api.onFinish) api.onFinish(lives * 100, true);
+            else onExit();
+            return;
+        }
+        currentQIndex = nextIdx;
+        currentQ = questionsList[currentQIndex];
+        const qData = currentQ;
+        const score = questionStates[currentQIndex];
+        els.qText.innerText = qData.q;
+        renderBars();
+        if (score >= 2) {
+            els.bossUI.style.display = 'flex';
+            els.bossInput.value = '';
+            setTimeout(() => els.bossInput.focus(), 50);
+            startBossPhase();
+        } else {
+            els.bossUI.style.display = 'none';
+            startInvaderPhase();
+        }
+    };
+
+    const update = () => {
+        if (!isPaused) {
+            for (let i = projectiles.length - 1; i >= 0; i--) {
+                const p = projectiles[i];
+                p.y += 8;
+                p.div.style.bottom = p.y + 'px';
+                if (p.y > window.innerHeight) { p.div.remove(); projectiles.splice(i, 1); }
+            }
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const e = enemies[i];
+                e.y += e.speed;
+                e.div.style.top = e.y + 'px';
+                if (e.type === 'invader') {
+                    const eRect = e.div.getBoundingClientRect();
+                    for (let j = projectiles.length - 1; j >= 0; j--) {
+                        const p = projectiles[j];
+                        const pRect = p.div.getBoundingClientRect();
+                        if (!(pRect.right < eRect.left || pRect.left > eRect.right || pRect.bottom < eRect.top || pRect.top > eRect.bottom)) {
+                            p.div.remove(); projectiles.splice(j, 1);
+                            e.div.remove(); enemies.splice(i, 1);
+                            if (e.isCorrect) { questionStates[currentQIndex]++; loadRound(); } else { failAction("MAUVAISE CIBLE !"); }
+                            return; 
+                        }
+                    }
+                }
+                const shipRect = els.ship.getBoundingClientRect();
+                const eRect = e.div.getBoundingClientRect();
+                const hitbox = { left: shipRect.left + 10, right: shipRect.right - 10, top: shipRect.top + 10, bottom: shipRect.bottom - 10 };
+                if (!(hitbox.right < eRect.left || hitbox.left > eRect.right || hitbox.bottom < eRect.top || hitbox.top > eRect.bottom)) {
+                    failAction("COLLISION !"); return;
+                }
+                if (e.y > window.innerHeight - 50) { e.div.remove(); enemies.splice(i, 1); }
+            }
+        }
+        frameId = requestAnimationFrame(update);
+    };
+
+    root.querySelector('.s-quit-btn').onclick = onExit;
+    const handleKey = (e) => { if (e.key === 'ArrowLeft') moveShip(-5); if (e.key === 'ArrowRight') moveShip(5); if (e.code === 'Space') { e.preventDefault(); fire(); } };
+    document.addEventListener('keydown', handleKey);
+    root.addEventListener('touchstart', (e) => { if(e.target.tagName !== 'BUTTON' && e.target.tagName !== 'INPUT') { const x = e.touches[0].clientX; if (x < window.innerWidth / 2) moveShip(-5); else moveShip(5); } });
+    root.querySelector('#s-mobile-fire').onclick = (e) => { e.stopPropagation(); fire(); };
+    els.bossInput.onkeydown = (e) => { if(e.key === 'Enter') handleBossInput(); };
+    els.nukeBtn.onclick = handleBossInput;
+
+    loadRound();
+    update();
+
+    return { destroy: () => { cancelAnimationFrame(frameId); clearInterval(spawnInterval); document.removeEventListener('keydown', handleKey); } };
+}
+
+[[[£ END: client/src/features/eleve/games/starship/starship_core.js £]]]
+
+[[[£ FILE: client/src/features/eleve/games/starship/starship_style.css £]]]
+/* DESIGN SPACE INVADERS */
+.s-game-wrapper {
+    position: relative; width: 100%; height: 100%;
+    background: #000; /* Espace noir */
+    font-family: 'Orbitron', sans-serif;
+    color: white; overflow: hidden;
+    user-select: none;
+}
+
+/* Étoiles fond (CSS pur) */
+.s-stars {
+    position: absolute; inset: 0;
+    background-image: 
+        radial-gradient(white 1px, transparent 1px),
+        radial-gradient(white 1px, transparent 1px);
+    background-size: 50px 50px, 100px 100px;
+    background-position: 0 0, 25px 25px;
+    opacity: 0.5;
+}
+
+/* HUD */
+.s-hud {
+    position: absolute; top: 0; width: 100%; height: 60px;
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 0 20px; background: rgba(0,0,0,0.8);
+    border-bottom: 1px solid #333; z-index: 50;
+}
+.s-lives { font-size: 1.2rem; letter-spacing: 2px; }
+.s-quit-btn {
+    background: #ef4444; border: 1px solid #f87171; color: white;
+    border-radius: 4px; padding: 5px 10px; cursor: pointer;
+    font-family: inherit; font-weight: bold;
+}
+
+/* BARRES PROGRESSION */
+.s-bars-container { display: flex; gap: 6px; }
+.s-mini-bar-box {
+    display: flex; gap: 2px; padding: 2px;
+    border: 1px solid #333; border-radius: 2px;
+}
+.s-mini-bar-box.active { border-color: #06b6d4; box-shadow: 0 0 5px #06b6d4; }
+.s-bar-seg {
+    width: 10px; height: 6px; background: #1e293b;
+}
+.s-bar-seg.filled { background: #06b6d4; box-shadow: 0 0 5px #06b6d4; }
+
+/* BANNER QUESTION */
+.s-question-banner {
+    position: absolute; top: 70px; width: 100%; text-align: center;
+    font-size: 1.3rem; font-weight: 900; color: #facc15;
+    text-shadow: 0 0 10px #facc15; z-index: 10;
+    padding: 0 20px;
+}
+
+/* PLAY AREA */
+.s-play-area {
+    position: absolute; inset: 0;
+}
+
+/* VAISSEAU */
+.s-ship {
+    position: absolute; bottom: 30px; 
+    font-size: 3rem; transform: translateX(-50%);
+    text-shadow: 0 0 20px #3b82f6;
+    transition: left 0.05s linear;
+    z-index: 20;
+}
+
+/* ENNEMIS (Réponses) */
+.s-enemy {
+    position: absolute; 
+    background: #1e293b; border: 2px solid #ef4444; color: white;
+    padding: 8px 12px; border-radius: 6px; 
+    font-size: 0.9rem; font-weight: bold;
+    transform: translateX(-50%);
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+    white-space: nowrap; z-index: 15;
+}
+/* Juste pour debug visuel (optionnel) */
+/* .s-correct-target { border-color: #22c55e; } */
+
+.s-projectile {
+    position: absolute; width: 4px; height: 15px;
+    background: #06b6d4; box-shadow: 0 0 8px #06b6d4;
+    transform: translateX(-50%); z-index: 18;
+}
+
+/* BOSS */
+.s-boss {
+    position: absolute; font-size: 5rem;
+    transform: translateX(-50%);
+    text-shadow: 0 0 30px #a855f7; z-index: 25;
+}
+
+/* BOSS INPUT UI */
+.s-boss-interface {
+    position: absolute; bottom: 100px; width: 100%;
+    display: flex; gap: 10px; justify-content: center;
+    z-index: 60;
+}
+.s-boss-input {
+    background: rgba(0,0,0,0.8); border: 2px solid #a855f7;
+    color: #a855f7; padding: 10px; font-family: inherit; font-size: 1.2rem;
+    text-transform: uppercase; text-align: center;
+}
+.s-nuke-btn {
+    background: #a855f7; color: white; border: none; padding: 0 20px;
+    font-weight: bold; cursor: pointer;
+}
+
+/* FEEDBACK */
+.s-feedback {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    font-size: 3rem; color: #ef4444; font-weight: 900;
+    text-shadow: 0 0 20px red; pointer-events: none; z-index: 100;
+}
+
+.s-nuke-flash {
+    position: fixed; inset: 0; background: white; z-index: 200;
+    animation: flash 0.8s ease-out forwards;
+}
+@keyframes flash { from { opacity: 1; } to { opacity: 0; } }
+
+.s-mobile-shoot {
+    position: absolute; bottom: 20px; right: 20px;
+    width: 70px; height: 70px; background: rgba(255,255,255,0.1);
+    border: 2px solid rgba(255,255,255,0.3); border-radius: 50%;
+    font-size: 2rem; display: flex; align-items: center; justify-content: center;
+    color: white; z-index: 50;
+}
+
+[[[£ END: client/src/features/eleve/games/starship/starship_style.css £]]]
+
+[[[£ FILE: client/src/features/eleve/games/zombie/ZombieGame.css £]]]
+.z-container { width: 100%; max-width: 800px; background: white; border-radius: 30px; border: 4px solid #1e293b; overflow: hidden; }
+#zombie-arena { height: 200px; background: #1e293b; position: relative; }
+
+[[[£ END: client/src/features/eleve/games/zombie/ZombieGame.css £]]]
+
+[[[£ FILE: client/src/features/eleve/games/zombie/ZombieGame.js £]]]
+// @signatures: ZombieGame
+export class ZombieGame {
+    constructor(container, ctrl) { this.c = container; this.ctrl = ctrl; }
+    loadQuestion(q) { this.c.querySelector('#z-q').textContent = q.q; }
+}
+
+[[[£ END: client/src/features/eleve/games/zombie/ZombieGame.js £]]]
+
+[[[£ FILE: client/src/features/eleve/games/zombie/ZombieWrapper.jsx £]]]
+// @signatures: ZombieWrapper, handleGameFinish, saveProgress
+import React, { useEffect, useRef } from 'react';
+import { initZombieGame } from './zombie_core';
+import './zombie_style.css';
+
+export default function ZombieWrapper({ user, level, onClose }) {
+    const boxRef = useRef(null);
+    
+    // Fonction générique pour sauvegarder
+    const saveProgress = async (score, lvl) => {
+        if (!user || !level) return;
+        try {
+            await fetch('/api/games/save-progress', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    studentId: user._id || user.id,
+                    gameId: level._id,
+                    score: score,
+                    levelReached: lvl
+                })
+            });
+        } catch (e) { console.error("Save fail", e); }
+    };
+
+    // Callback Fin de jeu (Win/Lose)
+    const handleGameFinish = (score, success) => {
+        saveProgress(score, success ? 1 : 0); // 1 = Violet, 0 = Bleu
+        onClose();
+    };
+
+    useEffect(() => {
+        if (!level || !boxRef.current) return;
+
+        // 1. SIGNAL DE DÉPART : On marque "Bleu" (0) dès l'ouverture
+        // Comme ça, même si l'élève quitte avec la croix, c'est marqué "Vu/Essayé"
+        saveProgress(0, 0);
+
+        // 2. Lancement du jeu
+        const engine = initZombieGame(boxRef.current, { level, user, onFinish: handleGameFinish }, onClose);
+        
+        return () => engine.destroy();
+    }, [level]);
+
+    return (
+        <div className="fixed inset-0 bg-black z-[9999] flex flex-col">
+            <div id="zombie-root" ref={boxRef} className="w-full h-full"></div>
+        </div>
+    );
+}
+
+[[[£ END: client/src/features/eleve/games/zombie/ZombieWrapper.jsx £]]]
+
+[[[£ FILE: client/src/features/eleve/games/zombie/zombie_core.js £]]]
+// @signatures: failAction, fireProjectile, getNextQuestion, handleInputAnswer, initZombieGame, loadRound, loop, normalize, renderBars, showFeedback, updatePositions
+export function initZombieGame(root, api, onExit) {
+    // --- 1. DONNÉES & ÉTAT ---
+    let questionsList = api.level.questions;
+    if (!questionsList || !Array.isArray(questionsList) || questionsList.length === 0) {
+        questionsList = [{ q: "Erreur config", options: ["OK"], a: 0 }];
+    }
+
+    const questionStates = questionsList.map(() => 0); 
+    let currentQIndex = -1;
+    let lives = 4;
+    
+    // Mouvement
+    let zombiePos = 0; 
+    let zombieSpeed = 0.035; 
+    let frameId;
+    let isPaused = false; 
+
+    // --- 2. HTML UI ---
+    root.innerHTML = `
+        <div class="z-game-wrapper">
+            <div class="z-hud">
+                <div class="z-lives">❤️❤️❤️❤️</div>
+                <div class="z-bars-container" id="bars-container"></div>
+                <button class="z-quit-btn">QUITTER</button>
+            </div>
+            <div id="arena">
+                <div id="hero-container" class="z-char-box" style="left: 5%;">
+                    <div class="z-emoji">🧙‍♂️</div>
+                    <img src="/images/hero.png" class="z-img-layer" onload="this.style.opacity=1" onerror="this.style.display='none'"/>
+                </div>
+                <div id="zombie-container" class="z-char-box" style="right: 0%;">
+                    <div class="z-emoji">🧟</div>
+                    <img src="/images/zombi.png" class="z-img-layer" onload="this.style.opacity=1" onerror="this.style.display='none'"/>
+                </div>
+                <div id="projectile">🔥</div>
+                <div id="feedback-msg" class="z-feedback"></div>
+            </div>
+            <div class="z-interaction-zone">
+                <div id="question-text" class="z-q-text">Chargement...</div>
+                <div id="choices-area" class="z-choices-grid"></div>
+                <div id="input-area" class="z-input-box" style="display:none">
+                    <input type="text" id="answer-input" placeholder="TAPEZ LA RÉPONSE..." autocomplete="off" />
+                    <button id="validate-btn">TIRER</button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    const els = {
+        hero: root.querySelector('#hero-container'),
+        zombie: root.querySelector('#zombie-container'),
+        zombieImg: root.querySelector('#zombie-container .z-img-layer'),
+        zombieEmoji: root.querySelector('#zombie-container .z-emoji'),
+        projectile: root.querySelector('#projectile'),
+        lives: root.querySelector('.z-lives'),
+        bars: root.querySelector('#bars-container'),
+        qText: root.querySelector('#question-text'),
+        choices: root.querySelector('#choices-area'),
+        inputArea: root.querySelector('#input-area'),
+        input: root.querySelector('#answer-input'),
+        validateBtn: root.querySelector('#validate-btn'),
+        feedback: root.querySelector('#feedback-msg')
+    };
+
+    const updatePositions = () => {
+        els.zombie.style.right = zombiePos + '%';
+    };
+
+    // QUITTER SANS SAUVEGARDER (Bouton Quitter)
+    root.querySelector('.z-quit-btn').onclick = onExit;
+    
+    els.validateBtn.onclick = () => handleInputAnswer();
+    els.input.onkeydown = (e) => { if(e.key === 'Enter') handleInputAnswer(); };
+
+    const renderBars = () => {
+        els.bars.innerHTML = '';
+        questionStates.forEach((score, i) => {
+            const barBox = document.createElement('div');
+            barBox.className = 'z-mini-bar-box';
+            if (i === currentQIndex) barBox.classList.add('active-q');
+            for(let s=0; s<3; s++) {
+                const seg = document.createElement('div');
+                seg.className = 'z-bar-seg';
+                if (score > s) seg.classList.add('filled');
+                barBox.appendChild(seg);
+            }
+            els.bars.appendChild(barBox);
+        });
+    };
+
+    const getNextQuestion = () => {
+        if (currentQIndex !== -1 && questionStates[currentQIndex] < 3) return currentQIndex;
+        const available = questionStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
+        if (available.length === 0) return null;
+        return available[Math.floor(Math.random() * available.length)];
+    };
+
+    const normalize = (str) => (str || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
+
+    const loadRound = () => {
+        const nextIdx = getNextQuestion();
+        
+        // --- VICTOIRE ---
+        if (nextIdx === null) {
+            alert("VICTOIRE !");
+            // CALCUL DU SCORE (Basique : Vies restantes * 100)
+            const finalScore = lives * 100;
+            // APPEL API POUR SAUVEGARDER
+            if (api.onFinish) api.onFinish(finalScore, true);
+            else onExit();
+            return;
+        }
+
+        currentQIndex = nextIdx;
+        const qData = questionsList[currentQIndex];
+        const score = questionStates[currentQIndex];
+
+        els.qText.innerText = qData.q || "Question vide";
+        renderBars();
+
+        if (score >= 2) {
+            els.choices.style.display = 'none';
+            els.inputArea.style.display = 'flex';
+            els.input.value = '';
+            setTimeout(() => els.input.focus(), 50);
+            els.zombieEmoji.innerText = "👹"; 
+            els.zombieImg.style.filter = "drop-shadow(0 0 15px red) hue-rotate(-50deg)";
+        } else {
+            els.inputArea.style.display = 'none';
+            els.choices.style.display = 'grid';
+            els.zombieEmoji.innerText = "🧟";
+            els.zombieImg.style.filter = "none";
+            els.choices.innerHTML = '';
+            const rawOpts = qData.options || ["A", "B", "C", "D"];
+            const opts = rawOpts.map((txt, idx) => ({ txt, idx }));
+            opts.sort(() => Math.random() - 0.5);
+            opts.forEach(o => {
+                const btn = document.createElement('button');
+                btn.className = 'z-btn';
+                btn.style.color = "#000"; 
+                btn.innerText = o.txt;
+                btn.onclick = () => {
+                    if (o.idx === qData.a) fireProjectile(true);
+                    else failAction();
+                };
+                els.choices.appendChild(btn);
+            });
+        }
+    };
+
+    const handleInputAnswer = () => {
+        if (isPaused) return;
+        const qData = questionsList[currentQIndex];
+        const correctTxt = qData.options[qData.a]; 
+        if (normalize(els.input.value) === normalize(correctTxt)) fireProjectile(true);
+        else {
+            showFeedback(`Réponse : ${correctTxt}`, false);
+            failAction();
+        }
+    };
+
+    const failAction = () => {
+        showFeedback("RATÉ !", false);
+        zombiePos += 15; 
+        updatePositions();
+    };
+
+    const fireProjectile = (isHit) => {
+        isPaused = true;
+        els.projectile.style.display = 'block';
+        let projX = 10;
+        const targetX = 100 - zombiePos - 10; 
+
+        const anim = setInterval(() => {
+            projX += 4;
+            els.projectile.style.left = projX + '%';
+
+            if (projX >= targetX) {
+                clearInterval(anim);
+                els.projectile.style.display = 'none';
+                if (isHit) {
+                    questionStates[currentQIndex]++;
+                    zombiePos = 0; 
+                    updatePositions();
+                    showFeedback("TOUCHÉ !", true);
+                    setTimeout(() => {
+                        isPaused = false;
+                        loadRound();
+                    }, 500);
+                }
+            }
+        }, 16);
+    };
+
+    const showFeedback = (msg, good) => {
+        els.feedback.innerText = msg;
+        els.feedback.style.color = good ? '#22c55e' : '#ef4444';
+        els.feedback.style.opacity = 1;
+        els.feedback.style.transform = 'translate(-50%, -50%) scale(1.5)';
+        setTimeout(() => {
+            els.feedback.style.opacity = 0;
+            els.feedback.style.transform = 'translate(-50%, -50%) scale(0)';
+        }, 1000);
+    };
+
+    const loop = () => {
+        if (!isPaused) {
+            zombiePos += zombieSpeed;
+            updatePositions();
+
+            if (zombiePos >= 85) {
+                lives--;
+                els.lives.innerText = "❤️".repeat(lives);
+                if (questionStates[currentQIndex] > 0) {
+                    questionStates[currentQIndex]--;
+                    showFeedback("RECULE !", false);
+                }
+                zombiePos = 0; 
+                updatePositions();
+                document.querySelector('.z-game-wrapper').style.background = '#fee2e2';
+                setTimeout(() => document.querySelector('.z-game-wrapper').style.background = '#f0f9ff', 200);
+
+                // --- DÉFAITE ---
+                if (lives <= 0) {
+                    alert("GAME OVER !");
+                    // SAUVEGARDE MÊME EN CAS DE DÉFAITE (Score partiel)
+                    // On considère que le jeu est "FAIT" même si perdu, pour enlever le badge rouge
+                    // Ou alors false pour levelReached pour dire "Non validé"
+                    if (api.onFinish) api.onFinish(0, true); 
+                    else onExit();
+                } else {
+                    loadRound();
+                }
+            }
+        }
+        frameId = requestAnimationFrame(loop);
+    };
+
+    updatePositions();
+    loadRound();
+    loop();
+
+    return { destroy: () => cancelAnimationFrame(frameId) };
+}
+
+[[[£ END: client/src/features/eleve/games/zombie/zombie_core.js £]]]
+
+[[[£ FILE: client/src/features/eleve/games/zombie/zombie_style.css £]]]
+.z-game-wrapper {
+    position: relative; width: 100%; height: 100%;
+    display: flex; flex-direction: column; 
+    background: #f0f9ff;
+    font-family: 'Segoe UI', sans-serif;
+    user-select: none;
+    overflow: hidden; /* Empêche le scroll */
+}
+
+/* HUD (Hauteur Fixe) */
+.z-hud {
+    height: 60px; flex-shrink: 0;
+    background: #1e293b; color: white;
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 0 20px;
+    z-index: 50;
+    border-bottom: 2px solid #334155;
+}
+.z-lives { font-size: 1.5rem; letter-spacing: 3px; }
+.z-quit-btn {
+    background: #ef4444; border: none; color: white; padding: 8px 16px;
+    border-radius: 8px; font-weight: bold; cursor: pointer;
+}
+
+/* BARRES */
+.z-bars-container { display: flex; gap: 6px; }
+.z-mini-bar-box {
+    display: flex; gap: 2px; padding: 2px;
+    background: #334155; border-radius: 4px;
+    border: 2px solid transparent;
+}
+.z-mini-bar-box.active-q { border-color: #fbbf24; }
+.z-bar-seg {
+    width: 12px; height: 8px; background: #475569; border-radius: 1px;
+}
+.z-bar-seg.filled { background: #22c55e; }
+
+/* ARÈNE (Prend le reste de l'espace, minimum 50%) */
+#arena {
+    flex: 1; position: relative;
+    background: linear-gradient(to bottom, #bae6fd 0%, #e0f2fe 80%, #64748b 80%, #475569 100%);
+    overflow: hidden;
+    min-height: 200px; /* Sécurité */
+}
+
+/* PERSONNAGES (Box Conteneur) */
+.z-char-box {
+    position: absolute; bottom: 15%;
+    width: 120px; height: 120px;
+    display: flex; align-items: center; justify-content: center;
+}
+/* Emoji en fond */
+.z-emoji {
+    font-size: 5rem; position: absolute; z-index: 1;
+}
+/* Image par dessus (opacité 0 au début) */
+.z-img-layer {
+    width: 100%; height: 100%; object-fit: contain;
+    filter: drop-shadow(0 10px 5px rgba(0,0,0,0.3));
+    z-index: 2; opacity: 0; transition: opacity 0.2s;
+}
+
+#projectile {
+    position: absolute; display: none;
+    width: 40px; height: 40px; border-radius: 50%;
+    background: radial-gradient(circle, #facc15, #ef4444);
+    bottom: 20%; z-index: 20;
+    font-size: 1.5rem; line-height: 40px; text-align: center;
+    box-shadow: 0 0 20px #f59e0b;
+}
+
+.z-feedback {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%) scale(0);
+    font-size: 3rem; font-weight: 900;
+    text-shadow: 3px 3px 0 white;
+    pointer-events: none; transition: transform 0.2s, opacity 0.2s;
+    z-index: 100; text-align: center;
+    width: 100%;
+}
+
+/* ZONE QUIZ (Hauteur Fixe Importante pour visibilité) */
+.z-interaction-zone {
+    height: 40%; /* 40% de l'écran quoi qu'il arrive */
+    flex-shrink: 0; /* Ne rétrécit pas */
+    background: white;
+    border-top: 6px solid #cbd5e1;
+    display: flex; flex-direction: column;
+    padding: 15px; gap: 10px;
+    box-shadow: 0 -10px 20px rgba(0,0,0,0.1);
+}
+
+.z-q-text {
+    font-size: 1.3rem; font-weight: 800; color: #1e293b;
+    text-align: center; width: 100%;
+    padding: 10px; background: #f1f5f9; border-radius: 10px;
+    border: 2px solid #e2e8f0;
+    min-height: 50px; display: flex; align-items: center; justify-content: center;
+}
+
+/* GRILLE BOUTONS */
+.z-choices-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+    width: 100%; height: 100%;
+}
+.z-btn {
+    background: white; border: 2px solid #94a3b8; border-radius: 12px;
+    font-size: 1.1rem; font-weight: bold; color: #0f172a !important; /* NOIR FORCÉ */
+    cursor: pointer; box-shadow: 0 4px 0 #cbd5e1;
+    transition: transform 0.1s;
+    padding: 5px;
+    white-space: normal; line-height: 1.2;
+}
+.z-btn:active { transform: translateY(4px); box-shadow: none; }
+.z-btn:hover { border-color: #3b82f6; background: #eff6ff; }
+
+/* INPUT BOSS */
+.z-input-box {
+    display: flex; gap: 10px; width: 100%; height: 100%; align-items: center; justify-content: center;
+}
+#answer-input {
+    flex: 1; padding: 15px; font-size: 1.3rem; text-align: center;
+    border: 4px solid #ef4444; border-radius: 12px;
+    font-weight: bold; text-transform: uppercase; color: #b91c1c;
+}
+#validate-btn {
+    padding: 0 30px; height: 60px;
+    background: #ef4444; color: white;
+    border: none; border-radius: 12px; font-weight: 900; font-size: 1.2rem;
+    cursor: pointer; box-shadow: 0 4px 0 #991b1b;
+}
+
+[[[£ END: client/src/features/eleve/games/zombie/zombie_style.css £]]]
+
+[[[£ FILE: client/src/features/prof/games/GameStudio.css £]]]
+.v84-game-container {
+    position: fixed; inset: 0; background: #f8fafc; z-index: 9500;
+    display: flex; flex-direction: column; font-family: 'Inter', sans-serif;
+}
+
+/* HEADER STYLE JEU (Violet) */
+.v84-game-header {
+    height: 90px; background: white; border-bottom: 2px solid #f1f5f9;
+    display: flex; align-items: center; padding: 0 40px; justify-content: space-between;
+}
+.v84-game-icon { font-size: 2rem; background: #9333ea; color: white; padding: 10px; border-radius: 18px; box-shadow: 0 8px 15px rgba(147, 51, 234, 0.3); }
+.v84-game-title-input { border: none; font-size: 1.8rem; font-weight: 950; color: #0f172a; outline: none; width: 100%; text-transform: uppercase; margin-left: 20px; }
+
+/* LAYOUT */
+.v84-game-body { flex: 1; display: flex; overflow: hidden; }
+
+/* QUESTIONS LIST (LEFT) */
+.v84-q-list-sidebar {
+    width: 280px; background: white; padding: 20px; display: flex; flex-direction: column; border-right: 2px solid #f1f5f9;
+}
+.v84-q-item {
+    padding: 15px; background: #f8fafc; border-radius: 16px; border: 2px solid transparent; 
+    cursor: pointer; transition: all 0.2s; margin-bottom: 8px;
+}
+.v84-q-item.active { background: #f3e8ff; border-color: #a855f7; box-shadow: 0 4px 12px rgba(168, 85, 247, 0.15); }
+.v84-q-preview { font-weight: 800; font-size: 11px; color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.v84-q-sub { font-size: 9px; color: #94a3b8; font-weight: 700; margin-top: 4px; }
+
+.v84-add-q-btn { margin-top: 10px; padding: 15px; border: 2px dashed #e2e8f0; border-radius: 20px; color: #94a3b8; font-weight: 900; font-size: 10px; cursor: pointer; background: none; transition: all 0.2s; }
+.v84-add-q-btn:hover { border-color: #a855f7; color: #a855f7; background: #f3e8ff; }
+
+/* EDITOR (CENTER) */
+.v84-game-editor { flex: 1; padding: 40px; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; background: #f8fafc; }
+
+.v84-q-card { background: white; border-radius: 30px; padding: 30px; border: 1px solid #e2e8f0; box-shadow: 0 10px 30px -10px rgba(0,0,0,0.05); }
+.v84-field-label { font-size: 10px; font-weight: 950; color: #94a3b8; text-transform: uppercase; margin-bottom: 10px; display: block; letter-spacing: 0.05em; }
+
+.v84-q-input { 
+    width: 100%; padding: 20px; border-radius: 20px; background: #f8fafc; border: 2px solid #f1f5f9;
+    font-size: 1.1rem; font-weight: 700; color: #1e293b; outline: none; transition: border-color 0.2s;
+}
+.v84-q-input:focus { border-color: #a855f7; background: white; }
+
+.v84-answers-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 10px; }
+.v84-ans-row { display: flex; align-items: center; gap: 10px; background: #f8fafc; padding: 5px 15px 5px 5px; border-radius: 18px; border: 2px solid transparent; transition: all 0.2s; }
+.v84-ans-row.correct { background: #dcfce7; border-color: #22c55e; }
+
+.v84-correct-radio {
+    width: 40px; height: 40px; border-radius: 14px; background: white; border: 2px solid #cbd5e1;
+    display: flex; align-items: center; justify-content: center; cursor: pointer; font-weight: 900; color: #cbd5e1; font-size: 14px;
+}
+.v84-ans-row.correct .v84-correct-radio { background: #22c55e; border-color: #22c55e; color: white; }
+.v84-ans-input { flex: 1; background: transparent; border: none; padding: 10px; font-weight: 700; font-size: 0.9rem; outline: none; }
+
+/* AI WIDGET */
+.v84-ai-widget { background: #7e22ce; color: white; padding: 20px; border-radius: 25px; margin-bottom: 20px; display: flex; gap: 15px; align-items: center; box-shadow: 0 10px 25px rgba(126, 34, 206, 0.3); }
+.v84-ai-input { flex: 1; background: rgba(255,255,255,0.2); border: none; padding: 12px 20px; border-radius: 15px; color: white; font-weight: 700; placeholder-color: rgba(255,255,255,0.5); outline: none; }
+.v84-ai-btn { background: white; color: #7e22ce; border: none; padding: 12px 25px; border-radius: 15px; font-weight: 950; font-size: 10px; cursor: pointer; text-transform: uppercase; }
+
+/* RIGHT SIDEBAR (DISTRIBUTION - Identique Homework mais ajusté couleurs) */
+.v84-dist-sidebar { width: 350px; background: white; border-left: 2px solid #f1f5f9; padding: 30px; display: flex; flex-direction: column; }
+.v84-tab-btn-game { padding: 8px 16px; border-radius: 12px; font-size: 10px; font-weight: 900; transition: all 0.2s; border: 1px solid transparent; }
+.v84-tab-btn-game.active { background: #9333ea; color: white; shadow: 0 4px 10px rgba(147, 51, 234, 0.3); }
+.v84-tab-btn-game.inactive { background: #f1f5f9; color: #94a3b8; }
+
+.v84-game-publish-btn { width: 100%; padding: 20px; background: #9333ea; color: white; font-weight: 950; border-radius: 20px; border: none; margin-top: 20px; font-size: 12px; text-transform: uppercase; cursor: pointer; box-shadow: 0 10px 30px rgba(147, 51, 234, 0.3); transition: transform 0.1s; }
+.v84-game-publish-btn:hover { transform: translateY(-2px); }
+
+[[[£ END: client/src/features/prof/games/GameStudio.css £]]]
+
+[[[£ FILE: client/src/features/prof/games/GameStudio.jsx £]]]
+// @signatures: GameStudio, handleAddQuestion, handleGenerateAI, handleInput, handleSave, handleSelectClass, handleSelectQuestion, handleToggleStudent, isMain, loadData, myClassesIds, toggleAllStudents, updateQuestion
+import React, { useState, useEffect, useRef } from 'react';
+import './GameStudio.css';
+import { api } from '../../../services/api';
+import { StudioUtils } from '../homework/HomeworkStudio'; 
+
+const DEFAULT_QUIZ_DATA = { title: '', chapterId: '', teacherId: null, targetClassrooms: [], assignedStudents: [], isAllClass: true, questions: [{ q: 'Nouvelle question', options: ['', '', '', ''], a: 0 }] };
+
+export default function GameStudio({ initialData, chapters, classFilter, user, targetSection, onClose }) {
+    // ✅ FIX V18:50 : Utilisation robuste de StudioUtils
+    const [formData, setFormData] = useState(initialData || { ...DEFAULT_QUIZ_DATA, teacherId: user.id || user._id, targetClassrooms: classFilter ? [classFilter] : [] });
+    const [activeQIndex, setActiveQIndex] = useState(0);
+    const [allStudents, setAllStudents] = useState([]);
+    const [allClasses, setAllClasses] = useState([]);
+    const [distribution, setDistribution] = useState({});
+    const [viewingClass, setViewingClass] = useState(classFilter || "");
+    const [studentSearch, setStudentSearch] = useState(""); 
+    const [loading, setLoading] = useState(false);
+    const [aiTopic, setAiTopic] = useState('');
+    const [aiGenerating, setAiGenerating] = useState(false);
+    
+    const loadData = async () => {
+        setLoading(true);
+        try {
+            const [sts, cls] = await Promise.all([ api.get('/admin/students'), api.get('/admin/classrooms') ]);
+            setAllStudents(sts); setAllClasses(cls);
+            if (initialData) {
+                const targets = initialData.targetClassrooms || [initialData.classroom];
+                const newDist = {};
+                targets.forEach(clsName => {
+                    const clsObj = cls.find(c => c.name === clsName);
+                    const clsId = clsObj ? String(clsObj._id) : null;
+                    let classStudentIds = sts.filter(s => {
+                        const isMain = (s.currentClass||"").trim().toUpperCase() === clsName.trim().toUpperCase();
+                        const isOption = clsId && (s.assignedGroups||[]).some(gId => String(gId) === clsId);
+                        return (isMain || isOption) && (initialData.assignedStudents||[]).includes(s._id);
+                    }).map(s => s._id);
+                    newDist[clsName] = { chapterId: initialData.chapterId, studentIds: classStudentIds };
+                });
+                setDistribution(newDist);
+                if (targets.length > 0) setViewingClass(targets[0]);
+            } else if (classFilter) {
+                setViewingClass(classFilter);
+                const defId = StudioUtils.findDefaultChapterId([classFilter], chapters, user, targetSection, cls);
+                setDistribution({ [classFilter]: { chapterId: defId, studentIds: [] } });
+            }
+        } catch(e) { console.error("GameStudio Load Error:", e); }
+        setLoading(false);
+    };
+
+    useEffect(() => { loadData(); }, [classFilter]);
+
+    const handleInput = (field, value) => setFormData(p => ({ ...p, [field]: value }));
+    const handleSelectQuestion = (index) => setActiveQIndex(index);
+    const handleAddQuestion = () => { setFormData(p => ({ ...p, questions: [...p.questions, { q: `Nouvelle question ${p.questions.length + 1}`, options: ['', '', '', ''], a: 0 }] })); setActiveQIndex(formData.questions.length); };
+    const updateQuestion = (field, value, optionIndex = null) => { setFormData(p => { const nextQuestions = [...p.questions]; const currentQ = { ...nextQuestions[activeQIndex] }; if (field === 'q' || field === 'a') { currentQ[field] = value; } else if (field === 'options' && optionIndex !== null) { const nextOptions = [...currentQ.options]; nextOptions[optionIndex] = value; currentQ.options = nextOptions; } nextQuestions[activeQIndex] = currentQ; return { ...p, questions: nextQuestions }; }); };
+    const handleGenerateAI = async () => { if (!aiTopic) return alert("Entrez un sujet !"); setAiGenerating(true); try { const result = await api.post('/games/generate', { topic: aiTopic, count: 5 }); const cleaned = Array.isArray(result) ? result : []; if (cleaned.length === 0) { alert("Échec génération."); setAiGenerating(false); return; } setFormData(p => ({ ...p, questions: [...p.questions, ...cleaned.filter(q => q.q && q.options && q.options.length === 4 && q.a !== undefined)] })); setActiveQIndex(formData.questions.length); } catch(e) { alert("Erreur IA."); } setAiGenerating(false); };
+
+    const targetLevel = allClasses.find(c => c.name === viewingClass)?.level;
+    const myClassesIds = (user.assignedClasses || []).map(c => String(c._id || c));
+    const availableClasses = allClasses.filter(c => { if (targetLevel) if (String(c.level) !== String(targetLevel)) return false; if (user.isDeveloper || user.role === 'admin') return true; return myClassesIds.includes(String(c._id)); }).sort((a,b) => a.name.localeCompare(b.name));
+    
+    // ✅ FIX V18:50 : Utilisation de StudioUtils via l'import
+    const rawStudents = StudioUtils.getStudentsForViewingClass(viewingClass, allStudents, allClasses);
+    const studentsToDisplay = rawStudents.filter(s => `${s.firstName} ${s.lastName}`.toLowerCase().includes(studentSearch.toLowerCase()));
+    
+    const handleToggleStudent = (sId) => { setDistribution(prev => { const next = { ...prev }; const cfg = next[viewingClass]; if (!cfg) { const defId = StudioUtils.findDefaultChapterId([viewingClass], chapters, user, targetSection, allClasses); next[viewingClass] = { chapterId: defId, studentIds: [sId] }; } else { let newIds = cfg.studentIds.length === 0 ? rawStudents.map(s => s._id).filter(id => id !== sId) : (cfg.studentIds.includes(sId) ? cfg.studentIds.filter(id => id !== sId) : [...cfg.studentIds, sId]); if (newIds.length === 0) delete next[viewingClass]; else if (newIds.length === rawStudents.length) next[viewingClass] = { ...cfg, studentIds: [] }; else next[viewingClass] = { ...cfg, studentIds: newIds }; } return next; }); };
+    const toggleAllStudents = () => { setDistribution(prev => { const next = { ...prev }; if (next[viewingClass]) delete next[viewingClass]; else { const defId = StudioUtils.findDefaultChapterId([viewingClass], chapters, user, targetSection, allClasses); next[viewingClass] = { chapterId: defId, studentIds: [] }; } return next; }); };
+    
+    const handleSave = async () => {
+        const targets = Object.keys(distribution);
+        if (!formData.title || targets.length === 0) return alert("❌ Titre et Classe requis !");
+        setLoading(true);
+        try {
+            for (const cls of targets) {
+                const cfg = distribution[cls];
+                let realChapterId = cfg.chapterId || StudioUtils.findDefaultChapterId([cls], chapters, user, targetSection, allClasses);
+                let finalIds = cfg.studentIds.length > 0 ? cfg.studentIds : StudioUtils.getStudentsForViewingClass(cls, allStudents, allClasses).map(s => s._id);
+                await api.post('/games', { ...formData, chapterId: realChapterId, targetClassrooms: [cls], teacherId: user.id || user._id, assignedStudents: finalIds, isAllClass: cfg.studentIds.length === 0, type: 'zombie' });
+            }
+            onClose();
+        } catch(e) { alert("Erreur sauvegarde."); }
+        setLoading(false);
+    };
+    
+    const currentQ = formData.questions[activeQIndex];
+    const distCfg = distribution[viewingClass];
+    const isSelected = !!distribution[viewingClass];
+    const selectedClassesList = Object.keys(distribution);
+    
+    // ✅ FIX V18:50 : getChaptersForContext via StudioUtils
+    const availableChapters = StudioUtils.getChaptersForContext(selectedClassesList.length > 1 ? selectedClassesList : [viewingClass], chapters, user, targetSection, allClasses);
+
+    return (
+        <div className="v84-game-container">
+            <div className="v84-game-header">
+                <div className="flex items-center"><span className="v84-game-icon">🎮</span><input className="v84-game-title-input" value={formData.title} onChange={e => handleInput('title', e.target.value)} placeholder="TITRE DU QUIZ..." disabled={loading} /></div>
+                <button onClick={onClose} className="v84-close-btn">✕</button>
+            </div>
+            <div className="v84-game-body">
+                <div className="v84-q-list-sidebar custom-scrollbar"><span className="v84-sidebar-label">Questions ({formData.questions.length})</span>{formData.questions.map((q, index) => (<div key={index} className={`v84-q-item ${activeQIndex === index ? 'active' : ''}`} onClick={() => handleSelectQuestion(index)}><div className="v84-q-preview">Q{index + 1}: {q.q.substring(0, 30)}...</div><div className="v84-q-sub">Rép: {q.options[q.a]}</div></div>))}<button className="v84-add-q-btn" onClick={handleAddQuestion} disabled={loading}>+ AJOUTER</button></div>
+                <div className="v84-game-editor custom-scrollbar">
+                    <div className="v84-ai-widget"><span className="text-3xl">🤖</span><input className="v84-ai-input" placeholder="Sujet..." value={aiTopic} onChange={e => setAiTopic(e.target.value)} disabled={aiGenerating || loading} /><button className="v84-ai-btn" onClick={handleGenerateAI} disabled={aiGenerating || loading}>{aiGenerating ? '...' : 'GÉNÉRER'}</button></div>
+                    {currentQ && (<div className="v84-q-card"><span className="v84-field-label">Question {activeQIndex + 1}</span><textarea className="v84-q-input" value={currentQ.q} onChange={e => updateQuestion('q', e.target.value)} rows="3" disabled={loading}/><div className="v84-answers-grid">{currentQ.options.map((opt, index) => (<div key={index} className={`v84-ans-row ${currentQ.a === index ? 'correct' : ''}`}><div className="v84-correct-radio" onClick={() => updateQuestion('a', index)}>{currentQ.a === index ? '✓' : ''}</div><input className="v84-ans-input" placeholder={`Opt ${index + 1}`} value={opt} onChange={e => updateQuestion('options', e.target.value, index)} disabled={loading}/></div>))}</div></div>)}
+                </div>
+                <div className="v84-dist-sidebar custom-scrollbar">
+                    <span className="v84-sidebar-label">Distribution</span>
+                    <div className="mb-4 flex flex-wrap gap-2">{availableClasses.map(c => (<button key={c._id} onClick={() => { setViewingClass(c.name); setStudentSearch(""); }} className={`v84-tab-btn-game ${distribution[c.name] ? 'active' : 'inactive'} ${viewingClass === c.name ? 'border-2 border-purple-700' : ''}`} style={c.type === 'GROUP' ? { color: '#f59e0b', borderColor: '#fcd34d' } : {}}>{c.name}</button>))}</div>
+                    {viewingClass && (
+                        <div className="flex-1 flex flex-col bg-slate-50 rounded-2xl overflow-hidden border border-slate-200 p-4">
+                            <div className="flex justify-between items-center mb-4 cursor-pointer" onClick={toggleAllStudents}><span className="font-black text-slate-700 uppercase">{viewingClass}</span><div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${isSelected ? 'bg-purple-600 border-purple-600' : 'border-slate-300'}`}>{isSelected && <span className="text-white text-xs">✓</span>}</div></div>
+                            
+                            <div className="p-3 bg-white rounded-xl border border-slate-200 mb-4">
+                                <label className="text-[9px] font-black text-slate-400 uppercase mb-1 block">Dossier :</label>
+                                <select 
+                                    className="w-full p-2 rounded-lg text-xs font-bold border border-slate-100 outline-none bg-slate-50" 
+                                    value={distCfg?.chapterId || StudioUtils.findDefaultChapterId([viewingClass], chapters, user, targetSection, allClasses)} 
+                                    onChange={(e) => setDistribution(p => ({ ...p, [viewingClass]: { ...p[viewingClass], chapterId: e.target.value } }))} 
+                                    disabled={loading}
+                                >
+                                    <option value="">-- CHOISIR --</option>
+                                    {availableChapters.map(c => <option key={c._id} value={c._id}>{c.title}</option>)}
+                                </select>
+                            </div>
+                            
+                            <div className="relative mb-2">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px]">🔎</span>
+                                <input 
+                                    className="w-full pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-[10px] font-bold outline-none focus:border-purple-400" 
+                                    placeholder="Chercher..." 
+                                    value={studentSearch} 
+                                    onChange={e => setStudentSearch(e.target.value)} 
+                                />
+                            </div>
+
+                            <div className="flex-1 overflow-y-auto custom-scrollbar">
+                                {studentsToDisplay.map(s => { 
+                                    const checked = isSelected && (distribution[viewingClass].studentIds.length === 0 || distribution[viewingClass].studentIds.includes(s._id));
+                                    return (<div key={s._id} onClick={() => handleToggleStudent(s._id)} className={`flex items-center gap-3 p-2 rounded cursor-pointer transition-colors ${checked ? 'bg-purple-50 text-purple-700' : 'hover:bg-slate-100 text-slate-400'}`}>
+                                        <div className={`w-4 h-4 rounded border shrink-0 ${checked ? 'bg-purple-600 border-purple-600' : 'border-slate-300'}`}></div>
+                                        <span className="text-[11px] font-bold truncate">{s.lastName} {s.firstName}</span>
+                                    </div>); 
+                                })}
+                            </div>
+                        </div>
+                    )}
+                    <button className="v84-game-publish-btn" onClick={handleSave} disabled={loading || formData.questions.length === 0}>{loading ? '...' : (initialData ? 'MODIFIER' : 'PUBLIER 🚀')}</button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+[[[£ END: client/src/features/prof/games/GameStudio.jsx £]]]
+
+[[[£ FILE: server/domains/games/ai/games.ai.js £]]]
+const AIEngine = require('../../../core/ai.engine');
+const GamesAI = {
+    askQuiz: async (prompt) => {
+        const system = "Tu es un expert en pédagogie. Réponds uniquement en JSON pur (Array).";
+        return await AIEngine.ask(prompt, system);
+    }
+};
+module.exports = GamesAI;
+
+[[[£ END: server/domains/games/ai/games.ai.js £]]]
+
+[[[£ FILE: server/domains/games/ai/quiz-creator.ai.js £]]]
+const AIEngine = require('../../../core/ai.engine');
+
+const QuizCreatorAI = {
+    generate: async (topic, count = 5) => {
+        const system = "Tu es un expert pédagogique. Tu réponds UNIQUEMENT par un tableau JSON pur. Pas de texte avant, pas de texte après.";
+        
+        // CORRECTION V370 : Prompt plus robuste
+        const prompt = `Génère un quiz de ${count} questions sur : "${topic}".
+        Chaque question doit avoir 4 options (strings).
+        Le champ 'a' est l'index (0, 1, 2 ou 3) de la bonne réponse.
+        
+        STRUCTURE JSON OBLIGATOIRE (Array) :
+        [
+          {
+            "q": "La question ?",
+            "options": ["R1", "R2", "R3", "R4"],
+            "a": 0
+          }
+        ]
+        
+        Pas de markdown (pas de \`\`\`json). Juste le tableau.`;
+
+        const responseText = await AIEngine.ask(prompt, system);
+        return AIEngine.sanitizeJSON(responseText);
+    }
+};
+
+module.exports = QuizCreatorAI;
+
+[[[£ END: server/domains/games/ai/quiz-creator.ai.js £]]]
+
+[[[£ FILE: server/domains/games/db/games.db.js £]]]
+const mongoose = require('mongoose');
+const GamesDB = {
+    fetchAll: async () => await mongoose.model('GameLevel').find({}).lean(),
+    upsert: async (data) => {
+        const Model = mongoose.model('GameLevel');
+        if (data._id) return await Model.findByIdAndUpdate(data._id, data, { new: true });
+        return await Model.create(data);
+    }
+};
+module.exports = GamesDB;
+
+[[[£ END: server/domains/games/db/games.db.js £]]]
+
+[[[£ FILE: server/domains/games/experts/games.db.js £]]]
+const GamesDB = require('../db/games.db');
+const GamesExpertDB = {
+    getAll: async () => await GamesDB.fetchAll(),
+    saveQuiz: async (data) => await GamesDB.upsert(data)
+};
+module.exports = GamesExpertDB;
+
+[[[£ END: server/domains/games/experts/games.db.js £]]]
+
+[[[£ FILE: server/domains/games/experts/quiz-creator.ai.js £]]]
+const AIEngine = require('../../../core/ai.engine');
+
+const QuizCreatorExpertAI = {
+    generate: async (topic, count = 5) => {
+        console.log(`🧠 [EXPERT-QUIZ] Déclenchement IA pour : ${topic}`);
+        const system = "Tu es un professeur expert. Réponds UNIQUEMENT en JSON pur (Array).";
+        const prompt = `Génère un tableau JSON de ${count} questions QCM sur : "${topic}". 
+        Format : [{"q": "Question", "options": ["A", "B", "C", "D"], "a": 0}]`;
+
+        try {
+            const raw = await AIEngine.ask(prompt, system);
+            return AIEngine.sanitizeJSON(raw);
+        } catch (e) {
+            console.error("❌ [EXPERT-QUIZ] Échec génération :", e.message);
+            throw e;
+        }
+    }
+};
+
+module.exports = QuizCreatorExpertAI;
+
+[[[£ END: server/domains/games/experts/quiz-creator.ai.js £]]]
+
+[[[£ FILE: server/domains/games/games.routes.js £]]]
+// @signatures: DELETE /:id, GET /all, GET /progress, POST /, POST /generate, POST /save-progress
+const express = require('express');
+const router = express.Router();
+const QuizCreatorExpertAI = require('./experts/quiz-creator.ai');
+const mongoose = require('mongoose');
+
+const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
+router.post('/generate', asyncHandler(async (req, res) => {
+    const { topic, count } = req.body;
+    const quiz = await QuizCreatorExpertAI.generate(topic, count || 5);
+    res.json(quiz);
+}));
+
+router.get('/all', asyncHandler(async (req, res) => {
+    res.json(await mongoose.model('GameLevel').find({}).lean());
+}));
+
+router.get('/progress', asyncHandler(async (req, res) => {
+    const progs = await mongoose.model('GameProgress').find({}, 'studentId gameId levelReached lastScore').lean();
+    res.json(progs);
+}));
+
+// --- CORRECTION SAUVEGARDE SCORE ---
+router.post('/save-progress', asyncHandler(async (req, res) => {
+    const { studentId, gameId, score, levelReached } = req.body;
+    const GameProgress = mongoose.model('GameProgress');
+
+    // 1. On cherche s'il y a déjà une progression
+    const existing = await GameProgress.findOne({ studentId, gameId });
+
+    if (existing) {
+        // On ne met à jour le niveau que si on fait mieux (pour ne pas perdre le statut "Violet" si on rejoue et perd)
+        // Mais on met toujours à jour le score et la date (pour le suivi)
+        const newLevel = Math.max(existing.levelReached || 0, levelReached);
+        
+        await GameProgress.updateOne(
+            { _id: existing._id },
+            { 
+                lastScore: score, 
+                levelReached: newLevel,
+                updatedAt: new Date() 
+            }
+        );
+    } else {
+        // Première fois : on crée l'entrée (Bleu si 0, Violet si 1)
+        await GameProgress.create({
+            studentId,
+            gameId,
+            lastScore: score,
+            levelReached: levelReached, // Accepte 0 explicitement maintenant
+            updatedAt: new Date()
+        });
+    }
+    
+    res.json({ ok: true });
+}));
+
+router.post('/', asyncHandler(async (req, res) => {
+    const Model = mongoose.model('GameLevel');
+    const result = req.body._id ? 
+        await Model.findByIdAndUpdate(req.body._id, req.body, { new: true }) : 
+        await Model.create(req.body);
+    res.json(result);
+}));
+
+router.delete('/:id', asyncHandler(async (req, res) => {
+    await mongoose.model('GameLevel').findByIdAndDelete(req.params.id);
+    res.json({ ok: true });
+}));
+
+module.exports = router;
+
+[[[£ END: server/domains/games/games.routes.js £]]]
+
+[[[£ FILE: server/eleve/games/games.eleve.js £]]]
+// @signatures: EleveGames, list, score
+const express = require('express');
+const router = express.Router();
+const mongoose = require('mongoose');
+
+router.get('/list/:studentId', async (req, res) => {
+    const student = await mongoose.model('Student').findById(req.params.studentId).lean();
+    if (!student) return res.json([]);
+    res.json(await mongoose.model('GameLevel').find({ targetClassrooms: student.currentClass }).lean());
+});
+
+router.post('/score', async (req, res) => {
+    const { studentId, gameId, score } = req.body;
+    await mongoose.model('GameProgress').findOneAndUpdate({ studentId, gameId }, { lastScore: score }, { upsert: true });
+    res.json({ ok: true });
+});
+
+module.exports = router;
+
+[[[£ END: server/eleve/games/games.eleve.js £]]]
+
+[[[£ FILE: server/models/Game.js £]]]
+const mongoose = require('mongoose');
+/**
+ * SECTION 10 : LES JEUX (Conteneurs)
+ * Définit un jeu global (ex: "La Rome Antique") qui contient des niveaux.
+ */
+const GameSchema = new mongoose.Schema({
+    title: { type: String, required: true },
+    chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter' },
+    type: { type: String, enum: ['zombie', 'starship'], default: 'zombie' },
+    createdAt: { type: Date, default: Date.now }
+}, { collection: 'games' });
+module.exports = mongoose.models.Game || mongoose.model('Game', GameSchema);
+
+[[[£ END: server/models/Game.js £]]]
+
+[[[£ FILE: server/models/GameLevel.js £]]]
+const mongoose = require('mongoose');
+
+/**
+ * 🎮 MODÈLE GAME LEVEL V2 (Harmonisé avec Homework)
+ * Ajout des champs de ciblage (Classes, Élèves, Prof) pour la distribution.
+ */
+const GameLevelSchema = new mongoose.Schema({
+    title: { type: String, required: true },
+    
+    // Structure & Propriété
+    chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter' },
+    teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher' },
+
+    // Ciblage (Distribution)
+    classroom: String, // Gardé pour compatibilité legacy
+    targetClassrooms: [String], 
+    assignedStudents: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Student' }],
+    isAllClass: { type: Boolean, default: true },
+
+    // Contenu
+    questions: [{
+        q: String,          // Énoncé
+        options: [String],  // [Rep A, Rep B, Rep C, Rep D]
+        a: Number           // Index bonne réponse (0-3)
+    }],
+
+    isArchived: { type: Boolean, default: false },
+    createdAt: { type: Date, default: Date.now }
+}, { collection: 'gamelevels' });
+
+module.exports = mongoose.models.GameLevel || mongoose.model('GameLevel', GameLevelSchema);
+
+[[[£ END: server/models/GameLevel.js £]]]
+
+[[[£ FILE: server/models/GameProgress.js £]]]
+const mongoose = require('mongoose');
+const GameProgressSchema = new mongoose.Schema({
+    studentId: mongoose.Schema.Types.ObjectId,
+    gameId: String,
+    levelReached: { type: Number, default: 0 },
+    lastScore: Number
+}, { collection: 'gameprogress' });
+module.exports = mongoose.models.GameProgress || mongoose.model('GameProgress', GameProgressSchema);
+
+[[[£ END: server/models/GameProgress.js £]]]
+
+[[[£ FILE: server/prof/games/games.prof.js £]]]
+// @signatures: ProfGamesRouter, all, create, generate
+const express = require('express');
+const router = express.Router();
+const { GameLevel } = require('../models/prof.models');
+const ProfAI = require('../core/prof.ai');
+
+/**
+ * 🕹️ BLOC PROF : LOGIQUE JEUX (/api/games)
+ */
+
+router.get('/all', async (req, res) => {
+    res.json(await GameLevel.find({}).lean());
+});
+
+router.post('/', async (req, res) => {
+    const quiz = await GameLevel.create(req.body);
+    res.json(quiz);
+});
+
+router.post('/generate', async (req, res) => {
+    const { topic, count } = req.body;
+    const system = "Tu es un professeur expert. Réponds UNIQUEMENT en JSON pur (Array d'objets {q, options, a}).";
+    const raw = await ProfAI.ask(`Génère un quiz de ${count} questions sur: ${topic}`, system);
+    res.json(ProfAI.sanitize(raw));
+});
+
+module.exports = router;
+
+[[[£ END: server/prof/games/games.prof.js £]]]

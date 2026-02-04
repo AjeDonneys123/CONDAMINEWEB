@@ -335,3 +335,29 @@
 
 03/02/2026 13:05 - Paquet CORE : Évolution de snap.js.
 03/02/2026 13:20 - Paquet STUDIO : FEATURE MAJEURE. Ajout de la fonction "Supprimer Backgrounds". Implémentation d'un algorithme de Chroma Key côté client (Canvas) pour rendre transparentes les couleurs dominantes de tous les sprites du projet. Traitement par lots et ré-upload automatique.
+
+03/02/2026 12:45 - Paquet STUDIO : Restauration visuelle complète du panneau d'actions.
+03/02/2026 13:00 - CORE/RECOVERY : Restauration après reset manuel.
+03/02/2026 13:20 - Paquet CORE : RÉPARATION snap.js. Rétablissement de la génération automatique de studio.txt pour isoler les fichiers relatifs aux jeux et animations.
+
+03/02/2026 13:40 - Paquet STUDIO : Implémentation du nettoyage de fond ciblé.
+03/02/2026 14:20 - Paquet STUDIO : FIX CRITIQUE détourage spécialisé.
+03/02/2026 16:50 - Paquet STUDIO : Grille 2 colonnes pour les personnages.
+03/02/2026 17:01 - Paquet STUDIO : Rendu du contrôleur de Taille (%) et uniformisation à 150px.
+03/02/2026 17:25 - Paquet STUDIO : FIX PREVIEW ANIMATION. Réimplémentation du moteur de séquence via useEffect pour garantir la synchronisation en temps réel sur la scène centrale lors de l'utilisation du bouton PLAY.
+
+03/02/2026 13:40 - Paquet STUDIO : Implémentation du nettoyage de fond ciblé.
+03/02/2026 14:20 - Paquet STUDIO : FIX CRITIQUE détourage spécialisé.
+03/02/2026 16:50 - Paquet STUDIO : Grille 2 colonnes pour les personnages.
+03/02/2026 17:01 - Paquet STUDIO : Rendu du contrôleur de Taille (%) et uniformisation à 150px.
+03/02/2026 17:25 - Paquet STUDIO : FIX PREVIEW ANIMATION via useEffect.
+03/02/2026 17:35 - Paquet STUDIO : Le sprite sélectionné remplace désormais l'aperçu du personnage sur la scène centrale.
+03/02/2026 17:41 - Paquet STUDIO : Amélioration du bouton "NETTOYER BGS" : le nettoyage automatique cible désormais uniquement toutes les frames de l'acteur sélectionné au lieu de tout le projet (ou une frame unique si sélectionnée).
+
+03/02/2026 19:40 - DOC : Mise à jour de snap.js pour inclure le Référentiel Fonctionnel STUDIO complet (Build #161) dans le fichier studio.txt généré.
+
+04/02/2026 09:15 - TOOLING : Mise à jour de snap.js pour générer games.txt. Ce snapshot isole tout le code relatif aux Jeux et Quiz (Prof + Élève + BDD).
+
+04/02/2026 09:25 - TOOLING : Mise à jour de snap.js. Le fichier games.txt inclut désormais le Référentiel des User Stories spécifique aux Jeux en en-tête.
+
+04/02/2026 09:35 - TOOLING : Évolution majeure de snap.js. Le script extrait désormais dynamiquement les User Stories depuis userStories.txt (via détection des balises 📜) pour les injecter dans games.txt, studio.txt et structure.txt. Fin du hardcoding des specs.

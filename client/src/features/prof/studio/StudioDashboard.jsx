@@ -1,10 +1,11 @@
-// @signatures: StudioDashboard, LiveEngine, handleSelectActor, handleStageMouseDown, handleStageMouseMove, handleStageMouseUp, handleAddAction, handleAddFrame, handleAddActor, handleUpdateProp, handleReorderFrame, handleDeleteFrame, togglePreview, handleRemoveAllBackgrounds, processFrameBackground
+// @signatures: StudioDashboard, LiveEngine, flipFrame, handleAICleanBackground, handleAddAction, handleAddActor, handleAddFrame, handleDeleteActor, handleDeleteBackdrop, handleDeleteFrame, handleMirrorSequence, handleRemoveAllBackgrounds, handleReorderFrame, handleSelectActor, handleStageMouseDown, handleStageMouseMove, handleStageMouseUp, handleUpdateActionSpeed, handleUpdateProp, loadProjects, processFrameBackground, resolveUrl, saveProject, togglePreview
 import React, { useState, useRef, useEffect } from 'react';
 import './StudioDashboard.css';
 import { api } from '../../../services/api';
 
 /**
- * 🕹️ ENGINE V123 (CORE)
+ * 🕹️ ENGINE V140 (REAL-TIME CLOCK)
+ * Correction Vitesse : Utilisation de Date.now() pour une animation précise à la milliseconde.
  */
 const LiveEngine = ({ code, project, activeSceneIdx, onStop }) => {
     const canvasRef = useRef(null);
@@ -49,11 +50,15 @@ const LiveEngine = ({ code, project, activeSceneIdx, onStop }) => {
                             this.dir = data.direction || 0; this.scale = data.scale || 1;
                             this.rotationStyle = data.rotationStyle || 'all';
                             this.currentAction = data.actions?.[0]?.name || 'IDLE';
-                            this.frameIdx = 0; this.animTick = 0;
+                            this.frameIdx = 0;
+                            // CORRECTION V140 : On utilise le temps réel
+                            this.lastAnimTime = 0; 
                         }
                         play(name) { 
                             if(this.currentAction.toUpperCase() !== name.toUpperCase()) {
-                                this.currentAction = name; this.frameIdx = 0; this.animTick = 0;
+                                this.currentAction = name; 
+                                this.frameIdx = 0; 
+                                this.lastAnimTime = 0; // Reset du timer
                             }
                         }
                     }
@@ -74,25 +79,46 @@ const LiveEngine = ({ code, project, activeSceneIdx, onStop }) => {
                             if(!this.ctx) return;
                             this.ctx.fillStyle = 'white';
                             this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                            
+                            // Décor
                             const s = project.scenes[sceneIdx];
                             const bd = s.backdrops?.[s.currentBackdropIdx || 0];
                             if(bd && this.assets[bd.url]) this.ctx.drawImage(this.assets[bd.url], 0, 0, this.canvas.width, this.canvas.height);
+                            
+                            // Acteurs
                             s.actors.forEach((a) => {
                                 const p = this.actorsMap.get(a.id);
                                 if (!p) return;
                                 const action = (a.actions || []).find(act => act.name.toUpperCase() === p.currentAction.toUpperCase()) || a.actions?.[0];
+                                
                                 if(action && action.frames?.length > 0) {
-                                    p.animTick++; if(p.animTick > 6) { p.animTick = 0; p.frameIdx = (p.frameIdx + 1) % action.frames.length; }
+                                    // --- GESTION VITESSE TEMPS RÉEL (V140) ---
+                                    const now = Date.now();
+                                    const speedMs = action.speed || 100;
+
+                                    if (now - p.lastAnimTime > speedMs) {
+                                        p.frameIdx = (p.frameIdx + 1) % action.frames.length;
+                                        p.lastAnimTime = now;
+                                    }
+                                    
                                     const frame = action.frames[p.frameIdx];
                                     const img = frame ? this.assets[frame.url] : null;
+                                    
                                     if(img) {
                                         let rx = (p.x / 100) * this.canvas.width;
                                         let ry = (p.y / 100) * this.canvas.height;
-                                        this.ctx.save(); this.ctx.translate(rx, ry);
+                                        this.ctx.save(); 
+                                        this.ctx.translate(rx, ry);
+                                        
                                         let normDir = ((p.dir % 360) + 360) % 360;
-                                        if (p.rotationStyle === 'left-right') { if (normDir > 90 && normDir < 270) this.ctx.scale(-1, 1); }
-                                        else if (p.rotationStyle === 'all') { this.ctx.rotate(p.dir * Math.PI / 180); }
-                                        let sz = 150 * p.scale; this.ctx.drawImage(img, -sz/2, -sz/2, sz, sz);
+                                        if (p.rotationStyle === 'left-right') { 
+                                            if (normDir > 90 && normDir < 270) this.ctx.scale(-1, 1); 
+                                        } else if (p.rotationStyle === 'all') { 
+                                            this.ctx.rotate(p.dir * Math.PI / 180); 
+                                        }
+                                        
+                                        let sz = 150 * p.scale; 
+                                        this.ctx.drawImage(img, -sz/2, -sz/2, sz, sz);
                                         this.ctx.restore();
                                     }
                                 }
@@ -145,17 +171,33 @@ export default function StudioDashboard({ user }) {
     const [dropTargetIdx, setDropTargetIdx] = useState(null);
     const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
     const [previewFrameIdx, setPreviewFrameIdx] = useState(0);
+    const [selectedFrameIdx, setSelectedFrameIdx] = useState(null);
     const [isDraggingOnStage, setIsDraggingOnStage] = useState(false);
-    const [previewLatency, setPreviewLatency] = useState(300);
 
     const frameUploadRef = useRef(null);
     const actorUploadRef = useRef(null);
-    const previewIntervalRef = useRef(null);
+    const backdropUploadRef = useRef(null); 
     const stageRef = useRef(null);
 
     useEffect(() => { loadProjects(); }, [user]);
-    useEffect(() => { stopPreview(); }, [selectedActorId, selectedActionIdx]);
-    useEffect(() => { if (isPreviewPlaying) { stopPreview(); startPreview(); } }, [previewLatency]);
+
+    // 🚀 SYNC PREVIEW ENGINE
+    useEffect(() => {
+        let timer;
+        const currentSpeed = selectedAction?.speed || 100; 
+
+        if (isPreviewPlaying) {
+            const framesCount = selectedAction?.frames?.length || 0;
+            if (framesCount > 0) {
+                timer = setInterval(() => {
+                    setPreviewFrameIdx(prev => (prev + 1) % framesCount);
+                }, currentSpeed);
+            }
+        } else {
+            setPreviewFrameIdx(0);
+        }
+        return () => clearInterval(timer);
+    }, [isPreviewPlaying, selectedActionIdx, selectedActorId, project]);
 
     async function loadProjects() {
         const data = await api.get(`/studio/projects/${user.id || user._id}`);
@@ -178,29 +220,69 @@ export default function StudioDashboard({ user }) {
         setLoading(false);
     }
 
-    // 🚀 FONCTION DE NETTOYAGE DES BACKGROUNDS
+    const handleUpdateActionSpeed = (delta) => {
+        if (!selectedActorId || selectedActionIdx === null) return;
+        const next = JSON.parse(JSON.stringify(project));
+        const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
+        if (actor && actor.actions[selectedActionIdx]) {
+            const current = actor.actions[selectedActionIdx].speed || 100;
+            const newSpeed = Math.max(20, Math.min(2000, current + delta));
+            actor.actions[selectedActionIdx].speed = newSpeed;
+            setProject(next);
+            saveProject(next);
+        }
+    };
+
+    const handleAICleanBackground = async () => {
+        if (!project || selectedFrameIdx === null) return;
+        if (!confirm("✨ Lancer le détourage professionnel ?")) return;
+        setCleaning(true);
+        try {
+            const actor = project.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
+            const frame = actor.actions[selectedActionIdx].frames[selectedFrameIdx];
+            const res = await api.post('/studio/remove-bg-specialized', { url: frame.url });
+            if (res.url) {
+                const next = JSON.parse(JSON.stringify(project));
+                const nextActorIdx = next.scenes[selectedSceneIdx].actors.findIndex(a => a.id === selectedActorId);
+                next.scenes[selectedSceneIdx].actors[nextActorIdx].actions[selectedActionIdx].frames[selectedFrameIdx].url = res.url;
+                await saveProject(next);
+                alert("✨ Détourage réussi !");
+            }
+        } catch (e) { alert("Erreur lors du traitement."); }
+        setCleaning(false);
+    };
+
     const handleRemoveAllBackgrounds = async () => {
-        if (!project || !confirm("Voulez-vous rendre transparent le fond de TOUS les sprites de ce projet ?")) return;
+        if (!project || !selectedActorId) return;
+        const actor = project.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
+        if (!actor) return;
+        const isSingle = selectedFrameIdx !== null;
+        const msg = isSingle 
+            ? `Nettoyer UNIQUEMENT ce sprite pour ${actor.name} ?` 
+            : `Nettoyer TOUS les sprites du personnage ${actor.name} ?`;
+        if (!confirm(msg)) return;
         setCleaning(true);
         const next = JSON.parse(JSON.stringify(project));
-        
+        const nextActor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
         try {
-            for (const scene of next.scenes) {
-                for (const actor of scene.actors) {
-                    for (const action of actor.actions) {
-                        for (let i = 0; i < action.frames.length; i++) {
-                            const frame = action.frames[i];
-                            const newUrl = await processFrameBackground(frame.url);
-                            if (newUrl) action.frames[i].url = newUrl;
-                        }
+            if (isSingle) {
+                const action = nextActor.actions[selectedActionIdx];
+                const frame = action.frames[selectedFrameIdx];
+                const newUrl = await processFrameBackground(frame.url);
+                if (newUrl) action.frames[selectedFrameIdx].url = newUrl;
+            } else {
+                for (const action of nextActor.actions) {
+                    for (let i = 0; i < action.frames.length; i++) {
+                        const frame = action.frames[i];
+                        const newUrl = await processFrameBackground(frame.url);
+                        if (newUrl) action.frames[i].url = newUrl;
                     }
                 }
             }
             await saveProject(next);
-            alert("✨ Nettoyage terminé avec succès !");
-        } catch (e) {
-            alert("Erreur lors du nettoyage.");
-        }
+            alert(`✨ Nettoyage de ${actor.name} terminé !`);
+            setSelectedFrameIdx(null);
+        } catch (e) { alert("Erreur lors du nettoyage."); }
         setCleaning(false);
     };
 
@@ -210,40 +292,23 @@ export default function StudioDashboard({ user }) {
             img.crossOrigin = "anonymous";
             img.onload = () => {
                 const canvas = document.createElement('canvas');
-                canvas.width = img.width;
-                canvas.height = img.height;
+                canvas.width = img.width; canvas.height = img.height;
                 const ctx = canvas.getContext('2d');
                 ctx.drawImage(img, 0, 0);
-                
                 const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
                 const data = imageData.data;
-                
-                // On récupère la couleur du premier pixel (fond supposé)
-                const targetR = data[0];
-                const targetG = data[1];
-                const targetB = data[2];
-                const tolerance = 35; // Seuil de ressemblance
+                const corners = [[data[0], data[1], data[2]], [data[(img.width - 1) * 4], data[(img.width - 1) * 4 + 1], data[(img.width - 1) * 4 + 2]], [data[(img.width * (img.height - 1)) * 4], data[(img.width * (img.height - 1)) * 4 + 1], data[(img.width * (img.height - 1)) * 4 + 2]], [data[(data.length - 4)], data[(data.length - 3)], data[(data.length - 2)]]];
+                const [targetR, targetG, targetB] = corners[0];
+                const tolerance = 50; 
 
                 for (let i = 0; i < data.length; i += 4) {
-                    const r = data[i];
-                    const g = data[i+1];
-                    const b = data[i+2];
-                    
-                    const dist = Math.sqrt(
-                        Math.pow(r - targetR, 2) + 
-                        Math.pow(g - targetG, 2) + 
-                        Math.pow(b - targetB, 2)
-                    );
-
-                    if (dist < tolerance) {
-                        data[i + 3] = 0; // Transparent
-                    }
+                    const dist = Math.sqrt(Math.pow(data[i] - targetR, 2) + Math.pow(data[i+1] - targetG, 2) + Math.pow(data[i+2] - targetB, 2));
+                    if (dist < tolerance) data[i + 3] = 0; 
                 }
-                
                 ctx.putImageData(imageData, 0, 0);
                 canvas.toBlob(async (blob) => {
                     const formData = new FormData();
-                    formData.append('file', blob, "cleaned_sprite.png");
+                    formData.append('file', blob, "cleaned.png");
                     const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: formData }).then(r => r.json());
                     resolve(res.url);
                 }, 'image/png');
@@ -251,6 +316,55 @@ export default function StudioDashboard({ user }) {
             img.onerror = () => resolve(null);
             img.src = url.startsWith('/api/proxy') ? url : `/api/proxy/${url.split('/').pop()}`;
         });
+    };
+
+    // 🚀 FONCTION MIROIR (Canvas flip)
+    const flipFrame = async (url) => {
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = img.width; canvas.height = img.height;
+                const ctx = canvas.getContext('2d');
+                ctx.translate(img.width, 0);
+                ctx.scale(-1, 1);
+                ctx.drawImage(img, 0, 0);
+                canvas.toBlob(async (blob) => {
+                    const formData = new FormData();
+                    formData.append('file', blob, "flipped.png");
+                    const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: formData }).then(r => r.json());
+                    resolve(res.url);
+                }, 'image/png');
+            };
+            img.onerror = () => resolve(null);
+            img.src = url.startsWith('/api/proxy') ? url : `/api/proxy/${url.split('/').pop()}`;
+        });
+    };
+
+    const handleMirrorSequence = async () => {
+        if (!project || !selectedActorId) return;
+        const actor = project.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
+        const action = actor.actions[selectedActionIdx];
+        if (!action || action.frames.length === 0) return;
+
+        if (!confirm(`Retourner (Miroir) les ${action.frames.length} images de la séquence "${action.name}" ?`)) return;
+
+        setCleaning(true);
+        const next = JSON.parse(JSON.stringify(project));
+        const nextActor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
+        const nextAction = nextActor.actions[selectedActionIdx];
+
+        try {
+            for (let i = 0; i < nextAction.frames.length; i++) {
+                const newUrl = await flipFrame(nextAction.frames[i].url);
+                if (newUrl) nextAction.frames[i].url = newUrl;
+            }
+            setProject(next);
+            await saveProject(next);
+            setSelectedFrameIdx(null); // Reset selection
+        } catch (e) { alert("Erreur miroir"); }
+        setCleaning(false);
     };
 
     const handleSelectActor = (actorId, currentProj = project) => {
@@ -263,6 +377,8 @@ export default function StudioDashboard({ user }) {
             actors.push(moved);
             setProject(next);
             setSelectedActorId(actorId);
+            setIsPreviewPlaying(false);
+            setSelectedFrameIdx(null);
         }
     };
 
@@ -286,9 +402,7 @@ export default function StudioDashboard({ user }) {
         }
     };
 
-    const handleStageMouseUp = () => {
-        if (isDraggingOnStage) { setIsDraggingOnStage(false); saveProject(); }
-    };
+    const handleStageMouseUp = () => { if (isDraggingOnStage) { setIsDraggingOnStage(false); saveProject(); } };
 
     const handleUpdateProp = (f, v) => {
         const next = { ...project };
@@ -306,7 +420,7 @@ export default function StudioDashboard({ user }) {
         if (!name) return;
         const next = JSON.parse(JSON.stringify(project));
         const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
-        actor.actions.push({ name: name.toUpperCase(), frames: [] });
+        actor.actions.push({ name: name.toUpperCase(), frames: [], speed: 100 });
         saveProject(next);
     };
 
@@ -328,14 +442,32 @@ export default function StudioDashboard({ user }) {
         saveProject(next);
     };
 
-    const togglePreview = () => { if (isPreviewPlaying) stopPreview(); else startPreview(); };
-    const startPreview = () => {
-        const framesCount = selectedAction?.frames?.length || 0;
-        if (framesCount === 0) return;
-        setIsPreviewPlaying(true); setPreviewFrameIdx(0);
-        previewIntervalRef.current = setInterval(() => { setPreviewFrameIdx(prev => (prev + 1) % framesCount); }, previewLatency);
+    const togglePreview = () => { setIsPreviewPlaying(!isPreviewPlaying); };
+
+    // 🗑️ SUPPRESSION PERSONNAGE
+    const handleDeleteActor = (e, actorId) => {
+        e.stopPropagation();
+        if (!confirm("Supprimer ce personnage de la scène ?")) return;
+        const next = JSON.parse(JSON.stringify(project));
+        next.scenes[selectedSceneIdx].actors = next.scenes[selectedSceneIdx].actors.filter(a => a.id !== actorId);
+        if (selectedActorId === actorId) setSelectedActorId(null);
+        setProject(next);
+        saveProject(next);
     };
-    const stopPreview = () => { if (previewIntervalRef.current) clearInterval(previewIntervalRef.current); setIsPreviewPlaying(false); setPreviewFrameIdx(0); };
+
+    // 🗑️ SUPPRESSION DÉCOR
+    const handleDeleteBackdrop = (e, bIdx) => {
+        e.stopPropagation();
+        if (!confirm("Supprimer ce décor ?")) return;
+        const next = JSON.parse(JSON.stringify(project));
+        const scene = next.scenes[selectedSceneIdx];
+        scene.backdrops.splice(bIdx, 1);
+        if (scene.currentBackdropIdx >= scene.backdrops.length) {
+            scene.currentBackdropIdx = Math.max(0, scene.backdrops.length - 1);
+        }
+        setProject(next);
+        saveProject(next);
+    };
 
     const currentScene = project?.scenes?.[selectedSceneIdx];
     const selectedActor = currentScene?.actors?.find(a => a.id === selectedActorId);
@@ -366,9 +498,21 @@ export default function StudioDashboard({ user }) {
                     const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: formData }).then(r => r.json());
                     const next = JSON.parse(JSON.stringify(project));
                     if (!next.scenes[selectedSceneIdx].actors) next.scenes[selectedSceneIdx].actors = [];
-                    const newActor = { id: `actor-${Date.now()}`, name: "P" + (next.scenes[selectedSceneIdx].actors.length + 1), actions: [{ name: "IDLE", frames: [{url: res.url, name: "C1"}] }], initialX: 50, initialY: 50, scale: 1, direction: 0, rotationStyle: 'all' };
+                    const newActor = { id: `actor-${Date.now()}`, name: "P" + (next.scenes[selectedSceneIdx].actors.length + 1), actions: [{ name: "IDLE", speed: 100, frames: [{url: res.url, name: "C1"}] }], initialX: 50, initialY: 50, scale: 1, direction: 0, rotationStyle: 'all' };
                     next.scenes[selectedSceneIdx].actors.push(newActor);
                     handleSelectActor(newActor.id, next);
+                    await saveProject(next);
+                    setLoading(false);
+                }} />
+                <input type="file" ref={backdropUploadRef} onChange={async (e) => {
+                    const file = e.target.files[0]; if(!file) return;
+                    setLoading(true);
+                    const formData = new FormData(); formData.append('file', file);
+                    const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: formData }).then(r => r.json());
+                    const next = JSON.parse(JSON.stringify(project));
+                    if (!next.scenes[selectedSceneIdx].backdrops) next.scenes[selectedSceneIdx].backdrops = [];
+                    next.scenes[selectedSceneIdx].backdrops.push({ url: res.url, name: file.name });
+                    next.scenes[selectedSceneIdx].currentBackdropIdx = next.scenes[selectedSceneIdx].backdrops.length - 1;
                     await saveProject(next);
                     setLoading(false);
                 }} />
@@ -383,7 +527,7 @@ export default function StudioDashboard({ user }) {
                     {leftTab === 'actions' ? (
                         <>
                             {selectedActor?.actions?.map((act, idx) => (
-                                <div key={idx} onClick={() => { setSelectedActionIdx(idx); }} className={`action-card-square ${selectedActionIdx === idx ? 'active' : ''}`}>
+                                <div key={idx} onClick={() => { setSelectedActionIdx(idx); setIsPreviewPlaying(false); setSelectedFrameIdx(null); }} className={`action-card-square ${selectedActionIdx === idx ? 'active' : ''}`}>
                                     <span>{act.name}</span>
                                 </div>
                             ))}
@@ -401,17 +545,31 @@ export default function StudioDashboard({ user }) {
                         <div className="sequence-header">
                             <span className="text-[9px] font-black text-slate-400 uppercase">Séquence ({selectedAction.name})</span>
                             <div className="sequence-controls">
-                                <button className="btn-speed" onClick={() => setPreviewLatency(prev => Math.max(50, prev - 50))}>-</button>
-                                <span className="speed-indicator">{previewLatency}ms</span>
-                                <button className="btn-speed" onClick={() => setPreviewLatency(prev => prev + 50)}>+</button>
+                                {/* BOUTON MIROIR */}
+                                <button className="btn-mirror" onClick={handleMirrorSequence} title="Miroir Horizontal">↔️</button>
+                                
+                                {/* CONTRÔLES VITESSE DYNAMIQUES */}
+                                <button className="btn-speed" onClick={() => handleUpdateActionSpeed(-50)}>-</button>
+                                <span className="speed-indicator">{selectedAction.speed || 100}ms</span>
+                                <button className="btn-speed" onClick={() => handleUpdateActionSpeed(50)}>+</button>
+                                
                                 <button className={`btn-preview-play ${isPreviewPlaying ? 'playing' : ''}`} onClick={togglePreview}>{isPreviewPlaying ? '⏹️ STOP' : '▶️ PLAY'}</button>
                             </div>
                         </div>
                         <div className="sequence-grid custom-scrollbar">
                             {selectedAction.frames.map((frame, fIdx) => (
-                                <div key={fIdx} className={`frame-card ${isPreviewPlaying && previewFrameIdx === fIdx ? 'active-preview' : ''}`} draggable onDragStart={() => setDraggedFrameIdx(fIdx)} onDragOver={(e) => { e.preventDefault(); setDropTargetIdx(fIdx); }} onDrop={() => handleReorderFrame(fIdx)} onDragLeave={() => setDropTargetIdx(null)}>
+                                <div 
+                                    key={fIdx} 
+                                    className={`frame-card ${isPreviewPlaying && previewFrameIdx === fIdx ? 'active-preview' : ''} ${selectedFrameIdx === fIdx ? 'selected-for-clean' : ''}`} 
+                                    draggable 
+                                    onClick={() => { setSelectedFrameIdx(selectedFrameIdx === fIdx ? null : fIdx); setIsPreviewPlaying(false); }}
+                                    onDragStart={() => setDraggedFrameIdx(fIdx)} 
+                                    onDragOver={(e) => { e.preventDefault(); setDropTargetIdx(fIdx); }} 
+                                    onDrop={() => handleReorderFrame(fIdx)} 
+                                    onDragLeave={() => setDropTargetIdx(null)}
+                                >
                                     <img src={`/api/proxy/${frame.url.split('/').pop()}`} className="frame-img" alt="" />
-                                    <button className="frame-del" onClick={() => handleDeleteFrame(fIdx)}>✕</button>
+                                    <button className="frame-del" onClick={(e) => { e.stopPropagation(); handleDeleteFrame(fIdx); }}>✕</button>
                                 </div>
                             ))}
                             <button className="btn-add-frame" onClick={() => frameUploadRef.current.click()}>+</button>
@@ -421,16 +579,23 @@ export default function StudioDashboard({ user }) {
             </div>
 
             <div className="studio-center-column">
-                <div ref={stageRef} className="stage-view" style={{ backgroundImage: currentScene?.backdrops?.[0]?.url ? `url(/api/proxy/${currentScene.backdrops[0].url.split('/').pop()})` : 'none' }}>
+                <div ref={stageRef} className="stage-view" style={{ backgroundImage: currentScene?.backdrops?.[currentScene.currentBackdropIdx || 0]?.url ? `url(/api/proxy/${currentScene.backdrops[currentScene.currentBackdropIdx || 0].url.split('/').pop()})` : 'none' }}>
                     {isPlaying ? <LiveEngine code={code} project={project} activeSceneIdx={selectedSceneIdx} onStop={() => setIsPlaying(false)} /> : (
                         currentScene?.actors?.map((a) => {
                             const isSelected = selectedActorId === a.id;
-                            const actionToRender = (isSelected && isPreviewPlaying) ? selectedAction : (a.actions?.find(act => act.name.toUpperCase() === "IDLE") || a.actions?.[0]);
-                            const currentFrameIdx = (isSelected && isPreviewPlaying) ? previewFrameIdx : 0;
+                            let actionToRender;
+                            let currentFrameIdx = 0;
+                            if (isSelected) {
+                                actionToRender = selectedAction;
+                                if (isPreviewPlaying) { currentFrameIdx = previewFrameIdx; } 
+                                else if (selectedFrameIdx !== null) { currentFrameIdx = selectedFrameIdx; }
+                            } else {
+                                actionToRender = (a.actions?.find(act => act.name.toUpperCase() === "IDLE") || a.actions?.[0]);
+                            }
                             const frameUrl = actionToRender?.frames?.[currentFrameIdx]?.url;
                             return (
-                                <div key={a.id} onMouseDown={(e) => handleStageMouseDown(e, a.id)} className={`actor-on-stage ${isSelected ? 'selected' : ''}`} style={{ left: `${a.initialX}%`, top: `${a.initialY}%`, transform: `translate(-50%, -50%) scale(${a.scale}) rotate(${a.direction}deg)` }}>
-                                    <img src={frameUrl ? `/api/proxy/${frameUrl.split('/').pop()}` : ""} alt="" />
+                                <div key={a.id} onMouseDown={(e) => handleStageMouseDown(e, a.id)} className={`actor-on-stage ${isSelected ? 'selected' : ''}`} style={{ left: `${a.initialX}%`, top: `${a.initialY}%`, transform: `translate(-50%, -50%) scale(${a.scale}) rotate(${a.direction || 0}deg)` }}>
+                                    {frameUrl ? <img src={`/api/proxy/${frameUrl.split('/').pop()}`} alt="" /> : <div className="text-[10px] opacity-20">VIDE</div>}
                                     <div className="actor-label-tag">{a.name}</div>
                                 </div>
                             );
@@ -439,6 +604,7 @@ export default function StudioDashboard({ user }) {
                 </div>
                 <div className="v115-prop-bar">
                     <div className="flex flex-col"><span className="text-[8px] font-black opacity-30 uppercase">Nom</span><input className="prop-input-mini !w-16" value={selectedActor?.name || ""} onChange={e => handleUpdateProp('name', e.target.value)} /></div>
+                    <div className="flex flex-col border-l pl-4"><span className="text-[8px] font-black opacity-30 uppercase mb-1">Taille (%)</span><input type="number" className="prop-input-mini !w-16" value={Math.round((selectedActor?.scale || 1) * 100)} onChange={e => handleUpdateProp('scale', parseFloat(e.target.value) / 100)} /></div>
                     <div className="flex flex-col border-l pl-4"><span className="text-[8px] font-black opacity-30 uppercase mb-1">Style de Rotation</span><div className="flex gap-1"><button onClick={() => handleUpdateProp('rotationStyle', 'all')} className={`p-1.5 rounded-lg border-2 ${selectedActor?.rotationStyle === 'all' ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>🔄</button><button onClick={() => handleUpdateProp('rotationStyle', 'left-right')} className={`p-1.5 rounded-lg border-2 ${selectedActor?.rotationStyle === 'left-right' ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>↔️</button><button onClick={() => handleUpdateProp('rotationStyle', 'none')} className={`p-1.5 rounded-lg border-2 ${selectedActor?.rotationStyle === 'none' ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>🚫</button></div></div>
                     <button onClick={() => setIsPlaying(true)} className="ml-auto bg-indigo-600 text-white px-6 py-2 rounded-xl text-[10px] font-black uppercase shadow-lg">▶ TESTER</button>
                 </div>
@@ -446,23 +612,58 @@ export default function StudioDashboard({ user }) {
             </div>
 
             <div className="studio-library-panel">
-                <div className="library-section-header">
-                    <span className="font-black text-[10px] uppercase text-slate-400">Personnages</span>
-                    <button className="btn-clean-bgs" onClick={handleRemoveAllBackgrounds} disabled={cleaning || loading}>
-                        {cleaning ? '✨ NETTOYAGE...' : '✨ NETTOYER BGS'}
-                    </button>
+                <div className="library-scroll-area custom-scrollbar">
+                    {/* SECTION PERSONNAGES */}
+                    <div className="library-section-header">
+                        <div className="lib-header-top">
+                            <span className="lib-section-title">Personnages</span>
+                            {selectedFrameIdx !== null && (
+                                <button className="btn-ai-clean animate-pulse" onClick={handleAICleanBackground} disabled={cleaning || loading}>
+                                    {cleaning ? '🤖 ANALYSE...' : '🤖 PRO DETOURAGE'}
+                                </button>
+                            )}
+                        </div>
+                        <div className="lib-actions-row">
+                            <button className="btn-clean-bgs" onClick={handleRemoveAllBackgrounds} disabled={cleaning || loading}>
+                                {cleaning ? '⏳ TRAITEMENT...' : '✨ NETTOYER BGS'}
+                            </button>
+                        </div>
+                    </div>
+                    <div className="library-grid">
+                        {currentScene?.actors?.map((actor) => {
+                            const thumb = actor.actions?.[0]?.frames?.[0]?.url;
+                            return (
+                                <div key={actor.id} className={`item-card ${selectedActorId === actor.id ? 'active' : ''}`} onClick={() => handleSelectActor(actor.id)}>
+                                    <button className="item-del-btn" onClick={(e) => handleDeleteActor(e, actor.id)}>✕</button>
+                                    <div className="item-img-container"><img src={thumb ? `/api/proxy/${thumb.split('/').pop()}` : ""} className="item-img" alt={actor.name} /></div>
+                                    <div className="item-name-tag">{actor.name}</div>
+                                </div>
+                            );
+                        })}
+                        <div className="item-card !bg-indigo-50 !border-dashed !border-indigo-200" onClick={() => actorUploadRef.current.click()}><div className="item-img-container !bg-transparent"><span className="text-3xl text-indigo-300">+</span></div><div className="item-name-tag text-indigo-400 text-[9px]">Nouveau</div></div>
+                    </div>
                 </div>
-                <div className="library-grid custom-scrollbar">
-                    {currentScene?.actors?.map((actor) => {
-                        const thumb = actor.actions?.[0]?.frames?.[0]?.url;
-                        return (
-                            <div key={actor.id} className={`item-card ${selectedActorId === actor.id ? 'active' : ''}`} onClick={() => handleSelectActor(actor.id)}>
-                                <div className="item-img-container"><img src={thumb ? `/api/proxy/${thumb.split('/').pop()}` : ""} className="item-img" alt={actor.name} /></div>
-                                <div className="item-name-tag">{actor.name}</div>
+
+                {/* SECTION BACKGROUNDS */}
+                <div className="library-bg-section">
+                    <div className="library-section-header">
+                        <span className="lib-section-title">Décors (Backgrounds)</span>
+                    </div>
+                    <div className="library-grid custom-scrollbar overflow-y-auto">
+                        {currentScene?.backdrops?.map((bd, bIdx) => (
+                            <div key={bIdx} className={`item-card ${currentScene.currentBackdropIdx === bIdx ? 'active' : ''}`} onClick={() => {
+                                const next = JSON.parse(JSON.stringify(project));
+                                next.scenes[selectedSceneIdx].currentBackdropIdx = bIdx;
+                                setProject(next);
+                                saveProject(next);
+                            }}>
+                                <button className="item-del-btn" onClick={(e) => handleDeleteBackdrop(e, bIdx)}>✕</button>
+                                <div className="item-img-container"><img src={`/api/proxy/${bd.url.split('/').pop()}` } className="item-img" alt="" /></div>
+                                <div className="item-name-tag">DÉCOR {bIdx+1}</div>
                             </div>
-                        );
-                    })}
-                    <div className="item-card !bg-indigo-50 !border-dashed !border-indigo-200" onClick={() => actorUploadRef.current.click()}><div className="item-img-container !bg-transparent"><span className="text-3xl text-indigo-300">+</span></div><div className="item-name-tag text-indigo-400 text-[9px]">Nouveau</div></div>
+                        ))}
+                        <div className="item-card !bg-emerald-50 !border-dashed !border-emerald-200" onClick={() => backdropUploadRef.current.click()}><div className="item-img-container !bg-transparent"><span className="text-3xl text-emerald-300">+</span></div><div className="item-name-tag text-emerald-400 text-[9px]">Ajouter</div></div>
+                    </div>
                 </div>
             </div>
         </div>

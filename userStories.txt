@@ -86,3 +86,82 @@ En tant qu'utilisateur, je veux pouvoir définir si une section est visible pour
 Critères d’acceptation :
 - La modale d'édition propose 3 statuts : GÉNÉRAL (Global), NIVEAU (Toutes les classes du même niveau), ou CETTE CLASSE.
 - Le changement de statut est enregistré immédiatement et filtre l'affichage selon le contexte de navigation.
+
+================================================================================
+📜 RÉFÉRENTIEL DES USER STORYS: FONCTIONALITÉ STUDIO 
+================================================================================
+
+================================================================================
+🎯 OBJECTIF GLOBAL - MODULE STUDIO
+================================================================================
+Permettre à l'Enseignant de créer des expériences interactives (jeux, théâtres) 
+en manipulant des acteurs et des décors via une interface Wysiwyg, 
+scriptée en JavaScript et assistée par IA pour le traitement d'images.
+
+================================================================================
+RÉFÉRENTIEL  FONCTIONNEL (BUILD #161)
+================================================================================
+
+L'interface est divisée en trois colonnes principales plus une barre de propriétés horizontale.
+
+1. Colonne de Gauche : Logique & Séquençage
+-------------------------------------------
+Cette zone gère les comportements et les animations des acteurs sélectionnés.
+- Sélecteur de Type d'Asset :
+    * Onglet ⚡ ACTIONS (actif) : Liste des animations du personnage.
+    * Onglet 🎵 SONS : Gestion des effets sonores (WIP).
+- Gestionnaire d'Actions :
+    * Liste cliquable des animations existantes (ex: IDLE, AVANCER).
+    * Bouton + AJOUTER ACTION : Créer un nouvel état d'animation.
+- Éditeur de Séquence (Séquenceur) :
+    * Contrôles de vitesse : Indicateur de délai en millisecondes (ex: 300ms) avec boutons + et -.
+    * Bouton PLAY/STOP : Prévisualiser l'animation en boucle sur la scène.
+    * Grille de Frames :
+        * Affichage des miniatures de chaque image de l'animation.
+        * Bouton X rouge sur chaque frame pour la supprimer.
+        * Bouton + : Importer de nouvelles images (frames) pour l'action sélectionnée.
+
+2. Colonne Centrale : La Scène et le Code
+-----------------------------------------
+C'est le cœur du moteur de jeu "Wysiwyg".
+- La Scène (Stage) :
+    * Rendu en temps réel du décor et des acteurs.
+    * Interaction : Glisser-déposer (Drag & Drop) pour positionner les personnages.
+    * Sélection : Un cadre bleu indique quel acteur est en cours d'édition.
+    * Étiquettes : Affichage du nom au-dessus de chaque acteur (ex: P2, P3).
+- Barre de Propriétés (Prop-Bar) :
+    * Champ NOM : Renommer l'acteur pour l'utiliser dans le code.
+    * Champ TAILLE (%) : Ajuster l'échelle de l'acteur (scale).
+    * Styles de Rotation : 🔄 Libre (360°), ↔️ Miroir horizontal, 🚫 Fixe.
+    * Bouton ▶ TESTER : Lance le mode jeu réel (LiveEngine).
+- Éditeur de Code Compact :
+    * Console JS intégrée. Moteur basé sur 'class MiniGame extends MiniGameBase'.
+    * Fonctions : start() (init) et update() (boucle).
+
+3. Colonne de Droite : Bibliothèque d'Assets
+--------------------------------------------
+Gestion globale des ressources du projet.
+- Section PERSONNAGES :
+    * Bouton ✨ NETTOYER BGS : Algorithme local d'échantillonnage 4 coins.
+    * Bouton 🤖 PRO DÉTOURAGE : API Remove.bg pour détourage pro (Hercule).
+    * Grille des Acteurs : Miniatures, suppression (X au survol), bouton + NOUVEAU.
+- Section DÉCORS (BACKGROUNDS) :
+    * Grille des Backdrops : Sélection du décor actif, suppression (X), bouton + AJOUTER.
+
+4. Fonctionnalités "Invisibles" (Sous-jacentes)
+-----------------------------------------------
+- Auto-Save : Persistance automatique vers MongoDB.
+- Cloud Storage : Synchronisation immédiate vers Google Drive (Vault).
+- Proxy de Streaming : Flux sécurisé pour l'affichage des images (Anti-CORS).
+- Z-Index Automatique : Le dernier acteur cliqué passe au premier plan.
+- Échantillonnage 4 coins : Détection auto de la couleur de fond pour la transparence.
+================================================================================
+📜 RÉFÉRENTIEL DES USER STORYS: FONCTIONALITÉ GAMES
+================================================================================
+-Dans le menu activité, quand je clique sur +jeu une modale s ouvre qui me permet de créér des quizz (qcm)
+Je peux y nomer le quizz (en mettant des espaces entre les mots du tire)
+-Je peu ajouter une nouvel question en écrivant la question et les 4 réponses proposées et coliquer sur celle su sera la 
+bonne et recommencer l opération pour créér un quizz manuel
+-je peu mettre un sujet et envoyer a l ia pour générer un quizz automatique
+-dans la partie droite je peu attribuer un quizz a une classe a plusieurs classes ou a certains élèves d une classe
+le modèle de sélectionest identique que celui de Homwork (Devoirs Maison)

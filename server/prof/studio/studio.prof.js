@@ -1,20 +1,16 @@
-// @signatures: ProfStudio, projects, save, uploadAsset, detectBg
+// @signatures: ProfStudio, projects, save, uploadAsset, detectBg, removeBgSpecialized
 const express = require('express');
 const router = express.Router();
 const { StudioProject } = require('../models/prof.models');
 const ProfDrive = require('../core/drive.prof');
+const StudioExpert = require('../../domains/studio/experts/studio.expert'); 
 const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
 
-// SÉCURITÉ : Création dossier temp
 const tempDir = path.join(process.cwd(), 'public', 'uploads', 'temp');
 if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 const upload = multer({ dest: tempDir });
-
-/**
- * 🎬 ROUTER STUDIO PROF V106
- */
 
 router.get('/projects/:userId', async (req, res) => {
     try {
@@ -33,28 +29,34 @@ router.post('/', async (req, res) => {
     } catch (e) { res.status(500).json({ error: "Save fail" }); }
 });
 
-// ✅ ROUTE D'UPLOAD (Celle que le front cherchait)
 router.post('/upload-asset', upload.single('file'), async (req, res) => {
-    console.log("📥 [STUDIO-ROUTE] Upload reçu :", req.file?.originalname);
     try {
         if (!req.file) return res.status(400).json({ error: "Fichier manquant" });
-        
         const folderId = await ProfDrive.getOrCreateFolder("STUDIO_ASSETS");
         const driveFile = await ProfDrive.uploadFile(req.file.originalname, req.file.path, folderId);
-        
         try { fs.unlinkSync(req.file.path); } catch(e) {}
-
-        const url = `/api/proxy/${driveFile.id}`;
-        console.log("✅ [STUDIO-ROUTE] URL générée :", url);
-        res.json({ url });
-    } catch (e) {
-        console.error("❌ [STUDIO-ROUTE] Erreur :", e.message);
-        res.status(500).json({ error: e.message });
-    }
+        res.json({ url: `/api/proxy/${driveFile.id}` });
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.post('/detect-bg-by-id', async (req, res) => {
-    res.json({ color: "#FFFFFF" });
+// ✅ ROUTE DÉTOURAGE SPÉCIALISÉ
+router.post('/remove-bg-specialized', async (req, res) => {
+    console.log("📥 [STUDIO-ROUTE] Requête remove-bg-specialized reçue.");
+    try {
+        const { url } = req.body;
+        if (!url) return res.status(400).json({ error: "URL manquante" });
+        
+        const result = await StudioExpert.specializedBgRemoval(url);
+        
+        if (result) {
+            res.json(result);
+        } else {
+            res.status(500).json({ error: "Échec du détourage (voir logs serveur)" });
+        }
+    } catch (e) {
+        console.error("❌ [STUDIO-ROUTE] Erreur fatale :", e.message);
+        res.status(500).json({ error: e.message });
+    }
 });
 
 module.exports = router;

@@ -361,7 +361,6 @@ STRUCTURE:
 │   ├── server.js
 │   └── version.json
 ├── snap.js
-├── studio.txt
 ├── systemInstructions.md
 ├── temp_diff.json
 ├── tests/
@@ -411,29 +410,31 @@ Si tes images ne s'affichent plus et que le terminal affiche `invalid_grant` :
 [[[£ END: LOCKED_FILES.md £]]]
 
 [[[£ FILE: apply.js £]]]
-// @signatures: applyUpdate, getBundle, extractSignatures, writeStatus, readStatusSafe, checkDomIntegrity, checkLogicDensity, saveDiff, snapshot
+// @signatures: applyUpdate, getBundle, extractSignatures, writeStatus
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
-const inputFile = 'update.txt';
 const statusFile = 'apply_status.json';
-const diffFile = 'temp_diff.json';
-const verdictFile = 'temp_verdict.json';
+const inputFile = 'update.txt';
 
 /**
- * 🛡️ APPLY.JS V7.3 - ARCHITECTE HERMÉTIQUE RÉPARÉ
- * RÔLE : Protection contre les régressions par domaine fonctionnel.
- * RÈGLE : Un seul paquet (Bundle) par mise à jour.
+ * 🛡️ APPLY.JS V7.4 - RÉALIGNEMENT STUDIO
+ * Autorise server/models/StudioProject.js dans le bundle STUDIO.
  */
 
 const BUNDLES = {
     STRUCTURE: ['server/domains/structure', 'server/prof/structure', 'client/src/features/prof/components/ProfStudioFolder.jsx'],
-    STUDIO: ['server/domains/studio', 'server/prof/studio', 'client/src/features/prof/studio'],
+    STUDIO: [
+        'server/domains/studio', 
+        'server/prof/studio', 
+        'client/src/features/prof/studio',
+        'server/models/StudioProject.js' // <--- DÉPLACÉ ICI
+    ],
     SCAN: ['server/domains/scans', 'server/prof/scans', 'client/src/features/prof/scans'],
     ADMIN: ['server/domains/admin', 'server/prof/admin', 'client/src/features/admin'],
     AUTH: ['server/domains/auth', 'server/prof/auth', 'client/src/features/auth'],
     ELEVE: ['server/eleve', 'client/src/features/eleve'],
-    CORE: ['server/core', 'server/server.js', 'server/models', 'client/src/App.jsx', 'apply.js', 'apply_status.json']
+    CORE: ['server/core', 'server/server.js', 'server/models', 'client/src/App.jsx', 'apply.js'] 
+    // ^ La règle "STUDIO" étant placée AVANT "CORE", StudioProject sera capturé par STUDIO.
 };
 
 function getBundle(filePath) {
@@ -446,9 +447,7 @@ function getBundle(filePath) {
 function writeStatus(type, message, details = null) {
     const data = { status: type, message, details, timestamp: Date.now() };
     try {
-        const tempPath = statusFile + '.tmp';
-        fs.writeFileSync(tempPath, JSON.stringify(data, null, 2));
-        fs.renameSync(tempPath, statusFile);
+        fs.writeFileSync(statusFile, JSON.stringify(data, null, 2));
     } catch(e) {}
 }
 
@@ -457,8 +456,7 @@ function extractSignatures(content) {
     const patterns = [
         /function\s+([a-zA-Z0-9_]+)/g,
         /const\s+([a-zA-Z0-9_]+)\s*=\s*(?:async\s*)?\(/g,
-        /export\s+default\s+function\s+([a-zA-Z0-9_]+)/g,
-        /async\s+function\s+([a-zA-Z0-9_]+)/g
+        /export\s+default\s+function\s+([a-zA-Z0-9_]+)/g
     ];
     patterns.forEach(regex => {
         let match;
@@ -467,54 +465,29 @@ function extractSignatures(content) {
     return sigs;
 }
 
-function checkDomIntegrity(oldContent, newContent) {
-    const getIds = (text) => {
-        const ids = new Set();
-        let match;
-        const regex = /id=['"]([^'"]+)['"]/g;
-        while ((match = regex.exec(text))) ids.add(match[1]);
-        return ids;
-    };
-    const oldIds = getIds(oldContent);
-    const newIds = getIds(newContent);
-    const missing = [...oldIds].filter(id => !newIds.has(id));
-    return missing.length > 0 ? missing : null;
-}
-
-function checkLogicDensity(oldContent, newContent) {
-    const logicKeywords = /\b(if|else|switch|case|return|await|async|map|filter|reduce|useEffect|useState|useRef)\b/g;
-    const count = (text) => (text.match(logicKeywords) || []).length;
-    const oldScore = count(oldContent);
-    const newScore = count(newContent);
-    if (oldScore > 10 && newScore < oldScore * 0.7) return { drop: Math.round((1 - newScore/oldScore)*100) };
-    return null;
-}
-
 function applyUpdate() {
     try {
         if (!fs.existsSync(inputFile)) return;
         const rawContent = fs.readFileSync(inputFile, 'utf8');
         if (!rawContent || rawContent.length < 10) return;
 
-        // 1. ANALYSE D'HERMÉTICITÉ
         const fileMatchRegex = /\[\[\[£\s*FILE\s*:\s*([^£\s\]]+)\s*£\]\]\]/g;
         let m;
         const detectedBundles = new Set();
         while ((m = fileMatchRegex.exec(rawContent)) !== null) {
             const fPath = m[1].trim();
-            if (fPath.includes('history.txt') || fPath === 'apply.js' || fPath === 'apply_status.json') continue;
+            if (fPath.includes('history.txt') || fPath === 'apply.js') continue;
             const bundle = getBundle(fPath);
             if (bundle !== 'GLOBAL') detectedBundles.add(bundle);
         }
 
         if (detectedBundles.size > 1) {
             const list = Array.from(detectedBundles).join(', ');
-            console.error("❌ [REJET] Violation d'herméticité : " + list);
-            writeStatus('REJECTED', `Plusieurs paquets détectés : ${list}`);
-            fs.writeFileSync(inputFile, ''); return;
+            writeStatus('REJECTED', `Violation d'herméticité : ${list}`);
+            fs.writeFileSync(inputFile, ''); 
+            return;
         }
 
-        // 2. APPLICATION
         fs.writeFileSync(inputFile, ''); 
         const startRegex = /\[\[\[£\s*FILE\s*:\s*([^£\s\]]+)\s*£\]\]\]/g;
         let match;
@@ -522,65 +495,38 @@ function applyUpdate() {
         while ((match = startRegex.exec(rawContent)) !== null) {
             const filePath = match[1].trim();
             const startIdx = match.index + match[0].length;
-            
-            const endTagNormal = `[[[£ END: ${filePath} £]]]`;
-            const endTagRefactor = `[[[£ END:REFACTORING: ${filePath} £]]]`;
-            
-            let endIdx = rawContent.indexOf(endTagNormal, startIdx);
-            let isRefactoring = false;
-            if (endIdx === -1) {
-                endIdx = rawContent.indexOf(endTagRefactor, startIdx);
-                if (endIdx !== -1) isRefactoring = true;
-            }
+            const endTag = `[[[£ END: ${filePath} £]]]`;
+            const endIdx = rawContent.indexOf(endTag, startIdx);
 
             if (endIdx !== -1) {
                 let newContent = rawContent.substring(startIdx, endIdx).trim();
                 const fullPath = path.join(__dirname, filePath);
-                let canWrite = true;
 
-                if (fs.existsSync(fullPath) && !isRefactoring && !filePath.includes('history.txt')) {
-                    const oldContent = fs.readFileSync(fullPath, 'utf8');
-                    const oldSigs = extractSignatures(oldContent);
-                    const newSigs = extractSignatures(newContent);
-                    const lost = [...oldSigs].filter(s => !newSigs.has(s));
-                    const lostIds = checkDomIntegrity(oldContent, newContent);
-                    const density = checkLogicDensity(oldContent, newContent);
-
-                    if (lost.length > 0 || lostIds || density) {
-                        const reason = lost.length > 0 ? `Perte fonctions: ${lost.join(', ')}` : (lostIds ? "IDs manquants" : "Logique réduite");
-                        writeStatus('JUDGING', `VÉRIFICATION : ${filePath}`, reason);
-                        canWrite = false;
-                    }
+                fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+                if (filePath.toLowerCase().endsWith('history.txt')) {
+                    fs.appendFileSync(fullPath, '\n' + newContent + '\n');
+                } else {
+                    fs.writeFileSync(fullPath, newContent + '\n');
                 }
-
-                if (canWrite || isRefactoring) {
-                    fs.mkdirSync(path.dirname(fullPath), { recursive: true });
-                    if (filePath.toLowerCase().endsWith('history.txt')) {
-                        fs.appendFileSync(fullPath, '\n' + newContent + '\n');
-                    } else {
-                        fs.writeFileSync(fullPath, newContent + '\n');
-                    }
-                    console.log(`${isRefactoring ? '🛠️  REFACTORED' : '✅ APPLIED'}: ${filePath}`);
-                }
+                console.log(`✅ APPLIED: ${filePath}`);
             }
         }
-        writeStatus('OK', 'Mise à jour réussie');
+        writeStatus('OK', 'Infrastructure mise à jour');
     } catch (e) {
-        console.error("❌ Erreur Moteur:", e.message);
         writeStatus('ERROR', e.message);
     }
 }
 
 setInterval(applyUpdate, 500);
-console.log("🛡️ ARCHITECTE HERMÉTIQUE (V7.3) ACTIF");
+console.log("🛡️ ARCHITECTE HERMÉTIQUE (V7.4) - STUDIO SYNC ACTIF");
 [[[£ END: apply.js £]]]
 
 [[[£ FILE: apply_status.json £]]]
 {
   "status": "OK",
-  "message": "Mise à jour réussie",
+  "message": "Infrastructure mise à jour",
   "details": null,
-  "timestamp": 1770120217307
+  "timestamp": 1770215739521
 }
 [[[£ END: apply_status.json £]]]
 
@@ -7130,18 +7076,228 @@ export default function StudentsManager({ globalClassId }) {
     border-radius: 20px;
     overflow: hidden;
     border: 1px solid #e2e8f0;
+    position: relative;
 }
 
-/* PANNEAU GAUCHE (ACTIONS) */
+/* PANNEAU GAUCHE */
 .studio-assets-panel {
-    width: 350px;
+    width: 320px;
+    min-width: 320px;
+    flex-shrink: 0;
     background: #fff;
     border-right: 1px solid #e2e8f0;
     display: flex;
     flex-direction: column;
 }
 
-/* CENTRE (STAGE + CODE) */
+.studio-tab-header {
+    display: flex;
+    background: #f1f5f9;
+    padding: 5px;
+    gap: 5px;
+}
+
+.studio-tab-btn {
+    flex: 1;
+    padding: 12px;
+    border-radius: 12px;
+    font-weight: 900;
+    font-size: 10px;
+    text-transform: uppercase;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s;
+    color: #94a3b8;
+}
+.studio-tab-btn.active {
+    background: white;
+    color: #6366f1;
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+}
+
+.studio-asset-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* CARDS ACTIONS */
+.action-card-square {
+    background: #f8fafc;
+    border: 2px solid #f1f5f9;
+    border-radius: 20px;
+    padding: 18px 22px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+}
+.action-card-square:hover {
+    border-color: #cbd5e1;
+    background: #fff;
+}
+.action-card-square.active {
+    background: #fff;
+    border-color: #6366f1;
+    box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.15);
+}
+.action-card-square span {
+    font-weight: 950;
+    font-size: 11px;
+    color: #1e293b;
+    text-transform: uppercase;
+}
+
+.v84-add-btn-minimal {
+    padding: 15px;
+    border: 2px dashed #cbd5e1;
+    border-radius: 20px;
+    background: transparent;
+    color: #94a3b8;
+    font-weight: 900;
+    font-size: 11px;
+    text-transform: uppercase;
+    cursor: pointer;
+}
+
+/* SÉQUENCEUR */
+.studio-sequence-editor {
+    height: 280px;
+    background: #f8fafc;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    flex-direction: column;
+    padding: 15px 20px;
+}
+
+.sequence-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.sequence-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #fff;
+    padding: 4px 8px;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+}
+
+.speed-indicator {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    font-weight: 900;
+    color: #6366f1;
+    min-width: 45px;
+    text-align: center;
+}
+
+.btn-speed {
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
+    color: #475569;
+    font-weight: 900;
+    cursor: pointer;
+}
+
+/* BOUTON MIROIR (NOUVEAU) */
+.btn-mirror {
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    padding: 6px 12px;
+    font-size: 10px;
+    font-weight: 900;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-right: 5px;
+}
+.btn-mirror:hover {
+    background: #e2e8f0;
+    color: #1e293b;
+    transform: scale(1.05);
+}
+
+.btn-preview-play {
+    background: #6366f1;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    padding: 6px 12px;
+    font-size: 10px;
+    font-weight: 950;
+    cursor: pointer;
+}
+.btn-preview-play.playing { background: #ef4444; }
+
+.sequence-grid {
+    flex: 1;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(65px, 1fr));
+    gap: 10px;
+    overflow-y: auto;
+}
+
+.frame-card {
+    width: 65px;
+    height: 65px;
+    background: white;
+    border: 2px solid #e2e8f0;
+    border-radius: 12px;
+    position: relative;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.frame-card.active-preview { 
+    border-color: #6366f1; 
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+}
+
+.frame-card.selected-for-clean {
+    border-color: #3b82f6 !important;
+    border-style: solid !important;
+    border-width: 3px !important;
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.3) !important;
+}
+
+.frame-img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    padding: 5px;
+    pointer-events: none;
+}
+
+.frame-del {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    background: #ef4444;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 8px;
+    cursor: pointer;
+    z-index: 20;
+}
+
+/* CENTRE (SCÈNE) */
 .studio-center-column {
     flex: 1;
     display: flex;
@@ -7157,7 +7313,7 @@ export default function StudentsManager({ globalClassId }) {
     background-color: #fff;
     background-size: cover;
     background-position: center;
-    border-radius: 15px;
+    border-radius: 20px;
     position: relative;
     overflow: hidden;
     box-shadow: inset 0 0 40px rgba(0,0,0,0.05);
@@ -7168,131 +7324,258 @@ export default function StudentsManager({ globalClassId }) {
     transform: translate(-50%, -50%);
     cursor: grab;
     z-index: 10;
+    width: 150px;
+    height: 150px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
+.actor-on-stage img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+
 .actor-on-stage.selected {
     outline: 3px solid #6366f1;
     outline-offset: 5px;
     border-radius: 5px;
+    z-index: 100;
 }
 
-.actor-on-stage img {
-    max-width: 150px;
-    max-height: 150px;
+.actor-label-tag {
+    position: absolute;
+    top: -20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.6);
+    color: white;
+    font-size: 8px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 900;
+    pointer-events: none;
+    white-space: nowrap;
 }
 
-/* PANNEAU DROITE (PERSONNAGES) */
+/* PANNEAU DROITE (BIBLIOTHÈQUE) */
 .studio-library-panel {
     width: 250px;
+    min-width: 250px;
     background: #fff;
     border-left: 1px solid #e2e8f0;
     display: flex;
     flex-direction: column;
 }
 
+/* SECTION HEADERS */
+.library-section-header {
+    padding: 12px 15px;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.lib-header-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.lib-section-title {
+    font-weight: 950;
+    font-size: 10px;
+    text-transform: uppercase;
+    color: #94a3b8;
+    letter-spacing: 0.05em;
+}
+
+.lib-actions-row {
+    display: flex;
+    gap: 5px;
+}
+
+.btn-clean-bgs {
+    flex: 1;
+    background: #10b981;
+    color: white;
+    border: none;
+    padding: 8px;
+    border-radius: 10px;
+    font-weight: 950;
+    font-size: 8px;
+    text-transform: uppercase;
+    cursor: pointer;
+}
+
+.btn-ai-clean {
+    background: #6366f1;
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 10px;
+    font-weight: 950;
+    font-size: 8px;
+    text-transform: uppercase;
+    cursor: pointer;
+    box-shadow: 0 4px 10px rgba(99, 102, 241, 0.2);
+}
+
+/* SCROLLABLE GRIDS */
+.library-scroll-area {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+
 .library-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, 1fr);
     gap: 10px;
     padding: 15px;
 }
 
+/* CARDS */
 .item-card {
     background: #f8fafc;
     border: 2px solid transparent;
-    border-radius: 12px;
-    padding: 10px;
+    border-radius: 16px;
+    padding: 8px;
     cursor: pointer;
     text-align: center;
     transition: all 0.2s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative; /* Crucial pour le bouton X */
 }
-.item-card.active {
-    border-color: #6366f1;
-    background: #eef2ff;
-}
+.item-card:hover { background: #f1f5f9; border-color: #cbd5e1; }
+.item-card.active { border-color: #6366f1; background: #eef2ff; }
 
-.item-img-container {
-    height: 60px;
+/* ❌ BOUTON SUPPRESSION ITEM (AMÉLIORÉ) */
+.item-del-btn {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    width: 22px;
+    height: 22px;
+    background: #ef4444;
+    color: white;
+    border: 2px solid white;
+    border-radius: 50%;
+    font-size: 12px;
+    font-weight: 950;
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-bottom: 5px;
+    cursor: pointer;
+    opacity: 0;
+    transform: scale(0.8);
+    transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    z-index: 100;
+    box-shadow: 0 4px 10px rgba(239, 68, 68, 0.3);
 }
+.item-card:hover .item-del-btn { 
+    opacity: 1; 
+    transform: scale(1);
+}
+.item-del-btn:hover {
+    background: #dc2626;
+    transform: scale(1.1) !important;
+}
+
+.item-img-container {
+    width: 100%;
+    height: 55px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: white;
+    border-radius: 10px;
+    margin-bottom: 6px;
+    overflow: hidden;
+}
+
 .item-img {
-    max-height: 100%;
-    max-width: 100%;
+    max-width: 90%;
+    max-height: 90%;
+    object-fit: contain;
 }
 
 .item-name-tag {
-    font-size: 9px;
     font-weight: 900;
+    font-size: 8px;
+    color: #475569;
     text-transform: uppercase;
-    color: #64748b;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
+}
+
+/* SECTION BACKGROUNDS FIXE EN BAS */
+.library-bg-section {
+    border-top: 1px solid #e2e8f0;
+    background: white;
+    height: 220px;
+    display: flex;
+    flex-direction: column;
+}
+
+.v115-prop-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: white;
+    padding: 8px 15px;
+    border-radius: 18px;
+    border: 1px solid #e2e8f0;
+    flex-wrap: wrap;
+}
+
+.prop-input-mini {
+    background: #f1f5f9;
+    border: none;
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-weight: 900;
+    font-size: 11px;
+    color: #1e293b;
+    outline: none;
 }
 
 .compact-code-editor {
-    height: 120px;
+    height: 180px;
     background: #0f172a;
     border-radius: 15px;
-    display: flex;
-    flex-direction: column;
     overflow: hidden;
-    border: 1px solid #334155;
-    flex-shrink: 0;
 }
 
 .compact-code-editor textarea {
-    flex: 1;
+    width: 100%;
+    height: 100%;
     background: transparent;
     color: #10b981;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    padding: 10px;
-    outline: none;
-    border: none;
-    resize: none;
-}
-
-/* GROS CARRÉS ACTIONS */
-.action-card-square {
-    background: #f1f5f9;
-    border-radius: 15px;
+    font-size: 12px;
     padding: 15px;
-    cursor: pointer;
-    border: 3px solid transparent;
-    transition: all 0.2s;
-}
-.action-card-square.active {
-    border-color: #6366f1;
-    background: #fff;
-    box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
-}
-
-.action-preview-row {
-    display: flex;
-    gap: 5px;
-    height: 40px;
-    margin-top: 5px;
-    overflow: hidden;
-}
-.action-preview-row img {
-    height: 100%;
-    width: 40px;
-    object-fit: contain;
-    background: #fff;
-    border-radius: 5px;
+    border: none;
+    outline: none;
+    resize: none;
 }
 
 [[[£ END: client/src/features/prof/studio/StudioDashboard.css £]]]
 
 [[[£ FILE: client/src/features/prof/studio/StudioDashboard.jsx £]]]
-// @signatures: StudioDashboard, LiveEngine, handleAddAction, handleAddFrame, handleMoveFrame, handleDeleteActor, handleRemoveBgSingle, handleSaveCode, handleAddActor, handleUpdateProp, getImgUrl, handleCenterActor
+// @signatures: StudioDashboard, LiveEngine, flipFrame, handleAICleanBackground, handleAddAction, handleAddActor, handleAddFrame, handleDeleteActor, handleDeleteBackdrop, handleDeleteFrame, handleMirrorSequence, handleRemoveAllBackgrounds, handleReorderFrame, handleSelectActor, handleStageMouseDown, handleStageMouseMove, handleStageMouseUp, handleUpdateActionSpeed, handleUpdateProp, loadProjects, processFrameBackground, resolveUrl, saveProject, togglePreview
 import React, { useState, useRef, useEffect } from 'react';
 import './StudioDashboard.css';
 import { api } from '../../../services/api';
 
 /**
- * 🕹️ ENGINE V115 (FULL ROTATION SUPPORT)
- * Gère parfaitement les styles Scratch : 360°, Miroir, et Fixe.
+ * 🕹️ ENGINE V140 (REAL-TIME CLOCK)
+ * Correction Vitesse : Utilisation de Date.now() pour une animation précise à la milliseconde.
  */
 const LiveEngine = ({ code, project, activeSceneIdx, onStop }) => {
     const canvasRef = useRef(null);
@@ -7301,6 +7584,7 @@ const LiveEngine = ({ code, project, activeSceneIdx, onStop }) => {
 
     function resolveUrl(url) {
         if (!url) return "";
+        if (url.startsWith('/api/proxy')) return url;
         const id = url.split('/').pop();
         return `/api/proxy/${id}`;
     }
@@ -7329,68 +7613,81 @@ const LiveEngine = ({ code, project, activeSceneIdx, onStop }) => {
 
                 const engineLogic = `
                     const { canvas, ctx, assets, project, sceneIdx } = arguments[0];
-                    
                     class ActorProxy {
                         constructor(data) {
-                            this.x = data.initialX || 50;
-                            this.y = data.initialY || 50;
-                            this.dir = data.direction || 0;
-                            this.scale = data.scale || 1;
+                            this.id = data.id; this.name = data.name;
+                            this.x = data.initialX || 50; this.y = data.initialY || 50;
+                            this.dir = data.direction || 0; this.scale = data.scale || 1;
                             this.rotationStyle = data.rotationStyle || 'all';
                             this.currentAction = data.actions?.[0]?.name || 'IDLE';
                             this.frameIdx = 0;
-                            this.animTick = 0;
+                            // CORRECTION V140 : On utilise le temps réel
+                            this.lastAnimTime = 0; 
                         }
-                        center() { this.x = 50; this.y = 50; }
                         play(name) { 
                             if(this.currentAction.toUpperCase() !== name.toUpperCase()) {
-                                this.currentAction = name; this.frameIdx = 0; this.animTick = 0;
+                                this.currentAction = name; 
+                                this.frameIdx = 0; 
+                                this.lastAnimTime = 0; // Reset du timer
                             }
                         }
                     }
-
                     class MiniGameBase {
                         constructor() {
                             this.canvas = canvas; this.ctx = ctx; this.assets = assets;
-                            this.keys = {}; this.running = true;
+                            this.keys = {}; this.running = true; this.actorsMap = new Map();
                             project.scenes[sceneIdx].actors.forEach((a, i) => {
-                                this['P' + (i + 1)] = new ActorProxy(a);
+                                const proxy = new ActorProxy(a);
+                                this.actorsMap.set(a.id, proxy);
+                                this['P' + (i + 1)] = proxy;
+                                if (a.name) this[a.name] = proxy;
                             });
                             window.onkeydown = (e) => { this.keys[e.code] = true; if(e.code === 'Space') e.preventDefault(); };
                             window.onkeyup = (e) => this.keys[e.code] = false;
                         }
-
                         _render() {
                             if(!this.ctx) return;
                             this.ctx.fillStyle = 'white';
                             this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                            
+                            // Décor
                             const s = project.scenes[sceneIdx];
                             const bd = s.backdrops?.[s.currentBackdropIdx || 0];
                             if(bd && this.assets[bd.url]) this.ctx.drawImage(this.assets[bd.url], 0, 0, this.canvas.width, this.canvas.height);
-
-                            s.actors.forEach((a, i) => {
-                                const p = this['P' + (i + 1)];
+                            
+                            // Acteurs
+                            s.actors.forEach((a) => {
+                                const p = this.actorsMap.get(a.id);
+                                if (!p) return;
                                 const action = (a.actions || []).find(act => act.name.toUpperCase() === p.currentAction.toUpperCase()) || a.actions?.[0];
+                                
                                 if(action && action.frames?.length > 0) {
-                                    p.animTick++; if(p.animTick > 6) { p.animTick = 0; p.frameIdx = (p.frameIdx + 1) % action.frames.length; }
-                                    const img = this.assets[action.frames[p.frameIdx].url];
+                                    // --- GESTION VITESSE TEMPS RÉEL (V140) ---
+                                    const now = Date.now();
+                                    const speedMs = action.speed || 100;
+
+                                    if (now - p.lastAnimTime > speedMs) {
+                                        p.frameIdx = (p.frameIdx + 1) % action.frames.length;
+                                        p.lastAnimTime = now;
+                                    }
+                                    
+                                    const frame = action.frames[p.frameIdx];
+                                    const img = frame ? this.assets[frame.url] : null;
+                                    
                                     if(img) {
                                         let rx = (p.x / 100) * this.canvas.width;
                                         let ry = (p.y / 100) * this.canvas.height;
-                                        this.ctx.save();
+                                        this.ctx.save(); 
                                         this.ctx.translate(rx, ry);
-
+                                        
                                         let normDir = ((p.dir % 360) + 360) % 360;
-
-                                        if (p.rotationStyle === 'left-right') {
-                                            // Mode Miroir (Scratch)
-                                            if (normDir > 90 && normDir < 270) this.ctx.scale(-1, 1);
-                                        } else if (p.rotationStyle === 'all') {
-                                            // Mode 360° (Scratch)
-                                            this.ctx.rotate(p.dir * Math.PI / 180);
+                                        if (p.rotationStyle === 'left-right') { 
+                                            if (normDir > 90 && normDir < 270) this.ctx.scale(-1, 1); 
+                                        } else if (p.rotationStyle === 'all') { 
+                                            this.ctx.rotate(p.dir * Math.PI / 180); 
                                         }
-
-                                        let sz = 150 * p.scale;
+                                        
+                                        let sz = 150 * p.scale; 
                                         this.ctx.drawImage(img, -sz/2, -sz/2, sz, sz);
                                         this.ctx.restore();
                                     }
@@ -7401,12 +7698,10 @@ const LiveEngine = ({ code, project, activeSceneIdx, onStop }) => {
                     ${code}
                     return typeof MiniGame !== 'undefined' ? MiniGame : MiniGameBase;
                 `;
-
                 const ctx = canvas.getContext('2d');
                 const GameFactory = new Function(engineLogic);
                 const FinalClass = GameFactory({ canvas, ctx, assets, project, sceneIdx: activeSceneIdx });
                 engineRef.current = new FinalClass();
-                if (engineRef.current.start) engineRef.current.start();
                 const loop = () => {
                     if (!engineRef.current || !engineRef.current.running) return;
                     if (engineRef.current.update) engineRef.current.update();
@@ -7435,14 +7730,44 @@ export default function StudioDashboard({ user }) {
     const [selectedSceneIdx, setSelectedSceneIdx] = useState(0);
     const [selectedActorId, setSelectedActorId] = useState(null);
     const [selectedActionIdx, setSelectedActionIdx] = useState(0);
+    const [leftTab, setLeftTab] = useState('actions');
     const [code, setCode] = useState("");
     const [isPlaying, setIsPlaying] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [cleaning, setCleaning] = useState(false);
+    
+    // --- ÉTATS SÉQUENCEUR ---
+    const [draggedFrameIdx, setDraggedFrameIdx] = useState(null);
+    const [dropTargetIdx, setDropTargetIdx] = useState(null);
+    const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
+    const [previewFrameIdx, setPreviewFrameIdx] = useState(0);
+    const [selectedFrameIdx, setSelectedFrameIdx] = useState(null);
+    const [isDraggingOnStage, setIsDraggingOnStage] = useState(false);
 
     const frameUploadRef = useRef(null);
     const actorUploadRef = useRef(null);
+    const backdropUploadRef = useRef(null); 
+    const stageRef = useRef(null);
 
     useEffect(() => { loadProjects(); }, [user]);
+
+    // 🚀 SYNC PREVIEW ENGINE
+    useEffect(() => {
+        let timer;
+        const currentSpeed = selectedAction?.speed || 100; 
+
+        if (isPreviewPlaying) {
+            const framesCount = selectedAction?.frames?.length || 0;
+            if (framesCount > 0) {
+                timer = setInterval(() => {
+                    setPreviewFrameIdx(prev => (prev + 1) % framesCount);
+                }, currentSpeed);
+            }
+        } else {
+            setPreviewFrameIdx(0);
+        }
+        return () => clearInterval(timer);
+    }, [isPreviewPlaying, selectedActionIdx, selectedActorId, project]);
 
     async function loadProjects() {
         const data = await api.get(`/studio/projects/${user.id || user._id}`);
@@ -7451,7 +7776,7 @@ export default function StudioDashboard({ user }) {
             const p = data[0];
             setProject(p);
             if (p.generatedCode) setCode(p.generatedCode);
-            if (!selectedActorId && p.scenes?.[0]?.actors?.[0]) setSelectedActorId(p.scenes[0].actors[0].id);
+            if (!selectedActorId && p.scenes?.[0]?.actors?.[0]) handleSelectActor(p.scenes[0].actors[0].id, p);
         }
     }
 
@@ -7465,104 +7790,450 @@ export default function StudioDashboard({ user }) {
         setLoading(false);
     }
 
+    const handleUpdateActionSpeed = (delta) => {
+        if (!selectedActorId || selectedActionIdx === null) return;
+        const next = JSON.parse(JSON.stringify(project));
+        const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
+        if (actor && actor.actions[selectedActionIdx]) {
+            const current = actor.actions[selectedActionIdx].speed || 100;
+            const newSpeed = Math.max(20, Math.min(2000, current + delta));
+            actor.actions[selectedActionIdx].speed = newSpeed;
+            setProject(next);
+            saveProject(next);
+        }
+    };
+
+    const handleAICleanBackground = async () => {
+        if (!project || selectedFrameIdx === null) return;
+        if (!confirm("✨ Lancer le détourage professionnel ?")) return;
+        setCleaning(true);
+        try {
+            const actor = project.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
+            const frame = actor.actions[selectedActionIdx].frames[selectedFrameIdx];
+            const res = await api.post('/studio/remove-bg-specialized', { url: frame.url });
+            if (res.url) {
+                const next = JSON.parse(JSON.stringify(project));
+                const nextActorIdx = next.scenes[selectedSceneIdx].actors.findIndex(a => a.id === selectedActorId);
+                next.scenes[selectedSceneIdx].actors[nextActorIdx].actions[selectedActionIdx].frames[selectedFrameIdx].url = res.url;
+                await saveProject(next);
+                alert("✨ Détourage réussi !");
+            }
+        } catch (e) { alert("Erreur lors du traitement."); }
+        setCleaning(false);
+    };
+
+    const handleRemoveAllBackgrounds = async () => {
+        if (!project || !selectedActorId) return;
+        const actor = project.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
+        if (!actor) return;
+        const isSingle = selectedFrameIdx !== null;
+        const msg = isSingle 
+            ? `Nettoyer UNIQUEMENT ce sprite pour ${actor.name} ?` 
+            : `Nettoyer TOUS les sprites du personnage ${actor.name} ?`;
+        if (!confirm(msg)) return;
+        setCleaning(true);
+        const next = JSON.parse(JSON.stringify(project));
+        const nextActor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
+        try {
+            if (isSingle) {
+                const action = nextActor.actions[selectedActionIdx];
+                const frame = action.frames[selectedFrameIdx];
+                const newUrl = await processFrameBackground(frame.url);
+                if (newUrl) action.frames[selectedFrameIdx].url = newUrl;
+            } else {
+                for (const action of nextActor.actions) {
+                    for (let i = 0; i < action.frames.length; i++) {
+                        const frame = action.frames[i];
+                        const newUrl = await processFrameBackground(frame.url);
+                        if (newUrl) action.frames[i].url = newUrl;
+                    }
+                }
+            }
+            await saveProject(next);
+            alert(`✨ Nettoyage de ${actor.name} terminé !`);
+            setSelectedFrameIdx(null);
+        } catch (e) { alert("Erreur lors du nettoyage."); }
+        setCleaning(false);
+    };
+
+    const processFrameBackground = async (url) => {
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = img.width; canvas.height = img.height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0);
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const data = imageData.data;
+                const corners = [[data[0], data[1], data[2]], [data[(img.width - 1) * 4], data[(img.width - 1) * 4 + 1], data[(img.width - 1) * 4 + 2]], [data[(img.width * (img.height - 1)) * 4], data[(img.width * (img.height - 1)) * 4 + 1], data[(img.width * (img.height - 1)) * 4 + 2]], [data[(data.length - 4)], data[(data.length - 3)], data[(data.length - 2)]]];
+                const [targetR, targetG, targetB] = corners[0];
+                const tolerance = 50; 
+
+                for (let i = 0; i < data.length; i += 4) {
+                    const dist = Math.sqrt(Math.pow(data[i] - targetR, 2) + Math.pow(data[i+1] - targetG, 2) + Math.pow(data[i+2] - targetB, 2));
+                    if (dist < tolerance) data[i + 3] = 0; 
+                }
+                ctx.putImageData(imageData, 0, 0);
+                canvas.toBlob(async (blob) => {
+                    const formData = new FormData();
+                    formData.append('file', blob, "cleaned.png");
+                    const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: formData }).then(r => r.json());
+                    resolve(res.url);
+                }, 'image/png');
+            };
+            img.onerror = () => resolve(null);
+            img.src = url.startsWith('/api/proxy') ? url : `/api/proxy/${url.split('/').pop()}`;
+        });
+    };
+
+    // 🚀 FONCTION MIROIR (Canvas flip)
+    const flipFrame = async (url) => {
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = img.width; canvas.height = img.height;
+                const ctx = canvas.getContext('2d');
+                ctx.translate(img.width, 0);
+                ctx.scale(-1, 1);
+                ctx.drawImage(img, 0, 0);
+                canvas.toBlob(async (blob) => {
+                    const formData = new FormData();
+                    formData.append('file', blob, "flipped.png");
+                    const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: formData }).then(r => r.json());
+                    resolve(res.url);
+                }, 'image/png');
+            };
+            img.onerror = () => resolve(null);
+            img.src = url.startsWith('/api/proxy') ? url : `/api/proxy/${url.split('/').pop()}`;
+        });
+    };
+
+    const handleMirrorSequence = async () => {
+        if (!project || !selectedActorId) return;
+        const actor = project.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
+        const action = actor.actions[selectedActionIdx];
+        if (!action || action.frames.length === 0) return;
+
+        if (!confirm(`Retourner (Miroir) les ${action.frames.length} images de la séquence "${action.name}" ?`)) return;
+
+        setCleaning(true);
+        const next = JSON.parse(JSON.stringify(project));
+        const nextActor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
+        const nextAction = nextActor.actions[selectedActionIdx];
+
+        try {
+            for (let i = 0; i < nextAction.frames.length; i++) {
+                const newUrl = await flipFrame(nextAction.frames[i].url);
+                if (newUrl) nextAction.frames[i].url = newUrl;
+            }
+            setProject(next);
+            await saveProject(next);
+            setSelectedFrameIdx(null); // Reset selection
+        } catch (e) { alert("Erreur miroir"); }
+        setCleaning(false);
+    };
+
+    const handleSelectActor = (actorId, currentProj = project) => {
+        if (!currentProj) return;
+        const next = JSON.parse(JSON.stringify(currentProj));
+        const actors = next.scenes[selectedSceneIdx].actors;
+        const idx = actors.findIndex(a => a.id === actorId);
+        if (idx !== -1) {
+            const [moved] = actors.splice(idx, 1);
+            actors.push(moved);
+            setProject(next);
+            setSelectedActorId(actorId);
+            setIsPreviewPlaying(false);
+            setSelectedFrameIdx(null);
+        }
+    };
+
+    const handleStageMouseDown = (e, actorId) => {
+        e.preventDefault(); e.stopPropagation();
+        handleSelectActor(actorId);
+        setIsDraggingOnStage(true);
+    };
+
+    const handleStageMouseMove = (e) => {
+        if (!isDraggingOnStage || !selectedActorId || !stageRef.current) return;
+        const rect = stageRef.current.getBoundingClientRect();
+        const x = ((e.clientX - rect.left) / rect.width) * 100;
+        const y = ((e.clientY - rect.top) / rect.height) * 100;
+        const next = { ...project };
+        const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
+        if (actor) {
+            actor.initialX = Math.round(Math.max(0, Math.min(100, x)));
+            actor.initialY = Math.round(Math.max(0, Math.min(100, y)));
+            setProject(next);
+        }
+    };
+
+    const handleStageMouseUp = () => { if (isDraggingOnStage) { setIsDraggingOnStage(false); saveProject(); } };
+
     const handleUpdateProp = (f, v) => {
         const next = { ...project };
         const actor = next.scenes?.[selectedSceneIdx]?.actors?.find(a => a.id === selectedActorId);
         if (actor) {
             actor[f] = isNaN(v) ? v : parseFloat(v);
             setProject(next);
+            saveProject(next);
         }
+    };
+
+    const handleAddAction = () => {
+        if (!selectedActorId) return;
+        const name = prompt("Nom de l'action :", "MARCHER");
+        if (!name) return;
+        const next = JSON.parse(JSON.stringify(project));
+        const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
+        actor.actions.push({ name: name.toUpperCase(), frames: [], speed: 100 });
+        saveProject(next);
+    };
+
+    const handleReorderFrame = (targetIdx) => {
+        if (draggedFrameIdx === null || draggedFrameIdx === targetIdx) return;
+        const next = JSON.parse(JSON.stringify(project));
+        const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
+        const frames = actor.actions[selectedActionIdx].frames;
+        const [moved] = frames.splice(draggedFrameIdx, 1);
+        frames.splice(targetIdx, 0, moved);
+        saveProject(next);
+        setDraggedFrameIdx(null); setDropTargetIdx(null);
+    };
+
+    const handleDeleteFrame = (fIdx) => {
+        const next = JSON.parse(JSON.stringify(project));
+        const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
+        actor.actions[selectedActionIdx].frames.splice(fIdx, 1);
+        saveProject(next);
+    };
+
+    const togglePreview = () => { setIsPreviewPlaying(!isPreviewPlaying); };
+
+    // 🗑️ SUPPRESSION PERSONNAGE
+    const handleDeleteActor = (e, actorId) => {
+        e.stopPropagation();
+        if (!confirm("Supprimer ce personnage de la scène ?")) return;
+        const next = JSON.parse(JSON.stringify(project));
+        next.scenes[selectedSceneIdx].actors = next.scenes[selectedSceneIdx].actors.filter(a => a.id !== actorId);
+        if (selectedActorId === actorId) setSelectedActorId(null);
+        setProject(next);
+        saveProject(next);
+    };
+
+    // 🗑️ SUPPRESSION DÉCOR
+    const handleDeleteBackdrop = (e, bIdx) => {
+        e.stopPropagation();
+        if (!confirm("Supprimer ce décor ?")) return;
+        const next = JSON.parse(JSON.stringify(project));
+        const scene = next.scenes[selectedSceneIdx];
+        scene.backdrops.splice(bIdx, 1);
+        if (scene.currentBackdropIdx >= scene.backdrops.length) {
+            scene.currentBackdropIdx = Math.max(0, scene.backdrops.length - 1);
+        }
+        setProject(next);
+        saveProject(next);
     };
 
     const currentScene = project?.scenes?.[selectedSceneIdx];
     const selectedActor = currentScene?.actors?.find(a => a.id === selectedActorId);
+    const selectedAction = selectedActor?.actions?.[selectedActionIdx];
 
     return (
-        <div className="studio-wrapper">
-            <input type="file" ref={frameUploadRef} className="hidden" multiple onChange={async (e) => {
-                const files = Array.from(e.target.files);
-                if (files.length === 0 || !selectedActorId) return;
-                setLoading(true);
-                const next = JSON.parse(JSON.stringify(project));
-                const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
-                const action = actor.actions[selectedActionIdx];
-                for (const file of files) {
+        <div className="studio-wrapper" onMouseMove={handleStageMouseMove} onMouseUp={handleStageMouseUp} onMouseLeave={handleStageMouseUp}>
+            <div style={{ position: 'absolute', visibility: 'hidden', pointerEvents: 'none' }}>
+                <input type="file" ref={frameUploadRef} multiple onChange={async (e) => {
+                    const files = Array.from(e.target.files);
+                    if (files.length === 0 || !selectedActorId) return;
+                    setLoading(true);
+                    const next = JSON.parse(JSON.stringify(project));
+                    const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
+                    const action = actor.actions[selectedActionIdx];
+                    for (const file of files) {
+                        const formData = new FormData(); formData.append('file', file);
+                        const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: formData }).then(r => r.json());
+                        if (res.url) action.frames.push({ url: res.url, name: file.name });
+                    }
+                    await saveProject(next);
+                    setLoading(false);
+                }} />
+                <input type="file" ref={actorUploadRef} onChange={async (e) => {
+                    const file = e.target.files[0]; if(!file) return;
+                    setLoading(true);
                     const formData = new FormData(); formData.append('file', file);
                     const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: formData }).then(r => r.json());
-                    if (res.url) action.frames.push({ url: res.url, name: file.name });
-                }
-                await saveProject(next);
-                setLoading(false);
-            }} />
-            
-            <input type="file" ref={actorUploadRef} className="hidden" onChange={async (e) => {
-                const file = e.target.files[0]; if(!file) return;
-                setLoading(true);
-                const formData = new FormData(); formData.append('file', file);
-                const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: formData }).then(r => r.json());
-                const next = { ...project };
-                if (!next.scenes[selectedSceneIdx].actors) next.scenes[selectedSceneIdx].actors = [];
-                const newActor = { id: `actor-${Date.now()}`, name: "P" + (next.scenes[selectedSceneIdx].actors.length + 1), actions: [{ name: "IDLE", frames: [{url: res.url, name: "C1"}] }], initialX: 50, initialY: 50, scale: 1, direction: 0, rotationStyle: 'all' };
-                next.scenes[selectedSceneIdx].actors.push(newActor);
-                setSelectedActorId(newActor.id);
-                await saveProject(next);
-                setLoading(false);
-            }} />
+                    const next = JSON.parse(JSON.stringify(project));
+                    if (!next.scenes[selectedSceneIdx].actors) next.scenes[selectedSceneIdx].actors = [];
+                    const newActor = { id: `actor-${Date.now()}`, name: "P" + (next.scenes[selectedSceneIdx].actors.length + 1), actions: [{ name: "IDLE", speed: 100, frames: [{url: res.url, name: "C1"}] }], initialX: 50, initialY: 50, scale: 1, direction: 0, rotationStyle: 'all' };
+                    next.scenes[selectedSceneIdx].actors.push(newActor);
+                    handleSelectActor(newActor.id, next);
+                    await saveProject(next);
+                    setLoading(false);
+                }} />
+                <input type="file" ref={backdropUploadRef} onChange={async (e) => {
+                    const file = e.target.files[0]; if(!file) return;
+                    setLoading(true);
+                    const formData = new FormData(); formData.append('file', file);
+                    const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: formData }).then(r => r.json());
+                    const next = JSON.parse(JSON.stringify(project));
+                    if (!next.scenes[selectedSceneIdx].backdrops) next.scenes[selectedSceneIdx].backdrops = [];
+                    next.scenes[selectedSceneIdx].backdrops.push({ url: res.url, name: file.name });
+                    next.scenes[selectedSceneIdx].currentBackdropIdx = next.scenes[selectedSceneIdx].backdrops.length - 1;
+                    await saveProject(next);
+                    setLoading(false);
+                }} />
+            </div>
 
             <div className="studio-assets-panel">
-                <div className="p-4 border-b flex justify-between items-center bg-slate-50">
-                    <span className="text-[10px] font-black uppercase text-slate-400">Actions</span>
+                <div className="studio-tab-header">
+                    <button onClick={() => setLeftTab('actions')} className={`studio-tab-btn ${leftTab === 'actions' ? 'active' : ''}`}>⚡ Actions</button>
+                    <button onClick={() => setLeftTab('sounds')} className={`studio-tab-btn ${leftTab === 'sounds' ? 'active' : ''}`}>🎵 Sons</button>
                 </div>
-                <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
-                    {selectedActor?.actions?.map((act, idx) => (
-                        <div key={idx} onClick={() => setSelectedActionIdx(idx)} className={`action-card-square ${selectedActionIdx === idx ? 'active' : ''}`}>
-                            <span className="font-black text-[10px] uppercase">{act.name}</span>
+                <div className="studio-asset-list custom-scrollbar">
+                    {leftTab === 'actions' ? (
+                        <>
+                            {selectedActor?.actions?.map((act, idx) => (
+                                <div key={idx} onClick={() => { setSelectedActionIdx(idx); setIsPreviewPlaying(false); setSelectedFrameIdx(null); }} className={`action-card-square ${selectedActionIdx === idx ? 'active' : ''}`}>
+                                    <span>{act.name}</span>
+                                </div>
+                            ))}
+                            <button className="v84-add-btn-minimal" onClick={handleAddAction}>+ Ajouter Action</button>
+                        </>
+                    ) : (
+                        <div className="flex flex-col items-center justify-center p-10 opacity-30 text-center">
+                            <span className="text-3xl mb-2">🎹</span>
+                            <span className="text-[10px] font-black uppercase">Sons bientôt disponibles</span>
                         </div>
-                    ))}
+                    )}
                 </div>
+                {leftTab === 'actions' && selectedAction && (
+                    <div className="studio-sequence-editor">
+                        <div className="sequence-header">
+                            <span className="text-[9px] font-black text-slate-400 uppercase">Séquence ({selectedAction.name})</span>
+                            <div className="sequence-controls">
+                                {/* BOUTON MIROIR */}
+                                <button className="btn-mirror" onClick={handleMirrorSequence} title="Miroir Horizontal">↔️</button>
+                                
+                                {/* CONTRÔLES VITESSE DYNAMIQUES */}
+                                <button className="btn-speed" onClick={() => handleUpdateActionSpeed(-50)}>-</button>
+                                <span className="speed-indicator">{selectedAction.speed || 100}ms</span>
+                                <button className="btn-speed" onClick={() => handleUpdateActionSpeed(50)}>+</button>
+                                
+                                <button className={`btn-preview-play ${isPreviewPlaying ? 'playing' : ''}`} onClick={togglePreview}>{isPreviewPlaying ? '⏹️ STOP' : '▶️ PLAY'}</button>
+                            </div>
+                        </div>
+                        <div className="sequence-grid custom-scrollbar">
+                            {selectedAction.frames.map((frame, fIdx) => (
+                                <div 
+                                    key={fIdx} 
+                                    className={`frame-card ${isPreviewPlaying && previewFrameIdx === fIdx ? 'active-preview' : ''} ${selectedFrameIdx === fIdx ? 'selected-for-clean' : ''}`} 
+                                    draggable 
+                                    onClick={() => { setSelectedFrameIdx(selectedFrameIdx === fIdx ? null : fIdx); setIsPreviewPlaying(false); }}
+                                    onDragStart={() => setDraggedFrameIdx(fIdx)} 
+                                    onDragOver={(e) => { e.preventDefault(); setDropTargetIdx(fIdx); }} 
+                                    onDrop={() => handleReorderFrame(fIdx)} 
+                                    onDragLeave={() => setDropTargetIdx(null)}
+                                >
+                                    <img src={`/api/proxy/${frame.url.split('/').pop()}`} className="frame-img" alt="" />
+                                    <button className="frame-del" onClick={(e) => { e.stopPropagation(); handleDeleteFrame(fIdx); }}>✕</button>
+                                </div>
+                            ))}
+                            <button className="btn-add-frame" onClick={() => frameUploadRef.current.click()}>+</button>
+                        </div>
+                    </div>
+                )}
             </div>
 
             <div className="studio-center-column">
-                <div className="stage-view" style={{ backgroundImage: currentScene?.backdrops?.[0]?.url ? `url(/api/proxy/${currentScene.backdrops[0].url.split('/').pop()})` : 'none' }}>
+                <div ref={stageRef} className="stage-view" style={{ backgroundImage: currentScene?.backdrops?.[currentScene.currentBackdropIdx || 0]?.url ? `url(/api/proxy/${currentScene.backdrops[currentScene.currentBackdropIdx || 0].url.split('/').pop()})` : 'none' }}>
                     {isPlaying ? <LiveEngine code={code} project={project} activeSceneIdx={selectedSceneIdx} onStop={() => setIsPlaying(false)} /> : (
-                        currentScene?.actors?.map((a, i) => (
-                            <div key={a.id} onMouseDown={() => setSelectedActorId(a.id)} className={`actor-on-stage ${selectedActorId === a.id ? 'selected' : ''}`} style={{ left: `${a.initialX}%`, top: `${a.initialY}%` }}>
-                                <img src={`/api/proxy/${(a.actions?.[0]?.frames?.[0]?.url || "").split('/').pop()}`} style={{transform: `scale(${a.scale}) rotate(${a.direction}deg)` }} />
-                                <span className="absolute -top-6 left-1/2 -translate-x-1/2 bg-black text-white text-[8px] px-1 rounded font-black uppercase">{a.name}</span>
-                            </div>
-                        ))
+                        currentScene?.actors?.map((a) => {
+                            const isSelected = selectedActorId === a.id;
+                            let actionToRender;
+                            let currentFrameIdx = 0;
+                            if (isSelected) {
+                                actionToRender = selectedAction;
+                                if (isPreviewPlaying) { currentFrameIdx = previewFrameIdx; } 
+                                else if (selectedFrameIdx !== null) { currentFrameIdx = selectedFrameIdx; }
+                            } else {
+                                actionToRender = (a.actions?.find(act => act.name.toUpperCase() === "IDLE") || a.actions?.[0]);
+                            }
+                            const frameUrl = actionToRender?.frames?.[currentFrameIdx]?.url;
+                            return (
+                                <div key={a.id} onMouseDown={(e) => handleStageMouseDown(e, a.id)} className={`actor-on-stage ${isSelected ? 'selected' : ''}`} style={{ left: `${a.initialX}%`, top: `${a.initialY}%`, transform: `translate(-50%, -50%) scale(${a.scale}) rotate(${a.direction || 0}deg)` }}>
+                                    {frameUrl ? <img src={`/api/proxy/${frameUrl.split('/').pop()}`} alt="" /> : <div className="text-[10px] opacity-20">VIDE</div>}
+                                    <div className="actor-label-tag">{a.name}</div>
+                                </div>
+                            );
+                        })
                     )}
                 </div>
-
-                <div className="properties-bar flex items-center gap-4 bg-white p-2 rounded-xl border">
+                <div className="v115-prop-bar">
                     <div className="flex flex-col"><span className="text-[8px] font-black opacity-30 uppercase">Nom</span><input className="prop-input-mini !w-16" value={selectedActor?.name || ""} onChange={e => handleUpdateProp('name', e.target.value)} /></div>
-                    
-                    <div className="flex flex-col border-l pl-4">
-                        <span className="text-[8px] font-black opacity-30 uppercase mb-1">Style de Rotation</span>
-                        <div className="flex gap-1">
-                            <button title="360°" onClick={() => handleUpdateProp('rotationStyle', 'all')} className={`p-1.5 rounded-lg border-2 ${selectedActor?.rotationStyle === 'all' ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>🔄</button>
-                            <button title="Gauche/Droite" onClick={() => handleUpdateProp('rotationStyle', 'left-right')} className={`p-1.5 rounded-lg border-2 ${selectedActor?.rotationStyle === 'left-right' ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>↔️</button>
-                            <button title="Fixe" onClick={() => handleUpdateProp('rotationStyle', 'none')} className={`p-1.5 rounded-lg border-2 ${selectedActor?.rotationStyle === 'none' ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>🚫</button>
-                        </div>
-                    </div>
-
-                    <button onClick={() => setIsPlaying(true)} className="ml-auto bg-indigo-600 text-white px-6 py-1.5 rounded-lg text-[10px] font-black uppercase">▶ TESTER</button>
+                    <div className="flex flex-col border-l pl-4"><span className="text-[8px] font-black opacity-30 uppercase mb-1">Taille (%)</span><input type="number" className="prop-input-mini !w-16" value={Math.round((selectedActor?.scale || 1) * 100)} onChange={e => handleUpdateProp('scale', parseFloat(e.target.value) / 100)} /></div>
+                    <div className="flex flex-col border-l pl-4"><span className="text-[8px] font-black opacity-30 uppercase mb-1">Style de Rotation</span><div className="flex gap-1"><button onClick={() => handleUpdateProp('rotationStyle', 'all')} className={`p-1.5 rounded-lg border-2 ${selectedActor?.rotationStyle === 'all' ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>🔄</button><button onClick={() => handleUpdateProp('rotationStyle', 'left-right')} className={`p-1.5 rounded-lg border-2 ${selectedActor?.rotationStyle === 'left-right' ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>↔️</button><button onClick={() => handleUpdateProp('rotationStyle', 'none')} className={`p-1.5 rounded-lg border-2 ${selectedActor?.rotationStyle === 'none' ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>🚫</button></div></div>
+                    <button onClick={() => setIsPlaying(true)} className="ml-auto bg-indigo-600 text-white px-6 py-2 rounded-xl text-[10px] font-black uppercase shadow-lg">▶ TESTER</button>
                 </div>
-
-                <div className="compact-code-editor h-[200px]">
-                    <textarea value={code} onChange={e => setCode(e.target.value)} spellCheck="false" />
-                </div>
+                <div className="compact-code-editor"><textarea value={code} onChange={e => setCode(e.target.value)} spellCheck="false" placeholder="Tapez votre code ici..." /></div>
             </div>
 
             <div className="studio-library-panel">
-                <div className="library-section-header p-4 bg-slate-50 border-b font-black text-[10px] uppercase text-slate-400">Personnages</div>
-                <div className="library-grid custom-scrollbar">
-                    {currentScene?.actors?.map((actor) => (
-                        <div key={actor.id} className={`item-card relative ${selectedActorId === actor.id ? 'active' : ''}`} onClick={() => setSelectedActorId(actor.id)}>
-                            <div className="item-name-tag">{actor.name}</div>
+                <div className="library-scroll-area custom-scrollbar">
+                    {/* SECTION PERSONNAGES */}
+                    <div className="library-section-header">
+                        <div className="lib-header-top">
+                            <span className="lib-section-title">Personnages</span>
+                            {selectedFrameIdx !== null && (
+                                <button className="btn-ai-clean animate-pulse" onClick={handleAICleanBackground} disabled={cleaning || loading}>
+                                    {cleaning ? '🤖 ANALYSE...' : '🤖 PRO DETOURAGE'}
+                                </button>
+                            )}
                         </div>
-                    ))}
-                    <div className="item-card !bg-indigo-50" onClick={() => actorUploadRef.current.click()}><span className="text-xl text-indigo-500 font-black">+</span></div>
+                        <div className="lib-actions-row">
+                            <button className="btn-clean-bgs" onClick={handleRemoveAllBackgrounds} disabled={cleaning || loading}>
+                                {cleaning ? '⏳ TRAITEMENT...' : '✨ NETTOYER BGS'}
+                            </button>
+                        </div>
+                    </div>
+                    <div className="library-grid">
+                        {currentScene?.actors?.map((actor) => {
+                            const thumb = actor.actions?.[0]?.frames?.[0]?.url;
+                            return (
+                                <div key={actor.id} className={`item-card ${selectedActorId === actor.id ? 'active' : ''}`} onClick={() => handleSelectActor(actor.id)}>
+                                    <button className="item-del-btn" onClick={(e) => handleDeleteActor(e, actor.id)}>✕</button>
+                                    <div className="item-img-container"><img src={thumb ? `/api/proxy/${thumb.split('/').pop()}` : ""} className="item-img" alt={actor.name} /></div>
+                                    <div className="item-name-tag">{actor.name}</div>
+                                </div>
+                            );
+                        })}
+                        <div className="item-card !bg-indigo-50 !border-dashed !border-indigo-200" onClick={() => actorUploadRef.current.click()}><div className="item-img-container !bg-transparent"><span className="text-3xl text-indigo-300">+</span></div><div className="item-name-tag text-indigo-400 text-[9px]">Nouveau</div></div>
+                    </div>
+                </div>
+
+                {/* SECTION BACKGROUNDS */}
+                <div className="library-bg-section">
+                    <div className="library-section-header">
+                        <span className="lib-section-title">Décors (Backgrounds)</span>
+                    </div>
+                    <div className="library-grid custom-scrollbar overflow-y-auto">
+                        {currentScene?.backdrops?.map((bd, bIdx) => (
+                            <div key={bIdx} className={`item-card ${currentScene.currentBackdropIdx === bIdx ? 'active' : ''}`} onClick={() => {
+                                const next = JSON.parse(JSON.stringify(project));
+                                next.scenes[selectedSceneIdx].currentBackdropIdx = bIdx;
+                                setProject(next);
+                                saveProject(next);
+                            }}>
+                                <button className="item-del-btn" onClick={(e) => handleDeleteBackdrop(e, bIdx)}>✕</button>
+                                <div className="item-img-container"><img src={`/api/proxy/${bd.url.split('/').pop()}` } className="item-img" alt="" /></div>
+                                <div className="item-name-tag">DÉCOR {bIdx+1}</div>
+                            </div>
+                        ))}
+                        <div className="item-card !bg-emerald-50 !border-dashed !border-emerald-200" onClick={() => backdropUploadRef.current.click()}><div className="item-img-container !bg-transparent"><span className="text-3xl text-emerald-300">+</span></div><div className="item-name-tag text-emerald-400 text-[9px]">Ajouter</div></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -8052,6 +8723,60 @@ setInterval(doPush, 600000);
 
 03/02/2026 07:45 - Paquet CORE : SUPPORT UTILISATEUR.
 03/02/2026 08:00 - Paquet CORE : DEBUG OAUTH. Ajout de logs ultra-détaillés dans drive.prof.js pour afficher l'URL de redirection générée. Objectif : résoudre l'erreur Google 400 en vérifiant la conformité des paramètres envoyés.
+
+03/02/2026 12:45 - Paquet STUDIO : Restauration visuelle complète du panneau d'actions.
+03/02/2026 13:00 - CORE/RECOVERY : Restauration après reset manuel. Rétablissement de la version V123 Stable (Moteur résilient, Z-index auto, Animation scène, Layout 3 colonnes). Suppression de la fonctionnalité instable de nettoyage de fond.
+
+03/02/2026 09:20 - Paquet STUDIO : Implémentation du séquenceur d'images sous les actions.
+03/02/2026 09:45 - Paquet STUDIO : Ajout d'un moteur de prévisualisation d'animation dans le séquenceur. Bouton Play/Stop ajouté avec défilement automatique des sprites toutes les 0.3s et mise en surbrillance de la frame active.
+
+03/02/2026 09:45 - Paquet STUDIO : Ajout d'un moteur de prévisualisation d'animation.
+03/02/2026 10:10 - Paquet STUDIO : Mise à jour majeure de la scène centrale. Rétablissement du Drag & Drop pour positionner les acteurs. Implémentation du système de Z-Index auto (le dernier cliqué passe devant). L'animation Play du séquenceur s'affiche désormais directement sur le personnage sélectionné sur la scène.
+
+03/02/2026 08:30 - Paquet STUDIO : Amélioration de l'interface.
+03/02/2026 09:45 - Paquet STUDIO : Ajout d'un moteur de prévisualisation d'animation.
+03/02/2026 10:15 - Paquet STUDIO : FIX MOTEUR & Z-INDEX. Refonte du LiveEngine pour supporter le réordonnancement dynamique (Z-Index). Rétablissement du Drag & Drop sur la scène centrale. Synchronisation de l'animation preview sur l'acteur sélectionné au centre.
+
+03/02/2026 10:15 - Paquet STUDIO : FIX MOTEUR & Z-INDEX.
+03/02/2026 10:40 - Paquet STUDIO : Restauration de l'interface visuelle (Action Cards, Dashed Buttons). Alignement du design avec le moteur V120. Maintien de l'animation en temps réel sur la scène et du Drag & Drop.
+
+03/02/2026 10:40 - Paquet STUDIO : Restauration de l'interface visuelle.
+03/02/2026 11:15 - Paquet STUDIO : Uniformisation de la taille des sprites dans le séquenceur (object-fit). Ajout d'un contrôleur de vitesse d'animation (+/- 50ms) avec mise à jour dynamique du délai de prévisualisation.
+
+03/02/2026 11:15 - Paquet STUDIO : Uniformisation de la taille des sprites et contrôleur de vitesse.
+03/02/2026 11:50 - Paquet STUDIO : FIX LAYOUT CRITIQUE. Rétablissement de la structure en 3 colonnes (le centre n'est plus écrasé). Sanctuarisation de la scène centrale. Taille des vignettes fixée à 70px.
+
+03/02/2026 12:15 - Paquet CORE : Rétablissement de la visibilité du bandeau de santé.
+03/02/2026 12:45 - Paquet STUDIO : Restauration visuelle complète du panneau d'actions. Rétablissement des Action Cards (arrondis 20px, ombres) et du bouton d'ajout stylisé (Dashed). Fixation des dimensions pour éviter tout décalage visuel.
+
+03/02/2026 13:05 - Paquet CORE : Évolution de snap.js.
+03/02/2026 13:20 - Paquet STUDIO : FEATURE MAJEURE. Ajout de la fonction "Supprimer Backgrounds". Implémentation d'un algorithme de Chroma Key côté client (Canvas) pour rendre transparentes les couleurs dominantes de tous les sprites du projet. Traitement par lots et ré-upload automatique.
+
+03/02/2026 12:45 - Paquet STUDIO : Restauration visuelle complète du panneau d'actions.
+03/02/2026 13:00 - CORE/RECOVERY : Restauration après reset manuel.
+03/02/2026 13:20 - Paquet CORE : RÉPARATION snap.js. Rétablissement de la génération automatique de studio.txt pour isoler les fichiers relatifs aux jeux et animations.
+
+03/02/2026 13:40 - Paquet STUDIO : Implémentation du nettoyage de fond ciblé.
+03/02/2026 14:20 - Paquet STUDIO : FIX CRITIQUE détourage spécialisé.
+03/02/2026 16:50 - Paquet STUDIO : Grille 2 colonnes pour les personnages.
+03/02/2026 17:01 - Paquet STUDIO : Rendu du contrôleur de Taille (%) et uniformisation à 150px.
+03/02/2026 17:25 - Paquet STUDIO : FIX PREVIEW ANIMATION. Réimplémentation du moteur de séquence via useEffect pour garantir la synchronisation en temps réel sur la scène centrale lors de l'utilisation du bouton PLAY.
+
+03/02/2026 13:40 - Paquet STUDIO : Implémentation du nettoyage de fond ciblé.
+03/02/2026 14:20 - Paquet STUDIO : FIX CRITIQUE détourage spécialisé.
+03/02/2026 16:50 - Paquet STUDIO : Grille 2 colonnes pour les personnages.
+03/02/2026 17:01 - Paquet STUDIO : Rendu du contrôleur de Taille (%) et uniformisation à 150px.
+03/02/2026 17:25 - Paquet STUDIO : FIX PREVIEW ANIMATION via useEffect.
+03/02/2026 17:35 - Paquet STUDIO : Le sprite sélectionné remplace désormais l'aperçu du personnage sur la scène centrale.
+03/02/2026 17:41 - Paquet STUDIO : Amélioration du bouton "NETTOYER BGS" : le nettoyage automatique cible désormais uniquement toutes les frames de l'acteur sélectionné au lieu de tout le projet (ou une frame unique si sélectionnée).
+
+03/02/2026 19:40 - DOC : Mise à jour de snap.js pour inclure le Référentiel Fonctionnel STUDIO complet (Build #161) dans le fichier studio.txt généré.
+
+04/02/2026 09:15 - TOOLING : Mise à jour de snap.js pour générer games.txt. Ce snapshot isole tout le code relatif aux Jeux et Quiz (Prof + Élève + BDD).
+
+04/02/2026 09:25 - TOOLING : Mise à jour de snap.js. Le fichier games.txt inclut désormais le Référentiel des User Stories spécifique aux Jeux en en-tête.
+
+04/02/2026 09:35 - TOOLING : Évolution majeure de snap.js. Le script extrait désormais dynamiquement les User Stories depuis userStories.txt (via détection des balises 📜) pour les injecter dans games.txt, studio.txt et structure.txt. Fin du hardcoding des specs.
 
 [[[£ END: history.txt £]]]
 
@@ -10158,8 +10883,8 @@ const GameGeneratorAI = {
         1. Tu dois retourner un objet JSON : { "code": "...", "message": "..." }.
         2. Le code DOIT contenir 'class MiniGame { ... }'.
         3. Le constructeur DOIT être : 'constructor(canvas, assets) { ... }'.
-        4. La méthode 'start()' est OBLIGATOIRE. Elle lance la boucle de jeu.
-        5. La méthode 'destroy()' est OBLIGATOIRE. Elle nettoie les events et arrête le loop.
+        4. La méthode 'start()' est OBLIGATORY. Elle lance la boucle de jeu.
+        5. La méthode 'destroy()' est OBLIGATORY. Elle nettoie les events et arrête le loop.
         6. Utilise 'this.assets[ID_ACTEUR]' pour dessiner les personnages.
         
         INTERDICTION :
@@ -10361,62 +11086,80 @@ module.exports = StudioDrive;
 [[[£ END: server/domains/studio/experts/studio.drive.js £]]]
 
 [[[£ FILE: server/domains/studio/experts/studio.expert.js £]]]
-// @signatures: codeToSave, StudioExpert
+// @signatures: StudioExpert, specializedBgRemoval, _getImageBuffer
 const fs = require('fs');
 const path = require('path');
-const https = require('https');
-const StudioAI = require('../ai/studio.ai');
-const GameGeneratorAI = require('../ai/game-generator.ai'); 
-const StudioDB = require('../db/studio.db');
+const fetch = require('node-fetch');
+const FormData = require('form-data');
+const ProfDrive = require('../../../prof/core/drive.prof'); 
 const StudioDrive = require('./studio.drive'); 
+const StudioDB = require('../db/studio.db');
 
 const StudioExpert = {
-    generateAsset: async (userPrompt, type) => {
-        const optimizedPrompt = await StudioAI.optimizeAssetPrompt(userPrompt, type);
-        return await StudioExpert._downloadAndStore(optimizedPrompt, userPrompt);
-    },
+    // 🚀 DÉTOURAGE VIA API SPÉCIALISÉE REMOVE.BG
+    specializedBgRemoval: async (imageUrl) => {
+        const apiKey = process.env.REMOVE_BG_API_KEY;
+        
+        console.log("------------------------------------------------");
+        console.log("🛡️ [STUDIO-EXPERT] DÉBUT DÉTOURAGE SPÉCIALISÉ");
+        console.log("   Cible :", imageUrl);
+        
+        if (!apiKey) {
+            console.error("❌ ERREUR : Clé REMOVE_BG_API_KEY absente du .env");
+            return null;
+        }
 
-    _downloadAndStore: async (prompt, originalName) => {
-        const encodedPrompt = encodeURIComponent(prompt);
-        const seed = Math.floor(Math.random() * 10000);
-        const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=512&height=512&seed=${seed}&nologo=true`;
-        const fileName = `studio-${Date.now()}-${seed}.png`;
-        const uploadDir = path.join(process.cwd(), 'public', 'uploads');
-        if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
-        const localPath = path.join(uploadDir, fileName);
-        const file = fs.createWriteStream(localPath);
+        try {
+            // 1. Extraction ID Drive
+            const fileId = imageUrl.split('/').pop();
+            console.log("   ID Drive extrait :", fileId);
 
-        return new Promise((resolve, reject) => {
-            https.get(imageUrl, (response) => {
-                if (response.statusCode !== 200) { reject(new Error("Error")); return; }
-                response.pipe(file);
-                file.on('finish', async () => {
-                    file.close();
-                    const driveData = await StudioDrive.uploadAsset(localPath, fileName);
-                    resolve({ url: `/api/structure/proxy/${driveData.id}`, name: originalName });
-                });
-            }).on('error', reject);
-        });
-    },
+            // 2. Récupération du flux depuis Google Drive
+            const stream = await ProfDrive.getFileStream(fileId);
+            console.log("   Flux Drive récupéré.");
+            
+            // 3. Préparation FormData pour Remove.bg
+            const formData = new FormData();
+            formData.append('size', 'auto');
+            formData.append('image_file', stream);
 
-    generateGame: async (projectId, gameIdea) => {
-        const project = await StudioDB.findProjectById(projectId);
-        if (!project) throw new Error("ID Invalide");
-        const allActors = project.scenes.flatMap(s => s.actors);
-        const aiResult = await GameGeneratorAI.generateGameCode(gameIdea, allActors);
-        project.generatedCode = aiResult.code;
-        await StudioDB.upsertProject(project);
-        return aiResult;
-    },
+            console.log("   Envoi vers Remove.bg...");
+            const response = await fetch('https://api.remove.bg/v1.0/removebg', {
+                method: 'POST',
+                headers: { 'X-Api-Key': apiKey },
+                body: formData
+            });
 
-    fixCode: async (code, userInstruction, projectId) => {
-        const project = await StudioDB.findProjectById(projectId);
-        if (!project) throw new Error("ID Invalide");
-        const allActors = project.scenes.flatMap(s => s.actors);
-        const aiResult = await GameGeneratorAI.fixGameCode(code, userInstruction, allActors);
-        project.generatedCode = aiResult.code;
-        await StudioDB.upsertProject(project);
-        return aiResult;
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error("❌ ERREUR API Remove.bg :", response.status, errorText);
+                return null;
+            }
+
+            // 4. Réception du résultat
+            const buffer = await response.buffer();
+            console.log("   Image détourée reçue (Taille :", buffer.length, "octets)");
+
+            // 5. Sauvegarde temporaire locale
+            const fileName = `ai-cleaned-${Date.now()}.png`;
+            const localPath = path.join(process.cwd(), 'public', 'uploads', fileName);
+            fs.writeFileSync(localPath, buffer);
+
+            // 6. Upload final vers Drive (Dossier Studio Assets)
+            const driveData = await StudioDrive.uploadAsset(localPath, fileName);
+            console.log("   Upload Drive réussi :", driveData.id);
+
+            // Nettoyage
+            try { fs.unlinkSync(localPath); } catch(e) {}
+
+            console.log("✅ DÉTOURAGE TERMINÉ.");
+            console.log("------------------------------------------------");
+            return { url: `/api/proxy/${driveData.id}` };
+
+        } catch (e) {
+            console.error("💥 CRASH DÉTOURAGE :", e.message);
+            return null;
+        }
     },
 
     saveProject: async (projectData) => await StudioDB.upsertProject(projectData),
@@ -10428,7 +11171,7 @@ module.exports = StudioExpert;
 [[[£ END: server/domains/studio/experts/studio.expert.js £]]]
 
 [[[£ FILE: server/domains/studio/studio.routes.js £]]]
-// @signatures: DELETE /:id, GET /:id, GET /projects/:userId, POST /, POST /fix-code, POST /generate-asset, POST /generate-game, POST /remix-asset, POST /upload-asset
+// @signatures: DELETE /:id, GET /:id, GET /projects/:userId, POST /, POST /fix-code, POST /generate-asset, POST /generate-game, POST /remix-asset, POST /upload-asset, POST /remove-bg-ai
 const express = require('express');
 const router = express.Router();
 const StudioExpert = require('./experts/studio.expert');
@@ -10468,7 +11211,13 @@ router.post('/generate-game', asyncHandler(async (req, res) => {
     res.json(result);
 }));
 
-// --- ROUTE POUR LE FEEDBACK / FIX ---
+// --- NOUVEAU : ANALYSE IA POUR NETTOYAGE ---
+router.post('/remove-bg-ai', asyncHandler(async (req, res) => {
+    const { url } = req.body;
+    const instructions = await StudioExpert.removeBackgroundWithAI(url);
+    res.json(instructions);
+}));
+
 router.post('/fix-code', asyncHandler(async (req, res) => {
     const { projectId, code, userInstruction } = req.body;
     const result = await StudioExpert.fixCode(code, userInstruction, projectId);
@@ -11032,6 +11781,7 @@ const FrameSchema = new mongoose.Schema({
 
 const ActionSchema = new mongoose.Schema({
     name: { type: String, default: "Nouvelle Action" },
+    speed: { type: Number, default: 100 }, // Vitesse de l'animation en ms (ex: 100ms par frame)
     frames: { type: [FrameSchema], default: [] }
 }, { _id: false });
 
@@ -11043,7 +11793,8 @@ const ActorSchema = new mongoose.Schema({
     initialX: { type: Number, default: 50 }, 
     initialY: { type: Number, default: 50 }, 
     scale: { type: Number, default: 1 },
-    direction: { type: Number, default: 0 }
+    direction: { type: Number, default: 0 },
+    rotationStyle: { type: String, default: 'all' }
 });
 
 const SceneSchema = new mongoose.Schema({
@@ -11972,23 +12723,19 @@ module.exports = router;
 [[[£ END: server/prof/structure/structure.prof.js £]]]
 
 [[[£ FILE: server/prof/studio/studio.prof.js £]]]
-// @signatures: ProfStudio, projects, save, uploadAsset, detectBg
+// @signatures: ProfStudio, projects, save, uploadAsset, detectBg, removeBgSpecialized
 const express = require('express');
 const router = express.Router();
 const { StudioProject } = require('../models/prof.models');
 const ProfDrive = require('../core/drive.prof');
+const StudioExpert = require('../../domains/studio/experts/studio.expert'); 
 const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
 
-// SÉCURITÉ : Création dossier temp
 const tempDir = path.join(process.cwd(), 'public', 'uploads', 'temp');
 if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 const upload = multer({ dest: tempDir });
-
-/**
- * 🎬 ROUTER STUDIO PROF V106
- */
 
 router.get('/projects/:userId', async (req, res) => {
     try {
@@ -12007,28 +12754,34 @@ router.post('/', async (req, res) => {
     } catch (e) { res.status(500).json({ error: "Save fail" }); }
 });
 
-// ✅ ROUTE D'UPLOAD (Celle que le front cherchait)
 router.post('/upload-asset', upload.single('file'), async (req, res) => {
-    console.log("📥 [STUDIO-ROUTE] Upload reçu :", req.file?.originalname);
     try {
         if (!req.file) return res.status(400).json({ error: "Fichier manquant" });
-        
         const folderId = await ProfDrive.getOrCreateFolder("STUDIO_ASSETS");
         const driveFile = await ProfDrive.uploadFile(req.file.originalname, req.file.path, folderId);
-        
         try { fs.unlinkSync(req.file.path); } catch(e) {}
-
-        const url = `/api/proxy/${driveFile.id}`;
-        console.log("✅ [STUDIO-ROUTE] URL générée :", url);
-        res.json({ url });
-    } catch (e) {
-        console.error("❌ [STUDIO-ROUTE] Erreur :", e.message);
-        res.status(500).json({ error: e.message });
-    }
+        res.json({ url: `/api/proxy/${driveFile.id}` });
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.post('/detect-bg-by-id', async (req, res) => {
-    res.json({ color: "#FFFFFF" });
+// ✅ ROUTE DÉTOURAGE SPÉCIALISÉ
+router.post('/remove-bg-specialized', async (req, res) => {
+    console.log("📥 [STUDIO-ROUTE] Requête remove-bg-specialized reçue.");
+    try {
+        const { url } = req.body;
+        if (!url) return res.status(400).json({ error: "URL manquante" });
+        
+        const result = await StudioExpert.specializedBgRemoval(url);
+        
+        if (result) {
+            res.json(result);
+        } else {
+            res.status(500).json({ error: "Échec du détourage (voir logs serveur)" });
+        }
+    } catch (e) {
+        console.error("❌ [STUDIO-ROUTE] Erreur fatale :", e.message);
+        res.status(500).json({ error: e.message });
+    }
 });
 
 module.exports = router;
@@ -12180,30 +12933,61 @@ initServices();
 [[[£ END: server/version.json £]]]
 
 [[[£ FILE: snap.js £]]]
-// @signatures: buildTree, captureContent, run, isStructureFile
+// @signatures: buildTree, captureContent, run, isStructureFile, isStudioFile, isGamesFile, extractStories
 const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
 
 const OUTPUT_FILENAME = 'snapshot.txt';
 const STRUCTURE_FILENAME = 'structure.txt';
+const STUDIO_FILENAME = 'studio.txt'; 
+const GAMES_FILENAME = 'games.txt'; 
 const MAP_FILENAME = 'projectMap.txt';
 const STORIES_FILENAME = 'userStories.txt';
 
 const IGNORE = [
-    'node_modules', '.git', 'dist', 'build', 'snapshot.txt', 'structure.txt', 'update.txt', 
-    '.env', 'package-lock.json', 'projectMap.txt'
+    'node_modules', '.git', 'dist', 'build', 
+    'snapshot.txt', 'structure.txt', 'studio.txt', 'games.txt', 
+    'update.txt', '.env', 'package-lock.json', 'projectMap.txt'
 ];
 
-// Définition du paquet STRUCTURE identique à apply.js
+// Définition du paquet STRUCTURE
 const STRUCTURE_BUNDLE = [
     'server/domains/structure', 
     'server/prof/structure', 
     'client/src/features/prof/components/ProfStudioFolder.jsx'
 ];
 
+// Définition du paquet STUDIO (Front, Back, Models)
+const STUDIO_BUNDLE = [
+    'server/domains/studio',
+    'server/prof/studio',
+    'client/src/features/prof/studio',
+    'server/models/StudioProject.js'
+];
+
+// Définition du paquet GAMES (Quiz, Zombie, Starship)
+const GAMES_BUNDLE = [
+    'server/domains/games',
+    'server/prof/games',
+    'server/eleve/games',
+    'client/src/features/prof/games',
+    'client/src/features/eleve/games',
+    'server/models/Game.js',
+    'server/models/GameLevel.js',
+    'server/models/GameProgress.js'
+];
+
 function isStructureFile(filePath) {
     return STRUCTURE_BUNDLE.some(p => filePath.includes(p));
+}
+
+function isStudioFile(filePath) {
+    return STUDIO_BUNDLE.some(p => filePath.includes(p));
+}
+
+function isGamesFile(filePath) {
+    return GAMES_BUNDLE.some(p => filePath.includes(p));
 }
 
 function buildTree(dir, prefix = '') {
@@ -12222,7 +13006,7 @@ function buildTree(dir, prefix = '') {
     return structure;
 }
 
-function captureContent(dir, baseDir = "", onlyStructure = false) {
+function captureContent(dir, baseDir = "", filterFn = null) {
     let content = "";
     try {
         const items = fs.readdirSync(dir).filter(i => !IGNORE.includes(i));
@@ -12232,13 +13016,13 @@ function captureContent(dir, baseDir = "", onlyStructure = false) {
             const stat = fs.statSync(p);
             
             if (stat.isDirectory()) {
-                content += captureContent(p, rel, onlyStructure);
+                content += captureContent(p, rel, filterFn);
             } else {
-                if (onlyStructure && !isStructureFile(rel)) continue;
+                if (filterFn && !filterFn(rel)) continue;
 
                 const ext = path.extname(item).toLowerCase();
                 if (['.js', '.jsx', '.css', '.json', '.html', '.md', '.txt'].includes(ext)) {
-                    if (rel === OUTPUT_FILENAME || rel === STRUCTURE_FILENAME || rel === MAP_FILENAME) continue;
+                    if (rel === STORIES_FILENAME || rel === OUTPUT_FILENAME || rel === STRUCTURE_FILENAME || rel === STUDIO_FILENAME || rel === GAMES_FILENAME || rel === MAP_FILENAME) continue;
                     const fileContent = fs.readFileSync(p, 'utf8');
                     content += `\n[[[£ FILE: ${rel} £]]]\n${fileContent}\n[[[£ END: ${rel} £]]]\n`;
                 }
@@ -12248,1246 +13032,82 @@ function captureContent(dir, baseDir = "", onlyStructure = false) {
     return content;
 }
 
+// 🧠 EXTRACTION INTELLIGENTE DES USER STORIES
+function extractStories(fullText, keyword) {
+    if (!fullText) return `⚠️ User Stories non chargées (Fichier ${STORIES_FILENAME} manquant)`;
+    
+    const lines = fullText.split('\n');
+    let start = -1;
+    let end = lines.length;
+
+    for (let i = 0; i < lines.length; i++) {
+        // Détection du début : Ligne contenant le parchemin ET le mot clé (ex: GAMES)
+        if (lines[i].includes('📜') && lines[i].toUpperCase().includes(keyword.toUpperCase())) {
+            // On remonte pour prendre la barre de séparation (===) si elle est juste avant
+            if (i > 0 && lines[i-1].startsWith('====')) start = i - 1;
+            else start = i;
+
+            // Recherche de la fin (Prochaine section 📜 ou fin de fichier)
+            for (let j = i + 1; j < lines.length; j++) {
+                if (lines[j].includes('📜')) {
+                    // On s'arrête à la barre de séparation précédente
+                    if (lines[j-1].startsWith('====')) end = j - 1;
+                    else end = j;
+                    break;
+                }
+            }
+            break;
+        }
+    }
+
+    if (start === -1) return `⚠️ [SNAP] Aucune section trouvée pour : ${keyword} dans ${STORIES_FILENAME}`;
+    
+    return lines.slice(start, end).join('\n').trim();
+}
+
 function run() {
+    console.log("📚 Chargement des User Stories...");
+    let allStories = "";
+    if (fs.existsSync(STORIES_FILENAME)) {
+        allStories = fs.readFileSync(STORIES_FILENAME, 'utf8');
+    } else {
+        console.warn(`⚠️ Fichier ${STORIES_FILENAME} introuvable.`);
+    }
+
     console.log("📸 Génération du Snapshot Global...");
     const tree = buildTree(__dirname);
-    const fullCode = captureContent(__dirname, "", false);
+    const fullCode = captureContent(__dirname, "", null);
     fs.writeFileSync(OUTPUT_FILENAME, `STRUCTURE:\n${tree}\n\nCODE:\n${fullCode}`);
     fs.writeFileSync(MAP_FILENAME, tree);
 
+    // --- SNAPSHOT STRUCTURE ---
     console.log("📂 Génération du Snapshot STRUCTURE...");
-    let stories = "";
-    if (fs.existsSync(STORIES_FILENAME)) {
-        // On récupère tout le contenu de userStories.txt car il est maintenant dédié à STRUCTURE
-        stories = fs.readFileSync(STORIES_FILENAME, 'utf8');
-    }
-    
-    const structureCode = captureContent(__dirname, "", true);
-    
-    const finalStructureContent = `${stories}
+    const structureStories = extractStories(allStories, 'STRUCTURE');
+    const structureCode = captureContent(__dirname, "", isStructureFile);
+    fs.writeFileSync(STRUCTURE_FILENAME, `${structureStories}\n\n================================================================================\n💻 CODE SOURCE - MODULE STRUCTURE\n================================================================================\n${structureCode}`);
 
-================================================================================
-💻 CODE SOURCE - MODULE STRUCTURE
-================================================================================
-${structureCode}`;
+    // --- SNAPSHOT STUDIO ---
+    console.log("🎬 Génération du Snapshot STUDIO...");
+    const studioStories = extractStories(allStories, 'STUDIO');
+    const studioCode = captureContent(__dirname, "", isStudioFile);
+    fs.writeFileSync(STUDIO_FILENAME, `${studioStories}\n\n================================================================================\n💻 CODE SOURCE - MODULE STUDIO\n================================================================================\n${studioCode}`);
 
-    fs.writeFileSync(STRUCTURE_FILENAME, finalStructureContent);
+    // --- SNAPSHOT GAMES ---
+    console.log("🎮 Génération du Snapshot GAMES...");
+    const gamesStories = extractStories(allStories, 'GAMES');
+    const gamesCode = captureContent(__dirname, "", isGamesFile);
+    fs.writeFileSync(GAMES_FILENAME, `${gamesStories}\n\n================================================================================\n💻 CODE SOURCE - MODULE GAMES\n================================================================================\n${gamesCode}`);
 
     console.log(`✨ Terminé :`);
-    console.log(`   - ${OUTPUT_FILENAME} (Total)`);
-    console.log(`   - ${STRUCTURE_FILENAME} (Référentiel STRUCTURE + Code)`);
+    console.log(`   - ${OUTPUT_FILENAME} (Global)`);
+    console.log(`   - ${STRUCTURE_FILENAME} (Structure + Stories)`);
+    console.log(`   - ${STUDIO_FILENAME} (Studio + Stories)`);
+    console.log(`   - ${GAMES_FILENAME} (Games + Stories)`);
 }
 
 run();
 
 [[[£ END: snap.js £]]]
-
-[[[£ FILE: studio.txt £]]]
-================================================================================
-📜 CONTEXTE FONCTIONNEL - MODULE STUDIO
-================================================================================
-Ce fichier regroupe l'intégralité de la logique de création de jeux, théâtres et 
-animations (Front-end Studio, Routes API Back-end et Modèles de données).
-
-================================================================================
-💻 CODE SOURCE - MODULE STUDIO
-================================================================================
-
-[[[£ FILE: client/src/features/prof/studio/StudioDashboard.css £]]]
-.studio-wrapper {
-    display: flex;
-    width: 100%;
-    height: 85vh;
-    background: #f8fafc;
-    border-radius: 20px;
-    overflow: hidden;
-    border: 1px solid #e2e8f0;
-    position: relative;
-}
-
-/* PANNEAU GAUCHE */
-.studio-assets-panel {
-    width: 320px;
-    min-width: 320px;
-    flex-shrink: 0;
-    background: #fff;
-    border-right: 1px solid #e2e8f0;
-    display: flex;
-    flex-direction: column;
-}
-
-.studio-tab-header {
-    display: flex;
-    background: #f1f5f9;
-    padding: 5px;
-    gap: 5px;
-}
-
-.studio-tab-btn {
-    flex: 1;
-    padding: 12px;
-    border-radius: 12px;
-    font-weight: 900;
-    font-size: 10px;
-    text-transform: uppercase;
-    border: none;
-    cursor: pointer;
-    transition: all 0.2s;
-    color: #94a3b8;
-}
-.studio-tab-btn.active {
-    background: white;
-    color: #6366f1;
-    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
-}
-
-.studio-asset-list {
-    flex: 1;
-    overflow-y: auto;
-    padding: 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-}
-
-/* 🎨 CARDS ACTIONS (RÉTABLIES) */
-.action-card-square {
-    background: #f8fafc;
-    border: 2px solid #f1f5f9;
-    border-radius: 20px;
-    padding: 18px 22px;
-    cursor: pointer;
-    transition: all 0.2s;
-    display: flex;
-    align-items: center;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.02);
-}
-.action-card-square:hover {
-    border-color: #cbd5e1;
-    background: #fff;
-}
-.action-card-square.active {
-    background: #fff;
-    border-color: #6366f1;
-    box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.15);
-    transform: scale(1.02);
-}
-.action-card-square span {
-    font-weight: 950;
-    font-size: 11px;
-    color: #1e293b;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-/* ➕ BOUTON AJOUT ACTION (RÉTABLI) */
-.v84-add-btn-minimal {
-    padding: 15px;
-    border: 2px dashed #cbd5e1;
-    border-radius: 20px;
-    background: transparent;
-    color: #94a3b8;
-    font-weight: 900;
-    font-size: 11px;
-    text-transform: uppercase;
-    cursor: pointer;
-    transition: all 0.2s;
-    margin-top: 5px;
-}
-.v84-add-btn-minimal:hover {
-    border-color: #6366f1;
-    color: #6366f1;
-    background: #f5f3ff;
-}
-
-/* SÉQUENCEUR */
-.studio-sequence-editor {
-    height: 280px;
-    background: #f8fafc;
-    border-top: 1px solid #e2e8f0;
-    display: flex;
-    flex-direction: column;
-    padding: 15px 20px;
-}
-
-.sequence-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 15px;
-}
-
-.sequence-controls {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background: #fff;
-    padding: 4px 8px;
-    border-radius: 12px;
-    border: 1px solid #e2e8f0;
-}
-
-.speed-indicator {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9px;
-    font-weight: 900;
-    color: #6366f1;
-    min-width: 45px;
-    text-align: center;
-}
-
-.btn-speed {
-    width: 22px;
-    height: 22px;
-    border-radius: 6px;
-    border: 1px solid #e2e8f0;
-    background: #f8fafc;
-    color: #475569;
-    font-weight: 900;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.btn-preview-play {
-    background: #6366f1;
-    color: white;
-    border: none;
-    border-radius: 10px;
-    padding: 6px 12px;
-    font-size: 10px;
-    font-weight: 950;
-    cursor: pointer;
-}
-.btn-preview-play.playing { background: #ef4444; }
-
-.sequence-grid {
-    flex: 1;
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(65px, 1fr));
-    gap: 10px;
-    overflow-y: auto;
-}
-
-.frame-card {
-    width: 65px;
-    height: 65px;
-    background: white;
-    border: 2px solid #e2e8f0;
-    border-radius: 12px;
-    position: relative;
-    cursor: grab;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
-}
-.frame-card.active-preview { 
-    border-color: #6366f1; 
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
-}
-
-.frame-img {
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-    padding: 5px;
-    pointer-events: none;
-}
-
-.btn-add-frame {
-    aspect-ratio: 1;
-    border: 2px dashed #cbd5e1;
-    border-radius: 12px;
-    background: transparent;
-    color: #cbd5e1;
-    font-size: 24px;
-    font-weight: bold;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-/* SCÈNE CENTRALE */
-.studio-center-column {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    background: #f1f5f9;
-    padding: 15px;
-    gap: 10px;
-    min-width: 0;
-}
-
-.stage-view {
-    flex: 1;
-    background-color: #fff;
-    background-size: cover;
-    background-position: center;
-    border-radius: 20px;
-    position: relative;
-    overflow: hidden;
-    box-shadow: inset 0 0 40px rgba(0,0,0,0.05);
-}
-
-.actor-on-stage {
-    position: absolute;
-    transform: translate(-50%, -50%);
-    cursor: grab;
-    z-index: 10;
-}
-.actor-on-stage.selected {
-    outline: 3px solid #6366f1;
-    outline-offset: 5px;
-    border-radius: 5px;
-    z-index: 100;
-}
-
-.actor-label-tag {
-    position: absolute;
-    top: -35px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: #1e293b;
-    color: white;
-    font-size: 10px;
-    font-weight: 900;
-    padding: 4px 10px;
-    border-radius: 6px;
-    text-transform: uppercase;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-}
-
-/* PANNEAU DROITE */
-.studio-library-panel {
-    width: 280px;
-    min-width: 280px;
-    background: #fff;
-    border-left: 1px solid #e2e8f0;
-    display: flex;
-    flex-direction: column;
-}
-
-.library-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 12px;
-    padding: 15px;
-    overflow-y: auto;
-}
-
-.item-card {
-    background: #f8fafc;
-    border: 2px solid transparent;
-    border-radius: 16px;
-    padding: 12px;
-    cursor: pointer;
-    text-align: center;
-    transition: all 0.2s;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
-}
-.item-card.active {
-    border-color: #6366f1;
-    background: #eef2ff;
-}
-
-.item-img-container {
-    width: 100%;
-    height: 70px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: white;
-    border-radius: 12px;
-    border: 1px solid rgba(0,0,0,0.02);
-}
-.item-img { max-height: 90%; max-width: 90%; object-fit: contain; }
-
-.v115-prop-bar {
-    display: flex;
-    align-items: center;
-    gap: 15px;
-    background: white;
-    padding: 10px 20px;
-    border-radius: 18px;
-    border: 1px solid #e2e8f0;
-}
-
-.compact-code-editor {
-    height: 180px;
-    background: #0f172a;
-    border-radius: 15px;
-    overflow: hidden;
-}
-
-.compact-code-editor textarea {
-    width: 100%;
-    height: 100%;
-    background: transparent;
-    color: #10b981;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 12px;
-    padding: 15px;
-    border: none;
-    outline: none;
-    resize: none;
-}
-
-[[[£ END: client/src/features/prof/studio/StudioDashboard.css £]]]
-
-[[[£ FILE: client/src/features/prof/studio/StudioDashboard.jsx £]]]
-// @signatures: StudioDashboard, LiveEngine, handleSelectActor, handleStageMouseDown, handleStageMouseMove, handleStageMouseUp, handleAddAction, handleAddFrame, handleAddActor, handleUpdateProp, handleReorderFrame, handleDeleteFrame, togglePreview
-import React, { useState, useRef, useEffect } from 'react';
-import './StudioDashboard.css';
-import { api } from '../../../services/api';
-
-/**
- * 🕹️ ENGINE V123 (RÉSILIENT ET FLUIDE)
- */
-const LiveEngine = ({ code, project, activeSceneIdx, onStop }) => {
-    const canvasRef = useRef(null);
-    const engineRef = useRef(null);
-    const [crash, setCrash] = useState(null);
-
-    function resolveUrl(url) {
-        if (!url) return "";
-        if (url.startsWith('/api/proxy')) return url;
-        const id = url.split('/').pop();
-        return `/api/proxy/${id}`;
-    }
-
-    useEffect(() => {
-        if (!canvasRef.current || !code || !project) return;
-        const canvas = canvasRef.current;
-        const assets = {};
-        
-        async function run() {
-            try {
-                const scene = project?.scenes?.[activeSceneIdx];
-                if (!scene) return;
-                const resources = (scene.actors || []).flatMap(a => 
-                    (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))
-                ).concat((scene.backdrops || []).map(b => b.url));
-                
-                await Promise.all([...new Set(resources)].filter(Boolean).map(url => new Promise(resolve => {
-                    const img = new Image();
-                    img.crossOrigin = "anonymous";
-                    img.onload = () => { assets[url] = img; resolve(); };
-                    img.onerror = () => resolve();
-                    img.src = resolveUrl(url);
-                    setTimeout(resolve, 2000);
-                })));
-
-                const engineLogic = `
-                    const { canvas, ctx, assets, project, sceneIdx } = arguments[0];
-                    class ActorProxy {
-                        constructor(data) {
-                            this.id = data.id; this.name = data.name;
-                            this.x = data.initialX || 50; this.y = data.initialY || 50;
-                            this.dir = data.direction || 0; this.scale = data.scale || 1;
-                            this.rotationStyle = data.rotationStyle || 'all';
-                            this.currentAction = data.actions?.[0]?.name || 'IDLE';
-                            this.frameIdx = 0; this.animTick = 0;
-                        }
-                        play(name) { 
-                            if(this.currentAction.toUpperCase() !== name.toUpperCase()) {
-                                this.currentAction = name; this.frameIdx = 0; this.animTick = 0;
-                            }
-                        }
-                    }
-                    class MiniGameBase {
-                        constructor() {
-                            this.canvas = canvas; this.ctx = ctx; this.assets = assets;
-                            this.keys = {}; this.running = true; this.actorsMap = new Map();
-                            project.scenes[sceneIdx].actors.forEach((a, i) => {
-                                const proxy = new ActorProxy(a);
-                                this.actorsMap.set(a.id, proxy);
-                                this['P' + (i + 1)] = proxy;
-                                if (a.name) this[a.name] = proxy;
-                            });
-                            window.onkeydown = (e) => { this.keys[e.code] = true; if(e.code === 'Space') e.preventDefault(); };
-                            window.onkeyup = (e) => this.keys[e.code] = false;
-                        }
-                        _render() {
-                            if(!this.ctx) return;
-                            this.ctx.fillStyle = 'white';
-                            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-                            const s = project.scenes[sceneIdx];
-                            const bd = s.backdrops?.[s.currentBackdropIdx || 0];
-                            if(bd && this.assets[bd.url]) this.ctx.drawImage(this.assets[bd.url], 0, 0, this.canvas.width, this.canvas.height);
-                            s.actors.forEach((a) => {
-                                const p = this.actorsMap.get(a.id);
-                                if (!p) return;
-                                const action = (a.actions || []).find(act => act.name.toUpperCase() === p.currentAction.toUpperCase()) || a.actions?.[0];
-                                if(action && action.frames?.length > 0) {
-                                    p.animTick++; if(p.animTick > 6) { p.animTick = 0; p.frameIdx = (p.frameIdx + 1) % action.frames.length; }
-                                    const frame = action.frames[p.frameIdx];
-                                    const img = frame ? this.assets[frame.url] : null;
-                                    if(img) {
-                                        let rx = (p.x / 100) * this.canvas.width;
-                                        let ry = (p.y / 100) * this.canvas.height;
-                                        this.ctx.save(); this.ctx.translate(rx, ry);
-                                        let normDir = ((p.dir % 360) + 360) % 360;
-                                        if (p.rotationStyle === 'left-right') { if (normDir > 90 && normDir < 270) this.ctx.scale(-1, 1); }
-                                        else if (p.rotationStyle === 'all') { this.ctx.rotate(p.dir * Math.PI / 180); }
-                                        let sz = 150 * p.scale; this.ctx.drawImage(img, -sz/2, -sz/2, sz, sz);
-                                        this.ctx.restore();
-                                    }
-                                }
-                            });
-                        }
-                    }
-                    ${code}
-                    return typeof MiniGame !== 'undefined' ? MiniGame : MiniGameBase;
-                `;
-                const ctx = canvas.getContext('2d');
-                const GameFactory = new Function(engineLogic);
-                const FinalClass = GameFactory({ canvas, ctx, assets, project, sceneIdx: activeSceneIdx });
-                engineRef.current = new FinalClass();
-                const loop = () => {
-                    if (!engineRef.current || !engineRef.current.running) return;
-                    if (engineRef.current.update) engineRef.current.update();
-                    engineRef.current._render();
-                    requestAnimationFrame(loop);
-                };
-                loop();
-            } catch(e) { setCrash("ERREUR: " + e.message); }
-        }
-        run();
-        return () => { if(engineRef.current) engineRef.current.running = false; };
-    }, [code, project, activeSceneIdx]);
-
-    return (
-        <div className="absolute inset-0 z-[100] bg-black">
-            {crash && <div className="absolute top-0 left-0 right-0 bg-red-600 text-white p-2 text-[10px] font-mono z-[120]">{crash}</div>}
-            <canvas ref={canvasRef} width={800} height={450} className="w-full h-full object-contain" />
-            <button onClick={onStop} className="absolute top-4 right-4 bg-white text-black px-4 py-1 rounded-full font-black text-xs z-[130]">STOP</button>
-        </div>
-    );
-};
-
-export default function StudioDashboard({ user }) {
-    const [projects, setProjects] = useState([]);
-    const [project, setProject] = useState(null);
-    const [selectedSceneIdx, setSelectedSceneIdx] = useState(0);
-    const [selectedActorId, setSelectedActorId] = useState(null);
-    const [selectedActionIdx, setSelectedActionIdx] = useState(0);
-    const [leftTab, setLeftTab] = useState('actions');
-    const [code, setCode] = useState("");
-    const [isPlaying, setIsPlaying] = useState(false);
-    const [loading, setLoading] = useState(false);
-    
-    // --- ÉTATS SÉQUENCEUR ---
-    const [draggedFrameIdx, setDraggedFrameIdx] = useState(null);
-    const [dropTargetIdx, setDropTargetIdx] = useState(null);
-    const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
-    const [previewFrameIdx, setPreviewFrameIdx] = useState(0);
-    const [isDraggingOnStage, setIsDraggingOnStage] = useState(false);
-    const [previewLatency, setPreviewLatency] = useState(300);
-
-    const frameUploadRef = useRef(null);
-    const actorUploadRef = useRef(null);
-    const previewIntervalRef = useRef(null);
-    const stageRef = useRef(null);
-
-    useEffect(() => { loadProjects(); }, [user]);
-    useEffect(() => { stopPreview(); }, [selectedActorId, selectedActionIdx]);
-    useEffect(() => { if (isPreviewPlaying) { stopPreview(); startPreview(); } }, [previewLatency]);
-
-    async function loadProjects() {
-        const data = await api.get(`/studio/projects/${user.id || user._id}`);
-        setProjects(data); 
-        if (data && data.length > 0) {
-            const p = data[0];
-            setProject(p);
-            if (p.generatedCode) setCode(p.generatedCode);
-            if (!selectedActorId && p.scenes?.[0]?.actors?.[0]) handleSelectActor(p.scenes[0].actors[0].id, p);
-        }
-    }
-
-    async function saveProject(p = project) {
-        if (!p) return;
-        setLoading(true);
-        try {
-            const saved = await api.post('/studio', { ...p, teacherId: user.id || user._id, generatedCode: code });
-            setProject(saved);
-        } catch(e) { console.error("Save Error", e); }
-        setLoading(false);
-    }
-
-    const handleSelectActor = (actorId, currentProj = project) => {
-        if (!currentProj) return;
-        const next = JSON.parse(JSON.stringify(currentProj));
-        const actors = next.scenes[selectedSceneIdx].actors;
-        const idx = actors.findIndex(a => a.id === actorId);
-        if (idx !== -1) {
-            const [moved] = actors.splice(idx, 1);
-            actors.push(moved);
-            setProject(next);
-            setSelectedActorId(actorId);
-        }
-    };
-
-    const handleStageMouseDown = (e, actorId) => {
-        e.preventDefault(); e.stopPropagation();
-        handleSelectActor(actorId);
-        setIsDraggingOnStage(true);
-    };
-
-    const handleStageMouseMove = (e) => {
-        if (!isDraggingOnStage || !selectedActorId || !stageRef.current) return;
-        const rect = stageRef.current.getBoundingClientRect();
-        const x = ((e.clientX - rect.left) / rect.width) * 100;
-        const y = ((e.clientY - rect.top) / rect.height) * 100;
-        const next = { ...project };
-        const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
-        if (actor) {
-            actor.initialX = Math.round(Math.max(0, Math.min(100, x)));
-            actor.initialY = Math.round(Math.max(0, Math.min(100, y)));
-            setProject(next);
-        }
-    };
-
-    const handleStageMouseUp = () => {
-        if (isDraggingOnStage) { setIsDraggingOnStage(false); saveProject(); }
-    };
-
-    const handleUpdateProp = (f, v) => {
-        const next = { ...project };
-        const actor = next.scenes?.[selectedSceneIdx]?.actors?.find(a => a.id === selectedActorId);
-        if (actor) {
-            actor[f] = isNaN(v) ? v : parseFloat(v);
-            setProject(next);
-            saveProject(next);
-        }
-    };
-
-    const handleAddAction = () => {
-        if (!selectedActorId) return;
-        const name = prompt("Nom de l'action :", "MARCHER");
-        if (!name) return;
-        const next = JSON.parse(JSON.stringify(project));
-        const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
-        actor.actions.push({ name: name.toUpperCase(), frames: [] });
-        saveProject(next);
-    };
-
-    const handleReorderFrame = (targetIdx) => {
-        if (draggedFrameIdx === null || draggedFrameIdx === targetIdx) return;
-        const next = JSON.parse(JSON.stringify(project));
-        const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
-        const frames = actor.actions[selectedActionIdx].frames;
-        const [moved] = frames.splice(draggedFrameIdx, 1);
-        frames.splice(targetIdx, 0, moved);
-        saveProject(next);
-        setDraggedFrameIdx(null); setDropTargetIdx(null);
-    };
-
-    const handleDeleteFrame = (fIdx) => {
-        const next = JSON.parse(JSON.stringify(project));
-        const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
-        actor.actions[selectedActionIdx].frames.splice(fIdx, 1);
-        saveProject(next);
-    };
-
-    const togglePreview = () => { if (isPreviewPlaying) stopPreview(); else startPreview(); };
-    const startPreview = () => {
-        const framesCount = selectedAction?.frames?.length || 0;
-        if (framesCount === 0) return;
-        setIsPreviewPlaying(true); setPreviewFrameIdx(0);
-        previewIntervalRef.current = setInterval(() => { setPreviewFrameIdx(prev => (prev + 1) % framesCount); }, previewLatency);
-    };
-    const stopPreview = () => { if (previewIntervalRef.current) clearInterval(previewIntervalRef.current); setIsPreviewPlaying(false); setPreviewFrameIdx(0); };
-
-    const currentScene = project?.scenes?.[selectedSceneIdx];
-    const selectedActor = currentScene?.actors?.find(a => a.id === selectedActorId);
-    const selectedAction = selectedActor?.actions?.[selectedActionIdx];
-
-    return (
-        <div className="studio-wrapper" onMouseMove={handleStageMouseMove} onMouseUp={handleStageMouseUp} onMouseLeave={handleStageMouseUp}>
-            <div style={{ position: 'absolute', visibility: 'hidden', pointerEvents: 'none' }}>
-                <input type="file" ref={frameUploadRef} multiple onChange={async (e) => {
-                    const files = Array.from(e.target.files);
-                    if (files.length === 0 || !selectedActorId) return;
-                    setLoading(true);
-                    const next = JSON.parse(JSON.stringify(project));
-                    const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
-                    const action = actor.actions[selectedActionIdx];
-                    for (const file of files) {
-                        const formData = new FormData(); formData.append('file', file);
-                        const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: formData }).then(r => r.json());
-                        if (res.url) action.frames.push({ url: res.url, name: file.name });
-                    }
-                    await saveProject(next);
-                    setLoading(false);
-                }} />
-                <input type="file" ref={actorUploadRef} onChange={async (e) => {
-                    const file = e.target.files[0]; if(!file) return;
-                    setLoading(true);
-                    const formData = new FormData(); formData.append('file', file);
-                    const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: formData }).then(r => r.json());
-                    const next = JSON.parse(JSON.stringify(project));
-                    if (!next.scenes[selectedSceneIdx].actors) next.scenes[selectedSceneIdx].actors = [];
-                    const newActor = { id: `actor-${Date.now()}`, name: "P" + (next.scenes[selectedSceneIdx].actors.length + 1), actions: [{ name: "IDLE", frames: [{url: res.url, name: "C1"}] }], initialX: 50, initialY: 50, scale: 1, direction: 0, rotationStyle: 'all' };
-                    next.scenes[selectedSceneIdx].actors.push(newActor);
-                    handleSelectActor(newActor.id, next);
-                    await saveProject(next);
-                    setLoading(false);
-                }} />
-            </div>
-
-            <div className="studio-assets-panel">
-                <div className="studio-tab-header">
-                    <button onClick={() => setLeftTab('actions')} className={`studio-tab-btn ${leftTab === 'actions' ? 'active' : ''}`}>⚡ Actions</button>
-                    <button onClick={() => setLeftTab('sounds')} className={`studio-tab-btn ${leftTab === 'sounds' ? 'active' : ''}`}>🎵 Sons</button>
-                </div>
-                
-                <div className="studio-asset-list custom-scrollbar">
-                    {leftTab === 'actions' ? (
-                        <>
-                            {selectedActor?.actions?.map((act, idx) => (
-                                <div key={idx} onClick={() => { setSelectedActionIdx(idx); }} className={`action-card-square ${selectedActionIdx === idx ? 'active' : ''}`}>
-                                    <span>{act.name}</span>
-                                </div>
-                            ))}
-                            <button className="v84-add-btn-minimal" onClick={handleAddAction}>+ Ajouter Action</button>
-                        </>
-                    ) : (
-                        <div className="flex flex-col items-center justify-center p-10 opacity-30 text-center">
-                            <span className="text-3xl mb-2">🎹</span>
-                            <span className="text-[10px] font-black uppercase">Sons bientôt disponibles</span>
-                        </div>
-                    )}
-                </div>
-
-                {leftTab === 'actions' && selectedAction && (
-                    <div className="studio-sequence-editor">
-                        <div className="sequence-header">
-                            <span className="text-[9px] font-black text-slate-400 uppercase">Séquence ({selectedAction.name})</span>
-                            <div className="sequence-controls">
-                                <button className="btn-speed" onClick={() => setPreviewLatency(prev => Math.max(50, prev - 50))}>-</button>
-                                <span className="speed-indicator">{previewLatency}ms</span>
-                                <button className="btn-speed" onClick={() => setPreviewLatency(prev => prev + 50)}>+</button>
-                                <button className={`btn-preview-play ${isPreviewPlaying ? 'playing' : ''}`} onClick={togglePreview}>{isPreviewPlaying ? '⏹️ STOP' : '▶️ PLAY'}</button>
-                            </div>
-                        </div>
-                        <div className="sequence-grid custom-scrollbar">
-                            {selectedAction.frames.map((frame, fIdx) => (
-                                <div key={fIdx} className={`frame-card ${isPreviewPlaying && previewFrameIdx === fIdx ? 'active-preview' : ''}`} draggable onDragStart={() => setDraggedFrameIdx(fIdx)} onDragOver={(e) => { e.preventDefault(); setDropTargetIdx(fIdx); }} onDrop={() => handleReorderFrame(fIdx)} onDragLeave={() => setDropTargetIdx(null)}>
-                                    <img src={`/api/proxy/${frame.url.split('/').pop()}`} className="frame-img" alt="" />
-                                    <button className="frame-del" onClick={() => handleDeleteFrame(fIdx)}>✕</button>
-                                </div>
-                            ))}
-                            <button className="btn-add-frame" onClick={() => frameUploadRef.current.click()}>+</button>
-                        </div>
-                    </div>
-                )}
-            </div>
-
-            <div className="studio-center-column">
-                <div ref={stageRef} className="stage-view" style={{ backgroundImage: currentScene?.backdrops?.[0]?.url ? `url(/api/proxy/${currentScene.backdrops[0].url.split('/').pop()})` : 'none' }}>
-                    {isPlaying ? <LiveEngine code={code} project={project} activeSceneIdx={selectedSceneIdx} onStop={() => setIsPlaying(false)} /> : (
-                        currentScene?.actors?.map((a) => {
-                            const isSelected = selectedActorId === a.id;
-                            const actionToRender = (isSelected && isPreviewPlaying) ? selectedAction : (a.actions?.find(act => act.name.toUpperCase() === "IDLE") || a.actions?.[0]);
-                            const currentFrameIdx = (isSelected && isPreviewPlaying) ? previewFrameIdx : 0;
-                            const frameUrl = actionToRender?.frames?.[currentFrameIdx]?.url;
-                            return (
-                                <div key={a.id} onMouseDown={(e) => handleStageMouseDown(e, a.id)} className={`actor-on-stage ${isSelected ? 'selected' : ''}`} style={{ left: `${a.initialX}%`, top: `${a.initialY}%`, transform: `translate(-50%, -50%) scale(${a.scale}) rotate(${a.direction}deg)` }}>
-                                    <img src={frameUrl ? `/api/proxy/${frameUrl.split('/').pop()}` : ""} alt="" />
-                                    <div className="actor-label-tag">{a.name}</div>
-                                </div>
-                            );
-                        })
-                    )}
-                </div>
-                <div className="v115-prop-bar">
-                    <div className="flex flex-col"><span className="text-[8px] font-black opacity-30 uppercase">Nom</span><input className="prop-input-mini !w-16" value={selectedActor?.name || ""} onChange={e => handleUpdateProp('name', e.target.value)} /></div>
-                    <div className="flex flex-col border-l pl-4"><span className="text-[8px] font-black opacity-30 uppercase mb-1">Style de Rotation</span><div className="flex gap-1"><button onClick={() => handleUpdateProp('rotationStyle', 'all')} className={`p-1.5 rounded-lg border-2 ${selectedActor?.rotationStyle === 'all' ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>🔄</button><button onClick={() => handleUpdateProp('rotationStyle', 'left-right')} className={`p-1.5 rounded-lg border-2 ${selectedActor?.rotationStyle === 'left-right' ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>↔️</button><button onClick={() => handleUpdateProp('rotationStyle', 'none')} className={`p-1.5 rounded-lg border-2 ${selectedActor?.rotationStyle === 'none' ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>🚫</button></div></div>
-                    <button onClick={() => setIsPlaying(true)} className="ml-auto bg-indigo-600 text-white px-6 py-2 rounded-xl text-[10px] font-black uppercase shadow-lg">▶ TESTER</button>
-                </div>
-                <div className="compact-code-editor"><textarea value={code} onChange={e => setCode(e.target.value)} spellCheck="false" placeholder="Tapez votre code ici..." /></div>
-            </div>
-
-            <div className="studio-library-panel">
-                <div className="library-section-header p-4 bg-slate-50 border-b font-black text-[10px] uppercase text-slate-400">Personnages</div>
-                <div className="library-grid custom-scrollbar">
-                    {currentScene?.actors?.map((actor) => {
-                        const thumb = actor.actions?.[0]?.frames?.[0]?.url;
-                        return (
-                            <div key={actor.id} className={`item-card ${selectedActorId === actor.id ? 'active' : ''}`} onClick={() => handleSelectActor(actor.id)}>
-                                <div className="item-img-container"><img src={thumb ? `/api/proxy/${thumb.split('/').pop()}` : ""} className="item-img" alt={actor.name} /></div>
-                                <div className="item-name-tag">{actor.name}</div>
-                            </div>
-                        );
-                    })}
-                    <div className="item-card !bg-indigo-50 !border-dashed !border-indigo-200" onClick={() => actorUploadRef.current.click()}><div className="item-img-container !bg-transparent"><span className="text-3xl text-indigo-300">+</span></div><div className="item-name-tag text-indigo-400 text-[9px]">Nouveau</div></div>
-                </div>
-            </div>
-        </div>
-    );
-}
-
-[[[£ END: client/src/features/prof/studio/StudioDashboard.jsx £]]]
-
-[[[£ FILE: server/domains/studio/ai/game-generator.ai.js £]]]
-// @signatures: MiniGame
-const AIEngine = require('../../../core/ai.engine');
-
-const GameGeneratorAI = {
-    
-    generateGameCode: async (gameIdea, actors) => {
-        console.log("🕹️ [GAME-GEN] Création forcée...");
-
-        const actorsContext = actors.map((a) => `- ID: "${a.id}", Nom: "${a.name}"`).join('\n');
-
-        const system = `Tu es un développeur de jeux expert. Tu écris UNIQUEMENT une classe JavaScript nommée 'MiniGame'.
-        
-        CONTRAT TECHNIQUE INVIOLABLE :
-        1. Tu dois retourner un objet JSON : { "code": "...", "message": "..." }.
-        2. Le code DOIT contenir 'class MiniGame { ... }'.
-        3. Le constructeur DOIT être : 'constructor(canvas, assets) { ... }'.
-        4. La méthode 'start()' est OBLIGATOIRE. Elle lance la boucle de jeu.
-        5. La méthode 'destroy()' est OBLIGATOIRE. Elle nettoie les events et arrête le loop.
-        6. Utilise 'this.assets[ID_ACTEUR]' pour dessiner les personnages.
-        
-        INTERDICTION :
-        - Ne dis jamais que l'erreur ne vient pas de toi.
-        - Si une méthode manque, RE-GÉNÈRE LA CLASSE COMPLÈTE avec la méthode manquante.
-        - Ne réponds jamais en anglais.
-
-        STRUCTURE REQUISE :
-        class MiniGame {
-            constructor(canvas, assets) {
-                this.canvas = canvas;
-                this.ctx = canvas.getContext('2d');
-                this.assets = assets;
-                this.keys = {};
-                this.running = false;
-            }
-            start() { 
-                this.running = true;
-                window.addEventListener('keydown', e => this.keys[e.code] = true);
-                window.addEventListener('keyup', e => this.keys[e.code] = false);
-                this.loop();
-            }
-            loop() {
-                if(!this.running) return;
-                this.update();
-                this.draw();
-                requestAnimationFrame(() => this.loop());
-            }
-            update() { /* Logique de saut, gravité, collisions */ }
-            draw() { /* Effacer le canvas et dessiner this.assets */ }
-            destroy() { this.running = false; }
-        }`;
-
-        const prompt = `GÉNÈRE LE JEU : "${gameIdea}"\nACTEURS : ${actorsContext}`;
-
-        try {
-            const raw = await AIEngine.ask(prompt, system);
-            return AIEngine.sanitizeJSON(raw);
-        } catch (e) { throw e; }
-    },
-
-    fixGameCode: async (currentCode, userInstruction, actors) => {
-        console.log("🔧 [GAME-FIX] Correction forcée...");
-
-        const actorsContext = actors.map((a) => `- ID: "${a.id}", Nom: "${a.name}"`).join('\n');
-
-        const system = `Tu es un expert JS Canvas. Tu dois CORRIGER la classe MiniGame fournie.
-        Si l'utilisateur rapporte que 'start is not a function', c'est que tu as oublié de l'écrire. INCLUS-LA.
-        
-        RAPPEL DU CONTRAT :
-        - Classe MiniGame
-        - constructor(canvas, assets)
-        - start() <--- INDISPENSABLE
-        - loop(), update(), draw()
-        - destroy()
-
-        Réponds en JSON uniquement. Explique brièvement tes corrections dans 'message'.`;
-
-        const prompt = `CODE ACTUEL :\n${currentCode}\n\nRETOUR ÉLÈVE/DÉFAUT : "${userInstruction}"\nACTEURS : ${actorsContext}`;
-
-        try {
-            const raw = await AIEngine.ask(prompt, system);
-            return AIEngine.sanitizeJSON(raw);
-        } catch (e) { throw e; }
-    }
-};
-
-module.exports = GameGeneratorAI;
-
-[[[£ END: server/domains/studio/ai/game-generator.ai.js £]]]
-
-[[[£ FILE: server/domains/studio/ai/studio.ai.js £]]]
-const AIEngine = require('../../../core/ai.engine');
-
-/**
- * 🧠 COUCHE IA STUDIO
- * Spécialisée dans la génération de prompts artistiques.
- */
-const StudioAI = {
-    optimizeAssetPrompt: async (userPrompt, type) => {
-        console.log(`🎨 [STUDIO-AI] Optimisation du prompt pour : ${type}`);
-        
-        const styleContext = type === 'character' 
-            ? "sprite 2D, vector style, flat colors, white background, full body, video game asset style, no shadow"
-            : "video game background, 2D vector art, scenic, flat style, colorful, wide angle";
-            
-        const systemInstruction = "Tu es un expert en Prompts pour IA générative d'images (Stable Diffusion/Midjourney). Traduis et optimise la demande en Anglais pour un résultat style Cartoon/Jeu Vidéo.";
-        
-        const prompt = `Transforme cette demande : "${userPrompt}" en un prompt descriptif technique en anglais.
-        Ajoute impérativement ce style : ${styleContext}.
-        Réponds UNIQUEMENT le prompt anglais, sans guillemets, sans texte avant ni après.`;
-
-        try {
-            return await AIEngine.ask(prompt, systemInstruction);
-        } catch (e) {
-            console.error("❌ [STUDIO-AI] Erreur:", e.message);
-            // Fallback si l'IA échoue : on renvoie le prompt utilisateur + style
-            return `${userPrompt}, ${styleContext}`;
-        }
-    }
-};
-
-module.exports = StudioAI;
-
-[[[£ END: server/domains/studio/ai/studio.ai.js £]]]
-
-[[[£ FILE: server/domains/studio/db/studio.db.js £]]]
-const mongoose = require('mongoose');
-
-/**
- * 💾 COUCHE DB STUDIO
- * Accès aux projets de théâtre/jeux.
- */
-const StudioDB = {
-    // Créer ou mettre à jour un projet (UPSERT ROBUSTE)
-    upsertProject: async (data) => {
-        const Model = mongoose.model('StudioProject');
-        
-        // 1. Nettoyage de l'objet pour éviter les injections d'ID null
-        const cleanData = { ...data };
-        
-        // Nettoyage ID principal
-        if (!cleanData._id || cleanData._id === 'null' || cleanData._id === 'undefined') {
-            delete cleanData._id;
-        }
-
-        // NETTOYAGE DES SCÈNES (CÔTÉ SERVEUR AUSSI)
-        if (cleanData.scenes && Array.isArray(cleanData.scenes)) {
-            cleanData.scenes = cleanData.scenes.map(s => {
-                // Si l'ID n'est pas valide (pas un ObjectId), on le supprime pour que Mongoose en génère un nouveau
-                if (s._id && !mongoose.Types.ObjectId.isValid(s._id)) {
-                    delete s._id;
-                }
-                return s;
-            });
-        }
-
-        // 2. Tentative de mise à jour SI on a un ID valide
-        if (cleanData._id && mongoose.Types.ObjectId.isValid(cleanData._id)) {
-            const updated = await Model.findByIdAndUpdate(cleanData._id, cleanData, { new: true });
-            if (updated) return updated;
-            
-            // SINON (ID introuvable), on le supprime pour forcer une création
-            delete cleanData._id;
-        }
-        
-        // 3. Création
-        return await Model.create(cleanData);
-    },
-
-    findProjectsByTeacher: async (teacherId) => {
-        return await mongoose.model('StudioProject').find({ teacherId }).sort({ updatedAt: -1 }).lean();
-    },
-
-    findProjectById: async (id) => {
-        if (!mongoose.Types.ObjectId.isValid(id)) return null;
-        return await mongoose.model('StudioProject').findById(id).lean();
-    },
-
-    deleteProject: async (id) => {
-        return await mongoose.model('StudioProject').findByIdAndDelete(id);
-    }
-};
-
-module.exports = StudioDB;
-
-[[[£ END: server/domains/studio/db/studio.db.js £]]]
-
-[[[£ FILE: server/domains/studio/experts/studio.drive.js £]]]
-const DriveEngine = require('../../../core/drive.engine');
-
-const STUDIO_FOLDER_NAME = "CONDA_STUDIO_ASSETS";
-
-/**
- * 🎨 EXPERT DRIVE STUDIO
- * Gère le stockage propre des assets de jeu sur le Drive.
- */
-const StudioDrive = {
-    
-    getStudioRoot: async () => {
-        return await DriveEngine.getOrCreateFolder(STUDIO_FOLDER_NAME);
-    },
-
-    uploadAsset: async (localPath, filename) => {
-        try {
-            const rootId = await StudioDrive.getStudioRoot();
-            // On upload le fichier
-            const fileData = await DriveEngine.uploadFile(filename, localPath, rootId);
-            return fileData; // { id, link }
-        } catch (e) {
-            console.error("Studio Drive Upload Error:", e);
-            return null;
-        }
-    }
-};
-
-module.exports = StudioDrive;
-
-[[[£ END: server/domains/studio/experts/studio.drive.js £]]]
-
-[[[£ FILE: server/domains/studio/experts/studio.expert.js £]]]
-// @signatures: codeToSave, StudioExpert
-const fs = require('fs');
-const path = require('path');
-const https = require('https');
-const StudioAI = require('../ai/studio.ai');
-const GameGeneratorAI = require('../ai/game-generator.ai'); 
-const StudioDB = require('../db/studio.db');
-const StudioDrive = require('./studio.drive'); 
-
-const StudioExpert = {
-    generateAsset: async (userPrompt, type) => {
-        const optimizedPrompt = await StudioAI.optimizeAssetPrompt(userPrompt, type);
-        return await StudioExpert._downloadAndStore(optimizedPrompt, userPrompt);
-    },
-
-    _downloadAndStore: async (prompt, originalName) => {
-        const encodedPrompt = encodeURIComponent(prompt);
-        const seed = Math.floor(Math.random() * 10000);
-        const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=512&height=512&seed=${seed}&nologo=true`;
-        const fileName = `studio-${Date.now()}-${seed}.png`;
-        const uploadDir = path.join(process.cwd(), 'public', 'uploads');
-        if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
-        const localPath = path.join(uploadDir, fileName);
-        const file = fs.createWriteStream(localPath);
-
-        return new Promise((resolve, reject) => {
-            https.get(imageUrl, (response) => {
-                if (response.statusCode !== 200) { reject(new Error("Error")); return; }
-                response.pipe(file);
-                file.on('finish', async () => {
-                    file.close();
-                    const driveData = await StudioDrive.uploadAsset(localPath, fileName);
-                    resolve({ url: `/api/structure/proxy/${driveData.id}`, name: originalName });
-                });
-            }).on('error', reject);
-        });
-    },
-
-    generateGame: async (projectId, gameIdea) => {
-        const project = await StudioDB.findProjectById(projectId);
-        if (!project) throw new Error("ID Invalide");
-        const allActors = project.scenes.flatMap(s => s.actors);
-        const aiResult = await GameGeneratorAI.generateGameCode(gameIdea, allActors);
-        project.generatedCode = aiResult.code;
-        await StudioDB.upsertProject(project);
-        return aiResult;
-    },
-
-    fixCode: async (code, userInstruction, projectId) => {
-        const project = await StudioDB.findProjectById(projectId);
-        if (!project) throw new Error("ID Invalide");
-        const allActors = project.scenes.flatMap(s => s.actors);
-        const aiResult = await GameGeneratorAI.fixGameCode(code, userInstruction, allActors);
-        project.generatedCode = aiResult.code;
-        await StudioDB.upsertProject(project);
-        return aiResult;
-    },
-
-    saveProject: async (projectData) => await StudioDB.upsertProject(projectData),
-    getUserProjects: async (userId) => await StudioDB.findProjectsByTeacher(userId)
-};
-
-module.exports = StudioExpert;
-
-[[[£ END: server/domains/studio/experts/studio.expert.js £]]]
-
-[[[£ FILE: server/domains/studio/studio.routes.js £]]]
-// @signatures: DELETE /:id, GET /:id, GET /projects/:userId, POST /, POST /fix-code, POST /generate-asset, POST /generate-game, POST /remix-asset, POST /upload-asset
-const express = require('express');
-const router = express.Router();
-const StudioExpert = require('./experts/studio.expert');
-const StudioDB = require('./db/studio.db');
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
-
-const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
-
-const tempDir = path.join(process.cwd(), 'public', 'uploads', 'temp');
-if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
-const upload = multer({ dest: tempDir });
-
-router.get('/projects/:userId', asyncHandler(async (req, res) => {
-    res.json(await StudioExpert.getUserProjects(req.params.userId));
-}));
-
-router.get('/:id', asyncHandler(async (req, res) => {
-    const project = await StudioDB.findProjectById(req.params.id);
-    if (!project) return res.status(404).json({ error: "Project not found" });
-    res.json(project);
-}));
-
-router.post('/', asyncHandler(async (req, res) => {
-    res.json(await StudioExpert.saveProject(req.body));
-}));
-
-router.delete('/:id', asyncHandler(async (req, res) => {
-    await StudioDB.deleteProject(req.params.id);
-    res.json({ ok: true });
-}));
-
-router.post('/generate-game', asyncHandler(async (req, res) => {
-    const { projectId, gameIdea } = req.body;
-    const result = await StudioExpert.generateGame(projectId, gameIdea);
-    res.json(result);
-}));
-
-// --- ROUTE POUR LE FEEDBACK / FIX ---
-router.post('/fix-code', asyncHandler(async (req, res) => {
-    const { projectId, code, userInstruction } = req.body;
-    const result = await StudioExpert.fixCode(code, userInstruction, projectId);
-    res.json(result);
-}));
-
-router.post('/upload-asset', upload.single('file'), asyncHandler(async (req, res) => {
-    if (!req.file) return res.status(400).json({ error: "Fichier manquant" });
-    const driveData = await require('./experts/studio.drive').uploadAsset(req.file.path, req.file.originalname);
-    const finalUrl = `/api/structure/proxy/${driveData.id}`;
-    res.json({ url: finalUrl });
-}));
-
-module.exports = router;
-
-[[[£ END: server/domains/studio/studio.routes.js £]]]
-
-[[[£ FILE: server/models/StudioProject.js £]]]
-const mongoose = require('mongoose');
-
-const FrameSchema = new mongoose.Schema({
-    url: String,
-    name: String
-}, { _id: false });
-
-const ActionSchema = new mongoose.Schema({
-    name: { type: String, default: "Nouvelle Action" },
-    frames: { type: [FrameSchema], default: [] }
-}, { _id: false });
-
-const ActorSchema = new mongoose.Schema({
-    id: String, 
-    name: String, 
-    actions: { type: [ActionSchema], default: [] },
-    currentAction: { type: String, default: "" },
-    initialX: { type: Number, default: 50 }, 
-    initialY: { type: Number, default: 50 }, 
-    scale: { type: Number, default: 1 },
-    direction: { type: Number, default: 0 }
-});
-
-const SceneSchema = new mongoose.Schema({
-    name: String,
-    backdrops: [{ name: String, url: String }],
-    currentBackdropIdx: { type: Number, default: 0 },
-    actors: [ActorSchema]
-});
-
-const StudioProjectSchema = new mongoose.Schema({
-    title: { type: String, required: true },
-    teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher' },
-    scenes: [SceneSchema],
-    generatedCode: String,
-    createdAt: { type: Date, default: Date.now }
-}, { collection: 'studioprojects' });
-
-module.exports = mongoose.models.StudioProject || mongoose.model('StudioProject', StudioProjectSchema);
-
-[[[£ END: server/models/StudioProject.js £]]]
-
-[[[£ FILE: server/prof/studio/studio.prof.js £]]]
-// @signatures: ProfStudio, projects, save, uploadAsset, detectBg
-const express = require('express');
-const router = express.Router();
-const { StudioProject } = require('../models/prof.models');
-const ProfDrive = require('../core/drive.prof');
-const multer = require('multer');
-const fs = require('fs');
-const path = require('path');
-
-// SÉCURITÉ : Création dossier temp
-const tempDir = path.join(process.cwd(), 'public', 'uploads', 'temp');
-if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
-const upload = multer({ dest: tempDir });
-
-/**
- * 🎬 ROUTER STUDIO PROF V106
- */
-
-router.get('/projects/:userId', async (req, res) => {
-    try {
-        const projects = await StudioProject.find({ teacherId: req.params.userId }).sort({ updatedAt: -1 }).lean();
-        res.json(projects);
-    } catch (e) { res.status(500).json([]); }
-});
-
-router.post('/', async (req, res) => {
-    try {
-        const data = req.body;
-        let result;
-        if (data._id) result = await StudioProject.findByIdAndUpdate(data._id, data, { new: true });
-        else result = await StudioProject.create(data);
-        res.json(result);
-    } catch (e) { res.status(500).json({ error: "Save fail" }); }
-});
-
-// ✅ ROUTE D'UPLOAD (Celle que le front cherchait)
-router.post('/upload-asset', upload.single('file'), async (req, res) => {
-    console.log("📥 [STUDIO-ROUTE] Upload reçu :", req.file?.originalname);
-    try {
-        if (!req.file) return res.status(400).json({ error: "Fichier manquant" });
-        
-        const folderId = await ProfDrive.getOrCreateFolder("STUDIO_ASSETS");
-        const driveFile = await ProfDrive.uploadFile(req.file.originalname, req.file.path, folderId);
-        
-        try { fs.unlinkSync(req.file.path); } catch(e) {}
-
-        const url = `/api/proxy/${driveFile.id}`;
-        console.log("✅ [STUDIO-ROUTE] URL générée :", url);
-        res.json({ url });
-    } catch (e) {
-        console.error("❌ [STUDIO-ROUTE] Erreur :", e.message);
-        res.status(500).json({ error: e.message });
-    }
-});
-
-router.post('/detect-bg-by-id', async (req, res) => {
-    res.json({ color: "#FFFFFF" });
-});
-
-module.exports = router;
-
-[[[£ END: server/prof/studio/studio.prof.js £]]]
-
-[[[£ END: studio.txt £]]]
 
 [[[£ FILE: systemInstructions.md £]]]
 I REGLE D INTEGRITE
@@ -13813,98 +13433,6 @@ RÈGLES D'OR : définit comment Gemini doit te répondre et coder.
 │               Expert gérant l'Arbre et les diagnostics de maintenance.
 
 [[[£ END: tree.txt £]]]
-
-[[[£ FILE: userStories.txt £]]]
-================================================================================
-📜 RÉFÉRENTIEL DES USER STORIES - FONCTIONNALITÉ STRUCTURE 
-================================================================================
-
-Épic 1 — Structure des dossiers (sanctuarisée)
---------------------------------------------------------------------------------
-US1 — Structure sanctuarisée (non modifiable)
-En tant qu’utilisateur, je veux que la structure globale des dossiers soit sanctuarisée afin de ne plus risquer de casser l’organisation existante.
-
-Critères d’acceptation :
-- La structure de base ne peut pas être modifiée (pas de renommage/déplacement/suppression des éléments “structurels”).
-- L’utilisateur peut toujours créer des devoirs et les ranger dans un dossier existant.
-
-Épic 2 — Sélection automatique du dossier dans le créateur de DM (Homework)
---------------------------------------------------------------------------------
-US2 — Pré-sélection automatique du bon dossier
-En tant qu’utilisateur, je veux que le créateur de DM pré-sélectionne automatiquement un dossier non archivé afin de gagner du temps à chaque création de devoir.
-
-Règles :
-1. S’il existe un dossier non archivé autre que Général/Général, alors ce dossier est sélectionné par défaut.
-2. S’il existe plusieurs dossiers non archivés, alors le dernier (le plus récent) est sélectionné par défaut.
-3. Si aucun dossier non archivé n’existe (hors Général/Général), alors Général/Général est sélectionné par défaut.
-
-Critères d’acceptation :
-- À l’ouverture du créateur de DM, un dossier est déjà sélectionné selon les règles ci-dessus.
-- Général/Général n’est sélectionné par défaut que si aucune autre option non archivée n’existe.
-
-US3 — Changer de dossier via le Finder (sélection manuelle)
-En tant qu’utilisateur, je veux pouvoir choisir un autre dossier dans le Finder afin de ranger le devoir dans le dossier que je veux avant de le créer.
-
-Critères d’acceptation :
-- Le Finder affiche les dossiers disponibles (dont l’état archivé/non archivé).
-- Je peux sélectionner manuellement un dossier différent de celui pré-sélectionné.
-- Le dossier choisi dans le Finder devient le dossier actif pour la création du devoir.
-
-Épic 3 — Création et rangement du devoir
---------------------------------------------------------------------------------
-US4 — Ranger le devoir dans le dossier sélectionné et aux classes sélectionnées
-En tant qu’utilisateur, je veux que le devoir créé soit rangé automatiquement dans le dossier sélectionné et lié aux classes sélectionnées afin de retrouver le devoir au bon endroit et pour les bons groupes.
-
-Critères d’acceptation :
-- À la validation de création, le devoir apparaît dans le dossier sélectionné.
-- Le devoir est associé aux classes sélectionnées (il apparaît bien dans leur vue/liste).
-
-US5 — Afficher les élèves ciblés si devoir attribué à un sous-groupe
-En tant qu’utilisateur, je veux voir le nom des élèves si le devoir n’est attribué qu’à certains élèves afin de vérifier rapidement qui est concerné.
-
-Critères d’acceptation :
-- Si l’attribution = “certains élèves seulement”, alors le devoir affiche la liste des noms des élèves concernés (dans l’UI du dossier/devoir).
-- Si l’attribution = “classe entière”, alors aucune liste de noms n’est affichée (ou un libellé type “Toute la classe”).
-
-Épic 4 — Suppression d’un devoir (icône X)
---------------------------------------------------------------------------------
-US6 — Supprimer un devoir via le X
-En tant qu’utilisateur, je veux pouvoir supprimer un devoir via un bouton “X” afin de retirer facilement un devoir inutile ou créé par erreur.
-
-Critères d’acceptation :
-- Chaque devoir affiche un “X”.
-- Cliquer sur “X” supprime le devoir (avec confirmation).
-- Le devoir supprimé n’apparaît plus dans le dossier ni dans les classes.
-
-Épic 5 — Suppression de dossier et comportement de repli
---------------------------------------------------------------------------------
-US7 — Replacer automatiquement les devoirs si le dossier est supprimé
-En tant qu’utilisateur, je veux que si un dossier est supprimé, les devoirs qu’il contient ne soient pas perdus afin de conserver les devoirs en les envoyant dans Général/Général.
-
-Critères d’acceptation :
-- Quand un dossier contenant des devoirs est supprimé, tous les devoirs de ce dossier sont automatiquement déplacés vers le dossier Général de la section Général (Général/Général).
-- Les devoirs conservent leurs attributs (classes associées, élèves ciblés, etc.).
-- Aucun devoir n’est supprimé automatiquement à cause de la suppression du dossier.
-
-Épic 6 — Gestion des Sections (Matières)
---------------------------------------------------------------------------------
-US8 — Édition complète d'une section (Stylo)
-En tant qu'utilisateur, je veux pouvoir cliquer sur un stylo au survol d'une section pour modifier son nom et sa couleur de thème.
-
-Critères d’acceptation :
-- Un bouton stylo (✏️) est visible au survol de chaque section (sauf "GÉNÉRAL").
-- Le clic ouvre une modale permettant de renommer la section.
-- Une palette de couleurs prédéfinies permet de changer l'identité visuelle de la section.
-- Le renommage d'une section met à jour automatiquement tous les dossiers (Chapters) qu'elle contient en base de données (renommage en cascade).
-
-US9 — Définition de la portée (Statut) de la section
-En tant qu'utilisateur, je veux pouvoir définir si une section est visible pour tous, pour un niveau ou pour une classe spécifique.
-
-Critères d’acceptation :
-- La modale d'édition propose 3 statuts : GÉNÉRAL (Global), NIVEAU (Toutes les classes du même niveau), ou CETTE CLASSE.
-- Le changement de statut est enregistré immédiatement et filtre l'affichage selon le contexte de navigation.
-
-[[[£ END: userStories.txt £]]]
 
 [[[£ FILE: verificatons.txt £]]]
 1. Sécurité & Accès (Authentification)

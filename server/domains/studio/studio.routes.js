@@ -1,4 +1,4 @@
-// @signatures: DELETE /:id, GET /:id, GET /projects/:userId, POST /, POST /fix-code, POST /generate-asset, POST /generate-game, POST /remix-asset, POST /upload-asset
+// @signatures: DELETE /:id, GET /:id, GET /projects/:userId, POST /, POST /fix-code, POST /generate-asset, POST /generate-game, POST /remix-asset, POST /upload-asset, POST /remove-bg-ai
 const express = require('express');
 const router = express.Router();
 const StudioExpert = require('./experts/studio.expert');
@@ -38,7 +38,13 @@ router.post('/generate-game', asyncHandler(async (req, res) => {
     res.json(result);
 }));
 
-// --- ROUTE POUR LE FEEDBACK / FIX ---
+// --- NOUVEAU : ANALYSE IA POUR NETTOYAGE ---
+router.post('/remove-bg-ai', asyncHandler(async (req, res) => {
+    const { url } = req.body;
+    const instructions = await StudioExpert.removeBackgroundWithAI(url);
+    res.json(instructions);
+}));
+
 router.post('/fix-code', asyncHandler(async (req, res) => {
     const { projectId, code, userInstruction } = req.body;
     const result = await StudioExpert.fixCode(code, userInstruction, projectId);

@@ -7,6 +7,7 @@ const FrameSchema = new mongoose.Schema({
 
 const ActionSchema = new mongoose.Schema({
     name: { type: String, default: "Nouvelle Action" },
+    speed: { type: Number, default: 100 }, // Vitesse de l'animation en ms (ex: 100ms par frame)
     frames: { type: [FrameSchema], default: [] }
 }, { _id: false });
 
@@ -18,7 +19,8 @@ const ActorSchema = new mongoose.Schema({
     initialX: { type: Number, default: 50 }, 
     initialY: { type: Number, default: 50 }, 
     scale: { type: Number, default: 1 },
-    direction: { type: Number, default: 0 }
+    direction: { type: Number, default: 0 },
+    rotationStyle: { type: String, default: 'all' }
 });
 
 const SceneSchema = new mongoose.Schema({
