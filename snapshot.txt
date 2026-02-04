@@ -526,7 +526,7 @@ console.log("🛡️ ARCHITECTE HERMÉTIQUE (V7.4) - STUDIO SYNC ACTIF");
   "status": "OK",
   "message": "Infrastructure mise à jour",
   "details": null,
-  "timestamp": 1770215739521
+  "timestamp": 1770242681301
 }
 [[[£ END: apply_status.json £]]]
 
@@ -4661,17 +4661,18 @@ const DESCRIPTIONS = {
     chapters: "📁 Chapitres (Dossiers).",
     homeworks: "📝 Devoirs.",
     submissions: "📤 Rendus.",
-    gamelevels: "🎮 Quiz.",
+    gamelevels: "🎮 Quiz (Contient vos Niveaux).",
     gameprogress: "📈 Scores.",
     mistakes: "✒️ Orthographe.",
     accesslogs: "🔐 Logs.",
     bugreports: "🪲 Bugs.",
-    projectdocs: "🧠 Doc IA."
+    projectdocs: "🧠 Doc IA.",
+    studioprojects: "🎬 Projets Studio."
 };
 
 export default function DatabaseViewer({ onClose }) {
     const [data, setData] = useState(null);
-    const [activeTab, setActiveTab] = useState('classrooms'); // Par défaut sur classrooms pour vérifier
+    const [activeTab, setActiveTab] = useState('gamelevels'); // Focus Quiz
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
@@ -4685,8 +4686,6 @@ export default function DatabaseViewer({ onClose }) {
             })
             .then(d => { 
                 setData(d); 
-                const keys = Object.keys(d || {});
-                if (keys.length > 0 && !d[activeTab]) setActiveTab(keys[0]);
                 setLoading(false); 
             })
             .catch(err => { setError(err.message); setLoading(false); });
@@ -4696,34 +4695,54 @@ export default function DatabaseViewer({ onClose }) {
 
     const renderCell = (val) => {
         if (val === null || val === undefined) return <span className="text-slate-300">-</span>;
-        if (typeof val === 'object') {
+        
+        // Affichage amélioré des tableaux (Niveaux/Questions)
+        if (Array.isArray(val) && val.length > 0) {
             return (
-                <pre className="text-[9px] bg-slate-100 p-1 rounded border border-slate-200 max-h-[60px] overflow-y-auto whitespace-pre-wrap font-mono scrollbar-thin">
-                    {JSON.stringify(val, null, 0)}
-                </pre>
+                <div className="text-[9px] font-mono">
+                    <span className="font-bold text-indigo-600">Array({val.length})</span>
+                    <pre className="bg-slate-50 p-1 rounded border border-slate-200 max-h-[100px] max-w-[300px] overflow-auto mt-1">
+                        {JSON.stringify(val, null, 2)}
+                    </pre>
+                </div>
             );
         }
+        
+        if (typeof val === 'object') {
+            return <pre className="text-[9px]">{JSON.stringify(val).substring(0, 50)}...</pre>;
+        }
+        
         return <span className="font-bold text-slate-700">{String(val)}</span>;
     };
 
-    if (loading) return <div className="db-viewer-overlay"><h2 className="text-white font-black animate-pulse text-2xl">CHARGEMENT BDD...</h2></div>;
+    if (loading) return <div className="db-viewer-overlay"><h2 className="text-white font-black animate-pulse text-2xl">CHARGEMENT...</h2></div>;
     if (error) return <div className="db-viewer-overlay"><div className="bg-white p-8 rounded-2xl text-red-500 font-black">ERREUR: {error}<button onClick={onClose} className="block mt-4 bg-slate-800 text-white px-4 py-2 rounded">Fermer</button></div></div>;
 
     const currentData = (data && data[activeTab]) ? data[activeTab] : [];
 
-    // --- CORRECTION V143 : SCAN COMPLET DES COLONNES ---
-    // On ne regarde plus juste la ligne 0, on regarde TOUT pour trouver toutes les clés possibles
+    // --- SCAN ET TRI DES COLONNES ---
     const allKeys = new Set();
     currentData.forEach(item => Object.keys(item).forEach(k => allKeys.add(k)));
-    // On convertit le Set en Array, on retire __v, et on trie pour avoir _id et name en premier
+    
     const columns = Array.from(allKeys)
-        .filter(k => k !== '__v')
+        .filter(k => k !== '__v') // On cache la version interne mongo
         .sort((a, b) => {
-            if (a === '_id') return -1;
-            if (b === '_id') return 1;
-            if (a === 'name') return -1;
-            if (b === 'name') return 1;
-            if (a === 'level') return -1; // On met level en évidence
+            // ORDRE DE PRIORITÉ D'AFFICHAGE
+            const priority = ['title', 'name', 'levels', 'questions', 'teacherId'];
+            
+            const idxA = priority.indexOf(a);
+            const idxB = priority.indexOf(b);
+            
+            // Si les deux sont prioritaires, on respecte l'ordre de la liste
+            if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+            // Si l'un est prioritaire, il passe avant
+            if (idxA !== -1) return -1;
+            if (idxB !== -1) return 1;
+            
+            // ID à la fin
+            if (a === '_id') return 1;
+            if (b === '_id') return -1;
+            
             return a.localeCompare(b);
         });
 
@@ -4732,7 +4751,7 @@ export default function DatabaseViewer({ onClose }) {
             <div className="db-viewer-window" onClick={e => e.stopPropagation()}>
                 <div className="db-header">
                     <div>
-                        <h2 className="font-black uppercase text-xl text-slate-800">Visualisateur de Données V143</h2>
+                        <h2 className="font-black uppercase text-xl text-slate-800">Visualisateur BDD</h2>
                         <span className="text-[9px] text-indigo-500 font-black tracking-widest uppercase">Base MongoDB Brute</span>
                     </div>
                     <button onClick={onClose} className="w-10 h-10 bg-slate-100 rounded-full font-black hover:bg-red-50 hover:text-red-500 transition-colors">✕</button>
@@ -4757,7 +4776,9 @@ export default function DatabaseViewer({ onClose }) {
                             <thead>
                                 <tr>
                                     {columns.map(col => (
-                                        <th key={col} className={col === 'level' ? 'bg-yellow-100 text-yellow-700' : ''}>{col.toUpperCase()}</th>
+                                        <th key={col} className={col === 'levels' ? 'bg-green-200 text-green-800 border-b-4 border-green-500' : ''}>
+                                            {col.toUpperCase()}
+                                        </th>
                                     ))}
                                 </tr>
                             </thead>
@@ -4765,7 +4786,7 @@ export default function DatabaseViewer({ onClose }) {
                                 {currentData.map((row, i) => (
                                     <tr key={i} className="hover:bg-blue-50 transition-colors">
                                         {columns.map(col => (
-                                            <td key={col} className={`align-middle border-b border-slate-100 p-2 ${col === 'level' ? 'bg-yellow-50/50 font-black text-center' : ''}`}>
+                                            <td key={col} className={`align-middle border-b border-slate-100 p-2 ${col === 'levels' ? 'bg-green-50/20' : ''}`}>
                                                 {renderCell(row[col])}
                                             </td>
                                         ))}
@@ -5864,105 +5885,201 @@ export default function TrapComponent() {
 [[[£ END: client/src/features/prof/components/TrapComponent.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/games/GameStudio.css £]]]
-.v84-game-container {
-    position: fixed; inset: 0; background: #f8fafc; z-index: 9500;
-    display: flex; flex-direction: column; font-family: 'Inter', sans-serif;
-}
+/* ... (Styles précédents conservés) ... */
 
-/* HEADER STYLE JEU (Violet) */
-.v84-game-header {
-    height: 90px; background: white; border-bottom: 2px solid #f1f5f9;
-    display: flex; align-items: center; padding: 0 40px; justify-content: space-between;
-}
-.v84-game-icon { font-size: 2rem; background: #9333ea; color: white; padding: 10px; border-radius: 18px; box-shadow: 0 8px 15px rgba(147, 51, 234, 0.3); }
+/* HEADER */
+.v84-game-container { position: fixed; inset: 0; background: #f8fafc; z-index: 9500; display: flex; flex-direction: column; font-family: 'Inter', sans-serif; }
+.v84-game-header { height: 90px; background: white; border-bottom: 2px solid #f1f5f9; display: flex; align-items: center; padding: 0 40px; justify-content: space-between; }
+.v84-game-icon { font-size: 2rem; background: #9333ea; color: white; padding: 10px; border-radius: 18px; }
 .v84-game-title-input { border: none; font-size: 1.8rem; font-weight: 950; color: #0f172a; outline: none; width: 100%; text-transform: uppercase; margin-left: 20px; }
 
-/* LAYOUT */
 .v84-game-body { flex: 1; display: flex; overflow: hidden; }
 
-/* QUESTIONS LIST (LEFT) */
-.v84-q-list-sidebar {
-    width: 280px; background: white; padding: 20px; display: flex; flex-direction: column; border-right: 2px solid #f1f5f9;
-}
-.v84-q-item {
-    padding: 15px; background: #f8fafc; border-radius: 16px; border: 2px solid transparent; 
-    cursor: pointer; transition: all 0.2s; margin-bottom: 8px;
-}
-.v84-q-item.active { background: #f3e8ff; border-color: #a855f7; box-shadow: 0 4px 12px rgba(168, 85, 247, 0.15); }
-.v84-q-preview { font-weight: 800; font-size: 11px; color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.v84-q-sub { font-size: 9px; color: #94a3b8; font-weight: 700; margin-top: 4px; }
+/* SIDEBAR GAUCHE */
+.v84-q-list-sidebar { width: 340px; background: white; padding: 20px; display: flex; flex-direction: column; border-right: 2px solid #f1f5f9; }
+.v84-level-block { margin-bottom: 15px; border: 2px solid #f1f5f9; border-radius: 16px; overflow: hidden; background: #fff; }
+.v84-level-header { background: #f8fafc; padding: 10px 15px; display: flex; justify-content: space-between; align-items: center; font-size: 10px; font-weight: 950; color: #64748b; text-transform: uppercase; border-bottom: 2px solid #f1f5f9; cursor: pointer; transition: background 0.2s; position: relative; }
+.v84-level-header:hover { background: #f1f5f9; color: #1e293b; }
+.v84-level-header.active-lvl { background: #f5f3ff; color: #7c3aed; border-bottom-color: #ddd6fe; }
+.v84-q-list { padding: 5px; display: flex; flex-direction: column; gap: 5px; background: #fff; }
+.v84-q-item { padding: 10px 10px 10px 10px; border-bottom: 1px solid #f1f5f9; cursor: pointer; transition: all 0.2s; position: relative; background: white; display: flex; align-items: center; gap: 8px; }
+.v84-q-item:hover { background: #fafafa; }
+.v84-q-item.active { background: #f3e8ff; border-left: 4px solid #a855f7; }
+.v84-q-checkbox { width: 16px; height: 16px; cursor: pointer; accent-color: #7c3aed; border: 2px solid #cbd5e1; border-radius: 4px; }
+.v84-q-preview { font-weight: 800; font-size: 10px; color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; padding-right: 25px; }
+.v84-del-btn { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 20px; height: 20px; border-radius: 50%; background: #fee2e2; color: #ef4444; border: 1px solid #fecaca; font-weight: 900; font-size: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; opacity: 0.6; transition: all 0.2s; }
+.v84-q-item:hover .v84-del-btn, .v84-level-header:hover .v84-del-btn { opacity: 1; }
+.v84-del-btn:hover { background: #ef4444; color: white; transform: translateY(-50%) scale(1.1); }
+.v84-add-q-btn { width: 100%; padding: 8px; font-size: 9px; font-weight: 900; color: #94a3b8; background: #f8fafc; border: none; border-top: 1px dashed #e2e8f0; cursor: pointer; text-transform: uppercase; }
+.v84-add-q-btn:hover { color: #7c3aed; background: #f5f3ff; }
+.v84-add-level-btn { width: 100%; padding: 15px; background: #1e293b; color: white; border-radius: 15px; font-weight: 900; font-size: 10px; border: none; cursor: pointer; text-transform: uppercase; }
+.v84-move-box { background: #7c3aed; padding: 12px; border-radius: 15px; margin-top: auto; margin-bottom: 10px; color: white; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 10px 20px rgba(124, 58, 237, 0.3); animation: slideUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+.v84-move-title { font-size: 9px; font-weight: 900; text-transform: uppercase; opacity: 0.8; }
+.v84-move-actions { display: flex; gap: 5px; }
+.v84-move-select { flex: 1; padding: 6px; border-radius: 8px; border: none; font-size: 10px; color: #4c1d95; font-weight: 800; outline: none; background: rgba(255,255,255,0.9); }
+.v84-move-go-btn { background: #fbbf24; color: #78350f; border: none; padding: 6px 12px; border-radius: 8px; font-weight: 950; font-size: 10px; cursor: pointer; text-transform: uppercase; }
+.v84-move-go-btn:hover { background: #f59e0b; }
 
-.v84-add-q-btn { margin-top: 10px; padding: 15px; border: 2px dashed #e2e8f0; border-radius: 20px; color: #94a3b8; font-weight: 900; font-size: 10px; cursor: pointer; background: none; transition: all 0.2s; }
-.v84-add-q-btn:hover { border-color: #a855f7; color: #a855f7; background: #f3e8ff; }
-
-/* EDITOR (CENTER) */
+/* EDITOR CENTER */
 .v84-game-editor { flex: 1; padding: 40px; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; background: #f8fafc; }
 
+/* WIDGET IA MODIFIÉ */
+.v84-ai-widget { background: #fff; padding: 20px; border-radius: 25px; margin-bottom: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; }
+.v84-ai-row { display: flex; gap: 10px; align-items: center; width: 100%; margin-bottom: 10px; }
+
+/* INPUT COUNT (NOUVEAU) */
+.v84-ai-count-input {
+    width: 60px; padding: 12px; border: 2px solid #e2e8f0; border-radius: 15px;
+    font-weight: 900; color: #475569; text-align: center; font-size: 12px; outline: none;
+}
+.v84-ai-count-input:focus { border-color: #7e22ce; color: #7e22ce; }
+
+.v84-ai-input { flex: 1; background: #f8fafc; border: 2px solid #f1f5f9; padding: 12px 15px; border-radius: 15px; color: #475569; font-weight: 700; outline: none; font-size: 12px; }
+.v84-ai-input:focus { border-color: #a855f7; background: white; }
+.v84-ai-dropzone { background: #fff7ed; border: 2px dashed #fed7aa; border-radius: 15px; min-height: 80px; position: relative; display: flex; flex-direction: column; padding: 10px; transition: all 0.2s; }
+.v84-ai-dropzone:hover { border-color: #f97316; background: #ffedd5; }
+.v84-ai-textarea { width: 100%; height: 60px; background: transparent; border: none; outline: none; resize: none; font-size: 11px; color: #c2410c; font-weight: 600; text-align: center; }
+.v84-ai-textarea::placeholder { color: #fdba74; text-transform: uppercase; font-weight: 700; padding-top: 20px; }
+.v84-ai-plus-btn { position: absolute; bottom: 8px; right: 8px; width: 24px; height: 24px; background: #f97316; color: white; border-radius: 50%; border: none; font-weight: 900; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(249, 115, 22, 0.3); transition: transform 0.2s; }
+.v84-ai-plus-btn:hover { transform: scale(1.1); }
+.v84-file-tag { position: absolute; top: 8px; left: 8px; background: #fff; border: 1px solid #f97316; padding: 4px 10px; border-radius: 8px; font-size: 9px; font-weight: 900; color: #ea580c; display: flex; align-items: center; gap: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+.v84-file-close { cursor: pointer; color: #ef4444; font-size: 10px; }
+.v84-gen-btn { width: 100%; padding: 12px; background: #7e22ce; color: white; border: none; border-radius: 15px; font-weight: 900; font-size: 10px; margin-top: 10px; cursor: pointer; }
+
+/* Q CARD */
 .v84-q-card { background: white; border-radius: 30px; padding: 30px; border: 1px solid #e2e8f0; box-shadow: 0 10px 30px -10px rgba(0,0,0,0.05); }
-.v84-field-label { font-size: 10px; font-weight: 950; color: #94a3b8; text-transform: uppercase; margin-bottom: 10px; display: block; letter-spacing: 0.05em; }
-
-.v84-q-input { 
-    width: 100%; padding: 20px; border-radius: 20px; background: #f8fafc; border: 2px solid #f1f5f9;
-    font-size: 1.1rem; font-weight: 700; color: #1e293b; outline: none; transition: border-color 0.2s;
-}
-.v84-q-input:focus { border-color: #a855f7; background: white; }
-
+.v84-q-input { width: 100%; padding: 20px; border-radius: 20px; background: #f8fafc; border: 2px solid #f1f5f9; font-size: 1.1rem; font-weight: 700; color: #1e293b; outline: none; }
 .v84-answers-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 10px; }
-.v84-ans-row { display: flex; align-items: center; gap: 10px; background: #f8fafc; padding: 5px 15px 5px 5px; border-radius: 18px; border: 2px solid transparent; transition: all 0.2s; }
+.v84-ans-row { display: flex; align-items: center; gap: 10px; background: #f8fafc; padding: 5px 15px 5px 5px; border-radius: 18px; border: 2px solid transparent; }
 .v84-ans-row.correct { background: #dcfce7; border-color: #22c55e; }
-
-.v84-correct-radio {
-    width: 40px; height: 40px; border-radius: 14px; background: white; border: 2px solid #cbd5e1;
-    display: flex; align-items: center; justify-content: center; cursor: pointer; font-weight: 900; color: #cbd5e1; font-size: 14px;
-}
+.v84-correct-radio { width: 40px; height: 40px; border-radius: 14px; background: white; border: 2px solid #cbd5e1; display: flex; align-items: center; justify-content: center; cursor: pointer; font-weight: 900; color: #cbd5e1; }
 .v84-ans-row.correct .v84-correct-radio { background: #22c55e; border-color: #22c55e; color: white; }
 .v84-ans-input { flex: 1; background: transparent; border: none; padding: 10px; font-weight: 700; font-size: 0.9rem; outline: none; }
 
-/* AI WIDGET */
-.v84-ai-widget { background: #7e22ce; color: white; padding: 20px; border-radius: 25px; margin-bottom: 20px; display: flex; gap: 15px; align-items: center; box-shadow: 0 10px 25px rgba(126, 34, 206, 0.3); }
-.v84-ai-input { flex: 1; background: rgba(255,255,255,0.2); border: none; padding: 12px 20px; border-radius: 15px; color: white; font-weight: 700; placeholder-color: rgba(255,255,255,0.5); outline: none; }
-.v84-ai-btn { background: white; color: #7e22ce; border: none; padding: 12px 25px; border-radius: 15px; font-weight: 950; font-size: 10px; cursor: pointer; text-transform: uppercase; }
+/* RESSOURCES */
+.v84-resources-global { background: white; border: 2px solid #3b82f6; border-radius: 20px; padding: 15px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 4px 15px rgba(59, 130, 246, 0.1); }
+.v84-resources-level { background: #f8fafc; border: 1px dashed #94a3b8; border-radius: 15px; padding: 15px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 10px; }
+.v84-res-title { font-size: 10px; font-weight: 950; text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; gap: 5px; }
+.v84-res-title.global { color: #3b82f6; }
+.v84-res-title.local { color: #64748b; }
+.v84-res-row { display: flex; gap: 10px; align-items: center; }
+.v84-res-input { flex: 1; background: #f1f5f9; border: 1px solid #cbd5e1; padding: 8px 12px; border-radius: 10px; font-size: 11px; color: #334155; font-weight: 600; outline: none; }
+.v84-res-input:focus { background: white; border-color: #3b82f6; }
+.v84-res-btn { padding: 8px 15px; border-radius: 10px; font-weight: 900; font-size: 10px; border: none; cursor: pointer; text-transform: uppercase; display: flex; align-items: center; gap: 5px; transition: transform 0.1s; }
+.v84-res-btn.upload { background: #e2e8f0; color: #475569; }
+.v84-res-btn.upload:hover { background: #cbd5e1; }
+.v84-res-btn.view { background: #dcfce7; color: #16a34a; }
+.v84-res-badge { font-size: 9px; font-weight: 900; color: #fff; background: #10b981; padding: 4px 8px; border-radius: 6px; display: flex; align-items: center; gap: 5px; cursor: pointer; transition: filter 0.2s; }
+.v84-res-badge:hover { filter: brightness(1.1); }
+.v84-res-remove { cursor: pointer; opacity: 0.8; font-size: 10px; margin-left: 2px; width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.2); border-radius: 50%; }
+.v84-res-remove:hover { background: #ef4444; opacity: 1; }
 
-/* RIGHT SIDEBAR (DISTRIBUTION - Identique Homework mais ajusté couleurs) */
 .v84-dist-sidebar { width: 350px; background: white; border-left: 2px solid #f1f5f9; padding: 30px; display: flex; flex-direction: column; }
-.v84-tab-btn-game { padding: 8px 16px; border-radius: 12px; font-size: 10px; font-weight: 900; transition: all 0.2s; border: 1px solid transparent; }
+.v84-tab-btn-game { padding: 8px 16px; border-radius: 12px; font-size: 10px; font-weight: 900; transition: all 0.2s; border: 1px solid transparent; margin-right: 5px; }
 .v84-tab-btn-game.active { background: #9333ea; color: white; shadow: 0 4px 10px rgba(147, 51, 234, 0.3); }
 .v84-tab-btn-game.inactive { background: #f1f5f9; color: #94a3b8; }
-
-.v84-game-publish-btn { width: 100%; padding: 20px; background: #9333ea; color: white; font-weight: 950; border-radius: 20px; border: none; margin-top: 20px; font-size: 12px; text-transform: uppercase; cursor: pointer; box-shadow: 0 10px 30px rgba(147, 51, 234, 0.3); transition: transform 0.1s; }
+.v84-game-publish-btn { width: 100%; padding: 20px; background: #9333ea; color: white; font-weight: 950; border-radius: 20px; border: none; margin-top: 20px; font-size: 12px; cursor: pointer; box-shadow: 0 10px 30px rgba(147, 51, 234, 0.3); transition: transform 0.1s; }
 .v84-game-publish-btn:hover { transform: translateY(-2px); }
 
 [[[£ END: client/src/features/prof/games/GameStudio.css £]]]
 
 [[[£ FILE: client/src/features/prof/games/GameStudio.jsx £]]]
-// @signatures: GameStudio, handleAddQuestion, handleGenerateAI, handleInput, handleSave, handleSelectClass, handleSelectQuestion, handleToggleStudent, isMain, loadData, myClassesIds, toggleAllStudents, updateQuestion
+// @signatures: GameStudio, handleAddLevel, handleAddQuestion, handleDeleteLevel, handleDeleteQuestion, handleDrop, handleFileSelect, handleGenerateAI, handleInput, handleMoveQuestions, handleOpenSheet, handlePaste, handleRemoveAsset, handleRemoveFile, handleSave, handleSelectQuestion, handleToggleSelect, handleToggleStudent, handleUpdateAssetVideo, handleUploadAsset, isQuestionSelected, loadData, toggleAllStudents, updateQuestion
 import React, { useState, useEffect, useRef } from 'react';
 import './GameStudio.css';
 import { api } from '../../../services/api';
 import { StudioUtils } from '../homework/HomeworkStudio'; 
 
-const DEFAULT_QUIZ_DATA = { title: '', chapterId: '', teacherId: null, targetClassrooms: [], assignedStudents: [], isAllClass: true, questions: [{ q: 'Nouvelle question', options: ['', '', '', ''], a: 0 }] };
+const DEFAULT_QUIZ_DATA = { 
+    title: '', chapterId: '', teacherId: null, 
+    targetClassrooms: [], assignedStudents: [], isAllClass: true, 
+    globalIntro: { sheetUrl: "", videoUrl: "" },
+    levels: [
+        { 
+            name: "Niveau 1", 
+            intro: { sheetUrl: "", videoUrl: "" },
+            questions: [{ q: 'Nouvelle question', options: ['', '', '', ''], a: 0 }] 
+        }
+    ]
+};
 
 export default function GameStudio({ initialData, chapters, classFilter, user, targetSection, onClose }) {
-    // ✅ FIX V18:50 : Utilisation robuste de StudioUtils
-    const [formData, setFormData] = useState(initialData || { ...DEFAULT_QUIZ_DATA, teacherId: user.id || user._id, targetClassrooms: classFilter ? [classFilter] : [] });
-    const [activeQIndex, setActiveQIndex] = useState(0);
+    
+    // --- DEBUG & INIT ---
+    const initData = () => {
+        console.log("🔍 [STUDIO] Initialisation avec :", initialData);
+        
+        let base = initialData ? JSON.parse(JSON.stringify(initialData)) : { ...DEFAULT_QUIZ_DATA };
+        
+        // MIGRATION INTELLIGENTE
+        // Si on a des niveaux valides, on les garde !
+        if (base.levels && base.levels.length > 0) {
+            console.log("✅ [STUDIO] Niveaux détectés :", base.levels.length);
+        } 
+        // Sinon, si on a des questions 'legacy', on les migre
+        else if (base.questions && base.questions.length > 0) {
+            console.log("⚠️ [STUDIO] Migration Legacy (Questions -> Niveau 1)");
+            base.levels = [{ name: "Niveau 1", questions: base.questions, intro: {} }];
+            delete base.questions;
+        }
+        // Sinon, structure vide par défaut
+        else {
+            console.log("⚠️ [STUDIO] Aucune donnée, création par défaut.");
+            base.levels = [{ name: "Niveau 1", questions: [], intro: {} }];
+        }
+
+        // Sécurité Intros & Options
+        if (!base.globalIntro) base.globalIntro = { sheetUrl: "", videoUrl: "" };
+        base.levels.forEach(l => { 
+            if(!l.intro) l.intro = { sheetUrl: "", videoUrl: "" };
+            if(!l.questions) l.questions = [];
+            l.questions.forEach(q => {
+                if (!q.options || !Array.isArray(q.options)) q.options = ['', '', '', ''];
+                if (q.a === undefined) q.a = 0;
+            });
+        });
+
+        base.teacherId = user.id || user._id;
+        // Fix Classroom Target
+        if (!base.targetClassrooms || base.targetClassrooms.length === 0) {
+            // Si on édite un vieux quiz qui avait juste 'classroom'
+            if (base.classroom) base.targetClassrooms = [base.classroom];
+            else if (classFilter) base.targetClassrooms = [classFilter];
+            else base.targetClassrooms = [];
+        }
+        
+        return base;
+    };
+
+    const [formData, setFormData] = useState(initData());
+    const [activeLevelIdx, setActiveLevelIdx] = useState(0);
+    const [activeQIdx, setActiveQIdx] = useState(0);
+    const [selectedForMove, setSelectedForMove] = useState([]); 
+    const [moveTargetLevel, setMoveTargetLevel] = useState("");
     const [allStudents, setAllStudents] = useState([]);
     const [allClasses, setAllClasses] = useState([]);
     const [distribution, setDistribution] = useState({});
     const [viewingClass, setViewingClass] = useState(classFilter || "");
     const [studentSearch, setStudentSearch] = useState(""); 
     const [loading, setLoading] = useState(false);
+    
+    // IA & ASSETS
     const [aiTopic, setAiTopic] = useState('');
+    const [aiContextText, setAiContextText] = useState('');
+    const [aiFile, setAiFile] = useState(null);
     const [aiGenerating, setAiGenerating] = useState(false);
     
+    const fileInputRef = useRef(null);
+    const assetInputRef = useRef(null);
+    const [uploadTarget, setUploadTarget] = useState(null);
+
     const loadData = async () => {
         setLoading(true);
         try {
             const [sts, cls] = await Promise.all([ api.get('/admin/students'), api.get('/admin/classrooms') ]);
             setAllStudents(sts); setAllClasses(cls);
-            if (initialData) {
-                const targets = initialData.targetClassrooms || [initialData.classroom];
+            if (formData) {
+                const targets = formData.targetClassrooms || [];
                 const newDist = {};
                 targets.forEach(clsName => {
                     const clsObj = cls.find(c => c.name === clsName);
@@ -5970,43 +6087,182 @@ export default function GameStudio({ initialData, chapters, classFilter, user, t
                     let classStudentIds = sts.filter(s => {
                         const isMain = (s.currentClass||"").trim().toUpperCase() === clsName.trim().toUpperCase();
                         const isOption = clsId && (s.assignedGroups||[]).some(gId => String(gId) === clsId);
-                        return (isMain || isOption) && (initialData.assignedStudents||[]).includes(s._id);
+                        return (isMain || isOption) && (formData.assignedStudents||[]).includes(s._id);
                     }).map(s => s._id);
-                    newDist[clsName] = { chapterId: initialData.chapterId, studentIds: classStudentIds };
+                    newDist[clsName] = { chapterId: formData.chapterId, studentIds: classStudentIds };
                 });
                 setDistribution(newDist);
-                if (targets.length > 0) setViewingClass(targets[0]);
-            } else if (classFilter) {
-                setViewingClass(classFilter);
-                const defId = StudioUtils.findDefaultChapterId([classFilter], chapters, user, targetSection, cls);
-                setDistribution({ [classFilter]: { chapterId: defId, studentIds: [] } });
+                if (targets.length > 0 && !viewingClass) setViewingClass(targets[0]);
             }
-        } catch(e) { console.error("GameStudio Load Error:", e); }
+        } catch(e) { console.error("Load Error", e); }
         setLoading(false);
     };
 
-    useEffect(() => { loadData(); }, [classFilter]);
+    useEffect(() => { loadData(); }, []);
 
     const handleInput = (field, value) => setFormData(p => ({ ...p, [field]: value }));
-    const handleSelectQuestion = (index) => setActiveQIndex(index);
-    const handleAddQuestion = () => { setFormData(p => ({ ...p, questions: [...p.questions, { q: `Nouvelle question ${p.questions.length + 1}`, options: ['', '', '', ''], a: 0 }] })); setActiveQIndex(formData.questions.length); };
-    const updateQuestion = (field, value, optionIndex = null) => { setFormData(p => { const nextQuestions = [...p.questions]; const currentQ = { ...nextQuestions[activeQIndex] }; if (field === 'q' || field === 'a') { currentQ[field] = value; } else if (field === 'options' && optionIndex !== null) { const nextOptions = [...currentQ.options]; nextOptions[optionIndex] = value; currentQ.options = nextOptions; } nextQuestions[activeQIndex] = currentQ; return { ...p, questions: nextQuestions }; }); };
-    const handleGenerateAI = async () => { if (!aiTopic) return alert("Entrez un sujet !"); setAiGenerating(true); try { const result = await api.post('/games/generate', { topic: aiTopic, count: 5 }); const cleaned = Array.isArray(result) ? result : []; if (cleaned.length === 0) { alert("Échec génération."); setAiGenerating(false); return; } setFormData(p => ({ ...p, questions: [...p.questions, ...cleaned.filter(q => q.q && q.options && q.options.length === 4 && q.a !== undefined)] })); setActiveQIndex(formData.questions.length); } catch(e) { alert("Erreur IA."); } setAiGenerating(false); };
+    const handleSelectQuestion = (lIdx, qIdx) => { setActiveLevelIdx(lIdx); setActiveQIdx(qIdx); };
+    
+    // --- GESTION NIVEAUX ---
+    const handleAddLevel = () => {
+        setFormData(p => ({ 
+            ...p, 
+            levels: [...p.levels, { name: `Niveau ${p.levels.length + 1}`, questions: [], intro: { sheetUrl: "", videoUrl: "" } }] 
+        }));
+        setActiveLevelIdx(formData.levels.length);
+        setActiveQIdx(0);
+    };
+
+    const handleDeleteLevel = (e, lIdx) => {
+        e.stopPropagation();
+        if(!confirm("Supprimer ce niveau ?")) return;
+        setFormData(p => {
+            let newLevels = p.levels.filter((_, i) => i !== lIdx);
+            if (newLevels.length === 0) newLevels = [{ name: "Niveau 1", questions: [], intro: {} }];
+            return { ...p, levels: newLevels };
+        });
+        setActiveLevelIdx(0); setActiveQIdx(0);
+    };
+
+    // --- GESTION QUESTIONS ---
+    const handleAddQuestion = () => {
+        setFormData(p => {
+            const newLevels = [...p.levels];
+            newLevels[activeLevelIdx].questions.push({ q: 'Nouvelle question', options: ['', '', '', ''], a: 0 });
+            return { ...p, levels: newLevels };
+        });
+        setTimeout(() => setActiveQIdx(formData.levels[activeLevelIdx].questions.length), 0);
+    };
+
+    const handleDeleteQuestion = (e, lIdx, qIdx) => {
+        e.stopPropagation();
+        if(!confirm("Supprimer ?")) return;
+        setFormData(p => {
+            const newLevels = [...p.levels];
+            newLevels[lIdx].questions = newLevels[lIdx].questions.filter((_, i) => i !== qIdx);
+            return { ...p, levels: newLevels };
+        });
+        if(activeQIdx >= qIdx) setActiveQIdx(Math.max(0, activeQIdx - 1));
+        setSelectedForMove(prev => prev.filter(s => !(s.lIdx === lIdx && s.qIdx === qIdx)));
+    };
+
+    const updateQuestion = (field, value, optionIndex = null) => { 
+        setFormData(p => { 
+            const newLevels = [...p.levels]; 
+            if(!newLevels[activeLevelIdx] || !newLevels[activeLevelIdx].questions[activeQIdx]) return p;
+            const currentQ = { ...newLevels[activeLevelIdx].questions[activeQIdx] }; 
+            if (field === 'q' || field === 'a') { currentQ[field] = value; } 
+            else if (field === 'options' && optionIndex !== null) { 
+                const nextOptions = [...currentQ.options]; 
+                nextOptions[optionIndex] = value; 
+                currentQ.options = nextOptions; 
+            } 
+            newLevels[activeLevelIdx].questions[activeQIdx] = currentQ; 
+            return { ...p, levels: newLevels }; 
+        }); 
+    };
+
+    // --- MOVE ---
+    const handleToggleSelect = (e, lIdx, qIdx) => { e.stopPropagation(); const exists = selectedForMove.some(s => s.lIdx === lIdx && s.qIdx === qIdx); if (exists) setSelectedForMove(prev => prev.filter(s => !(s.lIdx === lIdx && s.qIdx === qIdx))); else setSelectedForMove(prev => [...prev, { lIdx, qIdx }]); };
+    const isQuestionSelected = (lIdx, qIdx) => selectedForMove.some(s => s.lIdx === lIdx && s.qIdx === qIdx);
+    const handleMoveQuestions = () => { if (moveTargetLevel === "" || isNaN(parseInt(moveTargetLevel))) return; const targetIdx = parseInt(moveTargetLevel); setFormData(prev => { const newLevels = prev.levels.map(l => ({ ...l, questions: [...l.questions] })); const questionsToMove = []; newLevels.forEach((lvl, lIdx) => { lvl.questions.forEach((q, qIdx) => { if (isQuestionSelected(lIdx, qIdx)) questionsToMove.push(q); }); }); newLevels.forEach((lvl, lIdx) => { lvl.questions = lvl.questions.filter((_, qIdx) => !isQuestionSelected(lIdx, qIdx)); }); newLevels[targetIdx].questions.push(...questionsToMove); return { ...prev, levels: newLevels }; }); setSelectedForMove([]); setActiveLevelIdx(targetIdx); setActiveQIdx(0); };
+
+    // --- ASSETS ---
+    const handleUploadAsset = async (e) => {
+        const file = e.target.files[0];
+        if (!file || uploadTarget === null) return;
+        setLoading(true);
+        const fd = new FormData(); fd.append('file', file);
+        try {
+            const res = await fetch('/api/games/upload-asset', { method: 'POST', body: fd });
+            const data = await res.json();
+            if (data.url) {
+                setFormData(prev => {
+                    const next = { ...prev };
+                    if (uploadTarget === -1) next.globalIntro = { ...next.globalIntro, sheetUrl: data.url };
+                    else next.levels[uploadTarget].intro = { ...next.levels[uploadTarget].intro, sheetUrl: data.url };
+                    return next;
+                });
+            }
+        } catch(err) { alert("Erreur upload"); }
+        setLoading(false); e.target.value = null;
+    };
+    const handleRemoveAsset = (idx) => { setFormData(prev => { const next = { ...prev }; if (idx === -1) next.globalIntro.sheetUrl = ""; else next.levels[idx].intro.sheetUrl = ""; return next; }); };
+    const handleUpdateAssetVideo = (idx, url) => { setFormData(prev => { const next = { ...prev }; if (idx === -1) next.globalIntro.videoUrl = url; else next.levels[idx].intro.videoUrl = url; return next; }); };
+    const handleOpenSheet = (url) => { window.open(url, '_blank'); };
+
+    // --- IA ---
+    const handlePaste = (e) => { const items = e.clipboardData.items; for (let i = 0; i < items.length; i++) { if (items[i].kind === 'file') { setAiFile(items[i].getAsFile()); e.preventDefault(); return; } } };
+    const handleDrop = (e) => { e.preventDefault(); if (e.dataTransfer.files[0]) setAiFile(e.dataTransfer.files[0]); };
+    const handleFileSelect = (e) => { if (e.target.files[0]) setAiFile(e.target.files[0]); };
+    const handleRemoveFile = (e) => { e.stopPropagation(); setAiFile(null); if(fileInputRef.current) fileInputRef.current.value = ""; };
+
+    const handleGenerateAI = async (mode = 'manual') => {
+        setAiGenerating(true);
+        try {
+            const fd = new FormData();
+            
+            if (mode === 'sheet') {
+                const sheetUrl = currentLevel.intro?.sheetUrl;
+                if (!sheetUrl) return alert("Pas de fiche dans ce niveau !");
+                fd.append('sheetUrl', sheetUrl);
+            } 
+            else {
+                if (!aiTopic) {
+                    setAiGenerating(false);
+                    return alert("Entrez un sujet !");
+                }
+            }
+            
+            fd.append('topic', aiTopic || (mode === 'sheet' ? "Génère un quiz d'après cette fiche" : "Quiz"));
+            fd.append('count', 5);
+
+            const res = await fetch('/api/games/generate-content', { method: 'POST', body: fd });
+            const cleaned = await res.json();
+
+            if (Array.isArray(cleaned) && cleaned.length > 0) {
+                setFormData(p => {
+                    const newLevels = [...p.levels];
+                    // On remplace les questions vides si c'est la seule
+                    if (newLevels[activeLevelIdx].questions.length === 1 && newLevels[activeLevelIdx].questions[0].q === 'Nouvelle question') {
+                        newLevels[activeLevelIdx].questions = cleaned;
+                    } else {
+                        newLevels[activeLevelIdx].questions = [...newLevels[activeLevelIdx].questions, ...cleaned];
+                    }
+                    return { ...p, levels: newLevels };
+                });
+                setActiveQIdx(0);
+                setAiTopic("");
+            } else { alert("L'IA n'a rien généré."); }
+        } catch(e) { alert("Erreur IA"); } 
+        setAiGenerating(false); 
+    };
+
+    // --- RENDU ---
+    const currentLevel = formData.levels[activeLevelIdx];
+    const safeQList = currentLevel ? currentLevel.questions : [];
+    const currentQ = safeQList[activeQIdx];
+    const hasLevelSheet = !!currentLevel?.intro?.sheetUrl;
+    const totalQuestionsCount = formData.levels.reduce((acc, l) => acc + l.questions.length, 0);
 
     const targetLevel = allClasses.find(c => c.name === viewingClass)?.level;
     const myClassesIds = (user.assignedClasses || []).map(c => String(c._id || c));
     const availableClasses = allClasses.filter(c => { if (targetLevel) if (String(c.level) !== String(targetLevel)) return false; if (user.isDeveloper || user.role === 'admin') return true; return myClassesIds.includes(String(c._id)); }).sort((a,b) => a.name.localeCompare(b.name));
-    
-    // ✅ FIX V18:50 : Utilisation de StudioUtils via l'import
     const rawStudents = StudioUtils.getStudentsForViewingClass(viewingClass, allStudents, allClasses);
     const studentsToDisplay = rawStudents.filter(s => `${s.firstName} ${s.lastName}`.toLowerCase().includes(studentSearch.toLowerCase()));
     
     const handleToggleStudent = (sId) => { setDistribution(prev => { const next = { ...prev }; const cfg = next[viewingClass]; if (!cfg) { const defId = StudioUtils.findDefaultChapterId([viewingClass], chapters, user, targetSection, allClasses); next[viewingClass] = { chapterId: defId, studentIds: [sId] }; } else { let newIds = cfg.studentIds.length === 0 ? rawStudents.map(s => s._id).filter(id => id !== sId) : (cfg.studentIds.includes(sId) ? cfg.studentIds.filter(id => id !== sId) : [...cfg.studentIds, sId]); if (newIds.length === 0) delete next[viewingClass]; else if (newIds.length === rawStudents.length) next[viewingClass] = { ...cfg, studentIds: [] }; else next[viewingClass] = { ...cfg, studentIds: newIds }; } return next; }); };
     const toggleAllStudents = () => { setDistribution(prev => { const next = { ...prev }; if (next[viewingClass]) delete next[viewingClass]; else { const defId = StudioUtils.findDefaultChapterId([viewingClass], chapters, user, targetSection, allClasses); next[viewingClass] = { chapterId: defId, studentIds: [] }; } return next; }); };
     
+    const isClassSelected = !!distribution[viewingClass];
+    const distCfg = distribution[viewingClass];
+    const selectedClassesList = Object.keys(distribution);
+    const availableChapters = StudioUtils.getChaptersForContext(selectedClassesList.length > 1 ? selectedClassesList : [viewingClass], chapters, user, targetSection, allClasses);
+
     const handleSave = async () => {
         const targets = Object.keys(distribution);
         if (!formData.title || targets.length === 0) return alert("❌ Titre et Classe requis !");
+        if (totalQuestionsCount === 0) return alert("Ajoutez au moins une question !");
         setLoading(true);
         try {
             for (const cls of targets) {
@@ -6019,60 +6275,112 @@ export default function GameStudio({ initialData, chapters, classFilter, user, t
         } catch(e) { alert("Erreur sauvegarde."); }
         setLoading(false);
     };
-    
-    const currentQ = formData.questions[activeQIndex];
-    const distCfg = distribution[viewingClass];
-    const isSelected = !!distribution[viewingClass];
-    const selectedClassesList = Object.keys(distribution);
-    
-    // ✅ FIX V18:50 : getChaptersForContext via StudioUtils
-    const availableChapters = StudioUtils.getChaptersForContext(selectedClassesList.length > 1 ? selectedClassesList : [viewingClass], chapters, user, targetSection, allClasses);
 
     return (
         <div className="v84-game-container">
+            <input type="file" ref={assetInputRef} className="hidden" accept="image/*,application/pdf" onChange={handleUploadAsset} />
+
             <div className="v84-game-header">
                 <div className="flex items-center"><span className="v84-game-icon">🎮</span><input className="v84-game-title-input" value={formData.title} onChange={e => handleInput('title', e.target.value)} placeholder="TITRE DU QUIZ..." disabled={loading} /></div>
                 <button onClick={onClose} className="v84-close-btn">✕</button>
             </div>
+            
             <div className="v84-game-body">
-                <div className="v84-q-list-sidebar custom-scrollbar"><span className="v84-sidebar-label">Questions ({formData.questions.length})</span>{formData.questions.map((q, index) => (<div key={index} className={`v84-q-item ${activeQIndex === index ? 'active' : ''}`} onClick={() => handleSelectQuestion(index)}><div className="v84-q-preview">Q{index + 1}: {q.q.substring(0, 30)}...</div><div className="v84-q-sub">Rép: {q.options[q.a]}</div></div>))}<button className="v84-add-q-btn" onClick={handleAddQuestion} disabled={loading}>+ AJOUTER</button></div>
-                <div className="v84-game-editor custom-scrollbar">
-                    <div className="v84-ai-widget"><span className="text-3xl">🤖</span><input className="v84-ai-input" placeholder="Sujet..." value={aiTopic} onChange={e => setAiTopic(e.target.value)} disabled={aiGenerating || loading} /><button className="v84-ai-btn" onClick={handleGenerateAI} disabled={aiGenerating || loading}>{aiGenerating ? '...' : 'GÉNÉRER'}</button></div>
-                    {currentQ && (<div className="v84-q-card"><span className="v84-field-label">Question {activeQIndex + 1}</span><textarea className="v84-q-input" value={currentQ.q} onChange={e => updateQuestion('q', e.target.value)} rows="3" disabled={loading}/><div className="v84-answers-grid">{currentQ.options.map((opt, index) => (<div key={index} className={`v84-ans-row ${currentQ.a === index ? 'correct' : ''}`}><div className="v84-correct-radio" onClick={() => updateQuestion('a', index)}>{currentQ.a === index ? '✓' : ''}</div><input className="v84-ans-input" placeholder={`Opt ${index + 1}`} value={opt} onChange={e => updateQuestion('options', e.target.value, index)} disabled={loading}/></div>))}</div></div>)}
+                {/* SIDEBAR GAUCHE */}
+                <div className="v84-q-list-sidebar custom-scrollbar">
+                    {formData.levels.map((lvl, lIdx) => (
+                        <div key={lIdx} className="v84-level-block">
+                            <div className={`v84-level-header ${activeLevelIdx === lIdx ? 'active-lvl' : ''}`} onClick={() => { setActiveLevelIdx(lIdx); setActiveQIdx(0); }}>
+                                {lvl.name} ({lvl.questions.length})
+                                {formData.levels.length > 1 && <button className="v84-del-btn" onClick={(e) => handleDeleteLevel(e, lIdx)}>✕</button>}
+                            </div>
+                            
+                            {activeLevelIdx === lIdx && (
+                                <div className="v84-q-list">
+                                    {lvl.questions.map((q, qIdx) => (
+                                        <div key={qIdx} className={`v84-q-item ${activeQIdx === qIdx ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); handleSelectQuestion(lIdx, qIdx); }}>
+                                            <input type="checkbox" className="v84-q-checkbox" checked={isQuestionSelected(lIdx, qIdx)} onChange={(e) => handleToggleSelect(e, lIdx, qIdx)} onClick={e => e.stopPropagation()} />
+                                            {/* PROTECTION */}
+                                            <div className="v84-q-preview">Q{qIdx + 1}: {(q.q || "Question vide").substring(0, 30)}...</div>
+                                            <button className="v84-del-btn" onClick={(e) => handleDeleteQuestion(e, lIdx, qIdx)}>✕</button>
+                                        </div>
+                                    ))}
+                                    <button className="v84-add-q-btn" onClick={handleAddQuestion} disabled={loading}>+ QUESTION</button>
+                                </div>
+                            )}
+                        </div>
+                    ))}
+                    {selectedForMove.length > 0 && (
+                        <div className="v84-move-box">
+                            <div className="v84-move-title">{selectedForMove.length} Sélectionné(s)</div>
+                            <div className="v84-move-actions">
+                                <select className="v84-move-select" value={moveTargetLevel} onChange={e => setMoveTargetLevel(e.target.value)}><option value="">Vers niveau...</option>{formData.levels.map((l, idx) => <option key={idx} value={idx}>{l.name}</option>)}</select>
+                                <button className="v84-move-go-btn" onClick={handleMoveQuestions}>GO</button>
+                            </div>
+                        </div>
+                    )}
+                    <button className="v84-add-level-btn" onClick={handleAddLevel}>+ NOUVEAU NIVEAU</button>
                 </div>
+
+                {/* EDITOR CENTER */}
+                <div className="v84-game-editor custom-scrollbar">
+                    {/* RESSOURCES GLOBALES */}
+                    {activeLevelIdx === 0 && activeQIdx === 0 && (
+                        <div className="v84-resources-global">
+                            <div className="v84-res-title global"><span>🌍</span> RESSOURCES GLOBALES (INTRO JEU)</div>
+                            <div className="v84-res-row">
+                                {formData.globalIntro.sheetUrl ? (
+                                    <div className="v84-res-badge" onClick={() => handleOpenSheet(formData.globalIntro.sheetUrl)}>📄 FICHE PRÊTE <span className="v84-res-remove" onClick={(e) => { e.stopPropagation(); handleRemoveAsset(-1); }}>✕</span></div>
+                                ) : ( <button className="v84-res-btn upload" onClick={() => { setUploadTarget(-1); assetInputRef.current.click(); }}>📤 AJOUTER FICHE</button> )}
+                                <input className="v84-res-input" placeholder="Lien Vidéo..." value={formData.globalIntro.videoUrl} onChange={e => handleUpdateAssetVideo(-1, e.target.value)} />
+                            </div>
+                        </div>
+                    )}
+                    {/* RESSOURCES NIVEAU */}
+                    {currentLevel && (
+                        <div className="v84-resources-level">
+                            <div className="v84-res-title local"><span>📍</span> RESSOURCES {currentLevel.name}</div>
+                            <div className="v84-res-row">
+                                {currentLevel.intro?.sheetUrl ? (
+                                    <div className="v84-res-badge" onClick={() => handleOpenSheet(currentLevel.intro.sheetUrl)}>📄 FICHE NIVEAU <span className="v84-res-remove" onClick={(e) => { e.stopPropagation(); handleRemoveAsset(activeLevelIdx); }}>✕</span></div>
+                                ) : ( <button className="v84-res-btn upload" onClick={() => { setUploadTarget(activeLevelIdx); assetInputRef.current.click(); }}>📤 FICHE NIVEAU</button> )}
+                                <input className="v84-res-input" placeholder="Vidéo..." value={currentLevel.intro?.videoUrl || ""} onChange={e => handleUpdateAssetVideo(activeLevelIdx, e.target.value)} />
+                            </div>
+                        </div>
+                    )}
+                    {/* IA WIDGET */}
+                    <div className="v84-ai-widget">
+                        <div className="v84-ai-row"><span className="text-2xl">🤖</span><input className="v84-ai-input" placeholder="Sujet / Consigne IA..." value={aiTopic} onChange={e => setAiTopic(e.target.value)} /></div>
+                        {hasLevelSheet && <button className="v84-gen-btn mb-2" onClick={() => handleGenerateAI('sheet')} disabled={aiGenerating}>{aiGenerating ? 'ANALYSE...' : '📄 GÉNÉRER D\'APRÈS LA FICHE DU NIVEAU'}</button>}
+                        <button className={`v84-gen-btn ${hasLevelSheet ? 'bg-slate-400' : ''}`} onClick={() => handleGenerateAI('manual')} disabled={aiGenerating}>{aiGenerating ? '...' : (hasLevelSheet ? 'OU GÉNÉRER VIA LE SUJET' : 'GÉNÉRER VIA CE SUJET')}</button>
+                    </div>
+                    {/* EDITOR */}
+                    {currentQ ? (
+                        <div className="v84-q-card">
+                            <span className="text-xs font-black text-slate-400 uppercase mb-4 block">{currentLevel.name} - Question {activeQIdx + 1}</span>
+                            <textarea className="v84-q-input" value={currentQ.q || ""} onChange={e => updateQuestion('q', e.target.value)} rows="3" disabled={loading}/>
+                            <div className="v84-answers-grid">{(currentQ.options || ['','','','']).map((opt, index) => (<div key={index} className={`v84-ans-row ${currentQ.a === index ? 'correct' : ''}`}><div className="v84-correct-radio" onClick={() => updateQuestion('a', index)}>{currentQ.a === index ? '✓' : ''}</div><input className="v84-ans-input" placeholder={`Opt ${index + 1}`} value={opt} onChange={e => updateQuestion('options', e.target.value, index)} disabled={loading}/></div>))}</div>
+                        </div>
+                    ) : <div className="flex items-center justify-center h-full text-slate-300 font-bold uppercase">Sélectionnez une question</div>}
+                </div>
+
+                {/* DISTRIBUTION */}
                 <div className="v84-dist-sidebar custom-scrollbar">
-                    <span className="v84-sidebar-label">Distribution</span>
                     <div className="mb-4 flex flex-wrap gap-2">{availableClasses.map(c => (<button key={c._id} onClick={() => { setViewingClass(c.name); setStudentSearch(""); }} className={`v84-tab-btn-game ${distribution[c.name] ? 'active' : 'inactive'} ${viewingClass === c.name ? 'border-2 border-purple-700' : ''}`} style={c.type === 'GROUP' ? { color: '#f59e0b', borderColor: '#fcd34d' } : {}}>{c.name}</button>))}</div>
                     {viewingClass && (
                         <div className="flex-1 flex flex-col bg-slate-50 rounded-2xl overflow-hidden border border-slate-200 p-4">
-                            <div className="flex justify-between items-center mb-4 cursor-pointer" onClick={toggleAllStudents}><span className="font-black text-slate-700 uppercase">{viewingClass}</span><div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${isSelected ? 'bg-purple-600 border-purple-600' : 'border-slate-300'}`}>{isSelected && <span className="text-white text-xs">✓</span>}</div></div>
-                            
+                            <div className="flex justify-between items-center mb-4 cursor-pointer" onClick={toggleAllStudents}><span className="font-black text-slate-700 uppercase">{viewingClass}</span><div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${isClassSelected ? 'bg-purple-600 border-purple-600' : 'border-slate-300'}`}>{isClassSelected && <span className="text-white text-xs">✓</span>}</div></div>
                             <div className="p-3 bg-white rounded-xl border border-slate-200 mb-4">
                                 <label className="text-[9px] font-black text-slate-400 uppercase mb-1 block">Dossier :</label>
-                                <select 
-                                    className="w-full p-2 rounded-lg text-xs font-bold border border-slate-100 outline-none bg-slate-50" 
-                                    value={distCfg?.chapterId || StudioUtils.findDefaultChapterId([viewingClass], chapters, user, targetSection, allClasses)} 
-                                    onChange={(e) => setDistribution(p => ({ ...p, [viewingClass]: { ...p[viewingClass], chapterId: e.target.value } }))} 
-                                    disabled={loading}
-                                >
+                                <select className="w-full p-2 rounded-lg text-xs font-bold border border-slate-100 outline-none bg-slate-50" value={distCfg?.chapterId || StudioUtils.findDefaultChapterId([viewingClass], chapters, user, targetSection, allClasses)} onChange={(e) => setDistribution(p => ({ ...p, [viewingClass]: { ...p[viewingClass], chapterId: e.target.value } }))} disabled={loading}>
                                     <option value="">-- CHOISIR --</option>
                                     {availableChapters.map(c => <option key={c._id} value={c._id}>{c.title}</option>)}
                                 </select>
                             </div>
-                            
-                            <div className="relative mb-2">
-                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px]">🔎</span>
-                                <input 
-                                    className="w-full pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-[10px] font-bold outline-none focus:border-purple-400" 
-                                    placeholder="Chercher..." 
-                                    value={studentSearch} 
-                                    onChange={e => setStudentSearch(e.target.value)} 
-                                />
-                            </div>
-
+                            <div className="relative mb-2"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px]">🔎</span><input className="w-full pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-[10px] font-bold outline-none focus:border-purple-400" placeholder="Chercher..." value={studentSearch} onChange={e => setStudentSearch(e.target.value)} /></div>
                             <div className="flex-1 overflow-y-auto custom-scrollbar">
                                 {studentsToDisplay.map(s => { 
-                                    const checked = isSelected && (distribution[viewingClass].studentIds.length === 0 || distribution[viewingClass].studentIds.includes(s._id));
+                                    const checked = isClassSelected && (distribution[viewingClass].studentIds.length === 0 || distribution[viewingClass].studentIds.includes(s._id));
                                     return (<div key={s._id} onClick={() => handleToggleStudent(s._id)} className={`flex items-center gap-3 p-2 rounded cursor-pointer transition-colors ${checked ? 'bg-purple-50 text-purple-700' : 'hover:bg-slate-100 text-slate-400'}`}>
                                         <div className={`w-4 h-4 rounded border shrink-0 ${checked ? 'bg-purple-600 border-purple-600' : 'border-slate-300'}`}></div>
                                         <span className="text-[11px] font-bold truncate">{s.lastName} {s.firstName}</span>
@@ -6081,7 +6389,7 @@ export default function GameStudio({ initialData, chapters, classFilter, user, t
                             </div>
                         </div>
                     )}
-                    <button className="v84-game-publish-btn" onClick={handleSave} disabled={loading || formData.questions.length === 0}>{loading ? '...' : (initialData ? 'MODIFIER' : 'PUBLIER 🚀')}</button>
+                    <button className="v84-game-publish-btn" onClick={handleSave} disabled={loading || totalQuestionsCount === 0}>{loading ? '...' : (initialData ? 'MODIFIER' : 'PUBLIER 🚀')}</button>
                 </div>
             </div>
         </div>
@@ -9369,35 +9677,39 @@ module.exports = AdminExpert;
 const mongoose = require('mongoose');
 const DriveEngine = require('../../../core/drive.engine');
 
-/**
- * 🧠 EXPERT ADMIN - VERSION 82 (CLEANED)
- * Fonctions de maintenance et diagnostic système.
- */
 const AdminExpert = {
-    // Vérification de la connexion Google Drive
+    // Vérification Drive
     checkDriveStatus: async () => {
         try {
             return await DriveEngine.testAuth();
         } catch (e) {
-            return { ok: false, error: e.message };
+            // Si le core engine n'est pas init, on tente une réponse soft
+            const hasToken = !!process.env.GOOGLE_REFRESH_TOKEN;
+            return { ok: hasToken, email: hasToken ? "Connecté (Drive)" : "Non configuré" };
         }
     },
 
-    // Dump complet de la BDD pour le mouchard
+    // Dump complet pour le visualiseur BDD
     getFullDump: async () => {
         const models = [
             'AcademicYear', 'Admin', 'Classroom', 'Subject', 
             'Teacher', 'Student', 'Enrollment', 'Chapter', 
-            'Homework', 'Submission', 'StudioProject'
+            'Homework', 'Submission', 'GameLevel', 'GameProgress', 
+            'ScanSession', 'StudioProject'
         ];
+        
         const dump = {};
+        
         for (const m of models) {
             try {
                 if (mongoose.models[m]) {
+                    // On récupère le nom réel de la collection en minuscules
                     const collectionName = mongoose.models[m].collection.name;
-                    dump[collectionName] = await mongoose.model(m).find({}).limit(500).lean();
+                    dump[collectionName] = await mongoose.model(m).find({}).limit(200).lean();
                 }
-            } catch (e) { console.error(`Dump fail for ${m}`); }
+            } catch (e) { 
+                console.error(`Dump fail for ${m}: ${e.message}`); 
+            }
         }
         return dump;
     }
@@ -11552,35 +11864,53 @@ module.exports = mongoose.models.Game || mongoose.model('Game', GameSchema);
 [[[£ FILE: server/models/GameLevel.js £]]]
 const mongoose = require('mongoose');
 
-/**
- * 🎮 MODÈLE GAME LEVEL V2 (Harmonisé avec Homework)
- * Ajout des champs de ciblage (Classes, Élèves, Prof) pour la distribution.
- */
+const QuestionSchema = new mongoose.Schema({
+    q: String,
+    options: [String],
+    a: Number
+}, { _id: false });
+
+const EducationalAssetSchema = new mongoose.Schema({
+    sheetUrl: { type: String, default: "" }, 
+    videoUrl: { type: String, default: "" }
+}, { _id: false });
+
+const LevelStructureSchema = new mongoose.Schema({
+    name: { type: String, default: "Niveau 1" },
+    intro: { type: EducationalAssetSchema, default: () => ({}) },
+    questions: [QuestionSchema]
+}, { _id: false });
+
 const GameLevelSchema = new mongoose.Schema({
     title: { type: String, required: true },
-    
-    // Structure & Propriété
     chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter' },
     teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher' },
-
-    // Ciblage (Distribution)
-    classroom: String, // Gardé pour compatibilité legacy
+    
+    classroom: String,
     targetClassrooms: [String], 
     assignedStudents: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Student' }],
     isAllClass: { type: Boolean, default: true },
 
-    // Contenu
-    questions: [{
-        q: String,          // Énoncé
-        options: [String],  // [Rep A, Rep B, Rep C, Rep D]
-        a: Number           // Index bonne réponse (0-3)
-    }],
+    levels: { type: [LevelStructureSchema], default: [] },
+    
+    questions: { type: [QuestionSchema], default: [] }, // Legacy
+
+    globalIntro: { type: EducationalAssetSchema, default: () => ({}) },
 
     isArchived: { type: Boolean, default: false },
     createdAt: { type: Date, default: Date.now }
-}, { collection: 'gamelevels' });
+}, { 
+    collection: 'gamelevels',
+    strict: false, // 🚀 FORCE L'ENREGISTREMENT DE TOUT
+    minimize: false // GARDE LES OBJETS VIDES SI BESOIN
+});
 
-module.exports = mongoose.models.GameLevel || mongoose.model('GameLevel', GameLevelSchema);
+// Hack pour forcer la recompilation du modèle si le fichier change
+if (mongoose.models.GameLevel) {
+    delete mongoose.models.GameLevel;
+}
+
+module.exports = mongoose.model('GameLevel', GameLevelSchema);
 
 [[[£ END: server/models/GameLevel.js £]]]
 
@@ -11877,57 +12207,47 @@ module.exports = mongoose.models.TeacherStyle || mongoose.model('TeacherStyle', 
 [[[£ END: server/models/TeacherStyle.js £]]]
 
 [[[£ FILE: server/prof/admin/admin.prof.js £]]]
-// @signatures: ProfAdminRouter, listAll, driveCheck
+// @signatures: ProfAdminRouter, listAll, driveCheck, databaseDump
 const express = require('express');
 const router = express.Router();
-const { Classroom, Student, Teacher, Admin, Subject } = require('../models/prof.models');
+const mongoose = require('mongoose');
+const AdminExpert = require('../../domains/admin/experts/admin.expert');
 
-/**
- * 🛡️ BLOC ADMIN PROF (/api/admin)
- * Gère l'infrastructure et les vérifications système.
- */
-
-// ✅ RÉPARATION : Route de vérification du Drive (appelée par ProfHeader.jsx)
+// 1. VÉRIFICATION DRIVE (Header)
 router.get('/drive-check', async (req, res) => {
+    const status = await AdminExpert.checkDriveStatus();
+    res.json(status);
+});
+
+// 2. MOUCHARD BDD (Le bouton qui plantait)
+router.get('/database-dump', async (req, res) => {
     try {
-        const hasToken = !!process.env.GOOGLE_REFRESH_TOKEN;
-        const hasClientId = !!process.env.GOOGLE_CLIENT_ID;
-        
-        res.json({ 
-            ok: hasToken && hasClientId, 
-            email: hasToken ? "Connecté (Drive Pro)" : "Non configuré" 
-        });
+        const dump = await AdminExpert.getFullDump();
+        res.json(dump);
     } catch (e) {
-        res.status(500).json({ ok: false, email: '' });
+        console.error("Dump Error:", e);
+        res.status(500).json({ error: e.message });
     }
 });
 
+// 3. LISTES SIMPLES
 router.get('/classrooms', async (req, res) => {
-    try {
-        const list = await Classroom.find({}).lean();
-        res.json(list.sort((a,b) => (a.name || "").localeCompare(b.name || "")));
-    } catch (e) { res.status(500).json({ error: "DB FAIL" }); }
+    res.json(await mongoose.model('Classroom').find({}).sort({ name: 1 }).lean());
 });
 
 router.get('/students', async (req, res) => {
-    try {
-        const list = await Student.find({}).sort({ lastName: 1 }).lean();
-        res.json(list);
-    } catch (e) { res.status(500).json({ error: "DB FAIL" }); }
+    res.json(await mongoose.model('Student').find({}).sort({ lastName: 1 }).lean());
 });
 
 router.get('/teachers/:id', async (req, res) => {
-    try {
-        const user = await Teacher.findById(req.params.id).lean() || await Admin.findById(req.params.id).lean();
-        res.json(user || {});
-    } catch (e) { res.status(500).json({ error: "DB FAIL" }); }
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) return res.json({});
+    const user = await mongoose.model('Teacher').findById(id).lean() || await mongoose.model('Admin').findById(id).lean();
+    res.json(user || {});
 });
 
 router.get('/subjects', async (req, res) => {
-    try {
-        const list = await Subject.find({}).sort({ name: 1 }).lean();
-        res.json(list);
-    } catch (e) { res.json([]); }
+    res.json(await mongoose.model('Subject').find({}).sort({ name: 1 }).lean());
 });
 
 module.exports = router;
@@ -12146,95 +12466,106 @@ module.exports = router;
 [[[£ END: server/prof/classroom/classroom.prof.js £]]]
 
 [[[£ FILE: server/prof/core/drive.prof.js £]]]
-// @signatures: ProfDrive, getAuth, getOrCreateFolder, uploadFile, getFileStream, getAuthUrl, getTokenFromCode
+// @signatures: ProfDrive, getAuthUrl, getFileStream, getOrCreateFolder, getTokenFromCode, init, uploadFile
 const { google } = require('googleapis');
 const fs = require('fs');
+
+console.log("☁️ [DRIVE-CORE] Initialisation du module...");
 
 let oauth2Client = null;
 
 const ProfDrive = {
     init: () => {
-        const clientId = (process.env.GOOGLE_CLIENT_ID || "").trim();
-        const clientSecret = (process.env.GOOGLE_CLIENT_SECRET || "").trim();
-        const redirectUri = "http://localhost:3000/api/auth/google/callback";
+        try {
+            console.log("   ... Lecture .env");
+            const clientId = (process.env.GOOGLE_CLIENT_ID || "").trim();
+            const clientSecret = (process.env.GOOGLE_CLIENT_SECRET || "").trim();
+            const redirectUri = "http://localhost:3000/api/auth/google/callback";
 
-        if (!clientId || !clientSecret) {
-            console.error("❌ [DRIVE-CORE] Client ID ou Secret manquant dans .env");
-            return;
-        }
+            if (!clientId || !clientSecret) {
+                console.error("   ❌ [DRIVE] CREDENTIALS MANQUANTS (GOOGLE_CLIENT_ID/SECRET)");
+                return;
+            }
 
-        oauth2Client = new google.auth.OAuth2(clientId, clientSecret, redirectUri);
-        
-        if (process.env.GOOGLE_REFRESH_TOKEN) {
-            oauth2Client.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN.trim() });
-            console.log("✅ [DRIVE-CORE] Client initialisé avec Refresh Token.");
+            oauth2Client = new google.auth.OAuth2(clientId, clientSecret, redirectUri);
+            console.log("   ✅ Client OAuth créé.");
+            
+            if (process.env.GOOGLE_REFRESH_TOKEN) {
+                oauth2Client.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN.trim() });
+                console.log("   ✅ Refresh Token chargé.");
+            } else {
+                console.warn("   ⚠️ Pas de Refresh Token.");
+            }
+        } catch (e) {
+            console.error("   ❌ CRASH INIT DRIVE:", e.message);
         }
     },
 
     getAuthUrl: () => {
-        if (!oauth2Client) throw new Error("Client OAuth non initialisé. Vérifiez votre .env.");
-        
-        const url = oauth2Client.generateAuthUrl({
+        if (!oauth2Client) throw new Error("Client OAuth non initialisé.");
+        return oauth2Client.generateAuthUrl({
             access_type: 'offline',
-            // Utilisation d'un scope plus large pour tester la compatibilité
-            scope: [
-                'https://www.googleapis.com/auth/drive.file',
-                'https://www.googleapis.com/auth/drive.readonly'
-            ],
+            scope: ['https://www.googleapis.com/auth/drive.file', 'https://www.googleapis.com/auth/drive.readonly'],
             prompt: 'consent'
         });
-
-        console.log("================================================");
-        console.log("🔗 URL DE CONNEXION GÉNÉRÉE :");
-        console.log(url);
-        console.log("------------------------------------------------");
-        console.log("👉 Vérifiez que 'redirect_uri' dans l'URL ci-dessus");
-        console.log("   est EXACTEMENT celui déclaré dans Google Cloud.");
-        console.log("================================================");
-        
-        return url;
     },
 
     getTokenFromCode: async (code) => {
-        console.log("⏳ [DRIVE-CORE] Échange du code contre token...");
+        if (!oauth2Client) throw new Error("Client OAuth non initialisé.");
         const { tokens } = await oauth2Client.getToken(code);
         return tokens;
     },
 
     getOrCreateFolder: async (name, parentId = null) => {
-        const drive = google.drive({ version: 'v3', auth: oauth2Client });
-        const cleanName = name.toUpperCase().trim();
-        let q = `name = '${cleanName.replace(/'/g, "\\'")}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
-        if (parentId) q += ` and '${parentId}' in parents`;
-        const res = await drive.files.list({ q, fields: 'files(id)' });
-        if (res.data.files?.length > 0) return res.data.files[0].id;
-        const folder = await drive.files.create({
-            resource: { name: cleanName, mimeType: 'application/vnd.google-apps.folder', parents: parentId ? [parentId] : [] },
-            fields: 'id'
-        });
-        return folder.data.id;
+        if (!oauth2Client) throw new Error("Drive non connecté (Pas d'instance OAuth)");
+        try {
+            const drive = google.drive({ version: 'v3', auth: oauth2Client });
+            const q = `name = '${name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false ${parentId ? `and '${parentId}' in parents` : ''}`;
+            
+            const res = await drive.files.list({ q, fields: 'files(id)' });
+            if (res.data.files.length > 0) return res.data.files[0].id;
+            
+            const folder = await drive.files.create({
+                resource: { name, mimeType: 'application/vnd.google-apps.folder', parents: parentId ? [parentId] : [] },
+                fields: 'id'
+            });
+            return folder.data.id;
+        } catch (e) { 
+            console.error("❌ Drive Folder Error:", e.message);
+            throw e; 
+        }
     },
 
     uploadFile: async (fileName, localPath, parentFolderId) => {
-        const drive = google.drive({ version: 'v3', auth: oauth2Client });
-        const media = { body: fs.createReadStream(localPath) };
-        const file = await drive.files.create({
-            resource: { name: fileName, parents: [parentFolderId] },
-            media: media,
-            fields: 'id'
-        });
-        await drive.permissions.create({ fileId: file.data.id, resource: { role: 'reader', type: 'anyone' } });
-        return { id: file.data.id };
+        if (!oauth2Client) throw new Error("Drive non connecté");
+        try {
+            const drive = google.drive({ version: 'v3', auth: oauth2Client });
+            const file = await drive.files.create({
+                resource: { name: fileName, parents: [parentFolderId] },
+                media: { body: fs.createReadStream(localPath) },
+                fields: 'id'
+            });
+            await drive.permissions.create({ fileId: file.data.id, resource: { role: 'reader', type: 'anyone' } });
+            return { id: file.data.id };
+        } catch (e) {
+            console.error("❌ Drive Upload Error:", e.message);
+            throw e;
+        }
     },
 
     getFileStream: async (fileId) => {
-        const drive = google.drive({ version: 'v3', auth: oauth2Client });
-        const res = await drive.files.get({ fileId, alt: 'media' }, { responseType: 'stream' });
-        return res.data;
+        if (!oauth2Client) throw new Error("Drive non connecté");
+        try {
+            const drive = google.drive({ version: 'v3', auth: oauth2Client });
+            const res = await drive.files.get({ fileId, alt: 'media' }, { responseType: 'stream' });
+            return res.data;
+        } catch (e) {
+            console.error("❌ Drive Stream Error:", e.message);
+            throw e;
+        }
     }
 };
 
-// Auto-init au chargement
 ProfDrive.init();
 module.exports = ProfDrive;
 
@@ -12247,11 +12578,17 @@ const fetch = require('node-fetch');
 const ProfAI = {
     ask: async (prompt, system = "") => {
         const apiKey = process.env.GEMINI_API_KEY;
-        if (!apiKey) return "ERROR_KEY";
+        if (!apiKey) {
+            console.error("❌ [ProfAI] API KEY MANQUANTE");
+            return "ERROR_KEY";
+        }
+        
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 35000);
+        const timeout = setTimeout(() => controller.abort(), 45000); // Timeout étendu à 45s
+
         try {
+            console.log("🤖 [ProfAI] Envoi requête Gemini...");
             const res = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -12259,36 +12596,66 @@ const ProfAI = {
                 body: JSON.stringify({
                     contents: [{ role: "user", parts: (Array.isArray(prompt) ? prompt : [{ text: prompt }]) }],
                     systemInstruction: { parts: [{ text: system }] },
-                    generationConfig: { temperature: 0.1, response_mime_type: "application/json" }
+                    generationConfig: { 
+                        temperature: 0.1, // Très strict
+                        // response_mime_type: "application/json" // On laisse libre pour éviter les erreurs 400 si le modèle ne supporte pas
+                    }
                 })
             });
             clearTimeout(timeout);
+            
+            if (!res.ok) {
+                const errText = await res.text();
+                console.error(`❌ [ProfAI] Erreur API (${res.status}):`, errText);
+                return "ERROR_API";
+            }
+
             const data = await res.json();
-            return data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+            const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
+            return text;
+
         } catch (e) { 
             clearTimeout(timeout);
+            console.error("❌ [ProfAI] Exception:", e.message);
             return "ERROR_AI_REACH"; 
         }
     },
 
     sanitize: (text) => {
-        if (!text || typeof text !== 'string') return { error: "Réponse vide" };
+        if (!text || typeof text !== 'string') return [];
+        
+        console.log("🧹 [ProfAI] Nettoyage réponse brute (début):", text.substring(0, 50) + "...");
+
         try {
-            // Nettoyage ultra-agressif du bruit Gemini
-            let clean = text.trim();
-            if (clean.includes('```')) {
-                clean = clean.split('```')[1];
-                if (clean.startsWith('json')) clean = clean.substring(4);
-                if (clean.startsWith('javascript')) clean = clean.substring(10);
+            // 1. Nettoyage Markdown
+            let clean = text.replace(/```json/g, '').replace(/```/g, '').trim();
+
+            // 2. Recherche du premier crochet ouvrant [ et dernier fermant ]
+            const firstBracket = clean.indexOf('[');
+            const lastBracket = clean.lastIndexOf(']');
+
+            if (firstBracket !== -1 && lastBracket !== -1) {
+                clean = clean.substring(firstBracket, lastBracket + 1);
+            } else {
+                // Si pas de tableau trouvé, on tente de trouver un objet et de le mettre dans un tableau
+                const firstBrace = clean.indexOf('{');
+                const lastBrace = clean.lastIndexOf('}');
+                if (firstBrace !== -1 && lastBrace !== -1) {
+                    clean = `[${clean.substring(firstBrace, lastBrace + 1)}]`;
+                }
             }
-            const firstBrace = clean.indexOf('{');
-            const lastBrace = clean.lastIndexOf('}');
-            if (firstBrace !== -1 && lastBrace !== -1) {
-                return JSON.parse(clean.substring(firstBrace, lastBrace + 1));
-            }
-            return JSON.parse(clean);
+
+            // 3. Parsing
+            const result = JSON.parse(clean);
+            
+            // 4. Validation finale (Doit être un tableau)
+            if (Array.isArray(result)) return result;
+            return [];
+
         } catch (e) { 
-            return { error: "Format JSON corrompu", raw: text }; 
+            console.error("❌ [ProfAI] Parse Error:", e.message);
+            console.error("   Contenu problématique:", text);
+            return []; 
         }
     }
 };
@@ -12298,30 +12665,130 @@ module.exports = ProfAI;
 [[[£ END: server/prof/core/prof.ai.js £]]]
 
 [[[£ FILE: server/prof/games/games.prof.js £]]]
-// @signatures: ProfGamesRouter, all, create, generate
+// @signatures: ProfGamesRouter, all, create, generate, generateContent, streamToBuffer, uploadAsset
 const express = require('express');
 const router = express.Router();
-const { GameLevel } = require('../models/prof.models');
+// On require le modèle ici pour être sûr qu'il est chargé
+const GameLevel = require('../../models/GameLevel'); 
 const ProfAI = require('../core/prof.ai');
+const ProfDrive = require('../core/drive.prof'); 
+const multer = require('multer');
+const fs = require('fs');
+const path = require('path');
 
-/**
- * 🕹️ BLOC PROF : LOGIQUE JEUX (/api/games)
- */
+const upload = multer({ dest: path.join(process.cwd(), 'public', 'uploads', 'temp') });
+
+const streamToBuffer = async (stream) => {
+    const chunks = [];
+    return new Promise((resolve, reject) => {
+        stream.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+        stream.on('error', (err) => reject(err));
+        stream.on('end', () => resolve(Buffer.concat(chunks)));
+    });
+};
 
 router.get('/all', async (req, res) => {
-    res.json(await GameLevel.find({}).lean());
+    try {
+        const list = await GameLevel.find({}).lean();
+        res.json(list);
+    } catch (e) { res.status(500).json([]); }
 });
 
 router.post('/', async (req, res) => {
-    const quiz = await GameLevel.create(req.body);
-    res.json(quiz);
+    console.log("💾 [GAMES] Sauvegarde...");
+    console.log("   DATA REÇUE:", JSON.stringify(req.body).substring(0, 200) + "...");
+    
+    if (req.body.levels) {
+        console.log(`   ✅ LEVELS PRÉSENTS: ${req.body.levels.length}`);
+    } else {
+        console.error("   ❌ LEVELS MANQUANTS DANS LE PAYLOAD !");
+    }
+
+    try {
+        const data = req.body;
+        
+        // Nettoyage IDs vides
+        if (data.levels) {
+            data.levels.forEach(l => {
+                if(l._id === "") delete l._id;
+                if(l.intro && l.intro._id === "") delete l.intro._id;
+                if(l.questions) l.questions.forEach(q => { if(q._id === "") delete q._id; });
+            });
+        }
+
+        let quiz;
+        if (data._id) {
+            // On force l'update avec le nouveau contenu
+            quiz = await GameLevel.findByIdAndUpdate(data._id, { $set: data }, { new: true });
+        } else {
+            quiz = await GameLevel.create(data);
+        }
+        
+        console.log("   ✅ Sauvegardé ID:", quiz._id);
+        res.json(quiz);
+    } catch (e) { 
+        console.error("   ❌ ERREUR:", e.message);
+        res.status(500).json({ error: e.message }); 
+    }
 });
 
-router.post('/generate', async (req, res) => {
-    const { topic, count } = req.body;
-    const system = "Tu es un professeur expert. Réponds UNIQUEMENT en JSON pur (Array d'objets {q, options, a}).";
-    const raw = await ProfAI.ask(`Génère un quiz de ${count} questions sur: ${topic}`, system);
-    res.json(ProfAI.sanitize(raw));
+router.post('/upload-asset', upload.single('file'), async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: "Fichier manquant" });
+    try {
+        const folderId = await ProfDrive.getOrCreateFolder("CONDA_GAMES_ASSETS");
+        const driveFile = await ProfDrive.uploadFile(req.file.originalname, req.file.path, folderId);
+        const url = `/api/structure/proxy/${driveFile.id}`;
+        try { fs.unlinkSync(req.file.path); } catch(e){}
+        res.json({ url, name: req.file.originalname });
+    } catch (e) {
+        res.status(500).json({ error: "Erreur Drive" });
+    }
+});
+
+router.post('/generate-content', upload.single('file'), async (req, res) => {
+    const { topic, count, contextText, sheetUrl } = req.body;
+    console.log(`🎮 [GAMES] Génération IA. Topic: "${topic}"`);
+
+    const system = `Tu es un expert pédagogique créateur de Quiz.
+    TA MISSION : Créer un QCM de ${count || 5} questions.
+    RÈGLE DE REDACTION : Format "Texte à trous" si possible.
+    FORMAT SORTIE : Un tableau JSON [ { "q": "...", "options": ["...",...], "a": 0 } ].`;
+
+    const promptParts = [];
+    if (topic) promptParts.push({ text: `Sujet/Consigne : "${topic}".` });
+    if (contextText) promptParts.push({ text: `CONTENU :\n${contextText}` });
+
+    try {
+        if (req.file) {
+            const fileData = fs.readFileSync(req.file.path).toString('base64');
+            promptParts.push({ inlineData: { mimeType: req.file.mimetype, data: fileData } });
+        } 
+        else if (sheetUrl && sheetUrl.includes('/proxy/')) {
+            const fileId = sheetUrl.split('/proxy/')[1];
+            const stream = await ProfDrive.getFileStream(fileId);
+            const buffer = await streamToBuffer(stream);
+            const mime = sheetUrl.endsWith('.pdf') ? 'application/pdf' : 'image/jpeg'; 
+            promptParts.push({ inlineData: { mimeType: mime, data: buffer.toString('base64') } });
+        }
+
+        if (promptParts.length === 0) return res.status(400).json({ error: "Aucun contexte" });
+
+        const raw = await ProfAI.ask(promptParts, system);
+        const questions = ProfAI.sanitize(raw);
+        
+        const shuffled = questions.map(q => {
+            const corr = q.options[q.a];
+            const opts = [...q.options].sort(() => Math.random() - 0.5);
+            return { ...q, options: opts, a: opts.indexOf(corr) };
+        });
+
+        res.json(shuffled);
+    } catch (e) {
+        console.error("❌ [GAMES] Erreur IA:", e);
+        res.status(500).json({ error: "Erreur IA" });
+    } finally {
+        if (req.file) { try { fs.unlinkSync(req.file.path); } catch(e){} }
+    }
 });
 
 module.exports = router;
@@ -12789,136 +13256,93 @@ module.exports = router;
 [[[£ END: server/prof/studio/studio.prof.js £]]]
 
 [[[£ FILE: server/server.js £]]]
-// @signatures: SERVER_BOOT_ID, GlobalInfrastructure, KernelV53, OracleMiddleware
+// @signatures: SERVER_BOOT_ID, GlobalInfrastructure, KernelV56_CLEAN
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const fs = require('fs');
 const path = require('path');
 
+console.log("------------------------------------------------");
+console.log("🚀 DÉMARRAGE DU SERVEUR (MODE PROD V56)");
+console.log("------------------------------------------------");
+
 dotenv.config();
 const app = express();
 const port = 3000;
 const SERVER_BOOT_ID = Date.now();
 
-// SÉCURITÉ MONGOOSE (Éviter les avertissements de dépréciation)
 mongoose.set('strictQuery', false);
 
 app.use(express.json({ limit: '70mb' }));
 app.use(express.urlencoded({ extended: true, limit: '70mb' }));
 
-// ==========================================================
-// 🛰️ 1. LOGGER DE TRAFIC (OBSERVABILITÉ)
-// ==========================================================
+// 1. LOGGER CIBLÉ (Uniquement les erreurs et les actions critiques)
 app.use((req, res, next) => {
-    const start = Date.now();
-    res.on('finish', () => {
-        const duration = Date.now() - start;
-        if (res.statusCode >= 400) {
-            console.error(`🔴 [${res.statusCode}] ${req.method} ${req.url} - ${duration}ms`);
-        } else {
-            console.log(`🟢 [${res.statusCode}] ${req.method} ${req.url} - ${duration}ms`);
-        }
-    });
+    if (req.method !== 'GET' && !req.url.includes('check-deploy') && !req.url.includes('apply-status')) {
+        console.log(`📥 REQ: ${req.method} ${req.url}`);
+    }
     next();
 });
 
-// ==========================================================
-// 🏗️ 2. SERVICES CORE (L'INFRASTRUCTURE)
-// ==========================================================
-
+// 2. ROUTES SYSTÈME
 app.get('/api/check-deploy', (req, res) => res.json({ status: "OK", bootId: SERVER_BOOT_ID }));
-
-app.get('/api/system/version', (req, res) => {
-    res.json({ hash: "V53-ORACLE", build: 161, mode: "DEBUG_ACTIVE" });
-});
-
+app.get('/api/system/version', (req, res) => res.json({ hash: "V56-PROD", build: 164 }));
 app.get('/api/system/apply-status', (req, res) => {
-    const statusFile = path.join(__dirname, '../apply_status.json');
     try {
-        if (fs.existsSync(statusFile)) {
-            const content = fs.readFileSync(statusFile, 'utf8').trim();
-            if (content && content.startsWith('{')) return res.json(JSON.parse(content));
-        }
-        res.json({ status: "OK" });
+        const p = path.join(__dirname, '../apply_status.json');
+        if (fs.existsSync(p)) res.json(JSON.parse(fs.readFileSync(p, 'utf8')));
+        else res.json({ status: "OK" });
     } catch (e) { res.json({ status: "OK" }); }
 });
 
-// 🚀 PROXY CLOUD CENTRAL (BOULEVARD UNIFIÉ)
 const ProfDrive = require('./prof/core/drive.prof');
 app.get(['/api/proxy/:id', '/api/structure/proxy/:id'], async (req, res) => {
-    const fileId = req.params.id;
-    
-    if (!fileId || fileId === 'undefined' || fileId === 'null') {
-        return res.status(400).send("ID Drive invalide.");
-    }
-
     try {
-        const stream = await ProfDrive.getFileStream(fileId);
+        const stream = await ProfDrive.getFileStream(req.params.id);
         res.setHeader('Content-Type', 'image/png');
         stream.pipe(res);
-        
-        stream.on('error', (err) => {
-            console.error(`💥 Erreur de flux pour ${fileId}:`, err.message);
-        });
-    } catch (e) {
-        console.error(`❌ Échec Proxy pour ${fileId}:`, e.message);
-        res.status(404).send("Cloud error");
-    }
+    } catch (e) { res.status(404).send("Cloud error"); }
 });
 
-// ==========================================================
-// 📂 3. CHARGEMENT DES SILOS MÉTIERS
-// ==========================================================
+// 3. CHARGEMENT
+const loadRoute = (pathRel, routeName) => {
+    try {
+        const r = require(pathRel);
+        app.use(`/api/${routeName}`, r);
+    } catch (e) { console.error(`❌ ECHEC ${routeName}:`, e.message); }
+};
 
-// SÉCURITÉ : On s'assure que les modèles sont chargés AVANT les routes
-require('./prof/models/prof.models');
-
-app.use('/api/auth', require('./prof/auth/auth.prof'));
-app.use('/api/admin', require('./prof/admin/admin.prof'));
-app.use('/api/homework', require('./prof/homework/homework.prof'));
-app.use('/api/games', require('./prof/games/games.prof'));
-app.use('/api/classroom', require('./prof/classroom/classroom.prof'));
-app.use('/api/scans', require('./prof/scans/scans.prof'));
-app.use('/api/structure', require('./prof/structure/structure.prof'));
-app.use('/api/studio', require('./prof/studio/studio.prof')); 
-
-app.use('/api/eleve/auth', require('./eleve/auth/auth.eleve'));
-app.use('/api/eleve/homework', require('./eleve/homework/homework.eleve'));
-app.use('/api/eleve/classroom', require('./eleve/classroom/classroom.eleve'));
-app.use('/api/eleve/games', require('./eleve/games/games.eleve'));
+try {
+    require('./prof/models/prof.models');
+    loadRoute('./prof/auth/auth.prof', 'auth');
+    loadRoute('./prof/admin/admin.prof', 'admin');
+    loadRoute('./prof/homework/homework.prof', 'homework');
+    loadRoute('./prof/games/games.prof', 'games');
+    loadRoute('./prof/classroom/classroom.prof', 'classroom');
+    loadRoute('./prof/scans/scans.prof', 'scans');
+    loadRoute('./prof/structure/structure.prof', 'structure');
+    loadRoute('./prof/studio/studio.prof', 'studio');
+    loadRoute('./eleve/auth/auth.eleve', 'eleve/auth');
+    loadRoute('./eleve/homework/homework.eleve', 'eleve/homework');
+    loadRoute('./eleve/classroom/classroom.eleve', 'eleve/classroom');
+    loadRoute('./eleve/games/games.eleve', 'eleve/games');
+} catch (globalErr) { console.error("💥 CRASH CHARGEMENT:", globalErr); }
 
 app.use('/uploads', express.static(path.join(__dirname, '../public/uploads')));
 
-// ==========================================================
-// ⚖️ 4. L'ORACLE (GESTIONNAIRE D'ERREURS GLOBAL)
-// Rôle : Capturer tout crash et l'afficher dans le terminal.
-// ==========================================================
+// 4. ORACLE
 app.use((err, req, res, next) => {
-    console.error("================================================");
-    console.error("🔥 CRASH DÉTECTÉ PAR L'ORACLE");
-    console.error(`URL: ${req.method} ${req.url}`);
-    console.error("MESSAGE:", err.message);
-    console.error("STACK:", err.stack);
-    console.error("================================================");
-    
-    res.status(500).json({
-        error: "Erreur Interne du Serveur",
-        message: err.message,
-        stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
-    });
+    console.error("🔥 ERREUR 500:", err.message);
+    res.status(500).json({ error: "CRASH SERVEUR", message: err.message });
 });
 
 const initServices = async () => {
     try {
         await mongoose.connect(process.env.MONGODB_URI);
-        console.log("📂 [DB] MongoDB Connecté.");
-        app.listen(port, '0.0.0.0', () => {
-            console.log(`🚀 [KERNEL V53] OPÉRATIONNEL SUR PORT ${port}`);
-        });
-    } catch (err) {
-        console.error("❌ KERNEL PANIC DURANT LE BOOT:", err.message);
-    }
+        console.log("📂 MongoDB Connecté.");
+        app.listen(port, '0.0.0.0', () => console.log(`🏁 PRET SUR LE PORT ${port}`));
+    } catch (err) { console.error("❌ ECHEC DB:", err.message); }
 };
 
 initServices();

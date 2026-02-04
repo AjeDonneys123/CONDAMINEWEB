@@ -1041,105 +1041,201 @@ export function initZombieGame(root, api, onExit) {
 [[[£ END: client/src/features/eleve/games/zombie/zombie_style.css £]]]
 
 [[[£ FILE: client/src/features/prof/games/GameStudio.css £]]]
-.v84-game-container {
-    position: fixed; inset: 0; background: #f8fafc; z-index: 9500;
-    display: flex; flex-direction: column; font-family: 'Inter', sans-serif;
-}
+/* ... (Styles précédents conservés) ... */
 
-/* HEADER STYLE JEU (Violet) */
-.v84-game-header {
-    height: 90px; background: white; border-bottom: 2px solid #f1f5f9;
-    display: flex; align-items: center; padding: 0 40px; justify-content: space-between;
-}
-.v84-game-icon { font-size: 2rem; background: #9333ea; color: white; padding: 10px; border-radius: 18px; box-shadow: 0 8px 15px rgba(147, 51, 234, 0.3); }
+/* HEADER */
+.v84-game-container { position: fixed; inset: 0; background: #f8fafc; z-index: 9500; display: flex; flex-direction: column; font-family: 'Inter', sans-serif; }
+.v84-game-header { height: 90px; background: white; border-bottom: 2px solid #f1f5f9; display: flex; align-items: center; padding: 0 40px; justify-content: space-between; }
+.v84-game-icon { font-size: 2rem; background: #9333ea; color: white; padding: 10px; border-radius: 18px; }
 .v84-game-title-input { border: none; font-size: 1.8rem; font-weight: 950; color: #0f172a; outline: none; width: 100%; text-transform: uppercase; margin-left: 20px; }
 
-/* LAYOUT */
 .v84-game-body { flex: 1; display: flex; overflow: hidden; }
 
-/* QUESTIONS LIST (LEFT) */
-.v84-q-list-sidebar {
-    width: 280px; background: white; padding: 20px; display: flex; flex-direction: column; border-right: 2px solid #f1f5f9;
-}
-.v84-q-item {
-    padding: 15px; background: #f8fafc; border-radius: 16px; border: 2px solid transparent; 
-    cursor: pointer; transition: all 0.2s; margin-bottom: 8px;
-}
-.v84-q-item.active { background: #f3e8ff; border-color: #a855f7; box-shadow: 0 4px 12px rgba(168, 85, 247, 0.15); }
-.v84-q-preview { font-weight: 800; font-size: 11px; color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.v84-q-sub { font-size: 9px; color: #94a3b8; font-weight: 700; margin-top: 4px; }
+/* SIDEBAR GAUCHE */
+.v84-q-list-sidebar { width: 340px; background: white; padding: 20px; display: flex; flex-direction: column; border-right: 2px solid #f1f5f9; }
+.v84-level-block { margin-bottom: 15px; border: 2px solid #f1f5f9; border-radius: 16px; overflow: hidden; background: #fff; }
+.v84-level-header { background: #f8fafc; padding: 10px 15px; display: flex; justify-content: space-between; align-items: center; font-size: 10px; font-weight: 950; color: #64748b; text-transform: uppercase; border-bottom: 2px solid #f1f5f9; cursor: pointer; transition: background 0.2s; position: relative; }
+.v84-level-header:hover { background: #f1f5f9; color: #1e293b; }
+.v84-level-header.active-lvl { background: #f5f3ff; color: #7c3aed; border-bottom-color: #ddd6fe; }
+.v84-q-list { padding: 5px; display: flex; flex-direction: column; gap: 5px; background: #fff; }
+.v84-q-item { padding: 10px 10px 10px 10px; border-bottom: 1px solid #f1f5f9; cursor: pointer; transition: all 0.2s; position: relative; background: white; display: flex; align-items: center; gap: 8px; }
+.v84-q-item:hover { background: #fafafa; }
+.v84-q-item.active { background: #f3e8ff; border-left: 4px solid #a855f7; }
+.v84-q-checkbox { width: 16px; height: 16px; cursor: pointer; accent-color: #7c3aed; border: 2px solid #cbd5e1; border-radius: 4px; }
+.v84-q-preview { font-weight: 800; font-size: 10px; color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; padding-right: 25px; }
+.v84-del-btn { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 20px; height: 20px; border-radius: 50%; background: #fee2e2; color: #ef4444; border: 1px solid #fecaca; font-weight: 900; font-size: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; opacity: 0.6; transition: all 0.2s; }
+.v84-q-item:hover .v84-del-btn, .v84-level-header:hover .v84-del-btn { opacity: 1; }
+.v84-del-btn:hover { background: #ef4444; color: white; transform: translateY(-50%) scale(1.1); }
+.v84-add-q-btn { width: 100%; padding: 8px; font-size: 9px; font-weight: 900; color: #94a3b8; background: #f8fafc; border: none; border-top: 1px dashed #e2e8f0; cursor: pointer; text-transform: uppercase; }
+.v84-add-q-btn:hover { color: #7c3aed; background: #f5f3ff; }
+.v84-add-level-btn { width: 100%; padding: 15px; background: #1e293b; color: white; border-radius: 15px; font-weight: 900; font-size: 10px; border: none; cursor: pointer; text-transform: uppercase; }
+.v84-move-box { background: #7c3aed; padding: 12px; border-radius: 15px; margin-top: auto; margin-bottom: 10px; color: white; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 10px 20px rgba(124, 58, 237, 0.3); animation: slideUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+.v84-move-title { font-size: 9px; font-weight: 900; text-transform: uppercase; opacity: 0.8; }
+.v84-move-actions { display: flex; gap: 5px; }
+.v84-move-select { flex: 1; padding: 6px; border-radius: 8px; border: none; font-size: 10px; color: #4c1d95; font-weight: 800; outline: none; background: rgba(255,255,255,0.9); }
+.v84-move-go-btn { background: #fbbf24; color: #78350f; border: none; padding: 6px 12px; border-radius: 8px; font-weight: 950; font-size: 10px; cursor: pointer; text-transform: uppercase; }
+.v84-move-go-btn:hover { background: #f59e0b; }
 
-.v84-add-q-btn { margin-top: 10px; padding: 15px; border: 2px dashed #e2e8f0; border-radius: 20px; color: #94a3b8; font-weight: 900; font-size: 10px; cursor: pointer; background: none; transition: all 0.2s; }
-.v84-add-q-btn:hover { border-color: #a855f7; color: #a855f7; background: #f3e8ff; }
-
-/* EDITOR (CENTER) */
+/* EDITOR CENTER */
 .v84-game-editor { flex: 1; padding: 40px; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; background: #f8fafc; }
 
+/* WIDGET IA MODIFIÉ */
+.v84-ai-widget { background: #fff; padding: 20px; border-radius: 25px; margin-bottom: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; }
+.v84-ai-row { display: flex; gap: 10px; align-items: center; width: 100%; margin-bottom: 10px; }
+
+/* INPUT COUNT (NOUVEAU) */
+.v84-ai-count-input {
+    width: 60px; padding: 12px; border: 2px solid #e2e8f0; border-radius: 15px;
+    font-weight: 900; color: #475569; text-align: center; font-size: 12px; outline: none;
+}
+.v84-ai-count-input:focus { border-color: #7e22ce; color: #7e22ce; }
+
+.v84-ai-input { flex: 1; background: #f8fafc; border: 2px solid #f1f5f9; padding: 12px 15px; border-radius: 15px; color: #475569; font-weight: 700; outline: none; font-size: 12px; }
+.v84-ai-input:focus { border-color: #a855f7; background: white; }
+.v84-ai-dropzone { background: #fff7ed; border: 2px dashed #fed7aa; border-radius: 15px; min-height: 80px; position: relative; display: flex; flex-direction: column; padding: 10px; transition: all 0.2s; }
+.v84-ai-dropzone:hover { border-color: #f97316; background: #ffedd5; }
+.v84-ai-textarea { width: 100%; height: 60px; background: transparent; border: none; outline: none; resize: none; font-size: 11px; color: #c2410c; font-weight: 600; text-align: center; }
+.v84-ai-textarea::placeholder { color: #fdba74; text-transform: uppercase; font-weight: 700; padding-top: 20px; }
+.v84-ai-plus-btn { position: absolute; bottom: 8px; right: 8px; width: 24px; height: 24px; background: #f97316; color: white; border-radius: 50%; border: none; font-weight: 900; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(249, 115, 22, 0.3); transition: transform 0.2s; }
+.v84-ai-plus-btn:hover { transform: scale(1.1); }
+.v84-file-tag { position: absolute; top: 8px; left: 8px; background: #fff; border: 1px solid #f97316; padding: 4px 10px; border-radius: 8px; font-size: 9px; font-weight: 900; color: #ea580c; display: flex; align-items: center; gap: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+.v84-file-close { cursor: pointer; color: #ef4444; font-size: 10px; }
+.v84-gen-btn { width: 100%; padding: 12px; background: #7e22ce; color: white; border: none; border-radius: 15px; font-weight: 900; font-size: 10px; margin-top: 10px; cursor: pointer; }
+
+/* Q CARD */
 .v84-q-card { background: white; border-radius: 30px; padding: 30px; border: 1px solid #e2e8f0; box-shadow: 0 10px 30px -10px rgba(0,0,0,0.05); }
-.v84-field-label { font-size: 10px; font-weight: 950; color: #94a3b8; text-transform: uppercase; margin-bottom: 10px; display: block; letter-spacing: 0.05em; }
-
-.v84-q-input { 
-    width: 100%; padding: 20px; border-radius: 20px; background: #f8fafc; border: 2px solid #f1f5f9;
-    font-size: 1.1rem; font-weight: 700; color: #1e293b; outline: none; transition: border-color 0.2s;
-}
-.v84-q-input:focus { border-color: #a855f7; background: white; }
-
+.v84-q-input { width: 100%; padding: 20px; border-radius: 20px; background: #f8fafc; border: 2px solid #f1f5f9; font-size: 1.1rem; font-weight: 700; color: #1e293b; outline: none; }
 .v84-answers-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 10px; }
-.v84-ans-row { display: flex; align-items: center; gap: 10px; background: #f8fafc; padding: 5px 15px 5px 5px; border-radius: 18px; border: 2px solid transparent; transition: all 0.2s; }
+.v84-ans-row { display: flex; align-items: center; gap: 10px; background: #f8fafc; padding: 5px 15px 5px 5px; border-radius: 18px; border: 2px solid transparent; }
 .v84-ans-row.correct { background: #dcfce7; border-color: #22c55e; }
-
-.v84-correct-radio {
-    width: 40px; height: 40px; border-radius: 14px; background: white; border: 2px solid #cbd5e1;
-    display: flex; align-items: center; justify-content: center; cursor: pointer; font-weight: 900; color: #cbd5e1; font-size: 14px;
-}
+.v84-correct-radio { width: 40px; height: 40px; border-radius: 14px; background: white; border: 2px solid #cbd5e1; display: flex; align-items: center; justify-content: center; cursor: pointer; font-weight: 900; color: #cbd5e1; }
 .v84-ans-row.correct .v84-correct-radio { background: #22c55e; border-color: #22c55e; color: white; }
 .v84-ans-input { flex: 1; background: transparent; border: none; padding: 10px; font-weight: 700; font-size: 0.9rem; outline: none; }
 
-/* AI WIDGET */
-.v84-ai-widget { background: #7e22ce; color: white; padding: 20px; border-radius: 25px; margin-bottom: 20px; display: flex; gap: 15px; align-items: center; box-shadow: 0 10px 25px rgba(126, 34, 206, 0.3); }
-.v84-ai-input { flex: 1; background: rgba(255,255,255,0.2); border: none; padding: 12px 20px; border-radius: 15px; color: white; font-weight: 700; placeholder-color: rgba(255,255,255,0.5); outline: none; }
-.v84-ai-btn { background: white; color: #7e22ce; border: none; padding: 12px 25px; border-radius: 15px; font-weight: 950; font-size: 10px; cursor: pointer; text-transform: uppercase; }
+/* RESSOURCES */
+.v84-resources-global { background: white; border: 2px solid #3b82f6; border-radius: 20px; padding: 15px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 4px 15px rgba(59, 130, 246, 0.1); }
+.v84-resources-level { background: #f8fafc; border: 1px dashed #94a3b8; border-radius: 15px; padding: 15px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 10px; }
+.v84-res-title { font-size: 10px; font-weight: 950; text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; gap: 5px; }
+.v84-res-title.global { color: #3b82f6; }
+.v84-res-title.local { color: #64748b; }
+.v84-res-row { display: flex; gap: 10px; align-items: center; }
+.v84-res-input { flex: 1; background: #f1f5f9; border: 1px solid #cbd5e1; padding: 8px 12px; border-radius: 10px; font-size: 11px; color: #334155; font-weight: 600; outline: none; }
+.v84-res-input:focus { background: white; border-color: #3b82f6; }
+.v84-res-btn { padding: 8px 15px; border-radius: 10px; font-weight: 900; font-size: 10px; border: none; cursor: pointer; text-transform: uppercase; display: flex; align-items: center; gap: 5px; transition: transform 0.1s; }
+.v84-res-btn.upload { background: #e2e8f0; color: #475569; }
+.v84-res-btn.upload:hover { background: #cbd5e1; }
+.v84-res-btn.view { background: #dcfce7; color: #16a34a; }
+.v84-res-badge { font-size: 9px; font-weight: 900; color: #fff; background: #10b981; padding: 4px 8px; border-radius: 6px; display: flex; align-items: center; gap: 5px; cursor: pointer; transition: filter 0.2s; }
+.v84-res-badge:hover { filter: brightness(1.1); }
+.v84-res-remove { cursor: pointer; opacity: 0.8; font-size: 10px; margin-left: 2px; width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.2); border-radius: 50%; }
+.v84-res-remove:hover { background: #ef4444; opacity: 1; }
 
-/* RIGHT SIDEBAR (DISTRIBUTION - Identique Homework mais ajusté couleurs) */
 .v84-dist-sidebar { width: 350px; background: white; border-left: 2px solid #f1f5f9; padding: 30px; display: flex; flex-direction: column; }
-.v84-tab-btn-game { padding: 8px 16px; border-radius: 12px; font-size: 10px; font-weight: 900; transition: all 0.2s; border: 1px solid transparent; }
+.v84-tab-btn-game { padding: 8px 16px; border-radius: 12px; font-size: 10px; font-weight: 900; transition: all 0.2s; border: 1px solid transparent; margin-right: 5px; }
 .v84-tab-btn-game.active { background: #9333ea; color: white; shadow: 0 4px 10px rgba(147, 51, 234, 0.3); }
 .v84-tab-btn-game.inactive { background: #f1f5f9; color: #94a3b8; }
-
-.v84-game-publish-btn { width: 100%; padding: 20px; background: #9333ea; color: white; font-weight: 950; border-radius: 20px; border: none; margin-top: 20px; font-size: 12px; text-transform: uppercase; cursor: pointer; box-shadow: 0 10px 30px rgba(147, 51, 234, 0.3); transition: transform 0.1s; }
+.v84-game-publish-btn { width: 100%; padding: 20px; background: #9333ea; color: white; font-weight: 950; border-radius: 20px; border: none; margin-top: 20px; font-size: 12px; cursor: pointer; box-shadow: 0 10px 30px rgba(147, 51, 234, 0.3); transition: transform 0.1s; }
 .v84-game-publish-btn:hover { transform: translateY(-2px); }
 
 [[[£ END: client/src/features/prof/games/GameStudio.css £]]]
 
 [[[£ FILE: client/src/features/prof/games/GameStudio.jsx £]]]
-// @signatures: GameStudio, handleAddQuestion, handleGenerateAI, handleInput, handleSave, handleSelectClass, handleSelectQuestion, handleToggleStudent, isMain, loadData, myClassesIds, toggleAllStudents, updateQuestion
+// @signatures: GameStudio, handleAddLevel, handleAddQuestion, handleDeleteLevel, handleDeleteQuestion, handleDrop, handleFileSelect, handleGenerateAI, handleInput, handleMoveQuestions, handleOpenSheet, handlePaste, handleRemoveAsset, handleRemoveFile, handleSave, handleSelectQuestion, handleToggleSelect, handleToggleStudent, handleUpdateAssetVideo, handleUploadAsset, isQuestionSelected, loadData, toggleAllStudents, updateQuestion
 import React, { useState, useEffect, useRef } from 'react';
 import './GameStudio.css';
 import { api } from '../../../services/api';
 import { StudioUtils } from '../homework/HomeworkStudio'; 
 
-const DEFAULT_QUIZ_DATA = { title: '', chapterId: '', teacherId: null, targetClassrooms: [], assignedStudents: [], isAllClass: true, questions: [{ q: 'Nouvelle question', options: ['', '', '', ''], a: 0 }] };
+const DEFAULT_QUIZ_DATA = { 
+    title: '', chapterId: '', teacherId: null, 
+    targetClassrooms: [], assignedStudents: [], isAllClass: true, 
+    globalIntro: { sheetUrl: "", videoUrl: "" },
+    levels: [
+        { 
+            name: "Niveau 1", 
+            intro: { sheetUrl: "", videoUrl: "" },
+            questions: [{ q: 'Nouvelle question', options: ['', '', '', ''], a: 0 }] 
+        }
+    ]
+};
 
 export default function GameStudio({ initialData, chapters, classFilter, user, targetSection, onClose }) {
-    // ✅ FIX V18:50 : Utilisation robuste de StudioUtils
-    const [formData, setFormData] = useState(initialData || { ...DEFAULT_QUIZ_DATA, teacherId: user.id || user._id, targetClassrooms: classFilter ? [classFilter] : [] });
-    const [activeQIndex, setActiveQIndex] = useState(0);
+    
+    // --- DEBUG & INIT ---
+    const initData = () => {
+        console.log("🔍 [STUDIO] Initialisation avec :", initialData);
+        
+        let base = initialData ? JSON.parse(JSON.stringify(initialData)) : { ...DEFAULT_QUIZ_DATA };
+        
+        // MIGRATION INTELLIGENTE
+        // Si on a des niveaux valides, on les garde !
+        if (base.levels && base.levels.length > 0) {
+            console.log("✅ [STUDIO] Niveaux détectés :", base.levels.length);
+        } 
+        // Sinon, si on a des questions 'legacy', on les migre
+        else if (base.questions && base.questions.length > 0) {
+            console.log("⚠️ [STUDIO] Migration Legacy (Questions -> Niveau 1)");
+            base.levels = [{ name: "Niveau 1", questions: base.questions, intro: {} }];
+            delete base.questions;
+        }
+        // Sinon, structure vide par défaut
+        else {
+            console.log("⚠️ [STUDIO] Aucune donnée, création par défaut.");
+            base.levels = [{ name: "Niveau 1", questions: [], intro: {} }];
+        }
+
+        // Sécurité Intros & Options
+        if (!base.globalIntro) base.globalIntro = { sheetUrl: "", videoUrl: "" };
+        base.levels.forEach(l => { 
+            if(!l.intro) l.intro = { sheetUrl: "", videoUrl: "" };
+            if(!l.questions) l.questions = [];
+            l.questions.forEach(q => {
+                if (!q.options || !Array.isArray(q.options)) q.options = ['', '', '', ''];
+                if (q.a === undefined) q.a = 0;
+            });
+        });
+
+        base.teacherId = user.id || user._id;
+        // Fix Classroom Target
+        if (!base.targetClassrooms || base.targetClassrooms.length === 0) {
+            // Si on édite un vieux quiz qui avait juste 'classroom'
+            if (base.classroom) base.targetClassrooms = [base.classroom];
+            else if (classFilter) base.targetClassrooms = [classFilter];
+            else base.targetClassrooms = [];
+        }
+        
+        return base;
+    };
+
+    const [formData, setFormData] = useState(initData());
+    const [activeLevelIdx, setActiveLevelIdx] = useState(0);
+    const [activeQIdx, setActiveQIdx] = useState(0);
+    const [selectedForMove, setSelectedForMove] = useState([]); 
+    const [moveTargetLevel, setMoveTargetLevel] = useState("");
     const [allStudents, setAllStudents] = useState([]);
     const [allClasses, setAllClasses] = useState([]);
     const [distribution, setDistribution] = useState({});
     const [viewingClass, setViewingClass] = useState(classFilter || "");
     const [studentSearch, setStudentSearch] = useState(""); 
     const [loading, setLoading] = useState(false);
+    
+    // IA & ASSETS
     const [aiTopic, setAiTopic] = useState('');
+    const [aiContextText, setAiContextText] = useState('');
+    const [aiFile, setAiFile] = useState(null);
     const [aiGenerating, setAiGenerating] = useState(false);
     
+    const fileInputRef = useRef(null);
+    const assetInputRef = useRef(null);
+    const [uploadTarget, setUploadTarget] = useState(null);
+
     const loadData = async () => {
         setLoading(true);
         try {
             const [sts, cls] = await Promise.all([ api.get('/admin/students'), api.get('/admin/classrooms') ]);
             setAllStudents(sts); setAllClasses(cls);
-            if (initialData) {
-                const targets = initialData.targetClassrooms || [initialData.classroom];
+            if (formData) {
+                const targets = formData.targetClassrooms || [];
                 const newDist = {};
                 targets.forEach(clsName => {
                     const clsObj = cls.find(c => c.name === clsName);
@@ -1147,43 +1243,182 @@ export default function GameStudio({ initialData, chapters, classFilter, user, t
                     let classStudentIds = sts.filter(s => {
                         const isMain = (s.currentClass||"").trim().toUpperCase() === clsName.trim().toUpperCase();
                         const isOption = clsId && (s.assignedGroups||[]).some(gId => String(gId) === clsId);
-                        return (isMain || isOption) && (initialData.assignedStudents||[]).includes(s._id);
+                        return (isMain || isOption) && (formData.assignedStudents||[]).includes(s._id);
                     }).map(s => s._id);
-                    newDist[clsName] = { chapterId: initialData.chapterId, studentIds: classStudentIds };
+                    newDist[clsName] = { chapterId: formData.chapterId, studentIds: classStudentIds };
                 });
                 setDistribution(newDist);
-                if (targets.length > 0) setViewingClass(targets[0]);
-            } else if (classFilter) {
-                setViewingClass(classFilter);
-                const defId = StudioUtils.findDefaultChapterId([classFilter], chapters, user, targetSection, cls);
-                setDistribution({ [classFilter]: { chapterId: defId, studentIds: [] } });
+                if (targets.length > 0 && !viewingClass) setViewingClass(targets[0]);
             }
-        } catch(e) { console.error("GameStudio Load Error:", e); }
+        } catch(e) { console.error("Load Error", e); }
         setLoading(false);
     };
 
-    useEffect(() => { loadData(); }, [classFilter]);
+    useEffect(() => { loadData(); }, []);
 
     const handleInput = (field, value) => setFormData(p => ({ ...p, [field]: value }));
-    const handleSelectQuestion = (index) => setActiveQIndex(index);
-    const handleAddQuestion = () => { setFormData(p => ({ ...p, questions: [...p.questions, { q: `Nouvelle question ${p.questions.length + 1}`, options: ['', '', '', ''], a: 0 }] })); setActiveQIndex(formData.questions.length); };
-    const updateQuestion = (field, value, optionIndex = null) => { setFormData(p => { const nextQuestions = [...p.questions]; const currentQ = { ...nextQuestions[activeQIndex] }; if (field === 'q' || field === 'a') { currentQ[field] = value; } else if (field === 'options' && optionIndex !== null) { const nextOptions = [...currentQ.options]; nextOptions[optionIndex] = value; currentQ.options = nextOptions; } nextQuestions[activeQIndex] = currentQ; return { ...p, questions: nextQuestions }; }); };
-    const handleGenerateAI = async () => { if (!aiTopic) return alert("Entrez un sujet !"); setAiGenerating(true); try { const result = await api.post('/games/generate', { topic: aiTopic, count: 5 }); const cleaned = Array.isArray(result) ? result : []; if (cleaned.length === 0) { alert("Échec génération."); setAiGenerating(false); return; } setFormData(p => ({ ...p, questions: [...p.questions, ...cleaned.filter(q => q.q && q.options && q.options.length === 4 && q.a !== undefined)] })); setActiveQIndex(formData.questions.length); } catch(e) { alert("Erreur IA."); } setAiGenerating(false); };
+    const handleSelectQuestion = (lIdx, qIdx) => { setActiveLevelIdx(lIdx); setActiveQIdx(qIdx); };
+    
+    // --- GESTION NIVEAUX ---
+    const handleAddLevel = () => {
+        setFormData(p => ({ 
+            ...p, 
+            levels: [...p.levels, { name: `Niveau ${p.levels.length + 1}`, questions: [], intro: { sheetUrl: "", videoUrl: "" } }] 
+        }));
+        setActiveLevelIdx(formData.levels.length);
+        setActiveQIdx(0);
+    };
+
+    const handleDeleteLevel = (e, lIdx) => {
+        e.stopPropagation();
+        if(!confirm("Supprimer ce niveau ?")) return;
+        setFormData(p => {
+            let newLevels = p.levels.filter((_, i) => i !== lIdx);
+            if (newLevels.length === 0) newLevels = [{ name: "Niveau 1", questions: [], intro: {} }];
+            return { ...p, levels: newLevels };
+        });
+        setActiveLevelIdx(0); setActiveQIdx(0);
+    };
+
+    // --- GESTION QUESTIONS ---
+    const handleAddQuestion = () => {
+        setFormData(p => {
+            const newLevels = [...p.levels];
+            newLevels[activeLevelIdx].questions.push({ q: 'Nouvelle question', options: ['', '', '', ''], a: 0 });
+            return { ...p, levels: newLevels };
+        });
+        setTimeout(() => setActiveQIdx(formData.levels[activeLevelIdx].questions.length), 0);
+    };
+
+    const handleDeleteQuestion = (e, lIdx, qIdx) => {
+        e.stopPropagation();
+        if(!confirm("Supprimer ?")) return;
+        setFormData(p => {
+            const newLevels = [...p.levels];
+            newLevels[lIdx].questions = newLevels[lIdx].questions.filter((_, i) => i !== qIdx);
+            return { ...p, levels: newLevels };
+        });
+        if(activeQIdx >= qIdx) setActiveQIdx(Math.max(0, activeQIdx - 1));
+        setSelectedForMove(prev => prev.filter(s => !(s.lIdx === lIdx && s.qIdx === qIdx)));
+    };
+
+    const updateQuestion = (field, value, optionIndex = null) => { 
+        setFormData(p => { 
+            const newLevels = [...p.levels]; 
+            if(!newLevels[activeLevelIdx] || !newLevels[activeLevelIdx].questions[activeQIdx]) return p;
+            const currentQ = { ...newLevels[activeLevelIdx].questions[activeQIdx] }; 
+            if (field === 'q' || field === 'a') { currentQ[field] = value; } 
+            else if (field === 'options' && optionIndex !== null) { 
+                const nextOptions = [...currentQ.options]; 
+                nextOptions[optionIndex] = value; 
+                currentQ.options = nextOptions; 
+            } 
+            newLevels[activeLevelIdx].questions[activeQIdx] = currentQ; 
+            return { ...p, levels: newLevels }; 
+        }); 
+    };
+
+    // --- MOVE ---
+    const handleToggleSelect = (e, lIdx, qIdx) => { e.stopPropagation(); const exists = selectedForMove.some(s => s.lIdx === lIdx && s.qIdx === qIdx); if (exists) setSelectedForMove(prev => prev.filter(s => !(s.lIdx === lIdx && s.qIdx === qIdx))); else setSelectedForMove(prev => [...prev, { lIdx, qIdx }]); };
+    const isQuestionSelected = (lIdx, qIdx) => selectedForMove.some(s => s.lIdx === lIdx && s.qIdx === qIdx);
+    const handleMoveQuestions = () => { if (moveTargetLevel === "" || isNaN(parseInt(moveTargetLevel))) return; const targetIdx = parseInt(moveTargetLevel); setFormData(prev => { const newLevels = prev.levels.map(l => ({ ...l, questions: [...l.questions] })); const questionsToMove = []; newLevels.forEach((lvl, lIdx) => { lvl.questions.forEach((q, qIdx) => { if (isQuestionSelected(lIdx, qIdx)) questionsToMove.push(q); }); }); newLevels.forEach((lvl, lIdx) => { lvl.questions = lvl.questions.filter((_, qIdx) => !isQuestionSelected(lIdx, qIdx)); }); newLevels[targetIdx].questions.push(...questionsToMove); return { ...prev, levels: newLevels }; }); setSelectedForMove([]); setActiveLevelIdx(targetIdx); setActiveQIdx(0); };
+
+    // --- ASSETS ---
+    const handleUploadAsset = async (e) => {
+        const file = e.target.files[0];
+        if (!file || uploadTarget === null) return;
+        setLoading(true);
+        const fd = new FormData(); fd.append('file', file);
+        try {
+            const res = await fetch('/api/games/upload-asset', { method: 'POST', body: fd });
+            const data = await res.json();
+            if (data.url) {
+                setFormData(prev => {
+                    const next = { ...prev };
+                    if (uploadTarget === -1) next.globalIntro = { ...next.globalIntro, sheetUrl: data.url };
+                    else next.levels[uploadTarget].intro = { ...next.levels[uploadTarget].intro, sheetUrl: data.url };
+                    return next;
+                });
+            }
+        } catch(err) { alert("Erreur upload"); }
+        setLoading(false); e.target.value = null;
+    };
+    const handleRemoveAsset = (idx) => { setFormData(prev => { const next = { ...prev }; if (idx === -1) next.globalIntro.sheetUrl = ""; else next.levels[idx].intro.sheetUrl = ""; return next; }); };
+    const handleUpdateAssetVideo = (idx, url) => { setFormData(prev => { const next = { ...prev }; if (idx === -1) next.globalIntro.videoUrl = url; else next.levels[idx].intro.videoUrl = url; return next; }); };
+    const handleOpenSheet = (url) => { window.open(url, '_blank'); };
+
+    // --- IA ---
+    const handlePaste = (e) => { const items = e.clipboardData.items; for (let i = 0; i < items.length; i++) { if (items[i].kind === 'file') { setAiFile(items[i].getAsFile()); e.preventDefault(); return; } } };
+    const handleDrop = (e) => { e.preventDefault(); if (e.dataTransfer.files[0]) setAiFile(e.dataTransfer.files[0]); };
+    const handleFileSelect = (e) => { if (e.target.files[0]) setAiFile(e.target.files[0]); };
+    const handleRemoveFile = (e) => { e.stopPropagation(); setAiFile(null); if(fileInputRef.current) fileInputRef.current.value = ""; };
+
+    const handleGenerateAI = async (mode = 'manual') => {
+        setAiGenerating(true);
+        try {
+            const fd = new FormData();
+            
+            if (mode === 'sheet') {
+                const sheetUrl = currentLevel.intro?.sheetUrl;
+                if (!sheetUrl) return alert("Pas de fiche dans ce niveau !");
+                fd.append('sheetUrl', sheetUrl);
+            } 
+            else {
+                if (!aiTopic) {
+                    setAiGenerating(false);
+                    return alert("Entrez un sujet !");
+                }
+            }
+            
+            fd.append('topic', aiTopic || (mode === 'sheet' ? "Génère un quiz d'après cette fiche" : "Quiz"));
+            fd.append('count', 5);
+
+            const res = await fetch('/api/games/generate-content', { method: 'POST', body: fd });
+            const cleaned = await res.json();
+
+            if (Array.isArray(cleaned) && cleaned.length > 0) {
+                setFormData(p => {
+                    const newLevels = [...p.levels];
+                    // On remplace les questions vides si c'est la seule
+                    if (newLevels[activeLevelIdx].questions.length === 1 && newLevels[activeLevelIdx].questions[0].q === 'Nouvelle question') {
+                        newLevels[activeLevelIdx].questions = cleaned;
+                    } else {
+                        newLevels[activeLevelIdx].questions = [...newLevels[activeLevelIdx].questions, ...cleaned];
+                    }
+                    return { ...p, levels: newLevels };
+                });
+                setActiveQIdx(0);
+                setAiTopic("");
+            } else { alert("L'IA n'a rien généré."); }
+        } catch(e) { alert("Erreur IA"); } 
+        setAiGenerating(false); 
+    };
+
+    // --- RENDU ---
+    const currentLevel = formData.levels[activeLevelIdx];
+    const safeQList = currentLevel ? currentLevel.questions : [];
+    const currentQ = safeQList[activeQIdx];
+    const hasLevelSheet = !!currentLevel?.intro?.sheetUrl;
+    const totalQuestionsCount = formData.levels.reduce((acc, l) => acc + l.questions.length, 0);
 
     const targetLevel = allClasses.find(c => c.name === viewingClass)?.level;
     const myClassesIds = (user.assignedClasses || []).map(c => String(c._id || c));
     const availableClasses = allClasses.filter(c => { if (targetLevel) if (String(c.level) !== String(targetLevel)) return false; if (user.isDeveloper || user.role === 'admin') return true; return myClassesIds.includes(String(c._id)); }).sort((a,b) => a.name.localeCompare(b.name));
-    
-    // ✅ FIX V18:50 : Utilisation de StudioUtils via l'import
     const rawStudents = StudioUtils.getStudentsForViewingClass(viewingClass, allStudents, allClasses);
     const studentsToDisplay = rawStudents.filter(s => `${s.firstName} ${s.lastName}`.toLowerCase().includes(studentSearch.toLowerCase()));
     
     const handleToggleStudent = (sId) => { setDistribution(prev => { const next = { ...prev }; const cfg = next[viewingClass]; if (!cfg) { const defId = StudioUtils.findDefaultChapterId([viewingClass], chapters, user, targetSection, allClasses); next[viewingClass] = { chapterId: defId, studentIds: [sId] }; } else { let newIds = cfg.studentIds.length === 0 ? rawStudents.map(s => s._id).filter(id => id !== sId) : (cfg.studentIds.includes(sId) ? cfg.studentIds.filter(id => id !== sId) : [...cfg.studentIds, sId]); if (newIds.length === 0) delete next[viewingClass]; else if (newIds.length === rawStudents.length) next[viewingClass] = { ...cfg, studentIds: [] }; else next[viewingClass] = { ...cfg, studentIds: newIds }; } return next; }); };
     const toggleAllStudents = () => { setDistribution(prev => { const next = { ...prev }; if (next[viewingClass]) delete next[viewingClass]; else { const defId = StudioUtils.findDefaultChapterId([viewingClass], chapters, user, targetSection, allClasses); next[viewingClass] = { chapterId: defId, studentIds: [] }; } return next; }); };
     
+    const isClassSelected = !!distribution[viewingClass];
+    const distCfg = distribution[viewingClass];
+    const selectedClassesList = Object.keys(distribution);
+    const availableChapters = StudioUtils.getChaptersForContext(selectedClassesList.length > 1 ? selectedClassesList : [viewingClass], chapters, user, targetSection, allClasses);
+
     const handleSave = async () => {
         const targets = Object.keys(distribution);
         if (!formData.title || targets.length === 0) return alert("❌ Titre et Classe requis !");
+        if (totalQuestionsCount === 0) return alert("Ajoutez au moins une question !");
         setLoading(true);
         try {
             for (const cls of targets) {
@@ -1196,60 +1431,112 @@ export default function GameStudio({ initialData, chapters, classFilter, user, t
         } catch(e) { alert("Erreur sauvegarde."); }
         setLoading(false);
     };
-    
-    const currentQ = formData.questions[activeQIndex];
-    const distCfg = distribution[viewingClass];
-    const isSelected = !!distribution[viewingClass];
-    const selectedClassesList = Object.keys(distribution);
-    
-    // ✅ FIX V18:50 : getChaptersForContext via StudioUtils
-    const availableChapters = StudioUtils.getChaptersForContext(selectedClassesList.length > 1 ? selectedClassesList : [viewingClass], chapters, user, targetSection, allClasses);
 
     return (
         <div className="v84-game-container">
+            <input type="file" ref={assetInputRef} className="hidden" accept="image/*,application/pdf" onChange={handleUploadAsset} />
+
             <div className="v84-game-header">
                 <div className="flex items-center"><span className="v84-game-icon">🎮</span><input className="v84-game-title-input" value={formData.title} onChange={e => handleInput('title', e.target.value)} placeholder="TITRE DU QUIZ..." disabled={loading} /></div>
                 <button onClick={onClose} className="v84-close-btn">✕</button>
             </div>
+            
             <div className="v84-game-body">
-                <div className="v84-q-list-sidebar custom-scrollbar"><span className="v84-sidebar-label">Questions ({formData.questions.length})</span>{formData.questions.map((q, index) => (<div key={index} className={`v84-q-item ${activeQIndex === index ? 'active' : ''}`} onClick={() => handleSelectQuestion(index)}><div className="v84-q-preview">Q{index + 1}: {q.q.substring(0, 30)}...</div><div className="v84-q-sub">Rép: {q.options[q.a]}</div></div>))}<button className="v84-add-q-btn" onClick={handleAddQuestion} disabled={loading}>+ AJOUTER</button></div>
-                <div className="v84-game-editor custom-scrollbar">
-                    <div className="v84-ai-widget"><span className="text-3xl">🤖</span><input className="v84-ai-input" placeholder="Sujet..." value={aiTopic} onChange={e => setAiTopic(e.target.value)} disabled={aiGenerating || loading} /><button className="v84-ai-btn" onClick={handleGenerateAI} disabled={aiGenerating || loading}>{aiGenerating ? '...' : 'GÉNÉRER'}</button></div>
-                    {currentQ && (<div className="v84-q-card"><span className="v84-field-label">Question {activeQIndex + 1}</span><textarea className="v84-q-input" value={currentQ.q} onChange={e => updateQuestion('q', e.target.value)} rows="3" disabled={loading}/><div className="v84-answers-grid">{currentQ.options.map((opt, index) => (<div key={index} className={`v84-ans-row ${currentQ.a === index ? 'correct' : ''}`}><div className="v84-correct-radio" onClick={() => updateQuestion('a', index)}>{currentQ.a === index ? '✓' : ''}</div><input className="v84-ans-input" placeholder={`Opt ${index + 1}`} value={opt} onChange={e => updateQuestion('options', e.target.value, index)} disabled={loading}/></div>))}</div></div>)}
+                {/* SIDEBAR GAUCHE */}
+                <div className="v84-q-list-sidebar custom-scrollbar">
+                    {formData.levels.map((lvl, lIdx) => (
+                        <div key={lIdx} className="v84-level-block">
+                            <div className={`v84-level-header ${activeLevelIdx === lIdx ? 'active-lvl' : ''}`} onClick={() => { setActiveLevelIdx(lIdx); setActiveQIdx(0); }}>
+                                {lvl.name} ({lvl.questions.length})
+                                {formData.levels.length > 1 && <button className="v84-del-btn" onClick={(e) => handleDeleteLevel(e, lIdx)}>✕</button>}
+                            </div>
+                            
+                            {activeLevelIdx === lIdx && (
+                                <div className="v84-q-list">
+                                    {lvl.questions.map((q, qIdx) => (
+                                        <div key={qIdx} className={`v84-q-item ${activeQIdx === qIdx ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); handleSelectQuestion(lIdx, qIdx); }}>
+                                            <input type="checkbox" className="v84-q-checkbox" checked={isQuestionSelected(lIdx, qIdx)} onChange={(e) => handleToggleSelect(e, lIdx, qIdx)} onClick={e => e.stopPropagation()} />
+                                            {/* PROTECTION */}
+                                            <div className="v84-q-preview">Q{qIdx + 1}: {(q.q || "Question vide").substring(0, 30)}...</div>
+                                            <button className="v84-del-btn" onClick={(e) => handleDeleteQuestion(e, lIdx, qIdx)}>✕</button>
+                                        </div>
+                                    ))}
+                                    <button className="v84-add-q-btn" onClick={handleAddQuestion} disabled={loading}>+ QUESTION</button>
+                                </div>
+                            )}
+                        </div>
+                    ))}
+                    {selectedForMove.length > 0 && (
+                        <div className="v84-move-box">
+                            <div className="v84-move-title">{selectedForMove.length} Sélectionné(s)</div>
+                            <div className="v84-move-actions">
+                                <select className="v84-move-select" value={moveTargetLevel} onChange={e => setMoveTargetLevel(e.target.value)}><option value="">Vers niveau...</option>{formData.levels.map((l, idx) => <option key={idx} value={idx}>{l.name}</option>)}</select>
+                                <button className="v84-move-go-btn" onClick={handleMoveQuestions}>GO</button>
+                            </div>
+                        </div>
+                    )}
+                    <button className="v84-add-level-btn" onClick={handleAddLevel}>+ NOUVEAU NIVEAU</button>
                 </div>
+
+                {/* EDITOR CENTER */}
+                <div className="v84-game-editor custom-scrollbar">
+                    {/* RESSOURCES GLOBALES */}
+                    {activeLevelIdx === 0 && activeQIdx === 0 && (
+                        <div className="v84-resources-global">
+                            <div className="v84-res-title global"><span>🌍</span> RESSOURCES GLOBALES (INTRO JEU)</div>
+                            <div className="v84-res-row">
+                                {formData.globalIntro.sheetUrl ? (
+                                    <div className="v84-res-badge" onClick={() => handleOpenSheet(formData.globalIntro.sheetUrl)}>📄 FICHE PRÊTE <span className="v84-res-remove" onClick={(e) => { e.stopPropagation(); handleRemoveAsset(-1); }}>✕</span></div>
+                                ) : ( <button className="v84-res-btn upload" onClick={() => { setUploadTarget(-1); assetInputRef.current.click(); }}>📤 AJOUTER FICHE</button> )}
+                                <input className="v84-res-input" placeholder="Lien Vidéo..." value={formData.globalIntro.videoUrl} onChange={e => handleUpdateAssetVideo(-1, e.target.value)} />
+                            </div>
+                        </div>
+                    )}
+                    {/* RESSOURCES NIVEAU */}
+                    {currentLevel && (
+                        <div className="v84-resources-level">
+                            <div className="v84-res-title local"><span>📍</span> RESSOURCES {currentLevel.name}</div>
+                            <div className="v84-res-row">
+                                {currentLevel.intro?.sheetUrl ? (
+                                    <div className="v84-res-badge" onClick={() => handleOpenSheet(currentLevel.intro.sheetUrl)}>📄 FICHE NIVEAU <span className="v84-res-remove" onClick={(e) => { e.stopPropagation(); handleRemoveAsset(activeLevelIdx); }}>✕</span></div>
+                                ) : ( <button className="v84-res-btn upload" onClick={() => { setUploadTarget(activeLevelIdx); assetInputRef.current.click(); }}>📤 FICHE NIVEAU</button> )}
+                                <input className="v84-res-input" placeholder="Vidéo..." value={currentLevel.intro?.videoUrl || ""} onChange={e => handleUpdateAssetVideo(activeLevelIdx, e.target.value)} />
+                            </div>
+                        </div>
+                    )}
+                    {/* IA WIDGET */}
+                    <div className="v84-ai-widget">
+                        <div className="v84-ai-row"><span className="text-2xl">🤖</span><input className="v84-ai-input" placeholder="Sujet / Consigne IA..." value={aiTopic} onChange={e => setAiTopic(e.target.value)} /></div>
+                        {hasLevelSheet && <button className="v84-gen-btn mb-2" onClick={() => handleGenerateAI('sheet')} disabled={aiGenerating}>{aiGenerating ? 'ANALYSE...' : '📄 GÉNÉRER D\'APRÈS LA FICHE DU NIVEAU'}</button>}
+                        <button className={`v84-gen-btn ${hasLevelSheet ? 'bg-slate-400' : ''}`} onClick={() => handleGenerateAI('manual')} disabled={aiGenerating}>{aiGenerating ? '...' : (hasLevelSheet ? 'OU GÉNÉRER VIA LE SUJET' : 'GÉNÉRER VIA CE SUJET')}</button>
+                    </div>
+                    {/* EDITOR */}
+                    {currentQ ? (
+                        <div className="v84-q-card">
+                            <span className="text-xs font-black text-slate-400 uppercase mb-4 block">{currentLevel.name} - Question {activeQIdx + 1}</span>
+                            <textarea className="v84-q-input" value={currentQ.q || ""} onChange={e => updateQuestion('q', e.target.value)} rows="3" disabled={loading}/>
+                            <div className="v84-answers-grid">{(currentQ.options || ['','','','']).map((opt, index) => (<div key={index} className={`v84-ans-row ${currentQ.a === index ? 'correct' : ''}`}><div className="v84-correct-radio" onClick={() => updateQuestion('a', index)}>{currentQ.a === index ? '✓' : ''}</div><input className="v84-ans-input" placeholder={`Opt ${index + 1}`} value={opt} onChange={e => updateQuestion('options', e.target.value, index)} disabled={loading}/></div>))}</div>
+                        </div>
+                    ) : <div className="flex items-center justify-center h-full text-slate-300 font-bold uppercase">Sélectionnez une question</div>}
+                </div>
+
+                {/* DISTRIBUTION */}
                 <div className="v84-dist-sidebar custom-scrollbar">
-                    <span className="v84-sidebar-label">Distribution</span>
                     <div className="mb-4 flex flex-wrap gap-2">{availableClasses.map(c => (<button key={c._id} onClick={() => { setViewingClass(c.name); setStudentSearch(""); }} className={`v84-tab-btn-game ${distribution[c.name] ? 'active' : 'inactive'} ${viewingClass === c.name ? 'border-2 border-purple-700' : ''}`} style={c.type === 'GROUP' ? { color: '#f59e0b', borderColor: '#fcd34d' } : {}}>{c.name}</button>))}</div>
                     {viewingClass && (
                         <div className="flex-1 flex flex-col bg-slate-50 rounded-2xl overflow-hidden border border-slate-200 p-4">
-                            <div className="flex justify-between items-center mb-4 cursor-pointer" onClick={toggleAllStudents}><span className="font-black text-slate-700 uppercase">{viewingClass}</span><div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${isSelected ? 'bg-purple-600 border-purple-600' : 'border-slate-300'}`}>{isSelected && <span className="text-white text-xs">✓</span>}</div></div>
-                            
+                            <div className="flex justify-between items-center mb-4 cursor-pointer" onClick={toggleAllStudents}><span className="font-black text-slate-700 uppercase">{viewingClass}</span><div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${isClassSelected ? 'bg-purple-600 border-purple-600' : 'border-slate-300'}`}>{isClassSelected && <span className="text-white text-xs">✓</span>}</div></div>
                             <div className="p-3 bg-white rounded-xl border border-slate-200 mb-4">
                                 <label className="text-[9px] font-black text-slate-400 uppercase mb-1 block">Dossier :</label>
-                                <select 
-                                    className="w-full p-2 rounded-lg text-xs font-bold border border-slate-100 outline-none bg-slate-50" 
-                                    value={distCfg?.chapterId || StudioUtils.findDefaultChapterId([viewingClass], chapters, user, targetSection, allClasses)} 
-                                    onChange={(e) => setDistribution(p => ({ ...p, [viewingClass]: { ...p[viewingClass], chapterId: e.target.value } }))} 
-                                    disabled={loading}
-                                >
+                                <select className="w-full p-2 rounded-lg text-xs font-bold border border-slate-100 outline-none bg-slate-50" value={distCfg?.chapterId || StudioUtils.findDefaultChapterId([viewingClass], chapters, user, targetSection, allClasses)} onChange={(e) => setDistribution(p => ({ ...p, [viewingClass]: { ...p[viewingClass], chapterId: e.target.value } }))} disabled={loading}>
                                     <option value="">-- CHOISIR --</option>
                                     {availableChapters.map(c => <option key={c._id} value={c._id}>{c.title}</option>)}
                                 </select>
                             </div>
-                            
-                            <div className="relative mb-2">
-                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px]">🔎</span>
-                                <input 
-                                    className="w-full pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-[10px] font-bold outline-none focus:border-purple-400" 
-                                    placeholder="Chercher..." 
-                                    value={studentSearch} 
-                                    onChange={e => setStudentSearch(e.target.value)} 
-                                />
-                            </div>
-
+                            <div className="relative mb-2"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px]">🔎</span><input className="w-full pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-[10px] font-bold outline-none focus:border-purple-400" placeholder="Chercher..." value={studentSearch} onChange={e => setStudentSearch(e.target.value)} /></div>
                             <div className="flex-1 overflow-y-auto custom-scrollbar">
                                 {studentsToDisplay.map(s => { 
-                                    const checked = isSelected && (distribution[viewingClass].studentIds.length === 0 || distribution[viewingClass].studentIds.includes(s._id));
+                                    const checked = isClassSelected && (distribution[viewingClass].studentIds.length === 0 || distribution[viewingClass].studentIds.includes(s._id));
                                     return (<div key={s._id} onClick={() => handleToggleStudent(s._id)} className={`flex items-center gap-3 p-2 rounded cursor-pointer transition-colors ${checked ? 'bg-purple-50 text-purple-700' : 'hover:bg-slate-100 text-slate-400'}`}>
                                         <div className={`w-4 h-4 rounded border shrink-0 ${checked ? 'bg-purple-600 border-purple-600' : 'border-slate-300'}`}></div>
                                         <span className="text-[11px] font-bold truncate">{s.lastName} {s.firstName}</span>
@@ -1258,7 +1545,7 @@ export default function GameStudio({ initialData, chapters, classFilter, user, t
                             </div>
                         </div>
                     )}
-                    <button className="v84-game-publish-btn" onClick={handleSave} disabled={loading || formData.questions.length === 0}>{loading ? '...' : (initialData ? 'MODIFIER' : 'PUBLIER 🚀')}</button>
+                    <button className="v84-game-publish-btn" onClick={handleSave} disabled={loading || totalQuestionsCount === 0}>{loading ? '...' : (initialData ? 'MODIFIER' : 'PUBLIER 🚀')}</button>
                 </div>
             </div>
         </div>
@@ -1476,35 +1763,53 @@ module.exports = mongoose.models.Game || mongoose.model('Game', GameSchema);
 [[[£ FILE: server/models/GameLevel.js £]]]
 const mongoose = require('mongoose');
 
-/**
- * 🎮 MODÈLE GAME LEVEL V2 (Harmonisé avec Homework)
- * Ajout des champs de ciblage (Classes, Élèves, Prof) pour la distribution.
- */
+const QuestionSchema = new mongoose.Schema({
+    q: String,
+    options: [String],
+    a: Number
+}, { _id: false });
+
+const EducationalAssetSchema = new mongoose.Schema({
+    sheetUrl: { type: String, default: "" }, 
+    videoUrl: { type: String, default: "" }
+}, { _id: false });
+
+const LevelStructureSchema = new mongoose.Schema({
+    name: { type: String, default: "Niveau 1" },
+    intro: { type: EducationalAssetSchema, default: () => ({}) },
+    questions: [QuestionSchema]
+}, { _id: false });
+
 const GameLevelSchema = new mongoose.Schema({
     title: { type: String, required: true },
-    
-    // Structure & Propriété
     chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter' },
     teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher' },
-
-    // Ciblage (Distribution)
-    classroom: String, // Gardé pour compatibilité legacy
+    
+    classroom: String,
     targetClassrooms: [String], 
     assignedStudents: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Student' }],
     isAllClass: { type: Boolean, default: true },
 
-    // Contenu
-    questions: [{
-        q: String,          // Énoncé
-        options: [String],  // [Rep A, Rep B, Rep C, Rep D]
-        a: Number           // Index bonne réponse (0-3)
-    }],
+    levels: { type: [LevelStructureSchema], default: [] },
+    
+    questions: { type: [QuestionSchema], default: [] }, // Legacy
+
+    globalIntro: { type: EducationalAssetSchema, default: () => ({}) },
 
     isArchived: { type: Boolean, default: false },
     createdAt: { type: Date, default: Date.now }
-}, { collection: 'gamelevels' });
+}, { 
+    collection: 'gamelevels',
+    strict: false, // 🚀 FORCE L'ENREGISTREMENT DE TOUT
+    minimize: false // GARDE LES OBJETS VIDES SI BESOIN
+});
 
-module.exports = mongoose.models.GameLevel || mongoose.model('GameLevel', GameLevelSchema);
+// Hack pour forcer la recompilation du modèle si le fichier change
+if (mongoose.models.GameLevel) {
+    delete mongoose.models.GameLevel;
+}
+
+module.exports = mongoose.model('GameLevel', GameLevelSchema);
 
 [[[£ END: server/models/GameLevel.js £]]]
 
@@ -1521,30 +1826,130 @@ module.exports = mongoose.models.GameProgress || mongoose.model('GameProgress', 
 [[[£ END: server/models/GameProgress.js £]]]
 
 [[[£ FILE: server/prof/games/games.prof.js £]]]
-// @signatures: ProfGamesRouter, all, create, generate
+// @signatures: ProfGamesRouter, all, create, generate, generateContent, streamToBuffer, uploadAsset
 const express = require('express');
 const router = express.Router();
-const { GameLevel } = require('../models/prof.models');
+// On require le modèle ici pour être sûr qu'il est chargé
+const GameLevel = require('../../models/GameLevel'); 
 const ProfAI = require('../core/prof.ai');
+const ProfDrive = require('../core/drive.prof'); 
+const multer = require('multer');
+const fs = require('fs');
+const path = require('path');
 
-/**
- * 🕹️ BLOC PROF : LOGIQUE JEUX (/api/games)
- */
+const upload = multer({ dest: path.join(process.cwd(), 'public', 'uploads', 'temp') });
+
+const streamToBuffer = async (stream) => {
+    const chunks = [];
+    return new Promise((resolve, reject) => {
+        stream.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+        stream.on('error', (err) => reject(err));
+        stream.on('end', () => resolve(Buffer.concat(chunks)));
+    });
+};
 
 router.get('/all', async (req, res) => {
-    res.json(await GameLevel.find({}).lean());
+    try {
+        const list = await GameLevel.find({}).lean();
+        res.json(list);
+    } catch (e) { res.status(500).json([]); }
 });
 
 router.post('/', async (req, res) => {
-    const quiz = await GameLevel.create(req.body);
-    res.json(quiz);
+    console.log("💾 [GAMES] Sauvegarde...");
+    console.log("   DATA REÇUE:", JSON.stringify(req.body).substring(0, 200) + "...");
+    
+    if (req.body.levels) {
+        console.log(`   ✅ LEVELS PRÉSENTS: ${req.body.levels.length}`);
+    } else {
+        console.error("   ❌ LEVELS MANQUANTS DANS LE PAYLOAD !");
+    }
+
+    try {
+        const data = req.body;
+        
+        // Nettoyage IDs vides
+        if (data.levels) {
+            data.levels.forEach(l => {
+                if(l._id === "") delete l._id;
+                if(l.intro && l.intro._id === "") delete l.intro._id;
+                if(l.questions) l.questions.forEach(q => { if(q._id === "") delete q._id; });
+            });
+        }
+
+        let quiz;
+        if (data._id) {
+            // On force l'update avec le nouveau contenu
+            quiz = await GameLevel.findByIdAndUpdate(data._id, { $set: data }, { new: true });
+        } else {
+            quiz = await GameLevel.create(data);
+        }
+        
+        console.log("   ✅ Sauvegardé ID:", quiz._id);
+        res.json(quiz);
+    } catch (e) { 
+        console.error("   ❌ ERREUR:", e.message);
+        res.status(500).json({ error: e.message }); 
+    }
 });
 
-router.post('/generate', async (req, res) => {
-    const { topic, count } = req.body;
-    const system = "Tu es un professeur expert. Réponds UNIQUEMENT en JSON pur (Array d'objets {q, options, a}).";
-    const raw = await ProfAI.ask(`Génère un quiz de ${count} questions sur: ${topic}`, system);
-    res.json(ProfAI.sanitize(raw));
+router.post('/upload-asset', upload.single('file'), async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: "Fichier manquant" });
+    try {
+        const folderId = await ProfDrive.getOrCreateFolder("CONDA_GAMES_ASSETS");
+        const driveFile = await ProfDrive.uploadFile(req.file.originalname, req.file.path, folderId);
+        const url = `/api/structure/proxy/${driveFile.id}`;
+        try { fs.unlinkSync(req.file.path); } catch(e){}
+        res.json({ url, name: req.file.originalname });
+    } catch (e) {
+        res.status(500).json({ error: "Erreur Drive" });
+    }
+});
+
+router.post('/generate-content', upload.single('file'), async (req, res) => {
+    const { topic, count, contextText, sheetUrl } = req.body;
+    console.log(`🎮 [GAMES] Génération IA. Topic: "${topic}"`);
+
+    const system = `Tu es un expert pédagogique créateur de Quiz.
+    TA MISSION : Créer un QCM de ${count || 5} questions.
+    RÈGLE DE REDACTION : Format "Texte à trous" si possible.
+    FORMAT SORTIE : Un tableau JSON [ { "q": "...", "options": ["...",...], "a": 0 } ].`;
+
+    const promptParts = [];
+    if (topic) promptParts.push({ text: `Sujet/Consigne : "${topic}".` });
+    if (contextText) promptParts.push({ text: `CONTENU :\n${contextText}` });
+
+    try {
+        if (req.file) {
+            const fileData = fs.readFileSync(req.file.path).toString('base64');
+            promptParts.push({ inlineData: { mimeType: req.file.mimetype, data: fileData } });
+        } 
+        else if (sheetUrl && sheetUrl.includes('/proxy/')) {
+            const fileId = sheetUrl.split('/proxy/')[1];
+            const stream = await ProfDrive.getFileStream(fileId);
+            const buffer = await streamToBuffer(stream);
+            const mime = sheetUrl.endsWith('.pdf') ? 'application/pdf' : 'image/jpeg'; 
+            promptParts.push({ inlineData: { mimeType: mime, data: buffer.toString('base64') } });
+        }
+
+        if (promptParts.length === 0) return res.status(400).json({ error: "Aucun contexte" });
+
+        const raw = await ProfAI.ask(promptParts, system);
+        const questions = ProfAI.sanitize(raw);
+        
+        const shuffled = questions.map(q => {
+            const corr = q.options[q.a];
+            const opts = [...q.options].sort(() => Math.random() - 0.5);
+            return { ...q, options: opts, a: opts.indexOf(corr) };
+        });
+
+        res.json(shuffled);
+    } catch (e) {
+        console.error("❌ [GAMES] Erreur IA:", e);
+        res.status(500).json({ error: "Erreur IA" });
+    } finally {
+        if (req.file) { try { fs.unlinkSync(req.file.path); } catch(e){} }
+    }
 });
 
 module.exports = router;

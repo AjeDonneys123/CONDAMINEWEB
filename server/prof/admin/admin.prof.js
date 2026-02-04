@@ -1,54 +1,44 @@
-// @signatures: ProfAdminRouter, listAll, driveCheck
+// @signatures: ProfAdminRouter, listAll, driveCheck, databaseDump
 const express = require('express');
 const router = express.Router();
-const { Classroom, Student, Teacher, Admin, Subject } = require('../models/prof.models');
+const mongoose = require('mongoose');
+const AdminExpert = require('../../domains/admin/experts/admin.expert');
 
-/**
- * 🛡️ BLOC ADMIN PROF (/api/admin)
- * Gère l'infrastructure et les vérifications système.
- */
-
-// ✅ RÉPARATION : Route de vérification du Drive (appelée par ProfHeader.jsx)
+// 1. VÉRIFICATION DRIVE (Header)
 router.get('/drive-check', async (req, res) => {
+    const status = await AdminExpert.checkDriveStatus();
+    res.json(status);
+});
+
+// 2. MOUCHARD BDD (Le bouton qui plantait)
+router.get('/database-dump', async (req, res) => {
     try {
-        const hasToken = !!process.env.GOOGLE_REFRESH_TOKEN;
-        const hasClientId = !!process.env.GOOGLE_CLIENT_ID;
-        
-        res.json({ 
-            ok: hasToken && hasClientId, 
-            email: hasToken ? "Connecté (Drive Pro)" : "Non configuré" 
-        });
+        const dump = await AdminExpert.getFullDump();
+        res.json(dump);
     } catch (e) {
-        res.status(500).json({ ok: false, email: '' });
+        console.error("Dump Error:", e);
+        res.status(500).json({ error: e.message });
     }
 });
 
+// 3. LISTES SIMPLES
 router.get('/classrooms', async (req, res) => {
-    try {
-        const list = await Classroom.find({}).lean();
-        res.json(list.sort((a,b) => (a.name || "").localeCompare(b.name || "")));
-    } catch (e) { res.status(500).json({ error: "DB FAIL" }); }
+    res.json(await mongoose.model('Classroom').find({}).sort({ name: 1 }).lean());
 });
 
 router.get('/students', async (req, res) => {
-    try {
-        const list = await Student.find({}).sort({ lastName: 1 }).lean();
-        res.json(list);
-    } catch (e) { res.status(500).json({ error: "DB FAIL" }); }
+    res.json(await mongoose.model('Student').find({}).sort({ lastName: 1 }).lean());
 });
 
 router.get('/teachers/:id', async (req, res) => {
-    try {
-        const user = await Teacher.findById(req.params.id).lean() || await Admin.findById(req.params.id).lean();
-        res.json(user || {});
-    } catch (e) { res.status(500).json({ error: "DB FAIL" }); }
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) return res.json({});
+    const user = await mongoose.model('Teacher').findById(id).lean() || await mongoose.model('Admin').findById(id).lean();
+    res.json(user || {});
 });
 
 router.get('/subjects', async (req, res) => {
-    try {
-        const list = await Subject.find({}).sort({ name: 1 }).lean();
-        res.json(list);
-    } catch (e) { res.json([]); }
+    res.json(await mongoose.model('Subject').find({}).sort({ name: 1 }).lean());
 });
 
 module.exports = router;

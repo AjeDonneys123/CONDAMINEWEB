@@ -1,4 +1,4 @@
-// @signatures: ProfStructureRouter, chapters, sections, deleteChapterRequest, moveChapter, moveActivity, proxy
+// @signatures: ProfStructureRouter, chapters, sections, deleteActivityRequest, deleteChapterRequest, moveChapter, moveActivity, proxy
 const express = require('express');
 const router = express.Router();
 const { Chapter, Teacher, Admin, Classroom, Homework, GameLevel } = require('../models/prof.models');
@@ -6,7 +6,7 @@ const ProfDrive = require('../core/drive.prof');
 const mongoose = require('mongoose');
 
 /**
- * 🛠️ BLOC STRUCTURE PROF V450 - RÉPARÉ (FIX PROXY)
+ * 🛠️ BLOC STRUCTURE PROF V450 - RÉPARÉ (FIX DELETE & PROXY)
  * RÔLE : Gestion des sections et dossiers + Proxy d'images partagé.
  */
 
@@ -142,6 +142,32 @@ router.post('/chapters/delete-request', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// --- 3. ACTIVITÉS (DELETE & MOVE) ---
+
+router.post('/activity/delete-request', async (req, res) => {
+    try {
+        const { id, type } = req.body;
+        
+        // Suppression Devoir
+        if (type === 'homework') {
+            await Homework.findByIdAndDelete(id);
+            return res.json({ ok: true });
+        }
+        
+        // Suppression Jeu
+        if (['game', 'zombie', 'starship'].includes(type) || !type) {
+            await GameLevel.findByIdAndDelete(id);
+            // Optionnel : Supprimer la progression associée ?
+            // await GameProgress.deleteMany({ gameId: id });
+            return res.json({ ok: true });
+        }
+
+        res.status(400).json({ error: "Type inconnu" });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// --- 4. UTILITAIRES ---
+
 router.get('/sections/:teacherId', async (req, res) => {
     try {
         const { teacherId } = req.params;
@@ -164,7 +190,6 @@ router.get('/sections/:teacherId', async (req, res) => {
 
 router.get('/proxy/:id', async (req, res) => {
     try {
-        // 🚀 FIX CRITIQUE : Utilisation du bon paramètre :id
         const stream = await ProfDrive.getFileStream(req.params.id);
         res.setHeader('Content-Type', 'image/png');
         stream.pipe(res);

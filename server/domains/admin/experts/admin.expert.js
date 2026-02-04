@@ -1,35 +1,39 @@
 const mongoose = require('mongoose');
 const DriveEngine = require('../../../core/drive.engine');
 
-/**
- * 🧠 EXPERT ADMIN - VERSION 82 (CLEANED)
- * Fonctions de maintenance et diagnostic système.
- */
 const AdminExpert = {
-    // Vérification de la connexion Google Drive
+    // Vérification Drive
     checkDriveStatus: async () => {
         try {
             return await DriveEngine.testAuth();
         } catch (e) {
-            return { ok: false, error: e.message };
+            // Si le core engine n'est pas init, on tente une réponse soft
+            const hasToken = !!process.env.GOOGLE_REFRESH_TOKEN;
+            return { ok: hasToken, email: hasToken ? "Connecté (Drive)" : "Non configuré" };
         }
     },
 
-    // Dump complet de la BDD pour le mouchard
+    // Dump complet pour le visualiseur BDD
     getFullDump: async () => {
         const models = [
             'AcademicYear', 'Admin', 'Classroom', 'Subject', 
             'Teacher', 'Student', 'Enrollment', 'Chapter', 
-            'Homework', 'Submission', 'StudioProject'
+            'Homework', 'Submission', 'GameLevel', 'GameProgress', 
+            'ScanSession', 'StudioProject'
         ];
+        
         const dump = {};
+        
         for (const m of models) {
             try {
                 if (mongoose.models[m]) {
+                    // On récupère le nom réel de la collection en minuscules
                     const collectionName = mongoose.models[m].collection.name;
-                    dump[collectionName] = await mongoose.model(m).find({}).limit(500).lean();
+                    dump[collectionName] = await mongoose.model(m).find({}).limit(200).lean();
                 }
-            } catch (e) { console.error(`Dump fail for ${m}`); }
+            } catch (e) { 
+                console.error(`Dump fail for ${m}: ${e.message}`); 
+            }
         }
         return dump;
     }
