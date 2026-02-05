@@ -1,6 +1,6 @@
 {
-  "status": "REJECTED",
-  "message": "Violation d'herméticité : STRUCTURE, CORE",
+  "status": "OK",
+  "message": "Infrastructure mise à jour",
   "details": null,
-  "timestamp": 1770314683864
+  "timestamp": 1770314954440
 }
