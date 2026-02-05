@@ -1,3 +1,4 @@
+├── ${relPath}
 ├── ${rel}
 ├── ...
 ├── .gitignore
@@ -92,6 +93,7 @@
 │   │   │       │   ├── ProfStudioFolder.jsx
 │   │   │       │   ├── ProjectTreeViewer.css
 │   │   │       │   ├── ProjectTreeViewer.jsx
+│   │   │       │   ├── StudioDistributionSidebar.jsx
 │   │   │       │   ├── SystemDocs.css
 │   │   │       │   ├── SystemDocs.jsx
 │   │   │       │   ├── SystemStatus.css
@@ -125,6 +127,8 @@
 │   └── vite.config.js
 ├── git-auto.js
 ├── history.txt
+├── homework.txt
+├── homeworkSnap.js
 ├── init-db.js
 ├── magic-paste.js
 ├── package.json
