@@ -92,12 +92,13 @@ Critères d’acceptation :
 ================================================================================
 
 [[[£ FILE: client/src/features/prof/components/ProfStudioFolder.jsx £]]]
-// @signatures: ProfStudioFolder, fetchSections, handleCreateSection, handleCreateChapter, handleRenameChapter, handleUpdateChapterComplete, handleArchiveChapter, prepareDelete, executeDelete, handleOpenEditSection, handleSaveSectionEdit
+// @signatures: ProfStudioFolder, executeDelete, fetchSections, handleArchiveChapter, handleCreateChapter, handleCreateSection, handleOpenEditSection, handleRenameChapter, handleSaveSectionEdit, handleUpdateChapterComplete, prepareDelete
 import React, { useState, useEffect } from 'react';
 
 /**
- * 📁 COMPOSANT FOLDER V440 - UNIFICATION SUPPRESSION
- * RÔLE : Gestion des dossiers et sections avec modale de suppression unique et stylisée.
+ * 📁 COMPOSANT FOLDER V460 - CRASH FIX & SAFE RENDER
+ * RÔLE : Gestion des dossiers et sections.
+ * FIX CRITIQUE : Vérification stricte 'Array.isArray()' avant tout .map() pour éviter l'écran blanc au démarrage.
  */
 export default function ProfStudioFolder({ items, chapters, studentsRef, classFilter, levelFilter, user, onEditItem, onCreateActivity, onRefresh }) {
     const [customSections, setCustomSections] = useState([]);
@@ -127,6 +128,11 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
 
     const getUserId = () => user?.id || user?._id;
 
+    // SÉCURITÉ DATA
+    const safeItems = Array.isArray(items) ? items : [];
+    const safeChapters = Array.isArray(chapters) ? chapters : [];
+    const safeSections = Array.isArray(customSections) ? customSections : [];
+
     async function fetchSections() {
         const uid = getUserId();
         if (!uid || uid === 'undefined') return;
@@ -134,7 +140,7 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
             const res = await fetch(`/api/structure/sections/${uid}?classContext=${classFilter || ""}`);
             if (res.ok) {
                 const data = await res.json();
-                let list = (data || []).filter(s => s.name.toUpperCase() !== "GÉNÉRAL");
+                let list = (Array.isArray(data) ? data : []).filter(s => s.name.toUpperCase() !== "GÉNÉRAL");
                 list.unshift({ name: 'GÉNÉRAL', color: '#64748b', scope: 'GLOBAL' });
                 setCustomSections(list);
             }
@@ -196,7 +202,7 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
 
     function handleRenameChapter(e, chapId, oldTitle) {
         e.stopPropagation();
-        const chap = (chapters || []).find(c => c._id === chapId);
+        const chap = safeChapters.find(c => c._id === chapId);
         let scope = chap?.classroom ? "CLASS" : (chap?.sharedLevel ? "LEVEL" : "GLOBAL");
         setEditingChapter({ id: chapId, title: oldTitle, scope });
         setShowEditChapterModal(true);
@@ -227,18 +233,16 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
         e.stopPropagation();
         const name = type === 'section' ? item.name : item.title;
         if (type === 'chapter' && activeSection.toUpperCase() === "GÉNÉRAL" && name.trim().toUpperCase() === "GÉNÉRAL") {
-            const sectionChapters = chapters.filter(c => c.section.toUpperCase() === "GÉNÉRAL" && !c.isArchived);
+            const sectionChapters = safeChapters.filter(c => c.section.toUpperCase() === "GÉNÉRAL" && !c.isArchived);
             if (sectionChapters.length <= 1) return alert("🔒 PROTECTION : Racine indestructible.");
         }
         const id = item._id || item.id;
         
-        // 🚀 UNIFICATION : On détermine si l'objet est partagé ou privé
         let isShared = false;
         if (type === 'section') isShared = item.scope !== 'CLASS';
         else if (type === 'chapter') isShared = !!item.sharedLevel;
         else isShared = (item.targetClassrooms && item.targetClassrooms.length > 1);
 
-        // On ouvre SYSTEMATIQUEMENT la modale custom
         setDeleteTarget({ id, type, name, isShared });
     }
 
@@ -271,12 +275,17 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
         }
     }
 
-    const filteredChapters = (chapters || []).filter(c => {
+    const filteredChapters = safeChapters.filter(c => {
         if (c.section.toUpperCase() !== activeSection.toUpperCase() || c.isArchived !== showArchived) return false;
         if (c.hiddenIn && c.hiddenIn.includes(classFilter)) return false;
         const isMatch = (activeSection.toUpperCase() === "GÉNÉRAL" && c.title.toUpperCase() === "GÉNÉRAL") || (classFilter && c.classroom === classFilter) || (levelFilter && String(c.sharedLevel) === String(levelFilter)) || (!c.classroom && !c.sharedLevel);
         return isMatch;
     });
+
+    const currentClassSize = classFilter && studentsRef ? studentsRef.filter(s => (s.currentClass || "").trim() === classFilter).length : 0;
+
+    // DÉDUPLICATION SÉCURISÉE (On garde les objets uniques par ID)
+    const uniqueItems = Array.from(new Map(safeItems.map(item => [item._id, item])).values());
 
     return (
         <div className="animate-in fade-in">
@@ -291,7 +300,7 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
                 </div>
                 
                 <div className="flex gap-3 overflow-x-auto no-scrollbar pb-6 pt-8 px-4 overflow-y-visible">
-                    {(customSections || []).map((s, idx) => {
+                    {safeSections.map((s, idx) => {
                         const isGeneral = s.name.toUpperCase() === "GÉNÉRAL";
                         const isActive = activeSection.toUpperCase() === s.name.toUpperCase();
                         
@@ -331,7 +340,7 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
 
             <div className="px-6 mt-10">
                 <div className="flex justify-between items-end mb-8">
-                    <h2 className="text-5xl font-black uppercase tracking-tighter" style={{ color: (customSections.find(s=>s.name.toUpperCase()===activeSection.toUpperCase())?.color || '#64748b') }}>{activeSection}</h2>
+                    <h2 className="text-5xl font-black uppercase tracking-tighter" style={{ color: (safeSections.find(s=>s.name.toUpperCase()===activeSection.toUpperCase())?.color || '#64748b') }}>{activeSection}</h2>
                     {!showArchived && (
                         <div className="flex gap-2">
                             <button onClick={() => onCreateActivity('homework', activeSection)} className="px-5 py-3 rounded-xl bg-orange-500 text-white text-[11px] font-black uppercase shadow-lg">+ Devoir</button>
@@ -345,13 +354,20 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
                     {filteredChapters.sort((a,b) => a.title.localeCompare(b.title)).map(chap => {
                         const isRoot = activeSection.toUpperCase() === "GÉNÉRAL" && chap.title.trim().toUpperCase() === "GÉNÉRAL";
                         const isLastSurvivor = activeSection.toUpperCase() === "GÉNÉRAL" && filteredChapters.length <= 1;
-                        const chapItemsCount = (items || []).filter(it=>String(it.chapterId)===String(chap._id)).length;
+
+                        // 🔍 FILTRE INTELLIGENT DES ITEMS
+                        const relevantItems = uniqueItems.filter(it => {
+                            if (String(it.chapterId) !== String(chap._id)) return false;
+                            // Si on filtre par classe, on ne compte pas les items des autres classes
+                            if (classFilter && it.targetClassrooms && !it.targetClassrooms.includes(classFilter)) return false;
+                            return true;
+                        });
 
                         return (
                             <div key={chap._id} className="bg-white border-2 rounded-[30px] overflow-hidden shadow-sm border-slate-100">
                                 <div className="p-5 flex justify-between items-center cursor-pointer hover:bg-slate-50" onClick={() => setOpenChaps({...openChaps, [chap._id]: !openChaps[chap._id]})}>
                                     <div className="flex items-center gap-4">
-                                        <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-xl shadow-inner" style={{ backgroundColor: (customSections.find(s=>s.name.toUpperCase()===activeSection.toUpperCase())?.color || '#64748b') }}>{openChaps[chap._id] ? '📂' : '📁'}</div>
+                                        <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-xl shadow-inner" style={{ backgroundColor: (safeSections.find(s=>s.name.toUpperCase()===activeSection.toUpperCase())?.color || '#64748b') }}>{openChaps[chap._id] ? '📂' : '📁'}</div>
                                         <div>
                                             <div className="flex items-center gap-2">
                                                 <h3 className="font-black text-slate-800 text-md uppercase">{chap.title}</h3>
@@ -363,7 +379,7 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
                                                     <span className="bg-indigo-50 text-indigo-400 text-[7px] font-black px-2 py-0.5 rounded uppercase tracking-widest border border-indigo-100">🏫 CLASSE</span>
                                                 ) : null}
                                             </div>
-                                            <span className="text-[8px] font-black text-slate-400 uppercase">{chapItemsCount} ÉLÉMENTS</span>
+                                            <span className="text-[8px] font-black text-slate-400 uppercase">{relevantItems.length} ÉLÉMENTS</span>
                                         </div>
                                     </div>
                                     <div className="flex gap-1">
@@ -374,25 +390,38 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
                                 </div>
                                 {openChaps[chap._id] && (
                                     <div className="bg-slate-50/50 border-t p-4 space-y-2">
-                                        {(items || []).filter(it => String(it.chapterId) === String(chap._id)).map(it => (
-                                            <div key={it._id} className="bg-white p-3 rounded-2xl flex justify-between items-center shadow-sm border border-slate-100">
-                                                <div className="flex flex-col">
-                                                    <span className="font-black text-slate-700 text-xs uppercase">{it.typeLabel} | {it.title}</span>
-                                                    {it.actType === 'homework' && it.isAllClass === false && it.assignedStudents?.length > 0 && (
-                                                        <div className="text-[8px] text-orange-500 font-bold mt-1 uppercase">
-                                                            Assigné à : {it.assignedStudents.map(id => {
-                                                                const s = studentsRef.find(st => String(st._id) === String(id));
-                                                                return s ? `${s.firstName} ${s.lastName.charAt(0)}.` : '...';
-                                                            }).join(', ')}
-                                                        </div>
-                                                    )}
+                                        {relevantItems.map(it => {
+                                            const assignedCount = it.assignedStudents?.length || 0;
+                                            const isManuallyFullClass = classFilter && currentClassSize > 0 && assignedCount >= currentClassSize;
+                                            const showList = !it.isAllClass && !isManuallyFullClass && assignedCount > 0;
+                                            
+                                            // 🔥 RECUPERATION DU NOM DE LA CLASSE CIBLE POUR LE BADGE
+                                            const targetClassName = (it.targetClassrooms && it.targetClassrooms.length > 0) ? it.targetClassrooms[0] : "";
+
+                                            return (
+                                                <div key={it._id} className="bg-white p-3 rounded-2xl flex justify-between items-center shadow-sm border border-slate-100">
+                                                    <div className="flex flex-col">
+                                                        <span className="font-black text-slate-700 text-xs uppercase">{it.typeLabel} | {it.title}</span>
+                                                        {showList ? (
+                                                            <div className="text-[8px] text-orange-500 font-bold mt-1 uppercase">
+                                                                👤 {targetClassName} : {it.assignedStudents.map(id => {
+                                                                    const s = studentsRef.find(st => String(st._id) === String(id));
+                                                                    return s ? `${s.firstName} ${s.lastName.charAt(0)}.` : '...';
+                                                                }).join(', ')}
+                                                            </div>
+                                                        ) : (
+                                                            <div className="text-[8px] text-emerald-500 font-bold mt-1 uppercase">
+                                                                🏫 Toute la {targetClassName}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex gap-2">
+                                                        <button onClick={() => onEditItem(it)} className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-[8px] font-black uppercase">ÉDITER</button>
+                                                        <button onClick={(e) => prepareDelete(e, it, it.actType)} className="px-2 py-1.5 rounded-lg bg-red-50 text-red-500 text-[10px]">✕</button>
+                                                    </div>
                                                 </div>
-                                                <div className="flex gap-2">
-                                                    <button onClick={() => onEditItem(it)} className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-[8px] font-black uppercase">ÉDITER</button>
-                                                    <button onClick={(e) => prepareDelete(e, it, it.actType)} className="px-2 py-1.5 rounded-lg bg-red-50 text-red-500 text-[10px]">✕</button>
-                                                </div>
-                                            </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 )}
                             </div>
@@ -406,114 +435,32 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
                 <div className="fixed inset-0 z-[40000] flex items-center justify-center bg-slate-900/90 backdrop-blur-sm">
                     <div className="bg-white p-10 rounded-[50px] w-full max-w-lg shadow-2xl animate-in zoom-in">
                         <h3 className="text-2xl font-black mb-2 uppercase text-slate-800">Édition Section</h3>
-                        
                         <div className="mb-6">
                             <label className="text-[10px] font-black text-slate-400 uppercase ml-2 block mb-1">Nom de la section</label>
-                            <input 
-                                className="w-full p-5 rounded-2xl bg-slate-100 border-none font-bold outline-none focus:ring-4 ring-indigo-500/20" 
-                                value={editingSection.name} 
-                                onChange={e => setEditingSection({...editingSection, name: e.target.value})} 
-                            />
+                            <input className="w-full p-5 rounded-2xl bg-slate-100 border-none font-bold outline-none focus:ring-4 ring-indigo-500/20" value={editingSection.name} onChange={e => setEditingSection({...editingSection, name: e.target.value})} />
                         </div>
-                        
                         <div className="mb-6">
                             <label className="text-[10px] font-black text-slate-400 uppercase ml-2 block mb-3">Thème Couleur</label>
                             <div className="grid grid-cols-6 gap-2 px-2">
                                 {PRESET_COLORS.map(c => (
-                                    <button 
-                                        key={c} 
-                                        onClick={() => setEditingSection({...editingSection, color: c})}
-                                        className={`w-10 h-10 rounded-xl border-4 transition-all ${editingSection.color === c ? 'border-slate-900 scale-110 shadow-lg' : 'border-transparent opacity-60 hover:opacity-100'}`}
-                                        style={{ backgroundColor: c }}
-                                    />
+                                    <button key={c} onClick={() => setEditingSection({...editingSection, color: c})} className={`w-10 h-10 rounded-xl border-4 transition-all ${editingSection.color === c ? 'border-slate-900 scale-110 shadow-lg' : 'border-transparent opacity-60 hover:opacity-100'}`} style={{ backgroundColor: c }} />
                                 ))}
                             </div>
                         </div>
-
                         <div className="mb-8">
                             <label className="text-[10px] font-black text-slate-400 uppercase ml-2 block mb-3">Statut / Portée</label>
                             <div className="grid grid-cols-3 gap-3">
                                 {['GLOBAL', 'LEVEL', 'CLASS'].map(s => (
-                                    <button 
-                                        key={s} 
-                                        onClick={() => setEditingSection({...editingSection, scope: s})} 
-                                        className={`p-4 rounded-2xl font-black text-[9px] border-2 transition-all ${editingSection.scope === s ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg' : 'bg-slate-50 text-slate-400'}`}
-                                    >
+                                    <button key={s} onClick={() => setEditingSection({...editingSection, scope: s})} className={`p-4 rounded-2xl font-black text-[9px] border-2 transition-all ${editingSection.scope === s ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg' : 'bg-slate-50 text-slate-400'}`}>
                                         {s === 'GLOBAL' ? '🌍 GÉNÉRAL' : s === 'LEVEL' ? '🎓 NIVEAU' : '🏫 CETTE CLASSE'}
                                     </button>
                                 ))}
                             </div>
                         </div>
-
                         <div className="flex gap-4">
                             <button onClick={() => setShowEditSectionModal(false)} className="flex-1 p-5 rounded-2xl font-black text-xs bg-slate-100 text-slate-400 uppercase">Annuler</button>
                             <button onClick={handleSaveSectionEdit} className="flex-1 p-5 rounded-2xl font-black text-xs bg-indigo-600 text-white uppercase shadow-xl">Sauvegarder ✨</button>
                         </div>
-                    </div>
-                </div>
-            )}
-
-            {/* 🚀 MODALE SUPPRESSION UNIFIÉE V440 */}
-            {deleteTarget && (
-                <div className="fixed inset-0 z-[40000] flex items-center justify-center bg-slate-900/95 backdrop-blur-md">
-                    <div className="bg-white p-10 rounded-[50px] w-full max-w-lg shadow-2xl animate-in zoom-in text-center">
-                        <div className="w-20 h-20 bg-red-100 text-red-500 rounded-full flex items-center justify-center text-4xl mx-auto mb-6">🗑️</div>
-                        <h3 className="text-2xl font-black mb-2 uppercase text-slate-800">Action sur "{deleteTarget.name}"</h3>
-                        
-                        {deleteTarget.isShared ? (
-                            <>
-                                <p className="text-sm text-slate-400 mb-8 px-6">Cet élément est partagé. Voulez-vous le supprimer partout ou simplement le masquer ici ?</p>
-                                <div className="flex flex-col gap-3">
-                                    <button onClick={() => executeDelete(deleteTarget.id, deleteTarget.type, false)} className="w-full p-5 rounded-2xl font-black text-xs bg-slate-900 text-white uppercase shadow-lg hover:scale-105 transition-transform">🙈 Masquer ici (conserver ailleurs)</button>
-                                    <button onClick={() => executeDelete(deleteTarget.id, deleteTarget.type, true)} className="w-full p-5 rounded-2xl font-black text-xs bg-red-600 text-white uppercase shadow-lg hover:scale-105 transition-transform">🔥 Supprimer partout</button>
-                                </div>
-                            </>
-                        ) : (
-                            <>
-                                <p className="text-sm text-slate-400 mb-8 px-6">Voulez-vous supprimer définitivement cet élément propre à la classe ?</p>
-                                <div className="flex flex-col gap-3">
-                                    <button onClick={() => executeDelete(deleteTarget.id, deleteTarget.type, true)} className="w-full p-5 rounded-2xl font-black text-xs bg-red-600 text-white uppercase shadow-lg hover:scale-105 transition-transform">🔥 Supprimer définitivement</button>
-                                </div>
-                            </>
-                        )}
-                        
-                        <button onClick={() => setDeleteTarget(null)} className="w-full p-4 rounded-2xl font-black text-xs bg-slate-100 text-slate-400 uppercase mt-4">Annuler</button>
-                    </div>
-                </div>
-            )}
-
-            {/* MODALES CLASSIQUES (DOSSIERS) */}
-            {showEditChapterModal && editingChapter && (
-                <div className="fixed inset-0 z-[35000] flex items-center justify-center bg-slate-900/90 backdrop-blur-sm">
-                    <div className="bg-white p-10 rounded-[50px] w-full max-w-md shadow-2xl animate-in zoom-in">
-                        <h3 className="text-2xl font-black mb-2 uppercase text-slate-800">Modifier Dossier</h3>
-                        <input className="w-full p-5 rounded-2xl bg-slate-100 border-none font-bold mb-6 outline-none focus:ring-4 ring-indigo-500/20" value={editingChapter.title} onChange={e => setEditingChapter({...editingChapter, title: e.target.value})} autoFocus />
-                        <div className="grid grid-cols-3 gap-3 mb-8">
-                            {['GLOBAL', 'LEVEL', 'CLASS'].map(s => (
-                                <button key={s} onClick={() => setEditingChapter({...editingChapter, scope: s})} className={`p-4 rounded-2xl font-black text-[9px] border-2 ${editingChapter.scope === s ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg' : 'bg-slate-50 text-slate-400'}`}>
-                                    {s === 'GLOBAL' ? '🌍 GLOBAL' : s === 'LEVEL' ? '🎓 NIV' : '🏫 CLASSE'}
-                                </button>
-                            ))}
-                        </div>
-                        <div className="flex gap-4">
-                            <button onClick={() => { setShowEditChapterModal(false); setEditingChapter(null); }} className="flex-1 p-5 rounded-2xl font-black text-xs bg-slate-100 text-slate-400 uppercase">Annuler</button>
-                            <button onClick={handleUpdateChapterComplete} className="flex-1 p-5 rounded-2xl font-black text-xs bg-indigo-600 text-white uppercase shadow-xl">Enregistrer ✨</button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {showSectionModal && (
-                <div className="fixed inset-0 z-[35000] flex items-center justify-center bg-slate-900/90 backdrop-blur-sm">
-                    <div className="bg-white p-10 rounded-[50px] w-full max-w-lg shadow-2xl animate-in zoom-in">
-                        <h3 className="text-2xl font-black mb-6 uppercase text-slate-800">Nouvelle Section</h3>
-                        <input className="w-full p-5 rounded-2xl bg-slate-100 border-none font-bold mb-6 outline-none focus:ring-4 ring-indigo-500/20" placeholder="Nom de la matière" value={newSectionName} onChange={e => setNewSectionName(e.target.value)} />
-                        <div className="grid grid-cols-3 gap-3 mb-8">
-                            <button onClick={() => setNewSectionScope("GLOBAL")} className={`p-4 rounded-2xl font-black text-[10px] border-2 transition-all ${newSectionScope === "GLOBAL" ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg' : 'bg-slate-50 text-slate-400'}`}>🌍 GLOBAL</button>
-                            <button onClick={() => setNewSectionScope("LEVEL")} className={`p-4 rounded-2xl font-black text-[10px] border-2 transition-all ${newSectionScope === "LEVEL" ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg' : 'bg-slate-50 text-slate-400'}`}>🎓 NIVEAU</button>
-                            <button onClick={() => setNewSectionScope("CLASS")} className={`p-4 rounded-2xl font-black text-[10px] border-2 transition-all ${newSectionScope === "CLASS" ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg' : 'bg-slate-50 text-slate-400'}`}>🏫 CLASSE</button>
-                        </div>
-                        <div className="flex gap-4"><button onClick={() => setShowSectionModal(false)} className="flex-1 p-5 rounded-2xl font-black text-xs bg-slate-100 text-slate-400 uppercase">Annuler</button><button onClick={handleCreateSection} className="flex-1 p-5 rounded-2xl font-black text-xs bg-indigo-600 text-white uppercase shadow-xl">Valider</button></div>
                     </div>
                 </div>
             )}
@@ -531,6 +478,32 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
                             <button onClick={() => setShowChapterModal(false)} className="flex-1 p-5 rounded-2xl font-black text-xs bg-slate-100 text-slate-400 uppercase">Annuler</button>
                             <button onClick={handleCreateChapter} className="flex-1 p-5 rounded-2xl font-black text-xs bg-slate-900 text-white uppercase shadow-xl">Créer</button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {deleteTarget && (
+                <div className="fixed inset-0 z-[40000] flex items-center justify-center bg-slate-900/95 backdrop-blur-md">
+                    <div className="bg-white p-10 rounded-[50px] w-full max-w-lg shadow-2xl animate-in zoom-in text-center">
+                        <div className="w-20 h-20 bg-red-100 text-red-500 rounded-full flex items-center justify-center text-4xl mx-auto mb-6">🗑️</div>
+                        <h3 className="text-2xl font-black mb-2 uppercase text-slate-800">Action sur "{deleteTarget.name}"</h3>
+                        {deleteTarget.isShared ? (
+                            <>
+                                <p className="text-sm text-slate-400 mb-8 px-6">Cet élément est partagé. Voulez-vous le supprimer partout ou simplement le masquer ici ?</p>
+                                <div className="flex flex-col gap-3">
+                                    <button onClick={() => executeDelete(deleteTarget.id, deleteTarget.type, false)} className="w-full p-5 rounded-2xl font-black text-xs bg-slate-900 text-white uppercase shadow-lg hover:scale-105 transition-transform">🙈 Masquer ici (conserver ailleurs)</button>
+                                    <button onClick={() => executeDelete(deleteTarget.id, deleteTarget.type, true)} className="w-full p-5 rounded-2xl font-black text-xs bg-red-600 text-white uppercase shadow-lg hover:scale-105 transition-transform">🔥 Supprimer partout</button>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <p className="text-sm text-slate-400 mb-8 px-6">Voulez-vous supprimer définitivement cet élément propre à la classe ?</p>
+                                <div className="flex flex-col gap-3">
+                                    <button onClick={() => executeDelete(deleteTarget.id, deleteTarget.type, true)} className="w-full p-5 rounded-2xl font-black text-xs bg-red-600 text-white uppercase shadow-lg hover:scale-105 transition-transform">🔥 Supprimer définitivement</button>
+                                </div>
+                            </>
+                        )}
+                        <button onClick={() => setDeleteTarget(null)} className="w-full p-4 rounded-2xl font-black text-xs bg-slate-100 text-slate-400 uppercase mt-4">Annuler</button>
                     </div>
                 </div>
             )}
@@ -875,7 +848,7 @@ module.exports = router;
 [[[£ END: server/domains/structure/structure.routes.js £]]]
 
 [[[£ FILE: server/prof/structure/structure.prof.js £]]]
-// @signatures: ProfStructureRouter, chapters, sections, deleteChapterRequest, moveChapter, moveActivity, proxy
+// @signatures: ProfStructureRouter, chapters, sections, deleteActivityRequest, deleteChapterRequest, moveChapter, moveActivity, proxy
 const express = require('express');
 const router = express.Router();
 const { Chapter, Teacher, Admin, Classroom, Homework, GameLevel } = require('../models/prof.models');
@@ -883,7 +856,7 @@ const ProfDrive = require('../core/drive.prof');
 const mongoose = require('mongoose');
 
 /**
- * 🛠️ BLOC STRUCTURE PROF V450 - RÉPARÉ (FIX PROXY)
+ * 🛠️ BLOC STRUCTURE PROF V450 - RÉPARÉ (FIX DELETE & PROXY)
  * RÔLE : Gestion des sections et dossiers + Proxy d'images partagé.
  */
 
@@ -1019,6 +992,32 @@ router.post('/chapters/delete-request', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// --- 3. ACTIVITÉS (DELETE & MOVE) ---
+
+router.post('/activity/delete-request', async (req, res) => {
+    try {
+        const { id, type } = req.body;
+        
+        // Suppression Devoir
+        if (type === 'homework') {
+            await Homework.findByIdAndDelete(id);
+            return res.json({ ok: true });
+        }
+        
+        // Suppression Jeu
+        if (['game', 'zombie', 'starship'].includes(type) || !type) {
+            await GameLevel.findByIdAndDelete(id);
+            // Optionnel : Supprimer la progression associée ?
+            // await GameProgress.deleteMany({ gameId: id });
+            return res.json({ ok: true });
+        }
+
+        res.status(400).json({ error: "Type inconnu" });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// --- 4. UTILITAIRES ---
+
 router.get('/sections/:teacherId', async (req, res) => {
     try {
         const { teacherId } = req.params;
@@ -1041,7 +1040,6 @@ router.get('/sections/:teacherId', async (req, res) => {
 
 router.get('/proxy/:id', async (req, res) => {
     try {
-        // 🚀 FIX CRITIQUE : Utilisation du bon paramètre :id
         const stream = await ProfDrive.getFileStream(req.params.id);
         res.setHeader('Content-Type', 'image/png');
         stream.pipe(res);
