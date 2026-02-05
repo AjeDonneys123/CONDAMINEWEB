@@ -361,3 +361,283 @@
 04/02/2026 09:25 - TOOLING : Mise à jour de snap.js. Le fichier games.txt inclut désormais le Référentiel des User Stories spécifique aux Jeux en en-tête.
 
 04/02/2026 09:35 - TOOLING : Évolution majeure de snap.js. Le script extrait désormais dynamiquement les User Stories depuis userStories.txt (via détection des balises 📜) pour les injecter dans games.txt, studio.txt et structure.txt. Fin du hardcoding des specs.
+
+04/02/2026 19:15 - RESTORATION STRUCTURE V465 : Rétablissement complet de la gestion des dossiers et sections. Éradication totale des prompt() au profit de modales React. Correction du bug des espaces dans les titres. Réactivation du renommage en cascade et de la palette de couleurs des sections. Protection de la racine GÉNÉRAL/GÉNÉRAL maintenue.
+
+04/02/2026 19:45 - FIX STUDIO CRITIQUE : 
+- Correction de 'getAvailableChapters' : les dossiers spécifiques à la classe et partagés par niveau sont de nouveau proposés correctement.
+- Refonte totale de 'HomeworkStudio.jsx' : passage en mode multi-pages (Niveaux) conforme aux User Stories.
+- Ajout de la gestion des consignes images et documents de travail par page dans les devoirs.
+- Alignement du design entre Devoirs et Jeux (Sidebar de navigation interne).
+
+04/02/2026 20:05 - EMERGENCY FIX #166 : 
+- Résolution du crash 'StudioUtils is not defined' dans HomeworkStudio.
+- Activation de la sélection automatique du dossier par défaut dans le Studio de Jeu et Devoir.
+- Restauration de l'interface multi-pages (Niveaux) pour les devoirs avec gestion des assets par page.
+
+04/02/2026 20:15 - STUDIO DEVOIR PRO : 
+- Refonte visuelle complète (Design "Sheet" Premium).
+- Correction du système d'upload (Drive Proxy + Multi-catégories).
+- Stabilisation de la sélection automatique des dossiers par classe.
+- Rétablissement des miniatures interactives avec bouton de suppression.
+
+04/02/2026 20:30 - FIX STUDIO HOMEWORK V3 :
+- Correction du 404 Upload : Route /api/homework/upload restaurée dans le silo prof.
+- Restauration de la fonction "PUNITION" : Ajout d'un toggle visuel dans le header du Studio.
+- Alignement complet du schéma de données entre Front et Back pour les devoirs multi-pages.
+
+04/02/2026 22:12 - BUGFIX STUDIO : 
+- Correction de l'importation en double des fichiers dans le Studio Devoir.
+- Nettoyage immédiat de l'input file après chaque sélection.
+- Ajout d'un filtre d'unicité sur les URLs lors de la mise à jour de l'état local.
+- Sécurisation du 'uploadMode' pour éviter les collisions lors d'uploads rapides.
+
+04/02/2026 22:25 - CRITICAL BUGFIX : 
+- Résolution du crash 'TypeError: includes of undefined' dans le Studio Devoir et Jeu.
+- Ajout de gardes robustes `( ... || [])` sur l'accès aux listes d'élèves sélectionnés.
+- Sécurisation de l'initialisation de la distribution pour éviter les objets vides.
+
+04/02/2026 22:35 - STUDIO EVOLUTION V4 : 
+- Suppression de l'option "Choisir" dans les sélecteurs de dossiers.
+- Implémentation de l'auto-sélection du chapitre le plus récent (Last Created) par défaut.
+- Filtrage strict des chapitres par Matière (Section) et Classe/Niveau.
+- Synchronisation de cette logique "Smart-Context" sur les Studios Jeux et Devoirs.
+
+04/02/2026 22:38 - STUDIO UX REFINEMENT : 
+- Implémentation du verrou de niveau (Level-Lock) dans la distribution des devoirs et jeux.
+- La liste des classes ciblées est désormais filtrée pour n'afficher que les classes du même niveau que le contexte actuel.
+- Nettoyage des boutons de classes inutiles pour éviter les erreurs d'assignation inter-niveaux.
+
+04/02/2026 22:30 - HARD LEVEL LOCK : 
+- Correction de l'incohérence de props (globalClass vs classFilter).
+- Implémentation du filtrage strict par niveau (Level-Lock) dans les deux Studios.
+- Si le prof travaille en 2de, seuls les boutons de ses autres classes de 2de apparaissent.
+- Affichage dynamique du niveau cible dans le titre de la sidebar de distribution.
+
+04/02/2026 22:35 - RESTAURATION STUDIO V4.2 : 
+- Rétablissement complet de l'interface visuelle du Studio Jeu et Devoir.
+- Fix de la zone d'édition centrale qui disparaissait.
+- Réactivation du bouton "+ Question" et de la liste des sprites/consignes.
+- Maintien du Level-Lock (filtrage des classes par niveau) et de l'Auto-Dossier intelligent.
+
+04/02/2026 22:40 - RESTORATION IA STUDIO : 
+- Réintégration du widget de génération IA dans l'éditeur central de GameStudio.
+- Rétablissement des fonctions 'handleGenerateAI' et des états associés (aiTopic, aiGenerating).
+- Support de la génération mixte : soit par sujet libre, soit par analyse de la fiche du niveau.
+- Maintien de l'intégrité du Level-Lock et de l'Auto-Dossier.
+
+04/02/2026 22:45 - RESTORATION COMPLÈTE IA QUIZ : 
+- Réintégration du générateur IA avec sélecteur du nombre de questions (aiCount).
+- Correction du rendu de l'éditeur central pour inclure le widget robot.
+- Sanctuarisation totale de l'onglet Devoirs (aucune modification effectuée).
+- Maintien du Level-Lock et de l'Auto-Dossier intelligent.
+
+04/02/2026 23:15 - RESTORATION DISTRIBUTION :
+- Suppression du verrou "Activer la classe" dans le Studio Jeu et Devoir.
+- Rétablissement de la sélection individuelle immédiate des élèves.
+- Correction de la logique de toggle dans le dictionnaire de distribution.
+- Maintien du filtrage par niveau (Level-Lock) et de l'auto-sélection du dossier.
+
+04/02/2026 23:30 - RÉPARATION DISTRIBUTION FINALE :
+- Suppression définitive du bouton "Activer la classe" (UX directe).
+- Correction du bug visuel des cases à cocher : les élèves apparaissent cochés si "Toute la classe" est actif.
+- Rétablissement de la sélection individuelle : cliquer sur un élève l'ajoute ou bascule le mode d'assignation.
+- Synchronisation parfaite des d'états de distribution dans GameStudio et HomeworkStudio.
+
+04/02/2026 23:45 - BUGFIX MULTI-SÉLECTION : 
+- Correction de 'handleToggleStudent' : la sélection multiple d'élèves à la souris est de nouveau fonctionnelle.
+- Rétablissement de l'accumulation des IDs dans le tableau 'studentIds'.
+- Synchronisation du comportement dans GameStudio et HomeworkStudio.
+- Maintien du Level-Lock et de l'Auto-Dossier.
+
+05/02/2026 09:15 - ARCHITECTURE STUDIO V5 : 
+- Sanctuarisation de la partie droite dans le composant 'StudioDistributionSidebar.jsx'.
+- Extraction de la logique métier de distribution (Level-Lock, Toggle multi-sélection, Auto-Dossier).
+- Isolation du centre (Editeur) pour éviter les pertes de données lors des interactions latérales.
+- Synchronisation des Studios Jeux et Devoirs sur ce nouveau composant standardisé.
+
+05/02/2026 09:20 - BUGFIX STUDIO DEVOIR : 
+- Correction de l'upload multiple : on peut désormais ajouter plusieurs documents de travail par page.
+- Stabilisation de la fonction 'handleUpload' avec verrouillage de l'index de page (currentLvl) pour éviter les erreurs lors d'uploads asynchrones.
+- Sanctuarisation confirmée de la partie droite (Distribution Sidebar) : aucun changement de logique ou de style.
+
+05/02/2026 09:35 - FIX 500 ERROR DEVOIR : 
+- Correction du crash CastError côté serveur : filtrage des IDs vides avant insertion en BDD.
+- Sécurisation du payload de publication : suppression des champs '_id' vides pour forcer la création.
+- Ajout d'une validation de présence de chapitre dans le Studio Devoir avant envoi.
+
+05/02/2026 09:45 - REPAIR 400 & LOGIC SYNC :
+- Backend : Support du "Auto-Fallback" vers le dossier GÉNÉRAL si l'ID est invalide (évite l'erreur 400).
+- Frontend : Rétablissement de 'getAvailableChapters' dans les parents pour stabiliser 'loadData'.
+- Fix ReferenceError : Toutes les fonctions de calcul sont désormais disponibles au chargement initial.
+- Sanctuarisation Sidebar : La structure visuelle droite est préservée.
+
+05/02/2026 09:55 - ULTIMATE SAVE FIX : 
+- Backend : Neutralisation des erreurs 400/500 via une détection automatique du dossier de secours 'GÉNÉRAL' si l'ID envoyé est invalide.
+- Frontend : Injection forcée du chapitre par défaut dans 'handleSave' avant l'envoi pour garantir l'intégrité du payload.
+- Quiz & Devoirs : Synchronisation de la logique de sauvegarde robuste sur les deux modules.
+- Stabilité : Validation systématique des ObjectIds Mongoose côté serveur.
+
+05/02/2026 10:20 - FIX MULTI-CLASS OVERWRITE : 
+- Refonte de 'handleSave' dans les Studios Jeux et Devoirs.
+- Implémentation du regroupement par chapitre : évite que l'édition pour une classe n'écrase ou ne supprime le devoir dans une autre.
+- Gestion intelligente des IDs : le premier groupe met à jour l'existant, les suivants créent des copies indépendantes.
+- Correction du bug de disparition des devoirs lors de l'ajout d'élèves d'autres classes.
+
+05/02/2026 10:15 - INSTRUMENTATION STUDIO : 
+- Ajout de logs massifs (LOGS-DEBUG) dans le cycle de publication des devoirs.
+- Traçage du regroupement multi-classes (chaptersMap) pour identifier l'origine du 400/500.
+- Backend : Ajout de logs sur le processus de fallback vers le dossier GÉNÉRAL.
+- Sanctuarisation Sidebar : Maintien de l'interface droite intacte.
+
+05/02/2026 10:25 - LOGIC FIX : PRIORITÉ D'UPDATE VS CLONE
+- Résolution du bug de "suppression" lors de l'ajout de classes sur des dossiers différents.
+- handleSave priorise désormais l'ID original pour le chapitre d'origine (Update réel).
+- Les autres groupes de dossiers créent automatiquement des clones (New Records) sans écraser l'original.
+- Synchronisation de cette sécurité sur GameStudio et HomeworkStudio.
+
+05/02/2026 10:35 - FIX FOLDER DISPLAY CONTEXT : 
+- Correction de l'affichage des assignations dans 'ProfStudioFolder.jsx'.
+- Les élèves listés sous les devoirs/jeux sont désormais filtrés par la classe actuellement sélectionnée par le prof.
+- Amélioration de la détection "Toute la classe" : gère correctement les cas hybrides (une classe complète + une classe partielle sur le même devoir).
+- Suppression des informations hors-contexte (ne montre plus la 2C quand on regarde la 1D).
+
+05/02/2026 10:45 - FIX UPDATE CHARACTERISTICS : 
+- Correction de la mutation d'état dans 'updateLevel' : utilisation d'une approche immuable pour garantir la détection des changements par React.
+- Nettoyage automatique du payload (suppression des métadonnées __v et timestamps) avant la sauvegarde.
+- Backend : Sécurisation du processus 'findByIdAndUpdate' pour garantir que les modifications de titres et consignes sont bien persistées.
+- Résolution du bug où les modifications textuelles n'étaient pas prises en compte lors de l'édition d'un devoir.
+
+05/02/2026 10:55 - FINAL FIX ASSIGNMENT LOGIC : 
+- Résolution du bug d'édition "Toute la classe" : séparation stricte des documents BDD par mode d'assignation (Global vs Partiel).
+- handleSave ne fusionne plus les classes ayant des modes d'assignation différents dans un même dossier.
+- Backend : Force le vidage de la liste 'assignedStudents' si le mode 'isAllClass' est activé lors d'une mise à jour.
+- Correction du bug où un devoir édité pour toute la classe restait bloqué sur les anciens élèves sélectionnés.
+
+05/02/2026 11:05 - INSTRUMENTATION TOTALE : 
+- Injection de logs-debug massifs dans 'HomeworkStudio.jsx' (Frontend) et 'homework.prof.js' (Backend).
+- Traçage précis de la chaîne de décision Update/Clone pour le multi-ciblage.
+- Surveillance des mutations d'état 'isAllClass' et 'assignedStudents'.
+- Sanctuarisation de la partie droite (Sidebar) confirmée.
+
+05/02/2026 10:45 - CHARACTERISTICS & LOGS REPAIR : 
+- Backend : Remplacement de 'findByIdAndUpdate' par 'doc.save()' pour assurer la persistance des tableaux 'levels'.
+- Frontend : Nettoyage du payload (suppression de actType, typeLabel, date) pour éviter les rejets BDD.
+- Debug : Ajout d'alertes visuelles et de logs console massifs en début de fonction pour confirmer l'exécution.
+- Stabilité : Correction du bug de non-mise à jour des textes édités.
+
+05/02/2026 11:15 - BUGFIX DISTRIBUTION ET ÉDITION : 
+- Correction de 'toggleClass' dans la Sidebar : permet désormais de basculer d'une sélection individuelle vers "Toute la classe" sans supprimer la cible.
+- Fix de la multi-sélection manuelle : on peut de nouveau cocher plusieurs élèves à la suite.
+- Backend : Sécurisation du mode 'isAllClass' qui force maintenant le vidage du tableau des élèves pour éviter les restes d'anciennes versions.
+- Rendu : Affichage prioritaire du statut "Toute la classe" dans le dossier si le flag est actif.
+
+05/02/2026 11:15 - BUGFIX DISTRIBUTION ET ÉDITION : 
+- Correction de 'toggleClass' dans la Sidebar : permet désormais de basculer d'une sélection individuelle vers "Toute la classe" sans supprimer la cible.
+- Fix de la multi-sélection manuelle : on peut de nouveau cocher plusieurs élèves à la suite.
+- Backend : Sécurisation du mode 'isAllClass' qui force maintenant le vidage du tableau des élèves pour éviter les restes d'anciennes versions.
+- Rendu : Affichage prioritaire du statut "Toute la classe" dans le dossier si le flag est actif.
+
+05/02/2026 10:55 - KERNEL V57 RECOVERY : 
+- Stabilisation globale du serveur Express contre les erreurs 500 en cascade.
+- Blindage du Singleton Mongoose dans 'prof.models.js' pour éviter les collisions de modèles.
+- Sécurisation du Proxy et des routes de structure contre les IDs malformés ou indéfinis.
+- Nettoyage automatique du fichier 'apply_status.json' pour rétablir la communication client/serveur.
+
+05/02/2026 11:20 - KERNEL V58 (STABILITY FIX) : 
+- Résolution définitive des erreurs 500 en cascade.
+- Ajout de gardes-fous sur les paramètres d'URL (classContext et teacherId).
+- Sécurisation du serveur Express : les erreurs de données ne font plus crasher le processus.
+- Amélioration de la résilience du frontend : les échecs d'API sont capturés sans bloquer l'interface.
+- Nettoyage des modèles Mongoose pour éviter les collisions 'OverwriteModelError'.
+
+05/02/2026 11:35 - KERNEL V59 (DÉFINITIF) : 
+- Simplification radicale des modèles Mongoose pour supprimer les erreurs 500.
+- Restauration de la logique de sauvegarde simple : un devoir = un enregistrement.
+- Le rangement se fait prioritairement dans le dossier choisi, sinon dans 'GÉNÉRAL'.
+- Suppression des boucles de clonage complexes qui causaient les échecs de publication.
+- Stabilisation du serveur : retour à un fonctionnement fluide.
+
+05/02/2026 11:45 - REFACTORISATION ARCHITECTURALE : 
+- Implémentation de la règle "1 Classe = 1 Document" pour les devoirs et jeux.
+- handleSave génère désormais autant d'enregistrements BDD qu'il y a de classes ciblées.
+- Isolation totale des caractéristiques par classe (élèves assignés, dossier de rangement).
+- Correction du bug de collision : l'édition d'une classe n'écrase plus les réglages des autres.
+- Nettoyage des payloads pour garantir l'indépendance des versions par classe.
+
+05/02/2026 12:05 - ARCHITECTURE ATOMIQUE FINALE : 
+- Séparation stricte des documents : 1 Devoir = 1 Classe = 1 Statut (Général ou Groupe).
+- handleSave : Envoi de requêtes individuelles par classe pour garantir l'indépendance des réglages.
+- Correction Backend : Force isAllClass/assignedStudents en fonction du payload reçu pour éviter les résidus d'anciennes versions.
+- Rendu Dossier : Affichage 1:1 basé sur les drapeaux BDD (isAllClass), supprimant les incohérences visuelles.
+
+05/02/2026 12:05 - ARCHITECTURE ATOMIQUE FINALE : 
+- Séparation stricte des documents : 1 Devoir = 1 Classe = 1 Statut (Général ou Groupe).
+- handleSave : Envoi de requêtes individuelles par classe pour garantir l'indépendance des réglages.
+- Correction Backend : Force isAllClass/assignedStudents en fonction du payload reçu pour éviter les résidus d'anciennes versions.
+- Rendu Dossier : Affichage 1:1 basé sur les drapeaux BDD (isAllClass), supprimant les incohérences visuelles.
+
+05/02/2026 12:15 - GROUP ISOLATION FIX : 
+- Extension de la règle "1 Cible = 1 Doc" aux groupes pédagogiques (ex: 2CD NON DNL).
+- Correction de la logique d'appartenance : détection automatique des élèves via 'assignedGroups'.
+- handleSave : Garantit que les réglages d'un groupe n'écrasent pas ceux d'une classe (et inversement).
+- Rendu Dossier : Affichage contextuel précis selon que l'on visualise une classe ou un groupe.
+
+05/02/2026 12:10 - FIX GROUP DISPLAY IN FOLDER : 
+- Correction du bug d'affichage des noms d'élèves pour les groupes pédagogiques (ex: 2CD NON DNL).
+- ProfStudioFolder utilise désormais 'allClasses' pour mapper les noms de groupes aux IDs d'élèves.
+- Rétablissement de la liste des noms sous les devoirs/jeux en mode "Groupe" (Individuel).
+- Maintien du badge vert "TOUTE LA CLASSE" si le mode global est actif.
+
+05/02/2026 12:20 - DEBUG INSTRUMENTATION RENDER : 
+- Ajout de logs console massifs dans 'ProfStudioFolder.jsx' pour traquer la disparition des noms d'élèves.
+- Vérification du mapping entre noms de groupes et IDs MongoDB.
+- Sécurisation des comparaisons d'IDs (String conversion systématique).
+- Traçage du filtrage 'assignedInThisClass' pour identifier les ruptures de données.
+
+05/02/2026 12:20 - DEBUG INSTRUMENTATION RENDER : 
+- Ajout de logs console massifs dans 'ProfStudioFolder.jsx' pour traquer la disparition des noms d'élèves.
+- Vérification du mapping entre noms de groupes et IDs MongoDB.
+- Sécurisation des comparaisons d'IDs (String conversion systématique).
+- Traçage du filtrage 'assignedInThisClass' pour identifier les ruptures de données.
+
+05/02/2026 12:25 - DEEP DEBUG INSTRUMENTATION : 
+- Instrumentation massive du rendu visuel des dossiers.
+- Traçage de la résolution Nom -> ID pour les groupes transversaux.
+- Log de comparaison binaire des IDs d'élèves (format String vs ObjectId).
+- Vérification de la complétude de 'studentsRef' et 'allClasses' dans le scope du dossier.
+
+05/02/2026 12:45 - STUDIO REPAIR V5.5 : 
+- Rétablissement des boutons de création (+ Devoir, + Jeu, + Dossier) dans le dossier.
+- Instrumentation de debug "Triple Check" pour résoudre la disparition des noms d'élèves en mode groupe.
+- Vérification de la chaîne de dépendance : allClasses -> contextClassId -> studentsInActiveContext.
+- Correction du bug d'affichage vide après le nom du groupe.
+
+05/02/2026 12:45 - STUDIO REPAIR V5.5 : 
+- Rétablissement des boutons de création (+ Devoir, + Jeu, + Dossier) dans le dossier.
+- Instrumentation de debug "Triple Check" pour résoudre la disparition des noms d'élèves en mode groupe.
+- Vérification de la chaîne de dépendance : allClasses -> contextClassId -> studentsInActiveContext.
+- Correction du bug d'affichage vide après le nom du groupe.
+
+05/02/2026 12:55 - STUDIO REPAIR FINAL : 
+- Restauration des boutons de création (+ Devoir, + Jeu, + Dossier) dans l'en-tête du dossier.
+- Correction de la résolution des groupes : les noms d'élèves s'affichent désormais correctement pour les classes administratives ET les groupes pédagogiques.
+- Sécurisation du rendu : ajout de valeurs par défaut sur 'allClasses' et 'studentsRef' pour éviter les filtrages sur tableaux vides.
+- Alignement du design : retour de l'interface complète haute-fidélité.
+
+05/02/2026 13:10 - SECURITY TOOLING : 
+- Création de 'homeworkSnap.js' : snapshot de protection spécifique au silo Devoir.
+- Identification des "Fichiers Dangereux" (Sidebar de distribution, Folder, Modèles).
+- Mise à jour du 'package.json' : ajout de la commande 'npm run homework'.
+- Cet outil permet une restauration chirurgicale en cas de régression sur les composants partagés.
+
+05/02/2026 13:45 - TOOLING REPAIR : 
+- Correction du 'package.json' pour activer la commande 'npm run homework'.
+- Correction du script 'homeworkSnap.js' (bug de template literal sur les chemins de fichiers).
+- Finalisation de l'outil de protection du silo Devoir.
+
+05/02/2026 12:55 - FINAL SYNC STABLE : 
+- Suppression des logs de debug et passage en mode production.
+- Sécurisation finale de la comparaison des IDs d'élèves dans le dossier (Conversion String forcée).
+- Validation de l'affichage contextuel pour les groupes transversaux (ex: 2CD NON DNL).
+- Sanctuarisation de l'architecture "1 Classe = 1 Document".

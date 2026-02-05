@@ -6,6 +6,7 @@
     "server-dev": "nodemon --ignore 'update.txt' --ignore 'apply_status.json' --ignore 'temp_diff.json' server/server.js",
     "client": "npm run dev --prefix client",
     "test": "node tests/integrity.test.js",
+    "homework": "node homeworkSnap.js",
     "dev": "concurrently -n \"APPLY,MAGIC,SERVER,CLIENT\" -c \"green,yellow,magenta,cyan\" \"node apply.js\" \"node magic-paste.js\" \"npm run server-dev\" \"npm run client\"",
     "build": "npm install --prefix client && npm run build --prefix client"
   },

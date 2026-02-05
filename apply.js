@@ -5,24 +5,33 @@ const statusFile = 'apply_status.json';
 const inputFile = 'update.txt';
 
 /**
- * 🛡️ APPLY.JS V7.4 - RÉALIGNEMENT STUDIO
- * Autorise server/models/StudioProject.js dans le bundle STUDIO.
+ * 🛡️ APPLY.JS V7.5 - HOMEWORK SECURITY
+ * Ajout du bundle HOMEWORK et intégration de la Sidebar de distribution.
  */
 
 const BUNDLES = {
-    STRUCTURE: ['server/domains/structure', 'server/prof/structure', 'client/src/features/prof/components/ProfStudioFolder.jsx'],
+    STRUCTURE: [
+        'server/domains/structure', 
+        'server/prof/structure', 
+        'client/src/features/prof/components/ProfStudioFolder.jsx',
+        'client/src/features/prof/components/StudioDistributionSidebar.jsx'
+    ],
     STUDIO: [
         'server/domains/studio', 
         'server/prof/studio', 
         'client/src/features/prof/studio',
-        'server/models/StudioProject.js' // <--- DÉPLACÉ ICI
+        'server/models/StudioProject.js'
+    ],
+    HOMEWORK: [
+        'server/domains/homework',
+        'server/prof/homework',
+        'client/src/features/prof/homework'
     ],
     SCAN: ['server/domains/scans', 'server/prof/scans', 'client/src/features/prof/scans'],
     ADMIN: ['server/domains/admin', 'server/prof/admin', 'client/src/features/admin'],
     AUTH: ['server/domains/auth', 'server/prof/auth', 'client/src/features/auth'],
     ELEVE: ['server/eleve', 'client/src/features/eleve'],
     CORE: ['server/core', 'server/server.js', 'server/models', 'client/src/App.jsx', 'apply.js'] 
-    // ^ La règle "STUDIO" étant placée AVANT "CORE", StudioProject sera capturé par STUDIO.
 };
 
 function getBundle(filePath) {
@@ -106,4 +115,4 @@ function applyUpdate() {
 }
 
 setInterval(applyUpdate, 500);
-console.log("🛡️ ARCHITECTE HERMÉTIQUE (V7.4) - STUDIO SYNC ACTIF");
+console.log("🛡️ ARCHITECTE HERMÉTIQUE (V7.5) - HOMEWORK PROTECTED");

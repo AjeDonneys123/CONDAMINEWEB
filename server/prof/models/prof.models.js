@@ -1,4 +1,4 @@
-// @signatures: ProfModels, UnifiedSingleton, getModel
+// @signatures: ProfModels, getModel
 const mongoose = require('mongoose');
 
 const SectionSchema = new mongoose.Schema({
@@ -9,141 +9,88 @@ const SectionSchema = new mongoose.Schema({
     hiddenIn: { type: [String], default: [] } 
 }, { _id: false });
 
-const Schemas = {
-    Chapter: new mongoose.Schema({ 
-        title: { type: String, default: "NOUVEAU" }, 
-        section: { type: String, default: "GÉNÉRAL" }, 
-        classroom: { type: String, default: "" }, 
-        sharedLevel: { type: String, default: "" }, 
-        teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher' }, 
-        isArchived: { type: Boolean, default: false },
-        hiddenIn: { type: [String], default: [] } // NOUVEAU
-    }, { timestamps: true }),
+const getModel = (name, schema) => {
+    return mongoose.models[name] || mongoose.model(name, new mongoose.Schema(schema, { timestamps: true }));
+};
 
-    Classroom: new mongoose.Schema({ 
-        name: String, 
-        level: String, 
-        type: { type: String, default: 'CLASS' }, 
-        layout: { separators: { type: [Number], default: [] } } 
+const Models = {
+    Chapter: getModel('Chapter', {
+        title: { type: String, default: "NOUVEAU" },
+        section: { type: String, default: "GÉNÉRAL" },
+        classroom: { type: String, default: "" },
+        sharedLevel: { type: String, default: "" },
+        teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher' },
+        isArchived: { type: Boolean, default: false },
+        hiddenIn: { type: [String], default: [] }
     }),
 
-    Student: new mongoose.Schema({ 
-        firstName: String, 
-        lastName: String, 
-        currentClass: String, 
-        classId: mongoose.Schema.Types.ObjectId, 
+    Classroom: getModel('Classroom', {
+        name: String,
+        level: String,
+        type: { type: String, default: 'CLASS' },
+        layout: { separators: { type: [Number], default: [] } }
+    }),
+
+    Student: getModel('Student', {
+        firstName: String, lastName: String, currentClass: String,
+        classId: mongoose.Schema.Types.ObjectId,
         assignedGroups: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Classroom' }],
         behaviorRecords: [{
             teacherId: mongoose.Schema.Types.ObjectId,
-            crosses: { type: Number, default: 0 },
-            bonuses: { type: Number, default: 0 },
-            weeksToRedemption: { type: Number, default: 3 }
+            crosses: { type: Number, default: 0 }, bonuses: { type: Number, default: 0 }, weeksToRedemption: { type: Number, default: 3 }
         }],
-        teacherNotes: [{
-            teacherId: mongoose.Schema.Types.ObjectId,
-            text: String
-        }],
-        punishmentStatus: { type: String, default: 'NONE' }, 
-        punishmentDueDate: Date,
-        seatX: { type: Number, default: 0 }, 
-        seatY: { type: Number, default: 0 },
-        gender: { type: String, default: 'M' },
-        indicators: { type: Array, default: [] },
+        teacherNotes: [{ teacherId: mongoose.Schema.Types.ObjectId, text: String }],
+        punishmentStatus: { type: String, default: 'NONE' },
+        punishmentDueDate: Date, seatX: Number, seatY: Number, gender: String,
+        indicators: Array,
         spellingMistakes: [{ wrong: String, correct: String, date: { type: Date, default: Date.now } }]
     }),
 
-    Homework: new mongoose.Schema({ 
-        title: String, 
-        subject: String, 
-        isPunishment: { type: Boolean, default: false }, 
-        targetClassrooms: { type: [String], default: [] }, 
-        chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter' }, 
-        teacherId: mongoose.Schema.Types.ObjectId, 
-        levels: { type: Array, default: [] }, 
-        assignedStudents: [mongoose.Schema.Types.ObjectId], 
-        isAllClass: { type: Boolean, default: true }, 
-        date: { type: Date, default: Date.now },
-        hiddenIn: { type: [String], default: [] } // NOUVEAU
-    }),
-
-    GameLevel: new mongoose.Schema({ 
-        title: String, 
-        chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter' }, 
-        teacherId: mongoose.Schema.Types.ObjectId, 
-        targetClassrooms: { type: [String], default: [] }, 
-        questions: { type: Array, default: [] }, 
-        assignedStudents: [mongoose.Schema.Types.ObjectId],
-        isAllClass: { type: Boolean, default: true },
-        hiddenIn: { type: [String], default: [] } // NOUVEAU
-    }),
-
-    ScanSession: new mongoose.Schema({ 
-        title: String, 
-        teacherId: String, 
-        chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter' }, 
-        subjectUrls: { type: [String], default: [] }, 
-        copyUrls: { type: [String], default: [] }, 
-        corrections: { type: Array, default: [] },
+    Homework: getModel('Homework', {
+        title: String, subject: String, isPunishment: { type: Boolean, default: false },
+        targetClassrooms: [String], chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter' },
+        teacherId: mongoose.Schema.Types.ObjectId, levels: Array,
+        assignedStudents: [mongoose.Schema.Types.ObjectId], isAllClass: { type: Boolean, default: true },
         date: { type: Date, default: Date.now }
     }),
 
-    Teacher: new mongoose.Schema({ 
-        firstName: String, 
-        lastName: String, 
-        password: { type: String, required: true }, 
-        subjectSections: [SectionSchema], 
-        taughtSubjects: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Subject' }],
-        assignedClasses: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Classroom' }] 
+    GameLevel: getModel('GameLevel', {
+        title: String, chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter' },
+        teacherId: mongoose.Schema.Types.ObjectId, targetClassrooms: [String],
+        questions: Array, levels: Array, assignedStudents: [mongoose.Schema.Types.ObjectId],
+        isAllClass: { type: Boolean, default: true }
     }),
 
-    Admin: new mongoose.Schema({ 
-        firstName: String, 
-        lastName: String, 
-        password: { type: String, required: true }, 
-        role: { type: String, default: 'admin' }, 
-        isDeveloper: { type: Boolean, default: false } 
+    ScanSession: getModel('ScanSession', {
+        title: String, teacherId: String, chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter' },
+        subjectUrls: [String], copyUrls: [String], corrections: Array, date: { type: Date, default: Date.now }
     }),
 
-    Subject: new mongoose.Schema({ name: String, color: String }),
-
-    Submission: new mongoose.Schema({ 
-        studentId: mongoose.Schema.Types.ObjectId, 
-        homeworkId: mongoose.Schema.Types.ObjectId, 
-        levelIndex: Number,
-        content: String, 
-        feedback: String, 
-        grade: String,
-        date: { type: Date, default: Date.now }
+    Teacher: getModel('Teacher', {
+        firstName: String, lastName: String, password: { type: String, required: true },
+        subjectSections: [SectionSchema], taughtSubjects: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Subject' }],
+        assignedClasses: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Classroom' }]
     }),
 
-    GameProgress: new mongoose.Schema({ 
-        studentId: mongoose.Schema.Types.ObjectId, 
-        gameId: mongoose.Schema.Types.ObjectId, 
-        levelReached: { type: Number, default: 0 }, 
-        lastScore: { type: Number, default: 0 } 
+    Admin: getModel('Admin', {
+        firstName: String, lastName: String, password: { type: String, required: true },
+        role: { type: String, default: 'admin' }, isDeveloper: { type: Boolean, default: false }
     }),
 
-    StudioProject: new mongoose.Schema({ 
-        title: String, 
-        teacherId: mongoose.Schema.Types.ObjectId, 
-        scenes: { type: Array, default: [] }, 
-        generatedCode: String 
-    }, { timestamps: true })
+    Subject: getModel('Subject', { name: String, color: String }),
+    Submission: getModel('Submission', {
+        studentId: mongoose.Schema.Types.ObjectId, homeworkId: mongoose.Schema.Types.ObjectId,
+        levelIndex: Number, content: String, feedback: String, grade: String
+    }),
+
+    GameProgress: getModel('GameProgress', {
+        studentId: mongoose.Schema.Types.ObjectId, gameId: mongoose.Schema.Types.ObjectId,
+        levelReached: { type: Number, default: 0 }, lastScore: { type: Number, default: 0 }
+    }),
+
+    StudioProject: getModel('StudioProject', {
+        title: String, teacherId: mongoose.Schema.Types.ObjectId, scenes: Array, generatedCode: String
+    })
 };
 
-const getModel = (name) => mongoose.models[name] || mongoose.model(name, Schemas[name]);
-
-module.exports = {
-    Chapter: getModel('Chapter'),
-    Classroom: getModel('Classroom'),
-    Student: getModel('Student'),
-    Homework: getModel('Homework'),
-    GameLevel: getModel('GameLevel'),
-    ScanSession: getModel('ScanSession'),
-    Teacher: getModel('Teacher'),
-    Admin: getModel('Admin'),
-    Subject: getModel('Subject'),
-    Submission: getModel('Submission'),
-    GameProgress: getModel('GameProgress'),
-    StudioProject: getModel('StudioProject')
-};
+module.exports = Models;
