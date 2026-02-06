@@ -714,3 +714,8 @@
 - Restauration des boutons **Supprimer** (✕) sur les activités (Devoirs/Jeux) dans les dossiers.
 - Restauration des boutons **Modifier** (✏️) et **Supprimer** (✕) sur les sections (Chips) au survol.
 - Restauration complète de la modale d'édition de section (`showEditSectionModal`).
+
+06/02/2026 12:42 - UI FIX FOLDER NAMES :
+- Correction de l'affichage des noms d'élèves dans les activités individuelles (`ProfStudioFolder.jsx`).
+- Les noms sont maintenant mappés correctement même dans les contextes de classe filtrés.
+- Si le devoir est individuel, il affiche "👤 [Classe] : Jean D., Paul M." au lieu de juste "INDIVIDUEL".

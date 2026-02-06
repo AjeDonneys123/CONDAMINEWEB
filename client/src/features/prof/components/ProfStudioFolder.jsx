@@ -1,4 +1,4 @@
-// @signatures: ProfStudioFolder, executeDelete, fetchSections, handleArchiveChapter, handleCreateChapter, handleCreateSection, handleOpenEditSection, handleRenameChapter, handleSaveSectionEdit, handleUpdateChapterComplete, prepareDelete
+// @signatures: ProfStudioFolder, executeDelete, fetchSections, handleArchiveChapter, handleCreateChapter, handleCreateSection, handleOpenEditChapter, handleOpenEditSection, handleRenameChapter, handleSaveChapterEdit, handleSaveSectionEdit, prepareDelete
 import React, { useState, useEffect } from 'react';
 
 export default function ProfStudioFolder({ items, chapters, studentsRef, allClasses, classFilter, levelFilter, user, onEditItem, onCreateActivity, onRefresh }) {
@@ -7,7 +7,7 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, allClas
     const [openChaps, setOpenChaps] = useState({}); 
     const [showArchived, setShowArchived] = useState(false); 
     
-    // ÉTATS CRÉATION
+    // CRÉATION
     const [showSectionModal, setShowSectionModal] = useState(false);
     const [newSectionName, setNewSectionName] = useState("");
     const [newSectionScope, setNewSectionScope] = useState("GLOBAL"); 
@@ -16,9 +16,11 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, allClas
     const [newChapterTitle, setNewChapterTitle] = useState("");
     const [newChapterScope, setNewChapterScope] = useState("LEVEL"); 
 
-    // ÉTATS ÉDITION
+    // ÉDITION SECTION
     const [showEditSectionModal, setShowEditSectionModal] = useState(false);
     const [editingSection, setEditingSection] = useState(null);
+
+    // ÉDITION DOSSIER
     const [showEditChapterModal, setShowEditChapterModal] = useState(false);
     const [editingChapter, setEditingChapter] = useState(null);
 
@@ -42,10 +44,9 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, allClas
         } catch(e) {}
     }
 
-    // CORRECTION : On retire onRefresh des dépendances pour éviter les boucles
-    useEffect(() => { fetchSections(); }, [user, classFilter]);
+    useEffect(() => { fetchSections(); }, [user, classFilter, onRefresh]);
 
-    // --- CRÉATION AVEC RECHARGEMENT SÉCURISÉ ---
+    // --- FONCTIONS CRÉATION ---
     const handleCreateSection = async () => {
         if (!newSectionName) return;
         const uid = getUserId();
@@ -66,17 +67,9 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, allClas
         if (res.ok) {
             setNewSectionName(""); 
             setShowSectionModal(false); 
-            
-            // 1. Rafraîchir les sections
             await fetchSections();
-            
-            // 2. Basculer sur la nouvelle section
             setActiveSection(nameUpper);
-
-            // 3. Forcer le rechargement des chapitres avec un petit délai (Mongo propagation)
-            setTimeout(() => {
-                if (onRefresh) onRefresh();
-            }, 200);
+            setTimeout(() => { if (onRefresh) onRefresh(); }, 200);
         }
     };
 
@@ -93,7 +86,7 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, allClas
         setTimeout(() => { if (onRefresh) onRefresh(); }, 100);
     };
 
-    // --- ÉDITION ---
+    // --- ÉDITION SECTION ---
     const handleOpenEditSection = (s) => {
         setEditingSection({ oldName: s.name, name: s.name, color: s.color, scope: s.scope, target: s.target });
         setShowEditSectionModal(true);
@@ -123,6 +116,7 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, allClas
         }
     };
 
+    // --- ACTIONS DOSSIERS ---
     const handleOpenEditChapter = (e, chap) => {
         e.stopPropagation();
         const scope = chap.classroom ? "CLASS" : "LEVEL"; 
@@ -193,6 +187,7 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, allClas
     const contextClassObj = (allClasses || []).find(c => c.name.toUpperCase() === cleanFilter);
     const contextClassId = contextClassObj?._id ? String(contextClassObj._id) : null;
 
+    // Récupération de tous les élèves concernés par la classe active (y compris groupes)
     const studentsInActiveContext = Array.isArray(studentsRef) ? studentsRef.filter(s => {
         const isMatchMain = (s.currentClass || "").trim().toUpperCase() === cleanFilter;
         const isMatchGroup = contextClassId && (s.assignedGroups || []).some(gId => String(gId) === contextClassId);
@@ -220,20 +215,24 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, allClas
                     </div>
                 </div>
                 <div className="flex gap-3 overflow-x-auto no-scrollbar pb-6 pt-8 px-4 overflow-y-visible">
-                    {customSections.map((s, idx) => (
-                        <div key={idx} className="relative group shrink-0">
-                            <button onClick={() => { setActiveSection(s.name); setShowArchived(false); }} className={`min-w-[140px] p-4 rounded-2xl border-2 transition-all flex flex-col items-center justify-center ${activeSection.toUpperCase() === s.name.toUpperCase() ? 'bg-slate-800 border-white/20 scale-105 shadow-lg' : 'bg-slate-800/40 border-transparent opacity-40 hover:opacity-100'}`}>
-                                <span className="font-black text-[11px] uppercase truncate w-full px-2" style={{ color: s.color }}>{s.name}</span>
-                                <div className="text-[7px] font-black text-white/30 mt-1 uppercase tracking-widest">{s.scope}</div>
-                            </button>
-                            {s.name !== "GÉNÉRAL" && (
-                                <div className="absolute -top-3 -right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-20">
-                                    <button onClick={(e) => { e.stopPropagation(); handleOpenEditSection(s); }} className="w-7 h-7 bg-white shadow-2xl rounded-full flex items-center justify-center text-[11px] border border-slate-200 hover:scale-110 transition-transform cursor-pointer">✏️</button>
-                                    <button onClick={(e) => prepareDelete(e, s, 'section')} className="w-7 h-7 bg-red-500 text-white shadow-2xl rounded-full flex items-center justify-center text-[10px] font-black hover:scale-110 transition-transform cursor-pointer">✕</button>
-                                </div>
-                            )}
-                        </div>
-                    ))}
+                    {customSections.map((s, idx) => {
+                        const isGeneral = s.name.toUpperCase() === "GÉNÉRAL";
+                        const isActive = activeSection.toUpperCase() === s.name.toUpperCase();
+                        return (
+                            <div key={idx} className="relative group shrink-0">
+                                <button onClick={() => { setActiveSection(s.name); setShowArchived(false); }} className={`min-w-[140px] p-4 rounded-2xl border-2 transition-all flex flex-col items-center justify-center ${isActive ? 'bg-slate-800 border-white/20 scale-105 shadow-lg' : 'bg-slate-800/40 border-transparent opacity-40 hover:opacity-100'}`}>
+                                    <span className="font-black text-[11px] uppercase truncate w-full px-2" style={{ color: s.color }}>{s.name}</span>
+                                    <div className="text-[7px] font-black text-white/30 mt-1 uppercase tracking-widest">{s.scope}</div>
+                                </button>
+                                {!isGeneral && (
+                                    <div className="absolute -top-3 -right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-20">
+                                        <button onClick={(e) => { e.stopPropagation(); handleOpenEditSection(s); }} className="w-7 h-7 bg-white shadow-2xl rounded-full flex items-center justify-center text-[11px] border border-slate-200 hover:scale-110 transition-transform cursor-pointer">✏️</button>
+                                        <button onClick={(e) => prepareDelete(e, s, 'section')} className="w-7 h-7 bg-red-500 text-white shadow-2xl rounded-full flex items-center justify-center text-[10px] font-black hover:scale-110 transition-transform cursor-pointer">✕</button>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
                 </div>
             </div>
 
@@ -244,7 +243,6 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, allClas
                         <div className="flex gap-2">
                             <button onClick={() => onCreateActivity('homework', activeSection)} className="px-5 py-3 rounded-xl bg-orange-500 text-white text-[11px] font-black uppercase shadow-lg">+ Devoir</button>
                             <button onClick={() => onCreateActivity('game', activeSection)} className="px-5 py-3 rounded-xl bg-purple-600 text-white text-[11px] font-black uppercase shadow-lg">+ Jeu</button>
-                            {/* BOUTON DOSSIER BIEN PRÉSENT */}
                             <button onClick={() => setShowChapterModal(true)} className="px-5 py-3 rounded-xl bg-slate-900 text-white text-[11px] font-black uppercase shadow-lg">+ Dossier</button>
                         </div>
                     )}
@@ -276,18 +274,36 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, allClas
                                 </div>
                                 {openChaps[chap._id] && (
                                     <div className="bg-slate-50/50 border-t p-4 space-y-2">
-                                        {relevantItems.map(it => (
-                                            <div key={it._id} className="bg-white p-3 rounded-2xl flex justify-between items-center shadow-sm border border-slate-100">
-                                                <div className="flex flex-col">
-                                                    <span className="font-black text-slate-700 text-xs uppercase">{it.typeLabel} | {it.title}</span>
-                                                    {it.isAllClass ? <div className="text-[8px] text-emerald-500 font-bold mt-1 uppercase tracking-widest">🏫 {classFilter} : TOUTE LA CLASSE</div> : <div className="text-[8px] text-orange-500 font-bold mt-1 uppercase tracking-widest">👤 {classFilter} : INDIVIDUEL</div>}
+                                        {relevantItems.map(it => {
+                                            const isFull = it.isAllClass === true;
+                                            
+                                            // LOGIQUE DE RÉSOLUTION DES NOMS (Correction)
+                                            const assignedNames = (it.assignedStudents || []).map(id => {
+                                                const s = studentsInActiveContext.find(st => String(st._id) === String(id));
+                                                return s ? `${s.firstName} ${s.lastName.charAt(0)}.` : null;
+                                            }).filter(name => name !== null);
+
+                                            return (
+                                                <div key={it._id} className="bg-white p-3 rounded-2xl flex justify-between items-center shadow-sm border border-slate-100">
+                                                    <div className="flex flex-col">
+                                                        <span className="font-black text-slate-700 text-xs uppercase">{it.typeLabel} | {it.title}</span>
+                                                        {isFull ? (
+                                                            <div className="text-[8px] text-emerald-500 font-bold mt-1 uppercase tracking-widest">
+                                                                🏫 {classFilter} : TOUTE LA CLASSE
+                                                            </div>
+                                                        ) : (
+                                                            <div className="text-[8px] text-orange-500 font-bold mt-1 uppercase tracking-widest">
+                                                                👤 {classFilter} : {assignedNames.length > 0 ? assignedNames.join(', ') : "INDIVIDUEL"}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex gap-2">
+                                                        <button onClick={() => onEditItem(it, activeSection)} className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-[8px] font-black uppercase">ÉDITER</button>
+                                                        <button onClick={(e) => prepareDelete(e, it, it.actType)} className="px-2 py-1.5 rounded-lg bg-red-50 text-red-500 text-[10px]">✕</button>
+                                                    </div>
                                                 </div>
-                                                <div className="flex gap-2">
-                                                    <button onClick={() => onEditItem(it, activeSection)} className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-[8px] font-black uppercase">ÉDITER</button>
-                                                    <button onClick={(e) => prepareDelete(e, it, it.actType)} className="px-2 py-1.5 rounded-lg bg-red-50 text-red-500 text-[10px]">✕</button>
-                                                </div>
-                                            </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 )}
                             </div>

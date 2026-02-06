@@ -55,7 +55,10 @@ const Models = {
     }),
 
     GameLevel: getModel('GameLevel', {
-        title: String, chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter' },
+        title: String, 
+        // AJOUT OFFICIEL DU CHAMP SUBJECT
+        subject: { type: String, default: "GÉNÉRAL" }, 
+        chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter' },
         teacherId: mongoose.Schema.Types.ObjectId, targetClassrooms: [String],
         questions: Array, levels: Array, assignedStudents: [mongoose.Schema.Types.ObjectId],
         isAllClass: { type: Boolean, default: true }

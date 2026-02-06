@@ -1,28 +1,30 @@
-/* --- BANDEAU INTÉGRÉ AU FLUX (NO-FIXED) --- */
+/* BANDEAU QUI POUSSE LE CONTENU */
 .system-status-banner-flow {
-    position: relative;
+    position: relative; 
     width: 100%;
     color: white;
     font-family: 'JetBrains Mono', monospace;
-    border-bottom: 0px solid rgba(0,0,0,0.1);
-    z-index: 50;
+    z-index: 9999; /* Très haut */
     overflow: hidden;
     transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    box-shadow: 0 5px 20px rgba(0,0,0,0.2);
 }
 
 .system-status-banner-flow.show {
     height: auto;
-    min-height: 44px;
+    min-height: 60px;
     opacity: 1;
-    border-bottom-width: 3px;
     transform: translateY(0);
+    padding: 15px 20px;
+    margin-bottom: 0;
 }
 
 .system-status-banner-flow.hide {
     height: 0;
     min-height: 0;
     opacity: 0;
-    border-bottom-width: 0px;
+    padding: 0;
+    margin-bottom: 0;
     transform: translateY(-10px);
     pointer-events: none;
 }
@@ -30,9 +32,13 @@
 .system-status-content-wrapper {
     max-width: 1400px;
     margin: 0 auto;
-    padding: 10px 24px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 20px;
 }
+
+/* ÉTATS */
+.status-ok { background: #10b981; }
+.status-warning { background: #f59e0b; }
+.status-error { background: #ef4444; }
+.status-rejected { background: #7c3aed; } /* Violet pour Rejet */

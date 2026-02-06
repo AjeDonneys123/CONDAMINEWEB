@@ -35,7 +35,12 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
                     actType: 'homework', 
                     typeLabel: (x.subject && x.subject.toUpperCase() !== 'GÉNÉRAL') ? `📝 DM ${x.subject.toUpperCase()}` : '📝 DM'
                 })), 
-                ...(gm || []).map(x => ({...x, actType: 'game', typeLabel: '🎮 JEU'})),
+                ...(gm || []).map(x => ({
+                    ...x, 
+                    actType: 'game', 
+                    // CORRECTION FORCEE ICI
+                    typeLabel: (x.subject && x.subject.toUpperCase() !== 'GÉNÉRAL') ? `🎮 JEU ${x.subject.toUpperCase()}` : '🎮 JEU'
+                })),
                 ...(sc || []).map(x => ({...x, actType: 'scan', typeLabel: '📸 DC', title: x.title || 'Scan sans titre'})) 
             ]);
             setChapters(cp || []);
@@ -58,11 +63,7 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
     };
 
     if (editingItem) {
-        // CORRECTION V475 : Détection intelligente de la section
-        // 1. Si on crée (editingItem.section existe) -> On prend la section active
-        // 2. Si on édite (editingItem.data existe) -> On prend le sujet enregistré (subject)
-        const activeSectionName = editingItem.data?.subject || editingItem.section || "GÉNÉRAL";
-
+        const activeSectionName = editingItem.section || editingItem.data?.subject || "GÉNÉRAL";
         const props = {
             initialData: editingItem.data,
             chapters,
@@ -87,7 +88,7 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
                 classFilter={globalClass}
                 levelFilter={globalLevel}
                 user={user}
-                onEditItem={(it) => setEditingItem({type: it.actType, data: it})}
+                onEditItem={(it, sectionContext) => setEditingItem({type: it.actType, data: it, section: sectionContext})}
                 onCreateActivity={(type, section) => setEditingItem({ type, section })}
                 onDeleteItem={handleDeleteItem}
                 onRefresh={() => { loadData(); if(onRefreshRequest) onRefreshRequest(); }}

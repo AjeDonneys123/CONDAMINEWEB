@@ -5,20 +5,24 @@ import { api } from '../../../services/api';
 import StudioDistributionSidebar from '../components/StudioDistributionSidebar';
 
 const DEFAULT_QUIZ_DATA = { 
-    title: '', chapterId: '', teacherId: null, 
+    title: '', chapterId: '', teacherId: null, subject: "GÉNÉRAL",
     targetClassrooms: [], assignedStudents: [], isAllClass: true, 
     levels: [ { name: "Niveau 1", intro: { sheetUrl: "", videoUrl: "" }, questions: [{ q: 'Nouvelle question', options: ['', '', '', ''], a: 0 }] } ]
 };
 
 export default function GameStudio({ initialData, chapters, globalClass, globalLevel, user, targetSection, onClose }) {
     
-    const getAvailableChapters = (clsName, allClassesList) => {
+    // --- LOGIQUE CHAPITRES (Filtrage par section + classe/niveau) ---
+    const getAvailableChapters = (clsName, allClassesList, currentSec) => {
         const safeChapters = Array.isArray(chapters) ? chapters : [];
-        const cleanSection = (targetSection || "GÉNÉRAL").toUpperCase().trim();
+        const cleanSection = (currentSec || "GÉNÉRAL").toUpperCase().trim();
         const clsObj = (allClassesList || []).find(c => c.name === clsName);
         return safeChapters.filter(c => {
             if (c.isArchived) return false;
+            // Filtre Matière
             if ((c.section || "GÉNÉRAL").toUpperCase().trim() !== cleanSection) return false;
+            
+            // Filtre Portée
             if (c.classroom === clsName) return true;
             if (c.sharedLevel && clsObj && String(c.sharedLevel) === String(clsObj.level)) return true;
             if (!c.classroom && !c.sharedLevel) return !c.hiddenIn || !c.hiddenIn.includes(clsName);
@@ -26,8 +30,8 @@ export default function GameStudio({ initialData, chapters, globalClass, globalL
         }).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
     };
 
-    const findBestDefaultChapter = (clsName, allClassesList) => {
-        const av = getAvailableChapters(clsName, allClassesList);
+    const findBestDefaultChapter = (clsName, allClassesList, currentSec) => {
+        const av = getAvailableChapters(clsName, allClassesList, currentSec);
         return av.length > 0 ? av[0]._id : "";
     };
 
@@ -40,6 +44,8 @@ export default function GameStudio({ initialData, chapters, globalClass, globalL
             base.levels = [{ name: "Niveau 1", questions: [{ q: 'Nouvelle question', options: ['', '', '', ''], a: 0 }], intro: {} }];
         }
         base.teacherId = user.id || user._id;
+        // Si pas de sujet, on prend celui passé en props (contexte d'ouverture)
+        if (!base.subject) base.subject = targetSection || "GÉNÉRAL";
         return base;
     };
 
@@ -48,6 +54,7 @@ export default function GameStudio({ initialData, chapters, globalClass, globalL
     const [activeQIdx, setActiveQIdx] = useState(0);
     const [allStudents, setAllStudents] = useState([]);
     const [allClasses, setAllClasses] = useState([]);
+    const [teacherSections, setTeacherSections] = useState([]); // Liste des matières
     const [distribution, setDistribution] = useState({});
     const [viewingClass, setViewingClass] = useState(globalClass || "");
     const [studentSearch, setStudentSearch] = useState(""); 
@@ -61,29 +68,66 @@ export default function GameStudio({ initialData, chapters, globalClass, globalL
     const loadData = async () => {
         setLoading(true);
         try {
-            const [sts, cls] = await Promise.all([ api.get('/admin/students'), api.get('/admin/classrooms') ]);
+            // CORRECTION CRITIQUE : Encodage de la classe pour l'URL
+            const encodedClass = encodeURIComponent(globalClass || "");
+            const uid = user.id || user._id;
+
+            const [sts, cls, sections] = await Promise.all([ 
+                api.get('/admin/students'), 
+                api.get('/admin/classrooms'),
+                api.get(`/structure/sections/${uid}?classContext=${encodedClass}`)
+            ]);
+
             setAllStudents(sts || []); setAllClasses(cls || []); 
+            
+            // Préparation sections
+            let secs = (Array.isArray(sections) ? sections : []).filter(s => s.name !== "GÉNÉRAL");
+            secs.unshift({ name: "GÉNÉRAL", color: "#64748b" });
+            setTeacherSections(secs);
+
             if (formData) {
                 const newDist = {};
-                const currentTargets = formData.targetClassrooms || [globalClass];
-                currentTargets.forEach(clsName => {
+                const targets = formData.targetClassrooms && formData.targetClassrooms.length > 0 ? formData.targetClassrooms : [globalClass];
+                const currentSubject = formData.subject || "GÉNÉRAL";
+
+                targets.forEach(clsName => {
+                    if(!clsName) return;
                     const clsObj = (cls || []).find(c => c.name === clsName);
                     const ids = (sts || []).filter(s => {
                         const isM = (s.currentClass||"").trim().toUpperCase() === clsName.toUpperCase();
                         const isO = clsObj && (s.assignedGroups||[]).some(gId => String(gId) === String(clsObj._id));
                         return (isM || isO) && (formData.assignedStudents||[]).includes(String(s._id));
                     }).map(s => String(s._id));
-                    newDist[clsName] = { chapterId: formData.chapterId || findBestDefaultChapter(clsName, cls), studentIds: ids };
+                    
+                    newDist[clsName] = { 
+                        chapterId: formData.chapterId || findBestDefaultChapter(clsName, cls, currentSubject), 
+                        studentIds: ids 
+                    };
                 });
                 setDistribution(newDist);
             }
-        } catch(e) {}
+        } catch(e) { console.error("GameStudio Load Error", e); }
         setLoading(false);
     };
 
     useEffect(() => { loadData(); }, []);
 
-    const handleInput = (field, value) => setFormData(p => ({ ...p, [field]: value }));
+    const handleInput = (field, value) => {
+        setFormData(p => ({ ...p, [field]: value }));
+        
+        // Mise à jour des dossiers par défaut si changement de matière
+        if (field === 'subject') {
+            const newSubject = value;
+            setDistribution(prev => {
+                const next = { ...prev };
+                Object.keys(next).forEach(clsName => {
+                    next[clsName].chapterId = findBestDefaultChapter(clsName, allClasses, newSubject);
+                });
+                return next;
+            });
+        }
+    };
+
     const handleAddLevel = () => { setFormData(p => ({ ...p, levels: [...p.levels, { name: `Niveau ${p.levels.length + 1}`, questions: [{ q: '', options: ['', '', '', ''], a: 0 }], intro: { sheetUrl: "", videoUrl: "" } }] })); setActiveLevelIdx(formData.levels.length); setActiveQIdx(0); };
     const handleDeleteLevel = (e, lIdx) => { e.stopPropagation(); if(!confirm("Supprimer ce niveau ?")) return; setFormData(p => { let newLevels = p.levels.filter((_, i) => i !== lIdx); if (newLevels.length === 0) newLevels = [{ name: "Niveau 1", questions: [{q:'', options:['','','',''], a:0}], intro: {} }]; return { ...p, levels: newLevels }; }); setActiveLevelIdx(0); setActiveQIdx(0); };
     const handleAddQuestion = () => { setFormData(p => { const newLevels = [...p.levels]; newLevels[activeLevelIdx].questions.push({ q: '', options: ['', '', '', ''], a: 0 }); return { ...p, levels: newLevels }; }); setTimeout(() => setActiveQIdx(formData.levels[activeLevelIdx].questions.length - 1), 0); };
@@ -107,29 +151,33 @@ export default function GameStudio({ initialData, chapters, globalClass, globalL
         } catch(e) { alert("Erreur IA"); } finally { setAiGenerating(false); }
     };
 
+    // --- SAUVEGARDE ATOMIQUE (1 Classe = 1 Jeu) ---
     const handleSave = async () => {
-        const targets = Object.keys(distribution); if (!formData.title || targets.length === 0) return alert("❌ Titre et Classe requis !");
+        const targets = Object.keys(distribution); 
+        if (!formData.title || targets.length === 0) return alert("❌ Titre et Classe requis !");
         setLoading(true);
         try {
             const originalId = initialData?._id;
+            const originalClass = initialData?.targetClassrooms?.[0];
             let idUsed = false;
 
-            for (let i = 0; i < targets.length; i++) {
-                const clsName = targets[i];
+            for (const clsName of targets) {
                 const cfg = distribution[clsName];
                 const { actType, typeLabel, date, __v, createdAt, updatedAt, chapterId, targetClassrooms, assignedStudents, isAllClass, teacherId, ...contentData } = formData;
 
                 const payload = { 
                     ...contentData, 
-                    chapterId: cfg.chapterId || findBestDefaultChapter(clsName, allClasses), 
+                    chapterId: cfg.chapterId || findBestDefaultChapter(clsName, allClasses, formData.subject), 
                     targetClassrooms: [clsName], 
                     assignedStudents: cfg.studentIds, 
                     isAllClass: cfg.studentIds.length === 0, 
                     teacherId: user.id || user._id, 
-                    type: 'zombie' 
+                    type: 'zombie',
+                    // On force le sujet choisi
+                    subject: formData.subject || "GÉNÉRAL"
                 };
 
-                if (originalId && !idUsed) {
+                if (originalId && clsName === originalClass && !idUsed) {
                     payload._id = originalId; idUsed = true;
                 } else {
                     delete payload._id;
@@ -204,7 +252,24 @@ export default function GameStudio({ initialData, chapters, globalClass, globalL
                 </div>
 
                 <StudioDistributionSidebar 
-                    user={user} allClasses={allClasses} allStudents={allStudents} chapters={chapters} distribution={distribution} setDistribution={setDistribution} viewingClass={viewingClass} setViewingClass={setViewingClass} studentSearch={studentSearch} setStudentSearch={setStudentSearch} targetLevel={globalLevel} targetSection={targetSection} loading={loading} onSave={handleSave}
+                    user={user} 
+                    allClasses={allClasses} 
+                    allStudents={allStudents} 
+                    chapters={chapters} 
+                    distribution={distribution} 
+                    setDistribution={setDistribution} 
+                    viewingClass={viewingClass} 
+                    setViewingClass={setViewingClass} 
+                    studentSearch={studentSearch} 
+                    setStudentSearch={setStudentSearch} 
+                    targetLevel={globalLevel} 
+                    loading={loading} 
+                    onSave={handleSave}
+                    saveLabel={initialData ? "MODIFIER" : "PUBLIER LE JEU 🚀"}
+                    // NOUVEAUX PROPS POUR LA SECTION
+                    sections={teacherSections}
+                    currentSection={formData.subject}
+                    onSectionChange={(s) => handleInput('subject', s)}
                 />
             </div>
         </div>

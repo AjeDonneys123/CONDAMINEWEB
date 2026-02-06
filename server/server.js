@@ -11,16 +11,30 @@ const port = 3000;
 const SERVER_BOOT_ID = Date.now();
 
 console.log("------------------------------------------------");
-console.log("🚀 KERNEL V59 : RETOUR À LA STABILITÉ");
+console.log("🚀 KERNEL V60 : STATUS SYSTÈME CONNECTÉ");
 console.log("------------------------------------------------");
 
 app.use(express.json({ limit: '70mb' }));
 app.use(express.urlencoded({ extended: true, limit: '70mb' }));
 
-// 1. ROUTES SYSTÈME (Infaillibles)
+// 1. ROUTES SYSTÈME
 app.get('/api/check-deploy', (req, res) => res.json({ status: "OK", bootId: SERVER_BOOT_ID }));
-app.get('/api/system/version', (req, res) => res.json({ hash: "V59-STABLE", build: 172 }));
-app.get('/api/system/apply-status', (req, res) => res.json({ status: "OK" }));
+app.get('/api/system/version', (req, res) => res.json({ hash: "V60-STATUS", build: 173 }));
+
+// CORRECTION : Lecture réelle du fichier de statut écrit par apply.js
+app.get('/api/system/apply-status', (req, res) => {
+    try {
+        const statusPath = path.join(__dirname, '../apply_status.json');
+        if (fs.existsSync(statusPath)) {
+            const data = fs.readFileSync(statusPath, 'utf8');
+            res.json(JSON.parse(data));
+        } else {
+            res.json({ status: "OK", message: "Système prêt" });
+        }
+    } catch (e) {
+        res.json({ status: "OK", message: "Statut illisible" });
+    }
+});
 
 // 2. CHARGEMENT SÉCURISÉ
 try {
