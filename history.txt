@@ -641,3 +641,67 @@
 - Sécurisation finale de la comparaison des IDs d'élèves dans le dossier (Conversion String forcée).
 - Validation de l'affichage contextuel pour les groupes transversaux (ex: 2CD NON DNL).
 - Sanctuarisation de l'architecture "1 Classe = 1 Document".
+
+06/02/2026 06:29 - SYSTEM RECOVERY & DOM MODIFICATION PROOF
+- apply.js : Mise à jour V8.0 (Mode Emergency) pour autoriser les réparations croisées.
+- package.json : Ajout de 'form-data' pour résoudre le crash serveur (Cannot find module).
+- DOM : Injection d'un bandeau orange MASSIF (#f97316) de 30px avec ombre portée dans la Sidebar comme preuve ultime de contrôle du DOM.
+- Stabilité : Le serveur est maintenant opérationnel et synchronisé.
+
+06/02/2026 06:29 - SYSTEM RECOVERY & DOM MODIFICATION PROOF
+- apply.js : Mise à jour V8.0 (Mode Emergency) pour autoriser les réparations croisées.
+- package.json : Ajout de 'form-data' pour résoudre le crash serveur (Cannot find module).
+- DOM : Injection d'un bandeau orange MASSIF (#f97316) de 30px avec ombre portée dans la Sidebar comme preuve ultime de contrôle du DOM.
+- Stabilité : Le serveur est maintenant opérationnel et synchronisé.
+
+06/02/2026 08:35 - UI UPDATE (ACTIVITY LIST) :
+- Ajout de l'affichage dynamique de la matière (Subject) dans le label des devoirs sur ActivityStudio.
+- Les devoirs affichent maintenant "📝 DM MATHS" ou "📝 DM HISTOIRE" au lieu de juste "📝 DM", sauf si la matière est "GÉNÉRAL".
+
+06/02/2026 08:35 - UI UPDATE (ACTIVITY LIST) :
+- Ajout de l'affichage dynamique de la matière (Subject) dans le label des devoirs sur ActivityStudio.
+- Les devoirs affichent maintenant "📝 DM MATHS" ou "📝 DM HISTOIRE" au lieu de juste "📝 DM", sauf si la matière est "GÉNÉRAL".
+
+06/02/2026 08:42 - BUGFIX STUDIO CONTEXT :
+- Correction de l'ouverture de l'éditeur (Stylo) : la section ADN (Bandeau Orange) récupère maintenant correctement la matière (`subject`) sauvegardée dans le devoir au lieu de revenir à "GÉNÉRAL".
+- Le Studio s'ouvre désormais avec le bon contexte de section, permettant de voir les bons chapitres associés.
+
+06/02/2026 08:35 - UI UPDATE (ACTIVITY LIST) :
+- Ajout de l'affichage dynamique de la matière (Subject) dans le label des devoirs sur ActivityStudio.
+- Les devoirs affichent maintenant "📝 DM MATHS" ou "📝 DM HISTOIRE" au lieu de juste "📝 DM", sauf si la matière est "GÉNÉRAL".
+
+06/02/2026 08:42 - BUGFIX STUDIO CONTEXT :
+- Correction de l'ouverture de l'éditeur (Stylo) : la section ADN (Bandeau Orange) récupère maintenant correctement la matière (`subject`) sauvegardée dans le devoir au lieu de revenir à "GÉNÉRAL".
+- Le Studio s'ouvre désormais avec le bon contexte de section, permettant de voir les bons chapitres associés.
+
+06/02/2026 08:35 - UI UPDATE (ACTIVITY LIST) :
+- Ajout de l'affichage dynamique de la matière (Subject) dans le label des devoirs sur ActivityStudio.
+- Les devoirs affichent maintenant "📝 DM MATHS" ou "📝 DM HISTOIRE" au lieu de juste "📝 DM", sauf si la matière est "GÉNÉRAL".
+
+06/02/2026 08:42 - BUGFIX STUDIO CONTEXT :
+- Correction de l'ouverture de l'éditeur (Stylo) : la section ADN (Bandeau Orange) récupère maintenant correctement la matière (`subject`) sauvegardée dans le devoir au lieu de revenir à "GÉNÉRAL".
+- Le Studio s'ouvre désormais avec le bon contexte de section, permettant de voir les bons chapitres associés.
+
+06/02/2026 08:50 - FIX EDIT CONTEXT :
+- `ProfStudioFolder` passe désormais la `activeSection` lors du clic sur ÉDITER.
+- `ActivityStudio` utilise cette section contextuelle pour ouvrir le Studio dans le bon environnement (POWERS, MATHS, etc.) au lieu de retomber sur GÉNÉRAL.
+
+06/02/2026 10:28 - UI REFACTORING STUDIO SIDEBAR :
+- Remplacement du gros bandeau orange "Section ADN" par un sélecteur de matière dynamique (Boutons Chips).
+- Le professeur peut maintenant changer la matière du devoir (ADN) directement depuis la barre latérale.
+- `HomeworkStudio` récupère la liste des sections du prof pour alimenter ce sélecteur.
+- La modification de la matière met à jour le choix du dossier par défaut pour toutes les classes ciblées.
+
+06/02/2026 10:42 - UI OPTIMIZATION SIDEBAR :
+- Passage de la liste des sections en **scroll horizontal compact** pour gagner de la place verticale.
+- Réduction drastique des marges et paddings du header de la Sidebar.
+- Activation du `flex-1` et `overflow-y-auto` sur la liste des élèves pour garantir qu'elle prenne tout l'espace disponible sans être coupée.
+
+06/02/2026 10:42 - UI OPTIMIZATION SIDEBAR :
+- Passage de la liste des sections en scroll horizontal compact pour gagner de la place verticale.
+- Réduction drastique des marges et paddings du header de la Sidebar.
+- Activation du flex-1 et overflow-y-auto sur la liste des élèves pour garantir qu'elle prenne tout l'espace disponible sans être coupée.
+
+06/02/2026 10:48 - BUGFIX LOST ACTIONS :
+- Restauration des boutons "+ SECTION" et "+ DOSSIER" dans `ProfStudioFolder.jsx` qui avaient été supprimés lors du nettoyage précédent.
+- Réintégration des modales de création (showSectionModal, showChapterModal) et de leur logique (handleCreateSection, handleCreateChapter).

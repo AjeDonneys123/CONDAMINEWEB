@@ -5,7 +5,7 @@ import { api } from '../../../services/api';
 import StudioDistributionSidebar from '../components/StudioDistributionSidebar';
 
 const DEFAULT_HW_DATA = { 
-    title: '', chapterId: '', teacherId: null, 
+    title: '', chapterId: '', teacherId: null, subject: "GÉNÉRAL",
     targetClassrooms: [], assignedStudents: [], isAllClass: true,
     isPunishment: false,
     levels: [ { instruction: '', instructionUrls: [], aiHints: '', attachmentUrls: [] } ]
@@ -13,9 +13,9 @@ const DEFAULT_HW_DATA = {
 
 export default function HomeworkStudio({ initialData, chapters, globalClass, globalLevel, user, targetSection, onClose }) {
 
-    const getAvailableChapters = (clsName, allClassesList) => {
+    const getAvailableChapters = (clsName, allClassesList, currentSec) => {
         const safeChapters = Array.isArray(chapters) ? chapters : [];
-        const cleanSection = (targetSection || "GÉNÉRAL").toUpperCase().trim();
+        const cleanSection = (currentSec || "GÉNÉRAL").toUpperCase().trim();
         const clsObj = (allClassesList || []).find(c => c.name === clsName);
         return safeChapters.filter(c => {
             if (c.isArchived) return false;
@@ -27,14 +27,16 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
         }).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
     };
 
-    const findBestDefaultChapter = (clsName, allClassesList) => {
-        const av = getAvailableChapters(clsName, allClassesList);
+    const findBestDefaultChapter = (clsName, allClassesList, currentSec) => {
+        const av = getAvailableChapters(clsName, allClassesList, currentSec);
         return av.length > 0 ? av[0]._id : "";
     };
 
     const initData = () => {
         let base = initialData ? JSON.parse(JSON.stringify(initialData)) : { ...DEFAULT_HW_DATA };
         base.teacherId = user.id || user._id;
+        // Si pas de sujet défini (création), on prend la section cible passée en props
+        if (!base.subject) base.subject = targetSection || "GÉNÉRAL";
         return base;
     };
 
@@ -42,6 +44,7 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
     const [activeLevelIdx, setActiveLevelIdx] = useState(0);
     const [allStudents, setAllStudents] = useState([]);
     const [allClasses, setAllClasses] = useState([]);
+    const [teacherSections, setTeacherSections] = useState([]); // Liste des matières du prof
     const [distribution, setDistribution] = useState({});
     const [viewingClass, setViewingClass] = useState(globalClass || "");
     const [studentSearch, setStudentSearch] = useState(""); 
@@ -52,12 +55,26 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
     const loadData = async () => {
         setLoading(true);
         try {
-            const [sts, cls] = await Promise.all([ api.get('/admin/students'), api.get('/admin/classrooms') ]);
-            setAllStudents(sts || []); setAllClasses(cls || []); 
+            const [sts, cls, sections] = await Promise.all([ 
+                api.get('/admin/students'), 
+                api.get('/admin/classrooms'),
+                api.get(`/structure/sections/${user.id || user._id}`)
+            ]);
+            
+            setAllStudents(sts || []); 
+            setAllClasses(cls || []); 
+            
+            // On prépare la liste des sections pour le sélecteur
+            let secs = (Array.isArray(sections) ? sections : []).filter(s => s.name !== "GÉNÉRAL");
+            secs.unshift({ name: "GÉNÉRAL", color: "#64748b" });
+            setTeacherSections(secs);
+
             if (formData) {
                 const newDist = {};
                 // L'édition se concentre sur les classes du document chargé
                 const targets = formData.targetClassrooms && formData.targetClassrooms.length > 0 ? formData.targetClassrooms : [globalClass];
+                const currentSubject = formData.subject || "GÉNÉRAL";
+
                 targets.forEach(clsName => {
                     const clsObj = (cls || []).find(c => c.name === clsName);
                     const ids = (sts || []).filter(s => {
@@ -65,7 +82,11 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
                         const isO = clsObj && (s.assignedGroups||[]).some(gId => String(gId) === String(clsObj._id));
                         return (isM || isO) && (formData.assignedStudents||[]).includes(String(s._id));
                     }).map(s => String(s._id));
-                    newDist[clsName] = { chapterId: formData.chapterId || findBestDefaultChapter(clsName, cls), studentIds: ids };
+                    
+                    newDist[clsName] = { 
+                        chapterId: formData.chapterId || findBestDefaultChapter(clsName, cls, currentSubject), 
+                        studentIds: ids 
+                    };
                 });
                 setDistribution(newDist);
             }
@@ -75,7 +96,23 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
 
     useEffect(() => { loadData(); }, []);
 
-    const handleInput = (field, value) => setFormData(p => ({ ...p, [field]: value }));
+    const handleInput = (field, value) => {
+        setFormData(p => ({ ...p, [field]: value }));
+        
+        // Si on change la matière, on doit mettre à jour les dossiers par défaut dans la distribution
+        if (field === 'subject') {
+            const newSubject = value;
+            setDistribution(prev => {
+                const next = { ...prev };
+                Object.keys(next).forEach(clsName => {
+                    // On recalcule le meilleur dossier pour la nouvelle matière
+                    next[clsName].chapterId = findBestDefaultChapter(clsName, allClasses, newSubject);
+                });
+                return next;
+            });
+        }
+    };
+
     const updateLevel = (field, value) => { setFormData(p => { const next = p.levels.map((lvl, idx) => idx === activeLevelIdx ? { ...lvl, [field]: value } : lvl); return { ...p, levels: next }; }); };
     const handleAddLevel = () => { setFormData(p => ({ ...p, levels: [...p.levels, { instruction: '', instructionUrls: [], aiHints: '', attachmentUrls: [] }] })); setActiveLevelIdx(formData.levels.length); };
     const handleDeleteLevel = (e, idx) => { e.stopPropagation(); if (formData.levels.length === 1) return; if(!confirm("Supprimer cette page ?")) return; setFormData(p => { const next = p.levels.filter((_, i) => i !== idx); return { ...p, levels: next }; }); setActiveLevelIdx(0); };
@@ -120,13 +157,14 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
 
                 const payload = { 
                     ...cleanFormData, 
-                    chapterId: cfg.chapterId || findBestDefaultChapter(clsName, allClasses), 
+                    chapterId: cfg.chapterId || findBestDefaultChapter(clsName, allClasses, formData.subject), 
                     targetClassrooms: [clsName], 
                     assignedStudents: cfg.studentIds, 
                     isAllClass: (cfg.studentIds || []).length === 0, 
                     teacherId: user.id || user._id, 
                     type: 'homework',
-                    subject: targetSection || "GÉNÉRAL"
+                    // On force le sujet choisi dans le sélecteur
+                    subject: formData.subject || "GÉNÉRAL"
                 };
 
                 // Si cette classe est celle d'origine, on fait un UPDATE
@@ -214,7 +252,24 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
                 </div>
 
                 <StudioDistributionSidebar 
-                    user={user} allClasses={allClasses} allStudents={allStudents} chapters={chapters} distribution={distribution} setDistribution={setDistribution} viewingClass={viewingClass} setViewingClass={setViewingClass} studentSearch={studentSearch} setStudentSearch={setStudentSearch} targetLevel={globalLevel} targetSection={targetSection} loading={loading} onSave={handleSave} saveLabel={initialData ? "MODIFIER" : "PUBLIER LE DEVOIR 🚀"}
+                    user={user} 
+                    allClasses={allClasses} 
+                    allStudents={allStudents} 
+                    chapters={chapters} 
+                    distribution={distribution} 
+                    setDistribution={setDistribution} 
+                    viewingClass={viewingClass} 
+                    setViewingClass={setViewingClass} 
+                    studentSearch={studentSearch} 
+                    setStudentSearch={setStudentSearch} 
+                    targetLevel={globalLevel} 
+                    loading={loading} 
+                    onSave={handleSave} 
+                    saveLabel={initialData ? "MODIFIER" : "PUBLIER LE DEVOIR 🚀"}
+                    // NOUVEAUX PROPS POUR LA SECTION
+                    sections={teacherSections}
+                    currentSection={formData.subject}
+                    onSectionChange={(s) => handleInput('subject', s)}
                 />
             </div>
         </div>

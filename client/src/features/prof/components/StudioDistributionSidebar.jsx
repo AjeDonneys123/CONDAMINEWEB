@@ -2,22 +2,25 @@
 import React from 'react';
 
 /**
- * 🛡️ COMPOSANT DISTRIBUTION - VERSION GROUP-READY V5.2
- * RÔLE : Gère l'assignation pour Classes et Groupes (2CD NON DNL, etc.)
+ * 🛡️ COMPOSANT DISTRIBUTION - VERSION COMPACTE (SCROLLABLE SECTIONS)
+ * RÔLE : Gère l'assignation pour Classes/Groupes ET le choix de la matière (ADN).
  */
 export default function StudioDistributionSidebar({ 
     user, allClasses, allStudents, chapters, distribution, setDistribution, 
     viewingClass, setViewingClass, studentSearch, setStudentSearch,
-    targetLevel, targetSection, loading, onSave, saveLabel = "PUBLIER 🚀"
+    targetLevel, loading, onSave, saveLabel = "PUBLIER 🚀",
+    // Nouveaux props pour la section
+    sections = [], currentSection, onSectionChange
 }) {
 
     const getAvailableChapters = (clsName) => {
         const safeChapters = Array.isArray(chapters) ? chapters : [];
-        const cleanSection = (targetSection || "GÉNÉRAL").toUpperCase().trim();
+        const activeSectionName = (currentSection || "GÉNÉRAL").toUpperCase().trim();
         const clsObj = (allClasses || []).find(c => c.name === clsName);
+        
         return safeChapters.filter(c => {
             if (c.isArchived) return false;
-            if ((c.section || "GÉNÉRAL").toUpperCase().trim() !== cleanSection) return false;
+            if ((c.section || "GÉNÉRAL").toUpperCase().trim() !== activeSectionName) return false;
             if (c.classroom === clsName) return true;
             if (c.sharedLevel && clsObj && String(c.sharedLevel) === String(clsObj.level)) return true;
             if (!c.classroom && !c.sharedLevel) return !c.hiddenIn || !c.hiddenIn.includes(clsName);
@@ -56,7 +59,6 @@ export default function StudioDistributionSidebar({
         setDistribution(next);
     };
 
-    // --- FILTRAGE PAR NIVEAU ---
     const availableClasses = (allClasses || []).filter(c => {
         const isAssigned = user.isDeveloper || (user.assignedClasses || []).some(id => String(id) === String(c._id));
         if (!isAssigned) return false;
@@ -64,7 +66,6 @@ export default function StudioDistributionSidebar({
         return true;
     }).sort((a,b) => a.name.localeCompare(b.name));
 
-    // --- DÉTECTION ÉLÈVES (CLASSE OU GROUPE) ---
     const clsObj = (allClasses || []).find(c => c.name === viewingClass);
     const clsId = clsObj ? String(clsObj._id) : null;
     
@@ -79,30 +80,55 @@ export default function StudioDistributionSidebar({
     );
 
     return (
-        <div className="v84-dist-sidebar custom-scrollbar">
-            <div className="text-[10px] font-black text-slate-400 mb-4 uppercase tracking-widest px-1">
+        <div className="v84-dist-sidebar custom-scrollbar flex flex-col h-full overflow-hidden">
+            
+            {/* SÉLECTEUR DE MATIÈRE (SECTION) - COMPACT & SCROLLABLE */}
+            <div className="mb-3 shrink-0">
+                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 block px-1">
+                    ADN DU DEVOIR
+                </label>
+                <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+                    {sections.map(sec => {
+                        const isActive = (currentSection || "GÉNÉRAL") === sec.name;
+                        return (
+                            <button 
+                                key={sec.name}
+                                onClick={() => onSectionChange && onSectionChange(sec.name)}
+                                className={`px-2 py-1.5 rounded-lg text-[9px] font-black uppercase border whitespace-nowrap transition-all ${isActive ? 'bg-slate-800 text-white border-slate-800 shadow-sm' : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'}`}
+                                style={isActive ? { backgroundColor: sec.color, borderColor: sec.color } : {}}
+                            >
+                                {sec.name}
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
+
+            <div className="h-px bg-slate-100 mb-3 shrink-0"></div>
+
+            <div className="text-[9px] font-black text-slate-400 mb-2 uppercase tracking-widest px-1 shrink-0">
                 Distribution {targetLevel ? `(Niv. ${targetLevel})` : ''}
             </div>
 
-            <div className="mb-4 flex flex-wrap gap-2">
+            <div className="mb-3 flex flex-wrap gap-1.5 shrink-0">
                 {availableClasses.map(c => (
-                    <button key={c._id} onClick={() => setViewingClass(c.name)} className={`v84-tab-btn ${distribution[c.name] ? 'active' : 'inactive'} ${viewingClass === c.name ? 'border-2 border-purple-700 ring-2 ring-purple-500 ring-offset-2' : ''}`}>
+                    <button key={c._id} onClick={() => setViewingClass(c.name)} className={`v84-tab-btn ${distribution[c.name] ? 'active' : 'inactive'} ${viewingClass === c.name ? 'border-2 border-purple-700 ring-1 ring-purple-500 ring-offset-1' : ''}`}>
                         {c.name}
                     </button>
                 ))}
             </div>
 
             {viewingClass && (
-                <div className="v84-class-card animate-in slide-in-from-right">
-                    <div className="v84-class-header" onClick={() => toggleClass(viewingClass)}>
+                <div className="v84-class-card animate-in slide-in-from-right flex flex-col flex-1 min-h-0 overflow-hidden">
+                    <div className="v84-class-header shrink-0" onClick={() => toggleClass(viewingClass)}>
                         <span className="v84-class-title">{viewingClass}</span>
                         <div className={`v84-check-badge ${distribution[viewingClass] && distribution[viewingClass].studentIds.length === 0 ? 'checked' : ''}`}>
                             {distribution[viewingClass] && distribution[viewingClass].studentIds.length === 0 && '✓'}
                         </div>
                     </div>
 
-                    <div className="v84-folder-select-box">
-                        <label className="v84-folder-label">Dossier :</label>
+                    <div className="v84-folder-select-box shrink-0">
+                        <label className="v84-folder-label">Dossier ({currentSection}) :</label>
                         <select className="v84-folder-select" value={distribution[viewingClass]?.chapterId || ""} onChange={e => {
                             const next = { ...distribution };
                             if (next[viewingClass]) { next[viewingClass].chapterId = e.target.value; setDistribution(next); }
@@ -111,12 +137,13 @@ export default function StudioDistributionSidebar({
                         </select>
                     </div>
 
-                    <div className="v84-search-box">
+                    <div className="v84-search-box shrink-0">
                         <span>🔎</span>
                         <input className="v84-search-input" placeholder="Chercher un élève..." value={studentSearch} onChange={e => setStudentSearch(e.target.value)} />
                     </div>
 
-                    <div className="v84-students-list custom-scrollbar">
+                    {/* LISTE DES ÉLÈVES (Zone flexible qui prend tout l'espace restant) */}
+                    <div className="v84-students-list custom-scrollbar flex-1 overflow-y-auto">
                         {studentsToDisplay.map(s => { 
                             const classConfig = distribution[viewingClass];
                             const isSelected = classConfig && (classConfig.studentIds.length === 0 || classConfig.studentIds.includes(String(s._id))); 
@@ -131,7 +158,7 @@ export default function StudioDistributionSidebar({
                 </div>
             )}
             
-            <button className="v84-publish-btn" onClick={onSave} disabled={loading || Object.keys(distribution).length === 0}>
+            <button className="v84-publish-btn shrink-0 mt-3" onClick={onSave} disabled={loading || Object.keys(distribution).length === 0}>
                 {loading ? 'PUBLICATION...' : saveLabel}
             </button>
         </div>

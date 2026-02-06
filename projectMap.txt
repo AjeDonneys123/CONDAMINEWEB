@@ -1,5 +1,7 @@
+├── ${fPath}
 ├── ${relPath}
 ├── ${rel}
+├── ${subRelPath}
 ├── ...
 ├── .gitignore
 ├── INSTRUCTIONS_OAUTH.md
@@ -285,7 +287,8 @@
 │   │   │   │   ├── structure.db.js
 │   │   │   │   ├── structure.drive.js
 │   │   │   │   └── structure.expert.js
-│   │   │   └── structure.routes.js
+│   │   │   ├── structure.routes.js
+│   │   │   └── structure.service.js
 │   │   ├── students/
 │   │   │   └── experts/
 │   │   │       └── student.drive.js
@@ -364,6 +367,10 @@
 │   ├── server.js
 │   └── version.json
 ├── snap.js
+├── snapGames.js
+├── snapHomework.js
+├── snapStructure.js
+├── snapStudio.js
 ├── systemInstructions.md
 ├── temp_diff.json
 ├── tests/

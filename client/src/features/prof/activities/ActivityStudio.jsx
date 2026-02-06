@@ -30,7 +30,11 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
             ]);
             
             setActivities([
-                ...(hw || []).map(x => ({...x, actType: 'homework', typeLabel: '📝 DM'})), 
+                ...(hw || []).map(x => ({
+                    ...x, 
+                    actType: 'homework', 
+                    typeLabel: (x.subject && x.subject.toUpperCase() !== 'GÉNÉRAL') ? `📝 DM ${x.subject.toUpperCase()}` : '📝 DM'
+                })), 
                 ...(gm || []).map(x => ({...x, actType: 'game', typeLabel: '🎮 JEU'})),
                 ...(sc || []).map(x => ({...x, actType: 'scan', typeLabel: '📸 DC', title: x.title || 'Scan sans titre'})) 
             ]);
@@ -54,13 +58,18 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
     };
 
     if (editingItem) {
+        // CORRECTION V475 : Détection intelligente de la section
+        // 1. Si on crée (editingItem.section existe) -> On prend la section active
+        // 2. Si on édite (editingItem.data existe) -> On prend le sujet enregistré (subject)
+        const activeSectionName = editingItem.data?.subject || editingItem.section || "GÉNÉRAL";
+
         const props = {
             initialData: editingItem.data,
             chapters,
             globalClass,
             globalLevel,
             user,
-            targetSection: editingItem.section,
+            targetSection: activeSectionName,
             onClose: () => { setEditingItem(null); loadData(); }
         };
         return editingItem.type === 'homework' ? <HomeworkStudio {...props} /> : <GameStudio {...props} />;
