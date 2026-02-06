@@ -35,7 +35,6 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
     const initData = () => {
         let base = initialData ? JSON.parse(JSON.stringify(initialData)) : { ...DEFAULT_HW_DATA };
         base.teacherId = user.id || user._id;
-        // Si pas de sujet défini (création), on prend la section cible passée en props
         if (!base.subject) base.subject = targetSection || "GÉNÉRAL";
         return base;
     };
@@ -44,7 +43,7 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
     const [activeLevelIdx, setActiveLevelIdx] = useState(0);
     const [allStudents, setAllStudents] = useState([]);
     const [allClasses, setAllClasses] = useState([]);
-    const [teacherSections, setTeacherSections] = useState([]); // Liste des matières du prof
+    const [teacherSections, setTeacherSections] = useState([]); 
     const [distribution, setDistribution] = useState({});
     const [viewingClass, setViewingClass] = useState(globalClass || "");
     const [studentSearch, setStudentSearch] = useState(""); 
@@ -55,27 +54,31 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
     const loadData = async () => {
         setLoading(true);
         try {
+            // CORRECTION CRITIQUE : Encodage de la classe pour l'URL (ex: "1D BFI" -> "1D%20BFI")
+            const encodedClass = encodeURIComponent(globalClass || "");
+            const uid = user.id || user._id;
+
             const [sts, cls, sections] = await Promise.all([ 
                 api.get('/admin/students'), 
                 api.get('/admin/classrooms'),
-                api.get(`/structure/sections/${user.id || user._id}`)
+                api.get(`/structure/sections/${uid}?classContext=${encodedClass}`)
             ]);
             
             setAllStudents(sts || []); 
             setAllClasses(cls || []); 
             
-            // On prépare la liste des sections pour le sélecteur
+            // Préparation des sections
             let secs = (Array.isArray(sections) ? sections : []).filter(s => s.name !== "GÉNÉRAL");
             secs.unshift({ name: "GÉNÉRAL", color: "#64748b" });
             setTeacherSections(secs);
 
             if (formData) {
                 const newDist = {};
-                // L'édition se concentre sur les classes du document chargé
                 const targets = formData.targetClassrooms && formData.targetClassrooms.length > 0 ? formData.targetClassrooms : [globalClass];
                 const currentSubject = formData.subject || "GÉNÉRAL";
 
                 targets.forEach(clsName => {
+                    if (!clsName) return; // Sécurité
                     const clsObj = (cls || []).find(c => c.name === clsName);
                     const ids = (sts || []).filter(s => {
                         const isM = (s.currentClass||"").trim().toUpperCase() === clsName.toUpperCase();
@@ -90,7 +93,7 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
                 });
                 setDistribution(newDist);
             }
-        } catch(e) {}
+        } catch(e) { console.error("Erreur chargement Studio:", e); }
         setLoading(false);
     };
 
@@ -99,13 +102,11 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
     const handleInput = (field, value) => {
         setFormData(p => ({ ...p, [field]: value }));
         
-        // Si on change la matière, on doit mettre à jour les dossiers par défaut dans la distribution
         if (field === 'subject') {
             const newSubject = value;
             setDistribution(prev => {
                 const next = { ...prev };
                 Object.keys(next).forEach(clsName => {
-                    // On recalcule le meilleur dossier pour la nouvelle matière
                     next[clsName].chapterId = findBestDefaultChapter(clsName, allClasses, newSubject);
                 });
                 return next;
@@ -139,7 +140,6 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
         } catch(e) { alert("Erreur upload"); } finally { setLoading(false); setUploadMode(null); }
     };
 
-    // --- SAUVEGARDE ATOMIQUE : 1 CLASSE = 1 REQUÊTE ---
     const handleSave = async () => {
         const targets = Object.keys(distribution);
         if (!formData.title.trim()) return alert("❌ Titre requis !");
@@ -148,7 +148,7 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
         setLoading(true);
         try {
             const originalId = initialData?._id;
-            const originalClass = initialData?.targetClassrooms?.[0]; // On assume 1 doc = 1 classe désormais
+            const originalClass = initialData?.targetClassrooms?.[0]; 
             let idUsed = false;
 
             for (const clsName of targets) {
@@ -163,16 +163,13 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
                     isAllClass: (cfg.studentIds || []).length === 0, 
                     teacherId: user.id || user._id, 
                     type: 'homework',
-                    // On force le sujet choisi dans le sélecteur
                     subject: formData.subject || "GÉNÉRAL"
                 };
 
-                // Si cette classe est celle d'origine, on fait un UPDATE
                 if (originalId && clsName === originalClass && !idUsed) {
                     payload._id = originalId;
                     idUsed = true;
                 } else {
-                    // Sinon, on supprime l'ID pour forcer un CLONE (Création d'un doc séparé)
                     delete payload._id;
                 }
 
@@ -266,7 +263,6 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
                     loading={loading} 
                     onSave={handleSave} 
                     saveLabel={initialData ? "MODIFIER" : "PUBLIER LE DEVOIR 🚀"}
-                    // NOUVEAUX PROPS POUR LA SECTION
                     sections={teacherSections}
                     currentSection={formData.subject}
                     onSectionChange={(s) => handleInput('subject', s)}

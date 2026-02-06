@@ -6,8 +6,7 @@ const ProfDrive = require('../core/drive.prof');
 const mongoose = require('mongoose');
 
 /**
- * 🛠️ BLOC STRUCTURE PROF V465 - FIX RESTORATION
- * RÔLE : Gestion des sections et dossiers avec fusion (Upsert) et renommage en cascade.
+ * 🛠️ BLOC STRUCTURE PROF - FIX DELETE & LOGIC
  */
 
 const getRandomColor = () => `hsl(${Math.floor(Math.random() * 360)}, 85%, 60%)`;
@@ -25,7 +24,7 @@ router.post('/sections', async (req, res) => {
 
         if (!user.subjectSections) user.subjectSections = [];
 
-        // CAS A : RENOMMAGE (Cascade)
+        // A. RENOMMAGE
         if (oldName && oldName.toUpperCase() !== name) {
             const idx = user.subjectSections.findIndex(s => s.name === oldName.toUpperCase());
             if (idx !== -1) {
@@ -34,69 +33,94 @@ router.post('/sections', async (req, res) => {
                 if (scope) user.subjectSections[idx].scope = scope;
                 if (target) user.subjectSections[idx].target = target;
                 
-                // Cascade sur les dossiers
                 await Chapter.updateMany(
                     { teacherId: user._id, section: oldName.toUpperCase() }, 
                     { $set: { section: name } }
                 );
             }
+            await user.save();
         } 
-        // CAS B : MISE À JOUR OU CRÉATION
+        // B. CRÉATION
         else {
             const existingIdx = user.subjectSections.findIndex(s => s.name === name);
             if (existingIdx !== -1) {
                 if (color) user.subjectSections[existingIdx].color = color;
                 if (scope) user.subjectSections[existingIdx].scope = scope;
                 if (target) user.subjectSections[existingIdx].target = target;
+                await user.save();
             } else {
-                // Création
-                const isFirstCustom = user.subjectSections.length === 1 && user.subjectSections[0].name === "GÉNÉRAL";
-                
-                user.subjectSections.push({ 
-                    name, 
-                    color: color || getRandomColor(), 
-                    scope: scope || 'GLOBAL', 
-                    target: target || null, 
-                    hiddenIn: [] 
+                // INSERTION BDD via $push pour éviter les conflits de version
+                await (user.constructor).findByIdAndUpdate(user._id, {
+                    $push: { 
+                        subjectSections: { 
+                            name, 
+                            color: color || getRandomColor(), 
+                            scope: scope || 'GLOBAL', 
+                            target: target || null, 
+                            hiddenIn: [] 
+                        } 
+                    }
                 });
 
-                // Migration auto si première section
-                if (isFirstCustom) {
-                    const generalRoot = await Chapter.findOne({ teacherId: user._id, section: "GÉNÉRAL", title: "GÉNÉRAL" });
-                    const newCh1 = await Chapter.create({ title: "CH1", section: name, teacherId: user._id });
-                    if (generalRoot) {
-                        await Homework.updateMany({ chapterId: generalRoot._id }, { chapterId: newCh1._id });
-                        await GameLevel.updateMany({ chapterId: generalRoot._id }, { chapterId: newCh1._id });
-                        await ScanSession.updateMany({ chapterId: generalRoot._id }, { chapterId: newCh1._id });
-                    }
-                }
+                // AUTO-CREATION CH1
+                // Logique : Si section GLOBAL -> CH1 est GLOBAL (donc visible par tous les niveaux, agissant comme un commun)
+                // Si section CLASSE -> CH1 est CLASSE
+                await Chapter.create({
+                    title: "CH1",
+                    section: name,
+                    teacherId: user._id,
+                    classroom: scope === 'CLASS' ? target : "",
+                    sharedLevel: scope === 'LEVEL' ? target : "",
+                    isArchived: false
+                });
             }
         }
-        await user.save();
-        res.json(user.subjectSections);
-    } catch (e) { res.status(500).json({ error: e.message }); }
+        
+        // Re-fetch pour renvoyer la donnée fraîche
+        const updatedUser = await (user.constructor).findById(user._id).lean();
+        res.json(updatedUser.subjectSections);
+
+    } catch (e) { 
+        console.error("Section Error:", e);
+        res.status(500).json({ error: e.message }); 
+    }
 });
 
 router.post('/sections/delete-request', async (req, res) => {
     try {
         const { teacherId, sectionName, permanent, classId } = req.body;
-        const user = await Teacher.findById(teacherId) || await Admin.findById(teacherId);
-        if (!user) return res.status(404).json({ error: "Prof introuvable" });
+        const userModel = await Teacher.exists({ _id: teacherId }) ? Teacher : Admin;
+        const name = sectionName.toUpperCase().trim();
 
         if (permanent) {
-            // Migration vers GÉNÉRAL avant suppression
-            await Chapter.updateMany({ teacherId: user._id, section: sectionName.toUpperCase() }, { $set: { section: "GÉNÉRAL" } });
-            user.subjectSections = user.subjectSections.filter(s => s.name !== sectionName.toUpperCase());
+            // 1. Migrer le contenu vers GÉNÉRAL
+            await Chapter.updateMany(
+                { teacherId, section: name }, 
+                { $set: { section: "GÉNÉRAL" } }
+            );
+            
+            // 2. Supprimer la section via $pull (Correction du crash 500)
+            await userModel.findByIdAndUpdate(teacherId, {
+                $pull: { subjectSections: { name: name } }
+            });
         } else {
-            const section = user.subjectSections.find(s => s.name === sectionName.toUpperCase());
+            // Masquage local
+            // On doit charger, modifier, sauver pour gérer le tableau hiddenIn dans le sous-document
+            const user = await userModel.findById(teacherId);
+            const section = user.subjectSections.find(s => s.name === name);
             if (section) {
                 if (!section.hiddenIn) section.hiddenIn = [];
                 if (!section.hiddenIn.includes(classId)) section.hiddenIn.push(classId);
+                await user.save();
             }
         }
-        await user.save();
-        res.json(user.subjectSections);
-    } catch (e) { res.status(500).json({ error: e.message }); }
+
+        const updatedUser = await userModel.findById(teacherId).lean();
+        res.json(updatedUser.subjectSections);
+    } catch (e) {
+        console.error("Delete Section Error:", e);
+        res.status(500).json({ error: e.message });
+    }
 });
 
 // --- 2. CHAPITRES ---
@@ -107,23 +131,8 @@ router.get('/chapters', async (req, res) => {
         const isValidId = teacherId && teacherId !== 'undefined' && mongoose.Types.ObjectId.isValid(teacherId);
         
         if (isValidId) {
-            // Garantir racine
             const root = await Chapter.findOne({ teacherId, section: "GÉNÉRAL", title: "GÉNÉRAL" });
             if (!root) await Chapter.create({ title: "GÉNÉRAL", section: "GÉNÉRAL", teacherId, isArchived: false });
-            
-            // Fusion des doublons par Nom+Section
-            const allChaps = await Chapter.find({ teacherId }).sort({ createdAt: 1 });
-            const registry = {}; const toDelete = [];
-            for (const c of allChaps) {
-                const key = `${c.section}_${c.title}`.toUpperCase().trim();
-                if (!registry[key]) registry[key] = c._id;
-                else { 
-                    await Homework.updateMany({ chapterId: c._id }, { chapterId: registry[key] }); 
-                    await GameLevel.updateMany({ chapterId: c._id }, { chapterId: registry[key] }); 
-                    toDelete.push(c._id); 
-                }
-            }
-            if (toDelete.length > 0) await Chapter.deleteMany({ _id: { $in: toDelete } });
         }
 
         const query = isValidId ? { teacherId } : {};
@@ -139,14 +148,6 @@ router.post('/chapters', async (req, res) => {
         const cleanTitle = (title || "NOUVEAU").toUpperCase().trim();
         const cleanSection = (section || "GÉNÉRAL").toUpperCase().trim();
         
-        // UPSERT LOGIC
-        const existing = await Chapter.findOne({ teacherId, section: cleanSection, title: cleanTitle });
-        if (existing) {
-            existing.classroom = scope === 'CLASS' ? target : "";
-            existing.sharedLevel = scope === 'LEVEL' ? target : "";
-            await existing.save();
-            return res.json(existing);
-        }
         const newChap = await Chapter.create({ 
             title: cleanTitle, 
             section: cleanSection, 
@@ -181,7 +182,6 @@ router.post('/chapters/delete-request', async (req, res) => {
         if (!target) return res.status(404).json({ error: "Introuvable" });
 
         if (permanent) {
-            // Migration vers racine avant suppression
             let root = await Chapter.findOne({ teacherId, section: "GÉNÉRAL", title: "GÉNÉRAL" });
             if (!root) root = await Chapter.create({ title: "GÉNÉRAL", section: "GÉNÉRAL", teacherId });
             
