@@ -1,15 +1,15 @@
-// @signatures: StudioDistributionSidebar, getAvailableChapters, findBestDefaultChapter, handleToggleStudent, toggleClass
+// @signatures: StudioDistributionSidebar, getAvailableChapters, findBestDefaultChapter, handleToggleStudent, toggleClass, handleToggleAll
 import React from 'react';
 
 /**
- * 🛡️ COMPOSANT DISTRIBUTION - VERSION COMPACTE (SCROLLABLE SECTIONS)
+ * 🛡️ COMPOSANT DISTRIBUTION - VERSION MASSIVE V6
  * RÔLE : Gère l'assignation pour Classes/Groupes ET le choix de la matière (ADN).
+ * AJOUT : Case à cocher "Tout sélectionner" (Batch Assign).
  */
 export default function StudioDistributionSidebar({ 
     user, allClasses, allStudents, chapters, distribution, setDistribution, 
     viewingClass, setViewingClass, studentSearch, setStudentSearch,
     targetLevel, loading, onSave, saveLabel = "PUBLIER 🚀",
-    // Nouveaux props pour la section
     sections = [], currentSection, onSectionChange
 }) {
 
@@ -21,6 +21,7 @@ export default function StudioDistributionSidebar({
         return safeChapters.filter(c => {
             if (c.isArchived) return false;
             if ((c.section || "GÉNÉRAL").toUpperCase().trim() !== activeSectionName) return false;
+            
             if (c.classroom === clsName) return true;
             if (c.sharedLevel && clsObj && String(c.sharedLevel) === String(clsObj.level)) return true;
             if (!c.classroom && !c.sharedLevel) return !c.hiddenIn || !c.hiddenIn.includes(clsName);
@@ -66,6 +67,39 @@ export default function StudioDistributionSidebar({
         return true;
     }).sort((a,b) => a.name.localeCompare(b.name));
 
+    // --- LOGIQUE TOUT SÉLECTIONNER ---
+    const areAllClassesFullSelected = availableClasses.length > 0 && availableClasses.every(c => {
+        const conf = distribution[c.name];
+        // Est considéré comme "Full Selected" si présent ET liste d'élèves vide (mode toute la classe)
+        return conf && conf.studentIds.length === 0;
+    });
+
+    const handleToggleAll = () => {
+        const next = { ...distribution };
+        
+        if (areAllClassesFullSelected) {
+            // SI TOUT EST DÉJÀ SÉLECTIONNÉ -> ON DÉCOCHE TOUT (Pour ce niveau)
+            availableClasses.forEach(c => {
+                delete next[c.name];
+            });
+        } else {
+            // SINON -> ON COCHE TOUT EN MODE "TOUTE LA CLASSE"
+            availableClasses.forEach(c => {
+                // On écrase la config existante pour forcer "Toute la classe"
+                next[c.name] = {
+                    chapterId: findBestDefaultChapter(c.name),
+                    studentIds: [] // Liste vide = Toute la classe
+                };
+            });
+            // On force l'affichage de la première classe pour que l'utilisateur voit ce qu'il se passe
+            if (availableClasses.length > 0 && !viewingClass) {
+                setViewingClass(availableClasses[0].name);
+            }
+        }
+        setDistribution(next);
+    };
+
+    // --- LOGIQUE D'AFFICHAGE ÉLÈVES ---
     const clsObj = (allClasses || []).find(c => c.name === viewingClass);
     const clsId = clsObj ? String(clsObj._id) : null;
     
@@ -82,7 +116,7 @@ export default function StudioDistributionSidebar({
     return (
         <div className="v84-dist-sidebar custom-scrollbar flex flex-col h-full overflow-hidden">
             
-            {/* SÉLECTEUR DE MATIÈRE (SECTION) - COMPACT & SCROLLABLE */}
+            {/* SÉLECTEUR DE MATIÈRE */}
             <div className="mb-3 shrink-0">
                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 block px-1">
                     ADN DU DEVOIR
@@ -106,8 +140,21 @@ export default function StudioDistributionSidebar({
 
             <div className="h-px bg-slate-100 mb-3 shrink-0"></div>
 
-            <div className="text-[9px] font-black text-slate-400 mb-2 uppercase tracking-widest px-1 shrink-0">
-                Distribution {targetLevel ? `(Niv. ${targetLevel})` : ''}
+            {/* HEADER DISTRIBUTION AVEC CHECKBOX MAGIQUE */}
+            <div className="flex items-center justify-between mb-3 px-1 shrink-0">
+                <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                    Distribution {targetLevel ? `(Niv. ${targetLevel})` : ''}
+                </div>
+                
+                {/* BOUTON TOUT COCHER */}
+                <div onClick={handleToggleAll} className="flex items-center gap-2 cursor-pointer group hover:bg-purple-50 px-2 py-1 rounded-lg transition-colors">
+                    <div className={`w-3 h-3 rounded border flex items-center justify-center transition-all ${areAllClassesFullSelected ? 'bg-purple-600 border-purple-600' : 'border-slate-300 bg-white'}`}>
+                        {areAllClassesFullSelected && <span className="text-white text-[8px] font-black">✓</span>}
+                    </div>
+                    <span className={`text-[8px] font-black uppercase ${areAllClassesFullSelected ? 'text-purple-600' : 'text-slate-400 group-hover:text-purple-500'}`}>
+                        Tout Cocher
+                    </span>
+                </div>
             </div>
 
             <div className="mb-3 flex flex-wrap gap-1.5 shrink-0">
@@ -142,7 +189,6 @@ export default function StudioDistributionSidebar({
                         <input className="v84-search-input" placeholder="Chercher un élève..." value={studentSearch} onChange={e => setStudentSearch(e.target.value)} />
                     </div>
 
-                    {/* LISTE DES ÉLÈVES (Zone flexible qui prend tout l'espace restant) */}
                     <div className="v84-students-list custom-scrollbar flex-1 overflow-y-auto">
                         {studentsToDisplay.map(s => { 
                             const classConfig = distribution[viewingClass];
