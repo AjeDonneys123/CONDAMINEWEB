@@ -705,3 +705,12 @@
 06/02/2026 10:48 - BUGFIX LOST ACTIONS :
 - Restauration des boutons "+ SECTION" et "+ DOSSIER" dans `ProfStudioFolder.jsx` qui avaient été supprimés lors du nettoyage précédent.
 - Réintégration des modales de création (showSectionModal, showChapterModal) et de leur logique (handleCreateSection, handleCreateChapter).
+
+06/02/2026 10:48 - BUGFIX LOST ACTIONS :
+- Restauration des boutons "+ SECTION" et "+ DOSSIER" dans `ProfStudioFolder.jsx` qui avaient été supprimés lors du nettoyage précédent.
+- Réintégration des modales de création (showSectionModal, showChapterModal) et de leur logique (handleCreateSection, handleCreateChapter).
+
+06/02/2026 10:55 - BUGFIX ACTION BUTTONS :
+- Restauration des boutons **Supprimer** (✕) sur les activités (Devoirs/Jeux) dans les dossiers.
+- Restauration des boutons **Modifier** (✏️) et **Supprimer** (✕) sur les sections (Chips) au survol.
+- Restauration complète de la modale d'édition de section (`showEditSectionModal`).
