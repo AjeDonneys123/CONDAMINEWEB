@@ -1,9 +1,10 @@
-// @signatures: ProfStudio, projects, save, uploadAsset, detectBg, removeBgSpecialized
+// @signatures: ProfStudio, projects, save, uploadAsset, detectBg, removeBgSpecialized, saveEdition
 const express = require('express');
 const router = express.Router();
 const { StudioProject } = require('../models/prof.models');
 const ProfDrive = require('../core/drive.prof');
 const StudioExpert = require('../../domains/studio/experts/studio.expert'); 
+const EditionExpert = require('../../domains/studio/experts/edition.expert'); // V459
 const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
@@ -39,24 +40,24 @@ router.post('/upload-asset', upload.single('file'), async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ✅ ROUTE DÉTOURAGE SPÉCIALISÉ
-router.post('/remove-bg-specialized', async (req, res) => {
-    console.log("📥 [STUDIO-ROUTE] Requête remove-bg-specialized reçue.");
+// ✅ NOUVELLE ROUTE : SAUVEGARDE ÉDITION (GOMME) V459
+router.post('/save-edition', upload.single('file'), async (req, res) => {
     try {
-        const { url } = req.body;
-        if (!url) return res.status(400).json({ error: "URL manquante" });
-        
-        const result = await StudioExpert.specializedBgRemoval(url);
-        
-        if (result) {
-            res.json(result);
-        } else {
-            res.status(500).json({ error: "Échec du détourage (voir logs serveur)" });
-        }
+        if (!req.file) return res.status(400).json({ error: "Blob manquant" });
+        const result = await EditionExpert.saveErasedImage(req.file.path, req.file.originalname);
+        res.json(result);
     } catch (e) {
-        console.error("❌ [STUDIO-ROUTE] Erreur fatale :", e.message);
         res.status(500).json({ error: e.message });
     }
+});
+
+router.post('/remove-bg-specialized', async (req, res) => {
+    try {
+        const { url } = req.body;
+        const result = await StudioExpert.specializedBgRemoval(url);
+        if (result) res.json(result);
+        else res.status(500).json({ error: "Échec détourage" });
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 module.exports = router;

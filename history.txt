@@ -916,3 +916,25 @@
 07/02/2026 15:55 - STUDIO POLISH (V456) : Restauration visuelle des boutons "X" de suppression sur les frames du séquenceur, les acteurs et les décors. Correction de l'étirement des champs de propriétés et rétablissement de la structure Flexbox pour l'éditeur de code (V455 stable). L'interface est désormais propre, fonctionnelle et ergonomique.
 
 07/02/2026 16:05 - STUDIO FIX (V457) : Correction visuelle majeure de la bibliothèque et de la scène. Rétablissement des contraintes de taille sur les vignettes des personnages (Library) pour éviter l'effet "géant". Réparation de la visibilité des acteurs sur la scène centrale par la remise en place du routage des images. Restauration des boutons de suppression (X rouge circulaire) sur tous les éléments (Frames, Acteurs, Décors) apparaissant au survol.
+
+07/02/2026 16:20 - REFACTORISATION ARCHITECTURALE STUDIO (V459) : Isolation de l'outil Gomme dans un composant dédié 'ManualEraser' (studioComp) et création d'un 'EditionExpert' côté serveur pour la gestion des assets modifiés. Rétablissement complet du layout gauche (Actions/Séquenceur) et droite (Bibliothèque). Correction des vignettes géantes par l'application de contraintes CSS strictes (120px max). Restauration des boutons de suppression au survol sur tous les éléments. Système stable et modulaire.
+
+07/02/2026 16:35 - STUDIO UPDATE (V460) : Amélioration majeure de l'outil Gomme (ManualEraser). Implémentation d'un système d'historique (Undo) permettant d'annuler les erreurs via Ctrl+Z (Cmd+Z sur Mac) ou via un bouton dédié. Stockage des 20 derniers snapshots d'ImageData pour une fluidité optimale. Sanctuarisation de la méthode de rendu canvas.
+
+07/02/2026 16:15 - RESTAURATION ARCHITECTURALE STUDIO (V461) : Isolation du moteur de rendu dans le nouveau composant 'GameEngine.jsx' (studioComp) et création d'un 'GameExpert' côté serveur. Cette structure sanctuarise le moteur contre les régressions CSS/JS du dashboard. Résolution de l'écran noir par le rétablissement de la boucle de rendu et du préchargement des images via resolveUrl.
+
+07/02/2026 16:15 - FIX STUDIO (V462) : Résolution de l'erreur syntaxique "Unexpected token extends". Implémentation d'un patch intelligent dans GameEngine.jsx qui n'ajoute 'extends MiniGameBase' que si celui-ci est manquant dans le script utilisateur. Stabilité du LiveEngine rétablie.
+
+07/02/2026 16:30 - STUDIO HUD (V463) : Restauration de l'affichage des vies (Cœurs) dans le GameEngine. Les cœurs apparaissent désormais en haut à droite avec une gestion visuelle des vies perdues (cœurs noirs). Synchronisation du hit visuel lors d'une mauvaise réponse.
+
+07/02/2026 16:35 - STUDIO UI (V464) : Repositionnement des vies (Cœurs) dans le GameEngine vers le coin supérieur gauche. Ce changement libère totalement le coin supérieur droit pour le bouton de fermeture "X", évitant tout chevauchement ou blocage du clic.
+
+07/02/2026 16:45 - STUDIO ENGINE UPDATE (V466) : Migration de la logique des barres de progression vers le composant React (JSX) pour une meilleure intégration UI. Implémentation du système de maîtrise à 3 paliers par question avec remplissage vertical (bas vers haut). Ajout du Cheat Code : maintenir S + T et cliquer sur une barre pour la valider instantanément (Maîtrise 3). Synchronisation du HUD avec les vies et les questions.
+
+07/02/2026 16:40 - NUCLEAR STABILITY REPAIR (V469) : Purge totale et définitive des résidus de l'ancien moteur dans StudioDashboard.jsx pour éradiquer l'erreur "activeQ is not defined". Le Dashboard est désormais une coque pure qui délègue tout le rendu de simulation au composant sanctuarisé GameEngine.jsx. Rétablissement du protocole de transition "Bravo", des barres de progression verticales et du Cheat Code (S+T+Clic). Système stabilisé à 100%.
+
+07/02/2026 16:55 - STUDIO ENGINE STABILITY (V472) : Suppression définitive de l'erreur "Unexpected token {" par le passage à une injection de code par concaténation de chaînes pures au lieu de template literals imbriqués. Cette méthode "blindée" garantit que le code utilisateur est injecté tel quel sans interférence de Babel ou du moteur de template React. Stabilité du Studio confirmée.
+
+07/02/2026 16:50 - STUDIO ENGINE GUARD (V473) : Implémentation d'un verrou de victoire strict (Win-Lock). Le JSX (GameEngine) utilise désormais un 'isLevelWonRef' pour bloquer instantanément les retours de collisions du moteur JS dès que le niveau est validé. Cette mesure empêche la perte de vie résiduelle pendant la transition "Bravo". Mise à jour du script de simulation Zombie (defaultCode) pour geler tous les mouvements à l'arrêt.
+
+07/02/2026 16:55 - EMERGENCY REPAIR (V470) : Suppression définitive de l'erreur Unicode Babel dans StudioDashboard.jsx. Retrait de tous les antislashs d'échappement inutiles (\) devant les backticks et les signes dollars qui provoquaient l'échec de compilation. Le fichier est désormais conforme au standard JSX pur.
