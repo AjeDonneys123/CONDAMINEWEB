@@ -119,7 +119,11 @@
 │   │   │       │   └── StudentsManager.jsx
 │   │   │       └── studio/
 │   │   │           ├── StudioDashboard.css
-│   │   │           └── StudioDashboard.jsx
+│   │   │           ├── StudioDashboard.jsx
+│   │   │           └── studioComp/
+│   │   │               ├── GameEngine.jsx
+│   │   │               ├── ManualEraser.css
+│   │   │               └── ManualEraser.jsx
 │   │   ├── index.css
 │   │   ├── main.jsx
 │   │   ├── services/
@@ -301,6 +305,8 @@
 │   │       ├── db/
 │   │       │   └── studio.db.js
 │   │       ├── experts/
+│   │       │   ├── edition.expert.js
+│   │       │   ├── game.expert.js
 │   │       │   ├── studio.drive.js
 │   │       │   └── studio.expert.js
 │   │       └── studio.routes.js

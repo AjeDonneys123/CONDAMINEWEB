@@ -74,552 +74,129 @@ Gestion globale des ressources du projet.
 [[[£ FILE: client/src/features/prof/studio/StudioDashboard.css £]]]
 /* --- LAYOUT GLOBAL --- */
 .studio-wrapper {
-    display: flex;
-    width: 100%;
-    height: 85vh;
-    background: #f8fafc;
-    border-radius: 20px;
-    overflow: hidden;
-    border: 1px solid #e2e8f0;
-    position: relative;
+    display: flex; width: 100%; height: 85vh;
+    background: #f8fafc; border-radius: 25px;
+    overflow: hidden; border: 1px solid #e2e8f0; position: relative;
 }
 
-/* --- PANNEAU GAUCHE (ASSETS) --- */
+/* --- SABLIER / LOADING --- */
+.studio-loading-overlay {
+    position: absolute; inset: 0; background: rgba(15, 23, 42, 0.85);
+    backdrop-filter: blur(8px); z-index: 30000;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    color: white; font-family: 'Inter', sans-serif; gap: 20px;
+}
+.sablier-icon { font-size: 4rem; animation: hourglass-flip 2s ease-in-out infinite; }
+
+/* --- PANNEAU GAUCHE (RESTAURÉ V458) --- */
 .studio-assets-panel {
-    width: 320px;
-    min-width: 320px;
-    flex-shrink: 0;
-    background: #fff;
-    border-right: 1px solid #e2e8f0;
-    display: flex;
-    flex-direction: column;
+    width: 320px; min-width: 320px; flex-shrink: 0;
+    background: #fff; border-right: 1px solid #e2e8f0; 
+    display: flex; flex-direction: column;
 }
 
-.studio-tab-header {
-    display: flex;
-    background: #f1f5f9;
-    padding: 5px;
-    gap: 5px;
-}
-
-.studio-tab-btn {
-    flex: 1;
-    padding: 12px;
-    border-radius: 12px;
-    font-weight: 900;
-    font-size: 10px;
-    text-transform: uppercase;
-    border: none;
-    cursor: pointer;
-    transition: all 0.2s;
-    color: #94a3b8;
-}
-.studio-tab-btn.active {
-    background: white;
-    color: #6366f1;
-    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
-}
+.studio-tab-header { display: flex; background: #f1f5f9; padding: 6px; gap: 5px; }
+.studio-tab-btn { flex: 1; padding: 12px; border-radius: 12px; font-weight: 900; font-size: 10px; text-transform: uppercase; border: none; cursor: pointer; color: #94a3b8; transition: all 0.2s; }
+.studio-tab-btn.active { background: white; color: #6366f1; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
 
 .studio-asset-list {
-    flex: 1;
-    overflow-y: auto;
-    padding: 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
+    flex: 1; overflow-y: auto; padding: 20px;
+    display: flex; flex-direction: column; gap: 10px;
 }
 
-/* CARDS ACTIONS */
+/* CARTES ACTIONS */
 .action-card-square {
-    background: #f8fafc;
-    border: 2px solid #f1f5f9;
-    border-radius: 20px;
-    padding: 18px 22px;
-    cursor: pointer;
-    transition: all 0.2s;
-    display: flex;
-    align-items: center;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+    background: #f8fafc; border: 2px solid #f1f5f9; border-radius: 18px;
+    padding: 15px 20px; cursor: pointer; transition: all 0.2s;
+    display: flex; align-items: center; justify-content: space-between;
 }
-.action-card-square:hover {
-    border-color: #cbd5e1;
-    background: #fff;
-}
-.action-card-square.active {
-    background: #fff;
-    border-color: #6366f1;
-    box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.15);
-}
-.action-card-square span {
-    font-weight: 950;
-    font-size: 11px;
-    color: #1e293b;
-    text-transform: uppercase;
-}
-
-.v84-add-btn-minimal {
-    padding: 15px;
-    border: 2px dashed #cbd5e1;
-    border-radius: 20px;
-    background: transparent;
-    color: #94a3b8;
-    font-weight: 900;
-    font-size: 11px;
-    text-transform: uppercase;
-    cursor: pointer;
-}
+.action-card-square:hover { border-color: #cbd5e1; background: #fff; }
+.action-card-square.active { background: #fff; border-color: #6366f1; box-shadow: 0 10px 20px rgba(99, 102, 241, 0.1); }
+.action-card-square span { font-weight: 950; font-size: 11px; color: #1e293b; text-transform: uppercase; }
 
 /* SÉQUENCEUR */
 .studio-sequence-editor {
-    height: 280px;
-    background: #f8fafc;
-    border-top: 1px solid #e2e8f0;
-    display: flex;
-    flex-direction: column;
-    padding: 15px 20px;
+    height: 400px; background: #f8fafc; border-top: 1px solid #e2e8f0;
+    display: flex; flex-direction: column; padding: 20px; gap: 15px;
 }
-
-.sequence-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 15px;
-}
+.sequence-header { display: flex; justify-content: space-between; align-items: center; }
+.sequence-title { font-size: 9px; font-weight: 950; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; }
 
 .sequence-controls {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background: #fff;
-    padding: 4px 8px;
-    border-radius: 12px;
-    border: 1px solid #e2e8f0;
+    display: flex; align-items: center; gap: 6px;
+    background: white; padding: 5px 10px; border-radius: 12px; border: 1px solid #e2e8f0;
 }
-
-.speed-indicator {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9px;
-    font-weight: 900;
-    color: #6366f1;
-    min-width: 45px;
-    text-align: center;
-}
-
-.btn-speed {
-    width: 22px;
-    height: 22px;
-    border-radius: 6px;
-    border: 1px solid #e2e8f0;
-    background: #f8fafc;
-    color: #475569;
-    font-weight: 900;
-    cursor: pointer;
-}
-
-.btn-mirror {
-    background: #f1f5f9;
-    color: #475569;
-    border: 1px solid #cbd5e1;
-    border-radius: 10px;
-    padding: 6px 12px;
-    font-size: 10px;
-    font-weight: 900;
-    cursor: pointer;
-    transition: all 0.2s;
-    margin-right: 5px;
-}
-.btn-mirror:hover {
-    background: #e2e8f0;
-    color: #1e293b;
-    transform: scale(1.05);
-}
-
-.btn-preview-play {
-    background: #6366f1;
-    color: white;
-    border: none;
-    border-radius: 10px;
-    padding: 6px 12px;
-    font-size: 10px;
-    font-weight: 950;
-    cursor: pointer;
-}
-.btn-preview-play.playing { background: #ef4444; }
+.btn-speed { width: 24px; height: 24px; background: #f1f5f9; border: none; border-radius: 6px; font-weight: 900; cursor: pointer; }
+.speed-indicator { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 900; color: #6366f1; min-width: 40px; text-align: center; }
 
 .sequence-grid {
-    flex: 1;
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(65px, 1fr));
-    gap: 10px;
-    overflow-y: auto;
+    flex: 1; display: grid; grid-template-columns: repeat(auto-fill, minmax(65px, 1fr));
+    gap: 12px; overflow-y: auto; padding-right: 5px;
 }
-
 .frame-card {
-    width: 65px;
-    height: 65px;
-    background: white;
-    border: 2px solid #e2e8f0;
-    border-radius: 12px;
-    position: relative;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
+    width: 65px; height: 65px; background: white; border: 2px solid #e2e8f0;
+    border-radius: 12px; position: relative; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; transition: all 0.2s;
 }
+.frame-card.active-preview { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2); }
+.frame-del { position: absolute; top: -5px; right: -5px; width: 20px; height: 20px; background: #ef4444; color: white; border: 2px solid white; border-radius: 50%; font-size: 10px; display: flex; align-items: center; justify-content: center; cursor: pointer; opacity: 0; transition: 0.2s; z-index: 10; }
+.frame-card:hover .frame-del { opacity: 1; }
 
-.frame-card.active-preview { 
-    border-color: #6366f1; 
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+/* BARRE DE GOMME (FIX ALIGNEMENT) */
+.eraser-tool-bar {
+    background: white; border: 2px solid #e2e8f0; border-radius: 20px;
+    padding: 12px 15px; display: flex; align-items: center; justify-content: space-between;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-top: auto;
 }
+.btn-eraser-main { width: 42px; height: 42px; background: #f1f5f9; border-radius: 12px; font-size: 1.2rem; cursor: pointer; border: none; display: flex; align-items: center; justify-content: center; transition: 0.2s; }
+.btn-eraser-main.active { background: #6366f1; color: white; box-shadow: 0 0 15px rgba(99, 102, 241, 0.4); }
 
-.frame-card.selected-for-clean {
-    border-color: #3b82f6 !important;
-    border-style: solid !important;
-    border-width: 3px !important;
-    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.3) !important;
-}
+.eraser-size-ctrl { display: flex; align-items: center; gap: 8px; background: #f8fafc; padding: 5px 12px; border-radius: 12px; border: 1px solid #eee; }
+.btn-size { width: 26px; height: 26px; background: white; border: 1px solid #ddd; border-radius: 6px; font-weight: 900; cursor: pointer; }
+.size-val { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 950; color: #1e293b; min-width: 20px; text-align: center; }
 
-.frame-img {
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-    padding: 5px;
-    pointer-events: none;
-}
-
-.frame-del {
-    position: absolute;
-    top: 2px;
-    right: 2px;
-    background: #ef4444;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    font-size: 8px;
-    cursor: pointer;
-    z-index: 20;
-}
-
-/* --- CENTRE (SCÈNE & ÉDITEUR) --- */
+/* --- COLONNE CENTRALE --- */
 .studio-center-column {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    background: #f1f5f9;
-    padding: 15px;
-    gap: 10px;
-    min-width: 0;
+    flex: 1; display: flex; flex-direction: column;
+    background: #f1f5f9; padding: 15px; gap: 15px; min-width: 0;
 }
-
 .stage-view {
-    flex: 1;
-    background-color: #fff;
-    background-size: cover;
-    background-position: center;
-    border-radius: 20px;
-    position: relative;
-    overflow: hidden;
-    box-shadow: inset 0 0 40px rgba(0,0,0,0.05);
-    min-height: 250px;
+    height: 320px; background-color: #fff; background-size: cover; background-position: center;
+    border-radius: 25px; position: relative; overflow: hidden; box-shadow: inset 0 0 40px rgba(0,0,0,0.05); flex-shrink: 0;
 }
+.actor-on-stage { position: absolute; transform: translate(-50%, -50%); cursor: grab; z-index: 10; width: 150px; height: 150px; display: flex; align-items: center; justify-content: center; }
+.actor-on-stage img { max-width: 100%; max-height: 100%; object-fit: contain; pointer-events: none; }
 
-.actor-on-stage {
-    position: absolute;
-    transform: translate(-50%, -50%);
-    cursor: grab;
-    z-index: 10;
-    width: 150px;
-    height: 150px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-.actor-on-stage img {
-    max-width: 100%;
-    max-height: 100%;
-    object-fit: contain;
-}
-
-.actor-on-stage.selected {
-    outline: 3px solid #6366f1;
-    outline-offset: 5px;
-    border-radius: 5px;
-    z-index: 100;
-}
-
-.actor-label-tag {
-    position: absolute;
-    top: -20px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: rgba(0,0,0,0.6);
-    color: white;
-    font-size: 8px;
-    padding: 2px 6px;
-    border-radius: 4px;
-    font-weight: 900;
-    pointer-events: none;
-    white-space: nowrap;
-}
-
-/* BARRE D'OUTILS ET PROPRIÉTÉS (FIX LAYOUT) */
 .v115-prop-bar {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    background: white;
-    padding: 8px 12px;
-    border-radius: 18px;
-    border: 1px solid #e2e8f0;
-    flex-wrap: nowrap; /* Empêche le passage à la ligne */
-    overflow-x: auto;
-    white-space: nowrap;
-    min-height: 60px;
-    flex-shrink: 0;
+    display: flex; align-items: center; gap: 15px;
+    background: white; padding: 12px 20px; border-radius: 20px; border: 1px solid #e2e8f0; flex-shrink: 0;
 }
-.v115-prop-bar::-webkit-scrollbar { display: none; }
+.prop-input-mini { background: #f1f5f9; border: none; padding: 8px 12px; border-radius: 10px; font-weight: 900; font-size: 12px; width: 100px; outline: none; }
 
-.prop-input-mini {
-    background: #f1f5f9;
-    border: none;
-    padding: 6px 10px;
-    border-radius: 8px;
-    font-weight: 900;
-    font-size: 11px;
-    color: #1e293b;
-    outline: none;
-    width: 50px;
-    text-align: center;
-}
+.compact-code-editor { flex: 1; background: #0f172a; border-radius: 20px; overflow: hidden; display: flex; border: 1px solid #334155; }
+.compact-code-editor textarea { width: 100%; height: 100%; background: transparent; color: #10b981; font-family: 'JetBrains Mono', monospace; font-size: 12px; padding: 20px; border: none; outline: none; resize: none; line-height: 1.6; }
 
-/* BOUTON VOIR QUIZ */
-.btn-view-quiz {
-    background: #f1f5f9;
-    color: #64748b;
-    border: 1px solid #cbd5e1;
-    padding: 8px 12px;
-    border-radius: 12px;
-    font-weight: 900;
-    font-size: 9px;
-    text-transform: uppercase;
-    cursor: pointer;
-    transition: all 0.2s;
-    margin-left: auto;
-    white-space: nowrap;
-    display: flex; align-items: center; gap: 5px;
-}
-.btn-view-quiz:hover {
-    background: #e2e8f0;
-    color: #1e293b;
-}
-
-/* ÉDITEUR DE CODE */
-.compact-code-editor {
-    flex: 1; /* Prend l'espace restant */
-    background: #0f172a;
-    border-radius: 15px;
-    overflow: hidden;
-    min-height: 150px;
-}
-
-.compact-code-editor textarea {
-    width: 100%;
-    height: 100%;
-    background: transparent;
-    color: #10b981;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 12px;
-    padding: 15px;
-    border: none;
-    outline: none;
-    resize: none;
-}
-
-/* --- PANNEAU DROITE (BIBLIOTHÈQUE) --- */
-.studio-library-panel {
-    width: 250px;
-    min-width: 250px;
-    background: #fff;
-    border-left: 1px solid #e2e8f0;
-    display: flex;
-    flex-direction: column;
-}
-
-.library-section-header {
-    padding: 12px 15px;
-    background: #f8fafc;
-    border-bottom: 1px solid #e2e8f0;
-}
-
-.lib-header-top {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 8px;
-}
-
-.lib-section-title {
-    font-weight: 950;
-    font-size: 10px;
-    text-transform: uppercase;
-    color: #94a3b8;
-    letter-spacing: 0.05em;
-}
-
-.lib-actions-row {
-    display: flex;
-    gap: 5px;
-}
-
-.btn-clean-bgs {
-    flex: 1;
-    background: #10b981;
-    color: white;
-    border: none;
-    padding: 8px;
-    border-radius: 10px;
-    font-weight: 950;
-    font-size: 8px;
-    text-transform: uppercase;
-    cursor: pointer;
-}
-
-.btn-ai-clean {
-    background: #6366f1;
-    color: white;
-    border: none;
-    padding: 8px 12px;
-    border-radius: 10px;
-    font-weight: 950;
-    font-size: 8px;
-    text-transform: uppercase;
-    cursor: pointer;
-    box-shadow: 0 4px 10px rgba(99, 102, 241, 0.2);
-}
-
-.library-scroll-area {
-    flex: 1;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-}
-
-.library-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 10px;
-    padding: 15px;
-}
-
-.item-card {
-    background: #f8fafc;
-    border: 2px solid transparent;
-    border-radius: 16px;
-    padding: 8px;
-    cursor: pointer;
-    text-align: center;
-    transition: all 0.2s;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    position: relative;
-}
-.item-card:hover { background: #f1f5f9; border-color: #cbd5e1; }
+/* --- BIBLIOTHÈQUE --- */
+.studio-library-panel { width: 250px; min-width: 250px; background: #fff; border-left: 1px solid #e2e8f0; display: flex; flex-direction: column; }
+.library-grid { display: grid; grid-template-columns: 1fr; gap: 12px; padding: 15px; }
+.item-card { background: #f8fafc; border: 2px solid #f1f5f9; border-radius: 20px; padding: 15px; cursor: pointer; display: flex; flex-direction: column; align-items: center; position: relative; transition: all 0.2s; }
 .item-card.active { border-color: #6366f1; background: #eef2ff; }
-
-.item-del-btn {
-    position: absolute;
-    top: -5px;
-    right: -5px;
-    width: 22px;
-    height: 22px;
-    background: #ef4444;
-    color: white;
-    border: 2px solid white;
-    border-radius: 50%;
-    font-size: 12px;
-    font-weight: 950;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    opacity: 0;
-    transform: scale(0.8);
-    transition: all 0.2s;
-    z-index: 100;
-    box-shadow: 0 4px 10px rgba(239, 68, 68, 0.3);
-}
+.item-img-container { width: 100%; height: 120px; display: flex; align-items: center; justify-content: center; background: white; border-radius: 12px; margin-bottom: 8px; overflow: hidden; border: 1px solid #f1f5f9; }
+.item-img { max-width: 90%; max-height: 90%; object-fit: contain; }
+.item-del-btn { position: absolute; top: -6px; right: -6px; width: 22px; height: 22px; background: #ef4444; color: white; border: 2px solid white; border-radius: 50%; font-size: 12px; font-weight: 950; display: flex; align-items: center; justify-content: center; cursor: pointer; opacity: 0; transform: scale(0.8); transition: 0.2s; z-index: 100; }
 .item-card:hover .item-del-btn { opacity: 1; transform: scale(1); }
-.item-del-btn:hover { background: #dc2626; transform: scale(1.1) !important; }
-
-.item-img-container {
-    width: 100%;
-    height: 55px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: white;
-    border-radius: 10px;
-    margin-bottom: 6px;
-    overflow: hidden;
-}
-
-.item-img {
-    max-width: 90%;
-    max-height: 90%;
-    object-fit: contain;
-}
-
-.item-name-tag {
-    font-weight: 900;
-    font-size: 8px;
-    color: #475569;
-    text-transform: uppercase;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    width: 100%;
-}
-
-.library-bg-section {
-    border-top: 1px solid #e2e8f0;
-    background: white;
-    height: 220px;
-    display: flex;
-    flex-direction: column;
-}
-
-/* MODALE QUIZ DATA */
-.quiz-data-overlay {
-    position: fixed; inset: 0; z-index: 20000;
-    background: rgba(15, 23, 42, 0.9);
-    display: flex; align-items: center; justify-content: center;
-    backdrop-filter: blur(5px);
-}
-.quiz-data-window {
-    background: white; width: 600px; max-height: 80vh;
-    border-radius: 20px; overflow: hidden; display: flex; flex-direction: column;
-    box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
-}
-.quiz-data-header {
-    padding: 15px 20px; background: #f8fafc; border-bottom: 1px solid #e2e8f0;
-    display: flex; justify-content: space-between; align-items: center;
-}
-.quiz-data-body {
-    padding: 20px; overflow-y: auto; background: #0f172a; color: #10b981;
-    font-family: 'JetBrains Mono', monospace; font-size: 11px;
-}
 
 [[[£ END: client/src/features/prof/studio/StudioDashboard.css £]]]
 
 [[[£ FILE: client/src/features/prof/studio/StudioDashboard.jsx £]]]
-// @signatures: StudioDashboard, LiveEngine, resolveUrl, flipFrame, handleBatchAIClean, handleBatchManualClean, handleAddAction, handleAddActor, handleAddFrame, handleDeleteActor, handleDeleteBackdrop, handleDeleteFrame, handleMirrorSequence, handleReorderFrame, handleSelectActor, handleStageMouseDown, handleStageMouseMove, handleStageMouseUp, handleUpdateActionSpeed, handleUpdateProp, loadProjects, processFrameBackgroundManual, saveProject, togglePreview, handleViewTestQuiz
+// @signatures: StudioDashboard, resolveUrl, loadProjects, saveProject, handleViewTestQuiz, handleUpdateActionSpeed, handleBatchAIClean, handleBatchManualClean, processFrameBackgroundManual, handleMirrorSequence, handleSelectActor, handleStageMouseDown, handleStageMouseMove, handleStageMouseUp, handleUpdateActionSpeed, handleUpdateProp, loadProjects, processFrameBackgroundManual, saveProject, togglePreview, handleViewTestQuiz
 import React, { useState, useRef, useEffect } from 'react';
 import './StudioDashboard.css';
 import { api } from '../../../services/api';
+import ManualEraser from './studioComp/ManualEraser';
+import GameEngine from './studioComp/GameEngine';
 
-const CURRENT_BUILD = 50; // V445: DUAL CLEANING (MANUAL + AI)
+const CURRENT_BUILD = 70; // V470: RAW JSX (Fix Unicode Escape Error)
 
 function resolveUrl(url) {
     if (!url) return "";
@@ -628,368 +205,38 @@ function resolveUrl(url) {
     return `/api/proxy/${id}`;
 }
 
-const LiveEngine = ({ code, project, activeSceneIdx, onStop }) => {
-    const canvasRef = useRef(null);
-    const logsEndRef = useRef(null);
-    const gameInstanceRef = useRef(null);
-
-    const [crash, setCrash] = useState(null);
-    const [quizData, setQuizData] = useState([]);
-    const [currentQ, setCurrentQ] = useState(null);
-    const [qIdx, setQIdx] = useState(0);
-    const [feedback, setFeedback] = useState(null);
-    const [logs, setLogs] = useState([]);
-    const [reloadKey, setReloadKey] = useState(0);
-
-    const [allLevels, setAllLevels] = useState([]); 
-    const [currentLevelIdx, setCurrentLevelIdx] = useState(0);
-    const [levelQuestions, setLevelQuestions] = useState([]); 
-    const [questionStates, setQuestionStates] = useState([]); 
-    const [currentQIndex, setCurrentQIndex] = useState(-1);
-    const [lives, setLives] = useState(4);
-
-    const addLog = (msg) => {
-        setLogs(prev => [...prev.slice(-9), `[${new Date().toLocaleTimeString().split(' ')[0]}] ${msg}`]);
-    };
-
-    useEffect(() => { logsEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [logs]);
-
-    useEffect(() => {
-        api.get('/games/test-data').then(data => {
-            let levelsData = [];
-            if (data && data.levels?.length > 0) {
-                addLog(`✅ Jeu chargé : ${data.title}`);
-                levelsData = data.levels;
-            } else {
-                levelsData = [
-                    { name: "Niveau 1", questions: [{ q: "2 + 2 ?", options: ["3", "4", "5", "6"], a: 1 }] }
-                ];
-                addLog("⚠️ Mode Mock");
-            }
-            setAllLevels(levelsData);
-            initLevel(0, levelsData);
-        }).catch(() => {
-            addLog("❌ Erreur Quiz");
-        });
-    }, []);
-
-    const initLevel = (idx, sourceData = allLevels) => {
-        if (!sourceData[idx]) {
-            alert("VICTOIRE TOTALE ! 🏆");
-            onStop();
-            return;
-        }
-        const lvl = sourceData[idx];
-        addLog(`📂 ${lvl.name || `Niveau ${idx+1}`}`);
-        setCurrentLevelIdx(idx);
-        setLevelQuestions(lvl.questions);
-        setQuestionStates(new Array(lvl.questions.length).fill(0)); 
-        if (lvl.questions.length > 0) {
-            setCurrentQIndex(0);
-            if (gameInstanceRef.current?.onQuestion) {
-                gameInstanceRef.current.onQuestion(lvl.questions[0]);
-            }
-        }
-    };
-
-    const pickNextQuestion = (currentStates) => {
-        const availableIndices = currentStates
-            .map((score, idx) => score < 3 ? idx : -1)
-            .filter(idx => idx !== -1);
-        if (availableIndices.length === 0) return -1; 
-        return availableIndices[Math.floor(Math.random() * availableIndices.length)];
-    };
-
-    const handleAnswerClick = (choiceIdx) => {
-        if (feedback || currentQIndex === -1) return;
-        const currentQ = levelQuestions[currentQIndex];
-        const isCorrect = currentQ.a === choiceIdx;
-        setFeedback(isCorrect ? 'CORRECT' : 'WRONG');
-
-        const newStates = [...questionStates];
-        if (isCorrect) {
-            newStates[currentQIndex] = Math.min(3, newStates[currentQIndex] + 1);
-            if (gameInstanceRef.current?.onResult) gameInstanceRef.current.onResult(true);
-        } else {
-            newStates[currentQIndex] = Math.max(0, newStates[currentQIndex] - 1);
-            if (gameInstanceRef.current?.onResult) gameInstanceRef.current.onResult(false);
-        }
-        setQuestionStates(newStates);
-
-        setTimeout(() => {
-            setFeedback(null);
-            const nextQ = pickNextQuestion(newStates);
-            if (nextQ !== -1) {
-                setCurrentQIndex(nextQ);
-                if (gameInstanceRef.current?.onQuestion) gameInstanceRef.current.onQuestion(levelQuestions[nextQ]);
-            } else {
-                if (gameInstanceRef.current?.onLevelComplete) gameInstanceRef.current.onLevelComplete();
-                addLog("🎉 Niveau validé !");
-                setTimeout(() => { initLevel(currentLevelIdx + 1); }, 3000);
-            }
-        }, 1200);
-    };
-
-    const handlePlayerHit = () => {
-        setLives(prev => {
-            const newVal = prev - 1;
-            if (newVal <= 0) {
-                if (gameInstanceRef.current?.onGameOver) gameInstanceRef.current.onGameOver();
-                return 0;
-            }
-            return newVal;
-        });
-    };
-
-    useEffect(() => {
-        if (!code || !project || !canvasRef.current) return;
-        let isMounting = true;
-        let animationFrameId = null;
-        setCrash(null);
-        
-        const canvas = canvasRef.current;
-        const ctx = canvas.getContext('2d');
-        ctx.fillStyle = "#000"; ctx.fillRect(0, 0, canvas.width, canvas.height);
-        const assets = {};
-
-        async function initAndRun() {
-            try {
-                const scene = project?.scenes?.[activeSceneIdx];
-                if (!scene) return;
-                const resources = (scene.actors || []).flatMap(a => 
-                    (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))
-                ).concat((scene.backdrops || []).map(b => b.url));
-                const uniqueRes = [...new Set(resources)].filter(Boolean);
-                await Promise.all(uniqueRes.map(url => new Promise(resolve => {
-                    const img = new Image();
-                    img.crossOrigin = "anonymous";
-                    const key = resolveUrl(url);
-                    img.onload = () => { assets[key] = img; resolve(); };
-                    img.onerror = () => { resolve(); };
-                    img.src = key;
-                })));
-
-                if (!isMounting) return;
-
-                let patchedCode = code;
-                if (!patchedCode.includes('extends MiniGameBase')) patchedCode = patchedCode.replace('class MiniGame', 'class MiniGame extends MiniGameBase');
-                if (patchedCode.includes('constructor') && !patchedCode.includes('super(')) patchedCode = patchedCode.replace(/(constructor\s*\([^)]*\)\s*\{)/, '$1 super(...arguments); ');
-                if (patchedCode.match(/loop\s*\(\)\s*\{/)) patchedCode = patchedCode.replace(/loop\s*\(\)\s*\{/, 'update() {');
-                patchedCode = patchedCode.replace(/this\.ctx\.clearRect/g, '//this.ctx.clearRect');
-                patchedCode = patchedCode.replace(/this\.ctx\.fillRect\(0,\s*0/g, '//this.ctx.fillRect(0,0');
-
-                const factoryCode = `
-                    const { canvas, ctx, assets, project, sceneIdx, logger, resolveUrl, callbacks } = params;
-                    class ActorProxy {
-                        constructor(data) {
-                            this.id = data.id; this.name = data.name;
-                            this.x = data.initialX !== undefined ? data.initialX : 50; 
-                            this.y = data.initialY !== undefined ? data.initialY : 50;
-                            this.dir = data.direction || 0; this.scale = data.scale || 1;
-                            this.visible = true; 
-                            this.currentAction = data.actions?.[0]?.name || 'IDLE';
-                            this.rotationStyle = data.rotationStyle || 'all';
-                            this.frameIdx = 0; this.lastAnimTime = 0;
-                        }
-                        play(name) { 
-                            if(this.currentAction.toUpperCase() !== name.toUpperCase()) {
-                                this.currentAction = name; 
-                                this.frameIdx = 0; 
-                                this.lastAnimTime = 0; 
-                            }
-                        }
-                    }
-                    class MiniGameBase {
-                        constructor(c, a, cb) {
-                            this.canvas = c || canvas; this.ctx = ctx; this.assets = a || assets; this.callbacks = cb || callbacks; this.keys = {}; this.frameCount = 0;
-                            project.scenes[sceneIdx].actors.forEach((a, i) => {
-                                const p = new ActorProxy(a);
-                                this['P' + (i + 1)] = p;
-                                const cleanName = a.name.toUpperCase().replace(/\\s+/g, '_');
-                                this[cleanName] = p;
-                            });
-                        }
-                        _system_render() {
-                            this.frameCount++;
-                            const s = project.scenes[sceneIdx];
-                            const bd = s.backdrops?.[s.currentBackdropIdx || 0];
-                            if(bd) {
-                                const bgKey = resolveUrl(bd.url);
-                                if (this.assets[bgKey]) this.ctx.drawImage(this.assets[bgKey], 0, 0, this.canvas.width, this.canvas.height);
-                                else { this.ctx.fillStyle = "#000"; this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height); }
-                            } else { this.ctx.fillStyle = "#000"; this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height); }
-                            for(let key in this) {
-                                const p = this[key];
-                                if(p instanceof ActorProxy && p.visible) {
-                                    const actorData = project.scenes[sceneIdx].actors.find(ac => ac.id === p.id);
-                                    if(!actorData) continue;
-                                    const act = (actorData.actions || []).find(x => x.name.toUpperCase() === p.currentAction.toUpperCase()) || actorData.actions?.[0];
-                                    if(act && act.frames?.length > 0) {
-                                        const now = Date.now();
-                                        if (now - p.lastAnimTime > (act.speed || 100)) {
-                                            p.frameIdx = (p.frameIdx + 1) % act.frames.length;
-                                            p.lastAnimTime = now;
-                                        }
-                                        const rawUrl = act.frames[p.frameIdx].url;
-                                        const img = this.assets[resolveUrl(rawUrl)];
-                                        const xPx = (p.x / 100) * this.canvas.width;
-                                        const yPx = (p.y / 100) * this.canvas.height;
-                                        let sz = 150 * p.scale;
-                                        if(img) {
-                                            this.ctx.save();
-                                            this.ctx.translate(xPx, yPx);
-                                            if(p.rotationStyle==='left-right' && (((p.dir%360)+360)%360)>90 && (((p.dir%360)+360)%360)<270) this.ctx.scale(-1,1);
-                                            else if(p.rotationStyle==='all') this.ctx.rotate(p.dir*Math.PI/180);
-                                            this.ctx.drawImage(img, -sz/2, -sz/2, sz, sz);
-                                            this.ctx.restore();
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    ${patchedCode}
-                    if (typeof MiniGame.prototype.loop !== 'function') {
-                        MiniGame.prototype.loop = function() { if (this.update) this.update(); };
-                    }
-                    return MiniGame;
-                `;
-
-                const callbacks = { onPlayerHit: () => handlePlayerHit() };
-                const factory = new Function('params', factoryCode);
-                const FinalGameClass = factory({ canvas, ctx, assets, project, sceneIdx: activeSceneIdx, resolveUrl, logger: addLog, callbacks });
-                const instance = new FinalGameClass(canvas, assets, callbacks);
-                gameInstanceRef.current = instance;
-                instance.canvas = canvas; instance.ctx = ctx; instance.assets = assets; instance.callbacks = callbacks;
-
-                const handleCanvasClick = (e) => {
-                    const rect = canvas.getBoundingClientRect();
-                    const x = e.clientX - rect.left;
-                    const y = e.clientY - rect.top;
-                    if (instance.onClick) instance.onClick(x, y);
-                };
-                canvas.addEventListener('mousedown', handleCanvasClick);
-                const handleKeyDown = (e) => { if(instance.keys) instance.keys[e.code] = true; };
-                const handleKeyUp = (e) => { if(instance.keys) instance.keys[e.code] = false; };
-                window.addEventListener('keydown', handleKeyDown);
-                window.addEventListener('keyup', handleKeyUp);
-
-                if(instance.start) instance.start();
-                if(levelQuestions.length > 0 && currentQIndex !== -1) {
-                    if(instance.onQuestion) instance.onQuestion(levelQuestions[currentQIndex]);
-                }
-
-                const masterLoop = () => {
-                    if (!isMounting) return;
-                    try { if (instance.update) instance.update(); else if (instance.loop) instance.loop(); } 
-                    catch(e) { setCrash("UPDATE: " + e.message); return; }
-                    try { if (instance._system_render) instance._system_render(); } catch(e) { return; }
-                    try { if (instance.draw) instance.draw(); } catch(e) { setCrash("DRAW: " + e.message); return; }
-                    animationFrameId = requestAnimationFrame(masterLoop);
-                };
-                addLog("🔄 Boucle V445");
-                masterLoop();
-
-                return () => {
-                    canvas.removeEventListener('mousedown', handleCanvasClick);
-                    window.removeEventListener('keydown', handleKeyDown);
-                    window.removeEventListener('keyup', handleKeyUp);
-                    if (instance.destroy) instance.destroy();
-                };
-            } catch(e) { setCrash("INIT: " + e.message); }
-        }
-        const cleanupPromise = initAndRun();
-        return () => {
-            isMounting = false;
-            if (animationFrameId) cancelAnimationFrame(animationFrameId);
-            cleanupPromise.then(cleanup => cleanup && cleanup());
-        };
-    }, [code, project, reloadKey, currentLevelIdx]);
-
-    const activeQ = levelQuestions[currentQIndex];
-
-    return (
-        <div className="fixed inset-0 z-[99999] bg-slate-900 flex flex-col font-sans">
-            {/* OVERLAY UI */}
-            <div className="absolute inset-0 pointer-events-none z-10 flex flex-col justify-between">
-                <div className="flex justify-between items-start p-6 w-full">
-                    {activeQ ? (
-                         <div className="bg-slate-900/90 text-white font-black text-center py-3 px-8 rounded-2xl border-2 border-slate-600 shadow-2xl text-xl backdrop-blur-md pointer-events-auto max-w-3xl">
-                            {feedback === 'CORRECT' ? <span className="text-green-400">✅ BRAVO !</span> : 
-                             feedback === 'WRONG' ? <span className="text-red-400">❌ RATÉ...</span> : 
-                             activeQ.q}
-                        </div>
-                    ) : <div className="text-white font-black animate-pulse">CHARGEMENT NIVEAU...</div>}
-                    <div className="flex flex-col items-end gap-1">
-                        <div className="text-[10px] font-black text-white bg-blue-600 px-2 rounded">NIVEAU {currentLevelIdx + 1}</div>
-                        <div className="bg-slate-900/80 p-3 rounded-xl border border-slate-600 flex gap-2 backdrop-blur pointer-events-auto">
-                            {questionStates.map((score, i) => (
-                                <div key={i} className={`w-4 h-12 rounded-md border border-slate-500 overflow-hidden flex flex-col ${currentQIndex === i ? 'ring-2 ring-yellow-400' : ''}`}>
-                                    <div className={`flex-1 ${score >= 3 ? 'bg-green-500' : 'bg-slate-800'} border-b border-black/20`}></div>
-                                    <div className={`flex-1 ${score >= 2 ? 'bg-green-500' : 'bg-slate-800'} border-b border-black/20`}></div>
-                                    <div className={`flex-1 ${score >= 1 ? 'bg-green-500' : 'bg-slate-800'}`}></div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                    <div className="bg-slate-900/80 p-2 px-4 rounded-xl border border-slate-600 text-2xl pointer-events-auto mt-12 mr-2">{"❤️".repeat(lives)}</div>
-                </div>
-                {activeQ && (
-                    <div className="p-6 w-full flex justify-center pointer-events-auto pb-10">
-                        <div className="grid grid-cols-4 gap-4 w-full max-w-5xl">
-                            {activeQ.options.map((opt, idx) => (
-                                <button key={idx} onClick={() => handleAnswerClick(idx)} disabled={feedback !== null}
-                                    className={`h-16 rounded-xl font-black text-sm uppercase py-2 px-2 transition-all border-b-4 shadow-xl active:border-b-0 active:translate-y-1 ${feedback === null ? 'bg-blue-600 text-white border-blue-800 hover:bg-blue-500' : ''} ${feedback === 'CORRECT' && activeQ.a === idx ? 'bg-green-500 text-white border-green-700 scale-105' : ''} ${feedback === 'WRONG' && activeQ.a === idx ? 'bg-green-500 text-white border-green-700 opacity-60' : ''} ${feedback === 'WRONG' && activeQ.a !== idx ? 'bg-slate-700 text-slate-500 border-slate-900' : ''}`}>
-                                    {opt}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-                )}
-            </div>
-
-            <div className="flex-1 bg-black relative flex items-center justify-center overflow-hidden">
-                <canvas ref={canvasRef} width={800} height={450} className="max-w-full max-h-full aspect-video shadow-2xl" />
-                {crash && <div className="absolute inset-0 bg-red-900/90 flex items-center justify-center text-white font-mono font-black text-xl p-10 text-center z-[100]">💥 ERREUR SCRIPT : {crash}</div>}
-                <button onClick={onStop} className="absolute top-4 right-4 bg-red-600 text-white w-10 h-10 rounded-full font-black text-xl hover:bg-red-500 shadow-lg border-2 border-white z-[150] flex items-center justify-center pointer-events-auto">✕</button>
-            </div>
-        </div>
-    );
-};
-
 const defaultCode = `// 🧟 ZOMBIE V445
 class MiniGame extends MiniGameBase {
     constructor(canvas, assets, callbacks) {
         super(canvas, assets, callbacks);
-        this.lives = 4;
         this.heroState = "IDLE"; this.heroTimer = 0;
-        this.zombieState = "WALK"; this.zombieX = 90; this.zombieTimer = 0;
-        this.projectiles = []; this.levelCompleted = false; this.gameOver = false;
+        this.zombieX = 90; this.projectiles = [];
+        this.isStopped = false;
     }
-    start() { if(this.HEROS) { this.HEROS.x = 15; this.HEROS.y = 70; this.HEROS.play("IDLE"); } if(this.ZOMBIE) { this.ZOMBIE.x = this.zombieX; this.ZOMBIE.y = 70; this.ZOMBIE.play("AVANCER"); } }
-    onQuestion(q) { this.zombieState = "WALK"; this.levelCompleted = false; }
-    onResult(correct) { if(correct) { this.heroState = "SHOOT"; this.heroTimer = 30; if(this.HEROS) this.HEROS.play("TIRER"); this.projectiles.push({ x: 20, y: 65 }); } }
-    onLevelComplete() { this.levelCompleted = true; this.zombieX = 150; if(this.HEROS) this.HEROS.play("IDLE"); }
-    onGameOver() { this.gameOver = true; this.zombieState = "IDLE"; if(this.ZOMBIE) this.ZOMBIE.play("IDLE"); }
+    start() { 
+        this.isStopped = false;
+        if(this.HEROS) { this.HEROS.x = 15; this.HEROS.y = 70; } 
+        if(this.ZOMBIE) { this.ZOMBIE.x = 90; this.ZOMBIE.y = 70; } 
+    }
+    onLevelWin() { this.isStopped = true; }
+    onResult(correct) { if(correct) { this.heroState = "SHOOT"; this.heroTimer = 30; this.projectiles.push({ x: 20, y: 65 }); } }
     update() {
-        if (this.levelCompleted || this.gameOver) return;
-        if(this.heroState === "SHOOT") { this.heroTimer--; if(this.heroTimer <= 0) { this.heroState = "IDLE"; if(this.HEROS) this.HEROS.play("IDLE"); } }
-        if(this.zombieState === "WALK") { this.zombieX -= 0.15; if(this.zombieX < 20) { if (this.callbacks.onPlayerHit) this.callbacks.onPlayerHit(); this.zombieX = 100; } if(this.ZOMBIE) { this.ZOMBIE.x = this.zombieX; this.ZOMBIE.dir = -90; if(this.ZOMBIE.currentAction !== "AVANCER") this.ZOMBIE.play("AVANCER"); } } else if(this.zombieState === "HIT") { this.zombieTimer--; if(this.zombieTimer <= 0) { this.zombieState = "WALK"; } }
-        for(let i=this.projectiles.length-1; i>=0; i--) { let p = this.projectiles[i]; p.x += 3; if(p.x > this.zombieX - 5 && p.x < this.zombieX + 5) { this.projectiles.splice(i, 1); this.zombieX = 100; this.zombieState = "HIT"; this.zombieTimer = 60; if(this.ZOMBIE) this.ZOMBIE.play("IDLE"); } else if(p.x > 100) { this.projectiles.splice(i, 1); } }
+        if(this.isStopped) return;
+        if(this.heroState === "SHOOT") { this.heroTimer--; if(this.heroTimer <= 0) this.heroState = "IDLE"; }
+        this.zombieX -= 0.15; if(this.zombieX < 20) { if (this.callbacks.onPlayerHit) this.callbacks.onPlayerHit(); this.zombieX = 100; }
+        if(this.ZOMBIE) { this.ZOMBIE.x = this.zombieX; this.ZOMBIE.dir = -90; this.ZOMBIE.play("AVANCER"); }
+        for(let i=this.projectiles.length-1; i>=0; i--) { let p = this.projectiles[i]; p.x += 3; if(p.x > this.zombieX - 5 && p.x < this.zombieX + 5) { this.projectiles.splice(i, 1); this.zombieX = 100; } }
     }
     draw() {
+        if(this.isStopped) return;
         const ctx = this.ctx; const cw = this.canvas.width; const ch = this.canvas.height;
         ctx.fillStyle = "#f97316"; this.projectiles.forEach(p => { ctx.beginPath(); ctx.arc((p.x/100)*cw, (p.y/100)*ch, 10, 0, Math.PI*2); ctx.fill(); });
-        if(this.levelCompleted) { ctx.fillStyle = "rgba(0,0,0,0.7)"; ctx.fillRect(0,0,cw,ch); ctx.fillStyle = "#fbbf24"; ctx.textAlign = "center"; ctx.font = "bold 40px Arial"; ctx.fillText("NIVEAU RÉUSSI !", cw/2, ch/2); }
-        if(this.gameOver) { ctx.fillStyle = "rgba(50, 0, 0, 0.85)"; ctx.fillRect(0, 0, cw, ch); ctx.fillStyle = "#ef4444"; ctx.textAlign = "center"; ctx.font = "900 60px Arial"; ctx.shadowColor = "red"; ctx.shadowBlur = 20; ctx.fillText("GAME OVER", cw/2, ch/2); ctx.shadowBlur = 0; ctx.fillStyle = "white"; ctx.font = "bold 20px Arial"; ctx.fillText("Relancez le jeu pour réessayer", cw/2, ch/2 + 50); }
     }
 }
 `;
 
 export default function StudioDashboard({ user }) {
-    const [projects, setProjects] = useState([]);
     const [project, setProject] = useState(null);
-    const [selectedSceneIdx, setSelectedSceneIdx] = useState(0);
     const [selectedActorId, setSelectedActorId] = useState(null);
     const [selectedActionIdx, setSelectedActionIdx] = useState(0);
     const [leftTab, setLeftTab] = useState('actions');
@@ -997,22 +244,24 @@ export default function StudioDashboard({ user }) {
     const [isPlaying, setIsPlaying] = useState(false);
     const [loading, setLoading] = useState(false);
     const [cleaning, setCleaning] = useState(false);
-    
+    const [statusText, setStatusText] = useState("");
+    const [eraserActive, setEraserActive] = useState(false);
+    const [eraserSize, setEraserSize] = useState(10);
+    const [frameToErase, setFrameToErase] = useState(null);
+    const [testQuizData, setTestQuizData] = useState(null);
+    const [showTestQuizModal, setShowTestQuizModal] = useState(false);
     const [draggedFrameIdx, setDraggedFrameIdx] = useState(null);
-    const [dropTargetIdx, setDropTargetIdx] = useState(null);
     const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
     const [previewFrameIdx, setPreviewFrameIdx] = useState(0);
     const [selectedFrameIdx, setSelectedFrameIdx] = useState(null);
     const [isDraggingOnStage, setIsDraggingOnStage] = useState(false);
-
-    const [testQuizData, setTestQuizData] = useState(null);
-    const [showTestQuizModal, setShowTestQuizModal] = useState(false);
 
     const frameUploadRef = useRef(null);
     const actorUploadRef = useRef(null);
     const backdropUploadRef = useRef(null); 
     const stageRef = useRef(null);
 
+    const selectedSceneIdx = 0;
     const currentScene = project?.scenes?.[selectedSceneIdx];
     const selectedActor = currentScene?.actors?.find(a => a.id === selectedActorId);
     const selectedAction = selectedActor?.actions?.[selectedActionIdx];
@@ -1022,156 +271,134 @@ export default function StudioDashboard({ user }) {
     useEffect(() => {
         let timer;
         if (isPreviewPlaying && selectedAction?.frames?.length > 0) {
-            timer = setInterval(() => {
-                setPreviewFrameIdx(prev => (prev + 1) % selectedAction.frames.length);
-            }, selectedAction.speed || 100);
+            timer = setInterval(() => { setPreviewFrameIdx(prev => (prev + 1) % selectedAction.frames.length); }, selectedAction.speed || 100);
         } else setPreviewFrameIdx(0);
         return () => clearInterval(timer);
     }, [isPreviewPlaying, selectedAction]);
 
     async function loadProjects() {
         const data = await api.get(`/studio/projects/${user.id || user._id}`);
-        setProjects(data); 
         if (data?.length > 0) {
-            setProject(data[0]);
-            // AUTO-FIX V445
-            if (!data[0].generatedCode || data[0].generatedCode.length < 50 || data[0].generatedCode.includes("rgba(50, 0, 0")) {
-                setCode(defaultCode);
-            } else {
-                setCode(data[0].generatedCode);
-            }
-            if (data[0].scenes?.[0]?.actors?.[0]) handleSelectActor(data[0].scenes[0].actors[0].id, data[0]);
+            const p = data[0];
+            setProject(p);
+            setCode(p.generatedCode || defaultCode);
+            if (p.scenes?.[0]?.actors?.[0]) setSelectedActorId(p.scenes[0].actors[0].id);
         }
     }
 
     async function saveProject(p = project) {
         if (!p) return;
-        setLoading(true);
+        setLoading(true); setStatusText("Synchronisation Cloud...");
         try {
             const saved = await api.post('/studio', { ...p, teacherId: user.id || user._id, generatedCode: code });
             setProject(saved);
-        } catch(e) { console.error(e); }
-        setLoading(false);
+        } catch(e) {} setLoading(false);
     }
+
+    const handleViewTestQuiz = async () => {
+        try {
+            const data = await api.get('/games/test-data');
+            if (data) { setTestQuizData(data); setShowTestQuizModal(true); }
+        } catch (e) {}
+    };
 
     const handleUpdateActionSpeed = (delta) => {
         if (!selectedAction) return;
         const next = JSON.parse(JSON.stringify(project));
         const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
-        if (actor?.actions[selectedActionIdx]) {
+        if (actor && actor.actions[selectedActionIdx]) {
             actor.actions[selectedActionIdx].speed = Math.max(20, Math.min(2000, (actor.actions[selectedActionIdx].speed || 100) + delta));
             setProject(next); saveProject(next);
         }
     };
 
-    // --- BATCH AI CLEANER ---
     const handleBatchAIClean = async () => {
-        if (!selectedActor || !selectedAction) return alert("Sélectionnez une action.");
+        if (!selectedAction) return;
         if (!confirm(`🤖 NETTOYAGE IA : Envoyer les ${selectedAction.frames.length} images ?`)) return;
-        setCleaning(true);
+        setCleaning(true); setStatusText("Analyse IA en cours...");
         const next = JSON.parse(JSON.stringify(project));
-        const act = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId).actions[selectedActionIdx];
-        try {
-            let count = 0;
-            for (let i = 0; i < act.frames.length; i++) {
-                const res = await api.post('/studio/remove-bg-specialized', { url: act.frames[i].url });
-                if (res.url) { act.frames[i].url = res.url; count++; }
-            }
-            if (count > 0) { setProject(next); await saveProject(next); alert(`✨ ${count} images traitées.`); }
-        } catch (e) { alert("Erreur IA"); }
-        setCleaning(false);
+        const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
+        const act = actor.actions[selectedActionIdx];
+        for (let i = 0; i < act.frames.length; i++) {
+            const res = await api.post('/studio/remove-bg-specialized', { url: act.frames[i].url });
+            if (res.url) act.frames[i].url = res.url;
+        }
+        setProject(next); await saveProject(next); setCleaning(false);
     };
 
-    // --- BATCH MANUAL CLEANER (CANVAS PIXEL) ---
     const handleBatchManualClean = async () => {
-        if (!selectedActor || !selectedAction) return alert("Sélectionnez une action.");
-        if (!confirm(`🎨 NETTOYAGE MANUEL : Traiter les ${selectedAction.frames.length} images (Pixel haut-gauche) ?`)) return;
-        setCleaning(true);
+        if (!selectedAction) return;
+        if (!confirm("🎨 Détourage Automatique (Haut-Gauche) ?")) return;
+        setCleaning(true); setStatusText("Détourage Chromatique...");
         const next = JSON.parse(JSON.stringify(project));
-        const act = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId).actions[selectedActionIdx];
-        try {
-            let count = 0;
-            for (let i = 0; i < act.frames.length; i++) {
-                const url = await processFrameBackgroundManual(act.frames[i].url);
-                if (url) { act.frames[i].url = url; count++; }
-            }
-            if (count > 0) { setProject(next); await saveProject(next); alert(`🎨 ${count} images nettoyées.`); }
-        } catch (e) { alert("Erreur Manuel"); }
-        setCleaning(false);
+        const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
+        const act = actor.actions[selectedActionIdx];
+        for (let i = 0; i < act.frames.length; i++) {
+            const url = await processFrameBackgroundManual(act.frames[i].url);
+            if (url) act.frames[i].url = url;
+        }
+        setProject(next); await saveProject(next); setCleaning(false);
     };
 
     const processFrameBackgroundManual = async (url) => {
         return new Promise((resolve) => {
-            const img = new Image();
-            img.crossOrigin = "anonymous";
+            const img = new Image(); img.crossOrigin = "anonymous";
             img.onload = () => {
-                const canvas = document.createElement('canvas');
-                canvas.width = img.width; canvas.height = img.height;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0);
-                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                const data = imageData.data;
-                const [tr, tg, tb] = [data[0], data[1], data[2]]; // Couleur coin haut gauche
-                for (let i = 0; i < data.length; i += 4) {
-                    const dist = Math.sqrt(Math.pow(data[i]-tr,2)+Math.pow(data[i+1]-tg,2)+Math.pow(data[i+2]-tb,2));
-                    if (dist < 50) data[i+3] = 0; // Transparence
+                const canvas = document.createElement('canvas'); canvas.width = img.width; canvas.height = img.height;
+                const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0);
+                const iD = ctx.getImageData(0, 0, canvas.width, canvas.height); const d = iD.data;
+                const [tr, tg, tb] = [d[0], d[1], d[2]];
+                for (let i = 0; i < d.length; i += 4) {
+                    const dist = Math.sqrt(Math.pow(d[i]-tr,2)+Math.pow(d[i+1]-tg,2)+Math.pow(d[i+2]-tb,2));
+                    if (dist < 50) d[i+3] = 0;
                 }
-                ctx.putImageData(imageData, 0, 0);
+                ctx.putImageData(iD, 0, 0);
                 canvas.toBlob(async (blob) => {
-                    const fd = new FormData(); fd.append('file', blob, "manual-clean.png");
+                    const fd = new FormData(); fd.append('file', blob, "auto-clean.png");
                     const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json());
                     resolve(res.url);
                 }, 'image/png');
             };
-            img.onerror = () => resolve(null);
             img.src = resolveUrl(url);
         });
     };
 
     const handleMirrorSequence = async () => {
         if (!selectedAction) return;
-        setCleaning(true);
+        setCleaning(true); setStatusText("Création Miroir...");
         const next = JSON.parse(JSON.stringify(project));
-        const act = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId).actions[selectedActionIdx];
-        try {
-            for (let i = 0; i < act.frames.length; i++) {
-                const img = new Image(); img.crossOrigin = "anonymous";
-                const url = await new Promise(res => {
-                    img.onload = () => {
-                        const c = document.createElement('canvas'); c.width=img.width; c.height=img.height;
-                        const x = c.getContext('2d'); x.translate(img.width, 0); x.scale(-1,1); x.drawImage(img,0,0);
-                        c.toBlob(async b => {
-                            const f = new FormData(); f.append('file', b, "flipped.png");
-                            const r = await fetch('/api/studio/upload-asset', { method: 'POST', body: f }).then(z=>z.json());
-                            res(r.url);
-                        }, 'image/png');
-                    };
-                    img.src = resolveUrl(act.frames[i].url);
-                });
-                if(url) act.frames[i].url = url;
-            }
-            setProject(next); await saveProject(next);
-        } catch (e) {}
-        setCleaning(false);
+        const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
+        const act = actor.actions[selectedActionIdx];
+        for (let i = 0; i < act.frames.length; i++) {
+            const img = new Image(); img.crossOrigin = "anonymous";
+            const url = await new Promise(res => {
+                img.onload = () => {
+                    const c = document.createElement('canvas'); c.width=img.width; c.height=img.height;
+                    const x = c.getContext('2d'); x.translate(img.width, 0); x.scale(-1,1); x.drawImage(img,0,0);
+                    c.toBlob(async b => {
+                        const f = new FormData(); f.append('file', b, "flipped.png");
+                        const r = await fetch('/api/studio/upload-asset', { method: 'POST', body: f }).then(z=>z.json());
+                        res(r.url);
+                    }, 'image/png');
+                };
+                img.src = resolveUrl(act.frames[i].url);
+            });
+            if(url) act.frames[i].url = url;
+        }
+        setProject(next); await saveProject(next); setCleaning(false);
     };
 
-    const handleSelectActor = (actorId, currentProj = project) => {
-        if (!currentProj) return;
-        const next = JSON.parse(JSON.stringify(currentProj));
+    const handleSelectActor = (actorId) => {
+        if (!project) return;
+        const next = JSON.parse(JSON.stringify(project));
         const actors = next.scenes[selectedSceneIdx].actors;
         const idx = actors.findIndex(a => a.id === actorId);
-        if (idx !== -1) {
-            const [moved] = actors.splice(idx, 1);
-            actors.push(moved);
-            setProject(next); setSelectedActorId(actorId); setSelectedFrameIdx(null);
-        }
+        if (idx === -1) return;
+        const [moved] = actors.splice(idx, 1); actors.push(moved);
+        setProject(next); setSelectedActorId(actorId); setSelectedFrameIdx(null);
     };
 
-    const handleStageMouseDown = (e, actorId) => {
-        e.preventDefault(); e.stopPropagation();
-        handleSelectActor(actorId); setIsDraggingOnStage(true);
-    };
-
+    const handleStageMouseDown = (e, actorId) => { e.preventDefault(); e.stopPropagation(); handleSelectActor(actorId); setIsDraggingOnStage(true); };
     const handleStageMouseMove = (e) => {
         if (!isDraggingOnStage || !selectedActorId || !stageRef.current) return;
         const rect = stageRef.current.getBoundingClientRect();
@@ -1187,213 +414,592 @@ export default function StudioDashboard({ user }) {
     const handleUpdateProp = (f, v) => {
         if (!selectedActor) return;
         const next = { ...project };
-        const actor = next.scenes?.[selectedSceneIdx]?.actors?.find(a => a.id === selectedActorId);
-        if (actor) { actor[f] = isNaN(v) ? v : parseFloat(v); setProject(next); saveProject(next); }
-    };
-
-    const handleAddAction = () => {
-        if (!selectedActor) return;
-        const name = prompt("Nom :"); if (!name) return;
-        const next = JSON.parse(JSON.stringify(project));
-        next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId).actions.push({ name: name.toUpperCase(), frames: [], speed: 100 });
-        saveProject(next);
+        const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
+        if (actor) {
+            actor[f] = isNaN(v) ? v : parseFloat(v); setProject(next); saveProject(next);
+        }
     };
 
     const handleReorderFrame = (targetIdx) => {
         if (draggedFrameIdx === null || draggedFrameIdx === targetIdx || !selectedAction) return;
         const next = JSON.parse(JSON.stringify(project));
-        const frames = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId).actions[selectedActionIdx].frames;
-        const [moved] = frames.splice(draggedFrameIdx, 1);
-        frames.splice(targetIdx, 0, moved);
-        saveProject(next); setDraggedFrameIdx(null); setDropTargetIdx(null);
+        const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
+        const frames = actor.actions[selectedActionIdx].frames;
+        const [moved] = frames.splice(draggedFrameIdx, 1); frames.splice(targetIdx, 0, moved);
+        saveProject(next); setDraggedFrameIdx(null);
     };
 
     const handleDeleteFrame = (fIdx) => {
         if (!selectedAction) return;
         const next = JSON.parse(JSON.stringify(project));
-        next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId).actions[selectedActionIdx].frames.splice(fIdx, 1);
+        const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
+        actor.actions[selectedActionIdx].frames.splice(fIdx, 1);
         saveProject(next);
     };
 
-    const handleDeleteActor = (e, actorId) => {
-        e.stopPropagation(); if (!confirm("Supprimer ?")) return;
-        const next = JSON.parse(JSON.stringify(project));
-        next.scenes[selectedSceneIdx].actors = next.scenes[selectedSceneIdx].actors.filter(a => a.id !== actorId);
-        if (selectedActorId === actorId) setSelectedActorId(null);
-        setProject(next); saveProject(next);
-    };
-
-    const handleDeleteBackdrop = (e, bIdx) => {
-        e.stopPropagation(); if (!confirm("Supprimer ?")) return;
-        const next = JSON.parse(JSON.stringify(project));
-        next.scenes[selectedSceneIdx].backdrops.splice(bIdx, 1);
-        next.scenes[selectedSceneIdx].currentBackdropIdx = Math.max(0, next.scenes[selectedSceneIdx].backdrops.length - 1);
-        setProject(next); saveProject(next);
-    };
-
-    const handleViewTestQuiz = async () => {
-        try {
-            const data = await api.get('/games/test-data');
-            if (data) { setTestQuizData(data); setShowTestQuizModal(true); }
-            else alert("Aucun jeu de test défini. Cochez 'DÉFINIR COMME TEST' dans le Game Studio.");
-        } catch (e) {}
-    };
+    const handleDeleteActor = (e, id) => { e.stopPropagation(); if (!confirm("Supprimer ?")) return; const next = JSON.parse(JSON.stringify(project)); next.scenes[selectedSceneIdx].actors = next.scenes[selectedSceneIdx].actors.filter(a => a.id !== id); if (selectedActorId === id) setSelectedActorId(null); setProject(next); saveProject(next); };
+    const handleDeleteBackdrop = (e, idx) => { e.stopPropagation(); if (!confirm("Supprimer ?")) return; const next = JSON.parse(JSON.stringify(project)); next.scenes[selectedSceneIdx].backdrops.splice(idx, 1); next.scenes[selectedSceneIdx].currentBackdropIdx = 0; setProject(next); saveProject(next); };
 
     return (
-        <div className="studio-wrapper" onMouseMove={handleStageMouseMove} onMouseUp={() => setIsDraggingOnStage(false)} onMouseLeave={() => setIsDraggingOnStage(false)}>
-            <div style={{ position: 'absolute', visibility: 'hidden', pointerEvents: 'none' }}>
-                <input type="file" ref={frameUploadRef} multiple onChange={async (e) => {
-                    const files = Array.from(e.target.files); if (files.length === 0) return;
-                    setLoading(true); const next = JSON.parse(JSON.stringify(project));
-                    const act = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId).actions[selectedActionIdx];
-                    for (const file of files) {
-                        const fd = new FormData(); fd.append('file', file);
-                        const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json());
-                        if (res.url) act.frames.push({ url: res.url, name: file.name });
-                    }
-                    await saveProject(next); setLoading(false);
-                }} />
-                <input type="file" ref={actorUploadRef} onChange={async (e) => {
-                    const file = e.target.files[0]; if(!file) return;
-                    setLoading(true); const fd = new FormData(); fd.append('file', file);
-                    const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json());
-                    const next = JSON.parse(JSON.stringify(project));
-                    const newActor = { id: `actor-${Date.now()}`, name: "P" + (next.scenes[selectedSceneIdx].actors.length + 1), actions: [{ name: "IDLE", speed: 100, frames: [{url: res.url, name: "C1"}] }], initialX: 50, initialY: 50, scale: 1, direction: 0, rotationStyle: 'all' };
-                    next.scenes[selectedSceneIdx].actors.push(newActor);
-                    handleSelectActor(newActor.id, next); await saveProject(next); setLoading(false);
-                }} />
-                <input type="file" ref={backdropUploadRef} onChange={async (e) => {
-                    const file = e.target.files[0]; if(!file) return;
-                    setLoading(true); const fd = new FormData(); fd.append('file', file);
-                    const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json());
-                    const next = JSON.parse(JSON.stringify(project));
-                    next.scenes[selectedSceneIdx].backdrops.push({ url: res.url, name: file.name });
-                    next.scenes[selectedSceneIdx].currentBackdropIdx = next.scenes[selectedSceneIdx].backdrops.length - 1;
-                    await saveProject(next); setLoading(false);
-                }} />
-            </div>
-
-            {showTestQuizModal && (
-                <div className="quiz-data-overlay" onClick={() => setShowTestQuizModal(false)}>
-                    <div className="quiz-data-window" onClick={e => e.stopPropagation()}>
-                        <div className="quiz-data-header"><span className="font-black text-slate-700 uppercase">Quiz Test : {testQuizData?.title}</span><button onClick={() => setShowTestQuizModal(false)}>✕</button></div>
-                        <div className="quiz-data-body custom-scrollbar"><pre>{JSON.stringify(testQuizData, null, 2)}</pre></div>
-                    </div>
-                </div>
+        <div className="studio-wrapper" onMouseMove={handleStageMouseMove} onMouseUp={() => setIsDraggingOnStage(false)}>
+            {frameToErase && (
+                <ManualEraser 
+                    imageUrl={frameToErase.url} initialSize={eraserSize} resolveUrl={resolveUrl}
+                    onCancel={() => setFrameToErase(null)}
+                    onSave={(newUrl) => {
+                        const next = JSON.parse(JSON.stringify(project));
+                        const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
+                        actor.actions[selectedActionIdx].frames[frameToErase.idx].url = newUrl;
+                        setProject(next); saveProject(next); setFrameToErase(null);
+                    }}
+                />
             )}
 
-            {isPlaying && <LiveEngine code={code} project={project} activeSceneIdx={selectedSceneIdx} onStop={() => setIsPlaying(false)} />}
+            {(loading || cleaning) && (<div className="studio-loading-overlay"><div className="sablier-icon">⏳</div><div className="loading-text">{statusText}</div></div>)}
+            
+            <div style={{ position: 'absolute', visibility: 'hidden', pointerEvents: 'none' }}>
+                <input type="file" ref={frameUploadRef} multiple onChange={async (e) => { const files = Array.from(e.target.files); if (files.length === 0) return; setLoading(true); setStatusText("Upload frames..."); const next = JSON.parse(JSON.stringify(project)); const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); const act = actor.actions[selectedActionIdx]; for (const file of files) { const fd = new FormData(); fd.append('file', file); const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json()); if (res.url) act.frames.push({ url: res.url, name: file.name }); } await saveProject(next); setLoading(false); }} />
+                <input type="file" ref={actorUploadRef} onChange={async (e) => { const file = e.target.files[0]; if(!file) return; setLoading(true); setStatusText("Nouveau personnage..."); const fd = new FormData(); fd.append('file', file); const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json()); const next = JSON.parse(JSON.stringify(project)); const newActor = { id: `actor-${Date.now()}`, name: "P" + (next.scenes[selectedSceneIdx].actors.length + 1), actions: [{ name: "IDLE", speed: 100, frames: [{url: res.url, name: "C1"}] }], initialX: 50, initialY: 50, scale: 1, direction: 0, rotationStyle: 'all' }; next.scenes[selectedSceneIdx].actors.push(newActor); setSelectedActorId(newActor.id); await saveProject(next); setLoading(false); }} />
+                <input type="file" ref={backdropUploadRef} onChange={async (e) => { const file = e.target.files[0]; if(!file) return; setLoading(true); setStatusText("Upload décor..."); const fd = new FormData(); fd.append('file', file); const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json()); const next = JSON.parse(JSON.stringify(project)); next.scenes[selectedSceneIdx].backdrops.push({ url: res.url, name: file.name }); next.scenes[selectedSceneIdx].currentBackdropIdx = next.scenes[selectedSceneIdx].backdrops.length - 1; await saveProject(next); setLoading(false); }} />
+            </div>
+
+            {showTestQuizModal && (<div className="quiz-data-overlay" onClick={() => setShowTestQuizModal(false)}><div className="quiz-data-window" onClick={e => e.stopPropagation()}><div className="quiz-data-header"><span className="font-black text-slate-700 uppercase">Quiz Test</span><button onClick={() => setShowTestQuizModal(false)}>✕</button></div><div className="quiz-data-body custom-scrollbar"><pre>{JSON.stringify(testQuizData, null, 2)}</pre></div></div></div>)}
+            
+            {isPlaying && (
+                <GameEngine 
+                    code={code} 
+                    project={project} 
+                    activeSceneIdx={selectedSceneIdx} 
+                    onStop={() => setIsPlaying(false)} 
+                    resolveUrl={resolveUrl} 
+                />
+            )}
 
             <div className="studio-assets-panel">
-                <div className="studio-tab-header">
-                    <button onClick={() => setLeftTab('actions')} className={`studio-tab-btn ${leftTab === 'actions' ? 'active' : ''}`}>⚡ Actions</button>
-                    <button onClick={() => setLeftTab('sounds')} className={`studio-tab-btn ${leftTab === 'sounds' ? 'active' : ''}`}>🎵 Sons</button>
-                </div>
+                <div className="studio-tab-header"><button onClick={() => setLeftTab('actions')} className={`studio-tab-btn ${leftTab === 'actions' ? 'active' : ''}`}>⚡ Actions</button><button onClick={() => setLeftTab('sounds')} className={`studio-tab-btn ${leftTab === 'sounds' ? 'active' : ''}`}>🎵 Sons</button></div>
                 <div className="studio-asset-list custom-scrollbar">
-                    {leftTab === 'actions' ? (
-                        <>
-                            {currentScene?.actors.find(a => a.id === selectedActorId)?.actions.map((act, idx) => (
-                                <div key={idx} onClick={() => { setSelectedActionIdx(idx); setIsPreviewPlaying(false); setSelectedFrameIdx(null); }} className={`action-card-square ${selectedActionIdx === idx ? 'active' : ''}`}><span>{act.name}</span></div>
-                            ))}
-                            <button className="v84-add-btn-minimal" onClick={handleAddAction}>+ Ajouter</button>
-                        </>
-                    ) : <div className="p-10 opacity-30 text-center uppercase text-[10px] font-black">Bientôt</div>}
+                    {leftTab === 'actions' ? (<>{selectedActor?.actions?.map((act, idx) => (<div key={idx} onClick={() => { setSelectedActionIdx(idx); setIsPreviewPlaying(false); setSelectedFrameIdx(null); }} className={`action-card-square ${selectedActionIdx === idx ? 'active' : ''}`}><span>{act.name}</span></div>))}<button className="v84-add-btn-minimal" onClick={() => { const name = prompt("Nom :"); if(!name) return; const next = JSON.parse(JSON.stringify(project)); next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId).actions.push({ name: name.toUpperCase(), frames: [], speed: 100 }); saveProject(next); }}>+ Ajouter</button></>) : <div className="p-10 opacity-30 text-center uppercase text-[10px] font-black">Bientôt</div>}
                 </div>
                 {leftTab === 'actions' && selectedAction && (
                     <div className="studio-sequence-editor">
-                        <div className="sequence-header">
-                            <span className="text-[9px] font-black text-slate-400 uppercase">Séquence ({selectedAction.name})</span>
-                            <div className="sequence-controls">
-                                <button className="btn-mirror" onClick={handleMirrorSequence}>↔️</button>
-                                <button className="btn-speed" onClick={() => handleUpdateActionSpeed(-50)}>-</button>
-                                <span className="speed-indicator">{selectedAction.speed || 100}ms</span>
-                                <button className="btn-speed" onClick={() => handleUpdateActionSpeed(50)}>+</button>
-                                <button className={`btn-preview-play ${isPreviewPlaying ? 'playing' : ''}`} onClick={() => setIsPreviewPlaying(!isPreviewPlaying)}>{isPreviewPlaying ? '⏹️' : '▶️'}</button>
-                            </div>
-                        </div>
-                        <div className="sequence-grid custom-scrollbar">
-                            {selectedAction.frames.map((frame, fIdx) => (
-                                <div key={fIdx} className={`frame-card ${isPreviewPlaying && previewFrameIdx === fIdx ? 'active-preview' : ''} ${selectedFrameIdx === fIdx ? 'selected-for-clean' : ''}`} draggable onClick={() => { setSelectedFrameIdx(selectedFrameIdx === fIdx ? null : fIdx); setIsPreviewPlaying(false); }} onDragStart={() => setDraggedFrameIdx(fIdx)} onDragOver={(e) => { e.preventDefault(); setDropTargetIdx(fIdx); }} onDrop={() => handleReorderFrame(fIdx)}>
-                                    <img src={resolveUrl(frame.url)} className="frame-img" />
-                                    <button className="frame-del" onClick={(e) => { e.stopPropagation(); handleDeleteFrame(fIdx); }}>✕</button>
-                                </div>
-                            ))}
-                            <button className="btn-add-frame" onClick={() => frameUploadRef.current.click()}>+</button>
-                        </div>
+                        <div className="sequence-header"><span className="text-[9px] font-black text-slate-400 uppercase">Séquence ({selectedAction.name})</span><div className="sequence-controls"><button className="btn-mirror" onClick={handleMirrorSequence} title="Miroir">↔️</button><button className="btn-speed" onClick={() => handleUpdateActionSpeed(-50)}>-</button><span className="speed-indicator">{selectedAction.speed || 100}ms</span><button className="btn-speed" onClick={() => handleUpdateActionSpeed(50)}>+</button><button className={`btn-preview-play ${isPreviewPlaying ? 'playing' : ''}`} onClick={() => setIsPreviewPlaying(!isPreviewPlaying)}>{isPreviewPlaying ? '⏹️' : '▶️'}</button></div></div>
+                        <div className="sequence-grid custom-scrollbar">{selectedAction.frames.map((frame, fIdx) => (<div key={fIdx} className={`frame-card ${isPreviewPlaying && previewFrameIdx === fIdx ? 'active-preview' : ''} ${selectedFrameIdx === fIdx ? 'selected-for-clean' : ''}`} draggable onClick={() => { setSelectedFrameIdx(selectedFrameIdx === fIdx ? null : fIdx); setIsPreviewPlaying(false); }} onDragStart={() => setDraggedFrameIdx(fIdx)} onDragOver={e => e.preventDefault()} onDrop={() => handleReorderFrame(fIdx)}><img src={resolveUrl(frame.url)} className="frame-img" /><button className="frame-del" onClick={e => { e.stopPropagation(); handleDeleteFrame(fIdx); }}>✕</button></div>))}<button className="v84-add-btn-minimal !p-2 !h-16 !w-16" onClick={() => frameUploadRef.current.click()}>+</button></div>
+                        <div className="eraser-tool-bar"><button className={`btn-eraser-main ${eraserActive ? 'active' : ''}`} onClick={() => setEraserActive(!eraserActive)}>🧽</button><div className="eraser-size-ctrl"><button onClick={() => setEraserSize(Math.max(1, eraserSize - 2))} className="btn-size">-</button><span className="size-val">{eraserSize}</span><button onClick={() => setEraserSize(Math.min(100, eraserSize + 2))} className="btn-size">+</button></div>{eraserActive && selectedFrameIdx !== null && (<button className="btn-launch-eraser animate-pulse" onClick={() => setFrameToErase({ url: selectedAction.frames[selectedFrameIdx].url, idx: selectedFrameIdx })}>GOMMER FRAME</button>)}</div>
                     </div>
                 )}
             </div>
-
+            
             <div className="studio-center-column">
-                <div ref={stageRef} className="stage-view" style={{ backgroundImage: currentScene?.backdrops?.[currentScene.currentBackdropIdx || 0]?.url ? `url(${resolveUrl(currentScene.backdrops[currentScene.currentBackdropIdx].url)})` : 'none' }}>
-                    {currentScene?.actors?.map((a) => {
-                        const isSelected = selectedActorId === a.id;
-                        let action = isSelected ? selectedAction : (a.actions?.find(act => act.name.toUpperCase() === "IDLE") || a.actions?.[0]);
-                        let frameIdx = isSelected ? (isPreviewPlaying ? previewFrameIdx : (selectedFrameIdx !== null ? selectedFrameIdx : 0)) : 0;
-                        const url = action?.frames?.[frameIdx]?.url;
-                        return (
-                            <div key={a.id} onMouseDown={(e) => handleStageMouseDown(e, a.id)} className={`actor-on-stage ${isSelected ? 'selected' : ''}`} style={{ left: `${a.initialX}%`, top: `${a.initialY}%`, transform: `translate(-50%, -50%) scale(${a.scale}) rotate(${a.direction || 0}deg)` }}>
-                                {url ? <img src={resolveUrl(url)} /> : <div className="text-[10px] opacity-20">VIDE</div>}
-                                <div className="actor-label-tag">{a.name}</div>
-                            </div>
-                        );
-                    })}
-                </div>
-                <div className="v115-prop-bar">
-                    <div className="flex flex-col"><span className="text-[8px] font-black opacity-30 uppercase">Nom</span><input className="prop-input-mini !w-16" value={selectedActor?.name || ""} onChange={e => handleUpdateProp('name', e.target.value)} /></div>
-                    <div className="flex flex-col border-l pl-4"><span className="text-[8px] font-black opacity-30 uppercase mb-1">Taille (%)</span><input type="number" className="prop-input-mini !w-16" value={Math.round((selectedActor?.scale || 1) * 100)} onChange={e => handleUpdateProp('scale', parseFloat(e.target.value) / 100)} /></div>
-                    <div className="flex flex-col border-l pl-4"><span className="text-[8px] font-black opacity-30 uppercase mb-1">Rotation</span><div className="flex gap-1"><button onClick={() => handleUpdateProp('rotationStyle', 'all')} className={`p-1.5 rounded-lg border-2 ${selectedActor?.rotationStyle === 'all' ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>🔄</button><button onClick={() => handleUpdateProp('rotationStyle', 'left-right')} className={`p-1.5 rounded-lg border-2 ${selectedActor?.rotationStyle === 'left-right' ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>↔️</button><button onClick={() => handleUpdateProp('rotationStyle', 'none')} className={`p-1.5 rounded-lg border-2 ${selectedActor?.rotationStyle === 'none' ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>🚫</button></div></div>
-                    <button onClick={handleViewTestQuiz} className="btn-view-quiz">📋 VOIR QUIZ</button>
-                    <button onClick={() => setCode(defaultCode)} className="ml-2 bg-slate-800 text-slate-400 px-4 py-2 rounded-xl text-[9px] font-black uppercase hover:text-white border border-slate-700">♻️ RESET CODE</button>
-                    <button onClick={() => { saveProject(); setIsPlaying(true); }} className="ml-2 bg-indigo-600 text-white px-6 py-2 rounded-xl text-[10px] font-black uppercase shadow-lg">▶ TESTER</button>
-                </div>
-                <div className="compact-code-editor"><textarea value={code} onChange={e => setCode(e.target.value)} spellCheck="false" placeholder="Code JS ici..." /></div>
+                <div ref={stageRef} className="stage-view" style={{ backgroundImage: currentScene?.backdrops?.[currentScene.currentBackdropIdx || 0]?.url ? `url(${resolveUrl(currentScene.backdrops[currentScene.currentBackdropIdx].url)})` : 'none' }}>{currentScene?.actors?.map((a) => { const isSelected = selectedActorId === a.id; let action = isSelected ? selectedAction : (a.actions?.find(act => act.name.toUpperCase() === "IDLE") || a.actions?.[0]); let frameIdx = isSelected ? (isPreviewPlaying ? previewFrameIdx : (selectedFrameIdx !== null ? selectedFrameIdx : 0)) : 0; return (<div key={a.id} onMouseDown={e => handleStageMouseDown(e, a.id)} className={`actor-on-stage ${isSelected ? 'selected' : ''}`} style={{ left: `${a.initialX}%`, top: `${a.initialY}%`, transform: `translate(-50%, -50%) scale(${a.scale}) rotate(${a.direction || 0}deg)` }}>{action?.frames?.[frameIdx]?.url && <img src={resolveUrl(action.frames[frameIdx].url)} />}<div className="actor-label-tag">{a.name}</div></div>); })}</div>
+                <div className="v115-prop-bar"><div className="flex flex-col"><span className="text-[8px] font-black opacity-30 uppercase">Nom</span><input className="prop-input-mini" value={selectedActor?.name || ""} onChange={e => handleUpdateProp('name', e.target.value)} /></div><div className="flex flex-col border-l pl-4"><span className="text-[8px] font-black opacity-30 uppercase">Taille (%)</span><input type="number" className="prop-input-mini" value={Math.round((selectedActor?.scale || 1) * 100)} onChange={e => handleUpdateProp('scale', parseFloat(e.target.value)/100)} /></div><button onClick={handleViewTestQuiz} className="btn-view-quiz">📋 QUIZ</button><button onClick={() => { saveProject(); setIsPlaying(true); }} className="ml-2 bg-indigo-600 text-white px-6 py-2 rounded-xl font-black text-[10px] shadow-lg">▶ TESTER</button></div>
+                <div className="compact-code-editor"><textarea value={code} onChange={e => setCode(e.target.value)} spellCheck="false" /></div>
             </div>
 
             <div className="studio-library-panel">
-                <div className="library-scroll-area custom-scrollbar">
-                    <div className="library-section-header">
-                        <span className="lib-section-title">Personnages</span>
-                        {/* BOUTONS NETTOYAGE V445 */}
-                        <div className="flex flex-col gap-1 mt-2">
-                            <button className="bg-blue-100 text-blue-600 border border-blue-200 rounded-lg py-1 text-[9px] font-black uppercase hover:bg-blue-200" onClick={handleBatchManualClean}>🎨 NETTOYAGE MANUEL</button>
-                            <button className="bg-purple-100 text-purple-600 border border-purple-200 rounded-lg py-1 text-[9px] font-black uppercase hover:bg-purple-200" onClick={handleBatchAIClean} disabled={cleaning}>✨ NETTOYAGE IA (PRO)</button>
-                        </div>
-                    </div>
-                    <div className="library-grid">
-                        {currentScene?.actors?.map((actor) => (
-                            <div key={actor.id} className={`item-card ${selectedActorId === actor.id ? 'active' : ''}`} onClick={() => handleSelectActor(actor.id)}>
-                                <button className="item-del-btn" onClick={(e) => handleDeleteActor(e, actor.id)}>✕</button>
-                                <div className="item-img-container"><img src={actor.actions?.[0]?.frames?.[0]?.url ? resolveUrl(actor.actions[0].frames[0].url) : ""} className="item-img" /></div>
-                                <div className="item-name-tag">{actor.name}</div>
-                            </div>
-                        ))}
-                        <div className="item-card !bg-indigo-50" onClick={() => actorUploadRef.current.click()}><span className="text-3xl text-indigo-300">+</span><div className="item-name-tag">Nouveau</div></div>
-                    </div>
-                </div>
-                <div className="library-bg-section">
-                    <div className="library-section-header"><span className="lib-section-title">Décors</span></div>
-                    <div className="library-grid custom-scrollbar">
-                        {currentScene?.backdrops?.map((bd, bIdx) => (
-                            <div key={bIdx} className={`item-card ${currentScene.currentBackdropIdx === bIdx ? 'active' : ''}`} onClick={() => {
-                                const next = JSON.parse(JSON.stringify(project));
-                                next.scenes[selectedSceneIdx].currentBackdropIdx = bIdx;
-                                setProject(next); saveProject(next);
-                            }}>
-                                <button className="item-del-btn" onClick={(e) => handleDeleteBackdrop(e, bIdx)}>✕</button>
-                                <div className="item-img-container"><img src={resolveUrl(bd.url)} className="item-img" /></div>
-                                <div className="item-name-tag">DÉCOR {bIdx+1}</div>
-                            </div>
-                        ))}
-                        <div className="item-card !bg-emerald-50" onClick={() => backdropUploadRef.current.click()}><span className="text-3xl text-emerald-300">+</span><div className="item-name-tag">Ajouter</div></div>
-                    </div>
-                </div>
+                <div className="library-scroll-area custom-scrollbar"><div className="library-section-header"><span className="lib-section-title">Personnages</span><div className="flex flex-col gap-1 mt-2"><button className="bg-blue-100 text-blue-600 border border-blue-200 rounded-lg py-1 text-[9px] font-black uppercase" onClick={handleBatchManualClean}>🎨 AUTO-CLEAN</button><button className="bg-purple-100 text-purple-600 border border-purple-200 rounded-lg py-1 text-[9px] font-black uppercase" onClick={handleBatchAIClean} disabled={cleaning}>✨ IA CLEAN</button></div></div><div className="library-grid">{currentScene?.actors?.map((actor) => (<div key={actor.id} className={`item-card ${selectedActorId === actor.id ? 'active' : ''}`} onClick={() => handleSelectActor(actor.id)}><button className="item-del-btn" onClick={e => handleDeleteActor(e, actor.id)}>✕</button><div className="item-img-container"><img src={actor.actions?.[0]?.frames?.[0]?.url ? resolveUrl(actor.actions[0].frames[0].url) : ""} className="item-img" /></div><div className="item-name-tag">{actor.name}</div></div>))}<div className="item-card !bg-indigo-50" onClick={() => actorUploadRef.current.click()}><span className="text-3xl text-indigo-300">+</span></div></div></div>
+                <div className="library-bg-section"><div className="library-section-header"><span className="lib-section-title">Décors</span></div><div className="library-grid custom-scrollbar">{currentScene?.backdrops?.map((bd, bIdx) => (<div key={bIdx} className={`item-card ${currentScene.currentBackdropIdx === bIdx ? 'active' : ''}`} onClick={() => { const next = JSON.parse(JSON.stringify(project)); next.scenes[selectedSceneIdx].currentBackdropIdx = bIdx; setProject(next); saveProject(next); }}><button className="item-del-btn" onClick={e => handleDeleteBackdrop(e, bIdx)}>✕</button><div className="item-img-container"><img src={resolveUrl(bd.url)} className="item-img" /></div><div className="item-name-tag">DÉCOR {bIdx+1}</div></div>))}<div className="item-card !bg-emerald-50" onClick={() => backdropUploadRef.current.click()}><span className="text-3xl text-emerald-300">+</span></div></div></div>
             </div>
         </div>
     );
 }
 
 [[[£ END: client/src/features/prof/studio/StudioDashboard.jsx £]]]
+
+[[[£ FILE: client/src/features/prof/studio/studioComp/GameEngine.jsx £]]]
+// @signatures: GameEngine, initLevel, handleAnswerClick, triggerWinSequence, handleBarCheat
+import React, { useState, useRef, useEffect } from 'react';
+import { api } from '../../../../services/api';
+
+/**
+ * 🎮 MOTEUR DE JEU DÉDIÉ (SÉCURITÉ TRANSITION V473)
+ * RÔLE : Arbitre JSX avec Verrou de Victoire pour empêcher la perte de vie post-victoire.
+ */
+export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
+    const canvasRef = useRef(null);
+    const gameInstanceRef = useRef(null);
+    const [crash, setCrash] = useState(null);
+    const [feedback, setFeedback] = useState(null);
+    
+    // --- ÉTATS DU QUIZ ---
+    const [allLevels, setAllLevels] = useState([]); 
+    const [currentLevelIdx, setCurrentLevelIdx] = useState(0);
+    const [levelQuestions, setLevelQuestions] = useState([]); 
+    const [questionStates, setQuestionStates] = useState([]); 
+    const [currentQIndex, setCurrentQIndex] = useState(-1);
+    const [lives, setLives] = useState(4);
+
+    // --- ÉTATS DE STRUCTURE ---
+    const [isLevelWon, setIsLevelWon] = useState(false);
+    const isLevelWonRef = useRef(false); // Ref pour accès synchrone dans les callbacks JS
+    const [isPowerOff, setIsPowerOff] = useState(false);
+    const [keysPressed, setKeysPressed] = useState({});
+
+    useEffect(() => {
+        api.get('/games/test-data').then(data => {
+            const levelsData = data?.levels?.length > 0 ? data.levels : [{ name: "Test", questions: [{ q: "Prêt ?", options: ["OUI", "NON"], a: 0 }] }];
+            setAllLevels(levelsData);
+            initLevel(0, levelsData);
+        });
+        const handleKeyDown = (e) => setKeysPressed(prev => ({ ...prev, [e.code]: true }));
+        const handleKeyUp = (e) => setKeysPressed(prev => ({ ...prev, [e.code]: false }));
+        window.addEventListener('keydown', handleKeyDown);
+        window.addEventListener('keyup', handleKeyUp);
+        return () => { window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); };
+    }, []);
+
+    const initLevel = (idx, sourceData) => {
+        if (!sourceData[idx]) { onStop(); return; }
+        const lvl = sourceData[idx];
+        setCurrentLevelIdx(idx);
+        const questions = lvl.questions || [];
+        setLevelQuestions(questions);
+        setQuestionStates(new Array(questions.length).fill(0));
+        setIsLevelWon(false);
+        isLevelWonRef.current = false; // Relâche le verrou
+        setIsPowerOff(false);
+        if (questions.length > 0) setCurrentQIndex(0);
+    };
+
+    const handleAnswerClick = (choiceIdx) => {
+        if (feedback || currentQIndex === -1 || isLevelWonRef.current) return;
+        const currentQ = levelQuestions[currentQIndex];
+        const isCorrect = currentQ.a === choiceIdx;
+        setFeedback(isCorrect ? 'CORRECT' : 'WRONG');
+
+        const newStates = [...questionStates];
+        if (isCorrect) {
+            newStates[currentQIndex] = Math.min(3, newStates[currentQIndex] + 1);
+            if (gameInstanceRef.current?.onResult) gameInstanceRef.current.onResult(true);
+        } else {
+            newStates[currentQIndex] = Math.max(0, newStates[currentQIndex] - 1);
+            if (gameInstanceRef.current?.onResult) gameInstanceRef.current.onResult(false);
+            setLives(l => Math.max(0, l - 1));
+        }
+        setQuestionStates(newStates);
+
+        setTimeout(() => {
+            setFeedback(null);
+            const available = newStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
+            if (available.length > 0) {
+                const nIdx = available[Math.floor(Math.random() * available.length)];
+                setCurrentQIndex(nIdx);
+                if (gameInstanceRef.current?.onQuestion) gameInstanceRef.current.onQuestion(levelQuestions[nIdx]);
+            } else {
+                triggerWinSequence();
+            }
+        }, 1000);
+    };
+
+    const triggerWinSequence = () => {
+        setIsLevelWon(true);
+        isLevelWonRef.current = true; // 🔒 VERROU ACTIF : Le JSX n'écoute plus les dégâts
+        
+        if (gameInstanceRef.current?.onLevelWin) {
+            gameInstanceRef.current.onLevelWin();
+        }
+        
+        setTimeout(() => setIsPowerOff(true), 1500);
+        setTimeout(() => {
+            const nextLvlIdx = currentLevelIdx + 1;
+            if (allLevels[nextLvlIdx]) initLevel(nextLvlIdx, allLevels);
+            else { alert("🎉 JEU TERMINÉ !"); onStop(); }
+        }, 4000);
+    };
+
+    const handleBarCheat = (idx) => {
+        if (keysPressed['KeyS'] && keysPressed['KeyT']) {
+            const next = [...questionStates];
+            next[idx] = 3;
+            setQuestionStates(next);
+            if (next.every(s => s === 3)) triggerWinSequence();
+        }
+    };
+
+    useEffect(() => {
+        if (!code || !project || !canvasRef.current) return;
+        let isMounting = true;
+        let animationFrameId = null;
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        const assets = {};
+
+        async function startEngine() {
+            try {
+                const scene = project.scenes[activeSceneIdx];
+                if (!scene) return;
+                const resources = (scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url));
+                await Promise.all([...new Set(resources)].filter(Boolean).map(url => new Promise(resolve => {
+                    const img = new Image(); img.crossOrigin = "anonymous";
+                    img.onload = () => { assets[resolveUrl(url)] = img; resolve(); };
+                    img.onerror = () => resolve();
+                    img.src = resolveUrl(url);
+                })));
+                if (!isMounting) return;
+
+                let userCode = code;
+                if (userCode.includes('class MiniGame') && !userCode.includes('extends MiniGameBase')) {
+                    userCode = userCode.replace('class MiniGame', 'class MiniGame extends MiniGameBase');
+                }
+
+                const headerCode = `
+                    const { canvas, ctx, assets, project, sceneIdx, resolveUrl, callbacks } = params;
+                    class ActorProxy {
+                        constructor(data) {
+                            this.id = data.id; this.name = data.name;
+                            this.x = data.initialX || 50; this.y = data.initialY || 50;
+                            this.dir = data.direction || 0; this.scale = data.scale || 1;
+                            this.visible = true; this.currentAction = data.actions?.[0]?.name || 'IDLE';
+                            this.rotationStyle = data.rotationStyle || 'all';
+                            this.frameIdx = 0; this.lastAnimTime = 0;
+                        }
+                        play(name) { if(this.currentAction.toUpperCase() !== name.toUpperCase()) { this.currentAction = name; this.frameIdx = 0; this.lastAnimTime = 0; } }
+                    }
+                    class MiniGameBase {
+                        constructor(c, a, cb) {
+                            this.canvas = c || canvas; this.ctx = ctx; this.assets = a || assets; this.callbacks = cb || callbacks; this.keys = {};
+                            const s = project.scenes[sceneIdx];
+                            if(s && s.actors) { s.actors.forEach(a => { this[a.name.toUpperCase()] = new ActorProxy(a); }); }
+                        }
+                        _system_render() {
+                            const s = project.scenes[sceneIdx];
+                            const bd = s?.backdrops?.[s.currentBackdropIdx || 0];
+                            if(bd && this.assets[resolveUrl(bd.url)]) this.ctx.drawImage(this.assets[resolveUrl(bd.url)], 0, 0, this.canvas.width, this.canvas.height);
+                            else { this.ctx.fillStyle = "#000"; this.ctx.fillRect(0,0,this.canvas.width,this.canvas.height); }
+                            for(let key in this) {
+                                const p = this[key];
+                                if(p instanceof ActorProxy && p.visible) {
+                                    const aData = project.scenes[sceneIdx].actors.find(ac => ac.id === p.id);
+                                    if(!aData) continue;
+                                    const act = (aData.actions || []).find(x => x.name.toUpperCase() === p.currentAction.toUpperCase()) || aData.actions?.[0];
+                                    if(act && act.frames?.length > 0) {
+                                        const now = Date.now();
+                                        if (now - p.lastAnimTime > (act.speed || 100)) { p.frameIdx = (p.frameIdx+1)%act.frames.length; p.lastAnimTime=now; }
+                                        const img = this.assets[resolveUrl(act.frames[p.frameIdx].url)];
+                                        if(img) {
+                                            const xPx = (p.x/100)*this.canvas.width; const yPx = (p.y/100)*this.canvas.height; let sz = 150*p.scale;
+                                            this.ctx.save(); this.ctx.translate(xPx, yPx);
+                                            if(p.rotationStyle==='left-right' && (((p.dir%360)+360)%360)>90 && (((p.dir%360)+360)%360)<270) this.ctx.scale(-1,1);
+                                            else if(p.rotationStyle==='all') this.ctx.rotate(p.dir*Math.PI/180);
+                                            this.ctx.drawImage(img, -sz/2, -sz/2, sz, sz); this.ctx.restore();
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                `;
+
+                const finalScript = headerCode + "\n" + userCode + "\n return MiniGame;";
+                
+                const FinalClass = new Function('params', finalScript)({ 
+                    canvas, ctx, assets, project, sceneIdx: activeSceneIdx, resolveUrl, 
+                    callbacks: { 
+                        // 🛡️ SÉCURITÉ V473 : Le callback de dégâts vérifie le verrou de victoire
+                        onPlayerHit: () => {
+                            if (!isLevelWonRef.current) {
+                                setLives(l => Math.max(0, l - 1));
+                            }
+                        } 
+                    } 
+                });
+                const instance = new FinalClass();
+                gameInstanceRef.current = instance;
+
+                const loop = () => {
+                    if (!isMounting) return;
+                    if (instance.update) instance.update();
+                    if (instance._system_render) instance._system_render();
+                    if (instance.draw) instance.draw();
+                    animationFrameId = requestAnimationFrame(loop);
+                };
+                loop();
+            } catch(e) { setCrash(e.message); }
+        }
+        startEngine();
+        return () => { isMounting = false; if (animationFrameId) cancelAnimationFrame(animationFrameId); };
+    }, [code, project, activeSceneIdx]);
+
+    return (
+        <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center font-sans">
+             <div className="absolute top-6 w-full flex justify-between items-start px-10 pointer-events-none z-20">
+                <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-xl pointer-events-auto flex gap-1">
+                    {"❤️".repeat(lives)}{"🖤".repeat(Math.max(0, 4 - lives))}
+                </div>
+                <div className="flex-1 flex justify-center px-4">
+                    {levelQuestions[currentQIndex] && !isLevelWon && (
+                        <div className="bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 border-slate-600 shadow-2xl text-xl pointer-events-auto">
+                            {feedback === 'CORRECT' ? "✅ BRAVO !" : feedback === 'WRONG' ? "❌ RATÉ..." : levelQuestions[currentQIndex].q}
+                        </div>
+                    )}
+                </div>
+                <div className="flex gap-2 items-center pointer-events-auto mr-16">
+                    {questionStates.map((mastery, idx) => (
+                        <div key={idx} onClick={() => handleBarCheat(idx)} className={`w-4 h-12 rounded-md border border-slate-600 relative overflow-hidden transition-all cursor-help ${currentQIndex === idx ? 'ring-2 ring-indigo-400 scale-110' : 'opacity-60'}`}>
+                            <div className={`absolute bottom-0 left-0 right-0 transition-all duration-500 ${mastery === 3 ? 'bg-green-500 shadow-[0_0_10px_green]' : 'bg-yellow-500'}`} style={{ height: `${(mastery / 3) * 100}%` }} />
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            <div className="relative">
+                <canvas ref={canvasRef} width={800} height={450} className={`aspect-video shadow-2xl bg-black border-4 border-slate-800 rounded-xl transition-opacity duration-1000 ${isPowerOff ? 'opacity-0' : 'opacity-100'}`} />
+                {isLevelWon && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm rounded-xl animate-in zoom-in">
+                        <div className="bg-white p-10 rounded-[40px] shadow-2xl text-center border-8 border-green-500">
+                            <span className="text-6xl block mb-4">🏆</span>
+                            <h2 className="text-4xl font-black text-slate-800 uppercase">Niveau Réussi !</h2>
+                        </div>
+                    </div>
+                )}
+                {isPowerOff && <div className="absolute inset-0 bg-black rounded-xl flex items-center justify-center"><div className="w-1 h-1 bg-white rounded-full animate-ping"></div></div>}
+            </div>
+            {crash && <div className="absolute inset-0 bg-red-900/90 flex items-center justify-center text-white font-mono p-10 text-center z-50">💥 ERREUR SCRIPT : {crash}</div>}
+
+            <div className="absolute bottom-6 w-full flex justify-center px-10">
+                <div className="grid grid-cols-4 gap-4 w-full max-w-5xl">
+                    {levelQuestions[currentQIndex]?.options?.map((o, i) => (
+                        <button key={i} onClick={() => handleAnswerClick(i)} className="bg-indigo-600 text-white py-5 rounded-xl font-black uppercase shadow-xl hover:bg-indigo-500 transition-all border-b-4 border-indigo-800 active:border-b-0 active:translate-y-1">{o}</button>
+                    ))}
+                </div>
+            </div>
+            <button onClick={onStop} className="absolute top-6 right-6 bg-red-600 text-white w-12 h-12 rounded-full font-black text-2xl shadow-xl border-4 border-white hover:scale-110 transition-all flex items-center justify-center pointer-events-auto">✕</button>
+        </div>
+    );
+}
+
+[[[£ END: client/src/features/prof/studio/studioComp/GameEngine.jsx £]]]
+
+[[[£ FILE: client/src/features/prof/studio/studioComp/ManualEraser.css £]]]
+/* --- FENÊTRE DE GOMME DÉDIÉE V459 --- */
+.eraser-modal-overlay {
+    position: fixed; inset: 0;
+    z-index: 50000; background: rgba(0,0,0,0.98);
+    display: flex; align-items: center; justify-content: center;
+    backdrop-filter: blur(20px);
+}
+
+.eraser-window {
+    background: #0f172a; width: 95vw; height: 95vh;
+    border-radius: 40px; display: flex; flex-direction: column;
+    overflow: hidden; border: 1px solid #334155;
+    box-shadow: 0 50px 100px rgba(0,0,0,0.8);
+}
+
+.eraser-header {
+    padding: 25px 40px; background: #1e293b; border-bottom: 1px solid #334155;
+    display: flex; justify-content: space-between; align-items: center;
+}
+
+.eraser-canvas-container {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    /* Fond en damier pour la transparence */
+    background-image: 
+        linear-gradient(45deg, #1e293b 25%, transparent 25%), 
+        linear-gradient(-45deg, #1e293b 25%, transparent 25%), 
+        linear-gradient(45deg, transparent 75%, #1e293b 75%), 
+        linear-gradient(-45deg, transparent 75%, #1e293b 75%);
+    background-size: 24px 24px;
+    background-position: 0 0, 0 12px, 12px -12px, -12px 0px;
+    overflow: hidden; cursor: crosshair;
+}
+
+.eraser-canvas-container canvas {
+    max-width: 90%; max-height: 90%; object-fit: contain;
+    image-rendering: pixelated; /* Pour voir les pixels à gommer */
+}
+
+.eraser-footer {
+    padding: 30px; background: #1e293b; border-top: 1px solid #334155;
+    display: flex; justify-content: center; gap: 50px; align-items: center;
+}
+
+.eraser-size-widget {
+    display: flex; align-items: center; gap: 15px;
+    background: #0f172a; padding: 10px 25px; border-radius: 20px;
+    border: 1px solid #334155;
+}
+
+.btn-eraser-size {
+    width: 40px; height: 40px; background: #334155; color: white;
+    border: none; border-radius: 12px; font-weight: 900; font-size: 1.2rem;
+    cursor: pointer; transition: all 0.1s;
+}
+.btn-eraser-size:active { transform: scale(0.9); }
+
+.eraser-size-display {
+    color: #6366f1; font-family: 'JetBrains Mono', monospace;
+    font-size: 20px; font-weight: 950; min-width: 40px; text-align: center;
+}
+
+.eraser-actions { display: flex; gap: 15px; }
+.btn-eraser-save { background: #10b981; color: white; padding: 15px 40px; border-radius: 20px; font-weight: 950; border: none; cursor: pointer; box-shadow: 0 10px 20px rgba(16, 185, 129, 0.3); }
+.btn-eraser-cancel { background: #ef4444; color: white; padding: 15px 30px; border-radius: 20px; font-weight: 950; border: none; cursor: pointer; }
+
+[[[£ END: client/src/features/prof/studio/studioComp/ManualEraser.css £]]]
+
+[[[£ FILE: client/src/features/prof/studio/studioComp/ManualEraser.jsx £]]]
+// @signatures: ManualEraser, saveState, undo, startDrawing, stopDrawing, erase, handleSave
+import React, { useState, useRef, useEffect } from 'react';
+import './ManualEraser.css';
+
+/**
+ * 🧹 COMPOSANT GOMME MANUELLE (V460 - CTRL+Z READY)
+ * RÔLE : Nettoyage précis avec historique de retour arrière.
+ */
+export default function ManualEraser({ imageUrl, initialSize, onSave, onCancel, resolveUrl }) {
+    const canvasRef = useRef(null);
+    const [size, setSize] = useState(initialSize || 10);
+    const [isDrawing, setIsDrawing] = useState(false);
+    const [loading, setLoading] = useState(false);
+    
+    // --- GESTION DE L'HISTORIQUE (UNDO) ---
+    const [history, setHistory] = useState([]);
+
+    // Initialisation du canvas et premier snapshot
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => {
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx.drawImage(img, 0, 0);
+            // On capture l'état initial
+            saveState();
+        };
+        img.src = resolveUrl(imageUrl);
+    }, [imageUrl]);
+
+    // Écouteur pour le CTRL+Z
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+                e.preventDefault();
+                undo();
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [history]); // On ré-écoute quand l'historique change
+
+    const saveState = () => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        // On stocke l'image brute du canvas (ImageData est trop lourd pour le state, on utilise DataURL ou ImageBitmap)
+        // Ici on utilise getImageData pour la fidélité, mais on limite l'historique
+        const ctx = canvas.getContext('2d');
+        const snapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        setHistory(prev => [...prev.slice(-20), snapshot]); // Garde les 20 derniers coups
+    };
+
+    const undo = () => {
+        if (history.length <= 1) return; // Rien à annuler (ou état initial)
+        
+        const newHistory = [...history];
+        newHistory.pop(); // On enlève l'état actuel
+        const previousState = newHistory[newHistory.length - 1];
+        
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        ctx.putImageData(previousState, 0, 0);
+        
+        setHistory(newHistory);
+    };
+
+    const startDrawing = (e) => { 
+        setIsDrawing(true); 
+        erase(e); 
+    };
+
+    const stopDrawing = () => {
+        if (isDrawing) {
+            setIsDrawing(false);
+            saveState(); // On enregistre après chaque trait
+        }
+    };
+
+    const erase = (e) => {
+        if (!isDrawing) return;
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        const rect = canvas.getBoundingClientRect();
+        
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        
+        const x = (e.clientX - rect.left) * scaleX;
+        const y = (e.clientY - rect.top) * scaleY;
+
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.beginPath();
+        ctx.arc(x, y, size, 0, Math.PI * 2);
+        ctx.fill();
+    };
+
+    const handleInternalSave = () => {
+        setLoading(true);
+        canvasRef.current.toBlob(async (blob) => {
+            const fd = new FormData();
+            fd.append('file', blob, "manual-eraser-edit.png");
+            try {
+                const res = await fetch('/api/studio/save-edition', { method: 'POST', body: fd }).then(r => r.json());
+                onSave(res.url);
+            } catch (e) { alert("Erreur sauvegarde."); }
+            setLoading(false);
+        }, 'image/png');
+    };
+
+    return (
+        <div className="eraser-modal-overlay" onMouseUp={stopDrawing}>
+            <div className="eraser-window animate-in zoom-in" onClick={e => e.stopPropagation()}>
+                <div className="eraser-header">
+                    <div className="flex flex-col">
+                        <h2 className="text-white font-black text-2xl uppercase tracking-tighter">Atelier de Précision</h2>
+                        <span className="text-indigo-400 text-xs font-bold uppercase tracking-widest">Utilisez CTRL+Z pour annuler</span>
+                    </div>
+                    <div className="eraser-actions">
+                        <button onClick={onCancel} className="btn-eraser-cancel">QUITTER</button>
+                        <button onClick={handleInternalSave} disabled={loading} className="btn-eraser-save">
+                            {loading ? "TRAITEMENT..." : "APPLIQUER ✨"}
+                        </button>
+                    </div>
+                </div>
+
+                <div className="eraser-canvas-container" onMouseDown={startDrawing} onMouseMove={erase}>
+                    <canvas ref={canvasRef} />
+                </div>
+
+                <div className="eraser-footer">
+                    <div className="flex gap-4">
+                        <div className="eraser-size-widget">
+                            <span className="text-[10px] font-black text-slate-500 uppercase mr-4">Gomme</span>
+                            <button onClick={() => setSize(Math.max(1, size - 2))} className="btn-eraser-size">-</button>
+                            <div className="eraser-size-display">{size}</div>
+                            <button onClick={() => setSize(Math.min(100, size + 2))} className="btn-eraser-size">+</button>
+                        </div>
+                        
+                        {/* BOUTON UNDO VISUEL */}
+                        <button 
+                            onClick={undo} 
+                            disabled={history.length <= 1}
+                            className={`px-6 rounded-2xl font-black text-xs transition-all ${history.length <= 1 ? 'bg-slate-800 text-slate-600 opacity-50' : 'bg-indigo-600 text-white shadow-lg hover:scale-105'}`}
+                        >
+                            ↩️ ANNULER (CTRL+Z)
+                        </button>
+                    </div>
+                    
+                    <p className="text-slate-500 text-sm font-bold italic hidden md:block">
+                        L'historique garde vos 20 derniers mouvements.
+                    </p>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+[[[£ END: client/src/features/prof/studio/studioComp/ManualEraser.jsx £]]]
 
 [[[£ FILE: server/domains/studio/ai/game-generator.ai.js £]]]
 // @signatures: MiniGame
@@ -1573,6 +1179,83 @@ const StudioDB = {
 module.exports = StudioDB;
 
 [[[£ END: server/domains/studio/db/studio.db.js £]]]
+
+[[[£ FILE: server/domains/studio/experts/edition.expert.js £]]]
+// @signatures: EditionExpert, saveErasedImage
+const fs = require('fs');
+const path = require('path');
+const StudioDrive = require('./studio.drive');
+
+/**
+ * 🛠️ EXPERT EDITION - STUDIO
+ * Gère les transformations techniques des assets (Gomme, Filtres, etc.)
+ */
+const EditionExpert = {
+    /**
+     * Sauvegarde une image issue de la gomme manuelle vers le Drive
+     */
+    saveErasedImage: async (localPath, originalName) => {
+        try {
+            const fileName = `cleaned-${Date.now()}-${originalName}`;
+            const driveData = await StudioDrive.uploadAsset(localPath, fileName);
+            
+            // Nettoyage local
+            if (fs.existsSync(localPath)) {
+                try { fs.unlinkSync(localPath); } catch(e) {}
+            }
+
+            return { url: `/api/proxy/${driveData.id}` };
+        } catch (e) {
+            console.error("❌ [EDITION-EXPERT] Erreur save:", e.message);
+            throw e;
+        }
+    }
+};
+
+module.exports = EditionExpert;
+
+[[[£ END: server/domains/studio/experts/edition.expert.js £]]]
+
+[[[£ FILE: server/domains/studio/experts/game.expert.js £]]]
+// @signatures: GameExpert, getTestData
+const mongoose = require('mongoose');
+
+/**
+ * 🕹️ EXPERT GAME - STUDIO
+ * Gère la fourniture des données de test et la validation des scripts de jeu.
+ */
+const GameExpert = {
+    /**
+     * Récupère le dernier jeu marqué comme test pour alimenter le simulateur
+     */
+    getTestData: async () => {
+        try {
+            const GameLevel = mongoose.model('GameLevel');
+            const testGame = await GameLevel.findOne({ isTestGame: true }).sort({ updatedAt: -1 }).lean();
+            
+            if (testGame) return testGame;
+
+            // Mock de secours si aucun jeu de test n'est défini
+            return {
+                title: "Quiz de Secours",
+                levels: [{
+                    name: "Niveau 1",
+                    questions: [
+                        { q: "Combien font 2 x 3 ?", options: ["4", "5", "6", "8"], a: 2 },
+                        { q: "Capitale de la France ?", options: ["Lyon", "Paris", "Marseille", "Lille"], a: 1 }
+                    ]
+                }]
+            };
+        } catch (e) {
+            console.error("❌ [GAME-EXPERT] Error:", e.message);
+            return null;
+        }
+    }
+};
+
+module.exports = GameExpert;
+
+[[[£ END: server/domains/studio/experts/game.expert.js £]]]
 
 [[[£ FILE: server/domains/studio/experts/studio.drive.js £]]]
 const DriveEngine = require('../../../core/drive.engine');
@@ -1802,12 +1485,13 @@ module.exports = mongoose.models.StudioProject || mongoose.model('StudioProject'
 [[[£ END: server/models/StudioProject.js £]]]
 
 [[[£ FILE: server/prof/studio/studio.prof.js £]]]
-// @signatures: ProfStudio, projects, save, uploadAsset, detectBg, removeBgSpecialized
+// @signatures: ProfStudio, projects, save, uploadAsset, detectBg, removeBgSpecialized, saveEdition
 const express = require('express');
 const router = express.Router();
 const { StudioProject } = require('../models/prof.models');
 const ProfDrive = require('../core/drive.prof');
 const StudioExpert = require('../../domains/studio/experts/studio.expert'); 
+const EditionExpert = require('../../domains/studio/experts/edition.expert'); // V459
 const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
@@ -1843,24 +1527,24 @@ router.post('/upload-asset', upload.single('file'), async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ✅ ROUTE DÉTOURAGE SPÉCIALISÉ
-router.post('/remove-bg-specialized', async (req, res) => {
-    console.log("📥 [STUDIO-ROUTE] Requête remove-bg-specialized reçue.");
+// ✅ NOUVELLE ROUTE : SAUVEGARDE ÉDITION (GOMME) V459
+router.post('/save-edition', upload.single('file'), async (req, res) => {
     try {
-        const { url } = req.body;
-        if (!url) return res.status(400).json({ error: "URL manquante" });
-        
-        const result = await StudioExpert.specializedBgRemoval(url);
-        
-        if (result) {
-            res.json(result);
-        } else {
-            res.status(500).json({ error: "Échec du détourage (voir logs serveur)" });
-        }
+        if (!req.file) return res.status(400).json({ error: "Blob manquant" });
+        const result = await EditionExpert.saveErasedImage(req.file.path, req.file.originalname);
+        res.json(result);
     } catch (e) {
-        console.error("❌ [STUDIO-ROUTE] Erreur fatale :", e.message);
         res.status(500).json({ error: e.message });
     }
+});
+
+router.post('/remove-bg-specialized', async (req, res) => {
+    try {
+        const { url } = req.body;
+        const result = await StudioExpert.specializedBgRemoval(url);
+        if (result) res.json(result);
+        else res.status(500).json({ error: "Échec détourage" });
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 module.exports = router;

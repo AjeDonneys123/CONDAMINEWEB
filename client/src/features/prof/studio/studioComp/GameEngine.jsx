@@ -1,10 +1,10 @@
-// @signatures: GameEngine, initLevel, handleAnswerClick, triggerWinSequence, handleBarCheat
+// @signatures: GameEngine, initLevel, handleAnswerClick, triggerWinSequence, handleBarCheat, handleCanvasCheat
 import React, { useState, useRef, useEffect } from 'react';
 import { api } from '../../../../services/api';
 
 /**
- * 🎮 MOTEUR DE JEU DÉDIÉ (SÉCURITÉ TRANSITION V473)
- * RÔLE : Arbitre JSX avec Verrou de Victoire pour empêcher la perte de vie post-victoire.
+ * 🎮 MOTEUR DE JEU DÉDIÉ (VERSION UX FIX V479)
+ * RÔLE : Arbitre JSX avec séparation stricte des Cheat Codes (Barre vs Reset).
  */
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
     const canvasRef = useRef(null);
@@ -22,9 +22,14 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
     // --- ÉTATS DE STRUCTURE ---
     const [isLevelWon, setIsLevelWon] = useState(false);
-    const isLevelWonRef = useRef(false); // Ref pour accès synchrone dans les callbacks JS
+    const isLevelWonRef = useRef(false); 
     const [isPowerOff, setIsPowerOff] = useState(false);
     const [keysPressed, setKeysPressed] = useState({});
+    
+    // CHEAT STATES
+    const sPressed = keysPressed['KeyS'];
+    const tPressed = keysPressed['KeyT'];
+    const cheatReady = sPressed && tPressed;
 
     useEffect(() => {
         api.get('/games/test-data').then(data => {
@@ -32,8 +37,12 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             setAllLevels(levelsData);
             initLevel(0, levelsData);
         });
+        
         const handleKeyDown = (e) => setKeysPressed(prev => ({ ...prev, [e.code]: true }));
         const handleKeyUp = (e) => setKeysPressed(prev => ({ ...prev, [e.code]: false }));
+        
+        // Focus automatique pour capter le clavier
+        window.focus();
         window.addEventListener('keydown', handleKeyDown);
         window.addEventListener('keyup', handleKeyUp);
         return () => { window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); };
@@ -47,7 +56,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         setLevelQuestions(questions);
         setQuestionStates(new Array(questions.length).fill(0));
         setIsLevelWon(false);
-        isLevelWonRef.current = false; // Relâche le verrou
+        isLevelWonRef.current = false; 
         setIsPowerOff(false);
         if (questions.length > 0) setCurrentQIndex(0);
     };
@@ -84,12 +93,10 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
     const triggerWinSequence = () => {
         setIsLevelWon(true);
-        isLevelWonRef.current = true; // 🔒 VERROU ACTIF : Le JSX n'écoute plus les dégâts
-        
+        isLevelWonRef.current = true; 
         if (gameInstanceRef.current?.onLevelWin) {
             gameInstanceRef.current.onLevelWin();
         }
-        
         setTimeout(() => setIsPowerOff(true), 1500);
         setTimeout(() => {
             const nextLvlIdx = currentLevelIdx + 1;
@@ -98,13 +105,50 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         }, 4000);
     };
 
+    // --- CHEAT LOGIC ---
+    
+    // S+T + Clic sur une barre : Valide la question (SANS RESET ZOMBIE)
     const handleBarCheat = (idx) => {
-        if (keysPressed['KeyS'] && keysPressed['KeyT']) {
+        if (cheatReady) {
             const next = [...questionStates];
             next[idx] = 3;
             setQuestionStates(next);
             if (next.every(s => s === 3)) triggerWinSequence();
         }
+    };
+
+    const executeReset = (e) => {
+        if(e) e.stopPropagation(); // Empêche la propagation pour éviter les doubles déclenchements
+        console.log("⚡ EXECUTE RESET ZOMBIE !");
+
+        // 1. REINITIALISATION INTERFACE
+        setLives(4);
+        setIsLevelWon(false);
+        isLevelWonRef.current = false;
+        setIsPowerOff(false);
+
+        // 2. REINITIALISATION MOTEUR
+        if (gameInstanceRef.current) {
+            gameInstanceRef.current.isStopped = false;
+            
+            // Reset Variables Spécifiques (Zombie V445+)
+            if (typeof gameInstanceRef.current.zombieX !== 'undefined') {
+                gameInstanceRef.current.zombieX = 90;
+            }
+            if (typeof gameInstanceRef.current.projectiles !== 'undefined') {
+                gameInstanceRef.current.projectiles = [];
+            }
+
+            // Relance standard
+            if (gameInstanceRef.current.start) {
+                gameInstanceRef.current.start();
+            }
+        }
+    };
+
+    // S+T + Clic sur le Fond/Canvas : Reset Zombie
+    const handleCanvasCheat = (e) => {
+        if (cheatReady) executeReset(e);
     };
 
     useEffect(() => {
@@ -186,7 +230,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 const FinalClass = new Function('params', finalScript)({ 
                     canvas, ctx, assets, project, sceneIdx: activeSceneIdx, resolveUrl, 
                     callbacks: { 
-                        // 🛡️ SÉCURITÉ V473 : Le callback de dégâts vérifie le verrou de victoire
                         onPlayerHit: () => {
                             if (!isLevelWonRef.current) {
                                 setLives(l => Math.max(0, l - 1));
@@ -212,7 +255,24 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     }, [code, project, activeSceneIdx]);
 
     return (
-        <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center font-sans">
+        // UTILISATION DE ONCLICK STANDARD (Bubbling) POUR LAISSER LA PRIORITÉ AUX ENFANTS (BARRES)
+        <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center font-sans" onClick={handleCanvasCheat}>
+             
+             {/* HUD DEBUG CLAVIER */}
+             <div className="absolute top-2 left-2 z-[100000] bg-black/80 text-white font-mono text-xs p-2 rounded pointer-events-none">
+                KEYS: {sPressed ? 'S' : '_'} + {tPressed ? 'T' : '_'}
+             </div>
+
+             {/* BOUTON RESET EXPLICITE (VISIBLE SI CHEAT READY) */}
+             {cheatReady && (
+                 <button 
+                    onClick={executeReset}
+                    className="absolute top-20 left-1/2 -translate-x-1/2 z-[100000] bg-red-600 text-white font-black px-6 py-3 rounded-full shadow-2xl border-4 border-white animate-pulse uppercase tracking-widest text-lg cursor-pointer pointer-events-auto"
+                 >
+                    🔴 RESET ZOMBIE NOW
+                 </button>
+             )}
+
              <div className="absolute top-6 w-full flex justify-between items-start px-10 pointer-events-none z-20">
                 <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-xl pointer-events-auto flex gap-1">
                     {"❤️".repeat(lives)}{"🖤".repeat(Math.max(0, 4 - lives))}
@@ -226,17 +286,17 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 </div>
                 <div className="flex gap-2 items-center pointer-events-auto mr-16">
                     {questionStates.map((mastery, idx) => (
-                        <div key={idx} onClick={() => handleBarCheat(idx)} className={`w-4 h-12 rounded-md border border-slate-600 relative overflow-hidden transition-all cursor-help ${currentQIndex === idx ? 'ring-2 ring-indigo-400 scale-110' : 'opacity-60'}`}>
+                        <div key={idx} onClick={(e) => { e.stopPropagation(); handleBarCheat(idx); }} className={`w-4 h-12 rounded-md border border-slate-600 relative overflow-hidden transition-all cursor-help ${currentQIndex === idx ? 'ring-2 ring-indigo-400 scale-110' : 'opacity-60'}`}>
                             <div className={`absolute bottom-0 left-0 right-0 transition-all duration-500 ${mastery === 3 ? 'bg-green-500 shadow-[0_0_10px_green]' : 'bg-yellow-500'}`} style={{ height: `${(mastery / 3) * 100}%` }} />
                         </div>
                     ))}
                 </div>
             </div>
 
-            <div className="relative">
+            <div className={`relative transition-all duration-200 ${cheatReady ? 'ring-8 ring-red-500 rounded-xl' : ''}`}>
                 <canvas ref={canvasRef} width={800} height={450} className={`aspect-video shadow-2xl bg-black border-4 border-slate-800 rounded-xl transition-opacity duration-1000 ${isPowerOff ? 'opacity-0' : 'opacity-100'}`} />
                 {isLevelWon && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm rounded-xl animate-in zoom-in">
+                    <div className="absolute inset-0 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm rounded-xl animate-in zoom-in pointer-events-none">
                         <div className="bg-white p-10 rounded-[40px] shadow-2xl text-center border-8 border-green-500">
                             <span className="text-6xl block mb-4">🏆</span>
                             <h2 className="text-4xl font-black text-slate-800 uppercase">Niveau Réussi !</h2>
@@ -250,7 +310,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             <div className="absolute bottom-6 w-full flex justify-center px-10">
                 <div className="grid grid-cols-4 gap-4 w-full max-w-5xl">
                     {levelQuestions[currentQIndex]?.options?.map((o, i) => (
-                        <button key={i} onClick={() => handleAnswerClick(i)} className="bg-indigo-600 text-white py-5 rounded-xl font-black uppercase shadow-xl hover:bg-indigo-500 transition-all border-b-4 border-indigo-800 active:border-b-0 active:translate-y-1">{o}</button>
+                        <button key={i} onClick={(e) => { e.stopPropagation(); handleAnswerClick(i); }} className="bg-indigo-600 text-white py-5 rounded-xl font-black uppercase shadow-xl hover:bg-indigo-500 transition-all border-b-4 border-indigo-800 active:border-b-0 active:translate-y-1">{o}</button>
                     ))}
                 </div>
             </div>

@@ -938,3 +938,21 @@
 07/02/2026 16:50 - STUDIO ENGINE GUARD (V473) : Implémentation d'un verrou de victoire strict (Win-Lock). Le JSX (GameEngine) utilise désormais un 'isLevelWonRef' pour bloquer instantanément les retours de collisions du moteur JS dès que le niveau est validé. Cette mesure empêche la perte de vie résiduelle pendant la transition "Bravo". Mise à jour du script de simulation Zombie (defaultCode) pour geler tous les mouvements à l'arrêt.
 
 07/02/2026 16:55 - EMERGENCY REPAIR (V470) : Suppression définitive de l'erreur Unicode Babel dans StudioDashboard.jsx. Retrait de tous les antislashs d'échappement inutiles (\) devant les backticks et les signes dollars qui provoquaient l'échec de compilation. Le fichier est désormais conforme au standard JSX pur.
+
+07/02/2026 17:05 - STUDIO CHEAT (V475) : Activation du Reset Zombie par S+T+Clic sur le canvas. Patch du code par défaut pour inclure le reset de variable (zombieX) dans la méthode start(), garantissant un redémarrage propre lors du cheat code.
+
+07/02/2026 17:10 - STUDIO CHEAT REPAIR (V476) : Correction du Cheat Code S+T+Clic. Réinitialisation forcée des états React (isLevelWon, isPowerOff) et du moteur JS (isStopped) pour garantir le redémarrage du jeu même après une victoire ou un Game Over.
+
+07/02/2026 17:10 - STUDIO CHEAT REPAIR (V476) : Correction du Cheat Code S+T+Clic. Réinitialisation forcée des états React (isLevelWon, isPowerOff) et du moteur JS (isStopped) pour garantir le redémarrage du jeu même après une victoire ou un Game Over.
+
+07/02/2026 17:15 - STUDIO CHEAT DEBUG (V477) : Passage en mode diagnostic pour le Cheat Code.
+- Déplacement du listener onClick sur la racine `div.fixed` pour capturer tous les clics (même sur overlay).
+- Ajout de logs console : `CLICK ENGINE | S: true | T: true`.
+- Ajout d'un flash ROUGE visuel (`debugFlash`) lorsque le cheat est détecté pour confirmer l'action à l'utilisateur.
+
+07/02/2026 17:15 - STUDIO CHEAT DEBUG (V477) : Passage en mode diagnostic pour le Cheat Code.
+- Déplacement du listener onClick sur la racine `div.fixed` pour capturer tous les clics (même sur overlay).
+- Ajout de logs console : `CLICK ENGINE | S: true | T: true`.
+- Ajout d'un flash ROUGE visuel (`debugFlash`) lorsque le cheat est détecté pour confirmer l'action à l'utilisateur.
+
+07/02/2026 17:20 - STUDIO CHEAT VISUAL (V478) : Ajout d'un HUD Debug clavier (S: _ T: _) et d'un bouton explicite "RESET ZOMBIE" qui apparaît lorsque la combinaison est active. Utilisation de `onClickCapture` pour garantir l'interception des clics.
