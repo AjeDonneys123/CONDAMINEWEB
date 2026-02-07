@@ -43,6 +43,8 @@
 │   │   │   │   │   ├── EleveHeader.css
 │   │   │   │   │   └── EleveHeader.jsx
 │   │   │   │   ├── games/
+│   │   │   │   │   ├── GamePlayer.css
+│   │   │   │   │   ├── GamePlayer.jsx
 │   │   │   │   │   ├── GamesGrid.css
 │   │   │   │   │   ├── GamesGrid.jsx
 │   │   │   │   │   ├── mainGames.js

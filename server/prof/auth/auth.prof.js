@@ -1,4 +1,4 @@
-// @signatures: ProfAuth, login, config, finder, googleLogin, googleCallback
+// @signatures: ProfAuth, login, config, finder, googleLogin, googleCallback, toggleTestMode
 const express = require('express');
 const router = express.Router();
 const { Teacher, Admin, Student, Classroom } = require('../models/prof.models');
@@ -23,6 +23,24 @@ router.post('/login', async (req, res) => {
         return res.json({ ok: true, user: { ...obj, id: obj._id, role: obj.role || 'prof' } });
     }
     res.status(401).json({ ok: false, message: "Identifiants prof incorrects" });
+});
+
+// --- NOUVEAU : BASCULE MODE TESTEUR ---
+router.post('/toggle-test-mode', async (req, res) => {
+    const { userId } = req.body;
+    try {
+        let user = await Teacher.findById(userId) || await Admin.findById(userId);
+        if (!user) return res.status(404).json({ error: "Utilisateur introuvable" });
+
+        // Bascule du booléen
+        user.isTestAccount = !user.isTestAccount;
+        await user.save();
+
+        console.log(`🧪 [AUTH] Mode Testeur pour ${user.firstName} : ${user.isTestAccount}`);
+        res.json({ ok: true, isTestAccount: user.isTestAccount });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 });
 
 router.get('/config', async (req, res) => {

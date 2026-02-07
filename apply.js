@@ -5,8 +5,8 @@ const statusFile = 'apply_status.json';
 const inputFile = 'update.txt';
 
 /**
- * 🛡️ APPLY.JS V7.5 - HOMEWORK SECURITY
- * Ajout du bundle HOMEWORK et intégration de la Sidebar de distribution.
+ * 🛡️ APPLY.JS V7.6 - VISUAL DEBUG
+ * Ajout de logs console pour les rejets et erreurs.
  */
 
 const BUNDLES = {
@@ -48,20 +48,6 @@ function writeStatus(type, message, details = null) {
     } catch(e) {}
 }
 
-function extractSignatures(content) {
-    const sigs = new Set();
-    const patterns = [
-        /function\s+([a-zA-Z0-9_]+)/g,
-        /const\s+([a-zA-Z0-9_]+)\s*=\s*(?:async\s*)?\(/g,
-        /export\s+default\s+function\s+([a-zA-Z0-9_]+)/g
-    ];
-    patterns.forEach(regex => {
-        let match;
-        while ((match = regex.exec(content)) !== null) sigs.add(match[1]);
-    });
-    return sigs;
-}
-
 function applyUpdate() {
     try {
         if (!fs.existsSync(inputFile)) return;
@@ -78,8 +64,10 @@ function applyUpdate() {
             if (bundle !== 'GLOBAL') detectedBundles.add(bundle);
         }
 
+        // --- LOG DE REJET (TERMINAL) ---
         if (detectedBundles.size > 1) {
             const list = Array.from(detectedBundles).join(', ');
+            console.log(`❌ REJET : Violation d'herméticité (${list})`);
             writeStatus('REJECTED', `Violation d'herméticité : ${list}`);
             fs.writeFileSync(inputFile, ''); 
             return;
@@ -110,9 +98,10 @@ function applyUpdate() {
         }
         writeStatus('OK', 'Infrastructure mise à jour');
     } catch (e) {
+        console.log(`💥 ERREUR APPLY : ${e.message}`);
         writeStatus('ERROR', e.message);
     }
 }
 
 setInterval(applyUpdate, 500);
-console.log("🛡️ ARCHITECTE HERMÉTIQUE (V7.5) - HOMEWORK PROTECTED");
+console.log("🛡️ ARCHITECTE HERMÉTIQUE (V7.6) - VISUAL DEBUG ACTIVE");

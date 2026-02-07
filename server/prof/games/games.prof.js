@@ -1,4 +1,4 @@
-// @signatures: ProfGamesRouter, all, save, uploadAsset, generateContent
+// @signatures: ProfGamesRouter, all, save, uploadAsset, generateContent, getTestData
 const express = require('express');
 const router = express.Router();
 const { GameLevel, Chapter } = require('../models/prof.models');
@@ -25,15 +25,26 @@ router.get('/all', asyncHandler(async (req, res) => {
     res.json(await GameLevel.find({}).lean());
 }));
 
+// --- NOUVELLE ROUTE : RÉCUPÉRER LE JEU DE TEST ---
+router.get('/test-data', asyncHandler(async (req, res) => {
+    // On cherche le dernier jeu marqué comme test
+    const testGame = await GameLevel.findOne({ isTestGame: true }).sort({ updatedAt: -1 }).lean();
+    res.json(testGame || null);
+}));
+
 router.post('/', asyncHandler(async (req, res) => {
     const data = { ...req.body };
     const teacherId = data.teacherId;
 
     if (!data._id || data._id === "" || data._id === "null") delete data._id;
 
+    // Si on marque ce jeu comme test, on désactive le flag sur les autres (Un seul jeu test à la fois)
+    if (data.isTestGame) {
+        await GameLevel.updateMany({ _id: { $ne: data._id } }, { isTestGame: false });
+    }
+
     // --- SÉCURITÉ CHAPITRE : FALLBACK AGRESSIF ---
     if (!data.chapterId || !mongoose.Types.ObjectId.isValid(data.chapterId)) {
-        console.log("🛠️ [SAVE-JEU] Recalcul du dossier de secours...");
         let fallback = await Chapter.findOne({ teacherId, section: "GÉNÉRAL", title: "GÉNÉRAL" });
         if (!fallback && teacherId) {
             fallback = await Chapter.create({ title: "GÉNÉRAL", section: "GÉNÉRAL", teacherId });
@@ -73,9 +84,17 @@ router.post('/upload-asset', upload.single('file'), async (req, res) => {
 
 router.post('/generate-content', upload.single('file'), async (req, res) => {
     const { topic, count, contextText, sheetUrl } = req.body;
-    const system = `Tu es un expert pédagogique créateur de Quiz. Format Sortie JSON [ { "q": "...", "options": ["...",...], "a": 0 } ]`;
+    const targetCount = parseInt(count) || 5;
+
+    const system = `Tu es un expert pédagogique créateur de Quiz.
+    Règle d'or : Génère EXACTEMENT ${targetCount} questions. Ni plus, ni moins.
+    Chaque question doit avoir 4 options courtes.
+    Le champ 'a' est l'index de la bonne réponse (0, 1, 2 ou 3).
+    Format Sortie JSON STRICT (Array) : [ { "q": "...", "options": ["A", "B", "C", "D"], "a": 0 } ]`;
+    
     const promptParts = [];
-    if (topic) promptParts.push({ text: `Sujet : "${topic}".` });
+    if (topic) promptParts.push({ text: `Sujet du quiz : "${topic}".` });
+    
     try {
         if (req.file) {
             const fileData = fs.readFileSync(req.file.path).toString('base64');
@@ -86,6 +105,7 @@ router.post('/generate-content', upload.single('file'), async (req, res) => {
             const buffer = await streamToBuffer(stream);
             promptParts.push({ inlineData: { mimeType: 'image/jpeg', data: buffer.toString('base64') } });
         }
+        
         const raw = await ProfAI.ask(promptParts, system);
         res.json(ProfAI.sanitize(raw));
     } catch (e) { res.status(500).json({ error: "Erreur IA" }); }

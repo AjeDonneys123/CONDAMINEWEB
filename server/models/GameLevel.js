@@ -19,6 +19,13 @@ const LevelStructureSchema = new mongoose.Schema({
 
 const GameLevelSchema = new mongoose.Schema({
     title: { type: String, required: true },
+    
+    // AJOUT OFFICIEL DU CHAMP SUBJECT
+    subject: { type: String, default: "GÉNÉRAL" }, 
+
+    // NOUVEAU : FLAG TESTEUR
+    isTestGame: { type: Boolean, default: false },
+
     chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter' },
     teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher' },
     

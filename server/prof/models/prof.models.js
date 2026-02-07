@@ -54,10 +54,13 @@ const Models = {
         date: { type: Date, default: Date.now }
     }),
 
+    // --- CORRECTION V181 : AJOUT DE isTestGame ---
     GameLevel: getModel('GameLevel', {
         title: String, 
-        // AJOUT OFFICIEL DU CHAMP SUBJECT
         subject: { type: String, default: "GÉNÉRAL" }, 
+        
+        isTestGame: { type: Boolean, default: false }, // <--- LE CHAMP MANQUANT ÉTAIT ICI
+
         chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter' },
         teacherId: mongoose.Schema.Types.ObjectId, targetClassrooms: [String],
         questions: Array, levels: Array, assignedStudents: [mongoose.Schema.Types.ObjectId],

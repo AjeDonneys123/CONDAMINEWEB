@@ -4,52 +4,44 @@ const AIEngine = require('../../../core/ai.engine');
 const GameGeneratorAI = {
     
     generateGameCode: async (gameIdea, actors) => {
-        console.log("🕹️ [GAME-GEN] Création forcée...");
+        console.log("🕹️ [GAME-GEN] Création Native V420...");
 
         const actorsContext = actors.map((a) => `- ID: "${a.id}", Nom: "${a.name}"`).join('\n');
 
-        const system = `Tu es un développeur de jeux expert. Tu écris UNIQUEMENT une classe JavaScript nommée 'MiniGame'.
+        const system = `Tu es un développeur de jeux expert pour le moteur Condamine Engine V4.
         
-        CONTRAT TECHNIQUE INVIOLABLE :
-        1. Tu dois retourner un objet JSON : { "code": "...", "message": "..." }.
-        2. Le code DOIT contenir 'class MiniGame { ... }'.
-        3. Le constructeur DOIT être : 'constructor(canvas, assets) { ... }'.
-        4. La méthode 'start()' est OBLIGATORY. Elle lance la boucle de jeu.
-        5. La méthode 'destroy()' est OBLIGATORY. Elle nettoie les events et arrête le loop.
-        6. Utilise 'this.assets[ID_ACTEUR]' pour dessiner les personnages.
+        CONTRAT TECHNIQUE STRICT (ARCHITECTURE V420) :
+        1. Ta classe DOIT étendre 'MiniGameBase'.
+        2. Le constructeur DOIT appeler 'super(canvas, assets, callbacks)'.
+        3. NE JAMAIS ÉCRIRE DE MÉTHODE 'loop()'. C'est le moteur qui gère la boucle.
+        4. NE JAMAIS UTILISER 'requestAnimationFrame'.
+        5. Utilise 'update()' pour la logique (mouvements, collisions).
+        6. Utilise 'draw()' UNIQUEMENT pour le HUD (Score, Vies). NE DESSINE PAS LES ACTEURS (C'est automatique).
+        7. Les acteurs sont disponibles directement via 'this.NOM_ACTEUR' (ex: this.HEROS, this.ZOMBIE).
         
-        INTERDICTION :
-        - Ne dis jamais que l'erreur ne vient pas de toi.
-        - Si une méthode manque, RE-GÉNÈRE LA CLASSE COMPLÈTE avec la méthode manquante.
-        - Ne réponds jamais en anglais.
-
-        STRUCTURE REQUISE :
-        class MiniGame {
-            constructor(canvas, assets) {
-                this.canvas = canvas;
-                this.ctx = canvas.getContext('2d');
-                this.assets = assets;
-                this.keys = {};
-                this.running = false;
+        STRUCTURE OBLIGATOIRE :
+        class MiniGame extends MiniGameBase {
+            constructor(canvas, assets, callbacks) {
+                super(canvas, assets, callbacks);
+                this.score = 0;
             }
             start() { 
-                this.running = true;
-                window.addEventListener('keydown', e => this.keys[e.code] = true);
-                window.addEventListener('keyup', e => this.keys[e.code] = false);
-                this.loop();
+                // Initialisation (positions, écouteurs clavier)
+                // this.keys est déjà géré par le parent
             }
-            loop() {
-                if(!this.running) return;
-                this.update();
-                this.draw();
-                requestAnimationFrame(() => this.loop());
+            update() { 
+                // Logique par frame (ex: this.HEROS.x += 1)
             }
-            update() { /* Logique de saut, gravité, collisions */ }
-            draw() { /* Effacer le canvas et dessiner this.assets */ }
-            destroy() { this.running = false; }
-        }`;
+            draw() { 
+                // HUD uniquement (ex: this.ctx.fillText("Score", 10, 10))
+            }
+            onQuestion(q) { /* Réception question */ }
+            onResult(correct) { /* Réception résultat */ }
+        }
 
-        const prompt = `GÉNÈRE LE JEU : "${gameIdea}"\nACTEURS : ${actorsContext}`;
+        Réponds UNIQUEMENT un objet JSON : { "code": "...", "message": "..." }.`;
+
+        const prompt = `GÉNÈRE LE JEU : "${gameIdea}"\nACTEURS DISPONIBLES :\n${actorsContext}`;
 
         try {
             const raw = await AIEngine.ask(prompt, system);
@@ -58,23 +50,23 @@ const GameGeneratorAI = {
     },
 
     fixGameCode: async (currentCode, userInstruction, actors) => {
-        console.log("🔧 [GAME-FIX] Correction forcée...");
+        console.log("🔧 [GAME-FIX] Correction V420...");
 
         const actorsContext = actors.map((a) => `- ID: "${a.id}", Nom: "${a.name}"`).join('\n');
 
-        const system = `Tu es un expert JS Canvas. Tu dois CORRIGER la classe MiniGame fournie.
-        Si l'utilisateur rapporte que 'start is not a function', c'est que tu as oublié de l'écrire. INCLUS-LA.
+        const system = `Tu es un expert du moteur Condamine V4. Corrige le script.
         
-        RAPPEL DU CONTRAT :
-        - Classe MiniGame
-        - constructor(canvas, assets)
-        - start() <--- INDISPENSABLE
-        - loop(), update(), draw()
-        - destroy()
+        RÈGLES CRITIQUES :
+        - Vérifie que la classe étend bien 'MiniGameBase'.
+        - Vérifie que 'super()' est appelé dans le constructeur.
+        - Supprime toute méthode 'loop()' ou appel à 'requestAnimationFrame'.
+        - Déplace la logique de mouvement dans 'update()'.
+        - Déplace le dessin du HUD dans 'draw()'.
+        - Ne dessine jamais les acteurs manuellement (drawImage), le moteur le fait.
 
-        Réponds en JSON uniquement. Explique brièvement tes corrections dans 'message'.`;
+        Réponds en JSON : { "code": "...", "message": "Explication courte" }.`;
 
-        const prompt = `CODE ACTUEL :\n${currentCode}\n\nRETOUR ÉLÈVE/DÉFAUT : "${userInstruction}"\nACTEURS : ${actorsContext}`;
+        const prompt = `CODE ACTUEL :\n${currentCode}\n\nPROBLÈME : "${userInstruction}"\nACTEURS : ${actorsContext}`;
 
         try {
             const raw = await AIEngine.ask(prompt, system);

@@ -13,6 +13,227 @@ le modèle de sélectionest identique que celui de Homwork (Devoirs Maison)
 💻 CODE SOURCE - MODULE GAMES
 ================================================================================
 
+[[[£ FILE: client/src/features/eleve/games/GamePlayer.css £]]]
+.game-player-fullscreen {
+    position: fixed; inset: 0;
+    background: black; z-index: 10000;
+    display: flex; align-items: center; justify-content: center;
+}
+
+.game-canvas {
+    width: 100%; height: 100%;
+    object-fit: contain;
+}
+
+.game-hud-overlay {
+    position: absolute; top: 20px; left: 20px; right: 20px;
+    display: flex; justify-content: space-between;
+    pointer-events: none; /* Laisse passer les clics vers le canvas */
+}
+
+.hud-lives, .hud-score {
+    background: rgba(0,0,0,0.5); color: white;
+    padding: 10px 20px; border-radius: 20px;
+    font-family: 'JetBrains Mono', monospace; font-weight: 900;
+    border: 2px solid rgba(255,255,255,0.2);
+}
+
+.hud-quit-btn {
+    pointer-events: auto; /* Réactive le clic */
+    background: #ef4444; color: white;
+    border: none; padding: 10px 20px;
+    border-radius: 10px; font-weight: 900; cursor: pointer;
+}
+
+[[[£ END: client/src/features/eleve/games/GamePlayer.css £]]]
+
+[[[£ FILE: client/src/features/eleve/games/GamePlayer.jsx £]]]
+// @signatures: GamePlayer, handleGameMessage, initGame, nextRound
+import React, { useEffect, useRef, useState } from 'react';
+import './GamePlayer.css';
+
+/**
+ * 🎮 LECTEUR DE JEU UNIVERSEL
+ * Charge n'importe quel jeu du Studio et lui injecte les questions du Quiz.
+ */
+export default function GamePlayer({ user, gameData, onExit }) {
+    const canvasRef = useRef(null);
+    const gameInstance = useRef(null);
+    const [currentQIdx, setCurrentQIdx] = useState(0);
+    const [score, setScore] = useState(0);
+    const [lives, setLives] = useState(3);
+    const [gameOver, setGameOver] = useState(false);
+    
+    // Extraction des niveaux/questions
+    // On aplatit la structure pour avoir une liste simple de questions
+    const allQuestions = gameData.levels?.flatMap(l => l.questions) || [];
+
+    useEffect(() => {
+        if (canvasRef.current && !gameInstance.current) {
+            initGame();
+        }
+        return () => {
+            if (gameInstance.current && gameInstance.current.destroy) {
+                gameInstance.current.destroy();
+            }
+        };
+    }, []);
+
+    useEffect(() => {
+        // Si le jeu est prêt, on lance le round
+        if (gameInstance.current && !gameOver) {
+            const q = allQuestions[currentQIdx];
+            if (q) {
+                // 📡 ENVOI AU JEU : "Affiche cette question"
+                if (gameInstance.current.startRound) {
+                    gameInstance.current.startRound(q.q, q.options);
+                }
+            } else {
+                // Plus de questions = VICTOIRE
+                handleWin();
+            }
+        }
+    }, [currentQIdx, gameOver]);
+
+    const initGame = async () => {
+        try {
+            // 1. Préparation des Assets
+            const assets = {};
+            const scene = gameData.scenes?.[0]; // On prend la scène principale
+            if (scene) {
+                const resources = (scene.actors || []).flatMap(a => 
+                    (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))
+                ).concat((scene.backdrops || []).map(b => b.url));
+
+                await Promise.all([...new Set(resources)].filter(Boolean).map(url => new Promise(resolve => {
+                    const img = new Image();
+                    img.crossOrigin = "anonymous";
+                    img.src = url.startsWith('/api/proxy') ? url : `/api/proxy/${url.split('/').pop()}`;
+                    img.onload = () => { assets[url] = img; resolve(); };
+                    img.onerror = resolve;
+                })));
+            }
+
+            // 2. Injection du Code Studio
+            const code = gameData.generatedCode;
+            
+            // On encapsule le code dans une factory
+            const GameClass = new Function('canvas', 'assets', 'callbacks', `
+                ${code}
+                return MiniGame;
+            `);
+
+            // 3. Définition des Callbacks (Le Jeu parle à React)
+            const callbacks = {
+                submitAnswer: (index) => handleAnswer(index),
+                playerDied: () => handleLifeLost(),
+                playSound: (name) => console.log("🎵 Sound:", name)
+            };
+
+            // 4. Instanciation
+            gameInstance.current = new GameClass(canvasRef.current, assets, callbacks);
+            
+            // 5. Démarrage
+            if (gameInstance.current.start) gameInstance.current.start();
+            
+            // Premier round
+            const firstQ = allQuestions[0];
+            if (firstQ && gameInstance.current.startRound) {
+                gameInstance.current.startRound(firstQ.q, firstQ.options);
+            }
+
+        } catch (e) {
+            console.error("❌ Erreur démarrage jeu :", e);
+            alert("Ce jeu contient une erreur de code. Retour au menu.");
+            onExit();
+        }
+    };
+
+    // --- LOGIQUE MÉTIER (L'ARBITRE) ---
+
+    const handleAnswer = (selectedIndex) => {
+        if (gameOver) return;
+        
+        const correctIndex = allQuestions[currentQIdx].a;
+        const isCorrect = parseInt(selectedIndex) === parseInt(correctIndex);
+
+        // 📡 ENVOI AU JEU : "C'est juste/faux"
+        if (gameInstance.current.showResult) {
+            gameInstance.current.showResult(isCorrect);
+        }
+
+        if (isCorrect) {
+            setScore(s => s + 100);
+            setTimeout(() => {
+                if (currentQIdx + 1 < allQuestions.length) {
+                    setCurrentQIdx(prev => prev + 1);
+                } else {
+                    handleWin();
+                }
+            }, 1000); // Petit délai pour voir l'anim de réussite
+        } else {
+            handleLifeLost();
+        }
+    };
+
+    const handleLifeLost = () => {
+        const newLives = lives - 1;
+        setLives(newLives);
+        
+        // 📡 ENVOI AU JEU : "Mets à jour le HUD"
+        if (gameInstance.current.updateHUD) {
+            gameInstance.current.updateHUD(newLives, score);
+        }
+
+        if (newLives <= 0) {
+            setGameOver(true);
+            saveResult(0); // Échec
+        } else {
+            // On reste sur la même question ou on passe ?
+            // Choix pédagogique : On laisse la question pour qu'il réessaie ou on passe.
+            // Ici : On réessaie la même.
+        }
+    };
+
+    const handleWin = () => {
+        setGameOver(true);
+        saveResult(1); // Succès
+        alert(`VICTOIRE ! Score: ${score}`);
+        onExit();
+    };
+
+    const saveResult = async (successLvl) => {
+        // Sauvegarde BDD
+        await fetch('/api/eleve/games/score', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ 
+                studentId: user._id || user.id, 
+                gameId: gameData._id, 
+                score: score,
+                levelReached: successLvl 
+            })
+        });
+        if(successLvl === 0) alert("GAME OVER...");
+        onExit();
+    };
+
+    return (
+        <div className="game-player-fullscreen">
+            <canvas ref={canvasRef} width={window.innerWidth} height={window.innerHeight} className="game-canvas" />
+            
+            {/* UI DE SECOURS (Si le jeu ne gère pas l'affichage) */}
+            <div className="game-hud-overlay">
+                <div className="hud-lives">❤️ {lives}</div>
+                <div className="hud-score">🏆 {score}</div>
+                <button onClick={onExit} className="hud-quit-btn">QUITTER</button>
+            </div>
+        </div>
+    );
+}
+
+[[[£ END: client/src/features/eleve/games/GamePlayer.jsx £]]]
+
 [[[£ FILE: client/src/features/eleve/games/GamesGrid.css £]]]
 .game-selector-overlay { position: fixed; inset: 0; z-index: 9999; background: rgba(253, 242, 248, 0.95); display: flex; align-items: center; justify-content: center; }
 .selector-card { background: white; padding: 3rem; border-radius: 60px; text-align: center; border: 8px solid #fbcfe8; }
@@ -1046,8 +1267,15 @@ export function initZombieGame(root, api, onExit) {
 /* HEADER */
 .v84-game-container { position: fixed; inset: 0; background: #f8fafc; z-index: 9500; display: flex; flex-direction: column; font-family: 'Inter', sans-serif; }
 .v84-game-header { height: 90px; background: white; border-bottom: 2px solid #f1f5f9; display: flex; align-items: center; padding: 0 40px; justify-content: space-between; }
-.v84-game-icon { font-size: 2rem; background: #9333ea; color: white; padding: 10px; border-radius: 18px; }
-.v84-game-title-input { border: none; font-size: 1.8rem; font-weight: 950; color: #0f172a; outline: none; width: 100%; text-transform: uppercase; margin-left: 20px; }
+.v84-game-icon { font-size: 2rem; background: #9333ea; color: white; padding: 10px; border-radius: 18px; flex-shrink: 0; }
+
+/* FIX VISIBILITÉ BOUTON : FLEX 1 AU LIEU DE WIDTH 100% */
+.v84-game-title-input { 
+    border: none; font-size: 1.8rem; font-weight: 950; 
+    color: #0f172a; outline: none; flex: 1; 
+    text-transform: uppercase; margin-left: 20px; background: transparent;
+    min-width: 200px;
+}
 
 .v84-game-body { flex: 1; display: flex; overflow: hidden; }
 
@@ -1063,9 +1291,19 @@ export function initZombieGame(root, api, onExit) {
 .v84-q-item.active { background: #f3e8ff; border-left: 4px solid #a855f7; }
 .v84-q-checkbox { width: 16px; height: 16px; cursor: pointer; accent-color: #7c3aed; border: 2px solid #cbd5e1; border-radius: 4px; }
 .v84-q-preview { font-weight: 800; font-size: 10px; color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; padding-right: 25px; }
-.v84-del-btn { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 20px; height: 20px; border-radius: 50%; background: #fee2e2; color: #ef4444; border: 1px solid #fecaca; font-weight: 900; font-size: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; opacity: 0.6; transition: all 0.2s; }
+
+.v84-del-btn { 
+    position: absolute; right: 8px; top: 50%; transform: translateY(-50%); 
+    width: 20px; height: 20px; border-radius: 50%; 
+    background: #fee2e2; color: #ef4444; border: 1px solid #fecaca; 
+    font-weight: 900; font-size: 10px; cursor: pointer; 
+    display: flex; align-items: center; justify-content: center; 
+    opacity: 0.6; transition: all 0.2s; 
+    z-index: 20;
+}
 .v84-q-item:hover .v84-del-btn, .v84-level-header:hover .v84-del-btn { opacity: 1; }
 .v84-del-btn:hover { background: #ef4444; color: white; transform: translateY(-50%) scale(1.1); }
+
 .v84-add-q-btn { width: 100%; padding: 8px; font-size: 9px; font-weight: 900; color: #94a3b8; background: #f8fafc; border: none; border-top: 1px dashed #e2e8f0; cursor: pointer; text-transform: uppercase; }
 .v84-add-q-btn:hover { color: #7c3aed; background: #f5f3ff; }
 .v84-add-level-btn { width: 100%; padding: 15px; background: #1e293b; color: white; border-radius: 15px; font-weight: 900; font-size: 10px; border: none; cursor: pointer; text-transform: uppercase; }
@@ -1137,26 +1375,57 @@ export function initZombieGame(root, api, onExit) {
 .v84-game-publish-btn { width: 100%; padding: 20px; background: #9333ea; color: white; font-weight: 950; border-radius: 20px; border: none; margin-top: 20px; font-size: 12px; cursor: pointer; box-shadow: 0 10px 30px rgba(147, 51, 234, 0.3); transition: transform 0.1s; }
 .v84-game-publish-btn:hover { transform: translateY(-2px); }
 
+/* --- MODALE PRÉVISUALISATION --- */
+.v84-preview-overlay {
+    position: fixed; inset: 0; z-index: 20000;
+    background: rgba(15, 23, 42, 0.9);
+    display: flex; align-items: center; justify-content: center;
+    backdrop-filter: blur(5px); animation: fadeIn 0.2s ease-out;
+}
+.v84-preview-content {
+    background: transparent; max-width: 90vw; max-height: 90vh;
+    position: relative; display: flex; align-items: center; justify-content: center;
+}
+.v84-preview-img {
+    max-width: 100%; max-height: 90vh;
+    border-radius: 15px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+    border: 4px solid white;
+}
+.v84-preview-close {
+    position: absolute; top: -20px; right: -20px;
+    background: #ef4444; color: white; border: 4px solid white;
+    width: 50px; height: 50px; border-radius: 50%;
+    font-size: 1.5rem; font-weight: 900; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 10px 15px rgba(0,0,0,0.2);
+    transition: transform 0.2s;
+}
+.v84-preview-close:hover { transform: scale(1.1); background: #dc2626; }
+
 [[[£ END: client/src/features/prof/games/GameStudio.css £]]]
 
 [[[£ FILE: client/src/features/prof/games/GameStudio.jsx £]]]
-// @signatures: GameStudio, handleAddLevel, handleAddQuestion, handleDeleteLevel, handleDeleteQuestion, handleGenerateAI, handleInput, handleSave, loadData, updateQuestion, getAvailableChapters, findBestDefaultChapter
+// @signatures: GameStudio, handleAddLevel, handleAddQuestion, handleDeleteLevel, handleDeleteQuestion, handleGenerateAI, handleInput, handleSave, loadData, updateQuestion, getAvailableChapters, findBestDefaultChapter, handleUploadAsset
 import React, { useState, useEffect, useRef } from 'react';
 import './GameStudio.css';
 import { api } from '../../../services/api';
 import StudioDistributionSidebar from '../components/StudioDistributionSidebar';
 
 const DEFAULT_QUIZ_DATA = { 
-    title: '', chapterId: '', teacherId: null, 
+    title: '', chapterId: '', teacherId: null, subject: "GÉNÉRAL",
     targetClassrooms: [], assignedStudents: [], isAllClass: true, 
+    isTestGame: false, // NOUVEAU CHAMP
+    globalIntro: { sheetUrl: "", videoUrl: "" },
     levels: [ { name: "Niveau 1", intro: { sheetUrl: "", videoUrl: "" }, questions: [{ q: 'Nouvelle question', options: ['', '', '', ''], a: 0 }] } ]
 };
 
 export default function GameStudio({ initialData, chapters, globalClass, globalLevel, user, targetSection, onClose }) {
     
-    const getAvailableChapters = (clsName, allClassesList) => {
+    const [previewAsset, setPreviewAsset] = useState(null);
+
+    const getAvailableChapters = (clsName, allClassesList, currentSec) => {
         const safeChapters = Array.isArray(chapters) ? chapters : [];
-        const cleanSection = (targetSection || "GÉNÉRAL").toUpperCase().trim();
+        const cleanSection = (currentSec || "GÉNÉRAL").toUpperCase().trim();
         const clsObj = (allClassesList || []).find(c => c.name === clsName);
         return safeChapters.filter(c => {
             if (c.isArchived) return false;
@@ -1168,20 +1437,20 @@ export default function GameStudio({ initialData, chapters, globalClass, globalL
         }).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
     };
 
-    const findBestDefaultChapter = (clsName, allClassesList) => {
-        const av = getAvailableChapters(clsName, allClassesList);
+    const findBestDefaultChapter = (clsName, allClassesList, currentSec) => {
+        const av = getAvailableChapters(clsName, allClassesList, currentSec);
         return av.length > 0 ? av[0]._id : "";
     };
 
     const initData = () => {
         let base = initialData ? JSON.parse(JSON.stringify(initialData)) : { ...DEFAULT_QUIZ_DATA };
-        if (base.questions && base.questions.length > 0 && (!base.levels || base.levels.length === 0)) {
-            base.levels = [{ name: "Niveau 1", questions: base.questions, intro: {} }];
-            delete base.questions;
-        } else if (!base.levels || base.levels.length === 0) {
+        if (!base.globalIntro) base.globalIntro = { sheetUrl: "", videoUrl: "" };
+        if (!base.levels || base.levels.length === 0) {
             base.levels = [{ name: "Niveau 1", questions: [{ q: 'Nouvelle question', options: ['', '', '', ''], a: 0 }], intro: {} }];
         }
         base.teacherId = user.id || user._id;
+        if (!base.subject) base.subject = targetSection || "GÉNÉRAL";
+        if (base.isTestGame === undefined) base.isTestGame = false;
         return base;
     };
 
@@ -1190,88 +1459,245 @@ export default function GameStudio({ initialData, chapters, globalClass, globalL
     const [activeQIdx, setActiveQIdx] = useState(0);
     const [allStudents, setAllStudents] = useState([]);
     const [allClasses, setAllClasses] = useState([]);
+    const [teacherSections, setTeacherSections] = useState([]); 
     const [distribution, setDistribution] = useState({});
     const [viewingClass, setViewingClass] = useState(globalClass || "");
     const [studentSearch, setStudentSearch] = useState(""); 
     const [loading, setLoading] = useState(false);
+    
     const [aiTopic, setAiTopic] = useState('');
-    const [aiCount, setAiCount] = useState(5);
+    const [aiCount, setAiCount] = useState(5); 
     const [aiGenerating, setAiGenerating] = useState(false);
+    
     const assetInputRef = useRef(null);
-    const [uploadTarget, setUploadTarget] = useState(null);
+    const [uploadTarget, setUploadTarget] = useState(null); 
 
     const loadData = async () => {
         setLoading(true);
         try {
-            const [sts, cls] = await Promise.all([ api.get('/admin/students'), api.get('/admin/classrooms') ]);
+            const encodedClass = encodeURIComponent(globalClass || "");
+            const uid = user.id || user._id;
+
+            const [sts, cls, sections] = await Promise.all([ 
+                api.get('/admin/students'), 
+                api.get('/admin/classrooms'),
+                api.get(`/structure/sections/${uid}?classContext=${encodedClass}`)
+            ]);
+
             setAllStudents(sts || []); setAllClasses(cls || []); 
+            
+            let secs = (Array.isArray(sections) ? sections : []).filter(s => s.name !== "GÉNÉRAL");
+            secs.unshift({ name: "GÉNÉRAL", color: "#64748b" });
+            setTeacherSections(secs);
+
             if (formData) {
                 const newDist = {};
-                const currentTargets = formData.targetClassrooms || [globalClass];
-                currentTargets.forEach(clsName => {
+                const targets = formData.targetClassrooms && formData.targetClassrooms.length > 0 ? formData.targetClassrooms : [globalClass];
+                const currentSubject = formData.subject || "GÉNÉRAL";
+
+                targets.forEach(clsName => {
+                    if(!clsName) return;
                     const clsObj = (cls || []).find(c => c.name === clsName);
                     const ids = (sts || []).filter(s => {
                         const isM = (s.currentClass||"").trim().toUpperCase() === clsName.toUpperCase();
                         const isO = clsObj && (s.assignedGroups||[]).some(gId => String(gId) === String(clsObj._id));
                         return (isM || isO) && (formData.assignedStudents||[]).includes(String(s._id));
                     }).map(s => String(s._id));
-                    newDist[clsName] = { chapterId: formData.chapterId || findBestDefaultChapter(clsName, cls), studentIds: ids };
+                    
+                    newDist[clsName] = { 
+                        chapterId: formData.chapterId || findBestDefaultChapter(clsName, cls, currentSubject), 
+                        studentIds: ids 
+                    };
                 });
                 setDistribution(newDist);
             }
-        } catch(e) {}
+        } catch(e) { console.error("GameStudio Load Error", e); }
         setLoading(false);
     };
 
     useEffect(() => { loadData(); }, []);
 
-    const handleInput = (field, value) => setFormData(p => ({ ...p, [field]: value }));
-    const handleAddLevel = () => { setFormData(p => ({ ...p, levels: [...p.levels, { name: `Niveau ${p.levels.length + 1}`, questions: [{ q: '', options: ['', '', '', ''], a: 0 }], intro: { sheetUrl: "", videoUrl: "" } }] })); setActiveLevelIdx(formData.levels.length); setActiveQIdx(0); };
-    const handleDeleteLevel = (e, lIdx) => { e.stopPropagation(); if(!confirm("Supprimer ce niveau ?")) return; setFormData(p => { let newLevels = p.levels.filter((_, i) => i !== lIdx); if (newLevels.length === 0) newLevels = [{ name: "Niveau 1", questions: [{q:'', options:['','','',''], a:0}], intro: {} }]; return { ...p, levels: newLevels }; }); setActiveLevelIdx(0); setActiveQIdx(0); };
-    const handleAddQuestion = () => { setFormData(p => { const newLevels = [...p.levels]; newLevels[activeLevelIdx].questions.push({ q: '', options: ['', '', '', ''], a: 0 }); return { ...p, levels: newLevels }; }); setTimeout(() => setActiveQIdx(formData.levels[activeLevelIdx].questions.length - 1), 0); };
-    const handleDeleteQuestion = (e, lIdx, qIdx) => { e.stopPropagation(); if(!confirm("Supprimer ?")) return; setFormData(p => { const newLevels = [...p.levels]; newLevels[lIdx].questions = newLevels[lIdx].questions.filter((_, i) => i !== qIdx); return { ...p, levels: newLevels }; }); if(activeQIdx >= qIdx) setActiveQIdx(Math.max(0, activeQIdx - 1)); };
-    const updateQuestion = (field, value, optionIndex = null) => { setFormData(p => { const newLevels = [...p.levels]; const currentQ = { ...newLevels[activeLevelIdx].questions[activeQIdx] }; if (field === 'q' || field === 'a') currentQ[field] = value; else if (field === 'options') { currentQ.options[optionIndex] = value; } newLevels[activeLevelIdx].questions[activeQIdx] = currentQ; return { ...p, levels: newLevels }; }); };
+    const handleInput = (field, value) => {
+        setFormData(p => ({ ...p, [field]: value }));
+        if (field === 'subject') {
+            const newSubject = value;
+            setDistribution(prev => {
+                const next = { ...prev };
+                Object.keys(next).forEach(clsName => {
+                    next[clsName].chapterId = findBestDefaultChapter(clsName, allClasses, newSubject);
+                });
+                return next;
+            });
+        }
+    };
+
+    const handleAddLevel = () => { 
+        setFormData(p => ({ 
+            ...p, 
+            levels: [...p.levels, { name: `Niveau ${p.levels.length + 1}`, questions: [{ q: 'Nouvelle question', options: ['', '', '', ''], a: 0 }], intro: { sheetUrl: "", videoUrl: "" } }] 
+        })); 
+        setActiveLevelIdx(formData.levels.length); 
+        setActiveQIdx(0); 
+    };
+
+    const handleDeleteLevel = (e, lIdx) => { 
+        e.preventDefault(); e.stopPropagation(); 
+        if(!confirm("Supprimer ce niveau ?")) return; 
+        setFormData(p => { 
+            let newLevels = p.levels.filter((_, i) => i !== lIdx); 
+            if (newLevels.length === 0) {
+                newLevels = [{ name: "Niveau 1", questions: [{q:'', options:['','','',''], a:0}], intro: {} }]; 
+            }
+            return { ...p, levels: newLevels }; 
+        }); 
+        setActiveLevelIdx(0); 
+        setActiveQIdx(0); 
+    };
+
+    const handleAddQuestion = () => { 
+        setFormData(p => { 
+            const newLevels = p.levels.map((lvl, i) => {
+                if (i !== activeLevelIdx) return lvl;
+                return { ...lvl, questions: [...lvl.questions, { q: 'Nouvelle question', options: ['', '', '', ''], a: 0 }] };
+            });
+            return { ...p, levels: newLevels }; 
+        });
+        setTimeout(() => setActiveQIdx(formData.levels[activeLevelIdx].questions.length), 0); 
+    };
+
+    const handleDeleteQuestion = (e, lIdx, qIdx) => { 
+        e.preventDefault(); e.stopPropagation(); 
+        if(!confirm("Supprimer cette question ?")) return; 
+        setFormData(p => { 
+            const newLevels = [...p.levels];
+            const targetLevel = { ...newLevels[lIdx] };
+            targetLevel.questions = targetLevel.questions.filter((_, i) => i !== qIdx);
+            newLevels[lIdx] = targetLevel;
+            return { ...p, levels: newLevels }; 
+        }); 
+        if(activeQIdx >= qIdx) setActiveQIdx(prev => Math.max(0, prev - 1));
+    };
+
+    const updateQuestion = (field, value, optionIndex = null) => { 
+        setFormData(p => { 
+            return {
+                ...p,
+                levels: p.levels.map((lvl, lI) => {
+                    if (lI !== activeLevelIdx) return lvl;
+                    return {
+                        ...lvl,
+                        questions: lvl.questions.map((q, qI) => {
+                            if (qI !== activeQIdx) return q;
+                            const newQ = { ...q };
+                            if (field === 'q' || field === 'a') newQ[field] = value;
+                            else if (field === 'options') {
+                                const newOpts = [...newQ.options];
+                                newOpts[optionIndex] = value;
+                                newQ.options = newOpts;
+                            }
+                            return newQ;
+                        })
+                    };
+                })
+            };
+        }); 
+    };
 
     const handleGenerateAI = async (mode = 'manual') => {
         const currentLevel = formData.levels[activeLevelIdx]; if (!currentLevel) return;
         setAiGenerating(true);
         try {
             const fd = new FormData();
-            if (mode === 'sheet') { const sheetUrl = currentLevel.intro?.sheetUrl; if (!sheetUrl) return alert("Pas de fiche !"); fd.append('sheetUrl', sheetUrl); } 
-            else { if (!aiTopic.trim()) { setAiGenerating(false); return alert("Sujet requis !"); } fd.append('topic', aiTopic); }
-            fd.append('count', aiCount);
+            if (mode === 'sheet') { 
+                const sheetUrl = currentLevel.intro?.sheetUrl || formData.globalIntro?.sheetUrl;
+                if (!sheetUrl) return alert("Aucune fiche (Globale ou Niveau) trouvée !"); 
+                fd.append('sheetUrl', sheetUrl); 
+            } 
+            else { 
+                if (!aiTopic.trim()) { setAiGenerating(false); return alert("Sujet requis !"); } 
+                fd.append('topic', aiTopic); 
+            }
+            const desiredCount = parseInt(aiCount) || 5;
+            fd.append('count', desiredCount);
+            
             const res = await fetch('/api/games/generate-content', { method: 'POST', body: fd });
             const cleaned = await res.json();
+            
             if (Array.isArray(cleaned) && cleaned.length > 0) {
-                setFormData(p => { const newLevels = [...p.levels]; if (newLevels[activeLevelIdx].questions.length === 1 && !newLevels[activeLevelIdx].questions[0].q.trim()) { newLevels[activeLevelIdx].questions = cleaned; } else { newLevels[activeLevelIdx].questions = [...newLevels[activeLevelIdx].questions, ...cleaned]; } return { ...p, levels: newLevels }; });
-                setAiTopic(""); setActiveQIdx(0);
+                const keptQuestions = cleaned.slice(0, desiredCount);
+                setFormData(p => { 
+                    const newLevels = p.levels.map((lvl, idx) => {
+                        if (idx !== activeLevelIdx) return lvl;
+                        const updatedLevel = { ...lvl };
+                        const isInitialEmpty = updatedLevel.questions.length === 1 && !updatedLevel.questions[0].q.trim();
+                        if (isInitialEmpty) updatedLevel.questions = keptQuestions;
+                        else updatedLevel.questions = [...updatedLevel.questions, ...keptQuestions];
+                        return updatedLevel;
+                    });
+                    return { ...p, levels: newLevels }; 
+                });
+                setAiTopic(""); 
+                setActiveQIdx(0);
             }
         } catch(e) { alert("Erreur IA"); } finally { setAiGenerating(false); }
     };
 
+    const handleUploadAsset = async (e) => { 
+        const file = e.target.files[0]; if (!file || uploadTarget === null) return; 
+        setLoading(true); 
+        const fd = new FormData(); fd.append('file', file); 
+        try { 
+            const res = await fetch('/api/games/upload-asset', { method: 'POST', body: fd }); 
+            const data = await res.json(); 
+            if (data.url) { 
+                setFormData(prev => { 
+                    const next = { ...prev }; 
+                    if (uploadTarget === 'GLOBAL') next.globalIntro = { ...next.globalIntro, sheetUrl: data.url };
+                    else next.levels[uploadTarget].intro = { ...next.levels[uploadTarget].intro, sheetUrl: data.url }; 
+                    return next; 
+                }); 
+            } 
+        } catch(err) { alert("Erreur upload"); } 
+        setLoading(false); 
+        e.target.value = null; 
+    };
+
     const handleSave = async () => {
-        const targets = Object.keys(distribution); if (!formData.title || targets.length === 0) return alert("❌ Titre et Classe requis !");
+        const targets = Object.keys(distribution); 
+        if (!formData.title || targets.length === 0) return alert("❌ Titre et Classe requis !");
         setLoading(true);
         try {
             const originalId = initialData?._id;
+            const originalClass = initialData?.targetClassrooms?.[0];
             let idUsed = false;
 
-            for (let i = 0; i < targets.length; i++) {
-                const clsName = targets[i];
+            const cleanedLevels = formData.levels.map(lvl => ({
+                ...lvl,
+                questions: lvl.questions.filter(q => {
+                    const isDefault = q.q === 'Nouvelle question' && q.options.every(o => !o || o.trim() === '');
+                    const isEmpty = !q.q || !q.q.trim();
+                    return !isDefault && !isEmpty;
+                })
+            }));
+
+            for (const clsName of targets) {
                 const cfg = distribution[clsName];
-                const { actType, typeLabel, date, __v, createdAt, updatedAt, chapterId, targetClassrooms, assignedStudents, isAllClass, teacherId, ...contentData } = formData;
+                const { actType, typeLabel, date, __v, createdAt, updatedAt, chapterId, targetClassrooms, assignedStudents, isAllClass, teacherId, levels, ...contentData } = formData;
 
                 const payload = { 
                     ...contentData, 
-                    chapterId: cfg.chapterId || findBestDefaultChapter(clsName, allClasses), 
+                    levels: cleanedLevels, 
+                    chapterId: cfg.chapterId || findBestDefaultChapter(clsName, allClasses, formData.subject), 
                     targetClassrooms: [clsName], 
                     assignedStudents: cfg.studentIds, 
                     isAllClass: cfg.studentIds.length === 0, 
                     teacherId: user.id || user._id, 
-                    type: 'zombie' 
+                    type: 'zombie',
+                    subject: formData.subject || "GÉNÉRAL",
+                    isTestGame: formData.isTestGame 
                 };
 
-                if (originalId && !idUsed) {
+                if (originalId && clsName === originalClass && !idUsed) {
                     payload._id = originalId; idUsed = true;
                 } else {
                     delete payload._id;
@@ -1282,8 +1708,6 @@ export default function GameStudio({ initialData, chapters, globalClass, globalL
         } catch(e) { alert("Erreur sauvegarde."); } setLoading(false);
     };
 
-    const handleUploadAsset = async (e) => { const file = e.target.files[0]; if (!file || uploadTarget === null) return; setLoading(true); const fd = new FormData(); fd.append('file', file); try { const res = await fetch('/api/games/upload-asset', { method: 'POST', body: fd }); const data = await res.json(); if (data.url) { setFormData(prev => { const next = { ...prev }; if (uploadTarget === -1) next.globalIntro = { ...next.globalIntro, sheetUrl: data.url }; else next.levels[uploadTarget].intro = { ...next.levels[uploadTarget].intro, sheetUrl: data.url }; return next; }); } } catch(err) { alert("Erreur upload"); } setLoading(false); e.target.value = null; };
-
     const currentLevelData = formData.levels[activeLevelIdx];
     const currentQ = currentLevelData?.questions[activeQIdx];
 
@@ -1291,8 +1715,13 @@ export default function GameStudio({ initialData, chapters, globalClass, globalL
         <div className="v84-game-container">
             <input type="file" ref={assetInputRef} className="hidden" onChange={handleUploadAsset} />
             <div className="v84-game-header">
-                <div className="flex items-center gap-4"><span className="v84-game-icon">🎮</span><input className="v84-game-title-input" value={formData.title} onChange={e => handleInput('title', e.target.value)} placeholder="TITRE DU QUIZ..." /></div>
-                <button onClick={onClose} className="v84-close-btn">✕</button>
+                <div className="flex items-center gap-4 flex-1">
+                    <span className="v84-game-icon">🎮</span>
+                    <input className="v84-game-title-input" value={formData.title} onChange={e => handleInput('title', e.target.value)} placeholder="TITRE DU QUIZ..." />
+                    
+                    {/* BOUTON TESTEUR SUPPRIMÉ COMME DEMANDÉ */}
+                </div>
+                <button onClick={onClose} className="v84-close-btn ml-4">✕</button>
             </div>
             <div className="v84-game-body">
                 <div className="v84-q-list-sidebar custom-scrollbar">
@@ -1319,22 +1748,62 @@ export default function GameStudio({ initialData, chapters, globalClass, globalL
                 </div>
                 
                 <div className="v84-game-editor custom-scrollbar">
+                    <div className="v84-resources-global">
+                        <div className="v84-res-title global"><span>🌍</span> RESSOURCES GLOBALES (JEU ENTIER)</div>
+                        <div className="v84-res-row">
+                            {formData.globalIntro?.sheetUrl ? 
+                                <div className="v84-res-badge" onClick={() => setPreviewAsset(formData.globalIntro.sheetUrl)}>
+                                    📄 FICHE PRÊTE 
+                                    <span className="v84-res-remove" onClick={(e) => { e.stopPropagation(); handleInput('globalIntro', { ...formData.globalIntro, sheetUrl: "" }); }}>✕</span>
+                                </div> 
+                                : <button className="v84-res-btn upload" onClick={() => { setUploadTarget('GLOBAL'); assetInputRef.current.click(); }}>📤 FICHE GLOBALE</button>
+                            }
+                            <input className="v84-res-input" placeholder="Lien Vidéo Global..." value={formData.globalIntro?.videoUrl || ""} onChange={e => handleInput('globalIntro', { ...formData.globalIntro, videoUrl: e.target.value })} />
+                        </div>
+                    </div>
+
                     {currentLevelData ? (
                         <>
                             <div className="v84-resources-level">
                                 <div className="v84-res-title local"><span>📍</span> RESSOURCES {currentLevelData.name}</div>
                                 <div className="v84-res-row">
-                                    {currentLevelData.intro?.sheetUrl ? <div className="v84-res-badge">📄 FICHE PRÊTE <span className="v84-res-remove" onClick={() => handleInput('levels', formData.levels.map((l,i)=>i===activeLevelIdx?{...l, intro:{...l.intro, sheetUrl:""}}:l))}>✕</span></div> : <button className="v84-res-btn upload" onClick={() => { setUploadTarget(activeLevelIdx); assetInputRef.current.click(); }}>📤 FICHE NIVEAU</button>}
-                                    <input className="v84-res-input" placeholder="Lien Vidéo..." value={currentLevelData.intro?.videoUrl || ""} onChange={e => handleInput('levels', formData.levels.map((l,i)=>i===activeLevelIdx?{...l, intro:{...l.intro, videoUrl:e.target.value}}:l))} />
+                                    {currentLevelData.intro?.sheetUrl ? 
+                                        <div className="v84-res-badge" onClick={() => setPreviewAsset(currentLevelData.intro.sheetUrl)}>
+                                            📄 FICHE NIVEAU 
+                                            <span className="v84-res-remove" onClick={(e) => { e.stopPropagation(); handleInput('levels', formData.levels.map((l,i)=>i===activeLevelIdx?{...l, intro:{...l.intro, sheetUrl:""}}:l)); }}>✕</span>
+                                        </div> 
+                                        : <button className="v84-res-btn upload" onClick={() => { setUploadTarget(activeLevelIdx); assetInputRef.current.click(); }}>📤 FICHE NIVEAU</button>
+                                    }
+                                    <input className="v84-res-input" placeholder="Lien Vidéo Niveau..." value={currentLevelData.intro?.videoUrl || ""} onChange={e => handleInput('levels', formData.levels.map((l,i)=>i===activeLevelIdx?{...l, intro:{...l.intro, videoUrl:e.target.value}}:l))} />
                                 </div>
                             </div>
+                            
+                            {/* CASE TEST : ICI DANS LE DIV CENTRAL (COMME DEMANDÉ) */}
+                            <div className="mb-4 flex items-center gap-2 p-3 bg-indigo-50 border border-indigo-100 rounded-2xl cursor-pointer" onClick={() => handleInput('isTestGame', !formData.isTestGame)}>
+                                <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${formData.isTestGame ? 'bg-indigo-600 border-indigo-600' : 'bg-white border-indigo-200'}`}>
+                                    {formData.isTestGame && <span className="text-white text-xs font-black">✓</span>}
+                                </div>
+                                <span className={`text-xs font-black uppercase ${formData.isTestGame ? 'text-indigo-600' : 'text-slate-400'}`}>🧪 DÉFINIR COMME JEU DE TEST (DONNÉES POUR STUDIO)</span>
+                            </div>
+
                             <div className="v84-ai-widget">
-                                <div className="v84-ai-row"><span className="text-2xl">🤖</span><input type="number" className="v84-ai-count-input" value={aiCount} onChange={e => setAiCount(Math.max(1, Math.min(20, parseInt(e.target.value) || 1)))} /><input className="v84-ai-input" placeholder="Sujet du quiz..." value={aiTopic} onChange={e => setAiTopic(e.target.value)} disabled={aiGenerating} /></div>
+                                <div className="v84-ai-row">
+                                    <span className="text-2xl">🤖</span>
+                                    <input type="number" className="v84-ai-count-input" value={aiCount} onChange={e => setAiCount(Math.max(1, Math.min(20, parseInt(e.target.value) || 1)))} />
+                                    <input className="v84-ai-input" placeholder="Sujet du quiz..." value={aiTopic} onChange={e => setAiTopic(e.target.value)} disabled={aiGenerating} />
+                                </div>
                                 <div className="flex gap-2">
-                                    {currentLevelData.intro?.sheetUrl && <button className="v84-gen-btn !bg-emerald-600" onClick={() => handleGenerateAI('sheet')} disabled={aiGenerating}>{aiGenerating ? 'ANALYSE...' : `📄 GÉNÉRER ${aiCount} QUESTIONS VIA LA FICHE`}</button>}
-                                    <button className="v84-gen-btn" onClick={() => handleGenerateAI('manual')} disabled={aiGenerating || !aiTopic.trim()}>{aiGenerating ? 'CRÉATION...' : `✨ GÉNÉRER ${aiCount} QUESTIONS VIA LE SUJET`}</button>
+                                    {(currentLevelData.intro?.sheetUrl || formData.globalIntro?.sheetUrl) && 
+                                        <button className="v84-gen-btn !bg-emerald-600" onClick={() => handleGenerateAI('sheet')} disabled={aiGenerating}>
+                                            {aiGenerating ? 'ANALYSE...' : `📄 GÉNÉRER ${aiCount} QUESTIONS VIA LA FICHE`}
+                                        </button>
+                                    }
+                                    <button className="v84-gen-btn" onClick={() => handleGenerateAI('manual')} disabled={aiGenerating || !aiTopic.trim()}>
+                                        {aiGenerating ? 'CRÉATION...' : `✨ GÉNÉRER ${aiCount} QUESTIONS VIA LE SUJET`}
+                                    </button>
                                 </div>
                             </div>
+
                             {currentQ ? (
                                 <div className="v84-q-card animate-in fade-in">
                                     <textarea className="v84-q-input" value={currentQ.q} onChange={e => updateQuestion('q', e.target.value)} placeholder="Tapez la question..." rows="3" />
@@ -1346,9 +1815,22 @@ export default function GameStudio({ initialData, chapters, globalClass, globalL
                 </div>
 
                 <StudioDistributionSidebar 
-                    user={user} allClasses={allClasses} allStudents={allStudents} chapters={chapters} distribution={distribution} setDistribution={setDistribution} viewingClass={viewingClass} setViewingClass={setViewingClass} studentSearch={studentSearch} setStudentSearch={setStudentSearch} targetLevel={globalLevel} targetSection={targetSection} loading={loading} onSave={handleSave}
+                    user={user} allClasses={allClasses} allStudents={allStudents} chapters={chapters} distribution={distribution} setDistribution={setDistribution} viewingClass={viewingClass} setViewingClass={setViewingClass} studentSearch={studentSearch} setStudentSearch={setStudentSearch} targetLevel={globalLevel} loading={loading} onSave={handleSave}
+                    saveLabel={initialData ? "MODIFIER" : "PUBLIER LE JEU 🚀"}
+                    sections={teacherSections}
+                    currentSection={formData.subject}
+                    onSectionChange={(s) => handleInput('subject', s)}
                 />
             </div>
+
+            {previewAsset && (
+                <div className="v84-preview-overlay" onClick={() => setPreviewAsset(null)}>
+                    <div className="v84-preview-content" onClick={e => e.stopPropagation()}>
+                        <button className="v84-preview-close" onClick={() => setPreviewAsset(null)}>✕</button>
+                        <img src={previewAsset} className="v84-preview-img" alt="Preview" />
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
@@ -1583,6 +2065,13 @@ const LevelStructureSchema = new mongoose.Schema({
 
 const GameLevelSchema = new mongoose.Schema({
     title: { type: String, required: true },
+    
+    // AJOUT OFFICIEL DU CHAMP SUBJECT
+    subject: { type: String, default: "GÉNÉRAL" }, 
+
+    // NOUVEAU : FLAG TESTEUR
+    isTestGame: { type: Boolean, default: false },
+
     chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter' },
     teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher' },
     
@@ -1627,7 +2116,7 @@ module.exports = mongoose.models.GameProgress || mongoose.model('GameProgress', 
 [[[£ END: server/models/GameProgress.js £]]]
 
 [[[£ FILE: server/prof/games/games.prof.js £]]]
-// @signatures: ProfGamesRouter, all, save, uploadAsset, generateContent
+// @signatures: ProfGamesRouter, all, save, uploadAsset, generateContent, getTestData
 const express = require('express');
 const router = express.Router();
 const { GameLevel, Chapter } = require('../models/prof.models');
@@ -1654,15 +2143,26 @@ router.get('/all', asyncHandler(async (req, res) => {
     res.json(await GameLevel.find({}).lean());
 }));
 
+// --- NOUVELLE ROUTE : RÉCUPÉRER LE JEU DE TEST ---
+router.get('/test-data', asyncHandler(async (req, res) => {
+    // On cherche le dernier jeu marqué comme test
+    const testGame = await GameLevel.findOne({ isTestGame: true }).sort({ updatedAt: -1 }).lean();
+    res.json(testGame || null);
+}));
+
 router.post('/', asyncHandler(async (req, res) => {
     const data = { ...req.body };
     const teacherId = data.teacherId;
 
     if (!data._id || data._id === "" || data._id === "null") delete data._id;
 
+    // Si on marque ce jeu comme test, on désactive le flag sur les autres (Un seul jeu test à la fois)
+    if (data.isTestGame) {
+        await GameLevel.updateMany({ _id: { $ne: data._id } }, { isTestGame: false });
+    }
+
     // --- SÉCURITÉ CHAPITRE : FALLBACK AGRESSIF ---
     if (!data.chapterId || !mongoose.Types.ObjectId.isValid(data.chapterId)) {
-        console.log("🛠️ [SAVE-JEU] Recalcul du dossier de secours...");
         let fallback = await Chapter.findOne({ teacherId, section: "GÉNÉRAL", title: "GÉNÉRAL" });
         if (!fallback && teacherId) {
             fallback = await Chapter.create({ title: "GÉNÉRAL", section: "GÉNÉRAL", teacherId });
@@ -1702,9 +2202,17 @@ router.post('/upload-asset', upload.single('file'), async (req, res) => {
 
 router.post('/generate-content', upload.single('file'), async (req, res) => {
     const { topic, count, contextText, sheetUrl } = req.body;
-    const system = `Tu es un expert pédagogique créateur de Quiz. Format Sortie JSON [ { "q": "...", "options": ["...",...], "a": 0 } ]`;
+    const targetCount = parseInt(count) || 5;
+
+    const system = `Tu es un expert pédagogique créateur de Quiz.
+    Règle d'or : Génère EXACTEMENT ${targetCount} questions. Ni plus, ni moins.
+    Chaque question doit avoir 4 options courtes.
+    Le champ 'a' est l'index de la bonne réponse (0, 1, 2 ou 3).
+    Format Sortie JSON STRICT (Array) : [ { "q": "...", "options": ["A", "B", "C", "D"], "a": 0 } ]`;
+    
     const promptParts = [];
-    if (topic) promptParts.push({ text: `Sujet : "${topic}".` });
+    if (topic) promptParts.push({ text: `Sujet du quiz : "${topic}".` });
+    
     try {
         if (req.file) {
             const fileData = fs.readFileSync(req.file.path).toString('base64');
@@ -1715,6 +2223,7 @@ router.post('/generate-content', upload.single('file'), async (req, res) => {
             const buffer = await streamToBuffer(stream);
             promptParts.push({ inlineData: { mimeType: 'image/jpeg', data: buffer.toString('base64') } });
         }
+        
         const raw = await ProfAI.ask(promptParts, system);
         res.json(ProfAI.sanitize(raw));
     } catch (e) { res.status(500).json({ error: "Erreur IA" }); }
