@@ -3,8 +3,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { api } from '../../../../services/api';
 
 /**
- * 🎮 MOTEUR DE JEU DÉDIÉ (VERSION UX FIX V479)
- * RÔLE : Arbitre JSX avec séparation stricte des Cheat Codes (Barre vs Reset).
+ * 🎮 MOTEUR DE JEU DÉDIÉ (VERSION UX FINAL V480)
+ * RÔLE : Arbitre JSX avec Transitions Rapides et Écran de Victoire Stylisé.
  */
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
     const canvasRef = useRef(null);
@@ -21,9 +21,9 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const [lives, setLives] = useState(4);
 
     // --- ÉTATS DE STRUCTURE ---
-    const [isLevelWon, setIsLevelWon] = useState(false);
+    const [isLevelWon, setIsLevelWon] = useState(false); // Transition Niveau
+    const [isGameFinished, setIsGameFinished] = useState(false); // Victoire Totale
     const isLevelWonRef = useRef(false); 
-    const [isPowerOff, setIsPowerOff] = useState(false);
     const [keysPressed, setKeysPressed] = useState({});
     
     // CHEAT STATES
@@ -41,7 +41,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         const handleKeyDown = (e) => setKeysPressed(prev => ({ ...prev, [e.code]: true }));
         const handleKeyUp = (e) => setKeysPressed(prev => ({ ...prev, [e.code]: false }));
         
-        // Focus automatique pour capter le clavier
         window.focus();
         window.addEventListener('keydown', handleKeyDown);
         window.addEventListener('keyup', handleKeyUp);
@@ -56,8 +55,8 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         setLevelQuestions(questions);
         setQuestionStates(new Array(questions.length).fill(0));
         setIsLevelWon(false);
+        setIsGameFinished(false);
         isLevelWonRef.current = false; 
-        setIsPowerOff(false);
         if (questions.length > 0) setCurrentQIndex(0);
     };
 
@@ -92,22 +91,31 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     };
 
     const triggerWinSequence = () => {
+        // 1. Verrouillage
         setIsLevelWon(true);
         isLevelWonRef.current = true; 
+        
+        // 2. Notification au script JS (Animation de victoire)
         if (gameInstanceRef.current?.onLevelWin) {
             gameInstanceRef.current.onLevelWin();
         }
-        setTimeout(() => setIsPowerOff(true), 1500);
+        
+        // 3. Transition Rapide (1.2 secondes)
         setTimeout(() => {
             const nextLvlIdx = currentLevelIdx + 1;
-            if (allLevels[nextLvlIdx]) initLevel(nextLvlIdx, allLevels);
-            else { alert("🎉 JEU TERMINÉ !"); onStop(); }
-        }, 4000);
+            if (allLevels[nextLvlIdx]) {
+                // Passage au niveau suivant
+                initLevel(nextLvlIdx, allLevels);
+            } else {
+                // Fin du jeu
+                setIsLevelWon(false);
+                setIsGameFinished(true);
+            }
+        }, 1200);
     };
 
     // --- CHEAT LOGIC ---
     
-    // S+T + Clic sur une barre : Valide la question (SANS RESET ZOMBIE)
     const handleBarCheat = (idx) => {
         if (cheatReady) {
             const next = [...questionStates];
@@ -118,20 +126,19 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     };
 
     const executeReset = (e) => {
-        if(e) e.stopPropagation(); // Empêche la propagation pour éviter les doubles déclenchements
+        if(e) e.stopPropagation();
         console.log("⚡ EXECUTE RESET ZOMBIE !");
 
         // 1. REINITIALISATION INTERFACE
         setLives(4);
         setIsLevelWon(false);
+        setIsGameFinished(false); // Reset écran de fin
         isLevelWonRef.current = false;
-        setIsPowerOff(false);
 
         // 2. REINITIALISATION MOTEUR
         if (gameInstanceRef.current) {
             gameInstanceRef.current.isStopped = false;
             
-            // Reset Variables Spécifiques (Zombie V445+)
             if (typeof gameInstanceRef.current.zombieX !== 'undefined') {
                 gameInstanceRef.current.zombieX = 90;
             }
@@ -139,14 +146,12 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 gameInstanceRef.current.projectiles = [];
             }
 
-            // Relance standard
             if (gameInstanceRef.current.start) {
                 gameInstanceRef.current.start();
             }
         }
     };
 
-    // S+T + Clic sur le Fond/Canvas : Reset Zombie
     const handleCanvasCheat = (e) => {
         if (cheatReady) executeReset(e);
     };
@@ -255,22 +260,14 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     }, [code, project, activeSceneIdx]);
 
     return (
-        // UTILISATION DE ONCLICK STANDARD (Bubbling) POUR LAISSER LA PRIORITÉ AUX ENFANTS (BARRES)
         <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center font-sans" onClick={handleCanvasCheat}>
              
-             {/* HUD DEBUG CLAVIER */}
              <div className="absolute top-2 left-2 z-[100000] bg-black/80 text-white font-mono text-xs p-2 rounded pointer-events-none">
                 KEYS: {sPressed ? 'S' : '_'} + {tPressed ? 'T' : '_'}
              </div>
 
-             {/* BOUTON RESET EXPLICITE (VISIBLE SI CHEAT READY) */}
              {cheatReady && (
-                 <button 
-                    onClick={executeReset}
-                    className="absolute top-20 left-1/2 -translate-x-1/2 z-[100000] bg-red-600 text-white font-black px-6 py-3 rounded-full shadow-2xl border-4 border-white animate-pulse uppercase tracking-widest text-lg cursor-pointer pointer-events-auto"
-                 >
-                    🔴 RESET ZOMBIE NOW
-                 </button>
+                 <button onClick={executeReset} className="absolute top-20 left-1/2 -translate-x-1/2 z-[100000] bg-red-600 text-white font-black px-6 py-3 rounded-full shadow-2xl border-4 border-white animate-pulse uppercase tracking-widest text-lg cursor-pointer pointer-events-auto">🔴 RESET ZOMBIE NOW</button>
              )}
 
              <div className="absolute top-6 w-full flex justify-between items-start px-10 pointer-events-none z-20">
@@ -278,7 +275,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     {"❤️".repeat(lives)}{"🖤".repeat(Math.max(0, 4 - lives))}
                 </div>
                 <div className="flex-1 flex justify-center px-4">
-                    {levelQuestions[currentQIndex] && !isLevelWon && (
+                    {levelQuestions[currentQIndex] && !isLevelWon && !isGameFinished && (
                         <div className="bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 border-slate-600 shadow-2xl text-xl pointer-events-auto">
                             {feedback === 'CORRECT' ? "✅ BRAVO !" : feedback === 'WRONG' ? "❌ RATÉ..." : levelQuestions[currentQIndex].q}
                         </div>
@@ -294,17 +291,42 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             </div>
 
             <div className={`relative transition-all duration-200 ${cheatReady ? 'ring-8 ring-red-500 rounded-xl' : ''}`}>
-                <canvas ref={canvasRef} width={800} height={450} className={`aspect-video shadow-2xl bg-black border-4 border-slate-800 rounded-xl transition-opacity duration-1000 ${isPowerOff ? 'opacity-0' : 'opacity-100'}`} />
+                <canvas ref={canvasRef} width={800} height={450} className={`aspect-video shadow-2xl bg-black border-4 border-slate-800 rounded-xl transition-opacity duration-1000 ${isGameFinished ? 'opacity-20' : 'opacity-100'}`} />
+                
+                {/* --- OVERLAY DE TRANSITION NIVEAU --- */}
                 {isLevelWon && (
                     <div className="absolute inset-0 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm rounded-xl animate-in zoom-in pointer-events-none">
-                        <div className="bg-white p-10 rounded-[40px] shadow-2xl text-center border-8 border-green-500">
-                            <span className="text-6xl block mb-4">🏆</span>
-                            <h2 className="text-4xl font-black text-slate-800 uppercase">Niveau Réussi !</h2>
+                        <div className="bg-white p-8 rounded-[40px] shadow-2xl text-center border-8 border-indigo-500 transform scale-110">
+                            <span className="text-6xl block mb-2">🚀</span>
+                            <h2 className="text-2xl font-black text-slate-800 uppercase tracking-widest">Niveau {currentLevelIdx + 1} Terminé</h2>
                         </div>
                     </div>
                 )}
-                {isPowerOff && <div className="absolute inset-0 bg-black rounded-xl flex items-center justify-center"><div className="w-1 h-1 bg-white rounded-full animate-ping"></div></div>}
+
+                {/* --- OVERLAY JEU TERMINÉ (JOLI DIV) --- */}
+                {isGameFinished && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-slate-950/80 backdrop-blur-md rounded-xl animate-in zoom-in z-50">
+                        <div className="bg-gradient-to-br from-indigo-900 to-purple-900 p-10 rounded-[50px] shadow-2xl text-center border-[6px] border-white/20 max-w-lg w-full relative overflow-hidden">
+                            {/* Confettis CSS simples */}
+                            <div className="absolute top-0 left-0 w-full h-full opacity-30 pointer-events-none bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MCIgaGVpZ2h0PSI1MCI+CiAgPGNpcmNsZSBjeD0iMjUiIGN5PSIyNSIgcj0iMiIgZmlsbD0id2hpdGUiLz4KPC9zdmc+')] animate-spin-slow"></div>
+                            
+                            <div className="relative z-10">
+                                <div className="text-8xl mb-4 animate-bounce">🏆</div>
+                                <h2 className="text-4xl font-black text-white uppercase tracking-tighter mb-2 text-shadow-lg">Victoire Totale !</h2>
+                                <p className="text-indigo-200 font-bold uppercase tracking-widest text-sm mb-8">Tous les niveaux sont validés</p>
+                                
+                                <button 
+                                    onClick={(e) => { e.stopPropagation(); onStop(); }}
+                                    className="bg-white text-indigo-900 font-black text-xl py-4 px-10 rounded-2xl shadow-[0_10px_20px_rgba(0,0,0,0.3)] hover:scale-105 hover:bg-indigo-50 transition-all border-b-8 border-indigo-200 active:border-b-0 active:translate-y-2 uppercase tracking-wide"
+                                >
+                                    Quitter le jeu
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
+            
             {crash && <div className="absolute inset-0 bg-red-900/90 flex items-center justify-center text-white font-mono p-10 text-center z-50">💥 ERREUR SCRIPT : {crash}</div>}
 
             <div className="absolute bottom-6 w-full flex justify-center px-10">
