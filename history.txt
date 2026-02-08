@@ -1025,3 +1025,5 @@
 08/02/2026 18:40 - KERNEL REPAIR : Rétablissement global du serveur (V64 Stable). Correction des erreurs 500 sur /api/admin/students et /api/system/apply-status par blindage du parseur JSON et des routes de proxy. STUDIO DEBUG HUD : Intégration d'un système de logs visuels et d'un overlay d'erreur fatale directement sur l'écran de jeu pour faciliter le débogage sans console.
 
 08/02/2026 18:45 - KERNEL REPAIR : Rétablissement global des routes API et du proxy audio/image (V66 Stable). Correction des erreurs 500. STUDIO AUDIO ENGINE : Rétablissement complet de l'interface de jeu (HUD, Questions, Réponses) et synchronisation parfaite de l'audio avec les actions personnages. Zéro latence audio décodée via Web Audio API.
+
+08/02/2026 18:52 - DEBUGGING SESSION : Installation d'une sonde de traçage dans le GameEngine. Focus sur l'action de tir : chaque appel à .play() et chaque tentative de lecture audio génère désormais un badge jaune visuel sur l'écran. Correction du Proxy serveur pour une transmission binaire pure sans Content-Type forcé, indispensable au décodage Web Audio.

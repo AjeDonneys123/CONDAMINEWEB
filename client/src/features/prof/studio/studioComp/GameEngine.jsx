@@ -4,38 +4,34 @@ import { api } from '../../../../services/api';
 import SoundExpert from './SoundExpert';
 
 /**
- * 🎮 MOTEUR DE JEU DÉDIÉ (V530 - RESTORATION FINALE SON + UI)
+ * 🎮 MOTEUR DE JEU (V540 - SONDE DE DÉBOGAGE "SHOOT")
+ * FOCUS : Pourquoi l'action ne se lance pas au clic ?
  */
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
     const canvasRef = useRef(null);
     const gameInstanceRef = useRef(null);
     const [crash, setCrash] = useState(null);
     const [feedback, setFeedback] = useState(null);
-    
-    // --- ÉTATS DU QUIZ ---
     const [allLevels, setAllLevels] = useState([]); 
     const [currentLevelIdx, setCurrentLevelIdx] = useState(0);
     const [levelQuestions, setLevelQuestions] = useState([]); 
     const [questionStates, setQuestionStates] = useState([]); 
     const [currentQIndex, setCurrentQIndex] = useState(0);
     const [lives, setLives] = useState(4);
-
-    // --- ÉTATS DE STRUCTURE ---
     const [isLevelWon, setIsLevelWon] = useState(false);
     const isLevelWonRef = useRef(false);
     const [isPowerOff, setIsPowerOff] = useState(false);
-    const [debugLogs, setDebugLogs] = useState([]);
 
-    // 🔊 MOTEUR AUDIO
+    const [debugLogs, setDebugLogs] = useState([]);
     const audioCtxRef = useRef(new (window.AudioContext || window.webkitAudioContext)());
     const audioBuffersRef = useRef(new Map());
 
-    const logDebug = (msg, type = 'info') => {
-        setDebugLogs(prev => [...prev, { id: Date.now() + Math.random(), text: String(msg), type }].slice(-6));
+    // LOGS DE DÉBOGAGE CIBLÉS
+    const logAction = (msg) => {
+        setDebugLogs(prev => [...prev, { id: Date.now() + Math.random(), text: `🔥 ${msg}` }].slice(-5));
     };
 
     useEffect(() => {
-        logDebug("🕹️ Démarrage Moteur...");
         api.get('/games/test-data').then(data => {
             const levelsData = data?.levels?.length > 0 ? data.levels : [{ name: "Demo", questions: [{ q: "Prêt ?", options: ["OUI", "NON"], a: 0 }] }];
             setAllLevels(levelsData);
@@ -56,23 +52,31 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
     const handleAnswerClick = (choiceIdx) => {
         if (feedback || currentQIndex === -1 || isLevelWonRef.current) return;
-        if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
-
+        
         const currentQ = levelQuestions[currentQIndex];
         const isCorrect = currentQ.a === choiceIdx;
-        setFeedback(isCorrect ? 'CORRECT' : 'WRONG');
         
+        if (isCorrect) {
+            logAction("CLIC CORRECT : Envoi onResult(true)");
+            if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
+        }
+
+        setFeedback(isCorrect ? 'CORRECT' : 'WRONG');
         const newStates = [...questionStates];
+        
         if (isCorrect) {
             newStates[currentQIndex] = Math.min(3, newStates[currentQIndex] + 1);
-            if (gameInstanceRef.current?.onResult) gameInstanceRef.current.onResult(true);
+            if (gameInstanceRef.current?.onResult) {
+                // APPEL DU CODE UTILISATEUR
+                gameInstanceRef.current.onResult(true);
+            }
         } else {
             newStates[currentQIndex] = Math.max(0, newStates[currentQIndex] - 1);
             if (gameInstanceRef.current?.onResult) gameInstanceRef.current.onResult(false);
             if (!isLevelWonRef.current) setLives(l => Math.max(0, l - 1));
         }
-        setQuestionStates(newStates);
 
+        setQuestionStates(newStates);
         setTimeout(() => {
             setFeedback(null);
             const available = newStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
@@ -106,10 +110,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         async function startEngine() {
             try {
                 const scene = project.scenes[activeSceneIdx];
-                if (!scene) return;
-
-                logDebug("📦 Chargement...");
-
                 const imgUrls = (scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url));
                 const sndUrls = (scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url)));
 
@@ -131,10 +131,9 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 ]);
                 
                 if (!isMounting) return;
-                logDebug("🚀 Prêt !");
 
                 const headerCode = `
-                    const { canvas, ctx, assets, project, sceneIdx, resolveUrl, callbacks, audioBuffers, audioCtx } = params;
+                    const { canvas, ctx, assets, project, sceneIdx, resolveUrl, callbacks, audioBuffers, audioCtx, logAction } = params;
                     
                     class ActorProxy {
                         constructor(data, engine) {
@@ -146,9 +145,9 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                             this.frameIdx = 0; this.lastAnimTime = 0;
                         }
                         play(name) { 
+                            logAction("ACTION : " + this.name + ".play('" + name + "')");
                             if(this.currentAction.toUpperCase() !== name.toUpperCase()) { 
                                 this.currentAction = name; this.frameIdx = 0; this.lastAnimTime = 0;
-                                // 🔊 TRIGGER AUDIO IMMÉDIAT
                                 this.engine._triggerActionSounds(this.id, name);
                             } 
                         }
@@ -162,6 +161,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                         }
 
                         playGlobal(name) {
+                            logAction("GLOBAL SOUND : " + name);
                             const gs = project.scenes[sceneIdx].globalSounds?.find(s => s.name.toUpperCase() === name.toUpperCase());
                             if(gs && gs.sounds) gs.sounds.forEach(snd => this._playSound(snd.url));
                         }
@@ -169,15 +169,23 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                         _triggerActionSounds(actorId, actionName) {
                             const actor = project.scenes[sceneIdx].actors.find(a => a.id === actorId);
                             const action = actor?.actions.find(act => act.name.toUpperCase() === actionName.toUpperCase());
-                            if(action && action.sounds) action.sounds.forEach(snd => this._playSound(snd.url));
+                            if(action && action.sounds && action.sounds.length > 0) {
+                                logAction("AUDIO : " + action.sounds.length + " sons trouvés pour " + actionName);
+                                action.sounds.forEach(snd => this._playSound(snd.url));
+                            } else {
+                                logAction("AUDIO : Aucun son dans l'action " + actionName);
+                            }
                         }
 
                         _playSound(url) {
                             const buffer = audioBuffers.get(url);
                             if(buffer && audioCtx) {
+                                logAction("AUDIO : Lecture buffer OK");
                                 if(audioCtx.state === 'suspended') audioCtx.resume();
                                 const source = audioCtx.createBufferSource();
                                 source.buffer = buffer; source.connect(audioCtx.destination); source.start(0);
+                            } else {
+                                logAction("AUDIO : Buffer introuvable pour " + url.split('/').pop());
                             }
                         }
 
@@ -212,7 +220,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
                 const finalScript = headerCode + "\n" + code + "\n return MiniGame;";
                 const FinalClass = new Function('params', finalScript)({ 
-                    canvas, ctx, assets, project, sceneIdx: activeSceneIdx, resolveUrl, 
+                    canvas, ctx, assets, project, sceneIdx: activeSceneIdx, resolveUrl, logAction,
                     audioBuffers: audioBuffersRef.current, audioCtx: audioCtxRef.current,
                     callbacks: { onPlayerHit: () => { if (!isLevelWonRef.current) setLives(l => Math.max(0, l - 1)); } } 
                 });
@@ -240,18 +248,17 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     return (
         <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center font-sans overflow-hidden">
              
-             {/* 🛠️ DEBUG HUD */}
+             {/* 🛠️ DEBUG HUD (DÉDIÉ ACTION/SON) */}
              <div className="absolute top-0 left-0 p-4 z-[100] pointer-events-none">
                 <div className="flex flex-col gap-1">
                     {debugLogs.map(log => (
-                        <div key={log.id} className={`px-3 py-1 rounded text-[9px] font-mono shadow-lg border-l-4 w-fit ${log.type === 'error' ? 'bg-red-900/90 text-red-200 border-red-500' : 'bg-black/80 text-green-400 border-green-500'}`}>
+                        <div key={log.id} className="px-4 py-2 rounded-lg text-xs font-black bg-yellow-400 text-black shadow-xl border-2 border-yellow-600 animate-bounce">
                             {log.text}
                         </div>
                     ))}
                 </div>
              </div>
 
-             {/* UI TOP: VIES & QUESTION */}
              <div className="absolute top-0 left-0 right-0 p-6 flex justify-between items-start z-50 pointer-events-none">
                 <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-xl pointer-events-auto flex gap-1">
                     {"❤️".repeat(lives)}{"🖤".repeat(Math.max(0, 4 - lives))}
@@ -263,16 +270,9 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                         </div>
                     )}
                 </div>
-                <div className="flex gap-2 items-center pointer-events-auto mr-16">
-                    {questionStates.map((mastery, idx) => (
-                        <div key={idx} onClick={() => handleBarCheat(idx)} className={`w-4 h-12 rounded-md border border-slate-600 relative overflow-hidden transition-all cursor-help ${currentQIndex === idx ? 'ring-2 ring-indigo-400 scale-110' : 'opacity-60'}`}>
-                            <div className={`absolute bottom-0 left-0 right-0 transition-all duration-500 ${mastery === 3 ? 'bg-green-500 shadow-[0_0_10px_green]' : 'bg-yellow-500'}`} style={{ height: `${(mastery / 3) * 100}%` }} />
-                        </div>
-                    ))}
-                </div>
+                <div className="w-40"></div>
             </div>
 
-            {/* STAGE */}
             <div className="relative flex items-center justify-center w-full h-full">
                 <canvas ref={canvasRef} width={800} height={450} className={`aspect-video shadow-2xl bg-black border-4 border-slate-800 rounded-xl transition-opacity duration-1000 ${isPowerOff ? 'opacity-0' : 'opacity-100'}`} />
                 {isLevelWon && (<div className="absolute inset-0 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm rounded-xl animate-in zoom-in"><div className="bg-white p-10 rounded-[40px] shadow-2xl text-center border-8 border-green-500"><span className="text-6xl block mb-4">🏆</span><h2 className="text-4xl font-black text-slate-800 uppercase">Niveau Réussi !</h2></div></div>)}
@@ -287,7 +287,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 </div>
             )}
 
-            {/* UI BOTTOM: RÉPONSES */}
             <div className="absolute bottom-0 left-0 right-0 p-8 flex justify-center z-50 pointer-events-none">
                 <div className="grid grid-cols-4 gap-4 w-full max-w-6xl pointer-events-auto">
                     {currentQ?.options?.map((o, i) => (
