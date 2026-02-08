@@ -1,4 +1,4 @@
-// @signatures: SERVER_BOOT_ID, GlobalInfrastructure, KernelV64_STABLE
+// @signatures: SERVER_BOOT_ID, GlobalInfrastructure, KernelV64_ULTRA_STABLE
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
@@ -11,26 +11,31 @@ const port = 3000;
 const SERVER_BOOT_ID = Date.now();
 
 console.log("------------------------------------------------");
-console.log("🚀 KERNEL V64 : RÉPARATION DES ROUTES");
+console.log("🚀 KERNEL V64 : RÉPARATION & DÉBOGAGE VISUEL");
 console.log("------------------------------------------------");
 
 app.use(express.json({ limit: '70mb' }));
 app.use(express.urlencoded({ extended: true, limit: '70mb' }));
 
-// 1. ROUTES SYSTÈME
+// 1. ROUTES SYSTÈME BLINDÉES (Anti-500)
 app.get('/api/check-deploy', (req, res) => res.json({ status: "OK", bootId: SERVER_BOOT_ID }));
+
 app.get('/api/system/apply-status', (req, res) => {
     try {
         const statusPath = path.join(__dirname, '../apply_status.json');
         if (fs.existsSync(statusPath)) {
-            res.json(JSON.parse(fs.readFileSync(statusPath, 'utf8')));
+            const raw = fs.readFileSync(statusPath, 'utf8');
+            if (!raw || raw.trim() === "") return res.json({ status: "OK" });
+            res.json(JSON.parse(raw));
         } else {
-            res.json({ status: "OK" });
+            res.json({ status: "OK", message: "Initialisation..." });
         }
-    } catch (e) { res.json({ status: "OK" }); }
+    } catch (e) {
+        res.json({ status: "OK", error: "Read fail" });
+    }
 });
 
-// 2. CHARGEMENT SÉCURISÉ DES MODÈLES & ROUTES
+// 2. CHARGEMENT SILOS AVEC CAPTURE D'ERREUR
 try {
     const Models = require('./prof/models/prof.models');
     
@@ -48,30 +53,37 @@ try {
     app.use('/api/eleve/classroom', require('./eleve/classroom/classroom.eleve'));
     app.use('/api/eleve/games', require('./eleve/games/games.eleve'));
     
-    console.log("✅ Silos chargés sans erreur.");
+    console.log("✅ Silos opérationnels.");
 } catch (e) {
-    console.error("💥 Erreur Boot Silos:", e.message);
+    console.error("💥 CRASH CHARGEMENT SILOS:", e.message);
 }
 
-// 3. PROXY AUDIO/IMAGE FIX
+// 3. PROXY AUDIO/IMAGE (FLUX BRUT)
 const ProfDrive = require('./prof/core/drive.prof');
 app.get(['/api/proxy/:id', '/api/structure/proxy/:id'], async (req, res) => {
     try {
         const fileId = req.params.id;
-        if (!fileId || fileId === 'undefined') return res.status(400).send("No ID");
+        if (!fileId || fileId === 'undefined' || fileId === 'null') return res.status(400).send("Invalid ID");
+        
         const stream = await ProfDrive.getFileStream(fileId);
         res.setHeader('Accept-Ranges', 'bytes');
+        // On laisse le navigateur décider du Content-Type pour supporter MP3 et Images
         stream.pipe(res);
     } catch (e) { 
         res.status(404).send("File not found"); 
     }
 });
 
+// GESTIONNAIRE D'ERREUR GLOBAL (Empêche le 500 vide)
 app.use((err, req, res, next) => {
-    console.error("❌ Global Error:", err.message);
-    res.status(500).json({ error: "INTERNAL_ERROR", message: err.message });
+    console.error("🔥 SERVER ERROR:", err.stack);
+    res.status(500).json({ 
+        status: "ERROR", 
+        message: err.message,
+        path: req.path
+    });
 });
 
 mongoose.connect(process.env.MONGODB_URI).then(() => {
-    app.listen(port, '0.0.0.0', () => console.log(`🏁 PRET SUR LE PORT ${port}`));
+    app.listen(port, '0.0.0.0', () => console.log(`🏁 READY ON PORT ${port}`));
 });

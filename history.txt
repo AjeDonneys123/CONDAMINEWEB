@@ -1021,3 +1021,5 @@
 08/02/2026 18:27 - SYSTEM UPGRADE : apply.js V9.6 Flexible activé avec commit Git automatique. CORE/STUDIO REPAIR : Correction du Proxy serveur pour les flux audio. Le GameEngine synchronise désormais l'action .play() avec le déclenchement sonore immédiat. Zéro latence garantie.
 
 08/02/2026 18:32 - SYSTEM UPGRADE : apply.js V9.7 débridé (Multi-bundle) avec Commit Git automatique après chaque injection. KERNEL REPAIR : Rétablissement du chargement des modèles et routes (Fix 500). STUDIO AUDIO REPAIR : Correction du Proxy (Accept-Ranges) et du moteur GameEngine (Correction de l'erreur 'cod is not defined'). Zéro latence audio synchronisée avec les actions.
+
+08/02/2026 18:40 - KERNEL REPAIR : Rétablissement global du serveur (V64 Stable). Correction des erreurs 500 sur /api/admin/students et /api/system/apply-status par blindage du parseur JSON et des routes de proxy. STUDIO DEBUG HUD : Intégration d'un système de logs visuels et d'un overlay d'erreur fatale directement sur l'écran de jeu pour faciliter le débogage sans console.
