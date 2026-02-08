@@ -4,65 +4,54 @@ import { api } from '../../../../services/api';
 import SoundExpert from './SoundExpert';
 
 /**
- * 🎮 MOTEUR DE JEU (V510 - DEBUG HUD EDITION)
- * RÔLE : Arbitre JSX. Affiche les logs et erreurs directement à l'écran.
+ * 🎮 MOTEUR DE JEU DÉDIÉ (V530 - RESTORATION FINALE SON + UI)
  */
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
     const canvasRef = useRef(null);
     const gameInstanceRef = useRef(null);
     const [crash, setCrash] = useState(null);
     const [feedback, setFeedback] = useState(null);
+    
+    // --- ÉTATS DU QUIZ ---
     const [allLevels, setAllLevels] = useState([]); 
     const [currentLevelIdx, setCurrentLevelIdx] = useState(0);
     const [levelQuestions, setLevelQuestions] = useState([]); 
     const [questionStates, setQuestionStates] = useState([]); 
-    const [currentQIndex, setCurrentQIndex] = useState(-1);
+    const [currentQIndex, setCurrentQIndex] = useState(0);
     const [lives, setLives] = useState(4);
+
+    // --- ÉTATS DE STRUCTURE ---
     const [isLevelWon, setIsLevelWon] = useState(false);
     const isLevelWonRef = useRef(false);
     const [isPowerOff, setIsPowerOff] = useState(false);
-    const [keysPressed, setKeysPressed] = useState({});
-    
-    // 🛠️ DEBUG HUD STATE
     const [debugLogs, setDebugLogs] = useState([]);
 
+    // 🔊 MOTEUR AUDIO
     const audioCtxRef = useRef(new (window.AudioContext || window.webkitAudioContext)());
     const audioBuffersRef = useRef(new Map());
 
-    // Fonction pour logger visuellement
     const logDebug = (msg, type = 'info') => {
-        setDebugLogs(prev => [...prev, { id: Date.now() + Math.random(), text: String(msg), type }].slice(-10));
+        setDebugLogs(prev => [...prev, { id: Date.now() + Math.random(), text: String(msg), type }].slice(-6));
     };
 
     useEffect(() => {
         logDebug("🕹️ Démarrage Moteur...");
         api.get('/games/test-data').then(data => {
-            if (!data) logDebug("⚠️ Aucun Quiz Test en BDD, chargement démo", "warn");
-            const levelsData = data?.levels?.length > 0 ? data.levels : [{ name: "Test", questions: [{ q: "Prêt ?", options: ["OUI", "NON"], a: 0 }] }];
+            const levelsData = data?.levels?.length > 0 ? data.levels : [{ name: "Demo", questions: [{ q: "Prêt ?", options: ["OUI", "NON"], a: 0 }] }];
             setAllLevels(levelsData);
             initLevel(0, levelsData);
         });
-        
-        const handleKeyDown = (e) => setKeysPressed(prev => ({ ...prev, [e.code]: true }));
-        const handleKeyUp = (e) => setKeysPressed(prev => ({ ...prev, [e.code]: false }));
-        window.addEventListener('keydown', handleKeyDown);
-        window.addEventListener('keyup', handleKeyUp);
-        
-        return () => { 
-            window.removeEventListener('keydown', handleKeyDown); 
-            window.removeEventListener('keyup', handleKeyUp);
-        };
+        return () => { if(audioCtxRef.current) audioCtxRef.current.close(); };
     }, []);
 
     const initLevel = (idx, sourceData) => {
-        if (!sourceData[idx]) { onStop(); return; }
+        if (!sourceData[idx]) return;
         const lvl = sourceData[idx];
-        logDebug(`📂 Chargement ${lvl.name}...`);
         setCurrentLevelIdx(idx);
         setLevelQuestions(lvl.questions || []);
         setQuestionStates(new Array((lvl.questions || []).length).fill(0));
         setIsLevelWon(false); isLevelWonRef.current = false; setIsPowerOff(false);
-        if ((lvl.questions || []).length > 0) setCurrentQIndex(0);
+        setCurrentQIndex(0);
     };
 
     const handleAnswerClick = (choiceIdx) => {
@@ -72,20 +61,18 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         const currentQ = levelQuestions[currentQIndex];
         const isCorrect = currentQ.a === choiceIdx;
         setFeedback(isCorrect ? 'CORRECT' : 'WRONG');
-        const newStates = [...questionStates];
         
+        const newStates = [...questionStates];
         if (isCorrect) {
-            logDebug("✅ Bonne réponse !");
             newStates[currentQIndex] = Math.min(3, newStates[currentQIndex] + 1);
             if (gameInstanceRef.current?.onResult) gameInstanceRef.current.onResult(true);
         } else {
-            logDebug("❌ Mauvaise réponse", "error");
             newStates[currentQIndex] = Math.max(0, newStates[currentQIndex] - 1);
             if (gameInstanceRef.current?.onResult) gameInstanceRef.current.onResult(false);
             if (!isLevelWonRef.current) setLives(l => Math.max(0, l - 1));
         }
-        
         setQuestionStates(newStates);
+
         setTimeout(() => {
             setFeedback(null);
             const available = newStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
@@ -98,28 +85,18 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     };
 
     const triggerWinSequence = () => {
-        logDebug("🏆 Niveau validé !");
         setIsLevelWon(true); isLevelWonRef.current = true;
         if (gameInstanceRef.current?.onLevelWin) gameInstanceRef.current.onLevelWin();
         setTimeout(() => setIsPowerOff(true), 1500);
         setTimeout(() => {
             const nextLvlIdx = currentLevelIdx + 1;
             if (allLevels[nextLvlIdx]) initLevel(nextLvlIdx, allLevels);
-            else { logDebug("🏁 Victoire Finale !"); alert("🎉 JEU TERMINÉ !"); onStop(); }
+            else { alert("🎉 VICTOIRE FINALE !"); onStop(); }
         }, 4000);
     };
 
-    const handleBarCheat = (idx) => {
-        if (keysPressed['KeyS'] && keysPressed['KeyT']) {
-            const next = [...questionStates]; next[idx] = 3; setQuestionStates(next);
-            if (next.every(s => s === 3)) triggerWinSequence();
-        }
-    };
-
     useEffect(() => {
-        const userCode = code || ""; // Protection contreProp vide
-        if (!userCode || !project || !canvasRef.current) return;
-        
+        if (!code || !project || !canvasRef.current) return;
         let isMounting = true;
         let animationFrameId = null;
         const canvas = canvasRef.current;
@@ -131,7 +108,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 const scene = project.scenes[activeSceneIdx];
                 if (!scene) return;
 
-                logDebug("📦 Pré-chargement des ressources...");
+                logDebug("📦 Chargement...");
 
                 const imgUrls = (scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url));
                 const sndUrls = (scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url)));
@@ -140,8 +117,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     ...[...new Set(imgUrls)].filter(Boolean).map(url => new Promise(res => {
                         const img = new Image(); img.crossOrigin = "anonymous";
                         img.onload = () => { assets[resolveUrl(url)] = img; res(); };
-                        img.onerror = () => { logDebug(`Image corrompue: ${url.split('/').pop()}`, "error"); res(); };
-                        img.src = resolveUrl(url);
+                        img.onerror = res; img.src = resolveUrl(url);
                     })),
                     ...[...new Set(sndUrls)].filter(Boolean).map(url => new Promise(async res => {
                         try {
@@ -149,13 +125,13 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                                 const buffer = await SoundExpert.decodeAudio(resolveUrl(url), audioCtxRef.current);
                                 if (buffer) audioBuffersRef.current.set(url, buffer);
                             }
-                        } catch(e) { logDebug(`Son illisible: ${url.split('/').pop()}`, "error"); }
+                        } catch(e) {}
                         res();
                     }))
                 ]);
                 
                 if (!isMounting) return;
-                logDebug("✨ Ressources prêtes.");
+                logDebug("🚀 Prêt !");
 
                 const headerCode = `
                     const { canvas, ctx, assets, project, sceneIdx, resolveUrl, callbacks, audioBuffers, audioCtx } = params;
@@ -172,6 +148,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                         play(name) { 
                             if(this.currentAction.toUpperCase() !== name.toUpperCase()) { 
                                 this.currentAction = name; this.frameIdx = 0; this.lastAnimTime = 0;
+                                // 🔊 TRIGGER AUDIO IMMÉDIAT
                                 this.engine._triggerActionSounds(this.id, name);
                             } 
                         }
@@ -233,7 +210,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     }
                 `;
 
-                const finalScript = headerCode + "\n" + userCode + "\n return MiniGame;";
+                const finalScript = headerCode + "\n" + code + "\n return MiniGame;";
                 const FinalClass = new Function('params', finalScript)({ 
                     canvas, ctx, assets, project, sceneIdx: activeSceneIdx, resolveUrl, 
                     audioBuffers: audioBuffersRef.current, audioCtx: audioCtxRef.current,
@@ -252,41 +229,37 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     animationFrameId = requestAnimationFrame(loop);
                 };
                 loop();
-            } catch(e) { 
-                setCrash(e.message); 
-                logDebug(`Erreur Script: ${e.message}`, "error");
-            }
+            } catch(e) { setCrash(e.message); }
         }
         startEngine();
         return () => { isMounting = false; if (animationFrameId) cancelAnimationFrame(animationFrameId); };
     }, [code, project, activeSceneIdx]);
 
+    const currentQ = levelQuestions[currentQIndex];
+
     return (
         <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center font-sans overflow-hidden">
              
-             {/* 🛠️ DEBUG HUD OVERLAY (Nouveau) */}
-             <div className="absolute top-0 left-0 p-4 z-[100] pointer-events-none w-full">
+             {/* 🛠️ DEBUG HUD */}
+             <div className="absolute top-0 left-0 p-4 z-[100] pointer-events-none">
                 <div className="flex flex-col gap-1">
                     {debugLogs.map(log => (
-                        <div key={log.id} className={`px-3 py-1 rounded text-[9px] font-mono shadow-lg border-l-4 w-fit ${
-                            log.type === 'error' ? 'bg-red-900/90 text-red-200 border-red-500' : 
-                            log.type === 'warn' ? 'bg-orange-900/90 text-orange-200 border-orange-500' :
-                            'bg-black/80 text-green-400 border-green-500'
-                        }`}>
+                        <div key={log.id} className={`px-3 py-1 rounded text-[9px] font-mono shadow-lg border-l-4 w-fit ${log.type === 'error' ? 'bg-red-900/90 text-red-200 border-red-500' : 'bg-black/80 text-green-400 border-green-500'}`}>
                             {log.text}
                         </div>
                     ))}
                 </div>
              </div>
 
-             <div className="absolute top-6 w-full flex justify-between items-start px-10 pointer-events-none z-20">
+             {/* UI TOP: VIES & QUESTION */}
+             <div className="absolute top-0 left-0 right-0 p-6 flex justify-between items-start z-50 pointer-events-none">
                 <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-xl pointer-events-auto flex gap-1">
                     {"❤️".repeat(lives)}{"🖤".repeat(Math.max(0, 4 - lives))}
                 </div>
                 <div className="flex-1 flex justify-center px-4">
-                    {levelQuestions[currentQIndex] && !isLevelWon && (
+                    {currentQ && !isLevelWon && (
                         <div className="bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 border-slate-600 shadow-2xl text-xl pointer-events-auto">
-                            {feedback === 'CORRECT' ? "✅ BRAVO !" : feedback === 'WRONG' ? "❌ RATÉ..." : levelQuestions[currentQIndex].q}
+                            {feedback === 'CORRECT' ? "✅ BRAVO !" : feedback === 'WRONG' ? "❌ RATÉ..." : currentQ.q}
                         </div>
                     )}
                 </div>
@@ -299,38 +272,33 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 </div>
             </div>
 
-            <div className="relative">
+            {/* STAGE */}
+            <div className="relative flex items-center justify-center w-full h-full">
                 <canvas ref={canvasRef} width={800} height={450} className={`aspect-video shadow-2xl bg-black border-4 border-slate-800 rounded-xl transition-opacity duration-1000 ${isPowerOff ? 'opacity-0' : 'opacity-100'}`} />
-                {isLevelWon && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm rounded-xl animate-in zoom-in">
-                        <div className="bg-white p-10 rounded-[40px] shadow-2xl text-center border-8 border-green-500">
-                            <span className="text-6xl block mb-4">🏆</span>
-                            <h2 className="text-4xl font-black text-slate-800 uppercase">Niveau Réussi !</h2>
-                        </div>
-                    </div>
-                )}
+                {isLevelWon && (<div className="absolute inset-0 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm rounded-xl animate-in zoom-in"><div className="bg-white p-10 rounded-[40px] shadow-2xl text-center border-8 border-green-500"><span className="text-6xl block mb-4">🏆</span><h2 className="text-4xl font-black text-slate-800 uppercase">Niveau Réussi !</h2></div></div>)}
             </div>
             
-            {/* 💥 CRITICAL OVERLAY (Nouveau) */}
             {crash && (
                 <div className="absolute inset-0 bg-red-950/95 flex flex-col items-center justify-center text-white p-10 text-center z-[1000]">
                     <span className="text-6xl mb-6">💥</span>
-                    <h2 className="text-3xl font-black uppercase mb-4">Erreur Fatale dans le Script</h2>
-                    <pre className="bg-black/50 p-6 rounded-2xl font-mono text-sm text-red-400 border border-red-800 max-w-2xl overflow-auto mb-8">
-                        {crash}
-                    </pre>
-                    <button onClick={onStop} className="px-10 py-4 bg-white text-red-600 rounded-2xl font-black uppercase shadow-xl">Retour à l'éditeur</button>
+                    <h2 className="text-3xl font-black uppercase mb-4">Erreur Script</h2>
+                    <pre className="bg-black/50 p-6 rounded-2xl font-mono text-sm text-red-400 border border-red-800 max-w-2xl overflow-auto mb-8">{crash}</pre>
+                    <button onClick={onStop} className="px-10 py-4 bg-white text-red-600 rounded-2xl font-black uppercase shadow-xl">Retour</button>
                 </div>
             )}
 
-            <div className="absolute bottom-6 w-full flex justify-center px-10">
-                <div className="grid grid-cols-4 gap-4 w-full max-w-5xl">
-                    {levelQuestions[currentQIndex]?.options?.map((o, i) => (
-                        <button key={i} onClick={() => handleAnswerClick(i)} className="bg-indigo-600 text-white py-5 rounded-xl font-black uppercase shadow-xl hover:bg-indigo-500 transition-all border-b-4 border-indigo-800 active:border-b-0 active:translate-y-1">{o}</button>
+            {/* UI BOTTOM: RÉPONSES */}
+            <div className="absolute bottom-0 left-0 right-0 p-8 flex justify-center z-50 pointer-events-none">
+                <div className="grid grid-cols-4 gap-4 w-full max-w-6xl pointer-events-auto">
+                    {currentQ?.options?.map((o, i) => (
+                        <button key={i} onClick={() => handleAnswerClick(i)} className="bg-indigo-600 text-white py-5 rounded-xl font-black uppercase shadow-xl hover:bg-indigo-500 transition-all border-b-4 border-indigo-800 active:border-b-0 active:translate-y-1">
+                            {o}
+                        </button>
                     ))}
                 </div>
             </div>
-            <button onClick={onStop} className="absolute top-6 right-6 bg-red-600 text-white w-12 h-12 rounded-full font-black text-2xl shadow-xl border-4 border-white hover:scale-110 transition-all flex items-center justify-center pointer-events-auto">✕</button>
+
+            <button onClick={onStop} className="absolute top-6 right-6 bg-red-600 text-white w-12 h-12 rounded-full font-black text-2xl shadow-xl border-4 border-white hover:scale-110 transition-all flex items-center justify-center pointer-events-auto z-[60]">✕</button>
         </div>
     );
 }
