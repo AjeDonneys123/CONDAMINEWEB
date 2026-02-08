@@ -1,0 +1,69 @@
+.sound-modal-overlay {
+    position: fixed; inset: 0; z-index: 50000;
+    background: rgba(15, 23, 42, 0.95);
+    backdrop-filter: blur(5px);
+    display: flex; align-items: center; justify-content: center;
+}
+
+.sound-window {
+    background: white; width: 500px; height: 500px;
+    border-radius: 30px; display: flex; flex-direction: column;
+    overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+    border: 1px solid #e2e8f0; animation: sound-pop 0.3s ease-out;
+}
+
+.sound-header {
+    padding: 20px; background: #f8fafc; border-bottom: 1px solid #e2e8f0;
+    display: flex; justify-content: space-between; align-items: center;
+}
+.sound-title { font-weight: 950; font-size: 1rem; color: #1e293b; text-transform: uppercase; display: flex; align-items: center; gap: 10px; }
+.sound-close { width: 30px; height: 30px; border-radius: 50%; border: none; font-weight: 900; cursor: pointer; background: #e2e8f0; color: #64748b; }
+.sound-close:hover { background: #fee2e2; color: #ef4444; }
+
+.sound-tabs { display: flex; padding: 10px 20px; gap: 10px; background: white; }
+.sound-tab-btn {
+    flex: 1; padding: 10px; border-radius: 12px; border: 2px solid transparent;
+    font-weight: 800; font-size: 0.7rem; text-transform: uppercase;
+    cursor: pointer; background: #f1f5f9; color: #64748b; transition: all 0.2s;
+}
+.sound-tab-btn.active { background: #f0f9ff; color: #0ea5e9; border-color: #bae6fd; }
+
+.sound-body { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 15px; }
+
+/* --- SECTION MICRO --- */
+.mic-circle {
+    width: 80px; height: 80px; border-radius: 50%;
+    background: #ef4444; color: white; font-size: 2rem;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+    transition: all 0.2s;
+}
+.mic-circle.recording { animation: pulse-red 1.5s infinite; background: white; color: #ef4444; border: 4px solid #ef4444; }
+.mic-timer { font-family: 'JetBrains Mono', monospace; font-size: 1.5rem; font-weight: 900; color: #1e293b; }
+
+/* --- SECTION UPLOAD --- */
+.upload-zone {
+    width: 100%; height: 150px; border: 3px dashed #cbd5e1;
+    border-radius: 20px; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; color: #94a3b8;
+    cursor: pointer; transition: all 0.2s;
+}
+.upload-zone:hover { border-color: #0ea5e9; color: #0ea5e9; background: #f0f9ff; }
+
+/* --- SECTION AI --- */
+.ai-input-group { width: 100%; display: flex; gap: 5px; }
+.ai-input { flex: 1; padding: 10px; border: 2px solid #e2e8f0; border-radius: 10px; font-weight: 600; outline: none; }
+.ai-input:focus { border-color: #a855f7; }
+.ai-btn { background: #a855f7; color: white; border: none; border-radius: 10px; padding: 0 15px; font-weight: 900; cursor: pointer; }
+
+/* --- PREVIEW --- */
+.sound-preview { width: 100%; background: #f8fafc; padding: 15px; border-radius: 15px; border: 1px solid #e2e8f0; display: flex; align-items: center; gap: 10px; }
+.preview-play { width: 40px; height: 40px; border-radius: 50%; background: #1e293b; color: white; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.preview-wave { flex: 1; height: 4px; background: #cbd5e1; border-radius: 2px; overflow: hidden; }
+.preview-wave-fill { height: 100%; background: #10b981; width: 0%; animation: play-progress 2s linear infinite; }
+
+.btn-confirm-sound { width: 100%; padding: 15px; background: #10b981; color: white; border: none; border-radius: 15px; font-weight: 900; text-transform: uppercase; font-size: 0.9rem; cursor: pointer; margin-top: auto; }
+.btn-confirm-sound:disabled { background: #cbd5e1; cursor: not-allowed; }
+
+@keyframes sound-pop { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes pulse-red { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }

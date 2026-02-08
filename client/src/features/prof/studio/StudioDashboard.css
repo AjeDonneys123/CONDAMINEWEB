@@ -1,3 +1,15 @@
+/* --- MODIFICATION POUR LE BOUTON SON --- */
+.btn-sound-trigger {
+    width: 20px; height: 20px; 
+    background: #eef2ff; color: #6366f1; 
+    border: 1px solid #c7d2fe; border-radius: 4px; 
+    font-weight: 900; font-size: 0.7rem; 
+    cursor: pointer; display: flex; align-items: center; justify-content: center; 
+    transition: all 0.2s; margin-right: 4px;
+}
+.btn-sound-trigger:hover { background: #6366f1; color: white; border-color: #6366f1; }
+
+/* ... (Le reste du CSS est conservé, je ne le répète pas pour éviter le shrinking, mais assure-toi de garder l'existant) ... */
 /* --- LAYOUT GLOBAL --- */
 .studio-wrapper {
     display: flex;
