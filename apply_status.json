@@ -1,6 +1,5 @@
 {
   "status": "OK",
-  "message": "Infrastructure mise à jour",
-  "details": null,
-  "timestamp": 1770592796525
+  "message": "Infrastructure mise à jour et commitée",
+  "timestamp": 1770592851104
 }
