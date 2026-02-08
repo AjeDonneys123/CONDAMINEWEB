@@ -1,32 +1,34 @@
 // @signatures: GameEngine, initLevel, handleAnswerClick, triggerWinSequence, handleBarCheat
 import React, { useState, useRef, useEffect } from 'react';
 import { api } from '../../../../services/api';
+import SoundExpert from './SoundExpert';
 
 /**
- * 🎮 MOTEUR DE JEU DÉDIÉ (SÉCURITÉ TRANSITION V473)
- * RÔLE : Arbitre JSX avec Verrou de Victoire pour empêcher la perte de vie post-victoire.
+ * 🎮 MOTEUR DE JEU (V495 - ACTION + SOUND SYNC)
+ * RÔLE : Arbitre. Garantit que .play("NOM") déclenche l'animation ET les sons associés.
  */
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
     const canvasRef = useRef(null);
     const gameInstanceRef = useRef(null);
     const [crash, setCrash] = useState(null);
     const [feedback, setFeedback] = useState(null);
-    
-    // --- ÉTATS DU QUIZ ---
     const [allLevels, setAllLevels] = useState([]); 
     const [currentLevelIdx, setCurrentLevelIdx] = useState(0);
     const [levelQuestions, setLevelQuestions] = useState([]); 
     const [questionStates, setQuestionStates] = useState([]); 
     const [currentQIndex, setCurrentQIndex] = useState(-1);
     const [lives, setLives] = useState(4);
-
-    // --- ÉTATS DE STRUCTURE ---
     const [isLevelWon, setIsLevelWon] = useState(false);
-    const isLevelWonRef = useRef(false); // Ref pour accès synchrone dans les callbacks JS
+    const isLevelWonRef = useRef(false);
     const [isPowerOff, setIsPowerOff] = useState(false);
     const [keysPressed, setKeysPressed] = useState({});
 
+    // 🔊 MOTEUR AUDIO (WEB AUDIO API)
+    const audioCtxRef = useRef(null);
+    const audioBuffersRef = useRef(new Map());
+
     useEffect(() => {
+        audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
         api.get('/games/test-data').then(data => {
             const levelsData = data?.levels?.length > 0 ? data.levels : [{ name: "Test", questions: [{ q: "Prêt ?", options: ["OUI", "NON"], a: 0 }] }];
             setAllLevels(levelsData);
@@ -36,28 +38,30 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         const handleKeyUp = (e) => setKeysPressed(prev => ({ ...prev, [e.code]: false }));
         window.addEventListener('keydown', handleKeyDown);
         window.addEventListener('keyup', handleKeyUp);
-        return () => { window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); };
+        return () => { 
+            window.removeEventListener('keydown', handleKeyDown); 
+            window.removeEventListener('keyup', handleKeyUp);
+            if (audioCtxRef.current) audioCtxRef.current.close();
+        };
     }, []);
 
     const initLevel = (idx, sourceData) => {
         if (!sourceData[idx]) { onStop(); return; }
         const lvl = sourceData[idx];
         setCurrentLevelIdx(idx);
-        const questions = lvl.questions || [];
-        setLevelQuestions(questions);
-        setQuestionStates(new Array(questions.length).fill(0));
-        setIsLevelWon(false);
-        isLevelWonRef.current = false; // Relâche le verrou
-        setIsPowerOff(false);
-        if (questions.length > 0) setCurrentQIndex(0);
+        setLevelQuestions(lvl.questions || []);
+        setQuestionStates(new Array((lvl.questions || []).length).fill(0));
+        setIsLevelWon(false); isLevelWonRef.current = false; setIsPowerOff(false);
+        if ((lvl.questions || []).length > 0) setCurrentQIndex(0);
     };
 
     const handleAnswerClick = (choiceIdx) => {
         if (feedback || currentQIndex === -1 || isLevelWonRef.current) return;
+        if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
+
         const currentQ = levelQuestions[currentQIndex];
         const isCorrect = currentQ.a === choiceIdx;
         setFeedback(isCorrect ? 'CORRECT' : 'WRONG');
-
         const newStates = [...questionStates];
         if (isCorrect) {
             newStates[currentQIndex] = Math.min(3, newStates[currentQIndex] + 1);
@@ -65,10 +69,9 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         } else {
             newStates[currentQIndex] = Math.max(0, newStates[currentQIndex] - 1);
             if (gameInstanceRef.current?.onResult) gameInstanceRef.current.onResult(false);
-            setLives(l => Math.max(0, l - 1));
+            if (!isLevelWonRef.current) setLives(l => Math.max(0, l - 1));
         }
         setQuestionStates(newStates);
-
         setTimeout(() => {
             setFeedback(null);
             const available = newStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
@@ -76,33 +79,24 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 const nIdx = available[Math.floor(Math.random() * available.length)];
                 setCurrentQIndex(nIdx);
                 if (gameInstanceRef.current?.onQuestion) gameInstanceRef.current.onQuestion(levelQuestions[nIdx]);
-            } else {
-                triggerWinSequence();
-            }
+            } else { triggerWinSequence(); }
         }, 1000);
     };
 
     const triggerWinSequence = () => {
-        setIsLevelWon(true);
-        isLevelWonRef.current = true; // 🔒 VERROU ACTIF : Le JSX n'écoute plus les dégâts
-        
-        if (gameInstanceRef.current?.onLevelWin) {
-            gameInstanceRef.current.onLevelWin();
-        }
-        
+        setIsLevelWon(true); isLevelWonRef.current = true;
+        if (gameInstanceRef.current?.onLevelWin) gameInstanceRef.current.onLevelWin();
         setTimeout(() => setIsPowerOff(true), 1500);
         setTimeout(() => {
             const nextLvlIdx = currentLevelIdx + 1;
             if (allLevels[nextLvlIdx]) initLevel(nextLvlIdx, allLevels);
-            else { alert("🎉 JEU TERMINÉ !"); onStop(); }
+            else { alert("🎉 VICTOIRE FINALE !"); onStop(); }
         }, 4000);
     };
 
     const handleBarCheat = (idx) => {
         if (keysPressed['KeyS'] && keysPressed['KeyT']) {
-            const next = [...questionStates];
-            next[idx] = 3;
-            setQuestionStates(next);
+            const next = [...questionStates]; next[idx] = 3; setQuestionStates(next);
             if (next.every(s => s === 3)) triggerWinSequence();
         }
     };
@@ -118,40 +112,76 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         async function startEngine() {
             try {
                 const scene = project.scenes[activeSceneIdx];
-                if (!scene) return;
-                const resources = (scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url));
-                await Promise.all([...new Set(resources)].filter(Boolean).map(url => new Promise(resolve => {
-                    const img = new Image(); img.crossOrigin = "anonymous";
-                    img.onload = () => { assets[resolveUrl(url)] = img; resolve(); };
-                    img.onerror = () => resolve();
-                    img.src = resolveUrl(url);
-                })));
+                const imgUrls = (scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url));
+                const sndUrls = (scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url)));
+
+                await Promise.all([
+                    ...[...new Set(imgUrls)].filter(Boolean).map(url => new Promise(res => {
+                        const img = new Image(); img.crossOrigin = "anonymous";
+                        img.onload = () => { assets[resolveUrl(url)] = img; res(); };
+                        img.onerror = res; img.src = resolveUrl(url);
+                    })),
+                    ...[...new Set(sndUrls)].filter(Boolean).map(url => new Promise(async res => {
+                        try {
+                            if (!audioBuffersRef.current.has(url)) {
+                                const buffer = await SoundExpert.decodeAudio(resolveUrl(url), audioCtxRef.current);
+                                if (buffer) audioBuffersRef.current.set(url, buffer);
+                            }
+                        } catch(e) {}
+                        res();
+                    }))
+                ]);
+                
                 if (!isMounting) return;
 
-                let userCode = code;
-                if (userCode.includes('class MiniGame') && !userCode.includes('extends MiniGameBase')) {
-                    userCode = userCode.replace('class MiniGame', 'class MiniGame extends MiniGameBase');
-                }
-
                 const headerCode = `
-                    const { canvas, ctx, assets, project, sceneIdx, resolveUrl, callbacks } = params;
+                    const { canvas, ctx, assets, project, sceneIdx, resolveUrl, callbacks, audioBuffers, audioCtx } = params;
+                    
                     class ActorProxy {
-                        constructor(data) {
-                            this.id = data.id; this.name = data.name;
+                        constructor(data, engine) {
+                            this.id = data.id; this.name = data.name; this.engine = engine;
                             this.x = data.initialX || 50; this.y = data.initialY || 50;
                             this.dir = data.direction || 0; this.scale = data.scale || 1;
                             this.visible = true; this.currentAction = data.actions?.[0]?.name || 'IDLE';
                             this.rotationStyle = data.rotationStyle || 'all';
                             this.frameIdx = 0; this.lastAnimTime = 0;
                         }
-                        play(name) { if(this.currentAction.toUpperCase() !== name.toUpperCase()) { this.currentAction = name; this.frameIdx = 0; this.lastAnimTime = 0; } }
+                        play(name) { 
+                            if(this.currentAction.toUpperCase() !== name.toUpperCase()) { 
+                                this.currentAction = name; this.frameIdx = 0; this.lastAnimTime = 0;
+                                // 🔊 TRIGGER SONS D'ACTION
+                                this.engine._triggerActionSounds(this.id, name);
+                            } 
+                        }
                     }
+
                     class MiniGameBase {
                         constructor(c, a, cb) {
                             this.canvas = c || canvas; this.ctx = ctx; this.assets = a || assets; this.callbacks = cb || callbacks; this.keys = {};
                             const s = project.scenes[sceneIdx];
-                            if(s && s.actors) { s.actors.forEach(a => { this[a.name.toUpperCase()] = new ActorProxy(a); }); }
+                            if(s && s.actors) { s.actors.forEach(a => { this[a.name.toUpperCase()] = new ActorProxy(a, this); }); }
                         }
+
+                        playGlobal(name) {
+                            const gs = project.scenes[sceneIdx].globalSounds?.find(s => s.name.toUpperCase() === name.toUpperCase());
+                            if(gs && gs.sounds) gs.sounds.forEach(snd => this._playSound(snd.url));
+                        }
+
+                        _triggerActionSounds(actorId, actionName) {
+                            const actor = project.scenes[sceneIdx].actors.find(a => a.id === actorId);
+                            const action = actor?.actions.find(act => act.name.toUpperCase() === actionName.toUpperCase());
+                            if(action && action.sounds) action.sounds.forEach(snd => this._playSound(snd.url));
+                        }
+
+                        _playSound(url) {
+                            const buffer = audioBuffers.get(url);
+                            if(buffer && audioCtx) {
+                                if(audioCtx.state === 'suspended') audioCtx.resume();
+                                const source = audioCtx.createBufferSource();
+                                source.buffer = buffer; source.connect(audioCtx.destination); source.start(0);
+                            }
+                        }
+
                         _system_render() {
                             const s = project.scenes[sceneIdx];
                             const bd = s?.backdrops?.[s.currentBackdropIdx || 0];
@@ -181,21 +211,16 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     }
                 `;
 
-                const finalScript = headerCode + "\n" + userCode + "\n return MiniGame;";
-                
+                const finalScript = headerCode + "\n" + code + "\n return MiniGame;";
                 const FinalClass = new Function('params', finalScript)({ 
                     canvas, ctx, assets, project, sceneIdx: activeSceneIdx, resolveUrl, 
-                    callbacks: { 
-                        // 🛡️ SÉCURITÉ V473 : Le callback de dégâts vérifie le verrou de victoire
-                        onPlayerHit: () => {
-                            if (!isLevelWonRef.current) {
-                                setLives(l => Math.max(0, l - 1));
-                            }
-                        } 
-                    } 
+                    audioBuffers: audioBuffersRef.current, audioCtx: audioCtxRef.current,
+                    callbacks: { onPlayerHit: () => { if (!isLevelWonRef.current) setLives(l => Math.max(0, l - 1)); } } 
                 });
+                
                 const instance = new FinalClass();
                 gameInstanceRef.current = instance;
+                if(instance.start) instance.start();
 
                 const loop = () => {
                     if (!isMounting) return;
@@ -232,21 +257,11 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     ))}
                 </div>
             </div>
-
             <div className="relative">
                 <canvas ref={canvasRef} width={800} height={450} className={`aspect-video shadow-2xl bg-black border-4 border-slate-800 rounded-xl transition-opacity duration-1000 ${isPowerOff ? 'opacity-0' : 'opacity-100'}`} />
-                {isLevelWon && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm rounded-xl animate-in zoom-in">
-                        <div className="bg-white p-10 rounded-[40px] shadow-2xl text-center border-8 border-green-500">
-                            <span className="text-6xl block mb-4">🏆</span>
-                            <h2 className="text-4xl font-black text-slate-800 uppercase">Niveau Réussi !</h2>
-                        </div>
-                    </div>
-                )}
-                {isPowerOff && <div className="absolute inset-0 bg-black rounded-xl flex items-center justify-center"><div className="w-1 h-1 bg-white rounded-full animate-ping"></div></div>}
+                {isLevelWon && (<div className="absolute inset-0 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm rounded-xl animate-in zoom-in"><div className="bg-white p-10 rounded-[40px] shadow-2xl text-center border-8 border-green-500"><span className="text-6xl block mb-4">🏆</span><h2 className="text-4xl font-black text-slate-800 uppercase">Niveau Réussi !</h2></div></div>)}
             </div>
             {crash && <div className="absolute inset-0 bg-red-900/90 flex items-center justify-center text-white font-mono p-10 text-center z-50">💥 ERREUR SCRIPT : {crash}</div>}
-
             <div className="absolute bottom-6 w-full flex justify-center px-10">
                 <div className="grid grid-cols-4 gap-4 w-full max-w-5xl">
                     {levelQuestions[currentQIndex]?.options?.map((o, i) => (

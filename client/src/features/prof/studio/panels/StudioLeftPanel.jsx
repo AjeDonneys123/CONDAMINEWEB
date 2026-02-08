@@ -138,7 +138,7 @@ export default function StudioLeftPanel({
                     
                     <div className={`border-slate-200 pt-2 ${leftTab === 'actions' ? 'border-t mt-2' : ''}`}>
                         <div className="flex justify-between items-center mb-1">
-                            <span className="seq-label text-indigo-500">Piste Audio (3 max)</span>
+                            <span className="seq-label text-indigo-500">Piste Audio</span>
                             <button className="btn-sound-trigger !w-auto px-2 !text-[9px]" onClick={() => setShowSoundModal(true)}>
                                 🔊 Ajouter Son
                             </button>
@@ -153,11 +153,9 @@ export default function StudioLeftPanel({
                                     <button className="frame-del !bg-red-500 !text-white !opacity-100 !top-1 !right-1" onClick={(e) => { e.stopPropagation(); handleDeleteSound(sIdx); }}>✕</button>
                                 </div>
                             ))}
-                            {[...Array(Math.max(0, 3 - (selectedAction.sounds || []).length))].map((_, i) => (
-                                <div key={i + 100} className="border-2 border-dashed border-slate-200 rounded-lg h-16 flex items-center justify-center text-slate-300 text-xs font-bold">
-                                    VIDE
-                                </div>
-                            ))}
+                            <div className="border-2 border-dashed border-slate-200 rounded-lg h-16 flex items-center justify-center text-slate-300 text-[8px] font-bold">
+                                LIBRE
+                            </div>
                         </div>
                     </div>
 

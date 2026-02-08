@@ -4,14 +4,12 @@ import './StudioDashboard.css';
 import { api } from '../../../services/api';
 import SoundExpert from './studioComp/SoundExpert';
 
-// --- COMPOSANTS INTERNES ---
 import ManualEraser from './studioComp/ManualEraser';
 import GameEngine from './studioComp/GameEngine';
 import SaveLoadModal from './studioComp/SaveLoadModal';
 import SoundModal from './studioComp/SoundModal';
 import SoundEditorModal from './studioComp/SoundEditorModal';
 
-// --- PANNEAUX DÉCOUPÉS ---
 import StudioLeftPanel from './panels/StudioLeftPanel';
 import StudioCenterPanel from './panels/StudioCenterPanel';
 import StudioRightPanel from './panels/StudioRightPanel';
@@ -23,8 +21,7 @@ function resolveUrl(url) {
     return `/api/proxy/${id}`;
 }
 
-const defaultCode = `// 🧟 ZOMBIE V485
-class MiniGame extends MiniGameBase {
+const defaultCode = `class MiniGame extends MiniGameBase {
     constructor(canvas, assets, callbacks) {
         super(canvas, assets, callbacks);
         this.heroState = "IDLE"; this.heroTimer = 0;
@@ -36,17 +33,17 @@ class MiniGame extends MiniGameBase {
         if(this.HEROS) { this.HEROS.x = 15; this.HEROS.y = 70; } 
         if(this.ZOMBIE) { this.ZOMBIE.x = 90; this.ZOMBIE.y = 70; } 
     }
-    onLevelWin() { this.isStopped = true; }
+    onLevelWin() { this.isStopped = true; this.playGlobal("VICTOIRE"); }
     onResult(correct) { 
         if(correct) { 
-            this.heroState = "SHOOT"; 
-            this.heroTimer = 30; 
-            this.projectiles.push({ x: 20, y: 65 }); 
+            this.heroState = "SHOOT"; this.heroTimer = 30; 
+            this.projectiles.push({ x: 20, y: 65 });
+            if(this.HEROS) this.HEROS.play("SHOOT"); 
         } 
     }
     update() {
         if(this.isStopped) return;
-        if(this.heroState === "SHOOT") { this.heroTimer--; if(this.heroTimer <= 0) this.heroState = "IDLE"; }
+        if(this.heroState === "SHOOT") { this.heroTimer--; if(this.heroTimer <= 0) { this.heroState = "IDLE"; if(this.HEROS) this.HEROS.play("IDLE"); } }
         this.zombieX -= 0.15; 
         if(this.zombieX < 20) { if (this.callbacks.onPlayerHit) this.callbacks.onPlayerHit(); this.zombieX = 100; }
         if(this.ZOMBIE) { this.ZOMBIE.x = this.zombieX; this.ZOMBIE.dir = -90; this.ZOMBIE.play("AVANCER"); }
@@ -60,24 +57,9 @@ class MiniGame extends MiniGameBase {
 }
 `;
 
-const DEMO_PROJECT = { 
-    title: "Mon Premier Jeu", 
-    scenes: [{ 
-        name: "Scene 1", backdrops: [], currentBackdropIdx: 0,
-        actors: [
-            { id: "actor-hero", name: "HEROS", initialX: 15, initialY: 70, scale: 1, direction: 0, rotationStyle: 'all', actions: [{ name: "IDLE", speed: 100, frames: [], sounds: [] }, { name: "SHOOT", speed: 100, frames: [], sounds: [] }] },
-            { id: "actor-zombie", name: "ZOMBIE", initialX: 90, initialY: 70, scale: 1, direction: 0, rotationStyle: 'left-right', actions: [{ name: "AVANCER", speed: 150, frames: [], sounds: [] }] }
-        ],
-        globalSounds: [
-            { name: "DÉPART", sounds: [] },
-            { name: "VICTOIRE", sounds: [] },
-            { name: "DÉFAITE", sounds: [] }
-        ]
-    }] 
-};
+const DEMO_PROJECT = { title: "Mon Premier Jeu", scenes: [{ name: "Scene 1", backdrops: [], currentBackdropIdx: 0, actors: [ { id: "actor-hero", name: "HEROS", initialX: 15, initialY: 70, scale: 1, direction: 0, rotationStyle: 'all', actions: [{ name: "IDLE", speed: 100, frames: [], sounds: [] }, { name: "SHOOT", speed: 100, frames: [], sounds: [] }] }, { id: "actor-zombie", name: "ZOMBIE", initialX: 90, initialY: 70, scale: 1, direction: 0, rotationStyle: 'left-right', actions: [{ name: "AVANCER", speed: 150, frames: [], sounds: [] }] } ], globalSounds: [ { name: "DÉPART", sounds: [] }, { name: "VICTOIRE", sounds: [] }, { name: "DÉFAITE", sounds: [] } ] }] };
 
 export default function StudioDashboard({ user }) {
-    // 1. ÉTATS DE BASE
     const [project, setProject] = useState(DEMO_PROJECT);
     const [selectedActorId, setSelectedActorId] = useState("actor-hero");
     const [selectedActionIdx, setSelectedActionIdx] = useState(0);
@@ -106,21 +88,16 @@ export default function StudioDashboard({ user }) {
     const actorUploadRef = useRef(null);
     const backdropUploadRef = useRef(null); 
     const stageRef = useRef(null);
-    
     const audioCtxRef = useRef(null);
     const audioBuffersRef = useRef(new Map()); 
     const activeSourcesRef = useRef([]);
 
-    // 2. VARIABLES DÉRIVÉES (DÉCLARÉES AVANT LES EFFECTS)
+    // --- VARIABLES DÉRIVÉES (FIX REFERENCE ERROR) ---
     const selectedSceneIdx = 0;
     const currentScene = project?.scenes?.[selectedSceneIdx];
     const selectedActor = currentScene?.actors?.find(a => a.id === selectedActorId) || currentScene?.actors?.[0];
-    
-    const selectedAction = leftTab === 'actions' 
-        ? selectedActor?.actions?.[selectedActionIdx]
-        : currentScene?.globalSounds?.[selectedGlobalSoundIdx];
+    const selectedAction = leftTab === 'actions' ? selectedActor?.actions?.[selectedActionIdx] : currentScene?.globalSounds?.[selectedGlobalSoundIdx];
 
-    // 3. EFFETS SYSTÈME
     useEffect(() => { loadProjects(); }, [user]);
 
     useEffect(() => {
@@ -147,9 +124,7 @@ export default function StudioDashboard({ user }) {
             const buffer = audioBuffersRef.current.get(snd.url);
             if (buffer) {
                 const source = ctx.createBufferSource();
-                source.buffer = buffer;
-                source.connect(ctx.destination);
-                source.start(0);
+                source.buffer = buffer; source.connect(ctx.destination); source.start(0);
                 activeSourcesRef.current.push(source);
             }
         });
@@ -163,12 +138,8 @@ export default function StudioDashboard({ user }) {
     useEffect(() => {
         let timer;
         if (isPreviewPlaying && selectedAction?.frames?.length > 0) {
-            timer = setInterval(() => { 
-                setPreviewFrameIdx(prev => (prev + 1) % selectedAction.frames.length); 
-            }, selectedAction.speed || 100);
-        } else {
-            setPreviewFrameIdx(0);
-        }
+            timer = setInterval(() => { setPreviewFrameIdx(prev => (prev + 1) % (selectedAction.frames.length || 1)); }, selectedAction.speed || 100);
+        } else { setPreviewFrameIdx(0); }
         return () => clearInterval(timer);
     }, [isPreviewPlaying, selectedAction]);
 
@@ -181,16 +152,9 @@ export default function StudioDashboard({ user }) {
         const data = await api.get(`/studio/projects/${user.id || user._id}`);
         if (data?.length > 0) {
             const p = data[0];
-            if (p.scenes?.[0] && !p.scenes[0].globalSounds) {
-                p.scenes[0].globalSounds = DEMO_PROJECT.scenes[0].globalSounds;
-            }
-            setProject(p);
-            setCode(p.generatedCode || defaultCode);
+            if (p.scenes?.[0] && !p.scenes[0].globalSounds) p.scenes[0].globalSounds = DEMO_PROJECT.scenes[0].globalSounds;
+            setProject(p); if (p.generatedCode) setCode(p.generatedCode);
             if (p.scenes?.[0]?.actors?.[0]) setSelectedActorId(p.scenes[0].actors[0].id);
-        } else {
-            setProject(DEMO_PROJECT);
-            setCode(defaultCode);
-            setSelectedActorId("actor-hero");
         }
     }
 
@@ -218,7 +182,7 @@ export default function StudioDashboard({ user }) {
     const handleSelectActor = (actorId) => { setSelectedActorId(actorId); setSelectedFrameIdx(null); };
     const handleStageMouseDown = (e, actorId) => { e.preventDefault(); e.stopPropagation(); handleSelectActor(actorId); setIsDraggingOnStage(true); };
     const handleStageMouseMove = (e) => { if (!isDraggingOnStage || !selectedActorId || !stageRef.current) return; const rect = stageRef.current.getBoundingClientRect(); const next = { ...project }; const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); if (actor) { actor.initialX = Math.round(Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100))); actor.initialY = Math.round(Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100))); setProject(next); } };
-    const handleUpdateProp = (f, v) => { if (!selectedActor) return; const next = { ...project }; const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); if (actor) { actor[f] = isNaN(v) ? v : parseFloat(v); setProject(next); saveProject(next); } };
+    const handleUpdateProp = (f, v) => { const next = { ...project }; const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); if (actor) { actor[f] = isNaN(v) ? v : parseFloat(v); setProject(next); saveProject(next); } };
     const handleReorderFrame = (targetIdx) => { if (draggedFrameIdx === null || draggedFrameIdx === targetIdx || !selectedAction) return; const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); const frames = actor.actions[selectedActionIdx].frames; const [moved] = frames.splice(draggedFrameIdx, 1); frames.splice(targetIdx, 0, moved); } else { const frames = next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].frames; const [moved] = frames.splice(draggedFrameIdx, 1); frames.splice(targetIdx, 0, moved); } saveProject(next); setDraggedFrameIdx(null); };
     const handleDeleteFrame = (fIdx) => { if (!selectedAction) return; const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); actor.actions[selectedActionIdx].frames.splice(fIdx, 1); } else { next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].frames.splice(fIdx, 1); } stopAllSounds(); saveProject(next); };
     const handleDeleteSound = (sIdx) => { if (!selectedAction) return; const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); actor.actions[selectedActionIdx].sounds.splice(sIdx, 1); } else { next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].sounds.splice(sIdx, 1); } stopAllSounds(); saveProject(next); };
@@ -228,7 +192,7 @@ export default function StudioDashboard({ user }) {
 
     const handleDeleteActor = (e, id) => { e.stopPropagation(); if (!confirm("Supprimer ?")) return; const next = JSON.parse(JSON.stringify(project)); next.scenes[selectedSceneIdx].actors = next.scenes[selectedSceneIdx].actors.filter(a => a.id !== id); if (selectedActorId === id) setSelectedActorId(null); setProject(next); saveProject(next); };
     const handleDeleteBackdrop = (e, idx) => { e.stopPropagation(); if (!confirm("Supprimer ?")) return; const next = JSON.parse(JSON.stringify(project)); next.scenes[selectedSceneIdx].backdrops.splice(idx, 1); next.scenes[selectedSceneIdx].currentBackdropIdx = 0; setProject(next); saveProject(next); };
-    const handleSaveSound = (url, name) => { if (!selectedAction) return; const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); const act = actor.actions[selectedActionIdx]; if (!act.sounds) act.sounds = []; if (act.sounds.length < 3) act.sounds.push({ type: 'sound', url: url, name: name }); else alert("Max 3 sons."); } else { const act = next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx]; if (!act.sounds) act.sounds = []; if (act.sounds.length < 3) act.sounds.push({ type: 'sound', url: url, name: name }); else alert("Max 3 sons."); } setProject(next); saveProject(next); };
+    const handleSaveSound = (url, name) => { if (!selectedAction) return; const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); const act = actor.actions[selectedActionIdx]; if (!act.sounds) act.sounds = []; act.sounds.push({ type: 'sound', url: url, name: name }); } else { const act = next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx]; if (!act.sounds) act.sounds = []; act.sounds.push({ type: 'sound', url: url, name: name }); } setProject(next); saveProject(next); };
 
     return (
         <div className="studio-wrapper" onMouseMove={handleStageMouseMove} onMouseUp={() => setIsDraggingOnStage(false)}>

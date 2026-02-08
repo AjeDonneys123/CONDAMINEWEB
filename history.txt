@@ -1001,3 +1001,17 @@
 08/02/2026 17:15 - STUDIO EVOLUTION : Implémentation du système de Sons Globaux. L'onglet 'Sons' fonctionne désormais comme l'onglet 'Actions' mais pour des événements de scène (Départ, Victoire, Défaite). Ajout du bouton 'X' de suppression sur les slots audio et les entrées de listes. Mise à jour du modèle StudioProject pour supporter globalSounds.
 
 08/02/2026 17:20 - RECOVERY FIX : Résolution de la ReferenceError "selectedActor is not defined". Réorganisation structurelle du composant StudioDashboard pour garantir que toutes les variables dérivées sont déclarées avant les Hooks et le rendu. Intégration finalisée du système de Sons Globaux.
+
+08/02/2026 17:35 - RECOVERY FIX : Résolution de la ReferenceError "selectedActor is not defined". Réorganisation structurelle du composant StudioDashboard pour garantir que toutes les variables calculées (currentScene, selectedActor, selectedAction) sont déclarées au sommet du composant avant d'être passées aux panneaux fils.
+
+08/02/2026 17:40 - RECOVERY FIX : Rétablissement de selectedActor et harmonisation de selectedAction pour l'onglet Sons. Suppression définitive du crash ReferenceError par réorganisation structurelle des variables calculées.
+
+08/02/2026 17:35 - STUDIO FINAL AUDIO SYNC : Résolution de la ReferenceError 'selectedActor'. Levée totale de la limite des sons par action. Le bouton 'X' est ajouté pour la suppression des sons. Mise à jour du GameEngine : l'appel à .play("ACTION") déclenche désormais instantanément tous les sons associés. Le Proxy serveur a été corrigé pour supporter les flux audio bruts sans corruption.
+
+08/02/2026 17:40 - SYSTEM UPGRADE : apply.js V9.0 activé avec commit Git automatique après chaque injection. STUDIO AUDIO REPAIR : Levée de la limite de sons, ajout du bouton X sur les sons et actions. GameEngine corrigé pour déclencher les sons lors de .play() et .playGlobal(). Correction définitive de la ReferenceError selectedActor.
+
+08/02/2026 17:40 - SYSTEM UPGRADE : apply.js V9.0 activé avec commit Git automatique après chaque injection. STUDIO AUDIO REPAIR : Levée de la limite de sons, ajout du bouton X sur les sons et actions. GameEngine corrigé pour déclencher les sons lors de .play() et .playGlobal(). Correction définitive de la ReferenceError selectedActor.
+
+08/02/2026 18:15 - SYSTEM UPGRADE : apply.js V9.0 Flexible activé avec commit Git automatique. CORE/STUDIO REPAIR : Le Proxy serveur ne corrompt plus les fichiers audio. Le GameEngine décode maintenant les sons en AudioBuffers et synchronise parfaitement l'appel .play() avec le déclenchement sonore.
+
+08/02/2026 18:15 - SYSTEM UPGRADE : apply.js V9.0 Flexible activé avec commit Git automatique. CORE/STUDIO REPAIR : Le Proxy serveur ne corrompt plus les fichiers audio. Le GameEngine décode maintenant les sons en AudioBuffers et synchronise parfaitement l'appel .play() avec le déclenchement sonore.

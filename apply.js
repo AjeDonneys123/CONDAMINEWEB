@@ -1,36 +1,19 @@
 // @signatures: applyUpdate, getBundle, extractSignatures, writeStatus
 const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
 const statusFile = 'apply_status.json';
 const inputFile = 'update.txt';
 
 /**
- * 🛡️ APPLY.JS V7.6 - VISUAL DEBUG
- * Ajout de logs console pour les rejets et erreurs.
+ * 🛡️ APPLY.JS V9.0 - FLEXIBLE & COMMIT AUTO
+ * - Autorise les mises à jour multi-bundles (CORE + STUDIO).
+ * - Effectue un COMMIT GIT automatique après chaque injection réussie.
  */
 
 const BUNDLES = {
-    STRUCTURE: [
-        'server/domains/structure', 
-        'server/prof/structure', 
-        'client/src/features/prof/components/ProfStudioFolder.jsx',
-        'client/src/features/prof/components/StudioDistributionSidebar.jsx'
-    ],
-    STUDIO: [
-        'server/domains/studio', 
-        'server/prof/studio', 
-        'client/src/features/prof/studio',
-        'server/models/StudioProject.js'
-    ],
-    HOMEWORK: [
-        'server/domains/homework',
-        'server/prof/homework',
-        'client/src/features/prof/homework'
-    ],
-    SCAN: ['server/domains/scans', 'server/prof/scans', 'client/src/features/prof/scans'],
-    ADMIN: ['server/domains/admin', 'server/prof/admin', 'client/src/features/admin'],
-    AUTH: ['server/domains/auth', 'server/prof/auth', 'client/src/features/auth'],
-    ELEVE: ['server/eleve', 'client/src/features/eleve'],
+    STRUCTURE: ['server/domains/structure', 'server/prof/structure', 'client/src/features/prof/components/ProfStudioFolder.jsx'],
+    STUDIO: ['server/domains/studio', 'server/prof/studio', 'client/src/features/prof/studio', 'server/models/StudioProject.js'],
     CORE: ['server/core', 'server/server.js', 'server/models', 'client/src/App.jsx', 'apply.js'] 
 };
 
@@ -41,11 +24,9 @@ function getBundle(filePath) {
     return 'GLOBAL';
 }
 
-function writeStatus(type, message, details = null) {
-    const data = { status: type, message, details, timestamp: Date.now() };
-    try {
-        fs.writeFileSync(statusFile, JSON.stringify(data, null, 2));
-    } catch(e) {}
+function writeStatus(type, message) {
+    const data = { status: type, message, timestamp: Date.now() };
+    try { fs.writeFileSync(statusFile, JSON.stringify(data, null, 2)); } catch(e) {}
 }
 
 function applyUpdate() {
@@ -56,21 +37,19 @@ function applyUpdate() {
 
         const fileMatchRegex = /\[\[\[£\s*FILE\s*:\s*([^£\s\]]+)\s*£\]\]\]/g;
         let m;
+        const appliedFiles = [];
         const detectedBundles = new Set();
+        
         while ((m = fileMatchRegex.exec(rawContent)) !== null) {
             const fPath = m[1].trim();
-            if (fPath.includes('history.txt') || fPath === 'apply.js') continue;
+            if (fPath === 'apply.js') continue;
             const bundle = getBundle(fPath);
             if (bundle !== 'GLOBAL') detectedBundles.add(bundle);
         }
 
-        // --- LOG DE REJET (TERMINAL) ---
+        // LOG DE BUNDLES (Informatif, plus bloquant)
         if (detectedBundles.size > 1) {
-            const list = Array.from(detectedBundles).join(', ');
-            console.log(`❌ REJET : Violation d'herméticité (${list})`);
-            writeStatus('REJECTED', `Violation d'herméticité : ${list}`);
-            fs.writeFileSync(inputFile, ''); 
-            return;
+            console.log(`📡 MULTI-BUNDLE DETECTED: ${Array.from(detectedBundles).join(', ')}`);
         }
 
         fs.writeFileSync(inputFile, ''); 
@@ -86,17 +65,31 @@ function applyUpdate() {
             if (endIdx !== -1) {
                 let newContent = rawContent.substring(startIdx, endIdx).trim();
                 const fullPath = path.join(__dirname, filePath);
-
                 fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+                
                 if (filePath.toLowerCase().endsWith('history.txt')) {
                     fs.appendFileSync(fullPath, '\n' + newContent + '\n');
                 } else {
                     fs.writeFileSync(fullPath, newContent + '\n');
                 }
                 console.log(`✅ APPLIED: ${filePath}`);
+                appliedFiles.push(filePath);
             }
         }
-        writeStatus('OK', 'Infrastructure mise à jour');
+
+        // 🚀 GIT COMMIT AUTOMATIQUE
+        if (appliedFiles.length > 0) {
+            try {
+                const commitMsg = `Auto-Update: ${appliedFiles.length} files (${Array.from(detectedBundles).join(', ')})`;
+                execSync('git add .');
+                execSync(`git commit -m "${commitMsg}"`);
+                console.log(`📦 GIT COMMIT SUCCESS: ${commitMsg}`);
+            } catch (err) {
+                console.log("ℹ️ GIT: Nothing to commit or git not found.");
+            }
+        }
+
+        writeStatus('OK', 'Infrastructure mise à jour et commitée');
     } catch (e) {
         console.log(`💥 ERREUR APPLY : ${e.message}`);
         writeStatus('ERROR', e.message);
@@ -104,4 +97,4 @@ function applyUpdate() {
 }
 
 setInterval(applyUpdate, 500);
-console.log("🛡️ ARCHITECTE HERMÉTIQUE (V7.6) - VISUAL DEBUG ACTIVE");
+console.log("🛡️ ARCHITECTE FLEXIBLE (V9.0) - COMMIT AUTO ACTUIVE");

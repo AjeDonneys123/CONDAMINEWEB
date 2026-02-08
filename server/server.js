@@ -1,4 +1,4 @@
-// @signatures: SERVER_BOOT_ID, GlobalInfrastructure, KernelV59_CLEAN
+// @signatures: SERVER_BOOT_ID, GlobalInfrastructure, KernelV62_AUDIO_PIPE
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
@@ -11,35 +11,23 @@ const port = 3000;
 const SERVER_BOOT_ID = Date.now();
 
 console.log("------------------------------------------------");
-console.log("🚀 KERNEL V60 : STATUS SYSTÈME CONNECTÉ");
+console.log("🚀 KERNEL V62 : FIX PROXY AUDIO");
 console.log("------------------------------------------------");
 
 app.use(express.json({ limit: '70mb' }));
 app.use(express.urlencoded({ extended: true, limit: '70mb' }));
 
-// 1. ROUTES SYSTÈME
 app.get('/api/check-deploy', (req, res) => res.json({ status: "OK", bootId: SERVER_BOOT_ID }));
-app.get('/api/system/version', (req, res) => res.json({ hash: "V60-STATUS", build: 173 }));
-
-// CORRECTION : Lecture réelle du fichier de statut écrit par apply.js
 app.get('/api/system/apply-status', (req, res) => {
     try {
         const statusPath = path.join(__dirname, '../apply_status.json');
-        if (fs.existsSync(statusPath)) {
-            const data = fs.readFileSync(statusPath, 'utf8');
-            res.json(JSON.parse(data));
-        } else {
-            res.json({ status: "OK", message: "Système prêt" });
-        }
-    } catch (e) {
-        res.json({ status: "OK", message: "Statut illisible" });
-    }
+        if (fs.existsSync(statusPath)) res.json(JSON.parse(fs.readFileSync(statusPath, 'utf8')));
+        else res.json({ status: "OK" });
+    } catch (e) { res.json({ status: "OK" }); }
 });
 
-// 2. CHARGEMENT SÉCURISÉ
 try {
     const Models = require('./prof/models/prof.models');
-    
     app.use('/api/auth', require('./prof/auth/auth.prof'));
     app.use('/api/admin', require('./prof/admin/admin.prof'));
     app.use('/api/homework', require('./prof/homework/homework.prof'));
@@ -49,33 +37,25 @@ try {
     app.use('/api/structure', require('./prof/structure/structure.prof'));
     app.use('/api/studio', require('./prof/studio/studio.prof'));
 
-    // Silos Elève
     app.use('/api/eleve/auth', require('./eleve/auth/auth.eleve'));
     app.use('/api/eleve/homework', require('./eleve/homework/homework.eleve'));
     app.use('/api/eleve/classroom', require('./eleve/classroom/classroom.eleve'));
     app.use('/api/eleve/games', require('./eleve/games/games.eleve'));
-    
-    console.log("✅ Tous les silos sont chargés.");
-} catch (e) {
-    console.error("💥 Erreur critique Boot:", e.message);
-}
+} catch (e) { console.error("💥 Boot Error:", e.message); }
 
-// 3. PROXY IMAGES
 const ProfDrive = require('./prof/core/drive.prof');
 app.get(['/api/proxy/:id', '/api/structure/proxy/:id'], async (req, res) => {
     try {
-        const stream = await ProfDrive.getFileStream(req.params.id);
-        res.setHeader('Content-Type', 'image/png');
+        const fileId = req.params.id;
+        const stream = await ProfDrive.getFileStream(fileId);
+        // FIX : On ne force plus Content-Type image/png, on laisse le flux brut
+        // pour que la Web Audio API détecte le format réel (MP3/WAV/PNG).
         stream.pipe(res);
-    } catch (e) { res.status(404).send("Error"); }
+    } catch (e) { res.status(404).send("File missing"); }
 });
 
-// 4. ORACLE
-app.use((err, req, res, next) => {
-    res.status(500).json({ error: "INTERNAL_ERROR", message: err.message });
-});
+app.use((err, req, res, next) => { res.status(500).json({ error: "INTERNAL_ERROR", message: err.message }); });
 
 mongoose.connect(process.env.MONGODB_URI).then(() => {
-    console.log("📂 MongoDB Connecté.");
     app.listen(port, '0.0.0.0', () => console.log(`🏁 PRET SUR LE PORT ${port}`));
 });
