@@ -1,4 +1,3 @@
-// @signatures: applyUpdate, getBundle, extractSignatures, writeStatus
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
@@ -6,9 +5,9 @@ const statusFile = 'apply_status.json';
 const inputFile = 'update.txt';
 
 /**
- * 🛡️ APPLY.JS V9.0 - FLEXIBLE & COMMIT AUTO
- * - Autorise les mises à jour multi-bundles (CORE + STUDIO).
- * - Effectue un COMMIT GIT automatique après chaque injection réussie.
+ * 🛡️ APPLY.JS V9.6 - SMART COMMIT & FLEXIBLE MODE
+ * - Autorise les multi-bundles (Plus de blocage d'herméticité).
+ * - Effectue un COMMIT GIT automatique après chaque succès.
  */
 
 const BUNDLES = {
@@ -35,21 +34,15 @@ function applyUpdate() {
         const rawContent = fs.readFileSync(inputFile, 'utf8');
         if (!rawContent || rawContent.length < 10) return;
 
-        const fileMatchRegex = /\[\[\[£\s*FILE\s*:\s*([^£\s\]]+)\s*£\]\]\]/g;
-        let m;
         const appliedFiles = [];
         const detectedBundles = new Set();
         
+        const fileMatchRegex = /\[\[\[£\s*FILE\s*:\s*([^£\s\]]+)\s*£\]\]\]/g;
+        let m;
         while ((m = fileMatchRegex.exec(rawContent)) !== null) {
             const fPath = m[1].trim();
             if (fPath === 'apply.js') continue;
-            const bundle = getBundle(fPath);
-            if (bundle !== 'GLOBAL') detectedBundles.add(bundle);
-        }
-
-        // LOG DE BUNDLES (Informatif, plus bloquant)
-        if (detectedBundles.size > 1) {
-            console.log(`📡 MULTI-BUNDLE DETECTED: ${Array.from(detectedBundles).join(', ')}`);
+            detectedBundles.add(getBundle(fPath));
         }
 
         fs.writeFileSync(inputFile, ''); 
@@ -77,15 +70,14 @@ function applyUpdate() {
             }
         }
 
-        // 🚀 GIT COMMIT AUTOMATIQUE
         if (appliedFiles.length > 0) {
             try {
-                const commitMsg = `Auto-Update: ${appliedFiles.length} files (${Array.from(detectedBundles).join(', ')})`;
+                const commitMsg = `Auto-paste: ${appliedFiles.length} files (${Array.from(detectedBundles).join(', ')})`;
                 execSync('git add .');
                 execSync(`git commit -m "${commitMsg}"`);
-                console.log(`📦 GIT COMMIT SUCCESS: ${commitMsg}`);
+                console.log(`📦 [GIT] Commit réussi : ${commitMsg}`);
             } catch (err) {
-                console.log("ℹ️ GIT: Nothing to commit or git not found.");
+                console.log("ℹ️ [GIT] Rien à commiter.");
             }
         }
 
@@ -97,4 +89,4 @@ function applyUpdate() {
 }
 
 setInterval(applyUpdate, 500);
-console.log("🛡️ ARCHITECTE FLEXIBLE (V9.0) - COMMIT AUTO ACTUIVE");
+console.log("🛡️ ARCHITECTE FLEXIBLE (V9.6) - COMMIT AUTO ACTIF");

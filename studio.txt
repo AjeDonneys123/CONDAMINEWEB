@@ -270,15 +270,14 @@ Gestion globale des ressources du projet.
 import React, { useState, useRef, useEffect } from 'react';
 import './StudioDashboard.css';
 import { api } from '../../../services/api';
+import SoundExpert from './studioComp/SoundExpert';
 
-// --- COMPOSANTS INTERNES ---
 import ManualEraser from './studioComp/ManualEraser';
 import GameEngine from './studioComp/GameEngine';
 import SaveLoadModal from './studioComp/SaveLoadModal';
 import SoundModal from './studioComp/SoundModal';
-import SoundEditorModal from './studioComp/SoundEditorModal'; // NOUVEAU
+import SoundEditorModal from './studioComp/SoundEditorModal';
 
-// --- PANNEAUX DÉCOUPÉS ---
 import StudioLeftPanel from './panels/StudioLeftPanel';
 import StudioCenterPanel from './panels/StudioCenterPanel';
 import StudioRightPanel from './panels/StudioRightPanel';
@@ -290,8 +289,7 @@ function resolveUrl(url) {
     return `/api/proxy/${id}`;
 }
 
-const defaultCode = `// 🧟 ZOMBIE V485
-class MiniGame extends MiniGameBase {
+const defaultCode = `class MiniGame extends MiniGameBase {
     constructor(canvas, assets, callbacks) {
         super(canvas, assets, callbacks);
         this.heroState = "IDLE"; this.heroTimer = 0;
@@ -303,17 +301,17 @@ class MiniGame extends MiniGameBase {
         if(this.HEROS) { this.HEROS.x = 15; this.HEROS.y = 70; } 
         if(this.ZOMBIE) { this.ZOMBIE.x = 90; this.ZOMBIE.y = 70; } 
     }
-    onLevelWin() { this.isStopped = true; }
+    onLevelWin() { this.isStopped = true; this.playGlobal("VICTOIRE"); }
     onResult(correct) { 
         if(correct) { 
-            this.heroState = "SHOOT"; 
-            this.heroTimer = 30; 
-            this.projectiles.push({ x: 20, y: 65 }); 
+            this.heroState = "SHOOT"; this.heroTimer = 30; 
+            this.projectiles.push({ x: 20, y: 65 });
+            if(this.HEROS) this.HEROS.play("SHOOT"); 
         } 
     }
     update() {
         if(this.isStopped) return;
-        if(this.heroState === "SHOOT") { this.heroTimer--; if(this.heroTimer <= 0) this.heroState = "IDLE"; }
+        if(this.heroState === "SHOOT") { this.heroTimer--; if(this.heroTimer <= 0) { this.heroState = "IDLE"; if(this.HEROS) this.HEROS.play("IDLE"); } }
         this.zombieX -= 0.15; 
         if(this.zombieX < 20) { if (this.callbacks.onPlayerHit) this.callbacks.onPlayerHit(); this.zombieX = 100; }
         if(this.ZOMBIE) { this.ZOMBIE.x = this.zombieX; this.ZOMBIE.dir = -90; this.ZOMBIE.play("AVANCER"); }
@@ -327,22 +325,13 @@ class MiniGame extends MiniGameBase {
 }
 `;
 
-const DEMO_PROJECT = { 
-    title: "Mon Premier Jeu", 
-    scenes: [{ 
-        name: "Scene 1", backdrops: [], currentBackdropIdx: 0,
-        actors: [
-            { id: "actor-hero", name: "HEROS", initialX: 15, initialY: 70, scale: 1, direction: 0, rotationStyle: 'all', actions: [{ name: "IDLE", speed: 100, frames: [], sounds: [] }, { name: "SHOOT", speed: 100, frames: [], sounds: [] }] },
-            { id: "actor-zombie", name: "ZOMBIE", initialX: 90, initialY: 70, scale: 1, direction: 0, rotationStyle: 'left-right', actions: [{ name: "AVANCER", speed: 150, frames: [], sounds: [] }] }
-        ] 
-    }] 
-};
+const DEMO_PROJECT = { title: "Mon Premier Jeu", scenes: [{ name: "Scene 1", backdrops: [], currentBackdropIdx: 0, actors: [ { id: "actor-hero", name: "HEROS", initialX: 15, initialY: 70, scale: 1, direction: 0, rotationStyle: 'all', actions: [{ name: "IDLE", speed: 100, frames: [], sounds: [] }, { name: "SHOOT", speed: 100, frames: [], sounds: [] }] }, { id: "actor-zombie", name: "ZOMBIE", initialX: 90, initialY: 70, scale: 1, direction: 0, rotationStyle: 'left-right', actions: [{ name: "AVANCER", speed: 150, frames: [], sounds: [] }] } ], globalSounds: [ { name: "DÉPART", sounds: [] }, { name: "VICTOIRE", sounds: [] }, { name: "DÉFAITE", sounds: [] } ] }] };
 
 export default function StudioDashboard({ user }) {
-    // --- ETATS ---
     const [project, setProject] = useState(DEMO_PROJECT);
     const [selectedActorId, setSelectedActorId] = useState("actor-hero");
     const [selectedActionIdx, setSelectedActionIdx] = useState(0);
+    const [selectedGlobalSoundIdx, setSelectedGlobalSoundIdx] = useState(0);
     const [leftTab, setLeftTab] = useState('actions');
     const [code, setCode] = useState(defaultCode);
     const [isPlaying, setIsPlaying] = useState(false);
@@ -351,17 +340,10 @@ export default function StudioDashboard({ user }) {
     const [statusText, setStatusText] = useState("");
     const [testQuizData, setTestQuizData] = useState(null);
     const [showTestQuizModal, setShowTestQuizModal] = useState(false);
-
-    // ETATS OUTILS
     const [eraserActive, setEraserActive] = useState(false);
-    const [eraserSize, setEraserSize] = useState(10);
     const [frameToErase, setFrameToErase] = useState(null);
     const [showSoundModal, setShowSoundModal] = useState(false);
-    
-    // NOUVEAU : ETAT MODALE ÉDITION SON
-    const [soundToEdit, setSoundToEdit] = useState(null); // { idx: 0, url: '...', name: '...' }
-
-    // ETATS SÉQUENCEUR
+    const [soundToEdit, setSoundToEdit] = useState(null);
     const [draggedFrameIdx, setDraggedFrameIdx] = useState(null);
     const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
     const [previewFrameIdx, setPreviewFrameIdx] = useState(0);
@@ -374,80 +356,73 @@ export default function StudioDashboard({ user }) {
     const actorUploadRef = useRef(null);
     const backdropUploadRef = useRef(null); 
     const stageRef = useRef(null);
-    
-    // 🔊 LECTEUR AUDIO INDÉPENDANT (TRACK B)
-    const audioPlayersRef = useRef([]); // Un tableau d'objets Audio
+    const audioCtxRef = useRef(null);
+    const audioBuffersRef = useRef(new Map()); 
+    const activeSourcesRef = useRef([]);
 
+    // --- VARIABLES DÉRIVÉES (FIX REFERENCE ERROR) ---
     const selectedSceneIdx = 0;
     const currentScene = project?.scenes?.[selectedSceneIdx];
     const selectedActor = currentScene?.actors?.find(a => a.id === selectedActorId) || currentScene?.actors?.[0];
-    const selectedAction = selectedActor?.actions?.[selectedActionIdx];
+    const selectedAction = leftTab === 'actions' ? selectedActor?.actions?.[selectedActionIdx] : currentScene?.globalSounds?.[selectedGlobalSoundIdx];
 
     useEffect(() => { loadProjects(); }, [user]);
 
-    // --- HELPER AUDIO TRACK ---
-    const playAllActionSounds = () => {
-        // Stop previous sounds
-        stopAllSounds();
-
-        if (selectedAction && selectedAction.sounds && selectedAction.sounds.length > 0) {
-            // Pour chaque son dans la piste audio, on crée un lecteur
-            selectedAction.sounds.forEach(snd => {
-                if (snd.url) {
-                    const fullUrl = resolveUrl(snd.url).startsWith('http') ? resolveUrl(snd.url) : window.location.origin + resolveUrl(snd.url);
-                    const audio = new Audio(fullUrl);
-                    audio.volume = 1.0;
-                    audioPlayersRef.current.push(audio);
-                    audio.play().catch(e => console.warn("Audio Play Error", e));
+    useEffect(() => {
+        if (!selectedAction || !selectedAction.sounds) return;
+        const initCtx = () => { if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)(); };
+        const decodeSounds = async () => {
+            initCtx();
+            for (const snd of selectedAction.sounds) {
+                if (snd.url && !audioBuffersRef.current.has(snd.url)) {
+                    const buffer = await SoundExpert.decodeAudio(resolveUrl(snd.url), audioCtxRef.current);
+                    if (buffer) audioBuffersRef.current.set(snd.url, buffer);
                 }
-            });
-        }
+            }
+        };
+        decodeSounds();
+    }, [selectedAction]);
+
+    const playAllActionSounds = () => {
+        stopAllSounds();
+        if (!audioCtxRef.current || !selectedAction || !selectedAction.sounds) return;
+        const ctx = audioCtxRef.current;
+        if (ctx.state === 'suspended') ctx.resume();
+        selectedAction.sounds.forEach(snd => {
+            const buffer = audioBuffersRef.current.get(snd.url);
+            if (buffer) {
+                const source = ctx.createBufferSource();
+                source.buffer = buffer; source.connect(ctx.destination); source.start(0);
+                activeSourcesRef.current.push(source);
+            }
+        });
     };
 
     const stopAllSounds = () => {
-        audioPlayersRef.current.forEach(audio => {
-            audio.pause();
-            audio.currentTime = 0;
-        });
-        audioPlayersRef.current = [];
+        activeSourcesRef.current.forEach(source => { try { source.stop(); } catch(e) {} });
+        activeSourcesRef.current = [];
     };
 
-    // --- EFFECT 1 : LECTEUR IMAGES (TRACK A) ---
     useEffect(() => {
         let timer;
         if (isPreviewPlaying && selectedAction?.frames?.length > 0) {
-            timer = setInterval(() => { 
-                setPreviewFrameIdx(prev => (prev + 1) % selectedAction.frames.length); 
-            }, selectedAction.speed || 100);
-        } else {
-            setPreviewFrameIdx(0);
-        }
+            timer = setInterval(() => { setPreviewFrameIdx(prev => (prev + 1) % (selectedAction.frames.length || 1)); }, selectedAction.speed || 100);
+        } else { setPreviewFrameIdx(0); }
         return () => clearInterval(timer);
     }, [isPreviewPlaying, selectedAction]);
 
-    // --- EFFECT 2 : LECTEUR SONS (TRACK B) ---
-    // Ce lecteur réagit uniquement au changement d'état Play/Stop
     useEffect(() => {
-        if (isPreviewPlaying) {
-            playAllActionSounds();
-        } else {
-            stopAllSounds();
-        }
+        if (isPreviewPlaying) playAllActionSounds();
+        else stopAllSounds();
     }, [isPreviewPlaying]);
-
-    useEffect(() => { return () => stopAllSounds(); }, []);
 
     async function loadProjects() {
         const data = await api.get(`/studio/projects/${user.id || user._id}`);
         if (data?.length > 0) {
             const p = data[0];
-            setProject(p);
-            setCode(p.generatedCode || defaultCode);
+            if (p.scenes?.[0] && !p.scenes[0].globalSounds) p.scenes[0].globalSounds = DEMO_PROJECT.scenes[0].globalSounds;
+            setProject(p); if (p.generatedCode) setCode(p.generatedCode);
             if (p.scenes?.[0]?.actors?.[0]) setSelectedActorId(p.scenes[0].actors[0].id);
-        } else {
-            setProject(DEMO_PROJECT);
-            setCode(defaultCode);
-            setSelectedActorId("actor-hero");
         }
     }
 
@@ -463,67 +438,43 @@ export default function StudioDashboard({ user }) {
     const handleOpenSave = () => { setModalMode('SAVE'); setShowSaveLoadModal(true); };
     const handleOpenLoad = () => { setModalMode('LOAD'); setShowSaveLoadModal(true); };
     const handleCreateNew = () => { setProject(DEMO_PROJECT); setCode(defaultCode); setSelectedActorId("actor-hero"); setShowSaveLoadModal(false); };
-    const handleLoadProject = (p) => { setProject(p); setCode(p.generatedCode || defaultCode); if (p.scenes?.[0]?.actors?.[0]) setSelectedActorId(p.scenes[0].actors[0].id); else setSelectedActorId(null); setShowSaveLoadModal(false); };
+    const handleLoadProject = (p) => { 
+        if (p.scenes?.[0] && !p.scenes[0].globalSounds) p.scenes[0].globalSounds = DEMO_PROJECT.scenes[0].globalSounds;
+        setProject(p); setCode(p.generatedCode || defaultCode); if (p.scenes?.[0]?.actors?.[0]) setSelectedActorId(p.scenes[0].actors[0].id); else setSelectedActorId(null); setShowSaveLoadModal(false); 
+    };
+    
     const handleViewTestQuiz = async () => { try { const data = await api.get('/games/test-data'); if (data) { setTestQuizData(data); setShowTestQuizModal(true); } } catch (e) { console.error(e); } };
-    const handleUpdateActionSpeed = (delta) => { if (!selectedAction) return; const next = JSON.parse(JSON.stringify(project)); const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); if (actor && actor.actions[selectedActionIdx]) { actor.actions[selectedActionIdx].speed = Math.max(20, Math.min(2000, (actor.actions[selectedActionIdx].speed || 100) + delta)); setProject(next); saveProject(next); } };
-    const handleSmartAIClean = async () => { if (!selectedAction) return; const targetIndices = selectedFrameIdx !== null ? [selectedFrameIdx] : selectedAction.frames.map((_, i) => i); if (targetIndices.length === 0) return; if (!confirm(`✨ Nettoyage IA : Traiter ${targetIndices.length} image(s) ?`)) return; setCleaning(true); setStatusText(selectedFrameIdx !== null ? "Détourage CIBLÉ..." : "Détourage EN SÉRIE..."); const next = JSON.parse(JSON.stringify(project)); const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); const act = actor.actions[selectedActionIdx]; for (const idx of targetIndices) { try { const res = await api.post('/studio/remove-bg-specialized', { url: act.frames[idx].url }); if (res.url) act.frames[idx].url = res.url; } catch (e) {} } setProject(next); await saveProject(next); setCleaning(false); };
-    const handleMirrorSequence = async () => { if (!selectedAction) return; setCleaning(true); setStatusText("Création Miroir..."); const next = JSON.parse(JSON.stringify(project)); const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); const act = actor.actions[selectedActionIdx]; for (let i = 0; i < act.frames.length; i++) { if(act.frames[i].type === 'sound') continue; const img = new Image(); img.crossOrigin = "anonymous"; const url = await new Promise(res => { img.onload = () => { const c = document.createElement('canvas'); c.width=img.width; c.height=img.height; const x = c.getContext('2d'); x.translate(img.width, 0); x.scale(-1,1); x.drawImage(img,0,0); c.toBlob(async b => { const f = new FormData(); f.append('file', b, "flipped.png"); const r = await fetch('/api/studio/upload-asset', { method: 'POST', body: f }).then(z=>z.json()); res(r.url); }, 'image/png'); }; img.src = resolveUrl(act.frames[i].url); }); if(url) act.frames[i].url = url; } setProject(next); await saveProject(next); setCleaning(false); };
+    const handleUpdateActionSpeed = (delta) => { if (!selectedAction) return; const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); if (actor && actor.actions[selectedActionIdx]) actor.actions[selectedActionIdx].speed = Math.max(20, Math.min(2000, (actor.actions[selectedActionIdx].speed || 100) + delta)); } else { if (next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx]) next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].speed = Math.max(20, Math.min(2000, (next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].speed || 100) + delta)); } setProject(next); saveProject(next); };
+    const handleSmartAIClean = async () => { if (!selectedAction || leftTab === 'sounds') return; const targetIndices = selectedFrameIdx !== null ? [selectedFrameIdx] : selectedAction.frames.map((_, i) => i); if (targetIndices.length === 0) return; if (!confirm(`✨ Nettoyage IA : Traiter ${targetIndices.length} image(s) ?`)) return; setCleaning(true); setStatusText(selectedFrameIdx !== null ? "Détourage CIBLÉ..." : "Détourage EN SÉRIE..."); const next = JSON.parse(JSON.stringify(project)); const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); const act = actor.actions[selectedActionIdx]; for (const idx of targetIndices) { try { const res = await api.post('/studio/remove-bg-specialized', { url: act.frames[idx].url }); if (res.url) act.frames[idx].url = res.url; } catch (e) {} } setProject(next); await saveProject(next); setCleaning(false); };
+    const handleMirrorSequence = async () => { if (!selectedAction || leftTab === 'sounds') return; setCleaning(true); setStatusText("Création Miroir..."); const next = JSON.parse(JSON.stringify(project)); const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); const act = actor.actions[selectedActionIdx]; for (let i = 0; i < act.frames.length; i++) { if(act.frames[i].type === 'sound') continue; const img = new Image(); img.crossOrigin = "anonymous"; const url = await new Promise(res => { img.onload = () => { const c = document.createElement('canvas'); c.width=img.width; c.height=img.height; const x = c.getContext('2d'); x.translate(img.width, 0); x.scale(-1,1); x.drawImage(img,0,0); c.toBlob(async b => { const f = new FormData(); f.append('file', b, "flipped.png"); const r = await fetch('/api/studio/upload-asset', { method: 'POST', body: f }).then(z=>z.json()); res(r.url); }, 'image/png'); }; img.src = resolveUrl(act.frames[i].url); }); if(url) act.frames[i].url = url; } setProject(next); await saveProject(next); setCleaning(false); };
     const handleSelectActor = (actorId) => { setSelectedActorId(actorId); setSelectedFrameIdx(null); };
     const handleStageMouseDown = (e, actorId) => { e.preventDefault(); e.stopPropagation(); handleSelectActor(actorId); setIsDraggingOnStage(true); };
     const handleStageMouseMove = (e) => { if (!isDraggingOnStage || !selectedActorId || !stageRef.current) return; const rect = stageRef.current.getBoundingClientRect(); const next = { ...project }; const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); if (actor) { actor.initialX = Math.round(Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100))); actor.initialY = Math.round(Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100))); setProject(next); } };
-    const handleUpdateProp = (f, v) => { if (!selectedActor) return; const next = { ...project }; const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); if (actor) { actor[f] = isNaN(v) ? v : parseFloat(v); setProject(next); saveProject(next); } };
-    const handleReorderFrame = (targetIdx) => { if (draggedFrameIdx === null || draggedFrameIdx === targetIdx || !selectedAction) return; const next = JSON.parse(JSON.stringify(project)); const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); const frames = actor.actions[selectedActionIdx].frames; const [moved] = frames.splice(draggedFrameIdx, 1); frames.splice(targetIdx, 0, moved); saveProject(next); setDraggedFrameIdx(null); };
-    const handleDeleteFrame = (fIdx) => { if (!selectedAction) return; const next = JSON.parse(JSON.stringify(project)); const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); actor.actions[selectedActionIdx].frames.splice(fIdx, 1); stopAllSounds(); saveProject(next); };
-    const handleDeleteSound = (sIdx) => { if (!selectedAction) return; const next = JSON.parse(JSON.stringify(project)); const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); actor.actions[selectedActionIdx].sounds.splice(sIdx, 1); stopAllSounds(); saveProject(next); };
+    const handleUpdateProp = (f, v) => { const next = { ...project }; const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); if (actor) { actor[f] = isNaN(v) ? v : parseFloat(v); setProject(next); saveProject(next); } };
+    const handleReorderFrame = (targetIdx) => { if (draggedFrameIdx === null || draggedFrameIdx === targetIdx || !selectedAction) return; const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); const frames = actor.actions[selectedActionIdx].frames; const [moved] = frames.splice(draggedFrameIdx, 1); frames.splice(targetIdx, 0, moved); } else { const frames = next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].frames; const [moved] = frames.splice(draggedFrameIdx, 1); frames.splice(targetIdx, 0, moved); } saveProject(next); setDraggedFrameIdx(null); };
+    const handleDeleteFrame = (fIdx) => { if (!selectedAction) return; const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); actor.actions[selectedActionIdx].frames.splice(fIdx, 1); } else { next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].frames.splice(fIdx, 1); } stopAllSounds(); saveProject(next); };
+    const handleDeleteSound = (sIdx) => { if (!selectedAction) return; const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); actor.actions[selectedActionIdx].sounds.splice(sIdx, 1); } else { next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].sounds.splice(sIdx, 1); } stopAllSounds(); saveProject(next); };
     
-    // NOUVELLE VERSION : OUVRE LA MODALE D'ÉDITION
-    const handleEditSound = (sIdx) => {
-        const target = selectedAction.sounds[sIdx];
-        if (target) {
-            setSoundToEdit({ idx: sIdx, ...target });
-        }
-    };
-
-    // CALLBACK DE SAUVEGARDE DE L'ÉDITEUR SONORE
-    const handleSaveEditedSound = (newUrl, newName) => {
-        if (!soundToEdit) return;
-        const next = JSON.parse(JSON.stringify(project));
-        const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
-        const act = actor.actions[selectedActionIdx];
-        
-        act.sounds[soundToEdit.idx] = { ...act.sounds[soundToEdit.idx], url: newUrl, name: newName };
-        setProject(next);
-        saveProject(next);
-        setSoundToEdit(null); // Fermer la modale
-    };
+    const handleEditSound = (sIdx) => { const target = selectedAction.sounds[sIdx]; if (target) setSoundToEdit({ idx: sIdx, ...target }); };
+    const handleSaveEditedSound = (newUrl, newName) => { if (!soundToEdit) return; const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); actor.actions[selectedActionIdx].sounds[soundToEdit.idx] = { ...actor.actions[selectedActionIdx].sounds[soundToEdit.idx], url: newUrl, name: newName }; } else { next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].sounds[soundToEdit.idx] = { ...next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].sounds[soundToEdit.idx], url: newUrl, name: newName }; } setProject(next); saveProject(next); setSoundToEdit(null); };
 
     const handleDeleteActor = (e, id) => { e.stopPropagation(); if (!confirm("Supprimer ?")) return; const next = JSON.parse(JSON.stringify(project)); next.scenes[selectedSceneIdx].actors = next.scenes[selectedSceneIdx].actors.filter(a => a.id !== id); if (selectedActorId === id) setSelectedActorId(null); setProject(next); saveProject(next); };
     const handleDeleteBackdrop = (e, idx) => { e.stopPropagation(); if (!confirm("Supprimer ?")) return; const next = JSON.parse(JSON.stringify(project)); next.scenes[selectedSceneIdx].backdrops.splice(idx, 1); next.scenes[selectedSceneIdx].currentBackdropIdx = 0; setProject(next); saveProject(next); };
-    const handleSaveSound = (url, name) => { if (!selectedAction) return; const next = JSON.parse(JSON.stringify(project)); const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); const act = actor.actions[selectedActionIdx]; if (!act.sounds) act.sounds = []; if (act.sounds.length < 3) { act.sounds.push({ type: 'sound', url: url, name: name }); setProject(next); saveProject(next); } else { alert("Maximum 3 sons par action."); } };
+    const handleSaveSound = (url, name) => { if (!selectedAction) return; const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); const act = actor.actions[selectedActionIdx]; if (!act.sounds) act.sounds = []; act.sounds.push({ type: 'sound', url: url, name: name }); } else { const act = next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx]; if (!act.sounds) act.sounds = []; act.sounds.push({ type: 'sound', url: url, name: name }); } setProject(next); saveProject(next); };
 
     return (
         <div className="studio-wrapper" onMouseMove={handleStageMouseMove} onMouseUp={() => setIsDraggingOnStage(false)}>
             {showSaveLoadModal && (<SaveLoadModal mode={modalMode} user={user} currentProject={project} onClose={() => setShowSaveLoadModal(false)} onLoad={handleLoadProject} onNew={handleCreateNew} onSave={(p) => { saveProject(p).then(() => setShowSaveLoadModal(false)); }} />)}
-            {frameToErase && (<ManualEraser imageUrl={frameToErase.url} initialSize={eraserSize} resolveUrl={resolveUrl} onCancel={() => setFrameToErase(null)} onSave={(newUrl) => { const next = JSON.parse(JSON.stringify(project)); const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); actor.actions[selectedActionIdx].frames[frameToErase.idx].url = newUrl; setProject(next); saveProject(next); setFrameToErase(null); }} />)}
+            {frameToErase && (<ManualEraser imageUrl={frameToErase.url} resolveUrl={resolveUrl} onCancel={() => setFrameToErase(null)} onSave={(newUrl) => { const next = JSON.parse(JSON.stringify(project)); const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); actor.actions[selectedActionIdx].frames[frameToErase.idx].url = newUrl; setProject(next); saveProject(next); setFrameToErase(null); }} />)}
             {showSoundModal && <SoundModal onSave={handleSaveSound} onClose={() => setShowSoundModal(false)} />}
             {showTestQuizModal && (<div className="quiz-data-overlay" onClick={() => setShowTestQuizModal(false)}><div className="quiz-data-window" onClick={e => e.stopPropagation()}><div className="quiz-data-header"><span className="font-black text-slate-700 uppercase">Quiz Test</span><button onClick={() => setShowTestQuizModal(false)}>✕</button></div><div className="quiz-data-body custom-scrollbar"><pre>{JSON.stringify(testQuizData, null, 2)}</pre></div></div></div>)}
-            
-            {/* NOUVELLE MODALE ÉDITEUR SONORE */}
-            {soundToEdit && (
-                <SoundEditorModal 
-                    soundUrl={soundToEdit.url} 
-                    soundName={soundToEdit.name} 
-                    onSave={handleSaveEditedSound} 
-                    onClose={() => setSoundToEdit(null)}
-                    resolveUrl={resolveUrl}
-                />
-            )}
+            {soundToEdit && (<SoundEditorModal soundUrl={soundToEdit.url} soundName={soundToEdit.name} onSave={handleSaveEditedSound} onClose={() => setSoundToEdit(null)} resolveUrl={resolveUrl} />)}
 
             {(loading || cleaning) && (<div className="studio-loading-overlay"><div className="sablier-icon">⏳</div><div className="loading-text">{statusText}</div></div>)}
             {isPlaying && (<GameEngine code={code} project={project} activeSceneIdx={selectedSceneIdx} onStop={() => setIsPlaying(false)} resolveUrl={resolveUrl} />)}
 
             <div style={{ position: 'absolute', visibility: 'hidden', pointerEvents: 'none' }}>
-                <input type="file" ref={frameUploadRef} multiple onChange={async (e) => { const files = Array.from(e.target.files); if (files.length === 0) return; setLoading(true); setStatusText("Upload frames..."); const next = JSON.parse(JSON.stringify(project)); const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); const act = actor.actions[selectedActionIdx]; for (const file of files) { const fd = new FormData(); fd.append('file', file); const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json()); if (res.url) act.frames.push({ url: res.url, name: file.name, type: 'image' }); } await saveProject(next); setLoading(false); }} />
+                <input type="file" ref={frameUploadRef} multiple onChange={async (e) => { const files = Array.from(e.target.files); if (files.length === 0) return; setLoading(true); setStatusText("Upload frames..."); const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); const act = actor.actions[selectedActionIdx]; for (const file of files) { const fd = new FormData(); fd.append('file', file); const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json()); if (res.url) act.frames.push({ url: res.url, name: file.name, type: 'image' }); } } else { const act = next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx]; for (const file of files) { const fd = new FormData(); fd.append('file', file); const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json()); if (res.url) act.frames.push({ url: res.url, name: file.name, type: 'image' }); } } await saveProject(next); setLoading(false); }} />
                 <input type="file" ref={actorUploadRef} onChange={async (e) => { const file = e.target.files[0]; if(!file) return; setLoading(true); setStatusText("Nouveau personnage..."); const fd = new FormData(); fd.append('file', file); const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json()); const next = JSON.parse(JSON.stringify(project)); const newActor = { id: `actor-${Date.now()}`, name: "P" + (next.scenes[selectedSceneIdx].actors.length + 1), actions: [{ name: "IDLE", speed: 100, frames: [{url: res.url, name: "C1", type:'image'}], sounds: [] }], initialX: 50, initialY: 50, scale: 1, direction: 0, rotationStyle: 'all' }; next.scenes[selectedSceneIdx].actors.push(newActor); setSelectedActorId(newActor.id); await saveProject(next); setLoading(false); }} />
                 <input type="file" ref={backdropUploadRef} onChange={async (e) => { const file = e.target.files[0]; if(!file) return; setLoading(true); setStatusText("Upload décor..."); const fd = new FormData(); fd.append('file', file); const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json()); const next = JSON.parse(JSON.stringify(project)); next.scenes[selectedSceneIdx].backdrops.push({ url: res.url, name: file.name }); next.scenes[selectedSceneIdx].currentBackdropIdx = next.scenes[selectedSceneIdx].backdrops.length - 1; await saveProject(next); setLoading(false); }} />
             </div>
@@ -532,6 +483,7 @@ export default function StudioDashboard({ user }) {
                 <StudioLeftPanel 
                     leftTab={leftTab} setLeftTab={setLeftTab} 
                     selectedActor={selectedActor} selectedActionIdx={selectedActionIdx} setSelectedActionIdx={setSelectedActionIdx}
+                    selectedGlobalSoundIdx={selectedGlobalSoundIdx} setSelectedGlobalSoundIdx={setSelectedGlobalSoundIdx}
                     setIsPreviewPlaying={setIsPreviewPlaying} saveProject={saveProject} project={project}
                     selectedSceneIdx={selectedSceneIdx} selectedActorId={selectedActorId} selectedAction={selectedAction}
                     handleMirrorSequence={handleMirrorSequence} handleUpdateActionSpeed={handleUpdateActionSpeed}
@@ -544,7 +496,7 @@ export default function StudioDashboard({ user }) {
                     handleSmartAIClean={handleSmartAIClean} cleaning={cleaning}
                     setShowSoundModal={setShowSoundModal}
                     handleDeleteSound={handleDeleteSound} 
-                    handleEditSound={handleEditSound} // PASSER LA NOUVELLE FONCTION
+                    handleEditSound={handleEditSound}
                 />
                 <StudioCenterPanel 
                     stageRef={stageRef} currentScene={currentScene} resolveUrl={resolveUrl}
@@ -636,6 +588,7 @@ import React, { useState } from 'react';
 
 export default function StudioLeftPanel({
     leftTab, setLeftTab, selectedActor, selectedActionIdx, setSelectedActionIdx, 
+    selectedGlobalSoundIdx, setSelectedGlobalSoundIdx,
     setIsPreviewPlaying, saveProject, project, selectedSceneIdx, selectedActorId,
     selectedAction, handleMirrorSequence, handleUpdateActionSpeed, isPreviewPlaying,
     previewFrameIdx, selectedFrameIdx, setSelectedFrameIdx, setDraggedFrameIdx,
@@ -644,26 +597,44 @@ export default function StudioLeftPanel({
     handleSmartAIClean, cleaning, setShowSoundModal,
     handleDeleteSound, handleEditSound
 }) {
-    // --- GESTION LOCALE DE LA SÉLECTION SON ---
     const [selectedSoundIdx, setSelectedSoundIdx] = useState(null);
+    const currentScene = project?.scenes?.[selectedSceneIdx];
 
-    // GESTION CLIC ACTION
-    const handleSelectAction = (act, idx) => {
+    const handleSelectAction = (idx) => {
         setSelectedActionIdx(idx);
         setIsPreviewPlaying(false);
         setSelectedFrameIdx(null);
-        setSelectedSoundIdx(null); // Reset sélection son
+        setSelectedSoundIdx(null);
     };
 
-    // GESTION CLIC BOUTON "STYLO" (ÉDITER)
+    const handleSelectGlobalSound = (idx) => {
+        setSelectedGlobalSoundIdx(idx);
+        setIsPreviewPlaying(false);
+        setSelectedFrameIdx(null);
+        setSelectedSoundIdx(null);
+    };
+
     const handlePenClick = () => {
-        if (selectedFrameIdx !== null) {
-            // MODE IMAGE : Ouvrir la gomme (ManualEraser)
+        if (selectedFrameIdx !== null && leftTab === 'actions') {
             setFrameToErase({ url: selectedAction.frames[selectedFrameIdx].url, idx: selectedFrameIdx });
         } else if (selectedSoundIdx !== null) {
-            // MODE SON : Appel direct pour ouvrir la belle modale
             handleEditSound(selectedSoundIdx); 
         }
+    };
+
+    const handleDeleteActionOrSound = (e, idx) => {
+        e.stopPropagation();
+        if (!confirm("Supprimer cet événement ?")) return;
+        const next = JSON.parse(JSON.stringify(project));
+        if (leftTab === 'actions') {
+            const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
+            actor.actions.splice(idx, 1);
+            setSelectedActionIdx(0);
+        } else {
+            next.scenes[selectedSceneIdx].globalSounds.splice(idx, 1);
+            setSelectedGlobalSoundIdx(0);
+        }
+        saveProject(next);
     };
 
     return (
@@ -677,15 +648,12 @@ export default function StudioLeftPanel({
                 {leftTab === 'actions' ? (
                     <>
                         {selectedActor?.actions?.map((act, idx) => (
-                            <div 
-                                key={idx} 
-                                onClick={() => handleSelectAction(act, idx)} 
-                                className={`action-item ${selectedActionIdx === idx ? 'selected' : ''}`}
-                            >
+                            <div key={idx} onClick={() => handleSelectAction(idx)} className={`action-item ${selectedActionIdx === idx ? 'selected' : ''}`}>
                                 <span>{act.name}</span>
-                                <div className="flex gap-1">
+                                <div className="flex gap-2 items-center">
                                     <span className="text-[9px] bg-slate-100 px-1 rounded text-slate-400">{act.frames?.length || 0}f</span>
                                     {act.sounds?.length > 0 && <span className="text-[9px] bg-indigo-100 text-indigo-600 px-1 rounded">🎵</span>}
+                                    <button onClick={(e) => handleDeleteActionOrSound(e, idx)} className="text-[10px] text-red-300 hover:text-red-500 font-black ml-1">✕</button>
                                 </div>
                             </div>
                         ))}
@@ -695,19 +663,37 @@ export default function StudioLeftPanel({
                             const next = JSON.parse(JSON.stringify(project)); 
                             next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId).actions.push({ name: name.toUpperCase(), frames: [], sounds: [], speed: 100 }); 
                             saveProject(next); 
-                        }}>+ Ajouter</button>
+                        }}>+ Action</button>
                     </>
                 ) : (
-                    <div className="p-10 opacity-30 text-center uppercase text-[10px] font-black">Bientôt</div>
+                    <>
+                        {currentScene?.globalSounds?.map((act, idx) => (
+                            <div key={idx} onClick={() => handleSelectGlobalSound(idx)} className={`action-item ${selectedGlobalSoundIdx === idx ? 'selected' : ''}`}>
+                                <span>{act.name}</span>
+                                <div className="flex gap-2 items-center">
+                                    {act.sounds?.length > 0 && <span className="text-[9px] bg-indigo-100 text-indigo-600 px-1 rounded">🎵</span>}
+                                    <button onClick={(e) => handleDeleteActionOrSound(e, idx)} className="text-[10px] text-red-300 hover:text-red-500 font-black ml-1">✕</button>
+                                </div>
+                            </div>
+                        ))}
+                        <button className="v84-add-btn-minimal" onClick={() => { 
+                            const name = prompt("Événement (ex: VICTOIRE) :"); 
+                            if(!name) return; 
+                            const next = JSON.parse(JSON.stringify(project)); 
+                            if (!next.scenes[selectedSceneIdx].globalSounds) next.scenes[selectedSceneIdx].globalSounds = [];
+                            next.scenes[selectedSceneIdx].globalSounds.push({ name: name.toUpperCase(), frames: [], sounds: [], speed: 100 }); 
+                            saveProject(next); 
+                        }}>+ Événement Sonore</button>
+                    </>
                 )}
             </div>
 
-            {leftTab === 'actions' && selectedAction && (
+            {selectedAction && (
                 <div className="studio-sequencer-box">
                     <div className="seq-header">
-                        <span className="seq-label">Séquenceur ({selectedAction.frames.length} images)</span>
+                        <span className="seq-label">{leftTab === 'actions' ? 'Séquenceur' : 'Timeline Sonore'}</span>
                         <div className="seq-controls">
-                            <button className="btn-mirror" onClick={handleMirrorSequence} title="Miroir">↔️</button>
+                            {leftTab === 'actions' && <button className="btn-mirror" onClick={handleMirrorSequence} title="Miroir">↔️</button>}
                             <button className="btn-mini-ctrl" onClick={() => handleUpdateActionSpeed(-50)}>-</button>
                             <span className="speed-indicator">{selectedAction.speed || 100}ms</span>
                             <button className="btn-mini-ctrl" onClick={() => handleUpdateActionSpeed(50)}>+</button>
@@ -717,28 +703,27 @@ export default function StudioLeftPanel({
                         </div>
                     </div>
                     
-                    {/* 1. TRACK IMAGE (GRILLE) */}
-                    <div className="seq-frames-grid custom-scrollbar" style={{height: '110px', minHeight: '110px'}}>
-                        {selectedAction.frames.map((frame, fIdx) => (
-                            <div key={fIdx} 
-                                 className={`seq-frame ${isPreviewPlaying && previewFrameIdx === fIdx ? 'active' : ''} ${selectedFrameIdx === fIdx ? 'active' : ''}`} 
-                                 draggable 
-                                 onClick={() => { setSelectedFrameIdx(selectedFrameIdx === fIdx ? null : fIdx); setIsPreviewPlaying(false); setSelectedSoundIdx(null); }} 
-                                 onDragStart={() => setDraggedFrameIdx(fIdx)} 
-                                 onDragOver={e => e.preventDefault()} 
-                                 onDrop={() => handleReorderFrame(fIdx)}>
-                                
-                                <img src={resolveUrl(frame.url)} />
-                                <button className="frame-del" onClick={e => { e.stopPropagation(); handleDeleteFrame(fIdx); }}>✕</button>
-                            </div>
-                        ))}
-                        <div className="seq-frame seq-frame-add" onClick={() => frameUploadRef.current.click()}>+</div>
-                    </div>
+                    {leftTab === 'actions' && (
+                        <div className="seq-frames-grid custom-scrollbar" style={{height: '110px', minHeight: '110px'}}>
+                            {selectedAction.frames.map((frame, fIdx) => (
+                                <div key={fIdx} 
+                                    className={`seq-frame ${isPreviewPlaying && previewFrameIdx === fIdx ? 'active' : ''} ${selectedFrameIdx === fIdx ? 'active' : ''}`} 
+                                    draggable 
+                                    onClick={() => { setSelectedFrameIdx(selectedFrameIdx === fIdx ? null : fIdx); setIsPreviewPlaying(false); setSelectedSoundIdx(null); }} 
+                                    onDragStart={() => setDraggedFrameIdx(fIdx)} 
+                                    onDragOver={e => e.preventDefault()} 
+                                    onDrop={() => handleReorderFrame(fIdx)}>
+                                    <img src={resolveUrl(frame.url)} />
+                                    <button className="frame-del" onClick={e => { e.stopPropagation(); handleDeleteFrame(fIdx); }}>✕</button>
+                                </div>
+                            ))}
+                            <div className="seq-frame seq-frame-add" onClick={() => frameUploadRef.current.click()}>+</div>
+                        </div>
+                    )}
                     
-                    {/* 2. TRACK AUDIO (3 SLOTS) */}
-                    <div className="border-t border-slate-200 mt-2 pt-2">
+                    <div className={`border-slate-200 pt-2 ${leftTab === 'actions' ? 'border-t mt-2' : ''}`}>
                         <div className="flex justify-between items-center mb-1">
-                            <span className="seq-label text-indigo-500">Piste Audio (3 max)</span>
+                            <span className="seq-label text-indigo-500">Piste Audio</span>
                             <button className="btn-sound-trigger !w-auto px-2 !text-[9px]" onClick={() => setShowSoundModal(true)}>
                                 🔊 Ajouter Son
                             </button>
@@ -753,38 +738,22 @@ export default function StudioLeftPanel({
                                     <button className="frame-del !bg-red-500 !text-white !opacity-100 !top-1 !right-1" onClick={(e) => { e.stopPropagation(); handleDeleteSound(sIdx); }}>✕</button>
                                 </div>
                             ))}
-                            {[...Array(Math.max(0, 3 - (selectedAction.sounds || []).length))].map((_, i) => (
-                                <div key={i + 100} className="border-2 border-dashed border-slate-200 rounded-lg h-16 flex items-center justify-center text-slate-300 text-xs font-bold">
-                                    VIDE
-                                </div>
-                            ))}
+                            <div className="border-2 border-dashed border-slate-200 rounded-lg h-16 flex items-center justify-center text-slate-300 text-[8px] font-bold">
+                                LIBRE
+                            </div>
                         </div>
                     </div>
 
-                    {/* BARRE D'OUTILS INTELLIGENTE */}
                     <div className="eraser-bar mt-auto">
                         <div className="flex gap-2 items-center w-full">
-                            
-                            {/* BOUTON STYLO (Universel) */}
-                            <button 
-                                className="btn-tool-pen"
-                                onClick={handlePenClick}
-                                disabled={selectedFrameIdx === null && selectedSoundIdx === null}
-                                title={selectedSoundIdx !== null ? "Éditer le son" : "Éditer l'image"}
-                            >
+                            <button className="btn-tool-pen" onClick={handlePenClick} disabled={selectedFrameIdx === null && selectedSoundIdx === null} title={selectedSoundIdx !== null ? "Éditer le son" : "Éditer l'image"}>
                                 ✏️ ÉDITER
                             </button>
-
-                            {/* BOUTON MAGIC (Image seulement) */}
-                            <button 
-                                className={`btn-magic-clean ${cleaning ? 'pulse' : ''}`} 
-                                onClick={handleSmartAIClean}
-                                // Activé si au moins une frame existe
-                                disabled={cleaning || !selectedAction.frames || selectedAction.frames.length === 0}
-                                title={selectedFrameIdx !== null ? "Détourer l'image sélectionnée" : "Détourer TOUTES les images de l'action"}
-                            >
-                                ✨ {cleaning ? '...' : (selectedFrameIdx !== null ? 'CIBLÉ' : 'TOUT')}
-                            </button>
+                            {leftTab === 'actions' && (
+                                <button className={`btn-magic-clean ${cleaning ? 'pulse' : ''}`} onClick={handleSmartAIClean} disabled={cleaning || !selectedAction.frames || selectedAction.frames.length === 0} title={selectedFrameIdx !== null ? "Détourer l'image" : "Détourer TOUT"}>
+                                    ✨ {cleaning ? '...' : (selectedFrameIdx !== null ? 'CIBLÉ' : 'TOUT')}
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -872,32 +841,34 @@ export default function StudioRightPanel({
 // @signatures: GameEngine, initLevel, handleAnswerClick, triggerWinSequence, handleBarCheat
 import React, { useState, useRef, useEffect } from 'react';
 import { api } from '../../../../services/api';
+import SoundExpert from './SoundExpert';
 
 /**
- * 🎮 MOTEUR DE JEU DÉDIÉ (SÉCURITÉ TRANSITION V473)
- * RÔLE : Arbitre JSX avec Verrou de Victoire pour empêcher la perte de vie post-victoire.
+ * 🎮 MOTEUR DE JEU (V495 - ACTION + SOUND SYNC)
+ * RÔLE : Arbitre. Garantit que .play("NOM") déclenche l'animation ET les sons associés.
  */
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
     const canvasRef = useRef(null);
     const gameInstanceRef = useRef(null);
     const [crash, setCrash] = useState(null);
     const [feedback, setFeedback] = useState(null);
-    
-    // --- ÉTATS DU QUIZ ---
     const [allLevels, setAllLevels] = useState([]); 
     const [currentLevelIdx, setCurrentLevelIdx] = useState(0);
     const [levelQuestions, setLevelQuestions] = useState([]); 
     const [questionStates, setQuestionStates] = useState([]); 
     const [currentQIndex, setCurrentQIndex] = useState(-1);
     const [lives, setLives] = useState(4);
-
-    // --- ÉTATS DE STRUCTURE ---
     const [isLevelWon, setIsLevelWon] = useState(false);
-    const isLevelWonRef = useRef(false); // Ref pour accès synchrone dans les callbacks JS
+    const isLevelWonRef = useRef(false);
     const [isPowerOff, setIsPowerOff] = useState(false);
     const [keysPressed, setKeysPressed] = useState({});
 
+    // 🔊 MOTEUR AUDIO (WEB AUDIO API)
+    const audioCtxRef = useRef(null);
+    const audioBuffersRef = useRef(new Map());
+
     useEffect(() => {
+        audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
         api.get('/games/test-data').then(data => {
             const levelsData = data?.levels?.length > 0 ? data.levels : [{ name: "Test", questions: [{ q: "Prêt ?", options: ["OUI", "NON"], a: 0 }] }];
             setAllLevels(levelsData);
@@ -907,28 +878,30 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         const handleKeyUp = (e) => setKeysPressed(prev => ({ ...prev, [e.code]: false }));
         window.addEventListener('keydown', handleKeyDown);
         window.addEventListener('keyup', handleKeyUp);
-        return () => { window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); };
+        return () => { 
+            window.removeEventListener('keydown', handleKeyDown); 
+            window.removeEventListener('keyup', handleKeyUp);
+            if (audioCtxRef.current) audioCtxRef.current.close();
+        };
     }, []);
 
     const initLevel = (idx, sourceData) => {
         if (!sourceData[idx]) { onStop(); return; }
         const lvl = sourceData[idx];
         setCurrentLevelIdx(idx);
-        const questions = lvl.questions || [];
-        setLevelQuestions(questions);
-        setQuestionStates(new Array(questions.length).fill(0));
-        setIsLevelWon(false);
-        isLevelWonRef.current = false; // Relâche le verrou
-        setIsPowerOff(false);
-        if (questions.length > 0) setCurrentQIndex(0);
+        setLevelQuestions(lvl.questions || []);
+        setQuestionStates(new Array((lvl.questions || []).length).fill(0));
+        setIsLevelWon(false); isLevelWonRef.current = false; setIsPowerOff(false);
+        if ((lvl.questions || []).length > 0) setCurrentQIndex(0);
     };
 
     const handleAnswerClick = (choiceIdx) => {
         if (feedback || currentQIndex === -1 || isLevelWonRef.current) return;
+        if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
+
         const currentQ = levelQuestions[currentQIndex];
         const isCorrect = currentQ.a === choiceIdx;
         setFeedback(isCorrect ? 'CORRECT' : 'WRONG');
-
         const newStates = [...questionStates];
         if (isCorrect) {
             newStates[currentQIndex] = Math.min(3, newStates[currentQIndex] + 1);
@@ -936,10 +909,9 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         } else {
             newStates[currentQIndex] = Math.max(0, newStates[currentQIndex] - 1);
             if (gameInstanceRef.current?.onResult) gameInstanceRef.current.onResult(false);
-            setLives(l => Math.max(0, l - 1));
+            if (!isLevelWonRef.current) setLives(l => Math.max(0, l - 1));
         }
         setQuestionStates(newStates);
-
         setTimeout(() => {
             setFeedback(null);
             const available = newStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
@@ -947,33 +919,24 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 const nIdx = available[Math.floor(Math.random() * available.length)];
                 setCurrentQIndex(nIdx);
                 if (gameInstanceRef.current?.onQuestion) gameInstanceRef.current.onQuestion(levelQuestions[nIdx]);
-            } else {
-                triggerWinSequence();
-            }
+            } else { triggerWinSequence(); }
         }, 1000);
     };
 
     const triggerWinSequence = () => {
-        setIsLevelWon(true);
-        isLevelWonRef.current = true; // 🔒 VERROU ACTIF : Le JSX n'écoute plus les dégâts
-        
-        if (gameInstanceRef.current?.onLevelWin) {
-            gameInstanceRef.current.onLevelWin();
-        }
-        
+        setIsLevelWon(true); isLevelWonRef.current = true;
+        if (gameInstanceRef.current?.onLevelWin) gameInstanceRef.current.onLevelWin();
         setTimeout(() => setIsPowerOff(true), 1500);
         setTimeout(() => {
             const nextLvlIdx = currentLevelIdx + 1;
             if (allLevels[nextLvlIdx]) initLevel(nextLvlIdx, allLevels);
-            else { alert("🎉 JEU TERMINÉ !"); onStop(); }
+            else { alert("🎉 VICTOIRE FINALE !"); onStop(); }
         }, 4000);
     };
 
     const handleBarCheat = (idx) => {
         if (keysPressed['KeyS'] && keysPressed['KeyT']) {
-            const next = [...questionStates];
-            next[idx] = 3;
-            setQuestionStates(next);
+            const next = [...questionStates]; next[idx] = 3; setQuestionStates(next);
             if (next.every(s => s === 3)) triggerWinSequence();
         }
     };
@@ -989,40 +952,76 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         async function startEngine() {
             try {
                 const scene = project.scenes[activeSceneIdx];
-                if (!scene) return;
-                const resources = (scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url));
-                await Promise.all([...new Set(resources)].filter(Boolean).map(url => new Promise(resolve => {
-                    const img = new Image(); img.crossOrigin = "anonymous";
-                    img.onload = () => { assets[resolveUrl(url)] = img; resolve(); };
-                    img.onerror = () => resolve();
-                    img.src = resolveUrl(url);
-                })));
+                const imgUrls = (scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url));
+                const sndUrls = (scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url)));
+
+                await Promise.all([
+                    ...[...new Set(imgUrls)].filter(Boolean).map(url => new Promise(res => {
+                        const img = new Image(); img.crossOrigin = "anonymous";
+                        img.onload = () => { assets[resolveUrl(url)] = img; res(); };
+                        img.onerror = res; img.src = resolveUrl(url);
+                    })),
+                    ...[...new Set(sndUrls)].filter(Boolean).map(url => new Promise(async res => {
+                        try {
+                            if (!audioBuffersRef.current.has(url)) {
+                                const buffer = await SoundExpert.decodeAudio(resolveUrl(url), audioCtxRef.current);
+                                if (buffer) audioBuffersRef.current.set(url, buffer);
+                            }
+                        } catch(e) {}
+                        res();
+                    }))
+                ]);
+                
                 if (!isMounting) return;
 
-                let userCode = code;
-                if (userCode.includes('class MiniGame') && !userCode.includes('extends MiniGameBase')) {
-                    userCode = userCode.replace('class MiniGame', 'class MiniGame extends MiniGameBase');
-                }
-
                 const headerCode = `
-                    const { canvas, ctx, assets, project, sceneIdx, resolveUrl, callbacks } = params;
+                    const { canvas, ctx, assets, project, sceneIdx, resolveUrl, callbacks, audioBuffers, audioCtx } = params;
+                    
                     class ActorProxy {
-                        constructor(data) {
-                            this.id = data.id; this.name = data.name;
+                        constructor(data, engine) {
+                            this.id = data.id; this.name = data.name; this.engine = engine;
                             this.x = data.initialX || 50; this.y = data.initialY || 50;
                             this.dir = data.direction || 0; this.scale = data.scale || 1;
                             this.visible = true; this.currentAction = data.actions?.[0]?.name || 'IDLE';
                             this.rotationStyle = data.rotationStyle || 'all';
                             this.frameIdx = 0; this.lastAnimTime = 0;
                         }
-                        play(name) { if(this.currentAction.toUpperCase() !== name.toUpperCase()) { this.currentAction = name; this.frameIdx = 0; this.lastAnimTime = 0; } }
+                        play(name) { 
+                            if(this.currentAction.toUpperCase() !== name.toUpperCase()) { 
+                                this.currentAction = name; this.frameIdx = 0; this.lastAnimTime = 0;
+                                // 🔊 TRIGGER SONS D'ACTION
+                                this.engine._triggerActionSounds(this.id, name);
+                            } 
+                        }
                     }
+
                     class MiniGameBase {
                         constructor(c, a, cb) {
                             this.canvas = c || canvas; this.ctx = ctx; this.assets = a || assets; this.callbacks = cb || callbacks; this.keys = {};
                             const s = project.scenes[sceneIdx];
-                            if(s && s.actors) { s.actors.forEach(a => { this[a.name.toUpperCase()] = new ActorProxy(a); }); }
+                            if(s && s.actors) { s.actors.forEach(a => { this[a.name.toUpperCase()] = new ActorProxy(a, this); }); }
                         }
+
+                        playGlobal(name) {
+                            const gs = project.scenes[sceneIdx].globalSounds?.find(s => s.name.toUpperCase() === name.toUpperCase());
+                            if(gs && gs.sounds) gs.sounds.forEach(snd => this._playSound(snd.url));
+                        }
+
+                        _triggerActionSounds(actorId, actionName) {
+                            const actor = project.scenes[sceneIdx].actors.find(a => a.id === actorId);
+                            const action = actor?.actions.find(act => act.name.toUpperCase() === actionName.toUpperCase());
+                            if(action && action.sounds) action.sounds.forEach(snd => this._playSound(snd.url));
+                        }
+
+                        _playSound(url) {
+                            const buffer = audioBuffers.get(url);
+                            if(buffer && audioCtx) {
+                                if(audioCtx.state === 'suspended') audioCtx.resume();
+                                const source = audioCtx.createBufferSource();
+                                source.buffer = buffer; source.connect(audioCtx.destination); source.start(0);
+                            }
+                        }
+
                         _system_render() {
                             const s = project.scenes[sceneIdx];
                             const bd = s?.backdrops?.[s.currentBackdropIdx || 0];
@@ -1052,21 +1051,16 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     }
                 `;
 
-                const finalScript = headerCode + "\n" + userCode + "\n return MiniGame;";
-                
+                const finalScript = headerCode + "\n" + code + "\n return MiniGame;";
                 const FinalClass = new Function('params', finalScript)({ 
                     canvas, ctx, assets, project, sceneIdx: activeSceneIdx, resolveUrl, 
-                    callbacks: { 
-                        // 🛡️ SÉCURITÉ V473 : Le callback de dégâts vérifie le verrou de victoire
-                        onPlayerHit: () => {
-                            if (!isLevelWonRef.current) {
-                                setLives(l => Math.max(0, l - 1));
-                            }
-                        } 
-                    } 
+                    audioBuffers: audioBuffersRef.current, audioCtx: audioCtxRef.current,
+                    callbacks: { onPlayerHit: () => { if (!isLevelWonRef.current) setLives(l => Math.max(0, l - 1)); } } 
                 });
+                
                 const instance = new FinalClass();
                 gameInstanceRef.current = instance;
+                if(instance.start) instance.start();
 
                 const loop = () => {
                     if (!isMounting) return;
@@ -1103,21 +1097,11 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     ))}
                 </div>
             </div>
-
             <div className="relative">
                 <canvas ref={canvasRef} width={800} height={450} className={`aspect-video shadow-2xl bg-black border-4 border-slate-800 rounded-xl transition-opacity duration-1000 ${isPowerOff ? 'opacity-0' : 'opacity-100'}`} />
-                {isLevelWon && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm rounded-xl animate-in zoom-in">
-                        <div className="bg-white p-10 rounded-[40px] shadow-2xl text-center border-8 border-green-500">
-                            <span className="text-6xl block mb-4">🏆</span>
-                            <h2 className="text-4xl font-black text-slate-800 uppercase">Niveau Réussi !</h2>
-                        </div>
-                    </div>
-                )}
-                {isPowerOff && <div className="absolute inset-0 bg-black rounded-xl flex items-center justify-center"><div className="w-1 h-1 bg-white rounded-full animate-ping"></div></div>}
+                {isLevelWon && (<div className="absolute inset-0 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm rounded-xl animate-in zoom-in"><div className="bg-white p-10 rounded-[40px] shadow-2xl text-center border-8 border-green-500"><span className="text-6xl block mb-4">🏆</span><h2 className="text-4xl font-black text-slate-800 uppercase">Niveau Réussi !</h2></div></div>)}
             </div>
             {crash && <div className="absolute inset-0 bg-red-900/90 flex items-center justify-center text-white font-mono p-10 text-center z-50">💥 ERREUR SCRIPT : {crash}</div>}
-
             <div className="absolute bottom-6 w-full flex justify-center px-10">
                 <div className="grid grid-cols-4 gap-4 w-full max-w-5xl">
                     {levelQuestions[currentQIndex]?.options?.map((o, i) => (
@@ -1880,19 +1864,25 @@ export default function SoundEditorModal({ soundUrl, soundName, onSave, onClose,
 [[[£ END: client/src/features/prof/studio/studioComp/SoundEditorModal.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/studio/studioComp/SoundExpert.js £]]]
-// @signatures: SoundExpert, createBuffer, bufferToWav
 /**
  * 🎛️ EXPERT AUDIO CLIENT (Web Audio API)
  * Manipulation de buffers audio sans serveur.
+ * V3 : Optimisation du décodeur pour pré-chargement Studio.
  */
 const SoundExpert = {
     
-    // Convertir Blob/URL en AudioBuffer
-    decodeAudio: async (url) => {
-        const response = await fetch(url);
-        const arrayBuffer = await response.arrayBuffer();
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        return await audioCtx.decodeAudioData(arrayBuffer);
+    // Convertir Blob/URL en AudioBuffer (Méthode statique propre)
+    decodeAudio: async (url, audioCtx) => {
+        try {
+            const response = await fetch(url);
+            const arrayBuffer = await response.arrayBuffer();
+            // Utilise le contexte passé en paramètre ou en crée un nouveau
+            const ctx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+            return await ctx.decodeAudioData(arrayBuffer);
+        } catch (e) {
+            console.error("❌ Audio Decode Error:", e);
+            return null;
+        }
     },
 
     // Créer un nouveau buffer vide
@@ -1936,7 +1926,6 @@ const SoundExpert = {
             const inputData = buffer.getChannelData(channel);
             const outputData = newBuffer.getChannelData(channel);
             for (let i = 0; i < newLength; i++) {
-                // Interpolation linéaire basique
                 const originalIndex = i * playbackRate;
                 const indexFloor = Math.floor(originalIndex);
                 const indexCeil = Math.min(buffer.length - 1, Math.ceil(originalIndex));
@@ -1953,7 +1942,7 @@ const SoundExpert = {
     // EFFET : Fade In / Out
     fade: (buffer, type) => {
         const newBuffer = SoundExpert.createBuffer(buffer.numberOfChannels, buffer.length, buffer.sampleRate);
-        const fadeLength = Math.min(buffer.length, buffer.sampleRate * 2); // 2 secondes max
+        const fadeLength = Math.min(buffer.length, buffer.sampleRate * 2); 
         
         for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
             const inputData = buffer.getChannelData(channel);
@@ -1975,7 +1964,7 @@ const SoundExpert = {
     // EFFET : Robot (Modulation d'amplitude simple)
     robotize: (buffer) => {
         const newBuffer = SoundExpert.createBuffer(buffer.numberOfChannels, buffer.length, buffer.sampleRate);
-        const freq = 50; // Fréquence métallique
+        const freq = 50; 
         
         for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
             const inputData = buffer.getChannelData(channel);
@@ -2010,51 +1999,36 @@ const SoundExpert = {
 
     // Export vers WAV (pour sauvegarde)
     bufferToWav: (buffer) => {
-        const numOfChan = buffer.numberOfChannels,
-            length = buffer.length * numOfChan * 2 + 44,
-            bufferArray = new ArrayBuffer(length),
-            view = new DataView(bufferArray),
-            channels = [], i, sample, offset = 0, pos = 0;
-
-        // write WAVE header
-        setUint32(0x46464952);                         // "RIFF"
-        setUint32(length - 8);                         // file length - 8
-        setUint32(0x45564157);                         // "WAVE"
-
-        setUint32(0x20746d66);                         // "fmt " chunk
-        setUint32(16);                                 // length = 16
-        setUint16(1);                                  // PCM (uncompressed)
-        setUint16(numOfChan);
-        setUint32(buffer.sampleRate);
-        setUint32(buffer.sampleRate * 2 * numOfChan);  // avg. bytes/sec
-        setUint16(numOfChan * 2);                      // block-align
-        setUint16(16);                                 // 16-bit (hardcoded in this demo)
-
-        setUint32(0x61746164);                         // "data" - chunk
-        setUint32(length - pos - 4);                   // chunk length
-
-        // write interleaved data
-        for(i = 0; i < buffer.numberOfChannels; i++)
-            channels.push(buffer.getChannelData(i));
-
-        while(pos < buffer.length) {
-            for(i = 0; i < numOfChan; i++) {             // interleave channels
-                sample = Math.max(-1, Math.min(1, channels[i][pos])); // clamp
-                sample = (0.5 + sample < 0 ? sample * 32768 : sample * 32767)|0; // scale to 16-bit signed int
-                view.setInt16(44 + offset, sample, true);          // write 16-bit sample
-                offset += 2;
-            }
-            pos++;
-        }
-
-        return new Blob([bufferArray], { type: "audio/wav" });
+        const numOfChan = buffer.numberOfChannels;
+        const length = buffer.length * numOfChan * 2 + 44;
+        const bufferArray = new ArrayBuffer(length);
+        const view = new DataView(bufferArray);
+        let pos = 0;
 
         function setUint16(data) { view.setUint16(pos, data, true); pos += 2; }
         function setUint32(data) { view.setUint32(pos, data, true); pos += 4; }
+
+        setUint32(0x46464952); setUint32(length - 8); setUint32(0x45564157);
+        setUint32(0x20746d66); setUint32(16); setUint16(1); setUint16(numOfChan);
+        setUint32(buffer.sampleRate); setUint32(buffer.sampleRate * 2 * numOfChan);
+        setUint16(numOfChan * 2); setUint16(16); setUint32(0x61746164); setUint32(length - 44);
+
+        const channels = [];
+        for(let i = 0; i < buffer.numberOfChannels; i++) channels.push(buffer.getChannelData(i));
+
+        for (let i = 0; i < buffer.length; i++) {
+            for (let channel = 0; channel < numOfChan; channel++) {
+                let sample = Math.max(-1, Math.min(1, channels[channel][i]));
+                sample = (0.5 + sample < 0 ? sample * 32768 : sample * 32767)|0;
+                view.setInt16(pos, sample, true);
+                pos += 2;
+            }
+        }
+        return new Blob([bufferArray], { type: "audio/wav" });
     }
 };
 
-module.exports = SoundExpert;
+export default SoundExpert;
 
 [[[£ END: client/src/features/prof/studio/studioComp/SoundExpert.js £]]]
 
@@ -2800,9 +2774,9 @@ const FrameSchema = new mongoose.Schema({
 
 const ActionSchema = new mongoose.Schema({
     name: { type: String, default: "Nouvelle Action" },
-    speed: { type: Number, default: 100 }, // Vitesse de l'animation en ms
-    frames: { type: [FrameSchema], default: [] }, // Séquence d'images
-    sounds: { type: [FrameSchema], default: [] }  // NOUVEAU : Piste audio séparée
+    speed: { type: Number, default: 100 }, 
+    frames: { type: [FrameSchema], default: [] }, 
+    sounds: { type: [FrameSchema], default: [] }  
 }, { _id: false });
 
 const ActorSchema = new mongoose.Schema({
@@ -2821,7 +2795,9 @@ const SceneSchema = new mongoose.Schema({
     name: String,
     backdrops: [{ name: String, url: String }],
     currentBackdropIdx: { type: Number, default: 0 },
-    actors: [ActorSchema]
+    actors: [ActorSchema],
+    // NOUVEAU : Actions sonores globales (Victoire, Défaite, etc.)
+    globalSounds: { type: [ActionSchema], default: [] }
 });
 
 const StudioProjectSchema = new mongoose.Schema({

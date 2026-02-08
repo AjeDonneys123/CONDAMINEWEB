@@ -1,5 +1,5 @@
 {
-  "status": "OK",
-  "message": "Infrastructure mise à jour et commitée",
-  "timestamp": 1770592851104
+  "status": "ERROR",
+  "message": "code is not defined",
+  "timestamp": 1770593420469
 }
