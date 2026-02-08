@@ -1,24 +1,66 @@
-/* --- LAYOUT GLOBAL --- */
+/* --- LAYOUT GLOBAL (CORRIGÉ) --- */
 .studio-wrapper {
-    display: flex; width: 100%; height: 85vh;
-    background: #f8fafc; border-radius: 25px;
-    overflow: hidden; border: 1px solid #e2e8f0; position: relative;
+    display: flex;
+    flex-direction: column; /* IMPORTANT : Empile Header (Haut) et Body (Bas) */
+    width: 100%;
+    height: 85vh;
+    background: #f8fafc;
+    border-radius: 25px;
+    overflow: hidden;
+    border: 1px solid #e2e8f0;
+    position: relative;
 }
 
-/* --- SABLIER / LOADING --- */
-.studio-loading-overlay {
-    position: absolute; inset: 0; background: rgba(15, 23, 42, 0.85);
-    backdrop-filter: blur(8px); z-index: 30000;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    color: white; font-family: 'Inter', sans-serif; gap: 20px;
+/* --- HEADER DU STUDIO --- */
+.v84-game-header { 
+    height: 70px;
+    flex-shrink: 0; /* Empêche l'écrasement */
+    background: white; 
+    border-bottom: 2px solid #f1f5f9; 
+    display: flex; 
+    align-items: center; 
+    padding: 0 30px; 
+    justify-content: space-between; 
+    z-index: 50;
 }
-.sablier-icon { font-size: 4rem; animation: hourglass-flip 2s ease-in-out infinite; }
 
-/* --- PANNEAU GAUCHE (RESTAURÉ V458) --- */
+.v84-game-icon { 
+    font-size: 1.5rem; 
+    background: #9333ea; 
+    color: white; 
+    padding: 8px; 
+    border-radius: 12px; 
+    margin-right: 15px; 
+}
+
+.v84-game-title-input { 
+    border: none; 
+    font-size: 1.2rem; 
+    font-weight: 950; 
+    color: #0f172a; 
+    outline: none; 
+    flex: 1; 
+    text-transform: uppercase; 
+    background: transparent;
+}
+
+/* --- CORPS PRINCIPAL (3 COLONNES) --- */
+.studio-wrapper-body {
+    flex: 1;
+    display: flex; 
+    overflow: hidden; /* Gère les scrollbars internes */
+    flex-direction: row;
+}
+
+/* --- PANNEAU GAUCHE --- */
 .studio-assets-panel {
-    width: 320px; min-width: 320px; flex-shrink: 0;
-    background: #fff; border-right: 1px solid #e2e8f0; 
-    display: flex; flex-direction: column;
+    width: 320px; 
+    min-width: 320px; 
+    flex-shrink: 0;
+    background: #fff; 
+    border-right: 1px solid #e2e8f0; 
+    display: flex; 
+    flex-direction: column;
 }
 
 .studio-tab-header { display: flex; background: #f1f5f9; padding: 6px; gap: 5px; }
@@ -68,7 +110,7 @@
 .frame-del { position: absolute; top: -5px; right: -5px; width: 20px; height: 20px; background: #ef4444; color: white; border: 2px solid white; border-radius: 50%; font-size: 10px; display: flex; align-items: center; justify-content: center; cursor: pointer; opacity: 0; transition: 0.2s; z-index: 10; }
 .frame-card:hover .frame-del { opacity: 1; }
 
-/* BARRE DE GOMME (FIX ALIGNEMENT) */
+/* BARRE DE GOMME */
 .eraser-tool-bar {
     background: white; border: 2px solid #e2e8f0; border-radius: 20px;
     padding: 12px 15px; display: flex; align-items: center; justify-content: space-between;
@@ -111,3 +153,40 @@
 .item-img { max-width: 90%; max-height: 90%; object-fit: contain; }
 .item-del-btn { position: absolute; top: -6px; right: -6px; width: 22px; height: 22px; background: #ef4444; color: white; border: 2px solid white; border-radius: 50%; font-size: 12px; font-weight: 950; display: flex; align-items: center; justify-content: center; cursor: pointer; opacity: 0; transform: scale(0.8); transition: 0.2s; z-index: 100; }
 .item-card:hover .item-del-btn { opacity: 1; transform: scale(1); }
+
+/* --- MODALE PRÉVISUALISATION --- */
+.v84-preview-overlay {
+    position: fixed; inset: 0; z-index: 20000;
+    background: rgba(15, 23, 42, 0.9);
+    display: flex; align-items: center; justify-content: center;
+    backdrop-filter: blur(5px); animation: fadeIn 0.2s ease-out;
+}
+.v84-preview-content {
+    background: transparent; max-width: 90vw; max-height: 90vh;
+    position: relative; display: flex; align-items: center; justify-content: center;
+}
+.v84-preview-img {
+    max-width: 100%; max-height: 90vh;
+    border-radius: 15px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+    border: 4px solid white;
+}
+.v84-preview-close {
+    position: absolute; top: -20px; right: -20px;
+    background: #ef4444; color: white; border: 4px solid white;
+    width: 50px; height: 50px; border-radius: 50%;
+    font-size: 1.5rem; font-weight: 900; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 10px 15px rgba(0,0,0,0.2);
+    transition: transform 0.2s;
+}
+.v84-preview-close:hover { transform: scale(1.1); background: #dc2626; }
+
+/* --- LOADING OVERLAY --- */
+.studio-loading-overlay {
+    position: absolute; inset: 0; background: rgba(15, 23, 42, 0.85);
+    backdrop-filter: blur(8px); z-index: 30000;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    color: white; font-family: 'Inter', sans-serif; gap: 20px;
+}
+.sablier-icon { font-size: 4rem; animation: hourglass-flip 2s ease-in-out infinite; }
+@keyframes hourglass-flip { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(180deg); } }
