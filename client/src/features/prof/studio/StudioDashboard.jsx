@@ -6,7 +6,7 @@ import ManualEraser from './studioComp/ManualEraser';
 import GameEngine from './studioComp/GameEngine';
 import SaveLoadModal from './studioComp/SaveLoadModal';
 
-const CURRENT_BUILD = 71; 
+const CURRENT_BUILD = 87; // V487: CLEAN HEADERLESS
 
 function resolveUrl(url) {
     if (!url) return "";
@@ -68,7 +68,7 @@ export default function StudioDashboard({ user }) {
     
     // --- SAVE / LOAD STATE ---
     const [showSaveLoadModal, setShowSaveLoadModal] = useState(false);
-    const [modalMode, setModalMode] = useState('LOAD'); // 'SAVE' or 'LOAD'
+    const [modalMode, setModalMode] = useState('LOAD'); 
 
     const frameUploadRef = useRef(null);
     const actorUploadRef = useRef(null);
@@ -109,7 +109,6 @@ export default function StudioDashboard({ user }) {
         } catch(e) {} setLoading(false);
     }
 
-    // --- GESTION SAVE / LOAD / NEW ---
     const handleOpenSave = () => {
         setModalMode('SAVE');
         setShowSaveLoadModal(true);
@@ -138,8 +137,11 @@ export default function StudioDashboard({ user }) {
     const handleViewTestQuiz = async () => {
         try {
             const data = await api.get('/games/test-data');
-            if (data) { setTestQuizData(data); setShowTestQuizModal(true); }
-        } catch (e) {}
+            if (data) { 
+                setTestQuizData(data); 
+                setShowTestQuizModal(true); 
+            }
+        } catch (e) { console.error(e); }
     };
 
     const handleUpdateActionSpeed = (delta) => {
@@ -152,55 +154,19 @@ export default function StudioDashboard({ user }) {
         }
     };
 
-    const handleBatchAIClean = async () => {
+    const handleSmartAIClean = async () => {
         if (!selectedAction) return;
-        if (!confirm(`🤖 NETTOYAGE IA : Envoyer les ${selectedAction.frames.length} images ?`)) return;
-        setCleaning(true); setStatusText("Analyse IA en cours...");
+        const targetIndices = selectedFrameIdx !== null ? [selectedFrameIdx] : selectedAction.frames.map((_, i) => i);
+        if (targetIndices.length === 0) return;
+        if (!confirm(`✨ Nettoyage IA : Traiter ${targetIndices.length} image(s) ?`)) return;
+        setCleaning(true); setStatusText(selectedFrameIdx !== null ? "Détourage CIBLÉ..." : "Détourage EN SÉRIE...");
         const next = JSON.parse(JSON.stringify(project));
         const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
         const act = actor.actions[selectedActionIdx];
-        for (let i = 0; i < act.frames.length; i++) {
-            const res = await api.post('/studio/remove-bg-specialized', { url: act.frames[i].url });
-            if (res.url) act.frames[i].url = res.url;
+        for (const idx of targetIndices) {
+            try { const res = await api.post('/studio/remove-bg-specialized', { url: act.frames[idx].url }); if (res.url) act.frames[idx].url = res.url; } catch (e) {}
         }
         setProject(next); await saveProject(next); setCleaning(false);
-    };
-
-    const handleBatchManualClean = async () => {
-        if (!selectedAction) return;
-        if (!confirm("🎨 Détourage Automatique (Haut-Gauche) ?")) return;
-        setCleaning(true); setStatusText("Détourage Chromatique...");
-        const next = JSON.parse(JSON.stringify(project));
-        const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
-        const act = actor.actions[selectedActionIdx];
-        for (let i = 0; i < act.frames.length; i++) {
-            const url = await processFrameBackgroundManual(act.frames[i].url);
-            if (url) act.frames[i].url = url;
-        }
-        setProject(next); await saveProject(next); setCleaning(false);
-    };
-
-    const processFrameBackgroundManual = async (url) => {
-        return new Promise((resolve) => {
-            const img = new Image(); img.crossOrigin = "anonymous";
-            img.onload = () => {
-                const canvas = document.createElement('canvas'); canvas.width = img.width; canvas.height = img.height;
-                const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0);
-                const iD = ctx.getImageData(0, 0, canvas.width, canvas.height); const d = iD.data;
-                const [tr, tg, tb] = [d[0], d[1], d[2]];
-                for (let i = 0; i < d.length; i += 4) {
-                    const dist = Math.sqrt(Math.pow(d[i]-tr,2)+Math.pow(d[i+1]-tg,2)+Math.pow(d[i+2]-tb,2));
-                    if (dist < 50) d[i+3] = 0;
-                }
-                ctx.putImageData(iD, 0, 0);
-                canvas.toBlob(async (blob) => {
-                    const fd = new FormData(); fd.append('file', blob, "auto-clean.png");
-                    const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json());
-                    resolve(res.url);
-                }, 'image/png');
-            };
-            img.src = resolveUrl(url);
-        });
     };
 
     const handleMirrorSequence = async () => {
@@ -228,16 +194,7 @@ export default function StudioDashboard({ user }) {
         setProject(next); await saveProject(next); setCleaning(false);
     };
 
-    const handleSelectActor = (actorId) => {
-        if (!project) return;
-        const next = JSON.parse(JSON.stringify(project));
-        const actors = next.scenes[selectedSceneIdx].actors;
-        const idx = actors.findIndex(a => a.id === actorId);
-        if (idx === -1) return;
-        const [moved] = actors.splice(idx, 1); actors.push(moved);
-        setProject(next); setSelectedActorId(actorId); setSelectedFrameIdx(null);
-    };
-
+    const handleSelectActor = (actorId) => { setSelectedActorId(actorId); setSelectedFrameIdx(null); };
     const handleStageMouseDown = (e, actorId) => { e.preventDefault(); e.stopPropagation(); handleSelectActor(actorId); setIsDraggingOnStage(true); };
     const handleStageMouseMove = (e) => {
         if (!isDraggingOnStage || !selectedActorId || !stageRef.current) return;
@@ -255,9 +212,7 @@ export default function StudioDashboard({ user }) {
         if (!selectedActor) return;
         const next = { ...project };
         const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
-        if (actor) {
-            actor[f] = isNaN(v) ? v : parseFloat(v); setProject(next); saveProject(next);
-        }
+        if (actor) { actor[f] = isNaN(v) ? v : parseFloat(v); setProject(next); saveProject(next); }
     };
 
     const handleReorderFrame = (targetIdx) => {
@@ -329,42 +284,141 @@ export default function StudioDashboard({ user }) {
                 />
             )}
 
-            {/* HEADER FIXE */}
-            <div className="v84-game-header">
-                <div className="flex items-center gap-4 flex-1">
-                    <span className="v84-game-icon">🎬</span>
-                    <input className="v84-game-title-input" value={project?.title || ""} onChange={e => setProject({...project, title: e.target.value})} placeholder="TITRE DU PROJET..." />
-                    <button onClick={handleOpenSave} className="px-4 py-2 rounded-xl bg-green-500 text-white font-black text-xs uppercase hover:scale-105 transition-transform shadow-lg ml-4">💾 SAUVEGARDER</button>
-                    <button onClick={handleOpenLoad} className="px-4 py-2 rounded-xl bg-blue-500 text-white font-black text-xs uppercase hover:scale-105 transition-transform shadow-lg">📂 CHARGER</button>
-                </div>
-            </div>
-
-            {/* CORPS PRINCIPAL EN 3 COLONNES */}
-            <div className="studio-wrapper-body">
-                <div className="studio-assets-panel">
-                    <div className="studio-tab-header"><button onClick={() => setLeftTab('actions')} className={`studio-tab-btn ${leftTab === 'actions' ? 'active' : ''}`}>⚡ Actions</button><button onClick={() => setLeftTab('sounds')} className={`studio-tab-btn ${leftTab === 'sounds' ? 'active' : ''}`}>🎵 Sons</button></div>
-                    <div className="studio-asset-list custom-scrollbar">
-                        {leftTab === 'actions' ? (<>{selectedActor?.actions?.map((act, idx) => (<div key={idx} onClick={() => { setSelectedActionIdx(idx); setIsPreviewPlaying(false); setSelectedFrameIdx(null); }} className={`action-card-square ${selectedActionIdx === idx ? 'active' : ''}`}><span>{act.name}</span></div>))}<button className="v84-add-btn-minimal" onClick={() => { const name = prompt("Nom :"); if(!name) return; const next = JSON.parse(JSON.stringify(project)); next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId).actions.push({ name: name.toUpperCase(), frames: [], speed: 100 }); saveProject(next); }}>+ Ajouter</button></>) : <div className="p-10 opacity-30 text-center uppercase text-[10px] font-black">Bientôt</div>}
+            {/* HEADER SUPPRIMÉ ! */}
+            
+            <div className="studio-grid-body">
+                
+                {/* 1. GAUCHE : ACTIONS & SEQUENCES */}
+                <div className="studio-col-left">
+                    <div className="studio-tab-header"><button className={`studio-tab-btn ${leftTab === 'actions' ? 'active' : ''}`} onClick={() => setLeftTab('actions')}>⚡ Actions</button><button className={`studio-tab-btn ${leftTab === 'sounds' ? 'active' : ''}`} onClick={() => setLeftTab('sounds')}>🎵 Sons</button></div>
+                    <div className="studio-action-list custom-scrollbar">
+                        {leftTab === 'actions' ? (<>
+                            {selectedActor?.actions?.map((act, idx) => (<div key={idx} onClick={() => { setSelectedActionIdx(idx); setIsPreviewPlaying(false); setSelectedFrameIdx(null); }} className={`action-item ${selectedActionIdx === idx ? 'selected' : ''}`}>{act.name}</div>))}
+                            <button className="v84-add-btn-minimal" onClick={() => { const name = prompt("Nom :"); if(!name) return; const next = JSON.parse(JSON.stringify(project)); next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId).actions.push({ name: name.toUpperCase(), frames: [], speed: 100 }); saveProject(next); }}>+ Ajouter</button>
+                        </>) : <div className="p-10 opacity-30 text-center uppercase text-[10px] font-black">Bientôt</div>}
                     </div>
                     {leftTab === 'actions' && selectedAction && (
-                        <div className="studio-sequence-editor">
-                            <div className="sequence-header"><span className="text-[9px] font-black text-slate-400 uppercase">Séquence ({selectedAction.name})</span><div className="sequence-controls"><button className="btn-mirror" onClick={handleMirrorSequence} title="Miroir">↔️</button><button className="btn-speed" onClick={() => handleUpdateActionSpeed(-50)}>-</button><span className="speed-indicator">{selectedAction.speed || 100}ms</span><button className="btn-speed" onClick={() => handleUpdateActionSpeed(50)}>+</button><button className={`btn-preview-play ${isPreviewPlaying ? 'playing' : ''}`} onClick={() => setIsPreviewPlaying(!isPreviewPlaying)}>{isPreviewPlaying ? '⏹️' : '▶️'}</button></div></div>
-                            <div className="sequence-grid custom-scrollbar">{selectedAction.frames.map((frame, fIdx) => (<div key={fIdx} className={`frame-card ${isPreviewPlaying && previewFrameIdx === fIdx ? 'active-preview' : ''} ${selectedFrameIdx === fIdx ? 'selected-for-clean' : ''}`} draggable onClick={() => { setSelectedFrameIdx(selectedFrameIdx === fIdx ? null : fIdx); setIsPreviewPlaying(false); }} onDragStart={() => setDraggedFrameIdx(fIdx)} onDragOver={e => e.preventDefault()} onDrop={() => handleReorderFrame(fIdx)}><img src={resolveUrl(frame.url)} className="frame-img" /><button className="frame-del" onClick={e => { e.stopPropagation(); handleDeleteFrame(fIdx); }}>✕</button></div>))}<button className="v84-add-btn-minimal !p-2 !h-16 !w-16" onClick={() => frameUploadRef.current.click()}>+</button></div>
-                            <div className="eraser-tool-bar"><button className={`btn-eraser-main ${eraserActive ? 'active' : ''}`} onClick={() => setEraserActive(!eraserActive)}>🧽</button><div className="eraser-size-ctrl"><button onClick={() => setEraserSize(Math.max(1, eraserSize - 2))} className="btn-size">-</button><span className="size-val">{eraserSize}</span><button onClick={() => setEraserSize(Math.min(100, eraserSize + 2))} className="btn-size">+</button></div>{eraserActive && selectedFrameIdx !== null && (<button className="btn-launch-eraser animate-pulse" onClick={() => setFrameToErase({ url: selectedAction.frames[selectedFrameIdx].url, idx: selectedFrameIdx })}>GOMMER FRAME</button>)}</div>
+                        <div className="studio-sequencer-box">
+                            <div className="seq-header">
+                                <span className="seq-label">Timeline ({selectedAction.frames.length}f)</span>
+                                <div className="seq-controls">
+                                    <button className="btn-mirror" onClick={handleMirrorSequence} title="Miroir">↔️</button>
+                                    <button className="btn-mini-ctrl" onClick={() => handleUpdateActionSpeed(-50)}>-</button>
+                                    <span className="speed-indicator">{selectedAction.speed || 100}ms</span>
+                                    <button className="btn-mini-ctrl" onClick={() => handleUpdateActionSpeed(50)}>+</button>
+                                    <button className="btn-mini-ctrl" onClick={() => setIsPreviewPlaying(!isPreviewPlaying)}>{isPreviewPlaying ? '⏹️' : '▶️'}</button>
+                                </div>
+                            </div>
+                            <div className="seq-frames-grid custom-scrollbar">
+                                {selectedAction.frames.map((frame, fIdx) => (
+                                    <div key={fIdx} className={`seq-frame ${isPreviewPlaying && previewFrameIdx === fIdx ? 'active' : ''} ${selectedFrameIdx === fIdx ? 'active' : ''}`} draggable onClick={() => { setSelectedFrameIdx(selectedFrameIdx === fIdx ? null : fIdx); setIsPreviewPlaying(false); }} onDragStart={() => setDraggedFrameIdx(fIdx)} onDragOver={e => e.preventDefault()} onDrop={() => handleReorderFrame(fIdx)}>
+                                        <img src={resolveUrl(frame.url)} /><button className="frame-del" onClick={e => { e.stopPropagation(); handleDeleteFrame(fIdx); }}>✕</button>
+                                    </div>
+                                ))}
+                                <div className="seq-frame seq-frame-add" onClick={() => frameUploadRef.current.click()}>+</div>
+                            </div>
+                            <div className="eraser-bar">
+                                <button className={`btn-eraser-main ${eraserActive ? 'active' : ''}`} onClick={() => setEraserActive(!eraserActive)}>🧽</button>
+                                <div className="eraser-size-ctrl"><button className="btn-size" onClick={() => setEraserSize(Math.max(1, eraserSize - 2))}>-</button><span className="size-val">{eraserSize}</span><button className="btn-size" onClick={() => setEraserSize(Math.min(100, eraserSize + 2))}>+</button></div>
+                                {eraserActive && selectedFrameIdx !== null && <button className="btn-launch-eraser" onClick={() => setFrameToErase({ url: selectedAction.frames[selectedFrameIdx].url, idx: selectedFrameIdx })}>GOMMER</button>}
+                            
+                                <button 
+                                    className={`btn-magic-clean ${cleaning ? 'pulse' : ''}`} 
+                                    onClick={handleSmartAIClean}
+                                    title={selectedFrameIdx !== null ? "Détourer cette image" : "Détourer toute l'action"}
+                                >
+                                    ✨ {selectedFrameIdx !== null ? 'CIBLÉ' : 'AUTO'}
+                                </button>
+                            </div>
                         </div>
                     )}
                 </div>
-                
-                <div className="studio-center-column">
-                    <div ref={stageRef} className="stage-view" style={{ backgroundImage: currentScene?.backdrops?.[currentScene.currentBackdropIdx || 0]?.url ? `url(${resolveUrl(currentScene.backdrops[currentScene.currentBackdropIdx].url)})` : 'none' }}>{currentScene?.actors?.map((a) => { const isSelected = selectedActorId === a.id; let action = isSelected ? selectedAction : (a.actions?.find(act => act.name.toUpperCase() === "IDLE") || a.actions?.[0]); let frameIdx = isSelected ? (isPreviewPlaying ? previewFrameIdx : (selectedFrameIdx !== null ? selectedFrameIdx : 0)) : 0; return (<div key={a.id} onMouseDown={e => handleStageMouseDown(e, a.id)} className={`actor-on-stage ${isSelected ? 'selected' : ''}`} style={{ left: `${a.initialX}%`, top: `${a.initialY}%`, transform: `translate(-50%, -50%) scale(${a.scale}) rotate(${a.direction || 0}deg)` }}>{action?.frames?.[frameIdx]?.url && <img src={resolveUrl(action.frames[frameIdx].url)} />}<div className="actor-label-tag">{a.name}</div></div>); })}</div>
-                    <div className="v115-prop-bar"><div className="flex flex-col"><span className="text-[8px] font-black opacity-30 uppercase">Nom</span><input className="prop-input-mini" value={selectedActor?.name || ""} onChange={e => handleUpdateProp('name', e.target.value)} /></div><div className="flex flex-col border-l pl-4"><span className="text-[8px] font-black opacity-30 uppercase">Taille (%)</span><input type="number" className="prop-input-mini" value={Math.round((selectedActor?.scale || 1) * 100)} onChange={e => handleUpdateProp('scale', parseFloat(e.target.value)/100)} /></div><button onClick={handleViewTestQuiz} className="btn-view-quiz">📋 QUIZ</button><button onClick={() => { saveProject(); setIsPlaying(true); }} className="ml-2 bg-indigo-600 text-white px-6 py-2 rounded-xl font-black text-[10px] shadow-lg">▶ TESTER</button></div>
-                    <div className="compact-code-editor"><textarea value={code} onChange={e => setCode(e.target.value)} spellCheck="false" /></div>
+
+                {/* 2. CENTRE : SCÈNE & CODE */}
+                <div className="studio-col-center custom-scrollbar">
+                    <div ref={stageRef} className="stage-wrapper" style={{ backgroundImage: currentScene?.backdrops?.[currentScene.currentBackdropIdx || 0]?.url ? `url(${resolveUrl(currentScene.backdrops[currentScene.currentBackdropIdx].url)})` : 'none' }}>
+                        {currentScene?.actors?.map((a) => { 
+                            const isSelected = selectedActorId === a.id; 
+                            let action = isSelected ? selectedAction : (a.actions?.find(act => act.name.toUpperCase() === "IDLE") || a.actions?.[0]); 
+                            let frameIdx = isSelected ? (isPreviewPlaying ? previewFrameIdx : (selectedFrameIdx !== null ? selectedFrameIdx : 0)) : 0; 
+                            return (
+                                <div 
+                                    key={a.id} 
+                                    onMouseDown={e => handleStageMouseDown(e, a.id)} 
+                                    className={`actor-sprite ${isSelected ? 'selected' : ''}`} 
+                                    style={{ 
+                                        left: `${a.initialX}%`, 
+                                        top: `${a.initialY}%`, 
+                                        width: `${150 * (a.scale || 1)}px`, 
+                                        height: `${150 * (a.scale || 1)}px`, 
+                                        transform: `translate(-50%, -50%) rotate(${a.direction || 0}deg)`,
+                                        zIndex: isSelected ? 100 : 10 // Gestion Z-Index visuelle
+                                    }}
+                                >
+                                    {action?.frames?.[frameIdx]?.url && <img src={resolveUrl(action.frames[frameIdx].url)} />}
+                                </div>
+                            ); 
+                        })}
+                    </div>
+                    <div className="props-bar">
+                        <div className="prop-item"><span className="prop-label">Nom</span><input className="prop-input" value={selectedActor?.name || ""} onChange={e => handleUpdateProp('name', e.target.value)} /></div>
+                        <div className="prop-item"><span className="prop-label">Taille (%)</span><input type="number" className="prop-input" value={Math.round((selectedActor?.scale || 1) * 100)} onChange={e => handleUpdateProp('scale', parseFloat(e.target.value)/100)} /></div>
+                        <button onClick={handleViewTestQuiz} className="btn-view-quiz">📋 QUIZ</button>
+                        <button onClick={() => { saveProject(); setIsPlaying(true); }} className="ml-auto bg-indigo-600 text-white px-6 py-2 rounded-xl font-black text-[10px] shadow-lg">▶ TESTER</button>
+                    </div>
+                    <div className="code-editor-box"><textarea value={code} onChange={e => setCode(e.target.value)} spellCheck="false" /></div>
                 </div>
 
-                <div className="studio-library-panel">
-                    <div className="library-scroll-area custom-scrollbar"><div className="library-section-header"><span className="lib-section-title">Personnages</span><div className="flex flex-col gap-1 mt-2"><button className="bg-blue-100 text-blue-600 border border-blue-200 rounded-lg py-1 text-[9px] font-black uppercase" onClick={handleBatchManualClean}>🎨 AUTO-CLEAN</button><button className="bg-purple-100 text-purple-600 border border-purple-200 rounded-lg py-1 text-[9px] font-black uppercase" onClick={handleBatchAIClean} disabled={cleaning}>✨ IA CLEAN</button></div></div><div className="library-grid">{currentScene?.actors?.map((actor) => (<div key={actor.id} className={`item-card ${selectedActorId === actor.id ? 'active' : ''}`} onClick={() => handleSelectActor(actor.id)}><button className="item-del-btn" onClick={e => handleDeleteActor(e, actor.id)}>✕</button><div className="item-img-container"><img src={actor.actions?.[0]?.frames?.[0]?.url ? resolveUrl(actor.actions[0].frames[0].url) : ""} className="item-img" /></div><div className="item-name-tag">{actor.name}</div></div>))}<div className="item-card !bg-indigo-50" onClick={() => actorUploadRef.current.click()}><span className="text-3xl text-indigo-300">+</span></div></div></div>
-                    <div className="library-bg-section"><div className="library-section-header"><span className="lib-section-title">Décors</span></div><div className="library-grid custom-scrollbar">{currentScene?.backdrops?.map((bd, bIdx) => (<div key={bIdx} className={`item-card ${currentScene.currentBackdropIdx === bIdx ? 'active' : ''}`} onClick={() => { const next = JSON.parse(JSON.stringify(project)); next.scenes[selectedSceneIdx].currentBackdropIdx = bIdx; setProject(next); saveProject(next); }}><button className="item-del-btn" onClick={e => handleDeleteBackdrop(e, bIdx)}>✕</button><div className="item-img-container"><img src={resolveUrl(bd.url)} className="item-img" /></div><div className="item-name-tag">DÉCOR {bIdx+1}</div></div>))}<div className="item-card !bg-emerald-50" onClick={() => backdropUploadRef.current.click()}><span className="text-3xl text-emerald-300">+</span></div></div></div>
+                {/* 3. DROITE : BIBLIOTHÈQUE + MINI HEADER */}
+                <div className="studio-col-right">
+                    
+                    {/* NOUVEAU HEADER LOCAL */}
+                    <div className="right-project-header">
+                        <div className="project-meta-row">
+                            <span className="mini-proj-icon">🎬</span>
+                            <input 
+                                className="mini-proj-input" 
+                                value={project?.title || ""} 
+                                onChange={e => setProject({...project, title: e.target.value})} 
+                                placeholder="TITRE..." 
+                            />
+                        </div>
+                        <div className="project-actions-row">
+                            <button onClick={handleOpenSave} className="btn-mini-action btn-save-mini">
+                                💾 SAUVER
+                            </button>
+                            <button onClick={handleOpenLoad} className="btn-mini-action btn-load-mini">
+                                📂 CHARGER
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div className="lib-section" style={{flex: 2}}>
+                        <div className="lib-header"><span>Personnages</span><button className="btn-lib-add" onClick={() => actorUploadRef.current.click()}>+ IMPORT</button></div>
+                        <div className="lib-grid custom-scrollbar">
+                            {currentScene?.actors?.map((actor) => (
+                                <div key={actor.id} className={`lib-item ${selectedActorId === actor.id ? 'active' : ''}`} onClick={() => handleSelectActor(actor.id)}>
+                                    <button className="item-del-btn" onClick={e => handleDeleteActor(e, actor.id)}>✕</button>
+                                    <img src={actor.actions?.[0]?.frames?.[0]?.url ? resolveUrl(actor.actions[0].frames[0].url) : ""} className="lib-thumb" />
+                                    <span className="lib-name">{actor.name}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="lib-section" style={{flex: 1}}>
+                        <div className="lib-header"><span>Décors</span><button className="btn-lib-add" onClick={() => backdropUploadRef.current.click()}>+ IMPORT</button></div>
+                        <div className="lib-grid custom-scrollbar">
+                            {currentScene?.backdrops?.map((bd, bIdx) => (
+                                <div key={bIdx} className={`lib-item ${currentScene.currentBackdropIdx === bIdx ? 'active' : ''}`} onClick={() => { const next = JSON.parse(JSON.stringify(project)); next.scenes[selectedSceneIdx].currentBackdropIdx = bIdx; setProject(next); saveProject(next); }}>
+                                    <button className="item-del-btn" onClick={e => handleDeleteBackdrop(e, bIdx)}>✕</button>
+                                    <img src={resolveUrl(bd.url)} className="lib-thumb" />
+                                    <span className="lib-name">DÉCOR {bIdx+1}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
                 </div>
+
             </div>
         </div>
     );

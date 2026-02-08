@@ -74,12 +74,18 @@ Gestion globale des ressources du projet.
 [[[£ FILE: client/src/features/prof/studio/StudioDashboard.css £]]]
 /* --- LAYOUT GLOBAL --- */
 .studio-wrapper {
-    display: flex; width: 100%; height: 85vh;
-    background: #f8fafc; border-radius: 25px;
-    overflow: hidden; border: 1px solid #e2e8f0; position: relative;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 88vh; /* Un peu plus haut */
+    background: #f8fafc;
+    border-radius: 25px;
+    overflow: hidden;
+    border: 1px solid #e2e8f0;
+    position: relative;
 }
 
-/* --- SABLIER / LOADING --- */
+/* --- LOADING --- */
 .studio-loading-overlay {
     position: absolute; inset: 0; background: rgba(15, 23, 42, 0.85);
     backdrop-filter: blur(8px); z-index: 30000;
@@ -88,115 +94,266 @@ Gestion globale des ressources du projet.
 }
 .sablier-icon { font-size: 4rem; animation: hourglass-flip 2s ease-in-out infinite; }
 
-/* --- PANNEAU GAUCHE (RESTAURÉ V458) --- */
-.studio-assets-panel {
-    width: 320px; min-width: 320px; flex-shrink: 0;
-    background: #fff; border-right: 1px solid #e2e8f0; 
-    display: flex; flex-direction: column;
+/* --- GRID BODY (100% HAUTEUR) --- */
+.studio-grid-body {
+    display: grid;
+    grid-template-columns: 340px 1fr 280px;
+    height: 100%; 
+    overflow: hidden;
+    background: #f1f5f9;
 }
 
-.studio-tab-header { display: flex; background: #f1f5f9; padding: 6px; gap: 5px; }
-.studio-tab-btn { flex: 1; padding: 12px; border-radius: 12px; font-weight: 900; font-size: 10px; text-transform: uppercase; border: none; cursor: pointer; color: #94a3b8; transition: all 0.2s; }
-.studio-tab-btn.active { background: white; color: #6366f1; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
-
-.studio-asset-list {
-    flex: 1; overflow-y: auto; padding: 20px;
-    display: flex; flex-direction: column; gap: 10px;
+/* --- COLONNE GAUCHE --- */
+.studio-col-left {
+    background: white; border-right: 1px solid #e2e8f0;
+    display: flex; flex-direction: column; overflow: hidden;
 }
+.studio-tab-header { display: flex; padding: 10px; gap: 5px; background: white; border-bottom: 1px solid #f1f5f9; }
+.studio-tab-btn { flex: 1; padding: 8px; border-radius: 8px; font-weight: 900; font-size: 0.7rem; text-transform: uppercase; border: 2px solid transparent; cursor: pointer; color: #94a3b8; background: #f8fafc; transition: all 0.2s; }
+.studio-tab-btn.active { background: white; color: #7c3aed; border-color: #ddd6fe; }
 
-/* CARTES ACTIONS */
-.action-card-square {
-    background: #f8fafc; border: 2px solid #f1f5f9; border-radius: 18px;
-    padding: 15px 20px; cursor: pointer; transition: all 0.2s;
-    display: flex; align-items: center; justify-content: space-between;
+.studio-action-list {
+    flex: 1; overflow-y: auto; padding: 15px;
+    display: flex; flex-direction: column; gap: 8px; min-height: 0;
 }
-.action-card-square:hover { border-color: #cbd5e1; background: #fff; }
-.action-card-square.active { background: #fff; border-color: #6366f1; box-shadow: 0 10px 20px rgba(99, 102, 241, 0.1); }
-.action-card-square span { font-weight: 950; font-size: 11px; color: #1e293b; text-transform: uppercase; }
+.action-item {
+    padding: 12px 15px; background: white; border: 2px solid #f1f5f9; border-radius: 12px;
+    cursor: pointer; font-weight: 800; font-size: 0.75rem; color: #475569; 
+    text-transform: uppercase; transition: all 0.2s;
+}
+.action-item:hover { border-color: #a855f7; color: #7e22ce; }
+.action-item.selected { background: #f3e8ff; border-color: #a855f7; color: #6b21a8; box-shadow: 0 4px 10px rgba(168, 85, 247, 0.15); }
+.v84-add-btn-minimal { padding: 10px; border: 2px dashed #e2e8f0; border-radius: 12px; font-weight: 900; color: #cbd5e1; cursor: pointer; background: transparent; width: 100%; }
+.v84-add-btn-minimal:hover { border-color: #7c3aed; color: #7c3aed; }
 
 /* SÉQUENCEUR */
-.studio-sequence-editor {
-    height: 400px; background: #f8fafc; border-top: 1px solid #e2e8f0;
-    display: flex; flex-direction: column; padding: 20px; gap: 15px;
+.studio-sequencer-box {
+    height: 240px; flex-shrink: 0; background: #f8fafc; 
+    border-top: 2px solid #e2e8f0; padding: 10px;
+    display: flex; flex-direction: column; gap: 8px;
 }
-.sequence-header { display: flex; justify-content: space-between; align-items: center; }
-.sequence-title { font-size: 9px; font-weight: 950; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; }
+.seq-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px; }
+.seq-label { font-size: 0.65rem; font-weight: 900; color: #94a3b8; text-transform: uppercase; }
+.seq-controls { display: flex; align-items: center; gap: 5px; background: white; padding: 4px; border-radius: 8px; border: 1px solid #e2e8f0; }
+.btn-mini-ctrl { width: 20px; height: 20px; background: #f1f5f9; border: none; border-radius: 4px; font-weight: 900; font-size: 0.8rem; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 
-.sequence-controls {
-    display: flex; align-items: center; gap: 6px;
-    background: white; padding: 5px 10px; border-radius: 12px; border: 1px solid #e2e8f0;
+.btn-mirror { 
+    width: 20px; height: 20px; 
+    background: #eef2ff; color: #6366f1; 
+    border: 1px solid #c7d2fe; border-radius: 4px; 
+    font-weight: 900; font-size: 0.7rem; 
+    cursor: pointer; display: flex; align-items: center; justify-content: center; 
+    transition: all 0.2s; margin-right: 4px;
 }
-.btn-speed { width: 24px; height: 24px; background: #f1f5f9; border: none; border-radius: 6px; font-weight: 900; cursor: pointer; }
-.speed-indicator { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 900; color: #6366f1; min-width: 40px; text-align: center; }
+.btn-mirror:hover { background: #6366f1; color: white; border-color: #6366f1; }
 
-.sequence-grid {
-    flex: 1; display: grid; grid-template-columns: repeat(auto-fill, minmax(65px, 1fr));
-    gap: 12px; overflow-y: auto; padding-right: 5px;
+.seq-frames-grid {
+    flex: 1; display: grid; grid-template-columns: repeat(4, 1fr); 
+    grid-auto-rows: 55px; gap: 6px; overflow-y: auto; padding: 2px;
 }
-.frame-card {
-    width: 65px; height: 65px; background: white; border: 2px solid #e2e8f0;
-    border-radius: 12px; position: relative; cursor: pointer;
-    display: flex; align-items: center; justify-content: center; transition: all 0.2s;
+.seq-frame {
+    background: white; border: 2px solid #e2e8f0; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+    position: relative; overflow: hidden;
 }
-.frame-card.active-preview { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2); }
-.frame-del { position: absolute; top: -5px; right: -5px; width: 20px; height: 20px; background: #ef4444; color: white; border: 2px solid white; border-radius: 50%; font-size: 10px; display: flex; align-items: center; justify-content: center; cursor: pointer; opacity: 0; transition: 0.2s; z-index: 10; }
-.frame-card:hover .frame-del { opacity: 1; }
+.seq-frame img { width: 100%; height: 100%; object-fit: contain; }
+.seq-frame.active { border-color: #7c3aed; box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.2); }
+.seq-frame-add { border: 2px dashed #cbd5e1; color: #cbd5e1; font-size: 1.5rem; }
+.frame-del { position: absolute; top: -5px; right: -5px; width: 18px; height: 18px; background: #ef4444; color: white; border: 2px solid white; border-radius: 50%; font-size: 9px; display: flex; align-items: center; justify-content: center; cursor: pointer; opacity: 0; transition: 0.2s; z-index: 10; }
+.seq-frame:hover .frame-del { opacity: 1; }
 
-/* BARRE DE GOMME (FIX ALIGNEMENT) */
-.eraser-tool-bar {
-    background: white; border: 2px solid #e2e8f0; border-radius: 20px;
-    padding: 12px 15px; display: flex; align-items: center; justify-content: space-between;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-top: auto;
+.eraser-bar {
+    background: white; padding: 6px 10px; border-radius: 12px; border: 1px solid #e2e8f0;
+    display: flex; align-items: center; justify-content: space-between;
 }
-.btn-eraser-main { width: 42px; height: 42px; background: #f1f5f9; border-radius: 12px; font-size: 1.2rem; cursor: pointer; border: none; display: flex; align-items: center; justify-content: center; transition: 0.2s; }
-.btn-eraser-main.active { background: #6366f1; color: white; box-shadow: 0 0 15px rgba(99, 102, 241, 0.4); }
+.btn-eraser-main { width: 32px; height: 32px; background: #f1f5f9; border-radius: 10px; font-size: 1rem; cursor: pointer; border: none; display: flex; align-items: center; justify-content: center; transition: 0.2s; }
+.btn-eraser-main.active { background: #6366f1; color: white; box-shadow: 0 0 10px rgba(99, 102, 241, 0.4); }
+.eraser-size-ctrl { display: flex; align-items: center; gap: 5px; background: #f8fafc; padding: 4px 8px; border-radius: 8px; border: 1px solid #eee; }
+.btn-size { width: 22px; height: 22px; background: white; border: 1px solid #ddd; border-radius: 6px; font-weight: 900; cursor: pointer; font-size: 0.7rem; }
+.size-val { font-family: 'JetBrains Mono', monospace; font-size: 0.6rem; font-weight: 950; color: #1e293b; min-width: 15px; text-align: center; }
+.btn-launch-eraser { background: #6366f1; color: white; border: none; border-radius: 8px; font-size: 0.6rem; font-weight: 900; padding: 6px 12px; cursor: pointer; text-transform: uppercase; }
 
-.eraser-size-ctrl { display: flex; align-items: center; gap: 8px; background: #f8fafc; padding: 5px 12px; border-radius: 12px; border: 1px solid #eee; }
-.btn-size { width: 26px; height: 26px; background: white; border: 1px solid #ddd; border-radius: 6px; font-weight: 900; cursor: pointer; }
-.size-val { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 950; color: #1e293b; min-width: 20px; text-align: center; }
-
-/* --- COLONNE CENTRALE --- */
-.studio-center-column {
-    flex: 1; display: flex; flex-direction: column;
-    background: #f1f5f9; padding: 15px; gap: 15px; min-width: 0;
+/* BOUTON MAGIQUE IA */
+.btn-magic-clean { 
+    background: linear-gradient(135deg, #a855f7, #ec4899); 
+    color: white; border: none; border-radius: 8px; 
+    font-size: 0.55rem; font-weight: 950; padding: 8px 12px; 
+    cursor: pointer; text-transform: uppercase; 
+    display: flex; align-items: center; gap: 4px;
+    box-shadow: 0 4px 10px rgba(168, 85, 247, 0.3);
+    transition: transform 0.2s;
 }
-.stage-view {
-    height: 320px; background-color: #fff; background-size: cover; background-position: center;
-    border-radius: 25px; position: relative; overflow: hidden; box-shadow: inset 0 0 40px rgba(0,0,0,0.05); flex-shrink: 0;
+.btn-magic-clean:hover { transform: scale(1.05); filter: brightness(1.1); }
+.btn-magic-clean.pulse { animation: pulse-purple 1.5s infinite; }
+
+/* --- CENTRE (FIXÉ) --- */
+.studio-col-center {
+    padding: 15px; /* Moins de padding */
+    display: flex; flex-direction: column; gap: 10px;
+    overflow: hidden; /* Empêche le scroll global, on veut que le stage grandisse */
 }
-.actor-on-stage { position: absolute; transform: translate(-50%, -50%); cursor: grab; z-index: 10; width: 150px; height: 150px; display: flex; align-items: center; justify-content: center; }
-.actor-on-stage img { max-width: 100%; max-height: 100%; object-fit: contain; pointer-events: none; }
 
-.v115-prop-bar {
-    display: flex; align-items: center; gap: 15px;
-    background: white; padding: 12px 20px; border-radius: 20px; border: 1px solid #e2e8f0; flex-shrink: 0;
+.stage-wrapper {
+    flex: 1; /* LE STAGE PREND TOUT L'ESPACE DISPONIBLE */
+    width: 100%; 
+    min-height: 0; /* Important pour Flexbox */
+    background: #0f172a; 
+    border-radius: 20px; overflow: hidden; position: relative;
+    box-shadow: 0 20px 50px -10px rgba(0,0,0,0.2);
+    background-size: cover; background-position: center;
 }
-.prop-input-mini { background: #f1f5f9; border: none; padding: 8px 12px; border-radius: 10px; font-weight: 900; font-size: 12px; width: 100px; outline: none; }
 
-.compact-code-editor { flex: 1; background: #0f172a; border-radius: 20px; overflow: hidden; display: flex; border: 1px solid #334155; }
-.compact-code-editor textarea { width: 100%; height: 100%; background: transparent; color: #10b981; font-family: 'JetBrains Mono', monospace; font-size: 12px; padding: 20px; border: none; outline: none; resize: none; line-height: 1.6; }
+.actor-sprite { position: absolute; transform: translate(-50%, -50%); cursor: grab; user-select: none; }
+.actor-sprite:active { cursor: grabbing; transform: translate(-50%, -50%) scale(1.05); }
+.actor-sprite img { width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
 
-/* --- BIBLIOTHÈQUE --- */
-.studio-library-panel { width: 250px; min-width: 250px; background: #fff; border-left: 1px solid #e2e8f0; display: flex; flex-direction: column; }
-.library-grid { display: grid; grid-template-columns: 1fr; gap: 12px; padding: 15px; }
-.item-card { background: #f8fafc; border: 2px solid #f1f5f9; border-radius: 20px; padding: 15px; cursor: pointer; display: flex; flex-direction: column; align-items: center; position: relative; transition: all 0.2s; }
-.item-card.active { border-color: #6366f1; background: #eef2ff; }
-.item-img-container { width: 100%; height: 120px; display: flex; align-items: center; justify-content: center; background: white; border-radius: 12px; margin-bottom: 8px; overflow: hidden; border: 1px solid #f1f5f9; }
-.item-img { max-width: 90%; max-height: 90%; object-fit: contain; }
-.item-del-btn { position: absolute; top: -6px; right: -6px; width: 22px; height: 22px; background: #ef4444; color: white; border: 2px solid white; border-radius: 50%; font-size: 12px; font-weight: 950; display: flex; align-items: center; justify-content: center; cursor: pointer; opacity: 0; transform: scale(0.8); transition: 0.2s; z-index: 100; }
-.item-card:hover .item-del-btn { opacity: 1; transform: scale(1); }
+.props-bar {
+    background: white; padding: 10px 15px; border-radius: 15px; border: 1px solid #e2e8f0;
+    display: flex; align-items: center; gap: 15px; flex-shrink: 0;
+}
+.prop-item { display: flex; flex-direction: column; gap: 4px; }
+.prop-label { font-size: 0.6rem; font-weight: 900; color: #94a3b8; text-transform: uppercase; }
+.prop-input { background: #f1f5f9; border: none; padding: 6px 10px; border-radius: 8px; font-weight: 800; font-size: 0.8rem; width: 100px; color: #334155; outline: none; }
+
+.btn-view-quiz {
+    background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1;
+    padding: 6px 12px; border-radius: 8px; font-weight: 900; font-size: 0.7rem;
+    cursor: pointer; transition: all 0.2s;
+}
+.btn-view-quiz:hover { background: #e2e8f0; color: #1e293b; }
+
+/* CONSOLE COMPACTE ET FIXE */
+.code-editor-box {
+    height: 150px; /* HAUTEUR FIXE RÉDUITE */
+    min-height: 150px;
+    flex-shrink: 0; 
+    background: #1e293b; border-radius: 15px; 
+    border: 4px solid #334155; overflow: hidden; display: flex;
+}
+.code-editor-box textarea {
+    flex: 1; background: transparent; border: none; padding: 15px;
+    color: #10b981; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem;
+    line-height: 1.4; outline: none; resize: none;
+}
+
+/* --- DROITE --- */
+.studio-col-right {
+    background: white; border-left: 1px solid #e2e8f0;
+    display: flex; flex-direction: column; overflow: hidden;
+}
+
+/* MINI-HEADER DANS LA COLONNE DE DROITE */
+.right-project-header {
+    padding: 15px;
+    background: white;
+    border-bottom: 2px solid #f1f5f9;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+.project-meta-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #f8fafc;
+    padding: 10px;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+}
+
+.mini-proj-icon { font-size: 1.2rem; }
+.mini-proj-input {
+    border: none;
+    background: transparent;
+    font-weight: 900;
+    font-size: 0.8rem;
+    color: #334155;
+    width: 100%;
+    outline: none;
+    text-transform: uppercase;
+}
+
+.project-actions-row {
+    display: flex;
+    gap: 5px;
+}
+
+.btn-mini-action {
+    flex: 1;
+    padding: 10px;
+    border-radius: 10px;
+    border: none;
+    font-size: 0.7rem;
+    font-weight: 900;
+    color: white;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 5px;
+    text-transform: uppercase;
+    transition: transform 0.1s;
+}
+.btn-mini-action:hover { transform: scale(1.02); }
+.btn-save-mini { background: #10b981; }
+.btn-load-mini { background: #3b82f6; }
+
+.lib-section { flex: 1; display: flex; flex-direction: column; overflow: hidden; border-bottom: 1px solid #f1f5f9; }
+.lib-header { 
+    padding: 10px 15px; background: #f8fafc; border-bottom: 1px solid #e2e8f0;
+    font-size: 0.65rem; font-weight: 900; color: #64748b; text-transform: uppercase; 
+    display: flex; justify-content: space-between; align-items: center;
+}
+.btn-lib-add { 
+    background: #e0e7ff; color: #4f46e5; border: 1px solid #c7d2fe;
+    padding: 3px 8px; border-radius: 6px; font-size: 0.55rem; font-weight: 900; cursor: pointer;
+}
+.lib-grid {
+    flex: 1; overflow-y: auto; padding: 10px;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+}
+.lib-item {
+    background: white; border: 2px solid #f1f5f9; border-radius: 12px;
+    padding: 10px; display: flex; flex-direction: column; align-items: center;
+    cursor: pointer; transition: all 0.2s; position: relative;
+}
+.lib-item:hover { border-color: #cbd5e1; transform: translateY(-2px); }
+.lib-item.active { border-color: #6366f1; background: #eef2ff; }
+.lib-thumb { width: 100%; height: 70px; object-fit: contain; margin-bottom: 5px; }
+.lib-name { font-size: 0.7rem; font-weight: 800; color: #334155; text-align: center; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.item-del-btn { position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; background: #ef4444; color: white; border: 2px solid white; border-radius: 50%; font-size: 10px; font-weight: 950; display: flex; align-items: center; justify-content: center; cursor: pointer; opacity: 0; transform: scale(0.8); transition: 0.2s; z-index: 100; }
+.lib-item:hover .item-del-btn { opacity: 1; transform: scale(1); }
+
+/* --- MODALES --- */
+.quiz-data-overlay {
+    position: fixed; inset: 0; z-index: 40000;
+    background: rgba(15, 23, 42, 0.9);
+    display: flex; align-items: center; justify-content: center;
+}
+.quiz-data-window {
+    background: white; width: 500px; height: 400px; border-radius: 20px;
+    display: flex; flex-direction: column; overflow: hidden;
+}
+.quiz-data-header { padding: 15px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; }
+.quiz-data-body { padding: 20px; overflow: auto; font-family: monospace; font-size: 0.8rem; }
+
+@keyframes hourglass-flip { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(180deg); } }
+@keyframes pulse-purple { 0% { box-shadow: 0 0 0 0 rgba(168, 85, 247, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(168, 85, 247, 0); } 100% { box-shadow: 0 0 0 0 rgba(168, 85, 247, 0); } }
 
 [[[£ END: client/src/features/prof/studio/StudioDashboard.css £]]]
 
 [[[£ FILE: client/src/features/prof/studio/StudioDashboard.jsx £]]]
-// @signatures: StudioDashboard, resolveUrl, loadProjects, saveProject, handleViewTestQuiz, handleUpdateActionSpeed, handleBatchAIClean, handleBatchManualClean, processFrameBackgroundManual, handleMirrorSequence, handleSelectActor, handleStageMouseDown, handleStageMouseMove, handleStageMouseUp, handleUpdateActionSpeed, handleUpdateProp, loadProjects, processFrameBackgroundManual, saveProject, togglePreview, handleViewTestQuiz
+// @signatures: StudioDashboard
 import React, { useState, useRef, useEffect } from 'react';
 import './StudioDashboard.css';
 import { api } from '../../../services/api';
 import ManualEraser from './studioComp/ManualEraser';
 import GameEngine from './studioComp/GameEngine';
+import SaveLoadModal from './studioComp/SaveLoadModal';
 
-const CURRENT_BUILD = 70; // V470: RAW JSX (Fix Unicode Escape Error)
+const CURRENT_BUILD = 87; // V487: CLEAN HEADERLESS
 
 function resolveUrl(url) {
     if (!url) return "";
@@ -236,7 +393,7 @@ class MiniGame extends MiniGameBase {
 `;
 
 export default function StudioDashboard({ user }) {
-    const [project, setProject] = useState(null);
+    const [project, setProject] = useState({ title: "Nouveau Projet", scenes: [{ name: "Scene 1", actors: [], backdrops: [] }] });
     const [selectedActorId, setSelectedActorId] = useState(null);
     const [selectedActionIdx, setSelectedActionIdx] = useState(0);
     const [leftTab, setLeftTab] = useState('actions');
@@ -255,6 +412,10 @@ export default function StudioDashboard({ user }) {
     const [previewFrameIdx, setPreviewFrameIdx] = useState(0);
     const [selectedFrameIdx, setSelectedFrameIdx] = useState(null);
     const [isDraggingOnStage, setIsDraggingOnStage] = useState(false);
+    
+    // --- SAVE / LOAD STATE ---
+    const [showSaveLoadModal, setShowSaveLoadModal] = useState(false);
+    const [modalMode, setModalMode] = useState('LOAD'); 
 
     const frameUploadRef = useRef(null);
     const actorUploadRef = useRef(null);
@@ -295,11 +456,39 @@ export default function StudioDashboard({ user }) {
         } catch(e) {} setLoading(false);
     }
 
+    const handleOpenSave = () => {
+        setModalMode('SAVE');
+        setShowSaveLoadModal(true);
+    };
+
+    const handleOpenLoad = () => {
+        setModalMode('LOAD');
+        setShowSaveLoadModal(true);
+    };
+
+    const handleLoadProject = (p) => {
+        setProject(p);
+        setCode(p.generatedCode || defaultCode);
+        if (p.scenes?.[0]?.actors?.[0]) setSelectedActorId(p.scenes[0].actors[0].id);
+        else setSelectedActorId(null);
+        setShowSaveLoadModal(false);
+    };
+
+    const handleCreateNew = () => {
+        setProject({ title: "Nouveau Projet", scenes: [{ name: "Scene 1", actors: [], backdrops: [] }] });
+        setCode(defaultCode);
+        setSelectedActorId(null);
+        setShowSaveLoadModal(false);
+    };
+
     const handleViewTestQuiz = async () => {
         try {
             const data = await api.get('/games/test-data');
-            if (data) { setTestQuizData(data); setShowTestQuizModal(true); }
-        } catch (e) {}
+            if (data) { 
+                setTestQuizData(data); 
+                setShowTestQuizModal(true); 
+            }
+        } catch (e) { console.error(e); }
     };
 
     const handleUpdateActionSpeed = (delta) => {
@@ -312,55 +501,19 @@ export default function StudioDashboard({ user }) {
         }
     };
 
-    const handleBatchAIClean = async () => {
+    const handleSmartAIClean = async () => {
         if (!selectedAction) return;
-        if (!confirm(`🤖 NETTOYAGE IA : Envoyer les ${selectedAction.frames.length} images ?`)) return;
-        setCleaning(true); setStatusText("Analyse IA en cours...");
+        const targetIndices = selectedFrameIdx !== null ? [selectedFrameIdx] : selectedAction.frames.map((_, i) => i);
+        if (targetIndices.length === 0) return;
+        if (!confirm(`✨ Nettoyage IA : Traiter ${targetIndices.length} image(s) ?`)) return;
+        setCleaning(true); setStatusText(selectedFrameIdx !== null ? "Détourage CIBLÉ..." : "Détourage EN SÉRIE...");
         const next = JSON.parse(JSON.stringify(project));
         const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
         const act = actor.actions[selectedActionIdx];
-        for (let i = 0; i < act.frames.length; i++) {
-            const res = await api.post('/studio/remove-bg-specialized', { url: act.frames[i].url });
-            if (res.url) act.frames[i].url = res.url;
+        for (const idx of targetIndices) {
+            try { const res = await api.post('/studio/remove-bg-specialized', { url: act.frames[idx].url }); if (res.url) act.frames[idx].url = res.url; } catch (e) {}
         }
         setProject(next); await saveProject(next); setCleaning(false);
-    };
-
-    const handleBatchManualClean = async () => {
-        if (!selectedAction) return;
-        if (!confirm("🎨 Détourage Automatique (Haut-Gauche) ?")) return;
-        setCleaning(true); setStatusText("Détourage Chromatique...");
-        const next = JSON.parse(JSON.stringify(project));
-        const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
-        const act = actor.actions[selectedActionIdx];
-        for (let i = 0; i < act.frames.length; i++) {
-            const url = await processFrameBackgroundManual(act.frames[i].url);
-            if (url) act.frames[i].url = url;
-        }
-        setProject(next); await saveProject(next); setCleaning(false);
-    };
-
-    const processFrameBackgroundManual = async (url) => {
-        return new Promise((resolve) => {
-            const img = new Image(); img.crossOrigin = "anonymous";
-            img.onload = () => {
-                const canvas = document.createElement('canvas'); canvas.width = img.width; canvas.height = img.height;
-                const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0);
-                const iD = ctx.getImageData(0, 0, canvas.width, canvas.height); const d = iD.data;
-                const [tr, tg, tb] = [d[0], d[1], d[2]];
-                for (let i = 0; i < d.length; i += 4) {
-                    const dist = Math.sqrt(Math.pow(d[i]-tr,2)+Math.pow(d[i+1]-tg,2)+Math.pow(d[i+2]-tb,2));
-                    if (dist < 50) d[i+3] = 0;
-                }
-                ctx.putImageData(iD, 0, 0);
-                canvas.toBlob(async (blob) => {
-                    const fd = new FormData(); fd.append('file', blob, "auto-clean.png");
-                    const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json());
-                    resolve(res.url);
-                }, 'image/png');
-            };
-            img.src = resolveUrl(url);
-        });
     };
 
     const handleMirrorSequence = async () => {
@@ -388,16 +541,7 @@ export default function StudioDashboard({ user }) {
         setProject(next); await saveProject(next); setCleaning(false);
     };
 
-    const handleSelectActor = (actorId) => {
-        if (!project) return;
-        const next = JSON.parse(JSON.stringify(project));
-        const actors = next.scenes[selectedSceneIdx].actors;
-        const idx = actors.findIndex(a => a.id === actorId);
-        if (idx === -1) return;
-        const [moved] = actors.splice(idx, 1); actors.push(moved);
-        setProject(next); setSelectedActorId(actorId); setSelectedFrameIdx(null);
-    };
-
+    const handleSelectActor = (actorId) => { setSelectedActorId(actorId); setSelectedFrameIdx(null); };
     const handleStageMouseDown = (e, actorId) => { e.preventDefault(); e.stopPropagation(); handleSelectActor(actorId); setIsDraggingOnStage(true); };
     const handleStageMouseMove = (e) => {
         if (!isDraggingOnStage || !selectedActorId || !stageRef.current) return;
@@ -415,9 +559,7 @@ export default function StudioDashboard({ user }) {
         if (!selectedActor) return;
         const next = { ...project };
         const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
-        if (actor) {
-            actor[f] = isNaN(v) ? v : parseFloat(v); setProject(next); saveProject(next);
-        }
+        if (actor) { actor[f] = isNaN(v) ? v : parseFloat(v); setProject(next); saveProject(next); }
     };
 
     const handleReorderFrame = (targetIdx) => {
@@ -442,6 +584,20 @@ export default function StudioDashboard({ user }) {
 
     return (
         <div className="studio-wrapper" onMouseMove={handleStageMouseMove} onMouseUp={() => setIsDraggingOnStage(false)}>
+            {showSaveLoadModal && (
+                <SaveLoadModal 
+                    mode={modalMode} 
+                    user={user} 
+                    currentProject={project}
+                    onClose={() => setShowSaveLoadModal(false)}
+                    onLoad={handleLoadProject}
+                    onNew={handleCreateNew}
+                    onSave={(p) => { 
+                        saveProject(p).then(() => setShowSaveLoadModal(false)); 
+                    }}
+                />
+            )}
+
             {frameToErase && (
                 <ManualEraser 
                     imageUrl={frameToErase.url} initialSize={eraserSize} resolveUrl={resolveUrl}
@@ -475,29 +631,141 @@ export default function StudioDashboard({ user }) {
                 />
             )}
 
-            <div className="studio-assets-panel">
-                <div className="studio-tab-header"><button onClick={() => setLeftTab('actions')} className={`studio-tab-btn ${leftTab === 'actions' ? 'active' : ''}`}>⚡ Actions</button><button onClick={() => setLeftTab('sounds')} className={`studio-tab-btn ${leftTab === 'sounds' ? 'active' : ''}`}>🎵 Sons</button></div>
-                <div className="studio-asset-list custom-scrollbar">
-                    {leftTab === 'actions' ? (<>{selectedActor?.actions?.map((act, idx) => (<div key={idx} onClick={() => { setSelectedActionIdx(idx); setIsPreviewPlaying(false); setSelectedFrameIdx(null); }} className={`action-card-square ${selectedActionIdx === idx ? 'active' : ''}`}><span>{act.name}</span></div>))}<button className="v84-add-btn-minimal" onClick={() => { const name = prompt("Nom :"); if(!name) return; const next = JSON.parse(JSON.stringify(project)); next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId).actions.push({ name: name.toUpperCase(), frames: [], speed: 100 }); saveProject(next); }}>+ Ajouter</button></>) : <div className="p-10 opacity-30 text-center uppercase text-[10px] font-black">Bientôt</div>}
-                </div>
-                {leftTab === 'actions' && selectedAction && (
-                    <div className="studio-sequence-editor">
-                        <div className="sequence-header"><span className="text-[9px] font-black text-slate-400 uppercase">Séquence ({selectedAction.name})</span><div className="sequence-controls"><button className="btn-mirror" onClick={handleMirrorSequence} title="Miroir">↔️</button><button className="btn-speed" onClick={() => handleUpdateActionSpeed(-50)}>-</button><span className="speed-indicator">{selectedAction.speed || 100}ms</span><button className="btn-speed" onClick={() => handleUpdateActionSpeed(50)}>+</button><button className={`btn-preview-play ${isPreviewPlaying ? 'playing' : ''}`} onClick={() => setIsPreviewPlaying(!isPreviewPlaying)}>{isPreviewPlaying ? '⏹️' : '▶️'}</button></div></div>
-                        <div className="sequence-grid custom-scrollbar">{selectedAction.frames.map((frame, fIdx) => (<div key={fIdx} className={`frame-card ${isPreviewPlaying && previewFrameIdx === fIdx ? 'active-preview' : ''} ${selectedFrameIdx === fIdx ? 'selected-for-clean' : ''}`} draggable onClick={() => { setSelectedFrameIdx(selectedFrameIdx === fIdx ? null : fIdx); setIsPreviewPlaying(false); }} onDragStart={() => setDraggedFrameIdx(fIdx)} onDragOver={e => e.preventDefault()} onDrop={() => handleReorderFrame(fIdx)}><img src={resolveUrl(frame.url)} className="frame-img" /><button className="frame-del" onClick={e => { e.stopPropagation(); handleDeleteFrame(fIdx); }}>✕</button></div>))}<button className="v84-add-btn-minimal !p-2 !h-16 !w-16" onClick={() => frameUploadRef.current.click()}>+</button></div>
-                        <div className="eraser-tool-bar"><button className={`btn-eraser-main ${eraserActive ? 'active' : ''}`} onClick={() => setEraserActive(!eraserActive)}>🧽</button><div className="eraser-size-ctrl"><button onClick={() => setEraserSize(Math.max(1, eraserSize - 2))} className="btn-size">-</button><span className="size-val">{eraserSize}</span><button onClick={() => setEraserSize(Math.min(100, eraserSize + 2))} className="btn-size">+</button></div>{eraserActive && selectedFrameIdx !== null && (<button className="btn-launch-eraser animate-pulse" onClick={() => setFrameToErase({ url: selectedAction.frames[selectedFrameIdx].url, idx: selectedFrameIdx })}>GOMMER FRAME</button>)}</div>
-                    </div>
-                )}
-            </div>
+            {/* HEADER SUPPRIMÉ ! */}
             
-            <div className="studio-center-column">
-                <div ref={stageRef} className="stage-view" style={{ backgroundImage: currentScene?.backdrops?.[currentScene.currentBackdropIdx || 0]?.url ? `url(${resolveUrl(currentScene.backdrops[currentScene.currentBackdropIdx].url)})` : 'none' }}>{currentScene?.actors?.map((a) => { const isSelected = selectedActorId === a.id; let action = isSelected ? selectedAction : (a.actions?.find(act => act.name.toUpperCase() === "IDLE") || a.actions?.[0]); let frameIdx = isSelected ? (isPreviewPlaying ? previewFrameIdx : (selectedFrameIdx !== null ? selectedFrameIdx : 0)) : 0; return (<div key={a.id} onMouseDown={e => handleStageMouseDown(e, a.id)} className={`actor-on-stage ${isSelected ? 'selected' : ''}`} style={{ left: `${a.initialX}%`, top: `${a.initialY}%`, transform: `translate(-50%, -50%) scale(${a.scale}) rotate(${a.direction || 0}deg)` }}>{action?.frames?.[frameIdx]?.url && <img src={resolveUrl(action.frames[frameIdx].url)} />}<div className="actor-label-tag">{a.name}</div></div>); })}</div>
-                <div className="v115-prop-bar"><div className="flex flex-col"><span className="text-[8px] font-black opacity-30 uppercase">Nom</span><input className="prop-input-mini" value={selectedActor?.name || ""} onChange={e => handleUpdateProp('name', e.target.value)} /></div><div className="flex flex-col border-l pl-4"><span className="text-[8px] font-black opacity-30 uppercase">Taille (%)</span><input type="number" className="prop-input-mini" value={Math.round((selectedActor?.scale || 1) * 100)} onChange={e => handleUpdateProp('scale', parseFloat(e.target.value)/100)} /></div><button onClick={handleViewTestQuiz} className="btn-view-quiz">📋 QUIZ</button><button onClick={() => { saveProject(); setIsPlaying(true); }} className="ml-2 bg-indigo-600 text-white px-6 py-2 rounded-xl font-black text-[10px] shadow-lg">▶ TESTER</button></div>
-                <div className="compact-code-editor"><textarea value={code} onChange={e => setCode(e.target.value)} spellCheck="false" /></div>
-            </div>
+            <div className="studio-grid-body">
+                
+                {/* 1. GAUCHE : ACTIONS & SEQUENCES */}
+                <div className="studio-col-left">
+                    <div className="studio-tab-header"><button className={`studio-tab-btn ${leftTab === 'actions' ? 'active' : ''}`} onClick={() => setLeftTab('actions')}>⚡ Actions</button><button className={`studio-tab-btn ${leftTab === 'sounds' ? 'active' : ''}`} onClick={() => setLeftTab('sounds')}>🎵 Sons</button></div>
+                    <div className="studio-action-list custom-scrollbar">
+                        {leftTab === 'actions' ? (<>
+                            {selectedActor?.actions?.map((act, idx) => (<div key={idx} onClick={() => { setSelectedActionIdx(idx); setIsPreviewPlaying(false); setSelectedFrameIdx(null); }} className={`action-item ${selectedActionIdx === idx ? 'selected' : ''}`}>{act.name}</div>))}
+                            <button className="v84-add-btn-minimal" onClick={() => { const name = prompt("Nom :"); if(!name) return; const next = JSON.parse(JSON.stringify(project)); next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId).actions.push({ name: name.toUpperCase(), frames: [], speed: 100 }); saveProject(next); }}>+ Ajouter</button>
+                        </>) : <div className="p-10 opacity-30 text-center uppercase text-[10px] font-black">Bientôt</div>}
+                    </div>
+                    {leftTab === 'actions' && selectedAction && (
+                        <div className="studio-sequencer-box">
+                            <div className="seq-header">
+                                <span className="seq-label">Timeline ({selectedAction.frames.length}f)</span>
+                                <div className="seq-controls">
+                                    <button className="btn-mirror" onClick={handleMirrorSequence} title="Miroir">↔️</button>
+                                    <button className="btn-mini-ctrl" onClick={() => handleUpdateActionSpeed(-50)}>-</button>
+                                    <span className="speed-indicator">{selectedAction.speed || 100}ms</span>
+                                    <button className="btn-mini-ctrl" onClick={() => handleUpdateActionSpeed(50)}>+</button>
+                                    <button className="btn-mini-ctrl" onClick={() => setIsPreviewPlaying(!isPreviewPlaying)}>{isPreviewPlaying ? '⏹️' : '▶️'}</button>
+                                </div>
+                            </div>
+                            <div className="seq-frames-grid custom-scrollbar">
+                                {selectedAction.frames.map((frame, fIdx) => (
+                                    <div key={fIdx} className={`seq-frame ${isPreviewPlaying && previewFrameIdx === fIdx ? 'active' : ''} ${selectedFrameIdx === fIdx ? 'active' : ''}`} draggable onClick={() => { setSelectedFrameIdx(selectedFrameIdx === fIdx ? null : fIdx); setIsPreviewPlaying(false); }} onDragStart={() => setDraggedFrameIdx(fIdx)} onDragOver={e => e.preventDefault()} onDrop={() => handleReorderFrame(fIdx)}>
+                                        <img src={resolveUrl(frame.url)} /><button className="frame-del" onClick={e => { e.stopPropagation(); handleDeleteFrame(fIdx); }}>✕</button>
+                                    </div>
+                                ))}
+                                <div className="seq-frame seq-frame-add" onClick={() => frameUploadRef.current.click()}>+</div>
+                            </div>
+                            <div className="eraser-bar">
+                                <button className={`btn-eraser-main ${eraserActive ? 'active' : ''}`} onClick={() => setEraserActive(!eraserActive)}>🧽</button>
+                                <div className="eraser-size-ctrl"><button className="btn-size" onClick={() => setEraserSize(Math.max(1, eraserSize - 2))}>-</button><span className="size-val">{eraserSize}</span><button className="btn-size" onClick={() => setEraserSize(Math.min(100, eraserSize + 2))}>+</button></div>
+                                {eraserActive && selectedFrameIdx !== null && <button className="btn-launch-eraser" onClick={() => setFrameToErase({ url: selectedAction.frames[selectedFrameIdx].url, idx: selectedFrameIdx })}>GOMMER</button>}
+                            
+                                <button 
+                                    className={`btn-magic-clean ${cleaning ? 'pulse' : ''}`} 
+                                    onClick={handleSmartAIClean}
+                                    title={selectedFrameIdx !== null ? "Détourer cette image" : "Détourer toute l'action"}
+                                >
+                                    ✨ {selectedFrameIdx !== null ? 'CIBLÉ' : 'AUTO'}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
 
-            <div className="studio-library-panel">
-                <div className="library-scroll-area custom-scrollbar"><div className="library-section-header"><span className="lib-section-title">Personnages</span><div className="flex flex-col gap-1 mt-2"><button className="bg-blue-100 text-blue-600 border border-blue-200 rounded-lg py-1 text-[9px] font-black uppercase" onClick={handleBatchManualClean}>🎨 AUTO-CLEAN</button><button className="bg-purple-100 text-purple-600 border border-purple-200 rounded-lg py-1 text-[9px] font-black uppercase" onClick={handleBatchAIClean} disabled={cleaning}>✨ IA CLEAN</button></div></div><div className="library-grid">{currentScene?.actors?.map((actor) => (<div key={actor.id} className={`item-card ${selectedActorId === actor.id ? 'active' : ''}`} onClick={() => handleSelectActor(actor.id)}><button className="item-del-btn" onClick={e => handleDeleteActor(e, actor.id)}>✕</button><div className="item-img-container"><img src={actor.actions?.[0]?.frames?.[0]?.url ? resolveUrl(actor.actions[0].frames[0].url) : ""} className="item-img" /></div><div className="item-name-tag">{actor.name}</div></div>))}<div className="item-card !bg-indigo-50" onClick={() => actorUploadRef.current.click()}><span className="text-3xl text-indigo-300">+</span></div></div></div>
-                <div className="library-bg-section"><div className="library-section-header"><span className="lib-section-title">Décors</span></div><div className="library-grid custom-scrollbar">{currentScene?.backdrops?.map((bd, bIdx) => (<div key={bIdx} className={`item-card ${currentScene.currentBackdropIdx === bIdx ? 'active' : ''}`} onClick={() => { const next = JSON.parse(JSON.stringify(project)); next.scenes[selectedSceneIdx].currentBackdropIdx = bIdx; setProject(next); saveProject(next); }}><button className="item-del-btn" onClick={e => handleDeleteBackdrop(e, bIdx)}>✕</button><div className="item-img-container"><img src={resolveUrl(bd.url)} className="item-img" /></div><div className="item-name-tag">DÉCOR {bIdx+1}</div></div>))}<div className="item-card !bg-emerald-50" onClick={() => backdropUploadRef.current.click()}><span className="text-3xl text-emerald-300">+</span></div></div></div>
+                {/* 2. CENTRE : SCÈNE & CODE */}
+                <div className="studio-col-center custom-scrollbar">
+                    <div ref={stageRef} className="stage-wrapper" style={{ backgroundImage: currentScene?.backdrops?.[currentScene.currentBackdropIdx || 0]?.url ? `url(${resolveUrl(currentScene.backdrops[currentScene.currentBackdropIdx].url)})` : 'none' }}>
+                        {currentScene?.actors?.map((a) => { 
+                            const isSelected = selectedActorId === a.id; 
+                            let action = isSelected ? selectedAction : (a.actions?.find(act => act.name.toUpperCase() === "IDLE") || a.actions?.[0]); 
+                            let frameIdx = isSelected ? (isPreviewPlaying ? previewFrameIdx : (selectedFrameIdx !== null ? selectedFrameIdx : 0)) : 0; 
+                            return (
+                                <div 
+                                    key={a.id} 
+                                    onMouseDown={e => handleStageMouseDown(e, a.id)} 
+                                    className={`actor-sprite ${isSelected ? 'selected' : ''}`} 
+                                    style={{ 
+                                        left: `${a.initialX}%`, 
+                                        top: `${a.initialY}%`, 
+                                        width: `${150 * (a.scale || 1)}px`, 
+                                        height: `${150 * (a.scale || 1)}px`, 
+                                        transform: `translate(-50%, -50%) rotate(${a.direction || 0}deg)`,
+                                        zIndex: isSelected ? 100 : 10 // Gestion Z-Index visuelle
+                                    }}
+                                >
+                                    {action?.frames?.[frameIdx]?.url && <img src={resolveUrl(action.frames[frameIdx].url)} />}
+                                </div>
+                            ); 
+                        })}
+                    </div>
+                    <div className="props-bar">
+                        <div className="prop-item"><span className="prop-label">Nom</span><input className="prop-input" value={selectedActor?.name || ""} onChange={e => handleUpdateProp('name', e.target.value)} /></div>
+                        <div className="prop-item"><span className="prop-label">Taille (%)</span><input type="number" className="prop-input" value={Math.round((selectedActor?.scale || 1) * 100)} onChange={e => handleUpdateProp('scale', parseFloat(e.target.value)/100)} /></div>
+                        <button onClick={handleViewTestQuiz} className="btn-view-quiz">📋 QUIZ</button>
+                        <button onClick={() => { saveProject(); setIsPlaying(true); }} className="ml-auto bg-indigo-600 text-white px-6 py-2 rounded-xl font-black text-[10px] shadow-lg">▶ TESTER</button>
+                    </div>
+                    <div className="code-editor-box"><textarea value={code} onChange={e => setCode(e.target.value)} spellCheck="false" /></div>
+                </div>
+
+                {/* 3. DROITE : BIBLIOTHÈQUE + MINI HEADER */}
+                <div className="studio-col-right">
+                    
+                    {/* NOUVEAU HEADER LOCAL */}
+                    <div className="right-project-header">
+                        <div className="project-meta-row">
+                            <span className="mini-proj-icon">🎬</span>
+                            <input 
+                                className="mini-proj-input" 
+                                value={project?.title || ""} 
+                                onChange={e => setProject({...project, title: e.target.value})} 
+                                placeholder="TITRE..." 
+                            />
+                        </div>
+                        <div className="project-actions-row">
+                            <button onClick={handleOpenSave} className="btn-mini-action btn-save-mini">
+                                💾 SAUVER
+                            </button>
+                            <button onClick={handleOpenLoad} className="btn-mini-action btn-load-mini">
+                                📂 CHARGER
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div className="lib-section" style={{flex: 2}}>
+                        <div className="lib-header"><span>Personnages</span><button className="btn-lib-add" onClick={() => actorUploadRef.current.click()}>+ IMPORT</button></div>
+                        <div className="lib-grid custom-scrollbar">
+                            {currentScene?.actors?.map((actor) => (
+                                <div key={actor.id} className={`lib-item ${selectedActorId === actor.id ? 'active' : ''}`} onClick={() => handleSelectActor(actor.id)}>
+                                    <button className="item-del-btn" onClick={e => handleDeleteActor(e, actor.id)}>✕</button>
+                                    <img src={actor.actions?.[0]?.frames?.[0]?.url ? resolveUrl(actor.actions[0].frames[0].url) : ""} className="lib-thumb" />
+                                    <span className="lib-name">{actor.name}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="lib-section" style={{flex: 1}}>
+                        <div className="lib-header"><span>Décors</span><button className="btn-lib-add" onClick={() => backdropUploadRef.current.click()}>+ IMPORT</button></div>
+                        <div className="lib-grid custom-scrollbar">
+                            {currentScene?.backdrops?.map((bd, bIdx) => (
+                                <div key={bIdx} className={`lib-item ${currentScene.currentBackdropIdx === bIdx ? 'active' : ''}`} onClick={() => { const next = JSON.parse(JSON.stringify(project)); next.scenes[selectedSceneIdx].currentBackdropIdx = bIdx; setProject(next); saveProject(next); }}>
+                                    <button className="item-del-btn" onClick={e => handleDeleteBackdrop(e, bIdx)}>✕</button>
+                                    <img src={resolveUrl(bd.url)} className="lib-thumb" />
+                                    <span className="lib-name">DÉCOR {bIdx+1}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
             </div>
         </div>
     );
@@ -506,13 +774,13 @@ export default function StudioDashboard({ user }) {
 [[[£ END: client/src/features/prof/studio/StudioDashboard.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/studio/studioComp/GameEngine.jsx £]]]
-// @signatures: GameEngine, initLevel, handleAnswerClick, triggerWinSequence, handleBarCheat, handleCanvasCheat
+// @signatures: GameEngine, initLevel, handleAnswerClick, triggerWinSequence, handleBarCheat
 import React, { useState, useRef, useEffect } from 'react';
 import { api } from '../../../../services/api';
 
 /**
- * 🎮 MOTEUR DE JEU DÉDIÉ (VERSION UX FINAL V480)
- * RÔLE : Arbitre JSX avec Transitions Rapides et Écran de Victoire Stylisé.
+ * 🎮 MOTEUR DE JEU DÉDIÉ (SÉCURITÉ TRANSITION V473)
+ * RÔLE : Arbitre JSX avec Verrou de Victoire pour empêcher la perte de vie post-victoire.
  */
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
     const canvasRef = useRef(null);
@@ -529,15 +797,10 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const [lives, setLives] = useState(4);
 
     // --- ÉTATS DE STRUCTURE ---
-    const [isLevelWon, setIsLevelWon] = useState(false); // Transition Niveau
-    const [isGameFinished, setIsGameFinished] = useState(false); // Victoire Totale
-    const isLevelWonRef = useRef(false); 
+    const [isLevelWon, setIsLevelWon] = useState(false);
+    const isLevelWonRef = useRef(false); // Ref pour accès synchrone dans les callbacks JS
+    const [isPowerOff, setIsPowerOff] = useState(false);
     const [keysPressed, setKeysPressed] = useState({});
-    
-    // CHEAT STATES
-    const sPressed = keysPressed['KeyS'];
-    const tPressed = keysPressed['KeyT'];
-    const cheatReady = sPressed && tPressed;
 
     useEffect(() => {
         api.get('/games/test-data').then(data => {
@@ -545,11 +808,8 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             setAllLevels(levelsData);
             initLevel(0, levelsData);
         });
-        
         const handleKeyDown = (e) => setKeysPressed(prev => ({ ...prev, [e.code]: true }));
         const handleKeyUp = (e) => setKeysPressed(prev => ({ ...prev, [e.code]: false }));
-        
-        window.focus();
         window.addEventListener('keydown', handleKeyDown);
         window.addEventListener('keyup', handleKeyUp);
         return () => { window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); };
@@ -563,8 +823,8 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         setLevelQuestions(questions);
         setQuestionStates(new Array(questions.length).fill(0));
         setIsLevelWon(false);
-        setIsGameFinished(false);
-        isLevelWonRef.current = false; 
+        isLevelWonRef.current = false; // Relâche le verrou
+        setIsPowerOff(false);
         if (questions.length > 0) setCurrentQIndex(0);
     };
 
@@ -599,69 +859,28 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     };
 
     const triggerWinSequence = () => {
-        // 1. Verrouillage
         setIsLevelWon(true);
-        isLevelWonRef.current = true; 
+        isLevelWonRef.current = true; // 🔒 VERROU ACTIF : Le JSX n'écoute plus les dégâts
         
-        // 2. Notification au script JS (Animation de victoire)
         if (gameInstanceRef.current?.onLevelWin) {
             gameInstanceRef.current.onLevelWin();
         }
         
-        // 3. Transition Rapide (1.2 secondes)
+        setTimeout(() => setIsPowerOff(true), 1500);
         setTimeout(() => {
             const nextLvlIdx = currentLevelIdx + 1;
-            if (allLevels[nextLvlIdx]) {
-                // Passage au niveau suivant
-                initLevel(nextLvlIdx, allLevels);
-            } else {
-                // Fin du jeu
-                setIsLevelWon(false);
-                setIsGameFinished(true);
-            }
-        }, 1200);
+            if (allLevels[nextLvlIdx]) initLevel(nextLvlIdx, allLevels);
+            else { alert("🎉 JEU TERMINÉ !"); onStop(); }
+        }, 4000);
     };
 
-    // --- CHEAT LOGIC ---
-    
     const handleBarCheat = (idx) => {
-        if (cheatReady) {
+        if (keysPressed['KeyS'] && keysPressed['KeyT']) {
             const next = [...questionStates];
             next[idx] = 3;
             setQuestionStates(next);
             if (next.every(s => s === 3)) triggerWinSequence();
         }
-    };
-
-    const executeReset = (e) => {
-        if(e) e.stopPropagation();
-        console.log("⚡ EXECUTE RESET ZOMBIE !");
-
-        // 1. REINITIALISATION INTERFACE
-        setLives(4);
-        setIsLevelWon(false);
-        setIsGameFinished(false); // Reset écran de fin
-        isLevelWonRef.current = false;
-
-        // 2. REINITIALISATION MOTEUR
-        if (gameInstanceRef.current) {
-            gameInstanceRef.current.isStopped = false;
-            
-            if (typeof gameInstanceRef.current.zombieX !== 'undefined') {
-                gameInstanceRef.current.zombieX = 90;
-            }
-            if (typeof gameInstanceRef.current.projectiles !== 'undefined') {
-                gameInstanceRef.current.projectiles = [];
-            }
-
-            if (gameInstanceRef.current.start) {
-                gameInstanceRef.current.start();
-            }
-        }
-    };
-
-    const handleCanvasCheat = (e) => {
-        if (cheatReady) executeReset(e);
     };
 
     useEffect(() => {
@@ -743,6 +962,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 const FinalClass = new Function('params', finalScript)({ 
                     canvas, ctx, assets, project, sceneIdx: activeSceneIdx, resolveUrl, 
                     callbacks: { 
+                        // 🛡️ SÉCURITÉ V473 : Le callback de dégâts vérifie le verrou de victoire
                         onPlayerHit: () => {
                             if (!isLevelWonRef.current) {
                                 setLives(l => Math.max(0, l - 1));
@@ -768,22 +988,13 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     }, [code, project, activeSceneIdx]);
 
     return (
-        <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center font-sans" onClick={handleCanvasCheat}>
-             
-             <div className="absolute top-2 left-2 z-[100000] bg-black/80 text-white font-mono text-xs p-2 rounded pointer-events-none">
-                KEYS: {sPressed ? 'S' : '_'} + {tPressed ? 'T' : '_'}
-             </div>
-
-             {cheatReady && (
-                 <button onClick={executeReset} className="absolute top-20 left-1/2 -translate-x-1/2 z-[100000] bg-red-600 text-white font-black px-6 py-3 rounded-full shadow-2xl border-4 border-white animate-pulse uppercase tracking-widest text-lg cursor-pointer pointer-events-auto">🔴 RESET ZOMBIE NOW</button>
-             )}
-
+        <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center font-sans">
              <div className="absolute top-6 w-full flex justify-between items-start px-10 pointer-events-none z-20">
                 <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-xl pointer-events-auto flex gap-1">
                     {"❤️".repeat(lives)}{"🖤".repeat(Math.max(0, 4 - lives))}
                 </div>
                 <div className="flex-1 flex justify-center px-4">
-                    {levelQuestions[currentQIndex] && !isLevelWon && !isGameFinished && (
+                    {levelQuestions[currentQIndex] && !isLevelWon && (
                         <div className="bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 border-slate-600 shadow-2xl text-xl pointer-events-auto">
                             {feedback === 'CORRECT' ? "✅ BRAVO !" : feedback === 'WRONG' ? "❌ RATÉ..." : levelQuestions[currentQIndex].q}
                         </div>
@@ -791,56 +1002,31 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 </div>
                 <div className="flex gap-2 items-center pointer-events-auto mr-16">
                     {questionStates.map((mastery, idx) => (
-                        <div key={idx} onClick={(e) => { e.stopPropagation(); handleBarCheat(idx); }} className={`w-4 h-12 rounded-md border border-slate-600 relative overflow-hidden transition-all cursor-help ${currentQIndex === idx ? 'ring-2 ring-indigo-400 scale-110' : 'opacity-60'}`}>
+                        <div key={idx} onClick={() => handleBarCheat(idx)} className={`w-4 h-12 rounded-md border border-slate-600 relative overflow-hidden transition-all cursor-help ${currentQIndex === idx ? 'ring-2 ring-indigo-400 scale-110' : 'opacity-60'}`}>
                             <div className={`absolute bottom-0 left-0 right-0 transition-all duration-500 ${mastery === 3 ? 'bg-green-500 shadow-[0_0_10px_green]' : 'bg-yellow-500'}`} style={{ height: `${(mastery / 3) * 100}%` }} />
                         </div>
                     ))}
                 </div>
             </div>
 
-            <div className={`relative transition-all duration-200 ${cheatReady ? 'ring-8 ring-red-500 rounded-xl' : ''}`}>
-                <canvas ref={canvasRef} width={800} height={450} className={`aspect-video shadow-2xl bg-black border-4 border-slate-800 rounded-xl transition-opacity duration-1000 ${isGameFinished ? 'opacity-20' : 'opacity-100'}`} />
-                
-                {/* --- OVERLAY DE TRANSITION NIVEAU --- */}
+            <div className="relative">
+                <canvas ref={canvasRef} width={800} height={450} className={`aspect-video shadow-2xl bg-black border-4 border-slate-800 rounded-xl transition-opacity duration-1000 ${isPowerOff ? 'opacity-0' : 'opacity-100'}`} />
                 {isLevelWon && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm rounded-xl animate-in zoom-in pointer-events-none">
-                        <div className="bg-white p-8 rounded-[40px] shadow-2xl text-center border-8 border-indigo-500 transform scale-110">
-                            <span className="text-6xl block mb-2">🚀</span>
-                            <h2 className="text-2xl font-black text-slate-800 uppercase tracking-widest">Niveau {currentLevelIdx + 1} Terminé</h2>
+                    <div className="absolute inset-0 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm rounded-xl animate-in zoom-in">
+                        <div className="bg-white p-10 rounded-[40px] shadow-2xl text-center border-8 border-green-500">
+                            <span className="text-6xl block mb-4">🏆</span>
+                            <h2 className="text-4xl font-black text-slate-800 uppercase">Niveau Réussi !</h2>
                         </div>
                     </div>
                 )}
-
-                {/* --- OVERLAY JEU TERMINÉ (JOLI DIV) --- */}
-                {isGameFinished && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-slate-950/80 backdrop-blur-md rounded-xl animate-in zoom-in z-50">
-                        <div className="bg-gradient-to-br from-indigo-900 to-purple-900 p-10 rounded-[50px] shadow-2xl text-center border-[6px] border-white/20 max-w-lg w-full relative overflow-hidden">
-                            {/* Confettis CSS simples */}
-                            <div className="absolute top-0 left-0 w-full h-full opacity-30 pointer-events-none bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MCIgaGVpZ2h0PSI1MCI+CiAgPGNpcmNsZSBjeD0iMjUiIGN5PSIyNSIgcj0iMiIgZmlsbD0id2hpdGUiLz4KPC9zdmc+')] animate-spin-slow"></div>
-                            
-                            <div className="relative z-10">
-                                <div className="text-8xl mb-4 animate-bounce">🏆</div>
-                                <h2 className="text-4xl font-black text-white uppercase tracking-tighter mb-2 text-shadow-lg">Victoire Totale !</h2>
-                                <p className="text-indigo-200 font-bold uppercase tracking-widest text-sm mb-8">Tous les niveaux sont validés</p>
-                                
-                                <button 
-                                    onClick={(e) => { e.stopPropagation(); onStop(); }}
-                                    className="bg-white text-indigo-900 font-black text-xl py-4 px-10 rounded-2xl shadow-[0_10px_20px_rgba(0,0,0,0.3)] hover:scale-105 hover:bg-indigo-50 transition-all border-b-8 border-indigo-200 active:border-b-0 active:translate-y-2 uppercase tracking-wide"
-                                >
-                                    Quitter le jeu
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )}
+                {isPowerOff && <div className="absolute inset-0 bg-black rounded-xl flex items-center justify-center"><div className="w-1 h-1 bg-white rounded-full animate-ping"></div></div>}
             </div>
-            
             {crash && <div className="absolute inset-0 bg-red-900/90 flex items-center justify-center text-white font-mono p-10 text-center z-50">💥 ERREUR SCRIPT : {crash}</div>}
 
             <div className="absolute bottom-6 w-full flex justify-center px-10">
                 <div className="grid grid-cols-4 gap-4 w-full max-w-5xl">
                     {levelQuestions[currentQIndex]?.options?.map((o, i) => (
-                        <button key={i} onClick={(e) => { e.stopPropagation(); handleAnswerClick(i); }} className="bg-indigo-600 text-white py-5 rounded-xl font-black uppercase shadow-xl hover:bg-indigo-500 transition-all border-b-4 border-indigo-800 active:border-b-0 active:translate-y-1">{o}</button>
+                        <button key={i} onClick={() => handleAnswerClick(i)} className="bg-indigo-600 text-white py-5 rounded-xl font-black uppercase shadow-xl hover:bg-indigo-500 transition-all border-b-4 border-indigo-800 active:border-b-0 active:translate-y-1">{o}</button>
                     ))}
                 </div>
             </div>
@@ -1082,6 +1268,146 @@ export default function ManualEraser({ imageUrl, initialSize, onSave, onCancel, 
 }
 
 [[[£ END: client/src/features/prof/studio/studioComp/ManualEraser.jsx £]]]
+
+[[[£ FILE: client/src/features/prof/studio/studioComp/SaveLoadModal.css £]]]
+.sl-modal-overlay {
+    position: fixed; inset: 0; z-index: 50000;
+    background: rgba(15, 23, 42, 0.9);
+    backdrop-filter: blur(8px);
+    display: flex; align-items: center; justify-content: center;
+}
+
+.sl-window {
+    background: white; width: 600px; max-height: 80vh;
+    border-radius: 30px; display: flex; flex-direction: column;
+    overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+    border: 1px solid #e2e8f0; animation: sl-pop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.sl-header {
+    padding: 20px 30px; background: #f8fafc; border-bottom: 1px solid #e2e8f0;
+    display: flex; justify-content: space-between; align-items: center;
+}
+
+.sl-title { font-weight: 950; font-size: 1.2rem; color: #1e293b; text-transform: uppercase; }
+.sl-close { background: #e2e8f0; color: #94a3b8; width: 30px; height: 30px; border-radius: 50%; border: none; font-weight: 900; cursor: pointer; }
+.sl-close:hover { background: #fee2e2; color: #ef4444; }
+
+.sl-body { padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+
+.sl-project-item {
+    padding: 15px; border: 2px solid #f1f5f9; border-radius: 15px;
+    display: flex; justify-content: space-between; align-items: center;
+    cursor: pointer; transition: all 0.2s; background: white;
+}
+.sl-project-item:hover { border-color: #6366f1; background: #eef2ff; transform: translateX(5px); }
+
+.sl-p-name { font-weight: 800; color: #334155; font-size: 0.9rem; }
+.sl-p-date { font-size: 0.7rem; color: #94a3b8; font-weight: 600; text-transform: uppercase; }
+
+.sl-new-btn {
+    padding: 15px; background: #1e293b; color: white;
+    border-radius: 15px; font-weight: 900; text-transform: uppercase;
+    border: none; cursor: pointer; margin-bottom: 15px;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+}
+.sl-new-btn:hover { background: #334155; transform: scale(1.02); }
+
+.sl-save-box { display: flex; flex-direction: column; gap: 10px; }
+.sl-input { padding: 15px; border: 2px solid #e2e8f0; border-radius: 15px; font-weight: 700; outline: none; font-size: 1rem; }
+.sl-input:focus { border-color: #6366f1; }
+.sl-confirm-btn { padding: 15px; background: #10b981; color: white; border: none; border-radius: 15px; font-weight: 900; cursor: pointer; text-transform: uppercase; }
+
+@keyframes sl-pop { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+[[[£ END: client/src/features/prof/studio/studioComp/SaveLoadModal.css £]]]
+
+[[[£ FILE: client/src/features/prof/studio/studioComp/SaveLoadModal.jsx £]]]
+// @signatures: SaveLoadModal
+import React, { useState, useEffect } from 'react';
+import { api } from '../../../../services/api';
+import './SaveLoadModal.css';
+
+export default function SaveLoadModal({ mode, user, currentProject, onClose, onLoad, onSave, onNew }) {
+    const [projects, setProjects] = useState([]);
+    const [loading, setLoading] = useState(false);
+    const [saveName, setSaveName] = useState(currentProject?.title || "Nouveau Projet");
+
+    useEffect(() => {
+        if (mode === 'LOAD' || mode === 'LIST') {
+            setLoading(true);
+            api.get(`/studio/projects/${user.id || user._id}`)
+                .then(data => setProjects(data || []))
+                .catch(() => setProjects([]))
+                .finally(() => setLoading(false));
+        }
+    }, [mode, user]);
+
+    const handleSaveClick = () => {
+        if (!saveName.trim()) return alert("Nom requis !");
+        onSave({ ...currentProject, title: saveName });
+    };
+
+    return (
+        <div className="sl-modal-overlay" onClick={onClose}>
+            <div className="sl-window" onClick={e => e.stopPropagation()}>
+                <div className="sl-header">
+                    <span className="sl-title">{mode === 'SAVE' ? '💾 Sauvegarder' : '📂 Charger un projet'}</span>
+                    <button className="sl-close" onClick={onClose}>✕</button>
+                </div>
+                
+                <div className="sl-body custom-scrollbar">
+                    {mode === 'LOAD' && (
+                        <>
+                            <button className="sl-new-btn" onClick={onNew}>
+                                <span>✨</span> Créer un nouveau projet vide
+                            </button>
+                            <div className="h-px bg-slate-100 mb-4"></div>
+                            {loading ? <div className="text-center text-slate-400 font-bold p-4">Chargement...</div> : (
+                                projects.map(p => (
+                                    <div key={p._id} className="sl-project-item" onClick={() => onLoad(p)}>
+                                        <span className="sl-p-name">{p.title}</span>
+                                        <span className="sl-p-date">{new Date(p.updatedAt).toLocaleDateString()}</span>
+                                    </div>
+                                ))
+                            )}
+                            {projects.length === 0 && !loading && <div className="text-center text-slate-300 font-bold italic">Aucun projet sauvegardé.</div>}
+                        </>
+                    )}
+
+                    {mode === 'SAVE' && (
+                        <div className="sl-save-box">
+                            <label className="text-xs font-black text-slate-400 uppercase">Nom du projet</label>
+                            <input 
+                                className="sl-input" 
+                                value={saveName} 
+                                onChange={e => setSaveName(e.target.value)} 
+                                placeholder="Mon Super Jeu..." 
+                                autoFocus
+                            />
+                            <button className="sl-confirm-btn" onClick={handleSaveClick}>
+                                Confirmer la sauvegarde
+                            </button>
+                            
+                            <div className="mt-6">
+                                <span className="text-xs font-black text-slate-400 uppercase mb-2 block">Écraser une version existante :</span>
+                                <div className="flex flex-col gap-2 max-h-[200px] overflow-y-auto">
+                                    {projects.map(p => (
+                                        <div key={p._id} className="sl-project-item !py-2 !border-dashed" onClick={() => { setSaveName(p.title); }}>
+                                            <span className="sl-p-name opacity-60">{p.title}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+[[[£ END: client/src/features/prof/studio/studioComp/SaveLoadModal.jsx £]]]
 
 [[[£ FILE: server/domains/studio/ai/game-generator.ai.js £]]]
 // @signatures: MiniGame
@@ -1338,6 +1664,38 @@ const GameExpert = {
 module.exports = GameExpert;
 
 [[[£ END: server/domains/studio/experts/game.expert.js £]]]
+
+[[[£ FILE: server/domains/studio/experts/save-load.expert.js £]]]
+// @signatures: SaveLoadExpert
+const StudioDB = require('../db/studio.db');
+
+/**
+ * 💾 EXPERT SAVE-LOAD STUDIO
+ * Miroir Backend pour la gestion des sauvegardes et chargements.
+ */
+const SaveLoadExpert = {
+    
+    /**
+     * Liste légère des projets pour la modale
+     */
+    listProjects: async (teacherId) => {
+        return await StudioDB.findProjectsByTeacher(teacherId);
+    },
+
+    /**
+     * Sauvegarde ou mise à jour
+     */
+    saveProject: async (projectData) => {
+        if (!projectData.title) throw new Error("Le titre du projet est obligatoire.");
+        if (!projectData.teacherId) throw new Error("Propriétaire manquant.");
+        
+        return await StudioDB.upsertProject(projectData);
+    }
+};
+
+module.exports = SaveLoadExpert;
+
+[[[£ END: server/domains/studio/experts/save-load.expert.js £]]]
 
 [[[£ FILE: server/domains/studio/experts/studio.drive.js £]]]
 const DriveEngine = require('../../../core/drive.engine');

@@ -956,3 +956,7 @@
 - Ajout d'un flash ROUGE visuel (`debugFlash`) lorsque le cheat est détecté pour confirmer l'action à l'utilisateur.
 
 07/02/2026 17:20 - STUDIO CHEAT VISUAL (V478) : Ajout d'un HUD Debug clavier (S: _ T: _) et d'un bouton explicite "RESET ZOMBIE" qui apparaît lorsque la combinaison est active. Utilisation de `onClickCapture` pour garantir l'interception des clics.
+
+08/02/2026 11:37 - FORCE UPDATE : Restauration complète du module STUDIO (UI, Moteur, Gomme, Save/Load) via écrasement direct pour contourner les conflits de branche.
+
+08/02/2026 11:37 - FORCE UPDATE : Restauration complète du module STUDIO (UI, Moteur, Gomme, Save/Load) via écrasement direct pour contourner les conflits de branche.

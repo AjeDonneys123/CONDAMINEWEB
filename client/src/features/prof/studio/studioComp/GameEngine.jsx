@@ -1,10 +1,10 @@
-// @signatures: GameEngine, initLevel, handleAnswerClick, triggerWinSequence, handleBarCheat, handleCanvasCheat
+// @signatures: GameEngine, initLevel, handleAnswerClick, triggerWinSequence, handleBarCheat
 import React, { useState, useRef, useEffect } from 'react';
 import { api } from '../../../../services/api';
 
 /**
- * 🎮 MOTEUR DE JEU DÉDIÉ (VERSION UX FINAL V480)
- * RÔLE : Arbitre JSX avec Transitions Rapides et Écran de Victoire Stylisé.
+ * 🎮 MOTEUR DE JEU DÉDIÉ (SÉCURITÉ TRANSITION V473)
+ * RÔLE : Arbitre JSX avec Verrou de Victoire pour empêcher la perte de vie post-victoire.
  */
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
     const canvasRef = useRef(null);
@@ -21,15 +21,10 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const [lives, setLives] = useState(4);
 
     // --- ÉTATS DE STRUCTURE ---
-    const [isLevelWon, setIsLevelWon] = useState(false); // Transition Niveau
-    const [isGameFinished, setIsGameFinished] = useState(false); // Victoire Totale
-    const isLevelWonRef = useRef(false); 
+    const [isLevelWon, setIsLevelWon] = useState(false);
+    const isLevelWonRef = useRef(false); // Ref pour accès synchrone dans les callbacks JS
+    const [isPowerOff, setIsPowerOff] = useState(false);
     const [keysPressed, setKeysPressed] = useState({});
-    
-    // CHEAT STATES
-    const sPressed = keysPressed['KeyS'];
-    const tPressed = keysPressed['KeyT'];
-    const cheatReady = sPressed && tPressed;
 
     useEffect(() => {
         api.get('/games/test-data').then(data => {
@@ -37,11 +32,8 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             setAllLevels(levelsData);
             initLevel(0, levelsData);
         });
-        
         const handleKeyDown = (e) => setKeysPressed(prev => ({ ...prev, [e.code]: true }));
         const handleKeyUp = (e) => setKeysPressed(prev => ({ ...prev, [e.code]: false }));
-        
-        window.focus();
         window.addEventListener('keydown', handleKeyDown);
         window.addEventListener('keyup', handleKeyUp);
         return () => { window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); };
@@ -55,8 +47,8 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         setLevelQuestions(questions);
         setQuestionStates(new Array(questions.length).fill(0));
         setIsLevelWon(false);
-        setIsGameFinished(false);
-        isLevelWonRef.current = false; 
+        isLevelWonRef.current = false; // Relâche le verrou
+        setIsPowerOff(false);
         if (questions.length > 0) setCurrentQIndex(0);
     };
 
@@ -91,69 +83,28 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     };
 
     const triggerWinSequence = () => {
-        // 1. Verrouillage
         setIsLevelWon(true);
-        isLevelWonRef.current = true; 
+        isLevelWonRef.current = true; // 🔒 VERROU ACTIF : Le JSX n'écoute plus les dégâts
         
-        // 2. Notification au script JS (Animation de victoire)
         if (gameInstanceRef.current?.onLevelWin) {
             gameInstanceRef.current.onLevelWin();
         }
         
-        // 3. Transition Rapide (1.2 secondes)
+        setTimeout(() => setIsPowerOff(true), 1500);
         setTimeout(() => {
             const nextLvlIdx = currentLevelIdx + 1;
-            if (allLevels[nextLvlIdx]) {
-                // Passage au niveau suivant
-                initLevel(nextLvlIdx, allLevels);
-            } else {
-                // Fin du jeu
-                setIsLevelWon(false);
-                setIsGameFinished(true);
-            }
-        }, 1200);
+            if (allLevels[nextLvlIdx]) initLevel(nextLvlIdx, allLevels);
+            else { alert("🎉 JEU TERMINÉ !"); onStop(); }
+        }, 4000);
     };
 
-    // --- CHEAT LOGIC ---
-    
     const handleBarCheat = (idx) => {
-        if (cheatReady) {
+        if (keysPressed['KeyS'] && keysPressed['KeyT']) {
             const next = [...questionStates];
             next[idx] = 3;
             setQuestionStates(next);
             if (next.every(s => s === 3)) triggerWinSequence();
         }
-    };
-
-    const executeReset = (e) => {
-        if(e) e.stopPropagation();
-        console.log("⚡ EXECUTE RESET ZOMBIE !");
-
-        // 1. REINITIALISATION INTERFACE
-        setLives(4);
-        setIsLevelWon(false);
-        setIsGameFinished(false); // Reset écran de fin
-        isLevelWonRef.current = false;
-
-        // 2. REINITIALISATION MOTEUR
-        if (gameInstanceRef.current) {
-            gameInstanceRef.current.isStopped = false;
-            
-            if (typeof gameInstanceRef.current.zombieX !== 'undefined') {
-                gameInstanceRef.current.zombieX = 90;
-            }
-            if (typeof gameInstanceRef.current.projectiles !== 'undefined') {
-                gameInstanceRef.current.projectiles = [];
-            }
-
-            if (gameInstanceRef.current.start) {
-                gameInstanceRef.current.start();
-            }
-        }
-    };
-
-    const handleCanvasCheat = (e) => {
-        if (cheatReady) executeReset(e);
     };
 
     useEffect(() => {
@@ -235,6 +186,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 const FinalClass = new Function('params', finalScript)({ 
                     canvas, ctx, assets, project, sceneIdx: activeSceneIdx, resolveUrl, 
                     callbacks: { 
+                        // 🛡️ SÉCURITÉ V473 : Le callback de dégâts vérifie le verrou de victoire
                         onPlayerHit: () => {
                             if (!isLevelWonRef.current) {
                                 setLives(l => Math.max(0, l - 1));
@@ -260,22 +212,13 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     }, [code, project, activeSceneIdx]);
 
     return (
-        <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center font-sans" onClick={handleCanvasCheat}>
-             
-             <div className="absolute top-2 left-2 z-[100000] bg-black/80 text-white font-mono text-xs p-2 rounded pointer-events-none">
-                KEYS: {sPressed ? 'S' : '_'} + {tPressed ? 'T' : '_'}
-             </div>
-
-             {cheatReady && (
-                 <button onClick={executeReset} className="absolute top-20 left-1/2 -translate-x-1/2 z-[100000] bg-red-600 text-white font-black px-6 py-3 rounded-full shadow-2xl border-4 border-white animate-pulse uppercase tracking-widest text-lg cursor-pointer pointer-events-auto">🔴 RESET ZOMBIE NOW</button>
-             )}
-
+        <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center font-sans">
              <div className="absolute top-6 w-full flex justify-between items-start px-10 pointer-events-none z-20">
                 <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-xl pointer-events-auto flex gap-1">
                     {"❤️".repeat(lives)}{"🖤".repeat(Math.max(0, 4 - lives))}
                 </div>
                 <div className="flex-1 flex justify-center px-4">
-                    {levelQuestions[currentQIndex] && !isLevelWon && !isGameFinished && (
+                    {levelQuestions[currentQIndex] && !isLevelWon && (
                         <div className="bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 border-slate-600 shadow-2xl text-xl pointer-events-auto">
                             {feedback === 'CORRECT' ? "✅ BRAVO !" : feedback === 'WRONG' ? "❌ RATÉ..." : levelQuestions[currentQIndex].q}
                         </div>
@@ -283,56 +226,31 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 </div>
                 <div className="flex gap-2 items-center pointer-events-auto mr-16">
                     {questionStates.map((mastery, idx) => (
-                        <div key={idx} onClick={(e) => { e.stopPropagation(); handleBarCheat(idx); }} className={`w-4 h-12 rounded-md border border-slate-600 relative overflow-hidden transition-all cursor-help ${currentQIndex === idx ? 'ring-2 ring-indigo-400 scale-110' : 'opacity-60'}`}>
+                        <div key={idx} onClick={() => handleBarCheat(idx)} className={`w-4 h-12 rounded-md border border-slate-600 relative overflow-hidden transition-all cursor-help ${currentQIndex === idx ? 'ring-2 ring-indigo-400 scale-110' : 'opacity-60'}`}>
                             <div className={`absolute bottom-0 left-0 right-0 transition-all duration-500 ${mastery === 3 ? 'bg-green-500 shadow-[0_0_10px_green]' : 'bg-yellow-500'}`} style={{ height: `${(mastery / 3) * 100}%` }} />
                         </div>
                     ))}
                 </div>
             </div>
 
-            <div className={`relative transition-all duration-200 ${cheatReady ? 'ring-8 ring-red-500 rounded-xl' : ''}`}>
-                <canvas ref={canvasRef} width={800} height={450} className={`aspect-video shadow-2xl bg-black border-4 border-slate-800 rounded-xl transition-opacity duration-1000 ${isGameFinished ? 'opacity-20' : 'opacity-100'}`} />
-                
-                {/* --- OVERLAY DE TRANSITION NIVEAU --- */}
+            <div className="relative">
+                <canvas ref={canvasRef} width={800} height={450} className={`aspect-video shadow-2xl bg-black border-4 border-slate-800 rounded-xl transition-opacity duration-1000 ${isPowerOff ? 'opacity-0' : 'opacity-100'}`} />
                 {isLevelWon && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm rounded-xl animate-in zoom-in pointer-events-none">
-                        <div className="bg-white p-8 rounded-[40px] shadow-2xl text-center border-8 border-indigo-500 transform scale-110">
-                            <span className="text-6xl block mb-2">🚀</span>
-                            <h2 className="text-2xl font-black text-slate-800 uppercase tracking-widest">Niveau {currentLevelIdx + 1} Terminé</h2>
+                    <div className="absolute inset-0 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm rounded-xl animate-in zoom-in">
+                        <div className="bg-white p-10 rounded-[40px] shadow-2xl text-center border-8 border-green-500">
+                            <span className="text-6xl block mb-4">🏆</span>
+                            <h2 className="text-4xl font-black text-slate-800 uppercase">Niveau Réussi !</h2>
                         </div>
                     </div>
                 )}
-
-                {/* --- OVERLAY JEU TERMINÉ (JOLI DIV) --- */}
-                {isGameFinished && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-slate-950/80 backdrop-blur-md rounded-xl animate-in zoom-in z-50">
-                        <div className="bg-gradient-to-br from-indigo-900 to-purple-900 p-10 rounded-[50px] shadow-2xl text-center border-[6px] border-white/20 max-w-lg w-full relative overflow-hidden">
-                            {/* Confettis CSS simples */}
-                            <div className="absolute top-0 left-0 w-full h-full opacity-30 pointer-events-none bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MCIgaGVpZ2h0PSI1MCI+CiAgPGNpcmNsZSBjeD0iMjUiIGN5PSIyNSIgcj0iMiIgZmlsbD0id2hpdGUiLz4KPC9zdmc+')] animate-spin-slow"></div>
-                            
-                            <div className="relative z-10">
-                                <div className="text-8xl mb-4 animate-bounce">🏆</div>
-                                <h2 className="text-4xl font-black text-white uppercase tracking-tighter mb-2 text-shadow-lg">Victoire Totale !</h2>
-                                <p className="text-indigo-200 font-bold uppercase tracking-widest text-sm mb-8">Tous les niveaux sont validés</p>
-                                
-                                <button 
-                                    onClick={(e) => { e.stopPropagation(); onStop(); }}
-                                    className="bg-white text-indigo-900 font-black text-xl py-4 px-10 rounded-2xl shadow-[0_10px_20px_rgba(0,0,0,0.3)] hover:scale-105 hover:bg-indigo-50 transition-all border-b-8 border-indigo-200 active:border-b-0 active:translate-y-2 uppercase tracking-wide"
-                                >
-                                    Quitter le jeu
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )}
+                {isPowerOff && <div className="absolute inset-0 bg-black rounded-xl flex items-center justify-center"><div className="w-1 h-1 bg-white rounded-full animate-ping"></div></div>}
             </div>
-            
             {crash && <div className="absolute inset-0 bg-red-900/90 flex items-center justify-center text-white font-mono p-10 text-center z-50">💥 ERREUR SCRIPT : {crash}</div>}
 
             <div className="absolute bottom-6 w-full flex justify-center px-10">
                 <div className="grid grid-cols-4 gap-4 w-full max-w-5xl">
                     {levelQuestions[currentQIndex]?.options?.map((o, i) => (
-                        <button key={i} onClick={(e) => { e.stopPropagation(); handleAnswerClick(i); }} className="bg-indigo-600 text-white py-5 rounded-xl font-black uppercase shadow-xl hover:bg-indigo-500 transition-all border-b-4 border-indigo-800 active:border-b-0 active:translate-y-1">{o}</button>
+                        <button key={i} onClick={() => handleAnswerClick(i)} className="bg-indigo-600 text-white py-5 rounded-xl font-black uppercase shadow-xl hover:bg-indigo-500 transition-all border-b-4 border-indigo-800 active:border-b-0 active:translate-y-1">{o}</button>
                     ))}
                 </div>
             </div>
