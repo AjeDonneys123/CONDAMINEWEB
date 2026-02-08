@@ -2,13 +2,15 @@ const mongoose = require('mongoose');
 
 const FrameSchema = new mongoose.Schema({
     url: String,
-    name: String
+    name: String,
+    type: { type: String, default: 'image' } // image, sound
 }, { _id: false });
 
 const ActionSchema = new mongoose.Schema({
     name: { type: String, default: "Nouvelle Action" },
-    speed: { type: Number, default: 100 }, // Vitesse de l'animation en ms (ex: 100ms par frame)
-    frames: { type: [FrameSchema], default: [] }
+    speed: { type: Number, default: 100 }, 
+    frames: { type: [FrameSchema], default: [] }, 
+    sounds: { type: [FrameSchema], default: [] }  
 }, { _id: false });
 
 const ActorSchema = new mongoose.Schema({
@@ -27,7 +29,9 @@ const SceneSchema = new mongoose.Schema({
     name: String,
     backdrops: [{ name: String, url: String }],
     currentBackdropIdx: { type: Number, default: 0 },
-    actors: [ActorSchema]
+    actors: [ActorSchema],
+    // NOUVEAU : Actions sonores globales (Victoire, Défaite, etc.)
+    globalSounds: { type: [ActionSchema], default: [] }
 });
 
 const StudioProjectSchema = new mongoose.Schema({

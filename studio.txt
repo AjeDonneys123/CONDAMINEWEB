@@ -77,7 +77,7 @@ Gestion globale des ressources du projet.
     display: flex;
     flex-direction: column;
     width: 100%;
-    height: 88vh; /* Un peu plus haut */
+    height: 88vh;
     background: #f8fafc;
     border-radius: 25px;
     overflow: hidden;
@@ -103,10 +103,12 @@ Gestion globale des ressources du projet.
     background: #f1f5f9;
 }
 
-/* --- COLONNE GAUCHE --- */
+/* --- COLONNE GAUCHE (FIX WIDTH) --- */
 .studio-col-left {
     background: white; border-right: 1px solid #e2e8f0;
     display: flex; flex-direction: column; overflow: hidden;
+    width: 340px; /* Largeur fixe pour éviter l'écrasement */
+    flex-shrink: 0;
 }
 .studio-tab-header { display: flex; padding: 10px; gap: 5px; background: white; border-bottom: 1px solid #f1f5f9; }
 .studio-tab-btn { flex: 1; padding: 8px; border-radius: 8px; font-weight: 900; font-size: 0.7rem; text-transform: uppercase; border: 2px solid transparent; cursor: pointer; color: #94a3b8; background: #f8fafc; transition: all 0.2s; }
@@ -120,224 +122,143 @@ Gestion globale des ressources du projet.
     padding: 12px 15px; background: white; border: 2px solid #f1f5f9; border-radius: 12px;
     cursor: pointer; font-weight: 800; font-size: 0.75rem; color: #475569; 
     text-transform: uppercase; transition: all 0.2s;
+    display: flex; justify-content: space-between; align-items: center;
 }
 .action-item:hover { border-color: #a855f7; color: #7e22ce; }
 .action-item.selected { background: #f3e8ff; border-color: #a855f7; color: #6b21a8; box-shadow: 0 4px 10px rgba(168, 85, 247, 0.15); }
-.v84-add-btn-minimal { padding: 10px; border: 2px dashed #e2e8f0; border-radius: 12px; font-weight: 900; color: #cbd5e1; cursor: pointer; background: transparent; width: 100%; }
+.v84-add-btn-minimal { padding: 10px; border: 2px dashed #e2e8f0; border-radius: 12px; font-weight: 900; color: #cbd5e1; cursor: pointer; background: transparent; width: 100%; margin-top: 10px; }
 .v84-add-btn-minimal:hover { border-color: #7c3aed; color: #7c3aed; }
 
-/* SÉQUENCEUR */
+/* SÉQUENCEUR (HAUTEUR RÉDUITE DE 30%) */
 .studio-sequencer-box {
-    height: 240px; flex-shrink: 0; background: #f8fafc; 
+    height: 340px; /* Réduit de 460px à 340px pour laisser place à la liste */
+    flex-shrink: 0; background: #f8fafc; 
     border-top: 2px solid #e2e8f0; padding: 10px;
     display: flex; flex-direction: column; gap: 8px;
+    transition: height 0.3s;
 }
 .seq-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px; }
 .seq-label { font-size: 0.65rem; font-weight: 900; color: #94a3b8; text-transform: uppercase; }
 .seq-controls { display: flex; align-items: center; gap: 5px; background: white; padding: 4px; border-radius: 8px; border: 1px solid #e2e8f0; }
-.btn-mini-ctrl { width: 20px; height: 20px; background: #f1f5f9; border: none; border-radius: 4px; font-weight: 900; font-size: 0.8rem; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 
-.btn-mirror { 
-    width: 20px; height: 20px; 
+/* PETITS BOUTONS */
+.btn-mini-ctrl { width: 24px; height: 24px; background: #f1f5f9; border: none; border-radius: 6px; font-weight: 900; font-size: 0.8rem; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: 0.2s; }
+.btn-mini-ctrl:hover { background: #e2e8f0; }
+
+.btn-mirror, .btn-sound-trigger { 
+    width: 24px; height: 24px; 
     background: #eef2ff; color: #6366f1; 
-    border: 1px solid #c7d2fe; border-radius: 4px; 
-    font-weight: 900; font-size: 0.7rem; 
+    border: 1px solid #c7d2fe; border-radius: 6px; 
+    font-weight: 900; font-size: 0.9rem; 
     cursor: pointer; display: flex; align-items: center; justify-content: center; 
-    transition: all 0.2s; margin-right: 4px;
+    transition: all 0.2s; margin-right: 2px;
 }
-.btn-mirror:hover { background: #6366f1; color: white; border-color: #6366f1; }
+.btn-mirror:hover, .btn-sound-trigger:hover { background: #6366f1; color: white; border-color: #6366f1; }
 
+.speed-indicator { font-size: 0.65rem; font-weight: 900; color: #475569; min-width: 40px; text-align: center; }
+
+/* GRILLE FRAMES */
 .seq-frames-grid {
-    flex: 1; display: grid; grid-template-columns: repeat(4, 1fr); 
-    grid-auto-rows: 55px; gap: 6px; overflow-y: auto; padding: 2px;
+    flex: 1; 
+    display: grid; 
+    grid-template-columns: repeat(4, 1fr); 
+    grid-auto-rows: 60px; 
+    gap: 8px; 
+    overflow-y: auto; padding: 4px;
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
 }
 .seq-frame {
-    background: white; border: 2px solid #e2e8f0; border-radius: 10px;
+    background: white; border: 2px solid #f1f5f9; border-radius: 10px;
     display: flex; align-items: center; justify-content: center; cursor: pointer;
     position: relative; overflow: hidden;
 }
 .seq-frame img { width: 100%; height: 100%; object-fit: contain; }
 .seq-frame.active { border-color: #7c3aed; box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.2); }
-.seq-frame-add { border: 2px dashed #cbd5e1; color: #cbd5e1; font-size: 1.5rem; }
-.frame-del { position: absolute; top: -5px; right: -5px; width: 18px; height: 18px; background: #ef4444; color: white; border: 2px solid white; border-radius: 50%; font-size: 9px; display: flex; align-items: center; justify-content: center; cursor: pointer; opacity: 0; transition: 0.2s; z-index: 10; }
+.seq-frame-add { border: 2px dashed #cbd5e1; color: #cbd5e1; font-size: 1.5rem; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.seq-frame-add:hover { border-color: #7c3aed; color: #7c3aed; }
+
+.frame-del { position: absolute; top: 2px; right: 2px; width: 16px; height: 16px; background: #ef4444; color: white; border-radius: 50%; font-size: 9px; display: flex; align-items: center; justify-content: center; cursor: pointer; opacity: 0; transition: 0.2s; z-index: 10; border: 1px solid white; }
 .seq-frame:hover .frame-del { opacity: 1; }
 
-.eraser-bar {
-    background: white; padding: 6px 10px; border-radius: 12px; border: 1px solid #e2e8f0;
-    display: flex; align-items: center; justify-content: space-between;
+/* TUILE SON AVEC ETAT ACTIF */
+.sound-frame-visual { 
+    width: 100%; height: 100%; background: #eff6ff; color: #3b82f6; 
+    display: flex; flex-direction: column; align-items: center; justify-content: center; 
+    font-weight: 900; font-size: 1.2rem; cursor: pointer;
+    border-radius: 10px; border: 2px solid transparent; transition: all 0.2s;
 }
-.btn-eraser-main { width: 32px; height: 32px; background: #f1f5f9; border-radius: 10px; font-size: 1rem; cursor: pointer; border: none; display: flex; align-items: center; justify-content: center; transition: 0.2s; }
-.btn-eraser-main.active { background: #6366f1; color: white; box-shadow: 0 0 10px rgba(99, 102, 241, 0.4); }
-.eraser-size-ctrl { display: flex; align-items: center; gap: 5px; background: #f8fafc; padding: 4px 8px; border-radius: 8px; border: 1px solid #eee; }
-.btn-size { width: 22px; height: 22px; background: white; border: 1px solid #ddd; border-radius: 6px; font-weight: 900; cursor: pointer; font-size: 0.7rem; }
-.size-val { font-family: 'JetBrains Mono', monospace; font-size: 0.6rem; font-weight: 950; color: #1e293b; min-width: 15px; text-align: center; }
-.btn-launch-eraser { background: #6366f1; color: white; border: none; border-radius: 8px; font-size: 0.6rem; font-weight: 900; padding: 6px 12px; cursor: pointer; text-transform: uppercase; }
+.sound-frame-visual.active { border-color: #3b82f6; background: #dbeafe; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2); }
+.sound-name { font-size: 0.5rem; margin-top: 2px; text-transform: uppercase; max-width: 90%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* BARRE OUTILS BAS (STYLO & MAGIC) */
+.eraser-bar {
+    background: white; padding: 8px 12px; border-radius: 12px; border: 1px solid #e2e8f0;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    margin-top: auto; /* Pousse vers le bas */
+    flex-shrink: 0; /* Ne pas écraser */
+}
+
+/* BOUTON STYLO */
+.btn-tool-pen {
+    flex: 1; padding: 8px; background: #3b82f6; color: white;
+    border: none; border-radius: 10px; font-weight: 900; font-size: 0.65rem;
+    cursor: pointer; text-transform: uppercase;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    transition: transform 0.1s;
+    box-shadow: 0 3px 8px rgba(59, 130, 246, 0.3);
+}
+.btn-tool-pen:hover { transform: translateY(-2px); filter: brightness(1.1); }
+.btn-tool-pen:disabled { background: #f1f5f9; color: #cbd5e1; cursor: not-allowed; box-shadow: none; transform: none; }
 
 /* BOUTON MAGIQUE IA */
 .btn-magic-clean { 
+    flex: 1;
     background: linear-gradient(135deg, #a855f7, #ec4899); 
-    color: white; border: none; border-radius: 8px; 
-    font-size: 0.55rem; font-weight: 950; padding: 8px 12px; 
+    color: white; border: none; border-radius: 10px; 
+    font-size: 0.65rem; font-weight: 950; padding: 8px; 
     cursor: pointer; text-transform: uppercase; 
-    display: flex; align-items: center; gap: 4px;
-    box-shadow: 0 4px 10px rgba(168, 85, 247, 0.3);
+    display: flex; align-items: center; justify-content: center; gap: 4px;
+    box-shadow: 0 3px 8px rgba(168, 85, 247, 0.3);
     transition: transform 0.2s;
 }
 .btn-magic-clean:hover { transform: scale(1.05); filter: brightness(1.1); }
+.btn-magic-clean:disabled { opacity: 0.5; cursor: not-allowed; filter: grayscale(1); }
 .btn-magic-clean.pulse { animation: pulse-purple 1.5s infinite; }
 
-/* --- CENTRE (FIXÉ) --- */
-.studio-col-center {
-    padding: 15px; /* Moins de padding */
-    display: flex; flex-direction: column; gap: 10px;
-    overflow: hidden; /* Empêche le scroll global, on veut que le stage grandisse */
-}
-
-.stage-wrapper {
-    flex: 1; /* LE STAGE PREND TOUT L'ESPACE DISPONIBLE */
-    width: 100%; 
-    min-height: 0; /* Important pour Flexbox */
-    background: #0f172a; 
-    border-radius: 20px; overflow: hidden; position: relative;
-    box-shadow: 0 20px 50px -10px rgba(0,0,0,0.2);
-    background-size: cover; background-position: center;
-}
-
+/* --- CENTRE & DROITE (Préservés) --- */
+.studio-col-center { padding: 15px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
+.stage-wrapper { flex: 1; width: 100%; min-height: 0; background: #0f172a; border-radius: 20px; overflow: hidden; position: relative; box-shadow: 0 20px 50px -10px rgba(0,0,0,0.2); background-size: cover; background-position: center; }
 .actor-sprite { position: absolute; transform: translate(-50%, -50%); cursor: grab; user-select: none; }
 .actor-sprite:active { cursor: grabbing; transform: translate(-50%, -50%) scale(1.05); }
 .actor-sprite img { width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
-
-.props-bar {
-    background: white; padding: 10px 15px; border-radius: 15px; border: 1px solid #e2e8f0;
-    display: flex; align-items: center; gap: 15px; flex-shrink: 0;
-}
+.props-bar { background: white; padding: 10px 15px; border-radius: 15px; border: 1px solid #e2e8f0; display: flex; align-items: center; gap: 15px; flex-shrink: 0; }
 .prop-item { display: flex; flex-direction: column; gap: 4px; }
 .prop-label { font-size: 0.6rem; font-weight: 900; color: #94a3b8; text-transform: uppercase; }
 .prop-input { background: #f1f5f9; border: none; padding: 6px 10px; border-radius: 8px; font-weight: 800; font-size: 0.8rem; width: 100px; color: #334155; outline: none; }
-
-.btn-view-quiz {
-    background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1;
-    padding: 6px 12px; border-radius: 8px; font-weight: 900; font-size: 0.7rem;
-    cursor: pointer; transition: all 0.2s;
-}
-.btn-view-quiz:hover { background: #e2e8f0; color: #1e293b; }
-
-/* CONSOLE COMPACTE ET FIXE */
-.code-editor-box {
-    height: 150px; /* HAUTEUR FIXE RÉDUITE */
-    min-height: 150px;
-    flex-shrink: 0; 
-    background: #1e293b; border-radius: 15px; 
-    border: 4px solid #334155; overflow: hidden; display: flex;
-}
-.code-editor-box textarea {
-    flex: 1; background: transparent; border: none; padding: 15px;
-    color: #10b981; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem;
-    line-height: 1.4; outline: none; resize: none;
-}
-
-/* --- DROITE --- */
-.studio-col-right {
-    background: white; border-left: 1px solid #e2e8f0;
-    display: flex; flex-direction: column; overflow: hidden;
-}
-
-/* MINI-HEADER DANS LA COLONNE DE DROITE */
-.right-project-header {
-    padding: 15px;
-    background: white;
-    border-bottom: 2px solid #f1f5f9;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    flex-shrink: 0;
-}
-
-.project-meta-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background: #f8fafc;
-    padding: 10px;
-    border-radius: 12px;
-    border: 1px solid #e2e8f0;
-}
-
+.btn-view-quiz { background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; padding: 6px 12px; border-radius: 8px; font-weight: 900; font-size: 0.7rem; cursor: pointer; transition: all 0.2s; }
+.code-editor-box { height: 150px; min-height: 150px; flex-shrink: 0; background: #1e293b; border-radius: 15px; border: 4px solid #334155; overflow: hidden; display: flex; }
+.code-editor-box textarea { flex: 1; background: transparent; border: none; padding: 15px; color: #10b981; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; line-height: 1.4; outline: none; resize: none; }
+.studio-col-right { background: white; border-left: 1px solid #e2e8f0; display: flex; flex-direction: column; overflow: hidden; }
+.right-project-header { padding: 15px; background: white; border-bottom: 2px solid #f1f5f9; display: flex; flex-direction: column; gap: 10px; flex-shrink: 0; }
+.project-meta-row { display: flex; align-items: center; gap: 8px; background: #f8fafc; padding: 10px; border-radius: 12px; border: 1px solid #e2e8f0; }
 .mini-proj-icon { font-size: 1.2rem; }
-.mini-proj-input {
-    border: none;
-    background: transparent;
-    font-weight: 900;
-    font-size: 0.8rem;
-    color: #334155;
-    width: 100%;
-    outline: none;
-    text-transform: uppercase;
-}
-
-.project-actions-row {
-    display: flex;
-    gap: 5px;
-}
-
-.btn-mini-action {
-    flex: 1;
-    padding: 10px;
-    border-radius: 10px;
-    border: none;
-    font-size: 0.7rem;
-    font-weight: 900;
-    color: white;
-    cursor: pointer;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 5px;
-    text-transform: uppercase;
-    transition: transform 0.1s;
-}
+.mini-proj-input { border: none; background: transparent; font-weight: 900; font-size: 0.8rem; color: #334155; width: 100%; outline: none; text-transform: uppercase; }
+.project-actions-row { display: flex; gap: 5px; }
+.btn-mini-action { flex: 1; padding: 10px; border-radius: 10px; border: none; font-size: 0.7rem; font-weight: 900; color: white; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 5px; text-transform: uppercase; transition: transform 0.1s; }
 .btn-mini-action:hover { transform: scale(1.02); }
 .btn-save-mini { background: #10b981; }
 .btn-load-mini { background: #3b82f6; }
-
 .lib-section { flex: 1; display: flex; flex-direction: column; overflow: hidden; border-bottom: 1px solid #f1f5f9; }
-.lib-header { 
-    padding: 10px 15px; background: #f8fafc; border-bottom: 1px solid #e2e8f0;
-    font-size: 0.65rem; font-weight: 900; color: #64748b; text-transform: uppercase; 
-    display: flex; justify-content: space-between; align-items: center;
-}
-.btn-lib-add { 
-    background: #e0e7ff; color: #4f46e5; border: 1px solid #c7d2fe;
-    padding: 3px 8px; border-radius: 6px; font-size: 0.55rem; font-weight: 900; cursor: pointer;
-}
-.lib-grid {
-    flex: 1; overflow-y: auto; padding: 10px;
-    display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
-}
-.lib-item {
-    background: white; border: 2px solid #f1f5f9; border-radius: 12px;
-    padding: 10px; display: flex; flex-direction: column; align-items: center;
-    cursor: pointer; transition: all 0.2s; position: relative;
-}
+.lib-header { padding: 10px 15px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; font-size: 0.65rem; font-weight: 900; color: #64748b; text-transform: uppercase; display: flex; justify-content: space-between; align-items: center; }
+.btn-lib-add { background: #e0e7ff; color: #4f46e5; border: 1px solid #c7d2fe; padding: 3px 8px; border-radius: 6px; font-size: 0.55rem; font-weight: 900; cursor: pointer; }
+.lib-grid { flex: 1; overflow-y: auto; padding: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.lib-item { background: white; border: 2px solid #f1f5f9; border-radius: 12px; padding: 10px; display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: all 0.2s; position: relative; }
 .lib-item:hover { border-color: #cbd5e1; transform: translateY(-2px); }
 .lib-item.active { border-color: #6366f1; background: #eef2ff; }
 .lib-thumb { width: 100%; height: 70px; object-fit: contain; margin-bottom: 5px; }
 .lib-name { font-size: 0.7rem; font-weight: 800; color: #334155; text-align: center; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .item-del-btn { position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; background: #ef4444; color: white; border: 2px solid white; border-radius: 50%; font-size: 10px; font-weight: 950; display: flex; align-items: center; justify-content: center; cursor: pointer; opacity: 0; transform: scale(0.8); transition: 0.2s; z-index: 100; }
 .lib-item:hover .item-del-btn { opacity: 1; transform: scale(1); }
-
-/* --- MODALES --- */
-.quiz-data-overlay {
-    position: fixed; inset: 0; z-index: 40000;
-    background: rgba(15, 23, 42, 0.9);
-    display: flex; align-items: center; justify-content: center;
-}
-.quiz-data-window {
-    background: white; width: 500px; height: 400px; border-radius: 20px;
-    display: flex; flex-direction: column; overflow: hidden;
-}
-.quiz-data-header { padding: 15px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; }
-.quiz-data-body { padding: 20px; overflow: auto; font-family: monospace; font-size: 0.8rem; }
 
 @keyframes hourglass-flip { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(180deg); } }
 @keyframes pulse-purple { 0% { box-shadow: 0 0 0 0 rgba(168, 85, 247, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(168, 85, 247, 0); } 100% { box-shadow: 0 0 0 0 rgba(168, 85, 247, 0); } }
@@ -349,11 +270,18 @@ Gestion globale des ressources du projet.
 import React, { useState, useRef, useEffect } from 'react';
 import './StudioDashboard.css';
 import { api } from '../../../services/api';
+
+// --- COMPOSANTS INTERNES ---
 import ManualEraser from './studioComp/ManualEraser';
 import GameEngine from './studioComp/GameEngine';
 import SaveLoadModal from './studioComp/SaveLoadModal';
+import SoundModal from './studioComp/SoundModal';
+import SoundEditorModal from './studioComp/SoundEditorModal'; // NOUVEAU
 
-const CURRENT_BUILD = 87; // V487: CLEAN HEADERLESS
+// --- PANNEAUX DÉCOUPÉS ---
+import StudioLeftPanel from './panels/StudioLeftPanel';
+import StudioCenterPanel from './panels/StudioCenterPanel';
+import StudioRightPanel from './panels/StudioRightPanel';
 
 function resolveUrl(url) {
     if (!url) return "";
@@ -362,7 +290,7 @@ function resolveUrl(url) {
     return `/api/proxy/${id}`;
 }
 
-const defaultCode = `// 🧟 ZOMBIE V445
+const defaultCode = `// 🧟 ZOMBIE V485
 class MiniGame extends MiniGameBase {
     constructor(canvas, assets, callbacks) {
         super(canvas, assets, callbacks);
@@ -376,11 +304,18 @@ class MiniGame extends MiniGameBase {
         if(this.ZOMBIE) { this.ZOMBIE.x = 90; this.ZOMBIE.y = 70; } 
     }
     onLevelWin() { this.isStopped = true; }
-    onResult(correct) { if(correct) { this.heroState = "SHOOT"; this.heroTimer = 30; this.projectiles.push({ x: 20, y: 65 }); } }
+    onResult(correct) { 
+        if(correct) { 
+            this.heroState = "SHOOT"; 
+            this.heroTimer = 30; 
+            this.projectiles.push({ x: 20, y: 65 }); 
+        } 
+    }
     update() {
         if(this.isStopped) return;
         if(this.heroState === "SHOOT") { this.heroTimer--; if(this.heroTimer <= 0) this.heroState = "IDLE"; }
-        this.zombieX -= 0.15; if(this.zombieX < 20) { if (this.callbacks.onPlayerHit) this.callbacks.onPlayerHit(); this.zombieX = 100; }
+        this.zombieX -= 0.15; 
+        if(this.zombieX < 20) { if (this.callbacks.onPlayerHit) this.callbacks.onPlayerHit(); this.zombieX = 100; }
         if(this.ZOMBIE) { this.ZOMBIE.x = this.zombieX; this.ZOMBIE.dir = -90; this.ZOMBIE.play("AVANCER"); }
         for(let i=this.projectiles.length-1; i>=0; i--) { let p = this.projectiles[i]; p.x += 3; if(p.x > this.zombieX - 5 && p.x < this.zombieX + 5) { this.projectiles.splice(i, 1); this.zombieX = 100; } }
     }
@@ -392,9 +327,21 @@ class MiniGame extends MiniGameBase {
 }
 `;
 
+const DEMO_PROJECT = { 
+    title: "Mon Premier Jeu", 
+    scenes: [{ 
+        name: "Scene 1", backdrops: [], currentBackdropIdx: 0,
+        actors: [
+            { id: "actor-hero", name: "HEROS", initialX: 15, initialY: 70, scale: 1, direction: 0, rotationStyle: 'all', actions: [{ name: "IDLE", speed: 100, frames: [], sounds: [] }, { name: "SHOOT", speed: 100, frames: [], sounds: [] }] },
+            { id: "actor-zombie", name: "ZOMBIE", initialX: 90, initialY: 70, scale: 1, direction: 0, rotationStyle: 'left-right', actions: [{ name: "AVANCER", speed: 150, frames: [], sounds: [] }] }
+        ] 
+    }] 
+};
+
 export default function StudioDashboard({ user }) {
-    const [project, setProject] = useState({ title: "Nouveau Projet", scenes: [{ name: "Scene 1", actors: [], backdrops: [] }] });
-    const [selectedActorId, setSelectedActorId] = useState(null);
+    // --- ETATS ---
+    const [project, setProject] = useState(DEMO_PROJECT);
+    const [selectedActorId, setSelectedActorId] = useState("actor-hero");
     const [selectedActionIdx, setSelectedActionIdx] = useState(0);
     const [leftTab, setLeftTab] = useState('actions');
     const [code, setCode] = useState(defaultCode);
@@ -402,18 +349,24 @@ export default function StudioDashboard({ user }) {
     const [loading, setLoading] = useState(false);
     const [cleaning, setCleaning] = useState(false);
     const [statusText, setStatusText] = useState("");
+    const [testQuizData, setTestQuizData] = useState(null);
+    const [showTestQuizModal, setShowTestQuizModal] = useState(false);
+
+    // ETATS OUTILS
     const [eraserActive, setEraserActive] = useState(false);
     const [eraserSize, setEraserSize] = useState(10);
     const [frameToErase, setFrameToErase] = useState(null);
-    const [testQuizData, setTestQuizData] = useState(null);
-    const [showTestQuizModal, setShowTestQuizModal] = useState(false);
+    const [showSoundModal, setShowSoundModal] = useState(false);
+    
+    // NOUVEAU : ETAT MODALE ÉDITION SON
+    const [soundToEdit, setSoundToEdit] = useState(null); // { idx: 0, url: '...', name: '...' }
+
+    // ETATS SÉQUENCEUR
     const [draggedFrameIdx, setDraggedFrameIdx] = useState(null);
     const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
     const [previewFrameIdx, setPreviewFrameIdx] = useState(0);
     const [selectedFrameIdx, setSelectedFrameIdx] = useState(null);
     const [isDraggingOnStage, setIsDraggingOnStage] = useState(false);
-    
-    // --- SAVE / LOAD STATE ---
     const [showSaveLoadModal, setShowSaveLoadModal] = useState(false);
     const [modalMode, setModalMode] = useState('LOAD'); 
 
@@ -421,21 +374,68 @@ export default function StudioDashboard({ user }) {
     const actorUploadRef = useRef(null);
     const backdropUploadRef = useRef(null); 
     const stageRef = useRef(null);
+    
+    // 🔊 LECTEUR AUDIO INDÉPENDANT (TRACK B)
+    const audioPlayersRef = useRef([]); // Un tableau d'objets Audio
 
     const selectedSceneIdx = 0;
     const currentScene = project?.scenes?.[selectedSceneIdx];
-    const selectedActor = currentScene?.actors?.find(a => a.id === selectedActorId);
+    const selectedActor = currentScene?.actors?.find(a => a.id === selectedActorId) || currentScene?.actors?.[0];
     const selectedAction = selectedActor?.actions?.[selectedActionIdx];
 
     useEffect(() => { loadProjects(); }, [user]);
 
+    // --- HELPER AUDIO TRACK ---
+    const playAllActionSounds = () => {
+        // Stop previous sounds
+        stopAllSounds();
+
+        if (selectedAction && selectedAction.sounds && selectedAction.sounds.length > 0) {
+            // Pour chaque son dans la piste audio, on crée un lecteur
+            selectedAction.sounds.forEach(snd => {
+                if (snd.url) {
+                    const fullUrl = resolveUrl(snd.url).startsWith('http') ? resolveUrl(snd.url) : window.location.origin + resolveUrl(snd.url);
+                    const audio = new Audio(fullUrl);
+                    audio.volume = 1.0;
+                    audioPlayersRef.current.push(audio);
+                    audio.play().catch(e => console.warn("Audio Play Error", e));
+                }
+            });
+        }
+    };
+
+    const stopAllSounds = () => {
+        audioPlayersRef.current.forEach(audio => {
+            audio.pause();
+            audio.currentTime = 0;
+        });
+        audioPlayersRef.current = [];
+    };
+
+    // --- EFFECT 1 : LECTEUR IMAGES (TRACK A) ---
     useEffect(() => {
         let timer;
         if (isPreviewPlaying && selectedAction?.frames?.length > 0) {
-            timer = setInterval(() => { setPreviewFrameIdx(prev => (prev + 1) % selectedAction.frames.length); }, selectedAction.speed || 100);
-        } else setPreviewFrameIdx(0);
+            timer = setInterval(() => { 
+                setPreviewFrameIdx(prev => (prev + 1) % selectedAction.frames.length); 
+            }, selectedAction.speed || 100);
+        } else {
+            setPreviewFrameIdx(0);
+        }
         return () => clearInterval(timer);
     }, [isPreviewPlaying, selectedAction]);
+
+    // --- EFFECT 2 : LECTEUR SONS (TRACK B) ---
+    // Ce lecteur réagit uniquement au changement d'état Play/Stop
+    useEffect(() => {
+        if (isPreviewPlaying) {
+            playAllActionSounds();
+        } else {
+            stopAllSounds();
+        }
+    }, [isPreviewPlaying]);
+
+    useEffect(() => { return () => stopAllSounds(); }, []);
 
     async function loadProjects() {
         const data = await api.get(`/studio/projects/${user.id || user._id}`);
@@ -444,6 +444,10 @@ export default function StudioDashboard({ user }) {
             setProject(p);
             setCode(p.generatedCode || defaultCode);
             if (p.scenes?.[0]?.actors?.[0]) setSelectedActorId(p.scenes[0].actors[0].id);
+        } else {
+            setProject(DEMO_PROJECT);
+            setCode(defaultCode);
+            setSelectedActorId("actor-hero");
         }
     }
 
@@ -456,322 +460,413 @@ export default function StudioDashboard({ user }) {
         } catch(e) {} setLoading(false);
     }
 
-    const handleOpenSave = () => {
-        setModalMode('SAVE');
-        setShowSaveLoadModal(true);
-    };
-
-    const handleOpenLoad = () => {
-        setModalMode('LOAD');
-        setShowSaveLoadModal(true);
-    };
-
-    const handleLoadProject = (p) => {
-        setProject(p);
-        setCode(p.generatedCode || defaultCode);
-        if (p.scenes?.[0]?.actors?.[0]) setSelectedActorId(p.scenes[0].actors[0].id);
-        else setSelectedActorId(null);
-        setShowSaveLoadModal(false);
-    };
-
-    const handleCreateNew = () => {
-        setProject({ title: "Nouveau Projet", scenes: [{ name: "Scene 1", actors: [], backdrops: [] }] });
-        setCode(defaultCode);
-        setSelectedActorId(null);
-        setShowSaveLoadModal(false);
-    };
-
-    const handleViewTestQuiz = async () => {
-        try {
-            const data = await api.get('/games/test-data');
-            if (data) { 
-                setTestQuizData(data); 
-                setShowTestQuizModal(true); 
-            }
-        } catch (e) { console.error(e); }
-    };
-
-    const handleUpdateActionSpeed = (delta) => {
-        if (!selectedAction) return;
-        const next = JSON.parse(JSON.stringify(project));
-        const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
-        if (actor && actor.actions[selectedActionIdx]) {
-            actor.actions[selectedActionIdx].speed = Math.max(20, Math.min(2000, (actor.actions[selectedActionIdx].speed || 100) + delta));
-            setProject(next); saveProject(next);
-        }
-    };
-
-    const handleSmartAIClean = async () => {
-        if (!selectedAction) return;
-        const targetIndices = selectedFrameIdx !== null ? [selectedFrameIdx] : selectedAction.frames.map((_, i) => i);
-        if (targetIndices.length === 0) return;
-        if (!confirm(`✨ Nettoyage IA : Traiter ${targetIndices.length} image(s) ?`)) return;
-        setCleaning(true); setStatusText(selectedFrameIdx !== null ? "Détourage CIBLÉ..." : "Détourage EN SÉRIE...");
-        const next = JSON.parse(JSON.stringify(project));
-        const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
-        const act = actor.actions[selectedActionIdx];
-        for (const idx of targetIndices) {
-            try { const res = await api.post('/studio/remove-bg-specialized', { url: act.frames[idx].url }); if (res.url) act.frames[idx].url = res.url; } catch (e) {}
-        }
-        setProject(next); await saveProject(next); setCleaning(false);
-    };
-
-    const handleMirrorSequence = async () => {
-        if (!selectedAction) return;
-        setCleaning(true); setStatusText("Création Miroir...");
-        const next = JSON.parse(JSON.stringify(project));
-        const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
-        const act = actor.actions[selectedActionIdx];
-        for (let i = 0; i < act.frames.length; i++) {
-            const img = new Image(); img.crossOrigin = "anonymous";
-            const url = await new Promise(res => {
-                img.onload = () => {
-                    const c = document.createElement('canvas'); c.width=img.width; c.height=img.height;
-                    const x = c.getContext('2d'); x.translate(img.width, 0); x.scale(-1,1); x.drawImage(img,0,0);
-                    c.toBlob(async b => {
-                        const f = new FormData(); f.append('file', b, "flipped.png");
-                        const r = await fetch('/api/studio/upload-asset', { method: 'POST', body: f }).then(z=>z.json());
-                        res(r.url);
-                    }, 'image/png');
-                };
-                img.src = resolveUrl(act.frames[i].url);
-            });
-            if(url) act.frames[i].url = url;
-        }
-        setProject(next); await saveProject(next); setCleaning(false);
-    };
-
+    const handleOpenSave = () => { setModalMode('SAVE'); setShowSaveLoadModal(true); };
+    const handleOpenLoad = () => { setModalMode('LOAD'); setShowSaveLoadModal(true); };
+    const handleCreateNew = () => { setProject(DEMO_PROJECT); setCode(defaultCode); setSelectedActorId("actor-hero"); setShowSaveLoadModal(false); };
+    const handleLoadProject = (p) => { setProject(p); setCode(p.generatedCode || defaultCode); if (p.scenes?.[0]?.actors?.[0]) setSelectedActorId(p.scenes[0].actors[0].id); else setSelectedActorId(null); setShowSaveLoadModal(false); };
+    const handleViewTestQuiz = async () => { try { const data = await api.get('/games/test-data'); if (data) { setTestQuizData(data); setShowTestQuizModal(true); } } catch (e) { console.error(e); } };
+    const handleUpdateActionSpeed = (delta) => { if (!selectedAction) return; const next = JSON.parse(JSON.stringify(project)); const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); if (actor && actor.actions[selectedActionIdx]) { actor.actions[selectedActionIdx].speed = Math.max(20, Math.min(2000, (actor.actions[selectedActionIdx].speed || 100) + delta)); setProject(next); saveProject(next); } };
+    const handleSmartAIClean = async () => { if (!selectedAction) return; const targetIndices = selectedFrameIdx !== null ? [selectedFrameIdx] : selectedAction.frames.map((_, i) => i); if (targetIndices.length === 0) return; if (!confirm(`✨ Nettoyage IA : Traiter ${targetIndices.length} image(s) ?`)) return; setCleaning(true); setStatusText(selectedFrameIdx !== null ? "Détourage CIBLÉ..." : "Détourage EN SÉRIE..."); const next = JSON.parse(JSON.stringify(project)); const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); const act = actor.actions[selectedActionIdx]; for (const idx of targetIndices) { try { const res = await api.post('/studio/remove-bg-specialized', { url: act.frames[idx].url }); if (res.url) act.frames[idx].url = res.url; } catch (e) {} } setProject(next); await saveProject(next); setCleaning(false); };
+    const handleMirrorSequence = async () => { if (!selectedAction) return; setCleaning(true); setStatusText("Création Miroir..."); const next = JSON.parse(JSON.stringify(project)); const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); const act = actor.actions[selectedActionIdx]; for (let i = 0; i < act.frames.length; i++) { if(act.frames[i].type === 'sound') continue; const img = new Image(); img.crossOrigin = "anonymous"; const url = await new Promise(res => { img.onload = () => { const c = document.createElement('canvas'); c.width=img.width; c.height=img.height; const x = c.getContext('2d'); x.translate(img.width, 0); x.scale(-1,1); x.drawImage(img,0,0); c.toBlob(async b => { const f = new FormData(); f.append('file', b, "flipped.png"); const r = await fetch('/api/studio/upload-asset', { method: 'POST', body: f }).then(z=>z.json()); res(r.url); }, 'image/png'); }; img.src = resolveUrl(act.frames[i].url); }); if(url) act.frames[i].url = url; } setProject(next); await saveProject(next); setCleaning(false); };
     const handleSelectActor = (actorId) => { setSelectedActorId(actorId); setSelectedFrameIdx(null); };
     const handleStageMouseDown = (e, actorId) => { e.preventDefault(); e.stopPropagation(); handleSelectActor(actorId); setIsDraggingOnStage(true); };
-    const handleStageMouseMove = (e) => {
-        if (!isDraggingOnStage || !selectedActorId || !stageRef.current) return;
-        const rect = stageRef.current.getBoundingClientRect();
-        const next = { ...project };
-        const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
-        if (actor) {
-            actor.initialX = Math.round(Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100)));
-            actor.initialY = Math.round(Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100)));
-            setProject(next);
+    const handleStageMouseMove = (e) => { if (!isDraggingOnStage || !selectedActorId || !stageRef.current) return; const rect = stageRef.current.getBoundingClientRect(); const next = { ...project }; const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); if (actor) { actor.initialX = Math.round(Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100))); actor.initialY = Math.round(Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100))); setProject(next); } };
+    const handleUpdateProp = (f, v) => { if (!selectedActor) return; const next = { ...project }; const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); if (actor) { actor[f] = isNaN(v) ? v : parseFloat(v); setProject(next); saveProject(next); } };
+    const handleReorderFrame = (targetIdx) => { if (draggedFrameIdx === null || draggedFrameIdx === targetIdx || !selectedAction) return; const next = JSON.parse(JSON.stringify(project)); const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); const frames = actor.actions[selectedActionIdx].frames; const [moved] = frames.splice(draggedFrameIdx, 1); frames.splice(targetIdx, 0, moved); saveProject(next); setDraggedFrameIdx(null); };
+    const handleDeleteFrame = (fIdx) => { if (!selectedAction) return; const next = JSON.parse(JSON.stringify(project)); const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); actor.actions[selectedActionIdx].frames.splice(fIdx, 1); stopAllSounds(); saveProject(next); };
+    const handleDeleteSound = (sIdx) => { if (!selectedAction) return; const next = JSON.parse(JSON.stringify(project)); const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); actor.actions[selectedActionIdx].sounds.splice(sIdx, 1); stopAllSounds(); saveProject(next); };
+    
+    // NOUVELLE VERSION : OUVRE LA MODALE D'ÉDITION
+    const handleEditSound = (sIdx) => {
+        const target = selectedAction.sounds[sIdx];
+        if (target) {
+            setSoundToEdit({ idx: sIdx, ...target });
         }
     };
 
-    const handleUpdateProp = (f, v) => {
-        if (!selectedActor) return;
-        const next = { ...project };
-        const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
-        if (actor) { actor[f] = isNaN(v) ? v : parseFloat(v); setProject(next); saveProject(next); }
-    };
-
-    const handleReorderFrame = (targetIdx) => {
-        if (draggedFrameIdx === null || draggedFrameIdx === targetIdx || !selectedAction) return;
+    // CALLBACK DE SAUVEGARDE DE L'ÉDITEUR SONORE
+    const handleSaveEditedSound = (newUrl, newName) => {
+        if (!soundToEdit) return;
         const next = JSON.parse(JSON.stringify(project));
         const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
-        const frames = actor.actions[selectedActionIdx].frames;
-        const [moved] = frames.splice(draggedFrameIdx, 1); frames.splice(targetIdx, 0, moved);
-        saveProject(next); setDraggedFrameIdx(null);
-    };
-
-    const handleDeleteFrame = (fIdx) => {
-        if (!selectedAction) return;
-        const next = JSON.parse(JSON.stringify(project));
-        const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
-        actor.actions[selectedActionIdx].frames.splice(fIdx, 1);
+        const act = actor.actions[selectedActionIdx];
+        
+        act.sounds[soundToEdit.idx] = { ...act.sounds[soundToEdit.idx], url: newUrl, name: newName };
+        setProject(next);
         saveProject(next);
+        setSoundToEdit(null); // Fermer la modale
     };
 
     const handleDeleteActor = (e, id) => { e.stopPropagation(); if (!confirm("Supprimer ?")) return; const next = JSON.parse(JSON.stringify(project)); next.scenes[selectedSceneIdx].actors = next.scenes[selectedSceneIdx].actors.filter(a => a.id !== id); if (selectedActorId === id) setSelectedActorId(null); setProject(next); saveProject(next); };
     const handleDeleteBackdrop = (e, idx) => { e.stopPropagation(); if (!confirm("Supprimer ?")) return; const next = JSON.parse(JSON.stringify(project)); next.scenes[selectedSceneIdx].backdrops.splice(idx, 1); next.scenes[selectedSceneIdx].currentBackdropIdx = 0; setProject(next); saveProject(next); };
+    const handleSaveSound = (url, name) => { if (!selectedAction) return; const next = JSON.parse(JSON.stringify(project)); const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); const act = actor.actions[selectedActionIdx]; if (!act.sounds) act.sounds = []; if (act.sounds.length < 3) { act.sounds.push({ type: 'sound', url: url, name: name }); setProject(next); saveProject(next); } else { alert("Maximum 3 sons par action."); } };
 
     return (
         <div className="studio-wrapper" onMouseMove={handleStageMouseMove} onMouseUp={() => setIsDraggingOnStage(false)}>
-            {showSaveLoadModal && (
-                <SaveLoadModal 
-                    mode={modalMode} 
-                    user={user} 
-                    currentProject={project}
-                    onClose={() => setShowSaveLoadModal(false)}
-                    onLoad={handleLoadProject}
-                    onNew={handleCreateNew}
-                    onSave={(p) => { 
-                        saveProject(p).then(() => setShowSaveLoadModal(false)); 
-                    }}
-                />
-            )}
-
-            {frameToErase && (
-                <ManualEraser 
-                    imageUrl={frameToErase.url} initialSize={eraserSize} resolveUrl={resolveUrl}
-                    onCancel={() => setFrameToErase(null)}
-                    onSave={(newUrl) => {
-                        const next = JSON.parse(JSON.stringify(project));
-                        const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
-                        actor.actions[selectedActionIdx].frames[frameToErase.idx].url = newUrl;
-                        setProject(next); saveProject(next); setFrameToErase(null);
-                    }}
+            {showSaveLoadModal && (<SaveLoadModal mode={modalMode} user={user} currentProject={project} onClose={() => setShowSaveLoadModal(false)} onLoad={handleLoadProject} onNew={handleCreateNew} onSave={(p) => { saveProject(p).then(() => setShowSaveLoadModal(false)); }} />)}
+            {frameToErase && (<ManualEraser imageUrl={frameToErase.url} initialSize={eraserSize} resolveUrl={resolveUrl} onCancel={() => setFrameToErase(null)} onSave={(newUrl) => { const next = JSON.parse(JSON.stringify(project)); const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); actor.actions[selectedActionIdx].frames[frameToErase.idx].url = newUrl; setProject(next); saveProject(next); setFrameToErase(null); }} />)}
+            {showSoundModal && <SoundModal onSave={handleSaveSound} onClose={() => setShowSoundModal(false)} />}
+            {showTestQuizModal && (<div className="quiz-data-overlay" onClick={() => setShowTestQuizModal(false)}><div className="quiz-data-window" onClick={e => e.stopPropagation()}><div className="quiz-data-header"><span className="font-black text-slate-700 uppercase">Quiz Test</span><button onClick={() => setShowTestQuizModal(false)}>✕</button></div><div className="quiz-data-body custom-scrollbar"><pre>{JSON.stringify(testQuizData, null, 2)}</pre></div></div></div>)}
+            
+            {/* NOUVELLE MODALE ÉDITEUR SONORE */}
+            {soundToEdit && (
+                <SoundEditorModal 
+                    soundUrl={soundToEdit.url} 
+                    soundName={soundToEdit.name} 
+                    onSave={handleSaveEditedSound} 
+                    onClose={() => setSoundToEdit(null)}
+                    resolveUrl={resolveUrl}
                 />
             )}
 
             {(loading || cleaning) && (<div className="studio-loading-overlay"><div className="sablier-icon">⏳</div><div className="loading-text">{statusText}</div></div>)}
-            
+            {isPlaying && (<GameEngine code={code} project={project} activeSceneIdx={selectedSceneIdx} onStop={() => setIsPlaying(false)} resolveUrl={resolveUrl} />)}
+
             <div style={{ position: 'absolute', visibility: 'hidden', pointerEvents: 'none' }}>
-                <input type="file" ref={frameUploadRef} multiple onChange={async (e) => { const files = Array.from(e.target.files); if (files.length === 0) return; setLoading(true); setStatusText("Upload frames..."); const next = JSON.parse(JSON.stringify(project)); const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); const act = actor.actions[selectedActionIdx]; for (const file of files) { const fd = new FormData(); fd.append('file', file); const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json()); if (res.url) act.frames.push({ url: res.url, name: file.name }); } await saveProject(next); setLoading(false); }} />
-                <input type="file" ref={actorUploadRef} onChange={async (e) => { const file = e.target.files[0]; if(!file) return; setLoading(true); setStatusText("Nouveau personnage..."); const fd = new FormData(); fd.append('file', file); const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json()); const next = JSON.parse(JSON.stringify(project)); const newActor = { id: `actor-${Date.now()}`, name: "P" + (next.scenes[selectedSceneIdx].actors.length + 1), actions: [{ name: "IDLE", speed: 100, frames: [{url: res.url, name: "C1"}] }], initialX: 50, initialY: 50, scale: 1, direction: 0, rotationStyle: 'all' }; next.scenes[selectedSceneIdx].actors.push(newActor); setSelectedActorId(newActor.id); await saveProject(next); setLoading(false); }} />
+                <input type="file" ref={frameUploadRef} multiple onChange={async (e) => { const files = Array.from(e.target.files); if (files.length === 0) return; setLoading(true); setStatusText("Upload frames..."); const next = JSON.parse(JSON.stringify(project)); const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); const act = actor.actions[selectedActionIdx]; for (const file of files) { const fd = new FormData(); fd.append('file', file); const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json()); if (res.url) act.frames.push({ url: res.url, name: file.name, type: 'image' }); } await saveProject(next); setLoading(false); }} />
+                <input type="file" ref={actorUploadRef} onChange={async (e) => { const file = e.target.files[0]; if(!file) return; setLoading(true); setStatusText("Nouveau personnage..."); const fd = new FormData(); fd.append('file', file); const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json()); const next = JSON.parse(JSON.stringify(project)); const newActor = { id: `actor-${Date.now()}`, name: "P" + (next.scenes[selectedSceneIdx].actors.length + 1), actions: [{ name: "IDLE", speed: 100, frames: [{url: res.url, name: "C1", type:'image'}], sounds: [] }], initialX: 50, initialY: 50, scale: 1, direction: 0, rotationStyle: 'all' }; next.scenes[selectedSceneIdx].actors.push(newActor); setSelectedActorId(newActor.id); await saveProject(next); setLoading(false); }} />
                 <input type="file" ref={backdropUploadRef} onChange={async (e) => { const file = e.target.files[0]; if(!file) return; setLoading(true); setStatusText("Upload décor..."); const fd = new FormData(); fd.append('file', file); const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json()); const next = JSON.parse(JSON.stringify(project)); next.scenes[selectedSceneIdx].backdrops.push({ url: res.url, name: file.name }); next.scenes[selectedSceneIdx].currentBackdropIdx = next.scenes[selectedSceneIdx].backdrops.length - 1; await saveProject(next); setLoading(false); }} />
             </div>
 
-            {showTestQuizModal && (<div className="quiz-data-overlay" onClick={() => setShowTestQuizModal(false)}><div className="quiz-data-window" onClick={e => e.stopPropagation()}><div className="quiz-data-header"><span className="font-black text-slate-700 uppercase">Quiz Test</span><button onClick={() => setShowTestQuizModal(false)}>✕</button></div><div className="quiz-data-body custom-scrollbar"><pre>{JSON.stringify(testQuizData, null, 2)}</pre></div></div></div>)}
-            
-            {isPlaying && (
-                <GameEngine 
-                    code={code} 
-                    project={project} 
-                    activeSceneIdx={selectedSceneIdx} 
-                    onStop={() => setIsPlaying(false)} 
-                    resolveUrl={resolveUrl} 
-                />
-            )}
-
-            {/* HEADER SUPPRIMÉ ! */}
-            
             <div className="studio-grid-body">
-                
-                {/* 1. GAUCHE : ACTIONS & SEQUENCES */}
-                <div className="studio-col-left">
-                    <div className="studio-tab-header"><button className={`studio-tab-btn ${leftTab === 'actions' ? 'active' : ''}`} onClick={() => setLeftTab('actions')}>⚡ Actions</button><button className={`studio-tab-btn ${leftTab === 'sounds' ? 'active' : ''}`} onClick={() => setLeftTab('sounds')}>🎵 Sons</button></div>
-                    <div className="studio-action-list custom-scrollbar">
-                        {leftTab === 'actions' ? (<>
-                            {selectedActor?.actions?.map((act, idx) => (<div key={idx} onClick={() => { setSelectedActionIdx(idx); setIsPreviewPlaying(false); setSelectedFrameIdx(null); }} className={`action-item ${selectedActionIdx === idx ? 'selected' : ''}`}>{act.name}</div>))}
-                            <button className="v84-add-btn-minimal" onClick={() => { const name = prompt("Nom :"); if(!name) return; const next = JSON.parse(JSON.stringify(project)); next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId).actions.push({ name: name.toUpperCase(), frames: [], speed: 100 }); saveProject(next); }}>+ Ajouter</button>
-                        </>) : <div className="p-10 opacity-30 text-center uppercase text-[10px] font-black">Bientôt</div>}
-                    </div>
-                    {leftTab === 'actions' && selectedAction && (
-                        <div className="studio-sequencer-box">
-                            <div className="seq-header">
-                                <span className="seq-label">Timeline ({selectedAction.frames.length}f)</span>
-                                <div className="seq-controls">
-                                    <button className="btn-mirror" onClick={handleMirrorSequence} title="Miroir">↔️</button>
-                                    <button className="btn-mini-ctrl" onClick={() => handleUpdateActionSpeed(-50)}>-</button>
-                                    <span className="speed-indicator">{selectedAction.speed || 100}ms</span>
-                                    <button className="btn-mini-ctrl" onClick={() => handleUpdateActionSpeed(50)}>+</button>
-                                    <button className="btn-mini-ctrl" onClick={() => setIsPreviewPlaying(!isPreviewPlaying)}>{isPreviewPlaying ? '⏹️' : '▶️'}</button>
-                                </div>
-                            </div>
-                            <div className="seq-frames-grid custom-scrollbar">
-                                {selectedAction.frames.map((frame, fIdx) => (
-                                    <div key={fIdx} className={`seq-frame ${isPreviewPlaying && previewFrameIdx === fIdx ? 'active' : ''} ${selectedFrameIdx === fIdx ? 'active' : ''}`} draggable onClick={() => { setSelectedFrameIdx(selectedFrameIdx === fIdx ? null : fIdx); setIsPreviewPlaying(false); }} onDragStart={() => setDraggedFrameIdx(fIdx)} onDragOver={e => e.preventDefault()} onDrop={() => handleReorderFrame(fIdx)}>
-                                        <img src={resolveUrl(frame.url)} /><button className="frame-del" onClick={e => { e.stopPropagation(); handleDeleteFrame(fIdx); }}>✕</button>
-                                    </div>
-                                ))}
-                                <div className="seq-frame seq-frame-add" onClick={() => frameUploadRef.current.click()}>+</div>
-                            </div>
-                            <div className="eraser-bar">
-                                <button className={`btn-eraser-main ${eraserActive ? 'active' : ''}`} onClick={() => setEraserActive(!eraserActive)}>🧽</button>
-                                <div className="eraser-size-ctrl"><button className="btn-size" onClick={() => setEraserSize(Math.max(1, eraserSize - 2))}>-</button><span className="size-val">{eraserSize}</span><button className="btn-size" onClick={() => setEraserSize(Math.min(100, eraserSize + 2))}>+</button></div>
-                                {eraserActive && selectedFrameIdx !== null && <button className="btn-launch-eraser" onClick={() => setFrameToErase({ url: selectedAction.frames[selectedFrameIdx].url, idx: selectedFrameIdx })}>GOMMER</button>}
-                            
-                                <button 
-                                    className={`btn-magic-clean ${cleaning ? 'pulse' : ''}`} 
-                                    onClick={handleSmartAIClean}
-                                    title={selectedFrameIdx !== null ? "Détourer cette image" : "Détourer toute l'action"}
-                                >
-                                    ✨ {selectedFrameIdx !== null ? 'CIBLÉ' : 'AUTO'}
-                                </button>
-                            </div>
-                        </div>
-                    )}
-                </div>
-
-                {/* 2. CENTRE : SCÈNE & CODE */}
-                <div className="studio-col-center custom-scrollbar">
-                    <div ref={stageRef} className="stage-wrapper" style={{ backgroundImage: currentScene?.backdrops?.[currentScene.currentBackdropIdx || 0]?.url ? `url(${resolveUrl(currentScene.backdrops[currentScene.currentBackdropIdx].url)})` : 'none' }}>
-                        {currentScene?.actors?.map((a) => { 
-                            const isSelected = selectedActorId === a.id; 
-                            let action = isSelected ? selectedAction : (a.actions?.find(act => act.name.toUpperCase() === "IDLE") || a.actions?.[0]); 
-                            let frameIdx = isSelected ? (isPreviewPlaying ? previewFrameIdx : (selectedFrameIdx !== null ? selectedFrameIdx : 0)) : 0; 
-                            return (
-                                <div 
-                                    key={a.id} 
-                                    onMouseDown={e => handleStageMouseDown(e, a.id)} 
-                                    className={`actor-sprite ${isSelected ? 'selected' : ''}`} 
-                                    style={{ 
-                                        left: `${a.initialX}%`, 
-                                        top: `${a.initialY}%`, 
-                                        width: `${150 * (a.scale || 1)}px`, 
-                                        height: `${150 * (a.scale || 1)}px`, 
-                                        transform: `translate(-50%, -50%) rotate(${a.direction || 0}deg)`,
-                                        zIndex: isSelected ? 100 : 10 // Gestion Z-Index visuelle
-                                    }}
-                                >
-                                    {action?.frames?.[frameIdx]?.url && <img src={resolveUrl(action.frames[frameIdx].url)} />}
-                                </div>
-                            ); 
-                        })}
-                    </div>
-                    <div className="props-bar">
-                        <div className="prop-item"><span className="prop-label">Nom</span><input className="prop-input" value={selectedActor?.name || ""} onChange={e => handleUpdateProp('name', e.target.value)} /></div>
-                        <div className="prop-item"><span className="prop-label">Taille (%)</span><input type="number" className="prop-input" value={Math.round((selectedActor?.scale || 1) * 100)} onChange={e => handleUpdateProp('scale', parseFloat(e.target.value)/100)} /></div>
-                        <button onClick={handleViewTestQuiz} className="btn-view-quiz">📋 QUIZ</button>
-                        <button onClick={() => { saveProject(); setIsPlaying(true); }} className="ml-auto bg-indigo-600 text-white px-6 py-2 rounded-xl font-black text-[10px] shadow-lg">▶ TESTER</button>
-                    </div>
-                    <div className="code-editor-box"><textarea value={code} onChange={e => setCode(e.target.value)} spellCheck="false" /></div>
-                </div>
-
-                {/* 3. DROITE : BIBLIOTHÈQUE + MINI HEADER */}
-                <div className="studio-col-right">
-                    
-                    {/* NOUVEAU HEADER LOCAL */}
-                    <div className="right-project-header">
-                        <div className="project-meta-row">
-                            <span className="mini-proj-icon">🎬</span>
-                            <input 
-                                className="mini-proj-input" 
-                                value={project?.title || ""} 
-                                onChange={e => setProject({...project, title: e.target.value})} 
-                                placeholder="TITRE..." 
-                            />
-                        </div>
-                        <div className="project-actions-row">
-                            <button onClick={handleOpenSave} className="btn-mini-action btn-save-mini">
-                                💾 SAUVER
-                            </button>
-                            <button onClick={handleOpenLoad} className="btn-mini-action btn-load-mini">
-                                📂 CHARGER
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <div className="lib-section" style={{flex: 2}}>
-                        <div className="lib-header"><span>Personnages</span><button className="btn-lib-add" onClick={() => actorUploadRef.current.click()}>+ IMPORT</button></div>
-                        <div className="lib-grid custom-scrollbar">
-                            {currentScene?.actors?.map((actor) => (
-                                <div key={actor.id} className={`lib-item ${selectedActorId === actor.id ? 'active' : ''}`} onClick={() => handleSelectActor(actor.id)}>
-                                    <button className="item-del-btn" onClick={e => handleDeleteActor(e, actor.id)}>✕</button>
-                                    <img src={actor.actions?.[0]?.frames?.[0]?.url ? resolveUrl(actor.actions[0].frames[0].url) : ""} className="lib-thumb" />
-                                    <span className="lib-name">{actor.name}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                    <div className="lib-section" style={{flex: 1}}>
-                        <div className="lib-header"><span>Décors</span><button className="btn-lib-add" onClick={() => backdropUploadRef.current.click()}>+ IMPORT</button></div>
-                        <div className="lib-grid custom-scrollbar">
-                            {currentScene?.backdrops?.map((bd, bIdx) => (
-                                <div key={bIdx} className={`lib-item ${currentScene.currentBackdropIdx === bIdx ? 'active' : ''}`} onClick={() => { const next = JSON.parse(JSON.stringify(project)); next.scenes[selectedSceneIdx].currentBackdropIdx = bIdx; setProject(next); saveProject(next); }}>
-                                    <button className="item-del-btn" onClick={e => handleDeleteBackdrop(e, bIdx)}>✕</button>
-                                    <img src={resolveUrl(bd.url)} className="lib-thumb" />
-                                    <span className="lib-name">DÉCOR {bIdx+1}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-
+                <StudioLeftPanel 
+                    leftTab={leftTab} setLeftTab={setLeftTab} 
+                    selectedActor={selectedActor} selectedActionIdx={selectedActionIdx} setSelectedActionIdx={setSelectedActionIdx}
+                    setIsPreviewPlaying={setIsPreviewPlaying} saveProject={saveProject} project={project}
+                    selectedSceneIdx={selectedSceneIdx} selectedActorId={selectedActorId} selectedAction={selectedAction}
+                    handleMirrorSequence={handleMirrorSequence} handleUpdateActionSpeed={handleUpdateActionSpeed}
+                    isPreviewPlaying={isPreviewPlaying} previewFrameIdx={previewFrameIdx}
+                    selectedFrameIdx={selectedFrameIdx} setSelectedFrameIdx={setSelectedFrameIdx}
+                    setDraggedFrameIdx={setDraggedFrameIdx} handleReorderFrame={handleReorderFrame}
+                    resolveUrl={resolveUrl} handleDeleteFrame={handleDeleteFrame}
+                    frameUploadRef={frameUploadRef}
+                    eraserActive={eraserActive} setEraserActive={setEraserActive} setFrameToErase={setFrameToErase}
+                    handleSmartAIClean={handleSmartAIClean} cleaning={cleaning}
+                    setShowSoundModal={setShowSoundModal}
+                    handleDeleteSound={handleDeleteSound} 
+                    handleEditSound={handleEditSound} // PASSER LA NOUVELLE FONCTION
+                />
+                <StudioCenterPanel 
+                    stageRef={stageRef} currentScene={currentScene} resolveUrl={resolveUrl}
+                    selectedActorId={selectedActorId} selectedAction={selectedAction}
+                    isPreviewPlaying={isPreviewPlaying} previewFrameIdx={previewFrameIdx}
+                    selectedFrameIdx={selectedFrameIdx} handleStageMouseDown={handleStageMouseDown}
+                    selectedActor={selectedActor} handleUpdateProp={handleUpdateProp}
+                    handleViewTestQuiz={handleViewTestQuiz} saveProject={saveProject}
+                    setIsPlaying={setIsPlaying} code={code} setCode={setCode}
+                />
+                <StudioRightPanel 
+                    project={project} setProject={setProject}
+                    handleOpenSave={handleOpenSave} handleOpenLoad={handleOpenLoad}
+                    actorUploadRef={actorUploadRef} currentScene={currentScene}
+                    selectedActorId={selectedActorId} handleSelectActor={handleSelectActor}
+                    handleDeleteActor={handleDeleteActor} resolveUrl={resolveUrl}
+                    backdropUploadRef={backdropUploadRef} handleDeleteBackdrop={handleDeleteBackdrop}
+                    saveProject={saveProject} selectedSceneIdx={selectedSceneIdx}
+                />
             </div>
         </div>
     );
 }
 
 [[[£ END: client/src/features/prof/studio/StudioDashboard.jsx £]]]
+
+[[[£ FILE: client/src/features/prof/studio/panels/StudioCenterPanel.jsx £]]]
+// @signatures: StudioCenterPanel
+import React from 'react';
+
+export default function StudioCenterPanel({
+    stageRef, currentScene, resolveUrl, selectedActorId, selectedAction,
+    isPreviewPlaying, previewFrameIdx, selectedFrameIdx, handleStageMouseDown,
+    selectedActor, handleUpdateProp, handleViewTestQuiz, saveProject, setIsPlaying,
+    code, setCode
+}) {
+    return (
+        <div className="studio-col-center custom-scrollbar">
+            <div ref={stageRef} className="stage-wrapper" style={{ backgroundImage: currentScene?.backdrops?.[currentScene.currentBackdropIdx || 0]?.url ? `url(${resolveUrl(currentScene.backdrops[currentScene.currentBackdropIdx].url)})` : 'none' }}>
+                {currentScene?.actors?.map((a) => { 
+                    const isSelected = selectedActorId === a.id; 
+                    let action = isSelected ? selectedAction : (a.actions?.find(act => act.name.toUpperCase() === "IDLE") || a.actions?.[0]); 
+                    let frameIdx = isSelected ? (isPreviewPlaying ? previewFrameIdx : (selectedFrameIdx !== null ? selectedFrameIdx : 0)) : 0; 
+                    return (
+                        <div 
+                            key={a.id} 
+                            onMouseDown={e => handleStageMouseDown(e, a.id)} 
+                            className={`actor-sprite ${isSelected ? 'selected' : ''}`} 
+                            style={{ 
+                                left: `${a.initialX}%`, 
+                                top: `${a.initialY}%`, 
+                                width: `${150 * (a.scale || 1)}px`, 
+                                height: `${150 * (a.scale || 1)}px`, 
+                                transform: `translate(-50%, -50%) rotate(${a.direction || 0}deg)`,
+                                zIndex: isSelected ? 100 : 10 
+                            }}
+                        >
+                            {action?.frames?.[frameIdx]?.url && <img src={resolveUrl(action.frames[frameIdx].url)} />}
+                        </div>
+                    ); 
+                })}
+            </div>
+
+            <div className="props-bar">
+                <div className="prop-item">
+                    <span className="prop-label">Nom</span>
+                    <input className="prop-input" value={selectedActor?.name || ""} onChange={e => handleUpdateProp('name', e.target.value)} />
+                </div>
+                <div className="prop-item">
+                    <span className="prop-label">Taille (%)</span>
+                    <input type="number" className="prop-input" value={Math.round((selectedActor?.scale || 1) * 100)} onChange={e => handleUpdateProp('scale', parseFloat(e.target.value)/100)} />
+                </div>
+                <button onClick={handleViewTestQuiz} className="btn-view-quiz">📋 QUIZ</button>
+                <button onClick={() => { saveProject(); setIsPlaying(true); }} className="ml-auto bg-indigo-600 text-white px-6 py-2 rounded-xl font-black text-[10px] shadow-lg">▶ TESTER</button>
+            </div>
+
+            <div className="code-editor-box">
+                <textarea value={code} onChange={e => setCode(e.target.value)} spellCheck="false" />
+            </div>
+        </div>
+    );
+}
+
+[[[£ END: client/src/features/prof/studio/panels/StudioCenterPanel.jsx £]]]
+
+[[[£ FILE: client/src/features/prof/studio/panels/StudioLeftPanel.jsx £]]]
+// @signatures: StudioLeftPanel
+import React, { useState } from 'react';
+
+export default function StudioLeftPanel({
+    leftTab, setLeftTab, selectedActor, selectedActionIdx, setSelectedActionIdx, 
+    setIsPreviewPlaying, saveProject, project, selectedSceneIdx, selectedActorId,
+    selectedAction, handleMirrorSequence, handleUpdateActionSpeed, isPreviewPlaying,
+    previewFrameIdx, selectedFrameIdx, setSelectedFrameIdx, setDraggedFrameIdx,
+    handleReorderFrame, resolveUrl, handleDeleteFrame, frameUploadRef,
+    eraserActive, setEraserActive, setFrameToErase,
+    handleSmartAIClean, cleaning, setShowSoundModal,
+    handleDeleteSound, handleEditSound
+}) {
+    // --- GESTION LOCALE DE LA SÉLECTION SON ---
+    const [selectedSoundIdx, setSelectedSoundIdx] = useState(null);
+
+    // GESTION CLIC ACTION
+    const handleSelectAction = (act, idx) => {
+        setSelectedActionIdx(idx);
+        setIsPreviewPlaying(false);
+        setSelectedFrameIdx(null);
+        setSelectedSoundIdx(null); // Reset sélection son
+    };
+
+    // GESTION CLIC BOUTON "STYLO" (ÉDITER)
+    const handlePenClick = () => {
+        if (selectedFrameIdx !== null) {
+            // MODE IMAGE : Ouvrir la gomme (ManualEraser)
+            setFrameToErase({ url: selectedAction.frames[selectedFrameIdx].url, idx: selectedFrameIdx });
+        } else if (selectedSoundIdx !== null) {
+            // MODE SON : Appel direct pour ouvrir la belle modale
+            handleEditSound(selectedSoundIdx); 
+        }
+    };
+
+    return (
+        <div className="studio-col-left">
+            <div className="studio-tab-header">
+                <button className={`studio-tab-btn ${leftTab === 'actions' ? 'active' : ''}`} onClick={() => setLeftTab('actions')}>⚡ Actions</button>
+                <button className={`studio-tab-btn ${leftTab === 'sounds' ? 'active' : ''}`} onClick={() => setLeftTab('sounds')}>🎵 Sons</button>
+            </div>
+
+            <div className="studio-action-list custom-scrollbar">
+                {leftTab === 'actions' ? (
+                    <>
+                        {selectedActor?.actions?.map((act, idx) => (
+                            <div 
+                                key={idx} 
+                                onClick={() => handleSelectAction(act, idx)} 
+                                className={`action-item ${selectedActionIdx === idx ? 'selected' : ''}`}
+                            >
+                                <span>{act.name}</span>
+                                <div className="flex gap-1">
+                                    <span className="text-[9px] bg-slate-100 px-1 rounded text-slate-400">{act.frames?.length || 0}f</span>
+                                    {act.sounds?.length > 0 && <span className="text-[9px] bg-indigo-100 text-indigo-600 px-1 rounded">🎵</span>}
+                                </div>
+                            </div>
+                        ))}
+                        <button className="v84-add-btn-minimal" onClick={() => { 
+                            const name = prompt("Nom :"); 
+                            if(!name) return; 
+                            const next = JSON.parse(JSON.stringify(project)); 
+                            next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId).actions.push({ name: name.toUpperCase(), frames: [], sounds: [], speed: 100 }); 
+                            saveProject(next); 
+                        }}>+ Ajouter</button>
+                    </>
+                ) : (
+                    <div className="p-10 opacity-30 text-center uppercase text-[10px] font-black">Bientôt</div>
+                )}
+            </div>
+
+            {leftTab === 'actions' && selectedAction && (
+                <div className="studio-sequencer-box">
+                    <div className="seq-header">
+                        <span className="seq-label">Séquenceur ({selectedAction.frames.length} images)</span>
+                        <div className="seq-controls">
+                            <button className="btn-mirror" onClick={handleMirrorSequence} title="Miroir">↔️</button>
+                            <button className="btn-mini-ctrl" onClick={() => handleUpdateActionSpeed(-50)}>-</button>
+                            <span className="speed-indicator">{selectedAction.speed || 100}ms</span>
+                            <button className="btn-mini-ctrl" onClick={() => handleUpdateActionSpeed(50)}>+</button>
+                            <button className={`btn-mini-ctrl ${isPreviewPlaying ? 'bg-indigo-100 text-indigo-600' : ''}`} onClick={() => setIsPreviewPlaying(!isPreviewPlaying)}>
+                                {isPreviewPlaying ? '⏹️' : '▶️'}
+                            </button>
+                        </div>
+                    </div>
+                    
+                    {/* 1. TRACK IMAGE (GRILLE) */}
+                    <div className="seq-frames-grid custom-scrollbar" style={{height: '110px', minHeight: '110px'}}>
+                        {selectedAction.frames.map((frame, fIdx) => (
+                            <div key={fIdx} 
+                                 className={`seq-frame ${isPreviewPlaying && previewFrameIdx === fIdx ? 'active' : ''} ${selectedFrameIdx === fIdx ? 'active' : ''}`} 
+                                 draggable 
+                                 onClick={() => { setSelectedFrameIdx(selectedFrameIdx === fIdx ? null : fIdx); setIsPreviewPlaying(false); setSelectedSoundIdx(null); }} 
+                                 onDragStart={() => setDraggedFrameIdx(fIdx)} 
+                                 onDragOver={e => e.preventDefault()} 
+                                 onDrop={() => handleReorderFrame(fIdx)}>
+                                
+                                <img src={resolveUrl(frame.url)} />
+                                <button className="frame-del" onClick={e => { e.stopPropagation(); handleDeleteFrame(fIdx); }}>✕</button>
+                            </div>
+                        ))}
+                        <div className="seq-frame seq-frame-add" onClick={() => frameUploadRef.current.click()}>+</div>
+                    </div>
+                    
+                    {/* 2. TRACK AUDIO (3 SLOTS) */}
+                    <div className="border-t border-slate-200 mt-2 pt-2">
+                        <div className="flex justify-between items-center mb-1">
+                            <span className="seq-label text-indigo-500">Piste Audio (3 max)</span>
+                            <button className="btn-sound-trigger !w-auto px-2 !text-[9px]" onClick={() => setShowSoundModal(true)}>
+                                🔊 Ajouter Son
+                            </button>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2">
+                            {(selectedAction.sounds || []).map((snd, sIdx) => (
+                                <div key={sIdx} 
+                                     onClick={() => { setSelectedSoundIdx(selectedSoundIdx === sIdx ? null : sIdx); setSelectedFrameIdx(null); }}
+                                     className={`sound-frame-visual h-16 ${selectedSoundIdx === sIdx ? 'active' : ''}`}>
+                                    <span className="text-xl">🎵</span>
+                                    <span className="text-[8px] font-black text-indigo-800 w-full text-center truncate px-1">{snd.name?.substring(0,10)}</span>
+                                    <button className="frame-del !bg-red-500 !text-white !opacity-100 !top-1 !right-1" onClick={(e) => { e.stopPropagation(); handleDeleteSound(sIdx); }}>✕</button>
+                                </div>
+                            ))}
+                            {[...Array(Math.max(0, 3 - (selectedAction.sounds || []).length))].map((_, i) => (
+                                <div key={i + 100} className="border-2 border-dashed border-slate-200 rounded-lg h-16 flex items-center justify-center text-slate-300 text-xs font-bold">
+                                    VIDE
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* BARRE D'OUTILS INTELLIGENTE */}
+                    <div className="eraser-bar mt-auto">
+                        <div className="flex gap-2 items-center w-full">
+                            
+                            {/* BOUTON STYLO (Universel) */}
+                            <button 
+                                className="btn-tool-pen"
+                                onClick={handlePenClick}
+                                disabled={selectedFrameIdx === null && selectedSoundIdx === null}
+                                title={selectedSoundIdx !== null ? "Éditer le son" : "Éditer l'image"}
+                            >
+                                ✏️ ÉDITER
+                            </button>
+
+                            {/* BOUTON MAGIC (Image seulement) */}
+                            <button 
+                                className={`btn-magic-clean ${cleaning ? 'pulse' : ''}`} 
+                                onClick={handleSmartAIClean}
+                                // Activé si au moins une frame existe
+                                disabled={cleaning || !selectedAction.frames || selectedAction.frames.length === 0}
+                                title={selectedFrameIdx !== null ? "Détourer l'image sélectionnée" : "Détourer TOUTES les images de l'action"}
+                            >
+                                ✨ {cleaning ? '...' : (selectedFrameIdx !== null ? 'CIBLÉ' : 'TOUT')}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+[[[£ END: client/src/features/prof/studio/panels/StudioLeftPanel.jsx £]]]
+
+[[[£ FILE: client/src/features/prof/studio/panels/StudioRightPanel.jsx £]]]
+// @signatures: StudioRightPanel
+import React from 'react';
+
+export default function StudioRightPanel({
+    project, setProject, handleOpenSave, handleOpenLoad,
+    actorUploadRef, currentScene, selectedActorId, handleSelectActor, handleDeleteActor, resolveUrl,
+    backdropUploadRef, handleDeleteBackdrop, saveProject, selectedSceneIdx
+}) {
+    return (
+        <div className="studio-col-right">
+            
+            {/* MINI HEADER LOCAL */}
+            <div className="right-project-header">
+                <div className="project-meta-row">
+                    <span className="mini-proj-icon">🎬</span>
+                    <input 
+                        className="mini-proj-input" 
+                        value={project?.title || ""} 
+                        onChange={e => setProject({...project, title: e.target.value})} 
+                        placeholder="TITRE..." 
+                    />
+                </div>
+                <div className="project-actions-row">
+                    <button onClick={handleOpenSave} className="btn-mini-action btn-save-mini">💾 SAUVER</button>
+                    <button onClick={handleOpenLoad} className="btn-mini-action btn-load-mini">📂 CHARGER</button>
+                </div>
+            </div>
+            
+            {/* BIBLIOTHÈQUE PERSONNAGES */}
+            <div className="lib-section" style={{flex: 2}}>
+                <div className="lib-header">
+                    <span>Personnages</span>
+                    <button className="btn-lib-add" onClick={() => actorUploadRef.current.click()}>+ IMPORT</button>
+                </div>
+                <div className="lib-grid custom-scrollbar">
+                    {currentScene?.actors?.map((actor) => (
+                        <div key={actor.id} className={`lib-item ${selectedActorId === actor.id ? 'active' : ''}`} onClick={() => handleSelectActor(actor.id)}>
+                            <button className="item-del-btn" onClick={e => handleDeleteActor(e, actor.id)}>✕</button>
+                            <img src={actor.actions?.[0]?.frames?.[0]?.url ? resolveUrl(actor.actions[0].frames[0].url) : ""} className="lib-thumb" />
+                            <span className="lib-name">{actor.name}</span>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* BIBLIOTHÈQUE DÉCORS */}
+            <div className="lib-section" style={{flex: 1}}>
+                <div className="lib-header">
+                    <span>Décors</span>
+                    <button className="btn-lib-add" onClick={() => backdropUploadRef.current.click()}>+ IMPORT</button>
+                </div>
+                <div className="lib-grid custom-scrollbar">
+                    {currentScene?.backdrops?.map((bd, bIdx) => (
+                        <div key={bIdx} className={`lib-item ${currentScene.currentBackdropIdx === bIdx ? 'active' : ''}`} onClick={() => { 
+                            const next = JSON.parse(JSON.stringify(project)); 
+                            next.scenes[selectedSceneIdx].currentBackdropIdx = bIdx; 
+                            setProject(next); 
+                            saveProject(next); 
+                        }}>
+                            <button className="item-del-btn" onClick={e => handleDeleteBackdrop(e, bIdx)}>✕</button>
+                            <img src={resolveUrl(bd.url)} className="lib-thumb" />
+                            <span className="lib-name">DÉCOR {bIdx+1}</span>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+[[[£ END: client/src/features/prof/studio/panels/StudioRightPanel.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/studio/studioComp/GameEngine.jsx £]]]
 // @signatures: GameEngine, initLevel, handleAnswerClick, triggerWinSequence, handleBarCheat
@@ -1409,6 +1504,821 @@ export default function SaveLoadModal({ mode, user, currentProject, onClose, onL
 
 [[[£ END: client/src/features/prof/studio/studioComp/SaveLoadModal.jsx £]]]
 
+[[[£ FILE: client/src/features/prof/studio/studioComp/SoundEditorModal.css £]]]
+.se-modal-overlay {
+    position: fixed; inset: 0; z-index: 50000;
+    background: rgba(15, 23, 42, 0.95);
+    backdrop-filter: blur(10px);
+    display: flex; align-items: center; justify-content: center;
+}
+
+.se-window {
+    background: white; width: 900px; height: 600px;
+    border-radius: 30px; display: flex; flex-direction: column;
+    overflow: hidden; box-shadow: 0 50px 100px -10px rgba(0,0,0,0.6);
+    border: 4px solid #e2e8f0;
+    animation: se-pop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+/* HEADER */
+.se-header {
+    height: 70px; padding: 0 20px; display: flex; align-items: center; justify-content: space-between;
+    background: white; border-bottom: 2px solid #f1f5f9;
+}
+.se-title-input {
+    font-size: 1.2rem; font-weight: 950; color: #475569;
+    border: 2px solid #e2e8f0; padding: 8px 15px; border-radius: 12px;
+    width: 300px; outline: none; transition: border 0.2s;
+}
+.se-title-input:focus { border-color: #a855f7; color: #7e22ce; }
+
+.se-header-actions { display: flex; gap: 10px; }
+.se-btn-main {
+    padding: 8px 16px; border-radius: 10px; font-weight: 900; font-size: 0.75rem;
+    text-transform: uppercase; border: none; cursor: pointer; display: flex; align-items: center; gap: 6px;
+    transition: transform 0.1s;
+}
+.se-btn-main:hover { transform: translateY(-2px); }
+.btn-undo { background: #f1f5f9; color: #64748b; }
+.btn-save { background: #a855f7; color: white; box-shadow: 0 4px 10px rgba(168, 85, 247, 0.3); }
+.btn-close { background: #fee2e2; color: #ef4444; width: 36px; height: 36px; border-radius: 50%; padding: 0; display: flex; justify-content: center; }
+
+/* WAVEFORM AREA */
+.se-wave-area {
+    flex: 1; background: #fdf4ff; /* Rose très pâle comme Scratch */
+    position: relative; display: flex; align-items: center; justify-content: center;
+    border-bottom: 2px solid #f1f5f9; overflow: hidden;
+    user-select: none;
+}
+.se-canvas { width: 100%; height: 100%; object-fit: fill; }
+
+/* SÉLECTION TRIM */
+.se-trim-overlay {
+    position: absolute; top: 0; bottom: 0;
+    background: rgba(168, 85, 247, 0.2);
+    border-left: 2px solid #a855f7; border-right: 2px solid #a855f7;
+    pointer-events: none; /* Laisse passer les clics vers le canvas pour le drag */
+}
+.se-trim-handle {
+    position: absolute; top: 0; bottom: 0; width: 20px;
+    cursor: col-resize; background: rgba(255,255,255,0.5);
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: auto;
+}
+.se-trim-handle:hover { background: #a855f7; color: white; }
+.handle-left { left: 0; border-right: 2px solid #a855f7; border-radius: 0 10px 10px 0; }
+.handle-right { right: 0; border-left: 2px solid #a855f7; border-radius: 10px 0 0 10px; }
+
+/* TOOLBAR BOTTOM */
+.se-toolbar {
+    height: 100px; background: white; display: flex; align-items: center; justify-content: center; gap: 20px;
+}
+
+.se-tool-btn {
+    display: flex; flex-direction: column; align-items: center; gap: 5px;
+    background: transparent; border: none; cursor: pointer; color: #64748b;
+    transition: all 0.2s; min-width: 60px;
+}
+.se-tool-btn:hover { color: #a855f7; transform: scale(1.1); }
+.se-tool-icon { font-size: 1.5rem; background: #f8fafc; width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid #e2e8f0; }
+.se-tool-btn:hover .se-tool-icon { border-color: #a855f7; background: #faf5ff; }
+.se-tool-label { font-size: 0.65rem; font-weight: 800; text-transform: uppercase; }
+
+/* PLAY BUTTON */
+.se-play-big {
+    width: 60px; height: 60px; border-radius: 50%;
+    background: #a855f7; color: white; border: none;
+    font-size: 1.5rem; cursor: pointer; display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 5px 15px rgba(168, 85, 247, 0.4); margin-right: 30px;
+    transition: transform 0.1s;
+}
+.se-play-big:active { transform: scale(0.95); }
+.se-play-big.playing { background: #ef4444; box-shadow: 0 5px 15px rgba(239, 68, 68, 0.4); }
+
+@keyframes se-pop { 0% { transform: scale(0.9); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+
+[[[£ END: client/src/features/prof/studio/studioComp/SoundEditorModal.css £]]]
+
+[[[£ FILE: client/src/features/prof/studio/studioComp/SoundEditorModal.jsx £]]]
+// @signatures: SoundEditorModal, drawWaveform, handleTrim, applyEffect, playSound
+import React, { useState, useRef, useEffect } from 'react';
+import SoundExpert from './SoundExpert';
+import './SoundEditorModal.css';
+
+export default function SoundEditorModal({ soundUrl, soundName, onSave, onClose, resolveUrl }) {
+    const [buffer, setBuffer] = useState(null);
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [name, setName] = useState(soundName || "Son");
+    const [trimStart, setTrimStart] = useState(0); // 0.0 à 1.0
+    const [trimEnd, setTrimEnd] = useState(1);     // 0.0 à 1.0
+    const [history, setHistory] = useState([]);    // Pour Undo
+    const [isProcessing, setIsProcessing] = useState(false);
+
+    const canvasRef = useRef(null);
+    const sourceRef = useRef(null);
+    const audioCtxRef = useRef(null);
+
+    // Initialisation
+    useEffect(() => {
+        async function load() {
+            if (!soundUrl) return;
+            const fullUrl = resolveUrl(soundUrl);
+            const decoded = await SoundExpert.decodeAudio(fullUrl);
+            setBuffer(decoded);
+            setHistory([decoded]); // État initial
+        }
+        load();
+        
+        return () => stopSound();
+    }, [soundUrl]);
+
+    // Dessin de la Waveform
+    useEffect(() => {
+        if (!buffer || !canvasRef.current) return;
+        drawWaveform();
+    }, [buffer, trimStart, trimEnd]);
+
+    const drawWaveform = () => {
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width = canvas.offsetWidth;
+        const height = canvas.height = canvas.offsetHeight;
+        
+        ctx.fillStyle = '#fdf4ff'; // Fond rose pale
+        ctx.fillRect(0, 0, width, height);
+
+        const data = buffer.getChannelData(0);
+        const step = Math.ceil(data.length / width);
+        const amp = height / 2;
+
+        ctx.fillStyle = '#a855f7'; // Onde violette
+        ctx.beginPath();
+        
+        for (let i = 0; i < width; i++) {
+            let min = 1.0;
+            let max = -1.0;
+            for (let j = 0; j < step; j++) {
+                const datum = data[(i * step) + j];
+                if (datum < min) min = datum;
+                if (datum > max) max = datum;
+            }
+            ctx.fillRect(i, (1 + min) * amp, 1, Math.max(1, (max - min) * amp));
+        }
+
+        // Zone de sélection (Trim)
+        const x1 = trimStart * width;
+        const x2 = trimEnd * width;
+        
+        // Zone grisée hors sélection
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+        ctx.fillRect(0, 0, x1, height);
+        ctx.fillRect(x2, 0, width - x2, height);
+
+        // Lignes de coupe
+        ctx.fillStyle = '#7e22ce';
+        ctx.fillRect(x1, 0, 2, height);
+        ctx.fillRect(x2 - 2, 0, 2, height);
+    };
+
+    const stopSound = () => {
+        if (sourceRef.current) {
+            sourceRef.current.stop();
+            sourceRef.current = null;
+        }
+        setIsPlaying(false);
+    };
+
+    const playSound = () => {
+        if (isPlaying) {
+            stopSound();
+            return;
+        }
+        if (!buffer) return;
+
+        // Création du contexte si besoin
+        if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+        
+        const source = audioCtxRef.current.createBufferSource();
+        // On joue la version "Trimée" (virtuellement)
+        // Calcul du start/end en secondes
+        const startSec = trimStart * buffer.duration;
+        const endSec = trimEnd * buffer.duration;
+        const duration = endSec - startSec;
+
+        source.buffer = buffer;
+        source.connect(audioCtxRef.current.destination);
+        
+        // play(when, offset, duration)
+        source.start(0, startSec, duration);
+        sourceRef.current = source;
+        setIsPlaying(true);
+
+        source.onended = () => setIsPlaying(false);
+    };
+
+    const pushToHistory = (newBuffer) => {
+        setHistory(prev => [...prev.slice(-10), newBuffer]); // Max 10 undos
+        setBuffer(newBuffer);
+        // Reset Trim après un effet car la longueur peut changer
+        setTrimStart(0);
+        setTrimEnd(1);
+    };
+
+    const handleUndo = () => {
+        if (history.length > 1) {
+            const newHistory = [...history];
+            newHistory.pop(); // Retire l'actuel
+            setHistory(newHistory);
+            setBuffer(newHistory[newHistory.length - 1]);
+        }
+    };
+
+    // --- APPLICATION DES EFFETS ---
+    const applyEffect = (effectName) => {
+        if (!buffer) return;
+        setIsProcessing(true);
+        setTimeout(() => { // Timeout pour laisser l'UI afficher le loader si besoin
+            let newBuff = buffer;
+            
+            switch (effectName) {
+                case 'TRIM':
+                    newBuff = SoundExpert.trim(buffer, trimStart, trimEnd);
+                    break;
+                case 'FASTER':
+                    newBuff = SoundExpert.changeSpeed(buffer, 1.5);
+                    break;
+                case 'SLOWER':
+                    newBuff = SoundExpert.changeSpeed(buffer, 0.75);
+                    break;
+                case 'LOUDER':
+                    newBuff = SoundExpert.applyGain(buffer, 1.5);
+                    break;
+                case 'SOFTER':
+                    newBuff = SoundExpert.applyGain(buffer, 0.5);
+                    break;
+                case 'REVERSE':
+                    newBuff = SoundExpert.reverse(buffer);
+                    break;
+                case 'ROBOT':
+                    newBuff = SoundExpert.robotize(buffer);
+                    break;
+                case 'FADEIN':
+                    newBuff = SoundExpert.fade(buffer, 'in');
+                    break;
+                case 'FADEOUT':
+                    newBuff = SoundExpert.fade(buffer, 'out');
+                    break;
+            }
+            pushToHistory(newBuff);
+            setIsProcessing(false);
+        }, 10);
+    };
+
+    const handleSaveInternal = () => {
+        if (!buffer) return;
+        setIsProcessing(true);
+        
+        // 1. Conversion Buffer -> WAV Blob
+        const wavBlob = SoundExpert.bufferToWav(buffer);
+        
+        // 2. Upload via l'API existante
+        const fd = new FormData();
+        // Ajouter .wav si le nom n'en a pas
+        const finalName = name.endsWith('.wav') || name.endsWith('.mp3') ? name : `${name}.wav`;
+        fd.append('file', wavBlob, finalName);
+
+        // On utilise l'API upload-asset générique
+        fetch('/api/studio/upload-asset', { method: 'POST', body: fd })
+            .then(r => r.json())
+            .then(data => {
+                onSave(data.url, finalName); // Callback vers le parent
+                onClose();
+            })
+            .catch(() => alert("Erreur sauvegarde"))
+            .finally(() => setIsProcessing(false));
+    };
+
+    // Gestion Drag sur Canvas pour Trim
+    const handleMouseDown = (e) => {
+        const rect = canvasRef.current.getBoundingClientRect();
+        const x = (e.clientX - rect.left) / rect.width;
+        // Si on clique plus près du début, on bouge le début, sinon la fin
+        if (Math.abs(x - trimStart) < Math.abs(x - trimEnd)) {
+            setTrimStart(Math.max(0, Math.min(x, trimEnd - 0.05)));
+        } else {
+            setTrimEnd(Math.min(1, Math.max(x, trimStart + 0.05)));
+        }
+    };
+
+    return (
+        <div className="se-modal-overlay">
+            <div className="se-window animate-in zoom-in">
+                {isProcessing && <div className="absolute inset-0 bg-white/50 z-50 flex items-center justify-center font-black text-purple-600">TRAITEMENT...</div>}
+                
+                <div className="se-header">
+                    <input className="se-title-input" value={name} onChange={e => setName(e.target.value)} />
+                    <div className="se-header-actions">
+                        <button className="se-btn-main btn-undo" onClick={handleUndo} disabled={history.length <= 1}>↩ Undo</button>
+                        <button className="se-btn-main btn-save" onClick={handleSaveInternal}>💾 Sauver</button>
+                        <button className="se-btn-main btn-close" onClick={onClose}>✕</button>
+                    </div>
+                </div>
+
+                <div className="se-wave-area">
+                    <canvas ref={canvasRef} className="se-canvas" onMouseDown={handleMouseDown} />
+                    
+                    {/* Poignées visuelles (pour l'affichage seulement, la logique est dans le clic) */}
+                    <div className="se-trim-handle handle-left" style={{ left: `calc(${trimStart * 100}% - 20px)` }}>▎</div>
+                    <div className="se-trim-handle handle-right" style={{ left: `${trimEnd * 100}%` }}>▎</div>
+                </div>
+
+                <div className="se-toolbar">
+                    <button className={`se-play-big ${isPlaying ? 'playing' : ''}`} onClick={playSound}>
+                        {isPlaying ? '⏹' : '▶'}
+                    </button>
+
+                    <div className="w-px h-10 bg-slate-200 mx-2"></div>
+
+                    {/* Si sélection active, afficher le bouton COUPER */}
+                    {(trimStart > 0 || trimEnd < 1) && (
+                        <button className="se-tool-btn" onClick={() => applyEffect('TRIM')}>
+                            <div className="se-tool-icon text-red-500 border-red-200">✂️</div>
+                            <span className="se-tool-label text-red-500">Couper</span>
+                        </button>
+                    )}
+
+                    <button className="se-tool-btn" onClick={() => applyEffect('FASTER')}>
+                        <div className="se-tool-icon">🐇</div>
+                        <span className="se-tool-label">Vite</span>
+                    </button>
+                    <button className="se-tool-btn" onClick={() => applyEffect('SLOWER')}>
+                        <div className="se-tool-icon">🐢</div>
+                        <span className="se-tool-label">Lent</span>
+                    </button>
+                    <button className="se-tool-btn" onClick={() => applyEffect('LOUDER')}>
+                        <div className="se-tool-icon">🔊</div>
+                        <span className="se-tool-label">Fort</span>
+                    </button>
+                    <button className="se-tool-btn" onClick={() => applyEffect('SOFTER')}>
+                        <div className="se-tool-icon">🔉</div>
+                        <span className="se-tool-label">Doux</span>
+                    </button>
+                    <button className="se-tool-btn" onClick={() => applyEffect('REVERSE')}>
+                        <div className="se-tool-icon">↩️</div>
+                        <span className="se-tool-label">Envers</span>
+                    </button>
+                    <button className="se-tool-btn" onClick={() => applyEffect('ROBOT')}>
+                        <div className="se-tool-icon">🤖</div>
+                        <span className="se-tool-label">Robot</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+[[[£ END: client/src/features/prof/studio/studioComp/SoundEditorModal.jsx £]]]
+
+[[[£ FILE: client/src/features/prof/studio/studioComp/SoundExpert.js £]]]
+// @signatures: SoundExpert, createBuffer, bufferToWav
+/**
+ * 🎛️ EXPERT AUDIO CLIENT (Web Audio API)
+ * Manipulation de buffers audio sans serveur.
+ */
+const SoundExpert = {
+    
+    // Convertir Blob/URL en AudioBuffer
+    decodeAudio: async (url) => {
+        const response = await fetch(url);
+        const arrayBuffer = await response.arrayBuffer();
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        return await audioCtx.decodeAudioData(arrayBuffer);
+    },
+
+    // Créer un nouveau buffer vide
+    createBuffer: (channels, length, sampleRate) => {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        return audioCtx.createBuffer(channels, length, sampleRate);
+    },
+
+    // EFFET : Plus Fort / Moins Fort
+    applyGain: (buffer, value) => {
+        const newBuffer = SoundExpert.createBuffer(buffer.numberOfChannels, buffer.length, buffer.sampleRate);
+        for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+            const inputData = buffer.getChannelData(channel);
+            const outputData = newBuffer.getChannelData(channel);
+            for (let i = 0; i < buffer.length; i++) {
+                outputData[i] = inputData[i] * value;
+            }
+        }
+        return newBuffer;
+    },
+
+    // EFFET : Inverser
+    reverse: (buffer) => {
+        const newBuffer = SoundExpert.createBuffer(buffer.numberOfChannels, buffer.length, buffer.sampleRate);
+        for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+            const inputData = buffer.getChannelData(channel);
+            const outputData = newBuffer.getChannelData(channel);
+            for (let i = 0; i < buffer.length; i++) {
+                outputData[i] = inputData[buffer.length - 1 - i];
+            }
+        }
+        return newBuffer;
+    },
+
+    // EFFET : Vitesse (Resampling simple)
+    changeSpeed: (buffer, playbackRate) => {
+        const newLength = Math.floor(buffer.length / playbackRate);
+        const newBuffer = SoundExpert.createBuffer(buffer.numberOfChannels, newLength, buffer.sampleRate);
+        
+        for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+            const inputData = buffer.getChannelData(channel);
+            const outputData = newBuffer.getChannelData(channel);
+            for (let i = 0; i < newLength; i++) {
+                // Interpolation linéaire basique
+                const originalIndex = i * playbackRate;
+                const indexFloor = Math.floor(originalIndex);
+                const indexCeil = Math.min(buffer.length - 1, Math.ceil(originalIndex));
+                const fraction = originalIndex - indexFloor;
+                
+                const a = inputData[indexFloor];
+                const b = inputData[indexCeil];
+                outputData[i] = a + (b - a) * fraction;
+            }
+        }
+        return newBuffer;
+    },
+
+    // EFFET : Fade In / Out
+    fade: (buffer, type) => {
+        const newBuffer = SoundExpert.createBuffer(buffer.numberOfChannels, buffer.length, buffer.sampleRate);
+        const fadeLength = Math.min(buffer.length, buffer.sampleRate * 2); // 2 secondes max
+        
+        for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+            const inputData = buffer.getChannelData(channel);
+            const outputData = newBuffer.getChannelData(channel);
+            
+            for (let i = 0; i < buffer.length; i++) {
+                let multiplier = 1;
+                if (type === 'in' && i < fadeLength) {
+                    multiplier = i / fadeLength;
+                } else if (type === 'out' && i > buffer.length - fadeLength) {
+                    multiplier = (buffer.length - i) / fadeLength;
+                }
+                outputData[i] = inputData[i] * multiplier;
+            }
+        }
+        return newBuffer;
+    },
+
+    // EFFET : Robot (Modulation d'amplitude simple)
+    robotize: (buffer) => {
+        const newBuffer = SoundExpert.createBuffer(buffer.numberOfChannels, buffer.length, buffer.sampleRate);
+        const freq = 50; // Fréquence métallique
+        
+        for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+            const inputData = buffer.getChannelData(channel);
+            const outputData = newBuffer.getChannelData(channel);
+            for (let i = 0; i < buffer.length; i++) {
+                const modulator = Math.sin(2 * Math.PI * freq * (i / buffer.sampleRate));
+                outputData[i] = inputData[i] * modulator;
+            }
+        }
+        return newBuffer;
+    },
+
+    // COUPER (TRIM)
+    trim: (buffer, startRatio, endRatio) => {
+        const startSample = Math.floor(buffer.length * startRatio);
+        const endSample = Math.floor(buffer.length * endRatio);
+        const newLength = endSample - startSample;
+        
+        if (newLength <= 0) return buffer;
+
+        const newBuffer = SoundExpert.createBuffer(buffer.numberOfChannels, newLength, buffer.sampleRate);
+        
+        for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+            const inputData = buffer.getChannelData(channel);
+            const outputData = newBuffer.getChannelData(channel);
+            for (let i = 0; i < newLength; i++) {
+                outputData[i] = inputData[startSample + i];
+            }
+        }
+        return newBuffer;
+    },
+
+    // Export vers WAV (pour sauvegarde)
+    bufferToWav: (buffer) => {
+        const numOfChan = buffer.numberOfChannels,
+            length = buffer.length * numOfChan * 2 + 44,
+            bufferArray = new ArrayBuffer(length),
+            view = new DataView(bufferArray),
+            channels = [], i, sample, offset = 0, pos = 0;
+
+        // write WAVE header
+        setUint32(0x46464952);                         // "RIFF"
+        setUint32(length - 8);                         // file length - 8
+        setUint32(0x45564157);                         // "WAVE"
+
+        setUint32(0x20746d66);                         // "fmt " chunk
+        setUint32(16);                                 // length = 16
+        setUint16(1);                                  // PCM (uncompressed)
+        setUint16(numOfChan);
+        setUint32(buffer.sampleRate);
+        setUint32(buffer.sampleRate * 2 * numOfChan);  // avg. bytes/sec
+        setUint16(numOfChan * 2);                      // block-align
+        setUint16(16);                                 // 16-bit (hardcoded in this demo)
+
+        setUint32(0x61746164);                         // "data" - chunk
+        setUint32(length - pos - 4);                   // chunk length
+
+        // write interleaved data
+        for(i = 0; i < buffer.numberOfChannels; i++)
+            channels.push(buffer.getChannelData(i));
+
+        while(pos < buffer.length) {
+            for(i = 0; i < numOfChan; i++) {             // interleave channels
+                sample = Math.max(-1, Math.min(1, channels[i][pos])); // clamp
+                sample = (0.5 + sample < 0 ? sample * 32768 : sample * 32767)|0; // scale to 16-bit signed int
+                view.setInt16(44 + offset, sample, true);          // write 16-bit sample
+                offset += 2;
+            }
+            pos++;
+        }
+
+        return new Blob([bufferArray], { type: "audio/wav" });
+
+        function setUint16(data) { view.setUint16(pos, data, true); pos += 2; }
+        function setUint32(data) { view.setUint32(pos, data, true); pos += 4; }
+    }
+};
+
+module.exports = SoundExpert;
+
+[[[£ END: client/src/features/prof/studio/studioComp/SoundExpert.js £]]]
+
+[[[£ FILE: client/src/features/prof/studio/studioComp/SoundModal.css £]]]
+.sound-modal-overlay {
+    position: fixed; inset: 0; z-index: 50000;
+    background: rgba(15, 23, 42, 0.95);
+    backdrop-filter: blur(5px);
+    display: flex; align-items: center; justify-content: center;
+}
+
+.sound-window {
+    background: white; width: 500px; height: 500px;
+    border-radius: 30px; display: flex; flex-direction: column;
+    overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+    border: 1px solid #e2e8f0; animation: sound-pop 0.3s ease-out;
+}
+
+.sound-header {
+    padding: 20px; background: #f8fafc; border-bottom: 1px solid #e2e8f0;
+    display: flex; justify-content: space-between; align-items: center;
+}
+.sound-title { font-weight: 950; font-size: 1rem; color: #1e293b; text-transform: uppercase; display: flex; align-items: center; gap: 10px; }
+.sound-close { width: 30px; height: 30px; border-radius: 50%; border: none; font-weight: 900; cursor: pointer; background: #e2e8f0; color: #64748b; }
+.sound-close:hover { background: #fee2e2; color: #ef4444; }
+
+.sound-tabs { display: flex; padding: 10px 20px; gap: 10px; background: white; }
+.sound-tab-btn {
+    flex: 1; padding: 10px; border-radius: 12px; border: 2px solid transparent;
+    font-weight: 800; font-size: 0.7rem; text-transform: uppercase;
+    cursor: pointer; background: #f1f5f9; color: #64748b; transition: all 0.2s;
+}
+.sound-tab-btn.active { background: #f0f9ff; color: #0ea5e9; border-color: #bae6fd; }
+
+.sound-body { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 15px; }
+
+/* --- SECTION MICRO --- */
+.mic-circle {
+    width: 80px; height: 80px; border-radius: 50%;
+    background: #ef4444; color: white; font-size: 2rem;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+    transition: all 0.2s;
+}
+.mic-circle.recording { animation: pulse-red 1.5s infinite; background: white; color: #ef4444; border: 4px solid #ef4444; }
+.mic-timer { font-family: 'JetBrains Mono', monospace; font-size: 1.5rem; font-weight: 900; color: #1e293b; }
+
+/* --- SECTION UPLOAD --- */
+.upload-zone {
+    width: 100%; height: 150px; border: 3px dashed #cbd5e1;
+    border-radius: 20px; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; color: #94a3b8;
+    cursor: pointer; transition: all 0.2s;
+}
+.upload-zone:hover { border-color: #0ea5e9; color: #0ea5e9; background: #f0f9ff; }
+
+/* --- SECTION AI --- */
+.ai-input-group { width: 100%; display: flex; gap: 5px; }
+.ai-input { flex: 1; padding: 10px; border: 2px solid #e2e8f0; border-radius: 10px; font-weight: 600; outline: none; }
+.ai-input:focus { border-color: #a855f7; }
+.ai-btn { background: #a855f7; color: white; border: none; border-radius: 10px; padding: 0 15px; font-weight: 900; cursor: pointer; }
+
+/* --- PREVIEW --- */
+.sound-preview { width: 100%; background: #f8fafc; padding: 15px; border-radius: 15px; border: 1px solid #e2e8f0; display: flex; align-items: center; gap: 10px; }
+.preview-play { width: 40px; height: 40px; border-radius: 50%; background: #1e293b; color: white; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.preview-wave { flex: 1; height: 4px; background: #cbd5e1; border-radius: 2px; overflow: hidden; }
+.preview-wave-fill { height: 100%; background: #10b981; width: 0%; animation: play-progress 2s linear infinite; }
+
+.btn-confirm-sound { width: 100%; padding: 15px; background: #10b981; color: white; border: none; border-radius: 15px; font-weight: 900; text-transform: uppercase; font-size: 0.9rem; cursor: pointer; margin-top: auto; }
+.btn-confirm-sound:disabled { background: #cbd5e1; cursor: not-allowed; }
+
+@keyframes sound-pop { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes pulse-red { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
+
+[[[£ END: client/src/features/prof/studio/studioComp/SoundModal.css £]]]
+
+[[[£ FILE: client/src/features/prof/studio/studioComp/SoundModal.jsx £]]]
+// @signatures: SoundModal
+import React, { useState, useRef, useEffect } from 'react';
+import './SoundModal.css';
+
+export default function SoundModal({ onSave, onClose }) {
+    const [tab, setTab] = useState('upload'); // upload, mic, ai
+    const [recording, setRecording] = useState(false);
+    const [audioBlob, setAudioBlob] = useState(null);
+    const [audioUrl, setAudioUrl] = useState(null);
+    const [timer, setTimer] = useState(0);
+    const [loading, setLoading] = useState(false);
+    const [aiPrompt, setAiPrompt] = useState("");
+    
+    const mediaRecorderRef = useRef(null);
+    const timerRef = useRef(null);
+    const fileInputRef = useRef(null);
+    const audioRef = useRef(new Audio());
+
+    useEffect(() => {
+        return () => {
+            if (audioUrl) URL.revokeObjectURL(audioUrl);
+            clearInterval(timerRef.current);
+        };
+    }, []);
+
+    // --- MICROPHONE LOGIC ---
+    const toggleRecord = async () => {
+        if (recording) {
+            mediaRecorderRef.current.stop();
+            setRecording(false);
+            clearInterval(timerRef.current);
+        } else {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorderRef.current = new MediaRecorder(stream);
+                const chunks = [];
+                
+                mediaRecorderRef.current.ondataavailable = e => chunks.push(e.data);
+                mediaRecorderRef.current.onstop = () => {
+                    const blob = new Blob(chunks, { type: 'audio/mp3' });
+                    setAudioBlob(blob);
+                    setAudioUrl(URL.createObjectURL(blob));
+                    stream.getTracks().forEach(track => track.stop());
+                };
+
+                mediaRecorderRef.current.start();
+                setRecording(true);
+                setTimer(0);
+                timerRef.current = setInterval(() => setTimer(t => t + 1), 1000);
+            } catch (e) {
+                alert("Accès micro refusé ou impossible.");
+            }
+        }
+    };
+
+    // --- UPLOAD LOGIC ---
+    const handleFileSelect = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            setAudioBlob(file);
+            setAudioUrl(URL.createObjectURL(file));
+        }
+    };
+
+    // --- AI LOGIC (Simulated for now) ---
+    const handleAIGenerate = () => {
+        if (!aiPrompt) return;
+        setLoading(true);
+        // Simulation d'appel API
+        setTimeout(() => {
+            setLoading(false);
+            alert("Génération IA bientôt disponible ! (API Placeholder)");
+        }, 1500);
+    };
+
+    // --- SAVE LOGIC ---
+    const handleConfirm = async () => {
+        if (!audioBlob) return;
+        setLoading(true);
+        
+        const fd = new FormData();
+        // On donne un nom générique ou celui du fichier
+        const filename = audioBlob.name || `sound_rec_${Date.now()}.mp3`;
+        fd.append('file', audioBlob, filename);
+
+        try {
+            const res = await fetch('/api/studio/upload-asset', {
+                method: 'POST',
+                body: fd
+            });
+            const data = await res.json();
+            if (data.url) {
+                onSave(data.url, filename);
+                onClose();
+            }
+        } catch (e) {
+            alert("Erreur upload son.");
+        }
+        setLoading(false);
+    };
+
+    const playPreview = () => {
+        if (audioUrl) {
+            audioRef.current.src = audioUrl;
+            audioRef.current.play();
+        }
+    };
+
+    const formatTime = (s) => {
+        const min = Math.floor(s / 60);
+        const sec = s % 60;
+        return `${min}:${sec < 10 ? '0' : ''}${sec}`;
+    };
+
+    return (
+        <div className="sound-modal-overlay" onClick={onClose}>
+            <div className="sound-window" onClick={e => e.stopPropagation()}>
+                <div className="sound-header">
+                    <div className="sound-title">🎵 Ajouter un Son</div>
+                    <button className="sound-close" onClick={onClose}>✕</button>
+                </div>
+
+                <div className="sound-tabs">
+                    <button className={`sound-tab-btn ${tab === 'upload' ? 'active' : ''}`} onClick={() => setTab('upload')}>Import</button>
+                    <button className={`sound-tab-btn ${tab === 'mic' ? 'active' : ''}`} onClick={() => setTab('mic')}>Micro</button>
+                    <button className={`sound-tab-btn ${tab === 'ai' ? 'active' : ''}`} onClick={() => setTab('ai')}>IA Générative</button>
+                </div>
+
+                <div className="sound-body">
+                    {tab === 'upload' && (
+                        <>
+                            <input type="file" ref={fileInputRef} hidden accept="audio/*" onChange={handleFileSelect} />
+                            <div className="upload-zone" onClick={() => fileInputRef.current.click()}>
+                                <span style={{fontSize:'2rem'}}>📂</span>
+                                <span className="text-xs font-bold uppercase mt-2">Cliquez pour choisir un MP3/WAV</span>
+                            </div>
+                        </>
+                    )}
+
+                    {tab === 'mic' && (
+                        <>
+                            <div className={`mic-circle ${recording ? 'recording' : ''}`} onClick={toggleRecord}>
+                                {recording ? '⏹' : '🎤'}
+                            </div>
+                            <div className="mic-timer">{formatTime(timer)}</div>
+                            <div className="text-xs text-slate-400 font-bold uppercase">{recording ? "Enregistrement..." : "Appuyez pour enregistrer"}</div>
+                        </>
+                    )}
+
+                    {tab === 'ai' && (
+                        <>
+                            <div className="text-center p-4 bg-purple-50 rounded-xl border border-purple-100">
+                                <span className="text-2xl">🤖</span>
+                                <p className="text-[10px] font-bold text-purple-600 mt-2 uppercase">Décrivez le son (ex: Explosion laser rétro)</p>
+                            </div>
+                            <div className="ai-input-group">
+                                <input className="ai-input" placeholder="Description..." value={aiPrompt} onChange={e => setAiPrompt(e.target.value)} />
+                                <button className="ai-btn" onClick={handleAIGenerate}>GO</button>
+                            </div>
+                        </>
+                    )}
+
+                    {audioUrl && (
+                        <div className="sound-preview animate-in fade-in">
+                            <button className="preview-play" onClick={playPreview}>▶</button>
+                            <div className="flex-1">
+                                <div className="text-[10px] font-black text-slate-500 uppercase mb-1">Aperçu</div>
+                                <div className="preview-wave">
+                                    <div className="preview-wave-fill" style={{animationDuration: '2s'}}></div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                <div className="p-5 border-t bg-slate-50">
+                    <button className="btn-confirm-sound" onClick={handleConfirm} disabled={!audioBlob || loading}>
+                        {loading ? 'SAUVEGARDE...' : 'AJOUTER CE SON'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+[[[£ END: client/src/features/prof/studio/studioComp/SoundModal.jsx £]]]
+
 [[[£ FILE: server/domains/studio/ai/game-generator.ai.js £]]]
 // @signatures: MiniGame
 const AIEngine = require('../../../core/ai.engine');
@@ -1884,13 +2794,15 @@ const mongoose = require('mongoose');
 
 const FrameSchema = new mongoose.Schema({
     url: String,
-    name: String
+    name: String,
+    type: { type: String, default: 'image' } // image, sound
 }, { _id: false });
 
 const ActionSchema = new mongoose.Schema({
     name: { type: String, default: "Nouvelle Action" },
-    speed: { type: Number, default: 100 }, // Vitesse de l'animation en ms (ex: 100ms par frame)
-    frames: { type: [FrameSchema], default: [] }
+    speed: { type: Number, default: 100 }, // Vitesse de l'animation en ms
+    frames: { type: [FrameSchema], default: [] }, // Séquence d'images
+    sounds: { type: [FrameSchema], default: [] }  // NOUVEAU : Piste audio séparée
 }, { _id: false });
 
 const ActorSchema = new mongoose.Schema({

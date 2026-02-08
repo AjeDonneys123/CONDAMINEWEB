@@ -960,3 +960,44 @@
 08/02/2026 11:37 - FORCE UPDATE : Restauration complète du module STUDIO (UI, Moteur, Gomme, Save/Load) via écrasement direct pour contourner les conflits de branche.
 
 08/02/2026 11:37 - FORCE UPDATE : Restauration complète du module STUDIO (UI, Moteur, Gomme, Save/Load) via écrasement direct pour contourner les conflits de branche.
+
+07/02/2026 17:35 - STUDIO UX FINAL (V480) : Optimisation de l'expérience de jeu.
+- Transitions rapides (1.2s).
+- Overlay "Niveau Terminé".
+- Écran de Victoire Finale stylisé (Confettis, Gros Titre, Reset).
+- Cheat Code S+T réinitialise désormais tout le cycle de vie du jeu.
+
+07/02/2026 23:45 - STUDIO PROJET V485 : Intégration du système de gestion de projet complet.
+- Ajout d'une barre d'outils supérieure (Nouveau / Ouvrir / Sauver).
+- Implémentation de la modale "Ouvrir" listant les sauvegardes avec date et option de suppression.
+- Logique de réinitialisation "Nouveau" et de sauvegarde manuelle avec nommage.
+
+08/02/2026 11:37 - FORCE UPDATE : Restauration complète du module STUDIO (UI, Moteur, Gomme, Save/Load) via écrasement direct pour contourner les conflits de branche.
+08/02/2026 12:58 - AUDIO STUDIO FIX : Synchronisation du moteur audio avec le bouton PLAY du séquenceur. Le clic sur l'action ne déclenche plus de son (silencieux). Le son se joue uniquement si la frame courante de la boucle de prévisualisation est un fichier audio.
+
+08/02/2026 11:37 - FORCE UPDATE : Restauration complète du module STUDIO (UI, Moteur, Gomme, Save/Load) via écrasement direct pour contourner les conflits de branche.
+08/02/2026 12:58 - AUDIO STUDIO FIX : Synchronisation du moteur audio avec le bouton PLAY du séquenceur. Le clic sur l'action ne déclenche plus de son (silencieux). Le son se joue uniquement si la frame courante de la boucle de prévisualisation est un fichier audio.
+08/02/2026 13:00 - AUDIO FIX V2 (ROBUSTE) : Forçage des URL absolues et du volume à 100% dans le moteur de preview. Isolation du code audio pour éviter les conflits d'état.
+
+08/02/2026 12:58 - AUDIO STUDIO FIX : Synchronisation du moteur audio avec le bouton PLAY du séquenceur. Le clic sur l'action ne déclenche plus de son (silencieux). Le son se joue uniquement si la frame courante de la boucle de prévisualisation est un fichier audio.
+08/02/2026 13:00 - AUDIO FIX V2 (ROBUSTE) : Forçage des URL absolues et du volume à 100% dans le moteur de preview. Isolation du code audio pour éviter les conflits d'état.
+08/02/2026 13:10 - AUDIO FIX V3 (ABORT HANDLING) : Correction des erreurs "play request interrupted". Le moteur audio détecte maintenant si le même son est déjà en cours de lecture pour ne pas le couper (fluidité). Les erreurs d'interruption sont silencieuses.
+
+08/02/2026 12:58 - AUDIO STUDIO FIX : Synchronisation du moteur audio avec le bouton PLAY du séquenceur. Le clic sur l'action ne déclenche plus de son (silencieux). Le son se joue uniquement si la frame courante de la boucle de prévisualisation est un fichier audio.
+08/02/2026 13:00 - AUDIO FIX V2 (ROBUSTE) : Forçage des URL absolues et du volume à 100% dans le moteur de preview. Isolation du code audio pour éviter les conflits d'état.
+08/02/2026 13:10 - AUDIO FIX V3 (ABORT HANDLING) : Correction des erreurs "play request interrupted". Le moteur audio détecte maintenant si le même son est déjà en cours de lecture pour ne pas le couper (fluidité). Les erreurs d'interruption sont silencieuses.
+08/02/2026 13:28 - AUDIO FIX V4 (TRIGGER LOGIC) : Modification fondamentale de la logique sonore. Une frame "Son" déclenche la lecture, mais une frame "Image" NE L'ARRÊTE PLUS. Le son persiste jusqu'à la fin du fichier ou jusqu'au STOP manuel.
+
+08/02/2026 12:58 - AUDIO STUDIO FIX : Synchronisation du moteur audio avec le bouton PLAY du séquenceur. Le clic sur l'action ne déclenche plus de son (silencieux). Le son se joue uniquement si la frame courante de la boucle de prévisualisation est un fichier audio.
+08/02/2026 13:00 - AUDIO FIX V2 (ROBUSTE) : Forçage des URL absolues et du volume à 100% dans le moteur de preview. Isolation du code audio pour éviter les conflits d'état.
+08/02/2026 13:10 - AUDIO FIX V3 (ABORT HANDLING) : Correction des erreurs "play request interrupted". Le moteur audio détecte maintenant si le même son est déjà en cours de lecture pour ne pas le couper (fluidité). Les erreurs d'interruption sont silencieuses.
+08/02/2026 13:28 - AUDIO FIX V4 (TRIGGER LOGIC) : Modification fondamentale de la logique sonore. Une frame "Son" déclenche la lecture, mais une frame "Image" NE L'ARRÊTE PLUS. Le son persiste jusqu'à la fin du fichier ou jusqu'au STOP manuel.
+08/02/2026 13:38 - STUDIO ARCHITECTURE (SPLIT TRACKS) : Séparation physique des pistes. Les images sont dans une grille haute, les sons dans une grille basse (3 slots). Deux lecteurs indépendants (Loop Image + Trigger Audio) permettent une lecture fluide et simultanée sans coupure.
+
+08/02/2026 17:02 - AUDIO STUDIO OPTIMIZATION : Éradication de la latence sonore par migration vers la Web Audio API. Les sons sont désormais pré-décodés en AudioBuffers dès la sélection d'une action, permettant un déclenchement instantané sans bufferisation réseau au moment du clic.
+
+08/02/2026 17:05 - I18N FIX : Correction de la langue racine dans index.html (en -> fr) et ajout de la balise meta 'notranslate'. Cela empêche Google Chrome de traduire automatiquement le site ou de le basculer par erreur en espagnol.
+
+08/02/2026 17:15 - STUDIO EVOLUTION : Implémentation du système de Sons Globaux. L'onglet 'Sons' fonctionne désormais comme l'onglet 'Actions' mais pour des événements de scène (Départ, Victoire, Défaite). Ajout du bouton 'X' de suppression sur les slots audio et les entrées de listes. Mise à jour du modèle StudioProject pour supporter globalSounds.
+
+08/02/2026 17:20 - RECOVERY FIX : Résolution de la ReferenceError "selectedActor is not defined". Réorganisation structurelle du composant StudioDashboard pour garantir que toutes les variables dérivées sont déclarées avant les Hooks et le rendu. Intégration finalisée du système de Sons Globaux.

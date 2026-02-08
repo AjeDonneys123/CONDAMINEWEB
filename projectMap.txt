@@ -120,12 +120,21 @@
 │   │   │       └── studio/
 │   │   │           ├── StudioDashboard.css
 │   │   │           ├── StudioDashboard.jsx
+│   │   │           ├── panels/
+│   │   │           │   ├── StudioCenterPanel.jsx
+│   │   │           │   ├── StudioLeftPanel.jsx
+│   │   │           │   └── StudioRightPanel.jsx
 │   │   │           └── studioComp/
 │   │   │               ├── GameEngine.jsx
 │   │   │               ├── ManualEraser.css
 │   │   │               ├── ManualEraser.jsx
 │   │   │               ├── SaveLoadModal.css
-│   │   │               └── SaveLoadModal.jsx
+│   │   │               ├── SaveLoadModal.jsx
+│   │   │               ├── SoundEditorModal.css
+│   │   │               ├── SoundEditorModal.jsx
+│   │   │               ├── SoundExpert.js
+│   │   │               ├── SoundModal.css
+│   │   │               └── SoundModal.jsx
 │   │   ├── index.css
 │   │   ├── main.jsx
 │   │   ├── services/

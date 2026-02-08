@@ -1,15 +1,57 @@
 // @signatures: StudioLeftPanel
-import React from 'react';
+import React, { useState } from 'react';
 
 export default function StudioLeftPanel({
     leftTab, setLeftTab, selectedActor, selectedActionIdx, setSelectedActionIdx, 
+    selectedGlobalSoundIdx, setSelectedGlobalSoundIdx,
     setIsPreviewPlaying, saveProject, project, selectedSceneIdx, selectedActorId,
     selectedAction, handleMirrorSequence, handleUpdateActionSpeed, isPreviewPlaying,
     previewFrameIdx, selectedFrameIdx, setSelectedFrameIdx, setDraggedFrameIdx,
     handleReorderFrame, resolveUrl, handleDeleteFrame, frameUploadRef,
     eraserActive, setEraserActive, setFrameToErase,
-    handleSmartAIClean, cleaning, setShowSoundModal
+    handleSmartAIClean, cleaning, setShowSoundModal,
+    handleDeleteSound, handleEditSound
 }) {
+    const [selectedSoundIdx, setSelectedSoundIdx] = useState(null);
+    const currentScene = project?.scenes?.[selectedSceneIdx];
+
+    const handleSelectAction = (idx) => {
+        setSelectedActionIdx(idx);
+        setIsPreviewPlaying(false);
+        setSelectedFrameIdx(null);
+        setSelectedSoundIdx(null);
+    };
+
+    const handleSelectGlobalSound = (idx) => {
+        setSelectedGlobalSoundIdx(idx);
+        setIsPreviewPlaying(false);
+        setSelectedFrameIdx(null);
+        setSelectedSoundIdx(null);
+    };
+
+    const handlePenClick = () => {
+        if (selectedFrameIdx !== null && leftTab === 'actions') {
+            setFrameToErase({ url: selectedAction.frames[selectedFrameIdx].url, idx: selectedFrameIdx });
+        } else if (selectedSoundIdx !== null) {
+            handleEditSound(selectedSoundIdx); 
+        }
+    };
+
+    const handleDeleteActionOrSound = (e, idx) => {
+        e.stopPropagation();
+        if (!confirm("Supprimer cet événement ?")) return;
+        const next = JSON.parse(JSON.stringify(project));
+        if (leftTab === 'actions') {
+            const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
+            actor.actions.splice(idx, 1);
+            setSelectedActionIdx(0);
+        } else {
+            next.scenes[selectedSceneIdx].globalSounds.splice(idx, 1);
+            setSelectedGlobalSoundIdx(0);
+        }
+        saveProject(next);
+    };
+
     return (
         <div className="studio-col-left">
             <div className="studio-tab-header">
@@ -21,68 +63,115 @@ export default function StudioLeftPanel({
                 {leftTab === 'actions' ? (
                     <>
                         {selectedActor?.actions?.map((act, idx) => (
-                            <div key={idx} onClick={() => { setSelectedActionIdx(idx); setIsPreviewPlaying(false); setSelectedFrameIdx(null); }} className={`action-item ${selectedActionIdx === idx ? 'selected' : ''}`}>
-                                {act.name} {act.soundUrl && '🎵'}
+                            <div key={idx} onClick={() => handleSelectAction(idx)} className={`action-item ${selectedActionIdx === idx ? 'selected' : ''}`}>
+                                <span>{act.name}</span>
+                                <div className="flex gap-2 items-center">
+                                    <span className="text-[9px] bg-slate-100 px-1 rounded text-slate-400">{act.frames?.length || 0}f</span>
+                                    {act.sounds?.length > 0 && <span className="text-[9px] bg-indigo-100 text-indigo-600 px-1 rounded">🎵</span>}
+                                    <button onClick={(e) => handleDeleteActionOrSound(e, idx)} className="text-[10px] text-red-300 hover:text-red-500 font-black ml-1">✕</button>
+                                </div>
                             </div>
                         ))}
                         <button className="v84-add-btn-minimal" onClick={() => { 
                             const name = prompt("Nom :"); 
                             if(!name) return; 
                             const next = JSON.parse(JSON.stringify(project)); 
-                            next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId).actions.push({ name: name.toUpperCase(), frames: [], speed: 100 }); 
+                            next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId).actions.push({ name: name.toUpperCase(), frames: [], sounds: [], speed: 100 }); 
                             saveProject(next); 
-                        }}>+ Ajouter</button>
+                        }}>+ Action</button>
                     </>
                 ) : (
-                    <div className="p-10 opacity-30 text-center uppercase text-[10px] font-black">Bientôt</div>
+                    <>
+                        {currentScene?.globalSounds?.map((act, idx) => (
+                            <div key={idx} onClick={() => handleSelectGlobalSound(idx)} className={`action-item ${selectedGlobalSoundIdx === idx ? 'selected' : ''}`}>
+                                <span>{act.name}</span>
+                                <div className="flex gap-2 items-center">
+                                    {act.sounds?.length > 0 && <span className="text-[9px] bg-indigo-100 text-indigo-600 px-1 rounded">🎵</span>}
+                                    <button onClick={(e) => handleDeleteActionOrSound(e, idx)} className="text-[10px] text-red-300 hover:text-red-500 font-black ml-1">✕</button>
+                                </div>
+                            </div>
+                        ))}
+                        <button className="v84-add-btn-minimal" onClick={() => { 
+                            const name = prompt("Événement (ex: VICTOIRE) :"); 
+                            if(!name) return; 
+                            const next = JSON.parse(JSON.stringify(project)); 
+                            if (!next.scenes[selectedSceneIdx].globalSounds) next.scenes[selectedSceneIdx].globalSounds = [];
+                            next.scenes[selectedSceneIdx].globalSounds.push({ name: name.toUpperCase(), frames: [], sounds: [], speed: 100 }); 
+                            saveProject(next); 
+                        }}>+ Événement Sonore</button>
+                    </>
                 )}
             </div>
 
-            {leftTab === 'actions' && selectedAction && (
+            {selectedAction && (
                 <div className="studio-sequencer-box">
                     <div className="seq-header">
-                        <span className="seq-label">Timeline ({selectedAction.frames.length}f)</span>
+                        <span className="seq-label">{leftTab === 'actions' ? 'Séquenceur' : 'Timeline Sonore'}</span>
                         <div className="seq-controls">
-                            <button className="btn-mirror" onClick={handleMirrorSequence} title="Miroir">↔️</button>
-                            
-                            {/* BOUTON SON */}
-                            <button className="btn-sound-trigger" onClick={() => setShowSoundModal(true)} title="Ajouter un son">
-                                {selectedAction.soundUrl ? '🔊' : '🎵'}
-                            </button>
-
+                            {leftTab === 'actions' && <button className="btn-mirror" onClick={handleMirrorSequence} title="Miroir">↔️</button>}
                             <button className="btn-mini-ctrl" onClick={() => handleUpdateActionSpeed(-50)}>-</button>
                             <span className="speed-indicator">{selectedAction.speed || 100}ms</span>
                             <button className="btn-mini-ctrl" onClick={() => handleUpdateActionSpeed(50)}>+</button>
-                            <button className="btn-mini-ctrl" onClick={() => setIsPreviewPlaying(!isPreviewPlaying)}>{isPreviewPlaying ? '⏹️' : '▶️'}</button>
+                            <button className={`btn-mini-ctrl ${isPreviewPlaying ? 'bg-indigo-100 text-indigo-600' : ''}`} onClick={() => setIsPreviewPlaying(!isPreviewPlaying)}>
+                                {isPreviewPlaying ? '⏹️' : '▶️'}
+                            </button>
                         </div>
-                    </div>
-                    <div className="seq-frames-grid custom-scrollbar">
-                        {selectedAction.frames.map((frame, fIdx) => (
-                            <div key={fIdx} 
-                                 className={`seq-frame ${isPreviewPlaying && previewFrameIdx === fIdx ? 'active' : ''} ${selectedFrameIdx === fIdx ? 'active' : ''}`} 
-                                 draggable 
-                                 onClick={() => { setSelectedFrameIdx(selectedFrameIdx === fIdx ? null : fIdx); setIsPreviewPlaying(false); }} 
-                                 onDragStart={() => setDraggedFrameIdx(fIdx)} 
-                                 onDragOver={e => e.preventDefault()} 
-                                 onDrop={() => handleReorderFrame(fIdx)}>
-                                <img src={resolveUrl(frame.url)} />
-                                <button className="frame-del" onClick={e => { e.stopPropagation(); handleDeleteFrame(fIdx); }}>✕</button>
-                            </div>
-                        ))}
-                        <div className="seq-frame seq-frame-add" onClick={() => frameUploadRef.current.click()}>+</div>
                     </div>
                     
-                    <div className="eraser-bar">
-                        <div className="flex gap-2 items-center">
-                            {selectedFrameIdx !== null ? (
-                                <button className="btn-launch-eraser" onClick={() => setFrameToErase({ url: selectedAction.frames[selectedFrameIdx].url, idx: selectedFrameIdx })}>GOMMER</button>
-                            ) : (
-                                <button className="btn-eraser-main disabled" disabled title="Sélectionnez une image">🧽</button>
+                    {leftTab === 'actions' && (
+                        <div className="seq-frames-grid custom-scrollbar" style={{height: '110px', minHeight: '110px'}}>
+                            {selectedAction.frames.map((frame, fIdx) => (
+                                <div key={fIdx} 
+                                    className={`seq-frame ${isPreviewPlaying && previewFrameIdx === fIdx ? 'active' : ''} ${selectedFrameIdx === fIdx ? 'active' : ''}`} 
+                                    draggable 
+                                    onClick={() => { setSelectedFrameIdx(selectedFrameIdx === fIdx ? null : fIdx); setIsPreviewPlaying(false); setSelectedSoundIdx(null); }} 
+                                    onDragStart={() => setDraggedFrameIdx(fIdx)} 
+                                    onDragOver={e => e.preventDefault()} 
+                                    onDrop={() => handleReorderFrame(fIdx)}>
+                                    <img src={resolveUrl(frame.url)} />
+                                    <button className="frame-del" onClick={e => { e.stopPropagation(); handleDeleteFrame(fIdx); }}>✕</button>
+                                </div>
+                            ))}
+                            <div className="seq-frame seq-frame-add" onClick={() => frameUploadRef.current.click()}>+</div>
+                        </div>
+                    )}
+                    
+                    <div className={`border-slate-200 pt-2 ${leftTab === 'actions' ? 'border-t mt-2' : ''}`}>
+                        <div className="flex justify-between items-center mb-1">
+                            <span className="seq-label text-indigo-500">Piste Audio (3 max)</span>
+                            <button className="btn-sound-trigger !w-auto px-2 !text-[9px]" onClick={() => setShowSoundModal(true)}>
+                                🔊 Ajouter Son
+                            </button>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2">
+                            {(selectedAction.sounds || []).map((snd, sIdx) => (
+                                <div key={sIdx} 
+                                     onClick={() => { setSelectedSoundIdx(selectedSoundIdx === sIdx ? null : sIdx); setSelectedFrameIdx(null); }}
+                                     className={`sound-frame-visual h-16 ${selectedSoundIdx === sIdx ? 'active' : ''}`}>
+                                    <span className="text-xl">🎵</span>
+                                    <span className="text-[8px] font-black text-indigo-800 w-full text-center truncate px-1">{snd.name?.substring(0,10)}</span>
+                                    <button className="frame-del !bg-red-500 !text-white !opacity-100 !top-1 !right-1" onClick={(e) => { e.stopPropagation(); handleDeleteSound(sIdx); }}>✕</button>
+                                </div>
+                            ))}
+                            {[...Array(Math.max(0, 3 - (selectedAction.sounds || []).length))].map((_, i) => (
+                                <div key={i + 100} className="border-2 border-dashed border-slate-200 rounded-lg h-16 flex items-center justify-center text-slate-300 text-xs font-bold">
+                                    VIDE
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="eraser-bar mt-auto">
+                        <div className="flex gap-2 items-center w-full">
+                            <button className="btn-tool-pen" onClick={handlePenClick} disabled={selectedFrameIdx === null && selectedSoundIdx === null} title={selectedSoundIdx !== null ? "Éditer le son" : "Éditer l'image"}>
+                                ✏️ ÉDITER
+                            </button>
+                            {leftTab === 'actions' && (
+                                <button className={`btn-magic-clean ${cleaning ? 'pulse' : ''}`} onClick={handleSmartAIClean} disabled={cleaning || !selectedAction.frames || selectedAction.frames.length === 0} title={selectedFrameIdx !== null ? "Détourer l'image" : "Détourer TOUT"}>
+                                    ✨ {cleaning ? '...' : (selectedFrameIdx !== null ? 'CIBLÉ' : 'TOUT')}
+                                </button>
                             )}
                         </div>
-                        <button className={`btn-magic-clean ${cleaning ? 'pulse' : ''}`} onClick={handleSmartAIClean} title="Détourer toute l'action">
-                            ✨ {selectedFrameIdx !== null ? 'CIBLÉ' : 'AUTO'}
-                        </button>
                     </div>
                 </div>
             )}
