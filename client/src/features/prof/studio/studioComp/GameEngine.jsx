@@ -4,8 +4,8 @@ import { api } from '../../../../services/api';
 import SoundExpert from './SoundExpert';
 
 /**
- * 🎮 MOTEUR DE JEU DÉDIÉ (V500 - ACTION + SOUND SYNC)
- * RÔLE : Garantit que .play() déclenche l'animation ET les sons associés instantanément.
+ * 🎮 MOTEUR DE JEU (V505 - ACTION + SOUND SYNC)
+ * Correction de l'erreur "cod is not defined"
  */
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
     const canvasRef = useRef(null);
@@ -24,10 +24,11 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const [keysPressed, setKeysPressed] = useState({});
 
     // 🔊 MOTEUR AUDIO (WEB AUDIO API)
-    const audioCtxRef = useRef(new (window.AudioContext || window.webkitAudioContext)());
+    const audioCtxRef = useRef(null);
     const audioBuffersRef = useRef(new Map());
 
     useEffect(() => {
+        audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
         api.get('/games/test-data').then(data => {
             const levelsData = data?.levels?.length > 0 ? data.levels : [{ name: "Test", questions: [{ q: "Prêt ?", options: ["OUI", "NON"], a: 0 }] }];
             setAllLevels(levelsData);
@@ -40,6 +41,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         return () => { 
             window.removeEventListener('keydown', handleKeyDown); 
             window.removeEventListener('keyup', handleKeyUp);
+            if (audioCtxRef.current) audioCtxRef.current.close();
         };
     }, []);
 
@@ -55,7 +57,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
     const handleAnswerClick = (choiceIdx) => {
         if (feedback || currentQIndex === -1 || isLevelWonRef.current) return;
-        if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
+        if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
 
         const currentQ = levelQuestions[currentQIndex];
         const isCorrect = currentQ.a === choiceIdx;
@@ -110,6 +112,8 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         async function startEngine() {
             try {
                 const scene = project.scenes[activeSceneIdx];
+                if (!scene) return;
+
                 const imgUrls = (scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url));
                 const sndUrls = (scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url)));
 
@@ -121,7 +125,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     })),
                     ...[...new Set(sndUrls)].filter(Boolean).map(url => new Promise(async res => {
                         try {
-                            if (!audioBuffersRef.current.has(url)) {
+                            if (audioCtxRef.current && !audioBuffersRef.current.has(url)) {
                                 const buffer = await SoundExpert.decodeAudio(resolveUrl(url), audioCtxRef.current);
                                 if (buffer) audioBuffersRef.current.set(url, buffer);
                             }
@@ -147,7 +151,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                         play(name) { 
                             if(this.currentAction.toUpperCase() !== name.toUpperCase()) { 
                                 this.currentAction = name; this.frameIdx = 0; this.lastAnimTime = 0;
-                                // 🔊 TRIGGER AUDIO
                                 this.engine._triggerActionSounds(this.id, name);
                             } 
                         }
