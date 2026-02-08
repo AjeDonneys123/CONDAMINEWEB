@@ -4,8 +4,8 @@ import { api } from '../../../../services/api';
 import SoundExpert from './SoundExpert';
 
 /**
- * 🎮 MOTEUR DE JEU (V495 - ACTION + SOUND SYNC)
- * RÔLE : Arbitre. Garantit que .play("NOM") déclenche l'animation ET les sons associés.
+ * 🎮 MOTEUR DE JEU DÉDIÉ (V500 - ACTION + SOUND SYNC)
+ * RÔLE : Garantit que .play() déclenche l'animation ET les sons associés instantanément.
  */
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
     const canvasRef = useRef(null);
@@ -24,11 +24,10 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const [keysPressed, setKeysPressed] = useState({});
 
     // 🔊 MOTEUR AUDIO (WEB AUDIO API)
-    const audioCtxRef = useRef(null);
+    const audioCtxRef = useRef(new (window.AudioContext || window.webkitAudioContext)());
     const audioBuffersRef = useRef(new Map());
 
     useEffect(() => {
-        audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
         api.get('/games/test-data').then(data => {
             const levelsData = data?.levels?.length > 0 ? data.levels : [{ name: "Test", questions: [{ q: "Prêt ?", options: ["OUI", "NON"], a: 0 }] }];
             setAllLevels(levelsData);
@@ -41,7 +40,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         return () => { 
             window.removeEventListener('keydown', handleKeyDown); 
             window.removeEventListener('keyup', handleKeyUp);
-            if (audioCtxRef.current) audioCtxRef.current.close();
         };
     }, []);
 
@@ -149,7 +147,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                         play(name) { 
                             if(this.currentAction.toUpperCase() !== name.toUpperCase()) { 
                                 this.currentAction = name; this.frameIdx = 0; this.lastAnimTime = 0;
-                                // 🔊 TRIGGER SONS D'ACTION
+                                // 🔊 TRIGGER AUDIO
                                 this.engine._triggerActionSounds(this.id, name);
                             } 
                         }

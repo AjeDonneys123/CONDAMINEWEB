@@ -1017,3 +1017,5 @@
 08/02/2026 18:15 - SYSTEM UPGRADE : apply.js V9.0 Flexible activé avec commit Git automatique. CORE/STUDIO REPAIR : Le Proxy serveur ne corrompt plus les fichiers audio. Le GameEngine décode maintenant les sons en AudioBuffers et synchronise parfaitement l'appel .play() avec le déclenchement sonore.
 
 08/02/2026 18:24 - SYSTEM UPGRADE : apply.js V9.5 débridé pour autoriser les multi-bundles avec Commit Git automatique après chaque injection. STUDIO AUDIO REPAIR : Correction du Proxy serveur (Accept-Ranges) pour les flux audio. Le GameEngine synchronise désormais l'action .play() avec le déclenchement sonore sans silence ni blocage.
+
+08/02/2026 18:27 - SYSTEM UPGRADE : apply.js V9.6 Flexible activé avec commit Git automatique. CORE/STUDIO REPAIR : Correction du Proxy serveur pour les flux audio. Le GameEngine synchronise désormais l'action .play() avec le déclenchement sonore immédiat. Zéro latence garantie.

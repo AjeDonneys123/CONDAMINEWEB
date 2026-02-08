@@ -1,4 +1,4 @@
-// @signatures: SERVER_BOOT_ID, GlobalInfrastructure, KernelV62_AUDIO_PIPE
+// @signatures: SERVER_BOOT_ID, GlobalInfrastructure, KernelV63_RAW_PROXY
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
@@ -11,7 +11,7 @@ const port = 3000;
 const SERVER_BOOT_ID = Date.now();
 
 console.log("------------------------------------------------");
-console.log("🚀 KERNEL V62 : FIX PROXY AUDIO");
+console.log("🚀 KERNEL V63 : FIX AUDIO PROXY");
 console.log("------------------------------------------------");
 
 app.use(express.json({ limit: '70mb' }));
@@ -48,10 +48,10 @@ app.get(['/api/proxy/:id', '/api/structure/proxy/:id'], async (req, res) => {
     try {
         const fileId = req.params.id;
         const stream = await ProfDrive.getFileStream(fileId);
-        // FIX : On ne force plus Content-Type image/png, on laisse le flux brut
-        // pour que la Web Audio API détecte le format réel (MP3/WAV/PNG).
+        // FIX : On ne force plus "image/png" pour permettre le décodage MP3/WAV par la Web Audio API
+        res.setHeader('Accept-Ranges', 'bytes');
         stream.pipe(res);
-    } catch (e) { res.status(404).send("File missing"); }
+    } catch (e) { res.status(404).send("File not found"); }
 });
 
 app.use((err, req, res, next) => { res.status(500).json({ error: "INTERNAL_ERROR", message: err.message }); });
