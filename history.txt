@@ -8629,3 +8629,9 @@
 3. Renforcement de la sécurité audio avec un `resume()` forcé à chaque lecture de son.
 
 09/02/2026 12:59 - BUGFIX STUDIO GAME : Nettoyage du script de jeu par défaut (ZOMBIE_GAME_CODE) dans StudioDashboard.jsx. Suppression de la logique visuelle redondante "Niveau 1" (barre + texte) dans draw() et de l'appel manuel à playGlobal("DÉPART") dans start() qui causait un double son.
+
+09/02/2026 15:05 - STUDIO ENGINE V1000 (TITANIUM) : 
+- CHARGEMENT VRAI (Promise.all) : Le bouton JOUER attend 100% des assets (Images + Sons). Plus de mensonge visuel.
+- FILE D'ATTENTE AUDIO : stopAllSounds() est appelé avant les événements critiques (Game Over/Win) pour nettoyer la piste.
+- ROBUSTESSE : Protection anti-crash si une image manque (404) avec fallback visuel.
+- CHEATS : Codes de triche (Touche F) pleinement opérationnels.
