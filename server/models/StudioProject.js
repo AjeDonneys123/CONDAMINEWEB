@@ -10,7 +10,7 @@ const ActionSchema = new mongoose.Schema({
     name: { type: String, default: "Nouvelle Action" },
     speed: { type: Number, default: 100 }, 
     frames: { type: [FrameSchema], default: [] }, 
-    sounds: { type: [FrameSchema], default: [] }  
+    sounds: { type: [FrameSchema], default: [] }
 }, { _id: false });
 
 const ActorSchema = new mongoose.Schema({
@@ -30,8 +30,9 @@ const SceneSchema = new mongoose.Schema({
     backdrops: [{ name: String, url: String }],
     currentBackdropIdx: { type: Number, default: 0 },
     actors: [ActorSchema],
-    // NOUVEAU : Actions sonores globales (Victoire, Défaite, etc.)
-    globalSounds: { type: [ActionSchema], default: [] }
+    
+    // ✅ AJOUT DU CHAMP MANQUANT ICI
+    globalSounds: { type: [ActionSchema], default: [] } 
 });
 
 const StudioProjectSchema = new mongoose.Schema({
