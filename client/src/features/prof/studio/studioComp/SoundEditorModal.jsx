@@ -1,4 +1,4 @@
-// @signatures: SoundEditorModal, drawWaveform, handleTrim, applyEffect, playSound
+// @signatures: SoundEditorModal, drawWaveform, playSound
 import React, { useState, useRef, useEffect } from 'react';
 import SoundExpert from './SoundExpert';
 import './SoundEditorModal.css';
@@ -7,211 +7,228 @@ export default function SoundEditorModal({ soundUrl, soundName, onSave, onClose,
     const [buffer, setBuffer] = useState(null);
     const [isPlaying, setIsPlaying] = useState(false);
     const [name, setName] = useState(soundName || "Son");
-    const [trimStart, setTrimStart] = useState(0); // 0.0 à 1.0
-    const [trimEnd, setTrimEnd] = useState(1);     // 0.0 à 1.0
-    const [history, setHistory] = useState([]);    // Pour Undo
-    const [isProcessing, setIsProcessing] = useState(false);
+    const [trimStart, setTrimStart] = useState(0); 
+    const [trimEnd, setTrimEnd] = useState(1);     
+    const [history, setHistory] = useState([]);    
+    const [isProcessing, setIsProcessing] = useState(true);
+    
+    const [debugInfo, setDebugInfo] = useState("Initialisation...");
 
     const canvasRef = useRef(null);
     const sourceRef = useRef(null);
     const audioCtxRef = useRef(null);
 
-    // Initialisation
+    // 1. CHARGEMENT
     useEffect(() => {
         async function load() {
-            if (!soundUrl) return;
+            if (!soundUrl) {
+                setDebugInfo("Erreur: URL manquante");
+                setIsProcessing(false);
+                return;
+            }
+            
             const fullUrl = resolveUrl(soundUrl);
-            const decoded = await SoundExpert.decodeAudio(fullUrl);
-            setBuffer(decoded);
-            setHistory([decoded]); // État initial
+            setDebugInfo(`Chargement de: ${fullUrl.slice(-20)}...`);
+
+            if (!audioCtxRef.current) {
+                audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+            }
+
+            const result = await SoundExpert.decodeAudio(fullUrl, audioCtxRef.current);
+            
+            if (result) {
+                setBuffer(result);
+                setHistory([result]);
+                setDebugInfo(`AUDIO OK: ${result.duration.toFixed(2)}s`);
+            } else {
+                setDebugInfo("ÉCHEC: Buffer vide ou format invalide.");
+            }
+            setIsProcessing(false);
         }
         load();
-        
-        return () => stopSound();
+        return () => { if(sourceRef.current) sourceRef.current.stop(); };
     }, [soundUrl]);
 
-    // Dessin de la Waveform
+    // 2. OBSERVATEUR DE TAILLE (FIX VAGUE INVISIBLE)
     useEffect(() => {
-        if (!buffer || !canvasRef.current) return;
+        if (!canvasRef.current || !buffer) return;
+
+        // On redessine dès que la taille change (ex: fin d'animation d'ouverture)
+        const resizeObserver = new ResizeObserver(() => {
+            requestAnimationFrame(drawWaveform);
+        });
+        
+        resizeObserver.observe(canvasRef.current);
+        
+        // Premier dessin forcé
         drawWaveform();
+
+        return () => resizeObserver.disconnect();
     }, [buffer, trimStart, trimEnd]);
 
     const drawWaveform = () => {
         const canvas = canvasRef.current;
-        const ctx = canvas.getContext('2d');
-        const width = canvas.width = canvas.offsetWidth;
-        const height = canvas.height = canvas.offsetHeight;
+        if (!canvas || !buffer) return;
+
+        // 1. Récupérer la taille réelle du conteneur
+        // On remonte au parent si le canvas est écrasé à 0
+        const parent = canvas.parentElement;
+        const width = parent.clientWidth || 600;
+        const height = parent.clientHeight || 200;
+
+        if (width === 0 || height === 0) return;
+
+        // 2. Adapter la résolution (High DPI)
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = width * dpr;
+        canvas.height = height * dpr;
         
-        ctx.fillStyle = '#fdf4ff'; // Fond rose pale
+        // Pour le CSS (taille affichée)
+        canvas.style.width = `${width}px`;
+        canvas.style.height = `${height}px`;
+
+        const ctx = canvas.getContext('2d');
+        ctx.scale(dpr, dpr);
+
+        // 3. DESSIN
+        ctx.fillStyle = '#fdf4ff'; 
         ctx.fillRect(0, 0, width, height);
 
         const data = buffer.getChannelData(0);
         const step = Math.ceil(data.length / width);
         const amp = height / 2;
 
-        ctx.fillStyle = '#a855f7'; // Onde violette
+        ctx.fillStyle = '#7e22ce'; // Violet foncé (haute visibilité)
         ctx.beginPath();
         
+        let hasSignal = false;
+
         for (let i = 0; i < width; i++) {
             let min = 1.0;
             let max = -1.0;
             for (let j = 0; j < step; j++) {
-                const datum = data[(i * step) + j];
-                if (datum < min) min = datum;
-                if (datum > max) max = datum;
+                const idx = (i * step) + j;
+                if (idx < data.length) {
+                    const datum = data[idx];
+                    if (datum !== 0) hasSignal = true;
+                    if (datum < min) min = datum;
+                    if (datum > max) max = datum;
+                }
             }
-            ctx.fillRect(i, (1 + min) * amp, 1, Math.max(1, (max - min) * amp));
+            const y = (1 + min) * amp;
+            const h = Math.max(1, (max - min) * amp);
+            ctx.fillRect(i, y, 1, h);
         }
 
-        // Zone de sélection (Trim)
+        // --- INFO DEBUG SUR L'ÉCRAN ---
+        if (!hasSignal) setDebugInfo("⚠️ SILENCE DÉTECTÉ (Amplitude 0)");
+        else setDebugInfo(`🎨 DESSINÉ: ${width}x${height}px`);
+
+        // Trim Zones
         const x1 = trimStart * width;
         const x2 = trimEnd * width;
-        
-        // Zone grisée hors sélection
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
         ctx.fillRect(0, 0, x1, height);
         ctx.fillRect(x2, 0, width - x2, height);
-
-        // Lignes de coupe
-        ctx.fillStyle = '#7e22ce';
+        
+        // Trim Lines
+        ctx.fillStyle = '#ef4444'; // Rouge pour bien voir les barres
         ctx.fillRect(x1, 0, 2, height);
         ctx.fillRect(x2 - 2, 0, 2, height);
     };
 
-    const stopSound = () => {
-        if (sourceRef.current) {
-            sourceRef.current.stop();
-            sourceRef.current = null;
-        }
-        setIsPlaying(false);
-    };
-
-    const playSound = () => {
+    const playSound = async () => {
         if (isPlaying) {
-            stopSound();
+            if (sourceRef.current) sourceRef.current.stop();
+            setIsPlaying(false);
             return;
         }
-        if (!buffer) return;
+        if (!buffer || !audioCtxRef.current) return;
 
-        // Création du contexte si besoin
-        if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtxRef.current.state === 'suspended') {
+            await audioCtxRef.current.resume();
+        }
         
         const source = audioCtxRef.current.createBufferSource();
-        // On joue la version "Trimée" (virtuellement)
-        // Calcul du start/end en secondes
         const startSec = trimStart * buffer.duration;
-        const endSec = trimEnd * buffer.duration;
-        const duration = endSec - startSec;
+        const duration = (trimEnd - trimStart) * buffer.duration;
 
         source.buffer = buffer;
         source.connect(audioCtxRef.current.destination);
-        
-        // play(when, offset, duration)
         source.start(0, startSec, duration);
         sourceRef.current = source;
         setIsPlaying(true);
-
         source.onended = () => setIsPlaying(false);
     };
 
-    const pushToHistory = (newBuffer) => {
-        setHistory(prev => [...prev.slice(-10), newBuffer]); // Max 10 undos
-        setBuffer(newBuffer);
-        // Reset Trim après un effet car la longueur peut changer
-        setTrimStart(0);
-        setTrimEnd(1);
-    };
-
-    const handleUndo = () => {
-        if (history.length > 1) {
-            const newHistory = [...history];
-            newHistory.pop(); // Retire l'actuel
-            setHistory(newHistory);
-            setBuffer(newHistory[newHistory.length - 1]);
-        }
-    };
-
-    // --- APPLICATION DES EFFETS ---
     const applyEffect = (effectName) => {
         if (!buffer) return;
         setIsProcessing(true);
-        setTimeout(() => { // Timeout pour laisser l'UI afficher le loader si besoin
+        setTimeout(() => {
             let newBuff = buffer;
-            
-            switch (effectName) {
-                case 'TRIM':
-                    newBuff = SoundExpert.trim(buffer, trimStart, trimEnd);
-                    break;
-                case 'FASTER':
-                    newBuff = SoundExpert.changeSpeed(buffer, 1.5);
-                    break;
-                case 'SLOWER':
-                    newBuff = SoundExpert.changeSpeed(buffer, 0.75);
-                    break;
-                case 'LOUDER':
-                    newBuff = SoundExpert.applyGain(buffer, 1.5);
-                    break;
-                case 'SOFTER':
-                    newBuff = SoundExpert.applyGain(buffer, 0.5);
-                    break;
-                case 'REVERSE':
-                    newBuff = SoundExpert.reverse(buffer);
-                    break;
-                case 'ROBOT':
-                    newBuff = SoundExpert.robotize(buffer);
-                    break;
-                case 'FADEIN':
-                    newBuff = SoundExpert.fade(buffer, 'in');
-                    break;
-                case 'FADEOUT':
-                    newBuff = SoundExpert.fade(buffer, 'out');
-                    break;
+            if (SoundExpert[effectName.toLowerCase()] || effectName === 'TRIM' || effectName === 'FASTER' || effectName === 'SLOWER' || effectName === 'LOUDER' || effectName === 'SOFTER') {
+                 if (effectName === 'TRIM') newBuff = SoundExpert.trim(buffer, trimStart, trimEnd);
+                 else if (effectName === 'FASTER') newBuff = SoundExpert.changeSpeed(buffer, 1.25);
+                 else if (effectName === 'SLOWER') newBuff = SoundExpert.changeSpeed(buffer, 0.8);
+                 else if (effectName === 'LOUDER') newBuff = SoundExpert.applyGain(buffer, 1.25);
+                 else if (effectName === 'SOFTER') newBuff = SoundExpert.applyGain(buffer, 0.75);
+                 else if (effectName === 'REVERSE') newBuff = SoundExpert.reverse(buffer);
+                 else if (effectName === 'ROBOT') newBuff = SoundExpert.robotize(buffer);
+                 
+                 setHistory(prev => [...prev.slice(-10), newBuff]);
+                 setBuffer(newBuff);
+                 if (effectName === 'TRIM') { setTrimStart(0); setTrimEnd(1); }
             }
-            pushToHistory(newBuff);
             setIsProcessing(false);
-        }, 10);
+        }, 50);
     };
 
     const handleSaveInternal = () => {
         if (!buffer) return;
         setIsProcessing(true);
-        
-        // 1. Conversion Buffer -> WAV Blob
         const wavBlob = SoundExpert.bufferToWav(buffer);
-        
-        // 2. Upload via l'API existante
-        const fd = new FormData();
-        // Ajouter .wav si le nom n'en a pas
-        const finalName = name.endsWith('.wav') || name.endsWith('.mp3') ? name : `${name}.wav`;
-        fd.append('file', wavBlob, finalName);
+        if (!wavBlob) {
+            alert("Erreur export WAV");
+            setIsProcessing(false);
+            return;
+        }
 
-        // On utilise l'API upload-asset générique
+        const fd = new FormData();
+        const finalName = name.endsWith('.wav') ? name : `${name}.wav`;
+        fd.append('file', wavBlob, finalName);
         fetch('/api/studio/upload-asset', { method: 'POST', body: fd })
             .then(r => r.json())
-            .then(data => {
-                onSave(data.url, finalName); // Callback vers le parent
-                onClose();
-            })
-            .catch(() => alert("Erreur sauvegarde"))
+            .then(data => { if (data.url) onSave(data.url, finalName); onClose(); })
             .finally(() => setIsProcessing(false));
     };
 
-    // Gestion Drag sur Canvas pour Trim
     const handleMouseDown = (e) => {
         const rect = canvasRef.current.getBoundingClientRect();
         const x = (e.clientX - rect.left) / rect.width;
-        // Si on clique plus près du début, on bouge le début, sinon la fin
-        if (Math.abs(x - trimStart) < Math.abs(x - trimEnd)) {
-            setTrimStart(Math.max(0, Math.min(x, trimEnd - 0.05)));
-        } else {
-            setTrimEnd(Math.min(1, Math.max(x, trimStart + 0.05)));
+        if (Math.abs(x - trimStart) < Math.abs(x - trimEnd)) setTrimStart(Math.max(0, Math.min(x, trimEnd - 0.05)));
+        else setTrimEnd(Math.min(1, Math.max(x, trimStart + 0.05)));
+    };
+
+    const handleUndo = () => {
+        if (history.length > 1) {
+            const newHistory = [...history];
+            newHistory.pop();
+            setHistory(newHistory);
+            setBuffer(newHistory[newHistory.length - 1]);
+            setTrimStart(0);
+            setTrimEnd(1);
         }
     };
 
     return (
         <div className="se-modal-overlay">
             <div className="se-window animate-in zoom-in">
-                {isProcessing && <div className="absolute inset-0 bg-white/50 z-50 flex items-center justify-center font-black text-purple-600">TRAITEMENT...</div>}
+                {isProcessing && (
+                    <div className="absolute inset-0 bg-white/80 z-50 flex items-center justify-center flex-col">
+                        <div className="text-4xl animate-spin">⚙️</div>
+                        <span className="font-black text-purple-600 mt-2 uppercase">Traitement...</span>
+                    </div>
+                )}
                 
                 <div className="se-header">
                     <input className="se-title-input" value={name} onChange={e => setName(e.target.value)} />
@@ -222,53 +239,30 @@ export default function SoundEditorModal({ soundUrl, soundName, onSave, onClose,
                     </div>
                 </div>
 
-                <div className="se-wave-area">
+                <div className="se-wave-area relative">
                     <canvas ref={canvasRef} className="se-canvas" onMouseDown={handleMouseDown} />
                     
-                    {/* Poignées visuelles (pour l'affichage seulement, la logique est dans le clic) */}
+                    <div className="absolute top-2 left-2 bg-slate-900/80 text-white p-2 rounded text-[10px] font-mono pointer-events-none z-50">
+                        <strong>DIAGNOSTIC:</strong><br/>
+                        {debugInfo}
+                    </div>
+
                     <div className="se-trim-handle handle-left" style={{ left: `calc(${trimStart * 100}% - 20px)` }}>▎</div>
                     <div className="se-trim-handle handle-right" style={{ left: `${trimEnd * 100}%` }}>▎</div>
                 </div>
 
                 <div className="se-toolbar">
-                    <button className={`se-play-big ${isPlaying ? 'playing' : ''}`} onClick={playSound}>
-                        {isPlaying ? '⏹' : '▶'}
-                    </button>
-
+                    <button className={`se-play-big ${isPlaying ? 'playing' : ''}`} onClick={playSound}>{isPlaying ? '⏹' : '▶'}</button>
                     <div className="w-px h-10 bg-slate-200 mx-2"></div>
-
-                    {/* Si sélection active, afficher le bouton COUPER */}
                     {(trimStart > 0 || trimEnd < 1) && (
-                        <button className="se-tool-btn" onClick={() => applyEffect('TRIM')}>
-                            <div className="se-tool-icon text-red-500 border-red-200">✂️</div>
-                            <span className="se-tool-label text-red-500">Couper</span>
-                        </button>
+                        <button className="se-tool-btn" onClick={() => applyEffect('TRIM')}><div className="se-tool-icon text-red-500 border-red-200">✂️</div><span className="se-tool-label text-red-500">Couper</span></button>
                     )}
-
-                    <button className="se-tool-btn" onClick={() => applyEffect('FASTER')}>
-                        <div className="se-tool-icon">🐇</div>
-                        <span className="se-tool-label">Vite</span>
-                    </button>
-                    <button className="se-tool-btn" onClick={() => applyEffect('SLOWER')}>
-                        <div className="se-tool-icon">🐢</div>
-                        <span className="se-tool-label">Lent</span>
-                    </button>
-                    <button className="se-tool-btn" onClick={() => applyEffect('LOUDER')}>
-                        <div className="se-tool-icon">🔊</div>
-                        <span className="se-tool-label">Fort</span>
-                    </button>
-                    <button className="se-tool-btn" onClick={() => applyEffect('SOFTER')}>
-                        <div className="se-tool-icon">🔉</div>
-                        <span className="se-tool-label">Doux</span>
-                    </button>
-                    <button className="se-tool-btn" onClick={() => applyEffect('REVERSE')}>
-                        <div className="se-tool-icon">↩️</div>
-                        <span className="se-tool-label">Envers</span>
-                    </button>
-                    <button className="se-tool-btn" onClick={() => applyEffect('ROBOT')}>
-                        <div className="se-tool-icon">🤖</div>
-                        <span className="se-tool-label">Robot</span>
-                    </button>
+                    <button className="se-tool-btn" onClick={() => applyEffect('FASTER')}><div className="se-tool-icon">🐇</div><span className="se-tool-label">Vite</span></button>
+                    <button className="se-tool-btn" onClick={() => applyEffect('SLOWER')}><div className="se-tool-icon">🐢</div><span className="se-tool-label">Lent</span></button>
+                    <button className="se-tool-btn" onClick={() => applyEffect('LOUDER')}><div className="se-tool-icon">🔊</div><span className="se-tool-label">Fort</span></button>
+                    <button className="se-tool-btn" onClick={() => applyEffect('SOFTER')}><div className="se-tool-icon">🔉</div><span className="se-tool-label">Doux</span></button>
+                    <button className="se-tool-btn" onClick={() => applyEffect('REVERSE')}><div className="se-tool-icon">↩️</div><span className="se-tool-label">Envers</span></button>
+                    <button className="se-tool-btn" onClick={() => applyEffect('ROBOT')}><div className="se-tool-icon">🤖</div><span className="se-tool-label">Robot</span></button>
                 </div>
             </div>
         </div>
