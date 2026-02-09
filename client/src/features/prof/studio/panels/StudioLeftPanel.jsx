@@ -1,5 +1,6 @@
 // @signatures: StudioLeftPanel
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import SoundExpert from '../studioComp/SoundExpert';
 
 export default function StudioLeftPanel({
     leftTab, setLeftTab, selectedActor, selectedActionIdx, setSelectedActionIdx, 
@@ -10,16 +11,63 @@ export default function StudioLeftPanel({
     handleReorderFrame, resolveUrl, handleDeleteFrame, frameUploadRef,
     eraserActive, setEraserActive, setFrameToErase,
     handleSmartAIClean, cleaning, setShowSoundModal,
-    handleDeleteSound, handleEditSound
+    handleDeleteSound, handleEditSound,
+    // On passe cette fonction pour que le panel puisse mettre à jour l'index de preview du parent
+    setPreviewFrameIdx
 }) {
     const [selectedSoundIdx, setSelectedSoundIdx] = useState(null);
-    const currentScene = project?.scenes?.[selectedSceneIdx];
+    const audioCtxRef = useRef(null); // Pour la preview audio locale
+
+    // --- MOTEUR DE PRÉVISUALISATION (SÉQUENCEUR) ---
+    useEffect(() => {
+        let interval = null;
+
+        if (isPreviewPlaying && selectedAction && selectedAction.frames && selectedAction.frames.length > 0) {
+            // Init Audio Context pour la preview si besoin
+            if (!audioCtxRef.current) {
+                audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+            }
+
+            interval = setInterval(() => {
+                // Calcul de la frame suivante via le setter du parent (StudioDashboard)
+                // Note: setPreviewFrameIdx est passé via props, ou on utilise une prop locale si manquante.
+                // Ici on suppose que StudioDashboard gère l'état 'previewFrameIdx', mais on doit le piloter d'ici.
+                
+                // FIX: On appelle la fonction de mise à jour passée en prop (ou on simule si elle manque, mais elle est critique)
+                if (typeof setPreviewFrameIdx === 'function') {
+                    setPreviewFrameIdx(currentIdx => {
+                        const nextIdx = (currentIdx + 1) % selectedAction.frames.length;
+                        
+                        // 🔊 DÉCLENCHEMENT SONORE À LA BOUCLE (Frame 0)
+                        if (nextIdx === 0 && selectedAction.sounds && selectedAction.sounds.length > 0) {
+                            selectedAction.sounds.forEach(snd => {
+                                SoundExpert.decodeAudio(resolveUrl(snd.url), audioCtxRef.current).then(buf => {
+                                    if (buf) {
+                                        const source = audioCtxRef.current.createBufferSource();
+                                        source.buffer = buf;
+                                        source.connect(audioCtxRef.current.destination);
+                                        source.start(0);
+                                    }
+                                });
+                            });
+                        }
+                        return nextIdx;
+                    });
+                }
+            }, selectedAction.speed || 200);
+        }
+
+        return () => {
+            if (interval) clearInterval(interval);
+        };
+    }, [isPreviewPlaying, selectedAction]);
 
     const handleSelectAction = (idx) => {
         setSelectedActionIdx(idx);
         setIsPreviewPlaying(false);
         setSelectedFrameIdx(null);
         setSelectedSoundIdx(null);
+        if (setPreviewFrameIdx) setPreviewFrameIdx(0);
     };
 
     const handleSelectGlobalSound = (idx) => {
