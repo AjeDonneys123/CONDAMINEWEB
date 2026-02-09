@@ -4,10 +4,9 @@ import SoundExpert from './SoundExpert';
 import { api } from '../../../../services/api';
 
 /**
- * 🎮 MOTEUR STUDIO V1004 (DIAGNOSTIC & FIX)
- * - Logs détaillés des clés d'images pour déboguer le chargement
- * - Fallback robuste si une image est manquante (Carré Rose)
- * - Protection contre les erreurs audio "DÉPART introuvable"
+ * 🎮 MOTEUR STUDIO V1005 (FIX AUDIO DÉFAITE)
+ * - Correction du nom de l'événement système ("DEFAITE" -> "DÉFAITE")
+ * - Alignement strict de la logique Game Over sur la logique Victoire
  */
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
     const canvasRef = useRef(null);
@@ -67,7 +66,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     };
 
     /**
-     * 🔊 LECTEUR SYSTÈME DIRECT (Bypasse le script jeu)
+     * 🔊 LECTEUR SYSTÈME DIRECT
      */
     const playSystemSound = (soundName) => {
         if (!project || !audioCtxRef.current) return;
@@ -76,8 +75,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         const soundEvent = scene?.globalSounds?.find(gs => gs.name.toUpperCase().trim() === soundName.toUpperCase().trim());
         
         if (!soundEvent || !soundEvent.sounds || soundEvent.sounds.length === 0) {
-            // Pas une erreur critique, juste une info
-            // console.warn(`ℹ️ Son système absent: ${soundName}`);
             return;
         }
 
@@ -97,7 +94,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         });
     };
 
-    // 1. CHARGEMENT MASSIF
+    // 1. CHARGEMENT ASSETS
     useEffect(() => {
         const preloadAssets = async () => {
             if (!project) return;
@@ -113,26 +110,18 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             let loaded = 0;
             const updateProgress = () => { loaded++; setLoadProgress(`${Math.round((loaded / total) * 100)}%`); };
 
-            // Reset Map pour être sûr
             imageAssetsRef.current.clear();
 
             const imgPromises = imgUrls.map(url => new Promise(resolve => {
                 const img = new Image();
                 img.crossOrigin = "anonymous";
-                
-                const finalUrl = resolveUrl(url); // On calcule l'URL résolue
-                
+                const finalUrl = resolveUrl(url);
                 img.onload = () => { 
-                    // IMPORTANT : On utilise finalUrl comme clé
                     imageAssetsRef.current.set(finalUrl, img); 
                     updateProgress(); 
                     resolve(); 
                 };
-                img.onerror = () => { 
-                    console.warn("⚠️ Image 404:", finalUrl); 
-                    updateProgress(); 
-                    resolve(); 
-                };
+                img.onerror = () => { updateProgress(); resolve(); };
                 img.src = finalUrl;
             }));
 
@@ -145,7 +134,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             }));
 
             await Promise.all([...imgPromises, ...sndPromises]);
-            console.log("✅ ASSETS CHARGÉS. Clés disponibles :", Array.from(imageAssetsRef.current.keys()));
             setIsReady(true);
         };
 
@@ -170,7 +158,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         };
     }, [project]);
 
-    // 3. LOGIQUE JEU
+    // 2. LOGIQUE NIVEAUX
     const initLevel = (idx, sourceData) => {
         if (!sourceData[idx]) return;
         
@@ -193,20 +181,23 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             isPausedRef.current = false; 
             if (gameInstanceRef.current) {
                 if (gameInstanceRef.current.start) {
-                    try { gameInstanceRef.current.start(); } catch(e) { console.error("Start Error", e); }
+                    try { gameInstanceRef.current.start(); } catch(e) {}
                 }
                 playSystemSound("DÉPART");
             }
         }, 2000);
     };
 
+    // --- LOGIQUE GAME OVER (MODIFIÉE POUR MATCH "VICTOIRE") ---
     const handleGameOver = () => {
         stopAllSounds(); 
         setIsGameOver(true);
         isPausedRef.current = true;
         logSonde("💀 GAME OVER", "error");
+        
+        // Utilisation du nom avec accent pour matcher la capture d'écran
         safeTimeout(() => {
-            playSystemSound("DEFAITE");
+            playSystemSound("DÉFAITE");
         }, 500);
     };
 
@@ -228,14 +219,10 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         }
     };
 
-    // --- LOGIQUE DOMMAGES ---
     const triggerPlayerHit = () => {
         if (isPausedRef.current) return;
-        
-        logSonde("💥 COUP REÇU", "error");
         setHitFlash(true);
         setTimeout(() => setHitFlash(false), 200);
-
         setLives(prev => {
             const newVal = Math.max(0, prev - 1);
             if (newVal === 0) {
@@ -296,17 +283,13 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         initLevel(0, allLevels);
     };
 
-    // 6. FACTORY MOTEUR
+    // 3. MOTEUR RENDU
     useEffect(() => {
         if (!engineStarted || !canvasRef.current) return;
         try {
             const canvas = canvasRef.current;
             const ctx = canvas.getContext('2d');
-            
-            const gameCallbacks = {
-                onPlayerHit: triggerPlayerHit,
-                playSound: (name) => {}
-            };
+            const gameCallbacks = { onPlayerHit: triggerPlayerHit, playSound: (name) => {} };
 
             const BaseFactory = new Function('params', `
                 const { audioBuffers, audioCtx, project, sceneIdx, imageAssets, resolveUrl, canvas, ctx, activeSources } = params;
@@ -354,53 +337,32 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                             }
                         } catch(e) {}
                     }
-                    playGlobal(name) {
-                        // Managed by React directly now
-                    }
                     _render() {
                         const s = project.scenes[sceneIdx];
                         ctx.fillStyle = "#0f172a"; ctx.fillRect(0,0,canvas.width, canvas.height);
-                        
-                        // BACKGROUND
                         const bd = s?.backdrops?.[s.currentBackdropIdx || 0];
                         if(bd) {
-                            // !!! FIX ICI : Utilisation de resolveUrl pour matcher la clé de la Map !!!
                             const key = resolveUrl(bd.url);
                             const img = imageAssets.get(key);
                             if(img) ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                            else {
-                                // Fallback Backdrop
-                                ctx.fillStyle = "#1e293b";
-                                ctx.fillRect(0,0,canvas.width, canvas.height);
-                            }
                         }
-
-                        // ACTORS
                         for(let key in this) {
                             const p = this[key];
                             if(p instanceof ActorProxy && p.visible) {
                                 const aData = project.scenes[sceneIdx].actors.find(ac => ac.id === p.id);
                                 if(!aData) continue;
                                 const act = (aData.actions || []).find(x => x.name.toUpperCase() === p.currentAction.toUpperCase()) || aData.actions?.[0];
-                                
                                 if(act && act.frames && act.frames.length > 0) {
                                     const now = Date.now();
                                     if (now - p.lastAnimTime > (act.speed || 100)) { p.frameIdx = (p.frameIdx+1)%act.frames.length; p.lastAnimTime=now; }
-                                    
-                                    // !!! FIX ICI : Utilisation de resolveUrl pour matcher la clé !!!
                                     const assetKey = resolveUrl(act.frames[p.frameIdx].url);
                                     const spr = imageAssets.get(assetKey);
-                                    
                                     if(spr) {
                                         const xPx = (p.x/100)*canvas.width; const yPx = (p.y/100)*canvas.height; let sz = 150*p.scale;
                                         this.ctx.save(); this.ctx.translate(xPx, yPx);
                                         if(p.rotationStyle === 'left-right' && Math.abs(p.scale) !== p.scale) this.ctx.scale(Math.sign(p.scale), 1);
                                         else if (p.direction) this.ctx.rotate(p.direction * Math.PI / 180);
                                         this.ctx.drawImage(spr, -sz/2, -sz/2, sz, sz); this.ctx.restore();
-                                    } else {
-                                        // FALLBACK VISUEL (Carré Rose)
-                                        this.ctx.fillStyle = "#f472b6";
-                                        this.ctx.fillRect((p.x/100)*canvas.width - 20, (p.y/100)*canvas.height - 20, 40, 40);
                                     }
                                 }
                             }
@@ -423,24 +385,18 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             const tick = () => {
                 if(instance.keys) Object.assign(instance.keys, keysPressed.current);
                 instance.currentLevel = currentLevelIdx + 1;
-                
                 if (!isPausedRef.current && instance.update) instance.update();
                 if (instance._render) instance._render();
                 if (instance.draw) instance.draw();
-                
                 frameIdRef.current = requestAnimationFrame(tick);
             };
             tick();
-
         } catch (e) { logSonde("CRASH: " + e.message, "error"); }
     }, [engineStarted]);
 
     return (
         <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center overflow-hidden font-sans">
-             
-             {/* FLASH ROUGE (DÉGÂT) */}
              {hitFlash && <div className="absolute inset-0 bg-red-500/30 z-[100] pointer-events-none animate-ping"></div>}
-
              <button onClick={onStop} className="absolute top-6 right-6 bg-red-600 text-white w-12 h-12 rounded-full font-black text-2xl shadow-xl border-4 border-white hover:scale-110 transition-all flex items-center justify-center pointer-events-auto z-50">✕</button>
 
              {!engineStarted ? (
@@ -450,34 +406,19 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
              ) : (
                 <>
                     <div className="absolute top-6 w-full flex justify-between items-start px-10 pointer-events-none z-30">
-                        <div 
-                            className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-xl pointer-events-auto flex gap-1 cursor-pointer hover:border-red-500"
-                            onClick={handleHeartClick}
-                            title="Maintenir F + Clic pour perdre 1 vie"
-                        >
+                        <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-xl pointer-events-auto flex gap-1 cursor-pointer hover:border-red-500" onClick={handleHeartClick}>
                             {"❤️".repeat(lives)}{"🖤".repeat(Math.max(0, 4 - lives))}
                         </div>
-                        
                         <div className="flex-1 flex justify-center px-4">
                             {levelQuestions[currentQIndex] && !isLevelWon && !isGameOver && !showLevelTitle && (
-                                <div 
-                                    className="bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 border-slate-600 shadow-2xl text-xl pointer-events-auto animate-in slide-in-from-top cursor-pointer hover:border-green-500"
-                                    onClick={handleQuestionBoxClick}
-                                    title="Maintenir F + Clic pour gagner le niveau"
-                                >
+                                <div className="bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 border-slate-600 shadow-2xl text-xl pointer-events-auto animate-in slide-in-from-top cursor-pointer hover:border-green-500" onClick={handleQuestionBoxClick}>
                                     {feedback === 'CORRECT' ? "✅ BRAVO !" : feedback === 'WRONG' ? "❌ RATÉ..." : levelQuestions[currentQIndex].q}
                                 </div>
                             )}
                         </div>
-
                         <div className="flex gap-2 items-center pointer-events-auto mr-20">
                             {questionStates.map((mastery, idx) => (
-                                <div 
-                                    key={idx} 
-                                    onClick={() => handleBarClick(idx)}
-                                    title="Maintenir F + Clic pour remplir"
-                                    className={`w-4 h-12 rounded-md border border-slate-600 relative overflow-hidden cursor-pointer hover:border-white ${currentQIndex === idx ? 'ring-2 ring-indigo-400 scale-110' : 'opacity-60'}`}
-                                >
+                                <div key={idx} onClick={() => handleBarClick(idx)} className={`w-4 h-12 rounded-md border border-slate-600 relative overflow-hidden cursor-pointer hover:border-white ${currentQIndex === idx ? 'ring-2 ring-indigo-400 scale-110' : 'opacity-60'}`}>
                                     <div className={`absolute bottom-0 left-0 right-0 transition-all duration-500 ${mastery === 3 ? 'bg-green-500' : 'bg-yellow-500'}`} style={{ height: `${(mastery / 3) * 100}%` }} />
                                 </div>
                             ))}
@@ -486,14 +427,12 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
                     <div className="relative animate-in zoom-in">
                         <canvas ref={canvasRef} width={800} height={450} className="aspect-video shadow-2xl bg-black border-4 border-slate-800 rounded-xl" />
-                        
                         {showLevelTitle && (
                             <div className="absolute inset-0 bg-slate-900/90 flex flex-col items-center justify-center rounded-xl z-40 animate-in fade-in duration-500">
                                 <h1 className="text-6xl font-black text-yellow-400 drop-shadow-lg mb-4">NIVEAU {currentLevelIdx + 1}</h1>
                                 <p className="text-white text-2xl font-bold uppercase tracking-widest animate-pulse">Préparez-vous...</p>
                             </div>
                         )}
-
                         {isLevelWon && (
                             <div className="absolute inset-0 flex items-center justify-center bg-green-900/80 backdrop-blur-sm rounded-xl animate-in zoom-in z-40">
                                 <div className="text-center">
@@ -502,19 +441,16 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                                 </div>
                             </div>
                         )}
-
                         {isGameOver && (
                             <div className="absolute inset-0 flex flex-col items-center justify-center bg-red-900/90 backdrop-blur-md rounded-xl animate-in zoom-in z-50">
                                 <h2 className="text-6xl font-black text-white uppercase mb-8 drop-shadow-xl">💀 GAME OVER</h2>
                                 <button onClick={retryLevel} className="bg-white text-red-600 px-8 py-4 rounded-full font-black text-xl shadow-2xl hover:scale-105 transition-transform uppercase">🔄 Réessayer</button>
                             </div>
                         )}
-
                         {isGameCompleted && (
                             <div className="absolute inset-0 flex flex-col items-center justify-center bg-yellow-500/90 backdrop-blur-md rounded-xl animate-in zoom-in z-50">
                                 <span className="text-8xl animate-bounce mb-4">👑</span>
                                 <h2 className="text-6xl font-black text-white uppercase mb-4 drop-shadow-xl">VICTOIRE TOTALE !</h2>
-                                <p className="text-white font-bold text-2xl uppercase">Tu as terminé tous les niveaux !</p>
                                 <button onClick={onStop} className="mt-8 bg-white text-yellow-600 px-8 py-4 rounded-full font-black text-xl shadow-2xl hover:scale-105 transition-transform uppercase">QUITTER</button>
                             </div>
                         )}

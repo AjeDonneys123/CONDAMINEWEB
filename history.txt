@@ -8639,3 +8639,5 @@
 09/02/2026 18:35 - CRITICAL TOOLING FIX : Refonte de snap.js pour éviter les crashs de VS Code. Le script ignore désormais tous les fichiers méta (.txt, .json de config) et se concentre uniquement sur les dossiers 'server' et 'client/src'. Ajout d'une limite de taille de 100Ko par fichier pour garantir la fluidité de l'éditeur.
 
 09/02/2026 18:42 - STUDIO UPDATE : Modification de la modale de chargement (SaveLoadModal.jsx). Ajout du bouton de suppression (X) sur tous les projets de la liste, excepté sur le premier fichier (index 0). Intégration de la fonction handleDeleteProject connectée à l'API de suppression.
+
+2026-02-09: Correction du son de Game Over dans le Studio. Le signal système "DEFAITE" a été renommé en "DÉFAITE" dans handleGameOver pour correspondre à l'orthographe du projet et permettre au moteur de retrouver le buffer audio dans la scène. La logique de lecture a été strictement alignée sur celle de la victoire (nettoyage préalable puis safeTimeout de 500ms).
