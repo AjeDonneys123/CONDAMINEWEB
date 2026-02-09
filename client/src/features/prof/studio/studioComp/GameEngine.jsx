@@ -3,8 +3,9 @@ import React, { useState, useRef, useEffect } from 'react';
 import SoundExpert from './SoundExpert';
 
 /**
- * 🎮 MOTEUR "MOUVEMENT & SON" (V820 - FIX GETCONTEXT)
- * Sépare le clic (Audio Unlock) de l'init du jeu (Canvas Ready).
+ * 🎮 MOTEUR "MOUVEMENT & SON" (V825 - FIX SCOPE)
+ * Corrige "MiniGameBase is not defined" en injectant la classe de base
+ * dans le scope du script utilisateur via une Factory dédiée.
  */
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
     const canvasRef = useRef(null);
@@ -58,33 +59,28 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         };
     }, [project]);
 
-    // 2. DÉMARRAGE EN DEUX TEMPS
-    
-    // A. Interaction Utilisateur (Débloque Audio + Affiche Canvas)
+    // 2. DÉMARRAGE UTILISATEUR
     const handleStartGame = async () => {
-        // Déblocage Audio (Obligatoire sur clic)
         if (audioCtxRef.current?.state === 'suspended') {
             await audioCtxRef.current.resume();
-            logSonde("🔊 Audio Context Déverrouillé", "success");
+            logSonde("🔊 Audio Déverrouillé", "success");
         }
-        // Affiche le canvas (ce qui va déclencher le useEffect ci-dessous)
         setEngineStarted(true);
     };
 
-    // B. Initialisation Moteur (Une fois le Canvas monté dans le DOM)
+    // 3. INITIALISATION MOTEUR (Quand Canvas Prêt)
     useEffect(() => {
         if (!engineStarted || !canvasRef.current) return;
 
         try {
             const canvas = canvasRef.current;
             const ctx = canvas.getContext('2d');
-            
-            if (!ctx) throw new Error("Impossible de récupérer le contexte 2D");
+            if (!ctx) throw new Error("Contexte 2D introuvable");
 
-            logSonde("🎮 Démarrage Moteur...", "info");
+            logSonde("🎮 Compilation...", "info");
 
-            // --- FACTORY DU JEU ---
-            const Factory = new Function('params', `
+            // A. GÉNÉRATION DE LA CLASSE DE BASE (EXOSQUELETTE)
+            const BaseFactory = new Function('params', `
                 const { audioBuffers, audioCtx, logSonde, project, sceneIdx, imageAssets, resolveUrl, canvas, ctx } = params;
                 
                 class ActorProxy {
@@ -103,11 +99,13 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     }
                 }
 
-                return class MiniGame {
+                return class MiniGameBase {
                     constructor() {
                         this.canvas = canvas; this.ctx = ctx; this.keys = {};
                         const s = project.scenes[sceneIdx];
+                        // Injection automatique des acteurs (this.HEROS, etc.)
                         if(s && s.actors) s.actors.forEach(a => { this[a.name.toUpperCase()] = new ActorProxy(a, this); });
+                        
                         document.onkeydown = e => this.keys[e.code] = true;
                         document.onkeyup = e => this.keys[e.code] = false;
                     }
@@ -133,16 +131,17 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
                     _render() {
                         const s = project.scenes[sceneIdx];
+                        // Fond de sécurité
                         ctx.fillStyle = "#0f172a"; ctx.fillRect(0,0,canvas.width, canvas.height);
                         
-                        // Background
+                        // Background Image
                         const bd = s?.backdrops?.[s.currentBackdropIdx || 0];
                         if(bd) {
                             const img = imageAssets.get(resolveUrl(bd.url));
                             if(img) ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
                         }
 
-                        // Acteurs
+                        // Actors
                         for(let key in this) {
                             const p = this[key];
                             if(p instanceof ActorProxy && p.visible) {
@@ -156,7 +155,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                                     if(spr) {
                                         const xPx = (p.x/100)*canvas.width; const yPx = (p.y/100)*canvas.height; let sz = 150*p.scale;
                                         ctx.save(); ctx.translate(xPx, yPx);
-                                        // Rotation basique
                                         if (aData.direction) ctx.rotate(aData.direction * Math.PI / 180);
                                         ctx.drawImage(spr, -sz/2, -sz/2, sz, sz); ctx.restore();
                                     }
@@ -167,32 +165,37 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 }
             `);
 
-            const GameClass = Factory({ 
+            // Création de la classe Parent
+            const MiniGameBase = BaseFactory({ 
                 audioBuffers: audioBuffersRef.current, audioCtx: audioCtxRef.current, 
                 imageAssets: imageAssetsRef.current, resolveUrl, logSonde, project, sceneIdx: activeSceneIdx, canvas, ctx
             });
 
-            const instance = new GameClass();
+            // B. COMPILATION DU CODE UTILISATEUR
+            // On injecte MiniGameBase comme argument pour que 'extends MiniGameBase' fonctionne
+            const UserCodeFactory = new Function('MiniGameBase', `
+                ${code}
+                return MiniGame;
+            `);
+
+            const UserGameClass = UserCodeFactory(MiniGameBase);
+            const instance = new UserGameClass();
             gameInstanceRef.current = instance;
 
-            // Injection Code Utilisateur
-            const userScript = new Function('game', `with(game) { ${code} }`);
-            userScript(instance);
-
+            // C. LANCEMENT
             if (instance.start) instance.start();
-            instance.playGlobal("DÉPART"); // Test Sonore
-
-            // Boucle de rendu
+            
+            // Boucle
             const tick = () => {
                 if (instance.update) instance.update();
-                instance._render();
-                if (instance.draw) instance.draw();
+                if (instance._render) instance._render(); // Appel de la méthode interne du parent
+                if (instance.draw) instance.draw();       // HUD utilisateur par dessus
                 frameIdRef.current = requestAnimationFrame(tick);
             };
             tick();
 
         } catch (e) {
-            logSonde("💥 CRASH: " + e.message, "error");
+            logSonde("💥 ERREUR CODE: " + e.message, "error");
             console.error(e);
         }
     }, [engineStarted]);
