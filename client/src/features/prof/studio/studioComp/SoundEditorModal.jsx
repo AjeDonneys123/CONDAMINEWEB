@@ -28,7 +28,7 @@ export default function SoundEditorModal({ soundUrl, soundName, onSave, onClose,
             }
             
             const fullUrl = resolveUrl(soundUrl);
-            setDebugInfo(`Chargement de: ${fullUrl.slice(-20)}...`);
+            setDebugInfo(`Chargement...`);
 
             if (!audioCtxRef.current) {
                 audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
@@ -41,28 +41,20 @@ export default function SoundEditorModal({ soundUrl, soundName, onSave, onClose,
                 setHistory([result]);
                 setDebugInfo(`AUDIO OK: ${result.duration.toFixed(2)}s`);
             } else {
-                setDebugInfo("ÉCHEC: Buffer vide ou format invalide.");
+                setDebugInfo("ÉCHEC: Fichier invalide.");
             }
             setIsProcessing(false);
         }
         load();
-        return () => { if(sourceRef.current) sourceRef.current.stop(); };
+        return () => { if(sourceRef.current) try{sourceRef.current.stop()}catch(e){} };
     }, [soundUrl]);
 
-    // 2. OBSERVATEUR DE TAILLE (FIX VAGUE INVISIBLE)
+    // 2. DESSIN OPTIMISÉ (TURBO WAVE)
     useEffect(() => {
         if (!canvasRef.current || !buffer) return;
-
-        // On redessine dès que la taille change (ex: fin d'animation d'ouverture)
-        const resizeObserver = new ResizeObserver(() => {
-            requestAnimationFrame(drawWaveform);
-        });
-        
+        const resizeObserver = new ResizeObserver(() => requestAnimationFrame(drawWaveform));
         resizeObserver.observe(canvasRef.current);
-        
-        // Premier dessin forcé
         drawWaveform();
-
         return () => resizeObserver.disconnect();
     }, [buffer, trimStart, trimEnd]);
 
@@ -70,27 +62,22 @@ export default function SoundEditorModal({ soundUrl, soundName, onSave, onClose,
         const canvas = canvasRef.current;
         if (!canvas || !buffer) return;
 
-        // 1. Récupérer la taille réelle du conteneur
-        // On remonte au parent si le canvas est écrasé à 0
-        const parent = canvas.parentElement;
-        const width = parent.clientWidth || 600;
-        const height = parent.clientHeight || 200;
+        const rect = canvas.getBoundingClientRect();
+        if (rect.width === 0) return;
 
-        if (width === 0 || height === 0) return;
-
-        // 2. Adapter la résolution (High DPI)
+        // Configuration
         const dpr = window.devicePixelRatio || 1;
-        canvas.width = width * dpr;
-        canvas.height = height * dpr;
-        
-        // Pour le CSS (taille affichée)
-        canvas.style.width = `${width}px`;
-        canvas.style.height = `${height}px`;
+        canvas.width = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+        canvas.style.width = `${rect.width}px`;
+        canvas.style.height = `${rect.height}px`;
 
         const ctx = canvas.getContext('2d');
         ctx.scale(dpr, dpr);
-
-        // 3. DESSIN
+        const width = rect.width;
+        const height = rect.height;
+        
+        // Fond
         ctx.fillStyle = '#fdf4ff'; 
         ctx.fillRect(0, 0, width, height);
 
@@ -98,55 +85,59 @@ export default function SoundEditorModal({ soundUrl, soundName, onSave, onClose,
         const step = Math.ceil(data.length / width);
         const amp = height / 2;
 
-        ctx.fillStyle = '#7e22ce'; // Violet foncé (haute visibilité)
-        ctx.beginPath();
+        ctx.fillStyle = '#a855f7'; // Violet
         
-        let hasSignal = false;
+        // 🚀 OPTIMISATION MAJEURE : SKIP STEP
+        // Au lieu de lire tous les points, on saute des échantillons pour aller plus vite.
+        // Plus le fichier est long, plus on saute.
+        const skip = Math.max(1, Math.floor(step / 10)); 
 
         for (let i = 0; i < width; i++) {
             let min = 1.0;
             let max = -1.0;
-            for (let j = 0; j < step; j++) {
+            
+            // Boucle interne optimisée
+            for (let j = 0; j < step; j += skip) {
                 const idx = (i * step) + j;
                 if (idx < data.length) {
                     const datum = data[idx];
-                    if (datum !== 0) hasSignal = true;
                     if (datum < min) min = datum;
                     if (datum > max) max = datum;
                 }
             }
+            
+            // Dessin
             const y = (1 + min) * amp;
             const h = Math.max(1, (max - min) * amp);
             ctx.fillRect(i, y, 1, h);
         }
 
-        // --- INFO DEBUG SUR L'ÉCRAN ---
-        if (!hasSignal) setDebugInfo("⚠️ SILENCE DÉTECTÉ (Amplitude 0)");
-        else setDebugInfo(`🎨 DESSINÉ: ${width}x${height}px`);
-
-        // Trim Zones
+        // Zones Trim
         const x1 = trimStart * width;
         const x2 = trimEnd * width;
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
         ctx.fillRect(0, 0, x1, height);
         ctx.fillRect(x2, 0, width - x2, height);
         
-        // Trim Lines
-        ctx.fillStyle = '#ef4444'; // Rouge pour bien voir les barres
+        ctx.fillStyle = '#ef4444';
         ctx.fillRect(x1, 0, 2, height);
         ctx.fillRect(x2 - 2, 0, 2, height);
     };
 
-    const playSound = async () => {
+    const playSound = () => {
+        // STOP
         if (isPlaying) {
-            if (sourceRef.current) sourceRef.current.stop();
+            if (sourceRef.current) try { sourceRef.current.stop(); } catch(e){}
             setIsPlaying(false);
             return;
         }
+
+        // PLAY
         if (!buffer || !audioCtxRef.current) return;
 
+        // 🚀 NON-BLOQUANT : On demande le resume mais on n'attend pas (Fire & Forget)
         if (audioCtxRef.current.state === 'suspended') {
-            await audioCtxRef.current.resume();
+            audioCtxRef.current.resume();
         }
         
         const source = audioCtxRef.current.createBufferSource();
@@ -155,7 +146,10 @@ export default function SoundEditorModal({ soundUrl, soundName, onSave, onClose,
 
         source.buffer = buffer;
         source.connect(audioCtxRef.current.destination);
+        
+        // Démarrage immédiat
         source.start(0, startSec, duration);
+        
         sourceRef.current = source;
         setIsPlaying(true);
         source.onended = () => setIsPlaying(false);
@@ -164,9 +158,10 @@ export default function SoundEditorModal({ soundUrl, soundName, onSave, onClose,
     const applyEffect = (effectName) => {
         if (!buffer) return;
         setIsProcessing(true);
+        // Timeout pour laisser l'UI afficher le loader avant de geler le thread
         setTimeout(() => {
             let newBuff = buffer;
-            if (SoundExpert[effectName.toLowerCase()] || effectName === 'TRIM' || effectName === 'FASTER' || effectName === 'SLOWER' || effectName === 'LOUDER' || effectName === 'SOFTER') {
+            if (SoundExpert[effectName.toLowerCase()] || effectName === 'TRIM' || ['FASTER','SLOWER','LOUDER','SOFTER','REVERSE','ROBOT'].includes(effectName)) {
                  if (effectName === 'TRIM') newBuff = SoundExpert.trim(buffer, trimStart, trimEnd);
                  else if (effectName === 'FASTER') newBuff = SoundExpert.changeSpeed(buffer, 1.25);
                  else if (effectName === 'SLOWER') newBuff = SoundExpert.changeSpeed(buffer, 0.8);
@@ -187,18 +182,14 @@ export default function SoundEditorModal({ soundUrl, soundName, onSave, onClose,
         if (!buffer) return;
         setIsProcessing(true);
         const wavBlob = SoundExpert.bufferToWav(buffer);
-        if (!wavBlob) {
-            alert("Erreur export WAV");
-            setIsProcessing(false);
-            return;
-        }
-
         const fd = new FormData();
         const finalName = name.endsWith('.wav') ? name : `${name}.wav`;
         fd.append('file', wavBlob, finalName);
+
         fetch('/api/studio/upload-asset', { method: 'POST', body: fd })
             .then(r => r.json())
             .then(data => { if (data.url) onSave(data.url, finalName); onClose(); })
+            .catch(() => alert("Erreur sauvegarde"))
             .finally(() => setIsProcessing(false));
     };
 
