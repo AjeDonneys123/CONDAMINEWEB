@@ -1037,3 +1037,5 @@
 08/02/2026 20:05 - STUDIO STARTUP DEBUG : Déploiement d'un test audio forcé au démarrage. Le script par défaut appelle désormais this.playGlobal("DÉPART") dans start(). Le GameEngine a été mis à jour pour logger le succès du chargement de chaque buffer audio individuellement. Correction de l'injection des sons de scène dans le périmètre de la classe MiniGameBase.
 
 08/02/2026 20:15 - STUDIO AUDIO SYNC FINAL : Rétablissement du déclenchement sonore. Implémentation d'un bouton de démarrage "CLIQUE POUR JOUER" qui débloque l'AudioContext et lance simultanément la méthode start() du script. Le son de DÉPART est désormais audible car déclenché après l'interaction utilisateur obligatoire.
+
+08/02/2026 21:10 - KERNEL REPAIR : Rétablissement du Proxy serveur (V74). Suppression du forçage Content-Type qui corrompait les binaires audio. STUDIO ENGINE : Éradication du "Silent Crash" JavaScript dans la boucle de rendu en utilisant des constructeurs d'images dynamiques sûrs. Synchronisation finale du bouton JOUER avec le moteur Web Audio.
