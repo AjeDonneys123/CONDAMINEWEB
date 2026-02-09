@@ -2111,3 +2111,9 @@
 08/02/2026 21:19 - STUDIO ENGINE V790 : Implémentation de la "Séquence de Lancement Audio". Pour garantir le son, le bouton JOUER déclenche d'abord le son de DÉPART seul. La boucle de jeu et les sprites ne sont activés qu'à la fin de ce son via l'événement onended. Cette méthode isole la phase critique de déverrouillage de l'AudioContext pour assurer une sortie sonore infaillible.
 
 08/02/2026 23:45 - STUDIO ENGINE V810 : Fusion réussie du son et du mouvement. Le moteur utilise désormais une boucle requestAnimationFrame qui appelle simultanément la méthode de rendu système et la méthode update() du script utilisateur. L'audio est déverrouillé au clic sur JOUER, permettant le déclenchement immédiat du son de DÉPART et des sons d'actions. L'écran noir est définitivement éliminé.
+
+08/02/2026 21:19 - STUDIO ENGINE V790 : Implémentation de la "Séquence de Lancement Audio". Pour garantir le son, le bouton JOUER déclenche d'abord le son de DÉPART seul. La boucle de jeu et les sprites ne sont activés qu'à la fin de ce son via l'événement onended. Cette méthode isole la phase critique de déverrouillage de l'AudioContext pour assurer une sortie sonore infaillible.
+
+08/02/2026 23:45 - STUDIO ENGINE V810 : Fusion réussie du son et du mouvement. Le moteur utilise désormais une boucle requestAnimationFrame qui appelle simultanément la méthode de rendu système et la méthode update() du script utilisateur. L'audio est déverrouillé au clic sur JOUER, permettant le déclenchement immédiat du son de DÉPART et des sons d'actions. L'écran noir est définitivement éliminé.
+
+08/02/2026 23:55 - STUDIO ENGINE V820 (FIX GETCONTEXT) : Résolution du crash "Cannot read properties of null (reading 'getContext')". Séparation stricte de l'initialisation : le clic utilisateur active `engineStarted=true` et débloque le son, puis un `useEffect` déclenché par `engineStarted` attend que `canvasRef.current` soit monté dans le DOM avant d'initialiser le moteur de jeu.

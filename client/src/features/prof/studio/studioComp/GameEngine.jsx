@@ -3,61 +3,87 @@ import React, { useState, useRef, useEffect } from 'react';
 import SoundExpert from './SoundExpert';
 
 /**
- * 🎮 MOTEUR "MOUVEMENT & SON" (V810)
- * Repart de la version "Son Pur" et ajoute la boucle de mouvement.
+ * 🎮 MOTEUR "MOUVEMENT & SON" (V820 - FIX GETCONTEXT)
+ * Sépare le clic (Audio Unlock) de l'init du jeu (Canvas Ready).
  */
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
     const canvasRef = useRef(null);
     const [engineStarted, setEngineStarted] = useState(false);
     const [debugLogs, setDebugLogs] = useState([]);
+    
+    // Références persistantes
     const audioCtxRef = useRef(null);
     const audioBuffersRef = useRef(new Map());
     const imageAssetsRef = useRef(new Map());
     const gameInstanceRef = useRef(null);
+    const frameIdRef = useRef(null);
 
     const logSonde = (msg, type = 'info') => {
         const id = Math.random();
         setDebugLogs(prev => [...prev, { id, text: msg, type }].slice(-6));
     };
 
-    // 1. CHARGEMENT INITIAL (Sons + Images)
+    // 1. PRÉ-CHARGEMENT DES RESSOURCES
     useEffect(() => {
-        logSonde("🛠️ Chargement des ressources...");
-        if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+        logSonde("🛠️ Chargement ressources...");
+        if (!audioCtxRef.current) {
+            audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+        }
         
         const scene = project.scenes?.[activeSceneIdx];
         if (!scene) return;
 
-        const imgUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url)))].filter(Boolean);
-        const sndUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url))))].filter(Boolean);
-
         // Images
+        const imgUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url)))].filter(Boolean);
         imgUrls.forEach(url => {
             const img = new Image(); img.crossOrigin = "anonymous";
             img.onload = () => imageAssetsRef.current.set(resolveUrl(url), img);
             img.src = resolveUrl(url);
         });
 
-        // Sons (Décodage)
+        // Sons
+        const sndUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url))))].filter(Boolean);
         sndUrls.forEach(url => {
             SoundExpert.decodeAudio(resolveUrl(url), audioCtxRef.current).then(buf => {
                 if (buf) {
                     audioBuffersRef.current.set(url, buf);
-                    logSonde("🎵 Son chargé: " + url.split('/').pop(), "success");
+                    logSonde("🎵 Son prêt: " + url.split('/').pop(), "success");
                 }
             });
         });
+
+        return () => {
+            if (frameIdRef.current) cancelAnimationFrame(frameIdRef.current);
+            if (gameInstanceRef.current && gameInstanceRef.current.stop) gameInstanceRef.current.stop();
+        };
     }, [project]);
 
-    // 2. LE BOUTON MAGIQUE (DÉBLOQUE TOUT)
+    // 2. DÉMARRAGE EN DEUX TEMPS
+    
+    // A. Interaction Utilisateur (Débloque Audio + Affiche Canvas)
     const handleStartGame = async () => {
-        if (audioCtxRef.current?.state === 'suspended') await audioCtxRef.current.resume();
-        
+        // Déblocage Audio (Obligatoire sur clic)
+        if (audioCtxRef.current?.state === 'suspended') {
+            await audioCtxRef.current.resume();
+            logSonde("🔊 Audio Context Déverrouillé", "success");
+        }
+        // Affiche le canvas (ce qui va déclencher le useEffect ci-dessous)
+        setEngineStarted(true);
+    };
+
+    // B. Initialisation Moteur (Une fois le Canvas monté dans le DOM)
+    useEffect(() => {
+        if (!engineStarted || !canvasRef.current) return;
+
         try {
             const canvas = canvasRef.current;
             const ctx = canvas.getContext('2d');
+            
+            if (!ctx) throw new Error("Impossible de récupérer le contexte 2D");
 
-            // USINE À JEU (V810)
+            logSonde("🎮 Démarrage Moteur...", "info");
+
+            // --- FACTORY DU JEU ---
             const Factory = new Function('params', `
                 const { audioBuffers, audioCtx, logSonde, project, sceneIdx, imageAssets, resolveUrl, canvas, ctx } = params;
                 
@@ -97,7 +123,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                         if(buffer && audioCtx) {
                             const source = audioCtx.createBufferSource();
                             source.buffer = buffer; source.connect(audioCtx.destination); source.start(0);
-                            logSonde("🔊 SON !", "success");
                         }
                     }
 
@@ -109,11 +134,15 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     _render() {
                         const s = project.scenes[sceneIdx];
                         ctx.fillStyle = "#0f172a"; ctx.fillRect(0,0,canvas.width, canvas.height);
+                        
+                        // Background
                         const bd = s?.backdrops?.[s.currentBackdropIdx || 0];
                         if(bd) {
                             const img = imageAssets.get(resolveUrl(bd.url));
                             if(img) ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
                         }
+
+                        // Acteurs
                         for(let key in this) {
                             const p = this[key];
                             if(p instanceof ActorProxy && p.visible) {
@@ -127,6 +156,8 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                                     if(spr) {
                                         const xPx = (p.x/100)*canvas.width; const yPx = (p.y/100)*canvas.height; let sz = 150*p.scale;
                                         ctx.save(); ctx.translate(xPx, yPx);
+                                        // Rotation basique
+                                        if (aData.direction) ctx.rotate(aData.direction * Math.PI / 180);
                                         ctx.drawImage(spr, -sz/2, -sz/2, sz, sz); ctx.restore();
                                     }
                                 }
@@ -144,25 +175,27 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             const instance = new GameClass();
             gameInstanceRef.current = instance;
 
-            // INJECTION DU CODE UTILISATEUR (ZOMBIE, ETC)
+            // Injection Code Utilisateur
             const userScript = new Function('game', `with(game) { ${code} }`);
-            const scriptInstance = userScript(instance);
+            userScript(instance);
 
             if (instance.start) instance.start();
-            instance.playGlobal("DÉPART");
-            setEngineStarted(true);
+            instance.playGlobal("DÉPART"); // Test Sonore
 
-            // BOUCLE DE JEU (MOUVEMENT + DESSIN)
+            // Boucle de rendu
             const tick = () => {
                 if (instance.update) instance.update();
                 instance._render();
                 if (instance.draw) instance.draw();
-                requestAnimationFrame(tick);
+                frameIdRef.current = requestAnimationFrame(tick);
             };
             tick();
 
-        } catch (e) { logSonde("💥 Erreur: " + e.message, "error"); }
-    };
+        } catch (e) {
+            logSonde("💥 CRASH: " + e.message, "error");
+            console.error(e);
+        }
+    }, [engineStarted]);
 
     return (
         <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center overflow-hidden">
@@ -179,9 +212,9 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     🚀 JOUER
                  </button>
              ) : (
-                <div className="relative">
+                <div className="relative animate-in zoom-in">
                     <canvas ref={canvasRef} width={800} height={450} className="max-w-full shadow-2xl bg-black rounded-lg border-4 border-slate-800" />
-                    <button onClick={onStop} className="absolute -top-12 -right-12 w-10 h-10 bg-red-600 text-white rounded-full font-black">✕</button>
+                    <button onClick={onStop} className="absolute -top-12 -right-12 w-10 h-10 bg-red-600 text-white rounded-full font-black hover:bg-red-500 cursor-pointer">✕</button>
                 </div>
              )}
         </div>
