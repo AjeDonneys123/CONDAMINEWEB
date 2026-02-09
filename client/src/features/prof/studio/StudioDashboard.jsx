@@ -21,8 +21,10 @@ function resolveUrl(url) {
     return `/api/proxy/${id}`;
 }
 
-// 🧟 JEU ZOMBIE V5 : MACHINE À ÉTATS (ANTI-CRASH)
-const ZOMBIE_GAME_CODE = `// 🧟 ZOMBIE V5
+// 🧟 ZOMBIE V6 : NETTOYAGE UI & SON
+// Suppression de la bannière niveau interne et du son départ (gérés par le moteur)
+
+const ZOMBIE_GAME_CODE = `// 🧟 ZOMBIE V6
 // Logique stricte : MARCHE -> COGNE -> RESET
 
 class MiniGame extends MiniGameBase {
@@ -39,14 +41,12 @@ class MiniGame extends MiniGameBase {
         this.heroState = "IDLE";
         this.heroTimer = 0;
         
-        this.levelTimer = 180; 
         this.isStopped = false;
     }
 
     start() { 
-        console.log("🚀 START V5");
+        console.log("🚀 START V6");
         this.isStopped = false;
-        this.levelTimer = 180;
         
         if(this.HEROS) { 
             this.HEROS.x = 15; 
@@ -55,7 +55,6 @@ class MiniGame extends MiniGameBase {
         } 
         
         this.resetZombie();
-        this.playGlobal("DÉPART");
     }
 
     resetZombie() {
@@ -68,7 +67,7 @@ class MiniGame extends MiniGameBase {
     }
 
     onResult(isCorrect) {
-        if (this.levelTimer > 0 || this.heroState === "HIT") return;
+        if (this.heroState === "HIT") return;
 
         if (isCorrect && this.HEROS) {
             this.HEROS.play("TIRER");
@@ -81,13 +80,7 @@ class MiniGame extends MiniGameBase {
     update() {
         if (this.isStopped) return;
 
-        // --- 1. GESTION BANNIÈRE ---
-        if (this.levelTimer > 0) {
-            this.levelTimer--;
-            return;
-        }
-
-        // --- 2. GESTION HÉROS ---
+        // --- 1. GESTION HÉROS ---
         if (this.heroState === "SHOOT") {
             this.heroTimer--;
             if (this.heroTimer <= 0) {
@@ -103,7 +96,7 @@ class MiniGame extends MiniGameBase {
             }
         }
 
-        // --- 3. GESTION ZOMBIE (MACHINE À ÉTATS) ---
+        // --- 2. GESTION ZOMBIE (MACHINE À ÉTATS) ---
         
         // ETAT 1 : LE ZOMBIE MARCHE
         if (this.zombieState === "WALKING") {
@@ -160,7 +153,7 @@ class MiniGame extends MiniGameBase {
             }
         }
 
-        // --- 4. PROJECTILES ---
+        // --- 3. PROJECTILES ---
         for (let i = this.projectiles.length - 1; i >= 0; i--) { 
             let p = this.projectiles[i]; 
             p.x += 3;
@@ -193,21 +186,6 @@ class MiniGame extends MiniGameBase {
             ctx.arc((p.x/100)*cw, (p.y/100)*ch, 10, 0, Math.PI*2); 
             ctx.fill(); 
         });
-
-        if (this.levelTimer > 0) {
-            ctx.save();
-            ctx.fillStyle = "rgba(15, 23, 42, 0.9)";
-            ctx.fillRect(0, 0, cw, ch);
-            ctx.fillStyle = "#fbbf24";
-            ctx.font = "900 60px Arial";
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            ctx.fillText("NIVEAU 1", cw/2, ch/2);
-            ctx.fillStyle = "#fbbf24";
-            const barWidth = 200 * (this.levelTimer / 180);
-            ctx.fillRect(cw/2 - 100, ch/2 + 60, barWidth, 4);
-            ctx.restore();
-        }
     }
 }
 `;
@@ -245,7 +223,7 @@ export default function StudioDashboard({ user }) {
     const [selectedGlobalSoundIdx, setSelectedGlobalSoundIdx] = useState(0);
     const [leftTab, setLeftTab] = useState('actions');
     
-    // ⚠️ CODE FORCÉ V5
+    // ⚠️ CODE FORCÉ V6 (PROPRE)
     const [code, setCode] = useState(ZOMBIE_GAME_CODE);
     
     const [isPlaying, setIsPlaying] = useState(false);
@@ -286,8 +264,8 @@ export default function StudioDashboard({ user }) {
                 if (!p.scenes[0].globalSounds) p.scenes[0].globalSounds = [];
             }
             setProject(p);
-            setCode(ZOMBIE_GAME_CODE); // FORCE V5
-            console.log("🧟 CODE V5 ACTIVÉ");
+            setCode(ZOMBIE_GAME_CODE); // FORCE V6
+            console.log("🧟 CODE V6 ACTIVÉ");
             
             if (p.scenes?.[0]?.actors?.[0]) setSelectedActorId(p.scenes[0].actors[0].id);
         }
@@ -310,7 +288,7 @@ export default function StudioDashboard({ user }) {
     const handleOpenSave = () => { setModalMode('SAVE'); setShowSaveLoadModal(true); };
     const handleOpenLoad = () => { setModalMode('LOAD'); setShowSaveLoadModal(true); };
     
-    // NOUVEAU = RETOUR A LA DEMO ZOMBIE V5
+    // RETOUR A LA DEMO ZOMBIE V6
     const handleCreateNew = () => { 
         setProject(DEMO_PROJECT); 
         setCode(ZOMBIE_GAME_CODE); 
