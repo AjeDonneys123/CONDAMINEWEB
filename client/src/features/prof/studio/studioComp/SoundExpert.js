@@ -1,50 +1,61 @@
 /**
- * 🎛️ SOUND EXPERT V520 (SAFE MODE)
- * Correction Crash: Retourne strictement null en cas d'erreur.
+ * 🎛️ SOUND EXPERT V550 (RAM CACHE)
+ * Stocke les sons en mémoire pour une lecture instantanée (0ms latence).
  */
+
+// MÉMOIRE VIVE AUDIO (Global au module)
+const audioCache = new Map();
+
 const SoundExpert = {
-    // 1. DÉCODAGE SÉCURISÉ
+    // 1. DÉCODAGE AVEC CACHE
     decodeAudio: async (url, audioCtx) => {
         if (!audioCtx) return null;
+        
+        // A. SI DÉJÀ EN MÉMOIRE, ON RENVOIE DIRECTEMENT
+        if (audioCache.has(url)) {
+            // console.log("⚡ [SoundExpert] Cache Hit:", url);
+            return audioCache.get(url);
+        }
+
         try {
-            console.log("📥 [SoundExpert] Téléchargement:", url);
+            console.log("📥 [SoundExpert] Téléchargement & Décodage:", url);
             const response = await fetch(url, { mode: 'cors' });
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             
             const arrayBuffer = await response.arrayBuffer();
-            if (arrayBuffer.byteLength < 100) throw new Error("Fichier trop petit (<100 bytes)");
+            if (arrayBuffer.byteLength < 100) throw new Error("Fichier trop petit");
 
-            // Copie de sécurité
             const tempBuffer = arrayBuffer.slice(0);
             
             return await new Promise((resolve, reject) => {
                 audioCtx.decodeAudioData(tempBuffer, 
-                    (decoded) => resolve(decoded),
+                    (decoded) => {
+                        // B. ON STOCKE EN MÉMOIRE POUR LA PROCHAINE FOIS
+                        audioCache.set(url, decoded);
+                        resolve(decoded);
+                    },
                     (err) => {
                         console.error("❌ Decode Error:", err);
-                        resolve(null); // On résout en null pour ne pas crasher
+                        resolve(null);
                     }
                 );
             });
             
         } catch (e) {
-            console.error("❌ [SoundExpert] Erreur Fetch/Decode:", e.message);
-            return null; // RETOURNE NULL, PAS UN OBJET ERREUR !
+            console.error("❌ [SoundExpert] Erreur:", e.message);
+            return null;
         }
     },
 
-    // 2. OUTILS DSP (Protections ajoutées)
+    // --- OUTILS DSP (Inchangés) ---
     trim: (buffer, startPct, endPct) => {
-        if (!buffer || !buffer.getChannelData) return buffer; // Sécurité
-
+        if (!buffer || !buffer.getChannelData) return buffer;
         const start = Math.floor(startPct * buffer.length);
         const end = Math.floor(endPct * buffer.length);
         const newLen = end - start;
         if (newLen <= 0) return buffer;
-
         const newCtx = new (window.AudioContext || window.webkitAudioContext)();
         const newBuffer = newCtx.createBuffer(buffer.numberOfChannels, newLen, buffer.sampleRate);
-
         for (let i = 0; i < buffer.numberOfChannels; i++) {
             const channel = buffer.getChannelData(i);
             const newChannel = newBuffer.getChannelData(i);
@@ -55,7 +66,6 @@ const SoundExpert = {
     
     changeSpeed: (buffer, rate) => {
         if (!buffer || !buffer.getChannelData) return buffer;
-
         const newLen = Math.floor(buffer.length / rate);
         const newCtx = new (window.AudioContext || window.webkitAudioContext)();
         const newBuffer = newCtx.createBuffer(buffer.numberOfChannels, newLen, buffer.sampleRate);
