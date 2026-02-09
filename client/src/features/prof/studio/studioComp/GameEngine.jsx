@@ -4,9 +4,10 @@ import SoundExpert from './SoundExpert';
 import { api } from '../../../../services/api';
 
 /**
- * 🎮 MOTEUR STUDIO V950 (CHEAT EDITION)
- * - Correction Audio Robustesse
+ * 🎮 MOTEUR STUDIO V951 (STABILITY FIX)
+ * - Réintégration de retryLevel
  * - Codes de Triche (Touche F)
+ * - Protection Audio
  */
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
     const canvasRef = useRef(null);
@@ -122,10 +123,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         setIsGameOver(true);
         isPausedRef.current = true;
         logSonde("💀 GAME OVER", "error");
-        
-        // Sécurité Audio : On réveille le contexte avant de jouer
         if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
-        
         if (gameInstanceRef.current?.playGlobal) {
             gameInstanceRef.current.playGlobal("DEFAITE");
             logSonde("🔊 TENTATIVE SON: DEFAITE", "info");
@@ -134,15 +132,19 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         }
     };
 
+    // ✅ FONCTION RÉTABLIE
+    const retryLevel = () => {
+        setLives(4);
+        initLevel(currentLevelIdx, allLevels);
+    };
+
     const nextLevel = () => {
         const nextIdx = currentLevelIdx + 1;
         if (allLevels[nextIdx]) {
             initLevel(nextIdx, allLevels);
         } else {
             setIsGameCompleted(true);
-            // Sécurité Audio
             if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
-            
             if (gameInstanceRef.current?.playGlobal) {
                 gameInstanceRef.current.playGlobal("VICTOIRE");
                 logSonde("🔊 TENTATIVE SON: VICTOIRE", "success");
@@ -168,13 +170,12 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             const newStates = [...questionStates];
             newStates[idx] = 3;
             setQuestionStates(newStates);
-            // On vérifie si tout est fini pour potentiellement gagner
             const available = newStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
             if(available.length === 0) {
                 setIsLevelWon(true);
                 isPausedRef.current = true;
                 if (gameInstanceRef.current?.onLevelWin) gameInstanceRef.current.onLevelWin();
-                setTimeout(nextLevel, 2000); // Raccourci pour test rapide
+                setTimeout(nextLevel, 2000);
             }
         }
     };
