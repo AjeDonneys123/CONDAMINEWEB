@@ -146,7 +146,6 @@ export default function StudioLeftPanel({
 
         if (!scene.globalSounds) scene.globalSounds = [];
         
-        // Exactement la même logique que handleAddAction, mais sur globalSounds
         scene.globalSounds.push({ 
             name: name.toUpperCase(), 
             frames: [], 
@@ -154,6 +153,7 @@ export default function StudioLeftPanel({
             speed: 100 
         }); 
         
+        // On sauvegarde directement le projet complet
         saveProject(next);
     };
 
@@ -263,7 +263,6 @@ export default function StudioLeftPanel({
                                         onClick={(e) => { e.stopPropagation(); handleDeleteSound(sIdx); }}
                                         title="Supprimer le son"
                                     >✕</button>
-                                    
                                 </div>
                             ))}
                             <div className="border-2 border-dashed border-slate-200 rounded-lg h-16 flex items-center justify-center text-slate-300 text-[8px] font-bold">
