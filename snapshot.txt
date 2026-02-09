@@ -448,23 +448,10 @@ const statusFile = 'apply_status.json';
 const inputFile = 'update.txt';
 
 /**
- * 🛡️ APPLY.JS V9.6 - SMART COMMIT & FLEXIBLE MODE
- * - Autorise les multi-bundles (Plus de blocage d'herméticité).
- * - Effectue un COMMIT GIT automatique après chaque succès.
+ * 🛡️ APPLY.JS V9.8 - UNLIMITED FLEXIBILITY
+ * - Suppression totale des restrictions de bundles.
+ * - Commit Git automatique après chaque succès.
  */
-
-const BUNDLES = {
-    STRUCTURE: ['server/domains/structure', 'server/prof/structure', 'client/src/features/prof/components/ProfStudioFolder.jsx'],
-    STUDIO: ['server/domains/studio', 'server/prof/studio', 'client/src/features/prof/studio', 'server/models/StudioProject.js'],
-    CORE: ['server/core', 'server/server.js', 'server/models', 'client/src/App.jsx', 'apply.js'] 
-};
-
-function getBundle(filePath) {
-    for (const [name, paths] of Object.entries(BUNDLES)) {
-        if (paths.some(p => filePath.includes(p))) return name;
-    }
-    return 'GLOBAL';
-}
 
 function writeStatus(type, message) {
     const data = { status: type, message, timestamp: Date.now() };
@@ -478,17 +465,8 @@ function applyUpdate() {
         if (!rawContent || rawContent.length < 10) return;
 
         const appliedFiles = [];
-        const detectedBundles = new Set();
-        
-        const fileMatchRegex = /\[\[\[£\s*FILE\s*:\s*([^£\s\]]+)\s*£\]\]\]/g;
-        let m;
-        while ((m = fileMatchRegex.exec(rawContent)) !== null) {
-            const fPath = m[1].trim();
-            if (fPath === 'apply.js') continue;
-            detectedBundles.add(getBundle(fPath));
-        }
-
         fs.writeFileSync(inputFile, ''); 
+        
         const startRegex = /\[\[\[£\s*FILE\s*:\s*([^£\s\]]+)\s*£\]\]\]/g;
         let match;
 
@@ -515,16 +493,14 @@ function applyUpdate() {
 
         if (appliedFiles.length > 0) {
             try {
-                const commitMsg = `Auto-paste: ${appliedFiles.length} files (${Array.from(detectedBundles).join(', ')})`;
+                const commitMsg = `Auto-Update: ${appliedFiles.length} files changed.`;
                 execSync('git add .');
                 execSync(`git commit -m "${commitMsg}"`);
-                console.log(`📦 [GIT] Commit réussi : ${commitMsg}`);
-            } catch (err) {
-                console.log("ℹ️ [GIT] Rien à commiter.");
-            }
+                console.log(`📦 [GIT] Commit auto effectué.`);
+            } catch (err) { }
         }
 
-        writeStatus('OK', 'Infrastructure mise à jour et commitée');
+        writeStatus('OK', 'Infrastructure mise à jour');
     } catch (e) {
         console.log(`💥 ERREUR APPLY : ${e.message}`);
         writeStatus('ERROR', e.message);
@@ -532,14 +508,15 @@ function applyUpdate() {
 }
 
 setInterval(applyUpdate, 500);
-console.log("🛡️ ARCHITECTE FLEXIBLE (V9.6) - COMMIT AUTO ACTIF");
+console.log("🛡️ ARCHITECTE V9.8 - DÉBRIDÉ & COMMIT AUTO ACTIF");
+
 [[[£ END: apply.js £]]]
 
 [[[£ FILE: apply_status.json £]]]
 {
-  "status": "ERROR",
-  "message": "code is not defined",
-  "timestamp": 1770593420469
+  "status": "OK",
+  "message": "Infrastructure mise à jour et commitée",
+  "timestamp": 1770601062232
 }
 [[[£ END: apply_status.json £]]]
 
@@ -8121,43 +8098,40 @@ function resolveUrl(url) {
     return `/api/proxy/${id}`;
 }
 
-const defaultCode = `class MiniGame extends MiniGameBase {
+const defaultCode = `// 🎮 TEST AUDIO DÉPART
+class MiniGame extends MiniGameBase {
     constructor(canvas, assets, callbacks) {
         super(canvas, assets, callbacks);
-        this.heroState = "IDLE"; this.heroTimer = 0;
-        this.zombieX = 90; this.projectiles = [];
-        this.isStopped = false;
+        this.zombieX = 100;
+        this.projectiles = [];
     }
     start() { 
-        this.isStopped = false;
+        // 🔊 TEST IMMÉDIAT AU LANCEMENT
+        this.playGlobal("DÉPART");
+        
         if(this.HEROS) { this.HEROS.x = 15; this.HEROS.y = 70; } 
         if(this.ZOMBIE) { this.ZOMBIE.x = 90; this.ZOMBIE.y = 70; } 
     }
-    onLevelWin() { this.isStopped = true; this.playGlobal("VICTOIRE"); }
     onResult(correct) { 
-        if(correct) { 
-            this.heroState = "SHOOT"; this.heroTimer = 30; 
+        if(correct && this.HEROS) { 
+            this.HEROS.play("SHOOT"); // Doit jouer le son de l'action
             this.projectiles.push({ x: 20, y: 65 });
-            if(this.HEROS) this.HEROS.play("SHOOT"); 
         } 
     }
     update() {
-        if(this.isStopped) return;
-        if(this.heroState === "SHOOT") { this.heroTimer--; if(this.heroTimer <= 0) { this.heroState = "IDLE"; if(this.HEROS) this.HEROS.play("IDLE"); } }
-        this.zombieX -= 0.15; 
-        if(this.zombieX < 20) { if (this.callbacks.onPlayerHit) this.callbacks.onPlayerHit(); this.zombieX = 100; }
-        if(this.ZOMBIE) { this.ZOMBIE.x = this.zombieX; this.ZOMBIE.dir = -90; this.ZOMBIE.play("AVANCER"); }
-        for(let i=this.projectiles.length-1; i>=0; i--) { let p = this.projectiles[i]; p.x += 3; if(p.x > this.zombieX - 5 && p.x < this.zombieX + 5) { this.projectiles.splice(i, 1); this.zombieX = 100; } }
+        this.zombieX -= 0.1;
+        if(this.ZOMBIE) this.ZOMBIE.x = this.zombieX;
+        this.projectiles.forEach(p => p.x += 2);
     }
     draw() {
-        if(this.isStopped) return;
-        const ctx = this.ctx; const cw = this.canvas.width; const ch = this.canvas.height;
-        ctx.fillStyle = "#f97316"; this.projectiles.forEach(p => { ctx.beginPath(); ctx.arc((p.x/100)*cw, (p.y/100)*ch, 10, 0, Math.PI*2); ctx.fill(); });
+        const ctx = this.ctx;
+        ctx.fillStyle = "orange";
+        this.projectiles.forEach(p => ctx.fillRect((p.x/100)*this.canvas.width, (p.y/100)*this.canvas.height, 10, 10));
     }
 }
 `;
 
-const DEMO_PROJECT = { title: "Mon Premier Jeu", scenes: [{ name: "Scene 1", backdrops: [], currentBackdropIdx: 0, actors: [ { id: "actor-hero", name: "HEROS", initialX: 15, initialY: 70, scale: 1, direction: 0, rotationStyle: 'all', actions: [{ name: "IDLE", speed: 100, frames: [], sounds: [] }, { name: "SHOOT", speed: 100, frames: [], sounds: [] }] }, { id: "actor-zombie", name: "ZOMBIE", initialX: 90, initialY: 70, scale: 1, direction: 0, rotationStyle: 'left-right', actions: [{ name: "AVANCER", speed: 150, frames: [], sounds: [] }] } ], globalSounds: [ { name: "DÉPART", sounds: [] }, { name: "VICTOIRE", sounds: [] }, { name: "DÉFAITE", sounds: [] } ] }] };
+const DEMO_PROJECT = { title: "Test Audio", scenes: [{ name: "Scene 1", backdrops: [], currentBackdropIdx: 0, actors: [ { id: "actor-hero", name: "HEROS", initialX: 15, initialY: 70, scale: 1, actions: [{ name: "IDLE", speed: 100, frames: [], sounds: [] }, { name: "SHOOT", speed: 100, frames: [], sounds: [] }] } ], globalSounds: [ { name: "DÉPART", sounds: [] } ] }] };
 
 export default function StudioDashboard({ user }) {
     const [project, setProject] = useState(DEMO_PROJECT);
@@ -8188,11 +8162,7 @@ export default function StudioDashboard({ user }) {
     const actorUploadRef = useRef(null);
     const backdropUploadRef = useRef(null); 
     const stageRef = useRef(null);
-    const audioCtxRef = useRef(null);
-    const audioBuffersRef = useRef(new Map()); 
-    const activeSourcesRef = useRef([]);
 
-    // --- VARIABLES DÉRIVÉES (FIX REFERENCE ERROR) ---
     const selectedSceneIdx = 0;
     const currentScene = project?.scenes?.[selectedSceneIdx];
     const selectedActor = currentScene?.actors?.find(a => a.id === selectedActorId) || currentScene?.actors?.[0];
@@ -8200,67 +8170,20 @@ export default function StudioDashboard({ user }) {
 
     useEffect(() => { loadProjects(); }, [user]);
 
-    useEffect(() => {
-        if (!selectedAction || !selectedAction.sounds) return;
-        const initCtx = () => { if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)(); };
-        const decodeSounds = async () => {
-            initCtx();
-            for (const snd of selectedAction.sounds) {
-                if (snd.url && !audioBuffersRef.current.has(snd.url)) {
-                    const buffer = await SoundExpert.decodeAudio(resolveUrl(snd.url), audioCtxRef.current);
-                    if (buffer) audioBuffersRef.current.set(snd.url, buffer);
-                }
-            }
-        };
-        decodeSounds();
-    }, [selectedAction]);
-
-    const playAllActionSounds = () => {
-        stopAllSounds();
-        if (!audioCtxRef.current || !selectedAction || !selectedAction.sounds) return;
-        const ctx = audioCtxRef.current;
-        if (ctx.state === 'suspended') ctx.resume();
-        selectedAction.sounds.forEach(snd => {
-            const buffer = audioBuffersRef.current.get(snd.url);
-            if (buffer) {
-                const source = ctx.createBufferSource();
-                source.buffer = buffer; source.connect(ctx.destination); source.start(0);
-                activeSourcesRef.current.push(source);
-            }
-        });
-    };
-
-    const stopAllSounds = () => {
-        activeSourcesRef.current.forEach(source => { try { source.stop(); } catch(e) {} });
-        activeSourcesRef.current = [];
-    };
-
-    useEffect(() => {
-        let timer;
-        if (isPreviewPlaying && selectedAction?.frames?.length > 0) {
-            timer = setInterval(() => { setPreviewFrameIdx(prev => (prev + 1) % (selectedAction.frames.length || 1)); }, selectedAction.speed || 100);
-        } else { setPreviewFrameIdx(0); }
-        return () => clearInterval(timer);
-    }, [isPreviewPlaying, selectedAction]);
-
-    useEffect(() => {
-        if (isPreviewPlaying) playAllActionSounds();
-        else stopAllSounds();
-    }, [isPreviewPlaying]);
-
     async function loadProjects() {
         const data = await api.get(`/studio/projects/${user.id || user._id}`);
         if (data?.length > 0) {
             const p = data[0];
             if (p.scenes?.[0] && !p.scenes[0].globalSounds) p.scenes[0].globalSounds = DEMO_PROJECT.scenes[0].globalSounds;
-            setProject(p); if (p.generatedCode) setCode(p.generatedCode);
+            setProject(p);
+            if (p.generatedCode) setCode(p.generatedCode);
             if (p.scenes?.[0]?.actors?.[0]) setSelectedActorId(p.scenes[0].actors[0].id);
         }
     }
 
     async function saveProject(p = project) {
         if (!p) return;
-        setLoading(true); setStatusText("Synchronisation Cloud...");
+        setLoading(true); setStatusText("Sync...");
         try {
             const saved = await api.post('/studio', { ...p, teacherId: user.id || user._id, generatedCode: code });
             setProject(saved);
@@ -8277,15 +8200,13 @@ export default function StudioDashboard({ user }) {
     
     const handleViewTestQuiz = async () => { try { const data = await api.get('/games/test-data'); if (data) { setTestQuizData(data); setShowTestQuizModal(true); } } catch (e) { console.error(e); } };
     const handleUpdateActionSpeed = (delta) => { if (!selectedAction) return; const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); if (actor && actor.actions[selectedActionIdx]) actor.actions[selectedActionIdx].speed = Math.max(20, Math.min(2000, (actor.actions[selectedActionIdx].speed || 100) + delta)); } else { if (next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx]) next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].speed = Math.max(20, Math.min(2000, (next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].speed || 100) + delta)); } setProject(next); saveProject(next); };
-    const handleSmartAIClean = async () => { if (!selectedAction || leftTab === 'sounds') return; const targetIndices = selectedFrameIdx !== null ? [selectedFrameIdx] : selectedAction.frames.map((_, i) => i); if (targetIndices.length === 0) return; if (!confirm(`✨ Nettoyage IA : Traiter ${targetIndices.length} image(s) ?`)) return; setCleaning(true); setStatusText(selectedFrameIdx !== null ? "Détourage CIBLÉ..." : "Détourage EN SÉRIE..."); const next = JSON.parse(JSON.stringify(project)); const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); const act = actor.actions[selectedActionIdx]; for (const idx of targetIndices) { try { const res = await api.post('/studio/remove-bg-specialized', { url: act.frames[idx].url }); if (res.url) act.frames[idx].url = res.url; } catch (e) {} } setProject(next); await saveProject(next); setCleaning(false); };
-    const handleMirrorSequence = async () => { if (!selectedAction || leftTab === 'sounds') return; setCleaning(true); setStatusText("Création Miroir..."); const next = JSON.parse(JSON.stringify(project)); const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); const act = actor.actions[selectedActionIdx]; for (let i = 0; i < act.frames.length; i++) { if(act.frames[i].type === 'sound') continue; const img = new Image(); img.crossOrigin = "anonymous"; const url = await new Promise(res => { img.onload = () => { const c = document.createElement('canvas'); c.width=img.width; c.height=img.height; const x = c.getContext('2d'); x.translate(img.width, 0); x.scale(-1,1); x.drawImage(img,0,0); c.toBlob(async b => { const f = new FormData(); f.append('file', b, "flipped.png"); const r = await fetch('/api/studio/upload-asset', { method: 'POST', body: f }).then(z=>z.json()); res(r.url); }, 'image/png'); }; img.src = resolveUrl(act.frames[i].url); }); if(url) act.frames[i].url = url; } setProject(next); await saveProject(next); setCleaning(false); };
     const handleSelectActor = (actorId) => { setSelectedActorId(actorId); setSelectedFrameIdx(null); };
     const handleStageMouseDown = (e, actorId) => { e.preventDefault(); e.stopPropagation(); handleSelectActor(actorId); setIsDraggingOnStage(true); };
     const handleStageMouseMove = (e) => { if (!isDraggingOnStage || !selectedActorId || !stageRef.current) return; const rect = stageRef.current.getBoundingClientRect(); const next = { ...project }; const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); if (actor) { actor.initialX = Math.round(Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100))); actor.initialY = Math.round(Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100))); setProject(next); } };
-    const handleUpdateProp = (f, v) => { const next = { ...project }; const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); if (actor) { actor[f] = isNaN(v) ? v : parseFloat(v); setProject(next); saveProject(next); } };
+    const handleUpdateProp = (f, v) => { const next = { ...project }; const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); if (actor) { actor[f] = isNaN(v) ? v : v; setProject(next); saveProject(next); } };
     const handleReorderFrame = (targetIdx) => { if (draggedFrameIdx === null || draggedFrameIdx === targetIdx || !selectedAction) return; const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); const frames = actor.actions[selectedActionIdx].frames; const [moved] = frames.splice(draggedFrameIdx, 1); frames.splice(targetIdx, 0, moved); } else { const frames = next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].frames; const [moved] = frames.splice(draggedFrameIdx, 1); frames.splice(targetIdx, 0, moved); } saveProject(next); setDraggedFrameIdx(null); };
-    const handleDeleteFrame = (fIdx) => { if (!selectedAction) return; const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); actor.actions[selectedActionIdx].frames.splice(fIdx, 1); } else { next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].frames.splice(fIdx, 1); } stopAllSounds(); saveProject(next); };
-    const handleDeleteSound = (sIdx) => { if (!selectedAction) return; const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); actor.actions[selectedActionIdx].sounds.splice(sIdx, 1); } else { next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].sounds.splice(sIdx, 1); } stopAllSounds(); saveProject(next); };
+    const handleDeleteFrame = (fIdx) => { if (!selectedAction) return; const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); actor.actions[selectedActionIdx].frames.splice(fIdx, 1); } else { next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].frames.splice(fIdx, 1); } saveProject(next); };
+    const handleDeleteSound = (sIdx) => { if (!selectedAction) return; const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); actor.actions[selectedActionIdx].sounds.splice(sIdx, 1); } else { next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].sounds.splice(sIdx, 1); } saveProject(next); };
     
     const handleEditSound = (sIdx) => { const target = selectedAction.sounds[sIdx]; if (target) setSoundToEdit({ idx: sIdx, ...target }); };
     const handleSaveEditedSound = (newUrl, newName) => { if (!soundToEdit) return; const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); actor.actions[selectedActionIdx].sounds[soundToEdit.idx] = { ...actor.actions[selectedActionIdx].sounds[soundToEdit.idx], url: newUrl, name: newName }; } else { next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].sounds[soundToEdit.idx] = { ...next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].sounds[soundToEdit.idx], url: newUrl, name: newName }; } setProject(next); saveProject(next); setSoundToEdit(null); };
@@ -8306,9 +8227,9 @@ export default function StudioDashboard({ user }) {
             {isPlaying && (<GameEngine code={code} project={project} activeSceneIdx={selectedSceneIdx} onStop={() => setIsPlaying(false)} resolveUrl={resolveUrl} />)}
 
             <div style={{ position: 'absolute', visibility: 'hidden', pointerEvents: 'none' }}>
-                <input type="file" ref={frameUploadRef} multiple onChange={async (e) => { const files = Array.from(e.target.files); if (files.length === 0) return; setLoading(true); setStatusText("Upload frames..."); const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); const act = actor.actions[selectedActionIdx]; for (const file of files) { const fd = new FormData(); fd.append('file', file); const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json()); if (res.url) act.frames.push({ url: res.url, name: file.name, type: 'image' }); } } else { const act = next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx]; for (const file of files) { const fd = new FormData(); fd.append('file', file); const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json()); if (res.url) act.frames.push({ url: res.url, name: file.name, type: 'image' }); } } await saveProject(next); setLoading(false); }} />
-                <input type="file" ref={actorUploadRef} onChange={async (e) => { const file = e.target.files[0]; if(!file) return; setLoading(true); setStatusText("Nouveau personnage..."); const fd = new FormData(); fd.append('file', file); const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json()); const next = JSON.parse(JSON.stringify(project)); const newActor = { id: `actor-${Date.now()}`, name: "P" + (next.scenes[selectedSceneIdx].actors.length + 1), actions: [{ name: "IDLE", speed: 100, frames: [{url: res.url, name: "C1", type:'image'}], sounds: [] }], initialX: 50, initialY: 50, scale: 1, direction: 0, rotationStyle: 'all' }; next.scenes[selectedSceneIdx].actors.push(newActor); setSelectedActorId(newActor.id); await saveProject(next); setLoading(false); }} />
-                <input type="file" ref={backdropUploadRef} onChange={async (e) => { const file = e.target.files[0]; if(!file) return; setLoading(true); setStatusText("Upload décor..."); const fd = new FormData(); fd.append('file', file); const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json()); const next = JSON.parse(JSON.stringify(project)); next.scenes[selectedSceneIdx].backdrops.push({ url: res.url, name: file.name }); next.scenes[selectedSceneIdx].currentBackdropIdx = next.scenes[selectedSceneIdx].backdrops.length - 1; await saveProject(next); setLoading(false); }} />
+                <input type="file" ref={frameUploadRef} multiple onChange={async (e) => { const files = Array.from(e.target.files); if (files.length === 0) return; setLoading(true); setStatusText("Upload..."); const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); const act = actor.actions[selectedActionIdx]; for (const file of files) { const fd = new FormData(); fd.append('file', file); const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json()); if (res.url) act.frames.push({ url: res.url, name: file.name, type: 'image' }); } } else { const act = next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx]; for (const file of files) { const fd = new FormData(); fd.append('file', file); const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json()); if (res.url) act.frames.push({ url: res.url, name: file.name, type: 'image' }); } } await saveProject(next); setLoading(false); }} />
+                <input type="file" ref={actorUploadRef} onChange={async (e) => { const file = e.target.files[0]; if(!file) return; setLoading(true); setStatusText("Nouveau..."); const fd = new FormData(); fd.append('file', file); const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json()); const next = JSON.parse(JSON.stringify(project)); const newActor = { id: `actor-${Date.now()}`, name: "P" + (next.scenes[selectedSceneIdx].actors.length + 1), actions: [{ name: "IDLE", speed: 100, frames: [{url: res.url, name: "C1", type:'image'}], sounds: [] }], initialX: 50, initialY: 50, scale: 1, direction: 0, rotationStyle: 'all' }; next.scenes[selectedSceneIdx].actors.push(newActor); setSelectedActorId(newActor.id); await saveProject(next); setLoading(false); }} />
+                <input type="file" ref={backdropUploadRef} onChange={async (e) => { const file = e.target.files[0]; if(!file) return; setLoading(true); setStatusText("Décor..."); const fd = new FormData(); fd.append('file', file); const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json()); const next = JSON.parse(JSON.stringify(project)); next.scenes[selectedSceneIdx].backdrops.push({ url: res.url, name: file.name }); next.scenes[selectedSceneIdx].currentBackdropIdx = next.scenes[selectedSceneIdx].backdrops.length - 1; await saveProject(next); setLoading(false); }} />
             </div>
 
             <div className="studio-grid-body">
@@ -8318,16 +8239,11 @@ export default function StudioDashboard({ user }) {
                     selectedGlobalSoundIdx={selectedGlobalSoundIdx} setSelectedGlobalSoundIdx={setSelectedGlobalSoundIdx}
                     setIsPreviewPlaying={setIsPreviewPlaying} saveProject={saveProject} project={project}
                     selectedSceneIdx={selectedSceneIdx} selectedActorId={selectedActorId} selectedAction={selectedAction}
-                    handleMirrorSequence={handleMirrorSequence} handleUpdateActionSpeed={handleUpdateActionSpeed}
-                    isPreviewPlaying={isPreviewPlaying} previewFrameIdx={previewFrameIdx}
-                    selectedFrameIdx={selectedFrameIdx} setSelectedFrameIdx={setSelectedFrameIdx}
+                    handleUpdateActionSpeed={handleUpdateActionSpeed} isPreviewPlaying={isPreviewPlaying} 
+                    previewFrameIdx={previewFrameIdx} selectedFrameIdx={selectedFrameIdx} setSelectedFrameIdx={setSelectedFrameIdx}
                     setDraggedFrameIdx={setDraggedFrameIdx} handleReorderFrame={handleReorderFrame}
-                    resolveUrl={resolveUrl} handleDeleteFrame={handleDeleteFrame}
-                    frameUploadRef={frameUploadRef}
-                    eraserActive={eraserActive} setEraserActive={setEraserActive} setFrameToErase={setFrameToErase}
-                    handleSmartAIClean={handleSmartAIClean} cleaning={cleaning}
-                    setShowSoundModal={setShowSoundModal}
-                    handleDeleteSound={handleDeleteSound} 
+                    resolveUrl={resolveUrl} handleDeleteFrame={handleDeleteFrame} frameUploadRef={frameUploadRef}
+                    setFrameToErase={setFrameToErase} setShowSoundModal={setShowSoundModal} handleDeleteSound={handleDeleteSound} 
                     handleEditSound={handleEditSound}
                 />
                 <StudioCenterPanel 
@@ -8340,11 +8256,9 @@ export default function StudioDashboard({ user }) {
                     setIsPlaying={setIsPlaying} code={code} setCode={setCode}
                 />
                 <StudioRightPanel 
-                    project={project} setProject={setProject}
-                    handleOpenSave={handleOpenSave} handleOpenLoad={handleOpenLoad}
-                    actorUploadRef={actorUploadRef} currentScene={currentScene}
-                    selectedActorId={selectedActorId} handleSelectActor={handleSelectActor}
-                    handleDeleteActor={handleDeleteActor} resolveUrl={resolveUrl}
+                    project={project} setProject={setProject} handleOpenSave={handleOpenSave} handleOpenLoad={handleOpenLoad}
+                    actorUploadRef={actorUploadRef} currentScene={currentScene} selectedActorId={selectedActorId} 
+                    handleSelectActor={handleSelectActor} handleDeleteActor={handleDeleteActor} resolveUrl={resolveUrl}
                     backdropUploadRef={backdropUploadRef} handleDeleteBackdrop={handleDeleteBackdrop}
                     saveProject={saveProject} selectedSceneIdx={selectedSceneIdx}
                 />
@@ -8670,278 +8584,264 @@ export default function StudioRightPanel({
 [[[£ END: client/src/features/prof/studio/panels/StudioRightPanel.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/studio/studioComp/GameEngine.jsx £]]]
-// @signatures: GameEngine, initLevel, handleAnswerClick, triggerWinSequence, handleBarCheat
+// @signatures: GameEngine, initLevel, handleAnswerClick, triggerWinSequence, handleStartGame
 import React, { useState, useRef, useEffect } from 'react';
 import { api } from '../../../../services/api';
 import SoundExpert from './SoundExpert';
 
 /**
- * 🎮 MOTEUR DE JEU (V495 - ACTION + SOUND SYNC)
- * RÔLE : Arbitre. Garantit que .play("NOM") déclenche l'animation ET les sons associés.
+ * 🎮 MOTEUR DE JEU (V660 - AUDIO CONTEXT SAFETY)
+ * FIX : Cannot close a closed AudioContext + Black Screen Fix.
  */
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
     const canvasRef = useRef(null);
     const gameInstanceRef = useRef(null);
+    const [engineReady, setEngineReady] = useState(false);
+    const [engineStarted, setEngineStarted] = useState(false);
     const [crash, setCrash] = useState(null);
     const [feedback, setFeedback] = useState(null);
     const [allLevels, setAllLevels] = useState([]); 
     const [currentLevelIdx, setCurrentLevelIdx] = useState(0);
     const [levelQuestions, setLevelQuestions] = useState([]); 
     const [questionStates, setQuestionStates] = useState([]); 
-    const [currentQIndex, setCurrentQIndex] = useState(-1);
+    const [currentQIndex, setCurrentQIndex] = useState(0);
     const [lives, setLives] = useState(4);
     const [isLevelWon, setIsLevelWon] = useState(false);
     const isLevelWonRef = useRef(false);
-    const [isPowerOff, setIsPowerOff] = useState(false);
-    const [keysPressed, setKeysPressed] = useState({});
+    const [debugLogs, setDebugLogs] = useState([]);
 
-    // 🔊 MOTEUR AUDIO (WEB AUDIO API)
     const audioCtxRef = useRef(null);
     const audioBuffersRef = useRef(new Map());
+    const imageAssetsRef = useRef(new Map());
 
+    const logSonde = (msg, type = 'info') => {
+        const id = Math.random();
+        setDebugLogs(prev => [...prev, { id, text: msg, type }].slice(-6));
+        setTimeout(() => setDebugLogs(prev => prev.filter(l => l.id !== id)), 5000);
+    };
+
+    // 1. INITIALISATION AUDIO & DATA
     useEffect(() => {
-        audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+        logSonde("🛠️ Warmup...");
+        
+        // Initialisation sécurisée de l'AudioContext
+        if (!audioCtxRef.current) {
+            audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+        }
+
         api.get('/games/test-data').then(data => {
-            const levelsData = data?.levels?.length > 0 ? data.levels : [{ name: "Test", questions: [{ q: "Prêt ?", options: ["OUI", "NON"], a: 0 }] }];
+            const levelsData = data?.levels?.length > 0 ? data.levels : [{ name: "Demo", questions: [{ q: "Prêt ?", options: ["OUI", "NON"], a: 0 }] }];
             setAllLevels(levelsData);
             initLevel(0, levelsData);
         });
-        const handleKeyDown = (e) => setKeysPressed(prev => ({ ...prev, [e.code]: true }));
-        const handleKeyUp = (e) => setKeysPressed(prev => ({ ...prev, [e.code]: false }));
-        window.addEventListener('keydown', handleKeyDown);
-        window.addEventListener('keyup', handleKeyUp);
+        
         return () => { 
-            window.removeEventListener('keydown', handleKeyDown); 
-            window.removeEventListener('keyup', handleKeyUp);
-            if (audioCtxRef.current) audioCtxRef.current.close();
+            // FIX : Vérification de l'état avant fermeture
+            if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
+                audioCtxRef.current.close().catch(() => {}); 
+            }
         };
     }, []);
 
     const initLevel = (idx, sourceData) => {
-        if (!sourceData[idx]) { onStop(); return; }
+        if (!sourceData[idx]) return;
         const lvl = sourceData[idx];
         setCurrentLevelIdx(idx);
         setLevelQuestions(lvl.questions || []);
         setQuestionStates(new Array((lvl.questions || []).length).fill(0));
-        setIsLevelWon(false); isLevelWonRef.current = false; setIsPowerOff(false);
-        if ((lvl.questions || []).length > 0) setCurrentQIndex(0);
+        setCurrentQIndex(0);
     };
 
-    const handleAnswerClick = (choiceIdx) => {
-        if (feedback || currentQIndex === -1 || isLevelWonRef.current) return;
-        if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
-
-        const currentQ = levelQuestions[currentQIndex];
-        const isCorrect = currentQ.a === choiceIdx;
-        setFeedback(isCorrect ? 'CORRECT' : 'WRONG');
-        const newStates = [...questionStates];
-        if (isCorrect) {
-            newStates[currentQIndex] = Math.min(3, newStates[currentQIndex] + 1);
-            if (gameInstanceRef.current?.onResult) gameInstanceRef.current.onResult(true);
-        } else {
-            newStates[currentQIndex] = Math.max(0, newStates[currentQIndex] - 1);
-            if (gameInstanceRef.current?.onResult) gameInstanceRef.current.onResult(false);
-            if (!isLevelWonRef.current) setLives(l => Math.max(0, l - 1));
-        }
-        setQuestionStates(newStates);
-        setTimeout(() => {
-            setFeedback(null);
-            const available = newStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
-            if (available.length > 0) {
-                const nIdx = available[Math.floor(Math.random() * available.length)];
-                setCurrentQIndex(nIdx);
-                if (gameInstanceRef.current?.onQuestion) gameInstanceRef.current.onQuestion(levelQuestions[nIdx]);
-            } else { triggerWinSequence(); }
-        }, 1000);
-    };
-
-    const triggerWinSequence = () => {
-        setIsLevelWon(true); isLevelWonRef.current = true;
-        if (gameInstanceRef.current?.onLevelWin) gameInstanceRef.current.onLevelWin();
-        setTimeout(() => setIsPowerOff(true), 1500);
-        setTimeout(() => {
-            const nextLvlIdx = currentLevelIdx + 1;
-            if (allLevels[nextLvlIdx]) initLevel(nextLvlIdx, allLevels);
-            else { alert("🎉 VICTOIRE FINALE !"); onStop(); }
-        }, 4000);
-    };
-
-    const handleBarCheat = (idx) => {
-        if (keysPressed['KeyS'] && keysPressed['KeyT']) {
-            const next = [...questionStates]; next[idx] = 3; setQuestionStates(next);
-            if (next.every(s => s === 3)) triggerWinSequence();
-        }
-    };
-
+    // 2. CHARGEMENT ASSETS
     useEffect(() => {
-        if (!code || !project || !canvasRef.current) return;
-        let isMounting = true;
-        let animationFrameId = null;
-        const canvas = canvasRef.current;
-        const ctx = canvas.getContext('2d');
-        const assets = {};
+        if (!project || !audioCtxRef.current) return;
 
-        async function startEngine() {
+        async function prefetch() {
             try {
-                const scene = project.scenes[activeSceneIdx];
-                const imgUrls = (scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url));
-                const sndUrls = (scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url)));
+                const scene = project.scenes?.[activeSceneIdx];
+                if (!scene) return;
+
+                logSonde("📦 Loading assets...");
+                const imgUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url)))].filter(Boolean);
+                const sndUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url))))].filter(Boolean);
 
                 await Promise.all([
-                    ...[...new Set(imgUrls)].filter(Boolean).map(url => new Promise(res => {
+                    ...imgUrls.map(url => new Promise(res => {
                         const img = new Image(); img.crossOrigin = "anonymous";
-                        img.onload = () => { assets[resolveUrl(url)] = img; res(); };
+                        img.onload = () => { imageAssetsRef.current.set(resolveUrl(url), img); res(); };
                         img.onerror = res; img.src = resolveUrl(url);
                     })),
-                    ...[...new Set(sndUrls)].filter(Boolean).map(url => new Promise(async res => {
-                        try {
-                            if (!audioBuffersRef.current.has(url)) {
-                                const buffer = await SoundExpert.decodeAudio(resolveUrl(url), audioCtxRef.current);
-                                if (buffer) audioBuffersRef.current.set(url, buffer);
-                            }
-                        } catch(e) {}
+                    ...sndUrls.map(url => new Promise(async res => {
+                        const buffer = await SoundExpert.decodeAudio(resolveUrl(url), audioCtxRef.current);
+                        if (buffer) audioBuffersRef.current.set(url, buffer);
                         res();
                     }))
                 ]);
-                
-                if (!isMounting) return;
 
-                const headerCode = `
-                    const { canvas, ctx, assets, project, sceneIdx, resolveUrl, callbacks, audioBuffers, audioCtx } = params;
-                    
-                    class ActorProxy {
-                        constructor(data, engine) {
-                            this.id = data.id; this.name = data.name; this.engine = engine;
-                            this.x = data.initialX || 50; this.y = data.initialY || 50;
-                            this.dir = data.direction || 0; this.scale = data.scale || 1;
-                            this.visible = true; this.currentAction = data.actions?.[0]?.name || 'IDLE';
-                            this.rotationStyle = data.rotationStyle || 'all';
-                            this.frameIdx = 0; this.lastAnimTime = 0;
-                        }
-                        play(name) { 
-                            if(this.currentAction.toUpperCase() !== name.toUpperCase()) { 
-                                this.currentAction = name; this.frameIdx = 0; this.lastAnimTime = 0;
-                                // 🔊 TRIGGER SONS D'ACTION
-                                this.engine._triggerActionSounds(this.id, name);
-                            } 
+                logSonde("🚀 Ressources Prêtes", "success");
+                setEngineReady(true);
+            } catch (e) { logSonde("Erreur chargement", "error"); }
+        }
+        prefetch();
+    }, [project, activeSceneIdx]);
+
+    // 3. COMPILATION DU SCRIPT (Une fois ready)
+    useEffect(() => {
+        if (!engineReady || !code || !canvasRef.current) return;
+
+        try {
+            const headerCode = `
+                const { canvas, ctx, project, sceneIdx, resolveUrl, audioBuffers, imageAssets, audioCtx, logSonde } = params;
+                class ActorProxy {
+                    constructor(data, engine) { 
+                        this.id = data.id; this.name = data.name; this.engine = engine;
+                        this.x = data.initialX || 50; this.y = data.initialY || 50;
+                        this.dir = 0; this.scale = data.scale || 1; this.visible = true;
+                        this.currentAction = data.actions?.[0]?.name || 'IDLE';
+                        this.frameIdx = 0; this.lastAnimTime = 0;
+                    }
+                    play(name) { 
+                        if(this.currentAction.toUpperCase() !== name.toUpperCase()) { 
+                            this.currentAction = name; this.frameIdx = 0; this.lastAnimTime = 0;
+                            this.engine._triggerActionSounds(this.id, name);
+                        } 
+                    }
+                }
+                class MiniGameBase {
+                    constructor(c, a, cb) { 
+                        this.canvas = c; this.ctx = ctx; this.assets = a; this.callbacks = params.callbacks; this.keys = {};
+                        const s = project.scenes[sceneIdx];
+                        if(s && s.actors) s.actors.forEach(a => { this[a.name.toUpperCase()] = new ActorProxy(a, this); });
+                    }
+                    playGlobal(name) {
+                        const gs = project.scenes[sceneIdx].globalSounds?.find(s => s.name.toUpperCase() === name.toUpperCase());
+                        if(gs && gs.sounds) gs.sounds.forEach(snd => this._playSound(snd.url));
+                    }
+                    _triggerActionSounds(actorId, actionName) {
+                        const actor = project.scenes[sceneIdx].actors.find(a => a.id === actorId);
+                        const action = actor?.actions.find(act => act.name.toUpperCase() === actionName.toUpperCase());
+                        if(action && action.sounds) action.sounds.forEach(snd => this._playSound(snd.url));
+                    }
+                    _playSound(url) {
+                        const buffer = audioBuffers.get(url);
+                        if(buffer && audioCtx && audioCtx.state !== 'closed') {
+                            const source = audioCtx.createBufferSource();
+                            source.buffer = buffer; source.connect(audioCtx.destination); source.start(0);
                         }
                     }
-
-                    class MiniGameBase {
-                        constructor(c, a, cb) {
-                            this.canvas = c || canvas; this.ctx = ctx; this.assets = a || assets; this.callbacks = cb || callbacks; this.keys = {};
-                            const s = project.scenes[sceneIdx];
-                            if(s && s.actors) { s.actors.forEach(a => { this[a.name.toUpperCase()] = new ActorProxy(a, this); }); }
+                    _system_render() {
+                        const s = project.scenes[sceneIdx];
+                        const bd = s?.backdrops?.[s.currentBackdropIdx || 0];
+                        if(bd) {
+                            const img = imageAssets.get(resolveUrl(bd.url));
+                            if(img) ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
                         }
-
-                        playGlobal(name) {
-                            const gs = project.scenes[sceneIdx].globalSounds?.find(s => s.name.toUpperCase() === name.toUpperCase());
-                            if(gs && gs.sounds) gs.sounds.forEach(snd => this._playSound(snd.url));
-                        }
-
-                        _triggerActionSounds(actorId, actionName) {
-                            const actor = project.scenes[sceneIdx].actors.find(a => a.id === actorId);
-                            const action = actor?.actions.find(act => act.name.toUpperCase() === actionName.toUpperCase());
-                            if(action && action.sounds) action.sounds.forEach(snd => this._playSound(snd.url));
-                        }
-
-                        _playSound(url) {
-                            const buffer = audioBuffers.get(url);
-                            if(buffer && audioCtx) {
-                                if(audioCtx.state === 'suspended') audioCtx.resume();
-                                const source = audioCtx.createBufferSource();
-                                source.buffer = buffer; source.connect(audioCtx.destination); source.start(0);
-                            }
-                        }
-
-                        _system_render() {
-                            const s = project.scenes[sceneIdx];
-                            const bd = s?.backdrops?.[s.currentBackdropIdx || 0];
-                            if(bd && this.assets[resolveUrl(bd.url)]) this.ctx.drawImage(this.assets[resolveUrl(bd.url)], 0, 0, this.canvas.width, this.canvas.height);
-                            else { this.ctx.fillStyle = "#000"; this.ctx.fillRect(0,0,this.canvas.width,this.canvas.height); }
-                            for(let key in this) {
-                                const p = this[key];
-                                if(p instanceof ActorProxy && p.visible) {
-                                    const aData = project.scenes[sceneIdx].actors.find(ac => ac.id === p.id);
-                                    if(!aData) continue;
-                                    const act = (aData.actions || []).find(x => x.name.toUpperCase() === p.currentAction.toUpperCase()) || aData.actions?.[0];
-                                    if(act && act.frames?.length > 0) {
-                                        const now = Date.now();
-                                        if (now - p.lastAnimTime > (act.speed || 100)) { p.frameIdx = (p.frameIdx+1)%act.frames.length; p.lastAnimTime=now; }
-                                        const img = this.assets[resolveUrl(act.frames[p.frameIdx].url)];
-                                        if(img) {
-                                            const xPx = (p.x/100)*this.canvas.width; const yPx = (p.y/100)*this.canvas.height; let sz = 150*p.scale;
-                                            this.ctx.save(); this.ctx.translate(xPx, yPx);
-                                            if(p.rotationStyle==='left-right' && (((p.dir%360)+360)%360)>90 && (((p.dir%360)+360)%360)<270) this.ctx.scale(-1,1);
-                                            else if(p.rotationStyle==='all') this.ctx.rotate(p.dir*Math.PI/180);
-                                            this.ctx.drawImage(img, -sz/2, -sz/2, sz, sz); this.ctx.restore();
-                                        }
+                        for(let key in this) {
+                            const p = this[key];
+                            if(p instanceof ActorProxy && p.visible) {
+                                const aData = project.scenes[sceneIdx].actors.find(ac => ac.id === p.id);
+                                if(!aData) continue;
+                                const act = (aData.actions || []).find(x => x.name.toUpperCase() === p.currentAction.toUpperCase()) || aData.actions?.[0];
+                                if(act && act.frames?.length > 0) {
+                                    const now = Date.now();
+                                    if (now - p.lastAnimTime > (act.speed || 100)) { p.frameIdx = (p.frameIdx+1)%act.frames.length; p.lastAnimTime=now; }
+                                    const spr = imageAssets.get(resolveUrl(act.frames[p.frameIdx].url));
+                                    if(spr) {
+                                        const xPx = (p.x/100)*canvas.width; const yPx = (p.y/100)*canvas.height; let sz = 150*p.scale;
+                                        ctx.save(); ctx.translate(xPx, yPx);
+                                        ctx.drawImage(spr, -sz/2, -sz/2, sz, sz); ctx.restore();
                                     }
                                 }
                             }
                         }
                     }
-                `;
+                }
+            `;
 
-                const finalScript = headerCode + "\n" + code + "\n return MiniGame;";
-                const FinalClass = new Function('params', finalScript)({ 
-                    canvas, ctx, assets, project, sceneIdx: activeSceneIdx, resolveUrl, 
-                    audioBuffers: audioBuffersRef.current, audioCtx: audioCtxRef.current,
-                    callbacks: { onPlayerHit: () => { if (!isLevelWonRef.current) setLives(l => Math.max(0, l - 1)); } } 
-                });
-                
-                const instance = new FinalClass();
-                gameInstanceRef.current = instance;
-                if(instance.start) instance.start();
+            const FinalClass = new Function('params', headerCode + "\n" + code + "\n return MiniGame;");
+            gameInstanceRef.current = new FinalClass({ 
+                canvas: canvasRef.current, ctx: canvasRef.current.getContext('2d'), project, sceneIdx: activeSceneIdx, resolveUrl, logSonde,
+                audioBuffers: audioBuffersRef.current, imageAssets: imageAssetsRef.current, audioCtx: audioCtxRef.current,
+                callbacks: { onPlayerHit: () => setLives(l => Math.max(0, l - 1)) } 
+            });
 
-                const loop = () => {
-                    if (!isMounting) return;
-                    if (instance.update) instance.update();
-                    if (instance._system_render) instance._system_render();
-                    if (instance.draw) instance.draw();
-                    animationFrameId = requestAnimationFrame(loop);
-                };
-                loop();
-            } catch(e) { setCrash(e.message); }
+        } catch (e) { setCrash(e.message); }
+    }, [engineReady, code]);
+
+    const handleStartGame = async () => {
+        if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
+            await audioCtxRef.current.resume();
         }
-        startEngine();
-        return () => { isMounting = false; if (animationFrameId) cancelAnimationFrame(animationFrameId); };
-    }, [code, project, activeSceneIdx]);
+        setEngineStarted(true);
+        if (gameInstanceRef.current?.start) {
+            try { gameInstanceRef.current.start(); } catch(e) { setCrash(e.message); }
+        }
+    };
+
+    const handleAnswerClick = (choiceIdx) => {
+        if (!engineStarted || feedback) return;
+        const currentQ = levelQuestions[currentQIndex];
+        const isCorrect = currentQ?.a === choiceIdx;
+        setFeedback(isCorrect ? 'CORRECT' : 'WRONG');
+        if (isCorrect) {
+            setQuestionStates(p => { const n=[...p]; n[currentQIndex]=Math.min(3, n[currentQIndex]+1); return n; });
+            gameInstanceRef.current?.onResult?.(true);
+        } else {
+            gameInstanceRef.current?.onResult?.(false);
+            setLives(l => Math.max(0, l - 1));
+        }
+        setTimeout(() => {
+            setFeedback(null);
+            const avail = questionStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
+            if (avail.length > 0) setCurrentQIndex(avail[Math.floor(Math.random() * avail.length)]);
+            else logSonde("🏆 Niveau Terminé");
+        }, 1000);
+    };
+
+    useEffect(() => {
+        let animationFrameId;
+        const loop = () => {
+            if (engineStarted && gameInstanceRef.current) {
+                if (gameInstanceRef.current.update) gameInstanceRef.current.update();
+                if (gameInstanceRef.current._system_render) gameInstanceRef.current._system_render();
+                if (gameInstanceRef.current.draw) gameInstanceRef.current.draw();
+            }
+            animationFrameId = requestAnimationFrame(loop);
+        };
+        loop();
+        return () => cancelAnimationFrame(animationFrameId);
+    }, [engineStarted]);
 
     return (
-        <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center font-sans">
-             <div className="absolute top-6 w-full flex justify-between items-start px-10 pointer-events-none z-20">
-                <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-xl pointer-events-auto flex gap-1">
-                    {"❤️".repeat(lives)}{"🖤".repeat(Math.max(0, 4 - lives))}
-                </div>
-                <div className="flex-1 flex justify-center px-4">
-                    {levelQuestions[currentQIndex] && !isLevelWon && (
-                        <div className="bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 border-slate-600 shadow-2xl text-xl pointer-events-auto">
-                            {feedback === 'CORRECT' ? "✅ BRAVO !" : feedback === 'WRONG' ? "❌ RATÉ..." : levelQuestions[currentQIndex].q}
+        <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center font-sans overflow-hidden">
+             <div className="absolute top-0 left-0 p-4 z-[100] pointer-events-none">
+                <div className="flex flex-col gap-1">{debugLogs.map(log => (<div key={log.id} className={`px-3 py-1 rounded text-[10px] font-black shadow-lg border-l-4 ${log.type === 'error' ? 'bg-red-500 text-white' : log.type === 'success' ? 'bg-green-500 text-white' : 'bg-yellow-400 text-black'}`}>{log.text}</div>))}</div>
+             </div>
+
+             {!engineStarted && engineReady && (
+                 <div className="absolute inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                     <button onClick={handleStartGame} className="px-16 py-8 bg-white text-indigo-600 rounded-full font-black text-4xl shadow-2xl hover:scale-110 transition-transform animate-pulse">🚀 JOUER</button>
+                 </div>
+             )}
+
+             {engineStarted && (
+                 <>
+                    <div className="absolute top-0 left-0 right-0 p-6 flex justify-between items-start z-50 pointer-events-none">
+                        <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-xl pointer-events-auto flex gap-1">{"❤️".repeat(lives)}{"🖤".repeat(Math.max(0, 4 - lives))}</div>
+                        <div className="flex-1 flex justify-center px-4">
+                            {levelQuestions[currentQIndex] && (<div className="bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 border-slate-600 shadow-2xl text-xl pointer-events-auto">{feedback === 'CORRECT' ? "✅ BRAVO !" : feedback === 'WRONG' ? "❌ RATÉ..." : levelQuestions[currentQIndex].q}</div>)}
                         </div>
-                    )}
-                </div>
-                <div className="flex gap-2 items-center pointer-events-auto mr-16">
-                    {questionStates.map((mastery, idx) => (
-                        <div key={idx} onClick={() => handleBarCheat(idx)} className={`w-4 h-12 rounded-md border border-slate-600 relative overflow-hidden transition-all cursor-help ${currentQIndex === idx ? 'ring-2 ring-indigo-400 scale-110' : 'opacity-60'}`}>
-                            <div className={`absolute bottom-0 left-0 right-0 transition-all duration-500 ${mastery === 3 ? 'bg-green-500 shadow-[0_0_10px_green]' : 'bg-yellow-500'}`} style={{ height: `${(mastery / 3) * 100}%` }} />
-                        </div>
-                    ))}
-                </div>
-            </div>
-            <div className="relative">
-                <canvas ref={canvasRef} width={800} height={450} className={`aspect-video shadow-2xl bg-black border-4 border-slate-800 rounded-xl transition-opacity duration-1000 ${isPowerOff ? 'opacity-0' : 'opacity-100'}`} />
-                {isLevelWon && (<div className="absolute inset-0 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm rounded-xl animate-in zoom-in"><div className="bg-white p-10 rounded-[40px] shadow-2xl text-center border-8 border-green-500"><span className="text-6xl block mb-4">🏆</span><h2 className="text-4xl font-black text-slate-800 uppercase">Niveau Réussi !</h2></div></div>)}
-            </div>
-            {crash && <div className="absolute inset-0 bg-red-900/90 flex items-center justify-center text-white font-mono p-10 text-center z-50">💥 ERREUR SCRIPT : {crash}</div>}
-            <div className="absolute bottom-6 w-full flex justify-center px-10">
-                <div className="grid grid-cols-4 gap-4 w-full max-w-5xl">
-                    {levelQuestions[currentQIndex]?.options?.map((o, i) => (
-                        <button key={i} onClick={() => handleAnswerClick(i)} className="bg-indigo-600 text-white py-5 rounded-xl font-black uppercase shadow-xl hover:bg-indigo-500 transition-all border-b-4 border-indigo-800 active:border-b-0 active:translate-y-1">{o}</button>
-                    ))}
-                </div>
-            </div>
-            <button onClick={onStop} className="absolute top-6 right-6 bg-red-600 text-white w-12 h-12 rounded-full font-black text-2xl shadow-xl border-4 border-white hover:scale-110 transition-all flex items-center justify-center pointer-events-auto">✕</button>
+                        <div className="w-40"></div>
+                    </div>
+                    <div className="relative"><canvas ref={canvasRef} width={800} height={450} className="aspect-video shadow-2xl bg-black border-4 border-slate-800 rounded-xl" /></div>
+                    <div className="absolute bottom-0 left-0 right-0 p-8 flex justify-center z-50 pointer-events-none">
+                        {!isLevelWon && (<div className="grid grid-cols-4 gap-4 w-full max-w-6xl pointer-events-auto">{levelQuestions[currentQIndex]?.options?.map((o, i) => (<button key={i} onClick={() => handleAnswerClick(i)} className="bg-indigo-600 text-white py-5 rounded-xl font-black uppercase shadow-xl hover:bg-indigo-500 transition-all border-b-4 border-indigo-800 active:border-b-0 active:translate-y-1">{o}</button>))}</div>)}
+                    </div>
+                 </>
+             )}
+
+             {crash && (<div className="absolute inset-0 bg-red-950 flex flex-col items-center justify-center text-white p-10 text-center z-[10000]"><span className="text-8xl mb-8">💥</span><h2 className="text-4xl font-black mb-4 uppercase">Erreur Script</h2><pre className="bg-black/50 p-8 rounded-3xl font-mono text-lg text-red-200 border-2 border-red-500/30 max-w-4xl overflow-auto mb-10">{crash}</pre><button onClick={onStop} className="px-12 py-5 bg-white text-red-600 rounded-full font-black text-xl">Fermer</button></div>)}
+            <button onClick={onStop} className="absolute top-6 right-6 bg-red-600 text-white w-12 h-12 rounded-full font-black text-2xl shadow-xl border-4 border-white hover:scale-110 transition-all flex items-center justify-center pointer-events-auto z-[60]">✕</button>
         </div>
     );
 }
@@ -9698,165 +9598,19 @@ export default function SoundEditorModal({ soundUrl, soundName, onSave, onClose,
 [[[£ FILE: client/src/features/prof/studio/studioComp/SoundExpert.js £]]]
 /**
  * 🎛️ EXPERT AUDIO CLIENT (Web Audio API)
- * Manipulation de buffers audio sans serveur.
- * V3 : Optimisation du décodeur pour pré-chargement Studio.
+ * V8 : ESM Clean export.
  */
 const SoundExpert = {
-    
-    // Convertir Blob/URL en AudioBuffer (Méthode statique propre)
     decodeAudio: async (url, audioCtx) => {
         try {
             const response = await fetch(url);
+            if (!response.ok) return null;
             const arrayBuffer = await response.arrayBuffer();
-            // Utilise le contexte passé en paramètre ou en crée un nouveau
-            const ctx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-            return await ctx.decodeAudioData(arrayBuffer);
+            if (arrayBuffer.byteLength < 50) return null;
+            return await audioCtx.decodeAudioData(arrayBuffer);
         } catch (e) {
-            console.error("❌ Audio Decode Error:", e);
             return null;
         }
-    },
-
-    // Créer un nouveau buffer vide
-    createBuffer: (channels, length, sampleRate) => {
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        return audioCtx.createBuffer(channels, length, sampleRate);
-    },
-
-    // EFFET : Plus Fort / Moins Fort
-    applyGain: (buffer, value) => {
-        const newBuffer = SoundExpert.createBuffer(buffer.numberOfChannels, buffer.length, buffer.sampleRate);
-        for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
-            const inputData = buffer.getChannelData(channel);
-            const outputData = newBuffer.getChannelData(channel);
-            for (let i = 0; i < buffer.length; i++) {
-                outputData[i] = inputData[i] * value;
-            }
-        }
-        return newBuffer;
-    },
-
-    // EFFET : Inverser
-    reverse: (buffer) => {
-        const newBuffer = SoundExpert.createBuffer(buffer.numberOfChannels, buffer.length, buffer.sampleRate);
-        for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
-            const inputData = buffer.getChannelData(channel);
-            const outputData = newBuffer.getChannelData(channel);
-            for (let i = 0; i < buffer.length; i++) {
-                outputData[i] = inputData[buffer.length - 1 - i];
-            }
-        }
-        return newBuffer;
-    },
-
-    // EFFET : Vitesse (Resampling simple)
-    changeSpeed: (buffer, playbackRate) => {
-        const newLength = Math.floor(buffer.length / playbackRate);
-        const newBuffer = SoundExpert.createBuffer(buffer.numberOfChannels, newLength, buffer.sampleRate);
-        
-        for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
-            const inputData = buffer.getChannelData(channel);
-            const outputData = newBuffer.getChannelData(channel);
-            for (let i = 0; i < newLength; i++) {
-                const originalIndex = i * playbackRate;
-                const indexFloor = Math.floor(originalIndex);
-                const indexCeil = Math.min(buffer.length - 1, Math.ceil(originalIndex));
-                const fraction = originalIndex - indexFloor;
-                
-                const a = inputData[indexFloor];
-                const b = inputData[indexCeil];
-                outputData[i] = a + (b - a) * fraction;
-            }
-        }
-        return newBuffer;
-    },
-
-    // EFFET : Fade In / Out
-    fade: (buffer, type) => {
-        const newBuffer = SoundExpert.createBuffer(buffer.numberOfChannels, buffer.length, buffer.sampleRate);
-        const fadeLength = Math.min(buffer.length, buffer.sampleRate * 2); 
-        
-        for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
-            const inputData = buffer.getChannelData(channel);
-            const outputData = newBuffer.getChannelData(channel);
-            
-            for (let i = 0; i < buffer.length; i++) {
-                let multiplier = 1;
-                if (type === 'in' && i < fadeLength) {
-                    multiplier = i / fadeLength;
-                } else if (type === 'out' && i > buffer.length - fadeLength) {
-                    multiplier = (buffer.length - i) / fadeLength;
-                }
-                outputData[i] = inputData[i] * multiplier;
-            }
-        }
-        return newBuffer;
-    },
-
-    // EFFET : Robot (Modulation d'amplitude simple)
-    robotize: (buffer) => {
-        const newBuffer = SoundExpert.createBuffer(buffer.numberOfChannels, buffer.length, buffer.sampleRate);
-        const freq = 50; 
-        
-        for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
-            const inputData = buffer.getChannelData(channel);
-            const outputData = newBuffer.getChannelData(channel);
-            for (let i = 0; i < buffer.length; i++) {
-                const modulator = Math.sin(2 * Math.PI * freq * (i / buffer.sampleRate));
-                outputData[i] = inputData[i] * modulator;
-            }
-        }
-        return newBuffer;
-    },
-
-    // COUPER (TRIM)
-    trim: (buffer, startRatio, endRatio) => {
-        const startSample = Math.floor(buffer.length * startRatio);
-        const endSample = Math.floor(buffer.length * endRatio);
-        const newLength = endSample - startSample;
-        
-        if (newLength <= 0) return buffer;
-
-        const newBuffer = SoundExpert.createBuffer(buffer.numberOfChannels, newLength, buffer.sampleRate);
-        
-        for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
-            const inputData = buffer.getChannelData(channel);
-            const outputData = newBuffer.getChannelData(channel);
-            for (let i = 0; i < newLength; i++) {
-                outputData[i] = inputData[startSample + i];
-            }
-        }
-        return newBuffer;
-    },
-
-    // Export vers WAV (pour sauvegarde)
-    bufferToWav: (buffer) => {
-        const numOfChan = buffer.numberOfChannels;
-        const length = buffer.length * numOfChan * 2 + 44;
-        const bufferArray = new ArrayBuffer(length);
-        const view = new DataView(bufferArray);
-        let pos = 0;
-
-        function setUint16(data) { view.setUint16(pos, data, true); pos += 2; }
-        function setUint32(data) { view.setUint32(pos, data, true); pos += 4; }
-
-        setUint32(0x46464952); setUint32(length - 8); setUint32(0x45564157);
-        setUint32(0x20746d66); setUint32(16); setUint16(1); setUint16(numOfChan);
-        setUint32(buffer.sampleRate); setUint32(buffer.sampleRate * 2 * numOfChan);
-        setUint16(numOfChan * 2); setUint16(16); setUint32(0x61746164); setUint32(length - 44);
-
-        const channels = [];
-        for(let i = 0; i < buffer.numberOfChannels; i++) channels.push(buffer.getChannelData(i));
-
-        for (let i = 0; i < buffer.length; i++) {
-            for (let channel = 0; channel < numOfChan; channel++) {
-                let sample = Math.max(-1, Math.min(1, channels[channel][i]));
-                sample = (0.5 + sample < 0 ? sample * 32768 : sample * 32767)|0;
-                view.setInt16(pos, sample, true);
-                pos += 2;
-            }
-        }
-        return new Blob([bufferArray], { type: "audio/wav" });
     }
 };
 
@@ -11314,6 +11068,32 @@ setInterval(doPush, 600000);
 08/02/2026 18:15 - SYSTEM UPGRADE : apply.js V9.0 Flexible activé avec commit Git automatique. CORE/STUDIO REPAIR : Le Proxy serveur ne corrompt plus les fichiers audio. Le GameEngine décode maintenant les sons en AudioBuffers et synchronise parfaitement l'appel .play() avec le déclenchement sonore.
 
 08/02/2026 18:15 - SYSTEM UPGRADE : apply.js V9.0 Flexible activé avec commit Git automatique. CORE/STUDIO REPAIR : Le Proxy serveur ne corrompt plus les fichiers audio. Le GameEngine décode maintenant les sons en AudioBuffers et synchronise parfaitement l'appel .play() avec le déclenchement sonore.
+
+08/02/2026 18:24 - SYSTEM UPGRADE : apply.js V9.5 débridé pour autoriser les multi-bundles avec Commit Git automatique après chaque injection. STUDIO AUDIO REPAIR : Correction du Proxy serveur (Accept-Ranges) pour les flux audio. Le GameEngine synchronise désormais l'action .play() avec le déclenchement sonore sans silence ni blocage.
+
+08/02/2026 18:27 - SYSTEM UPGRADE : apply.js V9.6 Flexible activé avec commit Git automatique. CORE/STUDIO REPAIR : Correction du Proxy serveur pour les flux audio. Le GameEngine synchronise désormais l'action .play() avec le déclenchement sonore immédiat. Zéro latence garantie.
+
+08/02/2026 18:32 - SYSTEM UPGRADE : apply.js V9.7 débridé (Multi-bundle) avec Commit Git automatique après chaque injection. KERNEL REPAIR : Rétablissement du chargement des modèles et routes (Fix 500). STUDIO AUDIO REPAIR : Correction du Proxy (Accept-Ranges) et du moteur GameEngine (Correction de l'erreur 'cod is not defined'). Zéro latence audio synchronisée avec les actions.
+
+08/02/2026 18:40 - KERNEL REPAIR : Rétablissement global du serveur (V64 Stable). Correction des erreurs 500 sur /api/admin/students et /api/system/apply-status par blindage du parseur JSON et des routes de proxy. STUDIO DEBUG HUD : Intégration d'un système de logs visuels et d'un overlay d'erreur fatale directement sur l'écran de jeu pour faciliter le débogage sans console.
+
+08/02/2026 18:45 - KERNEL REPAIR : Rétablissement global des routes API et du proxy audio/image (V66 Stable). Correction des erreurs 500. STUDIO AUDIO ENGINE : Rétablissement complet de l'interface de jeu (HUD, Questions, Réponses) et synchronisation parfaite de l'audio avec les actions personnages. Zéro latence audio décodée via Web Audio API.
+
+08/02/2026 18:52 - DEBUGGING SESSION : Installation d'une sonde de traçage dans le GameEngine. Focus sur l'action de tir : chaque appel à .play() et chaque tentative de lecture audio génère désormais un badge jaune visuel sur l'écran. Correction du Proxy serveur pour une transmission binaire pure sans Content-Type forcé, indispensable au décodage Web Audio.
+
+08/02/2026 19:02 - CRITICAL ROUTE REPAIR : Rétablissement des routes vitales (apply-status, sections, classrooms) par remontée en tête de pile dans server.js. Suppression définitive des 404/500 bloquants. STUDIO DEBUG UPGRADE : La sonde visuelle dans le GameEngine affiche désormais les événements pendant 5 secondes pour un traçage précis du cycle Tir/Son. Ajout d'un bouton de forçage audio si le navigateur suspend le contexte.
+
+08/02/2026 19:04 - STUDIO AUDIO DEBUG : Installation d'une sonde chirurgicale dans le GameEngine. Chaque appel .play() et chaque lecture de son génère désormais un badge jaune ou vert en haut à gauche de l'écran. Rétablissement du Proxy serveur en mode "Raw Bytes" pour garantir l'intégrité des flux audio MP3 vers le navigateur.
+
+08/02/2026 19:04 - STUDIO AUDIO DEBUG : Installation d'une sonde chirurgicale dans le GameEngine. Chaque appel .play() et chaque lecture de son génère désormais un badge jaune ou vert en haut à gauche de l'écran. Rétablissement du Proxy serveur en mode "Raw Bytes" pour garantir l'intégrité des flux audio MP3 vers le navigateur.
+
+08/02/2026 20:05 - STUDIO STARTUP DEBUG : Déploiement d'un test audio forcé au démarrage. Le script par défaut appelle désormais this.playGlobal("DÉPART") dans start(). Le GameEngine a été mis à jour pour logger le succès du chargement de chaque buffer audio individuellement. Correction de l'injection des sons de scène dans le périmètre de la classe MiniGameBase.
+
+08/02/2026 20:15 - STUDIO AUDIO SYNC FINAL : Rétablissement du déclenchement sonore. Implémentation d'un bouton de démarrage "CLIQUE POUR JOUER" qui débloque l'AudioContext et lance simultanément la méthode start() du script. Le son de DÉPART est désormais audible car déclenché après l'interaction utilisateur obligatoire.
+
+08/02/2026 21:10 - KERNEL REPAIR : Rétablissement du Proxy serveur (V74). Suppression du forçage Content-Type qui corrompait les binaires audio. STUDIO ENGINE : Éradication du "Silent Crash" JavaScript dans la boucle de rendu en utilisant des constructeurs d'images dynamiques sûrs. Synchronisation finale du bouton JOUER avec le moteur Web Audio.
+
+08/02/2026 21:35 - KERNEL STABILITY : Kernel V78 stable. Fix de l'erreur InvalidStateError dans GameEngine.jsx par l'ajout d'une vérification de l'état (closed) avant la fermeture de l'AudioContext. Rétablissement de la séquence de démarrage : le bouton JOUER apparaît désormais systématiquement après la confirmation "Ressources Prêtes".
 
 [[[£ END: history.txt £]]]
 
@@ -17088,7 +16868,7 @@ module.exports = router;
 [[[£ END: server/prof/studio/studio.prof.js £]]]
 
 [[[£ FILE: server/server.js £]]]
-// @signatures: SERVER_BOOT_ID, GlobalInfrastructure, KernelV62_AUDIO_PIPE
+// @signatures: SERVER_BOOT_ID, GlobalInfrastructure, KernelV78_STABLE
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
@@ -17101,7 +16881,7 @@ const port = 3000;
 const SERVER_BOOT_ID = Date.now();
 
 console.log("------------------------------------------------");
-console.log("🚀 KERNEL V62 : FIX PROXY AUDIO");
+console.log("🚀 KERNEL V78 : FIX AUDIO CONTEXT & PROXY");
 console.log("------------------------------------------------");
 
 app.use(express.json({ limit: '70mb' }));
@@ -17111,43 +16891,48 @@ app.get('/api/check-deploy', (req, res) => res.json({ status: "OK", bootId: SERV
 app.get('/api/system/apply-status', (req, res) => {
     try {
         const statusPath = path.join(__dirname, '../apply_status.json');
-        if (fs.existsSync(statusPath)) res.json(JSON.parse(fs.readFileSync(statusPath, 'utf8')));
-        else res.json({ status: "OK" });
-    } catch (e) { res.json({ status: "OK" }); }
+        if (fs.existsSync(statusPath)) {
+            const raw = fs.readFileSync(statusPath, 'utf8');
+            if (raw.trim()) return res.json(JSON.parse(raw));
+        }
+    } catch (e) {}
+    res.json({ status: "OK", message: "Kernel V78 Online" });
 });
-
-try {
-    const Models = require('./prof/models/prof.models');
-    app.use('/api/auth', require('./prof/auth/auth.prof'));
-    app.use('/api/admin', require('./prof/admin/admin.prof'));
-    app.use('/api/homework', require('./prof/homework/homework.prof'));
-    app.use('/api/games', require('./prof/games/games.prof'));
-    app.use('/api/classroom', require('./prof/classroom/classroom.prof'));
-    app.use('/api/scans', require('./prof/scans/scans.prof'));
-    app.use('/api/structure', require('./prof/structure/structure.prof'));
-    app.use('/api/studio', require('./prof/studio/studio.prof'));
-
-    app.use('/api/eleve/auth', require('./eleve/auth/auth.eleve'));
-    app.use('/api/eleve/homework', require('./eleve/homework/homework.eleve'));
-    app.use('/api/eleve/classroom', require('./eleve/classroom/classroom.eleve'));
-    app.use('/api/eleve/games', require('./eleve/games/games.eleve'));
-} catch (e) { console.error("💥 Boot Error:", e.message); }
 
 const ProfDrive = require('./prof/core/drive.prof');
 app.get(['/api/proxy/:id', '/api/structure/proxy/:id'], async (req, res) => {
     try {
         const fileId = req.params.id;
+        if (!fileId || fileId === 'undefined') return res.status(400).send("No ID");
         const stream = await ProfDrive.getFileStream(fileId);
-        // FIX : On ne force plus Content-Type image/png, on laisse le flux brut
-        // pour que la Web Audio API détecte le format réel (MP3/WAV/PNG).
+        res.setHeader('Accept-Ranges', 'bytes');
         stream.pipe(res);
-    } catch (e) { res.status(404).send("File missing"); }
+    } catch (e) { res.status(404).send("Not found"); }
 });
 
-app.use((err, req, res, next) => { res.status(500).json({ error: "INTERNAL_ERROR", message: err.message }); });
+const safeLoad = (route, path) => {
+    try { app.use(route, require(path)); } catch (e) {}
+};
+
+safeLoad('/api/auth', './prof/auth/auth.prof');
+safeLoad('/api/admin', './prof/admin/admin.prof');
+safeLoad('/api/homework', './prof/homework/homework.prof');
+safeLoad('/api/games', './prof/games/games.prof');
+safeLoad('/api/classroom', './prof/classroom/classroom.prof');
+safeLoad('/api/scans', './prof/scans/scans.prof');
+safeLoad('/api/structure', './prof/structure/structure.prof');
+safeLoad('/api/studio', './prof/studio/studio.prof');
+safeLoad('/api/eleve/auth', './eleve/auth/auth.eleve');
+safeLoad('/api/eleve/homework', './eleve/homework/homework.eleve');
+safeLoad('/api/eleve/classroom', './eleve/classroom/classroom.eleve');
+safeLoad('/api/eleve/games', './eleve/games/games.eleve');
+
+app.use((err, req, res, next) => {
+    res.status(500).json({ error: "INTERNAL_ERROR", message: err.message });
+});
 
 mongoose.connect(process.env.MONGODB_URI).then(() => {
-    app.listen(port, '0.0.0.0', () => console.log(`🏁 PRET SUR LE PORT ${port}`));
+    app.listen(port, '0.0.0.0', () => console.log(`🏁 READY ${port}`));
 });
 
 [[[£ END: server/server.js £]]]

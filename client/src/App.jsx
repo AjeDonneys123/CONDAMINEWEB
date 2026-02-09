@@ -54,30 +54,34 @@ export default function App() {
 
   if (isSyncing) return <div className="sync-overlay"><h2 style={{color:'white', fontWeight:900}}>SYNCHRONISATION...</h2></div>;
   
-  // LE BANDEAU DOIT ÊTRE À LA RACINE, HORS DU IF USER
+  if (!user) return (
+      <div className="app-wrapper">
+          <SystemStatus />
+          <Login onLoginSuccess={setUser} />
+      </div>
+  );
+
+  const isTestAccount = user.isTestAccount === true;
+
   return (
     <div className="app-wrapper">
       <SystemStatus />
       
-      {!user ? (
-        <Login onLoginSuccess={setUser} />
-      ) : (
-        <>
-            {user.isTestAccount && (
-                <div className="v99-test-header">
-                <span>🛠️ MODE TEST ACTIF : {user.firstName} {user.lastName}</span>
-                <button className="btn-back-dev-mini" onClick={handleBackToDev}>⚡ RETOUR DÉVELOPPEUR</button>
-                </div>
-            )}
+      {/* BANDEAU DE SÉCURITÉ V99 (Pousse le contenu vers le bas) */}
+      {isTestAccount && (
+        <div className="v99-test-header">
+           <span>🛠️ MODE TEST ACTIF : {user.firstName} {user.lastName}</span>
+           <button className="btn-back-dev-mini" onClick={handleBackToDev}>⚡ RETOUR DÉVELOPPEUR</button>
+        </div>
+      )}
 
-            {(user.isDeveloper || user.role === 'prof') ? (
-                <ProfPage user={user} onLogout={handleLogout} />
-            ) : user.role === 'admin' ? (
-                <AdminPage user={user} onLogout={handleLogout} />
-            ) : (
-                <ElevePage user={user} onLogout={handleLogout} onBackToProf={() => setUser({ ...user, role: "prof" })} />
-            )}
-        </>
+      {/* ROUTAGE PRINCIPAL */}
+      {(user.isDeveloper || user.role === 'prof') ? (
+          <ProfPage user={user} onLogout={handleLogout} />
+      ) : user.role === 'admin' ? (
+          <AdminPage user={user} onLogout={handleLogout} />
+      ) : (
+          <ElevePage user={user} onLogout={handleLogout} onBackToProf={() => setUser({ ...user, role: "prof" })} />
       )}
     </div>
   );
