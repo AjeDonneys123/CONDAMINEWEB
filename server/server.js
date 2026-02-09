@@ -1,4 +1,4 @@
-// @signatures: SERVER_BOOT_ID, GlobalInfrastructure, KernelV76_STABLE
+// @signatures: SERVER_BOOT_ID, GlobalInfrastructure, KernelV77_ULTRA_STABLE
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
@@ -11,27 +11,27 @@ const port = 3000;
 const SERVER_BOOT_ID = Date.now();
 
 console.log("------------------------------------------------");
-console.log("🚀 KERNEL V76 : RÉPARATION SON & SYSTÈME");
+console.log("🚀 KERNEL V77 : RÉSILIENCE TOTALE");
 console.log("------------------------------------------------");
 
 app.use(express.json({ limit: '70mb' }));
 app.use(express.urlencoded({ extended: true, limit: '70mb' }));
 
-// 1. ROUTES SYSTÈME (FIX 404) - PLACÉES AVANT TOUT
+// 1. PRIORITÉ ABSOLUE : ROUTES SYSTÈME
 app.get('/api/check-deploy', (req, res) => res.json({ status: "OK", bootId: SERVER_BOOT_ID }));
 
 app.get('/api/system/apply-status', (req, res) => {
     try {
         const statusPath = path.join(__dirname, '../apply_status.json');
         if (fs.existsSync(statusPath)) {
-            const data = fs.readFileSync(statusPath, 'utf8');
-            return res.json(JSON.parse(data));
+            const raw = fs.readFileSync(statusPath, 'utf8');
+            if (raw.trim()) return res.json(JSON.parse(raw));
         }
-    } catch (e) { console.error("Apply status read error", e); }
-    res.json({ status: "OK", message: "Serveur en ligne" });
+    } catch (e) {}
+    res.json({ status: "OK", message: "En ligne" });
 });
 
-// 2. PROXY AUDIO/IMAGE TRANSPARENT (FIX SILENCE)
+// 2. PROXY BINAIRE (SANS TRANSFORMATION)
 const ProfDrive = require('./prof/core/drive.prof');
 app.get(['/api/proxy/:id', '/api/structure/proxy/:id'], async (req, res) => {
     try {
@@ -40,29 +40,36 @@ app.get(['/api/proxy/:id', '/api/structure/proxy/:id'], async (req, res) => {
         const stream = await ProfDrive.getFileStream(fileId);
         res.setHeader('Accept-Ranges', 'bytes');
         stream.pipe(res);
-    } catch (e) { res.status(404).send("File not found"); }
+    } catch (e) { res.status(404).send("File missing"); }
 });
 
-// 3. CHARGEMENT DES SILOS (FIX 500)
-try {
-    const Models = require('./prof/models/prof.models');
-    app.use('/api/auth', require('./prof/auth/auth.prof'));
-    app.use('/api/admin', require('./prof/admin/admin.prof'));
-    app.use('/api/homework', require('./prof/homework/homework.prof'));
-    app.use('/api/games', require('./prof/games/games.prof'));
-    app.use('/api/classroom', require('./prof/classroom/classroom.prof'));
-    app.use('/api/scans', require('./prof/scans/scans.prof'));
-    app.use('/api/structure', require('./prof/structure/structure.prof'));
-    app.use('/api/studio', require('./prof/studio/studio.prof'));
-} catch (e) { 
-    console.error("💥 Erreur critique chargement silos:", e.message); 
-}
+// 3. CHARGEMENT SÉCURISÉ DES SILOS (TRY/CATCH PAR SILO)
+const safeLoad = (route, path) => {
+    try { app.use(route, require(path)); } 
+    catch (e) { console.error(`❌ Erreur chargement silo ${route}:`, e.message); }
+};
 
+safeLoad('/api/auth', './prof/auth/auth.prof');
+safeLoad('/api/admin', './prof/admin/admin.prof');
+safeLoad('/api/homework', './prof/homework/homework.prof');
+safeLoad('/api/games', './prof/games/games.prof');
+safeLoad('/api/classroom', './prof/classroom/classroom.prof');
+safeLoad('/api/scans', './prof/scans/scans.prof');
+safeLoad('/api/structure', './prof/structure/structure.prof');
+safeLoad('/api/studio', './prof/studio/studio.prof');
+
+// Silos élèves
+safeLoad('/api/eleve/auth', './eleve/auth/auth.eleve');
+safeLoad('/api/eleve/homework', './eleve/homework/homework.eleve');
+safeLoad('/api/eleve/classroom', './eleve/classroom/classroom.eleve');
+safeLoad('/api/eleve/games', './eleve/games/games.eleve');
+
+// 4. GESTION DES ERREURS 500
 app.use((err, req, res, next) => {
-    console.error("❌ Erreur Serveur:", err.stack);
+    console.error("🔥 CRASH SERVEUR:", err.stack);
     res.status(500).json({ status: "ERROR", message: err.message });
 });
 
 mongoose.connect(process.env.MONGODB_URI).then(() => {
-    app.listen(port, '0.0.0.0', () => console.log(`🏁 PRET SUR LE PORT ${port}`));
+    app.listen(port, '0.0.0.0', () => console.log(`🏁 READY SUR LE PORT ${port}`));
 });
