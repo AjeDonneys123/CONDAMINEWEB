@@ -17,40 +17,60 @@ export default function StudioLeftPanel({
 }) {
     const [selectedSoundIdx, setSelectedSoundIdx] = useState(null);
     const audioCtxRef = useRef(null);
-    
-    // Référence pour garder la trace du son en cours et pouvoir le couper
-    const currentAudioSourceRef = useRef(null);
-    // Référence pour savoir si on doit continuer la chaîne (pour éviter les callbacks fantômes)
-    const isPlayingRef = useRef(false);
+    const activeSourcesRef = useRef([]);
 
-    // Fonction pour couper brutalement le son
-    const stopAudioChain = () => {
-        isPlayingRef.current = false; // Bloque la chaîne
-        if (currentAudioSourceRef.current) {
-            try {
-                currentAudioSourceRef.current.onended = null; // Détache l'event pour ne pas relancer
-                currentAudioSourceRef.current.stop();
-            } catch(e) {}
-            currentAudioSourceRef.current = null;
-        }
-    };
-
-    // --- MOTEUR DE PRÉVISUALISATION ---
+    // 1. INIT CONTEXTE AUDIO (Dès le montage)
     useEffect(() => {
-        let visualInterval = null;
+        if (!audioCtxRef.current) {
+            audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        
+        // Nettoyage au démontage
+        return () => {
+            stopAllSounds();
+            // On ne ferme pas le context ici pour garder le cache actif entre les changements d'onglets
+        };
+    }, []);
 
-        // Mise à jour de la Ref pour les callbacks asynchrones
-        isPlayingRef.current = isPreviewPlaying;
-
-        if (isPreviewPlaying && selectedAction) {
-            
-            // 1. DÉMARRAGE CONTEXTE AUDIO
+    // 2. ⚡ PRÉ-CHARGEMENT AU CLIC SUR L'ACTION (OPTIMISATION CACHE)
+    useEffect(() => {
+        if (selectedAction && selectedAction.sounds && selectedAction.sounds.length > 0) {
+            // Si le contexte n'existe pas encore (cas rare), on le crée
             if (!audioCtxRef.current) {
                 audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
             }
-            if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
 
-            // 2. BOUCLE VISUELLE (Indépendante du son)
+            console.log(`⚡ [PRELOAD] Pré-chargement des sons pour : ${selectedAction.name}`);
+            
+            // On lance le décodage immédiat. 
+            // Grâce au cache de SoundExpert, si on clique sur Play 1 seconde plus tard, ce sera instantané.
+            selectedAction.sounds.forEach(snd => {
+                SoundExpert.decodeAudio(resolveUrl(snd.url), audioCtxRef.current);
+            });
+        }
+    }, [selectedAction]); // Se déclenche à chaque changement d'action sélectionnée
+
+    const stopAllSounds = () => {
+        activeSourcesRef.current.forEach(source => {
+            try { source.stop(); } catch(e) {}
+        });
+        activeSourcesRef.current = [];
+    };
+
+    // 3. MOTEUR DE PRÉVISUALISATION (SÉQUENCEUR)
+    useEffect(() => {
+        let visualInterval = null;
+        let soundIndex = 0;
+        let isPlaying = isPreviewPlaying;
+
+        if (isPlaying && selectedAction) {
+            
+            // Réveil Audio si suspendu (nécessaire pour Chrome/Safari)
+            if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
+                audioCtxRef.current.resume();
+            }
+
+            // A. BOUCLE VISUELLE
             if (selectedAction.frames && selectedAction.frames.length > 0) {
                 visualInterval = setInterval(() => {
                     if (typeof setPreviewFrameIdx === 'function') {
@@ -59,68 +79,57 @@ export default function StudioLeftPanel({
                 }, selectedAction.speed || 200);
             }
 
-            // 3. BOUCLE AUDIO (Séquentielle : 1 -> 2 -> 3 -> 1...)
+            // B. BOUCLE AUDIO SÉQUENTIELLE
             if (selectedAction.sounds && selectedAction.sounds.length > 0) {
                 
-                let soundIndex = 0;
-
                 const playNextSound = async () => {
-                    // Si on a mis pause entre temps, on arrête tout
-                    if (!isPlayingRef.current) return;
+                    if (!isPlaying) return;
 
                     const soundData = selectedAction.sounds[soundIndex];
                     if (!soundData) return;
 
-                    try {
-                        const buffer = await SoundExpert.decodeAudio(resolveUrl(soundData.url), audioCtxRef.current);
-                        
-                        // Vérif encore après décodage
-                        if (!isPlayingRef.current || !buffer) return;
+                    // Appel au cache (Devrait être instantané grâce au pré-chargement)
+                    const buffer = await SoundExpert.decodeAudio(resolveUrl(soundData.url), audioCtxRef.current);
+                    
+                    if (!isPlaying || !buffer) return;
 
+                    try {
                         const source = audioCtxRef.current.createBufferSource();
                         source.buffer = buffer;
                         source.connect(audioCtxRef.current.destination);
                         
-                        // Stockage pour pouvoir stopper
-                        currentAudioSourceRef.current = source;
-
-                        // À LA FIN DU SON -> JOUER LE SUIVANT
+                        // Enchaînement
                         source.onended = () => {
-                            if (isPlayingRef.current) {
+                            if (isPlaying) {
                                 soundIndex = (soundIndex + 1) % selectedAction.sounds.length;
                                 playNextSound();
                             }
                         };
 
                         source.start(0);
-
+                        activeSourcesRef.current.push(source);
                     } catch (e) {
-                        console.error("Audio Preview Error", e);
-                        // En cas d'erreur, on essaie quand même le suivant pour ne pas bloquer la boucle
-                        if (isPlayingRef.current) {
-                            soundIndex = (soundIndex + 1) % selectedAction.sounds.length;
-                            playNextSound();
-                        }
+                        console.error("Audio Play Error", e);
                     }
                 };
 
-                // Lancement initial
+                // Lancement de la boucle audio
                 playNextSound();
             }
 
         } else {
-            // STOP : On coupe tout
-            stopAudioChain();
+            // STOP
+            stopAllSounds();
             if (setPreviewFrameIdx) setPreviewFrameIdx(0);
         }
 
-        // NETTOYAGE (Unmount ou changement d'action)
         return () => {
+            isPlaying = false;
             if (visualInterval) clearInterval(visualInterval);
-            stopAudioChain();
+            stopAllSounds();
         };
 
-    }, [isPreviewPlaying, selectedAction]); // Déclenchement au Play/Stop ou changement d'action
+    }, [isPreviewPlaying, selectedAction]);
 
     const handleSelectAction = (idx) => {
         setSelectedActionIdx(idx);
@@ -190,7 +199,6 @@ export default function StudioLeftPanel({
                     </>
                 ) : (
                     <>
-                        {/* UTILISATION DE CURRENT SCENE PASSÉE EN PROP */}
                         {currentScene?.globalSounds?.map((act, idx) => (
                             <div key={idx} onClick={() => handleSelectGlobalSound(idx)} className={`action-item ${selectedGlobalSoundIdx === idx ? 'selected' : ''}`}>
                                 <span>{act.name}</span>
@@ -260,7 +268,6 @@ export default function StudioLeftPanel({
                                     <span className="text-xl">🎵</span>
                                     <span className="text-[8px] font-black text-indigo-800 w-full text-center truncate px-1">{snd.name?.substring(0,10)}</span>
                                     
-                                    {/* --- BOUTON DE SUPPRESSION --- */}
                                     <button 
                                         className="frame-del !bg-red-500 !text-white !opacity-100 !top-1 !right-1 z-50" 
                                         onClick={(e) => { e.stopPropagation(); handleDeleteSound(sIdx); }}
