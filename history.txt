@@ -2107,3 +2107,5 @@
 08/02/2026 23:55 - STUDIO ENGINE V770 : Rétablissement de la boucle de jeu complète. Les sprites sont de nouveau animés grâce à l'appel systématique de instance.update() dans le loop. Restauration de l'interface JSX (vies, questions, boutons) autour du canvas. Le son est maintenu via le Proxy RAW et le déblocage forcé par le bouton JOUER.
 
 08/02/2026 23:59 - STUDIO ENGINE V780 : Résolution du crash "onPlayerHit". Les callbacks de l'interface React sont désormais correctement injectés dans l'instance de jeu via this.callbacks. Amélioration de la résilience audio : les sons sont joués avec un resume() forcé et un logging sonde pour chaque déclenchement. Le système est prêt pour une session de jeu complète avec interactions et retour sonore.
+
+08/02/2026 21:19 - STUDIO ENGINE V790 : Implémentation de la "Séquence de Lancement Audio". Pour garantir le son, le bouton JOUER déclenche d'abord le son de DÉPART seul. La boucle de jeu et les sprites ne sont activés qu'à la fin de ce son via l'événement onended. Cette méthode isole la phase critique de déverrouillage de l'AudioContext pour assurer une sortie sonore infaillible.
