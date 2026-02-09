@@ -21,88 +21,89 @@ function resolveUrl(url) {
     return `/api/proxy/${id}`;
 }
 
-// 🏃 CODE DE TEST : MARCHE + SON
-const WALK_TEST_CODE = `// 🏃 TEST MARCHE & SON
-// Utilisez les FLÈCHES GAUCHE / DROITE
+// 🎯 CODE DE TEST : QUIZ + TIR + SON
+const QUIZ_SHOOT_CODE = `// 🎯 TEST QUIZ INTERACTIF
+// Réponds JUSTE pour voir l'action TIRER (+ Son)
 
 class MiniGame extends MiniGameBase {
     constructor(canvas, assets, callbacks) {
         super(canvas, assets, callbacks);
-        this.speed = 0.5; // Vitesse de déplacement
+        this.projectiles = [];
+        this.shootTimer = 0;
     }
 
     start() { 
-        console.log("🚀 MOTEUR PRÊT : En attente de mouvement...");
-        // Position de départ
+        console.log("🚀 QUIZ PRÊT. En attente de réponse...");
         if(this.HEROS) { 
-            this.HEROS.y = 70; // Sol
             this.HEROS.play("IDLE");
+            this.HEROS.y = 70; // Sol
+        }
+    }
+
+    // C'est ici que la magie opère !
+    onResult(isCorrect) {
+        if (isCorrect) {
+            console.log("✅ BONNE RÉPONSE -> ACTION TIRER !");
+            
+            if (this.HEROS) {
+                // 1. Lance l'animation (et le son associé !)
+                this.HEROS.play("TIRER");
+                
+                // 2. Ajoute un effet visuel (balle)
+                this.projectiles.push({ x: this.HEROS.x + 5, y: this.HEROS.y - 5 });
+                
+                // 3. Timer pour revenir à IDLE après l'anim
+                this.shootTimer = 40; // ~1 seconde
+            }
+        } else {
+            console.log("❌ MAUVAISE RÉPONSE");
+            // Tu pourrais ajouter this.HEROS.play("HURT") ici
         }
     }
 
     update() {
-        let isMoving = false;
-
-        // --- DÉPLACEMENT DROITE ---
-        if (this.keys['ArrowRight']) {
-            if(this.HEROS) {
-                this.HEROS.x += this.speed;
-                this.HEROS.direction = 0; // Regarde à droite
-                this.HEROS.scale = Math.abs(this.HEROS.scale); // Scale positif
-                isMoving = true;
-            }
-        }
-        
-        // --- DÉPLACEMENT GAUCHE ---
-        if (this.keys['ArrowLeft']) {
-            if(this.HEROS) {
-                this.HEROS.x -= this.speed;
-                // Astuce miroir : on inverse le scale X si direction ne suffit pas
-                // (Dépend de vos réglages "Rotation Style" dans le panneau central)
-                this.HEROS.direction = 0; 
-                this.HEROS.scale = -Math.abs(this.HEROS.scale); 
-                isMoving = true;
-            }
-        }
-
-        // --- GESTION ANIMATION & SON ---
-        if (this.HEROS) {
-            if (isMoving) {
-                // Lance l'animation "MARCHER"
-                // Le moteur jouera AUTOMATIQUEMENT le son associé à cette action !
-                this.HEROS.play("MARCHER"); 
-            } else {
+        // Gestion du retour à la normale
+        if (this.shootTimer > 0) {
+            this.shootTimer--;
+            if (this.shootTimer === 0 && this.HEROS) {
                 this.HEROS.play("IDLE");
             }
+        }
+
+        // Avancée des projectiles
+        for (let i = this.projectiles.length - 1; i >= 0; i--) {
+            this.projectiles[i].x += 2; // Vitesse balle
+            if (this.projectiles[i].x > 100) this.projectiles.splice(i, 1);
         }
     }
 
     draw() {
-        // HUD simple
+        // Dessin des projectiles (Cercle Orange)
         const ctx = this.ctx;
-        ctx.fillStyle = "white";
-        ctx.font = "20px monospace";
-        ctx.textAlign = "left";
-        ctx.fillText("UTILISEZ LES FLÈCHES ⬅️ ➡️", 20, 40);
+        const cw = this.canvas.width;
+        const ch = this.canvas.height;
         
-        if(this.HEROS) {
-            ctx.fillText("ACTION : " + this.HEROS.currentAction, 20, 70);
-        }
+        ctx.fillStyle = "#f97316"; // Orange
+        this.projectiles.forEach(p => {
+            ctx.beginPath();
+            ctx.arc((p.x/100)*cw, (p.y/100)*ch, 10, 0, Math.PI*2);
+            ctx.fill();
+        });
     }
 }
 `;
 
 const DEMO_PROJECT = { 
-    title: "Test Marche", 
+    title: "Test Tir", 
     scenes: [{ 
         name: "Scene 1", backdrops: [], currentBackdropIdx: 0, 
         actors: [ 
             { 
-                id: "actor-hero", name: "HEROS", initialX: 50, initialY: 70, scale: 1, 
-                // On prépare la structure pour que ça matche votre interface
+                id: "actor-hero", name: "HEROS", initialX: 20, initialY: 70, scale: 1, 
+                // On prépare "TIRER" pour que l'utilisateur n'ait qu'à le remplir
                 actions: [
                     { name: "IDLE", speed: 100, frames: [], sounds: [] }, 
-                    { name: "MARCHER", speed: 150, frames: [], sounds: [] }
+                    { name: "TIRER", speed: 100, frames: [], sounds: [] }
                 ] 
             } 
         ], 
@@ -117,8 +118,8 @@ export default function StudioDashboard({ user }) {
     const [selectedGlobalSoundIdx, setSelectedGlobalSoundIdx] = useState(0);
     const [leftTab, setLeftTab] = useState('actions');
     
-    // ⚠️ CODE FORCÉ POUR LE TEST MARCHE
-    const [code, setCode] = useState(WALK_TEST_CODE);
+    // ⚠️ CODE FORCÉ POUR LE TEST QUIZ
+    const [code, setCode] = useState(QUIZ_SHOOT_CODE);
     
     const [isPlaying, setIsPlaying] = useState(false);
     const [loading, setLoading] = useState(false);
@@ -155,9 +156,9 @@ export default function StudioDashboard({ user }) {
         if (data?.length > 0) {
             const p = data[0];
             setProject(p);
-            // ON FORCE LE NOUVEAU CODE DE MARCHE
-            setCode(WALK_TEST_CODE); 
-            console.log("🚶 CODE MARCHE ACTIVÉ");
+            // ON FORCE LE CODE QUIZ
+            setCode(QUIZ_SHOOT_CODE);
+            console.log("🎯 CODE QUIZ/TIR ACTIVÉ");
             
             if (p.scenes?.[0]?.actors?.[0]) setSelectedActorId(p.scenes[0].actors[0].id);
         }
@@ -183,10 +184,18 @@ export default function StudioDashboard({ user }) {
 
     const handleOpenSave = () => { setModalMode('SAVE'); setShowSaveLoadModal(true); };
     const handleOpenLoad = () => { setModalMode('LOAD'); setShowSaveLoadModal(true); };
-    const handleCreateNew = () => { setProject(DEMO_PROJECT); setCode(WALK_TEST_CODE); setSelectedActorId("actor-hero"); setShowSaveLoadModal(false); };
+    
+    // NOUVEAU PROJET : On remet les bases propres avec les actions requises
+    const handleCreateNew = () => { 
+        setProject(DEMO_PROJECT); 
+        setCode(QUIZ_SHOOT_CODE); 
+        setSelectedActorId("actor-hero"); 
+        setShowSaveLoadModal(false); 
+    };
+
     const handleLoadProject = (p) => { 
         setProject(p); 
-        setCode(WALK_TEST_CODE); // Toujours le code test marche
+        setCode(QUIZ_SHOOT_CODE); // Toujours le code test quiz
         if (p.scenes?.[0]?.actors?.[0]) setSelectedActorId(p.scenes[0].actors[0].id); else setSelectedActorId(null); setShowSaveLoadModal(false); 
     };
     
@@ -220,7 +229,7 @@ export default function StudioDashboard({ user }) {
 
             <div style={{ position: 'absolute', visibility: 'hidden', pointerEvents: 'none' }}>
                 <input type="file" ref={frameUploadRef} multiple onChange={async (e) => { const files = Array.from(e.target.files); if (files.length === 0) return; setLoading(true); setStatusText("Upload..."); const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); const act = actor.actions[selectedActionIdx]; for (const file of files) { const fd = new FormData(); fd.append('file', file); const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json()); if (res.url) act.frames.push({ url: res.url, name: file.name, type: 'image' }); } } else { const act = next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx]; for (const file of files) { const fd = new FormData(); fd.append('file', file); const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json()); if (res.url) act.frames.push({ url: res.url, name: file.name, type: 'image' }); } } await saveProject(next); setLoading(false); }} />
-                <input type="file" ref={actorUploadRef} onChange={async (e) => { const file = e.target.files[0]; if(!file) return; setLoading(true); setStatusText("Nouveau..."); const fd = new FormData(); fd.append('file', file); const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json()); const next = JSON.parse(JSON.stringify(project)); const newActor = { id: `actor-${Date.now()}`, name: "P" + (next.scenes[selectedSceneIdx].actors.length + 1), actions: [{ name: "IDLE", speed: 100, frames: [{url: res.url, name: "C1", type:'image'}], sounds: [] }], initialX: 50, initialY: 50, scale: 1, direction: 0, rotationStyle: 'all' }; next.scenes[selectedSceneIdx].actors.push(newActor); setSelectedActorId(newActor.id); await saveProject(next); setLoading(false); }} />
+                <input type="file" ref={actorUploadRef} onChange={async (e) => { const file = e.target.files[0]; if(!file) return; setLoading(true); setStatusText("Nouveau..."); const fd = new FormData(); fd.append('file', file); const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json()); const next = JSON.parse(JSON.stringify(project)); const newActor = { id: `actor-${Date.now()}`, name: "P" + (next.scenes[selectedSceneIdx].actors.length + 1), actions: [{ name: "IDLE", speed: 100, frames: [{url: res.url, name: "C1", type:'image'}], sounds: [] }, { name: "TIRER", speed: 100, frames: [], sounds: [] }], initialX: 50, initialY: 50, scale: 1, direction: 0, rotationStyle: 'all' }; next.scenes[selectedSceneIdx].actors.push(newActor); setSelectedActorId(newActor.id); await saveProject(next); setLoading(false); }} />
                 <input type="file" ref={backdropUploadRef} onChange={async (e) => { const file = e.target.files[0]; if(!file) return; setLoading(true); setStatusText("Décor..."); const fd = new FormData(); fd.append('file', file); const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json()); const next = JSON.parse(JSON.stringify(project)); next.scenes[selectedSceneIdx].backdrops.push({ url: res.url, name: file.name }); next.scenes[selectedSceneIdx].currentBackdropIdx = next.scenes[selectedSceneIdx].backdrops.length - 1; await saveProject(next); setLoading(false); }} />
             </div>
 
@@ -237,7 +246,7 @@ export default function StudioDashboard({ user }) {
                     resolveUrl={resolveUrl} handleDeleteFrame={handleDeleteFrame} frameUploadRef={frameUploadRef}
                     setFrameToErase={setFrameToErase} setShowSoundModal={setShowSoundModal} handleDeleteSound={handleDeleteSound} 
                     handleEditSound={handleEditSound}
-                    setPreviewFrameIdx={handleSetPreviewFrameIdx} // 👈 PROP AJOUTÉE POUR LE SÉQUENCEUR
+                    setPreviewFrameIdx={handleSetPreviewFrameIdx} // 👈 PROP SÉQUENCEUR
                 />
                 <StudioCenterPanel 
                     stageRef={stageRef} currentScene={currentScene} resolveUrl={resolveUrl}
