@@ -1,4 +1,4 @@
-// @signatures: SERVER_BOOT_ID, GlobalInfrastructure, KernelV75_AUDIO_STABLE
+// @signatures: SERVER_BOOT_ID, GlobalInfrastructure, KernelV66_DEBUG_LOGS
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
@@ -15,24 +15,20 @@ app.use(express.urlencoded({ extended: true, limit: '70mb' }));
 
 app.get('/api/check-deploy', (req, res) => res.json({ status: "OK", bootId: SERVER_BOOT_ID }));
 
-app.get('/api/system/apply-status', (req, res) => {
-    try {
-        const statusPath = path.join(__dirname, '../apply_status.json');
-        if (fs.existsSync(statusPath)) return res.json(JSON.parse(fs.readFileSync(statusPath, 'utf8')));
-    } catch (e) {}
-    res.json({ status: "OK" });
-});
-
-// PROXY AUDIO/IMAGE BINAIRE PUR
+// PROXY AVEC LOGS DE TRAFIC
 const ProfDrive = require('./prof/core/drive.prof');
 app.get(['/api/proxy/:id', '/api/structure/proxy/:id'], async (req, res) => {
+    const fileId = req.params.id;
+    console.log(`📡 [PROXY] Requête pour : ${fileId}`);
     try {
-        const fileId = req.params.id;
         if (!fileId || fileId === 'undefined') return res.status(400).send("No ID");
         const stream = await ProfDrive.getFileStream(fileId);
         res.setHeader('Accept-Ranges', 'bytes');
         stream.pipe(res);
-    } catch (e) { res.status(404).send("Not found"); }
+    } catch (e) { 
+        console.error(`❌ [PROXY] Échec : ${fileId}`, e.message);
+        res.status(404).send("Not found"); 
+    }
 });
 
 try {
@@ -45,8 +41,8 @@ try {
     app.use('/api/scans', require('./prof/scans/scans.prof'));
     app.use('/api/structure', require('./prof/structure/structure.prof'));
     app.use('/api/studio', require('./prof/studio/studio.prof'));
-} catch (e) {}
+} catch (e) { console.error("💥 Boot Error:", e.message); }
 
 mongoose.connect(process.env.MONGODB_URI).then(() => {
-    app.listen(port, '0.0.0.0', () => console.log(`🏁 READY SUR LE PORT ${port}`));
+    app.listen(port, '0.0.0.0', () => console.log(`🏁 READY SUR ${port}`));
 });
