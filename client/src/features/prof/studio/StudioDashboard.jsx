@@ -21,35 +21,65 @@ function resolveUrl(url) {
     return `/api/proxy/${id}`;
 }
 
-const defaultCode = `// 🎮 TEST AUDIO DÉPART
+// 🎹 CODE DE TEST FORCÉ (BARRE ESPACE)
+const AUDIO_TEST_CODE = `// 🔊 TEST AUDIO FORCÉ V1
+// Ce code remplace tout le reste pour tester le son.
+
 class MiniGame extends MiniGameBase {
     constructor(canvas, assets, callbacks) {
         super(canvas, assets, callbacks);
-        this.zombieX = 100;
-        this.projectiles = [];
+        this.pressed = false;
+        this.msg = "APPUIE SUR ESPACE";
+        this.color = "white";
     }
+
     start() { 
-        // 🔊 TEST IMMÉDIAT AU LANCEMENT
-        this.playGlobal("DÉPART");
-        
-        if(this.HEROS) { this.HEROS.x = 15; this.HEROS.y = 70; } 
-        if(this.ZOMBIE) { this.ZOMBIE.x = 90; this.ZOMBIE.y = 70; } 
+        console.log("🚀 MODE TEST AUDIO ACTIVÉ");
+        // Tentative immédiate (souvent bloquée par le navigateur, mais on essaie)
+        this.playGlobal("DÉPART"); 
     }
-    onResult(correct) { 
-        if(correct && this.HEROS) { 
-            this.HEROS.play("SHOOT"); // Doit jouer le son de l'action
-            this.projectiles.push({ x: 20, y: 65 });
-        } 
-    }
+
     update() {
-        this.zombieX -= 0.1;
-        if(this.ZOMBIE) this.ZOMBIE.x = this.zombieX;
-        this.projectiles.forEach(p => p.x += 2);
+        if (this.keys['Space'] && !this.pressed) {
+            this.pressed = true;
+            this.color = "#22c55e"; // Vert
+            this.msg = "BOUM ! SON DÉCLENCHÉ";
+            console.log("🎹 ESPACE -> PLAY DÉPART");
+            
+            // On joue le son associé à l'événement global "DÉPART"
+            // Assurez-vous d'avoir un son dans l'onglet SONS > DÉPART !
+            this.playGlobal("DÉPART"); 
+        }
+
+        if (!this.keys['Space']) {
+            this.pressed = false;
+            if(this.color !== "white") {
+                this.color = "white";
+                this.msg = "APPUIE SUR ESPACE";
+            }
+        }
     }
+
     draw() {
         const ctx = this.ctx;
-        ctx.fillStyle = "orange";
-        this.projectiles.forEach(p => ctx.fillRect((p.x/100)*this.canvas.width, (p.y/100)*this.canvas.height, 10, 10));
+        ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        // Fond
+        ctx.fillStyle = "#0f172a";
+        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // Texte
+        ctx.fillStyle = this.color;
+        ctx.font = "40px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText("🔊 TEST AUDIO", this.canvas.width/2, 100);
+        
+        ctx.font = "30px monospace";
+        ctx.fillText(this.msg, this.canvas.width/2, 250);
+        
+        ctx.font = "15px monospace";
+        ctx.fillStyle = "#94a3b8";
+        ctx.fillText("(Vérifiez que l'onglet SONS contient 'DÉPART')", this.canvas.width/2, 350);
     }
 }
 `;
@@ -62,7 +92,10 @@ export default function StudioDashboard({ user }) {
     const [selectedActionIdx, setSelectedActionIdx] = useState(0);
     const [selectedGlobalSoundIdx, setSelectedGlobalSoundIdx] = useState(0);
     const [leftTab, setLeftTab] = useState('actions');
-    const [code, setCode] = useState(defaultCode);
+    
+    // ⚠️ ICI : On initialise DIRECTEMENT avec le code de test
+    const [code, setCode] = useState(AUDIO_TEST_CODE);
+    
     const [isPlaying, setIsPlaying] = useState(false);
     const [loading, setLoading] = useState(false);
     const [cleaning, setCleaning] = useState(false);
@@ -99,7 +132,12 @@ export default function StudioDashboard({ user }) {
             const p = data[0];
             if (p.scenes?.[0] && !p.scenes[0].globalSounds) p.scenes[0].globalSounds = DEMO_PROJECT.scenes[0].globalSounds;
             setProject(p);
-            if (p.generatedCode) setCode(p.generatedCode);
+            
+            // ⚠️ FORCE OVERRIDE : On ignore le code en base et on met le code de test
+            // setCode(p.generatedCode); <--- ANCIENNE LIGNE SUPPRIMÉE
+            setCode(AUDIO_TEST_CODE); // <--- NOUVELLE LIGNE FORCÉE
+            console.log("🔥 CODE DE TEST AUDIO FORCÉ 🔥");
+
             if (p.scenes?.[0]?.actors?.[0]) setSelectedActorId(p.scenes[0].actors[0].id);
         }
     }
@@ -115,12 +153,17 @@ export default function StudioDashboard({ user }) {
 
     const handleOpenSave = () => { setModalMode('SAVE'); setShowSaveLoadModal(true); };
     const handleOpenLoad = () => { setModalMode('LOAD'); setShowSaveLoadModal(true); };
-    const handleCreateNew = () => { setProject(DEMO_PROJECT); setCode(defaultCode); setSelectedActorId("actor-hero"); setShowSaveLoadModal(false); };
+    const handleCreateNew = () => { setProject(DEMO_PROJECT); setCode(AUDIO_TEST_CODE); setSelectedActorId("actor-hero"); setShowSaveLoadModal(false); };
     const handleLoadProject = (p) => { 
         if (p.scenes?.[0] && !p.scenes[0].globalSounds) p.scenes[0].globalSounds = DEMO_PROJECT.scenes[0].globalSounds;
-        setProject(p); setCode(p.generatedCode || defaultCode); if (p.scenes?.[0]?.actors?.[0]) setSelectedActorId(p.scenes[0].actors[0].id); else setSelectedActorId(null); setShowSaveLoadModal(false); 
+        setProject(p); 
+        // ⚠️ MÊME ICI : On force le code test si on charge un projet
+        // setCode(p.generatedCode || defaultCode); 
+        setCode(AUDIO_TEST_CODE);
+        if (p.scenes?.[0]?.actors?.[0]) setSelectedActorId(p.scenes[0].actors[0].id); else setSelectedActorId(null); setShowSaveLoadModal(false); 
     };
     
+    // --- (Le reste des fonctions est inchangé) ---
     const handleViewTestQuiz = async () => { try { const data = await api.get('/games/test-data'); if (data) { setTestQuizData(data); setShowTestQuizModal(true); } } catch (e) { console.error(e); } };
     const handleUpdateActionSpeed = (delta) => { if (!selectedAction) return; const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); if (actor && actor.actions[selectedActionIdx]) actor.actions[selectedActionIdx].speed = Math.max(20, Math.min(2000, (actor.actions[selectedActionIdx].speed || 100) + delta)); } else { if (next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx]) next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].speed = Math.max(20, Math.min(2000, (next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].speed || 100) + delta)); } setProject(next); saveProject(next); };
     const handleSelectActor = (actorId) => { setSelectedActorId(actorId); setSelectedFrameIdx(null); };
