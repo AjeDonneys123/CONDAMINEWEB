@@ -3,13 +3,15 @@ import React, { useState, useRef, useEffect } from 'react';
 import SoundExpert from './SoundExpert';
 
 /**
- * 🎮 MOTEUR "FORCE AUDIO WAKE UP" (V830)
- * Garantit que le contexte Audio est 'running' AVANT de lancer le script.
- * Ajoute des logs détaillés pour traquer le son manquant.
+ * 🎮 MOTEUR "AUDIO PRELOADER" (V840)
+ * 1. Empêche le démarrage tant que les sons ne sont pas prêts.
+ * 2. Force le déverrouillage audio avec un buffer silencieux au clic.
  */
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
     const canvasRef = useRef(null);
     const [engineStarted, setEngineStarted] = useState(false);
+    const [isReady, setIsReady] = useState(false); // Nouveau : état de chargement
+    const [loadProgress, setLoadProgress] = useState("");
     const [debugLogs, setDebugLogs] = useState([]);
     
     // Références persistantes
@@ -24,17 +26,19 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         setDebugLogs(prev => [...prev, { id, text: msg, type }].slice(-6));
     };
 
-    // 1. PRÉ-CHARGEMENT DES RESSOURCES
+    // 1. PRÉ-CHARGEMENT DES RESSOURCES (ASYNCHRONE)
     useEffect(() => {
-        logSonde("🛠️ Chargement ressources...");
         if (!audioCtxRef.current) {
             audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
         }
         
         const scene = project.scenes?.[activeSceneIdx];
-        if (!scene) return;
+        if (!scene) {
+            setIsReady(true);
+            return;
+        }
 
-        // Images
+        // Images (Non bloquant pour le son, mais on les charge)
         const imgUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url)))].filter(Boolean);
         imgUrls.forEach(url => {
             const img = new Image(); img.crossOrigin = "anonymous";
@@ -42,21 +46,36 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             img.src = resolveUrl(url);
         });
 
-        // Sons
+        // Sons (BLOQUANT : On attend qu'ils soient tous décodés)
         const sndUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url))))].filter(Boolean);
         
-        let loadedCount = 0;
-        sndUrls.forEach(url => {
-            SoundExpert.decodeAudio(resolveUrl(url), audioCtxRef.current).then(buf => {
-                if (buf) {
-                    audioBuffersRef.current.set(url, buf);
-                    loadedCount++;
-                    // logSonde("🎵 Chargé: " + url.split('/').pop(), "success");
-                }
+        if (sndUrls.length === 0) {
+            setIsReady(true);
+            logSonde("Aucun son à charger.", "info");
+        } else {
+            setLoadProgress(`0/${sndUrls.length}`);
+            let loaded = 0;
+            
+            sndUrls.forEach(url => {
+                SoundExpert.decodeAudio(resolveUrl(url), audioCtxRef.current).then(buf => {
+                    if (buf) {
+                        audioBuffersRef.current.set(url, buf);
+                        loaded++;
+                        setLoadProgress(`${loaded}/${sndUrls.length}`);
+                        // logSonde(`🎵 Buffer OK: ${url.slice(-10)}`, "success");
+                    } else {
+                        logSonde(`❌ Echec Son: ${url.slice(-10)}`, "error");
+                        // On compte quand même pour ne pas bloquer à jamais
+                        loaded++;
+                    }
+
+                    if (loaded === sndUrls.length) {
+                        setIsReady(true);
+                        logSonde("✅ TOUS LES SONS PRÊTS", "success");
+                    }
+                });
             });
-        });
-        
-        if (sndUrls.length > 0) logSonde(`🎵 ${sndUrls.length} sons détectés...`, "info");
+        }
 
         return () => {
             if (frameIdRef.current) cancelAnimationFrame(frameIdRef.current);
@@ -64,29 +83,34 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         };
     }, [project]);
 
-    // 2. DÉMARRAGE BLINDÉ (Interaction Utilisateur)
+    // 2. DÉMARRAGE AVEC "SILENT UNLOCK"
     const handleStartGame = async () => {
-        logSonde("🖱️ Clic reçu. Réveil Audio...", "info");
-        
-        // A. Forcer le réveil de l'AudioContext
+        if (!audioCtxRef.current) return;
+
+        // A. La technique du Ninja Silencieux :
+        // On joue un son vide de 0.1s. Ça force le navigateur à ouvrir les vannes audio.
         try {
-            if (audioCtxRef.current) {
+            const buffer = audioCtxRef.current.createBuffer(1, 1, 22050);
+            const source = audioCtxRef.current.createBufferSource();
+            source.buffer = buffer;
+            source.connect(audioCtxRef.current.destination);
+            source.start(0);
+            
+            // On s'assure que le contexte est bien running
+            if (audioCtxRef.current.state === 'suspended') {
                 await audioCtxRef.current.resume();
-                if (audioCtxRef.current.state === 'running') {
-                    logSonde("🔊 Moteur Audio: RUNNING", "success");
-                } else {
-                    logSonde("⚠️ Moteur Audio: " + audioCtxRef.current.state, "error");
-                }
             }
+            
+            logSonde("🔊 Canal Audio Ouvert", "success");
         } catch (e) {
-            logSonde("❌ Erreur Audio Resume: " + e.message, "error");
+            logSonde("⚠️ Audio Warning: " + e.message, "error");
         }
 
-        // B. Lancer le moteur graphique
+        // B. Lancer le visuel
         setEngineStarted(true);
     };
 
-    // 3. INITIALISATION MOTEUR (Une fois le Canvas monté)
+    // 3. INITIALISATION DU JEU (CANVAS + CODE)
     useEffect(() => {
         if (!engineStarted || !canvasRef.current) return;
 
@@ -95,9 +119,9 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             const ctx = canvas.getContext('2d');
             if (!ctx) throw new Error("Contexte 2D introuvable");
 
-            logSonde("🎮 Exécution du script...", "info");
+            logSonde("🚀 Script Start...", "info");
 
-            // A. GÉNÉRATION DE LA CLASSE DE BASE (EXOSQUELETTE)
+            // --- FACTORY (Classe de base) ---
             const BaseFactory = new Function('params', `
                 const { audioBuffers, audioCtx, logSonde, project, sceneIdx, imageAssets, resolveUrl, canvas, ctx } = params;
                 
@@ -121,9 +145,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     constructor() {
                         this.canvas = canvas; this.ctx = ctx; this.keys = {};
                         const s = project.scenes[sceneIdx];
-                        // Injection automatique des acteurs (this.HEROS, etc.)
                         if(s && s.actors) s.actors.forEach(a => { this[a.name.toUpperCase()] = new ActorProxy(a, this); });
-                        
                         document.onkeydown = e => this.keys[e.code] = true;
                         document.onkeyup = e => this.keys[e.code] = false;
                     }
@@ -131,49 +153,33 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     _triggerActionSounds(actorId, actionName) {
                         const actor = project.scenes[sceneIdx].actors.find(a => a.id === actorId);
                         const action = actor?.actions.find(act => act.name.toUpperCase() === actionName.toUpperCase());
-                        if(action && action.sounds) action.sounds.forEach(snd => this._playSound(snd.url, actionName));
+                        if(action && action.sounds) action.sounds.forEach(snd => this._playSound(snd.url));
                     }
 
-                    _playSound(url, sourceName = "System") {
-                        if (!audioCtx) { logSonde("🔇 Pas d'AudioCtx", "error"); return; }
-                        
+                    _playSound(url) {
                         const buffer = audioBuffers.get(url);
-                        if (!buffer) {
-                            logSonde("🔇 Buffer vide pour " + url.slice(-10), "error");
-                            return;
-                        }
-
-                        if (audioCtx.state !== 'running') {
-                            logSonde("⚠️ Audio suspendu ! Tentative resume...", "error");
-                            audioCtx.resume();
-                        }
-
-                        try {
-                            const source = audioCtx.createBufferSource();
-                            source.buffer = buffer;
-                            source.connect(audioCtx.destination);
-                            source.start(0);
-                            logSonde("🔊 JOUE: " + sourceName, "success");
-                        } catch(e) {
-                            logSonde("❌ Play Error: " + e.message, "error");
+                        if(buffer && audioCtx) {
+                            try {
+                                const source = audioCtx.createBufferSource();
+                                source.buffer = buffer;
+                                source.connect(audioCtx.destination);
+                                source.start(0);
+                            } catch(e) { console.error(e); }
+                        } else {
+                            logSonde("Erreur son: Buffer manquant", "error");
                         }
                     }
 
                     playGlobal(name) {
                         const s = project.scenes[sceneIdx];
                         const cleanName = name.toUpperCase().trim();
-                        // Recherche insensible aux accents si besoin, mais ici strict sur uppercase
                         const gs = s.globalSounds?.find(g => g.name.toUpperCase().trim() === cleanName);
                         
-                        if (gs) {
-                            if (gs.sounds && gs.sounds.length > 0) {
-                                logSonde("Found Global: " + name + " (" + gs.sounds.length + " sons)", "info");
-                                gs.sounds.forEach(snd => this._playSound(snd.url, name));
-                            } else {
-                                logSonde("⚠️ Global " + name + " trouvé mais vide", "error");
-                            }
+                        if (gs && gs.sounds) {
+                            logSonde("Trigger Global: " + name, "success");
+                            gs.sounds.forEach(snd => this._playSound(snd.url));
                         } else {
-                            logSonde("⚠️ Global " + name + " introuvable", "error");
+                            logSonde("Son introuvable: " + name, "error");
                         }
                     }
 
@@ -181,14 +187,12 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                         const s = project.scenes[sceneIdx];
                         ctx.fillStyle = "#0f172a"; ctx.fillRect(0,0,canvas.width, canvas.height);
                         
-                        // Background
                         const bd = s?.backdrops?.[s.currentBackdropIdx || 0];
                         if(bd) {
                             const img = imageAssets.get(resolveUrl(bd.url));
                             if(img) ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
                         }
 
-                        // Actors
                         for(let key in this) {
                             const p = this[key];
                             if(p instanceof ActorProxy && p.visible) {
@@ -212,13 +216,13 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 }
             `);
 
-            // Création de la classe Parent
+            // Création classe mère
             const MiniGameBase = BaseFactory({ 
                 audioBuffers: audioBuffersRef.current, audioCtx: audioCtxRef.current, 
                 imageAssets: imageAssetsRef.current, resolveUrl, logSonde, project, sceneIdx: activeSceneIdx, canvas, ctx
             });
 
-            // B. COMPILATION CODE UTILISATEUR
+            // Injection code utilisateur
             const UserCodeFactory = new Function('MiniGameBase', `
                 ${code}
                 return MiniGame;
@@ -228,10 +232,9 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             const instance = new UserGameClass();
             gameInstanceRef.current = instance;
 
-            // C. LANCEMENT
             if (instance.start) instance.start();
             
-            // Boucle
+            // BOUCLE DE RENDU
             const tick = () => {
                 if (instance.update) instance.update();
                 if (instance._render) instance._render();
@@ -241,7 +244,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             tick();
 
         } catch (e) {
-            logSonde("💥 ERREUR CODE: " + e.message, "error");
+            logSonde("CRASH: " + e.message, "error");
             console.error(e);
         }
     }, [engineStarted]);
@@ -257,8 +260,12 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
              </div>
 
              {!engineStarted ? (
-                 <button onClick={handleStartGame} className="px-20 py-10 bg-white text-indigo-600 rounded-full font-black text-5xl shadow-2xl border-8 border-indigo-200 hover:scale-110 transition-all animate-pulse">
-                    🚀 JOUER (SON ACTIF)
+                 <button 
+                    onClick={handleStartGame} 
+                    disabled={!isReady}
+                    className={`px-20 py-10 rounded-full font-black text-5xl shadow-2xl border-8 transition-all ${isReady ? 'bg-white text-indigo-600 border-indigo-200 hover:scale-110 animate-pulse' : 'bg-slate-700 text-slate-500 border-slate-600 cursor-not-allowed'}`}
+                 >
+                    {isReady ? "🚀 JOUER" : `CHARGEMENT SON (${loadProgress})...`}
                  </button>
              ) : (
                 <div className="relative animate-in zoom-in">

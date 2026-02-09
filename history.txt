@@ -2132,3 +2132,15 @@
 1. Le bouton "JOUER" appelle `audioCtx.resume()` et attend confirmation avant de lancer le jeu.
 2. Ajout de logs violets dans le HUD pour confirmer "Moteur Audio: RUNNING" et "JOUE: DÉPART".
 3. Le moteur de son `_playSound` vérifie si le buffer est chargé et si le contexte est actif avant de jouer.
+
+09/02/2026 00:05 - STUDIO ENGINE V825 (FIX SCOPE) : Résolution du crash "MiniGameBase is not defined". Le moteur injecte désormais explicitement la classe mère `MiniGameBase` (générée dynamiquement) dans le scope de la factory utilisateur. Cela permet au code `class MiniGame extends MiniGameBase` de fonctionner correctement.
+
+09/02/2026 00:15 - STUDIO ENGINE V830 (FORCE AUDIO WAKE UP) : Correction du son de DÉPART manquant.
+1. Le bouton "JOUER" appelle `audioCtx.resume()` et attend confirmation avant de lancer le jeu.
+2. Ajout de logs violets dans le HUD pour confirmer "Moteur Audio: RUNNING" et "JOUE: DÉPART".
+3. Le moteur de son `_playSound` vérifie si le buffer est chargé et si le contexte est actif avant de jouer.
+
+09/02/2026 00:25 - STUDIO ENGINE V840 (AUDIO PRELOADER) : Solution définitive pour le son manquant.
+1. Ajout d'un état `isReady` qui bloque le bouton "JOUER" tant que tous les sons du projet ne sont pas téléchargés et décodés.
+2. Affichage d'un compteur de chargement (ex: "CHARGEMENT SON (2/5)...") sur le bouton.
+3. Utilisation de la technique du "Silent Buffer" (lecture d'un son vide) au clic pour garantir le déverrouillage audio sur tous les navigateurs.
