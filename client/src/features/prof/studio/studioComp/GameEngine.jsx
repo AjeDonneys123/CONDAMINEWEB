@@ -4,8 +4,9 @@ import SoundExpert from './SoundExpert';
 import { api } from '../../../../services/api';
 
 /**
- * 🎮 MOTEUR STUDIO V870 (RESTAURATION HUD + SON)
- * Combine le chargement audio sécurisé ET l'interface visuelle du Quiz.
+ * 🎮 MOTEUR STUDIO V890 (FIX CALLBACKS)
+ * Résout le crash 'onPlayerHit undefined' en passant explicitement les callbacks
+ * au constructeur de la classe de jeu.
  */
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
     const canvasRef = useRef(null);
@@ -14,7 +15,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const [loadProgress, setLoadProgress] = useState("");
     const [debugLogs, setDebugLogs] = useState([]);
     
-    // --- ÉTATS DU QUIZ (RESTAURÉS) ---
+    // --- ÉTATS DU QUIZ ---
     const [allLevels, setAllLevels] = useState([]); 
     const [currentLevelIdx, setCurrentLevelIdx] = useState(0);
     const [levelQuestions, setLevelQuestions] = useState([]); 
@@ -34,7 +35,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const imageAssetsRef = useRef(new Map());
     const gameInstanceRef = useRef(null);
     const frameIdRef = useRef(null);
-    const keysPressed = useRef({}); // Utilisation Ref pour éviter re-render
+    const keysPressed = useRef({}); 
 
     const logSonde = (msg, type = 'info') => {
         const id = Math.random();
@@ -44,7 +45,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     // 1. INIT DONNÉES QUIZ
     useEffect(() => {
         api.get('/games/test-data').then(data => {
-            // Fallback si pas de données de test
             const levelsData = data?.levels?.length > 0 ? data.levels : [{ 
                 name: "Test Default", 
                 questions: [
@@ -76,7 +76,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         if (questions.length > 0) setCurrentQIndex(0);
     };
 
-    // 2. PRÉ-CHARGEMENT DES RESSOURCES
+    // 2. PRÉ-CHARGEMENT
     useEffect(() => {
         if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
         
@@ -115,7 +115,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         };
     }, [project]);
 
-    // 3. LOGIQUE JEU (RÉPONSES)
+    // 3. LOGIQUE JEU
     const handleAnswerClick = (choiceIdx) => {
         if (feedback || currentQIndex === -1 || isLevelWonRef.current) return;
         const currentQ = levelQuestions[currentQIndex];
@@ -179,9 +179,22 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             const ctx = canvas.getContext('2d');
             if (!ctx) throw new Error("Contexte 2D introuvable");
 
+            // --- OBJETS CALLBACKS ---
+            const gameCallbacks = {
+                onPlayerHit: () => {
+                    // Appelé par le script Zombie quand il touche le héros
+                    logSonde("💥 AIE ! Coup reçu !", "error");
+                    if (!isLevelWonRef.current) {
+                        setLives(l => Math.max(0, l - 1));
+                    }
+                },
+                onLevelWin: () => console.log("Win trigger internal"),
+                playSound: (name) => console.log("Sound req", name)
+            };
+
             // --- FACTORY ---
             const BaseFactory = new Function('params', `
-                const { audioBuffers, audioCtx, logSonde, project, sceneIdx, imageAssets, resolveUrl, canvas, ctx } = params;
+                const { audioBuffers, audioCtx, logSonde, project, sceneIdx, imageAssets, resolveUrl, canvas, ctx, callbacks } = params;
                 
                 class ActorProxy {
                     constructor(data, engine) { 
@@ -202,8 +215,16 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 }
 
                 return class MiniGameBase {
-                    constructor() {
-                        this.canvas = canvas; this.ctx = ctx; this.keys = {};
+                    // ✅ CONSTRUCTEUR CORRIGÉ : Récupère les arguments passés par new UserGameClass(...)
+                    constructor(c, a, cb) {
+                        this.canvas = c || canvas; 
+                        this.ctx = ctx; 
+                        this.keys = {};
+                        
+                        // Injection critique des callbacks
+                        this.callbacks = cb || callbacks;
+                        this.assets = a || {};
+
                         const s = project.scenes[sceneIdx];
                         if(s && s.actors) s.actors.forEach(a => { this[a.name.toUpperCase()] = new ActorProxy(a, this); });
                         
@@ -238,13 +259,11 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     _render() {
                         const s = project.scenes[sceneIdx];
                         ctx.fillStyle = "#0f172a"; ctx.fillRect(0,0,canvas.width, canvas.height);
-                        
                         const bd = s?.backdrops?.[s.currentBackdropIdx || 0];
                         if(bd) {
                             const img = imageAssets.get(resolveUrl(bd.url));
                             if(img) ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
                         }
-
                         for(let key in this) {
                             const p = this[key];
                             if(p instanceof ActorProxy && p.visible) {
@@ -258,8 +277,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                                     if(spr) {
                                         const xPx = (p.x/100)*canvas.width; const yPx = (p.y/100)*canvas.height; let sz = 150*p.scale;
                                         ctx.save(); ctx.translate(xPx, yPx);
-                                        // Gestion Rotation/Miroir
-                                        if(p.rotationStyle === 'left-right' && Math.abs(p.scale) !== p.scale) ctx.scale(Math.sign(p.scale), 1); // Fix Miroir
+                                        if(p.rotationStyle === 'left-right' && Math.abs(p.scale) !== p.scale) ctx.scale(Math.sign(p.scale), 1);
                                         else if (p.direction) ctx.rotate(p.direction * Math.PI / 180);
                                         ctx.drawImage(spr, -sz/2, -sz/2, sz, sz); ctx.restore();
                                     }
@@ -272,20 +290,23 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
             const MiniGameBase = BaseFactory({ 
                 audioBuffers: audioBuffersRef.current, audioCtx: audioCtxRef.current, 
-                imageAssets: imageAssetsRef.current, resolveUrl, logSonde, project, sceneIdx: activeSceneIdx, canvas, ctx
+                imageAssets: imageAssetsRef.current, resolveUrl, logSonde, project, sceneIdx: activeSceneIdx, canvas, ctx,
+                callbacks: gameCallbacks // On passe les callbacks à la Factory (au cas où)
             });
 
             const UserCodeFactory = new Function('MiniGameBase', `${code}\nreturn MiniGame;`);
             const UserGameClass = UserCodeFactory(MiniGameBase);
-            const instance = new UserGameClass();
+            
+            // ✅ INSTANCIATION AVEC ARGUMENTS (LA CLÉ DU SUCCÈS)
+            // C'est ça qui manquait ! Avant c'était new UserGameClass() vide.
+            const instance = new UserGameClass(canvas, {}, gameCallbacks);
+            
             gameInstanceRef.current = instance;
 
             if (instance.start) instance.start();
             
             const tick = () => {
-                // Update keys from Ref
                 if(instance.keys) Object.assign(instance.keys, keysPressed.current);
-                
                 if (instance.update) instance.update();
                 if (instance._render) instance._render();
                 if (instance.draw) instance.draw();
@@ -302,10 +323,8 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     return (
         <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center overflow-hidden font-sans">
              
-             {/* 🛑 BOUTON QUITTER 🛑 */}
              <button onClick={onStop} className="absolute top-6 right-6 bg-red-600 text-white w-12 h-12 rounded-full font-black text-2xl shadow-xl border-4 border-white hover:scale-110 transition-all flex items-center justify-center pointer-events-auto z-50">✕</button>
 
-             {/* LOGS FLOTTANTS */}
              <div className="absolute top-20 left-4 flex flex-col gap-1 pointer-events-none z-40">
                 {debugLogs.map(log => (
                     <div key={log.id} className={`px-3 py-1 rounded text-[9px] font-black shadow-lg border-l-4 ${log.type === 'error' ? 'bg-red-500 text-white' : log.type === 'success' ? 'bg-green-500 text-white' : 'bg-yellow-400 text-black'}`}>
@@ -324,14 +343,10 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                  </button>
              ) : (
                 <>
-                    {/* --- HUD DE JEU (RESTAURÉ) --- */}
                     <div className="absolute top-6 w-full flex justify-between items-start px-10 pointer-events-none z-30">
-                        {/* Vies */}
                         <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-xl pointer-events-auto flex gap-1">
                             {"❤️".repeat(lives)}{"🖤".repeat(Math.max(0, 4 - lives))}
                         </div>
-                        
-                        {/* Question */}
                         <div className="flex-1 flex justify-center px-4">
                             {levelQuestions[currentQIndex] && !isLevelWon && (
                                 <div className="bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 border-slate-600 shadow-2xl text-xl pointer-events-auto animate-in slide-in-from-top">
@@ -339,8 +354,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                                 </div>
                             )}
                         </div>
-
-                        {/* Barres Progression */}
                         <div className="flex gap-2 items-center pointer-events-auto mr-20">
                             {questionStates.map((mastery, idx) => (
                                 <div key={idx} className={`w-4 h-12 rounded-md border border-slate-600 relative overflow-hidden transition-all ${currentQIndex === idx ? 'ring-2 ring-indigo-400 scale-110' : 'opacity-60'}`}>
@@ -350,11 +363,8 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                         </div>
                     </div>
 
-                    {/* CANVAS */}
                     <div className="relative animate-in zoom-in">
                         <canvas ref={canvasRef} width={800} height={450} className={`aspect-video shadow-2xl bg-black border-4 border-slate-800 rounded-xl transition-opacity duration-1000 ${isPowerOff ? 'opacity-0' : 'opacity-100'}`} />
-                        
-                        {/* Overlay Victoire */}
                         {isLevelWon && (
                             <div className="absolute inset-0 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm rounded-xl animate-in zoom-in z-40">
                                 <div className="bg-white p-10 rounded-[40px] shadow-2xl text-center border-8 border-green-500">
@@ -365,7 +375,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                         )}
                     </div>
 
-                    {/* BOUTONS RÉPONSES */}
                     {!isLevelWon && !isPowerOff && levelQuestions[currentQIndex] && (
                         <div className="absolute bottom-10 w-full flex justify-center px-10 pointer-events-auto z-30">
                             <div className="grid grid-cols-4 gap-4 w-full max-w-5xl">
