@@ -1033,3 +1033,5 @@
 08/02/2026 19:04 - STUDIO AUDIO DEBUG : Installation d'une sonde chirurgicale dans le GameEngine. Chaque appel .play() et chaque lecture de son génère désormais un badge jaune ou vert en haut à gauche de l'écran. Rétablissement du Proxy serveur en mode "Raw Bytes" pour garantir l'intégrité des flux audio MP3 vers le navigateur.
 
 08/02/2026 19:04 - STUDIO AUDIO DEBUG : Installation d'une sonde chirurgicale dans le GameEngine. Chaque appel .play() et chaque lecture de son génère désormais un badge jaune ou vert en haut à gauche de l'écran. Rétablissement du Proxy serveur en mode "Raw Bytes" pour garantir l'intégrité des flux audio MP3 vers le navigateur.
+
+08/02/2026 20:05 - STUDIO STARTUP DEBUG : Déploiement d'un test audio forcé au démarrage. Le script par défaut appelle désormais this.playGlobal("DÉPART") dans start(). Le GameEngine a été mis à jour pour logger le succès du chargement de chaque buffer audio individuellement. Correction de l'injection des sons de scène dans le périmètre de la classe MiniGameBase.
