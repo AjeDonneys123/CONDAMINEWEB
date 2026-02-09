@@ -13,16 +13,28 @@ export default function StudioLeftPanel({
     handleSmartAIClean, cleaning, setShowSoundModal,
     handleDeleteSound, handleEditSound,
     setPreviewFrameIdx,
-    currentScene // <--- RÉCUPÉRATION DE LA SCÈNE (CRUCIAL POUR L'ONGLET SONS)
+    currentScene
 }) {
     const [selectedSoundIdx, setSelectedSoundIdx] = useState(null);
     const audioCtxRef = useRef(null);
+    
+    // 🔊 LISTE DES SONS EN COURS DE LECTURE (POUR POUVOIR LES COUPER)
+    const activeSourcesRef = useRef([]);
 
-    // --- MOTEUR DE PRÉVISUALISATION ---
+    // FONCTION POUR COUPER TOUT LE SON IMMÉDIATEMENT
+    const stopAllSounds = () => {
+        activeSourcesRef.current.forEach(source => {
+            try { source.stop(); } catch(e) {} // On ignore si déjà stoppé
+        });
+        activeSourcesRef.current = [];
+    };
+
+    // --- MOTEUR DE PRÉVISUALISATION (SÉQUENCEUR) ---
     useEffect(() => {
         let interval = null;
 
         if (isPreviewPlaying && selectedAction && selectedAction.frames && selectedAction.frames.length > 0) {
+            // Init Context
             if (!audioCtxRef.current) {
                 audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
             }
@@ -32,8 +44,13 @@ export default function StudioLeftPanel({
                     setPreviewFrameIdx(currentIdx => {
                         const nextIdx = (currentIdx + 1) % selectedAction.frames.length;
                         
-                        // Son sur boucle
+                        // 🔊 DÉCLENCHEMENT SONORE À LA BOUCLE (Frame 0)
                         if (nextIdx === 0 && selectedAction.sounds && selectedAction.sounds.length > 0) {
+                            
+                            // 1. On coupe les sons précédents pour éviter la cacophonie
+                            stopAllSounds();
+
+                            // 2. On lance les nouveaux sons
                             selectedAction.sounds.forEach(snd => {
                                 SoundExpert.decodeAudio(resolveUrl(snd.url), audioCtxRef.current).then(buf => {
                                     if (buf) {
@@ -41,6 +58,8 @@ export default function StudioLeftPanel({
                                         source.buffer = buf;
                                         source.connect(audioCtxRef.current.destination);
                                         source.start(0);
+                                        // On l'ajoute à la liste pour pouvoir le tuer si on met PAUSE
+                                        activeSourcesRef.current.push(source);
                                     }
                                 });
                             });
@@ -49,10 +68,15 @@ export default function StudioLeftPanel({
                     });
                 }
             }, selectedAction.speed || 200);
+        } else {
+            // SI ON MET PAUSE OU STOP : ON COUPE TOUT
+            stopAllSounds();
         }
 
+        // NETTOYAGE QUAND ON QUITTE L'ONGLET OU LE COMPOSANT
         return () => {
             if (interval) clearInterval(interval);
+            stopAllSounds();
         };
     }, [isPreviewPlaying, selectedAction]);
 
@@ -124,7 +148,6 @@ export default function StudioLeftPanel({
                     </>
                 ) : (
                     <>
-                        {/* UTILISATION DE CURRENT SCENE PASSÉE EN PROP (PLUS DE CRASH) */}
                         {currentScene?.globalSounds?.map((act, idx) => (
                             <div key={idx} onClick={() => handleSelectGlobalSound(idx)} className={`action-item ${selectedGlobalSoundIdx === idx ? 'selected' : ''}`}>
                                 <span>{act.name}</span>
@@ -194,7 +217,6 @@ export default function StudioLeftPanel({
                                     <span className="text-xl">🎵</span>
                                     <span className="text-[8px] font-black text-indigo-800 w-full text-center truncate px-1">{snd.name?.substring(0,10)}</span>
                                     
-                                    {/* --- BOUTON DE SUPPRESSION AJOUTÉ ICI --- */}
                                     <button 
                                         className="frame-del !bg-red-500 !text-white !opacity-100 !top-1 !right-1 z-50" 
                                         onClick={(e) => { e.stopPropagation(); handleDeleteSound(sIdx); }}
