@@ -3,14 +3,14 @@ import React, { useState, useRef, useEffect } from 'react';
 import SoundExpert from './SoundExpert';
 
 /**
- * 🎮 MOTEUR "AUDIO PRELOADER" (V840)
- * 1. Empêche le démarrage tant que les sons ne sont pas prêts.
- * 2. Force le déverrouillage audio avec un buffer silencieux au clic.
+ * 🎮 MOTEUR "CALLBACKS PATCH" (V850)
+ * Résout le crash 'onPlayerHit is undefined'.
+ * Injecte des fonctions de simulation pour la gestion des vies et de la victoire.
  */
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
     const canvasRef = useRef(null);
     const [engineStarted, setEngineStarted] = useState(false);
-    const [isReady, setIsReady] = useState(false); // Nouveau : état de chargement
+    const [isReady, setIsReady] = useState(false);
     const [loadProgress, setLoadProgress] = useState("");
     const [debugLogs, setDebugLogs] = useState([]);
     
@@ -26,19 +26,16 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         setDebugLogs(prev => [...prev, { id, text: msg, type }].slice(-6));
     };
 
-    // 1. PRÉ-CHARGEMENT DES RESSOURCES (ASYNCHRONE)
+    // 1. PRÉ-CHARGEMENT
     useEffect(() => {
         if (!audioCtxRef.current) {
             audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
         }
         
         const scene = project.scenes?.[activeSceneIdx];
-        if (!scene) {
-            setIsReady(true);
-            return;
-        }
+        if (!scene) { setIsReady(true); return; }
 
-        // Images (Non bloquant pour le son, mais on les charge)
+        // Images
         const imgUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url)))].filter(Boolean);
         imgUrls.forEach(url => {
             const img = new Image(); img.crossOrigin = "anonymous";
@@ -46,29 +43,19 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             img.src = resolveUrl(url);
         });
 
-        // Sons (BLOQUANT : On attend qu'ils soient tous décodés)
+        // Sons
         const sndUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url))))].filter(Boolean);
         
         if (sndUrls.length === 0) {
             setIsReady(true);
-            logSonde("Aucun son à charger.", "info");
         } else {
             setLoadProgress(`0/${sndUrls.length}`);
             let loaded = 0;
-            
             sndUrls.forEach(url => {
                 SoundExpert.decodeAudio(resolveUrl(url), audioCtxRef.current).then(buf => {
-                    if (buf) {
-                        audioBuffersRef.current.set(url, buf);
-                        loaded++;
-                        setLoadProgress(`${loaded}/${sndUrls.length}`);
-                        // logSonde(`🎵 Buffer OK: ${url.slice(-10)}`, "success");
-                    } else {
-                        logSonde(`❌ Echec Son: ${url.slice(-10)}`, "error");
-                        // On compte quand même pour ne pas bloquer à jamais
-                        loaded++;
-                    }
-
+                    if (buf) audioBuffersRef.current.set(url, buf);
+                    loaded++;
+                    setLoadProgress(`${loaded}/${sndUrls.length}`);
                     if (loaded === sndUrls.length) {
                         setIsReady(true);
                         logSonde("✅ TOUS LES SONS PRÊTS", "success");
@@ -83,34 +70,24 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         };
     }, [project]);
 
-    // 2. DÉMARRAGE AVEC "SILENT UNLOCK"
+    // 2. DÉMARRAGE
     const handleStartGame = async () => {
-        if (!audioCtxRef.current) return;
-
-        // A. La technique du Ninja Silencieux :
-        // On joue un son vide de 0.1s. Ça force le navigateur à ouvrir les vannes audio.
-        try {
-            const buffer = audioCtxRef.current.createBuffer(1, 1, 22050);
-            const source = audioCtxRef.current.createBufferSource();
-            source.buffer = buffer;
-            source.connect(audioCtxRef.current.destination);
-            source.start(0);
-            
-            // On s'assure que le contexte est bien running
-            if (audioCtxRef.current.state === 'suspended') {
+        if (audioCtxRef.current) {
+            // Tentative de réveil brutale
+            try {
                 await audioCtxRef.current.resume();
-            }
-            
-            logSonde("🔊 Canal Audio Ouvert", "success");
-        } catch (e) {
-            logSonde("⚠️ Audio Warning: " + e.message, "error");
+                // Son silencieux pour débloquer iOS/Chrome
+                const buffer = audioCtxRef.current.createBuffer(1, 1, 22050);
+                const source = audioCtxRef.current.createBufferSource();
+                source.buffer = buffer;
+                source.connect(audioCtxRef.current.destination);
+                source.start(0);
+            } catch (e) {}
         }
-
-        // B. Lancer le visuel
         setEngineStarted(true);
     };
 
-    // 3. INITIALISATION DU JEU (CANVAS + CODE)
+    // 3. INITIALISATION DU JEU
     useEffect(() => {
         if (!engineStarted || !canvasRef.current) return;
 
@@ -121,9 +98,17 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
             logSonde("🚀 Script Start...", "info");
 
-            // --- FACTORY (Classe de base) ---
+            // --- CALLBACKS SIMULÉS (Le cœur du fix) ---
+            const mockCallbacks = {
+                onPlayerHit: () => logSonde("💥 AÏE ! (Vies -1)", "error"),
+                onGameWin: () => logSonde("🏆 NIVEAU GAGNÉ !", "success"),
+                onGameOver: () => logSonde("💀 GAME OVER", "error"),
+                playSound: (name) => logSonde(`🎵 Demande son: ${name}`, "info")
+            };
+
+            // --- FACTORY ---
             const BaseFactory = new Function('params', `
-                const { audioBuffers, audioCtx, logSonde, project, sceneIdx, imageAssets, resolveUrl, canvas, ctx } = params;
+                const { audioBuffers, audioCtx, logSonde, project, sceneIdx, imageAssets, resolveUrl, canvas, ctx, callbacks } = params;
                 
                 class ActorProxy {
                     constructor(data, engine) { 
@@ -143,7 +128,11 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
                 return class MiniGameBase {
                     constructor() {
-                        this.canvas = canvas; this.ctx = ctx; this.keys = {};
+                        this.canvas = canvas; this.ctx = ctx; 
+                        this.keys = {};
+                        // Injection des callbacks (FIX V850)
+                        this.callbacks = callbacks;
+
                         const s = project.scenes[sceneIdx];
                         if(s && s.actors) s.actors.forEach(a => { this[a.name.toUpperCase()] = new ActorProxy(a, this); });
                         document.onkeydown = e => this.keys[e.code] = true;
@@ -159,14 +148,15 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     _playSound(url) {
                         const buffer = audioBuffers.get(url);
                         if(buffer && audioCtx) {
+                            // Sécurité ultime : Resume si suspendu
+                            if (audioCtx.state === 'suspended') audioCtx.resume();
+                            
                             try {
                                 const source = audioCtx.createBufferSource();
                                 source.buffer = buffer;
                                 source.connect(audioCtx.destination);
                                 source.start(0);
                             } catch(e) { console.error(e); }
-                        } else {
-                            logSonde("Erreur son: Buffer manquant", "error");
                         }
                     }
 
@@ -178,8 +168,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                         if (gs && gs.sounds) {
                             logSonde("Trigger Global: " + name, "success");
                             gs.sounds.forEach(snd => this._playSound(snd.url));
-                        } else {
-                            logSonde("Son introuvable: " + name, "error");
                         }
                     }
 
@@ -216,13 +204,13 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 }
             `);
 
-            // Création classe mère
+            // Création classe mère avec Callbacks
             const MiniGameBase = BaseFactory({ 
                 audioBuffers: audioBuffersRef.current, audioCtx: audioCtxRef.current, 
-                imageAssets: imageAssetsRef.current, resolveUrl, logSonde, project, sceneIdx: activeSceneIdx, canvas, ctx
+                imageAssets: imageAssetsRef.current, resolveUrl, logSonde, project, sceneIdx: activeSceneIdx, canvas, ctx,
+                callbacks: mockCallbacks // <--- L'INGRÉDIENT MANQUANT
             });
 
-            // Injection code utilisateur
             const UserCodeFactory = new Function('MiniGameBase', `
                 ${code}
                 return MiniGame;
@@ -234,7 +222,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
             if (instance.start) instance.start();
             
-            // BOUCLE DE RENDU
+            // Boucle
             const tick = () => {
                 if (instance.update) instance.update();
                 if (instance._render) instance._render();

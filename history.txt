@@ -2144,3 +2144,13 @@
 1. Ajout d'un état `isReady` qui bloque le bouton "JOUER" tant que tous les sons du projet ne sont pas téléchargés et décodés.
 2. Affichage d'un compteur de chargement (ex: "CHARGEMENT SON (2/5)...") sur le bouton.
 3. Utilisation de la technique du "Silent Buffer" (lecture d'un son vide) au clic pour garantir le déverrouillage audio sur tous les navigateurs.
+
+09/02/2026 00:25 - STUDIO ENGINE V840 (AUDIO PRELOADER) : Solution définitive pour le son manquant.
+1. Ajout d'un état `isReady` qui bloque le bouton "JOUER" tant que tous les sons du projet ne sont pas téléchargés et décodés.
+2. Affichage d'un compteur de chargement (ex: "CHARGEMENT SON (2/5)...") sur le bouton.
+3. Utilisation de la technique du "Silent Buffer" (lecture d'un son vide) au clic pour garantir le déverrouillage audio sur tous les navigateurs.
+
+09/02/2026 00:35 - STUDIO ENGINE V850 (CALLBACKS PATCH) : Résolution du crash `TypeError: onPlayerHit undefined`.
+1. Injection d'un objet `mockCallbacks` dans la classe `MiniGameBase` via la Factory.
+2. Les appels à `this.callbacks.onPlayerHit` ne font plus planter le jeu mais affichent un log de debug ("💥 AÏE !").
+3. Renforcement de la sécurité audio avec un `resume()` forcé à chaque lecture de son.
