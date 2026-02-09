@@ -1,4 +1,4 @@
-// @signatures: SERVER_BOOT_ID, GlobalInfrastructure, KernelV70_AUDIO_STABLE
+// @signatures: SERVER_BOOT_ID, GlobalInfrastructure, KernelV71_AUDIO_RAW
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
@@ -22,7 +22,6 @@ app.get(['/api/proxy/:id', '/api/structure/proxy/:id'], async (req, res) => {
         const fileId = req.params.id;
         const stream = await ProfDrive.getFileStream(fileId);
         res.setHeader('Accept-Ranges', 'bytes');
-        // Pas de Content-Type forcé pour laisser le navigateur décoder
         stream.pipe(res);
     } catch (e) { res.status(404).send("Audio not found"); }
 });
@@ -40,5 +39,5 @@ try {
 } catch (e) {}
 
 mongoose.connect(process.env.MONGODB_URI).then(() => {
-    app.listen(port, '0.0.0.0', () => console.log(`🏁 READY ${port}`));
+    app.listen(port, '0.0.0.0', () => console.log(`🏁 READY SUR LE PORT ${port}`));
 });
