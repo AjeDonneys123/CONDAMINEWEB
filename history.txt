@@ -1029,3 +1029,5 @@
 08/02/2026 18:52 - DEBUGGING SESSION : Installation d'une sonde de traçage dans le GameEngine. Focus sur l'action de tir : chaque appel à .play() et chaque tentative de lecture audio génère désormais un badge jaune visuel sur l'écran. Correction du Proxy serveur pour une transmission binaire pure sans Content-Type forcé, indispensable au décodage Web Audio.
 
 08/02/2026 19:02 - CRITICAL ROUTE REPAIR : Rétablissement des routes vitales (apply-status, sections, classrooms) par remontée en tête de pile dans server.js. Suppression définitive des 404/500 bloquants. STUDIO DEBUG UPGRADE : La sonde visuelle dans le GameEngine affiche désormais les événements pendant 5 secondes pour un traçage précis du cycle Tir/Son. Ajout d'un bouton de forçage audio si le navigateur suspend le contexte.
+
+08/02/2026 19:04 - STUDIO AUDIO DEBUG : Installation d'une sonde chirurgicale dans le GameEngine. Chaque appel .play() et chaque lecture de son génère désormais un badge jaune ou vert en haut à gauche de l'écran. Rétablissement du Proxy serveur en mode "Raw Bytes" pour garantir l'intégrité des flux audio MP3 vers le navigateur.
