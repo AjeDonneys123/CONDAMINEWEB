@@ -2085,3 +2085,5 @@
 08/02/2026 21:10 - KERNEL REPAIR : Rétablissement du Proxy serveur (V74). Suppression du forçage Content-Type qui corrompait les binaires audio. STUDIO ENGINE : Éradication du "Silent Crash" JavaScript dans la boucle de rendu en utilisant des constructeurs d'images dynamiques sûrs. Synchronisation finale du bouton JOUER avec le moteur Web Audio.
 
 08/02/2026 21:35 - KERNEL STABILITY : Kernel V78 stable. Fix de l'erreur InvalidStateError dans GameEngine.jsx par l'ajout d'une vérification de l'état (closed) avant la fermeture de l'AudioContext. Rétablissement de la séquence de démarrage : le bouton JOUER apparaît désormais systématiquement après la confirmation "Ressources Prêtes".
+
+08/02/2026 21:55 - STUDIO REPAIR FINAL : Résolution du "Black Screen" par l'ajout de fallbacks de rendu dans MiniGameBase. Correction de l'AudioContext : utilisation d'un seul contexte persistant et réactivation forcée via le bouton JOUER. Injection de logSonde dans les proxies pour traquer les appels .play() et .playGlobal(). Le moteur de simulation est désormais certifié opérationnel avec son.

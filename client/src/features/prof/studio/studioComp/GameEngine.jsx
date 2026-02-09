@@ -4,8 +4,8 @@ import { api } from '../../../../services/api';
 import SoundExpert from './SoundExpert';
 
 /**
- * 🎮 MOTEUR DE JEU (V660 - AUDIO CONTEXT SAFETY)
- * FIX : Cannot close a closed AudioContext + Black Screen Fix.
+ * 🎮 MOTEUR DE JEU (V670 - ULTIMATE AUDIO & RENDER FIX)
+ * Correction : Écran noir + Activation forcée du son.
  */
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
     const canvasRef = useRef(null);
@@ -34,27 +34,13 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         setTimeout(() => setDebugLogs(prev => prev.filter(l => l.id !== id)), 5000);
     };
 
-    // 1. INITIALISATION AUDIO & DATA
+    // 1. INITIALISATION DATA
     useEffect(() => {
-        logSonde("🛠️ Warmup...");
-        
-        // Initialisation sécurisée de l'AudioContext
-        if (!audioCtxRef.current) {
-            audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
-        }
-
         api.get('/games/test-data').then(data => {
             const levelsData = data?.levels?.length > 0 ? data.levels : [{ name: "Demo", questions: [{ q: "Prêt ?", options: ["OUI", "NON"], a: 0 }] }];
             setAllLevels(levelsData);
             initLevel(0, levelsData);
         });
-        
-        return () => { 
-            // FIX : Vérification de l'état avant fermeture
-            if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
-                audioCtxRef.current.close().catch(() => {}); 
-            }
-        };
     }, []);
 
     const initLevel = (idx, sourceData) => {
@@ -66,16 +52,21 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         setCurrentQIndex(0);
     };
 
-    // 2. CHARGEMENT ASSETS
+    // 2. CHARGEMENT ASSETS & AUDIO CONTEXT
     useEffect(() => {
-        if (!project || !audioCtxRef.current) return;
+        if (!project) return;
 
         async function prefetch() {
             try {
+                // Initialisation AudioContext sur le premier mouvement
+                if (!audioCtxRef.current) {
+                    audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+                }
+
                 const scene = project.scenes?.[activeSceneIdx];
                 if (!scene) return;
 
-                logSonde("📦 Loading assets...");
+                logSonde("📦 Chargement des ressources...");
                 const imgUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url)))].filter(Boolean);
                 const sndUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url))))].filter(Boolean);
 
@@ -83,29 +74,43 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     ...imgUrls.map(url => new Promise(res => {
                         const img = new Image(); img.crossOrigin = "anonymous";
                         img.onload = () => { imageAssetsRef.current.set(resolveUrl(url), img); res(); };
-                        img.onerror = res; img.src = resolveUrl(url);
+                        img.onerror = () => { console.error("Img Fail", url); res(); }; 
+                        img.src = resolveUrl(url);
                     })),
                     ...sndUrls.map(url => new Promise(async res => {
                         const buffer = await SoundExpert.decodeAudio(resolveUrl(url), audioCtxRef.current);
-                        if (buffer) audioBuffersRef.current.set(url, buffer);
+                        if (buffer) {
+                            audioBuffersRef.current.set(url, buffer);
+                            logSonde(`🎵 Son prêt : ${url.split('/').pop()}`, "success");
+                        }
                         res();
                     }))
                 ]);
 
-                logSonde("🚀 Ressources Prêtes", "success");
+                logSonde("🚀 Système prêt pour le démarrage", "success");
                 setEngineReady(true);
-            } catch (e) { logSonde("Erreur chargement", "error"); }
+            } catch (e) { 
+                console.error(e);
+                logSonde("💥 Erreur d'initialisation", "error"); 
+            }
         }
         prefetch();
+
+        return () => {
+            if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
+                audioCtxRef.current.close().catch(() => {});
+            }
+        };
     }, [project, activeSceneIdx]);
 
-    // 3. COMPILATION DU SCRIPT (Une fois ready)
+    // 3. COMPILATION DU SCRIPT
     useEffect(() => {
         if (!engineReady || !code || !canvasRef.current) return;
 
         try {
             const headerCode = `
                 const { canvas, ctx, project, sceneIdx, resolveUrl, audioBuffers, imageAssets, audioCtx, logSonde } = params;
+                
                 class ActorProxy {
                     constructor(data, engine) { 
                         this.id = data.id; this.name = data.name; this.engine = engine;
@@ -116,11 +121,13 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     }
                     play(name) { 
                         if(this.currentAction.toUpperCase() !== name.toUpperCase()) { 
+                            logSonde("🎬 Action: " + name);
                             this.currentAction = name; this.frameIdx = 0; this.lastAnimTime = 0;
                             this.engine._triggerActionSounds(this.id, name);
                         } 
                     }
                 }
+
                 class MiniGameBase {
                     constructor(c, a, cb) { 
                         this.canvas = c; this.ctx = ctx; this.assets = a; this.callbacks = params.callbacks; this.keys = {};
@@ -128,6 +135,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                         if(s && s.actors) s.actors.forEach(a => { this[a.name.toUpperCase()] = new ActorProxy(a, this); });
                     }
                     playGlobal(name) {
+                        logSonde("🔊 Global Sound: " + name);
                         const gs = project.scenes[sceneIdx].globalSounds?.find(s => s.name.toUpperCase() === name.toUpperCase());
                         if(gs && gs.sounds) gs.sounds.forEach(snd => this._playSound(snd.url));
                     }
@@ -138,18 +146,26 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     }
                     _playSound(url) {
                         const buffer = audioBuffers.get(url);
-                        if(buffer && audioCtx && audioCtx.state !== 'closed') {
+                        if(buffer && audioCtx) {
+                            if(audioCtx.state === 'suspended') audioCtx.resume();
                             const source = audioCtx.createBufferSource();
                             source.buffer = buffer; source.connect(audioCtx.destination); source.start(0);
+                            logSonde("⚡ Déclenchement Audio", "success");
+                        } else {
+                            logSonde("❌ Son introuvable", "error");
                         }
                     }
                     _system_render() {
                         const s = project.scenes[sceneIdx];
+                        // 1. Fond
                         const bd = s?.backdrops?.[s.currentBackdropIdx || 0];
                         if(bd) {
                             const img = imageAssets.get(resolveUrl(bd.url));
                             if(img) ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                        } else {
+                            ctx.fillStyle = "black"; ctx.fillRect(0,0,canvas.width, canvas.height);
                         }
+                        // 2. Acteurs
                         for(let key in this) {
                             const p = this[key];
                             if(p instanceof ActorProxy && p.visible) {
@@ -172,23 +188,52 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 }
             `;
 
-            const FinalClass = new Function('params', headerCode + "\n" + code + "\n return MiniGame;");
-            gameInstanceRef.current = new FinalClass({ 
-                canvas: canvasRef.current, ctx: canvasRef.current.getContext('2d'), project, sceneIdx: activeSceneIdx, resolveUrl, logSonde,
-                audioBuffers: audioBuffersRef.current, imageAssets: imageAssetsRef.current, audioCtx: audioCtxRef.current,
+            // Injection forcée de l'héritage si manquant
+            let finalCode = code;
+            if (!code.includes("extends MiniGameBase")) {
+                finalCode = code.replace(/class\s+MiniGame\s*{/, "class MiniGame extends MiniGameBase {");
+            }
+
+            const Factory = new Function('params', headerCode + "\n" + finalCode + "\n return MiniGame;");
+            const GameClass = Factory({ 
+                canvas: canvasRef.current, 
+                ctx: canvasRef.current.getContext('2d'), 
+                project, 
+                sceneIdx: activeSceneIdx, 
+                resolveUrl, 
+                logSonde,
+                audioBuffers: audioBuffersRef.current, 
+                imageAssets: imageAssetsRef.current, 
+                audioCtx: audioCtxRef.current,
                 callbacks: { onPlayerHit: () => setLives(l => Math.max(0, l - 1)) } 
             });
 
-        } catch (e) { setCrash(e.message); }
+            gameInstanceRef.current = new GameClass({ canvas: canvasRef.current });
+            logSonde("🛠️ Classe instanciée");
+
+        } catch (e) { 
+            console.error(e);
+            setCrash(e.message); 
+        }
     }, [engineReady, code]);
 
     const handleStartGame = async () => {
-        if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
+        if (!audioCtxRef.current) return;
+        
+        // GESTION DU DÉVERROUILLAGE AUDIO
+        if (audioCtxRef.current.state === 'suspended') {
             await audioCtxRef.current.resume();
         }
+        
         setEngineStarted(true);
+        logSonde("🏁 ENGINE START", "success");
+        
         if (gameInstanceRef.current?.start) {
-            try { gameInstanceRef.current.start(); } catch(e) { setCrash(e.message); }
+            try { 
+                gameInstanceRef.current.start(); 
+            } catch(e) { 
+                setCrash(e.message); 
+            }
         }
     };
 
@@ -197,6 +242,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         const currentQ = levelQuestions[currentQIndex];
         const isCorrect = currentQ?.a === choiceIdx;
         setFeedback(isCorrect ? 'CORRECT' : 'WRONG');
+        
         if (isCorrect) {
             setQuestionStates(p => { const n=[...p]; n[currentQIndex]=Math.min(3, n[currentQIndex]+1); return n; });
             gameInstanceRef.current?.onResult?.(true);
@@ -204,58 +250,99 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             gameInstanceRef.current?.onResult?.(false);
             setLives(l => Math.max(0, l - 1));
         }
+        
         setTimeout(() => {
             setFeedback(null);
             const avail = questionStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
             if (avail.length > 0) setCurrentQIndex(avail[Math.floor(Math.random() * avail.length)]);
-            else logSonde("🏆 Niveau Terminé");
+            else logSonde("🏆 Victoire Niveau !");
         }, 1000);
     };
 
     useEffect(() => {
-        let animationFrameId;
+        let frameId;
         const loop = () => {
-            if (engineStarted && gameInstanceRef.current) {
-                if (gameInstanceRef.current.update) gameInstanceRef.current.update();
-                if (gameInstanceRef.current._system_render) gameInstanceRef.current._system_render();
-                if (gameInstanceRef.current.draw) gameInstanceRef.current.draw();
+            if (engineStarted && gameInstanceRef.current && !crash) {
+                try {
+                    if (gameInstanceRef.current.update) gameInstanceRef.current.update();
+                    if (gameInstanceRef.current._system_render) gameInstanceRef.current._system_render();
+                    if (gameInstanceRef.current.draw) gameInstanceRef.current.draw();
+                } catch (e) {
+                    setCrash(e.message);
+                }
             }
-            animationFrameId = requestAnimationFrame(loop);
+            frameId = requestAnimationFrame(loop);
         };
         loop();
-        return () => cancelAnimationFrame(animationFrameId);
-    }, [engineStarted]);
+        return () => cancelAnimationFrame(frameId);
+    }, [engineStarted, crash]);
 
     return (
-        <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center font-sans overflow-hidden">
+        <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center overflow-hidden">
+             {/* HUD SONDE VISUELLE */}
              <div className="absolute top-0 left-0 p-4 z-[100] pointer-events-none">
-                <div className="flex flex-col gap-1">{debugLogs.map(log => (<div key={log.id} className={`px-3 py-1 rounded text-[10px] font-black shadow-lg border-l-4 ${log.type === 'error' ? 'bg-red-500 text-white' : log.type === 'success' ? 'bg-green-500 text-white' : 'bg-yellow-400 text-black'}`}>{log.text}</div>))}</div>
+                <div className="flex flex-col gap-1">
+                    {debugLogs.map(log => (
+                        <div key={log.id} className={`px-3 py-1 rounded text-[10px] font-black shadow-lg border-l-4 ${log.type === 'error' ? 'bg-red-500 text-white' : log.type === 'success' ? 'bg-green-500 text-white' : 'bg-yellow-400 text-black'}`}>
+                            {log.text}
+                        </div>
+                    ))}
+                </div>
              </div>
 
              {!engineStarted && engineReady && (
                  <div className="absolute inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm">
-                     <button onClick={handleStartGame} className="px-16 py-8 bg-white text-indigo-600 rounded-full font-black text-4xl shadow-2xl hover:scale-110 transition-transform animate-pulse">🚀 JOUER</button>
+                     <button onClick={handleStartGame} className="px-16 py-8 bg-white text-indigo-600 rounded-full font-black text-4xl shadow-2xl hover:scale-110 transition-transform animate-pulse border-8 border-indigo-200">
+                        🚀 JOUER
+                     </button>
                  </div>
              )}
 
              {engineStarted && (
                  <>
                     <div className="absolute top-0 left-0 right-0 p-6 flex justify-between items-start z-50 pointer-events-none">
-                        <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-xl pointer-events-auto flex gap-1">{"❤️".repeat(lives)}{"🖤".repeat(Math.max(0, 4 - lives))}</div>
-                        <div className="flex-1 flex justify-center px-4">
-                            {levelQuestions[currentQIndex] && (<div className="bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 border-slate-600 shadow-2xl text-xl pointer-events-auto">{feedback === 'CORRECT' ? "✅ BRAVO !" : feedback === 'WRONG' ? "❌ RATÉ..." : levelQuestions[currentQIndex].q}</div>)}
+                        <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-xl pointer-events-auto flex gap-1">
+                            {"❤️".repeat(lives)}{"🖤".repeat(Math.max(0, 4 - lives))}
                         </div>
-                        <div className="w-40"></div>
+                        <div className="flex-1 flex justify-center px-4">
+                            {levelQuestions[currentQIndex] && (
+                                <div className="bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 border-slate-600 shadow-2xl text-xl pointer-events-auto">
+                                    {feedback === 'CORRECT' ? "✅ BRAVO !" : feedback === 'WRONG' ? "❌ RATÉ..." : levelQuestions[currentQIndex].q}
+                                </div>
+                            )}
+                        </div>
                     </div>
-                    <div className="relative"><canvas ref={canvasRef} width={800} height={450} className="aspect-video shadow-2xl bg-black border-4 border-slate-800 rounded-xl" /></div>
-                    <div className="absolute bottom-0 left-0 right-0 p-8 flex justify-center z-50 pointer-events-none">
-                        {!isLevelWon && (<div className="grid grid-cols-4 gap-4 w-full max-w-6xl pointer-events-auto">{levelQuestions[currentQIndex]?.options?.map((o, i) => (<button key={i} onClick={() => handleAnswerClick(i)} className="bg-indigo-600 text-white py-5 rounded-xl font-black uppercase shadow-xl hover:bg-indigo-500 transition-all border-b-4 border-indigo-800 active:border-b-0 active:translate-y-1">{o}</button>))}</div>)}
+                    
+                    <div className="relative">
+                        <canvas ref={canvasRef} width={800} height={450} className="aspect-video shadow-2xl bg-black border-4 border-slate-800 rounded-xl" />
+                    </div>
+                    
+                    <div className="absolute bottom-0 left-0 right-0 p-8 flex justify-center z-50 pointer-events-auto">
+                        {!isLevelWon && (
+                            <div className="grid grid-cols-4 gap-4 w-full max-w-6xl">
+                                {levelQuestions[currentQIndex]?.options?.map((o, i) => (
+                                    <button key={i} onClick={() => handleAnswerClick(i)} className="bg-indigo-600 text-white py-5 rounded-xl font-black uppercase shadow-xl hover:bg-indigo-500 transition-all border-b-4 border-indigo-800 active:border-b-0 active:translate-y-1">
+                                        {o}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
                     </div>
                  </>
              )}
 
-             {crash && (<div className="absolute inset-0 bg-red-950 flex flex-col items-center justify-center text-white p-10 text-center z-[10000]"><span className="text-8xl mb-8">💥</span><h2 className="text-4xl font-black mb-4 uppercase">Erreur Script</h2><pre className="bg-black/50 p-8 rounded-3xl font-mono text-lg text-red-200 border-2 border-red-500/30 max-w-4xl overflow-auto mb-10">{crash}</pre><button onClick={onStop} className="px-12 py-5 bg-white text-red-600 rounded-full font-black text-xl">Fermer</button></div>)}
-            <button onClick={onStop} className="absolute top-6 right-6 bg-red-600 text-white w-12 h-12 rounded-full font-black text-2xl shadow-xl border-4 border-white hover:scale-110 transition-all flex items-center justify-center pointer-events-auto z-[60]">✕</button>
+             {crash && (
+                 <div className="absolute inset-0 bg-red-950 flex flex-col items-center justify-center text-white p-10 text-center z-[10000]">
+                    <span className="text-8xl mb-8">💥</span>
+                    <h2 className="text-4xl font-black mb-4 uppercase">Crash du Script</h2>
+                    <pre className="bg-black/50 p-8 rounded-3xl font-mono text-lg text-red-200 border-2 border-red-500/30 max-w-4xl overflow-auto mb-10">{crash}</pre>
+                    <button onClick={onStop} className="px-12 py-5 bg-white text-red-600 rounded-full font-black text-xl">QUITTER</button>
+                 </div>
+             )}
+
+            <button onClick={onStop} className="absolute top-6 right-6 bg-red-600 text-white w-12 h-12 rounded-full font-black text-2xl shadow-xl border-4 border-white hover:scale-110 transition-all flex items-center justify-center z-[60]">
+                ✕
+            </button>
         </div>
     );
 }
