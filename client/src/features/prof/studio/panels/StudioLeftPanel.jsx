@@ -12,33 +12,27 @@ export default function StudioLeftPanel({
     eraserActive, setEraserActive, setFrameToErase,
     handleSmartAIClean, cleaning, setShowSoundModal,
     handleDeleteSound, handleEditSound,
-    // On passe cette fonction pour que le panel puisse mettre à jour l'index de preview du parent
-    setPreviewFrameIdx
+    setPreviewFrameIdx,
+    currentScene // <--- RÉCUPÉRATION DE LA SCÈNE (CRUCIAL POUR L'ONGLET SONS)
 }) {
     const [selectedSoundIdx, setSelectedSoundIdx] = useState(null);
-    const audioCtxRef = useRef(null); // Pour la preview audio locale
+    const audioCtxRef = useRef(null);
 
-    // --- MOTEUR DE PRÉVISUALISATION (SÉQUENCEUR) ---
+    // --- MOTEUR DE PRÉVISUALISATION ---
     useEffect(() => {
         let interval = null;
 
         if (isPreviewPlaying && selectedAction && selectedAction.frames && selectedAction.frames.length > 0) {
-            // Init Audio Context pour la preview si besoin
             if (!audioCtxRef.current) {
                 audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
             }
 
             interval = setInterval(() => {
-                // Calcul de la frame suivante via le setter du parent (StudioDashboard)
-                // Note: setPreviewFrameIdx est passé via props, ou on utilise une prop locale si manquante.
-                // Ici on suppose que StudioDashboard gère l'état 'previewFrameIdx', mais on doit le piloter d'ici.
-                
-                // FIX: On appelle la fonction de mise à jour passée en prop (ou on simule si elle manque, mais elle est critique)
                 if (typeof setPreviewFrameIdx === 'function') {
                     setPreviewFrameIdx(currentIdx => {
                         const nextIdx = (currentIdx + 1) % selectedAction.frames.length;
                         
-                        // 🔊 DÉCLENCHEMENT SONORE À LA BOUCLE (Frame 0)
+                        // Son sur boucle
                         if (nextIdx === 0 && selectedAction.sounds && selectedAction.sounds.length > 0) {
                             selectedAction.sounds.forEach(snd => {
                                 SoundExpert.decodeAudio(resolveUrl(snd.url), audioCtxRef.current).then(buf => {
@@ -130,6 +124,7 @@ export default function StudioLeftPanel({
                     </>
                 ) : (
                     <>
+                        {/* UTILISATION DE CURRENT SCENE PASSÉE EN PROP (PLUS DE CRASH) */}
                         {currentScene?.globalSounds?.map((act, idx) => (
                             <div key={idx} onClick={() => handleSelectGlobalSound(idx)} className={`action-item ${selectedGlobalSoundIdx === idx ? 'selected' : ''}`}>
                                 <span>{act.name}</span>
@@ -195,10 +190,17 @@ export default function StudioLeftPanel({
                             {(selectedAction.sounds || []).map((snd, sIdx) => (
                                 <div key={sIdx} 
                                      onClick={() => { setSelectedSoundIdx(selectedSoundIdx === sIdx ? null : sIdx); setSelectedFrameIdx(null); }}
-                                     className={`sound-frame-visual h-16 ${selectedSoundIdx === sIdx ? 'active' : ''}`}>
+                                     className={`sound-frame-visual h-16 ${selectedSoundIdx === sIdx ? 'active' : ''} relative group`}>
                                     <span className="text-xl">🎵</span>
                                     <span className="text-[8px] font-black text-indigo-800 w-full text-center truncate px-1">{snd.name?.substring(0,10)}</span>
-                                    <button className="frame-del !bg-red-500 !text-white !opacity-100 !top-1 !right-1" onClick={(e) => { e.stopPropagation(); handleDeleteSound(sIdx); }}>✕</button>
+                                    
+                                    {/* --- BOUTON DE SUPPRESSION AJOUTÉ ICI --- */}
+                                    <button 
+                                        className="frame-del !bg-red-500 !text-white !opacity-100 !top-1 !right-1 z-50" 
+                                        onClick={(e) => { e.stopPropagation(); handleDeleteSound(sIdx); }}
+                                        title="Supprimer le son"
+                                    >✕</button>
+                                    
                                 </div>
                             ))}
                             <div className="border-2 border-dashed border-slate-200 rounded-lg h-16 flex items-center justify-center text-slate-300 text-[8px] font-bold">
