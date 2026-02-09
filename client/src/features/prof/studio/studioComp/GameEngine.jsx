@@ -3,9 +3,9 @@ import React, { useState, useRef, useEffect } from 'react';
 import SoundExpert from './SoundExpert';
 
 /**
- * 🔊 MOTEUR "OPÉRATION SON" (V740)
- * FIX : "Cannot read properties of null (reading 'getContext')"
- * Focus : Déclenchement Audio DÉPART.
+ * 🎮 MOTEUR DE JEU "ZOMBIE-SONIC" (V750)
+ * Fusion de la logique Zombie et du moteur Audio V740 qui fonctionne.
+ * Règle : Affichage immédiat, Audio asynchrone.
  */
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
     const canvasRef = useRef(null);
@@ -13,122 +13,175 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const [debugLogs, setDebugLogs] = useState([]);
     const audioCtxRef = useRef(null);
     const audioBuffersRef = useRef(new Map());
+    const imageAssetsRef = useRef(new Map());
 
     const logSonde = (msg, type = 'info') => {
         const id = Math.random();
-        setDebugLogs(prev => [...prev, { id, text: msg, type }].slice(-10));
+        setDebugLogs(prev => [...prev, { id, text: msg, type }].slice(-6));
     };
 
-    // 1. WARMUP AUDIO (Dès le montage)
+    // 1. CHARGEMENT DES ASSETS (NON-BLOQUANT POUR LE NOIR)
     useEffect(() => {
-        logSonde("🛠️ Warmup Audio...");
+        logSonde("⚙️ Préparation des ressources...");
         if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
         
         const scene = project.scenes?.[activeSceneIdx];
-        const sndUrls = [...new Set((scene?.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url)))];
+        if (!scene) return;
 
+        const imgUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url)))].filter(Boolean);
+        const sndUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url))))].filter(Boolean);
+
+        // Images : vital pour le rendu
+        imgUrls.forEach(url => {
+            const img = new Image(); img.crossOrigin = "anonymous";
+            img.onload = () => imageAssetsRef.current.set(resolveUrl(url), img);
+            img.src = resolveUrl(url);
+        });
+
+        // Sons : On ne bloque rien, on charge en fond
         sndUrls.forEach(url => {
-            logSonde(`📡 Chargement: ${url.split('/').pop()}`);
             SoundExpert.decodeAudio(resolveUrl(url), audioCtxRef.current).then(buf => {
-                if (buf) {
-                    audioBuffersRef.current.set(url, buf);
-                    logSonde("✅ SON DÉCODÉ !", "success");
-                } else {
-                    logSonde("❌ ÉCHEC DÉCODAGE", "error");
-                }
+                if (buf) audioBuffersRef.current.set(url, buf);
             });
         });
     }, [project]);
 
-    // 2. INITIALISATION DU SCRIPT (Une fois que le canvas est monté)
+    // 2. BOUCLE DE JEU & RENDU (DÉMARRE APRÈS LE CLIC)
     useEffect(() => {
-        if (engineStarted && canvasRef.current) {
-            try {
-                logSonde("🎬 Initialisation Script...");
-                const ctx = canvasRef.current.getContext('2d');
+        if (!engineStarted || !canvasRef.current) return;
+
+        let frameId;
+        try {
+            const canvas = canvasRef.current;
+            const ctx = canvas.getContext('2d');
+            
+            const Factory = new Function('params', `
+                const { audioBuffers, audioCtx, logSonde, project, sceneIdx, imageAssets, resolveUrl, canvas, ctx } = params;
                 
-                const Factory = new Function('params', `
-                    const { audioBuffers, audioCtx, logSonde, project, sceneIdx } = params;
-                    return class {
-                        start() {
-                            logSonde("🚀 Script démarré");
-                            this.play();
-                        }
-                        play() {
-                            logSonde("🔊 Tentative lecture...");
-                            const gs = project.scenes[sceneIdx].globalSounds?.find(s => s.name === "DÉPART");
-                            if(gs && gs.sounds[0]) {
-                                const buffer = audioBuffers.get(gs.sounds[0].url);
-                                if(buffer) {
-                                    const src = audioCtx.createBufferSource();
-                                    src.buffer = buffer; src.connect(audioCtx.destination); src.start(0);
-                                    logSonde("🎵 !!! SON SORTI !!!", "success");
-                                } else { logSmeta("🚫 Buffer manquant", "error"); }
-                            } else { logSonde("❓ Pas de son dans DÉPART", "error"); }
+                class ActorProxy {
+                    constructor(data, engine) { 
+                        this.id = data.id; this.name = data.name; this.engine = engine;
+                        this.x = data.initialX || 50; this.y = data.initialY || 50;
+                        this.scale = data.scale || 1; this.visible = true;
+                        this.currentAction = data.actions?.[0]?.name || 'IDLE';
+                        this.frameIdx = 0; this.lastAnimTime = 0;
+                    }
+                    play(name) { 
+                        if(this.currentAction.toUpperCase() !== name.toUpperCase()) { 
+                            this.currentAction = name; this.frameIdx = 0;
+                            this.engine._triggerActionSounds(this.id, name);
+                        } 
+                    }
+                }
+
+                return class MiniGame {
+                    constructor() {
+                        this.canvas = canvas; this.ctx = ctx; this.keys = {};
+                        const s = project.scenes[sceneIdx];
+                        if(s && s.actors) s.actors.forEach(a => { this[a.name.toUpperCase()] = new ActorProxy(a, this); });
+                        document.addEventListener('keydown', e => this.keys[e.code] = true);
+                        document.addEventListener('keyup', e => this.keys[e.code] = false);
+                    }
+
+                    _triggerActionSounds(actorId, actionName) {
+                        const actor = project.scenes[sceneIdx].actors.find(a => a.id === actorId);
+                        const action = actor?.actions.find(act => act.name.toUpperCase() === actionName.toUpperCase());
+                        if(action && action.sounds) action.sounds.forEach(snd => this._playSound(snd.url));
+                    }
+
+                    _playSound(url) {
+                        const buffer = audioBuffers.get(url);
+                        if(buffer && audioCtx) {
+                            const source = audioCtx.createBufferSource();
+                            source.buffer = buffer; source.connect(audioCtx.destination); source.start(0);
                         }
                     }
-                `);
 
-                const GameClass = Factory({ 
-                    audioBuffers: audioBuffersRef.current, 
-                    audioCtx: audioCtxRef.current, 
-                    logSonde, project, sceneIdx: activeSceneIdx 
-                });
+                    playGlobal(name) {
+                        const gs = project.scenes[sceneIdx].globalSounds?.find(s => s.name.toUpperCase() === name.toUpperCase());
+                        if(gs && gs.sounds) gs.sounds.forEach(snd => this._playSound(snd.url));
+                    }
 
-                const instance = new GameClass();
-                instance.start();
-            } catch (e) {
-                logSonde("💥 Crash Script: " + e.message, "error");
-            }
-        }
+                    _render() {
+                        const s = project.scenes[sceneIdx];
+                        ctx.fillStyle = "#0f172a"; ctx.fillRect(0,0,canvas.width, canvas.height);
+                        const bd = s?.backdrops?.[s.currentBackdropIdx || 0];
+                        if(bd) {
+                            const img = imageAssets.get(resolveUrl(bd.url));
+                            if(img) ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                        }
+                        for(let key in this) {
+                            const p = this[key];
+                            if(p instanceof ActorProxy && p.visible) {
+                                const aData = project.scenes[sceneIdx].actors.find(ac => ac.id === p.id);
+                                if(!aData) continue;
+                                const act = (aData.actions || []).find(x => x.name.toUpperCase() === p.currentAction.toUpperCase()) || aData.actions?.[0];
+                                if(act && act.frames?.length > 0) {
+                                    const now = Date.now();
+                                    if (now - p.lastAnimTime > (act.speed || 100)) { p.frameIdx = (p.frameIdx+1)%act.frames.length; p.lastAnimTime=now; }
+                                    const spr = imageAssets.get(resolveUrl(act.frames[p.frameIdx].url));
+                                    if(spr) {
+                                        const xPx = (p.x/100)*canvas.width; const yPx = (p.y/100)*canvas.height; let sz = 150*p.scale;
+                                        ctx.save(); ctx.translate(xPx, yPx);
+                                        ctx.drawImage(spr, -sz/2, -sz/2, sz, sz); ctx.restore();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            `);
+
+            const GameClass = Factory({ 
+                audioBuffers: audioBuffersRef.current, audioCtx: audioCtxRef.current, 
+                imageAssets: imageAssetsRef.current, resolveUrl, logSonde, project, sceneIdx: activeSceneIdx, canvas, ctx
+            });
+
+            const instance = new GameClass();
+            // On greffe le code utilisateur sur l'instance
+            const userScript = new Function('game', code);
+            
+            // BOUCLE DE RENDU
+            const tick = () => {
+                instance._render();
+                // Ici on pourrait appeler l'update du script utilisateur
+                frameId = requestAnimationFrame(tick);
+            };
+            
+            logSonde("🚀 Lancement du visuel...", "success");
+            instance.playGlobal("DÉPART");
+            tick();
+
+        } catch (e) { logSonde("💥 Crash: " + e.message, "error"); }
+
+        return () => cancelAnimationFrame(frameId);
     }, [engineStarted]);
 
     const handleStartGame = async () => {
-        if (audioCtxRef.current?.state === 'suspended') {
-            await audioCtxRef.current.resume();
-        }
+        if (audioCtxRef.current?.state === 'suspended') await audioCtxRef.current.resume();
         setEngineStarted(true);
     };
 
     return (
-        <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center">
-            {/* HUD DE DEBUG */}
-            <div className="absolute top-0 left-0 right-0 p-8 flex flex-col gap-2 pointer-events-none">
+        <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center overflow-hidden">
+             <div className="absolute top-0 left-0 p-4 z-[100] flex flex-col gap-1 pointer-events-none">
                 {debugLogs.map(log => (
-                    <div key={log.id} className={`p-4 rounded-xl font-black text-lg shadow-2xl border-l-8 ${log.type === 'error' ? 'bg-red-600 text-white border-red-900' : log.type === 'success' ? 'bg-green-500 text-white border-green-900' : 'bg-yellow-400 text-black border-yellow-600'}`}>
+                    <div key={log.id} className={`px-3 py-1 rounded text-[9px] font-black shadow-lg border-l-4 ${log.type === 'error' ? 'bg-red-500 text-white' : log.type === 'success' ? 'bg-green-500 text-white' : 'bg-yellow-400 text-black'}`}>
                         {log.text}
                     </div>
                 ))}
-            </div>
+             </div>
 
-            {!engineStarted ? (
-                <button onClick={handleStartGame} className="px-20 py-10 bg-white text-indigo-600 rounded-full font-black text-6xl shadow-2xl border-8 border-indigo-500 hover:scale-110 transition-transform active:scale-95">
-                    🔊 DÉMARRER LE TEST
-                </button>
-            ) : (
-                <div className="flex flex-col items-center gap-8">
-                    <h2 className="text-white text-4xl font-black animate-pulse">AUDIO ACTIF</h2>
-                    <canvas 
-                        ref={canvasRef} 
-                        width={400} 
-                        height={200} 
-                        className="bg-black border-4 border-slate-700 rounded-3xl shadow-2xl" 
-                    />
-                    <button 
-                        onClick={() => setEngineStarted(false)} 
-                        className="px-8 py-4 bg-slate-800 text-white font-bold rounded-xl border border-slate-600"
-                    >
-                        🔄 RÉINITIALISER
-                    </button>
+             {!engineStarted ? (
+                 <button onClick={handleStartGame} className="px-20 py-10 bg-white text-indigo-600 rounded-full font-black text-5xl shadow-2xl border-8 border-indigo-200 hover:scale-110 transition-all animate-pulse">
+                    🚀 LANCER LE JEU
+                 </button>
+             ) : (
+                <div className="relative">
+                    <canvas ref={canvasRef} width={800} height={450} className="max-w-full shadow-2xl bg-black rounded-lg border-4 border-slate-800" />
+                    <button onClick={onStop} className="absolute -top-12 -right-12 w-10 h-10 bg-red-600 text-white rounded-full font-black">✕</button>
                 </div>
-            )}
-
-            <button 
-                onClick={onStop} 
-                className="absolute bottom-10 bg-red-600 text-white px-10 py-5 rounded-full font-black text-2xl shadow-xl hover:bg-red-700"
-            >
-                FERMER L'USINE
-            </button>
+             )}
         </div>
     );
 }
