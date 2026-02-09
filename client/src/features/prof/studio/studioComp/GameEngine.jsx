@@ -4,9 +4,9 @@ import { api } from '../../../../services/api';
 import SoundExpert from './SoundExpert';
 
 /**
- * 🎮 MOTEUR DE JEU (V770 - RENDER RECOVERY)
- * Fix : Écran noir + Sprites fixes.
- * Focus : Force le rendu visuel et la boucle d'update.
+ * 🎮 MOTEUR DE JEU (V780 - COLLISION & AUDIO FIX)
+ * Fix : Crash 'onPlayerHit' + Silence Audio.
+ * Règle : Les callbacks et l'AudioContext sont verrouillés sur l'instance.
  */
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
     const canvasRef = useRef(null);
@@ -27,10 +27,10 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const logSonde = (msg, type = 'info') => {
         const id = Math.random();
         setDebugLogs(prev => [...prev, { id, text: msg, type }].slice(-6));
-        setTimeout(() => setDebugLogs(prev => prev.filter(l => l.id !== id)), 4000);
+        setTimeout(() => setDebugLogs(prev => prev.filter(l => l.id !== id)), 5000);
     };
 
-    // 1. CHARGEMENT DES QUESTIONS
+    // 1. DATA
     useEffect(() => {
         api.get('/games/test-data').then(data => {
             const lvl = data?.levels?.[0] || { questions: [{ q: "Prêt ?", options: ["OUI"], a: 0 }] };
@@ -38,7 +38,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         });
     }, []);
 
-    // 2. CHARGEMENT ASSETS (AVEC SÉCURITÉ ÉCRAN NOIR)
+    // 2. CHARGEMENT ASSETS
     useEffect(() => {
         if (!project) return;
         async function prefetch() {
@@ -47,33 +47,34 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 const scene = project.scenes?.[activeSceneIdx];
                 if (!scene) return;
 
-                logSonde("🛠️ Préparation Scène...");
                 const imgUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url)))].filter(Boolean);
                 const sndUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url))))].filter(Boolean);
 
-                // Images
-                await Promise.all(imgUrls.map(url => new Promise(res => {
-                    const img = new Image(); img.crossOrigin = "anonymous";
-                    img.onload = () => { imageAssetsRef.current.set(resolveUrl(url), img); res(); };
-                    img.onerror = res; img.src = resolveUrl(url);
-                })));
+                logSonde(`📦 Assets: ${imgUrls.length} imgs / ${sndUrls.length} sons`);
 
-                // Sons (Non-bloquants)
-                sndUrls.forEach(url => {
-                    SoundExpert.decodeAudio(resolveUrl(url), audioCtxRef.current).then(buf => {
-                        if (buf) { audioBuffersRef.current.set(url, buf); logSonde("🎵 Son OK"); }
-                    });
-                });
+                await Promise.all([
+                    ...imgUrls.map(url => new Promise(res => {
+                        const img = new Image(); img.crossOrigin = "anonymous";
+                        img.onload = () => { imageAssetsRef.current.set(resolveUrl(url), img); res(); };
+                        img.onerror = res; img.src = resolveUrl(url);
+                    })),
+                    ...sndUrls.map(url => SoundExpert.decodeAudio(resolveUrl(url), audioCtxRef.current).then(buf => {
+                        if (buf) {
+                            audioBuffersRef.current.set(url, buf);
+                            logSonde("🎵 " + url.split('/').pop() + " prêt", "success");
+                        }
+                    }))
+                ]);
 
                 setEngineReady(true);
-                logSonde("✅ Système Prêt", "success");
+                logSonde("🚀 Moteur prêt", "success");
             } catch (e) { logSonde("Erreur Init", "error"); }
         }
         prefetch();
         return () => { if (audioCtxRef.current?.state !== 'closed') audioCtxRef.current?.close(); };
     }, [project, activeSceneIdx]);
 
-    // 3. COMPILATION & BOUCLE (RESTAURATION MOUVEMENT)
+    // 3. COMPILATION DU PILOTE
     useEffect(() => {
         if (!engineReady || !code || !canvasRef.current || !engineStarted) return;
 
@@ -83,7 +84,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             const ctx = canvas.getContext('2d');
 
             const headerCode = `
-                const { canvas, ctx, project, sceneIdx, resolveUrl, audioBuffers, imageAssets, audioCtx, logSonde } = params;
+                const { canvas, ctx, project, sceneIdx, resolveUrl, audioBuffers, imageAssets, audioCtx, logSonde, callbacks } = params;
                 
                 class ActorProxy {
                     constructor(data, engine) { 
@@ -103,8 +104,10 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 class MiniGameBase {
                     constructor() { 
                         this.canvas = canvas; this.ctx = ctx; this.keys = {};
+                        this.callbacks = callbacks; // RÉPARATION CRITIQUE : onPlayerHit
                         const s = project.scenes[sceneIdx];
                         if(s && s.actors) s.actors.forEach(a => { this[a.name.toUpperCase()] = new ActorProxy(a, this); });
+                        
                         document.onkeydown = e => this.keys[e.code] = true;
                         document.onkeyup = e => this.keys[e.code] = false;
                     }
@@ -120,8 +123,12 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     _playSound(url) {
                         const buffer = audioBuffers.get(url);
                         if(buffer && audioCtx) {
+                            if(audioCtx.state === 'suspended') audioCtx.resume();
                             const source = audioCtx.createBufferSource();
                             source.buffer = buffer; source.connect(audioCtx.destination); source.start(0);
+                            logSonde("🔊 SON: " + url.split('/').pop(), "success");
+                        } else {
+                            logSonde("🔈 Son muet (chargement...)", "warning");
                         }
                     }
                     _system_render() {
@@ -144,7 +151,8 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                                     const spr = imageAssets.get(resolveUrl(act.frames[p.frameIdx].url));
                                     if(spr) {
                                         const xPx = (p.x/100)*canvas.width; const yPx = (p.y/100)*canvas.height; let sz = 150*p.scale;
-                                        ctx.save(); ctx.translate(xPx, yPx); ctx.drawImage(spr, -sz/2, -sz/2, sz, sz); ctx.restore();
+                                        ctx.save(); ctx.translate(xPx, yPx);
+                                        ctx.drawImage(spr, -sz/2, -sz/2, sz, sz); ctx.restore();
                                     }
                                 }
                             }
@@ -162,13 +170,17 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
             gameInstanceRef.current = new FinalClass();
             if (gameInstanceRef.current.start) gameInstanceRef.current.start();
-            gameInstanceRef.current.playGlobal("DÉPART");
+            
+            // SON DE DÉPART FORCÉ
+            setTimeout(() => gameInstanceRef.current.playGlobal("DÉPART"), 200);
 
             const loop = () => {
                 if (gameInstanceRef.current && !crash) {
-                    if (gameInstanceRef.current.update) gameInstanceRef.current.update();
-                    gameInstanceRef.current._system_render();
-                    if (gameInstanceRef.current.draw) gameInstanceRef.current.draw();
+                    try {
+                        if (gameInstanceRef.current.update) gameInstanceRef.current.update();
+                        gameInstanceRef.current._system_render();
+                        if (gameInstanceRef.current.draw) gameInstanceRef.current.draw();
+                    } catch (err) { setCrash(err.message); }
                 }
                 frameId = requestAnimationFrame(loop);
             };
@@ -176,7 +188,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
         } catch (e) { setCrash(e.message); }
         return () => cancelAnimationFrame(frameId);
-    }, [engineReady, engineStarted, code]);
+    }, [engineReady, engineStarted]);
 
     const handleStartGame = async () => {
         if (audioCtxRef.current?.state === 'suspended') await audioCtxRef.current.resume();
@@ -197,21 +209,21 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
     return (
         <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center overflow-hidden">
-             <div className="absolute top-0 left-0 p-4 z-[100] flex flex-col gap-1">
-                {debugLogs.map(log => (<div key={log.id} className={`px-2 py-1 rounded text-[9px] font-black shadow-lg border-l-4 ${log.type === 'error' ? 'bg-red-500 text-white' : log.type === 'success' ? 'bg-green-500 text-white' : 'bg-yellow-400 text-black'}`}>{log.text}</div>))}
+             <div className="absolute top-0 left-0 p-4 z-[100] flex flex-col gap-1 pointer-events-none">
+                {debugLogs.map(log => (<div key={log.id} className={`px-3 py-1 rounded text-[10px] font-black shadow-lg border-l-4 ${log.type === 'error' ? 'bg-red-500 text-white' : log.type === 'success' ? 'bg-green-500 text-white' : 'bg-yellow-400 text-black'}`}>{log.text}</div>))}
              </div>
 
              {!engineStarted ? (
                  <div className="absolute inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-md">
-                     <button onClick={handleStartGame} disabled={!engineReady} className="px-16 py-8 bg-white text-indigo-600 rounded-full font-black text-4xl shadow-2xl border-8 border-indigo-100">
+                     <button onClick={handleStartGame} disabled={!engineReady} className="px-16 py-8 bg-white text-indigo-600 rounded-full font-black text-4xl shadow-2xl border-8 border-indigo-100 hover:scale-110 transition-all">
                         {engineReady ? "🚀 JOUER" : "CHARGEMENT..."}
                      </button>
                  </div>
              ) : (
                  <>
-                    <div className="absolute top-6 left-6 right-6 flex justify-between items-start z-50">
+                    <div className="absolute top-6 left-6 right-6 flex justify-between items-start z-50 pointer-events-none">
                         <div className="bg-black/60 p-3 rounded-2xl text-2xl">{"❤️".repeat(lives)}</div>
-                        <div className="bg-slate-900/90 text-white font-black py-4 px-10 rounded-2xl border-2 border-slate-700 text-xl">
+                        <div className="bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 border-slate-700 shadow-2xl text-xl pointer-events-auto">
                             {feedback === 'OK' ? "✅ BRAVO !" : feedback === 'KO' ? "❌ RATÉ..." : levelQuestions[currentQIndex]?.q}
                         </div>
                         <div className="w-20"></div>
@@ -225,7 +237,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                  </>
              )}
              <button onClick={onStop} className="absolute top-6 right-6 w-10 h-10 bg-red-600 text-white rounded-full font-black text-xl z-[300]">✕</button>
-             {crash && <div className="absolute inset-0 bg-red-950 text-white p-20 z-[400] overflow-auto"><h2>ERREUR SCRIPT</h2><pre>{crash}</pre><button onClick={onStop}>QUITTER</button></div>}
+             {crash && <div className="absolute inset-0 bg-red-950 text-white p-20 z-[400] overflow-auto"><h2>💥 CRASH SCRIPT</h2><pre className="bg-black/40 p-5 mt-5 rounded">{crash}</pre><button onClick={onStop} className="mt-8 px-8 py-3 bg-white text-red-600 font-black rounded-xl">RETOUR STUDIO</button></div>}
         </div>
     );
 }
