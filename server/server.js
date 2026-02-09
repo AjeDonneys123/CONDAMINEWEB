@@ -1,4 +1,4 @@
-// @signatures: SERVER_BOOT_ID, GlobalInfrastructure, KernelV72_FINAL_REPAIR
+// @signatures: SERVER_BOOT_ID, GlobalInfrastructure, KernelV73_STABLE_RAW
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
@@ -13,33 +13,30 @@ const SERVER_BOOT_ID = Date.now();
 app.use(express.json({ limit: '70mb' }));
 app.use(express.urlencoded({ extended: true, limit: '70mb' }));
 
-// --- 🛡️ ZONE DE SÉCURITÉ : ROUTES SYSTÈME (FIX 404) ---
+// 1. ROUTES SYSTÈME (VITAL)
 app.get('/api/check-deploy', (req, res) => res.json({ status: "OK", bootId: SERVER_BOOT_ID }));
-
 app.get('/api/system/apply-status', (req, res) => {
     try {
         const statusPath = path.join(__dirname, '../apply_status.json');
-        if (fs.existsSync(statusPath)) {
-            const data = fs.readFileSync(statusPath, 'utf8');
-            return res.json(JSON.parse(data));
-        }
+        if (fs.existsSync(statusPath)) return res.json(JSON.parse(fs.readFileSync(statusPath, 'utf8')));
     } catch (e) {}
-    res.json({ status: "OK", message: "Connecté" });
+    res.json({ status: "OK" });
 });
 
-// PROXY AUDIO/IMAGE TRANSPARENT
+// 2. PROXY AUDIO/IMAGE SÉCURISÉ (RAW)
 const ProfDrive = require('./prof/core/drive.prof');
 app.get(['/api/proxy/:id', '/api/structure/proxy/:id'], async (req, res) => {
     try {
         const fileId = req.params.id;
         if (!fileId || fileId === 'undefined') return res.status(400).send("No ID");
         const stream = await ProfDrive.getFileStream(fileId);
+        // On ne force aucun type MIME ici, le navigateur gère le flux binaire
         res.setHeader('Accept-Ranges', 'bytes');
         stream.pipe(res);
-    } catch (e) { res.status(404).send("Not found"); }
+    } catch (e) { res.status(404).send("File missing"); }
 });
 
-// CHARGEMENT DES SILOS
+// 3. CHARGEMENT SILOS
 try {
     app.use('/api/auth', require('./prof/auth/auth.prof'));
     app.use('/api/admin', require('./prof/admin/admin.prof'));
@@ -49,8 +46,8 @@ try {
     app.use('/api/scans', require('./prof/scans/scans.prof'));
     app.use('/api/structure', require('./prof/structure/structure.prof'));
     app.use('/api/studio', require('./prof/studio/studio.prof'));
-} catch (e) { console.error("Silo error:", e.message); }
+} catch (e) { console.error("💥 Silo Error:", e.message); }
 
 mongoose.connect(process.env.MONGODB_URI).then(() => {
-    app.listen(port, '0.0.0.0', () => console.log(`🏁 KERNEL V72 READY`));
+    app.listen(port, '0.0.0.0', () => console.log(`🏁 KERNEL V73 READY` ));
 });
