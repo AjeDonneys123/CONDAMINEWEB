@@ -1,19 +1,21 @@
-// @signatures: GameEngine, initLevel, handleAnswerClick, triggerWinSequence, handleGameOver, retryLevel, nextLevel
+// @signatures: GameEngine, initLevel, handleAnswerClick, handleGameOver, retryLevel, nextLevel, preloadAssets
 import React, { useState, useRef, useEffect } from 'react';
 import SoundExpert from './SoundExpert';
 import { api } from '../../../../services/api';
 
 /**
- * 🎮 MOTEUR STUDIO V951 (STABILITY FIX)
- * - Réintégration de retryLevel
- * - Codes de Triche (Touche F)
- * - Protection Audio
+ * 🎮 MOTEUR STUDIO V1000 (TITANIUM)
+ * - Vrai Préchargement (Promise.all) : Le jeu ne démarre que si TOUT est là.
+ * - Audio Queueing : Stop les sons ambiants avant les sons critiques.
+ * - Anti-Crash Rendu : Fallback visuel si un sprite manque.
  */
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
     const canvasRef = useRef(null);
-    const [engineStarted, setEngineStarted] = useState(false);
-    const [isReady, setIsReady] = useState(false);
-    const [loadProgress, setLoadProgress] = useState("");
+    
+    // --- ÉTATS SYSTÈME ---
+    const [isReady, setIsReady] = useState(false);        // Tout est chargé en RAM ?
+    const [engineStarted, setEngineStarted] = useState(false); // Le joueur a cliqué sur START ?
+    const [loadProgress, setLoadProgress] = useState("0%");
     const [debugLogs, setDebugLogs] = useState([]);
     
     // --- ÉTATS DU JEU ---
@@ -25,114 +27,173 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const [lives, setLives] = useState(4);
     const [feedback, setFeedback] = useState(null);
 
-    // --- ÉTATS DE SÉQUENCE ---
+    // --- OVERLAYS ---
     const [showLevelTitle, setShowLevelTitle] = useState(false);
     const [isLevelWon, setIsLevelWon] = useState(false);
     const [isGameOver, setIsGameOver] = useState(false);
     const [isGameCompleted, setIsGameCompleted] = useState(false);
     
     const isPausedRef = useRef(false);
+    const activeTimeoutsRef = useRef([]);
 
-    // Références
+    // Références Moteur
     const audioCtxRef = useRef(null);
     const audioBuffersRef = useRef(new Map());
     const imageAssetsRef = useRef(new Map());
     const gameInstanceRef = useRef(null);
     const frameIdRef = useRef(null);
     const keysPressed = useRef({}); 
+    const activeSourcesRef = useRef([]); // Pour stopper les sons
 
+    // --- OUTILS ---
     const logSonde = (msg, type = 'info') => {
-        const id = Math.random();
-        setDebugLogs(prev => [...prev, { id, text: msg, type }].slice(-6));
+        setDebugLogs(prev => [...prev, { id: Math.random(), text: msg, type }].slice(-6));
     };
 
-    // 1. INIT DONNÉES
+    const safeTimeout = (fn, delay) => {
+        const id = setTimeout(fn, delay);
+        activeTimeoutsRef.current.push(id);
+        return id;
+    };
+
+    const clearAllTimeouts = () => {
+        activeTimeoutsRef.current.forEach(clearTimeout);
+        activeTimeoutsRef.current = [];
+    };
+
+    const stopAllSounds = () => {
+        activeSourcesRef.current.forEach(src => {
+            try { src.stop(); } catch(e){}
+        });
+        activeSourcesRef.current = [];
+    };
+
+    // 1. CHARGEMENT MASSIF ET BLOQUANT
     useEffect(() => {
+        const preloadAssets = async () => {
+            if (!project) return;
+            
+            // Init Audio Context (Suspendu pour l'instant)
+            if (!audioCtxRef.current) {
+                audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+            }
+
+            const scene = project.scenes?.[activeSceneIdx];
+            if (!scene) { setIsReady(true); return; }
+
+            // A. COLLECTE DES URLS
+            const imgUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url)))].filter(Boolean);
+            const sndUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url))))].filter(Boolean);
+
+            const total = imgUrls.length + sndUrls.length;
+            let loaded = 0;
+
+            const updateProgress = () => {
+                loaded++;
+                setLoadProgress(`${Math.round((loaded / total) * 100)}%`);
+            };
+
+            // B. CHARGEMENT IMAGES (Promise Wrapper)
+            const imgPromises = imgUrls.map(url => new Promise(resolve => {
+                const img = new Image();
+                img.crossOrigin = "anonymous";
+                img.onload = () => {
+                    imageAssetsRef.current.set(resolveUrl(url), img);
+                    updateProgress();
+                    resolve();
+                };
+                img.onerror = () => {
+                    console.warn("⚠️ Image 404:", url);
+                    updateProgress(); // On résout quand même pour ne pas bloquer
+                    resolve();
+                };
+                img.src = resolveUrl(url);
+            }));
+
+            // C. CHARGEMENT SONS (Promise Wrapper)
+            const sndPromises = sndUrls.map(url => new Promise(resolve => {
+                SoundExpert.decodeAudio(resolveUrl(url), audioCtxRef.current).then(buf => {
+                    if (buf) audioBuffersRef.current.set(url, buf);
+                    updateProgress();
+                    resolve();
+                });
+            }));
+
+            // D. ATTENTE TOTALE
+            await Promise.all([...imgPromises, ...sndPromises]);
+            
+            console.log("✅ TOUS LES ASSETS SONT EN RAM.");
+            setIsReady(true);
+        };
+
+        // Chargement des données de test + Assets
         api.get('/games/test-data').then(data => {
             let levelsData = data?.levels?.length > 0 ? data.levels : [{ name: "Defaut", questions: [{ q: "Q1", options:["A","B"], a:0 }] }];
             if (levelsData.length === 1) levelsData = [ { ...levelsData[0], name: "Niveau 1" }, { ...levelsData[0], name: "Niveau 2" } ];
             setAllLevels(levelsData);
-            initLevel(0, levelsData);
+            preloadAssets(); // Lance le chargement lourd
         });
 
+        // Listeners Clavier
         const handleKeyDown = (e) => { keysPressed.current[e.code] = true; };
         const handleKeyUp = (e) => { keysPressed.current[e.code] = false; };
         window.addEventListener('keydown', handleKeyDown);
         window.addEventListener('keyup', handleKeyUp);
-        return () => { window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); };
-    }, []);
-
-    // 2. PRÉ-CHARGEMENT
-    useEffect(() => {
-        if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
-        const scene = project.scenes?.[activeSceneIdx];
-        if (!scene) { setIsReady(true); return; }
-
-        const imgUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url)))].filter(Boolean);
-        imgUrls.forEach(url => {
-            const img = new Image(); img.crossOrigin = "anonymous";
-            img.onload = () => imageAssetsRef.current.set(resolveUrl(url), img);
-            img.src = resolveUrl(url);
-        });
-
-        const sndUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url))))].filter(Boolean);
-        if (sndUrls.length === 0) setIsReady(true);
-        else {
-            setLoadProgress(`0/${sndUrls.length}`);
-            let loaded = 0;
-            sndUrls.forEach(url => {
-                SoundExpert.decodeAudio(resolveUrl(url), audioCtxRef.current).then(buf => {
-                    if (buf) audioBuffersRef.current.set(url, buf);
-                    loaded++;
-                    setLoadProgress(`${loaded}/${sndUrls.length}`);
-                    if (loaded === sndUrls.length) { setIsReady(true); logSonde("✅ SONS PRÊTS", "success"); }
-                });
-            });
-        }
-        return () => {
+        
+        return () => { 
+            window.removeEventListener('keydown', handleKeyDown); 
+            window.removeEventListener('keyup', handleKeyUp);
             if (frameIdRef.current) cancelAnimationFrame(frameIdRef.current);
-            if (gameInstanceRef.current?.stop) gameInstanceRef.current.stop();
+            stopAllSounds();
+            clearAllTimeouts();
         };
     }, [project]);
 
     // 3. LOGIQUE JEU
     const initLevel = (idx, sourceData) => {
         if (!sourceData[idx]) return;
+        
+        stopAllSounds(); // Silence pour l'intro
+        clearAllTimeouts(); // Stop les timers précédents
+
         const lvl = sourceData[idx];
         setCurrentLevelIdx(idx);
         setLevelQuestions(lvl.questions || []);
         setQuestionStates(new Array((lvl.questions || []).length).fill(0));
         setCurrentQIndex(0);
+        
         setIsLevelWon(false); setIsGameOver(false); setIsGameCompleted(false);
-        isPausedRef.current = true;
+        isPausedRef.current = true; // Pause Moteur
+
         setShowLevelTitle(true);
-        setTimeout(() => {
+        
+        safeTimeout(() => {
             setShowLevelTitle(false);
-            isPausedRef.current = false;
+            isPausedRef.current = false; // Moteur ON
             if (gameInstanceRef.current) {
-                if (gameInstanceRef.current.start) gameInstanceRef.current.start();
+                // Restart script user
+                if (gameInstanceRef.current.start) {
+                    try { gameInstanceRef.current.start(); } catch(e) { console.error("User Start Error", e); }
+                }
+                // Son Départ
                 if (gameInstanceRef.current.playGlobal) {
                     gameInstanceRef.current.playGlobal("DÉPART");
-                    logSonde("🔊 SON: DÉPART", "info");
                 }
             }
         }, 3000);
     };
 
     const handleGameOver = () => {
+        stopAllSounds(); // Coupe les bruits d'impact/tirs
         setIsGameOver(true);
-        isPausedRef.current = true;
-        logSonde("💀 GAME OVER", "error");
-        if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
+        isPausedRef.current = true; // Freeze moteur
+        
+        // Son de défaite Prioritaire
         if (gameInstanceRef.current?.playGlobal) {
             gameInstanceRef.current.playGlobal("DEFAITE");
-            logSonde("🔊 TENTATIVE SON: DEFAITE", "info");
-        } else {
-            logSonde("⚠️ SON DEFAITE MANQUANT", "warning");
         }
     };
 
-    // ✅ FONCTION RÉTABLIE
     const retryLevel = () => {
         setLives(4);
         initLevel(currentLevelIdx, allLevels);
@@ -143,22 +204,23 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         if (allLevels[nextIdx]) {
             initLevel(nextIdx, allLevels);
         } else {
+            stopAllSounds();
             setIsGameCompleted(true);
-            if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
             if (gameInstanceRef.current?.playGlobal) {
                 gameInstanceRef.current.playGlobal("VICTOIRE");
-                logSonde("🔊 TENTATIVE SON: VICTOIRE", "success");
             }
         }
     };
 
-    // --- CHEAT CODES HANDLERS ---
+    // --- CHEAT CODES ---
     const handleHeartClick = () => {
         if (keysPressed.current['KeyF']) {
-            logSonde("🕵️ CHEAT: HIT", "warning");
             setLives(prev => {
                 const newVal = Math.max(0, prev - 1);
-                if (newVal === 0) setTimeout(handleGameOver, 100);
+                if (newVal === 0) {
+                     isPausedRef.current = true;
+                     safeTimeout(handleGameOver, 1000);
+                }
                 return newVal;
             });
         }
@@ -166,7 +228,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
     const handleBarClick = (idx) => {
         if (keysPressed.current['KeyF']) {
-            logSonde(`🕵️ CHEAT: BARRE ${idx + 1} MAX`, "success");
             const newStates = [...questionStates];
             newStates[idx] = 3;
             setQuestionStates(newStates);
@@ -175,18 +236,17 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 setIsLevelWon(true);
                 isPausedRef.current = true;
                 if (gameInstanceRef.current?.onLevelWin) gameInstanceRef.current.onLevelWin();
-                setTimeout(nextLevel, 2000);
+                safeTimeout(nextLevel, 2000);
             }
         }
     };
 
     const handleQuestionBoxClick = () => {
         if (keysPressed.current['KeyF']) {
-            logSonde("🕵️ CHEAT: INSTANT WIN", "success");
             setIsLevelWon(true);
             isPausedRef.current = true;
             if (gameInstanceRef.current?.onLevelWin) gameInstanceRef.current.onLevelWin();
-            setTimeout(nextLevel, 1500);
+            safeTimeout(nextLevel, 1500);
         }
     };
 
@@ -203,35 +263,47 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         } else {
             newStates[currentQIndex] = Math.max(0, newStates[currentQIndex] - 1);
             if (gameInstanceRef.current?.onResult) gameInstanceRef.current.onResult(false);
+            
+            // Perte de vie avec délai Game Over
             setLives(prev => {
                 const newVal = Math.max(0, prev - 1);
-                if (newVal === 0) setTimeout(handleGameOver, 500);
+                if (newVal === 0) {
+                    isPausedRef.current = true;
+                    // On attend 1s pour que le son "Aie" se termine ou pour le suspense
+                    safeTimeout(handleGameOver, 1000);
+                }
                 return newVal;
             });
         }
         setQuestionStates(newStates);
 
-        setTimeout(() => {
+        safeTimeout(() => {
             setFeedback(null);
-            const available = newStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
-            if (available.length > 0) {
-                const nIdx = available[Math.floor(Math.random() * available.length)];
-                setCurrentQIndex(nIdx);
-            } else {
-                setIsLevelWon(true);
-                isPausedRef.current = true;
-                if (gameInstanceRef.current?.onLevelWin) gameInstanceRef.current.onLevelWin();
-                setTimeout(nextLevel, 4000);
+            if (lives > 0) {
+                const available = newStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
+                if (available.length > 0) {
+                    const nIdx = available[Math.floor(Math.random() * available.length)];
+                    setCurrentQIndex(nIdx);
+                } else {
+                    setIsLevelWon(true);
+                    isPausedRef.current = true;
+                    if (gameInstanceRef.current?.onLevelWin) gameInstanceRef.current.onLevelWin();
+                    safeTimeout(nextLevel, 4000);
+                }
             }
         }, 1000);
     };
 
     const handleStartGame = async () => {
-        if (audioCtxRef.current) { try { await audioCtxRef.current.resume(); } catch (e) {} }
+        if (audioCtxRef.current) { 
+            try { await audioCtxRef.current.resume(); } catch (e) {} 
+        }
         setEngineStarted(true);
+        // On lance le niveau 0 APRES le clic utilisateur (Audio Unlock)
+        initLevel(0, allLevels);
     };
 
-    // 6. FACTORY MOTEUR AVEC PROTECTION SON
+    // 6. FACTORY MOTEUR
     useEffect(() => {
         if (!engineStarted || !canvasRef.current) return;
         try {
@@ -240,20 +312,15 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             
             const gameCallbacks = {
                 onPlayerHit: () => {
-                    if (!isPausedRef.current) {
-                        logSonde("💥 AIE !", "error");
-                        setLives(prev => {
-                            const newVal = Math.max(0, prev - 1);
-                            if (newVal === 0) setTimeout(handleGameOver, 100);
-                            return newVal;
-                        });
-                    }
+                    // Cette callback ne gère plus la mort, juste le feedback visuel/sonore scripté
+                    // La logique de vie est dans handleAnswerClick
                 },
-                playSound: (name) => console.log("Sound req", name)
+                playSound: (name) => {}
             };
 
             const BaseFactory = new Function('params', `
-                const { audioBuffers, audioCtx, project, sceneIdx, imageAssets, resolveUrl, canvas, ctx, callbacks } = params;
+                const { audioBuffers, audioCtx, project, sceneIdx, imageAssets, resolveUrl, canvas, ctx, activeSources } = params;
+                
                 class ActorProxy {
                     constructor(data, engine) { 
                         this.id = data.id; this.name = data.name; this.engine = engine;
@@ -274,7 +341,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 return class MiniGameBase {
                     constructor(c, a, cb) {
                         this.canvas = c || canvas; this.ctx = ctx; this.keys = {};
-                        this.callbacks = cb || callbacks; this.assets = a || {};
+                        this.callbacks = cb; this.assets = a || {};
                         this.currentLevel = 1; 
                         const s = project.scenes[sceneIdx];
                         if(s && s.actors) s.actors.forEach(a => { this[a.name.toUpperCase()] = new ActorProxy(a, this); });
@@ -293,8 +360,9 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                                 if (audioCtx.state === 'suspended') audioCtx.resume();
                                 const source = audioCtx.createBufferSource();
                                 source.buffer = buffer; source.connect(audioCtx.destination); source.start(0);
+                                activeSources.push(source);
                             }
-                        } catch(e) { console.error("Sound play error", e); }
+                        } catch(e) {}
                     }
                     playGlobal(name) {
                         const s = project.scenes[sceneIdx];
@@ -304,11 +372,15 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     _render() {
                         const s = project.scenes[sceneIdx];
                         ctx.fillStyle = "#0f172a"; ctx.fillRect(0,0,canvas.width, canvas.height);
+                        
+                        // BACKGROUND
                         const bd = s?.backdrops?.[s.currentBackdropIdx || 0];
                         if(bd) {
                             const img = imageAssets.get(resolveUrl(bd.url));
                             if(img) ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
                         }
+
+                        // ACTORS
                         for(let key in this) {
                             const p = this[key];
                             if(p instanceof ActorProxy && p.visible) {
@@ -319,12 +391,17 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                                     const now = Date.now();
                                     if (now - p.lastAnimTime > (act.speed || 100)) { p.frameIdx = (p.frameIdx+1)%act.frames.length; p.lastAnimTime=now; }
                                     const spr = imageAssets.get(resolveUrl(act.frames[p.frameIdx].url));
+                                    
                                     if(spr) {
                                         const xPx = (p.x/100)*canvas.width; const yPx = (p.y/100)*canvas.height; let sz = 150*p.scale;
                                         this.ctx.save(); this.ctx.translate(xPx, yPx);
                                         if(p.rotationStyle === 'left-right' && Math.abs(p.scale) !== p.scale) this.ctx.scale(Math.sign(p.scale), 1);
                                         else if (p.direction) this.ctx.rotate(p.direction * Math.PI / 180);
                                         this.ctx.drawImage(spr, -sz/2, -sz/2, sz, sz); this.ctx.restore();
+                                    } else {
+                                        // FALLBACK VISUEL SI IMAGE MANQUANTE
+                                        this.ctx.fillStyle = "#f472b6";
+                                        this.ctx.fillRect((p.x/100)*canvas.width - 20, (p.y/100)*canvas.height - 20, 40, 40);
                                     }
                                 }
                             }
@@ -336,22 +413,25 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             const MiniGameBase = BaseFactory({ 
                 audioBuffers: audioBuffersRef.current, audioCtx: audioCtxRef.current, 
                 imageAssets: imageAssetsRef.current, resolveUrl, logSonde, project, sceneIdx: activeSceneIdx, canvas, ctx,
-                callbacks: gameCallbacks
+                callbacks: gameCallbacks, activeSources: activeSourcesRef.current
             });
 
             const UserCodeFactory = new Function('MiniGameBase', `${code}\nreturn MiniGame;`);
             const UserGameClass = UserCodeFactory(MiniGameBase);
             const instance = new UserGameClass(canvas, {}, gameCallbacks);
             gameInstanceRef.current = instance;
-            instance.currentLevel = currentLevelIdx + 1;
-            if (instance.start) instance.start();
             
             const tick = () => {
                 if(instance.keys) Object.assign(instance.keys, keysPressed.current);
                 instance.currentLevel = currentLevelIdx + 1;
+                
+                // On met à jour SEULEMENT si pas en pause (pour figer le jeu au Game Over)
                 if (!isPausedRef.current && instance.update) instance.update();
+                
+                // Mais on dessine TOUJOURS (pour ne pas avoir d'écran noir pendant la pause)
                 if (instance._render) instance._render();
                 if (instance.draw) instance.draw();
+                
                 frameIdRef.current = requestAnimationFrame(tick);
             };
             tick();
@@ -365,11 +445,10 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
              {!engineStarted ? (
                  <button onClick={handleStartGame} disabled={!isReady} className={`px-20 py-10 rounded-full font-black text-5xl shadow-2xl border-8 transition-all ${isReady ? 'bg-white text-indigo-600 border-indigo-200 hover:scale-110 animate-pulse' : 'bg-slate-700 text-slate-500 border-slate-600 cursor-not-allowed'}`}>
-                    {isReady ? "🚀 JOUER" : `CHARGEMENT (${loadProgress})...`}
+                    {isReady ? "🚀 JOUER" : `CHARGEMENT ${loadProgress}...`}
                  </button>
              ) : (
                 <>
-                    {/* HUD - CŒURS (CLICK = CHEAT) */}
                     <div className="absolute top-6 w-full flex justify-between items-start px-10 pointer-events-none z-30">
                         <div 
                             className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-xl pointer-events-auto flex gap-1 cursor-pointer hover:border-red-500"
@@ -379,7 +458,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                             {"❤️".repeat(lives)}{"🖤".repeat(Math.max(0, 4 - lives))}
                         </div>
                         
-                        {/* QUESTIONS (CLICK = CHEAT) */}
                         <div className="flex-1 flex justify-center px-4">
                             {levelQuestions[currentQIndex] && !isLevelWon && !isGameOver && !showLevelTitle && (
                                 <div 
@@ -392,7 +470,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                             )}
                         </div>
 
-                        {/* BARRES (CLICK = CHEAT) */}
                         <div className="flex gap-2 items-center pointer-events-auto mr-20">
                             {questionStates.map((mastery, idx) => (
                                 <div 
