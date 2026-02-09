@@ -1,15 +1,16 @@
 const mongoose = require('mongoose');
 
+// Sous-schémas (pour la structure)
 const FrameSchema = new mongoose.Schema({
     url: String,
     name: String,
-    type: { type: String, default: 'image' } // image, sound
+    type: { type: String, default: 'image' } 
 }, { _id: false });
 
 const ActionSchema = new mongoose.Schema({
     name: { type: String, default: "Nouvelle Action" },
     speed: { type: Number, default: 100 }, 
-    frames: { type: [FrameSchema], default: [] }, 
+    frames: { type: [FrameSchema], default: [] },
     sounds: { type: [FrameSchema], default: [] }
 }, { _id: false });
 
@@ -31,9 +32,9 @@ const SceneSchema = new mongoose.Schema({
     currentBackdropIdx: { type: Number, default: 0 },
     actors: [ActorSchema],
     
-    // ✅ AJOUT DU CHAMP MANQUANT ICI
-    globalSounds: { type: [ActionSchema], default: [] } 
-});
+    // On déclare quand même le champ pour aider, mais le strict: false fera le travail
+    globalSounds: { type: [ActionSchema], default: [] }
+}, { _id: false });
 
 const StudioProjectSchema = new mongoose.Schema({
     title: { type: String, required: true },
@@ -41,6 +42,11 @@ const StudioProjectSchema = new mongoose.Schema({
     scenes: [SceneSchema],
     generatedCode: String,
     createdAt: { type: Date, default: Date.now }
-}, { collection: 'studioprojects' });
+}, { 
+    collection: 'studioprojects',
+    // 🚀 MODIFICATION CRITIQUE ICI :
+    strict: false,   // Accepte les champs inconnus (comme globalSounds s'il bug)
+    minimize: false  // Sauvegarde même les objets vides
+});
 
 module.exports = mongoose.models.StudioProject || mongoose.model('StudioProject', StudioProjectSchema);
