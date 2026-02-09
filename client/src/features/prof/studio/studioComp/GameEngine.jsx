@@ -121,10 +121,20 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
         // Animation Intro "NIVEAU X"
         setShowLevelTitle(true);
+        
         setTimeout(() => {
             setShowLevelTitle(false);
             isPausedRef.current = false; // Go !
-            if (gameInstanceRef.current?.start) gameInstanceRef.current.start();
+            if (gameInstanceRef.current) {
+                // Lancement de la logique utilisateur
+                if (gameInstanceRef.current.start) gameInstanceRef.current.start();
+                
+                // 🔊 DÉCLENCHEMENT DU SON DE DÉPART (Géré par le moteur)
+                if (gameInstanceRef.current.playGlobal) {
+                    gameInstanceRef.current.playGlobal("DÉPART");
+                    logSonde("🔊 SON: DÉPART", "info");
+                }
+            }
         }, 3000);
     };
 
@@ -132,7 +142,8 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         setIsGameOver(true);
         isPausedRef.current = true;
         logSonde("💀 GAME OVER", "error");
-        // Son de défaite global
+        
+        // 🔊 SON DE DÉFAITE GLOBAL
         if (gameInstanceRef.current?.playGlobal) gameInstanceRef.current.playGlobal("DEFAITE");
     };
 
@@ -147,6 +158,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             initLevel(nextIdx, allLevels);
         } else {
             setIsGameCompleted(true);
+            // 🔊 SON DE VICTOIRE FINALE
             if (gameInstanceRef.current?.playGlobal) gameInstanceRef.current.playGlobal("VICTOIRE");
         }
     };
@@ -316,6 +328,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 callbacks: gameCallbacks
             });
 
+            // Injection de MiniGameBase dans le scope pour que le code utilisateur puisse l'étendre
             const UserCodeFactory = new Function('MiniGameBase', `${code}\nreturn MiniGame;`);
             const UserGameClass = UserCodeFactory(MiniGameBase);
             const instance = new UserGameClass(canvas, {}, gameCallbacks);
