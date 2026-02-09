@@ -1,4 +1,4 @@
-// @signatures: SERVER_BOOT_ID, GlobalInfrastructure, KernelV81_STABLE
+// @signatures: SERVER_BOOT_ID, GlobalInfrastructure, KernelV82_STABLE
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
@@ -11,7 +11,7 @@ const port = 3000;
 const SERVER_BOOT_ID = Date.now();
 
 console.log("------------------------------------------------");
-console.log("🚀 KERNEL V81 : MULTIMEDIA PROXY REPAIR");
+console.log("🚀 KERNEL V82 : RAW PROXY (FIX AUDIO DECODE)");
 console.log("------------------------------------------------");
 
 app.use(express.json({ limit: '70mb' }));
@@ -19,18 +19,7 @@ app.use(express.urlencoded({ extended: true, limit: '70mb' }));
 
 app.get('/api/check-deploy', (req, res) => res.json({ status: "OK", bootId: SERVER_BOOT_ID }));
 
-app.get('/api/system/apply-status', (req, res) => {
-    try {
-        const statusPath = path.join(__dirname, '../apply_status.json');
-        if (fs.existsSync(statusPath)) {
-            const raw = fs.readFileSync(statusPath, 'utf8');
-            if (raw.trim()) return res.json(JSON.parse(raw));
-        }
-    } catch (e) {}
-    res.json({ status: "OK", message: "Kernel V81 Online" });
-});
-
-// --- FIX PROXY : DÉTECTION AUTOMATIQUE DU TYPE (AUDIO VS IMAGE) ---
+// --- PROXY TOTALEMENT TRANSPARENT (NE TOUCHE PAS AUX HEADERS) ---
 const ProfDrive = require('./prof/core/drive.prof');
 app.get(['/api/proxy/:id', '/api/structure/proxy/:id'], async (req, res) => {
     try {
@@ -39,16 +28,19 @@ app.get(['/api/proxy/:id', '/api/structure/proxy/:id'], async (req, res) => {
         
         const stream = await ProfDrive.getFileStream(fileId);
         
-        // On ne force pas image/png. On laisse le flux binaire brut pour le décodage Web Audio.
-        res.setHeader('Accept-Ranges', 'bytes');
+        // On ne définit AUCUN Content-Type, on laisse le navigateur deviner le flux binaire
         res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Accept-Ranges', 'bytes');
         
         stream.pipe(res);
-    } catch (e) { res.status(404).send("Not found"); }
+    } catch (e) { 
+        console.error("Proxy Error:", e.message);
+        res.status(404).send("Not found"); 
+    }
 });
 
 const safeLoad = (route, path) => {
-    try { app.use(route, require(path)); } catch (e) {}
+    try { app.use(route, require(path)); } catch (e) { console.error(`Error loading ${route}`); }
 };
 
 require('./prof/models/prof.models');
