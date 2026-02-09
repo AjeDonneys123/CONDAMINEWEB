@@ -4,10 +4,10 @@ import SoundExpert from './SoundExpert';
 import { api } from '../../../../services/api';
 
 /**
- * 🎮 MOTEUR STUDIO V1002 (AUDIO SAFE)
- * - Micro-délai audio pour éviter l'annulation du son de défaite.
- * - Correction de la gestion mémoire des sources audio (Ref Pointer Fix).
- * - Réveil forcé du contexte audio avant les événements critiques.
+ * 🎮 MOTEUR STUDIO V1003 (DIRECT AUDIO)
+ * - Lecture des sons critiques (Victoire/Défaite) gérée directement par React
+ * - Contournement de l'instance de jeu pour éviter les blocages de script
+ * - Logs explicites si le son est manquant dans le projet
  */
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
     const canvasRef = useRef(null);
@@ -62,10 +62,49 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     };
 
     const stopAllSounds = () => {
-        // Stop physique
         activeSourcesRef.current.forEach(src => { try { src.stop(); } catch(e){} });
-        // IMPORTANT : On vide le tableau sans casser la référence pour la Factory
         activeSourcesRef.current.length = 0; 
+    };
+
+    /**
+     * 🔊 LECTEUR SYSTÈME DIRECT (Bypasse le script jeu)
+     */
+    const playSystemSound = (soundName) => {
+        if (!project || !audioCtxRef.current) return;
+        
+        // 1. Recherche du son dans les données brutes du projet
+        const scene = project.scenes[activeSceneIdx];
+        const soundEvent = scene?.globalSounds?.find(gs => gs.name.toUpperCase().trim() === soundName.toUpperCase().trim());
+        
+        if (!soundEvent || !soundEvent.sounds || soundEvent.sounds.length === 0) {
+            console.warn(`❌ SON SYSTÈME INTROUVABLE: ${soundName}`);
+            logSonde(`⚠️ MANQUE: ${soundName}`, "warning");
+            return;
+        }
+
+        // 2. Réveil Audio Context
+        if (audioCtxRef.current.state === 'suspended') {
+            audioCtxRef.current.resume();
+        }
+
+        // 3. Lecture de tous les sons associés à l'événement
+        soundEvent.sounds.forEach(snd => {
+            const buffer = audioBuffersRef.current.get(snd.url);
+            if (buffer) {
+                try {
+                    const source = audioCtxRef.current.createBufferSource();
+                    source.buffer = buffer;
+                    source.connect(audioCtxRef.current.destination);
+                    source.start(0);
+                    activeSourcesRef.current.push(source); // Ajout pour nettoyage futur
+                    console.log(`🔊 PLAY SYSTEM: ${soundName}`);
+                } catch (e) {
+                    console.error("Audio Play Error:", e);
+                }
+            } else {
+                console.error("Buffer Audio introuvable pour:", snd.url);
+            }
+        });
     };
 
     // 1. CHARGEMENT MASSIF
@@ -151,33 +190,23 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 if (gameInstanceRef.current.start) {
                     try { gameInstanceRef.current.start(); } catch(e) { console.error("Start Error", e); }
                 }
-                if (gameInstanceRef.current.playGlobal) gameInstanceRef.current.playGlobal("DÉPART");
+                // Utilisation du lecteur système pour le départ aussi
+                playSystemSound("DÉPART");
             }
         }, 2000);
     };
 
     const handleGameOver = () => {
-        // 1. On coupe tout le son actuel (Impacts, Musique...)
-        stopAllSounds(); 
+        stopAllSounds(); // Silence
         
         setIsGameOver(true);
-        isPausedRef.current = true; // Freeze moteur
+        isPausedRef.current = true;
+        logSonde("💀 GAME OVER", "error");
 
-        // 2. PETIT DÉLAI DE SÉCURITÉ (50ms) POUR ÉVITER LE CONFLIT AUDIO
-        setTimeout(() => {
-            // Réveil contextuel au cas où
-            if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
-                audioCtxRef.current.resume();
-            }
-            
-            // Lancement du son
-            if (gameInstanceRef.current?.playGlobal) {
-                gameInstanceRef.current.playGlobal("DEFAITE");
-                logSonde("🔊 SON: DEFAITE", "info");
-            } else {
-                logSonde("⚠️ SON DEFAITE MANQUANT", "warning");
-            }
-        }, 100);
+        // Délai dramatique de 0.5s avant le son
+        safeTimeout(() => {
+            playSystemSound("DEFAITE");
+        }, 500);
     };
 
     const retryLevel = () => {
@@ -192,9 +221,9 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         } else {
             stopAllSounds();
             setIsGameCompleted(true);
-            setTimeout(() => {
-                if (gameInstanceRef.current?.playGlobal) gameInstanceRef.current.playGlobal("VICTOIRE");
-            }, 100);
+            safeTimeout(() => {
+                playSystemSound("VICTOIRE");
+            }, 500);
         }
     };
 
@@ -210,7 +239,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             const newVal = Math.max(0, prev - 1);
             if (newVal === 0) {
                 isPausedRef.current = true;
-                // On attend 1s pour le suspense, PUIS on lance la séquence Game Over
+                // On déclenche le Game Over avec un délai
                 safeTimeout(handleGameOver, 1000);
             }
             return newVal;
@@ -321,14 +350,12 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                                 if (audioCtx.state === 'suspended') audioCtx.resume();
                                 const source = audioCtx.createBufferSource();
                                 source.buffer = buffer; source.connect(audioCtx.destination); source.start(0);
-                                activeSources.push(source); // PUSH SUR LA REFERENCE PARTAGÉE
+                                activeSources.push(source);
                             }
                         } catch(e) {}
                     }
                     playGlobal(name) {
-                        const s = project.scenes[sceneIdx];
-                        const gs = s.globalSounds?.find(g => g.name.toUpperCase().trim() === name.toUpperCase().trim());
-                        if (gs && gs.sounds) gs.sounds.forEach(snd => this._playSound(snd.url));
+                        // LAISSÉ POUR COMPATIBILITÉ MAIS INACTIF SI LE MOTEUR REACT PREND LE RELAIS
                     }
                     _render() {
                         const s = project.scenes[sceneIdx];
@@ -369,7 +396,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 }
             `);
 
-            // PASSAGE CRITIQUE : On passe activeSourcesRef.current qui est le tableau réel
             const MiniGameBase = BaseFactory({ 
                 audioBuffers: audioBuffersRef.current, audioCtx: audioCtxRef.current, 
                 imageAssets: imageAssetsRef.current, resolveUrl, logSonde, project, sceneIdx: activeSceneIdx, canvas, ctx,
