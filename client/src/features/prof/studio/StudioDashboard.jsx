@@ -21,89 +21,216 @@ function resolveUrl(url) {
     return `/api/proxy/${id}`;
 }
 
-// 🎯 CODE DE TEST : QUIZ + TIR + SON
-const QUIZ_SHOOT_CODE = `// 🎯 TEST QUIZ INTERACTIF
-// Réponds JUSTE pour voir l'action TIRER (+ Son)
+// 🧟 JEU ZOMBIE V5 : MACHINE À ÉTATS (ANTI-CRASH)
+const ZOMBIE_GAME_CODE = `// 🧟 ZOMBIE V5
+// Logique stricte : MARCHE -> COGNE -> RESET
 
 class MiniGame extends MiniGameBase {
     constructor(canvas, assets, callbacks) {
         super(canvas, assets, callbacks);
         this.projectiles = [];
-        this.shootTimer = 0;
+        
+        // États du Zombie
+        this.zombieX = 100;
+        this.zombieState = "WALKING"; // WALKING, ATTACKING, HIT
+        this.zombieTimer = 0;
+        
+        // États du Héros
+        this.heroState = "IDLE";
+        this.heroTimer = 0;
+        
+        this.levelTimer = 180; 
+        this.isStopped = false;
     }
 
     start() { 
-        console.log("🚀 QUIZ PRÊT. En attente de réponse...");
+        console.log("🚀 START V5");
+        this.isStopped = false;
+        this.levelTimer = 180;
+        
         if(this.HEROS) { 
+            this.HEROS.x = 15; 
+            this.HEROS.y = 70; 
             this.HEROS.play("IDLE");
-            this.HEROS.y = 70; // Sol
+        } 
+        
+        this.resetZombie();
+        this.playGlobal("DÉPART");
+    }
+
+    resetZombie() {
+        this.zombieX = 100;
+        this.zombieState = "WALKING";
+        if(this.ZOMBIE) {
+            this.ZOMBIE.x = 100;
+            this.ZOMBIE.play("AVANCER");
         }
     }
 
-    // C'est ici que la magie opère !
     onResult(isCorrect) {
-        if (isCorrect) {
-            console.log("✅ BONNE RÉPONSE -> ACTION TIRER !");
-            
-            if (this.HEROS) {
-                // 1. Lance l'animation (et le son associé !)
-                this.HEROS.play("TIRER");
-                
-                // 2. Ajoute un effet visuel (balle)
-                this.projectiles.push({ x: this.HEROS.x + 5, y: this.HEROS.y - 5 });
-                
-                // 3. Timer pour revenir à IDLE après l'anim
-                this.shootTimer = 40; // ~1 seconde
-            }
-        } else {
-            console.log("❌ MAUVAISE RÉPONSE");
-            // Tu pourrais ajouter this.HEROS.play("HURT") ici
+        if (this.levelTimer > 0 || this.heroState === "HIT") return;
+
+        if (isCorrect && this.HEROS) {
+            this.HEROS.play("TIRER");
+            this.heroState = "SHOOT";
+            this.heroTimer = 40;
+            this.projectiles.push({ x: this.HEROS.x + 5, y: this.HEROS.y - 5 });
         }
     }
 
     update() {
-        // Gestion du retour à la normale
-        if (this.shootTimer > 0) {
-            this.shootTimer--;
-            if (this.shootTimer === 0 && this.HEROS) {
-                this.HEROS.play("IDLE");
+        if (this.isStopped) return;
+
+        // --- 1. GESTION BANNIÈRE ---
+        if (this.levelTimer > 0) {
+            this.levelTimer--;
+            return;
+        }
+
+        // --- 2. GESTION HÉROS ---
+        if (this.heroState === "SHOOT") {
+            this.heroTimer--;
+            if (this.heroTimer <= 0) {
+                this.heroState = "IDLE";
+                if(this.HEROS) this.HEROS.play("IDLE");
+            }
+        }
+        else if (this.heroState === "HIT") {
+            this.heroTimer--;
+            if (this.heroTimer <= 0) {
+                this.heroState = "IDLE";
+                if(this.HEROS) this.HEROS.play("IDLE");
             }
         }
 
-        // Avancée des projectiles
-        for (let i = this.projectiles.length - 1; i >= 0; i--) {
-            this.projectiles[i].x += 2; // Vitesse balle
-            if (this.projectiles[i].x > 100) this.projectiles.splice(i, 1);
+        // --- 3. GESTION ZOMBIE (MACHINE À ÉTATS) ---
+        
+        // ETAT 1 : LE ZOMBIE MARCHE
+        if (this.zombieState === "WALKING") {
+            this.zombieX -= 0.15; // Il avance
+            
+            // Test Collision avec Héros
+            if (this.zombieX < 20) {
+                // CHANGEMENT D'ÉTAT -> ATTACKING
+                this.zombieState = "ATTACKING";
+                this.zombieTimer = 60; // Durée de l'attaque (1s)
+                
+                // Effets immédiats
+                if (this.ZOMBIE) this.ZOMBIE.play("TAPER");
+                if (this.HEROS) {
+                    this.HEROS.play("TOUCHE");
+                    this.heroState = "HIT";
+                    this.heroTimer = 60;
+                }
+                // Perte de vie
+                if (this.callbacks.onPlayerHit) this.callbacks.onPlayerHit();
+            }
+            
+            // Mise à jour visuelle
+            if (this.ZOMBIE) {
+                this.ZOMBIE.x = this.zombieX;
+                // On s'assure qu'il joue bien l'anim de marche
+                if(this.ZOMBIE.currentAction !== "AVANCER") this.ZOMBIE.play("AVANCER");
+            }
+        }
+        
+        // ETAT 2 : LE ZOMBIE ATTAQUE (FIGÉ SUR PLACE)
+        else if (this.zombieState === "ATTACKING") {
+            this.zombieTimer--;
+            if (this.ZOMBIE) {
+                this.ZOMBIE.x = 20; // Bloqué au contact
+                // On force l'anim TAPER tant qu'il attaque
+                if(this.ZOMBIE.currentAction !== "TAPER") this.ZOMBIE.play("TAPER");
+            }
+            
+            if (this.zombieTimer <= 0) {
+                this.resetZombie(); // Fin attaque -> Retour départ
+            }
+        }
+        
+        // ETAT 3 : LE ZOMBIE EST TOUCHÉ (PAR BALLE)
+        else if (this.zombieState === "HIT") {
+            this.zombieTimer--;
+            // Il recule un peu sous l'impact
+            this.zombieX += 0.1; 
+            if(this.ZOMBIE) this.ZOMBIE.x = this.zombieX;
+            
+            if (this.zombieTimer <= 0) {
+                this.resetZombie(); // Fin douleur -> Retour départ
+            }
+        }
+
+        // --- 4. PROJECTILES ---
+        for (let i = this.projectiles.length - 1; i >= 0; i--) { 
+            let p = this.projectiles[i]; 
+            p.x += 3;
+            
+            // Collision Balle -> Zombie (Seulement si marche)
+            if (this.zombieState === "WALKING" && p.x > this.zombieX - 5 && p.x < this.zombieX + 5) {
+                this.projectiles.splice(i, 1);
+                console.log("💥 BAM !");
+                
+                // CHANGEMENT D'ÉTAT -> HIT
+                this.zombieState = "HIT";
+                this.zombieTimer = 40;
+                if (this.ZOMBIE) this.ZOMBIE.play("TOUCHE"); 
+            }
+            else if (p.x > 110) {
+                this.projectiles.splice(i, 1);
+            }
         }
     }
 
     draw() {
-        // Dessin des projectiles (Cercle Orange)
+        if (this.isStopped) return;
         const ctx = this.ctx;
-        const cw = this.canvas.width;
+        const cw = this.canvas.width; 
         const ch = this.canvas.height;
         
-        ctx.fillStyle = "#f97316"; // Orange
-        this.projectiles.forEach(p => {
-            ctx.beginPath();
-            ctx.arc((p.x/100)*cw, (p.y/100)*ch, 10, 0, Math.PI*2);
-            ctx.fill();
+        ctx.fillStyle = "#f97316"; 
+        this.projectiles.forEach(p => { 
+            ctx.beginPath(); 
+            ctx.arc((p.x/100)*cw, (p.y/100)*ch, 10, 0, Math.PI*2); 
+            ctx.fill(); 
         });
+
+        if (this.levelTimer > 0) {
+            ctx.save();
+            ctx.fillStyle = "rgba(15, 23, 42, 0.9)";
+            ctx.fillRect(0, 0, cw, ch);
+            ctx.fillStyle = "#fbbf24";
+            ctx.font = "900 60px Arial";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText("NIVEAU 1", cw/2, ch/2);
+            ctx.fillStyle = "#fbbf24";
+            const barWidth = 200 * (this.levelTimer / 180);
+            ctx.fillRect(cw/2 - 100, ch/2 + 60, barWidth, 4);
+            ctx.restore();
+        }
     }
 }
 `;
 
 const DEMO_PROJECT = { 
-    title: "Test Tir", 
+    title: "Chasse Zombie", 
     scenes: [{ 
         name: "Scene 1", backdrops: [], currentBackdropIdx: 0, 
         actors: [ 
             { 
-                id: "actor-hero", name: "HEROS", initialX: 20, initialY: 70, scale: 1, 
-                // On prépare "TIRER" pour que l'utilisateur n'ait qu'à le remplir
+                id: "actor-hero", name: "HEROS", initialX: 15, initialY: 70, scale: 1, 
                 actions: [
                     { name: "IDLE", speed: 100, frames: [], sounds: [] }, 
-                    { name: "TIRER", speed: 100, frames: [], sounds: [] }
+                    { name: "TIRER", speed: 100, frames: [], sounds: [] },
+                    { name: "TOUCHE", speed: 100, frames: [], sounds: [] }
+                ] 
+            },
+            { 
+                id: "actor-zombie", name: "ZOMBIE", initialX: 90, initialY: 70, scale: 1, 
+                actions: [
+                    { name: "AVANCER", speed: 150, frames: [], sounds: [] },
+                    { name: "TOUCHE", speed: 100, frames: [], sounds: [] },
+                    { name: "TAPER", speed: 100, frames: [], sounds: [] }
                 ] 
             } 
         ], 
@@ -118,8 +245,8 @@ export default function StudioDashboard({ user }) {
     const [selectedGlobalSoundIdx, setSelectedGlobalSoundIdx] = useState(0);
     const [leftTab, setLeftTab] = useState('actions');
     
-    // ⚠️ CODE FORCÉ POUR LE TEST QUIZ
-    const [code, setCode] = useState(QUIZ_SHOOT_CODE);
+    // ⚠️ CODE FORCÉ V5
+    const [code, setCode] = useState(ZOMBIE_GAME_CODE);
     
     const [isPlaying, setIsPlaying] = useState(false);
     const [loading, setLoading] = useState(false);
@@ -155,10 +282,12 @@ export default function StudioDashboard({ user }) {
         const data = await api.get(`/studio/projects/${user.id || user._id}`);
         if (data?.length > 0) {
             const p = data[0];
+            if (p.scenes && p.scenes[0]) {
+                if (!p.scenes[0].globalSounds) p.scenes[0].globalSounds = [];
+            }
             setProject(p);
-            // ON FORCE LE CODE QUIZ
-            setCode(QUIZ_SHOOT_CODE);
-            console.log("🎯 CODE QUIZ/TIR ACTIVÉ");
+            setCode(ZOMBIE_GAME_CODE); // FORCE V5
+            console.log("🧟 CODE V5 ACTIVÉ");
             
             if (p.scenes?.[0]?.actors?.[0]) setSelectedActorId(p.scenes[0].actors[0].id);
         }
@@ -173,30 +302,28 @@ export default function StudioDashboard({ user }) {
         } catch(e) {} setLoading(false);
     }
 
-    // PASSE LES PROPS NÉCESSAIRES AU LEFT PANEL (DONT setPreviewFrameIdx)
     const handleSetPreviewFrameIdx = (valOrFn) => {
-        if (typeof valOrFn === 'function') {
-            setPreviewFrameIdx(prev => valOrFn(prev));
-        } else {
-            setPreviewFrameIdx(valOrFn);
-        }
+        if (typeof valOrFn === 'function') setPreviewFrameIdx(prev => valOrFn(prev));
+        else setPreviewFrameIdx(valOrFn);
     };
 
     const handleOpenSave = () => { setModalMode('SAVE'); setShowSaveLoadModal(true); };
     const handleOpenLoad = () => { setModalMode('LOAD'); setShowSaveLoadModal(true); };
     
-    // NOUVEAU PROJET : On remet les bases propres avec les actions requises
+    // NOUVEAU = RETOUR A LA DEMO ZOMBIE V5
     const handleCreateNew = () => { 
         setProject(DEMO_PROJECT); 
-        setCode(QUIZ_SHOOT_CODE); 
+        setCode(ZOMBIE_GAME_CODE); 
         setSelectedActorId("actor-hero"); 
         setShowSaveLoadModal(false); 
     };
 
     const handleLoadProject = (p) => { 
+        if (p.scenes && p.scenes[0] && !p.scenes[0].globalSounds) p.scenes[0].globalSounds = [];
         setProject(p); 
-        setCode(QUIZ_SHOOT_CODE); // Toujours le code test quiz
-        if (p.scenes?.[0]?.actors?.[0]) setSelectedActorId(p.scenes[0].actors[0].id); else setSelectedActorId(null); setShowSaveLoadModal(false); 
+        setCode(ZOMBIE_GAME_CODE); 
+        if (p.scenes?.[0]?.actors?.[0]) setSelectedActorId(p.scenes[0].actors[0].id); else setSelectedActorId(null); 
+        setShowSaveLoadModal(false); 
     };
     
     const handleViewTestQuiz = async () => { try { const data = await api.get('/games/test-data'); if (data) { setTestQuizData(data); setShowTestQuizModal(true); } } catch (e) { console.error(e); } };
@@ -229,7 +356,7 @@ export default function StudioDashboard({ user }) {
 
             <div style={{ position: 'absolute', visibility: 'hidden', pointerEvents: 'none' }}>
                 <input type="file" ref={frameUploadRef} multiple onChange={async (e) => { const files = Array.from(e.target.files); if (files.length === 0) return; setLoading(true); setStatusText("Upload..."); const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); const act = actor.actions[selectedActionIdx]; for (const file of files) { const fd = new FormData(); fd.append('file', file); const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json()); if (res.url) act.frames.push({ url: res.url, name: file.name, type: 'image' }); } } else { const act = next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx]; for (const file of files) { const fd = new FormData(); fd.append('file', file); const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json()); if (res.url) act.frames.push({ url: res.url, name: file.name, type: 'image' }); } } await saveProject(next); setLoading(false); }} />
-                <input type="file" ref={actorUploadRef} onChange={async (e) => { const file = e.target.files[0]; if(!file) return; setLoading(true); setStatusText("Nouveau..."); const fd = new FormData(); fd.append('file', file); const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json()); const next = JSON.parse(JSON.stringify(project)); const newActor = { id: `actor-${Date.now()}`, name: "P" + (next.scenes[selectedSceneIdx].actors.length + 1), actions: [{ name: "IDLE", speed: 100, frames: [{url: res.url, name: "C1", type:'image'}], sounds: [] }, { name: "TIRER", speed: 100, frames: [], sounds: [] }], initialX: 50, initialY: 50, scale: 1, direction: 0, rotationStyle: 'all' }; next.scenes[selectedSceneIdx].actors.push(newActor); setSelectedActorId(newActor.id); await saveProject(next); setLoading(false); }} />
+                <input type="file" ref={actorUploadRef} onChange={async (e) => { const file = e.target.files[0]; if(!file) return; setLoading(true); setStatusText("Nouveau..."); const fd = new FormData(); fd.append('file', file); const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json()); const next = JSON.parse(JSON.stringify(project)); const newActor = { id: `actor-${Date.now()}`, name: "P" + (next.scenes[selectedSceneIdx].actors.length + 1), actions: [{ name: "IDLE", speed: 100, frames: [{url: res.url, name: "C1", type:'image'}], sounds: [] }, { name: "TIRER", speed: 100, frames: [], sounds: [] }, { name: "TOUCHE", speed: 100, frames: [], sounds: [] }], initialX: 50, initialY: 50, scale: 1, direction: 0, rotationStyle: 'all' }; next.scenes[selectedSceneIdx].actors.push(newActor); setSelectedActorId(newActor.id); await saveProject(next); setLoading(false); }} />
                 <input type="file" ref={backdropUploadRef} onChange={async (e) => { const file = e.target.files[0]; if(!file) return; setLoading(true); setStatusText("Décor..."); const fd = new FormData(); fd.append('file', file); const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json()); const next = JSON.parse(JSON.stringify(project)); next.scenes[selectedSceneIdx].backdrops.push({ url: res.url, name: file.name }); next.scenes[selectedSceneIdx].currentBackdropIdx = next.scenes[selectedSceneIdx].backdrops.length - 1; await saveProject(next); setLoading(false); }} />
             </div>
 
@@ -246,7 +373,8 @@ export default function StudioDashboard({ user }) {
                     resolveUrl={resolveUrl} handleDeleteFrame={handleDeleteFrame} frameUploadRef={frameUploadRef}
                     setFrameToErase={setFrameToErase} setShowSoundModal={setShowSoundModal} handleDeleteSound={handleDeleteSound} 
                     handleEditSound={handleEditSound}
-                    setPreviewFrameIdx={handleSetPreviewFrameIdx} // 👈 PROP SÉQUENCEUR
+                    setPreviewFrameIdx={handleSetPreviewFrameIdx} 
+                    currentScene={currentScene} 
                 />
                 <StudioCenterPanel 
                     stageRef={stageRef} currentScene={currentScene} resolveUrl={resolveUrl}
