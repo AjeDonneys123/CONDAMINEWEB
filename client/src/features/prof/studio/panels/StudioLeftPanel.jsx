@@ -127,10 +127,8 @@ export default function StudioLeftPanel({
     const handleAddAction = () => {
         const name = prompt("Nom de l'action (ex: MARCHER) :"); 
         if(!name) return; 
-        
         const next = JSON.parse(JSON.stringify(project)); 
         const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
-        
         if (actor) {
             actor.actions.push({ name: name.toUpperCase(), frames: [], sounds: [], speed: 100 }); 
             saveProject(next);
@@ -141,19 +139,27 @@ export default function StudioLeftPanel({
         const name = prompt("Nom de l'événement (ex: VICTOIRE, DÉPART) :"); 
         if(!name) return; 
         
+        // 1. CLONAGE
         const next = JSON.parse(JSON.stringify(project)); 
         const scene = next.scenes[selectedSceneIdx];
 
+        // 2. INITIALISATION FORCÉE
         if (!scene.globalSounds) scene.globalSounds = [];
         
-        scene.globalSounds.push({ 
+        // 3. AJOUT
+        const newSoundEvent = { 
             name: name.toUpperCase(), 
             frames: [], 
             sounds: [], 
             speed: 100 
-        }); 
+        };
+        scene.globalSounds.push(newSoundEvent); 
         
-        // On sauvegarde directement le projet complet
+        // 4. LOG DE CONTRÔLE
+        console.log("➕ Ajout Son Global :", newSoundEvent);
+        console.log("💾 Envoi au serveur...");
+
+        // 5. SAUVEGARDE
         saveProject(next);
     };
 
@@ -196,7 +202,9 @@ export default function StudioLeftPanel({
                     </>
                 ) : (
                     <>
-                        {currentScene?.globalSounds?.map((act, idx) => (
+                        {/* AFFICHAGE DES SONS GLOBAUX */}
+                        {/* On utilise currentScene (lecture) ou project (écriture) si currentScene est vide */}
+                        {(currentScene?.globalSounds || project.scenes[selectedSceneIdx].globalSounds || []).map((act, idx) => (
                             <div key={idx} onClick={() => handleSelectGlobalSound(idx)} className={`action-item ${selectedGlobalSoundIdx === idx ? 'selected' : ''}`}>
                                 <span>{act.name}</span>
                                 <div className="flex gap-2 items-center">
@@ -263,6 +271,7 @@ export default function StudioLeftPanel({
                                         onClick={(e) => { e.stopPropagation(); handleDeleteSound(sIdx); }}
                                         title="Supprimer le son"
                                     >✕</button>
+                                    
                                 </div>
                             ))}
                             <div className="border-2 border-dashed border-slate-200 rounded-lg h-16 flex items-center justify-center text-slate-300 text-[8px] font-bold">
