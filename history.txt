@@ -1039,3 +1039,5 @@
 08/02/2026 20:15 - STUDIO AUDIO SYNC FINAL : Rétablissement du déclenchement sonore. Implémentation d'un bouton de démarrage "CLIQUE POUR JOUER" qui débloque l'AudioContext et lance simultanément la méthode start() du script. Le son de DÉPART est désormais audible car déclenché après l'interaction utilisateur obligatoire.
 
 08/02/2026 21:10 - KERNEL REPAIR : Rétablissement du Proxy serveur (V74). Suppression du forçage Content-Type qui corrompait les binaires audio. STUDIO ENGINE : Éradication du "Silent Crash" JavaScript dans la boucle de rendu en utilisant des constructeurs d'images dynamiques sûrs. Synchronisation finale du bouton JOUER avec le moteur Web Audio.
+
+08/02/2026 21:35 - KERNEL STABILITY : Kernel V78 stable. Fix de l'erreur InvalidStateError dans GameEngine.jsx par l'ajout d'une vérification de l'état (closed) avant la fermeture de l'AudioContext. Rétablissement de la séquence de démarrage : le bouton JOUER apparaît désormais systématiquement après la confirmation "Ressources Prêtes".
