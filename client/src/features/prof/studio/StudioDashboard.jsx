@@ -21,70 +21,58 @@ function resolveUrl(url) {
     return `/api/proxy/${id}`;
 }
 
-// 🎹 CODE DE TEST FORCÉ (BARRE ESPACE)
-const AUDIO_TEST_CODE = `// 🔊 TEST AUDIO FORCÉ V1
-// Ce code remplace tout le reste pour tester le son.
+// 🏃 CODE DE TEST ANIMATION & SON
+const ANIMATION_TEST_CODE = `// 🏃 TEST ANIMATION + SON
+// 1. Crée une action 'WALK' à gauche.
+// 2. Mets des images + un son dedans.
+// 3. Clique sur JOUER et utilise les FLÈCHES.
 
 class MiniGame extends MiniGameBase {
     constructor(canvas, assets, callbacks) {
         super(canvas, assets, callbacks);
-        this.pressed = false;
-        this.msg = "APPUIE SUR ESPACE";
-        this.color = "white";
+        this.speed = 2; // Vitesse déplacement
     }
 
     start() { 
-        console.log("🚀 MODE TEST AUDIO ACTIVÉ");
-        // Tentative immédiate (souvent bloquée par le navigateur, mais on essaie)
-        this.playGlobal("DÉPART"); 
+        console.log("🚀 PRÊT : Utilisez GAUCHE / DROITE");
     }
 
     update() {
-        if (this.keys['Space'] && !this.pressed) {
-            this.pressed = true;
-            this.color = "#22c55e"; // Vert
-            this.msg = "BOUM ! SON DÉCLENCHÉ";
-            console.log("🎹 ESPACE -> PLAY DÉPART");
-            
-            // On joue le son associé à l'événement global "DÉPART"
-            // Assurez-vous d'avoir un son dans l'onglet SONS > DÉPART !
-            this.playGlobal("DÉPART"); 
+        let isMoving = false;
+
+        if (this.keys['ArrowRight']) {
+            this.HEROS.x += 0.5;
+            this.HEROS.direction = 0; // Regarde à droite
+            isMoving = true;
+        }
+        
+        if (this.keys['ArrowLeft']) {
+            this.HEROS.x -= 0.5;
+            this.HEROS.direction = 0; // Regarde à gauche (si tu as des sprites miroirs, sinon utilise scale -1)
+            isMoving = true;
         }
 
-        if (!this.keys['Space']) {
-            this.pressed = false;
-            if(this.color !== "white") {
-                this.color = "white";
-                this.msg = "APPUIE SUR ESPACE";
-            }
+        // GESTION ACTION & SON
+        if (isMoving) {
+            // Joue l'action 'WALK' (et son son associé)
+            // Assure-toi d'avoir créé l'action 'WALK' dans le panneau gauche !
+            this.HEROS.play("WALK"); 
+        } else {
+            this.HEROS.play("IDLE");
         }
     }
 
     draw() {
         const ctx = this.ctx;
-        ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        
-        // Fond
-        ctx.fillStyle = "#0f172a";
-        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-
-        // Texte
-        ctx.fillStyle = this.color;
-        ctx.font = "40px Arial";
-        ctx.textAlign = "center";
-        ctx.fillText("🔊 TEST AUDIO", this.canvas.width/2, 100);
-        
-        ctx.font = "30px monospace";
-        ctx.fillText(this.msg, this.canvas.width/2, 250);
-        
-        ctx.font = "15px monospace";
-        ctx.fillStyle = "#94a3b8";
-        ctx.fillText("(Vérifiez que l'onglet SONS contient 'DÉPART')", this.canvas.width/2, 350);
+        ctx.fillStyle = "white";
+        ctx.font = "20px monospace";
+        ctx.fillText("UTILISEZ LES FLÈCHES ⬅️ ➡️", 20, 30);
+        ctx.fillText("Action actuelle : " + this.HEROS.currentAction, 20, 60);
     }
 }
 `;
 
-const DEMO_PROJECT = { title: "Test Audio", scenes: [{ name: "Scene 1", backdrops: [], currentBackdropIdx: 0, actors: [ { id: "actor-hero", name: "HEROS", initialX: 15, initialY: 70, scale: 1, actions: [{ name: "IDLE", speed: 100, frames: [], sounds: [] }, { name: "SHOOT", speed: 100, frames: [], sounds: [] }] } ], globalSounds: [ { name: "DÉPART", sounds: [] } ] }] };
+const DEMO_PROJECT = { title: "Test Animation", scenes: [{ name: "Scene 1", backdrops: [], currentBackdropIdx: 0, actors: [ { id: "actor-hero", name: "HEROS", initialX: 50, initialY: 50, scale: 1, actions: [{ name: "IDLE", speed: 200, frames: [], sounds: [] }, { name: "WALK", speed: 150, frames: [], sounds: [] }] } ], globalSounds: [] }] };
 
 export default function StudioDashboard({ user }) {
     const [project, setProject] = useState(DEMO_PROJECT);
@@ -93,8 +81,8 @@ export default function StudioDashboard({ user }) {
     const [selectedGlobalSoundIdx, setSelectedGlobalSoundIdx] = useState(0);
     const [leftTab, setLeftTab] = useState('actions');
     
-    // ⚠️ ICI : On initialise DIRECTEMENT avec le code de test
-    const [code, setCode] = useState(AUDIO_TEST_CODE);
+    // ⚠️ CODE FORCÉ POUR LE TEST ANIMATION
+    const [code, setCode] = useState(ANIMATION_TEST_CODE);
     
     const [isPlaying, setIsPlaying] = useState(false);
     const [loading, setLoading] = useState(false);
@@ -130,14 +118,16 @@ export default function StudioDashboard({ user }) {
         const data = await api.get(`/studio/projects/${user.id || user._id}`);
         if (data?.length > 0) {
             const p = data[0];
-            if (p.scenes?.[0] && !p.scenes[0].globalSounds) p.scenes[0].globalSounds = DEMO_PROJECT.scenes[0].globalSounds;
+            // On s'assure qu'il y a les actions de base pour le test
+            if (p.scenes?.[0]?.actors?.[0]) {
+                const hero = p.scenes[0].actors[0];
+                if (!hero.actions.find(a => a.name === "WALK")) {
+                    hero.actions.push({ name: "WALK", speed: 150, frames: [], sounds: [] });
+                }
+            }
             setProject(p);
-            
-            // ⚠️ FORCE OVERRIDE : On ignore le code en base et on met le code de test
-            // setCode(p.generatedCode); <--- ANCIENNE LIGNE SUPPRIMÉE
-            setCode(AUDIO_TEST_CODE); // <--- NOUVELLE LIGNE FORCÉE
-            console.log("🔥 CODE DE TEST AUDIO FORCÉ 🔥");
-
+            // On force le code de test animation
+            setCode(ANIMATION_TEST_CODE);
             if (p.scenes?.[0]?.actors?.[0]) setSelectedActorId(p.scenes[0].actors[0].id);
         }
     }
@@ -151,19 +141,24 @@ export default function StudioDashboard({ user }) {
         } catch(e) {} setLoading(false);
     }
 
+    // PASSE LES PROPS NÉCESSAIRES AU LEFT PANEL (DONT setPreviewFrameIdx)
+    const handleSetPreviewFrameIdx = (valOrFn) => {
+        if (typeof valOrFn === 'function') {
+            setPreviewFrameIdx(prev => valOrFn(prev));
+        } else {
+            setPreviewFrameIdx(valOrFn);
+        }
+    };
+
     const handleOpenSave = () => { setModalMode('SAVE'); setShowSaveLoadModal(true); };
     const handleOpenLoad = () => { setModalMode('LOAD'); setShowSaveLoadModal(true); };
-    const handleCreateNew = () => { setProject(DEMO_PROJECT); setCode(AUDIO_TEST_CODE); setSelectedActorId("actor-hero"); setShowSaveLoadModal(false); };
+    const handleCreateNew = () => { setProject(DEMO_PROJECT); setCode(ANIMATION_TEST_CODE); setSelectedActorId("actor-hero"); setShowSaveLoadModal(false); };
     const handleLoadProject = (p) => { 
-        if (p.scenes?.[0] && !p.scenes[0].globalSounds) p.scenes[0].globalSounds = DEMO_PROJECT.scenes[0].globalSounds;
         setProject(p); 
-        // ⚠️ MÊME ICI : On force le code test si on charge un projet
-        // setCode(p.generatedCode || defaultCode); 
-        setCode(AUDIO_TEST_CODE);
+        setCode(ANIMATION_TEST_CODE); // Toujours le code test
         if (p.scenes?.[0]?.actors?.[0]) setSelectedActorId(p.scenes[0].actors[0].id); else setSelectedActorId(null); setShowSaveLoadModal(false); 
     };
     
-    // --- (Le reste des fonctions est inchangé) ---
     const handleViewTestQuiz = async () => { try { const data = await api.get('/games/test-data'); if (data) { setTestQuizData(data); setShowTestQuizModal(true); } } catch (e) { console.error(e); } };
     const handleUpdateActionSpeed = (delta) => { if (!selectedAction) return; const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); if (actor && actor.actions[selectedActionIdx]) actor.actions[selectedActionIdx].speed = Math.max(20, Math.min(2000, (actor.actions[selectedActionIdx].speed || 100) + delta)); } else { if (next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx]) next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].speed = Math.max(20, Math.min(2000, (next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].speed || 100) + delta)); } setProject(next); saveProject(next); };
     const handleSelectActor = (actorId) => { setSelectedActorId(actorId); setSelectedFrameIdx(null); };
@@ -194,7 +189,7 @@ export default function StudioDashboard({ user }) {
 
             <div style={{ position: 'absolute', visibility: 'hidden', pointerEvents: 'none' }}>
                 <input type="file" ref={frameUploadRef} multiple onChange={async (e) => { const files = Array.from(e.target.files); if (files.length === 0) return; setLoading(true); setStatusText("Upload..."); const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); const act = actor.actions[selectedActionIdx]; for (const file of files) { const fd = new FormData(); fd.append('file', file); const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json()); if (res.url) act.frames.push({ url: res.url, name: file.name, type: 'image' }); } } else { const act = next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx]; for (const file of files) { const fd = new FormData(); fd.append('file', file); const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json()); if (res.url) act.frames.push({ url: res.url, name: file.name, type: 'image' }); } } await saveProject(next); setLoading(false); }} />
-                <input type="file" ref={actorUploadRef} onChange={async (e) => { const file = e.target.files[0]; if(!file) return; setLoading(true); setStatusText("Nouveau..."); const fd = new FormData(); fd.append('file', file); const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json()); const next = JSON.parse(JSON.stringify(project)); const newActor = { id: `actor-${Date.now()}`, name: "P" + (next.scenes[selectedSceneIdx].actors.length + 1), actions: [{ name: "IDLE", speed: 100, frames: [{url: res.url, name: "C1", type:'image'}], sounds: [] }], initialX: 50, initialY: 50, scale: 1, direction: 0, rotationStyle: 'all' }; next.scenes[selectedSceneIdx].actors.push(newActor); setSelectedActorId(newActor.id); await saveProject(next); setLoading(false); }} />
+                <input type="file" ref={actorUploadRef} onChange={async (e) => { const file = e.target.files[0]; if(!file) return; setLoading(true); setStatusText("Nouveau..."); const fd = new FormData(); fd.append('file', file); const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json()); const next = JSON.parse(JSON.stringify(project)); const newActor = { id: `actor-${Date.now()}`, name: "P" + (next.scenes[selectedSceneIdx].actors.length + 1), actions: [{ name: "IDLE", speed: 100, frames: [{url: res.url, name: "C1", type:'image'}], sounds: [] }, { name: "WALK", speed: 150, frames: [], sounds: [] }], initialX: 50, initialY: 50, scale: 1, direction: 0, rotationStyle: 'all' }; next.scenes[selectedSceneIdx].actors.push(newActor); setSelectedActorId(newActor.id); await saveProject(next); setLoading(false); }} />
                 <input type="file" ref={backdropUploadRef} onChange={async (e) => { const file = e.target.files[0]; if(!file) return; setLoading(true); setStatusText("Décor..."); const fd = new FormData(); fd.append('file', file); const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json()); const next = JSON.parse(JSON.stringify(project)); next.scenes[selectedSceneIdx].backdrops.push({ url: res.url, name: file.name }); next.scenes[selectedSceneIdx].currentBackdropIdx = next.scenes[selectedSceneIdx].backdrops.length - 1; await saveProject(next); setLoading(false); }} />
             </div>
 
@@ -211,6 +206,7 @@ export default function StudioDashboard({ user }) {
                     resolveUrl={resolveUrl} handleDeleteFrame={handleDeleteFrame} frameUploadRef={frameUploadRef}
                     setFrameToErase={setFrameToErase} setShowSoundModal={setShowSoundModal} handleDeleteSound={handleDeleteSound} 
                     handleEditSound={handleEditSound}
+                    setPreviewFrameIdx={handleSetPreviewFrameIdx} // 👈 PROP AJOUTÉE POUR LE SÉQUENCEUR
                 />
                 <StudioCenterPanel 
                     stageRef={stageRef} currentScene={currentScene} resolveUrl={resolveUrl}
