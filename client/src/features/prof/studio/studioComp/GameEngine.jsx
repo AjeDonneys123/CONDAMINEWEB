@@ -4,8 +4,8 @@ import { api } from '../../../../services/api';
 import SoundExpert from './SoundExpert';
 
 /**
- * 🎮 MOTEUR DE JEU (V710 - ULTIMATE STARTUP STABILITY)
- * Fix : Écran noir + Décodage Son.
+ * 🎮 MOTEUR DE JEU (V720 - ANTI-BLACK-SCREEN & DIAGNOSTIC)
+ * Correction : Rendu forcé même si les ressources échouent.
  */
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
     const canvasRef = useRef(null);
@@ -37,54 +37,48 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         });
     }, []);
 
-    // 2. LOADER RÉSILIENT (DÉBLOQUE LE NOIR)
+    // 2. LOADER AVEC TIMEOUT (DÉBLOQUE L'ÉCRAN NOIR)
     useEffect(() => {
         if (!project) return;
         
-        async function loadAssets() {
-            try {
-                logSonde("🛠️ Initialisation du moteur...");
-                const scene = project.scenes?.[activeSceneIdx];
-                if (!scene) return;
+        async function prefetch() {
+            logSonde("⚙️ Initialisation...");
+            const scene = project.scenes?.[activeSceneIdx];
+            if (!scene) return;
 
-                if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+            if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
 
-                const imgUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url)))].filter(Boolean);
-                const sndUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url))))].filter(Boolean);
+            const imgUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url)))].filter(Boolean);
+            const sndUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url))))].filter(Boolean);
 
-                logSonde(`📦 Chargement : ${imgUrls.length} imgs, ${sndUrls.length} sons`);
+            // Chargement des images (Bloquant, mais avec secours)
+            await Promise.all(imgUrls.map(url => new Promise(res => {
+                const img = new Image(); img.crossOrigin = "anonymous";
+                img.onload = () => { imageAssetsRef.current.set(resolveUrl(url), img); res(); };
+                img.onerror = () => { console.warn("Image échec", url); res(); };
+                img.src = resolveUrl(url);
+                setTimeout(res, 2000); // Secours : on n'attend pas plus de 2s par image
+            })));
 
-                // Chargement des images (Bloquant)
-                await Promise.all(imgUrls.map(url => new Promise(res => {
-                    const img = new Image(); img.crossOrigin = "anonymous";
-                    img.onload = () => { imageAssetsRef.current.set(resolveUrl(url), img); res(); };
-                    img.onerror = () => { console.error("Image error", url); res(); };
-                    img.src = resolveUrl(url);
-                })));
-
-                // Chargement des sons (Non-bloquant)
-                sndUrls.forEach(url => {
-                    SoundExpert.decodeAudio(resolveUrl(url), audioCtxRef.current).then(buf => {
-                        if (buf) {
-                            audioBuffersRef.current.set(url, buf);
-                            logSonde(`🎵 Son prêt`, "success");
-                        } else {
-                            logSonde(`⚠️ Décodage raté`, "error");
-                        }
-                    });
+            // Chargement des sons (Totalement asynchrone)
+            sndUrls.forEach(url => {
+                SoundExpert.decodeAudio(resolveUrl(url), audioCtxRef.current).then(buf => {
+                    if (buf) {
+                        audioBuffersRef.current.set(url, buf);
+                        logSonde("🎵 Son chargé", "success");
+                    }
                 });
+            });
 
-                // --- DÉBLOCAGE IMMÉDIAT DU NOIR ---
-                setEngineReady(true);
-                logSonde("🚀 Moteur prêt", "success");
-            } catch (e) { logSonde("Erreur chargement", "error"); }
+            logSonde("🚀 Moteur prêt");
+            setEngineReady(true);
         }
 
-        loadAssets();
+        prefetch();
         return () => { if (audioCtxRef.current?.state !== 'closed') audioCtxRef.current?.close(); };
     }, [project, activeSceneIdx]);
 
-    // 3. COMPILATION & INSTANCIATION (V710 Blindée)
+    // 3. COMPILATION DU SCRIPT
     useEffect(() => {
         if (!engineReady || !code || !canvasRef.current) return;
         try {
@@ -121,7 +115,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     }
                     _playSound(url) {
                         const buffer = audioBuffers.get(url);
-                        if(buffer && audioCtx && audioCtx.state !== 'closed') {
+                        if(buffer && audioCtx) {
                             const source = audioCtx.createBufferSource();
                             source.buffer = buffer; source.connect(audioCtx.destination); source.start(0);
                             logSonde("⚡ PLAY", "success");
@@ -129,12 +123,15 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     }
                     _system_render() {
                         const s = project.scenes[sceneIdx];
-                        ctx.fillStyle = "black"; ctx.fillRect(0,0,canvas.width, canvas.height);
+                        // FOND DE SÉCURITÉ (EMPÊCHE L'ÉCRAN NOIR)
+                        ctx.fillStyle = "#1e293b"; ctx.fillRect(0,0,canvas.width, canvas.height);
+                        
                         const bd = s?.backdrops?.[s.currentBackdropIdx || 0];
                         if(bd) {
                             const img = imageAssets.get(resolveUrl(bd.url));
                             if(img) ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
                         }
+                        
                         for(let key in this) {
                             const p = this[key];
                             if(p instanceof ActorProxy && p.visible) {
@@ -186,14 +183,19 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     }, [engineStarted, crash]);
 
     return (
-        <div className="fixed inset-0 z-[99999] bg-black flex flex-col items-center justify-center">
-             <div className="absolute top-0 left-0 p-4 z-[100] flex flex-col gap-1">
-                {debugLogs.map(log => (<div key={log.id} className={`px-2 py-1 rounded text-[9px] font-black shadow-lg border-l-4 ${log.type === 'error' ? 'bg-red-500 text-white' : log.type === 'success' ? 'bg-green-500 text-white' : 'bg-yellow-400 text-black'}`}>{log.text}</div>))}
+        <div className="fixed inset-0 z-[99999] bg-black flex flex-col items-center justify-center overflow-hidden">
+             {/* HUD SONDE VISUELLE */}
+             <div className="absolute top-0 left-0 p-4 z-[100] flex flex-col gap-1 pointer-events-none">
+                {debugLogs.map(log => (
+                    <div key={log.id} className={`px-3 py-1 rounded text-[10px] font-black shadow-lg border-l-4 ${log.type === 'error' ? 'bg-red-500 text-white' : log.type === 'success' ? 'bg-green-500 text-white' : 'bg-yellow-400 text-black'}`}>
+                        {log.text}
+                    </div>
+                ))}
              </div>
 
              {!engineStarted && (
-                 <div className="absolute inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-md">
-                     <button onClick={handleStartGame} disabled={!engineReady} className="px-16 py-8 bg-white text-indigo-600 rounded-full font-black text-4xl shadow-2xl hover:scale-105 disabled:opacity-30 border-8 border-indigo-100 transition-all">
+                 <div className="absolute inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-md">
+                     <button onClick={handleStartGame} disabled={!engineReady} className="px-16 py-8 bg-white text-indigo-600 rounded-full font-black text-4xl shadow-2xl hover:scale-110 disabled:opacity-30 border-8 border-indigo-100 transition-all">
                         {engineReady ? "🚀 JOUER" : "CHARGEMENT..."}
                      </button>
                  </div>
@@ -202,18 +204,56 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
              {engineStarted && (
                  <>
                     <div className="absolute top-0 left-0 right-0 p-6 flex justify-between items-start z-50 pointer-events-none">
-                        <div className="bg-black/60 p-3 rounded-2xl text-2xl">{"❤️".repeat(lives)}</div>
-                        {levelQuestions[currentQIndex] && (
-                            <div className="bg-white text-slate-900 font-black py-4 px-10 rounded-2xl shadow-2xl text-xl">{levelQuestions[currentQIndex].q}</div>
-                        )}
-                        <div className="w-20"></div>
+                        <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-xl pointer-events-auto flex gap-1">
+                            {"❤️".repeat(lives)}
+                        </div>
+                        <div className="flex-1 flex justify-center px-4">
+                            {levelQuestions[currentQIndex] && (
+                                <div className="bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 border-slate-600 shadow-2xl text-xl pointer-events-auto">
+                                    {feedback === 'CORRECT' ? "✅ BRAVO !" : feedback === 'WRONG' ? "❌ RATÉ..." : levelQuestions[currentQIndex].q}
+                                </div>
+                            )}
+                        </div>
                     </div>
-                    <canvas ref={canvasRef} width={800} height={450} className="max-w-full shadow-2xl bg-black rounded-lg border-4 border-slate-800" />
+                    
+                    <div className="relative">
+                        <canvas ref={canvasRef} width={800} height={450} className="max-w-full shadow-2xl bg-black rounded-lg border-4 border-slate-800" />
+                    </div>
+                    
+                    <div className="absolute bottom-0 left-0 right-0 p-8 flex justify-center z-50">
+                        <div className="grid grid-cols-4 gap-4 w-full max-w-6xl">
+                            {levelQuestions[currentQIndex]?.options?.map((o, i) => (
+                                <button key={i} onClick={() => {
+                                    if(feedback) return;
+                                    const isCorrect = levelQuestions[currentQIndex].a === i;
+                                    setFeedback(isCorrect ? 'OK' : 'KO');
+                                    gameInstanceRef.current?.onResult?.(isCorrect);
+                                    if(!isCorrect) setLives(l => Math.max(0, l-1));
+                                    setTimeout(() => {
+                                        setFeedback(null);
+                                        setCurrentQIndex(prev => (prev + 1) % levelQuestions.length);
+                                    }, 1000);
+                                }} className="bg-indigo-600 text-white py-5 rounded-xl font-black uppercase shadow-xl hover:bg-indigo-500 transition-all border-b-4 border-indigo-800 active:border-b-0 active:translate-y-1">
+                                    {o}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
                  </>
              )}
-             
-             <button onClick={onStop} className="absolute top-6 right-6 w-12 h-12 bg-red-600 text-white rounded-full font-black text-2xl hover:bg-red-500 shadow-xl flex items-center justify-center z-[60]">✕</button>
-             {crash && <div className="absolute inset-0 bg-red-950 text-white p-20 z-[300] overflow-auto"><h2>ERREUR SCRIPT</h2><pre>{crash}</pre><button onClick={onStop}>QUITTER</button></div>}
+
+             {crash && (
+                 <div className="absolute inset-0 bg-red-950 flex flex-col items-center justify-center text-white p-10 text-center z-[10000]">
+                    <span className="text-8xl mb-8">💥</span>
+                    <h2 className="text-4xl font-black mb-4 uppercase">Erreur Script</h2>
+                    <pre className="bg-black/50 p-8 rounded-3xl font-mono text-lg text-red-200 border-2 border-red-500/30 max-w-4xl overflow-auto mb-10">{crash}</pre>
+                    <button onClick={onStop} className="px-12 py-5 bg-white text-red-600 rounded-full font-black text-xl">Fermer</button>
+                 </div>
+             )}
+
+            <button onClick={onStop} className="absolute top-6 right-6 bg-red-600 text-white w-12 h-12 rounded-full font-black text-2xl shadow-xl border-4 border-white hover:scale-110 transition-all flex items-center justify-center z-[60]">
+                ✕
+            </button>
         </div>
     );
 }
