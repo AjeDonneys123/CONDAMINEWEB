@@ -4,8 +4,8 @@ import { api } from '../../../../services/api';
 import SoundExpert from './SoundExpert';
 
 /**
- * 🎮 MOTEUR DE JEU (V700 - NON-BLOCKING LOADER)
- * L'écran noir est banni : le jeu démarre même si les sons échouent.
+ * 🎮 MOTEUR DE JEU (V710 - ULTIMATE STARTUP STABILITY)
+ * Fix : Écran noir + Décodage Son.
  */
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
     const canvasRef = useRef(null);
@@ -25,64 +25,66 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
     const logSonde = (msg, type = 'info') => {
         const id = Math.random();
-        setDebugLogs(prev => [...prev, { id, text: msg, type }].slice(-8));
-        setTimeout(() => setDebugLogs(prev => prev.filter(l => l.id !== id)), 6000);
+        setDebugLogs(prev => [...prev, { id, text: msg, type }].slice(-6));
+        setTimeout(() => setDebugLogs(prev => prev.filter(l => l.id !== id)), 5000);
     };
 
     // 1. DATA
     useEffect(() => {
         api.get('/games/test-data').then(data => {
-            const lvl = data?.levels?.[0] || { questions: [{ q: "Test ?", options: ["OK"], a: 0 }] };
-            setLevelQuestions(lvl.questions);
+            const lvl = data?.levels?.[0] || { questions: [{ q: "Prêt ?", options: ["OUI"], a: 0 }] };
+            setLevelQuestions(lvl.questions || []);
         });
     }, []);
 
-    // 2. LOADER NON-BLOQUANT
+    // 2. LOADER RÉSILIENT (DÉBLOQUE LE NOIR)
     useEffect(() => {
         if (!project) return;
         
         async function loadAssets() {
-            logSonde("🛠️ Analyse de la scène...");
-            const scene = project.scenes?.[activeSceneIdx];
-            if (!scene) return;
+            try {
+                logSonde("🛠️ Initialisation du moteur...");
+                const scene = project.scenes?.[activeSceneIdx];
+                if (!scene) return;
 
-            if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+                if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
 
-            const imgUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url)))].filter(Boolean);
-            const sndUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url))))].filter(Boolean);
+                const imgUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url)))].filter(Boolean);
+                const sndUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url))))].filter(Boolean);
 
-            // CHARGEMENT DES IMAGES (BLOQUANT car vital pour le visuel)
-            logSonde(`🖼️ Chargement de ${imgUrls.length} images...`);
-            await Promise.all(imgUrls.map(url => new Promise(res => {
-                const img = new Image(); img.crossOrigin = "anonymous";
-                img.onload = () => { imageAssetsRef.current.set(resolveUrl(url), img); res(); };
-                img.onerror = () => { logSonde("❌ Image corrompue: " + url.split('/').pop(), "error"); res(); };
-                img.src = resolveUrl(url);
-            })));
+                logSonde(`📦 Chargement : ${imgUrls.length} imgs, ${sndUrls.length} sons`);
 
-            // CHARGEMENT DES SONS (NON-BLOQUANT)
-            logSonde(`🎵 Préparation de ${sndUrls.length} sons...`);
-            sndUrls.forEach(url => {
-                SoundExpert.decodeAudio(resolveUrl(url), audioCtxRef.current).then(buf => {
-                    if (buf) {
-                        audioBuffersRef.current.set(url, buf);
-                        logSonde("✅ Son OK: " + url.split('/').pop(), "success");
-                    } else {
-                        logSonde("⚠️ Échec Son: " + url.split('/').pop(), "error");
-                    }
+                // Chargement des images (Bloquant)
+                await Promise.all(imgUrls.map(url => new Promise(res => {
+                    const img = new Image(); img.crossOrigin = "anonymous";
+                    img.onload = () => { imageAssetsRef.current.set(resolveUrl(url), img); res(); };
+                    img.onerror = () => { console.error("Image error", url); res(); };
+                    img.src = resolveUrl(url);
+                })));
+
+                // Chargement des sons (Non-bloquant)
+                sndUrls.forEach(url => {
+                    SoundExpert.decodeAudio(resolveUrl(url), audioCtxRef.current).then(buf => {
+                        if (buf) {
+                            audioBuffersRef.current.set(url, buf);
+                            logSonde(`🎵 Son prêt`, "success");
+                        } else {
+                            logSonde(`⚠️ Décodage raté`, "error");
+                        }
+                    });
                 });
-            });
 
-            // ON DÉBLOQUE L'ÉCRAN ICI, peu importe si les sons ont fini ou pas
-            setEngineReady(true);
-            logSonde("🚀 MOTEUR PRÊT", "success");
+                // --- DÉBLOCAGE IMMÉDIAT DU NOIR ---
+                setEngineReady(true);
+                logSonde("🚀 Moteur prêt", "success");
+            } catch (e) { logSonde("Erreur chargement", "error"); }
         }
 
         loadAssets();
         return () => { if (audioCtxRef.current?.state !== 'closed') audioCtxRef.current?.close(); };
-    }, [project]);
+    }, [project, activeSceneIdx]);
 
-    // 3. INJECTION
+    // 3. COMPILATION & INSTANCIATION (V710 Blindée)
     useEffect(() => {
         if (!engineReady || !code || !canvasRef.current) return;
         try {
@@ -119,17 +121,15 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     }
                     _playSound(url) {
                         const buffer = audioBuffers.get(url);
-                        if(buffer && audioCtx) {
+                        if(buffer && audioCtx && audioCtx.state !== 'closed') {
                             const source = audioCtx.createBufferSource();
                             source.buffer = buffer; source.connect(audioCtx.destination); source.start(0);
-                            logSonde("🔊 Lecture son...", "success");
-                        } else {
-                            logSonde("🔈 Son manquant: " + url.split('/').pop(), "error");
+                            logSonde("⚡ PLAY", "success");
                         }
                     }
                     _system_render() {
                         const s = project.scenes[sceneIdx];
-                        ctx.fillStyle = "#0f172a"; ctx.fillRect(0,0,canvas.width, canvas.height);
+                        ctx.fillStyle = "black"; ctx.fillRect(0,0,canvas.width, canvas.height);
                         const bd = s?.backdrops?.[s.currentBackdropIdx || 0];
                         if(bd) {
                             const img = imageAssets.get(resolveUrl(bd.url));
@@ -186,14 +186,14 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     }, [engineStarted, crash]);
 
     return (
-        <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center">
+        <div className="fixed inset-0 z-[99999] bg-black flex flex-col items-center justify-center">
              <div className="absolute top-0 left-0 p-4 z-[100] flex flex-col gap-1">
-                {debugLogs.map(log => (<div key={log.id} className={`px-2 py-1 rounded text-[9px] font-black shadow-lg border-l-4 ${log.type === 'error' ? 'bg-red-500 text-white' : log.type === 'success' ? 'bg-emerald-500 text-white' : 'bg-amber-400 text-black'}`}>{log.text}</div>))}
+                {debugLogs.map(log => (<div key={log.id} className={`px-2 py-1 rounded text-[9px] font-black shadow-lg border-l-4 ${log.type === 'error' ? 'bg-red-500 text-white' : log.type === 'success' ? 'bg-green-500 text-white' : 'bg-yellow-400 text-black'}`}>{log.text}</div>))}
              </div>
 
              {!engineStarted && (
-                 <div className="absolute inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm">
-                     <button onClick={handleStartGame} disabled={!engineReady} className="px-16 py-8 bg-white text-indigo-600 rounded-full font-black text-4xl shadow-2xl hover:scale-105 disabled:opacity-30 transition-all border-8 border-indigo-100">
+                 <div className="absolute inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-md">
+                     <button onClick={handleStartGame} disabled={!engineReady} className="px-16 py-8 bg-white text-indigo-600 rounded-full font-black text-4xl shadow-2xl hover:scale-105 disabled:opacity-30 border-8 border-indigo-100 transition-all">
                         {engineReady ? "🚀 JOUER" : "CHARGEMENT..."}
                      </button>
                  </div>
@@ -201,31 +201,19 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
              {engineStarted && (
                  <>
-                    <div className="absolute top-6 left-6 right-6 flex justify-between items-start z-50 pointer-events-none">
-                        <div className="bg-black/80 px-4 py-2 rounded-xl text-2xl border border-white/20">{"❤️".repeat(lives)}</div>
+                    <div className="absolute top-0 left-0 right-0 p-6 flex justify-between items-start z-50 pointer-events-none">
+                        <div className="bg-black/60 p-3 rounded-2xl text-2xl">{"❤️".repeat(lives)}</div>
                         {levelQuestions[currentQIndex] && (
                             <div className="bg-white text-slate-900 font-black py-4 px-10 rounded-2xl shadow-2xl text-xl">{levelQuestions[currentQIndex].q}</div>
                         )}
                         <div className="w-20"></div>
                     </div>
                     <canvas ref={canvasRef} width={800} height={450} className="max-w-full shadow-2xl bg-black rounded-lg border-4 border-slate-800" />
-                    <div className="absolute bottom-6 left-6 right-6 flex justify-center gap-4">
-                        {levelQuestions[currentQIndex]?.options?.map((o, i) => (<button key={i} onClick={() => {
-                            if(feedback) return;
-                            const isCorrect = levelQuestions[currentQIndex].a === i;
-                            setFeedback(isCorrect ? 'OK' : 'KO');
-                            gameInstanceRef.current?.onResult?.(isCorrect);
-                            if(!isCorrect) setLives(l => Math.max(0, l-1));
-                            setTimeout(() => {
-                                setFeedback(null);
-                                setCurrentQIndex(prev => (prev + 1) % levelQuestions.length);
-                            }, 1000);
-                        }} className={`py-4 px-8 rounded-xl font-black uppercase transition-all shadow-lg ${feedback === 'OK' && levelQuestions[currentQIndex].a === i ? 'bg-green-500 text-white scale-110' : feedback === 'KO' && levelQuestions[currentQIndex].a === i ? 'bg-red-500 text-white' : 'bg-indigo-600 text-white hover:bg-indigo-500'}`}>{o}</button>))}
-                    </div>
                  </>
              )}
-             <button onClick={onStop} className="absolute top-6 right-6 w-10 h-10 bg-red-600 text-white rounded-full font-black text-xl hover:bg-red-500">✕</button>
-             {crash && <div className="absolute inset-0 bg-red-950 text-white p-20 z-[300] overflow-auto"><h2>ERREUR SCRIPT</h2><pre className="bg-black/40 p-5 mt-5 rounded">{crash}</pre><button onClick={onStop} className="mt-10 bg-white text-red-900 p-4 rounded-xl font-bold">RETOUR STUDIO</button></div>}
+             
+             <button onClick={onStop} className="absolute top-6 right-6 w-12 h-12 bg-red-600 text-white rounded-full font-black text-2xl hover:bg-red-500 shadow-xl flex items-center justify-center z-[60]">✕</button>
+             {crash && <div className="absolute inset-0 bg-red-950 text-white p-20 z-[300] overflow-auto"><h2>ERREUR SCRIPT</h2><pre>{crash}</pre><button onClick={onStop}>QUITTER</button></div>}
         </div>
     );
 }
