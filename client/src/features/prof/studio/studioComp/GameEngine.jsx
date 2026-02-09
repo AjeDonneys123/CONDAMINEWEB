@@ -4,11 +4,10 @@ import SoundExpert from './SoundExpert';
 import { api } from '../../../../services/api';
 
 /**
- * 🎮 MOTEUR STUDIO V1001 (ARMORED)
- * - Vrai Préchargement Bloquant (Promise.all)
- * - Correction Callback "Hit" (Débogage visuel)
- * - File d'attente Audio
- * - Protection Crash Rendu (Image manquante = Carré Rose)
+ * 🎮 MOTEUR STUDIO V1002 (AUDIO SAFE)
+ * - Micro-délai audio pour éviter l'annulation du son de défaite.
+ * - Correction de la gestion mémoire des sources audio (Ref Pointer Fix).
+ * - Réveil forcé du contexte audio avant les événements critiques.
  */
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
     const canvasRef = useRef(null);
@@ -18,7 +17,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const [engineStarted, setEngineStarted] = useState(false);
     const [loadProgress, setLoadProgress] = useState("0%");
     const [debugLogs, setDebugLogs] = useState([]);
-    const [hitFlash, setHitFlash] = useState(false); // Flash rouge quand touché
+    const [hitFlash, setHitFlash] = useState(false);
     
     // --- ÉTATS DU JEU ---
     const [allLevels, setAllLevels] = useState([]); 
@@ -47,7 +46,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const keysPressed = useRef({}); 
     const activeSourcesRef = useRef([]);
 
-    // --- OUTILS ---
     const logSonde = (msg, type = 'info') => {
         setDebugLogs(prev => [...prev, { id: Math.random(), text: msg, type }].slice(-6));
     };
@@ -64,11 +62,13 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     };
 
     const stopAllSounds = () => {
+        // Stop physique
         activeSourcesRef.current.forEach(src => { try { src.stop(); } catch(e){} });
-        activeSourcesRef.current = [];
+        // IMPORTANT : On vide le tableau sans casser la référence pour la Factory
+        activeSourcesRef.current.length = 0; 
     };
 
-    // 1. CHARGEMENT MASSIF ET BLOQUANT
+    // 1. CHARGEMENT MASSIF
     useEffect(() => {
         const preloadAssets = async () => {
             if (!project) return;
@@ -146,21 +146,38 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         
         safeTimeout(() => {
             setShowLevelTitle(false);
-            isPausedRef.current = false; // DÉMARRAGE
+            isPausedRef.current = false; 
             if (gameInstanceRef.current) {
                 if (gameInstanceRef.current.start) {
                     try { gameInstanceRef.current.start(); } catch(e) { console.error("Start Error", e); }
                 }
                 if (gameInstanceRef.current.playGlobal) gameInstanceRef.current.playGlobal("DÉPART");
             }
-        }, 2000); // Réduit à 2s pour fluidité
+        }, 2000);
     };
 
     const handleGameOver = () => {
+        // 1. On coupe tout le son actuel (Impacts, Musique...)
         stopAllSounds(); 
+        
         setIsGameOver(true);
-        isPausedRef.current = true; 
-        if (gameInstanceRef.current?.playGlobal) gameInstanceRef.current.playGlobal("DEFAITE");
+        isPausedRef.current = true; // Freeze moteur
+
+        // 2. PETIT DÉLAI DE SÉCURITÉ (50ms) POUR ÉVITER LE CONFLIT AUDIO
+        setTimeout(() => {
+            // Réveil contextuel au cas où
+            if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
+                audioCtxRef.current.resume();
+            }
+            
+            // Lancement du son
+            if (gameInstanceRef.current?.playGlobal) {
+                gameInstanceRef.current.playGlobal("DEFAITE");
+                logSonde("🔊 SON: DEFAITE", "info");
+            } else {
+                logSonde("⚠️ SON DEFAITE MANQUANT", "warning");
+            }
+        }, 100);
     };
 
     const retryLevel = () => {
@@ -175,13 +192,15 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         } else {
             stopAllSounds();
             setIsGameCompleted(true);
-            if (gameInstanceRef.current?.playGlobal) gameInstanceRef.current.playGlobal("VICTOIRE");
+            setTimeout(() => {
+                if (gameInstanceRef.current?.playGlobal) gameInstanceRef.current.playGlobal("VICTOIRE");
+            }, 100);
         }
     };
 
     // --- LOGIQUE DOMMAGES ---
     const triggerPlayerHit = () => {
-        if (isPausedRef.current) return; // Pas de dégât pendant l'intro
+        if (isPausedRef.current) return;
         
         logSonde("💥 COUP REÇU", "error");
         setHitFlash(true);
@@ -191,7 +210,8 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             const newVal = Math.max(0, prev - 1);
             if (newVal === 0) {
                 isPausedRef.current = true;
-                safeTimeout(handleGameOver, 1000); // 1s de délai dramatique
+                // On attend 1s pour le suspense, PUIS on lance la séquence Game Over
+                safeTimeout(handleGameOver, 1000);
             }
             return newVal;
         });
@@ -222,7 +242,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         } else {
             newStates[currentQIndex] = Math.max(0, newStates[currentQIndex] - 1);
             if (gameInstanceRef.current?.onResult) gameInstanceRef.current.onResult(false);
-            triggerPlayerHit(); // Utilise la même logique centrale
+            triggerPlayerHit();
         }
         setQuestionStates(newStates);
 
@@ -255,7 +275,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             const ctx = canvas.getContext('2d');
             
             const gameCallbacks = {
-                onPlayerHit: triggerPlayerHit, // Callback direct vers la logique React
+                onPlayerHit: triggerPlayerHit,
                 playSound: (name) => {}
             };
 
@@ -301,7 +321,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                                 if (audioCtx.state === 'suspended') audioCtx.resume();
                                 const source = audioCtx.createBufferSource();
                                 source.buffer = buffer; source.connect(audioCtx.destination); source.start(0);
-                                activeSources.push(source);
+                                activeSources.push(source); // PUSH SUR LA REFERENCE PARTAGÉE
                             }
                         } catch(e) {}
                     }
@@ -327,7 +347,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                                 if(!aData) continue;
                                 const act = (aData.actions || []).find(x => x.name.toUpperCase() === p.currentAction.toUpperCase()) || aData.actions?.[0];
                                 
-                                // PROTECTION CRASH: Si pas de frames, on ignore
                                 if(act && act.frames && act.frames.length > 0) {
                                     const now = Date.now();
                                     if (now - p.lastAnimTime > (act.speed || 100)) { p.frameIdx = (p.frameIdx+1)%act.frames.length; p.lastAnimTime=now; }
@@ -340,7 +359,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                                         else if (p.direction) this.ctx.rotate(p.direction * Math.PI / 180);
                                         this.ctx.drawImage(spr, -sz/2, -sz/2, sz, sz); this.ctx.restore();
                                     } else {
-                                        // FALLBACK VISUEL (Carré Rose)
                                         this.ctx.fillStyle = "#f472b6";
                                         this.ctx.fillRect((p.x/100)*canvas.width - 20, (p.y/100)*canvas.height - 20, 40, 40);
                                     }
@@ -351,6 +369,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 }
             `);
 
+            // PASSAGE CRITIQUE : On passe activeSourcesRef.current qui est le tableau réel
             const MiniGameBase = BaseFactory({ 
                 audioBuffers: audioBuffersRef.current, audioCtx: audioCtxRef.current, 
                 imageAssets: imageAssetsRef.current, resolveUrl, logSonde, project, sceneIdx: activeSceneIdx, canvas, ctx,
