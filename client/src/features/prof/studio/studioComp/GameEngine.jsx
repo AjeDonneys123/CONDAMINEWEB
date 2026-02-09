@@ -1,10 +1,10 @@
-// @signatures: GameEngine, initLevel, handleAnswerClick, triggerWinSequence, handleBarCheat
+// @signatures: GameEngine, initLevel, handleAnswerClick, triggerWinSequence, logAction
 import React, { useState, useRef, useEffect } from 'react';
 import { api } from '../../../../services/api';
 import SoundExpert from './SoundExpert';
 
 /**
- * 🎮 MOTEUR DE JEU (V540 - SONDE DE DÉBOGAGE "SHOOT")
+ * 🎮 MOTEUR DE JEU (V550 - DEBUG PERSISTANT)
  * FOCUS : Pourquoi l'action ne se lance pas au clic ?
  */
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
@@ -21,14 +21,20 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const [isLevelWon, setIsLevelWon] = useState(false);
     const isLevelWonRef = useRef(false);
     const [isPowerOff, setIsPowerOff] = useState(false);
+    const [isAudioReady, setIsAudioReady] = useState(false);
 
     const [debugLogs, setDebugLogs] = useState([]);
     const audioCtxRef = useRef(new (window.AudioContext || window.webkitAudioContext)());
     const audioBuffersRef = useRef(new Map());
 
-    // LOGS DE DÉBOGAGE CIBLÉS
-    const logAction = (msg) => {
-        setDebugLogs(prev => [...prev, { id: Date.now() + Math.random(), text: `🔥 ${msg}` }].slice(-5));
+    // LOGS DE DÉBOGAGE PLUS LENTS (5 secondes)
+    const logAction = (msg, type = 'info') => {
+        const id = Date.now() + Math.random();
+        setDebugLogs(prev => [...prev, { id, text: `Sonde : ${msg}`, type }]);
+        // On retire le log après 5 secondes pour te laisser le temps de lire
+        setTimeout(() => {
+            setDebugLogs(prev => prev.filter(l => l.id !== id));
+        }, 5000);
     };
 
     useEffect(() => {
@@ -50,15 +56,29 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         setCurrentQIndex(0);
     };
 
+    const unlockAudio = () => {
+        if (audioCtxRef.current.state === 'suspended') {
+            audioCtxRef.current.resume().then(() => {
+                setIsAudioReady(true);
+                logAction("AUDIO DÉBLOQUÉ", "success");
+            });
+        } else {
+            setIsAudioReady(true);
+        }
+    };
+
     const handleAnswerClick = (choiceIdx) => {
         if (feedback || currentQIndex === -1 || isLevelWonRef.current) return;
         
+        unlockAudio(); // On force la reprise audio sur chaque clic
+
         const currentQ = levelQuestions[currentQIndex];
         const isCorrect = currentQ.a === choiceIdx;
         
         if (isCorrect) {
-            logAction("CLIC CORRECT : Envoi onResult(true)");
-            if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
+            logAction("CLIC CORRECT -> Appel onResult(true)");
+        } else {
+            logAction("CLIC FAUX -> Appel onResult(false)", "error");
         }
 
         setFeedback(isCorrect ? 'CORRECT' : 'WRONG');
@@ -66,10 +86,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         
         if (isCorrect) {
             newStates[currentQIndex] = Math.min(3, newStates[currentQIndex] + 1);
-            if (gameInstanceRef.current?.onResult) {
-                // APPEL DU CODE UTILISATEUR
-                gameInstanceRef.current.onResult(true);
-            }
+            if (gameInstanceRef.current?.onResult) gameInstanceRef.current.onResult(true);
         } else {
             newStates[currentQIndex] = Math.max(0, newStates[currentQIndex] - 1);
             if (gameInstanceRef.current?.onResult) gameInstanceRef.current.onResult(false);
@@ -145,7 +162,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                             this.frameIdx = 0; this.lastAnimTime = 0;
                         }
                         play(name) { 
-                            logAction("ACTION : " + this.name + ".play('" + name + "')");
+                            logAction(this.name + ".play('" + name + "') déclenché");
                             if(this.currentAction.toUpperCase() !== name.toUpperCase()) { 
                                 this.currentAction = name; this.frameIdx = 0; this.lastAnimTime = 0;
                                 this.engine._triggerActionSounds(this.id, name);
@@ -170,22 +187,20 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                             const actor = project.scenes[sceneIdx].actors.find(a => a.id === actorId);
                             const action = actor?.actions.find(act => act.name.toUpperCase() === actionName.toUpperCase());
                             if(action && action.sounds && action.sounds.length > 0) {
-                                logAction("AUDIO : " + action.sounds.length + " sons trouvés pour " + actionName);
+                                logAction(action.sounds.length + " sons trouvés pour " + actionName);
                                 action.sounds.forEach(snd => this._playSound(snd.url));
-                            } else {
-                                logAction("AUDIO : Aucun son dans l'action " + actionName);
                             }
                         }
 
                         _playSound(url) {
                             const buffer = audioBuffers.get(url);
                             if(buffer && audioCtx) {
-                                logAction("AUDIO : Lecture buffer OK");
                                 if(audioCtx.state === 'suspended') audioCtx.resume();
                                 const source = audioCtx.createBufferSource();
                                 source.buffer = buffer; source.connect(audioCtx.destination); source.start(0);
+                                logAction("Lecture buffer OK", "success");
                             } else {
-                                logAction("AUDIO : Buffer introuvable pour " + url.split('/').pop());
+                                logAction("Buffer son manquant !", "error");
                             }
                         }
 
@@ -248,17 +263,27 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     return (
         <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center font-sans overflow-hidden">
              
-             {/* 🛠️ DEBUG HUD (DÉDIÉ ACTION/SON) */}
+             {/* 🛠️ SONDE VISUELLE PERSISTANTE */}
              <div className="absolute top-0 left-0 p-4 z-[100] pointer-events-none">
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-col gap-2">
                     {debugLogs.map(log => (
-                        <div key={log.id} className="px-4 py-2 rounded-lg text-xs font-black bg-yellow-400 text-black shadow-xl border-2 border-yellow-600 animate-bounce">
+                        <div key={log.id} className={`px-4 py-2 rounded-xl text-xs font-black shadow-2xl border-2 animate-in slide-in-from-left ${
+                            log.type === 'error' ? 'bg-red-500 text-white border-red-700' : 
+                            log.type === 'success' ? 'bg-green-500 text-white border-green-700' :
+                            'bg-yellow-400 text-black border-yellow-600'
+                        }`}>
                             {log.text}
                         </div>
                     ))}
+                    {!isAudioReady && (
+                        <button onClick={unlockAudio} className="px-4 py-2 bg-indigo-600 text-white rounded-xl font-black text-xs pointer-events-auto shadow-lg animate-pulse">
+                            ⚠️ CLIQUER ICI POUR ACTIVER LE SON
+                        </button>
+                    )}
                 </div>
              </div>
 
+             {/* UI TOP */}
              <div className="absolute top-0 left-0 right-0 p-6 flex justify-between items-start z-50 pointer-events-none">
                 <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-xl pointer-events-auto flex gap-1">
                     {"❤️".repeat(lives)}{"🖤".repeat(Math.max(0, 4 - lives))}
@@ -273,6 +298,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 <div className="w-40"></div>
             </div>
 
+            {/* STAGE */}
             <div className="relative flex items-center justify-center w-full h-full">
                 <canvas ref={canvasRef} width={800} height={450} className={`aspect-video shadow-2xl bg-black border-4 border-slate-800 rounded-xl transition-opacity duration-1000 ${isPowerOff ? 'opacity-0' : 'opacity-100'}`} />
                 {isLevelWon && (<div className="absolute inset-0 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm rounded-xl animate-in zoom-in"><div className="bg-white p-10 rounded-[40px] shadow-2xl text-center border-8 border-green-500"><span className="text-6xl block mb-4">🏆</span><h2 className="text-4xl font-black text-slate-800 uppercase">Niveau Réussi !</h2></div></div>)}
@@ -287,6 +313,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 </div>
             )}
 
+            {/* UI BOTTOM */}
             <div className="absolute bottom-0 left-0 right-0 p-8 flex justify-center z-50 pointer-events-none">
                 <div className="grid grid-cols-4 gap-4 w-full max-w-6xl pointer-events-auto">
                     {currentQ?.options?.map((o, i) => (
