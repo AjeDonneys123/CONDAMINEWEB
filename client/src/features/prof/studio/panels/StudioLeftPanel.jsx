@@ -19,58 +19,41 @@ export default function StudioLeftPanel({
     const audioCtxRef = useRef(null);
     const activeSourcesRef = useRef([]);
 
-    // 1. INIT CONTEXTE AUDIO (Dès le montage)
+    // 1. INIT CONTEXTE
     useEffect(() => {
         if (!audioCtxRef.current) {
             audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
         }
-        
-        // Nettoyage au démontage
-        return () => {
-            stopAllSounds();
-            // On ne ferme pas le context ici pour garder le cache actif entre les changements d'onglets
-        };
+        return () => stopAllSounds();
     }, []);
 
-    // 2. ⚡ PRÉ-CHARGEMENT AU CLIC SUR L'ACTION (OPTIMISATION CACHE)
+    // 2. PRELOAD
     useEffect(() => {
         if (selectedAction && selectedAction.sounds && selectedAction.sounds.length > 0) {
-            // Si le contexte n'existe pas encore (cas rare), on le crée
-            if (!audioCtxRef.current) {
-                audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
-            }
-
-            console.log(`⚡ [PRELOAD] Pré-chargement des sons pour : ${selectedAction.name}`);
-            
-            // On lance le décodage immédiat. 
-            // Grâce au cache de SoundExpert, si on clique sur Play 1 seconde plus tard, ce sera instantané.
+            if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
             selectedAction.sounds.forEach(snd => {
                 SoundExpert.decodeAudio(resolveUrl(snd.url), audioCtxRef.current);
             });
         }
-    }, [selectedAction]); // Se déclenche à chaque changement d'action sélectionnée
+    }, [selectedAction]);
 
     const stopAllSounds = () => {
-        activeSourcesRef.current.forEach(source => {
-            try { source.stop(); } catch(e) {}
-        });
+        activeSourcesRef.current.forEach(source => { try { source.stop(); } catch(e) {} });
         activeSourcesRef.current = [];
     };
 
-    // 3. MOTEUR DE PRÉVISUALISATION (SÉQUENCEUR)
+    // 3. SEQUENCEUR
     useEffect(() => {
         let visualInterval = null;
         let soundIndex = 0;
         let isPlaying = isPreviewPlaying;
 
         if (isPlaying && selectedAction) {
-            
-            // Réveil Audio si suspendu (nécessaire pour Chrome/Safari)
             if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
                 audioCtxRef.current.resume();
             }
 
-            // A. BOUCLE VISUELLE
+            // VISUEL
             if (selectedAction.frames && selectedAction.frames.length > 0) {
                 visualInterval = setInterval(() => {
                     if (typeof setPreviewFrameIdx === 'function') {
@@ -79,46 +62,32 @@ export default function StudioLeftPanel({
                 }, selectedAction.speed || 200);
             }
 
-            // B. BOUCLE AUDIO SÉQUENTIELLE
+            // AUDIO
             if (selectedAction.sounds && selectedAction.sounds.length > 0) {
-                
                 const playNextSound = async () => {
                     if (!isPlaying) return;
-
                     const soundData = selectedAction.sounds[soundIndex];
                     if (!soundData) return;
-
-                    // Appel au cache (Devrait être instantané grâce au pré-chargement)
                     const buffer = await SoundExpert.decodeAudio(resolveUrl(soundData.url), audioCtxRef.current);
-                    
                     if (!isPlaying || !buffer) return;
 
                     try {
                         const source = audioCtxRef.current.createBufferSource();
                         source.buffer = buffer;
                         source.connect(audioCtxRef.current.destination);
-                        
-                        // Enchaînement
                         source.onended = () => {
                             if (isPlaying) {
                                 soundIndex = (soundIndex + 1) % selectedAction.sounds.length;
                                 playNextSound();
                             }
                         };
-
                         source.start(0);
                         activeSourcesRef.current.push(source);
-                    } catch (e) {
-                        console.error("Audio Play Error", e);
-                    }
+                    } catch (e) { console.error("Audio Error", e); }
                 };
-
-                // Lancement de la boucle audio
                 playNextSound();
             }
-
         } else {
-            // STOP
             stopAllSounds();
             if (setPreviewFrameIdx) setPreviewFrameIdx(0);
         }
@@ -128,7 +97,6 @@ export default function StudioLeftPanel({
             if (visualInterval) clearInterval(visualInterval);
             stopAllSounds();
         };
-
     }, [isPreviewPlaying, selectedAction]);
 
     const handleSelectAction = (idx) => {
@@ -152,6 +120,41 @@ export default function StudioLeftPanel({
         } else if (selectedSoundIdx !== null) {
             handleEditSound(selectedSoundIdx); 
         }
+    };
+
+    // --- HANDLERS D'AJOUT ---
+
+    const handleAddAction = () => {
+        const name = prompt("Nom de l'action (ex: MARCHER) :"); 
+        if(!name) return; 
+        
+        const next = JSON.parse(JSON.stringify(project)); 
+        const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
+        
+        if (actor) {
+            actor.actions.push({ name: name.toUpperCase(), frames: [], sounds: [], speed: 100 }); 
+            saveProject(next);
+        }
+    };
+
+    const handleAddGlobalSound = () => {
+        const name = prompt("Nom de l'événement (ex: VICTOIRE, DÉPART) :"); 
+        if(!name) return; 
+        
+        const next = JSON.parse(JSON.stringify(project)); 
+        const scene = next.scenes[selectedSceneIdx];
+
+        if (!scene.globalSounds) scene.globalSounds = [];
+        
+        // Exactement la même logique que handleAddAction, mais sur globalSounds
+        scene.globalSounds.push({ 
+            name: name.toUpperCase(), 
+            frames: [], 
+            sounds: [], 
+            speed: 100 
+        }); 
+        
+        saveProject(next);
     };
 
     const handleDeleteActionOrSound = (e, idx) => {
@@ -189,13 +192,7 @@ export default function StudioLeftPanel({
                                 </div>
                             </div>
                         ))}
-                        <button className="v84-add-btn-minimal" onClick={() => { 
-                            const name = prompt("Nom :"); 
-                            if(!name) return; 
-                            const next = JSON.parse(JSON.stringify(project)); 
-                            next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId).actions.push({ name: name.toUpperCase(), frames: [], sounds: [], speed: 100 }); 
-                            saveProject(next); 
-                        }}>+ Action</button>
+                        <button type="button" className="v84-add-btn-minimal" onClick={handleAddAction}>+ Action</button>
                     </>
                 ) : (
                     <>
@@ -208,14 +205,7 @@ export default function StudioLeftPanel({
                                 </div>
                             </div>
                         ))}
-                        <button className="v84-add-btn-minimal" onClick={() => { 
-                            const name = prompt("Événement (ex: VICTOIRE) :"); 
-                            if(!name) return; 
-                            const next = JSON.parse(JSON.stringify(project)); 
-                            if (!next.scenes[selectedSceneIdx].globalSounds) next.scenes[selectedSceneIdx].globalSounds = [];
-                            next.scenes[selectedSceneIdx].globalSounds.push({ name: name.toUpperCase(), frames: [], sounds: [], speed: 100 }); 
-                            saveProject(next); 
-                        }}>+ Événement Sonore</button>
+                        <button type="button" className="v84-add-btn-minimal" onClick={handleAddGlobalSound}>+ Événement Sonore</button>
                     </>
                 )}
             </div>
