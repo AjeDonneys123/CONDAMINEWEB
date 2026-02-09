@@ -4,8 +4,8 @@ import { api } from '../../../../services/api';
 import SoundExpert from './SoundExpert';
 
 /**
- * 🎮 MOTEUR DE JEU (V670 - ULTIMATE AUDIO & RENDER FIX)
- * Correction : Écran noir + Activation forcée du son.
+ * 🎮 MOTEUR DE JEU (V680 - ANTI-DEADLOCK & RENDER FALLBACK)
+ * Correction : Écran noir + Son bloqué.
  */
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
     const canvasRef = useRef(null);
@@ -14,14 +14,10 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const [engineStarted, setEngineStarted] = useState(false);
     const [crash, setCrash] = useState(null);
     const [feedback, setFeedback] = useState(null);
-    const [allLevels, setAllLevels] = useState([]); 
-    const [currentLevelIdx, setCurrentLevelIdx] = useState(0);
     const [levelQuestions, setLevelQuestions] = useState([]); 
     const [questionStates, setQuestionStates] = useState([]); 
     const [currentQIndex, setCurrentQIndex] = useState(0);
     const [lives, setLives] = useState(4);
-    const [isLevelWon, setIsLevelWon] = useState(false);
-    const isLevelWonRef = useRef(false);
     const [debugLogs, setDebugLogs] = useState([]);
 
     const audioCtxRef = useRef(null);
@@ -37,80 +33,54 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     // 1. INITIALISATION DATA
     useEffect(() => {
         api.get('/games/test-data').then(data => {
-            const levelsData = data?.levels?.length > 0 ? data.levels : [{ name: "Demo", questions: [{ q: "Prêt ?", options: ["OUI", "NON"], a: 0 }] }];
-            setAllLevels(levelsData);
-            initLevel(0, levelsData);
+            const lvl = data?.levels?.[0] || { questions: [{ q: "Prêt ?", options: ["OUI"], a: 0 }] };
+            setLevelQuestions(lvl.questions);
+            setQuestionStates(new Array(lvl.questions.length).fill(0));
         });
     }, []);
 
-    const initLevel = (idx, sourceData) => {
-        if (!sourceData[idx]) return;
-        const lvl = sourceData[idx];
-        setCurrentLevelIdx(idx);
-        setLevelQuestions(lvl.questions || []);
-        setQuestionStates(new Array((lvl.questions || []).length).fill(0));
-        setCurrentQIndex(0);
-    };
-
-    // 2. CHARGEMENT ASSETS & AUDIO CONTEXT
+    // 2. CHARGEMENT ASSETS (ANTI-BLOCAGE)
     useEffect(() => {
         if (!project) return;
-
         async function prefetch() {
             try {
-                // Initialisation AudioContext sur le premier mouvement
-                if (!audioCtxRef.current) {
-                    audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
-                }
-
+                if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
                 const scene = project.scenes?.[activeSceneIdx];
                 if (!scene) return;
 
-                logSonde("📦 Chargement des ressources...");
+                logSonde("📦 Chargement...");
                 const imgUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url)))].filter(Boolean);
                 const sndUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url))))].filter(Boolean);
 
+                // On charge images et sons en parallèle, mais on ne bloque PAS si un son échoue
                 await Promise.all([
                     ...imgUrls.map(url => new Promise(res => {
                         const img = new Image(); img.crossOrigin = "anonymous";
                         img.onload = () => { imageAssetsRef.current.set(resolveUrl(url), img); res(); };
-                        img.onerror = () => { console.error("Img Fail", url); res(); }; 
-                        img.src = resolveUrl(url);
+                        img.onerror = res; img.src = resolveUrl(url);
                     })),
-                    ...sndUrls.map(url => new Promise(async res => {
-                        const buffer = await SoundExpert.decodeAudio(resolveUrl(url), audioCtxRef.current);
-                        if (buffer) {
-                            audioBuffersRef.current.set(url, buffer);
-                            logSonde(`🎵 Son prêt : ${url.split('/').pop()}`, "success");
+                    ...sndUrls.map(url => SoundExpert.decodeAudio(resolveUrl(url), audioCtxRef.current).then(buf => {
+                        if (buf) {
+                            audioBuffersRef.current.set(url, buf);
+                            logSonde("🎵 Son chargé", "success");
                         }
-                        res();
                     }))
                 ]);
 
-                logSonde("🚀 Système prêt pour le démarrage", "success");
+                logSonde("🚀 Ressources Prêtes", "success");
                 setEngineReady(true);
-            } catch (e) { 
-                console.error(e);
-                logSonde("💥 Erreur d'initialisation", "error"); 
-            }
+            } catch (e) { logSonde("Erreur Init", "error"); }
         }
         prefetch();
-
-        return () => {
-            if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
-                audioCtxRef.current.close().catch(() => {});
-            }
-        };
+        return () => { if (audioCtxRef.current?.state !== 'closed') audioCtxRef.current?.close(); };
     }, [project, activeSceneIdx]);
 
-    // 3. COMPILATION DU SCRIPT
+    // 3. COMPILATION SCRIPT
     useEffect(() => {
         if (!engineReady || !code || !canvasRef.current) return;
-
         try {
             const headerCode = `
                 const { canvas, ctx, project, sceneIdx, resolveUrl, audioBuffers, imageAssets, audioCtx, logSonde } = params;
-                
                 class ActorProxy {
                     constructor(data, engine) { 
                         this.id = data.id; this.name = data.name; this.engine = engine;
@@ -121,21 +91,20 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     }
                     play(name) { 
                         if(this.currentAction.toUpperCase() !== name.toUpperCase()) { 
-                            logSonde("🎬 Action: " + name);
                             this.currentAction = name; this.frameIdx = 0; this.lastAnimTime = 0;
                             this.engine._triggerActionSounds(this.id, name);
                         } 
                     }
                 }
-
                 class MiniGameBase {
                     constructor(c, a, cb) { 
                         this.canvas = c; this.ctx = ctx; this.assets = a; this.callbacks = params.callbacks; this.keys = {};
                         const s = project.scenes[sceneIdx];
                         if(s && s.actors) s.actors.forEach(a => { this[a.name.toUpperCase()] = new ActorProxy(a, this); });
+                        document.addEventListener('keydown', e => this.keys[e.code] = true);
+                        document.addEventListener('keyup', e => this.keys[e.code] = false);
                     }
                     playGlobal(name) {
-                        logSonde("🔊 Global Sound: " + name);
                         const gs = project.scenes[sceneIdx].globalSounds?.find(s => s.name.toUpperCase() === name.toUpperCase());
                         if(gs && gs.sounds) gs.sounds.forEach(snd => this._playSound(snd.url));
                     }
@@ -147,25 +116,19 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     _playSound(url) {
                         const buffer = audioBuffers.get(url);
                         if(buffer && audioCtx) {
-                            if(audioCtx.state === 'suspended') audioCtx.resume();
                             const source = audioCtx.createBufferSource();
                             source.buffer = buffer; source.connect(audioCtx.destination); source.start(0);
-                            logSonde("⚡ Déclenchement Audio", "success");
-                        } else {
-                            logSonde("❌ Son introuvable", "error");
+                            logSonde("⚡ PLAY", "success");
                         }
                     }
                     _system_render() {
                         const s = project.scenes[sceneIdx];
-                        // 1. Fond
+                        ctx.fillStyle = "black"; ctx.fillRect(0,0,canvas.width, canvas.height);
                         const bd = s?.backdrops?.[s.currentBackdropIdx || 0];
                         if(bd) {
                             const img = imageAssets.get(resolveUrl(bd.url));
                             if(img) ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                        } else {
-                            ctx.fillStyle = "black"; ctx.fillRect(0,0,canvas.width, canvas.height);
                         }
-                        // 2. Acteurs
                         for(let key in this) {
                             const p = this[key];
                             if(p instanceof ActorProxy && p.visible) {
@@ -187,75 +150,31 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     }
                 }
             `;
-
-            // Injection forcée de l'héritage si manquant
-            let finalCode = code;
-            if (!code.includes("extends MiniGameBase")) {
-                finalCode = code.replace(/class\s+MiniGame\s*{/, "class MiniGame extends MiniGameBase {");
-            }
-
-            const Factory = new Function('params', headerCode + "\n" + finalCode + "\n return MiniGame;");
-            const GameClass = Factory({ 
-                canvas: canvasRef.current, 
-                ctx: canvasRef.current.getContext('2d'), 
-                project, 
-                sceneIdx: activeSceneIdx, 
-                resolveUrl, 
-                logSonde,
-                audioBuffers: audioBuffersRef.current, 
-                imageAssets: imageAssetsRef.current, 
-                audioCtx: audioCtxRef.current,
+            const Factory = new Function('params', headerCode + "\n" + code + "\n return MiniGame;");
+            gameInstanceRef.current = new (Factory({ 
+                canvas: canvasRef.current, ctx: canvasRef.current.getContext('2d'), project, sceneIdx: activeSceneIdx, resolveUrl, logSonde,
+                audioBuffers: audioBuffersRef.current, imageAssets: imageAssetsRef.current, audioCtx: audioCtxRef.current,
                 callbacks: { onPlayerHit: () => setLives(l => Math.max(0, l - 1)) } 
-            });
-
-            gameInstanceRef.current = new GameClass({ canvas: canvasRef.current });
-            logSonde("🛠️ Classe instanciée");
-
-        } catch (e) { 
-            console.error(e);
-            setCrash(e.message); 
-        }
+            }))({});
+        } catch (e) { setCrash(e.message); }
     }, [engineReady, code]);
 
     const handleStartGame = async () => {
-        if (!audioCtxRef.current) return;
-        
-        // GESTION DU DÉVERROUILLAGE AUDIO
-        if (audioCtxRef.current.state === 'suspended') {
-            await audioCtxRef.current.resume();
-        }
-        
+        if (audioCtxRef.current?.state === 'suspended') await audioCtxRef.current.resume();
         setEngineStarted(true);
-        logSonde("🏁 ENGINE START", "success");
-        
-        if (gameInstanceRef.current?.start) {
-            try { 
-                gameInstanceRef.current.start(); 
-            } catch(e) { 
-                setCrash(e.message); 
-            }
-        }
+        if (gameInstanceRef.current?.start) gameInstanceRef.current.start();
     };
 
-    const handleAnswerClick = (choiceIdx) => {
+    const handleAnswerClick = (idx) => {
         if (!engineStarted || feedback) return;
-        const currentQ = levelQuestions[currentQIndex];
-        const isCorrect = currentQ?.a === choiceIdx;
+        const isCorrect = levelQuestions[currentQIndex]?.a === idx;
         setFeedback(isCorrect ? 'CORRECT' : 'WRONG');
-        
-        if (isCorrect) {
-            setQuestionStates(p => { const n=[...p]; n[currentQIndex]=Math.min(3, n[currentQIndex]+1); return n; });
-            gameInstanceRef.current?.onResult?.(true);
-        } else {
-            gameInstanceRef.current?.onResult?.(false);
-            setLives(l => Math.max(0, l - 1));
-        }
-        
+        gameInstanceRef.current?.onResult?.(isCorrect);
+        if (!isCorrect) setLives(l => Math.max(0, l - 1));
         setTimeout(() => {
             setFeedback(null);
             const avail = questionStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
             if (avail.length > 0) setCurrentQIndex(avail[Math.floor(Math.random() * avail.length)]);
-            else logSonde("🏆 Victoire Niveau !");
         }, 1000);
     };
 
@@ -263,13 +182,9 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         let frameId;
         const loop = () => {
             if (engineStarted && gameInstanceRef.current && !crash) {
-                try {
-                    if (gameInstanceRef.current.update) gameInstanceRef.current.update();
-                    if (gameInstanceRef.current._system_render) gameInstanceRef.current._system_render();
-                    if (gameInstanceRef.current.draw) gameInstanceRef.current.draw();
-                } catch (e) {
-                    setCrash(e.message);
-                }
+                if (gameInstanceRef.current.update) gameInstanceRef.current.update();
+                if (gameInstanceRef.current._system_render) gameInstanceRef.current._system_render();
+                if (gameInstanceRef.current.draw) gameInstanceRef.current.draw();
             }
             frameId = requestAnimationFrame(loop);
         };
@@ -278,71 +193,30 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     }, [engineStarted, crash]);
 
     return (
-        <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center overflow-hidden">
-             {/* HUD SONDE VISUELLE */}
-             <div className="absolute top-0 left-0 p-4 z-[100] pointer-events-none">
-                <div className="flex flex-col gap-1">
-                    {debugLogs.map(log => (
-                        <div key={log.id} className={`px-3 py-1 rounded text-[10px] font-black shadow-lg border-l-4 ${log.type === 'error' ? 'bg-red-500 text-white' : log.type === 'success' ? 'bg-green-500 text-white' : 'bg-yellow-400 text-black'}`}>
-                            {log.text}
-                        </div>
-                    ))}
-                </div>
-             </div>
-
+        <div className="fixed inset-0 z-[99999] bg-black flex flex-col items-center justify-center">
+             <div className="absolute top-0 left-0 p-4 z-[100] flex flex-col gap-1">{debugLogs.map(log => (<div key={log.id} className={`px-2 py-1 rounded text-[9px] font-black shadow-lg border-l-4 ${log.type === 'error' ? 'bg-red-500 text-white' : log.type === 'success' ? 'bg-green-500 text-white' : 'bg-yellow-400 text-black'}`}>{log.text}</div>))}</div>
              {!engineStarted && engineReady && (
-                 <div className="absolute inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm">
-                     <button onClick={handleStartGame} className="px-16 py-8 bg-white text-indigo-600 rounded-full font-black text-4xl shadow-2xl hover:scale-110 transition-transform animate-pulse border-8 border-indigo-200">
-                        🚀 JOUER
-                     </button>
+                 <div className="absolute inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-md">
+                     <button onClick={handleStartGame} className="px-20 py-10 bg-white text-indigo-600 rounded-full font-black text-5xl shadow-2xl hover:scale-110 transition-transform animate-pulse border-8 border-indigo-200">🚀 JOUER</button>
                  </div>
              )}
-
              {engineStarted && (
                  <>
-                    <div className="absolute top-0 left-0 right-0 p-6 flex justify-between items-start z-50 pointer-events-none">
-                        <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-xl pointer-events-auto flex gap-1">
-                            {"❤️".repeat(lives)}{"🖤".repeat(Math.max(0, 4 - lives))}
-                        </div>
-                        <div className="flex-1 flex justify-center px-4">
-                            {levelQuestions[currentQIndex] && (
-                                <div className="bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 border-slate-600 shadow-2xl text-xl pointer-events-auto">
-                                    {feedback === 'CORRECT' ? "✅ BRAVO !" : feedback === 'WRONG' ? "❌ RATÉ..." : levelQuestions[currentQIndex].q}
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                    
-                    <div className="relative">
-                        <canvas ref={canvasRef} width={800} height={450} className="aspect-video shadow-2xl bg-black border-4 border-slate-800 rounded-xl" />
-                    </div>
-                    
-                    <div className="absolute bottom-0 left-0 right-0 p-8 flex justify-center z-50 pointer-events-auto">
-                        {!isLevelWon && (
-                            <div className="grid grid-cols-4 gap-4 w-full max-w-6xl">
-                                {levelQuestions[currentQIndex]?.options?.map((o, i) => (
-                                    <button key={i} onClick={() => handleAnswerClick(i)} className="bg-indigo-600 text-white py-5 rounded-xl font-black uppercase shadow-xl hover:bg-indigo-500 transition-all border-b-4 border-indigo-800 active:border-b-0 active:translate-y-1">
-                                        {o}
-                                    </button>
-                                ))}
-                            </div>
+                    <div className="absolute top-6 left-6 right-6 flex justify-between items-start z-50 pointer-events-none">
+                        <div className="bg-black/60 p-3 rounded-2xl text-2xl">{"❤️".repeat(lives)}</div>
+                        {levelQuestions[currentQIndex] && (
+                            <div className="bg-slate-900/90 text-white font-black py-4 px-8 rounded-2xl border-2 border-slate-700 text-lg">{feedback === 'CORRECT' ? "✅ BRAVO" : feedback === 'WRONG' ? "❌ RATE" : levelQuestions[currentQIndex].q}</div>
                         )}
+                        <div className="w-20"></div>
+                    </div>
+                    <canvas ref={canvasRef} width={800} height={450} className="max-w-full shadow-2xl bg-slate-900 rounded-xl" />
+                    <div className="absolute bottom-6 left-6 right-6 flex justify-center gap-4">
+                        {levelQuestions[currentQIndex]?.options?.map((o, i) => (<button key={i} onClick={() => handleAnswerClick(i)} className="bg-indigo-600 text-white py-4 px-8 rounded-xl font-black uppercase shadow-xl hover:bg-indigo-500 active:translate-y-1 transition-all">{o}</button>))}
                     </div>
                  </>
              )}
-
-             {crash && (
-                 <div className="absolute inset-0 bg-red-950 flex flex-col items-center justify-center text-white p-10 text-center z-[10000]">
-                    <span className="text-8xl mb-8">💥</span>
-                    <h2 className="text-4xl font-black mb-4 uppercase">Crash du Script</h2>
-                    <pre className="bg-black/50 p-8 rounded-3xl font-mono text-lg text-red-200 border-2 border-red-500/30 max-w-4xl overflow-auto mb-10">{crash}</pre>
-                    <button onClick={onStop} className="px-12 py-5 bg-white text-red-600 rounded-full font-black text-xl">QUITTER</button>
-                 </div>
-             )}
-
-            <button onClick={onStop} className="absolute top-6 right-6 bg-red-600 text-white w-12 h-12 rounded-full font-black text-2xl shadow-xl border-4 border-white hover:scale-110 transition-all flex items-center justify-center z-[60]">
-                ✕
-            </button>
+             <button onClick={onStop} className="absolute top-6 right-6 bg-red-600 text-white w-10 h-10 rounded-full font-black text-xl z-[60]">✕</button>
+             {crash && <div className="absolute inset-0 bg-red-900 text-white p-20 overflow-auto z-[300]"><h2>CRASH</h2><pre>{crash}</pre><button onClick={onStop}>QUITTER</button></div>}
         </div>
     );
 }
