@@ -8635,3 +8635,5 @@
 - FILE D'ATTENTE AUDIO : stopAllSounds() est appelé avant les événements critiques (Game Over/Win) pour nettoyer la piste.
 - ROBUSTESSE : Protection anti-crash si une image manque (404) avec fallback visuel.
 - CHEATS : Codes de triche (Touche F) pleinement opérationnels.
+
+09/02/2026 18:35 - CRITICAL TOOLING FIX : Refonte de snap.js pour éviter les crashs de VS Code. Le script ignore désormais tous les fichiers méta (.txt, .json de config) et se concentre uniquement sur les dossiers 'server' et 'client/src'. Ajout d'une limite de taille de 100Ko par fichier pour garantir la fluidité de l'éditeur.
