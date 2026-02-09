@@ -1,12 +1,8 @@
-// @signatures: GameEngine, initLevel, handleAnswerClick, triggerWinSequence, logAction
+// @signatures: GameEngine, initLevel, handleAnswerClick, triggerWinSequence
 import React, { useState, useRef, useEffect } from 'react';
 import { api } from '../../../../services/api';
 import SoundExpert from './SoundExpert';
 
-/**
- * 🎮 MOTEUR DE JEU (V550 - DEBUG PERSISTANT)
- * FOCUS : Pourquoi l'action ne se lance pas au clic ?
- */
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
     const canvasRef = useRef(null);
     const gameInstanceRef = useRef(null);
@@ -21,20 +17,15 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const [isLevelWon, setIsLevelWon] = useState(false);
     const isLevelWonRef = useRef(false);
     const [isPowerOff, setIsPowerOff] = useState(false);
-    const [isAudioReady, setIsAudioReady] = useState(false);
-
     const [debugLogs, setDebugLogs] = useState([]);
+
     const audioCtxRef = useRef(new (window.AudioContext || window.webkitAudioContext)());
     const audioBuffersRef = useRef(new Map());
 
-    // LOGS DE DÉBOGAGE PLUS LENTS (5 secondes)
-    const logAction = (msg, type = 'info') => {
-        const id = Date.now() + Math.random();
-        setDebugLogs(prev => [...prev, { id, text: `Sonde : ${msg}`, type }]);
-        // On retire le log après 5 secondes pour te laisser le temps de lire
-        setTimeout(() => {
-            setDebugLogs(prev => prev.filter(l => l.id !== id));
-        }, 5000);
+    const logSonde = (msg, type = 'info') => {
+        const id = Math.random();
+        setDebugLogs(prev => [...prev, { id, text: msg, type }]);
+        setTimeout(() => setDebugLogs(prev => prev.filter(l => l.id !== id)), 4000);
     };
 
     useEffect(() => {
@@ -48,55 +39,34 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
     const initLevel = (idx, sourceData) => {
         if (!sourceData[idx]) return;
-        const lvl = sourceData[idx];
         setCurrentLevelIdx(idx);
-        setLevelQuestions(lvl.questions || []);
-        setQuestionStates(new Array((lvl.questions || []).length).fill(0));
+        setLevelQuestions(sourceData[idx].questions || []);
+        setQuestionStates(new Array((sourceData[idx].questions || []).length).fill(0));
         setIsLevelWon(false); isLevelWonRef.current = false; setIsPowerOff(false);
         setCurrentQIndex(0);
     };
 
-    const unlockAudio = () => {
-        if (audioCtxRef.current.state === 'suspended') {
-            audioCtxRef.current.resume().then(() => {
-                setIsAudioReady(true);
-                logAction("AUDIO DÉBLOQUÉ", "success");
-            });
-        } else {
-            setIsAudioReady(true);
-        }
-    };
-
     const handleAnswerClick = (choiceIdx) => {
         if (feedback || currentQIndex === -1 || isLevelWonRef.current) return;
-        
-        unlockAudio(); // On force la reprise audio sur chaque clic
+        if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
 
         const currentQ = levelQuestions[currentQIndex];
         const isCorrect = currentQ.a === choiceIdx;
-        
-        if (isCorrect) {
-            logAction("CLIC CORRECT -> Appel onResult(true)");
-        } else {
-            logAction("CLIC FAUX -> Appel onResult(false)", "error");
-        }
-
         setFeedback(isCorrect ? 'CORRECT' : 'WRONG');
-        const newStates = [...questionStates];
         
         if (isCorrect) {
+            const newStates = [...questionStates];
             newStates[currentQIndex] = Math.min(3, newStates[currentQIndex] + 1);
+            setQuestionStates(newStates);
             if (gameInstanceRef.current?.onResult) gameInstanceRef.current.onResult(true);
         } else {
-            newStates[currentQIndex] = Math.max(0, newStates[currentQIndex] - 1);
             if (gameInstanceRef.current?.onResult) gameInstanceRef.current.onResult(false);
             if (!isLevelWonRef.current) setLives(l => Math.max(0, l - 1));
         }
 
-        setQuestionStates(newStates);
         setTimeout(() => {
             setFeedback(null);
-            const available = newStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
+            const available = questionStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
             if (available.length > 0) {
                 const nIdx = available[Math.floor(Math.random() * available.length)];
                 setCurrentQIndex(nIdx);
@@ -110,9 +80,8 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         if (gameInstanceRef.current?.onLevelWin) gameInstanceRef.current.onLevelWin();
         setTimeout(() => setIsPowerOff(true), 1500);
         setTimeout(() => {
-            const nextLvlIdx = currentLevelIdx + 1;
-            if (allLevels[nextLvlIdx]) initLevel(nextLvlIdx, allLevels);
-            else { alert("🎉 VICTOIRE FINALE !"); onStop(); }
+            if (allLevels[currentLevelIdx + 1]) initLevel(currentLevelIdx + 1, allLevels);
+            else { alert("🎉 VICTOIRE !"); onStop(); }
         }, 4000);
     };
 
@@ -137,12 +106,10 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                         img.onerror = res; img.src = resolveUrl(url);
                     })),
                     ...[...new Set(sndUrls)].filter(Boolean).map(url => new Promise(async res => {
-                        try {
-                            if (!audioBuffersRef.current.has(url)) {
-                                const buffer = await SoundExpert.decodeAudio(resolveUrl(url), audioCtxRef.current);
-                                if (buffer) audioBuffersRef.current.set(url, buffer);
-                            }
-                        } catch(e) {}
+                        if (!audioBuffersRef.current.has(url)) {
+                            const buffer = await SoundExpert.decodeAudio(resolveUrl(url), audioCtxRef.current);
+                            if (buffer) audioBuffersRef.current.set(url, buffer);
+                        }
                         res();
                     }))
                 ]);
@@ -150,7 +117,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 if (!isMounting) return;
 
                 const headerCode = `
-                    const { canvas, ctx, assets, project, sceneIdx, resolveUrl, callbacks, audioBuffers, audioCtx, logAction } = params;
+                    const { canvas, ctx, assets, project, sceneIdx, resolveUrl, callbacks, audioBuffers, audioCtx, logSonde } = params;
                     
                     class ActorProxy {
                         constructor(data, engine) {
@@ -162,9 +129,9 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                             this.frameIdx = 0; this.lastAnimTime = 0;
                         }
                         play(name) { 
-                            logAction(this.name + ".play('" + name + "') déclenché");
                             if(this.currentAction.toUpperCase() !== name.toUpperCase()) { 
                                 this.currentAction = name; this.frameIdx = 0; this.lastAnimTime = 0;
+                                logSonde("🎬 " + this.name + ".play('" + name + "')");
                                 this.engine._triggerActionSounds(this.id, name);
                             } 
                         }
@@ -176,34 +143,29 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                             const s = project.scenes[sceneIdx];
                             if(s && s.actors) { s.actors.forEach(a => { this[a.name.toUpperCase()] = new ActorProxy(a, this); }); }
                         }
-
                         playGlobal(name) {
-                            logAction("GLOBAL SOUND : " + name);
                             const gs = project.scenes[sceneIdx].globalSounds?.find(s => s.name.toUpperCase() === name.toUpperCase());
                             if(gs && gs.sounds) gs.sounds.forEach(snd => this._playSound(snd.url));
                         }
-
                         _triggerActionSounds(actorId, actionName) {
                             const actor = project.scenes[sceneIdx].actors.find(a => a.id === actorId);
                             const action = actor?.actions.find(act => act.name.toUpperCase() === actionName.toUpperCase());
                             if(action && action.sounds && action.sounds.length > 0) {
-                                logAction(action.sounds.length + " sons trouvés pour " + actionName);
+                                logSonde("🔊 " + action.sounds.length + " sons trouvés pour " + actionName);
                                 action.sounds.forEach(snd => this._playSound(snd.url));
                             }
                         }
-
                         _playSound(url) {
                             const buffer = audioBuffers.get(url);
                             if(buffer && audioCtx) {
                                 if(audioCtx.state === 'suspended') audioCtx.resume();
                                 const source = audioCtx.createBufferSource();
                                 source.buffer = buffer; source.connect(audioCtx.destination); source.start(0);
-                                logAction("Lecture buffer OK", "success");
+                                logSonde("🔈 Lecture Buffer OK", "success");
                             } else {
-                                logAction("Buffer son manquant !", "error");
+                                logSonde("🔇 Erreur: Buffer introuvable", "error");
                             }
                         }
-
                         _system_render() {
                             const s = project.scenes[sceneIdx];
                             const bd = s?.backdrops?.[s.currentBackdropIdx || 0];
@@ -235,7 +197,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
                 const finalScript = headerCode + "\n" + code + "\n return MiniGame;";
                 const FinalClass = new Function('params', finalScript)({ 
-                    canvas, ctx, assets, project, sceneIdx: activeSceneIdx, resolveUrl, logAction,
+                    canvas, ctx, assets, project, sceneIdx: activeSceneIdx, resolveUrl, logSonde,
                     audioBuffers: audioBuffersRef.current, audioCtx: audioCtxRef.current,
                     callbacks: { onPlayerHit: () => { if (!isLevelWonRef.current) setLives(l => Math.max(0, l - 1)); } } 
                 });
@@ -262,28 +224,15 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
     return (
         <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center font-sans overflow-hidden">
-             
-             {/* 🛠️ SONDE VISUELLE PERSISTANTE */}
              <div className="absolute top-0 left-0 p-4 z-[100] pointer-events-none">
-                <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-1">
                     {debugLogs.map(log => (
-                        <div key={log.id} className={`px-4 py-2 rounded-xl text-xs font-black shadow-2xl border-2 animate-in slide-in-from-left ${
-                            log.type === 'error' ? 'bg-red-500 text-white border-red-700' : 
-                            log.type === 'success' ? 'bg-green-500 text-white border-green-700' :
-                            'bg-yellow-400 text-black border-yellow-600'
-                        }`}>
+                        <div key={log.id} className={`px-3 py-1 rounded text-[10px] font-black shadow-lg border-l-4 ${log.type === 'error' ? 'bg-red-500 text-white' : log.type === 'success' ? 'bg-green-500 text-white' : 'bg-yellow-400 text-black'}`}>
                             {log.text}
                         </div>
                     ))}
-                    {!isAudioReady && (
-                        <button onClick={unlockAudio} className="px-4 py-2 bg-indigo-600 text-white rounded-xl font-black text-xs pointer-events-auto shadow-lg animate-pulse">
-                            ⚠️ CLIQUER ICI POUR ACTIVER LE SON
-                        </button>
-                    )}
                 </div>
              </div>
-
-             {/* UI TOP */}
              <div className="absolute top-0 left-0 right-0 p-6 flex justify-between items-start z-50 pointer-events-none">
                 <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-xl pointer-events-auto flex gap-1">
                     {"❤️".repeat(lives)}{"🖤".repeat(Math.max(0, 4 - lives))}
@@ -297,33 +246,17 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 </div>
                 <div className="w-40"></div>
             </div>
-
-            {/* STAGE */}
             <div className="relative flex items-center justify-center w-full h-full">
                 <canvas ref={canvasRef} width={800} height={450} className={`aspect-video shadow-2xl bg-black border-4 border-slate-800 rounded-xl transition-opacity duration-1000 ${isPowerOff ? 'opacity-0' : 'opacity-100'}`} />
                 {isLevelWon && (<div className="absolute inset-0 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm rounded-xl animate-in zoom-in"><div className="bg-white p-10 rounded-[40px] shadow-2xl text-center border-8 border-green-500"><span className="text-6xl block mb-4">🏆</span><h2 className="text-4xl font-black text-slate-800 uppercase">Niveau Réussi !</h2></div></div>)}
             </div>
-            
-            {crash && (
-                <div className="absolute inset-0 bg-red-950/95 flex flex-col items-center justify-center text-white p-10 text-center z-[1000]">
-                    <span className="text-6xl mb-6">💥</span>
-                    <h2 className="text-3xl font-black uppercase mb-4">Erreur Script</h2>
-                    <pre className="bg-black/50 p-6 rounded-2xl font-mono text-sm text-red-400 border border-red-800 max-w-2xl overflow-auto mb-8">{crash}</pre>
-                    <button onClick={onStop} className="px-10 py-4 bg-white text-red-600 rounded-2xl font-black uppercase shadow-xl">Retour</button>
-                </div>
-            )}
-
-            {/* UI BOTTOM */}
             <div className="absolute bottom-0 left-0 right-0 p-8 flex justify-center z-50 pointer-events-none">
                 <div className="grid grid-cols-4 gap-4 w-full max-w-6xl pointer-events-auto">
                     {currentQ?.options?.map((o, i) => (
-                        <button key={i} onClick={() => handleAnswerClick(i)} className="bg-indigo-600 text-white py-5 rounded-xl font-black uppercase shadow-xl hover:bg-indigo-500 transition-all border-b-4 border-indigo-800 active:border-b-0 active:translate-y-1">
-                            {o}
-                        </button>
+                        <button key={i} onClick={() => handleAnswerClick(i)} className="bg-indigo-600 text-white py-5 rounded-xl font-black uppercase shadow-xl hover:bg-indigo-500 transition-all border-b-4 border-indigo-800 active:border-b-0 active:translate-y-1">{o}</button>
                     ))}
                 </div>
             </div>
-
             <button onClick={onStop} className="absolute top-6 right-6 bg-red-600 text-white w-12 h-12 rounded-full font-black text-2xl shadow-xl border-4 border-white hover:scale-110 transition-all flex items-center justify-center pointer-events-auto z-[60]">✕</button>
         </div>
     );
