@@ -2123,3 +2123,12 @@
 08/02/2026 23:55 - STUDIO ENGINE V820 (FIX GETCONTEXT) : Résolution du crash "Cannot read properties of null (reading 'getContext')". Séparation stricte de l'initialisation : le clic utilisateur active `engineStarted=true` et débloque le son, puis un `useEffect` déclenché par `engineStarted` attend que `canvasRef.current` soit monté dans le DOM avant d'initialiser le moteur de jeu.
 
 09/02/2026 00:05 - STUDIO ENGINE V825 (FIX SCOPE) : Résolution du crash "MiniGameBase is not defined". Le moteur injecte désormais explicitement la classe mère `MiniGameBase` (générée dynamiquement) dans le scope de la factory utilisateur. Cela permet au code `class MiniGame extends MiniGameBase` de fonctionner correctement.
+
+08/02/2026 23:55 - STUDIO ENGINE V820 (FIX GETCONTEXT) : Résolution du crash "Cannot read properties of null (reading 'getContext')". Séparation stricte de l'initialisation : le clic utilisateur active `engineStarted=true` et débloque le son, puis un `useEffect` déclenché par `engineStarted` attend que `canvasRef.current` soit monté dans le DOM avant d'initialiser le moteur de jeu.
+
+09/02/2026 00:05 - STUDIO ENGINE V825 (FIX SCOPE) : Résolution du crash "MiniGameBase is not defined". Le moteur injecte désormais explicitement la classe mère `MiniGameBase` (générée dynamiquement) dans le scope de la factory utilisateur. Cela permet au code `class MiniGame extends MiniGameBase` de fonctionner correctement.
+
+09/02/2026 00:15 - STUDIO ENGINE V830 (FORCE AUDIO WAKE UP) : Correction du son de DÉPART manquant.
+1. Le bouton "JOUER" appelle `audioCtx.resume()` et attend confirmation avant de lancer le jeu.
+2. Ajout de logs violets dans le HUD pour confirmer "Moteur Audio: RUNNING" et "JOUE: DÉPART".
+3. Le moteur de son `_playSound` vérifie si le buffer est chargé et si le contexte est actif avant de jouer.

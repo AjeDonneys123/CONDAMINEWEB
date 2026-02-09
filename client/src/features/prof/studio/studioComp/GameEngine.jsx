@@ -3,9 +3,9 @@ import React, { useState, useRef, useEffect } from 'react';
 import SoundExpert from './SoundExpert';
 
 /**
- * 🎮 MOTEUR "MOUVEMENT & SON" (V825 - FIX SCOPE)
- * Corrige "MiniGameBase is not defined" en injectant la classe de base
- * dans le scope du script utilisateur via une Factory dédiée.
+ * 🎮 MOTEUR "FORCE AUDIO WAKE UP" (V830)
+ * Garantit que le contexte Audio est 'running' AVANT de lancer le script.
+ * Ajoute des logs détaillés pour traquer le son manquant.
  */
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
     const canvasRef = useRef(null);
@@ -44,14 +44,19 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
         // Sons
         const sndUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url))))].filter(Boolean);
+        
+        let loadedCount = 0;
         sndUrls.forEach(url => {
             SoundExpert.decodeAudio(resolveUrl(url), audioCtxRef.current).then(buf => {
                 if (buf) {
                     audioBuffersRef.current.set(url, buf);
-                    logSonde("🎵 Son prêt: " + url.split('/').pop(), "success");
+                    loadedCount++;
+                    // logSonde("🎵 Chargé: " + url.split('/').pop(), "success");
                 }
             });
         });
+        
+        if (sndUrls.length > 0) logSonde(`🎵 ${sndUrls.length} sons détectés...`, "info");
 
         return () => {
             if (frameIdRef.current) cancelAnimationFrame(frameIdRef.current);
@@ -59,16 +64,29 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         };
     }, [project]);
 
-    // 2. DÉMARRAGE UTILISATEUR
+    // 2. DÉMARRAGE BLINDÉ (Interaction Utilisateur)
     const handleStartGame = async () => {
-        if (audioCtxRef.current?.state === 'suspended') {
-            await audioCtxRef.current.resume();
-            logSonde("🔊 Audio Déverrouillé", "success");
+        logSonde("🖱️ Clic reçu. Réveil Audio...", "info");
+        
+        // A. Forcer le réveil de l'AudioContext
+        try {
+            if (audioCtxRef.current) {
+                await audioCtxRef.current.resume();
+                if (audioCtxRef.current.state === 'running') {
+                    logSonde("🔊 Moteur Audio: RUNNING", "success");
+                } else {
+                    logSonde("⚠️ Moteur Audio: " + audioCtxRef.current.state, "error");
+                }
+            }
+        } catch (e) {
+            logSonde("❌ Erreur Audio Resume: " + e.message, "error");
         }
+
+        // B. Lancer le moteur graphique
         setEngineStarted(true);
     };
 
-    // 3. INITIALISATION MOTEUR (Quand Canvas Prêt)
+    // 3. INITIALISATION MOTEUR (Une fois le Canvas monté)
     useEffect(() => {
         if (!engineStarted || !canvasRef.current) return;
 
@@ -77,7 +95,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             const ctx = canvas.getContext('2d');
             if (!ctx) throw new Error("Contexte 2D introuvable");
 
-            logSonde("🎮 Compilation...", "info");
+            logSonde("🎮 Exécution du script...", "info");
 
             // A. GÉNÉRATION DE LA CLASSE DE BASE (EXOSQUELETTE)
             const BaseFactory = new Function('params', `
@@ -113,28 +131,57 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     _triggerActionSounds(actorId, actionName) {
                         const actor = project.scenes[sceneIdx].actors.find(a => a.id === actorId);
                         const action = actor?.actions.find(act => act.name.toUpperCase() === actionName.toUpperCase());
-                        if(action && action.sounds) action.sounds.forEach(snd => this._playSound(snd.url));
+                        if(action && action.sounds) action.sounds.forEach(snd => this._playSound(snd.url, actionName));
                     }
 
-                    _playSound(url) {
+                    _playSound(url, sourceName = "System") {
+                        if (!audioCtx) { logSonde("🔇 Pas d'AudioCtx", "error"); return; }
+                        
                         const buffer = audioBuffers.get(url);
-                        if(buffer && audioCtx) {
+                        if (!buffer) {
+                            logSonde("🔇 Buffer vide pour " + url.slice(-10), "error");
+                            return;
+                        }
+
+                        if (audioCtx.state !== 'running') {
+                            logSonde("⚠️ Audio suspendu ! Tentative resume...", "error");
+                            audioCtx.resume();
+                        }
+
+                        try {
                             const source = audioCtx.createBufferSource();
-                            source.buffer = buffer; source.connect(audioCtx.destination); source.start(0);
+                            source.buffer = buffer;
+                            source.connect(audioCtx.destination);
+                            source.start(0);
+                            logSonde("🔊 JOUE: " + sourceName, "success");
+                        } catch(e) {
+                            logSonde("❌ Play Error: " + e.message, "error");
                         }
                     }
 
                     playGlobal(name) {
-                        const gs = project.scenes[sceneIdx].globalSounds?.find(s => s.name.toUpperCase() === name.toUpperCase());
-                        if(gs && gs.sounds) gs.sounds.forEach(snd => this._playSound(snd.url));
+                        const s = project.scenes[sceneIdx];
+                        const cleanName = name.toUpperCase().trim();
+                        // Recherche insensible aux accents si besoin, mais ici strict sur uppercase
+                        const gs = s.globalSounds?.find(g => g.name.toUpperCase().trim() === cleanName);
+                        
+                        if (gs) {
+                            if (gs.sounds && gs.sounds.length > 0) {
+                                logSonde("Found Global: " + name + " (" + gs.sounds.length + " sons)", "info");
+                                gs.sounds.forEach(snd => this._playSound(snd.url, name));
+                            } else {
+                                logSonde("⚠️ Global " + name + " trouvé mais vide", "error");
+                            }
+                        } else {
+                            logSonde("⚠️ Global " + name + " introuvable", "error");
+                        }
                     }
 
                     _render() {
                         const s = project.scenes[sceneIdx];
-                        // Fond de sécurité
                         ctx.fillStyle = "#0f172a"; ctx.fillRect(0,0,canvas.width, canvas.height);
                         
-                        // Background Image
+                        // Background
                         const bd = s?.backdrops?.[s.currentBackdropIdx || 0];
                         if(bd) {
                             const img = imageAssets.get(resolveUrl(bd.url));
@@ -171,8 +218,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 imageAssets: imageAssetsRef.current, resolveUrl, logSonde, project, sceneIdx: activeSceneIdx, canvas, ctx
             });
 
-            // B. COMPILATION DU CODE UTILISATEUR
-            // On injecte MiniGameBase comme argument pour que 'extends MiniGameBase' fonctionne
+            // B. COMPILATION CODE UTILISATEUR
             const UserCodeFactory = new Function('MiniGameBase', `
                 ${code}
                 return MiniGame;
@@ -188,8 +234,8 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             // Boucle
             const tick = () => {
                 if (instance.update) instance.update();
-                if (instance._render) instance._render(); // Appel de la méthode interne du parent
-                if (instance.draw) instance.draw();       // HUD utilisateur par dessus
+                if (instance._render) instance._render();
+                if (instance.draw) instance.draw();
                 frameIdRef.current = requestAnimationFrame(tick);
             };
             tick();
@@ -212,7 +258,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
              {!engineStarted ? (
                  <button onClick={handleStartGame} className="px-20 py-10 bg-white text-indigo-600 rounded-full font-black text-5xl shadow-2xl border-8 border-indigo-200 hover:scale-110 transition-all animate-pulse">
-                    🚀 JOUER
+                    🚀 JOUER (SON ACTIF)
                  </button>
              ) : (
                 <div className="relative animate-in zoom-in">
