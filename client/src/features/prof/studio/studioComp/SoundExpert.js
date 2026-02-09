@@ -1,46 +1,50 @@
 /**
- * 🎛️ SOUND EXPERT V510 (DIAGNOSTIC MODE)
- * Vérifie l'intégrité des données audio byte par byte.
+ * 🎛️ SOUND EXPERT V520 (SAFE MODE)
+ * Correction Crash: Retourne strictement null en cas d'erreur.
  */
 const SoundExpert = {
+    // 1. DÉCODAGE SÉCURISÉ
     decodeAudio: async (url, audioCtx) => {
-        if (!audioCtx) return { error: "AudioContext missing" };
+        if (!audioCtx) return null;
         try {
-            console.log("🔍 [SoundExpert] Fetching:", url);
-            const response = await fetch(url);
-            
-            // DIAGNOSTIC : Vérifier le type de contenu
-            const contentType = response.headers.get("content-type");
-            console.log("   Content-Type:", contentType);
-
+            console.log("📥 [SoundExpert] Téléchargement:", url);
+            const response = await fetch(url, { mode: 'cors' });
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             
             const arrayBuffer = await response.arrayBuffer();
-            console.log("   Bytes reçus:", arrayBuffer.byteLength);
-
             if (arrayBuffer.byteLength < 100) throw new Error("Fichier trop petit (<100 bytes)");
-            if (contentType && contentType.includes("text/html")) throw new Error("Reçu du HTML au lieu du Son (Erreur Proxy/404)");
 
+            // Copie de sécurité
             const tempBuffer = arrayBuffer.slice(0);
-            const decoded = await audioCtx.decodeAudioData(tempBuffer);
             
-            console.log(`   Décodé: ${decoded.duration}s, ${decoded.numberOfChannels} canaux`);
-            return decoded; // Succès, on renvoie l'AudioBuffer
+            return await new Promise((resolve, reject) => {
+                audioCtx.decodeAudioData(tempBuffer, 
+                    (decoded) => resolve(decoded),
+                    (err) => {
+                        console.error("❌ Decode Error:", err);
+                        resolve(null); // On résout en null pour ne pas crasher
+                    }
+                );
+            });
             
         } catch (e) {
-            console.error("❌ [SoundExpert] Erreur:", e);
-            return { error: e.message }; // On renvoie l'erreur pour l'afficher
+            console.error("❌ [SoundExpert] Erreur Fetch/Decode:", e.message);
+            return null; // RETOURNE NULL, PAS UN OBJET ERREUR !
         }
     },
 
-    // --- OUTILS DSP (Inchangés) ---
+    // 2. OUTILS DSP (Protections ajoutées)
     trim: (buffer, startPct, endPct) => {
+        if (!buffer || !buffer.getChannelData) return buffer; // Sécurité
+
         const start = Math.floor(startPct * buffer.length);
         const end = Math.floor(endPct * buffer.length);
         const newLen = end - start;
         if (newLen <= 0) return buffer;
+
         const newCtx = new (window.AudioContext || window.webkitAudioContext)();
         const newBuffer = newCtx.createBuffer(buffer.numberOfChannels, newLen, buffer.sampleRate);
+
         for (let i = 0; i < buffer.numberOfChannels; i++) {
             const channel = buffer.getChannelData(i);
             const newChannel = newBuffer.getChannelData(i);
@@ -50,6 +54,8 @@ const SoundExpert = {
     },
     
     changeSpeed: (buffer, rate) => {
+        if (!buffer || !buffer.getChannelData) return buffer;
+
         const newLen = Math.floor(buffer.length / rate);
         const newCtx = new (window.AudioContext || window.webkitAudioContext)();
         const newBuffer = newCtx.createBuffer(buffer.numberOfChannels, newLen, buffer.sampleRate);
@@ -69,6 +75,7 @@ const SoundExpert = {
     },
 
     applyGain: (buffer, val) => {
+        if (!buffer || !buffer.getChannelData) return buffer;
         const newCtx = new (window.AudioContext || window.webkitAudioContext)();
         const newBuffer = newCtx.createBuffer(buffer.numberOfChannels, buffer.length, buffer.sampleRate);
         for (let i = 0; i < buffer.numberOfChannels; i++) {
@@ -80,6 +87,7 @@ const SoundExpert = {
     },
 
     reverse: (buffer) => {
+        if (!buffer || !buffer.getChannelData) return buffer;
         const newCtx = new (window.AudioContext || window.webkitAudioContext)();
         const newBuffer = newCtx.createBuffer(buffer.numberOfChannels, buffer.length, buffer.sampleRate);
         for (let i = 0; i < buffer.numberOfChannels; i++) {
@@ -91,6 +99,7 @@ const SoundExpert = {
     },
 
     robotize: (buffer) => {
+        if (!buffer || !buffer.getChannelData) return buffer;
         const newCtx = new (window.AudioContext || window.webkitAudioContext)();
         const newBuffer = newCtx.createBuffer(buffer.numberOfChannels, buffer.length, buffer.sampleRate);
         const freq = 50; 
@@ -106,6 +115,7 @@ const SoundExpert = {
     },
 
     bufferToWav: (buffer) => {
+        if (!buffer || !buffer.getChannelData) return null;
         const numOfChan = buffer.numberOfChannels;
         const length = buffer.length * numOfChan * 2 + 44;
         const out = new ArrayBuffer(length);
