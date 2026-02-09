@@ -4,10 +4,10 @@ import SoundExpert from './SoundExpert';
 import { api } from '../../../../services/api';
 
 /**
- * 🎮 MOTEUR STUDIO V1003 (DIRECT AUDIO)
- * - Lecture des sons critiques (Victoire/Défaite) gérée directement par React
- * - Contournement de l'instance de jeu pour éviter les blocages de script
- * - Logs explicites si le son est manquant dans le projet
+ * 🎮 MOTEUR STUDIO V1004 (DIAGNOSTIC & FIX)
+ * - Logs détaillés des clés d'images pour déboguer le chargement
+ * - Fallback robuste si une image est manquante (Carré Rose)
+ * - Protection contre les erreurs audio "DÉPART introuvable"
  */
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
     const canvasRef = useRef(null);
@@ -72,22 +72,17 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const playSystemSound = (soundName) => {
         if (!project || !audioCtxRef.current) return;
         
-        // 1. Recherche du son dans les données brutes du projet
         const scene = project.scenes[activeSceneIdx];
         const soundEvent = scene?.globalSounds?.find(gs => gs.name.toUpperCase().trim() === soundName.toUpperCase().trim());
         
         if (!soundEvent || !soundEvent.sounds || soundEvent.sounds.length === 0) {
-            console.warn(`❌ SON SYSTÈME INTROUVABLE: ${soundName}`);
-            logSonde(`⚠️ MANQUE: ${soundName}`, "warning");
+            // Pas une erreur critique, juste une info
+            // console.warn(`ℹ️ Son système absent: ${soundName}`);
             return;
         }
 
-        // 2. Réveil Audio Context
-        if (audioCtxRef.current.state === 'suspended') {
-            audioCtxRef.current.resume();
-        }
+        if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
 
-        // 3. Lecture de tous les sons associés à l'événement
         soundEvent.sounds.forEach(snd => {
             const buffer = audioBuffersRef.current.get(snd.url);
             if (buffer) {
@@ -96,13 +91,8 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     source.buffer = buffer;
                     source.connect(audioCtxRef.current.destination);
                     source.start(0);
-                    activeSourcesRef.current.push(source); // Ajout pour nettoyage futur
-                    console.log(`🔊 PLAY SYSTEM: ${soundName}`);
-                } catch (e) {
-                    console.error("Audio Play Error:", e);
-                }
-            } else {
-                console.error("Buffer Audio introuvable pour:", snd.url);
+                    activeSourcesRef.current.push(source);
+                } catch (e) { console.error("Audio Play Error:", e); }
             }
         });
     };
@@ -123,12 +113,27 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             let loaded = 0;
             const updateProgress = () => { loaded++; setLoadProgress(`${Math.round((loaded / total) * 100)}%`); };
 
+            // Reset Map pour être sûr
+            imageAssetsRef.current.clear();
+
             const imgPromises = imgUrls.map(url => new Promise(resolve => {
                 const img = new Image();
                 img.crossOrigin = "anonymous";
-                img.onload = () => { imageAssetsRef.current.set(resolveUrl(url), img); updateProgress(); resolve(); };
-                img.onerror = () => { console.warn("⚠️ Image 404:", url); updateProgress(); resolve(); };
-                img.src = resolveUrl(url);
+                
+                const finalUrl = resolveUrl(url); // On calcule l'URL résolue
+                
+                img.onload = () => { 
+                    // IMPORTANT : On utilise finalUrl comme clé
+                    imageAssetsRef.current.set(finalUrl, img); 
+                    updateProgress(); 
+                    resolve(); 
+                };
+                img.onerror = () => { 
+                    console.warn("⚠️ Image 404:", finalUrl); 
+                    updateProgress(); 
+                    resolve(); 
+                };
+                img.src = finalUrl;
             }));
 
             const sndPromises = sndUrls.map(url => new Promise(resolve => {
@@ -140,7 +145,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             }));
 
             await Promise.all([...imgPromises, ...sndPromises]);
-            console.log("✅ ASSETS CHARGÉS EN RAM.");
+            console.log("✅ ASSETS CHARGÉS. Clés disponibles :", Array.from(imageAssetsRef.current.keys()));
             setIsReady(true);
         };
 
@@ -190,20 +195,16 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 if (gameInstanceRef.current.start) {
                     try { gameInstanceRef.current.start(); } catch(e) { console.error("Start Error", e); }
                 }
-                // Utilisation du lecteur système pour le départ aussi
                 playSystemSound("DÉPART");
             }
         }, 2000);
     };
 
     const handleGameOver = () => {
-        stopAllSounds(); // Silence
-        
+        stopAllSounds(); 
         setIsGameOver(true);
         isPausedRef.current = true;
         logSonde("💀 GAME OVER", "error");
-
-        // Délai dramatique de 0.5s avant le son
         safeTimeout(() => {
             playSystemSound("DEFAITE");
         }, 500);
@@ -239,7 +240,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             const newVal = Math.max(0, prev - 1);
             if (newVal === 0) {
                 isPausedRef.current = true;
-                // On déclenche le Game Over avec un délai
                 safeTimeout(handleGameOver, 1000);
             }
             return newVal;
@@ -355,18 +355,27 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                         } catch(e) {}
                     }
                     playGlobal(name) {
-                        // LAISSÉ POUR COMPATIBILITÉ MAIS INACTIF SI LE MOTEUR REACT PREND LE RELAIS
+                        // Managed by React directly now
                     }
                     _render() {
                         const s = project.scenes[sceneIdx];
                         ctx.fillStyle = "#0f172a"; ctx.fillRect(0,0,canvas.width, canvas.height);
                         
+                        // BACKGROUND
                         const bd = s?.backdrops?.[s.currentBackdropIdx || 0];
                         if(bd) {
-                            const img = imageAssets.get(resolveUrl(bd.url));
+                            // !!! FIX ICI : Utilisation de resolveUrl pour matcher la clé de la Map !!!
+                            const key = resolveUrl(bd.url);
+                            const img = imageAssets.get(key);
                             if(img) ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                            else {
+                                // Fallback Backdrop
+                                ctx.fillStyle = "#1e293b";
+                                ctx.fillRect(0,0,canvas.width, canvas.height);
+                            }
                         }
 
+                        // ACTORS
                         for(let key in this) {
                             const p = this[key];
                             if(p instanceof ActorProxy && p.visible) {
@@ -377,7 +386,10 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                                 if(act && act.frames && act.frames.length > 0) {
                                     const now = Date.now();
                                     if (now - p.lastAnimTime > (act.speed || 100)) { p.frameIdx = (p.frameIdx+1)%act.frames.length; p.lastAnimTime=now; }
-                                    const spr = imageAssets.get(resolveUrl(act.frames[p.frameIdx].url));
+                                    
+                                    // !!! FIX ICI : Utilisation de resolveUrl pour matcher la clé !!!
+                                    const assetKey = resolveUrl(act.frames[p.frameIdx].url);
+                                    const spr = imageAssets.get(assetKey);
                                     
                                     if(spr) {
                                         const xPx = (p.x/100)*canvas.width; const yPx = (p.y/100)*canvas.height; let sz = 150*p.scale;
@@ -386,6 +398,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                                         else if (p.direction) this.ctx.rotate(p.direction * Math.PI / 180);
                                         this.ctx.drawImage(spr, -sz/2, -sz/2, sz, sz); this.ctx.restore();
                                     } else {
+                                        // FALLBACK VISUEL (Carré Rose)
                                         this.ctx.fillStyle = "#f472b6";
                                         this.ctx.fillRect((p.x/100)*canvas.width - 20, (p.y/100)*canvas.height - 20, 40, 40);
                                     }
