@@ -1,6 +1,8 @@
 // @signatures: ProfModels, getModel
 const mongoose = require('mongoose');
 
+// --- SCHÉMAS UTILITAIRES ---
+
 const SectionSchema = new mongoose.Schema({
     name: { type: String, required: true },
     color: { type: String, default: '#6366f1' },
@@ -9,10 +11,49 @@ const SectionSchema = new mongoose.Schema({
     hiddenIn: { type: [String], default: [] } 
 }, { _id: false });
 
+const FrameSchema = new mongoose.Schema({
+    url: String,
+    name: String,
+    type: { type: String, default: 'image' } // image, sound
+}, { _id: false });
+
+const ActionSchema = new mongoose.Schema({
+    name: { type: String, default: "Nouvelle Action" },
+    speed: { type: Number, default: 100 }, 
+    frames: { type: [FrameSchema], default: [] }, 
+    sounds: { type: [FrameSchema], default: [] }
+}, { _id: false });
+
+const ActorSchema = new mongoose.Schema({
+    id: String, 
+    name: String, 
+    actions: { type: [ActionSchema], default: [] },
+    currentAction: { type: String, default: "" },
+    initialX: { type: Number, default: 50 }, 
+    initialY: { type: Number, default: 50 }, 
+    scale: { type: Number, default: 1 },
+    direction: { type: Number, default: 0 },
+    rotationStyle: { type: String, default: 'all' }
+}, { _id: false });
+
+const SceneSchema = new mongoose.Schema({
+    name: String,
+    backdrops: [{ name: String, url: String }],
+    currentBackdropIdx: { type: Number, default: 0 },
+    actors: [ActorSchema],
+    // ✅ AJOUT DU CHAMP MANQUANT QUI PROVOQUAIT LE CRASH
+    globalSounds: { type: [ActionSchema], default: [] } 
+}, { _id: false });
+
+
+// --- FONCTION DE RÉCUPÉRATION SÉCURISÉE ---
 const getModel = (name, schema) => {
-    return mongoose.models[name] || mongoose.model(name, new mongoose.Schema(schema, { timestamps: true }));
+    // Si le modèle existe déjà, on le retourne pour éviter l'erreur OverwriteModelError
+    if (mongoose.models[name]) return mongoose.models[name];
+    return mongoose.model(name, new mongoose.Schema(schema, { timestamps: true }));
 };
 
+// --- DÉFINITION DES MODÈLES ---
 const Models = {
     Chapter: getModel('Chapter', {
         title: { type: String, default: "NOUVEAU" },
@@ -54,13 +95,10 @@ const Models = {
         date: { type: Date, default: Date.now }
     }),
 
-    // --- CORRECTION V181 : AJOUT DE isTestGame ---
     GameLevel: getModel('GameLevel', {
         title: String, 
         subject: { type: String, default: "GÉNÉRAL" }, 
-        
-        isTestGame: { type: Boolean, default: false }, // <--- LE CHAMP MANQUANT ÉTAIT ICI
-
+        isTestGame: { type: Boolean, default: false }, 
         chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter' },
         teacherId: mongoose.Schema.Types.ObjectId, targetClassrooms: [String],
         questions: Array, levels: Array, assignedStudents: [mongoose.Schema.Types.ObjectId],
@@ -84,6 +122,7 @@ const Models = {
     }),
 
     Subject: getModel('Subject', { name: String, color: String }),
+    
     Submission: getModel('Submission', {
         studentId: mongoose.Schema.Types.ObjectId, homeworkId: mongoose.Schema.Types.ObjectId,
         levelIndex: Number, content: String, feedback: String, grade: String
@@ -95,7 +134,11 @@ const Models = {
     }),
 
     StudioProject: getModel('StudioProject', {
-        title: String, teacherId: mongoose.Schema.Types.ObjectId, scenes: Array, generatedCode: String
+        title: { type: String, required: true },
+        teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher' },
+        scenes: [SceneSchema],
+        generatedCode: String,
+        createdAt: { type: Date, default: Date.now }
     })
 };
 
