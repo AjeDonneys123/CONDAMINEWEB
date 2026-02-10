@@ -4,8 +4,8 @@ import SoundExpert from './SoundExpert';
 import { api } from '../../../../services/api';
 
 /**
- * 🎮 MOTEUR STUDIO V1007 (ZOOM FOCUS APPRENTISSAGE)
- * Ajout du mode Focus pour la fiche et la vidéo.
+ * 🎮 MOTEUR STUDIO V1008 (CONTRÔLE AUDIO)
+ * Ajout d'un bouton Mute/Unmute dans le HUD.
  */
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
     const canvasRef = useRef(null);
@@ -24,9 +24,13 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const [lives, setLives] = useState(4);
     const [feedback, setFeedback] = useState(null);
 
-    // --- ÉTATS APPRENTISSAGE & MODALES ---
+    // --- AUDIO CONTROL ---
+    const [isMuted, setIsMuted] = useState(false);
+    const isMutedRef = useRef(false);
+
+    // --- ÉTATS APPRENTISSAGE ---
     const [isStudyPhase, setIsStudyPhase] = useState(false);
-    const [activeFocus, setActiveFocus] = useState(null); // 'SHEET' ou 'VIDEO' ou null
+    const [activeFocus, setActiveFocus] = useState(null); 
     const [showLevelTitle, setShowLevelTitle] = useState(false);
     const [isLevelWon, setIsLevelWon] = useState(false);
     const [isGameOver, setIsGameOver] = useState(false);
@@ -43,7 +47,11 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const keysPressed = useRef({}); 
     const activeSourcesRef = useRef([]);
 
-    // --- HELPER YOUTUBE ROBUSTE ---
+    // Synchronisation de la Ref pour le moteur dynamique
+    useEffect(() => {
+        isMutedRef.current = isMuted;
+    }, [isMuted]);
+
     const getYoutubeEmbedUrl = (url) => {
         if (!url) return null;
         let videoId = "";
@@ -74,11 +82,14 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     };
 
     const playSystemSound = (soundName) => {
-        if (!project || !audioCtxRef.current) return;
+        if (isMutedRef.current || !project || !audioCtxRef.current) return;
+        
         const scene = project.scenes[activeSceneIdx];
         const soundEvent = scene?.globalSounds?.find(gs => gs.name.toUpperCase().trim() === soundName.toUpperCase().trim());
         if (!soundEvent || !soundEvent.sounds || soundEvent.sounds.length === 0) return;
+        
         if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
+
         soundEvent.sounds.forEach(snd => {
             const buffer = audioBuffersRef.current.get(snd.url);
             if (buffer) {
@@ -238,7 +249,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             const ctx = canvas.getContext('2d');
             const gameCallbacks = { onPlayerHit: triggerPlayerHit, playSound: (name) => {} };
             const BaseFactory = new Function('params', `
-                const { audioBuffers, audioCtx, project, sceneIdx, imageAssets, resolveUrl, canvas, ctx, activeSources } = params;
+                const { audioBuffers, audioCtx, project, sceneIdx, imageAssets, resolveUrl, canvas, ctx, activeSources, isMutedRef } = params;
                 class ActorProxy {
                     constructor(data, engine) { 
                         this.id = data.id; this.name = data.name; this.engine = engine;
@@ -272,6 +283,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                         if(action && action.sounds) action.sounds.forEach(snd => this._playSound(snd.url));
                     }
                     _playSound(url) {
+                        if (isMutedRef.current) return;
                         try {
                             const buffer = audioBuffers.get(url);
                             if(buffer && audioCtx) {
@@ -315,7 +327,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     }
                 }
             `);
-            const MiniGameBase = BaseFactory({ audioBuffers: audioBuffersRef.current, audioCtx: audioCtxRef.current, imageAssets: imageAssetsRef.current, resolveUrl, logSonde, project, sceneIdx: activeSceneIdx, canvas, ctx, callbacks: gameCallbacks, activeSources: activeSourcesRef.current });
+            const MiniGameBase = BaseFactory({ audioBuffers: audioBuffersRef.current, audioCtx: audioCtxRef.current, imageAssets: imageAssetsRef.current, resolveUrl, logSonde, project, sceneIdx: activeSceneIdx, canvas, ctx, callbacks: gameCallbacks, activeSources: activeSourcesRef.current, isMutedRef: isMutedRef });
             const UserCodeFactory = new Function('MiniGameBase', `${code}\nreturn MiniGame;`);
             const UserGameClass = UserCodeFactory(MiniGameBase);
             const instance = new UserGameClass(canvas, {}, gameCallbacks);
@@ -338,7 +350,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     return (
         <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center overflow-hidden font-sans">
              
-             {/* --- MODALE FOCUS (PLEIN ÉCRAN) --- */}
              {activeFocus && (
                  <div className="fixed inset-0 z-[100000] bg-slate-950/98 backdrop-blur-2xl flex flex-col items-center justify-center p-10 animate-in zoom-in duration-300">
                     <button 
@@ -375,9 +386,23 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
              ) : (
                 <>
                     <div className="absolute top-6 w-full flex justify-between items-start px-10 pointer-events-none z-30">
-                        <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-xl pointer-events-auto flex gap-1">
-                            {"❤️".repeat(lives)}{"🖤".repeat(Math.max(0, 4 - lives))}
+                        <div className="flex gap-4 pointer-events-auto">
+                            <div 
+                                className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-xl flex gap-1 cursor-pointer hover:border-red-500 transition-colors"
+                                onClick={() => { if (keysPressed.current['KeyF']) triggerPlayerHit(); }}
+                            >
+                                {"❤️".repeat(lives)}{"🖤".repeat(Math.max(0, 4 - lives))}
+                            </div>
+
+                            {/* BOUTON SON */}
+                            <button 
+                                onClick={() => setIsMuted(!isMuted)}
+                                className={`w-16 h-16 rounded-2xl border-2 shadow-xl flex items-center justify-center text-2xl transition-all ${isMuted ? 'bg-red-900/80 border-red-500 text-red-200' : 'bg-slate-900/80 border-slate-700 text-white hover:border-indigo-500'}`}
+                            >
+                                {isMuted ? '🔇' : '🔊'}
+                            </button>
                         </div>
+
                         <div className="flex-1 flex justify-center px-4">
                             {levelQuestions[currentQIndex] && !isStudyPhase && !isLevelWon && !isGameOver && !showLevelTitle && (
                                 <div className="bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 border-slate-600 shadow-2xl text-xl pointer-events-auto animate-in slide-in-from-top">
@@ -385,9 +410,10 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                                 </div>
                             )}
                         </div>
+
                         <div className="flex gap-2 items-center pointer-events-auto mr-20">
                             {questionStates.map((mastery, idx) => (
-                                <div key={idx} className={`w-4 h-12 rounded-md border border-slate-600 relative overflow-hidden ${currentQIndex === idx ? 'ring-2 ring-indigo-400 scale-110' : 'opacity-60'}`}>
+                                <div key={idx} onClick={() => handleBarClick(idx)} className={`w-4 h-12 rounded-md border border-slate-600 relative overflow-hidden cursor-pointer ${currentQIndex === idx ? 'ring-2 ring-indigo-400 scale-110' : 'opacity-60'}`}>
                                     <div className={`absolute bottom-0 left-0 right-0 transition-all duration-500 ${mastery === 3 ? 'bg-green-500' : 'bg-yellow-500'}`} style={{ height: `${(mastery / 3) * 100}%` }} />
                                 </div>
                             ))}
@@ -402,7 +428,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                                 <h2 className="text-3xl font-black text-indigo-400 uppercase text-center mb-4">Préparation : {currentLvlData.name}</h2>
                                 <div className="flex-1 flex gap-6 min-h-0 overflow-hidden">
                                     
-                                    {/* CLIC SUR FICHE -> FOCUS */}
                                     <div 
                                         className="flex-1 bg-white rounded-lg overflow-hidden border-4 border-slate-800 flex items-center justify-center cursor-pointer hover:border-indigo-400 transition-colors group relative"
                                         onClick={() => currentLvlData.intro?.sheetUrl && setActiveFocus('SHEET')}
@@ -417,7 +442,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                                         ) : <div className="text-slate-300 font-bold uppercase">Aucune fiche niveau</div>}
                                     </div>
 
-                                    {/* CLIC SUR VIDÉO -> FOCUS */}
                                     <div 
                                         className="flex-1 bg-black rounded-lg overflow-hidden border-4 border-slate-800 flex items-center justify-center cursor-pointer hover:border-red-500 transition-colors group relative"
                                         onClick={() => embedUrl && setActiveFocus('VIDEO')}
