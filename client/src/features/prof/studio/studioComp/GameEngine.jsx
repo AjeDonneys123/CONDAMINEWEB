@@ -1,10 +1,10 @@
-// @signatures: GameEngine, initLevel, handleAnswerLogic, handleInputSubmit, handleGameOver, retryLevel, nextLevel, preloadAssets, getYoutubeEmbedUrl, handleBarClick, handleForceWin, triggerPlayerHit
+// @signatures: GameEngine
 import React, { useState, useRef, useEffect } from 'react';
 import SoundExpert from './SoundExpert';
 import { api } from '../../../../services/api';
 
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
-    // 1. DÉCLARATION DES REFS
+    // 1. DÉCLARATION DES REFS (En premier pour éviter ReferenceError)
     const canvasRef = useRef(null);
     const livesRef = useRef(4);
     const inputRef = useRef(null);
@@ -15,7 +15,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const frameIdRef = useRef(null);
     const gameInstanceRef = useRef(null);
     const isMutedRef = useRef(false);
-    const isPausedRef = useRef(false); 
+    const isPausedRef = useRef(false);
     
     const activeTimeoutsRef = useRef([]);
     const audioCtxRef = useRef(null);
@@ -117,7 +117,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
     const triggerPlayerHit = () => {
         const now = Date.now();
-        if (now - lastInteractionRef.current < 1500) return;
+        if (now - lastInteractionRef.current < 1000) return;
         lastInteractionRef.current = now;
 
         setHitFlash(true); setTimeout(() => setHitFlash(false), 200);
@@ -282,7 +282,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         };
     }, [project]);
 
-    // 8. GAME LOOP (CORRECTIF ICI DANS LA FACTORY)
+    // 8. GAME LOOP
     useEffect(() => {
         if (!engineStarted || !canvasRef.current) return;
 
@@ -312,27 +312,18 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                         
                         this.currentAction = data.actions?.[0]?.name || 'IDLE';
                         this.frameIdx = 0; 
-                        
-                        // 🔥 INITIALISATION DU TIMER POUR NE PAS SAUTER LA FRAME 0
-                        this.lastAnimTime = Date.now(); 
-                        
+                        this.lastAnimTime = 0;
                         this.isAnimFinished = false; 
                         this.loop = true;
                     }
-
-                    // 🔥 PLAY AVEC RESET TIMER
                     play(name, loop = true) { 
                         if(this.currentAction.toUpperCase() !== name.toUpperCase()) { 
                             this.currentAction = name; 
                             this.frameIdx = 0;
                             this.loop = loop; 
                             this.isAnimFinished = false;
-                            
-                            // RESET DU TIMER CRUCIAL ICI
-                            this.lastAnimTime = Date.now(); 
-                            
                             this.engine._triggerActionSounds(this.id, name);
-                        }
+                        } 
                     }
                 }
 
@@ -537,7 +528,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                             {isBossUI ? (
                                 <form onSubmit={handleInputSubmit} className="flex gap-4 w-full max-w-2xl bg-white/10 backdrop-blur-md p-4 rounded-2xl border-2 border-red-500 animate-pulse shadow-[0_0_50px_rgba(239,68,68,0.5)]">
                                     <input ref={inputRef} value={inputValue} onChange={(e) => setInputValue(e.target.value)} className="flex-1 bg-white/90 text-red-600 font-black text-2xl uppercase text-center rounded-xl outline-none placeholder-red-200 border-2 border-red-200 focus:border-red-600" placeholder="TAPEZ LA RÉPONSE..." autoFocus />
-                                    <button type="submit" className="bg-red-600 text-white px-8 rounded-xl font-black uppercase shadow-lg hover:scale-105 transition-transform border-b-4 border-red-800 active:border-b-0 active:translate-y-1">TIRER 🔫</button>
+                                    <button type="submit" className="bg-red-600 text-white px-8 rounded-xl font-black uppercase shadow-lg hover:scale-105 transition-transform border-b-4 border-red-800 active:border-b-0 active:translate-y-1">ATTAQUER</button>
                                 </form>
                             ) : (
                                 <div className="grid grid-cols-4 gap-4 w-full max-w-5xl">
