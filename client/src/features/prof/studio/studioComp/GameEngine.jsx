@@ -18,16 +18,17 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const [currentQIndex, setCurrentQIndex] = useState(-1);
     
     const [lives, setLives] = useState(4);
-    
+    const livesRef = useRef(4); // 🔧 FIX CLOSURE: Ref pour lecture temps réel
+
     const [feedback, setFeedback] = useState(null);
 
     // --- BOSS MODE & INPUT ---
     const [inputValue, setInputValue] = useState("");
     const inputRef = useRef(null);
     
-    // 🔥 PONT TEMPS RÉEL
+    // 🔥 PONT TEMPS RÉEL (Référence mutable)
     const bossModeRef = useRef(false);
-    const lastHitTimeRef = useRef(0); // Anti-spam dégâts physique
+    const lastInteractionRef = useRef(0); 
 
     const [isMuted, setIsMuted] = useState(false);
     const isMutedRef = useRef(false);
@@ -47,10 +48,13 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const imageAssetsRef = useRef(new Map());
     const gameInstanceRef = useRef(null);
     const frameIdRef = useRef(null);
+    
+    // 🔧 FIX CHEAT: Suivi clavier global
     const keysPressed = useRef({}); 
     const activeSourcesRef = useRef([]);
 
     useEffect(() => { isMutedRef.current = isMuted; }, [isMuted]);
+    useEffect(() => { livesRef.current = lives; }, [lives]); // Sync Ref
 
     // 🔥 SYNCHRONISATION BOSS MODE
     useEffect(() => {
@@ -106,39 +110,14 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
     const normalize = (str) => (str || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
 
-    // --- LOGIQUE GAME OVER CENTRALISÉE ---
-    const handleGameOver = () => {
-        console.log("💀 GAME OVER TRIGGERED");
-        isPausedRef.current = true; // Arrêt immédiat de la boucle
-        stopAllSounds(); 
-        setIsGameOver(true); 
-        playSystemSound("DÉFAITE");
-    };
-
-    // --- LOGIQUE DÉGÂTS (ZOMBIE OU ERREUR) ---
-    const triggerPlayerHit = () => {
-        const now = Date.now();
-        // Protection Anti-Mitraillette (1 sec d'invulnérabilité)
-        if (now - lastHitTimeRef.current < 1000) return;
-        lastHitTimeRef.current = now;
-
-        setHitFlash(true); 
-        setTimeout(() => setHitFlash(false), 200);
-        
-        setLives(prev => {
-            const newVal = Math.max(0, prev - 1);
-            if (newVal === 0) {
-                // Si 0, on meurt tout de suite
-                handleGameOver();
-            }
-            return newVal;
-        });
-    };
-
     // --- LOGIQUE RÉPONSE ---
     const handleAnswerLogic = (isCorrect) => {
-        // Si déjà Game Over, on arrête tout
-        if (isGameOver || lives <= 0) return;
+        const now = Date.now();
+        if (!isCorrect && now - lastInteractionRef.current < 1000) return;
+        lastInteractionRef.current = now;
+
+        // Si on est déjà mort, on ne fait rien
+        if (livesRef.current <= 0) return;
 
         setFeedback(isCorrect ? 'CORRECT' : 'WRONG');
         const newStates = [...questionStates];
@@ -147,28 +126,34 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             newStates[currentQIndex] = Math.min(3, newStates[currentQIndex] + 1);
             if (gameInstanceRef.current?.onResult) gameInstanceRef.current.onResult(true);
         } else {
-            // Erreur = Perte d'un cran sur la question + Dégât joueur
             newStates[currentQIndex] = Math.max(0, newStates[currentQIndex] - 1);
             if (gameInstanceRef.current?.onResult) gameInstanceRef.current.onResult(false);
             
-            triggerPlayerHit(); // Utilise la fonction centralisée
+            // IMPACT VISUEL + VIE
+            setHitFlash(true); setTimeout(() => setHitFlash(false), 200);
+            
+            setLives(prev => {
+                const newVal = Math.max(0, prev - 1);
+                // 🛑 GAME OVER IMMÉDIAT SI 0
+                if (newVal === 0) {
+                    isPausedRef.current = true;
+                    handleGameOver();
+                }
+                return newVal;
+            });
         }
         
         setQuestionStates(newStates);
         setInputValue("");
 
-        // Transition après feedback
         safeTimeout(() => {
             setFeedback(null);
             
-            // On vérifie l'état actuel des vies via une fonction de callback ou ref si besoin, 
-            // mais ici triggerPlayerHit a déjà géré le Game Over si lives == 0.
-            // On vérifie juste si le jeu n'est PAS fini.
-            if (!isPausedRef.current && !isGameOver) {
+            // 🔧 FIX: On vérifie la REF (valeur temps réel), pas la variable closure
+            if (livesRef.current > 0) {
                 const available = newStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
-                
                 if (available.length > 0) {
-                    // Logique choix prochaine question
+                    // Si question courante non finie, on reste dessus
                     if (newStates[currentQIndex] < 3) {
                         setCurrentQIndex(currentQIndex);
                         if (newStates[currentQIndex] >= 2) setTimeout(() => inputRef.current?.focus(), 50);
@@ -176,30 +161,30 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                         setCurrentQIndex(available[Math.floor(Math.random() * available.length)]);
                     }
                 } else {
-                    // --- VICTOIRE NIVEAU ---
+                    // VICTOIRE
                     setIsLevelWon(true); 
                     isPausedRef.current = true;
-                    playSystemSound("VICTOIRE"); // 🔊 SON AJOUTÉ ICI
-                    
+                    playSystemSound("UPLEVEL"); // 🔊 SON CORRIGÉ : UPLEVEL
                     safeTimeout(() => {
                         setLives(4);
                         if (allLevels[currentLevelIdx + 1]) initLevel(currentLevelIdx + 1, allLevels);
                         else setIsGameCompleted(true);
                     }, 4000);
                 }
+            } else {
+                // Double sécurité : Si livesRef est 0, on s'assure que le Game Over est déclenché
+                if (!isGameOver) handleGameOver();
             }
         }, 1000);
     };
 
-    // --- CHEAT CODES (TOUCHE F) ---
+    // --- CHEAT CODES RÉTABLIS ---
     const handleBarClick = (idx) => {
-        // Détection plus permissive
-        if (keysPressed.current['KeyF'] || keysPressed.current['Keyf']) {
-            console.log("🕵️ CHEAT: BAR BOOST");
+        // console.log("🔍 CHEAT BAR CLICK", keysPressed.current);
+        if (keysPressed.current['KeyF'] || keysPressed.current['Keyf']) { // Tolérance maj/min
             const newStates = [...questionStates];
             newStates[idx] = Math.min(3, newStates[idx] + 1);
             setQuestionStates(newStates);
-            // Refresh immédiat si on passe en mode boss
             if (idx === currentQIndex && newStates[idx] >= 2) {
                 setTimeout(() => inputRef.current?.focus(), 50);
             }
@@ -207,11 +192,11 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     };
 
     const handleForceWin = () => {
+        // console.log("🔍 CHEAT WIN CLICK", keysPressed.current);
         if (keysPressed.current['KeyF'] || keysPressed.current['Keyf']) {
-            console.log("🕵️ CHEAT: WIN LEVEL");
             setIsLevelWon(true);
             isPausedRef.current = true;
-            playSystemSound("VICTOIRE");
+            playSystemSound("UPLEVEL"); // 🔊 SON CORRIGÉ : UPLEVEL
             safeTimeout(() => {
                 setLives(4);
                 if (allLevels[currentLevelIdx + 1]) initLevel(currentLevelIdx + 1, allLevels);
@@ -235,7 +220,25 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         handleAnswerLogic(normalize(inputValue) === normalize(correctText));
     };
 
+    const handleGameOver = () => {
+        stopAllSounds(); 
+        setIsGameOver(true); 
+        isPausedRef.current = true;
+        playSystemSound("DÉFAITE");
+    };
+
     const retryLevel = () => { setLives(4); initLevel(currentLevelIdx, allLevels); };
+
+    // --- NOUVEAU NEXTLEVEL POUR LA FIN DU JEU ---
+    const nextLevel = () => {
+        const nextIdx = currentLevelIdx + 1;
+        if (allLevels[nextIdx]) initLevel(nextIdx, allLevels);
+        else {
+            stopAllSounds(); 
+            setIsGameCompleted(true);
+            safeTimeout(() => { playSystemSound("UPLEVEL"); }, 500); // 🔊 SON CORRIGÉ : UPLEVEL
+        }
+    };
 
     const handleStartGame = async () => {
         if (audioCtxRef.current) { try { await audioCtxRef.current.resume(); } catch (e) {} }
@@ -277,12 +280,12 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             preloadAssets();
         });
 
-        // LISTENER CLAVIER (Fix Cheats)
         const handleKeyDown = (e) => { 
-            // On capture toujours F pour les cheats
-            if (e.code === 'KeyF') keysPressed.current[e.code] = true;
-            // Pour le reste, seulement si pas dans l'input
-            else if (e.target.tagName !== 'INPUT') keysPressed.current[e.code] = true; 
+            // On capture TOUT sauf si focus input, MAIS F est spécial
+            // Pour F, on le capture même si pas focus input, car on l'utilise avec la souris
+            if (e.code === 'KeyF' || e.target.tagName !== 'INPUT') {
+                keysPressed.current[e.code] = true; 
+            }
         };
         const handleKeyUp = (e) => { keysPressed.current[e.code] = false; };
         
@@ -314,9 +317,12 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         try {
             const canvas = canvasRef.current;
             const ctx = canvas.getContext('2d');
-            // MODIF : Le callback onPlayerHit appelle maintenant triggerPlayerHit directement !
+            // FIX: Callback appelle bien handleAnswerLogic(false) qui gère vies et game over
             const gameCallbacks = { 
-                onPlayerHit: () => triggerPlayerHit(), 
+                onPlayerHit: () => {
+                    // Simule une mauvaise réponse pour déclencher la perte de vie
+                    handleAnswerLogic(false); 
+                }, 
                 playSound: () => {} 
             };
             
