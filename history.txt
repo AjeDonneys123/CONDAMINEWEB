@@ -8649,3 +8649,8 @@
 2026-02-09: Ajout du contrôle audio dans le GameEngine (V1008). Un bouton 🔊/🔇 a été intégré au HUD supérieur. Ce contrôle utilise une référence synchronisée pour couper instantanément les sons système (victoire, départ...) ainsi que les sons déclenchés par les animations des acteurs à l'intérieur du moteur dynamique.
 
 2026-02-09: Ajout du contrôle audio dans le GameEngine (V1008). Un bouton 🔊/🔇 a été intégré au HUD supérieur. Ce contrôle utilise une référence synchronisée pour couper instantanément les sons système (victoire, départ...) ainsi que les sons déclenchés par les animations des acteurs à l'intérieur du moteur dynamique.
+
+10/02/2026 - 18:20 : FIX JEU TEST STUDIO. Mise à jour du script 'ZOMBIE_GAME_CODE' (V9.2).
+- Problème : Le retrait de vie était déclenché par la simple collision avec la table du héros.
+- Solution : Déplacement de l'appel 'onPlayerHit' à l'intérieur de l'animation 'TAPER' du zombie.
+- Mécanisme : Ajout d'un flag 'zombieDamagedPlayer' réinitialisé à chaque approche, les dégâts sont infligés à la frame 1 de l'attaque.

@@ -21,8 +21,8 @@ function resolveUrl(url) {
     return `/api/proxy/${id}`;
 }
 
-// 🧟 ZOMBIE V9.1 : SUPER FLAME BOSS
-const ZOMBIE_GAME_CODE = `// 🧟 ZOMBIE V9.1 (SUPER FLAME)
+// 🧟 ZOMBIE V9.2 : FIX COLLISION VS ATTACK
+const ZOMBIE_GAME_CODE = `// 🧟 ZOMBIE V9.2 (FIX ATTACK DELAY)
 class MiniGame extends MiniGameBase {
     constructor(canvas, assets, callbacks) {
         super(canvas, assets, callbacks);
@@ -31,6 +31,7 @@ class MiniGame extends MiniGameBase {
         // --- ÉTATS INITIAUX ---
         this.zombieX = 100;
         this.zombieState = "WALKING"; 
+        this.zombieDamagedPlayer = false; // Flag pour ne frapper qu'une fois
         
         this.heroState = "IDLE";
         this.heroTimer = 0;
@@ -51,7 +52,8 @@ class MiniGame extends MiniGameBase {
 
     resetZombie() {
         this.zombieX = 100;
-        this.zombieState = "WALKING"; 
+        this.zombieState = "WALKING";
+        this.zombieDamagedPlayer = false; 
         if(this.ZOMBIE) {
             this.ZOMBIE.x = 100;
             this.ZOMBIE.play("AVANCER", true);
@@ -94,9 +96,10 @@ class MiniGame extends MiniGameBase {
         if (this.zombieState === "WALKING") {
             this.zombieX -= currentSpeed;
             
-            // DÉTECTION COLLISION
+            // DÉTECTION COLLISION (On lance l'anim mais pas encore les dégâts)
             if (this.zombieX < 20) {
                 this.zombieState = "ATTACKING"; 
+                this.zombieDamagedPlayer = false;
                 if (this.ZOMBIE) this.ZOMBIE.play("TAPER", false);
                 
                 if (this.HEROS) { 
@@ -104,8 +107,6 @@ class MiniGame extends MiniGameBase {
                     this.heroState = "HIT"; 
                     this.heroTimer = 60; 
                 }
-                
-                if (this.callbacks.onPlayerHit) this.callbacks.onPlayerHit();
             }
             
             if (this.ZOMBIE) this.ZOMBIE.x = this.zombieX;
@@ -114,6 +115,13 @@ class MiniGame extends MiniGameBase {
         else if (this.zombieState === "ATTACKING") {
             if (this.ZOMBIE) {
                 this.ZOMBIE.x = 20; 
+
+                // FIX V9.2 : LES DÉGÂTS SONT INFLIGÉS AU MILIEU DE L'ANIMATION (FRAME 1 ou +)
+                if (!this.zombieDamagedPlayer && this.ZOMBIE.frameIdx >= 1) {
+                    if (this.callbacks.onPlayerHit) this.callbacks.onPlayerHit();
+                    this.zombieDamagedPlayer = true;
+                }
+
                 if (this.ZOMBIE.isAnimFinished) {
                     this.resetZombie();
                 }
@@ -154,17 +162,15 @@ class MiniGame extends MiniGameBase {
         // --- DESSIN PROJECTILES ---
         this.projectiles.forEach(p => { 
             if (this.isBossPhase) {
-                // 🔥 SUPER FLAMME POUR LE BOSS
                 ctx.save();
                 ctx.shadowBlur = 20;
-                ctx.shadowColor = "#f59e0b"; // Lueur orange
+                ctx.shadowColor = "#f59e0b"; 
                 ctx.font = "50px Arial";
                 ctx.textAlign = "center";
                 ctx.textBaseline = "middle";
                 ctx.fillText("🔥", (p.x/100)*this.canvas.width, (p.y/100)*this.canvas.height);
                 ctx.restore();
             } else {
-                // BALLE NORMALE
                 ctx.fillStyle = "#f97316"; 
                 ctx.beginPath(); 
                 ctx.arc((p.x/100)*this.canvas.width, (p.y/100)*this.canvas.height, 10, 0, Math.PI*2); 
@@ -220,7 +226,7 @@ export default function StudioDashboard({ user }) {
     const [selectedGlobalSoundIdx, setSelectedGlobalSoundIdx] = useState(0);
     const [leftTab, setLeftTab] = useState('actions');
     
-    // ⚠️ CODE FORCÉ V9.1
+    // ⚠️ CODE FORCÉ V9.2
     const [code, setCode] = useState(ZOMBIE_GAME_CODE);
     
     const [isPlaying, setIsPlaying] = useState(false);
