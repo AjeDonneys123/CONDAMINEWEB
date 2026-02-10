@@ -1,10 +1,10 @@
-// @signatures: GameEngine
+// @signatures: GameEngine, initLevel, handleAnswerLogic, handleInputSubmit, handleGameOver, retryLevel, nextLevel, preloadAssets, getYoutubeEmbedUrl, handleBarClick, handleForceWin, triggerPlayerHit
 import React, { useState, useRef, useEffect } from 'react';
 import SoundExpert from './SoundExpert';
 import { api } from '../../../../services/api';
 
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
-    // 1. REFS
+    // 1. DÉCLARATION DES REFS
     const canvasRef = useRef(null);
     const livesRef = useRef(4);
     const inputRef = useRef(null);
@@ -15,7 +15,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const frameIdRef = useRef(null);
     const gameInstanceRef = useRef(null);
     const isMutedRef = useRef(false);
-    const isPausedRef = useRef(false);
+    const isPausedRef = useRef(false); 
     
     const activeTimeoutsRef = useRef([]);
     const audioCtxRef = useRef(null);
@@ -117,7 +117,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
     const triggerPlayerHit = () => {
         const now = Date.now();
-        if (now - lastInteractionRef.current < 1000) return;
+        if (now - lastInteractionRef.current < 1500) return;
         lastInteractionRef.current = now;
 
         setHitFlash(true); setTimeout(() => setHitFlash(false), 200);
@@ -282,7 +282,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         };
     }, [project]);
 
-    // 8. GAME LOOP
+    // 8. GAME LOOP (CORRECTIF ICI DANS LA FACTORY)
     useEffect(() => {
         if (!engineStarted || !canvasRef.current) return;
 
@@ -312,23 +312,26 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                         
                         this.currentAction = data.actions?.[0]?.name || 'IDLE';
                         this.frameIdx = 0; 
-                        this.lastAnimTime = 0;
+                        
+                        // 🔥 INITIALISATION DU TIMER POUR NE PAS SAUTER LA FRAME 0
+                        this.lastAnimTime = Date.now(); 
+                        
                         this.isAnimFinished = false; 
                         this.loop = true;
                     }
 
-                    // 🔥 PLAY INTELLIGENT : Met à jour loop même si action identique
+                    // 🔥 PLAY AVEC RESET TIMER
                     play(name, loop = true) { 
                         if(this.currentAction.toUpperCase() !== name.toUpperCase()) { 
                             this.currentAction = name; 
                             this.frameIdx = 0;
                             this.loop = loop; 
                             this.isAnimFinished = false;
-                            this.lastAnimTime = Date.now(); // Reset timer pour éviter saut
+                            
+                            // RESET DU TIMER CRUCIAL ICI
+                            this.lastAnimTime = Date.now(); 
+                            
                             this.engine._triggerActionSounds(this.id, name);
-                        } else {
-                            // Même action, mais on met à jour la préférence de boucle
-                            this.loop = loop;
                         }
                     }
                 }
@@ -379,7 +382,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                                 if(!aData) continue;
                                 const act = (aData.actions || []).find(x => x.name.toUpperCase() === p.currentAction.toUpperCase()) || aData.actions?.[0];
                                 
-                                // 🔥 GESTION STRICTE DES FRAMES ET BOUCLES
                                 if(act && act.frames && act.frames.length > 0) {
                                     const now = Date.now();
                                     const speed = parseInt(act.speed) || 100;
@@ -388,15 +390,9 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                                     if (now - p.lastAnimTime > speed) { 
                                         if (!p.isAnimFinished) {
                                             p.frameIdx++;
-                                            
-                                            // FIN DE L'ANIMATION
                                             if (p.frameIdx >= totalFrames) {
-                                                if (p.loop) { 
-                                                    p.frameIdx = 0; // On boucle
-                                                } else { 
-                                                    p.frameIdx = totalFrames - 1; // On bloque sur la fin
-                                                    p.isAnimFinished = true; // Signal au script
-                                                }
+                                                if (p.loop) { p.frameIdx = 0; } 
+                                                else { p.frameIdx = totalFrames - 1; p.isAnimFinished = true; }
                                             }
                                             p.lastAnimTime = now; 
                                         }
