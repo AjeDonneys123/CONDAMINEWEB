@@ -1,11 +1,11 @@
-// @signatures: GameEngine, initLevel, handleAnswerClick, handleGameOver, retryLevel, nextLevel, preloadAssets
+// @signatures: GameEngine, initLevel, handleAnswerClick, handleGameOver, retryLevel, nextLevel, preloadAssets, getYoutubeEmbedUrl
 import React, { useState, useRef, useEffect } from 'react';
 import SoundExpert from './SoundExpert';
 import { api } from '../../../../services/api';
 
 /**
- * 🎮 MOTEUR STUDIO V1006 (PHASE APPRENTISSAGE)
- * Ajout de l'étape Fiche + Vidéo avant chaque niveau.
+ * 🎮 MOTEUR STUDIO V1007 (ZOOM FOCUS APPRENTISSAGE)
+ * Ajout du mode Focus pour la fiche et la vidéo.
  */
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
     const canvasRef = useRef(null);
@@ -24,8 +24,9 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const [lives, setLives] = useState(4);
     const [feedback, setFeedback] = useState(null);
 
-    // --- NOUVEAUX ÉTATS APPRENTISSAGE ---
+    // --- ÉTATS APPRENTISSAGE & MODALES ---
     const [isStudyPhase, setIsStudyPhase] = useState(false);
+    const [activeFocus, setActiveFocus] = useState(null); // 'SHEET' ou 'VIDEO' ou null
     const [showLevelTitle, setShowLevelTitle] = useState(false);
     const [isLevelWon, setIsLevelWon] = useState(false);
     const [isGameOver, setIsGameOver] = useState(false);
@@ -41,6 +42,16 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const frameIdRef = useRef(null);
     const keysPressed = useRef({}); 
     const activeSourcesRef = useRef([]);
+
+    // --- HELPER YOUTUBE ROBUSTE ---
+    const getYoutubeEmbedUrl = (url) => {
+        if (!url) return null;
+        let videoId = "";
+        if (url.includes("v=")) videoId = url.split("v=")[1]?.split("&")[0];
+        else if (url.includes("youtu.be/")) videoId = url.split("youtu.be/")[1]?.split("?")[0];
+        else if (url.includes("embed/")) videoId = url.split("embed/")[1]?.split("?")[0];
+        return videoId ? `https://www.youtube.com/embed/${videoId}?autoplay=1` : null;
+    };
 
     const logSonde = (msg, type = 'info') => {
         setDebugLogs(prev => [...prev, { id: Math.random(), text: msg, type }].slice(-6));
@@ -132,7 +143,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         };
     }, [project]);
 
-    // --- INITIALISATION NIVEAU AVEC PHASE ETUDE ---
     const initLevel = (idx, sourceData) => {
         if (!sourceData[idx]) return;
         stopAllSounds(); clearAllTimeouts(); 
@@ -142,8 +152,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         setQuestionStates(new Array((lvl.questions || []).length).fill(0));
         setCurrentQIndex(0);
         setIsLevelWon(false); setIsGameOver(false); setIsGameCompleted(false);
-        
-        // 1. On active la phase d'étude
         setIsStudyPhase(true);
         isPausedRef.current = true;
     };
@@ -163,7 +171,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
     const handleGameOver = () => {
         stopAllSounds(); setIsGameOver(true); isPausedRef.current = true;
-        logSonde("💀 GAME OVER", "error");
         safeTimeout(() => { playSystemSound("DÉFAITE"); }, 500);
     };
 
@@ -187,13 +194,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             if (newVal === 0) { isPausedRef.current = true; safeTimeout(handleGameOver, 1000); }
             return newVal;
         });
-    };
-
-    const handleBarClick = (idx) => {
-        if (keysPressed.current['KeyF']) {
-            const newStates = [...questionStates]; newStates[idx] = 3; setQuestionStates(newStates);
-            if(newStates.filter(s => s<3).length === 0) { setIsLevelWon(true); isPausedRef.current=true; safeTimeout(nextLevel, 1500); }
-        }
     };
 
     const handleAnswerClick = (choiceIdx) => {
@@ -329,14 +329,42 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 frameIdRef.current = requestAnimationFrame(tick);
             };
             tick();
-        } catch (e) { logSonde("CRASH: " + e.message, "error"); }
+        } catch (e) { console.error("Crash Game", e); }
     }, [engineStarted]);
 
-    // --- RENDU UI ---
     const currentLvlData = allLevels[currentLevelIdx];
+    const embedUrl = getYoutubeEmbedUrl(currentLvlData?.intro?.videoUrl);
 
     return (
         <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center overflow-hidden font-sans">
+             
+             {/* --- MODALE FOCUS (PLEIN ÉCRAN) --- */}
+             {activeFocus && (
+                 <div className="fixed inset-0 z-[100000] bg-slate-950/98 backdrop-blur-2xl flex flex-col items-center justify-center p-10 animate-in zoom-in duration-300">
+                    <button 
+                        onClick={() => setActiveFocus(null)}
+                        className="absolute top-10 right-10 w-16 h-16 bg-white rounded-full font-black text-2xl shadow-2xl hover:scale-110 transition-transform flex items-center justify-center"
+                    >
+                        ✕
+                    </button>
+                    
+                    <div className="w-full h-full flex flex-col items-center justify-center">
+                        {activeFocus === 'SHEET' ? (
+                            <img src={resolveUrl(currentLvlData.intro.sheetUrl)} className="max-w-full max-h-full object-contain shadow-2xl rounded-2xl border-4 border-white/10" />
+                        ) : (
+                            <iframe 
+                                className="w-full max-w-6xl aspect-video rounded-3xl shadow-2xl border-4 border-white/10" 
+                                src={embedUrl} 
+                                frameBorder="0" 
+                                allow="autoplay; encrypted-media" 
+                                allowFullScreen
+                            ></iframe>
+                        )}
+                        <h2 className="text-white font-black text-2xl uppercase mt-8 tracking-widest opacity-50">Appuyez sur la croix pour revenir à la préparation</h2>
+                    </div>
+                 </div>
+             )}
+
              {hitFlash && <div className="absolute inset-0 bg-red-500/30 z-[100] pointer-events-none animate-ping"></div>}
              <button onClick={onStop} className="absolute top-6 right-6 bg-red-600 text-white w-12 h-12 rounded-full font-black text-2xl shadow-xl border-4 border-white hover:scale-110 transition-all flex items-center justify-center pointer-events-auto z-50">✕</button>
 
@@ -347,7 +375,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
              ) : (
                 <>
                     <div className="absolute top-6 w-full flex justify-between items-start px-10 pointer-events-none z-30">
-                        <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-xl pointer-events-auto flex gap-1" onClick={() => { if (keysPressed.current['KeyF']) triggerPlayerHit(); }}>
+                        <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-xl pointer-events-auto flex gap-1">
                             {"❤️".repeat(lives)}{"🖤".repeat(Math.max(0, 4 - lives))}
                         </div>
                         <div className="flex-1 flex justify-center px-4">
@@ -359,7 +387,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                         </div>
                         <div className="flex gap-2 items-center pointer-events-auto mr-20">
                             {questionStates.map((mastery, idx) => (
-                                <div key={idx} onClick={() => handleBarClick(idx)} className={`w-4 h-12 rounded-md border border-slate-600 relative overflow-hidden cursor-pointer ${currentQIndex === idx ? 'ring-2 ring-indigo-400 scale-110' : 'opacity-60'}`}>
+                                <div key={idx} className={`w-4 h-12 rounded-md border border-slate-600 relative overflow-hidden ${currentQIndex === idx ? 'ring-2 ring-indigo-400 scale-110' : 'opacity-60'}`}>
                                     <div className={`absolute bottom-0 left-0 right-0 transition-all duration-500 ${mastery === 3 ? 'bg-green-500' : 'bg-yellow-500'}`} style={{ height: `${(mastery / 3) * 100}%` }} />
                                 </div>
                             ))}
@@ -369,23 +397,41 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     <div className="relative animate-in zoom-in">
                         <canvas ref={canvasRef} width={800} height={450} className="aspect-video shadow-2xl bg-black border-4 border-slate-800 rounded-xl" />
                         
-                        {/* --- MODALE APPRENTISSAGE --- */}
                         {isStudyPhase && currentLvlData && (
                             <div className="absolute inset-4 bg-slate-900/95 backdrop-blur-xl rounded-xl z-50 flex flex-col p-6 border-2 border-indigo-500 animate-in fade-in duration-300">
                                 <h2 className="text-3xl font-black text-indigo-400 uppercase text-center mb-4">Préparation : {currentLvlData.name}</h2>
                                 <div className="flex-1 flex gap-6 min-h-0 overflow-hidden">
-                                    {/* FICHE */}
-                                    <div className="flex-1 bg-white rounded-lg overflow-hidden border-4 border-slate-800 flex items-center justify-center">
+                                    
+                                    {/* CLIC SUR FICHE -> FOCUS */}
+                                    <div 
+                                        className="flex-1 bg-white rounded-lg overflow-hidden border-4 border-slate-800 flex items-center justify-center cursor-pointer hover:border-indigo-400 transition-colors group relative"
+                                        onClick={() => currentLvlData.intro?.sheetUrl && setActiveFocus('SHEET')}
+                                    >
                                         {currentLvlData.intro?.sheetUrl ? (
-                                            <img src={resolveUrl(currentLvlData.intro.sheetUrl)} className="max-w-full max-h-full object-contain" />
+                                            <>
+                                                <img src={resolveUrl(currentLvlData.intro.sheetUrl)} className="max-w-full max-h-full object-contain" />
+                                                <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                    <span className="text-white font-black text-lg uppercase tracking-tighter shadow-lg">🔍 CLIQUE POUR AGRANDIR</span>
+                                                </div>
+                                            </>
                                         ) : <div className="text-slate-300 font-bold uppercase">Aucune fiche niveau</div>}
                                     </div>
-                                    {/* VIDÉO */}
-                                    <div className="flex-1 bg-black rounded-lg overflow-hidden border-4 border-slate-800 flex items-center justify-center">
-                                        {currentLvlData.intro?.videoUrl ? (
-                                            <iframe className="w-full h-full" src={currentLvlData.intro.videoUrl.replace("watch?v=", "embed/")} frameBorder="0" allowFullScreen></iframe>
+
+                                    {/* CLIC SUR VIDÉO -> FOCUS */}
+                                    <div 
+                                        className="flex-1 bg-black rounded-lg overflow-hidden border-4 border-slate-800 flex items-center justify-center cursor-pointer hover:border-red-500 transition-colors group relative"
+                                        onClick={() => embedUrl && setActiveFocus('VIDEO')}
+                                    >
+                                        {embedUrl ? (
+                                            <>
+                                                <iframe className="w-full h-full pointer-events-none" src={embedUrl} frameBorder="0"></iframe>
+                                                <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                    <span className="text-white font-black text-lg uppercase tracking-tighter shadow-lg">🎬 CLIQUE POUR PLEIN ÉCRAN</span>
+                                                </div>
+                                            </>
                                         ) : <div className="text-slate-600 font-bold uppercase">Aucune vidéo niveau</div>}
                                     </div>
+
                                 </div>
                                 <button onClick={startLevelAfterStudy} className="mt-6 bg-indigo-600 text-white py-4 rounded-2xl font-black text-2xl hover:scale-105 transition-transform shadow-xl border-b-8 border-indigo-900 active:border-b-0 active:translate-y-2 uppercase">J'ai compris, on commence !</button>
                             </div>
