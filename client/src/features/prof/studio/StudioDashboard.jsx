@@ -21,8 +21,8 @@ function resolveUrl(url) {
     return `/api/proxy/${id}`;
 }
 
-// 🧟 ZOMBIE V9 : COLLISION VERROUILLÉE (ONE SHOT)
-const ZOMBIE_GAME_CODE = `// 🧟 ZOMBIE V9 (COLLISION FIX)
+// 🧟 ZOMBIE V9.1 : SUPER FLAME BOSS
+const ZOMBIE_GAME_CODE = `// 🧟 ZOMBIE V9.1 (SUPER FLAME)
 class MiniGame extends MiniGameBase {
     constructor(canvas, assets, callbacks) {
         super(canvas, assets, callbacks);
@@ -30,7 +30,7 @@ class MiniGame extends MiniGameBase {
         
         // --- ÉTATS INITIAUX ---
         this.zombieX = 100;
-        this.zombieState = "WALKING"; // WALKING | ATTACKING | HIT
+        this.zombieState = "WALKING"; 
         
         this.heroState = "IDLE";
         this.heroTimer = 0;
@@ -51,7 +51,7 @@ class MiniGame extends MiniGameBase {
 
     resetZombie() {
         this.zombieX = 100;
-        this.zombieState = "WALKING"; // On déverrouille le contact
+        this.zombieState = "WALKING"; 
         if(this.ZOMBIE) {
             this.ZOMBIE.x = 100;
             this.ZOMBIE.play("AVANCER", true);
@@ -72,7 +72,7 @@ class MiniGame extends MiniGameBase {
     update() {
         if (this.isStopped) return;
 
-        // 1. GESTION BOSS (Vitesse & Taille)
+        // 1. GESTION BOSS
         let currentSpeed = this.baseSpeed;
         if (this.isBossPhase) {
             currentSpeed = this.baseSpeed * 0.5;
@@ -81,7 +81,7 @@ class MiniGame extends MiniGameBase {
             if (this.ZOMBIE) this.ZOMBIE.scale = this.ZOMBIE.baseScale;
         }
 
-        // 2. GESTION HÉROS (Timer simple pour retour IDLE)
+        // 2. GESTION HÉROS
         if (this.heroState === "SHOOT" || this.heroState === "HIT") {
             this.heroTimer--;
             if (this.heroTimer <= 0) {
@@ -90,55 +90,42 @@ class MiniGame extends MiniGameBase {
             }
         }
 
-        // 3. GESTION ZOMBIE (MACHINE À ÉTATS STRICTE)
-        
-        // --- ÉTAT : MARCHE ---
+        // 3. GESTION ZOMBIE
         if (this.zombieState === "WALKING") {
             this.zombieX -= currentSpeed;
             
-            // DÉTECTION COLLISION (Le "Trigger")
+            // DÉTECTION COLLISION
             if (this.zombieX < 20) {
-                // 🛑 VERROUILLAGE IMMÉDIAT : On change d'état
                 this.zombieState = "ATTACKING"; 
-                
-                // ACTION : On lance l'attaque UNE SEULE FOIS ici
                 if (this.ZOMBIE) this.ZOMBIE.play("TAPER", false);
                 
-                // RÉACTION HÉROS
                 if (this.HEROS) { 
                     this.HEROS.play("TOUCHE", false); 
                     this.heroState = "HIT"; 
                     this.heroTimer = 60; 
                 }
                 
-                // DÉGÂT
                 if (this.callbacks.onPlayerHit) this.callbacks.onPlayerHit();
             }
             
-            // Mise à jour visuelle marche
             if (this.ZOMBIE) this.ZOMBIE.x = this.zombieX;
         } 
         
-        // --- ÉTAT : ATTAQUE (Bloqué sur place) ---
         else if (this.zombieState === "ATTACKING") {
             if (this.ZOMBIE) {
-                this.ZOMBIE.x = 20; // On force la position contact
-                
-                // On attend que l'animation "TAPER" soit finie pour reset
+                this.ZOMBIE.x = 20; 
                 if (this.ZOMBIE.isAnimFinished) {
                     this.resetZombie();
                 }
             } else {
-                this.resetZombie(); // Sécurité si pas de sprite
+                this.resetZombie(); 
             }
         } 
         
-        // --- ÉTAT : TOUCHÉ (Recul) ---
         else if (this.zombieState === "HIT") {
-            this.zombieX += 0.5; // Recul rapide
+            this.zombieX += 0.5; 
             if(this.ZOMBIE) this.ZOMBIE.x = this.zombieX;
             
-            // On attend la fin de l'anim "TOUCHE"
             if (this.ZOMBIE.isAnimFinished) {
                 this.resetZombie();
             }
@@ -149,11 +136,8 @@ class MiniGame extends MiniGameBase {
             let p = this.projectiles[i]; 
             p.x += 3;
             
-            // Collision Balle -> Zombie (Seulement si il marche !)
             if (this.zombieState === "WALKING" && p.x > this.zombieX - 5 && p.x < this.zombieX + 5) {
                 this.projectiles.splice(i, 1);
-                
-                // Passage en état HIT (Verrouille aussi)
                 this.zombieState = "HIT";
                 if (this.ZOMBIE) this.ZOMBIE.play("TOUCHE", false); 
             } 
@@ -167,13 +151,28 @@ class MiniGame extends MiniGameBase {
         if (this.isStopped) return;
         const ctx = this.ctx;
         
-        ctx.fillStyle = "#f97316"; 
+        // --- DESSIN PROJECTILES ---
         this.projectiles.forEach(p => { 
-            ctx.beginPath(); 
-            ctx.arc((p.x/100)*this.canvas.width, (p.y/100)*this.canvas.height, 10, 0, Math.PI*2); 
-            ctx.fill(); 
+            if (this.isBossPhase) {
+                // 🔥 SUPER FLAMME POUR LE BOSS
+                ctx.save();
+                ctx.shadowBlur = 20;
+                ctx.shadowColor = "#f59e0b"; // Lueur orange
+                ctx.font = "50px Arial";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText("🔥", (p.x/100)*this.canvas.width, (p.y/100)*this.canvas.height);
+                ctx.restore();
+            } else {
+                // BALLE NORMALE
+                ctx.fillStyle = "#f97316"; 
+                ctx.beginPath(); 
+                ctx.arc((p.x/100)*this.canvas.width, (p.y/100)*this.canvas.height, 10, 0, Math.PI*2); 
+                ctx.fill(); 
+            }
         });
 
+        // --- TEXTE BOSS ---
         if (this.isBossPhase) {
             ctx.save();
             ctx.font = "900 40px Arial";
@@ -221,7 +220,7 @@ export default function StudioDashboard({ user }) {
     const [selectedGlobalSoundIdx, setSelectedGlobalSoundIdx] = useState(0);
     const [leftTab, setLeftTab] = useState('actions');
     
-    // ⚠️ CODE FORCÉ V9
+    // ⚠️ CODE FORCÉ V9.1
     const [code, setCode] = useState(ZOMBIE_GAME_CODE);
     
     const [isPlaying, setIsPlaying] = useState(false);
