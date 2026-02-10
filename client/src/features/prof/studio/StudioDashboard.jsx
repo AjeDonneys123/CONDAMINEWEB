@@ -21,17 +21,18 @@ function resolveUrl(url) {
     return `/api/proxy/${id}`;
 }
 
-// 🧟 ZOMBIE V9.2 : FIX COLLISION VS ATTACK
-const ZOMBIE_GAME_CODE = `// 🧟 ZOMBIE V9.2 (FIX ATTACK DELAY)
+// 🧟 ZOMBIE V9.3 : CHAIN REACTION (Z-Attack -> H-Hit -> Life Loss)
+const ZOMBIE_GAME_CODE = `// 🧟 ZOMBIE V9.3 (FIX CHAIN REACTION)
 class MiniGame extends MiniGameBase {
     constructor(canvas, assets, callbacks) {
         super(canvas, assets, callbacks);
         this.projectiles = [];
         
-        // --- ÉTATS INITIAUX ---
+        // --- ÉTATS ---
         this.zombieX = 100;
         this.zombieState = "WALKING"; 
-        this.zombieDamagedPlayer = false; // Flag pour ne frapper qu'une fois
+        this.isColliding = false;      // Verrou de collision
+        this.hasDealtDamage = false;   // Verrou de dégâts par attaque
         
         this.heroState = "IDLE";
         this.heroTimer = 0;
@@ -53,7 +54,8 @@ class MiniGame extends MiniGameBase {
     resetZombie() {
         this.zombieX = 100;
         this.zombieState = "WALKING";
-        this.zombieDamagedPlayer = false; 
+        this.isColliding = false;
+        this.hasDealtDamage = false;
         if(this.ZOMBIE) {
             this.ZOMBIE.x = 100;
             this.ZOMBIE.play("AVANCER", true);
@@ -92,21 +94,16 @@ class MiniGame extends MiniGameBase {
             }
         }
 
-        // 3. GESTION ZOMBIE
+        // 3. GESTION ZOMBIE & COLLISIONS
         if (this.zombieState === "WALKING") {
             this.zombieX -= currentSpeed;
             
-            // DÉTECTION COLLISION (On lance l'anim mais pas encore les dégâts)
-            if (this.zombieX < 20) {
-                this.zombieState = "ATTACKING"; 
-                this.zombieDamagedPlayer = false;
+            // DÉTECTION COLLISION
+            if (this.zombieX < 20 && !this.isColliding) {
+                this.isColliding = true; 
+                this.zombieState = "ATTACKING";
+                this.hasDealtDamage = false;
                 if (this.ZOMBIE) this.ZOMBIE.play("TAPER", false);
-                
-                if (this.HEROS) { 
-                    this.HEROS.play("TOUCHE", false); 
-                    this.heroState = "HIT"; 
-                    this.heroTimer = 60; 
-                }
             }
             
             if (this.ZOMBIE) this.ZOMBIE.x = this.zombieX;
@@ -116,12 +113,24 @@ class MiniGame extends MiniGameBase {
             if (this.ZOMBIE) {
                 this.ZOMBIE.x = 20; 
 
-                // FIX V9.2 : LES DÉGÂTS SONT INFLIGÉS AU MILIEU DE L'ANIMATION (FRAME 1 ou +)
-                if (!this.zombieDamagedPlayer && this.ZOMBIE.frameIdx >= 1) {
-                    if (this.callbacks.onPlayerHit) this.callbacks.onPlayerHit();
-                    this.zombieDamagedPlayer = true;
+                // CHAÎNE DE RÉACTION V9.3
+                // Si le zombie commence à taper (Frame 1), le héros réagit
+                if (!this.hasDealtDamage && this.ZOMBIE.frameIdx >= 1) {
+                    this.hasDealtDamage = true;
+                    
+                    if (this.HEROS) {
+                        this.HEROS.play("TOUCHE", false);
+                        this.heroState = "HIT";
+                        this.heroTimer = 60;
+                    }
+
+                    // La perte de vie est déclenchée par la réaction du héros
+                    if (this.callbacks.onPlayerHit) {
+                        this.callbacks.onPlayerHit();
+                    }
                 }
 
+                // Une fois l'animation de tape finie, on reset le zombie
                 if (this.ZOMBIE.isAnimFinished) {
                     this.resetZombie();
                 }
@@ -159,7 +168,6 @@ class MiniGame extends MiniGameBase {
         if (this.isStopped) return;
         const ctx = this.ctx;
         
-        // --- DESSIN PROJECTILES ---
         this.projectiles.forEach(p => { 
             if (this.isBossPhase) {
                 ctx.save();
@@ -178,7 +186,6 @@ class MiniGame extends MiniGameBase {
             }
         });
 
-        // --- TEXTE BOSS ---
         if (this.isBossPhase) {
             ctx.save();
             ctx.font = "900 40px Arial";
@@ -226,7 +233,6 @@ export default function StudioDashboard({ user }) {
     const [selectedGlobalSoundIdx, setSelectedGlobalSoundIdx] = useState(0);
     const [leftTab, setLeftTab] = useState('actions');
     
-    // ⚠️ CODE FORCÉ V9.2
     const [code, setCode] = useState(ZOMBIE_GAME_CODE);
     
     const [isPlaying, setIsPlaying] = useState(false);

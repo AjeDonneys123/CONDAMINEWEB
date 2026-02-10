@@ -8654,3 +8654,8 @@
 - Problème : Le retrait de vie était déclenché par la simple collision avec la table du héros.
 - Solution : Déplacement de l'appel 'onPlayerHit' à l'intérieur de l'animation 'TAPER' du zombie.
 - Mécanisme : Ajout d'un flag 'zombieDamagedPlayer' réinitialisé à chaque approche, les dégâts sont infligés à la frame 1 de l'attaque.
+
+10/02/2026 - 18:30 : FIX COLLISION & RÉACTION EN CHAÎNE (V9.3).
+- Problème : Perte du verrou de collision et déclenchement direct des dégâts sans passer par l'animation héros.
+- Solution : Restauration de 'isColliding'.
+- Logique : La collision déclenche le 'TAPER' du zombie. Le 'TAPER' (Frame 1) déclenche le 'TOUCHE' du héros. C'est l'action du héros qui déclenche 'onPlayerHit'.
