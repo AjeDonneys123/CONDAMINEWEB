@@ -4,9 +4,7 @@ import SoundExpert from './SoundExpert';
 import { api } from '../../../../services/api';
 
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
-    // ========================================================================
-    // 1. RÉFÉRENCES (Déclarées en premier pour être accessibles partout)
-    // ========================================================================
+    // 1. REFS
     const canvasRef = useRef(null);
     const livesRef = useRef(4);
     const inputRef = useRef(null);
@@ -17,7 +15,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const frameIdRef = useRef(null);
     const gameInstanceRef = useRef(null);
     const isMutedRef = useRef(false);
-    const isPausedRef = useRef(false); // ✅ SÉCURISÉ ICI
+    const isPausedRef = useRef(false);
     
     const activeTimeoutsRef = useRef([]);
     const audioCtxRef = useRef(null);
@@ -26,9 +24,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const activeSourcesRef = useRef([]);
     const keysPressed = useRef({}); 
 
-    // ========================================================================
     // 2. ÉTATS
-    // ========================================================================
     const [isReady, setIsReady] = useState(false);
     const [engineStarted, setEngineStarted] = useState(false);
     const [loadProgress, setLoadProgress] = useState("0%");
@@ -49,9 +45,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const [isGameOver, setIsGameOver] = useState(false);
     const [isGameCompleted, setIsGameCompleted] = useState(false);
 
-    // ========================================================================
-    // 3. SYNCHRO
-    // ========================================================================
+    // 3. SYNCHRONISATION
     useEffect(() => { isMutedRef.current = isMuted; }, [isMuted]);
     useEffect(() => { livesRef.current = lives; }, [lives]);
     useEffect(() => { projectRef.current = project; }, [project]);
@@ -62,9 +56,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         if (gameInstanceRef.current) gameInstanceRef.current.isBossPhase = isBoss;
     }, [currentQIndex, questionStates]);
 
-    // ========================================================================
     // 4. UTILITAIRES
-    // ========================================================================
     const normalize = (str) => (str || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
     
     const safeTimeout = (fn, delay) => {
@@ -114,9 +106,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         });
     };
 
-    // ========================================================================
     // 5. LOGIQUE JEU
-    // ========================================================================
 
     const handleGameOver = () => {
         stopAllSounds();
@@ -208,9 +198,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         }, 1000);
     };
 
-    // ========================================================================
-    // 6. UI HANDLERS
-    // ========================================================================
+    // 6. HANDLERS UI
 
     const handleBarClick = (idx) => {
         if (keysPressed.current['KeyF'] || keysPressed.current['Keyf']) {
@@ -255,10 +243,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
     const retryLevel = () => { setLives(4); initLevel(currentLevelIdx, allLevels); };
 
-    // ========================================================================
     // 7. PRELOAD
-    // ========================================================================
-
     useEffect(() => {
         const load = async () => {
             if (!project) return;
@@ -297,9 +282,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         };
     }, [project]);
 
-    // ========================================================================
-    // 8. BOUCLE DE JEU (Game Loop)
-    // ========================================================================
+    // 8. GAME LOOP
     useEffect(() => {
         if (!engineStarted || !canvasRef.current) return;
 
@@ -333,14 +316,20 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                         this.isAnimFinished = false; 
                         this.loop = true;
                     }
+
+                    // 🔥 PLAY INTELLIGENT : Met à jour loop même si action identique
                     play(name, loop = true) { 
                         if(this.currentAction.toUpperCase() !== name.toUpperCase()) { 
                             this.currentAction = name; 
                             this.frameIdx = 0;
                             this.loop = loop; 
                             this.isAnimFinished = false;
+                            this.lastAnimTime = Date.now(); // Reset timer pour éviter saut
                             this.engine._triggerActionSounds(this.id, name);
-                        } 
+                        } else {
+                            // Même action, mais on met à jour la préférence de boucle
+                            this.loop = loop;
+                        }
                     }
                 }
 
@@ -390,6 +379,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                                 if(!aData) continue;
                                 const act = (aData.actions || []).find(x => x.name.toUpperCase() === p.currentAction.toUpperCase()) || aData.actions?.[0];
                                 
+                                // 🔥 GESTION STRICTE DES FRAMES ET BOUCLES
                                 if(act && act.frames && act.frames.length > 0) {
                                     const now = Date.now();
                                     const speed = parseInt(act.speed) || 100;
@@ -398,15 +388,21 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                                     if (now - p.lastAnimTime > speed) { 
                                         if (!p.isAnimFinished) {
                                             p.frameIdx++;
+                                            
+                                            // FIN DE L'ANIMATION
                                             if (p.frameIdx >= totalFrames) {
-                                                if (p.loop) { p.frameIdx = 0; } 
-                                                else { p.frameIdx = totalFrames - 1; p.isAnimFinished = true; }
+                                                if (p.loop) { 
+                                                    p.frameIdx = 0; // On boucle
+                                                } else { 
+                                                    p.frameIdx = totalFrames - 1; // On bloque sur la fin
+                                                    p.isAnimFinished = true; // Signal au script
+                                                }
                                             }
                                             p.lastAnimTime = now; 
                                         }
                                     }
                                     
-                                    const safeIdx = p.frameIdx % act.frames.length;
+                                    const safeIdx = Math.min(p.frameIdx, totalFrames - 1);
                                     const assetKey = resolveUrl(act.frames[safeIdx].url);
                                     
                                     const spr = imageAssets.get(assetKey);
@@ -450,9 +446,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 instance.currentLevel = currentLevelIdx + 1;
                 instance.isBossPhase = bossModeRef.current;
 
-                // ✅ ACCÈS SÉCURISÉ DANS LA BOUCLE
-                // On vérifie que isPausedRef existe (par sécurité) avant de lire .current
-                if (isPausedRef && isPausedRef.current === false) {
+                if (isPausedRef.current === false) {
                     if (instance.update) instance.update();
                 }
                 
