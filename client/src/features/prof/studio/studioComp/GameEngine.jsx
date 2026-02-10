@@ -4,33 +4,8 @@ import SoundExpert from './SoundExpert';
 import { api } from '../../../../services/api';
 
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
+    // --- 1. REFS (DÉCLARATION PRIORITAIRE) ---
     const canvasRef = useRef(null);
-    
-    // --- ETATS MOTEUR ---
-    const [isReady, setIsReady] = useState(false);
-    const [engineStarted, setEngineStarted] = useState(false);
-    const [loadProgress, setLoadProgress] = useState("0%");
-    const [hitFlash, setHitFlash] = useState(false);
-    
-    // --- DONNEES JEU ---
-    const [allLevels, setAllLevels] = useState([]); 
-    const [currentLevelIdx, setCurrentLevelIdx] = useState(0);
-    const [levelQuestions, setLevelQuestions] = useState([]); 
-    const [questionStates, setQuestionStates] = useState([]); 
-    const [currentQIndex, setCurrentQIndex] = useState(-1);
-    const [lives, setLives] = useState(4);
-    const [feedback, setFeedback] = useState(null);
-    const [inputValue, setInputValue] = useState("");
-    
-    // --- MODES DE JEU ---
-    const [isStudyPhase, setIsStudyPhase] = useState(false);
-    const [activeFocus, setActiveFocus] = useState(null); 
-    const [showLevelTitle, setShowLevelTitle] = useState(false);
-    const [isLevelWon, setIsLevelWon] = useState(false);
-    const [isGameOver, setIsGameOver] = useState(false);
-    const [isGameCompleted, setIsGameCompleted] = useState(false);
-    
-    // --- REFS TECHNIQUES (CRITIQUES) ---
     const livesRef = useRef(4);
     const inputRef = useRef(null);
     const bossModeRef = useRef(false);
@@ -39,57 +14,64 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const projectRef = useRef(project);
     const frameIdRef = useRef(null);
     const gameInstanceRef = useRef(null);
-
-    // --- AUDIO ---
-    const [isMuted, setIsMuted] = useState(false);
     const isMutedRef = useRef(false);
+    const isPausedRef = useRef(false); // ✅ GARANTI DÉFINI ICI
+    const activeTimeoutsRef = useRef([]);
     const audioCtxRef = useRef(null);
     const audioBuffersRef = useRef(new Map());
     const imageAssetsRef = useRef(new Map());
     const activeSourcesRef = useRef([]);
-
-    // --- INPUTS ---
     const keysPressed = useRef({}); 
 
+    // --- 2. ÉTATS ---
+    const [isReady, setIsReady] = useState(false);
+    const [engineStarted, setEngineStarted] = useState(false);
+    const [loadProgress, setLoadProgress] = useState("0%");
+    const [hitFlash, setHitFlash] = useState(false);
+    const [allLevels, setAllLevels] = useState([]); 
+    const [currentLevelIdx, setCurrentLevelIdx] = useState(0);
+    const [levelQuestions, setLevelQuestions] = useState([]); 
+    const [questionStates, setQuestionStates] = useState([]); 
+    const [currentQIndex, setCurrentQIndex] = useState(-1);
+    const [lives, setLives] = useState(4);
+    const [feedback, setFeedback] = useState(null);
+    const [inputValue, setInputValue] = useState("");
+    const [isMuted, setIsMuted] = useState(false);
+    const [isStudyPhase, setIsStudyPhase] = useState(false);
+    const [activeFocus, setActiveFocus] = useState(null); 
+    const [showLevelTitle, setShowLevelTitle] = useState(false);
+    const [isLevelWon, setIsLevelWon] = useState(false);
+    const [isGameOver, setIsGameOver] = useState(false);
+    const [isGameCompleted, setIsGameCompleted] = useState(false);
+
+    // --- 3. SYNCHRONISATION REFS ---
     useEffect(() => { isMutedRef.current = isMuted; }, [isMuted]);
     useEffect(() => { livesRef.current = lives; }, [lives]);
     useEffect(() => { projectRef.current = project; }, [project]);
 
-    // SYNC BOSS MODE
     useEffect(() => {
         const isBoss = (currentQIndex !== -1 && questionStates[currentQIndex] >= 2);
         bossModeRef.current = isBoss;
         if (gameInstanceRef.current) gameInstanceRef.current.isBossPhase = isBoss;
     }, [currentQIndex, questionStates]);
 
+    // --- 4. UTILITAIRES ---
     const normalize = (str) => (str || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
-    const safeTimeout = (fn, d) => setTimeout(fn, d);
+    
+    const safeTimeout = (fn, delay) => {
+        const id = setTimeout(fn, delay);
+        activeTimeoutsRef.current.push(id);
+        return id;
+    };
+
+    const clearAllTimeouts = () => {
+        activeTimeoutsRef.current.forEach(clearTimeout);
+        activeTimeoutsRef.current = [];
+    };
 
     const stopAllSounds = () => {
         activeSourcesRef.current.forEach(src => { try { src.stop(); } catch(e){} });
         activeSourcesRef.current.length = 0; 
-    };
-
-    const playSystemSound = (soundName) => {
-        if (isMutedRef.current || !project || !audioCtxRef.current) return;
-        const scene = project.scenes[activeSceneIdx];
-        const soundEvent = scene?.globalSounds?.find(gs => gs.name.toUpperCase().trim() === soundName.toUpperCase().trim());
-        if (!soundEvent || !soundEvent.sounds) return;
-        
-        if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
-        
-        soundEvent.sounds.forEach(snd => {
-            const buffer = audioBuffersRef.current.get(snd.url);
-            if (buffer) {
-                try {
-                    const s = audioCtxRef.current.createBufferSource();
-                    s.buffer = buffer;
-                    s.connect(audioCtxRef.current.destination);
-                    s.start(0);
-                    activeSourcesRef.current.push(s);
-                } catch (e) {}
-            }
-        });
     };
 
     const getYoutubeEmbedUrl = (url) => {
@@ -101,27 +83,66 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         return v ? `https://www.youtube.com/embed/${v}?autoplay=1` : null;
     };
 
-    // --- LOGIQUE JEU ---
+    const playSystemSound = (soundName) => {
+        if (isMutedRef.current || !project || !audioCtxRef.current) return;
+        const scene = project.scenes[activeSceneIdx];
+        const soundEvent = scene?.globalSounds?.find(gs => gs.name.toUpperCase().trim() === soundName.toUpperCase().trim());
+        if (!soundEvent || !soundEvent.sounds) return;
+        
+        if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
+        soundEvent.sounds.forEach(snd => {
+            const buffer = audioBuffersRef.current.get(snd.url);
+            if (buffer) {
+                try {
+                    const source = audioCtxRef.current.createBufferSource();
+                    source.buffer = buffer;
+                    source.connect(audioCtxRef.current.destination);
+                    source.start(0);
+                    activeSourcesRef.current.push(source);
+                } catch (e) {}
+            }
+        });
+    };
+
+    // --- 5. LOGIQUE JEU (DÉFINIE AVANT UTILISATION) ---
 
     const handleGameOver = () => {
         stopAllSounds();
         setIsGameOver(true);
+        isPausedRef.current = true; // ✅ ACCÈS SÉCURISÉ
         playSystemSound("DÉFAITE");
     };
 
     const triggerPlayerHit = () => {
         const now = Date.now();
-        // Anti-spam 1s
-        if (now - lastInteractionRef.current < 1000) return;
+        if (now - lastInteractionRef.current < 1500) return;
         lastInteractionRef.current = now;
 
         setHitFlash(true); setTimeout(() => setHitFlash(false), 200);
         
         setLives(prev => {
             const newVal = Math.max(0, prev - 1);
-            if (newVal === 0) handleGameOver();
+            if (newVal === 0) {
+                isPausedRef.current = true; // ✅ ACCÈS SÉCURISÉ
+                handleGameOver();
+            }
             return newVal;
         });
+    };
+
+    const initLevel = (idx, data) => {
+        if (!data[idx]) return;
+        stopAllSounds(); 
+        clearAllTimeouts();
+        setCurrentLevelIdx(idx);
+        setLevelQuestions(data[idx].questions || []);
+        setQuestionStates(new Array((data[idx].questions || []).length).fill(0));
+        setCurrentQIndex(0);
+        setIsLevelWon(false); 
+        setIsGameOver(false); 
+        setIsGameCompleted(false);
+        setIsStudyPhase(true); 
+        isPausedRef.current = true; // ✅ ACCÈS SÉCURISÉ
     };
 
     const handleAnswerLogic = (isCorrect) => {
@@ -132,24 +153,20 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         
         if (isCorrect) {
             newStates[currentQIndex] = Math.min(3, newStates[currentQIndex] + 1);
-            if (gameInstanceRef.current && gameInstanceRef.current.onResult) {
-                gameInstanceRef.current.onResult(true);
-            }
+            if (gameInstanceRef.current?.onResult) gameInstanceRef.current.onResult(true);
         } else {
             if (newStates[currentQIndex] > 0) newStates[currentQIndex] -= 1;
-            
-            if (gameInstanceRef.current && gameInstanceRef.current.onResult) {
-                gameInstanceRef.current.onResult(false);
-            }
-            
+            if (gameInstanceRef.current?.onResult) gameInstanceRef.current.onResult(false);
             triggerPlayerHit();
         }
         
         setQuestionStates(newStates);
         setInputValue("");
 
-        setTimeout(() => {
+        safeTimeout(() => {
             setFeedback(null);
+            
+            // Vérification de sécurité
             if (livesRef.current > 0 && !isGameOver) {
                 const available = newStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
                 
@@ -162,29 +179,39 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     }
                 } else {
                     setIsLevelWon(true);
+                    isPausedRef.current = true; // ✅ ACCÈS SÉCURISÉ
                     playSystemSound("UPLEVEL");
-                    setTimeout(() => {
+                    safeTimeout(() => {
                         setLives(4);
                         if (allLevels[currentLevelIdx + 1]) initLevel(currentLevelIdx + 1, allLevels);
                         else setIsGameCompleted(true);
                     }, 4000);
                 }
+            } else if (livesRef.current <= 0 && !isGameOver) {
+                handleGameOver();
             }
         }, 1000);
     };
 
-    // --- HANDLERS UI ---
-    
+    // --- 6. HANDLERS UI ---
+
     const handleBarClick = (idx) => {
-        if (keysPressed.current['KeyF']) {
+        if (keysPressed.current['KeyF'] || keysPressed.current['Keyf']) {
             const ns = [...questionStates]; ns[idx] = Math.min(3, ns[idx] + 1); setQuestionStates(ns);
             if (idx === currentQIndex && ns[idx] >= 2) setTimeout(() => inputRef.current?.focus(), 50);
         }
     };
+
     const handleForceWin = () => {
-        if (keysPressed.current['KeyF']) {
-            setIsLevelWon(true); playSystemSound("UPLEVEL");
-            setTimeout(() => { setLives(4); if (allLevels[currentLevelIdx + 1]) initLevel(currentLevelIdx + 1, allLevels); else setIsGameCompleted(true); }, 1000);
+        if (keysPressed.current['KeyF'] || keysPressed.current['Keyf']) {
+            setIsLevelWon(true); 
+            isPausedRef.current = true; // ✅ ACCÈS SÉCURISÉ
+            playSystemSound("UPLEVEL");
+            safeTimeout(() => {
+                setLives(4);
+                if (allLevels[currentLevelIdx + 1]) initLevel(currentLevelIdx + 1, allLevels);
+                else setIsGameCompleted(true);
+            }, 1000);
         }
     };
 
@@ -203,17 +230,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         }
     };
 
-    const initLevel = (idx, data) => {
-        if (!data[idx]) return;
-        stopAllSounds();
-        setCurrentLevelIdx(idx);
-        setLevelQuestions(data[idx].questions || []);
-        setQuestionStates(new Array((data[idx].questions || []).length).fill(0));
-        setCurrentQIndex(0);
-        setIsLevelWon(false); setIsGameOver(false); setIsGameCompleted(false);
-        setIsStudyPhase(true);
-    };
-
     const handleStartGame = async () => {
         if (audioCtxRef.current) { try { await audioCtxRef.current.resume(); } catch (e) {} }
         setEngineStarted(true);
@@ -222,7 +238,8 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
     const retryLevel = () => { setLives(4); initLevel(currentLevelIdx, allLevels); };
 
-    // --- PRELOAD ---
+    // --- 7. EFFETS DE CHARGEMENT ---
+
     useEffect(() => {
         const load = async () => {
             if (!project) return;
@@ -261,7 +278,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         };
     }, [project]);
 
-    // --- GAME LOOP ---
+    // --- 8. BOUCLE DE JEU ---
     useEffect(() => {
         if (!engineStarted || !canvasRef.current) return;
 
@@ -272,7 +289,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             const canvas = canvasRef.current;
             const ctx = canvas.getContext('2d');
 
-            const callbacksRef = {
+            const callbacks = {
                 onPlayerHit: () => triggerPlayerHit(),
                 onResult: (res) => {} 
             };
@@ -295,31 +312,14 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                         this.isAnimFinished = false; 
                         this.loop = true;
                     }
-
-                    // --- 🔥 PLAY INTELLIGENT (LE CORRECTIF EST ICI) ---
                     play(name, loop = true) { 
-                        const upperName = name.toUpperCase();
-                        
-                        // Si c'est une nouvelle action, on lance
-                        if (this.currentAction.toUpperCase() !== upperName) { 
+                        if(this.currentAction.toUpperCase() !== name.toUpperCase()) { 
                             this.currentAction = name; 
                             this.frameIdx = 0;
                             this.loop = loop; 
                             this.isAnimFinished = false;
                             this.engine._triggerActionSounds(this.id, name);
-                            return;
-                        }
-
-                        // Si c'est la MEME action
-                        // Si elle est finie ET qu'on ne boucle pas (ex: coup de hache), on peut la relancer si play() est rappelé explicitement
-                        // Mais ici on est dans une boucle 60fps... 
-                        // Donc on ne reset QUE si l'utilisateur a implémenté un système de "trigger" dans son code, 
-                        // OU si on change de "state". 
-                        // Dans le code Zombie V8, on utilise des états (WALKING, ATTACKING). 
-                        // Donc si on reste dans ATTACKING et qu'on appelle play("TAPER"), on ne veut PAS resetter.
-                        
-                        // Conclusion : On ne fait RIEN si l'action est déjà la bonne. 
-                        // C'est le changement d'état dans update() qui provoquera un nouveau play()
+                        } 
                     }
                 }
 
@@ -385,7 +385,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                                         }
                                     }
                                     
-                                    const safeIdx = p.frameIdx % totalFrames;
+                                    const safeIdx = p.frameIdx % act.frames.length;
                                     const assetKey = resolveUrl(act.frames[safeIdx].url);
                                     
                                     const spr = imageAssets.get(assetKey);
@@ -417,7 +417,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             const UserCodeFactory = new Function('MiniGameBase', `${code}\nreturn MiniGame;`);
             const UserGameClass = UserCodeFactory(MiniGameBase);
             
-            const instance = new UserGameClass(canvas, {}, callbacksRef);
+            const instance = new UserGameClass(canvas, {}, callbacks);
             gameInstanceRef.current = instance;
             
             if (instance.start) instance.start();
@@ -429,6 +429,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 instance.currentLevel = currentLevelIdx + 1;
                 instance.isBossPhase = bossModeRef.current;
 
+                // ✅ ACCÈS SÉCURISÉ DANS LA BOUCLE
                 if (!isPausedRef.current && instance.update) instance.update();
                 if (instance._render) instance._render();
                 if (instance.draw) instance.draw();
