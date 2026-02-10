@@ -8641,3 +8641,5 @@
 09/02/2026 18:42 - STUDIO UPDATE : Modification de la modale de chargement (SaveLoadModal.jsx). Ajout du bouton de suppression (X) sur tous les projets de la liste, excepté sur le premier fichier (index 0). Intégration de la fonction handleDeleteProject connectée à l'API de suppression.
 
 2026-02-09: Correction du son de Game Over dans le Studio. Le signal système "DEFAITE" a été renommé en "DÉFAITE" dans handleGameOver pour correspondre à l'orthographe du projet et permettre au moteur de retrouver le buffer audio dans la scène. La logique de lecture a été strictement alignée sur celle de la victoire (nettoyage préalable puis safeTimeout de 500ms).
+
+2026-02-09: Refonte majeure de l'interaction Quiz dans le Studio. Remplacement de la modale de debug par un "Learning Manager" complet. Le bouton QUIZ permet désormais d'importer une fiche (image) et de coller un lien YouTube pour chaque niveau du jeu test. Le moteur de rendu GameEngine a été mis à jour pour inclure une "Phase d'Étude" obligatoire avant chaque niveau, affichant ces ressources à l'enfant avant de lancer le gameplay.
