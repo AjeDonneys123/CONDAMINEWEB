@@ -8647,3 +8647,5 @@
 2026-02-09: Amélioration du GameEngine (V1007). Ajout d'un système de "Focus" (Zoom) sur la Phase d'Étude. L'enfant peut maintenant cliquer sur la fiche ou sur la vidéo pour les afficher en plein écran avant de lancer le niveau. Correction de l'erreur d'iframe YouTube par l'ajout d'un parseur d'URL qui convertit automatiquement les liens standards en liens d'intégration (/embed/).
 
 2026-02-09: Ajout du contrôle audio dans le GameEngine (V1008). Un bouton 🔊/🔇 a été intégré au HUD supérieur. Ce contrôle utilise une référence synchronisée pour couper instantanément les sons système (victoire, départ...) ainsi que les sons déclenchés par les animations des acteurs à l'intérieur du moteur dynamique.
+
+2026-02-09: Ajout du contrôle audio dans le GameEngine (V1008). Un bouton 🔊/🔇 a été intégré au HUD supérieur. Ce contrôle utilise une référence synchronisée pour couper instantanément les sons système (victoire, départ...) ainsi que les sons déclenchés par les animations des acteurs à l'intérieur du moteur dynamique.
