@@ -380,7 +380,7 @@ console.log("🛡️ ARCHITECTE V9.8 - DÉBRIDÉ & COMMIT AUTO ACTIF");
 {
   "status": "OK",
   "message": "Infrastructure mise à jour",
-  "timestamp": 1770734403486
+  "timestamp": 1770764979084
 }
 [[[£ END: apply_status.json £]]]
 
@@ -2654,7 +2654,8 @@ export function initZombieGame(root, api, onExit) {
     
     // Mouvement
     let zombiePos = 0; 
-    let zombieSpeed = 0.035; 
+    let baseSpeed = 0.035; // Vitesse de base
+    let zombieSpeed = baseSpeed; 
     let frameId;
     let isPaused = false; 
 
@@ -2680,7 +2681,11 @@ export function initZombieGame(root, api, onExit) {
             </div>
             <div class="z-interaction-zone">
                 <div id="question-text" class="z-q-text">Chargement...</div>
+                
+                <!-- MODE CLASSIQUE : BOUTONS -->
                 <div id="choices-area" class="z-choices-grid"></div>
+                
+                <!-- MODE BOSS : INPUT TEXTE -->
                 <div id="input-area" class="z-input-box" style="display:none">
                     <input type="text" id="answer-input" placeholder="TAPEZ LA RÉPONSE..." autocomplete="off" />
                     <button id="validate-btn">TIRER</button>
@@ -2709,9 +2714,10 @@ export function initZombieGame(root, api, onExit) {
         els.zombie.style.right = zombiePos + '%';
     };
 
-    // QUITTER SANS SAUVEGARDER (Bouton Quitter)
+    // QUITTER SANS SAUVEGARDER
     root.querySelector('.z-quit-btn').onclick = onExit;
     
+    // GESTION INPUT BOSS
     els.validateBtn.onclick = () => handleInputAnswer();
     els.input.onkeydown = (e) => { if(e.key === 'Enter') handleInputAnswer(); };
 
@@ -2732,13 +2738,20 @@ export function initZombieGame(root, api, onExit) {
     };
 
     const getNextQuestion = () => {
+        // Si la question en cours n'est pas finie (3 points), on reste dessus (ou on la remet dans le pool)
         if (currentQIndex !== -1 && questionStates[currentQIndex] < 3) return currentQIndex;
+        
+        // Sinon on cherche une autre question non finie
         const available = questionStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
         if (available.length === 0) return null;
         return available[Math.floor(Math.random() * available.length)];
     };
 
-    const normalize = (str) => (str || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
+    // Nettoyage pour tolérance maximale (Accents, Casse, Espaces, Ponctuation)
+    const normalize = (str) => (str || "")
+        .toLowerCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // Enlève accents
+        .replace(/[^a-z0-9]/g, ""); // Enlève tout sauf chiffres et lettres
 
     const loadRound = () => {
         const nextIdx = getNextQuestion();
@@ -2746,9 +2759,7 @@ export function initZombieGame(root, api, onExit) {
         // --- VICTOIRE ---
         if (nextIdx === null) {
             alert("VICTOIRE !");
-            // CALCUL DU SCORE (Basique : Vies restantes * 100)
             const finalScore = lives * 100;
-            // APPEL API POUR SAUVEGARDER
             if (api.onFinish) api.onFinish(finalScore, true);
             else onExit();
             return;
@@ -2761,22 +2772,43 @@ export function initZombieGame(root, api, onExit) {
         els.qText.innerText = qData.q || "Question vide";
         renderBars();
 
+        // --- LOGIQUE BOSS (Palier 3/3 soit score >= 2) ---
         if (score >= 2) {
+            // MODE INPUT
             els.choices.style.display = 'none';
             els.inputArea.style.display = 'flex';
             els.input.value = '';
             setTimeout(() => els.input.focus(), 50);
+            
+            // TRANSFORMATION VISUELLE BOSS
             els.zombieEmoji.innerText = "👹"; 
+            els.zombieEmoji.style.fontSize = "7.5rem"; // +50% taille
             els.zombieImg.style.filter = "drop-shadow(0 0 15px red) hue-rotate(-50deg)";
+            els.zombieImg.style.transform = "scale(1.5)"; // +50% taille image
+            
+            // RALENTISSEMENT
+            zombieSpeed = baseSpeed * 0.5; // 50% moins vite
         } else {
+            // MODE NORMAL
             els.inputArea.style.display = 'none';
             els.choices.style.display = 'grid';
+            
+            // RESET VISUEL
             els.zombieEmoji.innerText = "🧟";
+            els.zombieEmoji.style.fontSize = "5rem";
             els.zombieImg.style.filter = "none";
+            els.zombieImg.style.transform = "scale(1)";
+            
+            // VITESSE NORMALE
+            zombieSpeed = baseSpeed;
+
+            // GÉNÉRATION BOUTONS
             els.choices.innerHTML = '';
             const rawOpts = qData.options || ["A", "B", "C", "D"];
             const opts = rawOpts.map((txt, idx) => ({ txt, idx }));
+            // Mélange des boutons
             opts.sort(() => Math.random() - 0.5);
+            
             opts.forEach(o => {
                 const btn = document.createElement('button');
                 btn.className = 'z-btn';
@@ -2795,8 +2827,11 @@ export function initZombieGame(root, api, onExit) {
         if (isPaused) return;
         const qData = questionsList[currentQIndex];
         const correctTxt = qData.options[qData.a]; 
-        if (normalize(els.input.value) === normalize(correctTxt)) fireProjectile(true);
-        else {
+        
+        // Comparaison tolérante
+        if (normalize(els.input.value) === normalize(correctTxt)) {
+            fireProjectile(true);
+        } else {
             showFeedback(`Réponse : ${correctTxt}`, false);
             failAction();
         }
@@ -2804,7 +2839,7 @@ export function initZombieGame(root, api, onExit) {
 
     const failAction = () => {
         showFeedback("RATÉ !", false);
-        zombiePos += 15; 
+        zombiePos += 15; // Le zombie avance d'un coup
         updatePositions();
     };
 
@@ -2851,27 +2886,31 @@ export function initZombieGame(root, api, onExit) {
             zombiePos += zombieSpeed;
             updatePositions();
 
+            // COLLISION DU ZOMBIE
             if (zombiePos >= 85) {
                 lives--;
                 els.lives.innerText = "❤️".repeat(lives);
+                
+                // Si on se fait toucher, on perd un point sur la question en cours
                 if (questionStates[currentQIndex] > 0) {
                     questionStates[currentQIndex]--;
                     showFeedback("RECULE !", false);
                 }
+                
                 zombiePos = 0; 
                 updatePositions();
+                
+                // Effet écran rouge
                 document.querySelector('.z-game-wrapper').style.background = '#fee2e2';
                 setTimeout(() => document.querySelector('.z-game-wrapper').style.background = '#f0f9ff', 200);
 
                 // --- DÉFAITE ---
                 if (lives <= 0) {
                     alert("GAME OVER !");
-                    // SAUVEGARDE MÊME EN CAS DE DÉFAITE (Score partiel)
-                    // On considère que le jeu est "FAIT" même si perdu, pour enlever le badge rouge
-                    // Ou alors false pour levelReached pour dire "Non validé"
                     if (api.onFinish) api.onFinish(0, true); 
                     else onExit();
                 } else {
+                    // On recharge le round (pour éventuellement enlever le mode Boss si on a perdu le point)
                     loadRound();
                 }
             }
@@ -2926,12 +2965,12 @@ export function initZombieGame(root, api, onExit) {
 }
 .z-bar-seg.filled { background: #22c55e; }
 
-/* ARÈNE (Prend le reste de l'espace, minimum 50%) */
+/* ARÈNE */
 #arena {
     flex: 1; position: relative;
     background: linear-gradient(to bottom, #bae6fd 0%, #e0f2fe 80%, #64748b 80%, #475569 100%);
     overflow: hidden;
-    min-height: 200px; /* Sécurité */
+    min-height: 200px;
 }
 
 /* PERSONNAGES (Box Conteneur) */
@@ -2939,16 +2978,18 @@ export function initZombieGame(root, api, onExit) {
     position: absolute; bottom: 15%;
     width: 120px; height: 120px;
     display: flex; align-items: center; justify-content: center;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); /* Animation fluide taille */
 }
 /* Emoji en fond */
 .z-emoji {
     font-size: 5rem; position: absolute; z-index: 1;
+    transition: font-size 0.3s; /* Transition taille emoji */
 }
-/* Image par dessus (opacité 0 au début) */
+/* Image par dessus */
 .z-img-layer {
     width: 100%; height: 100%; object-fit: contain;
     filter: drop-shadow(0 10px 5px rgba(0,0,0,0.3));
-    z-index: 2; opacity: 0; transition: opacity 0.2s;
+    z-index: 2; opacity: 0; transition: all 0.3s;
 }
 
 #projectile {
@@ -2970,10 +3011,10 @@ export function initZombieGame(root, api, onExit) {
     width: 100%;
 }
 
-/* ZONE QUIZ (Hauteur Fixe Importante pour visibilité) */
+/* ZONE QUIZ */
 .z-interaction-zone {
-    height: 40%; /* 40% de l'écran quoi qu'il arrive */
-    flex-shrink: 0; /* Ne rétrécit pas */
+    height: 40%; 
+    flex-shrink: 0;
     background: white;
     border-top: 6px solid #cbd5e1;
     display: flex; flex-direction: column;
@@ -2996,7 +3037,7 @@ export function initZombieGame(root, api, onExit) {
 }
 .z-btn {
     background: white; border: 2px solid #94a3b8; border-radius: 12px;
-    font-size: 1.1rem; font-weight: bold; color: #0f172a !important; /* NOIR FORCÉ */
+    font-size: 1.1rem; font-weight: bold; color: #0f172a !important;
     cursor: pointer; box-shadow: 0 4px 0 #cbd5e1;
     transition: transform 0.1s;
     padding: 5px;
@@ -3005,21 +3046,30 @@ export function initZombieGame(root, api, onExit) {
 .z-btn:active { transform: translateY(4px); box-shadow: none; }
 .z-btn:hover { border-color: #3b82f6; background: #eff6ff; }
 
-/* INPUT BOSS */
+/* INPUT BOSS (NOUVEAU) */
 .z-input-box {
     display: flex; gap: 10px; width: 100%; height: 100%; align-items: center; justify-content: center;
+    background: #fef2f2; border-radius: 15px; border: 2px dashed #ef4444; padding: 10px;
+    animation: pulse-border 2s infinite;
 }
 #answer-input {
-    flex: 1; padding: 15px; font-size: 1.3rem; text-align: center;
+    flex: 1; padding: 15px; font-size: 1.5rem; text-align: center;
     border: 4px solid #ef4444; border-radius: 12px;
-    font-weight: bold; text-transform: uppercase; color: #b91c1c;
+    font-weight: 900; text-transform: uppercase; color: #b91c1c;
+    outline: none; box-shadow: 0 4px 10px rgba(239, 68, 68, 0.1);
 }
+#answer-input:focus { background: #fff; border-color: #b91c1c; }
+
 #validate-btn {
-    padding: 0 30px; height: 60px;
+    padding: 0 30px; height: 100%;
     background: #ef4444; color: white;
     border: none; border-radius: 12px; font-weight: 900; font-size: 1.2rem;
     cursor: pointer; box-shadow: 0 4px 0 #991b1b;
+    text-transform: uppercase;
 }
+#validate-btn:active { transform: translateY(2px); box-shadow: none; }
+
+@keyframes pulse-border { 0% { border-color: #ef4444; } 50% { border-color: #fca5a5; } 100% { border-color: #ef4444; } }
 
 [[[£ END: client/src/features/eleve/games/zombie/zombie_style.css £]]]
 
@@ -7512,48 +7562,40 @@ function resolveUrl(url) {
     return `/api/proxy/${id}`;
 }
 
-// 🧟 ZOMBIE V6 : NETTOYAGE UI & SON
-// Suppression de la bannière niveau interne et du son départ (gérés par le moteur)
-
-const ZOMBIE_GAME_CODE = `// 🧟 ZOMBIE V6
-// Logique stricte : MARCHE -> COGNE -> RESET
-
+// 🧟 ZOMBIE V9.1 : SUPER FLAME BOSS
+const ZOMBIE_GAME_CODE = `// 🧟 ZOMBIE V9.1 (SUPER FLAME)
 class MiniGame extends MiniGameBase {
     constructor(canvas, assets, callbacks) {
         super(canvas, assets, callbacks);
         this.projectiles = [];
         
-        // États du Zombie
+        // --- ÉTATS INITIAUX ---
         this.zombieX = 100;
-        this.zombieState = "WALKING"; // WALKING, ATTACKING, HIT
-        this.zombieTimer = 0;
+        this.zombieState = "WALKING"; 
         
-        // États du Héros
         this.heroState = "IDLE";
         this.heroTimer = 0;
         
         this.isStopped = false;
+        this.baseSpeed = 0.15;
     }
 
     start() { 
-        console.log("🚀 START V6");
         this.isStopped = false;
-        
         if(this.HEROS) { 
             this.HEROS.x = 15; 
             this.HEROS.y = 70; 
-            this.HEROS.play("IDLE");
+            this.HEROS.play("IDLE", true); 
         } 
-        
         this.resetZombie();
     }
 
     resetZombie() {
         this.zombieX = 100;
-        this.zombieState = "WALKING";
+        this.zombieState = "WALKING"; 
         if(this.ZOMBIE) {
             this.ZOMBIE.x = 100;
-            this.ZOMBIE.play("AVANCER");
+            this.ZOMBIE.play("AVANCER", true);
         }
     }
 
@@ -7561,7 +7603,7 @@ class MiniGame extends MiniGameBase {
         if (this.heroState === "HIT") return;
 
         if (isCorrect && this.HEROS) {
-            this.HEROS.play("TIRER");
+            this.HEROS.play("TIRER", false);
             this.heroState = "SHOOT";
             this.heroTimer = 40;
             this.projectiles.push({ x: this.HEROS.x + 5, y: this.HEROS.y - 5 });
@@ -7571,94 +7613,75 @@ class MiniGame extends MiniGameBase {
     update() {
         if (this.isStopped) return;
 
-        // --- 1. GESTION HÉROS ---
-        if (this.heroState === "SHOOT") {
-            this.heroTimer--;
-            if (this.heroTimer <= 0) {
-                this.heroState = "IDLE";
-                if(this.HEROS) this.HEROS.play("IDLE");
-            }
+        // 1. GESTION BOSS
+        let currentSpeed = this.baseSpeed;
+        if (this.isBossPhase) {
+            currentSpeed = this.baseSpeed * 0.5;
+            if (this.ZOMBIE) this.ZOMBIE.scale = this.ZOMBIE.baseScale * 1.6;
+        } else {
+            if (this.ZOMBIE) this.ZOMBIE.scale = this.ZOMBIE.baseScale;
         }
-        else if (this.heroState === "HIT") {
+
+        // 2. GESTION HÉROS
+        if (this.heroState === "SHOOT" || this.heroState === "HIT") {
             this.heroTimer--;
             if (this.heroTimer <= 0) {
                 this.heroState = "IDLE";
-                if(this.HEROS) this.HEROS.play("IDLE");
+                if(this.HEROS) this.HEROS.play("IDLE", true);
             }
         }
 
-        // --- 2. GESTION ZOMBIE (MACHINE À ÉTATS) ---
-        
-        // ETAT 1 : LE ZOMBIE MARCHE
+        // 3. GESTION ZOMBIE
         if (this.zombieState === "WALKING") {
-            this.zombieX -= 0.15; // Il avance
+            this.zombieX -= currentSpeed;
             
-            // Test Collision avec Héros
+            // DÉTECTION COLLISION
             if (this.zombieX < 20) {
-                // CHANGEMENT D'ÉTAT -> ATTACKING
-                this.zombieState = "ATTACKING";
-                this.zombieTimer = 60; // Durée de l'attaque (1s)
+                this.zombieState = "ATTACKING"; 
+                if (this.ZOMBIE) this.ZOMBIE.play("TAPER", false);
                 
-                // Effets immédiats
-                if (this.ZOMBIE) this.ZOMBIE.play("TAPER");
-                if (this.HEROS) {
-                    this.HEROS.play("TOUCHE");
-                    this.heroState = "HIT";
-                    this.heroTimer = 60;
+                if (this.HEROS) { 
+                    this.HEROS.play("TOUCHE", false); 
+                    this.heroState = "HIT"; 
+                    this.heroTimer = 60; 
                 }
-                // Perte de vie
+                
                 if (this.callbacks.onPlayerHit) this.callbacks.onPlayerHit();
             }
             
-            // Mise à jour visuelle
-            if (this.ZOMBIE) {
-                this.ZOMBIE.x = this.zombieX;
-                // On s'assure qu'il joue bien l'anim de marche
-                if(this.ZOMBIE.currentAction !== "AVANCER") this.ZOMBIE.play("AVANCER");
-            }
-        }
+            if (this.ZOMBIE) this.ZOMBIE.x = this.zombieX;
+        } 
         
-        // ETAT 2 : LE ZOMBIE ATTAQUE (FIGÉ SUR PLACE)
         else if (this.zombieState === "ATTACKING") {
-            this.zombieTimer--;
             if (this.ZOMBIE) {
-                this.ZOMBIE.x = 20; // Bloqué au contact
-                // On force l'anim TAPER tant qu'il attaque
-                if(this.ZOMBIE.currentAction !== "TAPER") this.ZOMBIE.play("TAPER");
+                this.ZOMBIE.x = 20; 
+                if (this.ZOMBIE.isAnimFinished) {
+                    this.resetZombie();
+                }
+            } else {
+                this.resetZombie(); 
             }
-            
-            if (this.zombieTimer <= 0) {
-                this.resetZombie(); // Fin attaque -> Retour départ
-            }
-        }
+        } 
         
-        // ETAT 3 : LE ZOMBIE EST TOUCHÉ (PAR BALLE)
         else if (this.zombieState === "HIT") {
-            this.zombieTimer--;
-            // Il recule un peu sous l'impact
-            this.zombieX += 0.1; 
+            this.zombieX += 0.5; 
             if(this.ZOMBIE) this.ZOMBIE.x = this.zombieX;
             
-            if (this.zombieTimer <= 0) {
-                this.resetZombie(); // Fin douleur -> Retour départ
+            if (this.ZOMBIE.isAnimFinished) {
+                this.resetZombie();
             }
         }
 
-        // --- 3. PROJECTILES ---
+        // 4. GESTION PROJECTILES
         for (let i = this.projectiles.length - 1; i >= 0; i--) { 
             let p = this.projectiles[i]; 
             p.x += 3;
             
-            // Collision Balle -> Zombie (Seulement si marche)
             if (this.zombieState === "WALKING" && p.x > this.zombieX - 5 && p.x < this.zombieX + 5) {
                 this.projectiles.splice(i, 1);
-                console.log("💥 BAM !");
-                
-                // CHANGEMENT D'ÉTAT -> HIT
                 this.zombieState = "HIT";
-                this.zombieTimer = 40;
-                if (this.ZOMBIE) this.ZOMBIE.play("TOUCHE"); 
-            }
+                if (this.ZOMBIE) this.ZOMBIE.play("TOUCHE", false); 
+            } 
             else if (p.x > 110) {
                 this.projectiles.splice(i, 1);
             }
@@ -7668,15 +7691,39 @@ class MiniGame extends MiniGameBase {
     draw() {
         if (this.isStopped) return;
         const ctx = this.ctx;
-        const cw = this.canvas.width; 
-        const ch = this.canvas.height;
         
-        ctx.fillStyle = "#f97316"; 
+        // --- DESSIN PROJECTILES ---
         this.projectiles.forEach(p => { 
-            ctx.beginPath(); 
-            ctx.arc((p.x/100)*cw, (p.y/100)*ch, 10, 0, Math.PI*2); 
-            ctx.fill(); 
+            if (this.isBossPhase) {
+                // 🔥 SUPER FLAMME POUR LE BOSS
+                ctx.save();
+                ctx.shadowBlur = 20;
+                ctx.shadowColor = "#f59e0b"; // Lueur orange
+                ctx.font = "50px Arial";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText("🔥", (p.x/100)*this.canvas.width, (p.y/100)*this.canvas.height);
+                ctx.restore();
+            } else {
+                // BALLE NORMALE
+                ctx.fillStyle = "#f97316"; 
+                ctx.beginPath(); 
+                ctx.arc((p.x/100)*this.canvas.width, (p.y/100)*this.canvas.height, 10, 0, Math.PI*2); 
+                ctx.fill(); 
+            }
         });
+
+        // --- TEXTE BOSS ---
+        if (this.isBossPhase) {
+            ctx.save();
+            ctx.font = "900 40px Arial";
+            ctx.fillStyle = "red";
+            ctx.textAlign = "center";
+            ctx.shadowColor = "black";
+            ctx.shadowBlur = 15;
+            ctx.fillText("💀 BOSS 💀", this.canvas.width / 2, 80);
+            ctx.restore();
+        }
     }
 }
 `;
@@ -7714,7 +7761,7 @@ export default function StudioDashboard({ user }) {
     const [selectedGlobalSoundIdx, setSelectedGlobalSoundIdx] = useState(0);
     const [leftTab, setLeftTab] = useState('actions');
     
-    // ⚠️ CODE FORCÉ V6 (PROPRE)
+    // ⚠️ CODE FORCÉ V9.1
     const [code, setCode] = useState(ZOMBIE_GAME_CODE);
     
     const [isPlaying, setIsPlaying] = useState(false);
@@ -7723,7 +7770,6 @@ export default function StudioDashboard({ user }) {
     const [statusText, setStatusText] = useState("");
     const [testQuizData, setTestQuizData] = useState(null);
     const [showTestQuizModal, setShowTestQuizModal] = useState(false);
-    const [eraserActive, setEraserActive] = useState(false);
     const [frameToErase, setFrameToErase] = useState(null);
     const [showSoundModal, setShowSoundModal] = useState(false);
     const [soundToEdit, setSoundToEdit] = useState(null);
@@ -7755,9 +7801,7 @@ export default function StudioDashboard({ user }) {
                 if (!p.scenes[0].globalSounds) p.scenes[0].globalSounds = [];
             }
             setProject(p);
-            setCode(ZOMBIE_GAME_CODE); // FORCE V6
-            console.log("🧟 CODE V6 ACTIVÉ");
-            
+            setCode(ZOMBIE_GAME_CODE); 
             if (p.scenes?.[0]?.actors?.[0]) setSelectedActorId(p.scenes[0].actors[0].id);
         }
     }
@@ -7779,7 +7823,6 @@ export default function StudioDashboard({ user }) {
     const handleOpenSave = () => { setModalMode('SAVE'); setShowSaveLoadModal(true); };
     const handleOpenLoad = () => { setModalMode('LOAD'); setShowSaveLoadModal(true); };
     
-    // RETOUR A LA DEMO ZOMBIE V6
     const handleCreateNew = () => { 
         setProject(DEMO_PROJECT); 
         setCode(ZOMBIE_GAME_CODE); 
@@ -7804,10 +7847,8 @@ export default function StudioDashboard({ user }) {
     const handleReorderFrame = (targetIdx) => { if (draggedFrameIdx === null || draggedFrameIdx === targetIdx || !selectedAction) return; const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); const frames = actor.actions[selectedActionIdx].frames; const [moved] = frames.splice(draggedFrameIdx, 1); frames.splice(targetIdx, 0, moved); } else { const frames = next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].frames; const [moved] = frames.splice(draggedFrameIdx, 1); frames.splice(targetIdx, 0, moved); } saveProject(next); setDraggedFrameIdx(null); };
     const handleDeleteFrame = (fIdx) => { if (!selectedAction) return; const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); actor.actions[selectedActionIdx].frames.splice(fIdx, 1); } else { next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].frames.splice(fIdx, 1); } saveProject(next); };
     const handleDeleteSound = (sIdx) => { if (!selectedAction) return; const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); actor.actions[selectedActionIdx].sounds.splice(sIdx, 1); } else { next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].sounds.splice(sIdx, 1); } saveProject(next); };
-    
     const handleEditSound = (sIdx) => { const target = selectedAction.sounds[sIdx]; if (target) setSoundToEdit({ idx: sIdx, ...target }); };
     const handleSaveEditedSound = (newUrl, newName) => { if (!soundToEdit) return; const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); actor.actions[selectedActionIdx].sounds[soundToEdit.idx] = { ...actor.actions[selectedActionIdx].sounds[soundToEdit.idx], url: newUrl, name: newName }; } else { next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].sounds[soundToEdit.idx] = { ...next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].sounds[soundToEdit.idx], url: newUrl, name: newName }; } setProject(next); saveProject(next); setSoundToEdit(null); };
-
     const handleDeleteActor = (e, id) => { e.stopPropagation(); if (!confirm("Supprimer ?")) return; const next = JSON.parse(JSON.stringify(project)); next.scenes[selectedSceneIdx].actors = next.scenes[selectedSceneIdx].actors.filter(a => a.id !== id); if (selectedActorId === id) setSelectedActorId(null); setProject(next); saveProject(next); };
     const handleDeleteBackdrop = (e, idx) => { e.stopPropagation(); if (!confirm("Supprimer ?")) return; const next = JSON.parse(JSON.stringify(project)); next.scenes[selectedSceneIdx].backdrops.splice(idx, 1); next.scenes[selectedSceneIdx].currentBackdropIdx = 0; setProject(next); saveProject(next); };
     const handleSaveSound = (url, name) => { if (!selectedAction) return; const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); const act = actor.actions[selectedActionIdx]; if (!act.sounds) act.sounds = []; act.sounds.push({ type: 'sound', url: url, name: name }); } else { const act = next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx]; if (!act.sounds) act.sounds = []; act.sounds.push({ type: 'sound', url: url, name: name }); } setProject(next); saveProject(next); };
@@ -8391,24 +8432,37 @@ export default function StudioRightPanel({
 [[[£ END: client/src/features/prof/studio/panels/StudioRightPanel.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/studio/studioComp/GameEngine.jsx £]]]
-// @signatures: GameEngine, initLevel, handleAnswerClick, handleGameOver, retryLevel, nextLevel, preloadAssets, getYoutubeEmbedUrl
+// @signatures: GameEngine
 import React, { useState, useRef, useEffect } from 'react';
 import SoundExpert from './SoundExpert';
 import { api } from '../../../../services/api';
 
-/**
- * 🎮 MOTEUR STUDIO V1008 (CONTRÔLE AUDIO)
- * Ajout d'un bouton Mute/Unmute dans le HUD.
- */
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
+    // 1. DÉCLARATION DES REFS (En premier pour éviter ReferenceError)
     const canvasRef = useRef(null);
+    const livesRef = useRef(4);
+    const inputRef = useRef(null);
+    const bossModeRef = useRef(false);
+    const lastInteractionRef = useRef(0);
+    const loopIdRef = useRef(0);
+    const projectRef = useRef(project);
+    const frameIdRef = useRef(null);
+    const gameInstanceRef = useRef(null);
+    const isMutedRef = useRef(false);
+    const isPausedRef = useRef(false);
     
+    const activeTimeoutsRef = useRef([]);
+    const audioCtxRef = useRef(null);
+    const audioBuffersRef = useRef(new Map());
+    const imageAssetsRef = useRef(new Map());
+    const activeSourcesRef = useRef([]);
+    const keysPressed = useRef({}); 
+
+    // 2. ÉTATS
     const [isReady, setIsReady] = useState(false);
     const [engineStarted, setEngineStarted] = useState(false);
     const [loadProgress, setLoadProgress] = useState("0%");
-    const [debugLogs, setDebugLogs] = useState([]);
     const [hitFlash, setHitFlash] = useState(false);
-    
     const [allLevels, setAllLevels] = useState([]); 
     const [currentLevelIdx, setCurrentLevelIdx] = useState(0);
     const [levelQuestions, setLevelQuestions] = useState([]); 
@@ -8416,48 +8470,29 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const [currentQIndex, setCurrentQIndex] = useState(-1);
     const [lives, setLives] = useState(4);
     const [feedback, setFeedback] = useState(null);
-
-    // --- AUDIO CONTROL ---
+    const [inputValue, setInputValue] = useState("");
     const [isMuted, setIsMuted] = useState(false);
-    const isMutedRef = useRef(false);
-
-    // --- ÉTATS APPRENTISSAGE ---
     const [isStudyPhase, setIsStudyPhase] = useState(false);
     const [activeFocus, setActiveFocus] = useState(null); 
     const [showLevelTitle, setShowLevelTitle] = useState(false);
     const [isLevelWon, setIsLevelWon] = useState(false);
     const [isGameOver, setIsGameOver] = useState(false);
     const [isGameCompleted, setIsGameCompleted] = useState(false);
-    
-    const isPausedRef = useRef(false);
-    const activeTimeoutsRef = useRef([]);
 
-    const audioCtxRef = useRef(null);
-    const audioBuffersRef = useRef(new Map());
-    const imageAssetsRef = useRef(new Map());
-    const gameInstanceRef = useRef(null);
-    const frameIdRef = useRef(null);
-    const keysPressed = useRef({}); 
-    const activeSourcesRef = useRef([]);
+    // 3. SYNCHRONISATION
+    useEffect(() => { isMutedRef.current = isMuted; }, [isMuted]);
+    useEffect(() => { livesRef.current = lives; }, [lives]);
+    useEffect(() => { projectRef.current = project; }, [project]);
 
-    // Synchronisation de la Ref pour le moteur dynamique
     useEffect(() => {
-        isMutedRef.current = isMuted;
-    }, [isMuted]);
+        const isBoss = (currentQIndex !== -1 && questionStates[currentQIndex] >= 2);
+        bossModeRef.current = isBoss;
+        if (gameInstanceRef.current) gameInstanceRef.current.isBossPhase = isBoss;
+    }, [currentQIndex, questionStates]);
 
-    const getYoutubeEmbedUrl = (url) => {
-        if (!url) return null;
-        let videoId = "";
-        if (url.includes("v=")) videoId = url.split("v=")[1]?.split("&")[0];
-        else if (url.includes("youtu.be/")) videoId = url.split("youtu.be/")[1]?.split("?")[0];
-        else if (url.includes("embed/")) videoId = url.split("embed/")[1]?.split("?")[0];
-        return videoId ? `https://www.youtube.com/embed/${videoId}?autoplay=1` : null;
-    };
-
-    const logSonde = (msg, type = 'info') => {
-        setDebugLogs(prev => [...prev, { id: Math.random(), text: msg, type }].slice(-6));
-    };
-
+    // 4. UTILITAIRES
+    const normalize = (str) => (str || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
+    
     const safeTimeout = (fn, delay) => {
         const id = setTimeout(fn, delay);
         activeTimeoutsRef.current.push(id);
@@ -8474,159 +8509,164 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         activeSourcesRef.current.length = 0; 
     };
 
+    const getYoutubeEmbedUrl = (url) => {
+        if (!url) return null;
+        let v = "";
+        if (url.includes("v=")) v = url.split("v=")[1]?.split("&")[0];
+        else if (url.includes("youtu.be/")) v = url.split("youtu.be/")[1]?.split("?")[0];
+        else if (url.includes("embed/")) v = url.split("embed/")[1]?.split("?")[0];
+        return v ? `https://www.youtube.com/embed/${v}?autoplay=1` : null;
+    };
+
     const playSystemSound = (soundName) => {
         if (isMutedRef.current || !project || !audioCtxRef.current) return;
-        
         const scene = project.scenes[activeSceneIdx];
         const soundEvent = scene?.globalSounds?.find(gs => gs.name.toUpperCase().trim() === soundName.toUpperCase().trim());
-        if (!soundEvent || !soundEvent.sounds || soundEvent.sounds.length === 0) return;
+        if (!soundEvent || !soundEvent.sounds) return;
         
         if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
-
+        
         soundEvent.sounds.forEach(snd => {
             const buffer = audioBuffersRef.current.get(snd.url);
             if (buffer) {
                 try {
-                    const source = audioCtxRef.current.createBufferSource();
-                    source.buffer = buffer;
-                    source.connect(audioCtxRef.current.destination);
-                    source.start(0);
-                    activeSourcesRef.current.push(source);
-                } catch (e) { console.error("Audio Play Error:", e); }
+                    const s = audioCtxRef.current.createBufferSource();
+                    s.buffer = buffer;
+                    s.connect(audioCtxRef.current.destination);
+                    s.start(0);
+                    activeSourcesRef.current.push(s);
+                } catch (e) {}
             }
         });
     };
 
-    useEffect(() => {
-        const preloadAssets = async () => {
-            if (!project) return;
-            if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
-            const scene = project.scenes?.[activeSceneIdx];
-            if (!scene) { setIsReady(true); return; }
-            const imgUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url)))].filter(Boolean);
-            const sndUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url))))].filter(Boolean);
-            const total = imgUrls.length + sndUrls.length;
-            let loaded = 0;
-            const updateProgress = () => { loaded++; setLoadProgress(`${Math.round((loaded / total) * 100)}%`); };
-            imageAssetsRef.current.clear();
-            const imgPromises = imgUrls.map(url => new Promise(resolve => {
-                const img = new Image();
-                img.crossOrigin = "anonymous";
-                const finalUrl = resolveUrl(url);
-                img.onload = () => { imageAssetsRef.current.set(finalUrl, img); updateProgress(); resolve(); };
-                img.onerror = () => { updateProgress(); resolve(); };
-                img.src = finalUrl;
-            }));
-            const sndPromises = sndUrls.map(url => new Promise(resolve => {
-                SoundExpert.decodeAudio(resolveUrl(url), audioCtxRef.current).then(buf => {
-                    if (buf) audioBuffersRef.current.set(url, buf);
-                    updateProgress();
-                    resolve();
-                });
-            }));
-            await Promise.all([...imgPromises, ...sndPromises]);
-            setIsReady(true);
-        };
-
-        api.get('/games/test-data').then(data => {
-            let levelsData = data?.levels?.length > 0 ? data.levels : [{ name: "Defaut", questions: [{ q: "Q1", options:["A","B"], a:0 }] }];
-            setAllLevels(levelsData);
-            preloadAssets();
-        });
-
-        const handleKeyDown = (e) => { keysPressed.current[e.code] = true; };
-        const handleKeyUp = (e) => { keysPressed.current[e.code] = false; };
-        window.addEventListener('keydown', handleKeyDown);
-        window.addEventListener('keyup', handleKeyUp);
-        return () => { 
-            window.removeEventListener('keydown', handleKeyDown); 
-            window.removeEventListener('keyup', handleKeyUp);
-            if (frameIdRef.current) cancelAnimationFrame(frameIdRef.current);
-            stopAllSounds();
-            clearAllTimeouts();
-        };
-    }, [project]);
-
-    const initLevel = (idx, sourceData) => {
-        if (!sourceData[idx]) return;
-        stopAllSounds(); clearAllTimeouts(); 
-        const lvl = sourceData[idx];
-        setCurrentLevelIdx(idx);
-        setLevelQuestions(lvl.questions || []);
-        setQuestionStates(new Array((lvl.questions || []).length).fill(0));
-        setCurrentQIndex(0);
-        setIsLevelWon(false); setIsGameOver(false); setIsGameCompleted(false);
-        setIsStudyPhase(true);
-        isPausedRef.current = true;
-    };
-
-    const startLevelAfterStudy = () => {
-        setIsStudyPhase(false);
-        setShowLevelTitle(true);
-        safeTimeout(() => {
-            setShowLevelTitle(false);
-            isPausedRef.current = false; 
-            if (gameInstanceRef.current && gameInstanceRef.current.start) {
-                gameInstanceRef.current.start();
-            }
-            playSystemSound("DÉPART");
-        }, 1500);
-    };
+    // 5. LOGIQUE JEU
 
     const handleGameOver = () => {
-        stopAllSounds(); setIsGameOver(true); isPausedRef.current = true;
-        safeTimeout(() => { playSystemSound("DÉFAITE"); }, 500);
-    };
-
-    const retryLevel = () => { setLives(4); initLevel(currentLevelIdx, allLevels); };
-
-    const nextLevel = () => {
-        const nextIdx = currentLevelIdx + 1;
-        if (allLevels[nextIdx]) initLevel(nextIdx, allLevels);
-        else {
-            stopAllSounds(); setIsGameCompleted(true);
-            safeTimeout(() => { playSystemSound("VICTOIRE"); }, 500);
-        }
+        stopAllSounds();
+        setIsGameOver(true);
+        isPausedRef.current = true;
+        playSystemSound("DÉFAITE");
     };
 
     const triggerPlayerHit = () => {
-        if (isPausedRef.current) return;
-        setHitFlash(true);
-        setTimeout(() => setHitFlash(false), 200);
+        const now = Date.now();
+        if (now - lastInteractionRef.current < 1000) return;
+        lastInteractionRef.current = now;
+
+        setHitFlash(true); setTimeout(() => setHitFlash(false), 200);
+        
         setLives(prev => {
             const newVal = Math.max(0, prev - 1);
-            if (newVal === 0) { isPausedRef.current = true; safeTimeout(handleGameOver, 1000); }
+            if (newVal === 0) {
+                isPausedRef.current = true;
+                handleGameOver();
+            }
             return newVal;
         });
     };
 
-    const handleAnswerClick = (choiceIdx) => {
-        if (feedback || currentQIndex === -1 || isPausedRef.current) return;
-        const currentQ = levelQuestions[currentQIndex];
-        const isCorrect = currentQ.a === choiceIdx;
+    const initLevel = (idx, data) => {
+        if (!data[idx]) return;
+        stopAllSounds(); 
+        clearAllTimeouts();
+        setCurrentLevelIdx(idx);
+        setLevelQuestions(data[idx].questions || []);
+        setQuestionStates(new Array((data[idx].questions || []).length).fill(0));
+        setCurrentQIndex(0);
+        setIsLevelWon(false); 
+        setIsGameOver(false); 
+        setIsGameCompleted(false);
+        setIsStudyPhase(true); 
+        isPausedRef.current = true;
+    };
+
+    const handleAnswerLogic = (isCorrect) => {
+        if (livesRef.current <= 0 || isGameOver) return;
+
         setFeedback(isCorrect ? 'CORRECT' : 'WRONG');
         const newStates = [...questionStates];
+        
         if (isCorrect) {
             newStates[currentQIndex] = Math.min(3, newStates[currentQIndex] + 1);
-            if (gameInstanceRef.current?.onResult) gameInstanceRef.current.onResult(true);
+            if (gameInstanceRef.current && typeof gameInstanceRef.current.onResult === 'function') {
+                gameInstanceRef.current.onResult(true);
+            }
         } else {
-            newStates[currentQIndex] = Math.max(0, newStates[currentQIndex] - 1);
-            if (gameInstanceRef.current?.onResult) gameInstanceRef.current.onResult(false);
+            if (newStates[currentQIndex] > 0) newStates[currentQIndex] -= 1;
+            if (gameInstanceRef.current && typeof gameInstanceRef.current.onResult === 'function') {
+                gameInstanceRef.current.onResult(false);
+            }
             triggerPlayerHit();
         }
+        
         setQuestionStates(newStates);
+        setInputValue("");
+
         safeTimeout(() => {
             setFeedback(null);
-            if (lives > 0) {
+            
+            if (livesRef.current > 0 && !isGameOver) {
                 const available = newStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
-                if (available.length > 0) setCurrentQIndex(available[Math.floor(Math.random() * available.length)]);
-                else {
-                    setIsLevelWon(true); isPausedRef.current = true;
-                    if (gameInstanceRef.current?.onLevelWin) gameInstanceRef.current.onLevelWin();
-                    safeTimeout(nextLevel, 4000);
+                
+                if (available.length > 0) {
+                    if (newStates[currentQIndex] < 3) {
+                        setCurrentQIndex(currentQIndex);
+                        if (newStates[currentQIndex] >= 2) setTimeout(() => inputRef.current?.focus(), 50);
+                    } else {
+                        setCurrentQIndex(available[Math.floor(Math.random() * available.length)]);
+                    }
+                } else {
+                    setIsLevelWon(true);
+                    isPausedRef.current = true;
+                    playSystemSound("UPLEVEL");
+                    safeTimeout(() => {
+                        setLives(4);
+                        if (allLevels[currentLevelIdx + 1]) initLevel(currentLevelIdx + 1, allLevels);
+                        else setIsGameCompleted(true);
+                    }, 4000);
                 }
+            } else if (livesRef.current <= 0 && !isGameOver) {
+                handleGameOver();
             }
         }, 1000);
+    };
+
+    // 6. HANDLERS UI
+
+    const handleBarClick = (idx) => {
+        if (keysPressed.current['KeyF'] || keysPressed.current['Keyf']) {
+            const ns = [...questionStates]; ns[idx] = Math.min(3, ns[idx] + 1); setQuestionStates(ns);
+            if (idx === currentQIndex && ns[idx] >= 2) setTimeout(() => inputRef.current?.focus(), 50);
+        }
+    };
+
+    const handleForceWin = () => {
+        if (keysPressed.current['KeyF'] || keysPressed.current['Keyf']) {
+            setIsLevelWon(true); 
+            isPausedRef.current = true;
+            playSystemSound("UPLEVEL");
+            safeTimeout(() => {
+                setLives(4);
+                if (allLevels[currentLevelIdx + 1]) initLevel(currentLevelIdx + 1, allLevels);
+                else setIsGameCompleted(true);
+            }, 1000);
+        }
+    };
+
+    const handleAnswerClick = (idx) => {
+        if (!feedback && currentQIndex !== -1 && !isGameOver) {
+            const isCorrect = levelQuestions[currentQIndex].a === idx;
+            handleAnswerLogic(isCorrect);
+        }
+    };
+
+    const handleInputSubmit = (e) => {
+        e.preventDefault();
+        if (!feedback && currentQIndex !== -1 && !isGameOver) {
+            const correct = levelQuestions[currentQIndex].options[levelQuestions[currentQIndex].a];
+            handleAnswerLogic(normalize(inputValue) === normalize(correct));
+        }
     };
 
     const handleStartGame = async () => {
@@ -8635,43 +8675,103 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         initLevel(0, allLevels);
     };
 
+    const retryLevel = () => { setLives(4); initLevel(currentLevelIdx, allLevels); };
+
+    // 7. PRELOAD
+    useEffect(() => {
+        const load = async () => {
+            if (!project) return;
+            if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+            const scene = project.scenes?.[activeSceneIdx];
+            if (!scene) { setIsReady(true); return; }
+            
+            const imgUrls = [...new Set((scene.actors||[]).flatMap(a=>(a.actions||[]).flatMap(ac=>(ac.frames||[]).map(f=>f.url))).concat((scene.backdrops||[]).map(b=>b.url)))].filter(Boolean);
+            const sndUrls = [...new Set((scene.actors||[]).flatMap(a=>(a.actions||[]).flatMap(ac=>(ac.sounds||[]).map(s=>s.url))).concat((scene.globalSounds||[]).flatMap(g=>(g.sounds||[]).map(s=>s.url))))].filter(Boolean);
+            
+            let c = 0, tot = imgUrls.length;
+            imageAssetsRef.current.clear();
+            
+            await Promise.all(imgUrls.map(u => new Promise(r => { 
+                const i=new Image(); i.crossOrigin="anonymous"; 
+                i.onload=()=>{imageAssetsRef.current.set(resolveUrl(u),i); c++; setLoadProgress(Math.round(c/tot*100)+"%"); r();}; 
+                i.onerror=r; i.src=resolveUrl(u); 
+            })));
+            
+            await Promise.all(sndUrls.map(u => SoundExpert.decodeAudio(resolveUrl(u), audioCtxRef.current).then(b => { if(b) audioBuffersRef.current.set(u, b); })));
+            setIsReady(true);
+        };
+
+        api.get('/games/test-data').then(d => { 
+            setAllLevels(d?.levels?.length > 0 ? d.levels : [{name:"Defaut", questions:[{q:"Q1",options:["A","B"],a:0}]}]); 
+            load(); 
+        });
+
+        const kd = (e) => { if(e.code === 'KeyF' || e.target.tagName !== 'INPUT') keysPressed.current[e.code]=true; };
+        const ku = (e) => { keysPressed.current[e.code]=false; };
+        window.addEventListener('keydown', kd); window.addEventListener('keyup', ku);
+        return () => { 
+            window.removeEventListener('keydown', kd); window.removeEventListener('keyup', ku); 
+            if(frameIdRef.current) cancelAnimationFrame(frameIdRef.current);
+            stopAllSounds();
+        };
+    }, [project]);
+
+    // 8. GAME LOOP
     useEffect(() => {
         if (!engineStarted || !canvasRef.current) return;
+
+        const myLoopId = Date.now();
+        loopIdRef.current = myLoopId;
+
         try {
             const canvas = canvasRef.current;
             const ctx = canvas.getContext('2d');
-            const gameCallbacks = { onPlayerHit: triggerPlayerHit, playSound: (name) => {} };
+
+            const callbacks = {
+                onPlayerHit: () => triggerPlayerHit(),
+                onResult: (res) => {} 
+            };
+
             const BaseFactory = new Function('params', `
-                const { audioBuffers, audioCtx, project, sceneIdx, imageAssets, resolveUrl, canvas, ctx, activeSources, isMutedRef } = params;
+                const { audioBuffers, audioCtx, projectRef, sceneIdx, imageAssets, resolveUrl, canvas, ctx, activeSources, isMutedRef, bossModeRef } = params;
+                
                 class ActorProxy {
                     constructor(data, engine) { 
                         this.id = data.id; this.name = data.name; this.engine = engine;
-                        this.x = data.initialX || 50; this.y = data.initialY || 50;
-                        this.scale = data.scale || 1; this.visible = true;
-                        this.direction = data.direction || 0;
-                        this.rotationStyle = data.rotationStyle || 'all';
+                        this.initialX = data.initialX||50; this.initialY = data.initialY||50;
+                        this.x = this.initialX; this.y = this.initialY;
+                        this.baseScale = data.scale||1; this.scale = this.baseScale;
+                        this.visible = true;
+                        this.direction = data.direction||0; this.rotationStyle = data.rotationStyle||'all';
+                        
                         this.currentAction = data.actions?.[0]?.name || 'IDLE';
-                        this.frameIdx = 0; this.lastAnimTime = 0;
+                        this.frameIdx = 0; 
+                        this.lastAnimTime = 0;
+                        this.isAnimFinished = false; 
+                        this.loop = true;
                     }
-                    play(name) { 
+                    play(name, loop = true) { 
                         if(this.currentAction.toUpperCase() !== name.toUpperCase()) { 
-                            this.currentAction = name; this.frameIdx = 0;
+                            this.currentAction = name; 
+                            this.frameIdx = 0;
+                            this.loop = loop; 
+                            this.isAnimFinished = false;
                             this.engine._triggerActionSounds(this.id, name);
                         } 
                     }
                 }
+
                 return class MiniGameBase {
                     constructor(c, a, cb) {
                         this.canvas = c || canvas; this.ctx = ctx; this.keys = {};
                         this.callbacks = cb; this.assets = a || {};
-                        this.currentLevel = 1; 
-                        const s = project.scenes[sceneIdx];
+                        this.isBossPhase = false; 
+                        const s = projectRef.current.scenes[sceneIdx];
                         if(s && s.actors) s.actors.forEach(a => { this[a.name.toUpperCase()] = new ActorProxy(a, this); });
-                        document.onkeydown = e => this.keys[e.code] = true;
-                        document.onkeyup = e => this.keys[e.code] = false;
                     }
                     _triggerActionSounds(actorId, actionName) {
-                        const actor = project.scenes[sceneIdx].actors.find(a => a.id === actorId);
+                        const s = projectRef.current.scenes[sceneIdx];
+                        const actor = s.actors.find(a => a.id === actorId);
                         const action = actor?.actions.find(act => act.name.toUpperCase() === actionName.toUpperCase());
                         if(action && action.sounds) action.sounds.forEach(snd => this._playSound(snd.url));
                     }
@@ -8688,31 +8788,61 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                         } catch(e) {}
                     }
                     _render() {
-                        const s = project.scenes[sceneIdx];
-                        ctx.fillStyle = "#0f172a"; ctx.fillRect(0,0,canvas.width, canvas.height);
+                        const s = projectRef.current.scenes[sceneIdx];
+                        if (!this.ctx || !this.canvas) return;
+
+                        this.ctx.fillStyle = "#0f172a"; 
+                        this.ctx.fillRect(0,0,this.canvas.width, this.canvas.height);
+                        
                         const bd = s?.backdrops?.[s.currentBackdropIdx || 0];
                         if(bd) {
-                            const key = resolveUrl(bd.url);
-                            const img = imageAssets.get(key);
-                            if(img) ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                            const img = imageAssets.get(resolveUrl(bd.url));
+                            if(img) this.ctx.drawImage(img, 0, 0, this.canvas.width, this.canvas.height);
                         }
+                        
                         for(let key in this) {
                             const p = this[key];
                             if(p instanceof ActorProxy && p.visible) {
-                                const aData = project.scenes[sceneIdx].actors.find(ac => ac.id === p.id);
+                                const aData = s.actors.find(ac => ac.id === p.id);
                                 if(!aData) continue;
                                 const act = (aData.actions || []).find(x => x.name.toUpperCase() === p.currentAction.toUpperCase()) || aData.actions?.[0];
+                                
                                 if(act && act.frames && act.frames.length > 0) {
                                     const now = Date.now();
-                                    if (now - p.lastAnimTime > (act.speed || 100)) { p.frameIdx = (p.frameIdx+1)%act.frames.length; p.lastAnimTime=now; }
-                                    const assetKey = resolveUrl(act.frames[p.frameIdx].url);
+                                    const speed = parseInt(act.speed) || 100;
+                                    const totalFrames = act.frames.length;
+
+                                    if (now - p.lastAnimTime > speed) { 
+                                        if (!p.isAnimFinished) {
+                                            p.frameIdx++;
+                                            if (p.frameIdx >= totalFrames) {
+                                                if (p.loop) { p.frameIdx = 0; } 
+                                                else { p.frameIdx = totalFrames - 1; p.isAnimFinished = true; }
+                                            }
+                                            p.lastAnimTime = now; 
+                                        }
+                                    }
+                                    
+                                    const safeIdx = Math.min(p.frameIdx, totalFrames - 1);
+                                    const assetKey = resolveUrl(act.frames[safeIdx].url);
+                                    
                                     const spr = imageAssets.get(assetKey);
                                     if(spr) {
-                                        const xPx = (p.x/100)*canvas.width; const yPx = (p.y/100)*canvas.height; let sz = 150*p.scale;
-                                        this.ctx.save(); this.ctx.translate(xPx, yPx);
+                                        const xPx = (p.x/100)*this.canvas.width; 
+                                        const yPx = (p.y/100)*this.canvas.height; 
+                                        let sz = 150 * p.scale; 
+                                        
+                                        this.ctx.save(); 
+                                        this.ctx.translate(xPx, yPx);
                                         if(p.rotationStyle === 'left-right' && Math.abs(p.scale) !== p.scale) this.ctx.scale(Math.sign(p.scale), 1);
                                         else if (p.direction) this.ctx.rotate(p.direction * Math.PI / 180);
-                                        this.ctx.drawImage(spr, -sz/2, -sz/2, sz, sz); this.ctx.restore();
+                                        
+                                        if (this.isBossPhase && p.name === 'ZOMBIE') {
+                                            this.ctx.filter = "drop-shadow(0 0 15px red) hue-rotate(-50deg)";
+                                        }
+                                        this.ctx.drawImage(spr, -sz/2, -sz/2, sz, sz); 
+                                        this.ctx.filter = "none";
+                                        this.ctx.restore();
                                     }
                                 }
                             }
@@ -8720,51 +8850,52 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     }
                 }
             `);
-            const MiniGameBase = BaseFactory({ audioBuffers: audioBuffersRef.current, audioCtx: audioCtxRef.current, imageAssets: imageAssetsRef.current, resolveUrl, logSonde, project, sceneIdx: activeSceneIdx, canvas, ctx, callbacks: gameCallbacks, activeSources: activeSourcesRef.current, isMutedRef: isMutedRef });
+
+            const MiniGameBase = BaseFactory({ audioBuffers: audioBuffersRef.current, audioCtx: audioCtxRef.current, imageAssets: imageAssetsRef.current, resolveUrl, projectRef, sceneIdx: activeSceneIdx, canvas, ctx, activeSources: activeSourcesRef.current, isMutedRef: isMutedRef, bossModeRef: bossModeRef });
             const UserCodeFactory = new Function('MiniGameBase', `${code}\nreturn MiniGame;`);
             const UserGameClass = UserCodeFactory(MiniGameBase);
-            const instance = new UserGameClass(canvas, {}, gameCallbacks);
+            
+            const instance = new UserGameClass(canvas, {}, callbacks);
             gameInstanceRef.current = instance;
+            
+            if (instance.start) instance.start();
+
             const tick = () => {
+                if (loopIdRef.current !== myLoopId) return;
+
                 if(instance.keys) Object.assign(instance.keys, keysPressed.current);
                 instance.currentLevel = currentLevelIdx + 1;
-                if (!isPausedRef.current && instance.update) instance.update();
+                instance.isBossPhase = bossModeRef.current;
+
+                if (isPausedRef.current === false) {
+                    if (instance.update) instance.update();
+                }
+                
                 if (instance._render) instance._render();
                 if (instance.draw) instance.draw();
+                
                 frameIdRef.current = requestAnimationFrame(tick);
             };
             tick();
-        } catch (e) { console.error("Crash Game", e); }
+
+        } catch (e) { console.error("Crash Game Engine:", e); }
+        
+        return () => {
+             if (frameIdRef.current) cancelAnimationFrame(frameIdRef.current);
+        };
+
     }, [engineStarted]);
 
-    const currentLvlData = allLevels[currentLevelIdx];
-    const embedUrl = getYoutubeEmbedUrl(currentLvlData?.intro?.videoUrl);
+    const isBossUI = currentQIndex !== -1 && questionStates[currentQIndex] >= 2;
 
     return (
         <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center overflow-hidden font-sans">
              
              {activeFocus && (
                  <div className="fixed inset-0 z-[100000] bg-slate-950/98 backdrop-blur-2xl flex flex-col items-center justify-center p-10 animate-in zoom-in duration-300">
-                    <button 
-                        onClick={() => setActiveFocus(null)}
-                        className="absolute top-10 right-10 w-16 h-16 bg-white rounded-full font-black text-2xl shadow-2xl hover:scale-110 transition-transform flex items-center justify-center"
-                    >
-                        ✕
-                    </button>
-                    
+                    <button onClick={() => setActiveFocus(null)} className="absolute top-10 right-10 w-16 h-16 bg-white rounded-full font-black text-2xl shadow-2xl hover:scale-110 transition-transform flex items-center justify-center">✕</button>
                     <div className="w-full h-full flex flex-col items-center justify-center">
-                        {activeFocus === 'SHEET' ? (
-                            <img src={resolveUrl(currentLvlData.intro.sheetUrl)} className="max-w-full max-h-full object-contain shadow-2xl rounded-2xl border-4 border-white/10" />
-                        ) : (
-                            <iframe 
-                                className="w-full max-w-6xl aspect-video rounded-3xl shadow-2xl border-4 border-white/10" 
-                                src={embedUrl} 
-                                frameBorder="0" 
-                                allow="autoplay; encrypted-media" 
-                                allowFullScreen
-                            ></iframe>
-                        )}
-                        <h2 className="text-white font-black text-2xl uppercase mt-8 tracking-widest opacity-50">Appuyez sur la croix pour revenir à la préparation</h2>
+                        {activeFocus === 'SHEET' ? <img src={resolveUrl(allLevels[currentLevelIdx].intro.sheetUrl)} className="max-w-full max-h-full object-contain shadow-2xl rounded-2xl border-4 border-white/10" /> : <div className="text-white">VIDEO</div>}
                     </div>
                  </div>
              )}
@@ -8780,30 +8911,19 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 <>
                     <div className="absolute top-6 w-full flex justify-between items-start px-10 pointer-events-none z-30">
                         <div className="flex gap-4 pointer-events-auto">
-                            <div 
-                                className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-xl flex gap-1 cursor-pointer hover:border-red-500 transition-colors"
-                                onClick={() => { if (keysPressed.current['KeyF']) triggerPlayerHit(); }}
-                            >
+                            <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-xl flex gap-1 cursor-pointer hover:border-red-500 transition-colors" onClick={() => { if (keysPressed.current['KeyF']) triggerPlayerHit(); }}>
                                 {"❤️".repeat(lives)}{"🖤".repeat(Math.max(0, 4 - lives))}
                             </div>
-
-                            {/* BOUTON SON */}
-                            <button 
-                                onClick={() => setIsMuted(!isMuted)}
-                                className={`w-16 h-16 rounded-2xl border-2 shadow-xl flex items-center justify-center text-2xl transition-all ${isMuted ? 'bg-red-900/80 border-red-500 text-red-200' : 'bg-slate-900/80 border-slate-700 text-white hover:border-indigo-500'}`}
-                            >
-                                {isMuted ? '🔇' : '🔊'}
-                            </button>
+                            <button onClick={() => setIsMuted(!isMuted)} className={`w-16 h-16 rounded-2xl border-2 shadow-xl flex items-center justify-center text-2xl transition-all ${isMuted ? 'bg-red-900/80 border-red-500 text-red-200' : 'bg-slate-900/80 border-slate-700 text-white hover:border-indigo-500'}`}>{isMuted ? '🔇' : '🔊'}</button>
                         </div>
-
                         <div className="flex-1 flex justify-center px-4">
+                            {/* CHEAT CLICK QUESTION */}
                             {levelQuestions[currentQIndex] && !isStudyPhase && !isLevelWon && !isGameOver && !showLevelTitle && (
-                                <div className="bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 border-slate-600 shadow-2xl text-xl pointer-events-auto animate-in slide-in-from-top">
+                                <div onClick={handleForceWin} className="bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 border-slate-600 shadow-2xl text-xl pointer-events-auto animate-in slide-in-from-top cursor-pointer hover:border-indigo-500 transition-colors">
                                     {feedback === 'CORRECT' ? "✅ BRAVO !" : feedback === 'WRONG' ? "❌ RATÉ..." : levelQuestions[currentQIndex].q}
                                 </div>
                             )}
                         </div>
-
                         <div className="flex gap-2 items-center pointer-events-auto mr-20">
                             {questionStates.map((mastery, idx) => (
                                 <div key={idx} onClick={() => handleBarClick(idx)} className={`w-4 h-12 rounded-md border border-slate-600 relative overflow-hidden cursor-pointer ${currentQIndex === idx ? 'ring-2 ring-indigo-400 scale-110' : 'opacity-60'}`}>
@@ -8814,77 +8934,43 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     </div>
 
                     <div className="relative animate-in zoom-in">
-                        <canvas ref={canvasRef} width={800} height={450} className="aspect-video shadow-2xl bg-black border-4 border-slate-800 rounded-xl" />
+                        <canvas ref={canvasRef} width={800} height={450} className={`aspect-video shadow-2xl bg-black border-4 rounded-xl transition-all duration-500 ${isBossUI ? 'border-red-600 shadow-red-900/50 scale-[1.02]' : 'border-slate-800'}`} />
                         
-                        {isStudyPhase && currentLvlData && (
+                        {isStudyPhase && allLevels[currentLevelIdx] && (
                             <div className="absolute inset-4 bg-slate-900/95 backdrop-blur-xl rounded-xl z-50 flex flex-col p-6 border-2 border-indigo-500 animate-in fade-in duration-300">
-                                <h2 className="text-3xl font-black text-indigo-400 uppercase text-center mb-4">Préparation : {currentLvlData.name}</h2>
+                                <h2 className="text-3xl font-black text-indigo-400 uppercase text-center mb-4">Préparation : {allLevels[currentLevelIdx].name}</h2>
                                 <div className="flex-1 flex gap-6 min-h-0 overflow-hidden">
-                                    
-                                    <div 
-                                        className="flex-1 bg-white rounded-lg overflow-hidden border-4 border-slate-800 flex items-center justify-center cursor-pointer hover:border-indigo-400 transition-colors group relative"
-                                        onClick={() => currentLvlData.intro?.sheetUrl && setActiveFocus('SHEET')}
-                                    >
-                                        {currentLvlData.intro?.sheetUrl ? (
-                                            <>
-                                                <img src={resolveUrl(currentLvlData.intro.sheetUrl)} className="max-w-full max-h-full object-contain" />
-                                                <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                                    <span className="text-white font-black text-lg uppercase tracking-tighter shadow-lg">🔍 CLIQUE POUR AGRANDIR</span>
-                                                </div>
-                                            </>
-                                        ) : <div className="text-slate-300 font-bold uppercase">Aucune fiche niveau</div>}
+                                    <div className="flex-1 bg-white rounded-lg overflow-hidden border-4 border-slate-800 flex items-center justify-center cursor-pointer hover:border-indigo-400 transition-colors group relative" onClick={() => allLevels[currentLevelIdx].intro?.sheetUrl && setActiveFocus('SHEET')}>
+                                        {allLevels[currentLevelIdx].intro?.sheetUrl ? <img src={resolveUrl(allLevels[currentLevelIdx].intro.sheetUrl)} className="max-w-full max-h-full object-contain" /> : <div className="text-slate-300 font-bold uppercase">Aucune fiche</div>}
                                     </div>
-
-                                    <div 
-                                        className="flex-1 bg-black rounded-lg overflow-hidden border-4 border-slate-800 flex items-center justify-center cursor-pointer hover:border-red-500 transition-colors group relative"
-                                        onClick={() => embedUrl && setActiveFocus('VIDEO')}
-                                    >
-                                        {embedUrl ? (
-                                            <>
-                                                <iframe className="w-full h-full pointer-events-none" src={embedUrl} frameBorder="0"></iframe>
-                                                <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                                    <span className="text-white font-black text-lg uppercase tracking-tighter shadow-lg">🎬 CLIQUE POUR PLEIN ÉCRAN</span>
-                                                </div>
-                                            </>
-                                        ) : <div className="text-slate-600 font-bold uppercase">Aucune vidéo niveau</div>}
+                                    <div className="flex-1 bg-black rounded-lg overflow-hidden border-4 border-slate-800 flex items-center justify-center cursor-pointer hover:border-red-500 transition-colors group relative" onClick={() => getYoutubeEmbedUrl(allLevels[currentLevelIdx]?.intro?.videoUrl) && setActiveFocus('VIDEO')}>
+                                        {getYoutubeEmbedUrl(allLevels[currentLevelIdx]?.intro?.videoUrl) ? <iframe className="w-full h-full pointer-events-none" src={getYoutubeEmbedUrl(allLevels[currentLevelIdx].intro.videoUrl)} frameBorder="0"></iframe> : <div className="text-slate-600 font-bold uppercase">Aucune vidéo</div>}
                                     </div>
-
                                 </div>
-                                <button onClick={startLevelAfterStudy} className="mt-6 bg-indigo-600 text-white py-4 rounded-2xl font-black text-2xl hover:scale-105 transition-transform shadow-xl border-b-8 border-indigo-900 active:border-b-0 active:translate-y-2 uppercase">J'ai compris, on commence !</button>
+                                <button onClick={() => { setIsStudyPhase(false); setShowLevelTitle(true); setTimeout(() => { setShowLevelTitle(false); isPausedRef.current = false; playSystemSound("DÉPART"); }, 1500); }} className="mt-6 bg-indigo-600 text-white py-4 rounded-2xl font-black text-2xl hover:scale-105 transition-transform shadow-xl border-b-8 border-indigo-900 active:border-b-0 active:translate-y-2 uppercase">J'ai compris, on commence !</button>
                             </div>
                         )}
 
-                        {showLevelTitle && (
-                            <div className="absolute inset-0 bg-slate-900/90 flex flex-col items-center justify-center rounded-xl z-40 animate-in fade-in">
-                                <h1 className="text-6xl font-black text-yellow-400 drop-shadow-lg mb-4">NIVEAU {currentLevelIdx + 1}</h1>
-                            </div>
-                        )}
-                        {isLevelWon && (
-                            <div className="absolute inset-0 flex items-center justify-center bg-green-900/80 backdrop-blur-sm rounded-xl animate-in zoom-in z-40">
-                                <h2 className="text-5xl font-black text-white uppercase">Niveau Réussi !</h2>
-                            </div>
-                        )}
-                        {isGameOver && (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-red-900/90 backdrop-blur-md rounded-xl z-50">
-                                <h2 className="text-6xl font-black text-white uppercase mb-8">💀 GAME OVER</h2>
-                                <button onClick={retryLevel} className="bg-white text-red-600 px-8 py-4 rounded-full font-black text-xl uppercase">🔄 Réessayer</button>
-                            </div>
-                        )}
-                        {isGameCompleted && (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-yellow-500/90 backdrop-blur-md rounded-xl z-50">
-                                <h2 className="text-6xl font-black text-white uppercase mb-4">VICTOIRE TOTALE !</h2>
-                                <button onClick={onStop} className="mt-8 bg-white text-yellow-600 px-8 py-4 rounded-full font-black text-xl uppercase">QUITTER</button>
-                            </div>
-                        )}
+                        {showLevelTitle && <div className="absolute inset-0 bg-slate-900/90 flex flex-col items-center justify-center rounded-xl z-40 animate-in fade-in"><h1 className="text-6xl font-black text-yellow-400 drop-shadow-lg mb-4">NIVEAU {currentLevelIdx + 1}</h1></div>}
+                        {isLevelWon && <div className="absolute inset-0 flex items-center justify-center bg-green-900/80 backdrop-blur-sm rounded-xl animate-in zoom-in z-40"><h2 className="text-5xl font-black text-white uppercase">Niveau Réussi !</h2></div>}
+                        {isGameOver && <div className="absolute inset-0 flex flex-col items-center justify-center bg-red-900/90 backdrop-blur-md rounded-xl z-50"><h2 className="text-6xl font-black text-white uppercase mb-8">💀 GAME OVER</h2><button onClick={retryLevel} className="bg-white text-red-600 px-8 py-4 rounded-full font-black text-xl uppercase">🔄 Réessayer</button></div>}
+                        {isGameCompleted && <div className="absolute inset-0 flex flex-col items-center justify-center bg-yellow-500/90 backdrop-blur-md rounded-xl z-50"><h2 className="text-6xl font-black text-white uppercase mb-4">VICTOIRE TOTALE !</h2><button onClick={onStop} className="mt-8 bg-white text-yellow-600 px-8 py-4 rounded-full font-black text-xl uppercase">QUITTER</button></div>}
                     </div>
 
                     {!isLevelWon && !isGameOver && !isGameCompleted && !showLevelTitle && !isStudyPhase && levelQuestions[currentQIndex] && (
                         <div className="absolute bottom-10 w-full flex justify-center px-10 pointer-events-auto z-30">
-                            <div className="grid grid-cols-4 gap-4 w-full max-w-5xl">
-                                {levelQuestions[currentQIndex].options.map((o, i) => (
-                                    <button key={i} onClick={() => handleAnswerClick(i)} className="bg-indigo-600 text-white py-6 rounded-2xl font-black uppercase text-lg shadow-xl hover:bg-indigo-500 border-b-8 border-indigo-800 active:border-b-0 active:translate-y-2">{o}</button>
-                                ))}
-                            </div>
+                            {isBossUI ? (
+                                <form onSubmit={handleInputSubmit} className="flex gap-4 w-full max-w-2xl bg-white/10 backdrop-blur-md p-4 rounded-2xl border-2 border-red-500 animate-pulse shadow-[0_0_50px_rgba(239,68,68,0.5)]">
+                                    <input ref={inputRef} value={inputValue} onChange={(e) => setInputValue(e.target.value)} className="flex-1 bg-white/90 text-red-600 font-black text-2xl uppercase text-center rounded-xl outline-none placeholder-red-200 border-2 border-red-200 focus:border-red-600" placeholder="TAPEZ LA RÉPONSE..." autoFocus />
+                                    <button type="submit" className="bg-red-600 text-white px-8 rounded-xl font-black uppercase shadow-lg hover:scale-105 transition-transform border-b-4 border-red-800 active:border-b-0 active:translate-y-1">ATTAQUER</button>
+                                </form>
+                            ) : (
+                                <div className="grid grid-cols-4 gap-4 w-full max-w-5xl">
+                                    {levelQuestions[currentQIndex].options.map((o, i) => (
+                                        <button key={i} onClick={() => handleAnswerClick(i)} className="bg-indigo-600 text-white py-6 rounded-2xl font-black uppercase text-lg shadow-xl hover:bg-indigo-500 border-b-8 border-indigo-800 active:border-b-0 active:translate-y-2">{o}</button>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     )}
                 </>
