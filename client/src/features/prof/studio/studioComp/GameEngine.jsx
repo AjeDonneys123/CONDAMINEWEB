@@ -4,21 +4,18 @@ import SoundExpert from './SoundExpert';
 import { api } from '../../../../services/api';
 
 /**
- * 🎮 MOTEUR STUDIO V1005 (FIX AUDIO DÉFAITE)
- * - Correction du nom de l'événement système ("DEFAITE" -> "DÉFAITE")
- * - Alignement strict de la logique Game Over sur la logique Victoire
+ * 🎮 MOTEUR STUDIO V1006 (PHASE APPRENTISSAGE)
+ * Ajout de l'étape Fiche + Vidéo avant chaque niveau.
  */
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
     const canvasRef = useRef(null);
     
-    // --- ÉTATS SYSTÈME ---
     const [isReady, setIsReady] = useState(false);
     const [engineStarted, setEngineStarted] = useState(false);
     const [loadProgress, setLoadProgress] = useState("0%");
     const [debugLogs, setDebugLogs] = useState([]);
     const [hitFlash, setHitFlash] = useState(false);
     
-    // --- ÉTATS DU JEU ---
     const [allLevels, setAllLevels] = useState([]); 
     const [currentLevelIdx, setCurrentLevelIdx] = useState(0);
     const [levelQuestions, setLevelQuestions] = useState([]); 
@@ -27,7 +24,8 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const [lives, setLives] = useState(4);
     const [feedback, setFeedback] = useState(null);
 
-    // --- OVERLAYS ---
+    // --- NOUVEAUX ÉTATS APPRENTISSAGE ---
+    const [isStudyPhase, setIsStudyPhase] = useState(false);
     const [showLevelTitle, setShowLevelTitle] = useState(false);
     const [isLevelWon, setIsLevelWon] = useState(false);
     const [isGameOver, setIsGameOver] = useState(false);
@@ -36,7 +34,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const isPausedRef = useRef(false);
     const activeTimeoutsRef = useRef([]);
 
-    // Références Moteur
     const audioCtxRef = useRef(null);
     const audioBuffersRef = useRef(new Map());
     const imageAssetsRef = useRef(new Map());
@@ -65,21 +62,12 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         activeSourcesRef.current.length = 0; 
     };
 
-    /**
-     * 🔊 LECTEUR SYSTÈME DIRECT
-     */
     const playSystemSound = (soundName) => {
         if (!project || !audioCtxRef.current) return;
-        
         const scene = project.scenes[activeSceneIdx];
         const soundEvent = scene?.globalSounds?.find(gs => gs.name.toUpperCase().trim() === soundName.toUpperCase().trim());
-        
-        if (!soundEvent || !soundEvent.sounds || soundEvent.sounds.length === 0) {
-            return;
-        }
-
+        if (!soundEvent || !soundEvent.sounds || soundEvent.sounds.length === 0) return;
         if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
-
         soundEvent.sounds.forEach(snd => {
             const buffer = audioBuffersRef.current.get(snd.url);
             if (buffer) {
@@ -94,37 +82,26 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         });
     };
 
-    // 1. CHARGEMENT ASSETS
     useEffect(() => {
         const preloadAssets = async () => {
             if (!project) return;
             if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
-
             const scene = project.scenes?.[activeSceneIdx];
             if (!scene) { setIsReady(true); return; }
-
             const imgUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url)))].filter(Boolean);
             const sndUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url))))].filter(Boolean);
-
             const total = imgUrls.length + sndUrls.length;
             let loaded = 0;
             const updateProgress = () => { loaded++; setLoadProgress(`${Math.round((loaded / total) * 100)}%`); };
-
             imageAssetsRef.current.clear();
-
             const imgPromises = imgUrls.map(url => new Promise(resolve => {
                 const img = new Image();
                 img.crossOrigin = "anonymous";
                 const finalUrl = resolveUrl(url);
-                img.onload = () => { 
-                    imageAssetsRef.current.set(finalUrl, img); 
-                    updateProgress(); 
-                    resolve(); 
-                };
+                img.onload = () => { imageAssetsRef.current.set(finalUrl, img); updateProgress(); resolve(); };
                 img.onerror = () => { updateProgress(); resolve(); };
                 img.src = finalUrl;
             }));
-
             const sndPromises = sndUrls.map(url => new Promise(resolve => {
                 SoundExpert.decodeAudio(resolveUrl(url), audioCtxRef.current).then(buf => {
                     if (buf) audioBuffersRef.current.set(url, buf);
@@ -132,14 +109,12 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     resolve();
                 });
             }));
-
             await Promise.all([...imgPromises, ...sndPromises]);
             setIsReady(true);
         };
 
         api.get('/games/test-data').then(data => {
             let levelsData = data?.levels?.length > 0 ? data.levels : [{ name: "Defaut", questions: [{ q: "Q1", options:["A","B"], a:0 }] }];
-            if (levelsData.length === 1) levelsData = [ { ...levelsData[0], name: "Niveau 1" }, { ...levelsData[0], name: "Niveau 2" } ];
             setAllLevels(levelsData);
             preloadAssets();
         });
@@ -148,7 +123,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         const handleKeyUp = (e) => { keysPressed.current[e.code] = false; };
         window.addEventListener('keydown', handleKeyDown);
         window.addEventListener('keyup', handleKeyUp);
-        
         return () => { 
             window.removeEventListener('keydown', handleKeyDown); 
             window.removeEventListener('keyup', handleKeyUp);
@@ -158,64 +132,49 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         };
     }, [project]);
 
-    // 2. LOGIQUE NIVEAUX
+    // --- INITIALISATION NIVEAU AVEC PHASE ETUDE ---
     const initLevel = (idx, sourceData) => {
         if (!sourceData[idx]) return;
-        
-        stopAllSounds(); 
-        clearAllTimeouts(); 
-
+        stopAllSounds(); clearAllTimeouts(); 
         const lvl = sourceData[idx];
         setCurrentLevelIdx(idx);
         setLevelQuestions(lvl.questions || []);
         setQuestionStates(new Array((lvl.questions || []).length).fill(0));
         setCurrentQIndex(0);
-        
         setIsLevelWon(false); setIsGameOver(false); setIsGameCompleted(false);
-        isPausedRef.current = true; 
-
-        setShowLevelTitle(true);
         
+        // 1. On active la phase d'étude
+        setIsStudyPhase(true);
+        isPausedRef.current = true;
+    };
+
+    const startLevelAfterStudy = () => {
+        setIsStudyPhase(false);
+        setShowLevelTitle(true);
         safeTimeout(() => {
             setShowLevelTitle(false);
             isPausedRef.current = false; 
-            if (gameInstanceRef.current) {
-                if (gameInstanceRef.current.start) {
-                    try { gameInstanceRef.current.start(); } catch(e) {}
-                }
-                playSystemSound("DÉPART");
+            if (gameInstanceRef.current && gameInstanceRef.current.start) {
+                gameInstanceRef.current.start();
             }
-        }, 2000);
+            playSystemSound("DÉPART");
+        }, 1500);
     };
 
-    // --- LOGIQUE GAME OVER (MODIFIÉE POUR MATCH "VICTOIRE") ---
     const handleGameOver = () => {
-        stopAllSounds(); 
-        setIsGameOver(true);
-        isPausedRef.current = true;
+        stopAllSounds(); setIsGameOver(true); isPausedRef.current = true;
         logSonde("💀 GAME OVER", "error");
-        
-        // Utilisation du nom avec accent pour matcher la capture d'écran
-        safeTimeout(() => {
-            playSystemSound("DÉFAITE");
-        }, 500);
+        safeTimeout(() => { playSystemSound("DÉFAITE"); }, 500);
     };
 
-    const retryLevel = () => {
-        setLives(4);
-        initLevel(currentLevelIdx, allLevels);
-    };
+    const retryLevel = () => { setLives(4); initLevel(currentLevelIdx, allLevels); };
 
     const nextLevel = () => {
         const nextIdx = currentLevelIdx + 1;
-        if (allLevels[nextIdx]) {
-            initLevel(nextIdx, allLevels);
-        } else {
-            stopAllSounds();
-            setIsGameCompleted(true);
-            safeTimeout(() => {
-                playSystemSound("VICTOIRE");
-            }, 500);
+        if (allLevels[nextIdx]) initLevel(nextIdx, allLevels);
+        else {
+            stopAllSounds(); setIsGameCompleted(true);
+            safeTimeout(() => { playSystemSound("VICTOIRE"); }, 500);
         }
     };
 
@@ -225,24 +184,16 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         setTimeout(() => setHitFlash(false), 200);
         setLives(prev => {
             const newVal = Math.max(0, prev - 1);
-            if (newVal === 0) {
-                isPausedRef.current = true;
-                safeTimeout(handleGameOver, 1000);
-            }
+            if (newVal === 0) { isPausedRef.current = true; safeTimeout(handleGameOver, 1000); }
             return newVal;
         });
     };
 
-    // --- CHEATS ---
-    const handleHeartClick = () => { if (keysPressed.current['KeyF']) triggerPlayerHit(); };
     const handleBarClick = (idx) => {
         if (keysPressed.current['KeyF']) {
             const newStates = [...questionStates]; newStates[idx] = 3; setQuestionStates(newStates);
             if(newStates.filter(s => s<3).length === 0) { setIsLevelWon(true); isPausedRef.current=true; safeTimeout(nextLevel, 1500); }
         }
-    };
-    const handleQuestionBoxClick = () => {
-        if (keysPressed.current['KeyF']) { setIsLevelWon(true); isPausedRef.current=true; safeTimeout(nextLevel, 1500); }
     };
 
     const handleAnswerClick = (choiceIdx) => {
@@ -250,7 +201,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         const currentQ = levelQuestions[currentQIndex];
         const isCorrect = currentQ.a === choiceIdx;
         setFeedback(isCorrect ? 'CORRECT' : 'WRONG');
-
         const newStates = [...questionStates];
         if (isCorrect) {
             newStates[currentQIndex] = Math.min(3, newStates[currentQIndex] + 1);
@@ -261,14 +211,12 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             triggerPlayerHit();
         }
         setQuestionStates(newStates);
-
         safeTimeout(() => {
             setFeedback(null);
             if (lives > 0) {
                 const available = newStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
-                if (available.length > 0) {
-                    setCurrentQIndex(available[Math.floor(Math.random() * available.length)]);
-                } else {
+                if (available.length > 0) setCurrentQIndex(available[Math.floor(Math.random() * available.length)]);
+                else {
                     setIsLevelWon(true); isPausedRef.current = true;
                     if (gameInstanceRef.current?.onLevelWin) gameInstanceRef.current.onLevelWin();
                     safeTimeout(nextLevel, 4000);
@@ -283,17 +231,14 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         initLevel(0, allLevels);
     };
 
-    // 3. MOTEUR RENDU
     useEffect(() => {
         if (!engineStarted || !canvasRef.current) return;
         try {
             const canvas = canvasRef.current;
             const ctx = canvas.getContext('2d');
             const gameCallbacks = { onPlayerHit: triggerPlayerHit, playSound: (name) => {} };
-
             const BaseFactory = new Function('params', `
                 const { audioBuffers, audioCtx, project, sceneIdx, imageAssets, resolveUrl, canvas, ctx, activeSources } = params;
-                
                 class ActorProxy {
                     constructor(data, engine) { 
                         this.id = data.id; this.name = data.name; this.engine = engine;
@@ -370,18 +315,11 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     }
                 }
             `);
-
-            const MiniGameBase = BaseFactory({ 
-                audioBuffers: audioBuffersRef.current, audioCtx: audioCtxRef.current, 
-                imageAssets: imageAssetsRef.current, resolveUrl, logSonde, project, sceneIdx: activeSceneIdx, canvas, ctx,
-                callbacks: gameCallbacks, activeSources: activeSourcesRef.current
-            });
-
+            const MiniGameBase = BaseFactory({ audioBuffers: audioBuffersRef.current, audioCtx: audioCtxRef.current, imageAssets: imageAssetsRef.current, resolveUrl, logSonde, project, sceneIdx: activeSceneIdx, canvas, ctx, callbacks: gameCallbacks, activeSources: activeSourcesRef.current });
             const UserCodeFactory = new Function('MiniGameBase', `${code}\nreturn MiniGame;`);
             const UserGameClass = UserCodeFactory(MiniGameBase);
             const instance = new UserGameClass(canvas, {}, gameCallbacks);
             gameInstanceRef.current = instance;
-            
             const tick = () => {
                 if(instance.keys) Object.assign(instance.keys, keysPressed.current);
                 instance.currentLevel = currentLevelIdx + 1;
@@ -393,6 +331,9 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             tick();
         } catch (e) { logSonde("CRASH: " + e.message, "error"); }
     }, [engineStarted]);
+
+    // --- RENDU UI ---
+    const currentLvlData = allLevels[currentLevelIdx];
 
     return (
         <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center overflow-hidden font-sans">
@@ -406,19 +347,19 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
              ) : (
                 <>
                     <div className="absolute top-6 w-full flex justify-between items-start px-10 pointer-events-none z-30">
-                        <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-xl pointer-events-auto flex gap-1 cursor-pointer hover:border-red-500" onClick={handleHeartClick}>
+                        <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-xl pointer-events-auto flex gap-1" onClick={() => { if (keysPressed.current['KeyF']) triggerPlayerHit(); }}>
                             {"❤️".repeat(lives)}{"🖤".repeat(Math.max(0, 4 - lives))}
                         </div>
                         <div className="flex-1 flex justify-center px-4">
-                            {levelQuestions[currentQIndex] && !isLevelWon && !isGameOver && !showLevelTitle && (
-                                <div className="bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 border-slate-600 shadow-2xl text-xl pointer-events-auto animate-in slide-in-from-top cursor-pointer hover:border-green-500" onClick={handleQuestionBoxClick}>
+                            {levelQuestions[currentQIndex] && !isStudyPhase && !isLevelWon && !isGameOver && !showLevelTitle && (
+                                <div className="bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 border-slate-600 shadow-2xl text-xl pointer-events-auto animate-in slide-in-from-top">
                                     {feedback === 'CORRECT' ? "✅ BRAVO !" : feedback === 'WRONG' ? "❌ RATÉ..." : levelQuestions[currentQIndex].q}
                                 </div>
                             )}
                         </div>
                         <div className="flex gap-2 items-center pointer-events-auto mr-20">
                             {questionStates.map((mastery, idx) => (
-                                <div key={idx} onClick={() => handleBarClick(idx)} className={`w-4 h-12 rounded-md border border-slate-600 relative overflow-hidden cursor-pointer hover:border-white ${currentQIndex === idx ? 'ring-2 ring-indigo-400 scale-110' : 'opacity-60'}`}>
+                                <div key={idx} onClick={() => handleBarClick(idx)} className={`w-4 h-12 rounded-md border border-slate-600 relative overflow-hidden cursor-pointer ${currentQIndex === idx ? 'ring-2 ring-indigo-400 scale-110' : 'opacity-60'}`}>
                                     <div className={`absolute bottom-0 left-0 right-0 transition-all duration-500 ${mastery === 3 ? 'bg-green-500' : 'bg-yellow-500'}`} style={{ height: `${(mastery / 3) * 100}%` }} />
                                 </div>
                             ))}
@@ -427,40 +368,58 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
                     <div className="relative animate-in zoom-in">
                         <canvas ref={canvasRef} width={800} height={450} className="aspect-video shadow-2xl bg-black border-4 border-slate-800 rounded-xl" />
+                        
+                        {/* --- MODALE APPRENTISSAGE --- */}
+                        {isStudyPhase && currentLvlData && (
+                            <div className="absolute inset-4 bg-slate-900/95 backdrop-blur-xl rounded-xl z-50 flex flex-col p-6 border-2 border-indigo-500 animate-in fade-in duration-300">
+                                <h2 className="text-3xl font-black text-indigo-400 uppercase text-center mb-4">Préparation : {currentLvlData.name}</h2>
+                                <div className="flex-1 flex gap-6 min-h-0 overflow-hidden">
+                                    {/* FICHE */}
+                                    <div className="flex-1 bg-white rounded-lg overflow-hidden border-4 border-slate-800 flex items-center justify-center">
+                                        {currentLvlData.intro?.sheetUrl ? (
+                                            <img src={resolveUrl(currentLvlData.intro.sheetUrl)} className="max-w-full max-h-full object-contain" />
+                                        ) : <div className="text-slate-300 font-bold uppercase">Aucune fiche niveau</div>}
+                                    </div>
+                                    {/* VIDÉO */}
+                                    <div className="flex-1 bg-black rounded-lg overflow-hidden border-4 border-slate-800 flex items-center justify-center">
+                                        {currentLvlData.intro?.videoUrl ? (
+                                            <iframe className="w-full h-full" src={currentLvlData.intro.videoUrl.replace("watch?v=", "embed/")} frameBorder="0" allowFullScreen></iframe>
+                                        ) : <div className="text-slate-600 font-bold uppercase">Aucune vidéo niveau</div>}
+                                    </div>
+                                </div>
+                                <button onClick={startLevelAfterStudy} className="mt-6 bg-indigo-600 text-white py-4 rounded-2xl font-black text-2xl hover:scale-105 transition-transform shadow-xl border-b-8 border-indigo-900 active:border-b-0 active:translate-y-2 uppercase">J'ai compris, on commence !</button>
+                            </div>
+                        )}
+
                         {showLevelTitle && (
-                            <div className="absolute inset-0 bg-slate-900/90 flex flex-col items-center justify-center rounded-xl z-40 animate-in fade-in duration-500">
+                            <div className="absolute inset-0 bg-slate-900/90 flex flex-col items-center justify-center rounded-xl z-40 animate-in fade-in">
                                 <h1 className="text-6xl font-black text-yellow-400 drop-shadow-lg mb-4">NIVEAU {currentLevelIdx + 1}</h1>
-                                <p className="text-white text-2xl font-bold uppercase tracking-widest animate-pulse">Préparez-vous...</p>
                             </div>
                         )}
                         {isLevelWon && (
                             <div className="absolute inset-0 flex items-center justify-center bg-green-900/80 backdrop-blur-sm rounded-xl animate-in zoom-in z-40">
-                                <div className="text-center">
-                                    <span className="text-8xl block mb-4">🏆</span>
-                                    <h2 className="text-5xl font-black text-white uppercase drop-shadow-xl">Niveau Réussi !</h2>
-                                </div>
+                                <h2 className="text-5xl font-black text-white uppercase">Niveau Réussi !</h2>
                             </div>
                         )}
                         {isGameOver && (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-red-900/90 backdrop-blur-md rounded-xl animate-in zoom-in z-50">
-                                <h2 className="text-6xl font-black text-white uppercase mb-8 drop-shadow-xl">💀 GAME OVER</h2>
-                                <button onClick={retryLevel} className="bg-white text-red-600 px-8 py-4 rounded-full font-black text-xl shadow-2xl hover:scale-105 transition-transform uppercase">🔄 Réessayer</button>
+                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-red-900/90 backdrop-blur-md rounded-xl z-50">
+                                <h2 className="text-6xl font-black text-white uppercase mb-8">💀 GAME OVER</h2>
+                                <button onClick={retryLevel} className="bg-white text-red-600 px-8 py-4 rounded-full font-black text-xl uppercase">🔄 Réessayer</button>
                             </div>
                         )}
                         {isGameCompleted && (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-yellow-500/90 backdrop-blur-md rounded-xl animate-in zoom-in z-50">
-                                <span className="text-8xl animate-bounce mb-4">👑</span>
-                                <h2 className="text-6xl font-black text-white uppercase mb-4 drop-shadow-xl">VICTOIRE TOTALE !</h2>
-                                <button onClick={onStop} className="mt-8 bg-white text-yellow-600 px-8 py-4 rounded-full font-black text-xl shadow-2xl hover:scale-105 transition-transform uppercase">QUITTER</button>
+                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-yellow-500/90 backdrop-blur-md rounded-xl z-50">
+                                <h2 className="text-6xl font-black text-white uppercase mb-4">VICTOIRE TOTALE !</h2>
+                                <button onClick={onStop} className="mt-8 bg-white text-yellow-600 px-8 py-4 rounded-full font-black text-xl uppercase">QUITTER</button>
                             </div>
                         )}
                     </div>
 
-                    {!isLevelWon && !isGameOver && !isGameCompleted && !showLevelTitle && levelQuestions[currentQIndex] && (
+                    {!isLevelWon && !isGameOver && !isGameCompleted && !showLevelTitle && !isStudyPhase && levelQuestions[currentQIndex] && (
                         <div className="absolute bottom-10 w-full flex justify-center px-10 pointer-events-auto z-30">
                             <div className="grid grid-cols-4 gap-4 w-full max-w-5xl">
                                 {levelQuestions[currentQIndex].options.map((o, i) => (
-                                    <button key={i} onClick={() => handleAnswerClick(i)} className="bg-indigo-600 text-white py-6 rounded-2xl font-black uppercase text-lg shadow-xl hover:bg-indigo-500 hover:scale-105 transition-all border-b-8 border-indigo-800 active:border-b-0 active:translate-y-2">{o}</button>
+                                    <button key={i} onClick={() => handleAnswerClick(i)} className="bg-indigo-600 text-white py-6 rounded-2xl font-black uppercase text-lg shadow-xl hover:bg-indigo-500 border-b-8 border-indigo-800 active:border-b-0 active:translate-y-2">{o}</button>
                                 ))}
                             </div>
                         </div>
