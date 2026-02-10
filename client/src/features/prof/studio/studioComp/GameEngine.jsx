@@ -4,7 +4,6 @@ import SoundExpert from './SoundExpert';
 import { api } from '../../../../services/api';
 
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
-    // 1. DÉCLARATION DES REFS (En premier pour éviter ReferenceError)
     const canvasRef = useRef(null);
     const livesRef = useRef(4);
     const inputRef = useRef(null);
@@ -24,7 +23,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const activeSourcesRef = useRef([]);
     const keysPressed = useRef({}); 
 
-    // 2. ÉTATS
     const [isReady, setIsReady] = useState(false);
     const [engineStarted, setEngineStarted] = useState(false);
     const [loadProgress, setLoadProgress] = useState("0%");
@@ -45,10 +43,19 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const [isGameOver, setIsGameOver] = useState(false);
     const [isGameCompleted, setIsGameCompleted] = useState(false);
 
-    // 3. SYNCHRONISATION
     useEffect(() => { isMutedRef.current = isMuted; }, [isMuted]);
     useEffect(() => { livesRef.current = lives; }, [lives]);
     useEffect(() => { projectRef.current = project; }, [project]);
+
+    // SURVEILLANCE DES VIES POUR GAME OVER (VÉGÉ : AJOUT DÉLAI)
+    useEffect(() => {
+        if (lives === 0 && !isGameOver) {
+            // On laisse le temps à l'animation "TOUCHE" de se faire (1.5s)
+            safeTimeout(() => {
+                handleGameOver();
+            }, 1500);
+        }
+    }, [lives]);
 
     useEffect(() => {
         const isBoss = (currentQIndex !== -1 && questionStates[currentQIndex] >= 2);
@@ -56,7 +63,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         if (gameInstanceRef.current) gameInstanceRef.current.isBossPhase = isBoss;
     }, [currentQIndex, questionStates]);
 
-    // 4. UTILITAIRES
     const normalize = (str) => (str || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
     
     const safeTimeout = (fn, delay) => {
@@ -106,8 +112,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         });
     };
 
-    // 5. LOGIQUE JEU
-
     const handleGameOver = () => {
         stopAllSounds();
         setIsGameOver(true);
@@ -117,19 +121,14 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
     const triggerPlayerHit = () => {
         const now = Date.now();
+        // Cooldown pour éviter de perdre 4 vies en une frame de collision
         if (now - lastInteractionRef.current < 1000) return;
         lastInteractionRef.current = now;
 
-        setHitFlash(true); setTimeout(() => setHitFlash(false), 200);
+        setHitFlash(true); 
+        setTimeout(() => setHitFlash(false), 200);
         
-        setLives(prev => {
-            const newVal = Math.max(0, prev - 1);
-            if (newVal === 0) {
-                isPausedRef.current = true;
-                handleGameOver();
-            }
-            return newVal;
-        });
+        setLives(prev => Math.max(0, prev - 1));
     };
 
     const initLevel = (idx, data) => {
@@ -192,13 +191,9 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                         else setIsGameCompleted(true);
                     }, 4000);
                 }
-            } else if (livesRef.current <= 0 && !isGameOver) {
-                handleGameOver();
             }
         }, 1000);
     };
-
-    // 6. HANDLERS UI
 
     const handleBarClick = (idx) => {
         if (keysPressed.current['KeyF'] || keysPressed.current['Keyf']) {
@@ -243,7 +238,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
     const retryLevel = () => { setLives(4); initLevel(currentLevelIdx, allLevels); };
 
-    // 7. PRELOAD
     useEffect(() => {
         const load = async () => {
             if (!project) return;
@@ -282,7 +276,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         };
     }, [project]);
 
-    // 8. GAME LOOP
     useEffect(() => {
         if (!engineStarted || !canvasRef.current) return;
 
@@ -483,7 +476,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                             <button onClick={() => setIsMuted(!isMuted)} className={`w-16 h-16 rounded-2xl border-2 shadow-xl flex items-center justify-center text-2xl transition-all ${isMuted ? 'bg-red-900/80 border-red-500 text-red-200' : 'bg-slate-900/80 border-slate-700 text-white hover:border-indigo-500'}`}>{isMuted ? '🔇' : '🔊'}</button>
                         </div>
                         <div className="flex-1 flex justify-center px-4">
-                            {/* CHEAT CLICK QUESTION */}
                             {levelQuestions[currentQIndex] && !isStudyPhase && !isLevelWon && !isGameOver && !showLevelTitle && (
                                 <div onClick={handleForceWin} className="bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 border-slate-600 shadow-2xl text-xl pointer-events-auto animate-in slide-in-from-top cursor-pointer hover:border-indigo-500 transition-colors">
                                     {feedback === 'CORRECT' ? "✅ BRAVO !" : feedback === 'WRONG' ? "❌ RATÉ..." : levelQuestions[currentQIndex].q}

@@ -8659,3 +8659,8 @@
 - Problème : Perte du verrou de collision et déclenchement direct des dégâts sans passer par l'animation héros.
 - Solution : Restauration de 'isColliding'.
 - Logique : La collision déclenche le 'TAPER' du zombie. Le 'TAPER' (Frame 1) déclenche le 'TOUCHE' du héros. C'est l'action du héros qui déclenche 'onPlayerHit'.
+
+10/02/2026 - 18:45 : FIX GAME ENGINE (DÉLAI DÉFAITE).
+- Problème : Le Game Over s'affichait instantanément à la collision si vies=0, coupant l'animation du héros.
+- Solution : Déplacement de 'handleGameOver' dans un useEffect avec un safeTimeout de 1.5s.
+- Résultat : L'élève voit son héros subir l'impact avant que l'écran de défaite n'apparaisse.
