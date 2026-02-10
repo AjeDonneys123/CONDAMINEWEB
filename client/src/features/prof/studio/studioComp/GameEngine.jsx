@@ -1,4 +1,4 @@
-// @signatures: GameEngine, initLevel, handleAnswerClick, handleInputSubmit, handleGameOver, retryLevel, nextLevel, preloadAssets, getYoutubeEmbedUrl
+// @signatures: GameEngine, initLevel, handleAnswerClick, handleInputSubmit, handleGameOver, retryLevel, nextLevel, preloadAssets, getYoutubeEmbedUrl, handleBarClick, handleForceWin, triggerPlayerHit
 import React, { useState, useRef, useEffect } from 'react';
 import SoundExpert from './SoundExpert';
 import { api } from '../../../../services/api';
@@ -16,15 +16,18 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const [levelQuestions, setLevelQuestions] = useState([]); 
     const [questionStates, setQuestionStates] = useState([]); 
     const [currentQIndex, setCurrentQIndex] = useState(-1);
+    
     const [lives, setLives] = useState(4);
+    
     const [feedback, setFeedback] = useState(null);
 
     // --- BOSS MODE & INPUT ---
     const [inputValue, setInputValue] = useState("");
     const inputRef = useRef(null);
     
-    // 🔥 PONT TEMPS RÉEL (Référence mutable)
+    // 🔥 PONT TEMPS RÉEL
     const bossModeRef = useRef(false);
+    const lastHitTimeRef = useRef(0); // Anti-spam dégâts physique
 
     const [isMuted, setIsMuted] = useState(false);
     const isMutedRef = useRef(false);
@@ -49,15 +52,11 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
     useEffect(() => { isMutedRef.current = isMuted; }, [isMuted]);
 
-    // 🔥 SYNCHRONISATION INSTANTANÉE ET CONTINUE
+    // 🔥 SYNCHRONISATION BOSS MODE
     useEffect(() => {
         const isBoss = (currentQIndex !== -1 && questionStates[currentQIndex] >= 2);
         bossModeRef.current = isBoss;
-        
-        // Injection directe si l'instance tourne déjà
-        if (gameInstanceRef.current) {
-            gameInstanceRef.current.isBossPhase = isBoss;
-        }
+        if (gameInstanceRef.current) gameInstanceRef.current.isBossPhase = isBoss;
     }, [currentQIndex, questionStates]);
 
     const getYoutubeEmbedUrl = (url) => {
@@ -107,30 +106,69 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
     const normalize = (str) => (str || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
 
+    // --- LOGIQUE GAME OVER CENTRALISÉE ---
+    const handleGameOver = () => {
+        console.log("💀 GAME OVER TRIGGERED");
+        isPausedRef.current = true; // Arrêt immédiat de la boucle
+        stopAllSounds(); 
+        setIsGameOver(true); 
+        playSystemSound("DÉFAITE");
+    };
+
+    // --- LOGIQUE DÉGÂTS (ZOMBIE OU ERREUR) ---
+    const triggerPlayerHit = () => {
+        const now = Date.now();
+        // Protection Anti-Mitraillette (1 sec d'invulnérabilité)
+        if (now - lastHitTimeRef.current < 1000) return;
+        lastHitTimeRef.current = now;
+
+        setHitFlash(true); 
+        setTimeout(() => setHitFlash(false), 200);
+        
+        setLives(prev => {
+            const newVal = Math.max(0, prev - 1);
+            if (newVal === 0) {
+                // Si 0, on meurt tout de suite
+                handleGameOver();
+            }
+            return newVal;
+        });
+    };
+
+    // --- LOGIQUE RÉPONSE ---
     const handleAnswerLogic = (isCorrect) => {
+        // Si déjà Game Over, on arrête tout
+        if (isGameOver || lives <= 0) return;
+
         setFeedback(isCorrect ? 'CORRECT' : 'WRONG');
         const newStates = [...questionStates];
+        
         if (isCorrect) {
             newStates[currentQIndex] = Math.min(3, newStates[currentQIndex] + 1);
-            // 🔫 DÉCLENCHEMENT DU TIR
-            if (gameInstanceRef.current?.onResult) {
-                console.log("🔫 MOTEUR: TIR DÉCLENCHÉ");
-                gameInstanceRef.current.onResult(true);
-            }
+            if (gameInstanceRef.current?.onResult) gameInstanceRef.current.onResult(true);
         } else {
+            // Erreur = Perte d'un cran sur la question + Dégât joueur
             newStates[currentQIndex] = Math.max(0, newStates[currentQIndex] - 1);
             if (gameInstanceRef.current?.onResult) gameInstanceRef.current.onResult(false);
-            setHitFlash(true); setTimeout(() => setHitFlash(false), 200);
-            setLives(prev => Math.max(0, prev - 1));
+            
+            triggerPlayerHit(); // Utilise la fonction centralisée
         }
+        
         setQuestionStates(newStates);
         setInputValue("");
 
+        // Transition après feedback
         safeTimeout(() => {
             setFeedback(null);
-            if (lives > 0) {
+            
+            // On vérifie l'état actuel des vies via une fonction de callback ou ref si besoin, 
+            // mais ici triggerPlayerHit a déjà géré le Game Over si lives == 0.
+            // On vérifie juste si le jeu n'est PAS fini.
+            if (!isPausedRef.current && !isGameOver) {
                 const available = newStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
+                
                 if (available.length > 0) {
+                    // Logique choix prochaine question
                     if (newStates[currentQIndex] < 3) {
                         setCurrentQIndex(currentQIndex);
                         if (newStates[currentQIndex] >= 2) setTimeout(() => inputRef.current?.focus(), 50);
@@ -138,17 +176,48 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                         setCurrentQIndex(available[Math.floor(Math.random() * available.length)]);
                     }
                 } else {
-                    setIsLevelWon(true); isPausedRef.current = true;
+                    // --- VICTOIRE NIVEAU ---
+                    setIsLevelWon(true); 
+                    isPausedRef.current = true;
+                    playSystemSound("VICTOIRE"); // 🔊 SON AJOUTÉ ICI
+                    
                     safeTimeout(() => {
                         setLives(4);
                         if (allLevels[currentLevelIdx + 1]) initLevel(currentLevelIdx + 1, allLevels);
                         else setIsGameCompleted(true);
                     }, 4000);
                 }
-            } else {
-                setIsGameOver(true);
             }
         }, 1000);
+    };
+
+    // --- CHEAT CODES (TOUCHE F) ---
+    const handleBarClick = (idx) => {
+        // Détection plus permissive
+        if (keysPressed.current['KeyF'] || keysPressed.current['Keyf']) {
+            console.log("🕵️ CHEAT: BAR BOOST");
+            const newStates = [...questionStates];
+            newStates[idx] = Math.min(3, newStates[idx] + 1);
+            setQuestionStates(newStates);
+            // Refresh immédiat si on passe en mode boss
+            if (idx === currentQIndex && newStates[idx] >= 2) {
+                setTimeout(() => inputRef.current?.focus(), 50);
+            }
+        }
+    };
+
+    const handleForceWin = () => {
+        if (keysPressed.current['KeyF'] || keysPressed.current['Keyf']) {
+            console.log("🕵️ CHEAT: WIN LEVEL");
+            setIsLevelWon(true);
+            isPausedRef.current = true;
+            playSystemSound("VICTOIRE");
+            safeTimeout(() => {
+                setLives(4);
+                if (allLevels[currentLevelIdx + 1]) initLevel(currentLevelIdx + 1, allLevels);
+                else setIsGameCompleted(true);
+            }, 1000);
+        }
     };
 
     const handleAnswerClick = (choiceIdx) => {
@@ -165,6 +234,8 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         const correctText = currentQ.options[currentQ.a];
         handleAnswerLogic(normalize(inputValue) === normalize(correctText));
     };
+
+    const retryLevel = () => { setLives(4); initLevel(currentLevelIdx, allLevels); };
 
     const handleStartGame = async () => {
         if (audioCtxRef.current) { try { await audioCtxRef.current.resume(); } catch (e) {} }
@@ -206,9 +277,18 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             preloadAssets();
         });
 
-        const handleKeyDown = (e) => { if (e.target.tagName !== 'INPUT') keysPressed.current[e.code] = true; };
+        // LISTENER CLAVIER (Fix Cheats)
+        const handleKeyDown = (e) => { 
+            // On capture toujours F pour les cheats
+            if (e.code === 'KeyF') keysPressed.current[e.code] = true;
+            // Pour le reste, seulement si pas dans l'input
+            else if (e.target.tagName !== 'INPUT') keysPressed.current[e.code] = true; 
+        };
         const handleKeyUp = (e) => { keysPressed.current[e.code] = false; };
-        window.addEventListener('keydown', handleKeyDown); window.addEventListener('keyup', handleKeyUp);
+        
+        window.addEventListener('keydown', handleKeyDown); 
+        window.addEventListener('keyup', handleKeyUp);
+        
         return () => { 
             window.removeEventListener('keydown', handleKeyDown); 
             window.removeEventListener('keyup', handleKeyUp);
@@ -234,7 +314,11 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         try {
             const canvas = canvasRef.current;
             const ctx = canvas.getContext('2d');
-            const gameCallbacks = { onPlayerHit: () => handleAnswerLogic(false), playSound: () => {} };
+            // MODIF : Le callback onPlayerHit appelle maintenant triggerPlayerHit directement !
+            const gameCallbacks = { 
+                onPlayerHit: () => triggerPlayerHit(), 
+                playSound: () => {} 
+            };
             
             const BaseFactory = new Function('params', `
                 const { audioBuffers, audioCtx, project, sceneIdx, imageAssets, resolveUrl, canvas, ctx, activeSources, isMutedRef, bossModeRef } = params;
@@ -337,18 +421,14 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 instance.isBossPhase = bossModeRef.current;
 
                 if (!isPausedRef.current && instance.update) instance.update();
-                
-                // ORDRE D'AFFICHAGE : FOND -> ACTEURS -> HUD/BALLES
-                if (instance._render) instance._render(); // Fond + Acteurs
-                if (instance.draw) instance.draw();       // Balles + Texte Boss
-                
+                if (instance._render) instance._render();
+                if (instance.draw) instance.draw();
                 frameIdRef.current = requestAnimationFrame(tick);
             };
             tick();
         } catch (e) { console.error("Crash Game", e); }
     }, [engineStarted]);
 
-    // Détection Boss Phase pour l'UI React (Bouton/Input)
     const isBossUI = currentQIndex !== -1 && questionStates[currentQIndex] >= 2;
 
     return (
@@ -380,15 +460,17 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                             <button onClick={() => setIsMuted(!isMuted)} className={`w-16 h-16 rounded-2xl border-2 shadow-xl flex items-center justify-center text-2xl transition-all ${isMuted ? 'bg-red-900/80 border-red-500 text-red-200' : 'bg-slate-900/80 border-slate-700 text-white hover:border-indigo-500'}`}>{isMuted ? '🔇' : '🔊'}</button>
                         </div>
                         <div className="flex-1 flex justify-center px-4">
+                            {/* CHEAT CLICK QUESTION */}
                             {levelQuestions[currentQIndex] && !isStudyPhase && !isLevelWon && !isGameOver && !showLevelTitle && (
-                                <div className="bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 border-slate-600 shadow-2xl text-xl pointer-events-auto animate-in slide-in-from-top">
+                                <div onClick={handleForceWin} className="bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 border-slate-600 shadow-2xl text-xl pointer-events-auto animate-in slide-in-from-top cursor-pointer hover:border-indigo-500 transition-colors">
                                     {feedback === 'CORRECT' ? "✅ BRAVO !" : feedback === 'WRONG' ? "❌ RATÉ..." : levelQuestions[currentQIndex].q}
                                 </div>
                             )}
                         </div>
                         <div className="flex gap-2 items-center pointer-events-auto mr-20">
                             {questionStates.map((mastery, idx) => (
-                                <div key={idx} className={`w-4 h-12 rounded-md border border-slate-600 relative overflow-hidden cursor-pointer ${currentQIndex === idx ? 'ring-2 ring-indigo-400 scale-110' : 'opacity-60'}`}>
+                                /* CHEAT CLICK BAR */
+                                <div key={idx} onClick={() => handleBarClick(idx)} className={`w-4 h-12 rounded-md border border-slate-600 relative overflow-hidden cursor-pointer ${currentQIndex === idx ? 'ring-2 ring-indigo-400 scale-110' : 'opacity-60'}`}>
                                     <div className={`absolute bottom-0 left-0 right-0 transition-all duration-500 ${mastery === 3 ? 'bg-green-500' : 'bg-yellow-500'}`} style={{ height: `${(mastery / 3) * 100}%` }} />
                                 </div>
                             ))}
