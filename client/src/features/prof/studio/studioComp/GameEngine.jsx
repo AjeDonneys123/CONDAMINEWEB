@@ -31,14 +31,15 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const [isGameCompleted, setIsGameCompleted] = useState(false);
     
     // --- REFS TECHNIQUES (CRITIQUES) ---
-    const livesRef = useRef(4); // Pour lecture instantanée dans les boucles
+    const livesRef = useRef(4);
     const inputRef = useRef(null);
     const bossModeRef = useRef(false);
-    const lastInteractionRef = useRef(0); // Anti-spam dégâts
-    const loopIdRef = useRef(0); // 🛑 ANTI-DOUBLON DE BOUCLE
-    const projectRef = useRef(project); // Accès frais aux données
+    const lastInteractionRef = useRef(0);
+    const loopIdRef = useRef(0);
+    const projectRef = useRef(project);
     const frameIdRef = useRef(null);
-    
+    const gameInstanceRef = useRef(null); // REFERENCE PRINCIPALE DU JEU
+
     // --- AUDIO ---
     const [isMuted, setIsMuted] = useState(false);
     const isMutedRef = useRef(false);
@@ -50,20 +51,19 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     // --- INPUTS ---
     const keysPressed = useRef({}); 
 
-    // Synchronisation des Refs
     useEffect(() => { isMutedRef.current = isMuted; }, [isMuted]);
     useEffect(() => { livesRef.current = lives; }, [lives]);
     useEffect(() => { projectRef.current = project; }, [project]);
 
-    // Détection Mode Boss
-    const isBossUI = currentQIndex !== -1 && questionStates[currentQIndex] >= 2;
+    // SYNC BOSS MODE
     useEffect(() => {
-        bossModeRef.current = isBossUI;
-    }, [isBossUI]);
+        const isBoss = (currentQIndex !== -1 && questionStates[currentQIndex] >= 2);
+        bossModeRef.current = isBoss;
+        if (gameInstanceRef.current) gameInstanceRef.current.isBossPhase = isBoss;
+    }, [currentQIndex, questionStates]);
 
-    // --- UTILITAIRES ---
     const normalize = (str) => (str || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
-    const safeTimeout = (fn, d) => setTimeout(fn, d); // Simplifié, React gère bien les timeouts courts
+    const safeTimeout = (fn, d) => setTimeout(fn, d);
 
     const stopAllSounds = () => {
         activeSourcesRef.current.forEach(src => { try { src.stop(); } catch(e){} });
@@ -111,7 +111,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
     const triggerPlayerHit = () => {
         const now = Date.now();
-        // Anti-spam 1s
         if (now - lastInteractionRef.current < 1000) return;
         lastInteractionRef.current = now;
 
@@ -132,10 +131,20 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         
         if (isCorrect) {
             newStates[currentQIndex] = Math.min(3, newStates[currentQIndex] + 1);
-            // On déclenche le tir pour le jeu (si défini)
+            
+            // ✅ APPEL SÉCURISÉ AU JEU (Si instance existe)
+            if (gameInstanceRef.current && typeof gameInstanceRef.current.onResult === 'function') {
+                gameInstanceRef.current.onResult(true);
+            }
+
         } else {
-            // Perte d'un point barre + Vie
             if (newStates[currentQIndex] > 0) newStates[currentQIndex] -= 1;
+            
+            // ✅ APPEL SÉCURISÉ AU JEU
+            if (gameInstanceRef.current && typeof gameInstanceRef.current.onResult === 'function') {
+                gameInstanceRef.current.onResult(false);
+            }
+            
             triggerPlayerHit();
         }
         
@@ -150,13 +159,11 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 if (available.length > 0) {
                     if (newStates[currentQIndex] < 3) {
                         setCurrentQIndex(currentQIndex);
-                        // Refocus si on passe en mode boss
                         if (newStates[currentQIndex] >= 2) setTimeout(() => inputRef.current?.focus(), 50);
                     } else {
                         setCurrentQIndex(available[Math.floor(Math.random() * available.length)]);
                     }
                 } else {
-                    // NIVEAU GAGNÉ
                     setIsLevelWon(true);
                     playSystemSound("UPLEVEL");
                     setTimeout(() => {
@@ -167,22 +174,18 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 }
             }
         }, 1000);
-
-        // Retour pour le script du jeu
-        return isCorrect;
     };
 
     // --- HANDLERS UI ---
     
-    // Cheat Codes
     const handleBarClick = (idx) => {
-        if (keysPressed.current['KeyF']) {
+        if (keysPressed.current['KeyF'] || keysPressed.current['Keyf']) {
             const ns = [...questionStates]; ns[idx] = Math.min(3, ns[idx] + 1); setQuestionStates(ns);
             if (idx === currentQIndex && ns[idx] >= 2) setTimeout(() => inputRef.current?.focus(), 50);
         }
     };
     const handleForceWin = () => {
-        if (keysPressed.current['KeyF']) {
+        if (keysPressed.current['KeyF'] || keysPressed.current['Keyf']) {
             setIsLevelWon(true); playSystemSound("UPLEVEL");
             setTimeout(() => { setLives(4); if (allLevels[currentLevelIdx + 1]) initLevel(currentLevelIdx + 1, allLevels); else setIsGameCompleted(true); }, 1000);
         }
@@ -191,10 +194,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const handleAnswerClick = (idx) => {
         if (!feedback && currentQIndex !== -1 && !isGameOver) {
             const isCorrect = levelQuestions[currentQIndex].a === idx;
-            const res = handleAnswerLogic(isCorrect);
-            // On notifie le jeu (pour qu'il tire ou non)
-            // Utilisation d'un event custom simple ou accès direct à l'instance serait mieux, 
-            // mais ici on passe par le callback déjà injecté dans le moteur plus bas
+            handleAnswerLogic(isCorrect);
         }
     };
 
@@ -268,7 +268,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     useEffect(() => {
         if (!engineStarted || !canvasRef.current) return;
 
-        // 🛑 1. CRÉATION D'UN ID UNIQUE POUR CETTE INSTANCE DE BOUCLE
         const myLoopId = Date.now();
         loopIdRef.current = myLoopId;
 
@@ -276,13 +275,12 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             const canvas = canvasRef.current;
             const ctx = canvas.getContext('2d');
 
-            // REF STABLE POUR LES CALLBACKS (Évite closure hell)
-            const callbacksRef = {
+            // Ref callback locale pour éviter la dépendance circulaire
+            const callbacks = {
                 onPlayerHit: () => triggerPlayerHit(),
-                onResult: (res) => { /* Sera appelé par le jeu pour animer */ }
+                onResult: (res) => {} 
             };
 
-            // Injection Code
             const BaseFactory = new Function('params', `
                 const { audioBuffers, audioCtx, projectRef, sceneIdx, imageAssets, resolveUrl, canvas, ctx, activeSources, isMutedRef, bossModeRef } = params;
                 
@@ -294,7 +292,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                         this.baseScale = data.scale||1; this.scale = this.baseScale;
                         this.visible = true;
                         this.direction = data.direction||0; this.rotationStyle = data.rotationStyle||'all';
-                        
                         this.currentAction = data.actions?.[0]?.name || 'IDLE';
                         this.frameIdx = 0; 
                         this.lastAnimTime = 0;
@@ -317,7 +314,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                         this.canvas = c || canvas; this.ctx = ctx; this.keys = {};
                         this.callbacks = cb; this.assets = a || {};
                         this.isBossPhase = false; 
-                        // Initialisation acteurs
                         const s = projectRef.current.scenes[sceneIdx];
                         if(s && s.actors) s.actors.forEach(a => { this[a.name.toUpperCase()] = new ActorProxy(a, this); });
                     }
@@ -341,7 +337,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     }
                     _render() {
                         const s = projectRef.current.scenes[sceneIdx];
-                        // 🛡️ SÉCURITÉ CANVAS
+                        // 🛡️ SÉCURITÉ CONTEXTE
                         if (!this.ctx || !this.canvas) return;
 
                         this.ctx.fillStyle = "#0f172a"; 
@@ -368,7 +364,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                                     if (now - p.lastAnimTime > speed) { 
                                         if (!p.isAnimFinished) {
                                             p.frameIdx++;
-                                            // LOGIQUE DE FIN DE BOUCLE
                                             if (p.frameIdx >= totalFrames) {
                                                 if (p.loop) { p.frameIdx = 0; } 
                                                 else { p.frameIdx = totalFrames - 1; p.isAnimFinished = true; }
@@ -377,10 +372,10 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                                         }
                                     }
                                     
-                                    const safeIdx = p.frameIdx % act.frames.length;
+                                    const safeIdx = p.frameIdx % totalFrames; // Modulo strict
                                     const assetKey = resolveUrl(act.frames[safeIdx].url);
-                                    const spr = imageAssets.get(assetKey);
                                     
+                                    const spr = imageAssets.get(assetKey);
                                     if(spr) {
                                         const xPx = (p.x/100)*this.canvas.width; 
                                         const yPx = (p.y/100)*this.canvas.height; 
@@ -388,16 +383,12 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                                         
                                         this.ctx.save(); 
                                         this.ctx.translate(xPx, yPx);
-                                        
-                                        // MIROIR / ROTATION
                                         if(p.rotationStyle === 'left-right' && Math.abs(p.scale) !== p.scale) this.ctx.scale(Math.sign(p.scale), 1);
                                         else if (p.direction) this.ctx.rotate(p.direction * Math.PI / 180);
                                         
-                                        // EFFET BOSS
                                         if (this.isBossPhase && p.name === 'ZOMBIE') {
                                             this.ctx.filter = "drop-shadow(0 0 15px red) hue-rotate(-50deg)";
                                         }
-                                        
                                         this.ctx.drawImage(spr, -sz/2, -sz/2, sz, sz); 
                                         this.ctx.filter = "none";
                                         this.ctx.restore();
@@ -413,27 +404,21 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             const UserCodeFactory = new Function('MiniGameBase', `${code}\nreturn MiniGame;`);
             const UserGameClass = UserCodeFactory(MiniGameBase);
             
-            const instance = new UserGameClass(canvas, {}, callbacksRef);
-            gameInstanceRef.current = instance;
+            const instance = new UserGameClass(canvas, {}, callbacks);
             
-            // On injecte le callback de résultat dans handleAnswerLogic pour qu'il puisse appeler onResult
-            // Attention: ici on a une référence circulaire légère, on va laisser handleAnswerLogic appeler instance.onResult directement
+            // ✅ ASSIGNATION STABLE
+            gameInstanceRef.current = instance;
             
             if (instance.start) instance.start();
 
             const tick = () => {
-                // 🛑 2. VERIFICATION ID BOUCLE
                 if (loopIdRef.current !== myLoopId) return;
 
                 if(instance.keys) Object.assign(instance.keys, keysPressed.current);
                 instance.currentLevel = currentLevelIdx + 1;
-                instance.isBossPhase = bossModeRef.current; // SYNC BOSS
+                instance.isBossPhase = bossModeRef.current;
 
-                // PAUSE LOGIQUE (Game Over / Win)
-                if (!isGameOver && !isLevelWon && !isStudyPhase && !showLevelTitle && !isGameCompleted) {
-                    if (instance.update) instance.update();
-                }
-                
+                if (!isPausedRef.current && instance.update) instance.update();
                 if (instance._render) instance._render();
                 if (instance.draw) instance.draw();
                 
@@ -444,16 +429,16 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         } catch (e) { console.error("Crash Game Engine:", e); }
         
         return () => {
-             // Nettoyage au démontage
              if (frameIdRef.current) cancelAnimationFrame(frameIdRef.current);
         };
 
-    }, [engineStarted]); // Dépendant seulement du démarrage
+    }, [engineStarted]);
+
+    const isBossUI = currentQIndex !== -1 && questionStates[currentQIndex] >= 2;
 
     return (
         <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center overflow-hidden font-sans">
              
-             {/* MODALE PRÉPARATION (FICHE / VIDEO) */}
              {activeFocus && (
                  <div className="fixed inset-0 z-[100000] bg-slate-950/98 backdrop-blur-2xl flex flex-col items-center justify-center p-10 animate-in zoom-in duration-300">
                     <button onClick={() => setActiveFocus(null)} className="absolute top-10 right-10 w-16 h-16 bg-white rounded-full font-black text-2xl shadow-2xl hover:scale-110 transition-transform flex items-center justify-center">✕</button>
@@ -463,9 +448,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                  </div>
              )}
 
-             {/* FLASH DÉGÂT */}
              {hitFlash && <div className="absolute inset-0 bg-red-500/30 z-[100] pointer-events-none animate-ping"></div>}
-             
              <button onClick={onStop} className="absolute top-6 right-6 bg-red-600 text-white w-12 h-12 rounded-full font-black text-2xl shadow-xl border-4 border-white hover:scale-110 transition-all flex items-center justify-center pointer-events-auto z-50">✕</button>
 
              {!engineStarted ? (
@@ -474,7 +457,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                  </button>
              ) : (
                 <>
-                    {/* HUD */}
                     <div className="absolute top-6 w-full flex justify-between items-start px-10 pointer-events-none z-30">
                         <div className="flex gap-4 pointer-events-auto">
                             <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-xl flex gap-1 cursor-pointer hover:border-red-500 transition-colors" onClick={() => { if (keysPressed.current['KeyF']) triggerPlayerHit(); }}>
@@ -492,7 +474,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                         </div>
                         <div className="flex gap-2 items-center pointer-events-auto mr-20">
                             {questionStates.map((mastery, idx) => (
-                                /* CHEAT CLICK BAR */
                                 <div key={idx} onClick={() => handleBarClick(idx)} className={`w-4 h-12 rounded-md border border-slate-600 relative overflow-hidden cursor-pointer ${currentQIndex === idx ? 'ring-2 ring-indigo-400 scale-110' : 'opacity-60'}`}>
                                     <div className={`absolute bottom-0 left-0 right-0 transition-all duration-500 ${mastery === 3 ? 'bg-green-500' : 'bg-yellow-500'}`} style={{ height: `${(mastery / 3) * 100}%` }} />
                                 </div>
@@ -500,11 +481,9 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                         </div>
                     </div>
 
-                    {/* CANVAS JEU */}
                     <div className="relative animate-in zoom-in">
                         <canvas ref={canvasRef} width={800} height={450} className={`aspect-video shadow-2xl bg-black border-4 rounded-xl transition-all duration-500 ${isBossUI ? 'border-red-600 shadow-red-900/50 scale-[1.02]' : 'border-slate-800'}`} />
                         
-                        {/* ÉCRANS INTERMÉDIAIRES */}
                         {isStudyPhase && allLevels[currentLevelIdx] && (
                             <div className="absolute inset-4 bg-slate-900/95 backdrop-blur-xl rounded-xl z-50 flex flex-col p-6 border-2 border-indigo-500 animate-in fade-in duration-300">
                                 <h2 className="text-3xl font-black text-indigo-400 uppercase text-center mb-4">Préparation : {allLevels[currentLevelIdx].name}</h2>
@@ -516,7 +495,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                                         {getYoutubeEmbedUrl(allLevels[currentLevelIdx]?.intro?.videoUrl) ? <iframe className="w-full h-full pointer-events-none" src={getYoutubeEmbedUrl(allLevels[currentLevelIdx].intro.videoUrl)} frameBorder="0"></iframe> : <div className="text-slate-600 font-bold uppercase">Aucune vidéo</div>}
                                     </div>
                                 </div>
-                                <button onClick={() => { setIsStudyPhase(false); setShowLevelTitle(true); setTimeout(() => { setShowLevelTitle(false); playSystemSound("DÉPART"); }, 1500); }} className="mt-6 bg-indigo-600 text-white py-4 rounded-2xl font-black text-2xl hover:scale-105 transition-transform shadow-xl border-b-8 border-indigo-900 active:border-b-0 active:translate-y-2 uppercase">J'ai compris, on commence !</button>
+                                <button onClick={() => { setIsStudyPhase(false); setShowLevelTitle(true); setTimeout(() => { setShowLevelTitle(false); isPausedRef.current = false; playSystemSound("DÉPART"); }, 1500); }} className="mt-6 bg-indigo-600 text-white py-4 rounded-2xl font-black text-2xl hover:scale-105 transition-transform shadow-xl border-b-8 border-indigo-900 active:border-b-0 active:translate-y-2 uppercase">J'ai compris, on commence !</button>
                             </div>
                         )}
 
@@ -526,7 +505,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                         {isGameCompleted && <div className="absolute inset-0 flex flex-col items-center justify-center bg-yellow-500/90 backdrop-blur-md rounded-xl z-50"><h2 className="text-6xl font-black text-white uppercase mb-4">VICTOIRE TOTALE !</h2><button onClick={onStop} className="mt-8 bg-white text-yellow-600 px-8 py-4 rounded-full font-black text-xl uppercase">QUITTER</button></div>}
                     </div>
 
-                    {/* INTERFACE JEU (BOUTONS / INPUT) */}
                     {!isLevelWon && !isGameOver && !isGameCompleted && !showLevelTitle && !isStudyPhase && levelQuestions[currentQIndex] && (
                         <div className="absolute bottom-10 w-full flex justify-center px-10 pointer-events-auto z-30">
                             {isBossUI ? (
