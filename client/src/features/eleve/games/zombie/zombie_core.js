@@ -12,7 +12,8 @@ export function initZombieGame(root, api, onExit) {
     
     // Mouvement
     let zombiePos = 0; 
-    let zombieSpeed = 0.035; 
+    let baseSpeed = 0.035; // Vitesse de base
+    let zombieSpeed = baseSpeed; 
     let frameId;
     let isPaused = false; 
 
@@ -38,7 +39,11 @@ export function initZombieGame(root, api, onExit) {
             </div>
             <div class="z-interaction-zone">
                 <div id="question-text" class="z-q-text">Chargement...</div>
+                
+                <!-- MODE CLASSIQUE : BOUTONS -->
                 <div id="choices-area" class="z-choices-grid"></div>
+                
+                <!-- MODE BOSS : INPUT TEXTE -->
                 <div id="input-area" class="z-input-box" style="display:none">
                     <input type="text" id="answer-input" placeholder="TAPEZ LA RÉPONSE..." autocomplete="off" />
                     <button id="validate-btn">TIRER</button>
@@ -67,9 +72,10 @@ export function initZombieGame(root, api, onExit) {
         els.zombie.style.right = zombiePos + '%';
     };
 
-    // QUITTER SANS SAUVEGARDER (Bouton Quitter)
+    // QUITTER SANS SAUVEGARDER
     root.querySelector('.z-quit-btn').onclick = onExit;
     
+    // GESTION INPUT BOSS
     els.validateBtn.onclick = () => handleInputAnswer();
     els.input.onkeydown = (e) => { if(e.key === 'Enter') handleInputAnswer(); };
 
@@ -90,13 +96,20 @@ export function initZombieGame(root, api, onExit) {
     };
 
     const getNextQuestion = () => {
+        // Si la question en cours n'est pas finie (3 points), on reste dessus (ou on la remet dans le pool)
         if (currentQIndex !== -1 && questionStates[currentQIndex] < 3) return currentQIndex;
+        
+        // Sinon on cherche une autre question non finie
         const available = questionStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
         if (available.length === 0) return null;
         return available[Math.floor(Math.random() * available.length)];
     };
 
-    const normalize = (str) => (str || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
+    // Nettoyage pour tolérance maximale (Accents, Casse, Espaces, Ponctuation)
+    const normalize = (str) => (str || "")
+        .toLowerCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // Enlève accents
+        .replace(/[^a-z0-9]/g, ""); // Enlève tout sauf chiffres et lettres
 
     const loadRound = () => {
         const nextIdx = getNextQuestion();
@@ -104,9 +117,7 @@ export function initZombieGame(root, api, onExit) {
         // --- VICTOIRE ---
         if (nextIdx === null) {
             alert("VICTOIRE !");
-            // CALCUL DU SCORE (Basique : Vies restantes * 100)
             const finalScore = lives * 100;
-            // APPEL API POUR SAUVEGARDER
             if (api.onFinish) api.onFinish(finalScore, true);
             else onExit();
             return;
@@ -119,22 +130,43 @@ export function initZombieGame(root, api, onExit) {
         els.qText.innerText = qData.q || "Question vide";
         renderBars();
 
+        // --- LOGIQUE BOSS (Palier 3/3 soit score >= 2) ---
         if (score >= 2) {
+            // MODE INPUT
             els.choices.style.display = 'none';
             els.inputArea.style.display = 'flex';
             els.input.value = '';
             setTimeout(() => els.input.focus(), 50);
+            
+            // TRANSFORMATION VISUELLE BOSS
             els.zombieEmoji.innerText = "👹"; 
+            els.zombieEmoji.style.fontSize = "7.5rem"; // +50% taille
             els.zombieImg.style.filter = "drop-shadow(0 0 15px red) hue-rotate(-50deg)";
+            els.zombieImg.style.transform = "scale(1.5)"; // +50% taille image
+            
+            // RALENTISSEMENT
+            zombieSpeed = baseSpeed * 0.5; // 50% moins vite
         } else {
+            // MODE NORMAL
             els.inputArea.style.display = 'none';
             els.choices.style.display = 'grid';
+            
+            // RESET VISUEL
             els.zombieEmoji.innerText = "🧟";
+            els.zombieEmoji.style.fontSize = "5rem";
             els.zombieImg.style.filter = "none";
+            els.zombieImg.style.transform = "scale(1)";
+            
+            // VITESSE NORMALE
+            zombieSpeed = baseSpeed;
+
+            // GÉNÉRATION BOUTONS
             els.choices.innerHTML = '';
             const rawOpts = qData.options || ["A", "B", "C", "D"];
             const opts = rawOpts.map((txt, idx) => ({ txt, idx }));
+            // Mélange des boutons
             opts.sort(() => Math.random() - 0.5);
+            
             opts.forEach(o => {
                 const btn = document.createElement('button');
                 btn.className = 'z-btn';
@@ -153,8 +185,11 @@ export function initZombieGame(root, api, onExit) {
         if (isPaused) return;
         const qData = questionsList[currentQIndex];
         const correctTxt = qData.options[qData.a]; 
-        if (normalize(els.input.value) === normalize(correctTxt)) fireProjectile(true);
-        else {
+        
+        // Comparaison tolérante
+        if (normalize(els.input.value) === normalize(correctTxt)) {
+            fireProjectile(true);
+        } else {
             showFeedback(`Réponse : ${correctTxt}`, false);
             failAction();
         }
@@ -162,7 +197,7 @@ export function initZombieGame(root, api, onExit) {
 
     const failAction = () => {
         showFeedback("RATÉ !", false);
-        zombiePos += 15; 
+        zombiePos += 15; // Le zombie avance d'un coup
         updatePositions();
     };
 
@@ -209,27 +244,31 @@ export function initZombieGame(root, api, onExit) {
             zombiePos += zombieSpeed;
             updatePositions();
 
+            // COLLISION DU ZOMBIE
             if (zombiePos >= 85) {
                 lives--;
                 els.lives.innerText = "❤️".repeat(lives);
+                
+                // Si on se fait toucher, on perd un point sur la question en cours
                 if (questionStates[currentQIndex] > 0) {
                     questionStates[currentQIndex]--;
                     showFeedback("RECULE !", false);
                 }
+                
                 zombiePos = 0; 
                 updatePositions();
+                
+                // Effet écran rouge
                 document.querySelector('.z-game-wrapper').style.background = '#fee2e2';
                 setTimeout(() => document.querySelector('.z-game-wrapper').style.background = '#f0f9ff', 200);
 
                 // --- DÉFAITE ---
                 if (lives <= 0) {
                     alert("GAME OVER !");
-                    // SAUVEGARDE MÊME EN CAS DE DÉFAITE (Score partiel)
-                    // On considère que le jeu est "FAIT" même si perdu, pour enlever le badge rouge
-                    // Ou alors false pour levelReached pour dire "Non validé"
                     if (api.onFinish) api.onFinish(0, true); 
                     else onExit();
                 } else {
+                    // On recharge le round (pour éventuellement enlever le mode Boss si on a perdu le point)
                     loadRound();
                 }
             }
