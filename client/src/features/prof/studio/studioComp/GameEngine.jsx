@@ -1,19 +1,14 @@
-// @signatures: GameEngine, initLevel, handleAnswerClick, handleGameOver, retryLevel, nextLevel, preloadAssets, getYoutubeEmbedUrl
+// @signatures: GameEngine, initLevel, handleAnswerClick, handleInputSubmit, handleGameOver, retryLevel, nextLevel, preloadAssets, getYoutubeEmbedUrl
 import React, { useState, useRef, useEffect } from 'react';
 import SoundExpert from './SoundExpert';
 import { api } from '../../../../services/api';
 
-/**
- * 🎮 MOTEUR STUDIO V1008 (CONTRÔLE AUDIO)
- * Ajout d'un bouton Mute/Unmute dans le HUD.
- */
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
     const canvasRef = useRef(null);
     
     const [isReady, setIsReady] = useState(false);
     const [engineStarted, setEngineStarted] = useState(false);
     const [loadProgress, setLoadProgress] = useState("0%");
-    const [debugLogs, setDebugLogs] = useState([]);
     const [hitFlash, setHitFlash] = useState(false);
     
     const [allLevels, setAllLevels] = useState([]); 
@@ -24,11 +19,14 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const [lives, setLives] = useState(4);
     const [feedback, setFeedback] = useState(null);
 
+    // --- BOSS MODE & INPUT ---
+    const [inputValue, setInputValue] = useState("");
+    const inputRef = useRef(null);
+
     // --- AUDIO CONTROL ---
     const [isMuted, setIsMuted] = useState(false);
     const isMutedRef = useRef(false);
 
-    // --- ÉTATS APPRENTISSAGE ---
     const [isStudyPhase, setIsStudyPhase] = useState(false);
     const [activeFocus, setActiveFocus] = useState(null); 
     const [showLevelTitle, setShowLevelTitle] = useState(false);
@@ -47,10 +45,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const keysPressed = useRef({}); 
     const activeSourcesRef = useRef([]);
 
-    // Synchronisation de la Ref pour le moteur dynamique
-    useEffect(() => {
-        isMutedRef.current = isMuted;
-    }, [isMuted]);
+    useEffect(() => { isMutedRef.current = isMuted; }, [isMuted]);
 
     const getYoutubeEmbedUrl = (url) => {
         if (!url) return null;
@@ -59,10 +54,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         else if (url.includes("youtu.be/")) videoId = url.split("youtu.be/")[1]?.split("?")[0];
         else if (url.includes("embed/")) videoId = url.split("embed/")[1]?.split("?")[0];
         return videoId ? `https://www.youtube.com/embed/${videoId}?autoplay=1` : null;
-    };
-
-    const logSonde = (msg, type = 'info') => {
-        setDebugLogs(prev => [...prev, { id: Math.random(), text: msg, type }].slice(-6));
     };
 
     const safeTimeout = (fn, delay) => {
@@ -83,13 +74,10 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
     const playSystemSound = (soundName) => {
         if (isMutedRef.current || !project || !audioCtxRef.current) return;
-        
         const scene = project.scenes[activeSceneIdx];
         const soundEvent = scene?.globalSounds?.find(gs => gs.name.toUpperCase().trim() === soundName.toUpperCase().trim());
         if (!soundEvent || !soundEvent.sounds || soundEvent.sounds.length === 0) return;
-        
         if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
-
         soundEvent.sounds.forEach(snd => {
             const buffer = audioBuffersRef.current.get(snd.url);
             if (buffer) {
@@ -99,10 +87,13 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     source.connect(audioCtxRef.current.destination);
                     source.start(0);
                     activeSourcesRef.current.push(source);
-                } catch (e) { console.error("Audio Play Error:", e); }
+                } catch (e) {}
             }
         });
     };
+
+    // --- LOGIQUE DE VALIDATION TOLÉRANTE ---
+    const normalize = (str) => (str || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
 
     useEffect(() => {
         const preloadAssets = async () => {
@@ -141,7 +132,10 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             preloadAssets();
         });
 
-        const handleKeyDown = (e) => { keysPressed.current[e.code] = true; };
+        const handleKeyDown = (e) => { 
+            // Si on est dans l'input, on ne capture pas les touches pour le jeu
+            if (e.target.tagName !== 'INPUT') keysPressed.current[e.code] = true; 
+        };
         const handleKeyUp = (e) => { keysPressed.current[e.code] = false; };
         window.addEventListener('keydown', handleKeyDown);
         window.addEventListener('keyup', handleKeyUp);
@@ -207,10 +201,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         });
     };
 
-    const handleAnswerClick = (choiceIdx) => {
-        if (feedback || currentQIndex === -1 || isPausedRef.current) return;
-        const currentQ = levelQuestions[currentQIndex];
-        const isCorrect = currentQ.a === choiceIdx;
+    const handleAnswerLogic = (isCorrect) => {
         setFeedback(isCorrect ? 'CORRECT' : 'WRONG');
         const newStates = [...questionStates];
         if (isCorrect) {
@@ -222,18 +213,54 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             triggerPlayerHit();
         }
         setQuestionStates(newStates);
+        
+        // Reset input
+        setInputValue("");
+
         safeTimeout(() => {
             setFeedback(null);
             if (lives > 0) {
+                // On cherche une question non finie
                 const available = newStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
-                if (available.length > 0) setCurrentQIndex(available[Math.floor(Math.random() * available.length)]);
-                else {
+                
+                // Si la question courante n'est pas finie, on y reste (avec un petit délai pour la feedback)
+                // Sinon on change
+                if (available.length > 0) {
+                    if (newStates[currentQIndex] < 3) {
+                        // On reste sur la même question si pas finie
+                        setCurrentQIndex(currentQIndex);
+                        // On re-focus l'input si boss phase
+                        if (newStates[currentQIndex] >= 2) {
+                            setTimeout(() => inputRef.current?.focus(), 50);
+                        }
+                    } else {
+                        // Question finie, on passe à une autre
+                        setCurrentQIndex(available[Math.floor(Math.random() * available.length)]);
+                    }
+                } else {
                     setIsLevelWon(true); isPausedRef.current = true;
                     if (gameInstanceRef.current?.onLevelWin) gameInstanceRef.current.onLevelWin();
                     safeTimeout(nextLevel, 4000);
                 }
             }
         }, 1000);
+    };
+
+    const handleAnswerClick = (choiceIdx) => {
+        if (feedback || currentQIndex === -1 || isPausedRef.current) return;
+        const currentQ = levelQuestions[currentQIndex];
+        const isCorrect = currentQ.a === choiceIdx;
+        handleAnswerLogic(isCorrect);
+    };
+
+    const handleInputSubmit = (e) => {
+        if (e) e.preventDefault();
+        if (feedback || currentQIndex === -1 || isPausedRef.current) return;
+        const currentQ = levelQuestions[currentQIndex];
+        const correctText = currentQ.options[currentQ.a];
+        
+        const isCorrect = normalize(inputValue) === normalize(correctText);
+        handleAnswerLogic(isCorrect);
     };
 
     const handleStartGame = async () => {
@@ -253,8 +280,11 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 class ActorProxy {
                     constructor(data, engine) { 
                         this.id = data.id; this.name = data.name; this.engine = engine;
-                        this.x = data.initialX || 50; this.y = data.initialY || 50;
-                        this.scale = data.scale || 1; this.visible = true;
+                        this.initialX = data.initialX || 50; this.initialY = data.initialY || 50;
+                        this.x = this.initialX; this.y = this.initialY;
+                        this.baseScale = data.scale || 1; 
+                        this.scale = this.baseScale; // Scale dynamique
+                        this.visible = true;
                         this.direction = data.direction || 0;
                         this.rotationStyle = data.rotationStyle || 'all';
                         this.currentAction = data.actions?.[0]?.name || 'IDLE';
@@ -272,10 +302,10 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                         this.canvas = c || canvas; this.ctx = ctx; this.keys = {};
                         this.callbacks = cb; this.assets = a || {};
                         this.currentLevel = 1; 
+                        this.isBossPhase = false; // FLAG POUR LE JEU
                         const s = project.scenes[sceneIdx];
                         if(s && s.actors) s.actors.forEach(a => { this[a.name.toUpperCase()] = new ActorProxy(a, this); });
-                        document.onkeydown = e => this.keys[e.code] = true;
-                        document.onkeyup = e => this.keys[e.code] = false;
+                        // Ne pas écraser les listeners globaux React
                     }
                     _triggerActionSounds(actorId, actionName) {
                         const actor = project.scenes[sceneIdx].actors.find(a => a.id === actorId);
@@ -315,11 +345,18 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                                     const assetKey = resolveUrl(act.frames[p.frameIdx].url);
                                     const spr = imageAssets.get(assetKey);
                                     if(spr) {
-                                        const xPx = (p.x/100)*canvas.width; const yPx = (p.y/100)*canvas.height; let sz = 150*p.scale;
+                                        const xPx = (p.x/100)*canvas.width; const yPx = (p.y/100)*canvas.height; 
+                                        let sz = 150 * p.scale; // Utilise l'échelle dynamique
                                         this.ctx.save(); this.ctx.translate(xPx, yPx);
                                         if(p.rotationStyle === 'left-right' && Math.abs(p.scale) !== p.scale) this.ctx.scale(Math.sign(p.scale), 1);
                                         else if (p.direction) this.ctx.rotate(p.direction * Math.PI / 180);
-                                        this.ctx.drawImage(spr, -sz/2, -sz/2, sz, sz); this.ctx.restore();
+                                        // Filtre Rouge pour Boss
+                                        if (this.isBossPhase && p.name === 'ZOMBIE') {
+                                            this.ctx.filter = "drop-shadow(0 0 10px red) hue-rotate(-50deg)";
+                                        }
+                                        this.ctx.drawImage(spr, -sz/2, -sz/2, sz, sz); 
+                                        this.ctx.filter = "none";
+                                        this.ctx.restore();
                                     }
                                 }
                             }
@@ -327,7 +364,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     }
                 }
             `);
-            const MiniGameBase = BaseFactory({ audioBuffers: audioBuffersRef.current, audioCtx: audioCtxRef.current, imageAssets: imageAssetsRef.current, resolveUrl, logSonde, project, sceneIdx: activeSceneIdx, canvas, ctx, callbacks: gameCallbacks, activeSources: activeSourcesRef.current, isMutedRef: isMutedRef });
+            const MiniGameBase = BaseFactory({ audioBuffers: audioBuffersRef.current, audioCtx: audioCtxRef.current, imageAssets: imageAssetsRef.current, resolveUrl, project, sceneIdx: activeSceneIdx, canvas, ctx, activeSources: activeSourcesRef.current, isMutedRef: isMutedRef });
             const UserCodeFactory = new Function('MiniGameBase', `${code}\nreturn MiniGame;`);
             const UserGameClass = UserCodeFactory(MiniGameBase);
             const instance = new UserGameClass(canvas, {}, gameCallbacks);
@@ -335,6 +372,14 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             const tick = () => {
                 if(instance.keys) Object.assign(instance.keys, keysPressed.current);
                 instance.currentLevel = currentLevelIdx + 1;
+                
+                // INJECTION ÉTAT BOSS
+                if (currentQIndex !== -1 && questionStates[currentQIndex] >= 2) {
+                    instance.isBossPhase = true;
+                } else {
+                    instance.isBossPhase = false;
+                }
+
                 if (!isPausedRef.current && instance.update) instance.update();
                 if (instance._render) instance._render();
                 if (instance.draw) instance.draw();
@@ -346,6 +391,9 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
     const currentLvlData = allLevels[currentLevelIdx];
     const embedUrl = getYoutubeEmbedUrl(currentLvlData?.intro?.videoUrl);
+    
+    // Détection Boss Phase pour l'UI
+    const isBossUI = currentQIndex !== -1 && questionStates[currentQIndex] >= 2;
 
     return (
         <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center overflow-hidden font-sans">
@@ -394,7 +442,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                                 {"❤️".repeat(lives)}{"🖤".repeat(Math.max(0, 4 - lives))}
                             </div>
 
-                            {/* BOUTON SON */}
                             <button 
                                 onClick={() => setIsMuted(!isMuted)}
                                 className={`w-16 h-16 rounded-2xl border-2 shadow-xl flex items-center justify-center text-2xl transition-all ${isMuted ? 'bg-red-900/80 border-red-500 text-red-200' : 'bg-slate-900/80 border-slate-700 text-white hover:border-indigo-500'}`}
@@ -413,7 +460,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
                         <div className="flex gap-2 items-center pointer-events-auto mr-20">
                             {questionStates.map((mastery, idx) => (
-                                <div key={idx} onClick={() => handleBarClick(idx)} className={`w-4 h-12 rounded-md border border-slate-600 relative overflow-hidden cursor-pointer ${currentQIndex === idx ? 'ring-2 ring-indigo-400 scale-110' : 'opacity-60'}`}>
+                                <div key={idx} className={`w-4 h-12 rounded-md border border-slate-600 relative overflow-hidden cursor-pointer ${currentQIndex === idx ? 'ring-2 ring-indigo-400 scale-110' : 'opacity-60'}`}>
                                     <div className={`absolute bottom-0 left-0 right-0 transition-all duration-500 ${mastery === 3 ? 'bg-green-500' : 'bg-yellow-500'}`} style={{ height: `${(mastery / 3) * 100}%` }} />
                                 </div>
                             ))}
@@ -421,7 +468,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     </div>
 
                     <div className="relative animate-in zoom-in">
-                        <canvas ref={canvasRef} width={800} height={450} className="aspect-video shadow-2xl bg-black border-4 border-slate-800 rounded-xl" />
+                        <canvas ref={canvasRef} width={800} height={450} className={`aspect-video shadow-2xl bg-black border-4 rounded-xl transition-colors duration-500 ${isBossUI ? 'border-red-600 shadow-red-900/50' : 'border-slate-800'}`} />
                         
                         {isStudyPhase && currentLvlData && (
                             <div className="absolute inset-4 bg-slate-900/95 backdrop-blur-xl rounded-xl z-50 flex flex-col p-6 border-2 border-indigo-500 animate-in fade-in duration-300">
@@ -487,11 +534,27 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
                     {!isLevelWon && !isGameOver && !isGameCompleted && !showLevelTitle && !isStudyPhase && levelQuestions[currentQIndex] && (
                         <div className="absolute bottom-10 w-full flex justify-center px-10 pointer-events-auto z-30">
-                            <div className="grid grid-cols-4 gap-4 w-full max-w-5xl">
-                                {levelQuestions[currentQIndex].options.map((o, i) => (
-                                    <button key={i} onClick={() => handleAnswerClick(i)} className="bg-indigo-600 text-white py-6 rounded-2xl font-black uppercase text-lg shadow-xl hover:bg-indigo-500 border-b-8 border-indigo-800 active:border-b-0 active:translate-y-2">{o}</button>
-                                ))}
-                            </div>
+                            {isBossUI ? (
+                                <form onSubmit={handleInputSubmit} className="flex gap-4 w-full max-w-2xl bg-white/10 backdrop-blur-md p-4 rounded-2xl border-2 border-red-500 animate-pulse">
+                                    <input 
+                                        ref={inputRef}
+                                        value={inputValue}
+                                        onChange={(e) => setInputValue(e.target.value)}
+                                        className="flex-1 bg-white/90 text-red-600 font-black text-2xl uppercase text-center rounded-xl outline-none placeholder-red-200 border-2 border-red-200 focus:border-red-600"
+                                        placeholder="TAPEZ LA RÉPONSE..."
+                                        autoFocus
+                                    />
+                                    <button type="submit" className="bg-red-600 text-white px-8 rounded-xl font-black uppercase shadow-lg hover:scale-105 transition-transform">
+                                        TIRER 🔫
+                                    </button>
+                                </form>
+                            ) : (
+                                <div className="grid grid-cols-4 gap-4 w-full max-w-5xl">
+                                    {levelQuestions[currentQIndex].options.map((o, i) => (
+                                        <button key={i} onClick={() => handleAnswerClick(i)} className="bg-indigo-600 text-white py-6 rounded-2xl font-black uppercase text-lg shadow-xl hover:bg-indigo-500 border-b-8 border-indigo-800 active:border-b-0 active:translate-y-2">{o}</button>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     )}
                 </>

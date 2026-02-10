@@ -21,39 +21,26 @@ function resolveUrl(url) {
     return `/api/proxy/${id}`;
 }
 
-// 🧟 ZOMBIE V6 : NETTOYAGE UI & SON
-// Suppression de la bannière niveau interne et du son départ (gérés par le moteur)
-
-const ZOMBIE_GAME_CODE = `// 🧟 ZOMBIE V6
-// Logique stricte : MARCHE -> COGNE -> RESET
-
+// 🧟 ZOMBIE V7 : SUPPORT DU MODE BOSS (GROSSISSEMENT + RALENTISSEMENT)
+const ZOMBIE_GAME_CODE = `// 🧟 ZOMBIE V7 (BOSS MODE READY)
 class MiniGame extends MiniGameBase {
     constructor(canvas, assets, callbacks) {
         super(canvas, assets, callbacks);
         this.projectiles = [];
-        
-        // États du Zombie
         this.zombieX = 100;
-        this.zombieState = "WALKING"; // WALKING, ATTACKING, HIT
+        this.zombieState = "WALKING"; 
         this.zombieTimer = 0;
-        
-        // États du Héros
         this.heroState = "IDLE";
         this.heroTimer = 0;
-        
         this.isStopped = false;
+        
+        // Stats de base
+        this.baseSpeed = 0.15;
     }
 
     start() { 
-        console.log("🚀 START V6");
         this.isStopped = false;
-        
-        if(this.HEROS) { 
-            this.HEROS.x = 15; 
-            this.HEROS.y = 70; 
-            this.HEROS.play("IDLE");
-        } 
-        
+        if(this.HEROS) { this.HEROS.x = 15; this.HEROS.y = 70; this.HEROS.play("IDLE"); } 
         this.resetZombie();
     }
 
@@ -68,7 +55,6 @@ class MiniGame extends MiniGameBase {
 
     onResult(isCorrect) {
         if (this.heroState === "HIT") return;
-
         if (isCorrect && this.HEROS) {
             this.HEROS.play("TIRER");
             this.heroState = "SHOOT";
@@ -80,15 +66,17 @@ class MiniGame extends MiniGameBase {
     update() {
         if (this.isStopped) return;
 
-        // --- 1. GESTION HÉROS ---
-        if (this.heroState === "SHOOT") {
-            this.heroTimer--;
-            if (this.heroTimer <= 0) {
-                this.heroState = "IDLE";
-                if(this.HEROS) this.HEROS.play("IDLE");
-            }
+        // --- GESTION DU MODE BOSS (Injecté par GameEngine) ---
+        let currentSpeed = this.baseSpeed;
+        if (this.isBossPhase) {
+            currentSpeed = this.baseSpeed * 0.5; // Ralenti de 50%
+            if (this.ZOMBIE) this.ZOMBIE.scale = this.ZOMBIE.baseScale * 1.5; // Gros
+        } else {
+            if (this.ZOMBIE) this.ZOMBIE.scale = this.ZOMBIE.baseScale; // Normal
         }
-        else if (this.heroState === "HIT") {
+
+        // --- HERO ---
+        if (this.heroState === "SHOOT" || this.heroState === "HIT") {
             this.heroTimer--;
             if (this.heroTimer <= 0) {
                 this.heroState = "IDLE";
@@ -96,79 +84,41 @@ class MiniGame extends MiniGameBase {
             }
         }
 
-        // --- 2. GESTION ZOMBIE (MACHINE À ÉTATS) ---
-        
-        // ETAT 1 : LE ZOMBIE MARCHE
+        // --- ZOMBIE ---
         if (this.zombieState === "WALKING") {
-            this.zombieX -= 0.15; // Il avance
-            
-            // Test Collision avec Héros
+            this.zombieX -= currentSpeed;
             if (this.zombieX < 20) {
-                // CHANGEMENT D'ÉTAT -> ATTACKING
                 this.zombieState = "ATTACKING";
-                this.zombieTimer = 60; // Durée de l'attaque (1s)
-                
-                // Effets immédiats
+                this.zombieTimer = 60;
                 if (this.ZOMBIE) this.ZOMBIE.play("TAPER");
-                if (this.HEROS) {
-                    this.HEROS.play("TOUCHE");
-                    this.heroState = "HIT";
-                    this.heroTimer = 60;
-                }
-                // Perte de vie
+                if (this.HEROS) { this.HEROS.play("TOUCHE"); this.heroState = "HIT"; this.heroTimer = 60; }
                 if (this.callbacks.onPlayerHit) this.callbacks.onPlayerHit();
             }
-            
-            // Mise à jour visuelle
             if (this.ZOMBIE) {
                 this.ZOMBIE.x = this.zombieX;
-                // On s'assure qu'il joue bien l'anim de marche
                 if(this.ZOMBIE.currentAction !== "AVANCER") this.ZOMBIE.play("AVANCER");
             }
-        }
-        
-        // ETAT 2 : LE ZOMBIE ATTAQUE (FIGÉ SUR PLACE)
-        else if (this.zombieState === "ATTACKING") {
+        } else if (this.zombieState === "ATTACKING") {
             this.zombieTimer--;
-            if (this.ZOMBIE) {
-                this.ZOMBIE.x = 20; // Bloqué au contact
-                // On force l'anim TAPER tant qu'il attaque
-                if(this.ZOMBIE.currentAction !== "TAPER") this.ZOMBIE.play("TAPER");
-            }
-            
-            if (this.zombieTimer <= 0) {
-                this.resetZombie(); // Fin attaque -> Retour départ
-            }
-        }
-        
-        // ETAT 3 : LE ZOMBIE EST TOUCHÉ (PAR BALLE)
-        else if (this.zombieState === "HIT") {
+            if (this.ZOMBIE) { this.ZOMBIE.x = 20; if(this.ZOMBIE.currentAction !== "TAPER") this.ZOMBIE.play("TAPER"); }
+            if (this.zombieTimer <= 0) this.resetZombie();
+        } else if (this.zombieState === "HIT") {
             this.zombieTimer--;
-            // Il recule un peu sous l'impact
             this.zombieX += 0.1; 
             if(this.ZOMBIE) this.ZOMBIE.x = this.zombieX;
-            
-            if (this.zombieTimer <= 0) {
-                this.resetZombie(); // Fin douleur -> Retour départ
-            }
+            if (this.zombieTimer <= 0) this.resetZombie();
         }
 
-        // --- 3. PROJECTILES ---
+        // --- PROJECTILES ---
         for (let i = this.projectiles.length - 1; i >= 0; i--) { 
             let p = this.projectiles[i]; 
             p.x += 3;
-            
-            // Collision Balle -> Zombie (Seulement si marche)
             if (this.zombieState === "WALKING" && p.x > this.zombieX - 5 && p.x < this.zombieX + 5) {
                 this.projectiles.splice(i, 1);
-                console.log("💥 BAM !");
-                
-                // CHANGEMENT D'ÉTAT -> HIT
                 this.zombieState = "HIT";
                 this.zombieTimer = 40;
                 if (this.ZOMBIE) this.ZOMBIE.play("TOUCHE"); 
-            }
-            else if (p.x > 110) {
+            } else if (p.x > 110) {
                 this.projectiles.splice(i, 1);
             }
         }
@@ -177,13 +127,10 @@ class MiniGame extends MiniGameBase {
     draw() {
         if (this.isStopped) return;
         const ctx = this.ctx;
-        const cw = this.canvas.width; 
-        const ch = this.canvas.height;
-        
         ctx.fillStyle = "#f97316"; 
         this.projectiles.forEach(p => { 
             ctx.beginPath(); 
-            ctx.arc((p.x/100)*cw, (p.y/100)*ch, 10, 0, Math.PI*2); 
+            ctx.arc((p.x/100)*this.canvas.width, (p.y/100)*this.canvas.height, 10, 0, Math.PI*2); 
             ctx.fill(); 
         });
     }
@@ -223,7 +170,7 @@ export default function StudioDashboard({ user }) {
     const [selectedGlobalSoundIdx, setSelectedGlobalSoundIdx] = useState(0);
     const [leftTab, setLeftTab] = useState('actions');
     
-    // ⚠️ CODE FORCÉ V6 (PROPRE)
+    // ⚠️ CODE FORCÉ V7 (BOSS MODE)
     const [code, setCode] = useState(ZOMBIE_GAME_CODE);
     
     const [isPlaying, setIsPlaying] = useState(false);
@@ -232,7 +179,6 @@ export default function StudioDashboard({ user }) {
     const [statusText, setStatusText] = useState("");
     const [testQuizData, setTestQuizData] = useState(null);
     const [showTestQuizModal, setShowTestQuizModal] = useState(false);
-    const [eraserActive, setEraserActive] = useState(false);
     const [frameToErase, setFrameToErase] = useState(null);
     const [showSoundModal, setShowSoundModal] = useState(false);
     const [soundToEdit, setSoundToEdit] = useState(null);
@@ -264,9 +210,7 @@ export default function StudioDashboard({ user }) {
                 if (!p.scenes[0].globalSounds) p.scenes[0].globalSounds = [];
             }
             setProject(p);
-            setCode(ZOMBIE_GAME_CODE); // FORCE V6
-            console.log("🧟 CODE V6 ACTIVÉ");
-            
+            setCode(ZOMBIE_GAME_CODE); 
             if (p.scenes?.[0]?.actors?.[0]) setSelectedActorId(p.scenes[0].actors[0].id);
         }
     }
@@ -288,7 +232,6 @@ export default function StudioDashboard({ user }) {
     const handleOpenSave = () => { setModalMode('SAVE'); setShowSaveLoadModal(true); };
     const handleOpenLoad = () => { setModalMode('LOAD'); setShowSaveLoadModal(true); };
     
-    // RETOUR A LA DEMO ZOMBIE V6
     const handleCreateNew = () => { 
         setProject(DEMO_PROJECT); 
         setCode(ZOMBIE_GAME_CODE); 
@@ -313,10 +256,8 @@ export default function StudioDashboard({ user }) {
     const handleReorderFrame = (targetIdx) => { if (draggedFrameIdx === null || draggedFrameIdx === targetIdx || !selectedAction) return; const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); const frames = actor.actions[selectedActionIdx].frames; const [moved] = frames.splice(draggedFrameIdx, 1); frames.splice(targetIdx, 0, moved); } else { const frames = next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].frames; const [moved] = frames.splice(draggedFrameIdx, 1); frames.splice(targetIdx, 0, moved); } saveProject(next); setDraggedFrameIdx(null); };
     const handleDeleteFrame = (fIdx) => { if (!selectedAction) return; const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); actor.actions[selectedActionIdx].frames.splice(fIdx, 1); } else { next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].frames.splice(fIdx, 1); } saveProject(next); };
     const handleDeleteSound = (sIdx) => { if (!selectedAction) return; const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); actor.actions[selectedActionIdx].sounds.splice(sIdx, 1); } else { next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].sounds.splice(sIdx, 1); } saveProject(next); };
-    
     const handleEditSound = (sIdx) => { const target = selectedAction.sounds[sIdx]; if (target) setSoundToEdit({ idx: sIdx, ...target }); };
     const handleSaveEditedSound = (newUrl, newName) => { if (!soundToEdit) return; const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); actor.actions[selectedActionIdx].sounds[soundToEdit.idx] = { ...actor.actions[selectedActionIdx].sounds[soundToEdit.idx], url: newUrl, name: newName }; } else { next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].sounds[soundToEdit.idx] = { ...next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].sounds[soundToEdit.idx], url: newUrl, name: newName }; } setProject(next); saveProject(next); setSoundToEdit(null); };
-
     const handleDeleteActor = (e, id) => { e.stopPropagation(); if (!confirm("Supprimer ?")) return; const next = JSON.parse(JSON.stringify(project)); next.scenes[selectedSceneIdx].actors = next.scenes[selectedSceneIdx].actors.filter(a => a.id !== id); if (selectedActorId === id) setSelectedActorId(null); setProject(next); saveProject(next); };
     const handleDeleteBackdrop = (e, idx) => { e.stopPropagation(); if (!confirm("Supprimer ?")) return; const next = JSON.parse(JSON.stringify(project)); next.scenes[selectedSceneIdx].backdrops.splice(idx, 1); next.scenes[selectedSceneIdx].currentBackdropIdx = 0; setProject(next); saveProject(next); };
     const handleSaveSound = (url, name) => { if (!selectedAction) return; const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); const act = actor.actions[selectedActionIdx]; if (!act.sounds) act.sounds = []; act.sounds.push({ type: 'sound', url: url, name: name }); } else { const act = next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx]; if (!act.sounds) act.sounds = []; act.sounds.push({ type: 'sound', url: url, name: name }); } setProject(next); saveProject(next); };
