@@ -21,40 +21,48 @@ function resolveUrl(url) {
     return `/api/proxy/${id}`;
 }
 
-// 🧟 ZOMBIE V7.3 : BOSS LABEL & BIG SIZE FIX
-const ZOMBIE_GAME_CODE = `// 🧟 ZOMBIE V7.3 (BOSS LABEL)
+// 🧟 ZOMBIE V9 : COLLISION VERROUILLÉE (ONE SHOT)
+const ZOMBIE_GAME_CODE = `// 🧟 ZOMBIE V9 (COLLISION FIX)
 class MiniGame extends MiniGameBase {
     constructor(canvas, assets, callbacks) {
         super(canvas, assets, callbacks);
         this.projectiles = [];
+        
+        // --- ÉTATS INITIAUX ---
         this.zombieX = 100;
-        this.zombieState = "WALKING"; 
-        this.zombieTimer = 0;
+        this.zombieState = "WALKING"; // WALKING | ATTACKING | HIT
+        
         this.heroState = "IDLE";
         this.heroTimer = 0;
+        
         this.isStopped = false;
         this.baseSpeed = 0.15;
     }
 
     start() { 
         this.isStopped = false;
-        if(this.HEROS) { this.HEROS.x = 15; this.HEROS.y = 70; this.HEROS.play("IDLE"); } 
+        if(this.HEROS) { 
+            this.HEROS.x = 15; 
+            this.HEROS.y = 70; 
+            this.HEROS.play("IDLE", true); 
+        } 
         this.resetZombie();
     }
 
     resetZombie() {
         this.zombieX = 100;
-        this.zombieState = "WALKING";
+        this.zombieState = "WALKING"; // On déverrouille le contact
         if(this.ZOMBIE) {
             this.ZOMBIE.x = 100;
-            this.ZOMBIE.play("AVANCER");
+            this.ZOMBIE.play("AVANCER", true);
         }
     }
 
     onResult(isCorrect) {
         if (this.heroState === "HIT") return;
+
         if (isCorrect && this.HEROS) {
-            this.HEROS.play("TIRER");
+            this.HEROS.play("TIRER", false);
             this.heroState = "SHOOT";
             this.heroTimer = 40;
             this.projectiles.push({ x: this.HEROS.x + 5, y: this.HEROS.y - 5 });
@@ -64,60 +72,92 @@ class MiniGame extends MiniGameBase {
     update() {
         if (this.isStopped) return;
 
-        // --- GESTION DU MODE BOSS ---
+        // 1. GESTION BOSS (Vitesse & Taille)
         let currentSpeed = this.baseSpeed;
-        
         if (this.isBossPhase) {
-            currentSpeed = this.baseSpeed * 0.5; // Ralenti
-            if (this.ZOMBIE) this.ZOMBIE.scale = this.ZOMBIE.baseScale * 1.6; // GROS
+            currentSpeed = this.baseSpeed * 0.5;
+            if (this.ZOMBIE) this.ZOMBIE.scale = this.ZOMBIE.baseScale * 1.6;
         } else {
-            if (this.ZOMBIE) this.ZOMBIE.scale = this.ZOMBIE.baseScale; // NORMAL
+            if (this.ZOMBIE) this.ZOMBIE.scale = this.ZOMBIE.baseScale;
         }
 
-        // --- HERO ---
+        // 2. GESTION HÉROS (Timer simple pour retour IDLE)
         if (this.heroState === "SHOOT" || this.heroState === "HIT") {
             this.heroTimer--;
             if (this.heroTimer <= 0) {
                 this.heroState = "IDLE";
-                if(this.HEROS) this.HEROS.play("IDLE");
+                if(this.HEROS) this.HEROS.play("IDLE", true);
             }
         }
 
-        // --- ZOMBIE ---
+        // 3. GESTION ZOMBIE (MACHINE À ÉTATS STRICTE)
+        
+        // --- ÉTAT : MARCHE ---
         if (this.zombieState === "WALKING") {
             this.zombieX -= currentSpeed;
+            
+            // DÉTECTION COLLISION (Le "Trigger")
             if (this.zombieX < 20) {
-                this.zombieState = "ATTACKING";
-                this.zombieTimer = 60;
-                if (this.ZOMBIE) this.ZOMBIE.play("TAPER");
-                if (this.HEROS) { this.HEROS.play("TOUCHE"); this.heroState = "HIT"; this.heroTimer = 60; }
+                // 🛑 VERROUILLAGE IMMÉDIAT : On change d'état
+                this.zombieState = "ATTACKING"; 
+                
+                // ACTION : On lance l'attaque UNE SEULE FOIS ici
+                if (this.ZOMBIE) this.ZOMBIE.play("TAPER", false);
+                
+                // RÉACTION HÉROS
+                if (this.HEROS) { 
+                    this.HEROS.play("TOUCHE", false); 
+                    this.heroState = "HIT"; 
+                    this.heroTimer = 60; 
+                }
+                
+                // DÉGÂT
                 if (this.callbacks.onPlayerHit) this.callbacks.onPlayerHit();
             }
+            
+            // Mise à jour visuelle marche
+            if (this.ZOMBIE) this.ZOMBIE.x = this.zombieX;
+        } 
+        
+        // --- ÉTAT : ATTAQUE (Bloqué sur place) ---
+        else if (this.zombieState === "ATTACKING") {
             if (this.ZOMBIE) {
-                this.ZOMBIE.x = this.zombieX;
-                if(this.ZOMBIE.currentAction !== "AVANCER") this.ZOMBIE.play("AVANCER");
+                this.ZOMBIE.x = 20; // On force la position contact
+                
+                // On attend que l'animation "TAPER" soit finie pour reset
+                if (this.ZOMBIE.isAnimFinished) {
+                    this.resetZombie();
+                }
+            } else {
+                this.resetZombie(); // Sécurité si pas de sprite
             }
-        } else if (this.zombieState === "ATTACKING") {
-            this.zombieTimer--;
-            if (this.ZOMBIE) { this.ZOMBIE.x = 20; if(this.ZOMBIE.currentAction !== "TAPER") this.ZOMBIE.play("TAPER"); }
-            if (this.zombieTimer <= 0) this.resetZombie();
-        } else if (this.zombieState === "HIT") {
-            this.zombieTimer--;
-            this.zombieX += 0.1; 
+        } 
+        
+        // --- ÉTAT : TOUCHÉ (Recul) ---
+        else if (this.zombieState === "HIT") {
+            this.zombieX += 0.5; // Recul rapide
             if(this.ZOMBIE) this.ZOMBIE.x = this.zombieX;
-            if (this.zombieTimer <= 0) this.resetZombie();
+            
+            // On attend la fin de l'anim "TOUCHE"
+            if (this.ZOMBIE.isAnimFinished) {
+                this.resetZombie();
+            }
         }
 
-        // --- PROJECTILES ---
+        // 4. GESTION PROJECTILES
         for (let i = this.projectiles.length - 1; i >= 0; i--) { 
             let p = this.projectiles[i]; 
             p.x += 3;
+            
+            // Collision Balle -> Zombie (Seulement si il marche !)
             if (this.zombieState === "WALKING" && p.x > this.zombieX - 5 && p.x < this.zombieX + 5) {
                 this.projectiles.splice(i, 1);
+                
+                // Passage en état HIT (Verrouille aussi)
                 this.zombieState = "HIT";
-                this.zombieTimer = 40;
-                if (this.ZOMBIE) this.ZOMBIE.play("TOUCHE"); 
-            } else if (p.x > 110) {
+                if (this.ZOMBIE) this.ZOMBIE.play("TOUCHE", false); 
+            } 
+            else if (p.x > 110) {
                 this.projectiles.splice(i, 1);
             }
         }
@@ -127,7 +167,6 @@ class MiniGame extends MiniGameBase {
         if (this.isStopped) return;
         const ctx = this.ctx;
         
-        // BALLES
         ctx.fillStyle = "#f97316"; 
         this.projectiles.forEach(p => { 
             ctx.beginPath(); 
@@ -135,7 +174,6 @@ class MiniGame extends MiniGameBase {
             ctx.fill(); 
         });
 
-        // TEXTE BOSS (ROUGE AVEC OMBRE)
         if (this.isBossPhase) {
             ctx.save();
             ctx.font = "900 40px Arial";
@@ -183,7 +221,7 @@ export default function StudioDashboard({ user }) {
     const [selectedGlobalSoundIdx, setSelectedGlobalSoundIdx] = useState(0);
     const [leftTab, setLeftTab] = useState('actions');
     
-    // ⚠️ CODE FORCÉ V7.3
+    // ⚠️ CODE FORCÉ V9
     const [code, setCode] = useState(ZOMBIE_GAME_CODE);
     
     const [isPlaying, setIsPlaying] = useState(false);
