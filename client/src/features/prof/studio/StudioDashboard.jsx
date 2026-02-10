@@ -21,8 +21,8 @@ function resolveUrl(url) {
     return `/api/proxy/${id}`;
 }
 
-// 🧟 ZOMBIE V7 : SUPPORT DU MODE BOSS (GROSSISSEMENT + RALENTISSEMENT)
-const ZOMBIE_GAME_CODE = `// 🧟 ZOMBIE V7 (BOSS MODE READY)
+// 🧟 ZOMBIE V7.3 : BOSS LABEL & BIG SIZE FIX
+const ZOMBIE_GAME_CODE = `// 🧟 ZOMBIE V7.3 (BOSS LABEL)
 class MiniGame extends MiniGameBase {
     constructor(canvas, assets, callbacks) {
         super(canvas, assets, callbacks);
@@ -33,8 +33,6 @@ class MiniGame extends MiniGameBase {
         this.heroState = "IDLE";
         this.heroTimer = 0;
         this.isStopped = false;
-        
-        // Stats de base
         this.baseSpeed = 0.15;
     }
 
@@ -66,13 +64,14 @@ class MiniGame extends MiniGameBase {
     update() {
         if (this.isStopped) return;
 
-        // --- GESTION DU MODE BOSS (Injecté par GameEngine) ---
+        // --- GESTION DU MODE BOSS ---
         let currentSpeed = this.baseSpeed;
+        
         if (this.isBossPhase) {
-            currentSpeed = this.baseSpeed * 0.5; // Ralenti de 50%
-            if (this.ZOMBIE) this.ZOMBIE.scale = this.ZOMBIE.baseScale * 1.5; // Gros
+            currentSpeed = this.baseSpeed * 0.5; // Ralenti
+            if (this.ZOMBIE) this.ZOMBIE.scale = this.ZOMBIE.baseScale * 1.6; // GROS
         } else {
-            if (this.ZOMBIE) this.ZOMBIE.scale = this.ZOMBIE.baseScale; // Normal
+            if (this.ZOMBIE) this.ZOMBIE.scale = this.ZOMBIE.baseScale; // NORMAL
         }
 
         // --- HERO ---
@@ -127,12 +126,26 @@ class MiniGame extends MiniGameBase {
     draw() {
         if (this.isStopped) return;
         const ctx = this.ctx;
+        
+        // BALLES
         ctx.fillStyle = "#f97316"; 
         this.projectiles.forEach(p => { 
             ctx.beginPath(); 
             ctx.arc((p.x/100)*this.canvas.width, (p.y/100)*this.canvas.height, 10, 0, Math.PI*2); 
             ctx.fill(); 
         });
+
+        // TEXTE BOSS (ROUGE AVEC OMBRE)
+        if (this.isBossPhase) {
+            ctx.save();
+            ctx.font = "900 40px Arial";
+            ctx.fillStyle = "red";
+            ctx.textAlign = "center";
+            ctx.shadowColor = "black";
+            ctx.shadowBlur = 15;
+            ctx.fillText("💀 BOSS 💀", this.canvas.width / 2, 80);
+            ctx.restore();
+        }
     }
 }
 `;
@@ -170,7 +183,7 @@ export default function StudioDashboard({ user }) {
     const [selectedGlobalSoundIdx, setSelectedGlobalSoundIdx] = useState(0);
     const [leftTab, setLeftTab] = useState('actions');
     
-    // ⚠️ CODE FORCÉ V7 (BOSS MODE)
+    // ⚠️ CODE FORCÉ V7.3
     const [code, setCode] = useState(ZOMBIE_GAME_CODE);
     
     const [isPlaying, setIsPlaying] = useState(false);
