@@ -38,7 +38,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const loopIdRef = useRef(0);
     const projectRef = useRef(project);
     const frameIdRef = useRef(null);
-    const gameInstanceRef = useRef(null); // REFERENCE PRINCIPALE DU JEU
+    const gameInstanceRef = useRef(null);
 
     // --- AUDIO ---
     const [isMuted, setIsMuted] = useState(false);
@@ -111,6 +111,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
     const triggerPlayerHit = () => {
         const now = Date.now();
+        // Anti-spam 1s
         if (now - lastInteractionRef.current < 1000) return;
         lastInteractionRef.current = now;
 
@@ -131,17 +132,13 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         
         if (isCorrect) {
             newStates[currentQIndex] = Math.min(3, newStates[currentQIndex] + 1);
-            
-            // ✅ APPEL SÉCURISÉ AU JEU (Si instance existe)
-            if (gameInstanceRef.current && typeof gameInstanceRef.current.onResult === 'function') {
+            if (gameInstanceRef.current && gameInstanceRef.current.onResult) {
                 gameInstanceRef.current.onResult(true);
             }
-
         } else {
             if (newStates[currentQIndex] > 0) newStates[currentQIndex] -= 1;
             
-            // ✅ APPEL SÉCURISÉ AU JEU
-            if (gameInstanceRef.current && typeof gameInstanceRef.current.onResult === 'function') {
+            if (gameInstanceRef.current && gameInstanceRef.current.onResult) {
                 gameInstanceRef.current.onResult(false);
             }
             
@@ -179,13 +176,13 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     // --- HANDLERS UI ---
     
     const handleBarClick = (idx) => {
-        if (keysPressed.current['KeyF'] || keysPressed.current['Keyf']) {
+        if (keysPressed.current['KeyF']) {
             const ns = [...questionStates]; ns[idx] = Math.min(3, ns[idx] + 1); setQuestionStates(ns);
             if (idx === currentQIndex && ns[idx] >= 2) setTimeout(() => inputRef.current?.focus(), 50);
         }
     };
     const handleForceWin = () => {
-        if (keysPressed.current['KeyF'] || keysPressed.current['Keyf']) {
+        if (keysPressed.current['KeyF']) {
             setIsLevelWon(true); playSystemSound("UPLEVEL");
             setTimeout(() => { setLives(4); if (allLevels[currentLevelIdx + 1]) initLevel(currentLevelIdx + 1, allLevels); else setIsGameCompleted(true); }, 1000);
         }
@@ -275,8 +272,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             const canvas = canvasRef.current;
             const ctx = canvas.getContext('2d');
 
-            // Ref callback locale pour éviter la dépendance circulaire
-            const callbacks = {
+            const callbacksRef = {
                 onPlayerHit: () => triggerPlayerHit(),
                 onResult: (res) => {} 
             };
@@ -292,20 +288,38 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                         this.baseScale = data.scale||1; this.scale = this.baseScale;
                         this.visible = true;
                         this.direction = data.direction||0; this.rotationStyle = data.rotationStyle||'all';
+                        
                         this.currentAction = data.actions?.[0]?.name || 'IDLE';
                         this.frameIdx = 0; 
                         this.lastAnimTime = 0;
                         this.isAnimFinished = false; 
                         this.loop = true;
                     }
+
+                    // --- 🔥 PLAY INTELLIGENT (LE CORRECTIF EST ICI) ---
                     play(name, loop = true) { 
-                        if(this.currentAction.toUpperCase() !== name.toUpperCase()) { 
+                        const upperName = name.toUpperCase();
+                        
+                        // Si c'est une nouvelle action, on lance
+                        if (this.currentAction.toUpperCase() !== upperName) { 
                             this.currentAction = name; 
                             this.frameIdx = 0;
                             this.loop = loop; 
                             this.isAnimFinished = false;
                             this.engine._triggerActionSounds(this.id, name);
-                        } 
+                            return;
+                        }
+
+                        // Si c'est la MEME action
+                        // Si elle est finie ET qu'on ne boucle pas (ex: coup de hache), on peut la relancer si play() est rappelé explicitement
+                        // Mais ici on est dans une boucle 60fps... 
+                        // Donc on ne reset QUE si l'utilisateur a implémenté un système de "trigger" dans son code, 
+                        // OU si on change de "state". 
+                        // Dans le code Zombie V8, on utilise des états (WALKING, ATTACKING). 
+                        // Donc si on reste dans ATTACKING et qu'on appelle play("TAPER"), on ne veut PAS resetter.
+                        
+                        // Conclusion : On ne fait RIEN si l'action est déjà la bonne. 
+                        // C'est le changement d'état dans update() qui provoquera un nouveau play()
                     }
                 }
 
@@ -337,7 +351,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     }
                     _render() {
                         const s = projectRef.current.scenes[sceneIdx];
-                        // 🛡️ SÉCURITÉ CONTEXTE
                         if (!this.ctx || !this.canvas) return;
 
                         this.ctx.fillStyle = "#0f172a"; 
@@ -372,7 +385,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                                         }
                                     }
                                     
-                                    const safeIdx = p.frameIdx % totalFrames; // Modulo strict
+                                    const safeIdx = p.frameIdx % totalFrames;
                                     const assetKey = resolveUrl(act.frames[safeIdx].url);
                                     
                                     const spr = imageAssets.get(assetKey);
@@ -404,9 +417,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             const UserCodeFactory = new Function('MiniGameBase', `${code}\nreturn MiniGame;`);
             const UserGameClass = UserCodeFactory(MiniGameBase);
             
-            const instance = new UserGameClass(canvas, {}, callbacks);
-            
-            // ✅ ASSIGNATION STABLE
+            const instance = new UserGameClass(canvas, {}, callbacksRef);
             gameInstanceRef.current = instance;
             
             if (instance.start) instance.start();
