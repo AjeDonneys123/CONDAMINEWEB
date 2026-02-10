@@ -1,16 +1,16 @@
-// @signatures: GameEngine, initLevel, handleAnswerClick, handleInputSubmit, handleGameOver, retryLevel, nextLevel, preloadAssets, getYoutubeEmbedUrl, handleBarClick, handleForceWin, triggerPlayerHit
+// @signatures: GameEngine, initLevel, handleAnswerLogic, handleInputSubmit, handleGameOver, retryLevel, nextLevel, preloadAssets, getYoutubeEmbedUrl, handleBarClick, handleForceWin
 import React, { useState, useRef, useEffect } from 'react';
 import SoundExpert from './SoundExpert';
 import { api } from '../../../../services/api';
 
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
     const canvasRef = useRef(null);
+    
     const [isReady, setIsReady] = useState(false);
     const [engineStarted, setEngineStarted] = useState(false);
     const [loadProgress, setLoadProgress] = useState("0%");
     const [hitFlash, setHitFlash] = useState(false);
     
-    // DATA
     const [allLevels, setAllLevels] = useState([]); 
     const [currentLevelIdx, setCurrentLevelIdx] = useState(0);
     const [levelQuestions, setLevelQuestions] = useState([]); 
@@ -26,11 +26,11 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     
     // REFS SYSTÈME
     const bossModeRef = useRef(false);
-    const lastInteractionRef = useRef(0); 
+    const lastInteractionRef = useRef(0); // Anti-spam dégâts
+
     const [isMuted, setIsMuted] = useState(false);
     const isMutedRef = useRef(false);
 
-    // REFS JEU
     const [isStudyPhase, setIsStudyPhase] = useState(false);
     const [activeFocus, setActiveFocus] = useState(null); 
     const [showLevelTitle, setShowLevelTitle] = useState(false);
@@ -78,46 +78,60 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         });
     };
 
-    // --- GESTION DÉGÂTS (Fix One Shot) ---
-    const triggerPlayerHit = () => {
-        const now = Date.now();
-        // Protection 1.5s entre deux coups reçus
-        if (now - lastInteractionRef.current < 1500) return;
-        lastInteractionRef.current = now;
-
-        setHitFlash(true); setTimeout(() => setHitFlash(false), 200);
-        
-        setLives(prev => {
-            const newVal = Math.max(0, prev - 1);
-            if (newVal === 0) { isPausedRef.current = true; handleGameOver(); }
-            return newVal;
-        });
-    };
-
+    // --- LOGIQUE RÉPONSE & DÉGÂTS (SÉCURISÉE) ---
     const handleAnswerLogic = (isCorrect) => {
+        const now = Date.now();
+        // 🔒 ANTI-SPAM 1.5 SECONDES : Bloque les dégâts multiples
+        if (!isCorrect && now - lastInteractionRef.current < 1500) return;
+        if (!isCorrect) lastInteractionRef.current = now; // On update le timer seulement si c'est une erreur/coup
+
         if (livesRef.current <= 0) return;
+
         setFeedback(isCorrect ? 'CORRECT' : 'WRONG');
         const newStates = [...questionStates];
+        
         if (isCorrect) {
             newStates[currentQIndex] = Math.min(3, newStates[currentQIndex] + 1);
             if (gameInstanceRef.current?.onResult) gameInstanceRef.current.onResult(true);
         } else {
-            newStates[currentQIndex] = Math.max(0, newStates[currentQIndex] - 1);
+            // PERTE D'UN POINT SUR LA BARRE
+            if (newStates[currentQIndex] > 0) newStates[currentQIndex] -= 1;
+            
             if (gameInstanceRef.current?.onResult) gameInstanceRef.current.onResult(false);
-            triggerPlayerHit();
+            
+            setHitFlash(true); setTimeout(() => setHitFlash(false), 200);
+            
+            setLives(prev => {
+                const newVal = Math.max(0, prev - 1);
+                if (newVal === 0) {
+                    isPausedRef.current = true;
+                    handleGameOver();
+                }
+                return newVal;
+            });
         }
-        setQuestionStates(newStates); setInputValue("");
+        
+        setQuestionStates(newStates);
+        setInputValue("");
+
         safeTimeout(() => {
             setFeedback(null);
+            
             if (livesRef.current > 0 && !isGameOver) {
                 const available = newStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
                 if (available.length > 0) {
-                    if (newStates[currentQIndex] < 3) { setCurrentQIndex(currentQIndex); if(newStates[currentQIndex] >= 2) setTimeout(() => inputRef.current?.focus(), 50); }
-                    else setCurrentQIndex(available[Math.floor(Math.random() * available.length)]);
+                    if (newStates[currentQIndex] < 3) { 
+                        setCurrentQIndex(currentQIndex); 
+                        if(newStates[currentQIndex] >= 2) setTimeout(() => inputRef.current?.focus(), 50); 
+                    } else {
+                        setCurrentQIndex(available[Math.floor(Math.random() * available.length)]);
+                    }
                 } else {
                     setIsLevelWon(true); isPausedRef.current = true; playSystemSound("UPLEVEL");
                     safeTimeout(() => { setLives(4); if(allLevels[currentLevelIdx+1]) initLevel(currentLevelIdx+1, allLevels); else setIsGameCompleted(true); }, 4000);
                 }
+            } else if (livesRef.current <= 0 && !isGameOver) {
+                handleGameOver();
             }
         }, 1000);
     };
@@ -161,10 +175,8 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         try {
             const cvs = canvasRef.current;
             const ctx = cvs.getContext('2d');
-            
-            // CALLBACKS
             const gameCallbacks = { 
-                onPlayerHit: () => triggerPlayerHit(), // Appelle la logique dégâts sécurisée
+                onPlayerHit: () => handleAnswerLogic(false), // DÉCLENCHE LA LOGIQUE DÉGÂT/PERTE
                 playSound: () => {} 
             };
             
@@ -179,23 +191,14 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                         this.baseScale = data.scale||1; this.scale = this.baseScale;
                         this.visible = true;
                         this.direction = data.direction||0; this.rotationStyle = data.rotationStyle||'all';
-                        
                         this.currentAction = data.actions?.[0]?.name || 'IDLE';
-                        
-                        // ANIMATION STATE
-                        this.frameIdx = 0; 
-                        this.lastAnimTime = 0;
-                        this.isAnimFinished = false; // NOUVEAU
-                        this.loop = true; // NOUVEAU
+                        this.frameIdx = 0; this.lastAnimTime = 0;
+                        this.isAnimFinished = false; this.loop = true;
                     }
-
-                    // NOUVEAU : play avec option loop
                     play(name, loop = true) { 
                         if(this.currentAction.toUpperCase() !== name.toUpperCase()) { 
-                            this.currentAction = name; 
-                            this.frameIdx = 0;
-                            this.loop = loop;
-                            this.isAnimFinished = false;
+                            this.currentAction = name; this.frameIdx = 0;
+                            this.loop = loop; this.isAnimFinished = false;
                             this.engine._triggerActionSounds(this.id, name);
                         } 
                     }
@@ -228,12 +231,14 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     }
                     _render() {
                         const s = project.scenes[sceneIdx];
-                        ctx.fillStyle = "#0f172a"; ctx.fillRect(0,0,canvas.width, canvas.height);
+                        // 🔥 CORRECTION : Usage de this.ctx et this.canvas
+                        this.ctx.fillStyle = "#0f172a"; 
+                        this.ctx.fillRect(0,0,this.canvas.width, this.canvas.height);
+                        
                         const bd = s?.backdrops?.[s.currentBackdropIdx || 0];
                         if(bd) {
-                            const key = resolveUrl(bd.url);
-                            const img = imageAssets.get(key);
-                            if(img) ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                            const img = imageAssets.get(resolveUrl(bd.url));
+                            if(img) this.ctx.drawImage(img, 0, 0, this.canvas.width, this.canvas.height);
                         }
                         for(let key in this) {
                             const p = this[key];
@@ -242,25 +247,16 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                                 if(!aData) continue;
                                 const act = (aData.actions || []).find(x => x.name.toUpperCase() === p.currentAction.toUpperCase()) || aData.actions?.[0];
                                 
-                                // GESTION DES FRAMES STRICTE
                                 if(act && act.frames && act.frames.length > 0) {
                                     const now = Date.now();
                                     const totalFrames = act.frames.length;
 
                                     if (now - p.lastAnimTime > (act.speed || 100)) { 
-                                        
-                                        // SI PAS FINI
                                         if (!p.isAnimFinished) {
                                             p.frameIdx++;
-                                            
-                                            // FIN D'ANIMATION
                                             if (p.frameIdx >= totalFrames) {
-                                                if (p.loop) {
-                                                    p.frameIdx = 0; // Boucle
-                                                } else {
-                                                    p.frameIdx = totalFrames - 1; // Reste sur la dernière
-                                                    p.isAnimFinished = true; // Signal au script
-                                                }
+                                                if (p.loop) { p.frameIdx = 0; } 
+                                                else { p.frameIdx = totalFrames - 1; p.isAnimFinished = true; }
                                             }
                                             p.lastAnimTime = now; 
                                         }
@@ -269,9 +265,12 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                                     const assetKey = resolveUrl(act.frames[p.frameIdx].url);
                                     const spr = imageAssets.get(assetKey);
                                     if(spr) {
-                                        const xPx = (p.x/100)*canvas.width; const yPx = (p.y/100)*canvas.height; 
+                                        const xPx = (p.x/100)*this.canvas.width; 
+                                        const yPx = (p.y/100)*this.canvas.height; 
                                         let sz = 150 * p.scale; 
-                                        this.ctx.save(); this.ctx.translate(xPx, yPx);
+                                        
+                                        this.ctx.save(); 
+                                        this.ctx.translate(xPx, yPx);
                                         if(p.rotationStyle === 'left-right' && Math.abs(p.scale) !== p.scale) this.ctx.scale(Math.sign(p.scale), 1);
                                         else if (p.direction) this.ctx.rotate(p.direction * Math.PI / 180);
                                         
@@ -331,7 +330,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 <>
                     <div className="absolute top-6 w-full flex justify-between items-start px-10 pointer-events-none z-30">
                         <div className="flex gap-4 pointer-events-auto">
-                            <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-xl flex gap-1 cursor-pointer hover:border-red-500 transition-colors" onClick={() => { if (keysPressed.current['KeyF']) triggerPlayerHit(); }}>
+                            <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-xl flex gap-1 cursor-pointer hover:border-red-500 transition-colors" onClick={() => { if (keysPressed.current['KeyF']) handleAnswerLogic(false); }}>
                                 {"❤️".repeat(lives)}{"🖤".repeat(Math.max(0, 4 - lives))}
                             </div>
                             <button onClick={() => setIsMuted(!isMuted)} className={`w-16 h-16 rounded-2xl border-2 shadow-xl flex items-center justify-center text-2xl transition-all ${isMuted ? 'bg-red-900/80 border-red-500 text-red-200' : 'bg-slate-900/80 border-slate-700 text-white hover:border-indigo-500'}`}>{isMuted ? '🔇' : '🔊'}</button>
