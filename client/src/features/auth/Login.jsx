@@ -1,4 +1,4 @@
-// @signatures: Login, body, clean, handleLogin, handleReset, handleSelectSuggestion
+// @signatures: Login, handleLogin, handleReset, handleSelectSuggestion
 import React, { useState, useEffect } from 'react';
 import './Login.css';
 
@@ -6,7 +6,7 @@ export default function Login({ onLoginSuccess }) {
   const [mode, setMode] = useState(null);
   
   // --- FINDER STATE ---
-  const [allStudentsData, setAllStudentsData] = useState([]); // Données brutes légères
+  const [allStudentsData, setAllStudentsData] = useState([]); 
   const [inputClass, setInputClass] = useState('');
   const [inputLast, setInputLast] = useState('');
   const [inputFirst, setInputFirst] = useState('');
@@ -38,9 +38,9 @@ export default function Login({ onLoginSuccess }) {
 
   // --- MOTEUR DE RECHERCHE CROISÉ ---
   useEffect(() => {
-    if (selectedStudent) return; // Si déjà choisi, pas de suggestions
+    if (selectedStudent) return; 
 
-    const clean = (str) => str.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const clean = (str) => (str || "").toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     
     const sClass = clean(inputClass);
     const sLast = clean(inputLast);
@@ -58,7 +58,7 @@ export default function Login({ onLoginSuccess }) {
         return matchClass && matchLast && matchFirst;
     });
 
-    setSuggestions(matches.slice(0, 8)); // Max 8 suggestions
+    setSuggestions(matches.slice(0, 8)); 
   }, [inputClass, inputLast, inputFirst, allStudentsData, selectedStudent]);
 
   const handleSelectSuggestion = (s) => {
@@ -81,16 +81,16 @@ export default function Login({ onLoginSuccess }) {
     e.preventDefault();
     setLoading(true);
     
-    // Simplifié : soit TEACHER soit STUDENT
-    let roleToSend = 'STUDENT';
-    if (mode === 'teacher') roleToSend = 'TEACHER';
+    // REDIRECTION INTELLIGENTE DES ROUTES (FIX V99)
+    const isTeacher = mode === 'teacher';
+    const loginUrl = isTeacher ? '/api/auth/login' : '/api/eleve/auth/login';
     
-    const body = (roleToSend === 'TEACHER')
-        ? { role: roleToSend, firstName: fName, lastName: lName, password }
-        : { role: 'STUDENT', studentId: selectedStudent?.id };
+    const body = isTeacher
+        ? { firstName: fName, lastName: lName, password }
+        : { studentId: selectedStudent?.id };
 
     try {
-        const res = await fetch('/api/auth/login', {
+        const res = await fetch(loginUrl, {
             method: 'POST',
             headers: {'Content-Type':'application/json'},
             body: JSON.stringify(body)
@@ -107,7 +107,6 @@ export default function Login({ onLoginSuccess }) {
     setLoading(false);
   };
 
-  // 1. ÉCRAN DE SÉLECTION DU RÔLE
   if (!mode) {
     return (
         <div className="login-screen">
@@ -129,7 +128,6 @@ export default function Login({ onLoginSuccess }) {
     );
   }
 
-  // 2. FORMULAIRES
   return (
     <div className="login-screen">
       <div className="login-card narrow">
@@ -141,12 +139,10 @@ export default function Login({ onLoginSuccess }) {
 
         <form onSubmit={handleLogin} className="login-inputs mt-6">
             
-            {/* --- MODE ÉLÈVE --- */}
             {mode === 'student' && (
                 <>
                     {!selectedStudent ? (
                         <div className="finder-wrapper">
-                            {/* LIGNE 1 : CLASSE */}
                             <input 
                                 className="login-field" 
                                 placeholder="Classe (ex: 6A)" 
@@ -155,7 +151,6 @@ export default function Login({ onLoginSuccess }) {
                                 onFocus={() => setActiveField('class')}
                             />
                             
-                            {/* LIGNE 2 : NOM & PRENOM */}
                             <div className="finder-row">
                                 <div className="finder-col-name">
                                     <input 
@@ -177,7 +172,6 @@ export default function Login({ onLoginSuccess }) {
                                 </div>
                             </div>
 
-                            {/* LISTE DE SUGGESTIONS INTELLIGENTE */}
                             {suggestions.length > 0 && (
                                 <div className="suggestions-box custom-scrollbar">
                                     {suggestions.map(s => (
@@ -201,7 +195,6 @@ export default function Login({ onLoginSuccess }) {
                 </>
             )}
 
-            {/* --- MODE STAFF (Prof uniquement) --- */}
             {mode === 'teacher' && (
                 <div className="space-y-4">
                     <input className="login-field" placeholder="Prénom" value={fName} onChange={e=>setFName(e.target.value)} required />
