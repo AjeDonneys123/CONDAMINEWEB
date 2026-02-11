@@ -1,35 +1,35 @@
-// @signatures: EleveGames, list, score, studioMirror
+// @signatures: EleveGames, studioMirror, score
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 
 /**
- * 🎮 ROUTE MIROIR : Julian récupère le dernier projet du Studio
+ * 🎮 ROUTE MIROIR TOTALE V106
+ * Fusionne le visuel du Studio avec les questions du Quiz de Test.
  */
 router.get('/studio-mirror', async (req, res) => {
     try {
         const StudioProject = mongoose.model('StudioProject');
-        // On cherche le projet le plus récent dans toute la base
+        const GameLevel = mongoose.model('GameLevel');
+
+        // 1. On prend le dernier visuel du Studio
         const project = await StudioProject.findOne({}).sort({ updatedAt: -1 }).lean();
+        // 2. On prend les questions du Quiz de Test
+        const testQuiz = await GameLevel.findOne({ isTestGame: true }).sort({ updatedAt: -1 }).lean();
         
         if (!project) return res.json(null);
-        res.json(project);
+
+        // 3. FUSION : On injecte les questions et les fiches dans le projet visuel
+        const fullMirror = {
+            ...project,
+            levels: testQuiz?.levels || [],
+            globalIntro: testQuiz?.globalIntro || { sheetUrl: "", videoUrl: "" }
+        };
+
+        res.json(fullMirror);
     } catch (e) {
         res.status(500).json(null);
     }
-});
-
-router.get('/list/:studentId', async (req, res) => {
-    try {
-        const Student = mongoose.model('Student');
-        const GameLevel = mongoose.model('GameLevel');
-        const student = await Student.findById(req.params.studentId).lean();
-        if (!student) return res.json([]);
-        const myClass = (student.currentClass || "").trim().toUpperCase();
-        const query = { $or: [ { assignedStudents: student._id }, { targetClassrooms: myClass }, { isTestGame: true } ] };
-        const games = await GameLevel.find(query).sort({ updatedAt: -1 }).lean();
-        res.json(games);
-    } catch (e) { res.status(500).json([]); }
 });
 
 router.post('/score', async (req, res) => {

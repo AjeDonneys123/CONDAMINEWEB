@@ -8756,3 +8756,8 @@ Build 161: MIGRATION MOTEUR JEU. Extraction de la logique 'BaseFactory' vers 'se
 
 11/02/2026 17:35 - MIROIR STUDIO : Julian est branché directement sur les projets du Studio.
 11/02/2026 17:40 - AUTO-ID MIRROR : Nouvelle route /studio-mirror pour Julian. Plus besoin d'ID hardcodé, le système détecte le dernier projet sauvegardé automatiquement.
+
+11/02/2026 17:35 - MIROIR STUDIO : Julian branché sur les projets Studio.
+11/02/2026 17:40 - AUTO-ID MIRROR : Route /studio-mirror active.
+11/02/2026 17:45 - FUSION MIROIR : La route /studio-mirror fusionne désormais le visuel (Studio) avec le contenu (Quiz Test). Julian a maintenant accès à la fiche intro, aux questions JSX et au moteur graphique simultanément.
+11/02/2026 17:46 - AUDIO FIX : Chargement et lecture des sons activés dans GamePlayer.jsx.
