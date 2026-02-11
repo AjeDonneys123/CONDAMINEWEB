@@ -4,6 +4,7 @@ import SoundExpert from './SoundExpert';
 import { api } from '../../../../services/api';
 import { createGameBase } from '../../../../services/gameCore';
 
+// --- ZOMBIE V10.0 (DEBUG EDITION) ---
 const ZOMBIE_GAME_CODE = `
 class MiniGame extends MiniGameBase {
     constructor(canvas, assets, callbacks) {
@@ -16,6 +17,7 @@ class MiniGame extends MiniGameBase {
         this.hasDealtDamage = false;
         this.isStopped = false;
         this.baseSpeed = 0.15;
+        console.log("🧟 [ZOMBIE] Jeu initialisé. Callbacks reçus ?", !!callbacks);
     }
 
     start() { 
@@ -60,24 +62,50 @@ class MiniGame extends MiniGameBase {
             }
         }
 
+        // --- LOGIQUE ZOMBIE ---
         if (this.zombieState === "WALKING") {
             let speed = this.isBossPhase ? this.baseSpeed * 0.5 : this.baseSpeed;
             this.zombieX -= speed;
+            
             if (this.zombieX < 20) {
+                console.log("🧟 [ZOMBIE] Arrivée au contact ! Passage en attaque.");
                 this.zombieState = "ATTACKING";
                 this.hasDealtDamage = false;
                 if (this.ZOMBIE) { this.ZOMBIE.x = 20; this.ZOMBIE.play("TAPER", false); }
             } else if (this.ZOMBIE) { this.ZOMBIE.x = this.zombieX; }
         } 
         else if (this.zombieState === "ATTACKING") {
-            if (this.ZOMBIE && this.ZOMBIE.frameIdx >= 1 && !this.hasDealtDamage) {
-                this.hasDealtDamage = true;
-                if (this.heroState !== "HIT") {
-                    if (this.HEROS) { this.HEROS.play("TOUCHE", false); this.heroState = "HIT"; this.heroTimer = 60; }
-                    if (this.callbacks.onPlayerHit) this.callbacks.onPlayerHit();
+            // Check frame pour impact
+            if (this.ZOMBIE && !this.hasDealtDamage) {
+                // On tape dès la frame 1 ou plus
+                if (this.ZOMBIE.frameIdx >= 1) {
+                    console.log("💥 [ZOMBIE] IMPACT ! Frame:", this.ZOMBIE.frameIdx);
+                    this.hasDealtDamage = true;
+                    
+                    if (this.heroState !== "HIT") {
+                        console.log("🩸 [ZOMBIE] Héros touché ! Envoi signal...");
+                        
+                        if (this.HEROS) { 
+                            this.HEROS.play("TOUCHE", false); 
+                            this.heroState = "HIT"; 
+                            this.heroTimer = 60; 
+                        }
+                        
+                        // APPEL CRITIQUE
+                        if (this.callbacks && this.callbacks.onPlayerHit) {
+                            this.callbacks.onPlayerHit();
+                        } else {
+                            console.error("❌ [ZOMBIE] ERREUR : Callback onPlayerHit introuvable !", this.callbacks);
+                        }
+                    } else {
+                        console.log("🛡️ [ZOMBIE] Héros déjà touché (Invincible).");
+                    }
                 }
             }
-            if (this.ZOMBIE && this.ZOMBIE.isAnimFinished) this.resetZombie();
+            if (this.ZOMBIE && this.ZOMBIE.isAnimFinished) {
+                console.log("🔄 [ZOMBIE] Anim finie, reset.");
+                this.resetZombie();
+            }
         } 
         else if (this.zombieState === "HIT") {
             this.zombieX += 0.5;
@@ -169,7 +197,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         return () => { window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); };
     }, []);
 
-    // --- LOGIQUE SONS STRUCTURELS ---
     const playParallelSoundImpl = (url) => {
         if (isMutedRef.current || !audioCtxRef.current) return;
         const buffer = audioBuffersRef.current.get(resolveUrl(url));
@@ -185,11 +212,16 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     };
 
     const triggerGlobalEvent = (eventName) => {
+        console.log(`📡 [REACT] Tentative de trigger Event: ${eventName}`);
         const scene = projectRef.current.scenes?.[activeSceneIdx];
         if (!scene || !scene.globalSounds) return;
         const event = scene.globalSounds.find(g => g.name.toUpperCase().trim() === eventName.toUpperCase().trim());
-        if (event && event.sounds) {
+        
+        if (event && event.sounds && event.sounds.length > 0) {
+            console.log(`🔊 [REACT] Playing Sound for Event: ${eventName}`);
             event.sounds.forEach(snd => playParallelSoundImpl(snd.url));
+        } else {
+            console.log(`⚠️ [REACT] Aucun son trouvé pour : ${eventName}`);
         }
     };
 
@@ -204,7 +236,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         setIsPowerOff(false);
         if (questions.length > 0) {
             setCurrentQIndex(0);
-            // SON DÉBUT DE NIVEAU
             setTimeout(() => triggerGlobalEvent("LEVEL_START"), 500);
         }
     };
@@ -260,7 +291,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         if (gameInstanceRef.current) gameInstanceRef.current.isBossPhase = isBoss;
     }, [currentQIndex, questionStates]);
 
-    // 3. LOGIQUE JEU & CHEATS
     const handleAnswerClick = (choiceIdx) => {
         if (feedback || currentQIndex === -1 || isLevelWonRef.current) return;
         const isCorrect = levelQuestions[currentQIndex].a === choiceIdx;
@@ -292,13 +322,13 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     // --- CHEAT CODE (CLICK BAR) : F + CLIC ---
     const handleBarCheat = (qIdx) => {
         if (keysPressed.current['KeyF']) {
-            // FORCE WIN : Passe directement la question au max (3)
+            console.log("🕵️ CHEAT: Force Win Question");
             const newStates = [...questionStates];
             newStates[qIdx] = 3;
             setQuestionStates(newStates);
             if (newStates.every(s => s >= 3)) triggerWinSequence();
         } else {
-            // CYCLE NORMAL : 0 -> 1 -> 2 -> 3 -> 0
+            // CYCLE NORMAL
             const newStates = [...questionStates];
             newStates[qIdx] = (newStates[qIdx] + 1) % 4; 
             setQuestionStates(newStates);
@@ -310,6 +340,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     // --- CHEAT CODE (CLICK COEUR) : F + CLIC ---
     const handleHeartClick = () => {
         if (keysPressed.current['KeyF']) {
+            console.log("🕵️ CHEAT: Lose Life");
             setLives(l => Math.max(0, l - 1));
         }
     };
@@ -325,7 +356,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const triggerWinSequence = () => {
         setIsLevelWon(true);
         isLevelWonRef.current = true;
-        // SON VICTOIRE NIVEAU
         triggerGlobalEvent("LEVEL_WIN");
         
         setTimeout(() => setIsPowerOff(true), 1500);
@@ -333,7 +363,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             if (allLevels[currentLevelIdx + 1]) initLevel(currentLevelIdx + 1, allLevels);
             else { 
                 alert("🎉 JEU TERMINÉ !"); 
-                triggerGlobalEvent("GAME_WIN"); // Son victoire finale
+                triggerGlobalEvent("GAME_WIN"); 
                 onStop(); 
             }
         }, 4000);
@@ -344,10 +374,28 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         setEngineStarted(true);
     };
 
+    // 4. INSTANCIATION MOTEUR AVEC CALLBACKS EXPLICITES
     useEffect(() => {
         if (!engineStarted || !canvasRef.current) return;
 
         try {
+            console.log("🚀 [REACT] Démarrage Moteur...");
+            
+            const gameCallbacks = {
+                onPlayerHit: () => { 
+                    console.log("💥 [CALLBACK REACT] onPlayerHit reçu !");
+                    if (!isLevelWonRef.current) {
+                        setLives(prev => {
+                            console.log("   Vies avant:", prev, "Après:", Math.max(0, prev - 1));
+                            return Math.max(0, prev - 1);
+                        }); 
+                    } else {
+                        console.log("   Ignoré car niveau gagné.");
+                    }
+                },
+                onLevelWin: () => { console.log("🏆 Win (Callback)"); }
+            };
+
             const MiniGameBase = createGameBase({ 
                 audioBuffers: audioBuffersRef.current, 
                 audioCtx: audioCtxRef.current, 
@@ -359,18 +407,15 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 ctx: canvasRef.current.getContext('2d'), 
                 isMutedRef, 
                 playParallelSound: playParallelSoundImpl,
-                callbacks: {
-                    onPlayerHit: () => { 
-                        if (!isLevelWonRef.current) setLives(l => Math.max(0, l - 1)); 
-                    }
-                }
+                callbacks: gameCallbacks // <-- PASSAGE EXPLICITE
             });
 
             const actualCode = code && code.length > 50 ? code : ZOMBIE_GAME_CODE;
             const UserCodeFactory = new Function('MiniGameBase', `${actualCode}\nreturn MiniGame;`);
             const UserGameClass = UserCodeFactory(MiniGameBase);
             
-            const instance = new UserGameClass(canvasRef.current, {}, {});
+            // Instanciation avec callbacks
+            const instance = new UserGameClass(canvasRef.current, {}, gameCallbacks);
             gameInstanceRef.current = instance;
 
             if (instance.start) instance.start();
@@ -410,7 +455,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 <>
                     <div className="absolute top-6 w-full flex justify-between items-start px-10 pointer-events-none z-30">
                         
-                        {/* VIES (Clickable Cheat) + MUTE */}
+                        {/* VIES + MUTE */}
                         <div className="flex gap-4 pointer-events-auto">
                             <div 
                                 className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-xl flex gap-1 cursor-pointer active:scale-95 transition-transform"
@@ -432,7 +477,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                             )}
                         </div>
 
-                        {/* BARRES DE PROGRESSION (Clickable Cheat) */}
+                        {/* BARRES DE PROGRESSION */}
                         <div className="flex gap-2 items-center pointer-events-auto mr-20">
                             {questionStates.map((mastery, idx) => (
                                 <div 
