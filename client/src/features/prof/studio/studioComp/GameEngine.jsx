@@ -1,10 +1,9 @@
-// @signatures: GameEngine, handleBarCheat, handleMuteToggle, initLevel, handleAnswerClick, triggerWinSequence, handleStartGame
+// @signatures: GameEngine, handleBarCheat, handleHeartClick, handleMuteToggle, initLevel, handleAnswerClick, triggerWinSequence, handleStartGame, triggerGlobalEvent
 import React, { useState, useRef, useEffect } from 'react';
 import SoundExpert from './SoundExpert';
 import { api } from '../../../../services/api';
 import { createGameBase } from '../../../../services/gameCore';
 
-// --- ZOMBIE V9.9 : LOGIQUE CORRIGÉE (DÉGÂTS + SONS) ---
 const ZOMBIE_GAME_CODE = `
 class MiniGame extends MiniGameBase {
     constructor(canvas, assets, callbacks) {
@@ -14,7 +13,7 @@ class MiniGame extends MiniGameBase {
         this.zombieState = "WALKING"; 
         this.heroState = "IDLE";
         this.heroTimer = 0;
-        this.hasDealtDamage = false; // ANTI-SPAM DÉGÂTS
+        this.hasDealtDamage = false;
         this.isStopped = false;
         this.baseSpeed = 0.15;
     }
@@ -32,7 +31,7 @@ class MiniGame extends MiniGameBase {
     resetZombie() {
         this.zombieX = 100;
         this.zombieState = "WALKING";
-        this.hasDealtDamage = false; // RESET DÉGÂTS
+        this.hasDealtDamage = false;
         if(this.ZOMBIE) {
             this.ZOMBIE.x = 100;
             this.ZOMBIE.play("AVANCER", true);
@@ -51,11 +50,8 @@ class MiniGame extends MiniGameBase {
 
     update() {
         if (this.isStopped) return;
-
-        // BOSS SCALING
         if (this.ZOMBIE) this.ZOMBIE.scale = this.isBossPhase ? this.ZOMBIE.baseScale * 1.6 : this.ZOMBIE.baseScale;
 
-        // HERO LOGIC
         if (this.heroState === "SHOOT" || this.heroState === "HIT") {
             this.heroTimer--;
             if (this.heroTimer <= 0) {
@@ -64,34 +60,20 @@ class MiniGame extends MiniGameBase {
             }
         }
 
-        // ZOMBIE LOGIC
         if (this.zombieState === "WALKING") {
             let speed = this.isBossPhase ? this.baseSpeed * 0.5 : this.baseSpeed;
             this.zombieX -= speed;
-            
-            // DÉCLENCHEMENT ATTAQUE
             if (this.zombieX < 20) {
                 this.zombieState = "ATTACKING";
-                this.hasDealtDamage = false; // PRÊT À FRAPPER
-                if (this.ZOMBIE) {
-                    this.ZOMBIE.x = 20;
-                    this.ZOMBIE.play("TAPER", false);
-                }
-            } else if (this.ZOMBIE) {
-                this.ZOMBIE.x = this.zombieX;
-            }
+                this.hasDealtDamage = false;
+                if (this.ZOMBIE) { this.ZOMBIE.x = 20; this.ZOMBIE.play("TAPER", false); }
+            } else if (this.ZOMBIE) { this.ZOMBIE.x = this.zombieX; }
         } 
         else if (this.zombieState === "ATTACKING") {
-            // COUP AU MOMENT DE L'IMPACT (Frame 1)
             if (this.ZOMBIE && this.ZOMBIE.frameIdx >= 1 && !this.hasDealtDamage) {
                 this.hasDealtDamage = true;
                 if (this.heroState !== "HIT") {
-                    if (this.HEROS) {
-                        this.HEROS.play("TOUCHE", false);
-                        this.heroState = "HIT";
-                        this.heroTimer = 60;
-                    }
-                    // SIGNAL AU MOTEUR REACT
+                    if (this.HEROS) { this.HEROS.play("TOUCHE", false); this.heroState = "HIT"; this.heroTimer = 60; }
                     if (this.callbacks.onPlayerHit) this.callbacks.onPlayerHit();
                 }
             }
@@ -99,13 +81,9 @@ class MiniGame extends MiniGameBase {
         } 
         else if (this.zombieState === "HIT") {
             this.zombieX += 0.5;
-            if (this.ZOMBIE) {
-                this.ZOMBIE.x = this.zombieX;
-                if (this.ZOMBIE.isAnimFinished) this.resetZombie();
-            }
+            if (this.ZOMBIE) { this.ZOMBIE.x = this.zombieX; if (this.ZOMBIE.isAnimFinished) this.resetZombie(); }
         }
 
-        // PROJECTILES
         for (let i = this.projectiles.length - 1; i >= 0; i--) { 
             let p = this.projectiles[i]; 
             p.x += 3;
@@ -173,7 +151,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
     useEffect(() => { projectRef.current = project; }, [project]);
 
-    // 1. INIT QUIZ & EVENTS
+    // 1. INIT & CLAVIER
     useEffect(() => {
         api.get('/games/test-data').then(data => {
             const levelsData = data?.levels?.length > 0 ? data.levels : [{ 
@@ -191,6 +169,30 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         return () => { window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); };
     }, []);
 
+    // --- LOGIQUE SONS STRUCTURELS ---
+    const playParallelSoundImpl = (url) => {
+        if (isMutedRef.current || !audioCtxRef.current) return;
+        const buffer = audioBuffersRef.current.get(resolveUrl(url));
+        if (buffer) {
+            if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
+            try {
+                const source = audioCtxRef.current.createBufferSource();
+                source.buffer = buffer;
+                source.connect(audioCtxRef.current.destination);
+                source.start(0);
+            } catch(e) {}
+        }
+    };
+
+    const triggerGlobalEvent = (eventName) => {
+        const scene = projectRef.current.scenes?.[activeSceneIdx];
+        if (!scene || !scene.globalSounds) return;
+        const event = scene.globalSounds.find(g => g.name.toUpperCase().trim() === eventName.toUpperCase().trim());
+        if (event && event.sounds) {
+            event.sounds.forEach(snd => playParallelSoundImpl(snd.url));
+        }
+    };
+
     const initLevel = (idx, sourceData) => {
         if (!sourceData[idx]) return;
         const questions = sourceData[idx].questions || [];
@@ -200,10 +202,14 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         setIsLevelWon(false);
         isLevelWonRef.current = false;
         setIsPowerOff(false);
-        if (questions.length > 0) setCurrentQIndex(0);
+        if (questions.length > 0) {
+            setCurrentQIndex(0);
+            // SON DÉBUT DE NIVEAU
+            setTimeout(() => triggerGlobalEvent("LEVEL_START"), 500);
+        }
     };
 
-    // 2. ASSET LOADING
+    // 2. CHARGEMENT ASSETS
     useEffect(() => {
         if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
         
@@ -223,7 +229,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         imgUrls.forEach(url => {
             const img = new Image(); 
             img.crossOrigin = "anonymous";
-            const resolvedKey = resolveUrl(url); // CLÉ HARMONISÉE
+            const resolvedKey = resolveUrl(url); 
 
             img.onload = () => {
                 imageAssetsRef.current.set(resolvedKey, img);
@@ -232,7 +238,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 if (loaded >= total) setIsReady(true);
             };
             img.onerror = () => {
-                console.error("❌ Img error:", resolvedKey);
                 loaded++;
                 if (loaded >= total) setIsReady(true);
             };
@@ -249,13 +254,13 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         return () => { if (frameIdRef.current) cancelAnimationFrame(frameIdRef.current); };
     }, [project]);
 
-    // 3. LOGIQUE JEU
     useEffect(() => {
         const isBoss = (currentQIndex !== -1 && (questionStates[currentQIndex] || 0) >= 2);
         bossModeRef.current = isBoss;
         if (gameInstanceRef.current) gameInstanceRef.current.isBossPhase = isBoss;
     }, [currentQIndex, questionStates]);
 
+    // 3. LOGIQUE JEU & CHEATS
     const handleAnswerClick = (choiceIdx) => {
         if (feedback || currentQIndex === -1 || isLevelWonRef.current) return;
         const isCorrect = levelQuestions[currentQIndex].a === choiceIdx;
@@ -284,17 +289,31 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         }, 1000);
     };
 
-    // --- CHEAT CODE (CLICK BAR) ---
+    // --- CHEAT CODE (CLICK BAR) : F + CLIC ---
     const handleBarCheat = (qIdx) => {
-        const newStates = [...questionStates];
-        newStates[qIdx] = (newStates[qIdx] + 1) % 4; // Cycle 0 -> 1 -> 2 -> 3 -> 0
-        setQuestionStates(newStates);
-        // Si on passe à 3, on vérifie la victoire
-        if (newStates.every(s => s >= 3)) triggerWinSequence();
-        else if (newStates[qIdx] < 3) setCurrentQIndex(qIdx);
+        if (keysPressed.current['KeyF']) {
+            // FORCE WIN : Passe directement la question au max (3)
+            const newStates = [...questionStates];
+            newStates[qIdx] = 3;
+            setQuestionStates(newStates);
+            if (newStates.every(s => s >= 3)) triggerWinSequence();
+        } else {
+            // CYCLE NORMAL : 0 -> 1 -> 2 -> 3 -> 0
+            const newStates = [...questionStates];
+            newStates[qIdx] = (newStates[qIdx] + 1) % 4; 
+            setQuestionStates(newStates);
+            if (newStates.every(s => s >= 3)) triggerWinSequence();
+            else if (newStates[qIdx] < 3) setCurrentQIndex(qIdx);
+        }
     };
 
-    // --- MUTE ---
+    // --- CHEAT CODE (CLICK COEUR) : F + CLIC ---
+    const handleHeartClick = () => {
+        if (keysPressed.current['KeyF']) {
+            setLives(l => Math.max(0, l - 1));
+        }
+    };
+
     const handleMuteToggle = () => {
         const newVal = !isMuted;
         setIsMuted(newVal);
@@ -303,28 +322,20 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         if (!newVal && audioCtxRef.current) audioCtxRef.current.resume();
     };
 
-    // --- PLAY SOUND (RÉPARÉ) ---
-    const playParallelSoundImpl = (url) => {
-        if (isMutedRef.current || !audioCtxRef.current) return;
-        const buffer = audioBuffersRef.current.get(resolveUrl(url)); // Clé harmonisée
-        if (buffer) {
-            if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
-            try {
-                const source = audioCtxRef.current.createBufferSource();
-                source.buffer = buffer;
-                source.connect(audioCtxRef.current.destination);
-                source.start(0);
-            } catch(e) {}
-        }
-    };
-
     const triggerWinSequence = () => {
         setIsLevelWon(true);
         isLevelWonRef.current = true;
+        // SON VICTOIRE NIVEAU
+        triggerGlobalEvent("LEVEL_WIN");
+        
         setTimeout(() => setIsPowerOff(true), 1500);
         setTimeout(() => {
             if (allLevels[currentLevelIdx + 1]) initLevel(currentLevelIdx + 1, allLevels);
-            else { alert("🎉 JEU TERMINÉ !"); onStop(); }
+            else { 
+                alert("🎉 JEU TERMINÉ !"); 
+                triggerGlobalEvent("GAME_WIN"); // Son victoire finale
+                onStop(); 
+            }
         }, 4000);
     };
 
@@ -333,7 +344,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         setEngineStarted(true);
     };
 
-    // 4. INSTANCIATION MOTEUR
     useEffect(() => {
         if (!engineStarted || !canvasRef.current) return;
 
@@ -348,7 +358,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 canvas: canvasRef.current, 
                 ctx: canvasRef.current.getContext('2d'), 
                 isMutedRef, 
-                playParallelSound: playParallelSoundImpl, // Foncteur passé au service
+                playParallelSound: playParallelSoundImpl,
                 callbacks: {
                     onPlayerHit: () => { 
                         if (!isLevelWonRef.current) setLives(l => Math.max(0, l - 1)); 
@@ -400,9 +410,13 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 <>
                     <div className="absolute top-6 w-full flex justify-between items-start px-10 pointer-events-none z-30">
                         
-                        {/* VIES + MUTE */}
+                        {/* VIES (Clickable Cheat) + MUTE */}
                         <div className="flex gap-4 pointer-events-auto">
-                            <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-xl flex gap-1">
+                            <div 
+                                className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-xl flex gap-1 cursor-pointer active:scale-95 transition-transform"
+                                onClick={handleHeartClick}
+                                title="Cheat: Maintenez F + Clic pour perdre un cœur"
+                            >
                                 {"❤️".repeat(lives)}{"🖤".repeat(Math.max(0, 4 - lives))}
                             </div>
                             <button onClick={handleMuteToggle} className="bg-slate-900/80 w-14 h-14 rounded-2xl border-2 border-slate-700 text-2xl flex items-center justify-center text-white hover:bg-slate-800">
@@ -418,12 +432,13 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                             )}
                         </div>
 
-                        {/* BARRES DE PROGRESSION (CLIQUABLES POUR CHEAT) */}
+                        {/* BARRES DE PROGRESSION (Clickable Cheat) */}
                         <div className="flex gap-2 items-center pointer-events-auto mr-20">
                             {questionStates.map((mastery, idx) => (
                                 <div 
                                     key={idx} 
                                     onClick={() => handleBarCheat(idx)}
+                                    title="Cheat: Maintenez F + Clic pour valider"
                                     className={`w-4 h-12 rounded-md border border-slate-600 relative overflow-hidden transition-all cursor-pointer hover:border-white ${currentQIndex === idx ? 'ring-2 ring-indigo-400 scale-110' : 'opacity-60'}`}
                                 >
                                     <div className={`absolute bottom-0 left-0 right-0 transition-all duration-500 ${mastery === 3 ? 'bg-green-500 shadow-[0_0_10px_green]' : 'bg-yellow-500'}`} style={{ height: `${(mastery / 3) * 100}%` }} />
