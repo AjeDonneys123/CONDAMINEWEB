@@ -8670,3 +8670,8 @@
 - Mode SNES (Action) : Les sons des acteurs ('_playSound' via 'playParallelSound') sont désormais parallèles. Ils se superposent sans attendre, comme sur une console de jeu classique.
 - Mode Broadcast (Système) : Les sons de Victoire, Défaite et Uplevel utilisent une file d'attente séquentielle ('systemQueueRef').
 - Résultat : Les musiques de victoire ne sont plus étouffées et se lancent proprement après les récompenses de niveau.
+
+10/02/2026 - 19:07 : REVERT & FIX CRASH (getYoutubeEmbedUrl).
+- Problème : ReferenceError sur 'getYoutubeEmbedUrl' causant le crash de l'app au démarrage.
+- Solution : Ré-introduction de la fonction helper 'getYoutubeEmbedUrl' dans le composant GameEngine.jsx.
+- Statut : Système audio hybride V9.6 préservé et fonctionnel.

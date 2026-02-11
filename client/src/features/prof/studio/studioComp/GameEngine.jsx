@@ -1,4 +1,4 @@
-// @signatures: GameEngine, processSystemQueue, playSystemSound, playParallelSound
+// @signatures: GameEngine, getYoutubeEmbedUrl, processSystemQueue, playSystemSound, playParallelSound
 import React, { useState, useRef, useEffect } from 'react';
 import SoundExpert from './SoundExpert';
 import { api } from '../../../../services/api';
@@ -17,9 +17,9 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const isPausedRef = useRef(false);
     
     // --- 🎛️ DOUBLE ENGINE AUDIO ---
-    const systemQueueRef = useRef([]); // File d'attente (Musiques)
-    const isSystemPlayingRef = useRef(false); // Verrou de file
-    const activeSourcesRef = useRef([]); // Sons parallèles (SNES style)
+    const systemQueueRef = useRef([]); 
+    const isSystemPlayingRef = useRef(false); 
+    const activeSourcesRef = useRef([]); 
 
     const activeTimeoutsRef = useRef([]);
     const audioCtxRef = useRef(null);
@@ -57,6 +57,16 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         }
     }, [lives]);
 
+    // --- 🛠️ HELPERS ---
+    const getYoutubeEmbedUrl = (url) => {
+        if (!url) return null;
+        let v = "";
+        if (url.includes("v=")) v = url.split("v=")[1]?.split("&")[0];
+        else if (url.includes("youtu.be/")) v = url.split("youtu.be/")[1]?.split("?")[0];
+        else if (url.includes("embed/")) v = url.split("embed/")[1]?.split("?")[0];
+        return v ? `https://www.youtube.com/embed/${v}?autoplay=1` : null;
+    };
+
     const normalize = (str) => (str || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
     const safeTimeout = (fn, delay) => { const id = setTimeout(fn, delay); activeTimeoutsRef.current.push(id); return id; };
     const clearAllTimeouts = () => { activeTimeoutsRef.current.forEach(clearTimeout); activeTimeoutsRef.current = []; };
@@ -68,8 +78,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         isSystemPlayingRef.current = false;
     };
 
-    // --- 1. COULOIR "PARALLÈLE" (MODE SNES) ---
-    // Pour les bruits d'action rapides qui se superposent
+    // --- 🔊 AUDIO LOGIC ---
     const playParallelSound = async (url) => {
         if (isMutedRef.current || !audioCtxRef.current) return;
         const buffer = audioBuffersRef.current.get(url);
@@ -80,22 +89,17 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             source.connect(audioCtxRef.current.destination);
             source.start(0);
             activeSourcesRef.current.push(source);
-            // On nettoie la ref une fois fini pour ne pas saturer la mémoire
             source.onended = () => {
                 activeSourcesRef.current = activeSourcesRef.current.filter(s => s !== source);
             };
         }
     };
 
-    // --- 2. COULOIR "SYSTÈME" (FILE D'ATTENTE) ---
-    // Pour les musiques importantes qui s'enchaînent sans se chevaucher
     const processSystemQueue = async () => {
         if (isSystemPlayingRef.current || systemQueueRef.current.length === 0 || isMutedRef.current) return;
-
         isSystemPlayingRef.current = true;
         const nextUrl = systemQueueRef.current.shift();
         const buffer = audioBuffersRef.current.get(nextUrl);
-
         if (buffer && audioCtxRef.current) {
             if (audioCtxRef.current.state === 'suspended') await audioCtxRef.current.resume();
             const source = audioCtxRef.current.createBufferSource();
@@ -118,13 +122,11 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         const scene = project.scenes[activeSceneIdx];
         const soundEvent = scene?.globalSounds?.find(gs => gs.name.toUpperCase().trim() === soundName.toUpperCase().trim());
         if (!soundEvent || !soundEvent.sounds) return;
-        
-        soundEvent.sounds.forEach(snd => {
-            systemQueueRef.current.push(snd.url);
-        });
+        soundEvent.sounds.forEach(snd => { systemQueueRef.current.push(snd.url); });
         processSystemQueue();
     };
 
+    // --- 🎮 LOGIQUE JEU ---
     const handleGameOver = () => {
         stopAllSounds();
         setIsGameOver(true);
@@ -179,7 +181,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     const isLastLevel = !allLevels[currentLevelIdx + 1];
                     if (isLastLevel) {
                         setIsGameCompleted(true);
-                        playSystemSound("VICTOIRE"); // Queue (attend la fin du bruitage précédent)
+                        playSystemSound("VICTOIRE");
                     } else {
                         playSystemSound("UPLEVEL");
                         safeTimeout(() => { setLives(4); initLevel(currentLevelIdx + 1, allLevels); }, 4000);
@@ -187,6 +189,12 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 }
             }
         }, 1000);
+    };
+
+    const handleBarClick = (idx) => {
+        if (keysPressed.current['KeyF']) {
+            const ns = [...questionStates]; ns[idx] = Math.min(3, ns[idx] + 1); setQuestionStates(ns);
+        }
     };
 
     const handleAnswerClick = (idx) => { if (!feedback && currentQIndex !== -1 && !isGameOver) handleAnswerLogic(levelQuestions[currentQIndex].a === idx); };
@@ -339,7 +347,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                         </div>
                         <div className="flex gap-2 items-center mr-20">
                             {questionStates.map((mastery, idx) => (
-                                <div key={idx} className={`w-4 h-12 rounded-md border border-slate-600 relative overflow-hidden ${currentQIndex === idx ? 'ring-2 ring-indigo-400 scale-110' : 'opacity-60'}`}>
+                                <div key={idx} onClick={() => handleBarClick(idx)} className={`w-4 h-12 rounded-md border border-slate-600 relative overflow-hidden ${currentQIndex === idx ? 'ring-2 ring-indigo-400 scale-110' : 'opacity-60'}`}>
                                     <div className={`absolute bottom-0 left-0 right-0 transition-all duration-500 ${mastery === 3 ? 'bg-green-500' : 'bg-yellow-500'}`} style={{ height: `${(mastery / 3) * 100}%` }} />
                                 </div>
                             ))}
@@ -356,7 +364,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                                         {allLevels[currentLevelIdx].intro?.sheetUrl ? <img src={resolveUrl(allLevels[currentLevelIdx].intro.sheetUrl)} className="max-w-full max-h-full object-contain" /> : <div className="text-slate-300 font-bold uppercase">Aucune fiche</div>}
                                     </div>
                                     <div className="flex-1 bg-black rounded-lg border-4 border-slate-800 flex items-center justify-center">
-                                        {getYoutubeEmbedUrl(allLevels[currentLevelIdx]?.intro?.videoUrl) ? <iframe className="w-full h-full" src={getYoutubeEmbedUrl(allLevels[currentLevelIdx].intro.videoUrl)} frameBorder="0"></iframe> : <div className="text-slate-600 font-bold uppercase">Aucune vidéo</div>}
+                                        {getYoutubeEmbedUrl(allLevels[currentLevelIdx]?.intro?.videoUrl) ? <iframe title="video" className="w-full h-full" src={getYoutubeEmbedUrl(allLevels[currentLevelIdx].intro.videoUrl)} frameBorder="0"></iframe> : <div className="text-slate-600 font-bold uppercase">Aucune vidéo</div>}
                                     </div>
                                 </div>
                                 <button onClick={() => { setIsStudyPhase(false); setShowLevelTitle(true); setTimeout(() => { setShowLevelTitle(false); isPausedRef.current = false; playSystemSound("DÉPART"); }, 1500); }} className="mt-6 bg-indigo-600 text-white py-4 rounded-2xl font-black text-2xl uppercase">C'est parti !</button>
