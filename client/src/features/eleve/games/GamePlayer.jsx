@@ -5,8 +5,8 @@ import { createGameBase } from '../../../services/gameCore';
 import SoundExpert from '../../../services/SoundExpert';
 
 /**
- * 🕹️ MOTEUR UNIFIÉ V165 (PEDAGO-LOADER + ZOOM SYSTEM)
- * Rôle : Affiche la pédagogie PENDANT le chargement des assets.
+ * 🕹️ MOTEUR UNIFIÉ V170 (PEDAGO-ZOOM HD)
+ * Rôle : Système de zoom plein écran 90% hauteur avec fond noir pur.
  */
 export default function GamePlayer({ user, gameData, onExit, isStudioTest = false }) {
     const canvasRef = useRef(null);
@@ -50,7 +50,7 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
         if (url.includes('v=')) videoId = url.split('v=')[1].split('&')[0];
         else if (url.includes('youtu.be/')) videoId = url.split('youtu.be/')[1].split('?')[0];
         else if (url.includes('embed/')) videoId = url.split('embed/')[1].split('?')[0];
-        return videoId ? `https://www.youtube.com/embed/${videoId}?autoplay=0&rel=0` : url;
+        return videoId ? `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0` : url;
     };
 
     const playParallelSoundImpl = (url) => {
@@ -85,25 +85,19 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
         return () => { window.removeEventListener('keydown', hDown); window.removeEventListener('keyup', hUp); };
     }, []);
 
-    // 1. CHARGEMENT EN ARRIÈRE-PLAN
     useEffect(() => {
         isRunningRef.current = true;
         const load = async () => {
             try {
                 if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
-                
                 let finalGameData = { ...gameData };
                 if (isStudioTest && (!finalGameData.levels || finalGameData.levels.length === 0)) {
                     const res = await fetch('/api/games/test-data');
                     const testQuiz = await res.json();
                     if (testQuiz) { finalGameData.levels = testQuiz.levels; setLevels(testQuiz.levels); }
-                } else {
-                    setLevels(finalGameData.levels || []);
-                }
-
+                } else { setLevels(finalGameData.levels || []); }
                 projectRef.current = finalGameData;
                 const scene = finalGameData.scenes?.[0] || { actors: [], backdrops: [] };
-                
                 const imgUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url)))].filter(Boolean);
                 await Promise.all(imgUrls.map(url => new Promise(resolve => {
                     const img = new Image(); img.crossOrigin = "anonymous";
@@ -111,17 +105,13 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
                     img.onload = () => { imageAssetsRef.current.set(rUrl, img); resolve(); };
                     img.onerror = resolve; img.src = rUrl;
                 })));
-
                 const sndUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url))))].filter(Boolean);
                 await Promise.all(sndUrls.map(async url => {
                     const rUrl = resolveUrl(url);
                     const buf = await SoundExpert.decodeAudio(rUrl, audioCtxRef.current);
                     if (buf) audioBuffersRef.current.set(rUrl, buf);
                 }));
-
-                const qCount = finalGameData.levels?.[currentLevelIdx]?.questions?.length || 0;
-                setQuestionStates(new Array(qCount).fill(0));
-                
+                setQuestionStates(new Array(finalGameData.levels?.[currentLevelIdx]?.questions?.length || 0).fill(0));
                 setLoading(false);
             } catch (e) { console.error("Engine Load Error", e); }
         };
@@ -129,10 +119,8 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
         return () => { isRunningRef.current = false; if(frameIdRef.current) cancelAnimationFrame(frameIdRef.current); };
     }, [gameData]);
 
-    // 2. MOTEUR GRAPHIQUE
     useEffect(() => {
         if (!engineStarted || !canvasRef.current || loading) return;
-
         const MiniGameBase = createGameBase({
             audioBuffers: audioBuffersRef.current, audioCtx: audioCtxRef.current,
             projectRef, sceneIdx: 0, imageAssets: imageAssetsRef.current,
@@ -141,27 +129,16 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
             callbacks: { 
                 onPlayerHit: () => {
                     if (keysPressed.current['KeyF']) return;
-                    setLives(l => {
-                        const next = Math.max(0, l - 1);
-                        if (next === 0) triggerGameOver();
-                        return next;
-                    });
+                    setLives(l => { const next = Math.max(0, l - 1); if (next === 0) triggerGameOver(); return next; });
                 }
             }
         });
-
         try {
             const factory = new Function('MiniGameBase', `${projectRef.current.generatedCode}\nreturn MiniGame;`);
             const GameClass = factory(MiniGameBase);
-            const instance = new GameClass(canvasRef.current, {}, { 
-                onPlayerHit: () => {
-                    if (keysPressed.current['KeyF']) return;
-                    setLives(l => Math.max(0, l - 1));
-                }
-            });
+            const instance = new GameClass(canvasRef.current, {}, { onPlayerHit: () => { if (keysPressed.current['KeyF']) return; setLives(l => Math.max(0, l - 1)); } });
             gameInstanceRef.current = instance;
             if (instance.start) instance.start();
-
             const tick = () => {
                 if (!isRunningRef.current || !gameInstanceRef.current) return;
                 try {
@@ -185,46 +162,45 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
         if (gameInstanceRef.current?.onResult) gameInstanceRef.current.onResult(isCorrect);
         const newStates = [...questionStates];
         if (isCorrect) newStates[currentQIdx] = Math.min(3, newStates[currentQIdx] + 1);
-        else {
-            newStates[currentQIdx] = Math.max(0, newStates[currentQIdx] - 1);
-            setLives(l => keysPressed.current['KeyF'] ? l : Math.max(0, l - 1));
-        }
+        else { newStates[currentQIdx] = Math.max(0, newStates[currentQIdx] - 1); setLives(l => keysPressed.current['KeyF'] ? l : Math.max(0, l - 1)); }
         setQuestionStates(newStates);
-        setTimeout(() => {
-            setFeedback(null);
-            if (isCorrect && newStates[currentQIdx] === 3) {
-                const nextQ = newStates.findIndex(s => s < 3);
-                if (nextQ !== -1) setCurrentQIdx(nextQ);
-                else triggerWin();
-            }
-        }, 1000);
+        setTimeout(() => { setFeedback(null); if (isCorrect && newStates[currentQIdx] === 3) { const nextQ = newStates.findIndex(s => s < 3); if (nextQ !== -1) setCurrentQIdx(nextQ); else triggerWin(); } }, 1000);
     };
 
-    const handleBarCheat = (idx) => {
-        if (!keysPressed.current['KeyF']) return;
-        const newStates = [...questionStates];
-        newStates[idx] = 3;
-        setQuestionStates(newStates);
-    };
-
+    const handleBarCheat = (idx) => { if (!keysPressed.current['KeyF']) return; const newStates = [...questionStates]; newStates[idx] = 3; setQuestionStates(newStates); };
     const triggerWin = () => { triggerGlobalEvent("LEVEL_WIN"); alert("NIVEAU RÉUSSI !"); onExit(); };
     const triggerGameOver = () => { triggerGlobalEvent("DÉFAITE"); alert("GAME OVER"); onExit(); };
 
     return (
         <div className="game-player-fullscreen bg-slate-950 flex flex-col items-center justify-center">
-            {/* BOUTON FERMER UNIVERSEL TOUJOURS LÀ */}
-            <button onClick={onExit} className="fixed top-6 right-6 w-14 h-14 bg-white/10 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-2xl font-black transition-all z-[1000] border-2 border-white/20 hover:scale-110 active:scale-95">✕</button>
+            {/* BOUTON FERMER UNIVERSEL */}
+            <button onClick={onExit} className="fixed top-6 right-6 w-14 h-14 bg-white/10 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-2xl font-black transition-all z-[3500] border-2 border-white/20 hover:scale-110 active:scale-95">✕</button>
 
-            {/* MODALE DE ZOOM MEDIA */}
+            {/* MODALE DE ZOOM MEDIA AMÉLIORÉE (FOND NOIR & 90% HAUTEUR) */}
             {zoomMedia && (
-                <div className="fixed inset-0 z-[2000] bg-slate-900/98 flex flex-col items-center justify-center p-4 lg:p-12 animate-in fade-in zoom-in duration-200" onClick={() => setZoomMedia(null)}>
-                    <button className="absolute top-10 right-10 w-16 h-16 bg-white text-slate-900 rounded-full font-black text-2xl shadow-2xl">✕</button>
-                    <div className="w-full h-full flex items-center justify-center" onClick={e => e.stopPropagation()}>
+                <div className="fixed inset-0 z-[4000] bg-black flex items-center justify-center p-0 animate-in fade-in duration-300">
+                    <button 
+                        onClick={() => setZoomMedia(null)} 
+                        className="absolute top-8 right-8 w-16 h-16 bg-white hover:bg-red-600 hover:text-white text-black rounded-full flex items-center justify-center text-3xl font-black shadow-2xl transition-all z-[4001] hover:scale-110 active:scale-95"
+                    >
+                        ✕
+                    </button>
+                    <div className="w-full h-full flex items-center justify-center p-4">
                         {zoomMedia === 'sheet' ? (
-                            <img src={resolveUrl(currentLevelData.intro?.sheetUrl)} className="max-w-full max-h-full object-contain rounded-xl shadow-2xl" />
+                            <img 
+                                src={resolveUrl(currentLevelData.intro?.sheetUrl)} 
+                                className="h-[90vh] w-auto max-w-[95vw] object-contain rounded-lg shadow-[0_0_100px_rgba(255,255,255,0.1)] animate-in zoom-in duration-300" 
+                                alt="Fiche plein écran"
+                            />
                         ) : (
-                            <div className="w-full max-w-6xl aspect-video bg-black rounded-3xl overflow-hidden border-8 border-white/10 shadow-2xl">
-                                <iframe className="w-full h-full" src={getEmbedUrl(currentLevelData.intro?.videoUrl)} frameBorder="0" allow="autoplay; encrypted-media" allowFullScreen></iframe>
+                            <div className="h-[90vh] aspect-video max-w-[95vw] bg-black rounded-2xl overflow-hidden border-4 border-white/10 shadow-2xl animate-in zoom-in duration-300">
+                                <iframe 
+                                    className="w-full h-full" 
+                                    src={getEmbedUrl(currentLevelData.intro?.videoUrl)} 
+                                    frameBorder="0" 
+                                    allow="autoplay; encrypted-media; gyroscope; picture-in-picture" 
+                                    allowFullScreen
+                                ></iframe>
                             </div>
                         )}
                     </div>
@@ -278,6 +254,7 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
                 </div>
             ) : (
                 <>
+                    {/* UI JEU STANDARD */}
                     <div className="absolute top-6 w-full flex justify-between items-start px-10 pointer-events-none z-30">
                         <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl flex gap-1 cursor-pointer pointer-events-auto" onClick={() => keysPressed.current['KeyF'] && setLives(4)}>
                             {"❤️".repeat(lives)}{"🖤".repeat(Math.max(0, 4 - lives))}

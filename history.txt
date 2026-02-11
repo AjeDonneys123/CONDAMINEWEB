@@ -8792,3 +8792,8 @@ Build 161: MIGRATION MOTEUR JEU. Extraction de la logique 'BaseFactory' vers 'se
 2026-02-11 18:05 - Ajout d'un système de zoom plein écran pour la fiche et la vidéo (Modal dédiée).
 2026-02-11 18:05 - Correction de la fonction getEmbedUrl pour mieux extraire l'ID vidéo YouTube et éviter les erreurs de lecture.
 2026-02-11 18:05 - Désactivation du bouton "Lancer le niveau" tant que le chargement (loading) n'est pas terminé.
+
+2026-02-11 18:12 - Refonte de la modale de zoom media : fond noir pur (#000) et contenu dimensionné à 90% de la hauteur (h-[90vh]).
+2026-02-11 18:12 - Ajout d'un bouton de fermeture blanc élégant en haut à droite pour la modale de zoom.
+2026-02-11 18:12 - Activation de l'autoplay (autoplay=1) lors du zoom sur la vidéo pour un lancement immédiat.
+2026-02-11 18:12 - Optimisation du layout de la vidéo zoomée (aspect-video) pour garantir le ratio 16/9 sur 90% de hauteur.
