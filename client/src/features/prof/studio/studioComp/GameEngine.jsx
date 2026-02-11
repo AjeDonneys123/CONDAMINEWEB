@@ -16,7 +16,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const isMutedRef = useRef(false);
     const isPausedRef = useRef(false);
     
-    // --- AUDIO SYSTEMS ---
+    // --- AUDIO ---
     const systemQueueRef = useRef([]); 
     const isSystemPlayingRef = useRef(false); 
     const activeSourcesRef = useRef([]); 
@@ -57,6 +57,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         }
     }, [lives]);
 
+    // SURVEILLANCE BOSS MODE
     useEffect(() => {
         const isBoss = (currentQIndex !== -1 && questionStates[currentQIndex] >= 2);
         bossModeRef.current = isBoss;
@@ -165,17 +166,15 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         }
     };
 
-    // ✅ NOUVEAU : TRICHE CLIC SUR COEUR
     const handleHeartClick = () => {
-        if (keysPressed.current['KeyF']) {
-            triggerPlayerHit();
-        }
+        if (keysPressed.current['KeyF']) triggerPlayerHit();
     };
 
     const handleAnswerLogic = (isCorrect) => {
         if (livesRef.current <= 0 || isGameOver) return;
         setFeedback(isCorrect ? 'CORRECT' : 'WRONG');
         const newStates = [...questionStates];
+        
         if (isCorrect) {
             newStates[currentQIndex] = Math.min(3, newStates[currentQIndex] + 1);
             if (gameInstanceRef.current?.onResult) gameInstanceRef.current.onResult(true);
@@ -184,6 +183,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             if (gameInstanceRef.current?.onResult) gameInstanceRef.current.onResult(false);
             triggerPlayerHit();
         }
+        
         setQuestionStates(newStates);
         setInputValue("");
 
@@ -191,14 +191,18 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             setFeedback(null);
             if (livesRef.current > 0 && !isGameOver) {
                 const available = newStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
+                
                 if (available.length > 0) {
-                    if (newStates[currentQIndex] < 3) {
-                        setCurrentQIndex(currentQIndex);
-                        if (newStates[currentQIndex] >= 2) setTimeout(() => inputRef.current?.focus(), 50);
-                    } else {
-                        const next = available[Math.floor(Math.random() * available.length)];
-                        setCurrentQIndex(next);
-                    }
+                    // ✅ FIX ROTATION : On cherche une AUTRE question non finie
+                    const others = available.filter(idx => idx !== currentQIndex);
+                    const nextIdx = others.length > 0 
+                        ? others[Math.floor(Math.random() * others.length)] 
+                        : available[0]; // Si une seule reste
+                    
+                    setCurrentQIndex(nextIdx);
+                    
+                    // On check le mode boss sur la nouvelle question
+                    if (newStates[nextIdx] >= 2) setTimeout(() => inputRef.current?.focus(), 50);
                 } else {
                     setIsLevelWon(true); isPausedRef.current = true;
                     const isLastLevel = !allLevels[currentLevelIdx + 1];
@@ -350,7 +354,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 <>
                     <div className="absolute top-6 w-full flex justify-between items-start px-10 z-30">
                         <div className="flex gap-4">
-                            {/* ✅ CHEAT : CLIC SUR COEUR POUR PERDRE VIE */}
                             <div 
                                 onClick={handleHeartClick}
                                 className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-xl flex gap-1 cursor-pointer hover:border-red-500 transition-colors"
@@ -360,7 +363,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                             <button onClick={() => setIsMuted(!isMuted)} className={`w-16 h-16 rounded-2xl border-2 shadow-xl flex items-center justify-center text-2xl transition-all ${isMuted ? 'bg-red-900/80 border-red-500' : 'bg-slate-900/80 border-slate-700'}`}>{isMuted ? '🔇' : '🔊'}</button>
                         </div>
                         <div className="flex-1 flex justify-center px-4">
-                            {/* ✅ CHEAT : CLIC SUR QUESTION POUR GAGNER NIVEAU */}
                             {levelQuestions[currentQIndex] && !isStudyPhase && !isLevelWon && !isGameOver && !showLevelTitle && (
                                 <div onClick={handleForceWin} className="bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 border-slate-600 shadow-2xl text-xl animate-in slide-in-from-top cursor-pointer hover:border-indigo-500 transition-colors">
                                     {feedback === 'CORRECT' ? "✅ BRAVO !" : feedback === 'WRONG' ? "❌ RATÉ..." : levelQuestions[currentQIndex].q}
@@ -377,7 +379,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     </div>
 
                     <div className="relative animate-in zoom-in">
-                        <canvas ref={canvasRef} width={800} height={450} className={`aspect-video shadow-2xl bg-black border-4 rounded-xl transition-all duration-500 ${isBossUI ? 'border-red-600' : 'border-slate-800'}`} />
+                        <canvas ref={canvasRef} width={800} height={450} className={`aspect-video shadow-2xl bg-black border-4 rounded-xl transition-all duration-500 ${isBossUI ? 'border-red-600 shadow-red-950/50' : 'border-slate-800'}`} />
                         {isStudyPhase && allLevels[currentLevelIdx] && (
                             <div className="absolute inset-4 bg-slate-900/95 backdrop-blur-xl rounded-xl z-50 flex flex-col p-6 border-2 border-indigo-500 animate-in fade-in">
                                 <h2 className="text-3xl font-black text-indigo-400 uppercase text-center mb-4">Préparation : {allLevels[currentLevelIdx].name}</h2>
@@ -386,10 +388,10 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                                         {allLevels[currentLevelIdx].intro?.sheetUrl ? <img src={resolveUrl(allLevels[currentLevelIdx].intro.sheetUrl)} className="max-w-full max-h-full object-contain" /> : <div className="text-slate-300 font-bold uppercase">Aucune fiche</div>}
                                     </div>
                                     <div className="flex-1 bg-black rounded-lg border-4 border-slate-800 flex items-center justify-center">
-                                        {getYoutubeEmbedUrl(allLevels[currentLevelIdx]?.intro?.videoUrl) ? <iframe title="video" className="w-full h-full" src={getYoutubeEmbedUrl(allLevels[currentLevelIdx].intro.videoUrl)} frameBorder="0"></iframe> : <div className="text-slate-600 font-bold uppercase">Aucune vidéo</div>}
+                                        {getYoutubeEmbedUrl(allLevels[currentLevelIdx]?.intro?.videoUrl) ? <iframe title="v" className="w-full h-full" src={getYoutubeEmbedUrl(allLevels[currentLevelIdx].intro.videoUrl)} frameBorder="0"></iframe> : <div className="text-slate-600 font-bold uppercase">Aucune vidéo</div>}
                                     </div>
                                 </div>
-                                <button onClick={() => { setIsStudyPhase(false); setShowLevelTitle(true); setTimeout(() => { setShowLevelTitle(false); isPausedRef.current = false; playSystemSound("DÉPART"); }, 1500); }} className="mt-6 bg-indigo-600 text-white py-4 rounded-2xl font-black text-2xl uppercase">C'est parti !</button>
+                                <button onClick={() => { setIsStudyPhase(false); setShowLevelTitle(true); setTimeout(() => { setShowLevelTitle(false); isPausedRef.current = false; playSystemSound("DÉPART"); }, 1500); }} className="mt-6 bg-indigo-600 text-white py-4 rounded-2xl font-black text-2xl uppercase shadow-xl hover:scale-105 transition-all">C'est parti !</button>
                             </div>
                         )}
                         {showLevelTitle && <div className="absolute inset-0 bg-slate-900/90 flex flex-col items-center justify-center rounded-xl z-40 animate-in fade-in"><h1 className="text-6xl font-black text-yellow-400">NIVEAU {currentLevelIdx + 1}</h1></div>}

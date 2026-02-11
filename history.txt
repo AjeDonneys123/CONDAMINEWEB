@@ -8684,3 +8684,9 @@
   2. Clic sur bandeau question = Victoire instantanée du niveau.
   3. Clic sur les cœurs (Vies) = Retrait immédiat d'une vie.
 - Audio : Moteur hybride préservé.
+
+10/02/2026 - 19:18 : FIX ROTATION & CHEATS (V9.9).
+- Rotation : Corrigé. Le moteur change désormais de question aléatoirement après chaque réponse parmi la liste des questions non finies (<3/3).
+- Cheat Cœurs : Rétabli. Maintenir 'F' et cliquer sur les cœurs retire une vie.
+- Cheat Question/Niveau : Rétabli. Maintenir 'F' et cliquer sur la question valide instantanément le niveau.
+- Boss UI : Correction du style visuel (bordure rouge et lueur) lors de la phase boss.
