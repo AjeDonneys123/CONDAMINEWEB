@@ -8816,3 +8816,8 @@ Build 161: MIGRATION MOTEUR JEU. Extraction de la logique 'BaseFactory' vers 'se
 2026-02-11 18:27 - Correction du bug d'alternance des questions : Le moteur cycle désormais à travers toutes les questions non finies après chaque réponse.
 2026-02-11 18:27 - Sécurisation du changement de question : Utilisation d'un modulo et d'une boucle while pour trouver l'index suivant valide.
 2026-02-11 18:27 - Correction du plantage en fin de jeu (NewStates.every check).
+
+2026-02-11 18:40 - Restauration du moteur de jeu stable (base fonctionnelle Zombie).
+2026-02-11 18:40 - Intégration du système de zoom HD (90% hauteur, fond noir, X élégant) dans le loader Studio.
+2026-02-11 18:40 - Intégration du Level Banner Arcade Jaune (1.5s, position haute) au lancement de chaque niveau.
+2026-02-11 18:40 - Fusion du Mode Boss (2/3 barre) avec saisie clavier permissive et bouton "ATTAQUER" à droite dans l'aperçu Studio.
