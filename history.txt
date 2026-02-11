@@ -8664,3 +8664,9 @@
 - Problème : Le Game Over s'affichait instantanément à la collision si vies=0, coupant l'animation du héros.
 - Solution : Déplacement de 'handleGameOver' dans un useEffect avec un safeTimeout de 1.5s.
 - Résultat : L'élève voit son héros subir l'impact avant que l'écran de défaite n'apparaisse.
+
+10/02/2026 - 19:05 : MISE À JOUR MOTEUR AUDIO HYBRIDE (V9.5).
+- Structure : Séparation des flux audio en deux couloirs.
+- Mode SNES (Action) : Les sons des acteurs ('_playSound' via 'playParallelSound') sont désormais parallèles. Ils se superposent sans attendre, comme sur une console de jeu classique.
+- Mode Broadcast (Système) : Les sons de Victoire, Défaite et Uplevel utilisent une file d'attente séquentielle ('systemQueueRef').
+- Résultat : Les musiques de victoire ne sont plus étouffées et se lancent proprement après les récompenses de niveau.
