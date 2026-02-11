@@ -8761,3 +8761,8 @@ Build 161: MIGRATION MOTEUR JEU. Extraction de la logique 'BaseFactory' vers 'se
 11/02/2026 17:40 - AUTO-ID MIRROR : Route /studio-mirror active.
 11/02/2026 17:45 - FUSION MIROIR : La route /studio-mirror fusionne désormais le visuel (Studio) avec le contenu (Quiz Test). Julian a maintenant accès à la fiche intro, aux questions JSX et au moteur graphique simultanément.
 11/02/2026 17:46 - AUDIO FIX : Chargement et lecture des sons activés dans GamePlayer.jsx.
+
+11/02/2026 17:35 - MIROIR STUDIO : Julian branché sur les projets Studio.
+11/02/2026 17:45 - HUD FIX : Le HUD élève est désormais un clone exact du moteur de test prof (Cœurs, Mastery Bars, Questions centrées).
+11/02/2026 17:46 - AUDIO MIROIR : La fonction playParallelSound est passée au moteur, activant les sons liés aux actions et aux événements globaux.
+11/02/2026 17:47 - LIVES FIX : Les cœurs réagissent désormais aux collisions du moteur graphique.
