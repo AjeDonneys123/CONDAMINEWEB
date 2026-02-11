@@ -1,4 +1,4 @@
-// @signatures: HomeworkStudio, handleAddLevel, handleDeleteLevel, handleInput, handleSave, handleUpload, loadData, updateLevel, getAvailableChapters, findBestDefaultChapter
+// @signatures: HomeworkStudio, handleAddLevel, handleDeleteLevel, handleInput, handleSave, handleUpload, loadData, updateLevel, findBestDefaultChapter
 import React, { useState, useEffect, useRef } from 'react';
 import './HomeworkStudio.css';
 import { api } from '../../../services/api';
@@ -11,13 +11,26 @@ const DEFAULT_HW_DATA = {
     levels: [ { instruction: '', instructionUrls: [], aiHints: '', attachmentUrls: [] } ]
 };
 
-export default function HomeworkStudio({ initialData, chapters, globalClass, globalLevel, user, targetSection, onClose }) {
+export default function HomeworkStudio({ initialData, chapters, allClasses, allStudents, globalClass, globalLevel, user, targetSection, onClose }) {
+    const [distribution, setDistribution] = useState({});
+    const [viewingClass, setViewingClass] = useState(globalClass || "");
+    const [studentSearch, setStudentSearch] = useState(""); 
+    const [loading, setLoading] = useState(false);
+    const [activeLevelIdx, setActiveLevelIdx] = useState(0);
+    const fileInputRef = useRef(null);
+    const [uploadMode, setUploadMode] = useState(null); 
 
-    const getAvailableChapters = (clsName, allClassesList) => {
+    const [formData, setFormData] = useState(() => {
+        let base = initialData ? JSON.parse(JSON.stringify(initialData)) : { ...DEFAULT_HW_DATA };
+        base.teacherId = user.id || user._id;
+        return base;
+    });
+
+    const findBestDefaultChapter = (clsName) => {
         const safeChapters = Array.isArray(chapters) ? chapters : [];
         const cleanSection = (targetSection || "GÉNÉRAL").toUpperCase().trim();
-        const clsObj = (allClassesList || []).find(c => c.name === clsName);
-        return safeChapters.filter(c => {
+        const clsObj = (allClasses || []).find(c => c.name === clsName);
+        const matches = safeChapters.filter(c => {
             if (c.isArchived) return false;
             if ((c.section || "GÉNÉRAL").toUpperCase().trim() !== cleanSection) return false;
             if (c.classroom === clsName) return true;
@@ -25,55 +38,26 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
             if (!c.classroom && !c.sharedLevel) return !c.hiddenIn || !c.hiddenIn.includes(clsName);
             return false;
         }).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+        return matches.length > 0 ? matches[0]._id : "";
     };
 
-    const findBestDefaultChapter = (clsName, allClassesList) => {
-        const av = getAvailableChapters(clsName, allClassesList);
-        return av.length > 0 ? av[0]._id : "";
-    };
-
-    const initData = () => {
-        let base = initialData ? JSON.parse(JSON.stringify(initialData)) : { ...DEFAULT_HW_DATA };
-        base.teacherId = user.id || user._id;
-        return base;
-    };
-
-    const [formData, setFormData] = useState(initData());
-    const [activeLevelIdx, setActiveLevelIdx] = useState(0);
-    const [allStudents, setAllStudents] = useState([]);
-    const [allClasses, setAllClasses] = useState([]);
-    const [distribution, setDistribution] = useState({});
-    const [viewingClass, setViewingClass] = useState(globalClass || "");
-    const [studentSearch, setStudentSearch] = useState(""); 
-    const [loading, setLoading] = useState(false);
-    const fileInputRef = useRef(null);
-    const [uploadMode, setUploadMode] = useState(null); 
-
-    const loadData = async () => {
-        setLoading(true);
-        try {
-            const [sts, cls] = await Promise.all([ api.get('/admin/students'), api.get('/admin/classrooms') ]);
-            setAllStudents(sts || []); setAllClasses(cls || []); 
-            if (formData) {
-                const newDist = {};
-                // L'édition se concentre sur les classes du document chargé
-                const targets = formData.targetClassrooms && formData.targetClassrooms.length > 0 ? formData.targetClassrooms : [globalClass];
-                targets.forEach(clsName => {
-                    const clsObj = (cls || []).find(c => c.name === clsName);
-                    const ids = (sts || []).filter(s => {
-                        const isM = (s.currentClass||"").trim().toUpperCase() === clsName.toUpperCase();
-                        const isO = clsObj && (s.assignedGroups||[]).some(gId => String(gId) === String(clsObj._id));
-                        return (isM || isO) && (formData.assignedStudents||[]).includes(String(s._id));
-                    }).map(s => String(s._id));
-                    newDist[clsName] = { chapterId: formData.chapterId || findBestDefaultChapter(clsName, cls), studentIds: ids };
-                });
-                setDistribution(newDist);
-            }
-        } catch(e) {}
-        setLoading(false);
-    };
-
-    useEffect(() => { loadData(); }, []);
+    useEffect(() => {
+        if (formData && initialData) {
+            const newDist = {};
+            const targets = formData.targetClassrooms && formData.targetClassrooms.length > 0 ? formData.targetClassrooms : [globalClass];
+            targets.forEach(clsName => {
+                if (!clsName) return;
+                const clsObj = (allClasses || []).find(c => c.name === clsName);
+                const ids = (allStudents || []).filter(s => {
+                    const isM = (s.currentClass||"").trim().toUpperCase() === clsName.toUpperCase();
+                    const isO = clsObj && (s.assignedGroups||[]).some(gId => String(gId) === String(clsObj._id));
+                    return (isM || isO) && (formData.assignedStudents||[]).includes(String(s._id));
+                }).map(s => String(s._id));
+                newDist[clsName] = { chapterId: formData.chapterId || findBestDefaultChapter(clsName), studentIds: ids };
+            });
+            setDistribution(newDist);
+        }
+    }, [initialData]);
 
     const handleInput = (field, value) => setFormData(p => ({ ...p, [field]: value }));
     const updateLevel = (field, value) => { setFormData(p => { const next = p.levels.map((lvl, idx) => idx === activeLevelIdx ? { ...lvl, [field]: value } : lvl); return { ...p, levels: next }; }); };
@@ -102,49 +86,33 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
         } catch(e) { alert("Erreur upload"); } finally { setLoading(false); setUploadMode(null); }
     };
 
-    // --- SAUVEGARDE ATOMIQUE : 1 CLASSE = 1 REQUÊTE ---
     const handleSave = async () => {
         const targets = Object.keys(distribution);
         if (!formData.title.trim()) return alert("❌ Titre requis !");
         if (targets.length === 0) return alert("❌ Sélectionnez au moins une classe !");
-        
         setLoading(true);
         try {
             const originalId = initialData?._id;
-            const originalClass = initialData?.targetClassrooms?.[0]; // On assume 1 doc = 1 classe désormais
+            const originalClass = initialData?.targetClassrooms?.[0];
             let idUsed = false;
-
             for (const clsName of targets) {
                 const cfg = distribution[clsName];
-                const { actType, typeLabel, date, __v, createdAt, updatedAt, ...cleanFormData } = formData;
-
                 const payload = { 
-                    ...cleanFormData, 
-                    chapterId: cfg.chapterId || findBestDefaultChapter(clsName, allClasses), 
+                    ...formData, 
+                    chapterId: cfg.chapterId || findBestDefaultChapter(clsName), 
                     targetClassrooms: [clsName], 
                     assignedStudents: cfg.studentIds, 
                     isAllClass: (cfg.studentIds || []).length === 0, 
                     teacherId: user.id || user._id, 
-                    type: 'homework',
                     subject: targetSection || "GÉNÉRAL"
                 };
-
-                // Si cette classe est celle d'origine, on fait un UPDATE
-                if (originalId && clsName === originalClass && !idUsed) {
-                    payload._id = originalId;
-                    idUsed = true;
-                } else {
-                    // Sinon, on supprime l'ID pour forcer un CLONE (Création d'un doc séparé)
-                    delete payload._id;
-                }
-
+                if (originalId && clsName === originalClass && !idUsed) { payload._id = originalId; idUsed = true; } 
+                else { delete payload._id; }
                 await api.post('/homework', payload);
             }
             onClose();
-        } catch(e) { alert("Erreur lors de la sauvegarde."); } finally { setLoading(false); }
+        } catch(e) { alert("Erreur sauvegarde."); } finally { setLoading(false); }
     };
-
-    const currentLevelData = formData.levels[activeLevelIdx];
 
     return (
         <div className="v84-hw-container">
@@ -173,44 +141,44 @@ export default function HomeworkStudio({ initialData, chapters, globalClass, glo
                 </div>
 
                 <div className="v84-hw-editor custom-scrollbar">
-                    {currentLevelData ? (
+                    {formData.levels[activeLevelIdx] ? (
                         <div className="v84-hw-card animate-in fade-in">
                             <div className="mb-6">
-                                <label className="v84-folder-label">CONSIGNE TEXTUELLE (Étape {activeLevelIdx + 1})</label>
-                                <textarea className="v84-hw-textarea !h-32 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl" placeholder="Instructions..." value={currentLevelData.instruction} onChange={e => updateLevel('instruction', e.target.value)} />
+                                <label className="v84-folder-label">CONSIGNE TEXTUELLE</label>
+                                <textarea className="v84-hw-textarea !h-32 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl" placeholder="Instructions..." value={formData.levels[activeLevelIdx].instruction} onChange={e => updateLevel('instruction', e.target.value)} />
                             </div>
                             <div className="grid grid-cols-2 gap-8">
                                 <div className="p-6 bg-slate-50 rounded-[30px] border-2 border-slate-100">
                                     <label className="v84-folder-label mb-4 block">📸 Consigne Images</label>
                                     <div className="flex flex-wrap gap-3">
-                                        {(currentLevelData.instructionUrls || []).map((url, i) => (
+                                        {(formData.levels[activeLevelIdx].instructionUrls || []).map((url, i) => (
                                             <div key={i} className="group relative w-20 h-20 bg-white border-2 border-slate-200 rounded-xl overflow-hidden shadow-sm">
                                                 <img src={url} className="w-full h-full object-cover" />
-                                                <button className="absolute top-1 right-1 bg-red-500 text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black opacity-0 group-hover:opacity-100" onClick={() => updateLevel('instructionUrls', currentLevelData.instructionUrls.filter((_, j) => i !== j))}>✕</button>
+                                                <button className="absolute top-1 right-1 bg-red-500 text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black" onClick={() => updateLevel('instructionUrls', formData.levels[activeLevelIdx].instructionUrls.filter((_, j) => i !== j))}>✕</button>
                                             </div>
                                         ))}
-                                        <button className="w-20 h-20 border-3 border-dashed border-slate-200 rounded-xl flex items-center justify-center text-3xl text-slate-300 hover:border-orange-400 hover:text-orange-400 transition-all" onClick={() => { setUploadMode('instruction'); fileInputRef.current.click(); }}>+</button>
+                                        <button className="w-20 h-20 border-3 border-dashed border-slate-200 rounded-xl flex items-center justify-center text-3xl text-slate-300" onClick={() => { setUploadMode('instruction'); fileInputRef.current.click(); }}>+</button>
                                     </div>
                                 </div>
                                 <div className="p-6 bg-indigo-50/50 rounded-[30px] border-2 border-indigo-100/50">
-                                    <label className="v84-folder-label !text-indigo-500 mb-4 block">📁 Documents de Travail</label>
+                                    <label className="v84-folder-label !text-indigo-500 mb-4 block"> support documents</label>
                                     <div className="flex flex-wrap gap-3">
-                                        {(currentLevelData.attachmentUrls || []).map((url, i) => (
+                                        {(formData.levels[activeLevelIdx].attachmentUrls || []).map((url, i) => (
                                             <div key={i} className="group relative w-20 h-20 bg-white border-2 border-indigo-200 rounded-xl overflow-hidden shadow-sm">
                                                 <img src={url} className="w-full h-full object-cover" />
-                                                <button className="absolute top-1 right-1 bg-red-500 text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black opacity-0 group-hover:opacity-100" onClick={() => updateLevel('attachmentUrls', currentLevelData.attachmentUrls.filter((_, j) => i !== j))}>✕</button>
+                                                <button className="absolute top-1 right-1 bg-red-500 text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black" onClick={() => updateLevel('attachmentUrls', formData.levels[activeLevelIdx].attachmentUrls.filter((_, j) => i !== j))}>✕</button>
                                             </div>
                                         ))}
-                                        <button className="w-20 h-20 border-3 border-dashed border-indigo-200 rounded-xl flex items-center justify-center text-3xl text-indigo-300 hover:border-indigo-400 transition-all" onClick={() => { setUploadMode('attachment'); fileInputRef.current.click(); }}>+</button>
+                                        <button className="w-20 h-20 border-3 border-dashed border-indigo-200 rounded-xl flex items-center justify-center text-3xl text-indigo-300" onClick={() => { setUploadMode('attachment'); fileInputRef.current.click(); }}>+</button>
                                     </div>
                                 </div>
                             </div>
                             <div className="mt-8 pt-6 border-t-2 border-slate-50">
-                                <label className="v84-folder-label !text-purple-600 mb-2 block">🤖 Intelligence Artificielle (Indices)</label>
-                                <textarea className="v84-hw-textarea !h-24 !bg-purple-50/50 !p-4 !text-sm border-2 border-purple-100 rounded-2xl" value={currentLevelData.aiHints} onChange={e => updateLevel('aiHints', e.target.value)} placeholder="Énumérez ici les éléments indispensables..." />
+                                <label className="v84-folder-label !text-purple-600 mb-2 block">🤖 Intelligence Artificielle (Secret Prof)</label>
+                                <textarea className="v84-hw-textarea !h-24 !bg-purple-50/50 !p-4 !text-sm border-2 border-purple-100 rounded-2xl" value={formData.levels[activeLevelIdx].aiHints} onChange={e => updateLevel('aiHints', e.target.value)} placeholder="Énumérez ici les éléments indispensables de la réponse..." />
                             </div>
                         </div>
-                    ) : ( <div className="flex flex-col items-center justify-center h-full text-slate-300 gap-4"><span className="text-6xl">📄</span><span className="font-black uppercase tracking-widest">Sélectionnez ou créez une page</span></div> )}
+                    ) : <div className="p-20 text-center text-slate-300">Sélectionnez une page</div>}
                 </div>
 
                 <StudioDistributionSidebar 

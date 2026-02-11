@@ -38,7 +38,6 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
                 ...(gm || []).map(x => ({
                     ...x, 
                     actType: 'game', 
-                    // CORRECTION FORCEE ICI
                     typeLabel: (x.subject && x.subject.toUpperCase() !== 'GÉNÉRAL') ? `🎮 JEU ${x.subject.toUpperCase()}` : '🎮 JEU'
                 })),
                 ...(sc || []).map(x => ({...x, actType: 'scan', typeLabel: '📸 DC', title: x.title || 'Scan sans titre'})) 
@@ -67,6 +66,8 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
         const props = {
             initialData: editingItem.data,
             chapters,
+            allClasses,
+            allStudents,
             globalClass,
             globalLevel,
             user,

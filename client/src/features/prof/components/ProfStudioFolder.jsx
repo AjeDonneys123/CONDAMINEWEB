@@ -1,4 +1,4 @@
-// @signatures: ProfStudioFolder, executeDelete, fetchSections, handleArchiveChapter, handleCreateChapter, handleCreateSection, handleOpenEditSection, handleRenameChapter, handleSaveSectionEdit, handleUpdateChapterComplete, prepareDelete
+// @signatures: ProfStudioFolder, fetchSections, handleArchiveChapter, handleCreateChapter, handleCreateSection
 import React, { useState, useEffect } from 'react';
 
 export default function ProfStudioFolder({ items, chapters, studentsRef, allClasses, classFilter, levelFilter, user, onEditItem, onCreateActivity, onRefresh }) {
@@ -12,11 +12,6 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, allClas
     const [showChapterModal, setShowChapterModal] = useState(false);
     const [newChapterTitle, setNewChapterTitle] = useState("");
     const [newChapterScope, setNewChapterScope] = useState("LEVEL"); 
-    const [showEditChapterModal, setShowEditChapterModal] = useState(false);
-    const [editingChapter, setEditingChapter] = useState(null); 
-    const [showEditSectionModal, setShowEditSectionModal] = useState(false);
-    const [editingSection, setEditingSection] = useState(null); 
-    const [deleteTarget, setDeleteTarget] = useState(null); 
 
     const getUserId = () => user?.id || user?._id;
 
@@ -36,16 +31,33 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, allClas
 
     useEffect(() => { fetchSections(); }, [user, classFilter, onRefresh]);
 
-    // --- RÉSOLUTION DU CONTEXTE (RÉPARÉ) ---
-    const cleanFilter = (classFilter || "").trim().toUpperCase();
-    const contextClassObj = (allClasses || []).find(c => c.name.toUpperCase() === cleanFilter);
-    const contextClassId = contextClassObj?._id ? String(contextClassObj._id) : null;
+    const handleCreateSection = async () => {
+        if (!newSectionName) return;
+        await fetch('/api/structure/sections', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ teacherId: getUserId(), sectionName: newSectionName.toUpperCase(), scope: newSectionScope, target: newSectionScope === 'CLASS' ? classFilter : levelFilter })
+        });
+        setNewSectionName(""); setShowSectionModal(false); fetchSections();
+    };
 
-    const studentsInActiveContext = Array.isArray(studentsRef) ? studentsRef.filter(s => {
-        const isMatchMain = (s.currentClass || "").trim().toUpperCase() === cleanFilter;
-        const isMatchGroup = contextClassId && (s.assignedGroups || []).some(gId => String(gId) === contextClassId);
-        return isMatchMain || isMatchGroup;
-    }) : [];
+    const handleCreateChapter = async () => {
+        if (!newChapterTitle) return;
+        await fetch('/api/structure/chapters', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title: newChapterTitle.toUpperCase(), section: activeSection, teacherId: getUserId(), scope: newChapterScope, target: newChapterScope === 'CLASS' ? classFilter : levelFilter })
+        });
+        setNewChapterTitle(""); setShowChapterModal(false); if (onRefresh) onRefresh();
+    };
+
+    const handleArchiveChapter = async (e, chapId, shouldArchive) => {
+        e.stopPropagation();
+        await fetch(`/api/structure/chapters/${chapId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ isArchived: shouldArchive }) });
+        if (onRefresh) onRefresh();
+    };
+
+    const activeColor = (customSections.find(s => s.name.toUpperCase() === activeSection.toUpperCase())?.color || '#64748b');
 
     const filteredChapters = (Array.isArray(chapters) ? chapters : []).filter(c => {
         if (c.section.toUpperCase() !== activeSection.toUpperCase() || c.isArchived !== showArchived) return false;
@@ -81,8 +93,7 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, allClas
 
             <div className="px-6 mt-10">
                 <div className="flex justify-between items-end mb-8">
-                    <h2 className="text-5xl font-black uppercase tracking-tighter" style={{ color: (customSections.find(s=>s.name.toUpperCase()===activeSection.toUpperCase())?.color || '#64748b') }}>{activeSection}</h2>
-                    {/* 🚀 BOUTONS DE CRÉATION RESTAURÉS */}
+                    <h2 className="text-5xl font-black uppercase tracking-tighter" style={{ color: activeColor }}>{activeSection}</h2>
                     {!showArchived && (
                         <div className="flex gap-2">
                             <button onClick={() => onCreateActivity('homework', activeSection)} className="px-5 py-3 rounded-xl bg-orange-500 text-white text-[11px] font-black uppercase shadow-lg">+ Devoir</button>
@@ -100,38 +111,19 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, allClas
                             <div key={chap._id} className="bg-white border-2 rounded-[30px] overflow-hidden shadow-sm border-slate-100">
                                 <div className="p-5 flex justify-between items-center cursor-pointer hover:bg-slate-50" onClick={() => setOpenChaps({...openChaps, [chap._id]: !openChaps[chap._id]})}>
                                     <div className="flex items-center gap-4">
-                                        <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-xl shadow-inner" style={{ backgroundColor: (customSections.find(s=>s.name.toUpperCase()===activeSection.toUpperCase())?.color || '#64748b') }}>{openChaps[chap._id] ? '📂' : '📁'}</div>
+                                        <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-xl shadow-inner" style={{ backgroundColor: activeColor }}>{openChaps[chap._id] ? '📂' : '📁'}</div>
                                         <h3 className="font-black text-slate-800 text-md uppercase">{chap.title}</h3>
                                     </div>
                                     <span className="text-[8px] font-black text-slate-400 uppercase">{relevantItems.length} ÉLÉMENTS</span>
                                 </div>
                                 {openChaps[chap._id] && (
                                     <div className="bg-slate-50/50 border-t p-4 space-y-2">
-                                        {relevantItems.map(it => {
-                                            const isFull = it.isAllClass === true;
-                                            const assignedInThisClass = (it.assignedStudents || []).filter(id => 
-                                                studentsInActiveContext.some(s => String(s._id) === String(id))
-                                            );
-
-                                            return (
-                                                <div key={it._id} className="bg-white p-3 rounded-2xl flex justify-between items-center shadow-sm border border-slate-100">
-                                                    <div className="flex flex-col">
-                                                        <span className="font-black text-slate-700 text-xs uppercase">{it.typeLabel} | {it.title}</span>
-                                                        {isFull ? (
-                                                            <div className="text-[8px] text-emerald-500 font-bold mt-1 uppercase tracking-widest">🏫 {classFilter} : TOUTE LA CLASSE</div>
-                                                        ) : (
-                                                            <div className="text-[8px] text-orange-500 font-bold mt-1 uppercase tracking-widest">
-                                                                👤 {classFilter} : {assignedInThisClass.length > 0 ? assignedInThisClass.map(id => {
-                                                                    const s = studentsInActiveContext.find(st => String(st._id) === String(id));
-                                                                    return s ? `${s.firstName} ${s.lastName.charAt(0)}.` : `[ID:${String(id).slice(-4)}]`;
-                                                                }).join(', ') : "AUCUN ÉLÈVE DÉTECTÉ"}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                    <button onClick={() => onEditItem(it)} className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-[8px] font-black uppercase">ÉDITER</button>
-                                                </div>
-                                            );
-                                        })}
+                                        {relevantItems.map(it => (
+                                            <div key={it._id} className="bg-white p-3 rounded-2xl flex justify-between items-center shadow-sm border border-slate-100">
+                                                <span className="font-black text-slate-700 text-xs uppercase">{it.typeLabel} | {it.title}</span>
+                                                <button onClick={() => onEditItem(it, activeSection)} className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-[8px] font-black uppercase">ÉDITER</button>
+                                            </div>
+                                        ))}
                                     </div>
                                 )}
                             </div>
@@ -139,6 +131,26 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, allClas
                     })}
                 </div>
             </div>
+
+            {showSectionModal && (
+                <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-900/90">
+                    <div className="bg-white p-10 rounded-[50px] w-full max-w-lg shadow-2xl animate-in zoom-in">
+                        <h3 className="text-2xl font-black mb-6 uppercase">Nouvelle Section</h3>
+                        <input className="w-full p-5 rounded-2xl bg-slate-100 mb-6 font-bold" placeholder="Nom de la matière" value={newSectionName} onChange={e => setNewSectionName(e.target.value)} />
+                        <div className="flex gap-4"><button onClick={() => setShowSectionModal(false)} className="flex-1 p-5 rounded-2xl bg-slate-100">Annuler</button><button onClick={handleCreateSection} className="flex-1 p-5 rounded-2xl bg-indigo-600 text-white font-black">Valider ✨</button></div>
+                    </div>
+                </div>
+            )}
+
+            {showChapterModal && (
+                <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-900/90">
+                    <div className="bg-white p-10 rounded-[50px] w-full max-w-md shadow-2xl animate-in zoom-in">
+                        <h3 className="text-2xl font-black mb-6 uppercase">Nouveau Dossier</h3>
+                        <input className="w-full p-5 rounded-2xl bg-slate-100 mb-6 font-bold" placeholder="Titre (ex: CH1, CH2...)" value={newChapterTitle} onChange={e => setNewChapterTitle(e.target.value)} />
+                        <div className="flex gap-4"><button onClick={() => setShowChapterModal(false)} className="flex-1 p-5 rounded-2xl bg-slate-100">Annuler</button><button onClick={handleCreateChapter} className="flex-1 p-5 rounded-2xl bg-slate-900 text-white font-black">Créer 📂</button></div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
