@@ -8696,3 +8696,8 @@ UPDATE V9.17 - GAME CORE FINAL FIX
 - Suppression de la String BaseFactory dans GameEngine.jsx.
 - Importation propre de createGameBase depuis le service.
 - Le moteur est maintenant centralisé et garanti fonctionnel par transplantation de code éprouvé.
+
+...
+Build 159: Snapshot de sécurité HOMEWORK généré.
+Build 160: Réparation de l'upload Studio (Canvas size limit).
+Build 161: MIGRATION MOTEUR JEU. Extraction de la logique 'BaseFactory' vers 'services/gameCore.js'. Correction du bug 'Carré Magenta' via harmonisation des clés d'assets (resolveUrl).

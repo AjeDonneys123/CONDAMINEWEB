@@ -1,26 +1,27 @@
 /**
- * 🎮 CORE ENGINE V8.0 (STRICT PORT FROM WORKING STRING)
- * Ce fichier contient EXACTEMENT le code qui fonctionnait dans la string "BaseFactory".
- * Aucune "amélioration" n'a été ajoutée pour éviter les régressions.
+ * 🎮 CORE ENGINE V8.1 (SHARED ENGINE)
+ * Ce fichier contient la logique basique du moteur de jeu (rendu, gestion des acteurs).
+ * Il est utilisé à la fois par le Studio (Prof) et le Player (Élève).
  */
+
 export const createGameBase = (params) => {
-    // Extraction des paramètres (Exactement comme dans ta string BaseFactory)
+    // Extraction des dépendances injectées par React
     const { 
         audioBuffers, 
         audioCtx, 
-        projectRef, // 👈 La clé du succès (Ref dynamique)
+        projectRef, // Référence dynamique vers le JSON du projet (Scènes, Acteurs)
         sceneIdx, 
-        imageAssets, 
-        resolveUrl, 
+        imageAssets, // Map<Url, ImageObject>
+        resolveUrl,  // Fonction utilitaire pour nettoyer les URLs
         canvas, 
         ctx, 
-        activeSources, 
         isMutedRef, 
-        playParallelSound,
+        playParallelSound, // Fonction pour jouer des sons sans bloquer le thread
         callbacks 
     } = params;
 
-    // --- CLASS ACTOR PROXY (Copié-Collé de ta string) ---
+    // --- CLASSE PROXY ACTEUR ---
+    // Sert d'interface entre le code utilisateur (this.HEROS.x) et les données brutes
     class ActorProxy {
         constructor(data, engine) { 
             this.id = data.id; 
@@ -32,8 +33,9 @@ export const createGameBase = (params) => {
             this.scale = this.baseScale;
             this.visible = true; 
             this.direction = data.direction || 0; 
-            this.rotationStyle = data.rotationStyle || 'all'; // Ajouté pour compatibilité
+            this.rotationStyle = data.rotationStyle || 'all';
             
+            // Animation
             this.currentAction = data.actions?.[0]?.name || 'IDLE';
             this.frameIdx = 0; 
             this.lastAnimTime = 0; 
@@ -42,6 +44,7 @@ export const createGameBase = (params) => {
         }
 
         play(name, loop = true) { 
+            // On ne change l'action que si elle est différente pour éviter de reset l'anim à chaque frame
             if(this.currentAction.toUpperCase() !== name.toUpperCase()) { 
                 this.currentAction = name; 
                 this.frameIdx = 0; 
@@ -52,29 +55,33 @@ export const createGameBase = (params) => {
         }
     }
 
-    // --- CLASS MINI GAME BASE (Copié-Collé de ta string) ---
+    // --- CLASSE DE BASE DU JEU ---
+    // C'est cette classe que le code utilisateur (ZOMBIE_GAME_CODE) va étendre
     return class MiniGameBase {
         constructor(c, a, cb) {
             this.canvas = c || canvas; 
             this.ctx = ctx; 
             this.keys = {}; 
-            this.callbacks = cb || callbacks; // Support callbacks externes
+            this.callbacks = cb || callbacks; 
             this.assets = a || {};
 
-            // Initialisation des acteurs
+            // Initialisation des acteurs au démarrage
+            // On lit projectRef.current pour avoir les données à jour (même si le prof modifie en live)
             const s = projectRef.current.scenes[sceneIdx];
             if(s && s.actors) {
                 s.actors.forEach(a => { 
+                    // On crée une propriété this.HEROS, this.ZOMBIE, etc.
                     this[a.name.toUpperCase()] = new ActorProxy(a, this); 
                 });
             }
             
-            // Bindings clavier (pour compatibilité avec le code existant)
+            // Bindings clavier de secours (si non gérés par React)
+            // Note: React gère déjà les touches via `keysPressed.current`, mais ceci est une sécurité
             document.onkeydown = e => this.keys[e.code] = true;
             document.onkeyup = e => this.keys[e.code] = false;
         }
 
-        // Ajout de secours pour éviter le crash "playGlobal is not a function"
+        // Jouer un son global (ex: "VICTOIRE")
         playGlobal(name) {
             const s = projectRef.current.scenes[sceneIdx];
             const cleanName = String(name||"").toUpperCase().trim();
@@ -82,13 +89,13 @@ export const createGameBase = (params) => {
             if(gs && gs.sounds) gs.sounds.forEach(snd => this._playSound(snd.url));
         }
 
+        // Méthode interne : Déclenche les sons liés à une action (ex: "TIRER" -> "bang.mp3")
         _triggerActionSounds(actorId, actionName) {
             const s = projectRef.current.scenes[sceneIdx];
             const actor = s.actors.find(a => a.id === actorId);
             const action = actor?.actions.find(act => act.name.toUpperCase() === actionName.toUpperCase());
             if(action && action.sounds) {
                 action.sounds.forEach(snd => {
-                    // On utilise playParallelSound (React) si dispo, sinon interne
                     if(playParallelSound) playParallelSound(snd.url);
                     else this._playSound(snd.url);
                 });
@@ -96,7 +103,6 @@ export const createGameBase = (params) => {
         }
 
         _playSound(url) {
-            // Logique interne si playParallelSound n'est pas fourni
             if(isMutedRef?.current) return;
             const buffer = audioBuffers.get(url);
             if(buffer && audioCtx) {
@@ -108,25 +114,29 @@ export const createGameBase = (params) => {
             }
         }
 
+        // --- BOUCLE DE RENDU PRINCIPALE ---
+        // Appelée automatiquement par GameEngine.jsx via requestAnimationFrame
         _render() {
             const s = projectRef.current.scenes[sceneIdx];
             if (!this.ctx || !this.canvas) return;
 
-            // Fond
+            // 1. Fond Noir
             this.ctx.fillStyle = "#0f172a"; 
             this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
             
-            // Backdrop
+            // 2. Décor (Backdrop)
             const bd = s?.backdrops?.[s.currentBackdropIdx || 0];
             if(bd) { 
+                // CRUCIAL : On utilise resolveUrl pour matcher la clé stockée dans le Loader
                 const img = imageAssets.get(resolveUrl(bd.url)); 
                 if(img) this.ctx.drawImage(img, 0, 0, this.canvas.width, this.canvas.height); 
             }
 
-            // Acteurs
+            // 3. Acteurs
             for(let key in this) {
                 const p = this[key];
                 if(p instanceof ActorProxy && p.visible) {
+                    // On retrouve les données sources pour récupérer les frames
                     const aData = s.actors.find(ac => ac.id === p.id);
                     if(!aData) continue;
                     
@@ -135,7 +145,7 @@ export const createGameBase = (params) => {
                     if(act && act.frames && act.frames.length > 0) {
                         const now = Date.now();
                         
-                        // Timing
+                        // Gestion Timing Animation
                         if (now - p.lastAnimTime > (parseInt(act.speed) || 100)) { 
                             if (!p.isAnimFinished) {
                                 p.frameIdx++;
@@ -150,10 +160,13 @@ export const createGameBase = (params) => {
                             }
                         }
                         
-                        // Image
-                        const spr = imageAssets.get(resolveUrl(act.frames[Math.min(p.frameIdx, act.frames.length-1)].url));
+                        // Dessin Sprite
+                        const frameUrl = act.frames[Math.min(p.frameIdx, act.frames.length-1)].url;
+                        // CRUCIAL : resolveUrl ici aussi !
+                        const spr = imageAssets.get(resolveUrl(frameUrl));
                         
                         if(spr) {
+                            // Conversion coordonnées % -> Pixels
                             const xPx = (p.x/100)*this.canvas.width; 
                             const yPx = (p.y/100)*this.canvas.height; 
                             let sz = 150*p.scale;
@@ -161,13 +174,14 @@ export const createGameBase = (params) => {
                             this.ctx.save(); 
                             this.ctx.translate(xPx, yPx);
                             
+                            // Gestion Rotation / Miroir
                             if(p.rotationStyle === 'left-right' && Math.abs(p.scale) !== p.scale) {
                                 this.ctx.scale(Math.sign(p.scale), 1);
                             } else if (p.direction) {
                                 this.ctx.rotate(p.direction * Math.PI / 180);
                             }
                             
-                            // Effet Boss visuel (préservé de ton code)
+                            // Effet Boss Rouge (Spécifique Zombie)
                             if (this.isBossPhase && p.name === 'ZOMBIE') {
                                 this.ctx.filter = "drop-shadow(0 0 15px red) hue-rotate(-50deg)";
                             }

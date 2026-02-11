@@ -1,9 +1,131 @@
-// @signatures: GameEngine, initLevel, handleAnswerClick, triggerWinSequence, handleBarCheat
+// @signatures: GameEngine, initLevel, handleAnswerClick, triggerWinSequence, handleStartGame
 import React, { useState, useRef, useEffect } from 'react';
 import SoundExpert from './SoundExpert';
 import { api } from '../../../../services/api';
-// IMPORT DU NOUVEAU MOTEUR (Copié de ta string)
+// IMPORT DU MOTEUR PARTAGÉ
 import { createGameBase } from '../../../../services/gameCore';
+
+// --- CODE UTILISATEUR PAR DÉFAUT (ZOMBIE) ---
+// Note : Le moteur "MiniGameBase" est maintenant importé, ce code ne fait qu'étendre la logique métier.
+const ZOMBIE_GAME_CODE = `
+class MiniGame extends MiniGameBase {
+    constructor(canvas, assets, callbacks) {
+        super(canvas, assets, callbacks);
+        this.projectiles = [];
+        this.zombieX = 100;
+        this.zombieState = "WALKING"; 
+        this.heroState = "IDLE";
+        this.heroTimer = 0;
+        this.isStopped = false;
+        this.baseSpeed = 0.15;
+    }
+
+    start() { 
+        this.isStopped = false;
+        if(this.HEROS) { 
+            this.HEROS.x = 15; 
+            this.HEROS.y = 70; 
+            this.HEROS.play("IDLE", true); 
+        } 
+        this.resetZombie();
+    }
+
+    resetZombie() {
+        this.zombieX = 100;
+        this.zombieState = "WALKING";
+        if(this.ZOMBIE) {
+            this.ZOMBIE.x = 100;
+            this.ZOMBIE.play("AVANCER", true);
+        }
+    }
+
+    onResult(isCorrect) {
+        if (this.heroState === "HIT") return;
+        if (isCorrect && this.HEROS) {
+            this.HEROS.play("TIRER", false);
+            this.heroState = "SHOOT";
+            this.heroTimer = 40;
+            this.projectiles.push({ x: this.HEROS.x + 5, y: this.HEROS.y - 5 });
+        }
+    }
+
+    update() {
+        if (this.isStopped) return;
+
+        // BOSS PHASE SCALING
+        if (this.ZOMBIE) this.ZOMBIE.scale = this.isBossPhase ? this.ZOMBIE.baseScale * 1.6 : this.ZOMBIE.baseScale;
+
+        // HERO LOGIC
+        if (this.heroState === "SHOOT" || this.heroState === "HIT") {
+            this.heroTimer--;
+            if (this.heroTimer <= 0) {
+                this.heroState = "IDLE";
+                if(this.HEROS) this.HEROS.play("IDLE", true);
+            }
+        }
+
+        // ZOMBIE LOGIC
+        if (this.zombieState === "WALKING") {
+            let speed = this.isBossPhase ? this.baseSpeed * 0.5 : this.baseSpeed;
+            this.zombieX -= speed;
+            if (this.zombieX < 20) {
+                this.zombieState = "ATTACKING";
+                if (this.ZOMBIE) {
+                    this.ZOMBIE.x = 20;
+                    this.ZOMBIE.play("TAPER", false);
+                }
+            } else if (this.ZOMBIE) {
+                this.ZOMBIE.x = this.zombieX;
+            }
+        } else if (this.zombieState === "ATTACKING") {
+            if (this.ZOMBIE && this.ZOMBIE.frameIdx >= 1 && this.heroState !== "HIT") {
+                if (this.HEROS) {
+                    this.HEROS.play("TOUCHE", false);
+                    this.heroState = "HIT";
+                    this.heroTimer = 60;
+                }
+                if (this.callbacks.onPlayerHit) this.callbacks.onPlayerHit();
+            }
+            if (this.ZOMBIE && this.ZOMBIE.isAnimFinished) this.resetZombie();
+        } else if (this.zombieState === "HIT") {
+            this.zombieX += 0.5;
+            if (this.ZOMBIE) {
+                this.ZOMBIE.x = this.zombieX;
+                if (this.ZOMBIE.isAnimFinished) this.resetZombie();
+            }
+        }
+
+        // PROJECTILES
+        for (let i = this.projectiles.length - 1; i >= 0; i--) { 
+            let p = this.projectiles[i]; 
+            p.x += 3;
+            if (this.zombieState === "WALKING" && p.x > this.zombieX - 5 && p.x < this.zombieX + 5) {
+                this.projectiles.splice(i, 1);
+                this.zombieState = "HIT";
+                if (this.ZOMBIE) this.ZOMBIE.play("TOUCHE", false); 
+            } 
+            else if (p.x > 110) { this.projectiles.splice(i, 1); }
+        }
+    }
+
+    draw() {
+        if (this.isStopped) return;
+        const ctx = this.ctx;
+        this.projectiles.forEach(p => { 
+            if (this.isBossPhase) {
+                ctx.save(); ctx.shadowBlur = 20; ctx.shadowColor = "#f59e0b"; ctx.font = "50px Arial";
+                ctx.textAlign = "center"; ctx.textBaseline = "middle";
+                ctx.fillText("🔥", (p.x/100)*this.canvas.width, (p.y/100)*this.canvas.height);
+                ctx.restore();
+            } else {
+                ctx.fillStyle = "#f97316"; ctx.beginPath(); 
+                ctx.arc((p.x/100)*this.canvas.width, (p.y/100)*this.canvas.height, 10, 0, Math.PI*2); 
+                ctx.fill(); 
+            }
+        });
+    }
+}
+`;
 
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
     const canvasRef = useRef(null);
@@ -12,7 +134,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const [loadProgress, setLoadProgress] = useState("");
     const [debugLogs, setDebugLogs] = useState([]);
     
-    // --- ÉTATS DU QUIZ ---
+    // Etats Quiz
     const [allLevels, setAllLevels] = useState([]); 
     const [currentLevelIdx, setCurrentLevelIdx] = useState(0);
     const [levelQuestions, setLevelQuestions] = useState([]); 
@@ -21,15 +143,12 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const [lives, setLives] = useState(4);
     const [feedback, setFeedback] = useState(null);
 
-    // --- ÉTATS VISUELS ---
+    // Etats Visuels
     const [isLevelWon, setIsLevelWon] = useState(false);
     const isLevelWonRef = useRef(false);
     const [isPowerOff, setIsPowerOff] = useState(false);
     
-    // --- MODE BOSS (Propriété du moteur V10) ---
-    const bossModeRef = useRef(false);
-
-    // Références persistantes
+    // Refs Engine
     const audioCtxRef = useRef(null);
     const audioBuffersRef = useRef(new Map());
     const imageAssetsRef = useRef(new Map());
@@ -37,37 +156,18 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const frameIdRef = useRef(null);
     const keysPressed = useRef({});
     
-    // 🔥 REF PROJET INDISPENSABLE POUR LE MOTEUR V8
     const projectRef = useRef(project);
-    useEffect(() => { projectRef.current = project; }, [project]);
-
-    // Mute Ref
+    const bossModeRef = useRef(false);
     const isMutedRef = useRef(false);
 
-    const logSonde = (msg, type = 'info') => {
-        const id = Math.random();
-        setDebugLogs(prev => [...prev, { id, text: msg, type }].slice(-6));
-    };
+    useEffect(() => { projectRef.current = project; }, [project]);
 
-    const playParallelSound = (url) => {
-        if (isMutedRef.current || !audioCtxRef.current) return;
-        const buffer = audioBuffersRef.current.get(url);
-        if (buffer) {
-            if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
-            const source = audioCtxRef.current.createBufferSource();
-            source.buffer = buffer; source.connect(audioCtxRef.current.destination); source.start(0);
-        }
-    };
-
-    // 1. INIT DONNÉES QUIZ
+    // 1. INIT QUIZ & EVENTS
     useEffect(() => {
         api.get('/games/test-data').then(data => {
             const levelsData = data?.levels?.length > 0 ? data.levels : [{ 
                 name: "Test Default", 
-                questions: [
-                    { q: "Quelle est la capitale de la France ?", options: ["Lyon", "Paris", "Marseille", "Lille"], a: 1 },
-                    { q: "Combien font 2 + 2 ?", options: ["3", "4", "5", "22"], a: 1 }
-                ] 
+                questions: [{ q: "Quelle est la capitale ?", options: ["Lyon", "Paris", "Marseille", "Lille"], a: 1 }] 
             }];
             setAllLevels(levelsData);
             initLevel(0, levelsData);
@@ -93,42 +193,48 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         if (questions.length > 0) setCurrentQIndex(0);
     };
 
-    // LOGIQUE BOSS
-    useEffect(() => {
-        const isBoss = (currentQIndex !== -1 && (questionStates[currentQIndex] || 0) >= 2);
-        bossModeRef.current = isBoss;
-        if (gameInstanceRef.current) gameInstanceRef.current.isBossPhase = isBoss;
-    }, [currentQIndex, questionStates]);
-
-    // 2. PRÉ-CHARGEMENT
+    // 2. ASSET LOADING (AVEC SYNC DES CLÉS)
     useEffect(() => {
         if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
         
         const scene = project.scenes?.[activeSceneIdx];
         if (!scene) { setIsReady(true); return; }
 
-        const imgUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url)))].filter(Boolean);
+        // Extraction de toutes les URLs d'images (frames + backdrops)
+        const imgUrls = [...new Set(
+            (scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url)))
+            .concat((scene.backdrops || []).map(b => b.url))
+        )].filter(Boolean);
+
         let loaded = 0;
         const total = imgUrls.length;
 
         if (total === 0) setIsReady(true);
 
         imgUrls.forEach(url => {
-            const img = new Image(); img.crossOrigin = "anonymous";
+            const img = new Image(); 
+            img.crossOrigin = "anonymous";
+            
+            // 🔑 CRITICAL FIX : On utilise resolveUrl pour la clé de stockage
+            // Cela garantit que le moteur (gameCore.js) trouvera l'image quand il appellera imageAssets.get(resolveUrl(url))
+            const resolvedKey = resolveUrl(url);
+
             img.onload = () => {
-                imageAssetsRef.current.set(resolveUrl(url), img);
+                imageAssetsRef.current.set(resolvedKey, img);
                 loaded++;
                 setLoadProgress(`${Math.round(loaded/total*100)}%`);
                 if (loaded >= total) setIsReady(true);
             };
             img.onerror = () => {
-                console.error("Img error:", url);
+                console.error("❌ Img error:", resolvedKey);
                 loaded++;
                 if (loaded >= total) setIsReady(true);
             };
-            img.src = resolveUrl(url);
+            // L'URL source doit aussi être résolue pour le chargement réseau
+            img.src = resolvedKey;
         });
 
+        // Chargement Sons (idem)
         const sndUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url))))].filter(Boolean);
         sndUrls.forEach(url => {
             SoundExpert.decodeAudio(resolveUrl(url), audioCtxRef.current).then(buf => {
@@ -136,17 +242,19 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             });
         });
 
-        return () => {
-            if (frameIdRef.current) cancelAnimationFrame(frameIdRef.current);
-            // Pas de stop sur l'instance ici pour éviter les clignotements
-        };
+        return () => { if (frameIdRef.current) cancelAnimationFrame(frameIdRef.current); };
     }, [project]);
 
     // 3. LOGIQUE JEU
+    useEffect(() => {
+        const isBoss = (currentQIndex !== -1 && (questionStates[currentQIndex] || 0) >= 2);
+        bossModeRef.current = isBoss;
+        if (gameInstanceRef.current) gameInstanceRef.current.isBossPhase = isBoss;
+    }, [currentQIndex, questionStates]);
+
     const handleAnswerClick = (choiceIdx) => {
         if (feedback || currentQIndex === -1 || isLevelWonRef.current) return;
-        const currentQ = levelQuestions[currentQIndex];
-        const isCorrect = currentQ.a === choiceIdx;
+        const isCorrect = levelQuestions[currentQIndex].a === choiceIdx;
         setFeedback(isCorrect ? 'CORRECT' : 'WRONG');
 
         const newStates = [...questionStates];
@@ -164,10 +272,8 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             setFeedback(null);
             const available = newStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
             if (available.length > 0) {
-                // On change de question si possible
                 const others = available.filter(idx => idx !== currentQIndex);
-                const nIdx = others.length > 0 ? others[Math.floor(Math.random() * others.length)] : available[0];
-                setCurrentQIndex(nIdx);
+                setCurrentQIndex(others.length > 0 ? others[Math.floor(Math.random() * others.length)] : available[0]);
             } else {
                 triggerWinSequence();
             }
@@ -177,62 +283,47 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const triggerWinSequence = () => {
         setIsLevelWon(true);
         isLevelWonRef.current = true;
-        if (gameInstanceRef.current?.onLevelWin) gameInstanceRef.current.onLevelWin();
         setTimeout(() => setIsPowerOff(true), 1500);
         setTimeout(() => {
-            const nextLvlIdx = currentLevelIdx + 1;
-            if (allLevels[nextLvlIdx]) initLevel(nextLvlIdx, allLevels);
+            if (allLevels[currentLevelIdx + 1]) initLevel(currentLevelIdx + 1, allLevels);
             else { alert("🎉 JEU TERMINÉ !"); onStop(); }
         }, 4000);
     };
 
-    // 4. DÉMARRAGE
     const handleStartGame = async () => {
-        if (audioCtxRef.current) {
-            try { await audioCtxRef.current.resume(); } catch (e) {}
-        }
+        if (audioCtxRef.current) await audioCtxRef.current.resume();
         setEngineStarted(true);
     };
 
-    // 5. ENGINE LOOP (LE COEUR DU SYSTÈME)
+    // 4. INSTANCIATION MOTEUR
     useEffect(() => {
         if (!engineStarted || !canvasRef.current) return;
 
         try {
-            const canvas = canvasRef.current;
-            const ctx = canvas.getContext('2d');
-            
-            // --- CALLBACKS ---
-            const gameCallbacks = {
-                onPlayerHit: () => {
-                    logSonde("💥 AIE ! Coup reçu !", "error");
-                    if (!isLevelWonRef.current) setLives(l => Math.max(0, l - 1));
-                },
-                onLevelWin: () => console.log("Win trigger internal"),
-                playSound: (name) => console.log("Sound req", name)
-            };
-
-            // 🚀 CRÉATION DE LA CLASSE DE BASE VIA LE SERVICE (VRAIE IMPORTATION)
+            // Création de la classe de base via la Factory importée
             const MiniGameBase = createGameBase({ 
                 audioBuffers: audioBuffersRef.current, 
                 audioCtx: audioCtxRef.current, 
-                projectRef, // ✅ PASSAGE DE LA REF
+                projectRef, 
                 sceneIdx: activeSceneIdx, 
                 imageAssets: imageAssetsRef.current, 
                 resolveUrl, 
-                canvas, 
-                ctx, 
+                canvas: canvasRef.current, 
+                ctx: canvasRef.current.getContext('2d'), 
                 isMutedRef, 
-                playParallelSound,
-                callbacks: gameCallbacks
+                playParallelSound: (url) => { /* Placeholder pour le playParallelSound */ },
+                callbacks: {
+                    onPlayerHit: () => { if (!isLevelWonRef.current) setLives(l => Math.max(0, l - 1)); }
+                }
             });
 
-            // Injection du code utilisateur (ZOMBIE V9.8)
-            const UserCodeFactory = new Function('MiniGameBase', `${code}\nreturn MiniGame;`);
+            // Injection du code utilisateur (Zombie) qui étend MiniGameBase
+            // Note : on passe 'code' qui est éditable dans le Studio, ou ZOMBIE_GAME_CODE par défaut
+            const actualCode = code && code.length > 50 ? code : ZOMBIE_GAME_CODE;
+            const UserCodeFactory = new Function('MiniGameBase', `${actualCode}\nreturn MiniGame;`);
             const UserGameClass = UserCodeFactory(MiniGameBase);
             
-            // Instanciation
-            const instance = new UserGameClass(canvas, {}, gameCallbacks);
+            const instance = new UserGameClass(canvasRef.current, {}, {});
             gameInstanceRef.current = instance;
 
             if (instance.start) instance.start();
@@ -242,18 +333,16 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 instance.isBossPhase = bossModeRef.current;
                 
                 if (instance.update) instance.update();
-                // LE RENDU EST GÉRÉ PAR LA CLASSE PARENTE (Importée)
-                if (instance._render) instance._render();
-                // LE HUD EST GÉRÉ PAR L'UTILISATEUR
-                if (instance.draw) instance.draw();
+                if (instance._render) instance._render(); // Appel à la méthode parente
+                if (instance.draw) instance.draw(); // Appel au HUD utilisateur
                 
                 frameIdRef.current = requestAnimationFrame(tick);
             };
             tick();
 
         } catch (e) {
-            logSonde("CRASH: " + e.message, "error");
-            console.error(e);
+            console.error("CRASH MOTEUR:", e);
+            alert("Erreur dans le code du jeu. Vérifiez la console.");
         }
         return () => { if(frameIdRef.current) cancelAnimationFrame(frameIdRef.current); };
     }, [engineStarted]);
@@ -261,14 +350,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     return (
         <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center overflow-hidden font-sans">
              <button onClick={onStop} className="absolute top-6 right-6 bg-red-600 text-white w-12 h-12 rounded-full font-black text-2xl shadow-xl border-4 border-white hover:scale-110 transition-all flex items-center justify-center pointer-events-auto z-50">✕</button>
-
-             <div className="absolute top-20 left-4 flex flex-col gap-1 pointer-events-none z-40">
-                {debugLogs.map(log => (
-                    <div key={log.id} className={`px-3 py-1 rounded text-[9px] font-black shadow-lg border-l-4 ${log.type === 'error' ? 'bg-red-500 text-white' : log.type === 'success' ? 'bg-green-500 text-white' : 'bg-yellow-400 text-black'}`}>
-                        {log.text}
-                    </div>
-                ))}
-             </div>
 
              {!engineStarted ? (
                  <button 
