@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import Login from './features/auth/Login';
 import ProfPage from './features/prof/ProfPage';
 import ElevePage from './features/eleve/ElevePage';
-import AdminPage from './features/admin/AdminPage';
 import SystemStatus from './features/prof/components/SystemStatus';
 import './App.css';
 
@@ -75,11 +74,9 @@ export default function App() {
         </div>
       )}
 
-      {/* ROUTAGE PRINCIPAL */}
-      {(user.isDeveloper || user.role === 'prof') ? (
+      {/* ROUTAGE PRINCIPAL : PROF OU ÉLÈVE UNIQUEMENT */}
+      {(user.isDeveloper || user.role === 'prof' || user.role === 'admin') ? (
           <ProfPage user={user} onLogout={handleLogout} />
-      ) : user.role === 'admin' ? (
-          <AdminPage user={user} onLogout={handleLogout} />
       ) : (
           <ElevePage user={user} onLogout={handleLogout} onBackToProf={() => setUser({ ...user, role: "prof" })} />
       )}

@@ -1,12 +1,6 @@
 STRUCTURE:
-├── ${fPath}
-├── ${relPath}
-├── ${rel}
-├── ${subRelPath}
 ├── ...
 ├── .gitignore
-├── INSTRUCTIONS_OAUTH.md
-├── LOCKED_FILES.md
 ├── apply.js
 ├── apply_status.json
 ├── check-google.js
@@ -22,12 +16,7 @@ STRUCTURE:
 │   ├── src/
 │   │   ├── App.css
 │   │   ├── App.jsx
-│   │   ├── assets/
-│   │   │   └── react.svg
 │   │   ├── features/
-│   │   │   ├── admin/
-│   │   │   │   ├── AdminPage.css
-│   │   │   │   └── AdminPage.jsx
 │   │   │   ├── auth/
 │   │   │   │   ├── Login.css
 │   │   │   │   └── Login.jsx
@@ -268,8 +257,6 @@ STRUCTURE:
 │   │   ├── Teacher.js
 │   │   └── TeacherStyle.js
 │   ├── prof/
-│   │   ├── admin/
-│   │   │   └── admin.prof.js
 │   │   ├── auth/
 │   │   │   └── auth.prof.js
 │   │   ├── classroom/
@@ -300,7 +287,6 @@ STRUCTURE:
 ├── systemInstructions.md
 ├── temp_diff.json
 ├── userStories.txt
-├── verificatons.txt
 └── vitest.config.js
 
 
@@ -382,7 +368,7 @@ console.log("🛡️ ARCHITECTE V9.8 - DÉBRIDÉ & COMMIT AUTO ACTIF");
 {
   "status": "OK",
   "message": "Infrastructure mise à jour",
-  "timestamp": 1770829987588
+  "timestamp": 1770843858509
 }
 [[[£ END: apply_status.json £]]]
 
@@ -654,67 +640,6 @@ export default function App() {
 }
 
 [[[£ END: client/src/App.jsx £]]]
-
-[[[£ FILE: client/src/features/admin/AdminPage.css £]]]
-.admin-page-wrapper {
-    min-height: 100vh;
-    background-color: #f1f5f9;
-    padding: 2rem;
-    max-width: 1400px;
-    margin: 0 auto;
-}
-
-.admin-header-bar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    background: white;
-    padding: 1.5rem 2rem;
-    border-radius: 25px;
-    margin-bottom: 2rem;
-    box-shadow: 0 10px 30px -10px rgba(0,0,0,0.05);
-    border: 1px solid #e2e8f0;
-}
-
-.admin-content-area {
-    /* Le Dashboard prend toute la place */
-}
-
-[[[£ END: client/src/features/admin/AdminPage.css £]]]
-
-[[[£ FILE: client/src/features/admin/AdminPage.jsx £]]]
-// @signatures: AdminPage, handleRefresh
-import React from 'react';
-import AdminDashboard from '../prof/admin/AdminDashboard'; // On réutilise le composant existant
-import './AdminPage.css';
-
-export default function AdminPage({ user, onLogout }) {
-  // Fonction vide pour le refresh car l'admin gère sa propre data
-  const handleRefresh = () => {};
-
-  return (
-    <div className="admin-page-wrapper">
-      <div className="admin-header-bar">
-        <div className="flex items-center gap-4">
-            <span className="text-3xl">🛡️</span>
-            <div>
-                <h1 className="text-xl font-black text-slate-800 uppercase tracking-tight">Espace Administration</h1>
-                <p className="text-xs font-bold text-slate-400 uppercase">Bienvenue, {user.firstName}</p>
-            </div>
-        </div>
-        <button onClick={onLogout} className="bg-white text-slate-400 hover:text-red-500 px-4 py-2 rounded-xl font-black text-xs border border-slate-200 transition-colors">
-            DÉCONNEXION
-        </button>
-      </div>
-      
-      <div className="admin-content-area">
-        <AdminDashboard user={user} onRefresh={handleRefresh} />
-      </div>
-    </div>
-  );
-}
-
-[[[£ END: client/src/features/admin/AdminPage.jsx £]]]
 
 [[[£ FILE: client/src/features/auth/Login.css £]]]
 .login-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; background-color: #f8fafc; }
@@ -13935,54 +13860,6 @@ const TeacherStyleSchema = new mongoose.Schema({ teacherId: String, pedagogicalM
 module.exports = mongoose.models.TeacherStyle || mongoose.model('TeacherStyle', TeacherStyleSchema);
 
 [[[£ END: server/models/TeacherStyle.js £]]]
-
-[[[£ FILE: server/prof/admin/admin.prof.js £]]]
-// @signatures: ProfAdminRouter, listAll, driveCheck, databaseDump
-const express = require('express');
-const router = express.Router();
-const mongoose = require('mongoose');
-const AdminExpert = require('../../domains/admin/experts/admin.expert');
-
-// 1. VÉRIFICATION DRIVE (Header)
-router.get('/drive-check', async (req, res) => {
-    const status = await AdminExpert.checkDriveStatus();
-    res.json(status);
-});
-
-// 2. MOUCHARD BDD (Le bouton qui plantait)
-router.get('/database-dump', async (req, res) => {
-    try {
-        const dump = await AdminExpert.getFullDump();
-        res.json(dump);
-    } catch (e) {
-        console.error("Dump Error:", e);
-        res.status(500).json({ error: e.message });
-    }
-});
-
-// 3. LISTES SIMPLES
-router.get('/classrooms', async (req, res) => {
-    res.json(await mongoose.model('Classroom').find({}).sort({ name: 1 }).lean());
-});
-
-router.get('/students', async (req, res) => {
-    res.json(await mongoose.model('Student').find({}).sort({ lastName: 1 }).lean());
-});
-
-router.get('/teachers/:id', async (req, res) => {
-    const { id } = req.params;
-    if (!mongoose.Types.ObjectId.isValid(id)) return res.json({});
-    const user = await mongoose.model('Teacher').findById(id).lean() || await mongoose.model('Admin').findById(id).lean();
-    res.json(user || {});
-});
-
-router.get('/subjects', async (req, res) => {
-    res.json(await mongoose.model('Subject').find({}).sort({ name: 1 }).lean());
-});
-
-module.exports = router;
-
-[[[£ END: server/prof/admin/admin.prof.js £]]]
 
 [[[£ FILE: server/prof/auth/auth.prof.js £]]]
 // @signatures: ProfAuth, login, config, finder, googleLogin, googleCallback, toggleTestMode

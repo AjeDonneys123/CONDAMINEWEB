@@ -81,11 +81,11 @@ export default function Login({ onLoginSuccess }) {
     e.preventDefault();
     setLoading(true);
     
+    // Simplifié : soit TEACHER soit STUDENT
     let roleToSend = 'STUDENT';
     if (mode === 'teacher') roleToSend = 'TEACHER';
-    if (mode === 'admin') roleToSend = 'ADMIN';
     
-    const body = (roleToSend === 'TEACHER' || roleToSend === 'ADMIN')
+    const body = (roleToSend === 'TEACHER')
         ? { role: roleToSend, firstName: fName, lastName: lName, password }
         : { role: 'STUDENT', studentId: selectedStudent?.id };
 
@@ -123,10 +123,6 @@ export default function Login({ onLoginSuccess }) {
                         <span className="role-icon">👨‍🏫</span>
                         <span className="role-label">Enseignant</span>
                     </div>
-                    <div className="role-card role-admin" onClick={() => setMode('admin')}>
-                        <span className="role-icon">🛡️</span>
-                        <span className="role-label">Administrateur</span>
-                    </div>
                 </div>
             </div>
         </div>
@@ -140,12 +136,12 @@ export default function Login({ onLoginSuccess }) {
         <button onClick={() => { setMode(null); handleReset(); }} className="back-btn">⬅ Changer de rôle</button>
         
         <h2 className="app-logo">
-            {mode === 'student' ? 'Espace Élève' : (mode === 'teacher' ? 'Espace Prof' : 'Administration')}
+            {mode === 'student' ? 'Espace Élève' : 'Espace Prof'}
         </h2>
 
         <form onSubmit={handleLogin} className="login-inputs mt-6">
             
-            {/* --- MODE ÉLÈVE (NOUVEAU FINDER 3 CHAMPS) --- */}
+            {/* --- MODE ÉLÈVE --- */}
             {mode === 'student' && (
                 <>
                     {!selectedStudent ? (
@@ -205,8 +201,8 @@ export default function Login({ onLoginSuccess }) {
                 </>
             )}
 
-            {/* --- MODE STAFF --- */}
-            {(mode === 'teacher' || mode === 'admin') && (
+            {/* --- MODE STAFF (Prof uniquement) --- */}
+            {mode === 'teacher' && (
                 <div className="space-y-4">
                     <input className="login-field" placeholder="Prénom" value={fName} onChange={e=>setFName(e.target.value)} required />
                     <input className="login-field" placeholder="Nom" value={lName} onChange={e=>setLName(e.target.value)} required />
