@@ -11,16 +11,14 @@ export default function GamesGrid({ user }) {
   const loadData = async () => {
     setLoading(true);
     try {
-        // ON IGNORE LES JEUX PUBLIÉS
-        // On va chercher directement le projet du Studio (le dernier travaillé)
-        const res = await fetch(`/api/studio/projects/67915ec2da279cba002c38af`); // ID du compte prof par défaut
-        const projects = await res.json();
+        // FIX MIROIR : On utilise la nouvelle route "Auto-détection"
+        const res = await fetch(`/api/eleve/games/studio-mirror`);
+        const project = await res.json();
         
-        if (projects && projects.length > 0) {
-            const p = projects[0];
+        if (project) {
             setStudioGame({
-                ...p,
-                title: "🎮 TEST ZOMBI (STUDIO)",
+                ...project,
+                title: "🎮 " + (project.title || "PROJET STUDIO"),
                 actType: 'game',
                 status: 'todo'
             });
@@ -44,28 +42,38 @@ export default function GamesGrid({ user }) {
   return (
     <div className="flex flex-col gap-6 animate-in">
         <div className="flex justify-between items-center px-4">
-            <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight">Zone de Test</h2>
-            <button onClick={loadData} className="text-[10px] font-black text-pink-500 bg-white px-4 py-2 rounded-xl border-2 border-pink-100">
-                {loading ? 'SYNC...' : '🔄 SYNCHRONISER STUDIO'}
+            <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight">Zone de Test (Miroir)</h2>
+            <button onClick={loadData} className="text-[10px] font-black text-indigo-500 bg-white px-4 py-2 rounded-xl border-2 border-indigo-100 shadow-sm hover:bg-indigo-50 transition-all">
+                {loading ? 'SYNC EN COURS...' : '🔄 SYNCHRONISER STUDIO'}
             </button>
         </div>
         
         {studioGame ? (
             <div 
                 onClick={() => setSelectedGame(studioGame)}
-                className="mx-4 p-8 bg-white border-4 border-indigo-600 rounded-[40px] shadow-xl cursor-pointer hover:scale-[1.02] transition-transform flex items-center justify-between"
+                className="mx-4 p-8 bg-gradient-to-br from-indigo-600 to-purple-700 rounded-[40px] shadow-2xl cursor-pointer hover:scale-[1.02] transition-all border-4 border-white/20 group"
             >
-                <div className="flex items-center gap-6">
-                    <span className="text-5xl">🧟</span>
-                    <div>
-                        <div className="text-2xl font-black text-slate-900 uppercase">{studioGame.title}</div>
-                        <div className="text-xs font-bold text-indigo-500 uppercase tracking-widest">Moteur V8.3 • Prêt pour le test</div>
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-6">
+                        <div className="w-20 h-20 bg-white/20 rounded-3xl flex items-center justify-center text-5xl shadow-inner group-hover:scale-110 transition-transform">
+                            🧟
+                        </div>
+                        <div>
+                            <div className="text-2xl font-black text-white uppercase tracking-tight">{studioGame.title}</div>
+                            <div className="text-xs font-bold text-indigo-200 uppercase tracking-widest mt-1">Moteur V8.3 • Branchement Direct</div>
+                        </div>
+                    </div>
+                    <div className="w-12 h-12 bg-white text-indigo-600 rounded-full flex items-center justify-center shadow-lg">
+                        <span className="text-2xl font-black">▶</span>
                     </div>
                 </div>
-                <span className="text-3xl text-slate-300">▶</span>
             </div>
         ) : (
-            <div className="text-center p-20 opacity-30 font-black uppercase">En attente du Studio...</div>
+            <div className="flex flex-col items-center justify-center p-20 opacity-30 text-center">
+                <span className="text-6xl mb-4">📡</span>
+                <p className="font-black uppercase text-sm tracking-widest">En attente d'un enregistrement dans le Studio...</p>
+                <p className="text-[10px] font-bold mt-2">Cliquez sur Sauver dans le Studio Prof pour envoyer ici.</p>
+            </div>
         )}
     </div>
   );

@@ -1,48 +1,40 @@
-// @signatures: EleveGames, list, score
+// @signatures: EleveGames, list, score, studioMirror
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 
 /**
- * 🎮 RÉCUPÉRATION DES JEUX (VERSION ULTRA-PERMISSIVE V102)
+ * 🎮 ROUTE MIROIR : Julian récupère le dernier projet du Studio
  */
+router.get('/studio-mirror', async (req, res) => {
+    try {
+        const StudioProject = mongoose.model('StudioProject');
+        // On cherche le projet le plus récent dans toute la base
+        const project = await StudioProject.findOne({}).sort({ updatedAt: -1 }).lean();
+        
+        if (!project) return res.json(null);
+        res.json(project);
+    } catch (e) {
+        res.status(500).json(null);
+    }
+});
+
 router.get('/list/:studentId', async (req, res) => {
     try {
         const Student = mongoose.model('Student');
         const GameLevel = mongoose.model('GameLevel');
-        
         const student = await Student.findById(req.params.studentId).lean();
         if (!student) return res.json([]);
-
-        // On nettoie la classe de Julian (ex: " 6D " -> "6D")
         const myClass = (student.currentClass || "").trim().toUpperCase();
-
-        // REQUÊTE ÉLARGIE :
-        const query = {
-            $or: [
-                // 1. Julian est spécifiquement invité par son ID
-                { assignedStudents: student._id },
-                // 2. La classe de Julian est dans la liste des cibles
-                { targetClassrooms: myClass },
-                // 3. Cas particulier : c'est un jeu de test (pour que tu puisses voir tes créations)
-                { isTestGame: true }
-            ]
-        };
-
+        const query = { $or: [ { assignedStudents: student._id }, { targetClassrooms: myClass }, { isTestGame: true } ] };
         const games = await GameLevel.find(query).sort({ updatedAt: -1 }).lean();
-        
-        console.log(`🔎 [GAMES] ${games.length} jeux trouvés pour ${student.firstName} (${myClass})`);
         res.json(games);
-    } catch (e) {
-        console.error("❌ [GAMES-ELEVE] Error:", e.message);
-        res.status(500).json([]);
-    }
+    } catch (e) { res.status(500).json([]); }
 });
 
 router.post('/score', async (req, res) => {
     const { studentId, gameId, score, levelReached } = req.body;
-    const GameProgress = mongoose.model('GameProgress');
-    await GameProgress.findOneAndUpdate(
+    await mongoose.model('GameProgress').findOneAndUpdate(
         { studentId, gameId }, 
         { lastScore: score, levelReached: levelReached || 1, updatedAt: new Date() }, 
         { upsert: true }

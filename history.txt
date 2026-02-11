@@ -8753,3 +8753,6 @@ Build 161: MIGRATION MOTEUR JEU. Extraction de la logique 'BaseFactory' vers 'se
 
 11/02/2026 17:35 - MIROIR STUDIO : Julian est maintenant branché directement sur les projets du Studio pour faciliter les tests.
 11/02/2026 17:36 - FIX CRASH BOUCLE : Correction de la boucle tick() dans GamePlayer.jsx avec un isRunningRef pour stopper les appels récursifs en cas d'erreur ou de démontage.
+
+11/02/2026 17:35 - MIROIR STUDIO : Julian est branché directement sur les projets du Studio.
+11/02/2026 17:40 - AUTO-ID MIRROR : Nouvelle route /studio-mirror pour Julian. Plus besoin d'ID hardcodé, le système détecte le dernier projet sauvegardé automatiquement.
