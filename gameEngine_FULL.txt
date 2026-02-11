@@ -1,0 +1,1421 @@
+
+================================================================================
+🎮 RÉFÉRENTIEL TECHNIQUE DU MOTEUR CONDAMINE
+📅 Date : 11/02/2026 17:52:10
+📂 Fichiers capturés : 10
+================================================================================
+Ce snapshot contient toute l'infrastructure permettant au Prof de créer dans 
+le Studio (Sprites/Sons) et à l'Élève de jouer en miroir exact.
+================================================================================
+
+[[[£ FILE: client/src/services/gameCore.js £]]]
+/**
+ * 🎮 CORE ENGINE V8.5 (SHARED ENGINE)
+ * Rôle : Moteur de rendu partagé Prof/Élève.
+ * Gère le dessin des personnages, les animations et le Boss Mode.
+ */
+export const createGameBase = (params) => {
+    const { 
+        audioBuffers, audioCtx, projectRef, sceneIdx, 
+        imageAssets, resolveUrl, canvas, ctx, isMutedRef, 
+        playParallelSound, callbacks 
+    } = params;
+
+    class ActorProxy {
+        constructor(data, engine) { 
+            this.id = data?.id || "unknown"; 
+            this.name = data?.name || "ACTEUR"; 
+            this.engine = engine;
+            this.x = data?.initialX ?? 50; 
+            this.y = data?.initialY ?? 50;
+            this.baseScale = data?.scale ?? 1; 
+            this.scale = this.baseScale;
+            this.visible = true; 
+            this.direction = data?.direction ?? 0; 
+            this.rotationStyle = data?.rotationStyle || 'all';
+            this.currentAction = data?.actions?.[0]?.name || 'IDLE';
+            this.frameIdx = 0; 
+            this.lastAnimTime = 0; 
+            this.isAnimFinished = false; 
+            this.loop = true;
+        }
+        play(name, loop = true) { 
+            if(String(this.currentAction).toUpperCase() !== String(name).toUpperCase()) { 
+                this.currentAction = name; 
+                this.frameIdx = 0; 
+                this.loop = loop; 
+                this.isAnimFinished = false;
+                if (this.engine._triggerActionSounds) this.engine._triggerActionSounds(this.id, name);
+            } 
+        }
+    }
+
+    return class MiniGameBase {
+        constructor(c, a, cb) {
+            this.canvas = c || canvas; 
+            this.ctx = ctx; 
+            this.keys = {}; 
+            this.callbacks = cb || callbacks || {}; 
+            this.assets = a || {};
+            this.isBossPhase = false;
+
+            const project = projectRef?.current || {};
+            const scenes = project.scenes || [];
+            const s = scenes[sceneIdx] || { actors: [] };
+
+            if(s.actors && Array.isArray(s.actors)) {
+                s.actors.forEach(a => { 
+                    this[a.name.toUpperCase()] = new ActorProxy(a, this); 
+                });
+            }
+        }
+
+        _triggerActionSounds(actorId, actionName) {
+            try {
+                const s = projectRef.current.scenes[sceneIdx];
+                const actor = s?.actors?.find(a => a.id === actorId);
+                const action = actor?.actions?.find(act => act.name.toUpperCase() === actionName.toUpperCase());
+                if(action?.sounds) {
+                    action.sounds.forEach(snd => {
+                        if(playParallelSound) playParallelSound(snd.url);
+                    });
+                }
+            } catch(e) {}
+        }
+
+        _render() {
+            if (!this.ctx || !this.canvas) return;
+            const project = projectRef?.current || {};
+            const s = project.scenes?.[sceneIdx] || { actors: [], backdrops: [] };
+
+            this.ctx.fillStyle = "#0f172a"; 
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            
+            const bd = s.backdrops?.[s.currentBackdropIdx || 0];
+            if(bd) { 
+                const img = imageAssets.get(resolveUrl(bd.url)); 
+                if(img) this.ctx.drawImage(img, 0, 0, this.canvas.width, this.canvas.height); 
+            }
+
+            for(let key in this) {
+                const p = this[key];
+                if(p instanceof ActorProxy && p.visible) {
+                    const aData = s.actors?.find(ac => ac.id === p.id);
+                    if(!aData) continue;
+                    const act = (aData.actions || []).find(x => x.name.toUpperCase() === p.currentAction.toUpperCase()) || aData.actions?.[0];
+                    
+                    if(act?.frames?.length > 0) {
+                        const now = Date.now();
+                        const speed = parseInt(act.speed) || 100;
+                        if (now - p.lastAnimTime > speed) { 
+                            if (!p.isAnimFinished) {
+                                p.frameIdx++;
+                                if (p.frameIdx >= act.frames.length) { 
+                                    if (p.loop) p.frameIdx = 0; 
+                                    else { p.frameIdx = act.frames.length - 1; p.isAnimFinished = true; } 
+                                }
+                                p.lastAnimTime = now; 
+                            }
+                        }
+                        const frame = act.frames[Math.min(p.frameIdx, act.frames.length - 1)];
+                        const spr = imageAssets.get(resolveUrl(frame.url));
+                        if(spr) {
+                            const xPx = (p.x/100)*this.canvas.width; 
+                            const yPx = (p.y/100)*this.canvas.height; 
+                            
+                            let scaleMultiplier = 1;
+                            if (this.isBossPhase && p.name === 'ZOMBIE') {
+                                scaleMultiplier = 1.6;
+                                this.ctx.filter = "drop-shadow(0 0 15px red) hue-rotate(-50deg)";
+                            }
+
+                            let sz = 150 * (p.scale || 1) * scaleMultiplier;
+                            this.ctx.save(); 
+                            this.ctx.translate(xPx, yPx);
+                            
+                            if (p.rotationStyle === 'left-right' && p.direction > 90 && p.direction < 270) {
+                                this.ctx.scale(-1, 1);
+                            } else if (p.rotationStyle === 'all') {
+                                this.ctx.rotate(p.direction * Math.PI / 180);
+                            }
+                            
+                            this.ctx.drawImage(spr, -sz/2, -sz/2, sz, sz); 
+                            this.ctx.restore();
+                            this.ctx.filter = "none";
+                        }
+                    }
+                }
+            }
+        }
+    };
+};
+
+[[[£ END: client/src/services/gameCore.js £]]]
+
+[[[£ FILE: client/src/services/SoundExpert.js £]]]
+/**
+ * 🎛️ SOUND EXPERT V550 (SHARED SERVICE)
+ * Stocke les sons en mémoire pour une lecture instantanée (0ms latence).
+ * Accessible par le Prof (Studio) ET l'Élève (Jeu).
+ */
+
+const audioCache = new Map();
+
+const SoundExpert = {
+    // 1. DÉCODAGE AVEC CACHE
+    decodeAudio: async (url, audioCtx) => {
+        if (!audioCtx) return null;
+        
+        // A. SI DÉJÀ EN MÉMOIRE, ON RENVOIE DIRECTEMENT
+        if (audioCache.has(url)) {
+            return audioCache.get(url);
+        }
+
+        try {
+            // console.log("📥 [SoundExpert] Téléchargement:", url);
+            const response = await fetch(url, { mode: 'cors' });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            
+            const arrayBuffer = await response.arrayBuffer();
+            if (arrayBuffer.byteLength < 100) throw new Error("Fichier trop petit");
+
+            const tempBuffer = arrayBuffer.slice(0);
+            
+            return await new Promise((resolve, reject) => {
+                audioCtx.decodeAudioData(tempBuffer, 
+                    (decoded) => {
+                        // B. ON STOCKE EN MÉMOIRE POUR LA PROCHAINE FOIS
+                        audioCache.set(url, decoded);
+                        resolve(decoded);
+                    },
+                    (err) => {
+                        console.error("❌ Decode Error:", err);
+                        resolve(null);
+                    }
+                );
+            });
+            
+        } catch (e) {
+            console.error("❌ [SoundExpert] Erreur:", e.message);
+            return null;
+        }
+    },
+
+    // --- OUTILS DSP (Traitement du signal) ---
+    trim: (buffer, startPct, endPct) => {
+        if (!buffer || !buffer.getChannelData) return buffer;
+        const start = Math.floor(startPct * buffer.length);
+        const end = Math.floor(endPct * buffer.length);
+        const newLen = end - start;
+        if (newLen <= 0) return buffer;
+        const newCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const newBuffer = newCtx.createBuffer(buffer.numberOfChannels, newLen, buffer.sampleRate);
+        for (let i = 0; i < buffer.numberOfChannels; i++) {
+            const channel = buffer.getChannelData(i);
+            const newChannel = newBuffer.getChannelData(i);
+            for (let j = 0; j < newLen; j++) newChannel[j] = channel[start + j];
+        }
+        return newBuffer;
+    },
+    
+    // (Autres méthodes utilitaires conservées...)
+    bufferToWav: (buffer) => {
+        if (!buffer || !buffer.getChannelData) return null;
+        const numOfChan = buffer.numberOfChannels;
+        const length = buffer.length * numOfChan * 2 + 44;
+        const out = new ArrayBuffer(length);
+        const view = new DataView(out);
+        const channels = [];
+        let sample;
+        let offset = 0;
+        let pos = 0;
+        setUint32(0x46464952); setUint32(length - 8); setUint32(0x45564157); setUint32(0x20746d66); setUint32(16); setUint16(1); setUint16(numOfChan); setUint32(buffer.sampleRate); setUint32(buffer.sampleRate * 2 * numOfChan); setUint16(numOfChan * 2); setUint16(16); setUint32(0x61746164); setUint32(length - pos - 4);
+        for(let i = 0; i < buffer.numberOfChannels; i++) channels.push(buffer.getChannelData(i));
+        while(pos < buffer.length) {
+            for(let i = 0; i < numOfChan; i++) {
+                sample = Math.max(-1, Math.min(1, channels[i][pos])); 
+                sample = (0.5 + sample < 0 ? sample * 32768 : sample * 32767)|0; 
+                view.setInt16(44 + offset, sample, true); 
+                offset += 2;
+            }
+            pos++;
+        }
+        return new Blob([out], { type: "audio/wav" });
+        function setUint16(data) { view.setUint16(pos, data, true); pos += 2; }
+        function setUint32(data) { view.setUint32(pos, data, true); pos += 4; }
+    }
+};
+
+export default SoundExpert;
+
+[[[£ END: client/src/services/SoundExpert.js £]]]
+
+[[[£ FILE: client/src/features/prof/studio/StudioDashboard.jsx £]]]
+// @signatures: StudioDashboard
+import React, { useState, useRef, useEffect } from 'react';
+import './StudioDashboard.css';
+import { api } from '../../../services/api';
+import SoundExpert from '../../../services/SoundExpert'; // ✅ IMPORT RESTAURÉ
+
+import ManualEraser from './studioComp/ManualEraser';
+import GameEngine from './studioComp/GameEngine';
+import SaveLoadModal from './studioComp/SaveLoadModal';
+import SoundModal from './studioComp/SoundModal';
+import SoundEditorModal from './studioComp/SoundEditorModal';
+
+import StudioLeftPanel from './panels/StudioLeftPanel';
+import StudioCenterPanel from './panels/StudioCenterPanel';
+import StudioRightPanel from './panels/StudioRightPanel';
+
+function resolveUrl(url) {
+    if (!url) return "";
+    if (url.startsWith('/api/proxy') || url.startsWith('blob:')) return url;
+    const id = url.split('/').pop();
+    return `/api/proxy/${id}`;
+}
+
+const ZOMBIE_GAME_CODE = `// 🧟 ZOMBIE V9.8 (FIX BOSS & ROTATION)
+class MiniGame extends MiniGameBase {
+    constructor(canvas, assets, callbacks) {
+        super(canvas, assets, callbacks);
+        this.projectiles = [];
+        this.zombieX = 100;
+        this.zombieState = "WALKING"; 
+        this.heroState = "IDLE";
+        this.heroTimer = 0;
+        this.hasDealtDamage = false;
+        this.isStopped = false;
+        this.baseSpeed = 0.15;
+    }
+    // ... (Reste du code par défaut identique) ...
+    start() { 
+        this.isStopped = false;
+        if(this.HEROS) { 
+            this.HEROS.x = 15; 
+            this.HEROS.y = 70; 
+            this.HEROS.play("IDLE", true); 
+        } 
+        this.resetZombie();
+    }
+    resetZombie() {
+        this.zombieX = 100;
+        this.zombieState = "WALKING";
+        this.hasDealtDamage = false;
+        if(this.ZOMBIE) {
+            this.ZOMBIE.x = 100;
+            this.ZOMBIE.play("AVANCER", true);
+        }
+    }
+    onResult(isCorrect) {
+        if (this.heroState === "HIT") return;
+        if (isCorrect && this.HEROS) {
+            this.HEROS.play("TIRER", false);
+            this.heroState = "SHOOT";
+            this.heroTimer = 40;
+            this.projectiles.push({ x: this.HEROS.x + 5, y: this.HEROS.y - 5 });
+        }
+    }
+    update() {
+        if (this.isStopped) return;
+        if (this.isBossPhase) {
+            if (this.ZOMBIE) this.ZOMBIE.scale = this.ZOMBIE.baseScale * 1.6;
+        } else {
+            if (this.ZOMBIE) this.ZOMBIE.scale = this.ZOMBIE.baseScale;
+        }
+        if (this.heroState === "SHOOT" || this.heroState === "HIT") {
+            this.heroTimer--;
+            if (this.heroTimer <= 0) {
+                this.heroState = "IDLE";
+                if(this.HEROS) this.HEROS.play("IDLE", true);
+            }
+        }
+        if (this.zombieState === "WALKING") {
+            let speed = this.isBossPhase ? this.baseSpeed * 0.5 : this.baseSpeed;
+            this.zombieX -= speed;
+            if (this.zombieX < 20) {
+                this.zombieState = "ATTACKING";
+                this.hasDealtDamage = false;
+                if (this.ZOMBIE) this.ZOMBIE.play("TAPER", false);
+            } else if(this.ZOMBIE) this.ZOMBIE.x = this.zombieX;
+        } 
+        else if (this.zombieState === "ATTACKING") {
+            if (this.ZOMBIE && this.ZOMBIE.frameIdx >= 1 && !this.hasDealtDamage) {
+                this.hasDealtDamage = true;
+                if (this.HEROS) { this.HEROS.play("TOUCHE", false); this.heroState = "HIT"; this.heroTimer = 60; }
+                if (this.callbacks.onPlayerHit) this.callbacks.onPlayerHit();
+            }
+            if (this.ZOMBIE && this.ZOMBIE.isAnimFinished) this.resetZombie();
+        } 
+        else if (this.zombieState === "HIT") {
+            this.zombieX += 0.5; 
+            if(this.ZOMBIE) { this.ZOMBIE.x = this.zombieX; if (this.ZOMBIE.isAnimFinished) this.resetZombie(); }
+        }
+        for (let i = this.projectiles.length - 1; i >= 0; i--) { 
+            let p = this.projectiles[i]; 
+            p.x += 3;
+            if (this.zombieState === "WALKING" && p.x > this.zombieX - 5 && p.x < this.zombieX + 5) {
+                this.projectiles.splice(i, 1);
+                this.zombieState = "HIT";
+                if (this.ZOMBIE) this.ZOMBIE.play("TOUCHE", false); 
+            } 
+            else if (p.x > 110) { this.projectiles.splice(i, 1); }
+        }
+    }
+    draw() {
+        if (this.isStopped) return;
+        const ctx = this.ctx;
+        this.projectiles.forEach(p => { 
+            if (this.isBossPhase) {
+                ctx.save(); ctx.shadowBlur = 20; ctx.shadowColor = "#f59e0b"; ctx.font = "50px Arial";
+                ctx.textAlign = "center"; ctx.textBaseline = "middle";
+                ctx.fillText("🔥", (p.x/100)*this.canvas.width, (p.y/100)*this.canvas.height);
+                ctx.restore();
+            } else {
+                ctx.fillStyle = "#f97316"; ctx.beginPath(); 
+                ctx.arc((p.x/100)*this.canvas.width, (p.y/100)*this.canvas.height, 10, 0, Math.PI*2); 
+                ctx.fill(); 
+            }
+        });
+    }
+}
+`;
+
+const DEMO_PROJECT = { 
+    title: "Chasse Zombie", 
+    scenes: [{ 
+        name: "Scene 1", backdrops: [], currentBackdropIdx: 0, 
+        actors: [ 
+            { id: "actor-hero", name: "HEROS", initialX: 15, initialY: 70, scale: 1, actions: [{ name: "IDLE", speed: 100, frames: [], sounds: [] }, { name: "TIRER", speed: 100, frames: [], sounds: [] }, { name: "TOUCHE", speed: 100, frames: [], sounds: [] }] },
+            { id: "actor-zombie", name: "ZOMBIE", initialX: 90, initialY: 70, scale: 1, actions: [{ name: "AVANCER", speed: 150, frames: [], sounds: [] }, { name: "TOUCHE", speed: 100, frames: [], sounds: [] }, { name: "TAPER", speed: 100, frames: [], sounds: [] }] } 
+        ], 
+        globalSounds: [] 
+    }] 
+};
+
+export default function StudioDashboard({ user }) {
+    const [project, setProject] = useState(DEMO_PROJECT);
+    const [selectedActorId, setSelectedActorId] = useState("actor-hero");
+    const [selectedActionIdx, setSelectedActionIdx] = useState(0);
+    const [selectedGlobalSoundIdx, setSelectedGlobalSoundIdx] = useState(0);
+    const [leftTab, setLeftTab] = useState('actions');
+    const [code, setCode] = useState(ZOMBIE_GAME_CODE);
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [loading, setLoading] = useState(false);
+    const [cleaning, setCleaning] = useState(false);
+    const [statusText, setStatusText] = useState("");
+    const [testQuizData, setTestQuizData] = useState(null);
+    const [showTestQuizModal, setShowTestQuizModal] = useState(false);
+    const [frameToErase, setFrameToErase] = useState(null);
+    const [showSoundModal, setShowSoundModal] = useState(false);
+    const [soundToEdit, setSoundToEdit] = useState(null);
+    const [draggedFrameIdx, setDraggedFrameIdx] = useState(null);
+    const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
+    const [previewFrameIdx, setPreviewFrameIdx] = useState(0);
+    const [selectedFrameIdx, setSelectedFrameIdx] = useState(null);
+    const [isDraggingOnStage, setIsDraggingOnStage] = useState(false);
+    const [showSaveLoadModal, setShowSaveLoadModal] = useState(false);
+    const [modalMode, setModalMode] = useState('LOAD'); 
+
+    const frameUploadRef = useRef(null);
+    const actorUploadRef = useRef(null);
+    const backdropUploadRef = useRef(null); 
+    const stageRef = useRef(null);
+
+    const selectedSceneIdx = 0;
+    const currentScene = project?.scenes?.[selectedSceneIdx];
+    const selectedActor = currentScene?.actors?.find(a => a.id === selectedActorId) || currentScene?.actors?.[0];
+    const selectedAction = leftTab === 'actions' ? selectedActor?.actions?.[selectedActionIdx] : currentScene?.globalSounds?.[selectedGlobalSoundIdx];
+
+    useEffect(() => { loadProjects(); }, [user]);
+
+    async function loadProjects() {
+        const data = await api.get(`/studio/projects/${user.id || user._id}`);
+        if (data?.length > 0) {
+            const p = data[0];
+            if (p.scenes && p.scenes[0] && !p.scenes[0].globalSounds) p.scenes[0].globalSounds = [];
+            setProject(p); setCode(ZOMBIE_GAME_CODE); 
+            if (p.scenes?.[0]?.actors?.[0]) setSelectedActorId(p.scenes[0].actors[0].id);
+        }
+    }
+
+    async function saveProject(p = project) {
+        if (!p) return;
+        setLoading(true); setStatusText("Sync...");
+        try {
+            const saved = await api.post('/studio', { ...p, teacherId: user.id || user._id, generatedCode: code });
+            setProject(saved);
+        } catch(e) {} setLoading(false);
+    }
+
+    // ... (Reste des handlers identiques à l'original) ...
+    // Je réécris les imports pour être sûr qu'ils passent bien
+    const handleSetPreviewFrameIdx = (valOrFn) => { if (typeof valOrFn === 'function') setPreviewFrameIdx(prev => valOrFn(prev)); else setPreviewFrameIdx(valOrFn); };
+    const handleOpenSave = () => { setModalMode('SAVE'); setShowSaveLoadModal(true); };
+    const handleOpenLoad = () => { setModalMode('LOAD'); setShowSaveLoadModal(true); };
+    const handleCreateNew = () => { setProject(DEMO_PROJECT); setCode(ZOMBIE_GAME_CODE); setSelectedActorId("actor-hero"); setShowSaveLoadModal(false); };
+    const handleLoadProject = (p) => { if (p.scenes && p.scenes[0] && !p.scenes[0].globalSounds) p.scenes[0].globalSounds = []; setProject(p); setCode(ZOMBIE_GAME_CODE); if (p.scenes?.[0]?.actors?.[0]) setSelectedActorId(p.scenes[0].actors[0].id); else setSelectedActorId(null); setShowSaveLoadModal(false); };
+    const handleViewTestQuiz = async () => { try { const data = await api.get('/games/test-data'); if (data) { setTestQuizData(data); setShowTestQuizModal(true); } } catch (e) { console.error(e); } };
+    const handleUpdateActionSpeed = (delta) => { if (!selectedAction) return; const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); if (actor && actor.actions[selectedActionIdx]) actor.actions[selectedActionIdx].speed = Math.max(20, Math.min(2000, (actor.actions[selectedActionIdx].speed || 100) + delta)); } else { if (next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx]) next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].speed = Math.max(20, Math.min(2000, (next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].speed || 100) + delta)); } setProject(next); saveProject(next); };
+    const handleSelectActor = (actorId) => { setSelectedActorId(actorId); setSelectedFrameIdx(null); };
+    const handleStageMouseDown = (e, actorId) => { e.preventDefault(); e.stopPropagation(); handleSelectActor(actorId); setIsDraggingOnStage(true); };
+    const handleStageMouseMove = (e) => { if (!isDraggingOnStage || !selectedActorId || !stageRef.current) return; const rect = stageRef.current.getBoundingClientRect(); const next = { ...project }; const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); if (actor) { actor.initialX = Math.round(Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100))); actor.initialY = Math.round(Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100))); setProject(next); } };
+    const handleUpdateProp = (f, v) => { const next = { ...project }; const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); if (actor) { actor[f] = isNaN(v) ? v : v; setProject(next); saveProject(next); } };
+    const handleReorderFrame = (targetIdx) => { if (draggedFrameIdx === null || draggedFrameIdx === targetIdx || !selectedAction) return; const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); const frames = actor.actions[selectedActionIdx].frames; const [moved] = frames.splice(draggedFrameIdx, 1); frames.splice(targetIdx, 0, moved); } else { const frames = next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].frames; const [moved] = frames.splice(draggedFrameIdx, 1); frames.splice(targetIdx, 0, moved); } saveProject(next); setDraggedFrameIdx(null); };
+    const handleDeleteFrame = (fIdx) => { if (!selectedAction) return; const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); actor.actions[selectedActionIdx].frames.splice(fIdx, 1); } else { next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].frames.splice(fIdx, 1); } saveProject(next); };
+    const handleDeleteSound = (sIdx) => { if (!selectedAction) return; const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); actor.actions[selectedActionIdx].sounds.splice(sIdx, 1); } else { next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].sounds.splice(sIdx, 1); } saveProject(next); };
+    const handleEditSound = (sIdx) => { const target = selectedAction.sounds[sIdx]; if (target) setSoundToEdit({ idx: sIdx, ...target }); };
+    const handleSaveEditedSound = (newUrl, newName) => { if (!soundToEdit) return; const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); actor.actions[selectedActionIdx].sounds[soundToEdit.idx] = { ...actor.actions[selectedActionIdx].sounds[soundToEdit.idx], url: newUrl, name: newName }; } else { next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].sounds[soundToEdit.idx] = { ...next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].sounds[soundToEdit.idx], url: newUrl, name: newName }; } setProject(next); saveProject(next); setSoundToEdit(null); };
+    const handleDeleteActor = (e, id) => { e.stopPropagation(); if (!confirm("Supprimer ?")) return; const next = JSON.parse(JSON.stringify(project)); next.scenes[selectedSceneIdx].actors = next.scenes[selectedSceneIdx].actors.filter(a => a.id !== id); if (selectedActorId === id) setSelectedActorId(null); setProject(next); saveProject(next); };
+    const handleDeleteBackdrop = (e, idx) => { e.stopPropagation(); if (!confirm("Supprimer ?")) return; const next = JSON.parse(JSON.stringify(project)); next.scenes[selectedSceneIdx].backdrops.splice(idx, 1); next.scenes[selectedSceneIdx].currentBackdropIdx = 0; setProject(next); saveProject(next); };
+    const handleSaveSound = (url, name) => { if (!selectedAction) return; const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); const act = actor.actions[selectedActionIdx]; if (!act.sounds) act.sounds = []; act.sounds.push({ type: 'sound', url: url, name: name }); } else { const act = next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx]; if (!act.sounds) act.sounds = []; act.sounds.push({ type: 'sound', url: url, name: name }); } setProject(next); saveProject(next); };
+
+    return (
+        <div className="studio-wrapper" onMouseMove={handleStageMouseMove} onMouseUp={() => setIsDraggingOnStage(false)}>
+            {showSaveLoadModal && (<SaveLoadModal mode={modalMode} user={user} currentProject={project} onClose={() => setShowSaveLoadModal(false)} onLoad={handleLoadProject} onNew={handleCreateNew} onSave={(p) => { saveProject(p).then(() => setShowSaveLoadModal(false)); }} />)}
+            {frameToErase && (<ManualEraser imageUrl={frameToErase.url} resolveUrl={resolveUrl} onCancel={() => setFrameToErase(null)} onSave={(newUrl) => { const next = JSON.parse(JSON.stringify(project)); const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); actor.actions[selectedActionIdx].frames[frameToErase.idx].url = newUrl; setProject(next); saveProject(next); setFrameToErase(null); }} />)}
+            {showSoundModal && <SoundModal onSave={handleSaveSound} onClose={() => setShowSoundModal(false)} />}
+            {showTestQuizModal && (<div className="quiz-data-overlay" onClick={() => setShowTestQuizModal(false)}><div className="quiz-data-window" onClick={e => e.stopPropagation()}><div className="quiz-data-header"><span className="font-black text-slate-700 uppercase">Quiz Test</span><button onClick={() => setShowTestQuizModal(false)}>✕</button></div><div className="quiz-data-body custom-scrollbar"><pre>{JSON.stringify(testQuizData, null, 2)}</pre></div></div></div>)}
+            {soundToEdit && (<SoundEditorModal soundUrl={soundToEdit.url} soundName={soundToEdit.name} onSave={handleSaveEditedSound} onClose={() => setSoundToEdit(null)} resolveUrl={resolveUrl} />)}
+            {(loading || cleaning) && (<div className="studio-loading-overlay"><div className="sablier-icon">⏳</div><div className="loading-text">{statusText}</div></div>)}
+            {isPlaying && (<GameEngine code={code} project={project} activeSceneIdx={selectedSceneIdx} onStop={() => setIsPlaying(false)} resolveUrl={resolveUrl} />)}
+            <div style={{ position: 'absolute', visibility: 'hidden', pointerEvents: 'none' }}>
+                <input type="file" ref={frameUploadRef} multiple onChange={async (e) => { const files = Array.from(e.target.files); if (files.length === 0) return; setLoading(true); setStatusText("Upload..."); const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); const act = actor.actions[selectedActionIdx]; for (const file of files) { const fd = new FormData(); fd.append('file', file); const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json()); if (res.url) act.frames.push({ url: res.url, name: file.name, type: 'image' }); } } else { const act = next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx]; for (const file of files) { const fd = new FormData(); fd.append('file', file); const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json()); if (res.url) act.frames.push({ url: res.url, name: file.name, type: 'image' }); } } await saveProject(next); setLoading(false); }} />
+                <input type="file" ref={actorUploadRef} onChange={async (e) => { const file = e.target.files[0]; if(!file) return; setLoading(true); setStatusText("Nouveau..."); const fd = new FormData(); fd.append('file', file); const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json()); const next = JSON.parse(JSON.stringify(project)); const newActor = { id: `actor-${Date.now()}`, name: "P" + (next.scenes[selectedSceneIdx].actors.length + 1), actions: [{ name: "IDLE", speed: 100, frames: [{url: res.url, name: "C1", type:'image'}], sounds: [] }, { name: "TIRER", speed: 100, frames: [], sounds: [] }, { name: "TOUCHE", speed: 100, frames: [], sounds: [] }], initialX: 50, initialY: 50, scale: 1, direction: 0, rotationStyle: 'all' }; next.scenes[selectedSceneIdx].actors.push(newActor); setSelectedActorId(newActor.id); await saveProject(next); setLoading(false); }} />
+                <input type="file" ref={backdropUploadRef} onChange={async (e) => { const file = e.target.files[0]; if(!file) return; setLoading(true); setStatusText("Décor..."); const fd = new FormData(); fd.append('file', file); const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json()); const next = JSON.parse(JSON.stringify(project)); next.scenes[selectedSceneIdx].backdrops.push({ url: res.url, name: file.name }); next.scenes[selectedSceneIdx].currentBackdropIdx = next.scenes[selectedSceneIdx].backdrops.length - 1; await saveProject(next); setLoading(false); }} />
+            </div>
+            <div className="studio-grid-body">
+                <StudioLeftPanel 
+                    leftTab={leftTab} setLeftTab={setLeftTab} 
+                    selectedActor={selectedActor} selectedActionIdx={selectedActionIdx} setSelectedActionIdx={setSelectedActionIdx}
+                    selectedGlobalSoundIdx={selectedGlobalSoundIdx} setSelectedGlobalSoundIdx={setSelectedGlobalSoundIdx}
+                    setIsPreviewPlaying={setIsPreviewPlaying} saveProject={saveProject} project={project}
+                    selectedSceneIdx={selectedSceneIdx} selectedActorId={selectedActorId} selectedAction={selectedAction}
+                    handleUpdateActionSpeed={handleUpdateActionSpeed} isPreviewPlaying={isPreviewPlaying} 
+                    previewFrameIdx={previewFrameIdx} selectedFrameIdx={selectedFrameIdx} setSelectedFrameIdx={setSelectedFrameIdx}
+                    setDraggedFrameIdx={setDraggedFrameIdx} handleReorderFrame={handleReorderFrame}
+                    resolveUrl={resolveUrl} handleDeleteFrame={handleDeleteFrame} frameUploadRef={frameUploadRef}
+                    setFrameToErase={setFrameToErase} setShowSoundModal={setShowSoundModal} handleDeleteSound={handleDeleteSound} 
+                    handleEditSound={handleEditSound}
+                    setPreviewFrameIdx={handleSetPreviewFrameIdx} 
+                    currentScene={currentScene} 
+                />
+                <StudioCenterPanel 
+                    stageRef={stageRef} currentScene={currentScene} resolveUrl={resolveUrl}
+                    selectedActorId={selectedActorId} selectedAction={selectedAction}
+                    isPreviewPlaying={isPreviewPlaying} previewFrameIdx={previewFrameIdx}
+                    selectedFrameIdx={selectedFrameIdx} handleStageMouseDown={handleStageMouseDown}
+                    selectedActor={selectedActor} handleUpdateProp={handleUpdateProp}
+                    handleViewTestQuiz={handleViewTestQuiz} saveProject={saveProject}
+                    setIsPlaying={setIsPlaying} code={code} setCode={setCode}
+                />
+                <StudioRightPanel 
+                    project={project} setProject={setProject} handleOpenSave={handleOpenSave} handleOpenLoad={handleOpenLoad}
+                    actorUploadRef={actorUploadRef} currentScene={currentScene} selectedActorId={selectedActorId} 
+                    handleSelectActor={handleSelectActor} handleDeleteActor={handleDeleteActor} resolveUrl={resolveUrl}
+                    backdropUploadRef={backdropUploadRef} handleDeleteBackdrop={handleDeleteBackdrop}
+                    saveProject={saveProject} selectedSceneIdx={selectedSceneIdx}
+                />
+            </div>
+        </div>
+    );
+}
+
+[[[£ END: client/src/features/prof/studio/StudioDashboard.jsx £]]]
+
+[[[£ FILE: client/src/features/prof/studio/panels/StudioLeftPanel.jsx £]]]
+// @signatures: StudioLeftPanel, handleSelectAction, handleAddAction
+import React, { useState, useEffect, useRef } from 'react';
+import SoundExpert from '../../../../services/SoundExpert';
+
+export default function StudioLeftPanel({
+    leftTab, setLeftTab, selectedActor, selectedActionIdx, setSelectedActionIdx, 
+    selectedGlobalSoundIdx, setSelectedGlobalSoundIdx,
+    setIsPreviewPlaying, saveProject, project, selectedSceneIdx, selectedActorId,
+    selectedAction, handleUpdateActionSpeed, isPreviewPlaying,
+    previewFrameIdx, selectedFrameIdx, setSelectedFrameIdx, setDraggedFrameIdx,
+    handleReorderFrame, resolveUrl, handleDeleteFrame, frameUploadRef,
+    setFrameToErase, setShowSoundModal, handleDeleteSound, handleEditSound,
+    setPreviewFrameIdx
+}) {
+    const [selectedSoundIdx, setSelectedSoundIdx] = useState(null);
+    const audioCtxRef = useRef(null);
+    const activeSourcesRef = useRef([]);
+
+    useEffect(() => {
+        if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+        return () => stopAllSounds();
+    }, []);
+
+    const stopAllSounds = () => {
+        activeSourcesRef.current.forEach(source => { try { source.stop(); } catch(e) {} });
+        activeSourcesRef.current = [];
+    };
+
+    useEffect(() => {
+        let visualInterval = null;
+        let soundIndex = 0;
+        let isPlaying = isPreviewPlaying;
+
+        if (isPlaying && selectedAction) {
+            if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
+
+            if (selectedAction.frames?.length > 0) {
+                visualInterval = setInterval(() => {
+                    setPreviewFrameIdx(idx => (idx + 1) % selectedAction.frames.length);
+                }, selectedAction.speed || 100);
+            }
+
+            if (selectedAction.sounds?.length > 0) {
+                const play = async () => {
+                    if (!isPlaying) return;
+                    const snd = selectedAction.sounds[soundIndex];
+                    const buf = await SoundExpert.decodeAudio(resolveUrl(snd.url), audioCtxRef.current);
+                    if (buf) {
+                        const source = audioCtxRef.current.createBufferSource();
+                        source.buffer = buf; source.connect(audioCtxRef.current.destination);
+                        source.onended = () => { soundIndex = (soundIndex + 1) % selectedAction.sounds.length; play(); };
+                        source.start(0);
+                        activeSourcesRef.current.push(source);
+                    }
+                };
+                play();
+            }
+        } else {
+            stopAllSounds();
+            setPreviewFrameIdx(0);
+        }
+        return () => { isPlaying = false; clearInterval(visualInterval); stopAllSounds(); };
+    }, [isPreviewPlaying, selectedAction]);
+
+    const handleAddAction = () => {
+        const name = prompt("Nom de l'action :"); if(!name) return;
+        const next = JSON.parse(JSON.stringify(project));
+        const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
+        actor.actions.push({ name: name.toUpperCase(), frames: [], sounds: [], speed: 100 });
+        saveProject(next);
+    };
+
+    return (
+        <div className="studio-col-left">
+            <div className="studio-tab-header">
+                <button className={`studio-tab-btn ${leftTab === 'actions' ? 'active' : ''}`} onClick={() => setLeftTab('actions')}>⚡ Actions</button>
+                <button className={`studio-tab-btn ${leftTab === 'sounds' ? 'active' : ''}`} onClick={() => setLeftTab('sounds')}>🎵 Sons</button>
+            </div>
+
+            <div className="studio-action-list custom-scrollbar">
+                {selectedActor?.actions?.map((act, idx) => (
+                    <div key={idx} onClick={() => setSelectedActionIdx(idx)} className={`action-item ${selectedActionIdx === idx ? 'selected' : ''}`}>
+                        <span>{act.name}</span>
+                        <div className="flex gap-2 items-center">
+                            <span className="text-[9px] bg-slate-100 px-1 rounded text-slate-400">{act.frames?.length || 0}f</span>
+                            {act.sounds?.length > 0 && <span className="text-[9px] bg-indigo-100 text-indigo-600 px-1 rounded">🎵</span>}
+                        </div>
+                    </div>
+                ))}
+                <button className="v84-add-btn-minimal" onClick={handleAddAction}>+ Action</button>
+            </div>
+
+            {selectedAction && (
+                <div className="studio-sequencer-box">
+                    <div className="seq-header">
+                        <span className="seq-label">Séquenceur</span>
+                        <div className="seq-controls">
+                            <button className="btn-mini-ctrl" onClick={() => handleUpdateActionSpeed(-20)}>-</button>
+                            <span className="speed-indicator">{selectedAction.speed}ms</span>
+                            <button className="btn-mini-ctrl" onClick={() => handleUpdateActionSpeed(20)}>+</button>
+                            <button className="btn-preview-play" onClick={() => setIsPreviewPlaying(!isPreviewPlaying)}>{isPreviewPlaying ? '⏹️' : '▶️'}</button>
+                        </div>
+                    </div>
+                    <div className="seq-frames-grid">
+                        {selectedAction.frames.map((f, i) => (
+                            <div key={i} className={`seq-frame ${previewFrameIdx === i ? 'active' : ''}`} onClick={() => setSelectedFrameIdx(i)}>
+                                <img src={resolveUrl(f.url)} />
+                            </div>
+                        ))}
+                        <div className="seq-frame seq-frame-add" onClick={() => frameUploadRef.current.click()}>+</div>
+                    </div>
+                    <div className="eraser-bar">
+                        <button className="btn-tool-pen" onClick={() => setShowSoundModal(true)}>🔊 AJOUTER SON</button>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+[[[£ END: client/src/features/prof/studio/panels/StudioLeftPanel.jsx £]]]
+
+[[[£ FILE: client/src/features/prof/studio/panels/StudioCenterPanel.jsx £]]]
+// @signatures: StudioCenterPanel, handleUpdateMetaData, handleUploadTestSheet
+import React, { useState } from 'react';
+import { api } from '../../../../services/api';
+
+export default function StudioCenterPanel({
+    stageRef, currentScene, resolveUrl, selectedActorId, selectedAction,
+    isPreviewPlaying, previewFrameIdx, selectedFrameIdx, handleStageMouseDown,
+    selectedActor, handleUpdateProp, handleViewTestQuiz, saveProject, setIsPlaying,
+    code, setCode
+}) {
+    const [showQuizManager, setShowQuizManager] = useState(false);
+    const [testGame, setTestGame] = useState(null);
+    const [loading, setLoading] = useState(false);
+
+    // --- GESTION DES DONNÉES TEST ---
+    const openQuizManager = async () => {
+        setLoading(true);
+        const data = await api.get('/games/test-data');
+        if (data) setTestGame(data);
+        setShowQuizManager(true);
+        setLoading(false);
+    };
+
+    const handleUpdateMetaData = async (levelIdx, field, value) => {
+        const next = { ...testGame };
+        if (levelIdx === 'GLOBAL') {
+            next.globalIntro = { ...next.globalIntro, [field]: value };
+        } else {
+            next.levels[levelIdx].intro = { ...next.levels[levelIdx].intro, [field]: value };
+        }
+        setTestGame(next);
+        await api.post('/games', next); // On sauve directement dans le GameLevel de test
+    };
+
+    const handleUploadTestSheet = async (e, levelIdx) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const fd = new FormData();
+        fd.append('file', file);
+        const res = await fetch('/api/games/upload-asset', { method: 'POST', body: fd }).then(r => r.json());
+        if (res.url) handleUpdateMetaData(levelIdx, 'sheetUrl', res.url);
+    };
+
+    return (
+        <div className="studio-col-center custom-scrollbar relative">
+            {/* MODALE DE GESTION DU QUIZ TEST (REMPLACE LA MODALE POURRIE) */}
+            {showQuizManager && testGame && (
+                <div className="fixed inset-0 z-[10000] bg-slate-900/95 backdrop-blur-xl flex items-center justify-center p-10 animate-in zoom-in">
+                    <div className="bg-white w-full max-w-5xl h-full rounded-[40px] shadow-2xl flex flex-col overflow-hidden">
+                        <div className="p-8 border-b flex justify-between items-center bg-slate-50">
+                            <div>
+                                <h2 className="text-2xl font-black text-slate-800 uppercase">Configuration du Quiz Test</h2>
+                                <p className="text-xs font-bold text-indigo-500 uppercase tracking-widest">Contenu du jeu : {testGame.title}</p>
+                            </div>
+                            <button onClick={() => setShowQuizManager(false)} className="w-12 h-12 rounded-full bg-white border-2 flex items-center justify-center font-black hover:bg-red-50 hover:text-red-500 transition-colors">✕</button>
+                        </div>
+                        
+                        <div className="flex-1 overflow-y-auto p-8 space-y-10 custom-scrollbar">
+                            {testGame.levels.map((lvl, idx) => (
+                                <div key={idx} className="bg-slate-50 p-6 rounded-3xl border-2 border-slate-100">
+                                    <h3 className="text-lg font-black text-slate-700 mb-4 uppercase">📖 NIVEAU {idx + 1} : {lvl.name}</h3>
+                                    <div className="grid grid-cols-2 gap-8">
+                                        {/* GESTION FICHE */}
+                                        <div className="space-y-3">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase">Fiche d'étude (Image)</label>
+                                            <div className="h-40 bg-white rounded-2xl border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden relative group">
+                                                {lvl.intro?.sheetUrl ? (
+                                                    <img src={resolveUrl(lvl.intro.sheetUrl)} className="w-full h-full object-contain" />
+                                                ) : <span className="text-slate-300 font-bold uppercase text-[10px]">Aucune Fiche</span>}
+                                                <div className="absolute inset-0 bg-slate-900/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                    <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => handleUploadTestSheet(e, idx)} />
+                                                    <span className="text-white font-black text-xs uppercase">Remplacer 📤</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {/* GESTION VIDÉO */}
+                                        <div className="space-y-3">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase">Lien Vidéo (YouTube)</label>
+                                            <div className="flex flex-col gap-3">
+                                                <input 
+                                                    className="w-full p-4 rounded-xl border-2 border-slate-100 font-bold text-sm outline-none focus:border-indigo-500" 
+                                                    placeholder="Collez l'URL YouTube ici..." 
+                                                    value={lvl.intro?.videoUrl || ""}
+                                                    onChange={(e) => handleUpdateMetaData(idx, 'videoUrl', e.target.value)}
+                                                />
+                                                {lvl.intro?.videoUrl && (
+                                                    <div className="aspect-video rounded-xl bg-black overflow-hidden border-2 border-slate-200">
+                                                        <iframe className="w-full h-full" src={lvl.intro.videoUrl.replace("watch?v=", "embed/")} frameBorder="0"></iframe>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="mt-6 border-t pt-4">
+                                        <span className="text-[9px] font-black text-slate-300 uppercase">Questions dans ce niveau : {lvl.questions?.length || 0}</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                        
+                        <div className="p-6 bg-slate-50 border-t flex justify-center">
+                            <button onClick={() => setShowQuizManager(false)} className="px-12 py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase shadow-xl hover:scale-105 transition-all">TERMINER LA CONFIGURATION</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <div ref={stageRef} className="stage-wrapper" style={{ backgroundImage: currentScene?.backdrops?.[currentScene.currentBackdropIdx || 0]?.url ? `url(${resolveUrl(currentScene.backdrops[currentScene.currentBackdropIdx].url)})` : 'none' }}>
+                {currentScene?.actors?.map((a) => { 
+                    const isSelected = selectedActorId === a.id; 
+                    let action = isSelected ? selectedAction : (a.actions?.find(act => act.name.toUpperCase() === "IDLE") || a.actions?.[0]); 
+                    let frameIdx = isSelected ? (isPreviewPlaying ? previewFrameIdx : (selectedFrameIdx !== null ? selectedFrameIdx : 0)) : 0; 
+                    return (
+                        <div key={a.id} onMouseDown={e => handleStageMouseDown(e, a.id)} className={`actor-sprite ${isSelected ? 'selected' : ''}`} style={{ left: `${a.initialX}%`, top: `${a.initialY}%`, width: `${150 * (a.scale || 1)}px`, height: `${150 * (a.scale || 1)}px`, transform: `translate(-50%, -50%) rotate(${a.direction || 0}deg)`, zIndex: isSelected ? 100 : 10 }}>
+                            {action?.frames?.[frameIdx]?.url && <img src={resolveUrl(action.frames[frameIdx].url)} />}
+                        </div>
+                    ); 
+                })}
+            </div>
+
+            <div className="props-bar">
+                <div className="prop-item">
+                    <span className="prop-label">Nom</span>
+                    <input className="prop-input" value={selectedActor?.name || ""} onChange={e => handleUpdateProp('name', e.target.value)} />
+                </div>
+                <div className="prop-item">
+                    <span className="prop-label">Taille (%)</span>
+                    <input type="number" className="prop-input" value={Math.round((selectedActor?.scale || 1) * 100)} onChange={e => handleUpdateProp('scale', parseFloat(e.target.value)/100)} />
+                </div>
+                {/* BOUTON MODIFIÉ ICI */}
+                <button onClick={openQuizManager} className={`btn-view-quiz ${loading ? 'animate-pulse opacity-50' : ''}`}>
+                    {loading ? '...' : '🎓 CONFIG QUIZ TEST'}
+                </button>
+                <button onClick={() => { saveProject(); setIsPlaying(true); }} className="ml-auto bg-indigo-600 text-white px-6 py-2 rounded-xl font-black text-[10px] shadow-lg">▶ TESTER</button>
+            </div>
+
+            <div className="code-editor-box">
+                <textarea value={code} onChange={e => setCode(e.target.value)} spellCheck="false" />
+            </div>
+        </div>
+    );
+}
+
+[[[£ END: client/src/features/prof/studio/panels/StudioCenterPanel.jsx £]]]
+
+[[[£ FILE: client/src/features/prof/studio/studioComp/GameEngine.jsx £]]]
+// @signatures: GameEngine
+import React from 'react';
+import GamePlayer from '../../../eleve/games/GamePlayer';
+
+/**
+ * 🎓 TESTEUR STUDIO UNIFIÉ V140
+ * RÔLE : Ce fichier n'est plus un clône, mais une simple porte vers GamePlayer.jsx.
+ * Toute modification dans GamePlayer sera répercutée ici automatiquement.
+ */
+export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
+    // On passe le flag isStudioTest pour désactiver l'intro et forcer le démarrage direct
+    return (
+        <GamePlayer 
+            gameData={{ ...project, generatedCode: code }} 
+            onExit={onStop} 
+            isStudioTest={true} 
+            user={{ firstName: "Prof", lastName: "Test" }}
+        />
+    );
+}
+
+[[[£ END: client/src/features/prof/studio/studioComp/GameEngine.jsx £]]]
+
+[[[£ FILE: client/src/features/prof/games/GameStudio.jsx £]]]
+// @signatures: GameStudio, handleAddLevel, handleAddQuestion, handleDeleteLevel, handleDeleteQuestion, handleGenerateAI, handleInput, handleSave, updateQuestion
+import React, { useState, useEffect, useRef } from 'react';
+import './GameStudio.css';
+import { api } from '../../../services/api';
+import StudioDistributionSidebar from '../components/StudioDistributionSidebar';
+
+const DEFAULT_QUIZ_DATA = { 
+    title: '', chapterId: '', teacherId: null, 
+    targetClassrooms: [], assignedStudents: [], isAllClass: true, 
+    levels: [ { name: "Niveau 1", intro: { sheetUrl: "", videoUrl: "" }, questions: [{ q: 'Question ?', options: ['', '', '', ''], a: 0 }] } ]
+};
+
+export default function GameStudio({ initialData, chapters, allClasses, allStudents, globalClass, globalLevel, user, targetSection, onClose }) {
+    const [distribution, setDistribution] = useState({});
+    const [viewingClass, setViewingClass] = useState(globalClass || "");
+    const [studentSearch, setStudentSearch] = useState(""); 
+    const [loading, setLoading] = useState(false);
+    const [activeLevelIdx, setActiveLevelIdx] = useState(0);
+    const [activeQIdx, setActiveQIdx] = useState(0);
+    const [aiTopic, setAiTopic] = useState('');
+    const [aiGenerating, setAiGenerating] = useState(false);
+
+    const [formData, setFormData] = useState(() => {
+        let base = initialData ? JSON.parse(JSON.stringify(initialData)) : { ...DEFAULT_QUIZ_DATA };
+        base.teacherId = user.id || user._id;
+        return base;
+    });
+
+    const findBestDefaultChapter = (clsName) => {
+        const safeChapters = Array.isArray(chapters) ? chapters : [];
+        const cleanSection = (targetSection || "GÉNÉRAL").toUpperCase().trim();
+        const clsObj = (allClasses || []).find(c => c.name === clsName);
+        const matches = safeChapters.filter(c => {
+            if (c.isArchived) return false;
+            if ((c.section || "GÉNÉRAL").toUpperCase().trim() !== cleanSection) return false;
+            if (c.classroom === clsName) return true;
+            if (c.sharedLevel && clsObj && String(c.sharedLevel) === String(clsObj.level)) return true;
+            if (!c.classroom && !c.sharedLevel) return !c.hiddenIn || !c.hiddenIn.includes(clsName);
+            return false;
+        }).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+        return matches.length > 0 ? matches[0]._id : "";
+    };
+
+    useEffect(() => {
+        if (formData && initialData) {
+            const newDist = {};
+            const targets = formData.targetClassrooms && formData.targetClassrooms.length > 0 ? formData.targetClassrooms : [globalClass];
+            targets.forEach(clsName => {
+                const clsObj = (allClasses || []).find(c => c.name === clsName);
+                const ids = (allStudents || []).filter(s => {
+                    const isM = (s.currentClass||"").trim().toUpperCase() === clsName.toUpperCase();
+                    const isO = clsObj && (s.assignedGroups||[]).some(gId => String(gId) === String(clsObj._id));
+                    return (isM || isO) && (formData.assignedStudents||[]).includes(String(s._id));
+                }).map(s => String(s._id));
+                newDist[clsName] = { chapterId: formData.chapterId || findBestDefaultChapter(clsName), studentIds: ids };
+            });
+            setDistribution(newDist);
+        }
+    }, [initialData]);
+
+    const handleInput = (field, value) => setFormData(p => ({ ...p, [field]: value }));
+    const updateQuestion = (field, value, optionIndex = null) => { 
+        setFormData(p => { 
+            const next = [...p.levels];
+            const q = next[activeLevelIdx].questions[activeQIdx];
+            if (field === 'q' || field === 'a') q[field] = value;
+            else if (field === 'options') q.options[optionIndex] = value;
+            return { ...p, levels: next };
+        }); 
+    };
+
+    const handleAddQuestion = () => {
+        setFormData(p => {
+            const next = [...p.levels];
+            next[activeLevelIdx].questions.push({ q: 'Nouvelle Question', options: ['', '', '', ''], a: 0 });
+            return { ...p, levels: next };
+        });
+        setTimeout(() => setActiveQIdx(formData.levels[activeLevelIdx].questions.length - 1), 0);
+    };
+
+    const handleGenerateAI = async () => {
+        if (!aiTopic) return alert("Sujet requis !");
+        setAiGenerating(true);
+        try {
+            const res = await fetch('/api/games/generate-content', { 
+                method: 'POST', 
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({ topic: aiTopic, count: 5 }) 
+            });
+            const cleaned = await res.json();
+            if (Array.isArray(cleaned)) {
+                setFormData(p => {
+                    const next = [...p.levels];
+                    next[activeLevelIdx].questions = [...next[activeLevelIdx].questions, ...cleaned];
+                    return { ...p, levels: next };
+                });
+                setAiTopic("");
+            }
+        } catch(e) { alert("Erreur IA"); } finally { setAiGenerating(false); }
+    };
+
+    const handleSave = async () => {
+        const targets = Object.keys(distribution);
+        if (!formData.title || targets.length === 0) return alert("❌ Titre et Classe requis !");
+        setLoading(true);
+        try {
+            const originalId = initialData?._id;
+            for (const clsName of targets) {
+                const cfg = distribution[clsName];
+                const payload = { 
+                    ...formData, 
+                    chapterId: cfg.chapterId || findBestDefaultChapter(clsName), 
+                    targetClassrooms: [clsName], 
+                    assignedStudents: cfg.studentIds, 
+                    isAllClass: cfg.studentIds.length === 0, 
+                    teacherId: user.id || user._id,
+                    subject: targetSection || "GÉNÉRAL"
+                };
+                if (originalId && clsName === initialData?.targetClassrooms?.[0]) payload._id = originalId;
+                else delete payload._id;
+                await api.post('/games', payload);
+            }
+            onClose();
+        } catch(e) { alert("Erreur sauvegarde."); } setLoading(false);
+    };
+
+    const currentLevel = formData.levels[activeLevelIdx];
+    const currentQ = currentLevel?.questions[activeQIdx];
+
+    return (
+        <div className="v84-game-container">
+            <div className="v84-game-header">
+                <div className="flex items-center gap-4 flex-1">
+                    <span className="v84-game-icon">🎮</span>
+                    <input className="v84-game-title-input" value={formData.title} onChange={e => handleInput('title', e.target.value)} placeholder="TITRE DU QUIZ..." />
+                </div>
+                <button onClick={onClose} className="v84-close-btn">✕</button>
+            </div>
+            <div className="v84-game-body">
+                <div className="v84-q-list-sidebar custom-scrollbar">
+                    {formData.levels.map((lvl, lIdx) => (
+                        <div key={lIdx} className="v84-level-block">
+                            <div className={`v84-level-header ${activeLevelIdx === lIdx ? 'active-lvl' : ''}`} onClick={() => setActiveLevelIdx(lIdx)}>
+                                {lvl.name} ({lvl.questions.length})
+                            </div>
+                            {activeLevelIdx === lIdx && (
+                                <div className="v84-q-list">
+                                    {lvl.questions.map((q, qIdx) => (
+                                        <div key={qIdx} className={`v84-q-item ${activeQIdx === qIdx ? 'active' : ''}`} onClick={() => setActiveQIdx(qIdx)}>
+                                            <div className="v84-q-preview">Q{qIdx + 1}: {q.q}</div>
+                                        </div>
+                                    ))}
+                                    <button className="v84-add-q-btn" onClick={handleAddQuestion}>+ Question</button>
+                                </div>
+                            )}
+                        </div>
+                    ))}
+                    <button className="v84-add-level-btn" onClick={() => setFormData({...formData, levels: [...formData.levels, { name: `Niveau ${formData.levels.length + 1}`, questions: [], intro: {} }]})}>+ Nouveau Niveau</button>
+                </div>
+                
+                <div className="v84-game-editor">
+                    <div className="v84-ai-widget">
+                        <div className="v84-ai-row">
+                            <span className="text-2xl">🤖</span>
+                            <input className="v84-ai-input" placeholder="Sujet du quiz..." value={aiTopic} onChange={e => setAiTopic(e.target.value)} />
+                            <button className="v84-gen-btn" onClick={handleGenerateAI} disabled={aiGenerating}>{aiGenerating ? '...' : 'GÉNÉRER'}</button>
+                        </div>
+                    </div>
+
+                    {currentQ && (
+                        <div className="v84-q-card animate-in fade-in">
+                            <textarea className="v84-q-input" value={currentQ.q} onChange={e => updateQuestion('q', e.target.value)} placeholder="Tapez la question..." />
+                            <div className="v84-answers-grid">
+                                {currentQ.options.map((opt, i) => (
+                                    <div key={i} className={`v84-ans-row ${currentQ.a === i ? 'correct' : ''}`}>
+                                        <div className="v84-correct-radio" onClick={() => updateQuestion('a', i)}>{currentQ.a === i ? '✓' : ''}</div>
+                                        <input className="v84-ans-input" value={opt} onChange={e => updateQuestion('options', e.target.value, i)} />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                <StudioDistributionSidebar 
+                    user={user} allClasses={allClasses} allStudents={allStudents} chapters={chapters} distribution={distribution} setDistribution={setDistribution} viewingClass={viewingClass} setViewingClass={setViewingClass} studentSearch={studentSearch} setStudentSearch={setStudentSearch} targetLevel={globalLevel} loading={loading} onSave={handleSave} saveLabel="PUBLIER LE QUIZ 🚀"
+                    targetSection={targetSection}
+                />
+            </div>
+        </div>
+    );
+}
+
+[[[£ END: client/src/features/prof/games/GameStudio.jsx £]]]
+
+[[[£ FILE: server/eleve/games/games.eleve.js £]]]
+// @signatures: EleveGames, studioMirror, score
+const express = require('express');
+const router = express.Router();
+const mongoose = require('mongoose');
+
+/**
+ * 🎮 ROUTE MIROIR UNIFIÉE V108
+ * Fix : Protection contre les crashs 500 (Check existence modèles)
+ */
+router.get('/studio-mirror', async (req, res) => {
+    try {
+        const StudioProject = mongoose.model('StudioProject');
+        const GameLevel = mongoose.model('GameLevel');
+
+        // On récupère en parallèle pour gagner du temps
+        const [project, testQuiz] = await Promise.all([
+            StudioProject.findOne({}).sort({ updatedAt: -1 }).lean(),
+            GameLevel.findOne({ isTestGame: true }).sort({ updatedAt: -1 }).lean()
+        ]);
+        
+        if (!project) return res.status(404).json({ error: "Aucun projet studio trouvé" });
+
+        // FUSION TOTALE
+        const fullMirror = {
+            ...project,
+            levels: testQuiz?.levels || [],
+            globalIntro: testQuiz?.globalIntro || { sheetUrl: "", videoUrl: "" }
+        };
+
+        res.json(fullMirror);
+    } catch (e) {
+        console.error("❌ Erreur Mirror Backend:", e.message);
+        res.status(500).json({ error: "Crash serveur miroir" });
+    }
+});
+
+router.post('/score', async (req, res) => {
+    try {
+        const { studentId, gameId, score, levelReached } = req.body;
+        const GameProgress = mongoose.model('GameProgress');
+        await GameProgress.findOneAndUpdate(
+            { studentId, gameId }, 
+            { lastScore: score, levelReached: levelReached || 1, updatedAt: new Date() }, 
+            { upsert: true }
+        );
+        res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+module.exports = router;
+
+[[[£ END: server/eleve/games/games.eleve.js £]]]
+
+[[[£ FILE: client/src/features/eleve/games/GamePlayer.jsx £]]]
+// @signatures: GamePlayer, handleAnswer, handleBarCheat, handleHeartClick, initGame, syncTestData
+import React, { useState, useEffect, useRef } from 'react';
+import './GamePlayer.css';
+import { createGameBase } from '../../../services/gameCore';
+import SoundExpert from '../../../services/SoundExpert';
+
+/**
+ * 🕹️ MOTEUR UNIFIÉ V155 (SCÈNE + QUIZ + SONS)
+ * SOURCE UNIQUE DE VÉRITÉ : Studio Prof & Player Élève.
+ */
+export default function GamePlayer({ user, gameData, onExit, isStudioTest = false }) {
+    const canvasRef = useRef(null);
+    const [engineStarted, setEngineStarted] = useState(false);
+    const [showLevelIntro, setShowLevelIntro] = useState(!isStudioTest); 
+    const [loading, setLoading] = useState(true);
+    
+    // Refs Engine
+    const audioCtxRef = useRef(null);
+    const audioBuffersRef = useRef(new Map());
+    const imageAssetsRef = useRef(new Map());
+    const gameInstanceRef = useRef(null);
+    const frameIdRef = useRef(null);
+    const isRunningRef = useRef(true);
+    const projectRef = useRef(gameData);
+    const keysPressed = useRef({});
+
+    // États du Quiz
+    const [levels, setLevels] = useState(gameData?.levels || []);
+    const [currentLevelIdx, setCurrentLevelIdx] = useState(0);
+    const [lives, setLives] = useState(4);
+    const [score, setScore] = useState(0);
+    const [currentQIdx, setCurrentQIdx] = useState(0);
+    const [feedback, setFeedback] = useState(null);
+    const [questionStates, setQuestionStates] = useState([]);
+    const [isMuted, setIsMuted] = useState(false);
+
+    const currentLevelData = levels[currentLevelIdx] || {};
+    const questions = currentLevelData.questions || [];
+
+    function resolveUrl(url) {
+        if (!url) return "";
+        if (url.startsWith('/api/proxy')) return url;
+        const id = url.split('/').pop();
+        return `/api/proxy/${id}`;
+    }
+
+    const playParallelSoundImpl = (url) => {
+        if (!isRunningRef.current || !audioCtxRef.current || isMuted) return;
+        const resolved = resolveUrl(url);
+        const buffer = audioBuffersRef.current.get(resolved);
+        if (buffer) {
+            if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
+            try {
+                const source = audioCtxRef.current.createBufferSource();
+                source.buffer = buffer;
+                source.connect(audioCtxRef.current.destination);
+                source.start(0);
+            } catch(e) {}
+        }
+    };
+
+    const triggerGlobalEvent = (eventName) => {
+        const scene = projectRef.current?.scenes?.[0];
+        if (!scene || !scene.globalSounds) return;
+        const event = scene.globalSounds.find(g => g.name.toUpperCase().trim() === eventName.toUpperCase().trim());
+        if (event && event.sounds) {
+            event.sounds.forEach(snd => playParallelSoundImpl(snd.url));
+        }
+    };
+
+    useEffect(() => {
+        const hDown = (e) => { keysPressed.current[e.code] = true; };
+        const hUp = (e) => { keysPressed.current[e.code] = false; };
+        window.addEventListener('keydown', hDown);
+        window.addEventListener('keyup', hUp);
+        return () => { window.removeEventListener('keydown', hDown); window.removeEventListener('keyup', hUp); };
+    }, []);
+
+    // 1. CHARGEMENT ET SYNC TEST
+    useEffect(() => {
+        isRunningRef.current = true;
+        const load = async () => {
+            try {
+                if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+                
+                let finalGameData = { ...gameData };
+
+                // ⚡ LE PONT : Si on est en Studio et qu'on n'a pas de questions, on les récupère
+                if (isStudioTest && (!finalGameData.levels || finalGameData.levels.length === 0)) {
+                    const res = await fetch('/api/games/test-data');
+                    const testQuiz = await res.json();
+                    if (testQuiz) {
+                        finalGameData.levels = testQuiz.levels;
+                        setLevels(testQuiz.levels);
+                    }
+                } else {
+                    setLevels(finalGameData.levels || []);
+                }
+
+                projectRef.current = finalGameData;
+                const scene = finalGameData.scenes?.[0] || { actors: [], backdrops: [] };
+                
+                // IMAGES
+                const imgUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url)))].filter(Boolean);
+                await Promise.all(imgUrls.map(url => new Promise(resolve => {
+                    const img = new Image(); img.crossOrigin = "anonymous";
+                    const rUrl = resolveUrl(url);
+                    img.onload = () => { imageAssetsRef.current.set(rUrl, img); resolve(); };
+                    img.onerror = resolve; img.src = rUrl;
+                })));
+
+                // SONS
+                const sndUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url))))].filter(Boolean);
+                await Promise.all(sndUrls.map(async url => {
+                    const rUrl = resolveUrl(url);
+                    const buf = await SoundExpert.decodeAudio(rUrl, audioCtxRef.current);
+                    if (buf) audioBuffersRef.current.set(rUrl, buf);
+                }));
+
+                const qCount = finalGameData.levels?.[0]?.questions?.length || 0;
+                setQuestionStates(new Array(qCount).fill(0));
+                
+                setLoading(false);
+                if (isStudioTest) setEngineStarted(true);
+            } catch (e) { console.error("Unified Engine Load Error", e); }
+        };
+        load();
+        return () => { isRunningRef.current = false; if(frameIdRef.current) cancelAnimationFrame(frameIdRef.current); };
+    }, [gameData]);
+
+    // 2. MOTEUR GRAPHIQUE
+    useEffect(() => {
+        if (!engineStarted || !canvasRef.current || loading) return;
+
+        const MiniGameBase = createGameBase({
+            audioBuffers: audioBuffersRef.current, audioCtx: audioCtxRef.current,
+            projectRef, sceneIdx: 0, imageAssets: imageAssetsRef.current,
+            resolveUrl, canvas: canvasRef.current, ctx: canvasRef.current.getContext('2d'),
+            playParallelSound: playParallelSoundImpl,
+            callbacks: { 
+                onPlayerHit: () => {
+                    if (keysPressed.current['KeyF']) return;
+                    setLives(l => {
+                        const next = Math.max(0, l - 1);
+                        if (next === 0) triggerGameOver();
+                        return next;
+                    });
+                }
+            }
+        });
+
+        try {
+            const factory = new Function('MiniGameBase', `${projectRef.current.generatedCode}\nreturn MiniGame;`);
+            const GameClass = factory(MiniGameBase);
+            const instance = new GameClass(canvasRef.current, {}, { 
+                onPlayerHit: () => {
+                    if (keysPressed.current['KeyF']) return;
+                    setLives(l => Math.max(0, l - 1));
+                }
+            });
+            gameInstanceRef.current = instance;
+            if (instance.start) instance.start();
+
+            const tick = () => {
+                if (!isRunningRef.current || !gameInstanceRef.current) return;
+                try {
+                    gameInstanceRef.current.isBossPhase = (questionStates[currentQIdx] >= 2);
+                    gameInstanceRef.current.keys = keysPressed.current;
+                    if (instance.update) instance.update();
+                    if (instance._render) instance._render();
+                    if (instance.draw) instance.draw();
+                } catch (e) { }
+                frameIdRef.current = requestAnimationFrame(tick);
+            };
+            tick();
+        } catch (err) { console.error("Engine Crash", err); }
+        return () => { isRunningRef.current = false; if (frameIdRef.current) cancelAnimationFrame(frameIdRef.current); };
+    }, [engineStarted, loading, currentQIdx]);
+
+    const handleAnswer = (idx) => {
+        if (!questions[currentQIdx]) return;
+        const isCorrect = questions[currentQIdx].a === idx;
+        setFeedback(isCorrect ? 'GOOD' : 'BAD');
+        if (gameInstanceRef.current?.onResult) gameInstanceRef.current.onResult(isCorrect);
+
+        const newStates = [...questionStates];
+        if (isCorrect) newStates[currentQIdx] = Math.min(3, newStates[currentQIdx] + 1);
+        else {
+            newStates[currentQIdx] = Math.max(0, newStates[currentQIdx] - 1);
+            setLives(l => keysPressed.current['KeyF'] ? l : Math.max(0, l - 1));
+        }
+        setQuestionStates(newStates);
+
+        setTimeout(() => {
+            setFeedback(null);
+            if (isCorrect && newStates[currentQIdx] === 3) {
+                const nextQ = newStates.findIndex(s => s < 3);
+                if (nextQ !== -1) setCurrentQIdx(nextQ);
+                else triggerWin();
+            }
+        }, 1000);
+    };
+
+    const handleBarCheat = (idx) => {
+        if (!keysPressed.current['KeyF']) return;
+        const newStates = [...questionStates];
+        newStates[idx] = 3;
+        setQuestionStates(newStates);
+    };
+
+    const triggerWin = () => { triggerGlobalEvent("LEVEL_WIN"); alert("NIVEAU RÉUSSI !"); onExit(); };
+    const triggerGameOver = () => { triggerGlobalEvent("DÉFAITE"); alert("GAME OVER"); onExit(); };
+
+    if (loading) return <div className="game-player-fullscreen bg-slate-900 flex items-center justify-center text-white font-black">CHARGEMENT DES DONNÉES...</div>;
+
+    return (
+        <div className="game-player-fullscreen bg-slate-950 flex flex-col items-center justify-center">
+            {showLevelIntro ? (
+                <div className="flex flex-col items-center animate-in zoom-in max-w-4xl px-6">
+                    <h1 className="text-4xl font-black text-white uppercase mb-8 text-center">{projectRef.current.title}</h1>
+                    <button onClick={() => { setShowLevelIntro(false); setEngineStarted(true); triggerGlobalEvent("UPLEVEL"); }} className="px-16 py-6 bg-white text-indigo-600 font-black text-3xl rounded-full shadow-2xl hover:scale-110 transition-all uppercase">
+                        🚀 GO !
+                    </button>
+                </div>
+            ) : (
+                <>
+                    <div className="absolute top-6 w-full flex justify-between items-start px-10 pointer-events-none z-30">
+                        <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl flex gap-1 cursor-pointer pointer-events-auto" onClick={() => keysPressed.current['KeyF'] && setLives(4)}>
+                            {"❤️".repeat(lives)}{"🖤".repeat(Math.max(0, 4 - lives))}
+                        </div>
+                        <div className="flex-1 flex flex-col items-center px-4 gap-2">
+                            <div className="bg-indigo-600 text-white px-4 py-1 rounded-full text-xs font-black uppercase border border-indigo-400">
+                                {projectRef.current.title}
+                            </div>
+                            {questions[currentQIdx] && (
+                                <div className="bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 border-slate-600 shadow-2xl text-xl pointer-events-auto">
+                                    {feedback === 'GOOD' ? "✅ BIEN JOUÉ !" : feedback === 'BAD' ? "❌ MAUVAISE RÉPONSE" : questions[currentQIdx].q}
+                                </div>
+                            )}
+                        </div>
+                        <div className="flex gap-2 items-center pointer-events-auto">
+                            {questionStates.map((mastery, idx) => (
+                                <div key={idx} onClick={() => handleBarCheat(idx)} className={`w-4 h-12 rounded-md border border-slate-600 relative overflow-hidden cursor-pointer ${currentQIdx === idx ? 'ring-2 ring-indigo-400' : 'opacity-60'}`}>
+                                    <div className={`absolute bottom-0 left-0 right-0 transition-all duration-500 ${mastery === 3 ? 'bg-green-500' : 'bg-yellow-500'}`} style={{ height: `${(mastery / 3) * 100}%` }} />
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                    
+                    <canvas ref={canvasRef} width={800} height={450} className="rounded-xl shadow-2xl bg-black border-4 border-slate-800" />
+
+                    {!loading && questions[currentQIdx] && (
+                        <div className="absolute bottom-10 w-full flex justify-center px-10 pointer-events-auto z-30">
+                            <div className="grid grid-cols-4 gap-4 w-full max-w-5xl">
+                                {questions[currentQIdx].options.map((o, i) => (
+                                    <button key={i} onClick={() => handleAnswer(i)} className="bg-indigo-600 text-white py-6 rounded-2xl font-black uppercase text-lg shadow-xl hover:bg-indigo-50 hover:scale-105 border-b-8 border-indigo-800 active:border-b-0 active:translate-y-2">
+                                        {o}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </>
+            )}
+        </div>
+    );
+}
+
+[[[£ END: client/src/features/eleve/games/GamePlayer.jsx £]]]
+
+[[[£ FILE: client/src/features/eleve/games/GamesGrid.jsx £]]]
+// @signatures: GamesGrid, loadData
+import React, { useState, useEffect } from 'react';
+import GamePlayer from './GamePlayer';
+import './GamesGrid.css';
+
+export default function GamesGrid({ user }) {
+  const [studioGame, setStudioGame] = useState(null);
+  const [selectedGame, setSelectedGame] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const loadData = async () => {
+    setLoading(true);
+    try {
+        // FIX MIROIR : On utilise la nouvelle route "Auto-détection"
+        const res = await fetch(`/api/eleve/games/studio-mirror`);
+        const project = await res.json();
+        
+        if (project) {
+            setStudioGame({
+                ...project,
+                title: "🎮 " + (project.title || "PROJET STUDIO"),
+                actType: 'game',
+                status: 'todo'
+            });
+        }
+    } catch(e) { console.error("GamesGrid Error:", e); }
+    setLoading(false);
+  };
+
+  useEffect(() => { loadData(); }, [user]);
+
+  if (selectedGame) {
+      return (
+          <GamePlayer 
+            user={user} 
+            gameData={selectedGame} 
+            onExit={() => { setSelectedGame(null); loadData(); }} 
+          />
+      );
+  }
+
+  return (
+    <div className="flex flex-col gap-6 animate-in">
+        <div className="flex justify-between items-center px-4">
+            <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight">Zone de Test (Miroir)</h2>
+            <button onClick={loadData} className="text-[10px] font-black text-indigo-500 bg-white px-4 py-2 rounded-xl border-2 border-indigo-100 shadow-sm hover:bg-indigo-50 transition-all">
+                {loading ? 'SYNC EN COURS...' : '🔄 SYNCHRONISER STUDIO'}
+            </button>
+        </div>
+        
+        {studioGame ? (
+            <div 
+                onClick={() => setSelectedGame(studioGame)}
+                className="mx-4 p-8 bg-gradient-to-br from-indigo-600 to-purple-700 rounded-[40px] shadow-2xl cursor-pointer hover:scale-[1.02] transition-all border-4 border-white/20 group"
+            >
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-6">
+                        <div className="w-20 h-20 bg-white/20 rounded-3xl flex items-center justify-center text-5xl shadow-inner group-hover:scale-110 transition-transform">
+                            🧟
+                        </div>
+                        <div>
+                            <div className="text-2xl font-black text-white uppercase tracking-tight">{studioGame.title}</div>
+                            <div className="text-xs font-bold text-indigo-200 uppercase tracking-widest mt-1">Moteur V8.3 • Branchement Direct</div>
+                        </div>
+                    </div>
+                    <div className="w-12 h-12 bg-white text-indigo-600 rounded-full flex items-center justify-center shadow-lg">
+                        <span className="text-2xl font-black">▶</span>
+                    </div>
+                </div>
+            </div>
+        ) : (
+            <div className="flex flex-col items-center justify-center p-20 opacity-30 text-center">
+                <span className="text-6xl mb-4">📡</span>
+                <p className="font-black uppercase text-sm tracking-widest">En attente d'un enregistrement dans le Studio...</p>
+                <p className="text-[10px] font-bold mt-2">Cliquez sur Sauver dans le Studio Prof pour envoyer ici.</p>
+            </div>
+        )}
+    </div>
+  );
+}
+
+[[[£ END: client/src/features/eleve/games/GamesGrid.jsx £]]]
