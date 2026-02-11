@@ -21,8 +21,8 @@ function resolveUrl(url) {
     return `/api/proxy/${id}`;
 }
 
-// 🧟 ZOMBIE V9.3 : CHAIN REACTION (Z-Attack -> H-Hit -> Life Loss)
-const ZOMBIE_GAME_CODE = `// 🧟 ZOMBIE V9.3 (FIX CHAIN REACTION)
+// 🧟 ZOMBIE V9.8 : BOSS FIX & ROTATION FULL
+const ZOMBIE_GAME_CODE = `// 🧟 ZOMBIE V9.8 (FIX BOSS & ROTATION)
 class MiniGame extends MiniGameBase {
     constructor(canvas, assets, callbacks) {
         super(canvas, assets, callbacks);
@@ -31,8 +31,8 @@ class MiniGame extends MiniGameBase {
         // --- ÉTATS ---
         this.zombieX = 100;
         this.zombieState = "WALKING"; 
-        this.isColliding = false;      // Verrou de collision
-        this.hasDealtDamage = false;   // Verrou de dégâts par attaque
+        this.isColliding = false;
+        this.hasDealtDamage = false;
         
         this.heroState = "IDLE";
         this.heroTimer = 0;
@@ -64,7 +64,6 @@ class MiniGame extends MiniGameBase {
 
     onResult(isCorrect) {
         if (this.heroState === "HIT") return;
-
         if (isCorrect && this.HEROS) {
             this.HEROS.play("TIRER", false);
             this.heroState = "SHOOT";
@@ -76,10 +75,8 @@ class MiniGame extends MiniGameBase {
     update() {
         if (this.isStopped) return;
 
-        // 1. GESTION BOSS
-        let currentSpeed = this.baseSpeed;
+        // 1. GESTION BOSS (Logique visuelle)
         if (this.isBossPhase) {
-            currentSpeed = this.baseSpeed * 0.5;
             if (this.ZOMBIE) this.ZOMBIE.scale = this.ZOMBIE.baseScale * 1.6;
         } else {
             if (this.ZOMBIE) this.ZOMBIE.scale = this.ZOMBIE.baseScale;
@@ -96,103 +93,71 @@ class MiniGame extends MiniGameBase {
 
         // 3. GESTION ZOMBIE & COLLISIONS
         if (this.zombieState === "WALKING") {
-            this.zombieX -= currentSpeed;
+            let speed = this.isBossPhase ? this.baseSpeed * 0.5 : this.baseSpeed;
+            this.zombieX -= speed;
             
-            // DÉTECTION COLLISION
             if (this.zombieX < 20 && !this.isColliding) {
                 this.isColliding = true; 
                 this.zombieState = "ATTACKING";
                 this.hasDealtDamage = false;
                 if (this.ZOMBIE) this.ZOMBIE.play("TAPER", false);
             }
-            
             if (this.ZOMBIE) this.ZOMBIE.x = this.zombieX;
         } 
         
         else if (this.zombieState === "ATTACKING") {
             if (this.ZOMBIE) {
                 this.ZOMBIE.x = 20; 
-
-                // CHAÎNE DE RÉACTION V9.3
-                // Si le zombie commence à taper (Frame 1), le héros réagit
                 if (!this.hasDealtDamage && this.ZOMBIE.frameIdx >= 1) {
                     this.hasDealtDamage = true;
-                    
                     if (this.HEROS) {
                         this.HEROS.play("TOUCHE", false);
                         this.heroState = "HIT";
                         this.heroTimer = 60;
                     }
-
-                    // La perte de vie est déclenchée par la réaction du héros
-                    if (this.callbacks.onPlayerHit) {
-                        this.callbacks.onPlayerHit();
-                    }
+                    if (this.callbacks.onPlayerHit) this.callbacks.onPlayerHit();
                 }
-
-                // Une fois l'animation de tape finie, on reset le zombie
-                if (this.ZOMBIE.isAnimFinished) {
-                    this.resetZombie();
-                }
-            } else {
-                this.resetZombie(); 
-            }
+                if (this.ZOMBIE.isAnimFinished) this.resetZombie();
+            } else { this.resetZombie(); }
         } 
         
         else if (this.zombieState === "HIT") {
             this.zombieX += 0.5; 
             if(this.ZOMBIE) this.ZOMBIE.x = this.zombieX;
-            
-            if (this.ZOMBIE.isAnimFinished) {
-                this.resetZombie();
-            }
+            if (this.ZOMBIE.isAnimFinished) this.resetZombie();
         }
 
         // 4. GESTION PROJECTILES
         for (let i = this.projectiles.length - 1; i >= 0; i--) { 
             let p = this.projectiles[i]; 
             p.x += 3;
-            
             if (this.zombieState === "WALKING" && p.x > this.zombieX - 5 && p.x < this.zombieX + 5) {
                 this.projectiles.splice(i, 1);
                 this.zombieState = "HIT";
                 if (this.ZOMBIE) this.ZOMBIE.play("TOUCHE", false); 
             } 
-            else if (p.x > 110) {
-                this.projectiles.splice(i, 1);
-            }
+            else if (p.x > 110) { this.projectiles.splice(i, 1); }
         }
     }
 
     draw() {
         if (this.isStopped) return;
         const ctx = this.ctx;
-        
         this.projectiles.forEach(p => { 
             if (this.isBossPhase) {
-                ctx.save();
-                ctx.shadowBlur = 20;
-                ctx.shadowColor = "#f59e0b"; 
-                ctx.font = "50px Arial";
-                ctx.textAlign = "center";
-                ctx.textBaseline = "middle";
+                ctx.save(); ctx.shadowBlur = 20; ctx.shadowColor = "#f59e0b"; ctx.font = "50px Arial";
+                ctx.textAlign = "center"; ctx.textBaseline = "middle";
                 ctx.fillText("🔥", (p.x/100)*this.canvas.width, (p.y/100)*this.canvas.height);
                 ctx.restore();
             } else {
-                ctx.fillStyle = "#f97316"; 
-                ctx.beginPath(); 
+                ctx.fillStyle = "#f97316"; ctx.beginPath(); 
                 ctx.arc((p.x/100)*this.canvas.width, (p.y/100)*this.canvas.height, 10, 0, Math.PI*2); 
                 ctx.fill(); 
             }
         });
-
         if (this.isBossPhase) {
-            ctx.save();
-            ctx.font = "900 40px Arial";
-            ctx.fillStyle = "red";
-            ctx.textAlign = "center";
-            ctx.shadowColor = "black";
-            ctx.shadowBlur = 15;
+            ctx.save(); ctx.font = "900 40px Arial"; ctx.fillStyle = "red"; ctx.textAlign = "center";
+            ctx.shadowColor = "black"; ctx.shadowBlur = 15;
             ctx.fillText("💀 BOSS 💀", this.canvas.width / 2, 80);
             ctx.restore();
         }
@@ -232,9 +197,7 @@ export default function StudioDashboard({ user }) {
     const [selectedActionIdx, setSelectedActionIdx] = useState(0);
     const [selectedGlobalSoundIdx, setSelectedGlobalSoundIdx] = useState(0);
     const [leftTab, setLeftTab] = useState('actions');
-    
     const [code, setCode] = useState(ZOMBIE_GAME_CODE);
-    
     const [isPlaying, setIsPlaying] = useState(false);
     const [loading, setLoading] = useState(false);
     const [cleaning, setCleaning] = useState(false);
@@ -271,8 +234,7 @@ export default function StudioDashboard({ user }) {
             if (p.scenes && p.scenes[0]) {
                 if (!p.scenes[0].globalSounds) p.scenes[0].globalSounds = [];
             }
-            setProject(p);
-            setCode(ZOMBIE_GAME_CODE); 
+            setProject(p); setCode(ZOMBIE_GAME_CODE); 
             if (p.scenes?.[0]?.actors?.[0]) setSelectedActorId(p.scenes[0].actors[0].id);
         }
     }
@@ -293,22 +255,8 @@ export default function StudioDashboard({ user }) {
 
     const handleOpenSave = () => { setModalMode('SAVE'); setShowSaveLoadModal(true); };
     const handleOpenLoad = () => { setModalMode('LOAD'); setShowSaveLoadModal(true); };
-    
-    const handleCreateNew = () => { 
-        setProject(DEMO_PROJECT); 
-        setCode(ZOMBIE_GAME_CODE); 
-        setSelectedActorId("actor-hero"); 
-        setShowSaveLoadModal(false); 
-    };
-
-    const handleLoadProject = (p) => { 
-        if (p.scenes && p.scenes[0] && !p.scenes[0].globalSounds) p.scenes[0].globalSounds = [];
-        setProject(p); 
-        setCode(ZOMBIE_GAME_CODE); 
-        if (p.scenes?.[0]?.actors?.[0]) setSelectedActorId(p.scenes[0].actors[0].id); else setSelectedActorId(null); 
-        setShowSaveLoadModal(false); 
-    };
-    
+    const handleCreateNew = () => { setProject(DEMO_PROJECT); setCode(ZOMBIE_GAME_CODE); setSelectedActorId("actor-hero"); setShowSaveLoadModal(false); };
+    const handleLoadProject = (p) => { if (p.scenes && p.scenes[0] && !p.scenes[0].globalSounds) p.scenes[0].globalSounds = []; setProject(p); setCode(ZOMBIE_GAME_CODE); if (p.scenes?.[0]?.actors?.[0]) setSelectedActorId(p.scenes[0].actors[0].id); else setSelectedActorId(null); setShowSaveLoadModal(false); };
     const handleViewTestQuiz = async () => { try { const data = await api.get('/games/test-data'); if (data) { setTestQuizData(data); setShowTestQuizModal(true); } } catch (e) { console.error(e); } };
     const handleUpdateActionSpeed = (delta) => { if (!selectedAction) return; const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); if (actor && actor.actions[selectedActionIdx]) actor.actions[selectedActionIdx].speed = Math.max(20, Math.min(2000, (actor.actions[selectedActionIdx].speed || 100) + delta)); } else { if (next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx]) next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].speed = Math.max(20, Math.min(2000, (next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].speed || 100) + delta)); } setProject(next); saveProject(next); };
     const handleSelectActor = (actorId) => { setSelectedActorId(actorId); setSelectedFrameIdx(null); };
@@ -331,16 +279,13 @@ export default function StudioDashboard({ user }) {
             {showSoundModal && <SoundModal onSave={handleSaveSound} onClose={() => setShowSoundModal(false)} />}
             {showTestQuizModal && (<div className="quiz-data-overlay" onClick={() => setShowTestQuizModal(false)}><div className="quiz-data-window" onClick={e => e.stopPropagation()}><div className="quiz-data-header"><span className="font-black text-slate-700 uppercase">Quiz Test</span><button onClick={() => setShowTestQuizModal(false)}>✕</button></div><div className="quiz-data-body custom-scrollbar"><pre>{JSON.stringify(testQuizData, null, 2)}</pre></div></div></div>)}
             {soundToEdit && (<SoundEditorModal soundUrl={soundToEdit.url} soundName={soundToEdit.name} onSave={handleSaveEditedSound} onClose={() => setSoundToEdit(null)} resolveUrl={resolveUrl} />)}
-
             {(loading || cleaning) && (<div className="studio-loading-overlay"><div className="sablier-icon">⏳</div><div className="loading-text">{statusText}</div></div>)}
             {isPlaying && (<GameEngine code={code} project={project} activeSceneIdx={selectedSceneIdx} onStop={() => setIsPlaying(false)} resolveUrl={resolveUrl} />)}
-
             <div style={{ position: 'absolute', visibility: 'hidden', pointerEvents: 'none' }}>
                 <input type="file" ref={frameUploadRef} multiple onChange={async (e) => { const files = Array.from(e.target.files); if (files.length === 0) return; setLoading(true); setStatusText("Upload..."); const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); const act = actor.actions[selectedActionIdx]; for (const file of files) { const fd = new FormData(); fd.append('file', file); const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json()); if (res.url) act.frames.push({ url: res.url, name: file.name, type: 'image' }); } } else { const act = next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx]; for (const file of files) { const fd = new FormData(); fd.append('file', file); const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json()); if (res.url) act.frames.push({ url: res.url, name: file.name, type: 'image' }); } } await saveProject(next); setLoading(false); }} />
                 <input type="file" ref={actorUploadRef} onChange={async (e) => { const file = e.target.files[0]; if(!file) return; setLoading(true); setStatusText("Nouveau..."); const fd = new FormData(); fd.append('file', file); const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json()); const next = JSON.parse(JSON.stringify(project)); const newActor = { id: `actor-${Date.now()}`, name: "P" + (next.scenes[selectedSceneIdx].actors.length + 1), actions: [{ name: "IDLE", speed: 100, frames: [{url: res.url, name: "C1", type:'image'}], sounds: [] }, { name: "TIRER", speed: 100, frames: [], sounds: [] }, { name: "TOUCHE", speed: 100, frames: [], sounds: [] }], initialX: 50, initialY: 50, scale: 1, direction: 0, rotationStyle: 'all' }; next.scenes[selectedSceneIdx].actors.push(newActor); setSelectedActorId(newActor.id); await saveProject(next); setLoading(false); }} />
                 <input type="file" ref={backdropUploadRef} onChange={async (e) => { const file = e.target.files[0]; if(!file) return; setLoading(true); setStatusText("Décor..."); const fd = new FormData(); fd.append('file', file); const res = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd }).then(r => r.json()); const next = JSON.parse(JSON.stringify(project)); next.scenes[selectedSceneIdx].backdrops.push({ url: res.url, name: file.name }); next.scenes[selectedSceneIdx].currentBackdropIdx = next.scenes[selectedSceneIdx].backdrops.length - 1; await saveProject(next); setLoading(false); }} />
             </div>
-
             <div className="studio-grid-body">
                 <StudioLeftPanel 
                     leftTab={leftTab} setLeftTab={setLeftTab} 
