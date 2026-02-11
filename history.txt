@@ -8797,3 +8797,7 @@ Build 161: MIGRATION MOTEUR JEU. Extraction de la logique 'BaseFactory' vers 'se
 2026-02-11 18:12 - Ajout d'un bouton de fermeture blanc élégant en haut à droite pour la modale de zoom.
 2026-02-11 18:12 - Activation de l'autoplay (autoplay=1) lors du zoom sur la vidéo pour un lancement immédiat.
 2026-02-11 18:12 - Optimisation du layout de la vidéo zoomée (aspect-video) pour garantir le ratio 16/9 sur 90% de hauteur.
+
+2026-02-11 18:14 - Ajout d'un bandeau de niveau (Level Banner) animé qui apparaît pendant 3 secondes au démarrage du jeu.
+2026-02-11 18:14 - Synchronisation du bandeau de niveau avec le déclenchement de la musique UPLEVEL.
+2026-02-11 18:14 - Nettoyage et optimisation de la fonction startCurrentLevel dans GamePlayer.jsx.

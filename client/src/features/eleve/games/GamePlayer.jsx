@@ -5,8 +5,8 @@ import { createGameBase } from '../../../services/gameCore';
 import SoundExpert from '../../../services/SoundExpert';
 
 /**
- * 🕹️ MOTEUR UNIFIÉ V170 (PEDAGO-ZOOM HD)
- * Rôle : Système de zoom plein écran 90% hauteur avec fond noir pur.
+ * 🕹️ MOTEUR UNIFIÉ V175 (LEVEL BANNER + PEDAGO-ZOOM)
+ * Rôle : Affiche un bandeau "NIVEAU X" au démarrage de chaque niveau.
  */
 export default function GamePlayer({ user, gameData, onExit, isStudioTest = false }) {
     const canvasRef = useRef(null);
@@ -14,6 +14,7 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
     const [showLevelIntro, setShowLevelIntro] = useState(true); 
     const [loading, setLoading] = useState(true);
     const [zoomMedia, setZoomMedia] = useState(null); // 'sheet' | 'video' | null
+    const [showLevelBanner, setShowLevelBanner] = useState(false); // Bando de niveau
     
     // Refs Engine
     const audioCtxRef = useRef(null);
@@ -111,7 +112,7 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
                     const buf = await SoundExpert.decodeAudio(rUrl, audioCtxRef.current);
                     if (buf) audioBuffersRef.current.set(rUrl, buf);
                 }));
-                setQuestionStates(new Array(finalGameData.levels?.[currentLevelIdx]?.questions?.length || 0).fill(0));
+                setQuestionStates(new Array(projectRef.current.levels?.[currentLevelIdx]?.questions?.length || 0).fill(0));
                 setLoading(false);
             } catch (e) { console.error("Engine Load Error", e); }
         };
@@ -171,36 +172,44 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
     const triggerWin = () => { triggerGlobalEvent("LEVEL_WIN"); alert("NIVEAU RÉUSSI !"); onExit(); };
     const triggerGameOver = () => { triggerGlobalEvent("DÉFAITE"); alert("GAME OVER"); onExit(); };
 
+    // ACTION : DÉMARRAGE DU NIVEAU
+    const startCurrentLevel = () => {
+        setShowLevelIntro(false);
+        setEngineStarted(true);
+        triggerGlobalEvent("UPLEVEL");
+        
+        // Affichage temporaire du bandeau de niveau
+        setShowLevelBanner(true);
+        setTimeout(() => setShowLevelBanner(false), 3000);
+    };
+
     return (
         <div className="game-player-fullscreen bg-slate-950 flex flex-col items-center justify-center">
             {/* BOUTON FERMER UNIVERSEL */}
             <button onClick={onExit} className="fixed top-6 right-6 w-14 h-14 bg-white/10 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-2xl font-black transition-all z-[3500] border-2 border-white/20 hover:scale-110 active:scale-95">✕</button>
 
-            {/* MODALE DE ZOOM MEDIA AMÉLIORÉE (FOND NOIR & 90% HAUTEUR) */}
+            {/* BANDEAU DE NIVEAU (TEMPORAIRE) */}
+            {showLevelBanner && (
+                <div className="fixed inset-0 z-[5000] flex items-center justify-center pointer-events-none">
+                    <div className="bg-white/95 backdrop-blur-md px-16 py-8 rounded-[40px] shadow-[0_20px_100px_rgba(0,0,0,0.5)] border-4 border-indigo-600 animate-in zoom-in slide-in-from-top-20 duration-500">
+                        <div className="flex flex-col items-center">
+                            <span className="text-indigo-600 font-black text-6xl uppercase tracking-tighter">Niveau {currentLevelIdx + 1}</span>
+                            <span className="text-slate-400 font-bold text-xl uppercase tracking-widest mt-2">{currentLevelData.name}</span>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* MODALE DE ZOOM MEDIA */}
             {zoomMedia && (
                 <div className="fixed inset-0 z-[4000] bg-black flex items-center justify-center p-0 animate-in fade-in duration-300">
-                    <button 
-                        onClick={() => setZoomMedia(null)} 
-                        className="absolute top-8 right-8 w-16 h-16 bg-white hover:bg-red-600 hover:text-white text-black rounded-full flex items-center justify-center text-3xl font-black shadow-2xl transition-all z-[4001] hover:scale-110 active:scale-95"
-                    >
-                        ✕
-                    </button>
+                    <button onClick={() => setZoomMedia(null)} className="absolute top-8 right-8 w-16 h-16 bg-white hover:bg-red-600 hover:text-white text-black rounded-full flex items-center justify-center text-3xl font-black shadow-2xl transition-all z-[4001] hover:scale-110 active:scale-95">✕</button>
                     <div className="w-full h-full flex items-center justify-center p-4">
                         {zoomMedia === 'sheet' ? (
-                            <img 
-                                src={resolveUrl(currentLevelData.intro?.sheetUrl)} 
-                                className="h-[90vh] w-auto max-w-[95vw] object-contain rounded-lg shadow-[0_0_100px_rgba(255,255,255,0.1)] animate-in zoom-in duration-300" 
-                                alt="Fiche plein écran"
-                            />
+                            <img src={resolveUrl(currentLevelData.intro?.sheetUrl)} className="h-[90vh] w-auto max-w-[95vw] object-contain rounded-lg shadow-2xl animate-in zoom-in duration-300" />
                         ) : (
                             <div className="h-[90vh] aspect-video max-w-[95vw] bg-black rounded-2xl overflow-hidden border-4 border-white/10 shadow-2xl animate-in zoom-in duration-300">
-                                <iframe 
-                                    className="w-full h-full" 
-                                    src={getEmbedUrl(currentLevelData.intro?.videoUrl)} 
-                                    frameBorder="0" 
-                                    allow="autoplay; encrypted-media; gyroscope; picture-in-picture" 
-                                    allowFullScreen
-                                ></iframe>
+                                <iframe className="w-full h-full" src={getEmbedUrl(currentLevelData.intro?.videoUrl)} frameBorder="0" allow="autoplay; encrypted-media; gyroscope; picture-in-picture" allowFullScreen></iframe>
                             </div>
                         )}
                     </div>
@@ -216,7 +225,6 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
                         </div>
 
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 mb-12">
-                            {/* CARTE FICHE */}
                             <div className="flex flex-col gap-4">
                                 <h2 className="text-indigo-400 font-black uppercase text-xs tracking-widest flex items-center gap-2">📖 Fiche de révision <span className="bg-white/10 px-2 py-0.5 rounded text-[10px]">CLIQUE POUR AGRANDIR</span></h2>
                                 <div onClick={() => currentLevelData.intro?.sheetUrl && setZoomMedia('sheet')} className={`aspect-[4/3] bg-slate-800 rounded-3xl border-4 border-slate-700 overflow-hidden flex items-center justify-center shadow-2xl group transition-all ${currentLevelData.intro?.sheetUrl ? 'cursor-pointer hover:border-indigo-500 hover:scale-[1.02]' : 'opacity-50'}`}>
@@ -225,8 +233,6 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
                                     ) : <div className="text-slate-600 font-black uppercase text-[10px]">Aucune fiche</div>}
                                 </div>
                             </div>
-
-                            {/* CARTE VIDEO */}
                             <div className="flex flex-col gap-4">
                                 <h2 className="text-indigo-400 font-black uppercase text-xs tracking-widest flex items-center gap-2">🎥 Vidéo explicative <span className="bg-white/10 px-2 py-0.5 rounded text-[10px]">CLIQUE POUR VOIR</span></h2>
                                 <div onClick={() => currentLevelData.intro?.videoUrl && setZoomMedia('video')} className={`aspect-[4/3] bg-black rounded-3xl border-4 border-slate-700 overflow-hidden shadow-2xl flex items-center justify-center group transition-all ${currentLevelData.intro?.videoUrl ? 'cursor-pointer hover:border-indigo-500 hover:scale-[1.02]' : 'opacity-50'}`}>
@@ -243,7 +249,7 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
                         <div className="flex justify-center pb-10">
                             <button 
                                 disabled={loading}
-                                onClick={() => { setShowLevelIntro(false); setEngineStarted(true); triggerGlobalEvent("UPLEVEL"); }} 
+                                onClick={startCurrentLevel} 
                                 className={`group relative px-20 py-8 ${loading ? 'bg-slate-700 text-slate-400 cursor-wait' : 'bg-white text-indigo-600 hover:scale-110'} font-black text-3xl rounded-full shadow-2xl transition-all uppercase overflow-hidden`}
                             >
                                 <span className="relative z-10">{loading ? '⌛ CHARGEMENT...' : '🚀 C\'EST PARTI !'}</span>
@@ -254,7 +260,6 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
                 </div>
             ) : (
                 <>
-                    {/* UI JEU STANDARD */}
                     <div className="absolute top-6 w-full flex justify-between items-start px-10 pointer-events-none z-30">
                         <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl flex gap-1 cursor-pointer pointer-events-auto" onClick={() => keysPressed.current['KeyF'] && setLives(4)}>
                             {"❤️".repeat(lives)}{"🖤".repeat(Math.max(0, 4 - lives))}
