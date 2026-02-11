@@ -3,32 +3,30 @@ const path = require('path');
 
 const OUTPUT_FILE = 'gameEngine_FULL.txt';
 
-// LISTE COMPLÈTE : CRÉATION (PROF) + MOTEUR (SHARED) + JEU (ÉLÈVE)
+// 📸 LISTE DES FICHIERS IMPLIQUÉS DANS LA CHAÎNE "STUDIO -> MOTEUR -> ÉLÈVE"
 const TARGET_FILES = [
-    // 1. LE MOTEUR COMMUN (Cœur du système)
+    // 1. LE CŒUR DU SYSTÈME (Shared Services)
     'client/src/services/gameCore.js',
     'client/src/services/SoundExpert.js',
 
-    // 2. COTÉ PROF : L'OUTIL DE CRÉATION DE JEU (Questions, Niveaux...)
-    'client/src/features/prof/games/GameStudio.jsx',
-
-    // 3. COTÉ PROF : L'ATELIER VISUEL (Sprites, Code, Preview)
+    // 2. LE STUDIO (L'origine des sprites et des sons)
     'client/src/features/prof/studio/StudioDashboard.jsx',
-    'client/src/features/prof/studio/studioComp/GameEngine.jsx', // Le moteur utilisé dans le Studio
-    'client/src/features/prof/studio/panels/StudioCenterPanel.jsx',
-    'client/src/features/prof/studio/panels/StudioLeftPanel.jsx',
+    'client/src/features/prof/studio/panels/StudioLeftPanel.jsx',   // Séquenceur & Sons
+    'client/src/features/prof/studio/panels/StudioCenterPanel.jsx', // Scène & Config
+    'client/src/features/prof/studio/studioComp/GameEngine.jsx',   // Pont vers le Player
 
-    // 4. COTÉ ÉLÈVE : LE LECTEUR DE JEU (Ce que voit l'enfant)
+    // 3. LA DISTRIBUTION (Le passage vers Julian)
+    'client/src/features/prof/games/GameStudio.jsx',
+    'server/eleve/games/games.eleve.js', // Route Mirror
+
+    // 4. L'APPLICATEUR ÉLÈVE (Le lecteur de Julian)
     'client/src/features/eleve/games/GamePlayer.jsx',
-    'client/src/features/eleve/games/zombie/ZombieWrapper.jsx', // Le conteneur spécifique
-
-    // 5. UTILITAIRES AUDIO
-    'client/src/features/prof/studio/studioComp/SoundModal.jsx'
+    'client/src/features/eleve/games/GamesGrid.jsx'
 ];
 
-function captureFiles() {
+function captureEngine() {
     console.log("------------------------------------------------");
-    console.log("📸 SNAPSHOT COMPLET : ENGINE + PROF + ÉLÈVE");
+    console.log("📸 SNAPSHOT DU MOTEUR UNIFIÉ (V165)");
     console.log("------------------------------------------------");
 
     let content = "";
@@ -36,7 +34,6 @@ function captureFiles() {
 
     TARGET_FILES.forEach(relPath => {
         const fullPath = path.join(__dirname, relPath);
-        
         if (fs.existsSync(fullPath)) {
             const fileContent = fs.readFileSync(fullPath, 'utf8');
             content += `\n[[[£ FILE: ${relPath} £]]]\n${fileContent}\n[[[£ END: ${relPath} £]]]\n`;
@@ -49,21 +46,18 @@ function captureFiles() {
 
     const header = `
 ================================================================================
-🎮 SNAPSHOT GLOBAL MOTEUR (V2)
+🎮 RÉFÉRENTIEL TECHNIQUE DU MOTEUR CONDAMINE
 📅 Date : ${new Date().toLocaleString()}
-📂 Fichiers : ${count}
+📂 Fichiers capturés : ${count}
 ================================================================================
-Ce fichier contient toute la chaîne de production du jeu :
-1. Services Partagés (Core)
-2. Interface Prof (Studio & GameStudio)
-3. Interface Élève (Player & Wrapper)
+Ce snapshot contient toute l'infrastructure permettant au Prof de créer dans 
+le Studio (Sprites/Sons) et à l'Élève de jouer en miroir exact.
 ================================================================================
 `;
 
     fs.writeFileSync(OUTPUT_FILE, header + content);
     console.log("------------------------------------------------");
-    console.log(`💾 Fichier généré : ${OUTPUT_FILE}`);
-    console.log(`🚀 Vous avez maintenant une image complète du système de jeu.`);
+    console.log(`💾 Photographie terminée : ${OUTPUT_FILE}`);
 }
 
-captureFiles();
+captureEngine();

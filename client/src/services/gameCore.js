@@ -1,7 +1,7 @@
 /**
- * 🎮 CORE ENGINE V8.3 (ULTRA-RESILIENT)
+ * 🎮 CORE ENGINE V8.5 (SHARED ENGINE)
  * Rôle : Moteur de rendu partagé Prof/Élève.
- * Fix : Ne crash JAMAIS, même si la scène ou les acteurs sont corrompus.
+ * Gère le dessin des personnages, les animations et le Boss Mode.
  */
 export const createGameBase = (params) => {
     const { 
@@ -10,7 +10,6 @@ export const createGameBase = (params) => {
         playParallelSound, callbacks 
     } = params;
 
-    // --- PROXY ACTEUR (SÉCURISÉ) ---
     class ActorProxy {
         constructor(data, engine) { 
             this.id = data?.id || "unknown"; 
@@ -40,7 +39,6 @@ export const createGameBase = (params) => {
         }
     }
 
-    // --- CLASSE DE BASE DU JEU ---
     return class MiniGameBase {
         constructor(c, a, cb) {
             this.canvas = c || canvas; 
@@ -50,15 +48,13 @@ export const createGameBase = (params) => {
             this.assets = a || {};
             this.isBossPhase = false;
 
-            // Chargement sécurisé des acteurs
             const project = projectRef?.current || {};
             const scenes = project.scenes || [];
             const s = scenes[sceneIdx] || { actors: [] };
 
             if(s.actors && Array.isArray(s.actors)) {
                 s.actors.forEach(a => { 
-                    const proxy = new ActorProxy(a, this);
-                    this[a.name.toUpperCase()] = proxy; 
+                    this[a.name.toUpperCase()] = new ActorProxy(a, this); 
                 });
             }
         }
@@ -79,21 +75,17 @@ export const createGameBase = (params) => {
         _render() {
             if (!this.ctx || !this.canvas) return;
             const project = projectRef?.current || {};
-            const scenes = project.scenes || [];
-            const s = scenes[sceneIdx] || { actors: [], backdrops: [] };
+            const s = project.scenes?.[sceneIdx] || { actors: [], backdrops: [] };
 
-            // 1. Fond
             this.ctx.fillStyle = "#0f172a"; 
             this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
             
-            // 2. Décor
             const bd = s.backdrops?.[s.currentBackdropIdx || 0];
             if(bd) { 
                 const img = imageAssets.get(resolveUrl(bd.url)); 
                 if(img) this.ctx.drawImage(img, 0, 0, this.canvas.width, this.canvas.height); 
             }
 
-            // 3. Dessin des Acteurs
             for(let key in this) {
                 const p = this[key];
                 if(p instanceof ActorProxy && p.visible) {
@@ -119,7 +111,14 @@ export const createGameBase = (params) => {
                         if(spr) {
                             const xPx = (p.x/100)*this.canvas.width; 
                             const yPx = (p.y/100)*this.canvas.height; 
-                            let sz = 150 * (p.scale || 1);
+                            
+                            let scaleMultiplier = 1;
+                            if (this.isBossPhase && p.name === 'ZOMBIE') {
+                                scaleMultiplier = 1.6;
+                                this.ctx.filter = "drop-shadow(0 0 15px red) hue-rotate(-50deg)";
+                            }
+
+                            let sz = 150 * (p.scale || 1) * scaleMultiplier;
                             this.ctx.save(); 
                             this.ctx.translate(xPx, yPx);
                             
@@ -129,11 +128,9 @@ export const createGameBase = (params) => {
                                 this.ctx.rotate(p.direction * Math.PI / 180);
                             }
                             
-                            if (this.isBossPhase && p.name === 'ZOMBIE') {
-                                this.ctx.filter = "drop-shadow(0 0 15px red) hue-rotate(-50deg)";
-                            }
                             this.ctx.drawImage(spr, -sz/2, -sz/2, sz, sz); 
                             this.ctx.restore();
+                            this.ctx.filter = "none";
                         }
                     }
                 }

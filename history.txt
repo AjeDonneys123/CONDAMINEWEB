@@ -8780,3 +8780,6 @@ Build 161: MIGRATION MOTEUR JEU. Extraction de la logique 'BaseFactory' vers 'se
 11/02/2026 17:35 - MIROIR STUDIO : Julian branché sur les projets Studio.
 11/02/2026 18:25 - LOGIQUE JSX RESTAURÉE : Ré-implémentation de la gestion des niveaux et questions.
 11/02/2026 18:32 - TEST STUDIO FIX : Le moteur GamePlayer détecte désormais s'il tourne dans le Studio sans questions et va les chercher dans le Quiz de Test automatiquement. Le son et les coeurs sont synchronisés.
+
+11/02/2026 18:45 - SNAPSHOT : Création du script snapGameEngine.js pour capturer l'infrastructure du moteur graphique et sonore.
+11/02/2026 18:46 - SYNC : Mise à jour de gameCore.js (V8.5) et StudioLeftPanel pour une gestion fluide des sons et des animations dans le Studio et chez l'élève.
