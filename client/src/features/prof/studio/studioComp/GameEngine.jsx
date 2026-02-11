@@ -1,10 +1,9 @@
-// @signatures: GameEngine, handleBarCheat, handleHeartClick, handleMuteToggle, initLevel, handleAnswerClick, triggerWinSequence, handleStartGame, triggerGlobalEvent
+// @signatures: GameEngine, handleBarCheat, handleHeartClick, handleMuteToggle, initLevel, handleAnswerClick, triggerWinSequence, triggerGameOver, handleStartGame, triggerGlobalEvent
 import React, { useState, useRef, useEffect } from 'react';
 import SoundExpert from './SoundExpert';
 import { api } from '../../../../services/api';
 import { createGameBase } from '../../../../services/gameCore';
 
-// --- ZOMBIE V10.0 (DEBUG EDITION) ---
 const ZOMBIE_GAME_CODE = `
 class MiniGame extends MiniGameBase {
     constructor(canvas, assets, callbacks) {
@@ -17,7 +16,6 @@ class MiniGame extends MiniGameBase {
         this.hasDealtDamage = false;
         this.isStopped = false;
         this.baseSpeed = 0.15;
-        console.log("🧟 [ZOMBIE] Jeu initialisé. Callbacks reçus ?", !!callbacks);
     }
 
     start() { 
@@ -62,50 +60,24 @@ class MiniGame extends MiniGameBase {
             }
         }
 
-        // --- LOGIQUE ZOMBIE ---
         if (this.zombieState === "WALKING") {
             let speed = this.isBossPhase ? this.baseSpeed * 0.5 : this.baseSpeed;
             this.zombieX -= speed;
-            
             if (this.zombieX < 20) {
-                console.log("🧟 [ZOMBIE] Arrivée au contact ! Passage en attaque.");
                 this.zombieState = "ATTACKING";
                 this.hasDealtDamage = false;
                 if (this.ZOMBIE) { this.ZOMBIE.x = 20; this.ZOMBIE.play("TAPER", false); }
             } else if (this.ZOMBIE) { this.ZOMBIE.x = this.zombieX; }
         } 
         else if (this.zombieState === "ATTACKING") {
-            // Check frame pour impact
-            if (this.ZOMBIE && !this.hasDealtDamage) {
-                // On tape dès la frame 1 ou plus
-                if (this.ZOMBIE.frameIdx >= 1) {
-                    console.log("💥 [ZOMBIE] IMPACT ! Frame:", this.ZOMBIE.frameIdx);
-                    this.hasDealtDamage = true;
-                    
-                    if (this.heroState !== "HIT") {
-                        console.log("🩸 [ZOMBIE] Héros touché ! Envoi signal...");
-                        
-                        if (this.HEROS) { 
-                            this.HEROS.play("TOUCHE", false); 
-                            this.heroState = "HIT"; 
-                            this.heroTimer = 60; 
-                        }
-                        
-                        // APPEL CRITIQUE
-                        if (this.callbacks && this.callbacks.onPlayerHit) {
-                            this.callbacks.onPlayerHit();
-                        } else {
-                            console.error("❌ [ZOMBIE] ERREUR : Callback onPlayerHit introuvable !", this.callbacks);
-                        }
-                    } else {
-                        console.log("🛡️ [ZOMBIE] Héros déjà touché (Invincible).");
-                    }
+            if (this.ZOMBIE && this.ZOMBIE.frameIdx >= 1 && !this.hasDealtDamage) {
+                this.hasDealtDamage = true;
+                if (this.heroState !== "HIT") {
+                    if (this.HEROS) { this.HEROS.play("TOUCHE", false); this.heroState = "HIT"; this.heroTimer = 60; }
+                    if (this.callbacks.onPlayerHit) this.callbacks.onPlayerHit();
                 }
             }
-            if (this.ZOMBIE && this.ZOMBIE.isAnimFinished) {
-                console.log("🔄 [ZOMBIE] Anim finie, reset.");
-                this.resetZombie();
-            }
+            if (this.ZOMBIE && this.ZOMBIE.isAnimFinished) this.resetZombie();
         } 
         else if (this.zombieState === "HIT") {
             this.zombieX += 0.5;
@@ -197,6 +169,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         return () => { window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); };
     }, []);
 
+    // --- LOGIQUE SONS STRUCTURELS ---
     const playParallelSoundImpl = (url) => {
         if (isMutedRef.current || !audioCtxRef.current) return;
         const buffer = audioBuffersRef.current.get(resolveUrl(url));
@@ -212,16 +185,11 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     };
 
     const triggerGlobalEvent = (eventName) => {
-        console.log(`📡 [REACT] Tentative de trigger Event: ${eventName}`);
         const scene = projectRef.current.scenes?.[activeSceneIdx];
         if (!scene || !scene.globalSounds) return;
         const event = scene.globalSounds.find(g => g.name.toUpperCase().trim() === eventName.toUpperCase().trim());
-        
         if (event && event.sounds && event.sounds.length > 0) {
-            console.log(`🔊 [REACT] Playing Sound for Event: ${eventName}`);
             event.sounds.forEach(snd => playParallelSoundImpl(snd.url));
-        } else {
-            console.log(`⚠️ [REACT] Aucun son trouvé pour : ${eventName}`);
         }
     };
 
@@ -319,16 +287,13 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         }, 1000);
     };
 
-    // --- CHEAT CODE (CLICK BAR) : F + CLIC ---
     const handleBarCheat = (qIdx) => {
         if (keysPressed.current['KeyF']) {
-            console.log("🕵️ CHEAT: Force Win Question");
             const newStates = [...questionStates];
             newStates[qIdx] = 3;
             setQuestionStates(newStates);
             if (newStates.every(s => s >= 3)) triggerWinSequence();
         } else {
-            // CYCLE NORMAL
             const newStates = [...questionStates];
             newStates[qIdx] = (newStates[qIdx] + 1) % 4; 
             setQuestionStates(newStates);
@@ -337,10 +302,8 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         }
     };
 
-    // --- CHEAT CODE (CLICK COEUR) : F + CLIC ---
     const handleHeartClick = () => {
         if (keysPressed.current['KeyF']) {
-            console.log("🕵️ CHEAT: Lose Life");
             setLives(l => Math.max(0, l - 1));
         }
     };
@@ -369,31 +332,45 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         }, 4000);
     };
 
+    // --- GAME OVER ---
+    const triggerGameOver = () => {
+        console.log("💀 GAME OVER TRIGGERED");
+        setIsPowerOff(true); // Ecran noir
+        
+        // SON DE DÉFAITE (Si configuré)
+        triggerGlobalEvent("GAME_OVER");
+
+        setTimeout(() => {
+            alert("💀 GAME OVER... Réessayez !");
+            // RESET COMPLET
+            setLives(4);
+            initLevel(currentLevelIdx, allLevels); 
+        }, 1000);
+    };
+
     const handleStartGame = async () => {
         if (audioCtxRef.current) await audioCtxRef.current.resume();
         setEngineStarted(true);
     };
 
-    // 4. INSTANCIATION MOTEUR AVEC CALLBACKS EXPLICITES
     useEffect(() => {
         if (!engineStarted || !canvasRef.current) return;
 
         try {
-            console.log("🚀 [REACT] Démarrage Moteur...");
-            
             const gameCallbacks = {
                 onPlayerHit: () => { 
-                    console.log("💥 [CALLBACK REACT] onPlayerHit reçu !");
                     if (!isLevelWonRef.current) {
                         setLives(prev => {
-                            console.log("   Vies avant:", prev, "Après:", Math.max(0, prev - 1));
-                            return Math.max(0, prev - 1);
+                            const newLives = Math.max(0, prev - 1);
+                            // 💀 DÉTECTION DE LA MORT ICI
+                            if (newLives === 0) {
+                                triggerGameOver();
+                            }
+                            return newLives;
                         }); 
-                    } else {
-                        console.log("   Ignoré car niveau gagné.");
                     }
                 },
-                onLevelWin: () => { console.log("🏆 Win (Callback)"); }
+                onLevelWin: () => { }
             };
 
             const MiniGameBase = createGameBase({ 
@@ -407,14 +384,13 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 ctx: canvasRef.current.getContext('2d'), 
                 isMutedRef, 
                 playParallelSound: playParallelSoundImpl,
-                callbacks: gameCallbacks // <-- PASSAGE EXPLICITE
+                callbacks: gameCallbacks
             });
 
             const actualCode = code && code.length > 50 ? code : ZOMBIE_GAME_CODE;
             const UserCodeFactory = new Function('MiniGameBase', `${actualCode}\nreturn MiniGame;`);
             const UserGameClass = UserCodeFactory(MiniGameBase);
             
-            // Instanciation avec callbacks
             const instance = new UserGameClass(canvasRef.current, {}, gameCallbacks);
             gameInstanceRef.current = instance;
 
@@ -454,8 +430,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
              ) : (
                 <>
                     <div className="absolute top-6 w-full flex justify-between items-start px-10 pointer-events-none z-30">
-                        
-                        {/* VIES + MUTE */}
                         <div className="flex gap-4 pointer-events-auto">
                             <div 
                                 className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-xl flex gap-1 cursor-pointer active:scale-95 transition-transform"
@@ -477,7 +451,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                             )}
                         </div>
 
-                        {/* BARRES DE PROGRESSION */}
                         <div className="flex gap-2 items-center pointer-events-auto mr-20">
                             {questionStates.map((mastery, idx) => (
                                 <div 
