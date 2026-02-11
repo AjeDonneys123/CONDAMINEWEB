@@ -8690,3 +8690,9 @@
 - Cheat Cœurs : Rétabli. Maintenir 'F' et cliquer sur les cœurs retire une vie.
 - Cheat Question/Niveau : Rétabli. Maintenir 'F' et cliquer sur la question valide instantanément le niveau.
 - Boss UI : Correction du style visuel (bordure rouge et lueur) lors de la phase boss.
+
+UPDATE V9.17 - GAME CORE FINAL FIX
+- Copie conforme de la logique de rendu du GameEngine.jsx fonctionnel vers gameCore.js.
+- Suppression de la String BaseFactory dans GameEngine.jsx.
+- Importation propre de createGameBase depuis le service.
+- Le moteur est maintenant centralisé et garanti fonctionnel par transplantation de code éprouvé.
