@@ -8801,3 +8801,5 @@ Build 161: MIGRATION MOTEUR JEU. Extraction de la logique 'BaseFactory' vers 'se
 2026-02-11 18:14 - Ajout d'un bandeau de niveau (Level Banner) animé qui apparaît pendant 3 secondes au démarrage du jeu.
 2026-02-11 18:14 - Synchronisation du bandeau de niveau avec le déclenchement de la musique UPLEVEL.
 2026-02-11 18:14 - Nettoyage et optimisation de la fonction startCurrentLevel dans GamePlayer.jsx.
+
+2026-02-11 18:15 - Modification du Level Banner : Texte jaune, fond transparent, position haute (top-20%) et durée réduite à 1.5s pour un look arcade.

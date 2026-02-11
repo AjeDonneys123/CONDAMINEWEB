@@ -5,16 +5,16 @@ import { createGameBase } from '../../../services/gameCore';
 import SoundExpert from '../../../services/SoundExpert';
 
 /**
- * 🕹️ MOTEUR UNIFIÉ V175 (LEVEL BANNER + PEDAGO-ZOOM)
- * Rôle : Affiche un bandeau "NIVEAU X" au démarrage de chaque niveau.
+ * 🕹️ MOTEUR UNIFIÉ V180 (DISCREET LEVEL BANNER)
+ * Rôle : Bandeau arcade jaune discret en haut de l'écran.
  */
 export default function GamePlayer({ user, gameData, onExit, isStudioTest = false }) {
     const canvasRef = useRef(null);
     const [engineStarted, setEngineStarted] = useState(false);
     const [showLevelIntro, setShowLevelIntro] = useState(true); 
     const [loading, setLoading] = useState(true);
-    const [zoomMedia, setZoomMedia] = useState(null); // 'sheet' | 'video' | null
-    const [showLevelBanner, setShowLevelBanner] = useState(false); // Bando de niveau
+    const [zoomMedia, setZoomMedia] = useState(null); 
+    const [showLevelBanner, setShowLevelBanner] = useState(false); 
     
     // Refs Engine
     const audioCtxRef = useRef(null);
@@ -172,15 +172,12 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
     const triggerWin = () => { triggerGlobalEvent("LEVEL_WIN"); alert("NIVEAU RÉUSSI !"); onExit(); };
     const triggerGameOver = () => { triggerGlobalEvent("DÉFAITE"); alert("GAME OVER"); onExit(); };
 
-    // ACTION : DÉMARRAGE DU NIVEAU
     const startCurrentLevel = () => {
         setShowLevelIntro(false);
         setEngineStarted(true);
         triggerGlobalEvent("UPLEVEL");
-        
-        // Affichage temporaire du bandeau de niveau
         setShowLevelBanner(true);
-        setTimeout(() => setShowLevelBanner(false), 3000);
+        setTimeout(() => setShowLevelBanner(false), 1500); 
     };
 
     return (
@@ -188,14 +185,13 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
             {/* BOUTON FERMER UNIVERSEL */}
             <button onClick={onExit} className="fixed top-6 right-6 w-14 h-14 bg-white/10 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-2xl font-black transition-all z-[3500] border-2 border-white/20 hover:scale-110 active:scale-95">✕</button>
 
-            {/* BANDEAU DE NIVEAU (TEMPORAIRE) */}
+            {/* BANDEAU DE NIVEAU DISCRET (JAUNE / TRANSPARENT) */}
             {showLevelBanner && (
-                <div className="fixed inset-0 z-[5000] flex items-center justify-center pointer-events-none">
-                    <div className="bg-white/95 backdrop-blur-md px-16 py-8 rounded-[40px] shadow-[0_20px_100px_rgba(0,0,0,0.5)] border-4 border-indigo-600 animate-in zoom-in slide-in-from-top-20 duration-500">
-                        <div className="flex flex-col items-center">
-                            <span className="text-indigo-600 font-black text-6xl uppercase tracking-tighter">Niveau {currentLevelIdx + 1}</span>
-                            <span className="text-slate-400 font-bold text-xl uppercase tracking-widest mt-2">{currentLevelData.name}</span>
-                        </div>
+                <div className="fixed top-[20%] left-0 right-0 z-[5000] flex justify-center pointer-events-none animate-in fade-in zoom-in duration-300">
+                    <div className="flex flex-col items-center">
+                        <span className="text-yellow-400 font-black text-6xl uppercase tracking-tighter italic drop-shadow-[0_4px_10px_rgba(0,0,0,0.8)]">
+                            Niveau {currentLevelIdx + 1}
+                        </span>
                     </div>
                 </div>
             )}
