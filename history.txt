@@ -8728,3 +8728,7 @@ Build 161: MIGRATION MOTEUR JEU. Extraction de la logique 'BaseFactory' vers 'se
 
 11/02/2026 16:30 - MOTEUR JEU : Migration réussie vers /services.
 11/02/2026 16:55 - FIX CRASH LECTEUR : Ajout d'un FALLBACK_SCRIPT dans GamePlayer.jsx pour éviter l'erreur 'MiniGame is not defined' si le code en base de données est manquant ou corrompu.
+
+11/02/2026 16:30 - MOTEUR JEU : Migration réussie vers /services.
+11/02/2026 16:55 - FIX CRASH LECTEUR : Ajout d'un FALLBACK_SCRIPT dans GamePlayer.jsx.
+11/02/2026 17:00 - FIX SÉCURITÉ MOTEUR : Mise à jour de gameCore.js (V8.2) et GamePlayer.jsx (V103) pour empêcher le crash "Cannot read properties of undefined (reading '0')" sur les jeux sans scènes définies.

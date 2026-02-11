@@ -4,7 +4,6 @@ import './GamePlayer.css';
 import { createGameBase } from '../../../services/gameCore';
 import SoundExpert from '../../../services/SoundExpert';
 
-// SCRIPT DE SECOURS (ZOMBIE STANDARD) SI LE CODE BDD EST VIDE
 const FALLBACK_SCRIPT = `
 class MiniGame extends MiniGameBase {
     constructor(canvas, assets, callbacks) {
@@ -13,6 +12,7 @@ class MiniGame extends MiniGameBase {
         this.projectiles = [];
     }
     start() {
+        // En mode Quiz pur, ces acteurs n'existent pas forcément
         if(this.HEROS) { this.HEROS.x = 15; this.HEROS.y = 70; this.HEROS.play("IDLE"); }
         if(this.ZOMBIE) { this.ZOMBIE.x = 100; this.ZOMBIE.y = 70; this.ZOMBIE.play("AVANCER"); }
     }
@@ -72,8 +72,22 @@ export default function GamePlayer({ user, gameData, onExit }) {
                 audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
             }
 
-            // 1. CHARGEMENT DES IMAGES (Même logique que le Studio)
-            const scene = gameData.scenes?.[0] || { actors: [], backdrops: [] };
+            // --- V103 : PRÉPARATION DU PROJET POUR LE MOTEUR ---
+            const project = { ...gameData };
+            // Si pas de scènes, on crée une structure minimale pour éviter le crash
+            if (!project.scenes || project.scenes.length === 0) {
+                project.scenes = [{ 
+                    name: "Scene 1", 
+                    actors: [
+                        { id: "actor-hero", name: "HEROS", initialX: 15, initialY: 70, actions: [] },
+                        { id: "actor-zombie", name: "ZOMBIE", initialX: 90, initialY: 70, actions: [] }
+                    ], 
+                    backdrops: [], 
+                    globalSounds: [] 
+                }];
+            }
+
+            const scene = project.scenes[0];
             const imgResources = [...new Set(
                 (scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url)))
                 .concat((scene.backdrops || []).map(b => b.url))
@@ -88,7 +102,6 @@ export default function GamePlayer({ user, gameData, onExit }) {
                 img.onerror = resolve;
             })));
 
-            // 2. CHARGEMENT DES SONS
             const sndResources = [...new Set(
                 (scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url)))
                 .concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url)))
@@ -100,23 +113,21 @@ export default function GamePlayer({ user, gameData, onExit }) {
                 if(buffer) audioBuffersRef.current.set(fullUrl, buffer);
             }));
 
-            // 3. INITIALISATION MOTEUR SHARED V8.1
             const MiniGameBase = createGameBase({
                 audioBuffers: audioBuffersRef.current,
                 audioCtx: audioCtxRef.current,
-                projectRef: { current: gameData }, 
+                projectRef: { current: project }, 
                 sceneIdx: 0,
                 imageAssets: imageAssetsRef.current,
                 resolveUrl: (u) => u.startsWith('/api/proxy') ? u : `/api/proxy/${u.split('/').pop()}`,
                 canvas: canvasRef.current,
                 ctx: canvasRef.current.getContext('2d'),
                 isMutedRef,
-                callbacks: { onPlayerHit: () => setLives(prev => prev - 1) }
+                callbacks: { onPlayerHit: () => setLives(prev => Math.max(0, prev - 1)) }
             });
 
-            // 4. INJECTION DU CODE (SÉCURISÉ)
-            const codeToInject = (gameData.generatedCode && gameData.generatedCode.length > 50) 
-                ? gameData.generatedCode 
+            const codeToInject = (project.generatedCode && project.generatedCode.length > 50) 
+                ? project.generatedCode 
                 : FALLBACK_SCRIPT;
 
             try {
@@ -124,14 +135,11 @@ export default function GamePlayer({ user, gameData, onExit }) {
                 gameInstance.current = new UserGameClass(canvasRef.current, {}, {});
                 if (gameInstance.current.start) gameInstance.current.start();
             } catch (evalErr) {
-                console.error("❌ Erreur Eval Script:", evalErr);
-                // Si le code custom crash, on force le fallback
                 const FallbackClass = new Function('MiniGameBase', `${FALLBACK_SCRIPT}\nreturn MiniGame;`)(MiniGameBase);
                 gameInstance.current = new FallbackClass(canvasRef.current, {}, {});
                 if (gameInstance.current.start) gameInstance.current.start();
             }
 
-            // 5. BOUCLE
             const tick = () => {
                 if(!gameInstance.current) return;
                 gameInstance.current.isBossPhase = (currentQIdx !== -1 && (currentQIdx % 3 === 0 && currentQIdx !== 0)); 
@@ -150,13 +158,10 @@ export default function GamePlayer({ user, gameData, onExit }) {
         setLoading(false);
     };
 
-    // --- LOGIQUE QUIZ ---
     const handleAnswer = (idx) => {
         if (gameOver) return;
         const isCorrect = idx === allQuestions[currentQIdx]?.a;
-        
         if (gameInstance.current?.onResult) gameInstance.current.onResult(isCorrect);
-
         if (isCorrect) {
             setScore(s => s + 100);
             if (currentQIdx + 1 < allQuestions.length) {
@@ -177,12 +182,7 @@ export default function GamePlayer({ user, gameData, onExit }) {
         await fetch('/api/eleve/games/score', {
             method: 'POST',
             headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({ 
-                studentId: user._id || user.id, 
-                gameId: gameData._id, 
-                score: score,
-                levelReached: status 
-            })
+            body: JSON.stringify({ studentId: user._id || user.id, gameId: gameData._id, score: score, levelReached: status })
         });
         onExit();
     };
@@ -192,15 +192,12 @@ export default function GamePlayer({ user, gameData, onExit }) {
     return (
         <div className="game-player-fullscreen">
             {loading && <div className="absolute inset-0 bg-slate-900 flex items-center justify-center text-white font-black z-50">CHARGEMENT...</div>}
-            
             <canvas ref={canvasRef} width={800} height={450} className="game-canvas" />
-            
             <div className="game-hud-overlay">
                 <div className="hud-lives">{"❤️".repeat(lives)}</div>
                 <div className="hud-score">🏆 {score}</div>
                 <button onClick={onExit} className="hud-quit-btn">✕</button>
             </div>
-
             {!loading && currentQ && (
                 <div className="game-quiz-ui animate-in slide-in-from-bottom">
                     <div className="quiz-question-box">{currentQ.q}</div>
