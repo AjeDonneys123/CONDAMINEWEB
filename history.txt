@@ -8750,3 +8750,6 @@ Build 161: MIGRATION MOTEUR JEU. Extraction de la logique 'BaseFactory' vers 'se
 11/02/2026 17:10 - PONT MIROIR : Unified GameLevel model.
 11/02/2026 17:18 - BUG FIX MIROIR : Correction du crash ReferenceError.
 11/02/2026 17:30 - ENGINE V8.3 : Sécurisation totale du moteur gameCore et du lecteur GamePlayer. Le jeu se lance désormais même si les données studio sont partielles ou absentes.
+
+11/02/2026 17:35 - MIROIR STUDIO : Julian est maintenant branché directement sur les projets du Studio pour faciliter les tests.
+11/02/2026 17:36 - FIX CRASH BOUCLE : Correction de la boucle tick() dans GamePlayer.jsx avec un isRunningRef pour stopper les appels récursifs en cas d'erreur ou de démontage.
