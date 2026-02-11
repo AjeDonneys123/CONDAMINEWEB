@@ -113,7 +113,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const [showGameOver, setShowGameOver] = useState(false);
     const [showLevelIntro, setShowLevelIntro] = useState(false);
     const [showLevelBanner, setShowLevelBanner] = useState(false);
-    const [zoomMedia, setZoomMedia] = useState(null); // 'sheet' | 'video' | null
+    const [zoomMedia, setZoomMedia] = useState(null);
     const [isPowerOff, setIsPowerOff] = useState(false);
     
     const isLevelWonRef = useRef(false);
@@ -218,6 +218,8 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const handleAnswerClick = (val) => {
         if (feedback || currentQIndex === -1 || isLevelWonRef.current || showGameOver || showLevelIntro) return;
         const currentQ = levelQuestions[currentQIndex];
+        if (!currentQ) return;
+
         let isCorrect = false;
         if (typeof val === 'number') isCorrect = currentQ.a === val;
         else isCorrect = checkAnswerPermissive(val, currentQ.options[currentQ.a]);
@@ -239,6 +241,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             setFeedback(null);
             const available = nextStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
             if (available.length > 0) {
+                // LOGIQUE STABLE : On cherche une autre question ou on reste sur la même si seule dispo
                 const others = available.filter(idx => idx !== currentQIndex);
                 setCurrentQIndex(others.length > 0 ? others[Math.floor(Math.random() * others.length)] : available[0]);
             } else triggerWinSequence();
@@ -253,6 +256,21 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             if (allLevels[currentLevelIdx + 1]) initLevel(currentLevelIdx + 1, allLevels, false);
             else { alert("🎉 JEU TERMINÉ !"); triggerGlobalEvent("GAME_WIN"); onStop(); }
         }, 4000);
+    };
+
+    const handleBarCheat = (idx) => {
+        if (keysPressed.current['KeyF']) {
+            const newStates = [...questionStates];
+            newStates[idx] = 3;
+            setQuestionStates(newStates);
+            if (newStates.every(s => s >= 3)) triggerWinSequence();
+        } else {
+            const newStates = [...questionStates];
+            newStates[idx] = (newStates[idx] + 1) % 4; 
+            setQuestionStates(newStates);
+            if (newStates.every(s => s >= 3)) triggerWinSequence();
+            else if (newStates[idx] < 3) setCurrentQIndex(idx);
+        }
     };
 
     const triggerGameOver = () => { triggerGlobalEvent("DÉFAITE"); setShowGameOver(true); };
@@ -286,14 +304,12 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center overflow-hidden font-sans">
             <button onClick={onStop} className="absolute top-6 right-6 w-14 h-14 bg-white/10 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-2xl font-black transition-all z-[3500] border-2 border-white/20 hover:scale-110 active:scale-95">✕</button>
 
-            {/* BANDEAU NIVEAU ARCADE */}
             {showLevelBanner && (
                 <div className="fixed top-[20%] left-0 right-0 z-[5000] flex justify-center pointer-events-none animate-in fade-in zoom-in duration-300">
                     <span className="text-yellow-400 font-black text-6xl uppercase tracking-tighter italic drop-shadow-[0_4px_10px_rgba(0,0,0,0.8)]">Niveau {currentLevelIdx + 1}</span>
                 </div>
             )}
 
-            {/* MODALE ZOOM HD */}
             {zoomMedia && (
                 <div className="fixed inset-0 z-[4000] bg-black flex items-center justify-center p-0 animate-in fade-in duration-300" onClick={() => setZoomMedia(null)}>
                     <button className="absolute top-8 right-8 w-16 h-16 bg-white hover:bg-red-600 hover:text-white text-black rounded-full flex items-center justify-center text-3xl font-black shadow-2xl transition-all z-[4001] hover:scale-110 active:scale-95">✕</button>
@@ -321,7 +337,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                                 <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-xl flex gap-1 cursor-pointer active:scale-95 transition-transform" onClick={() => keysPressed.current['KeyF'] && setLives(4)}>
                                     {"❤️".repeat(lives)}{"🖤".repeat(Math.max(0, 4 - lives))}
                                 </div>
-                                <button onClick={handleMuteToggle} className="bg-slate-900/80 w-14 h-14 rounded-2xl border-2 border-slate-700 text-2xl flex items-center justify-center text-white hover:bg-slate-800">{isMuted ? '🔇' : '🔊'}</button>
+                                <button onClick={() => setIsMuted(!isMuted)} className="bg-slate-900/80 w-14 h-14 rounded-2xl border-2 border-slate-700 text-2xl flex items-center justify-center text-white hover:bg-slate-800">{isMuted ? '🔇' : '🔊'}</button>
                             </div>
                             <div className="flex-1 flex flex-col items-center px-4 gap-2">
                                 <div className="bg-indigo-600 text-white px-4 py-1 rounded-full text-xs font-black uppercase tracking-widest shadow-lg border border-indigo-400">{allLevels[currentLevelIdx]?.name || `NIVEAU ${currentLevelIdx + 1}`}</div>
@@ -334,7 +350,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                             </div>
                             <div className="flex gap-2 items-center pointer-events-auto mr-20">
                                 {questionStates.map((mastery, idx) => (
-                                    <div key={idx} onClick={() => { handleBarCheat(idx); setCurrentQIndex(idx); }} className={`w-4 h-12 rounded-md border border-slate-600 relative overflow-hidden transition-all cursor-pointer ${currentQIndex === idx ? 'ring-2 ring-indigo-400 scale-110' : 'opacity-40'}`}>
+                                    <div key={idx} onClick={() => { handleBarCheat(idx); }} className={`w-4 h-12 rounded-md border border-slate-600 relative overflow-hidden transition-all cursor-pointer ${currentQIndex === idx ? 'ring-2 ring-indigo-400 scale-110' : 'opacity-40'}`}>
                                         <div className={`absolute bottom-0 left-0 right-0 transition-all duration-500 ${mastery >= 3 ? 'bg-green-500 shadow-[0_0_10px_green]' : mastery >= 2 ? 'bg-red-500 shadow-[0_0_10px_red]' : 'bg-yellow-500'}`} style={{ height: `${(mastery / 3) * 100}%` }} />
                                     </div>
                                 ))}
@@ -347,7 +363,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                         {isLevelWon && (<div className="absolute inset-0 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm rounded-xl animate-in zoom-in z-40"><div className="bg-white p-10 rounded-[40px] shadow-2xl text-center border-8 border-green-500"><span className="text-6xl block mb-4">🏆</span><h2 className="text-4xl font-black text-slate-800 uppercase">Niveau Réussi !</h2></div></div>)}
                         {showLevelIntro && !isLevelWon && (
                             <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/95 backdrop-blur-md rounded-xl z-50 animate-in zoom-in p-8">
-                                <h1 className="text-5xl text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-500 font-black uppercase tracking-tighter drop-shadow-2xl mb-6">{currentLevelData.name || `NIVEAU ${currentLevelIdx + 1}`}</h1>
+                                <h1 className="text-5xl text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-500 font-black uppercase tracking-tighter drop-shadow-2xl mb-6">{currentLevelIdx + 1} {currentLevelData.name}</h1>
                                 <div className="flex gap-10 mb-12 w-full max-w-4xl justify-center h-[280px]">
                                     <div onClick={() => currentLevelData.intro?.sheetUrl && setZoomMedia('sheet')} className="h-full aspect-[3/4] bg-slate-800 rounded-3xl border-4 border-slate-700 overflow-hidden flex items-center justify-center shadow-2xl cursor-pointer hover:border-indigo-500 hover:scale-105 transition-all">
                                         {currentLevelData.intro?.sheetUrl ? <img src={resolveUrl(currentLevelData.intro.sheetUrl)} className="w-full h-full object-contain" /> : "Fiche"}

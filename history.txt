@@ -8824,3 +8824,6 @@ Build 161: MIGRATION MOTEUR JEU. Extraction de la logique 'BaseFactory' vers 'se
 
 2026-02-11 18:43 - Correction de l'import erroné de SoundExpert dans GameEngine.jsx (Passage à ../../../../services/SoundExpert).
 2026-02-11 18:43 - Synchronisation de l'aperçu Studio avec le moteur stable et l'UI HD Arcade.
+
+2026-02-11 18:45 - Correction critique du crash au changement de question : Restauration stricte de la logique aléatoire stable issue de l'ancienne version.
+2026-02-11 18:45 - Intégration du Zoom HD et du Mode Boss dans la structure stable sans altérer les cycles de vie React.
