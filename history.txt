@@ -8831,3 +8831,7 @@ Build 161: MIGRATION MOTEUR JEU. Extraction de la logique 'BaseFactory' vers 'se
 2026-02-11 18:50 - Restauration du moteur stable (V.2.20) avec logique d'alternance aléatoire non bloquante.
 2026-02-11 18:50 - Ajout d'un badge "VERSION V.2.20" en haut à gauche pour vérification immédiate du déploiement.
 2026-02-11 18:50 - Correction de la structure des conditions de rendu pour éviter les crashs d'accès aux index questions.
+
+2026-02-11 18:57 - Déploiement de la VERSION V.2.21 avec instrumentation complète (console.log).
+2026-02-11 18:57 - Ajout de la variable safeQ (Anti-crash) pour protéger le rendu contre les index de questions hors limites ou indéfinis.
+2026-02-11 18:57 - Logs DEBUG ajoutés sur l'API, l'initLevel, le changement de question et le moteur.

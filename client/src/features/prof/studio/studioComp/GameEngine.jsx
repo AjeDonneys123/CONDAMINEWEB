@@ -5,9 +5,8 @@ import { api } from '../../../../services/api';
 import { createGameBase } from '../../../../services/gameCore';
 
 /**
- * 🕹️ MOTEUR UNIFIÉ V.2.20 (STABILITÉ ABSOLUE)
- * VERSION : V.2.20
- * LOGIQUE : Copie conforme du moteur fonctionnel avec UI HD Arcade.
+ * 🕹️ MOTEUR UNIFIÉ V.2.21 (DEBUG MODE & ANTI-CRASH)
+ * VERSION : V.2.21
  */
 
 const ZOMBIE_GAME_CODE = `
@@ -103,7 +102,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const [isReady, setIsReady] = useState(false);
     const [loadProgress, setLoadProgress] = useState("");
     
-    // --- ÉTATS QUIZ (Stables) ---
+    // --- ÉTATS QUIZ ---
     const [allLevels, setAllLevels] = useState([]); 
     const [currentLevelIdx, setCurrentLevelIdx] = useState(0);
     const [levelQuestions, setLevelQuestions] = useState([]); 
@@ -139,6 +138,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     // 1. INITIALISATION DES NIVEAUX
     useEffect(() => {
         api.get('/games/test-data').then(data => {
+            console.log("DEBUG [API] Données reçues:", data);
             const levelsData = data?.levels?.length > 0 ? data.levels : [{ name: "Test Default", questions: [{ q: "Quelle est la capitale ?", options: ["Lyon", "Paris", "Marseille", "Lille"], a: 1 }] }];
             setAllLevels(levelsData);
             initLevel(0, levelsData, true); 
@@ -162,7 +162,9 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const checkAnswerPermissive = (input, target) => {
         if (!input || !target) return false;
         const clean = (s) => String(s).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, '').trim();
-        return clean(input) === clean(target);
+        const ok = clean(input) === clean(target);
+        console.log(`DEBUG [Permissive] Compare "${input}" vs "${target}" -> Result: ${ok}`);
+        return ok;
     };
 
     const playParallelSoundImpl = (url) => {
@@ -186,7 +188,8 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     };
 
     const initLevel = (idx, sourceData, silent = false) => {
-        if (!sourceData[idx]) return;
+        console.log(`DEBUG [initLevel] Niveau ${idx}`);
+        if (!sourceData[idx]) { console.error("DEBUG [initLevel] Niveau inexistant"); return; }
         const qs = sourceData[idx].questions || [];
         setCurrentLevelIdx(idx);
         setLevelQuestions(qs);
@@ -215,11 +218,16 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         snds.forEach(url => { SoundExpert.decodeAudio(resolveUrl(url), audioCtxRef.current).then(buf => { if (buf) audioBuffersRef.current.set(resolveUrl(url), buf); }); });
     }, [project]);
 
-    // 3. LOGIQUE RÉPONSES (ALTERNANCE STABLE)
+    // 3. LOGIQUE RÉPONSES (ALTERNANCE STABLE AVEC DEBUG)
     const handleAnswerClick = (val) => {
-        if (feedback || currentQIndex === -1 || isLevelWonRef.current || showGameOver || showLevelIntro) return;
+        console.log(`DEBUG [handleAnswerClick] Input: ${val} | QIndex: ${currentQIndex}`);
+        if (feedback || currentQIndex === -1 || isLevelWonRef.current || showGameOver || showLevelIntro) {
+             console.warn("DEBUG [handleAnswerClick] Action ignorée (Busy)");
+             return;
+        }
+        
         const currentQ = levelQuestions[currentQIndex];
-        if(!currentQ) return;
+        if(!currentQ) { console.error("DEBUG [handleAnswerClick] Question indéfinie !"); return; }
         
         let isCorrect = false;
         if (typeof val === 'number') isCorrect = currentQ.a === val;
@@ -239,12 +247,20 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         setUserInput("");
 
         setTimeout(() => {
+            console.log("DEBUG [handleAnswerClick] Calcul de la question suivante...");
             setFeedback(null);
             const available = nextStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
+            console.log("DEBUG [handleAnswerClick] Questions restantes:", available);
+            
             if (available.length > 0) {
                 const others = available.filter(idx => idx !== currentQIndex);
-                setCurrentQIndex(others.length > 0 ? others[Math.floor(Math.random() * others.length)] : available[0]);
-            } else triggerWinSequence();
+                const nextI = others.length > 0 ? others[Math.floor(Math.random() * others.length)] : available[0];
+                console.log(`DEBUG [handleAnswerClick] Switch vers index: ${nextI}`);
+                setCurrentQIndex(nextI);
+            } else {
+                console.log("DEBUG [handleAnswerClick] Toutes les questions finies -> Win");
+                triggerWinSequence();
+            }
         }, 1000);
     };
 
@@ -259,6 +275,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     };
 
     const handleBarCheat = (idx) => {
+        console.log(`DEBUG [CheatBar] Click sur index ${idx}`);
         const nS = [...questionStates];
         if (keysPressed.current['KeyF']) { nS[idx] = 3; } else { nS[idx] = (nS[idx] + 1) % 4; }
         setQuestionStates(nS);
@@ -280,6 +297,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     useEffect(() => {
         if (!engineStarted || !canvasRef.current) return;
         try {
+            console.log("DEBUG [Moteur] Démarrage...");
             const MiniGameBase = createGameBase({ audioBuffers: audioBuffersRef.current, audioCtx: audioCtxRef.current, projectRef, sceneIdx: activeSceneIdx, imageAssets: imageAssetsRef.current, resolveUrl, canvas: canvasRef.current, ctx: canvasRef.current.getContext('2d'), isMutedRef, playParallelSound: playParallelSoundImpl, callbacks: { onPlayerHit: () => { if (!isLevelWonRef.current) setLives(l => { const n = Math.max(0, l - 1); if (n === 0) triggerGameOver(); return n; }); } } });
             const factory = new Function('MiniGameBase', `${code && code.length > 50 ? code : ZOMBIE_GAME_CODE}\nreturn MiniGame;`);
             const GameClass = factory(MiniGameBase);
@@ -292,18 +310,20 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 frameIdRef.current = requestAnimationFrame(tick);
             };
             tick();
-        } catch (e) { console.error("Moteur Crash:", e); }
+        } catch (e) { console.error("DEBUG [Moteur] Crash Runtime:", e); }
         return () => { if(frameIdRef.current) cancelAnimationFrame(frameIdRef.current); };
     }, [engineStarted]);
 
     const currentLevelData = allLevels[currentLevelIdx] || {};
     const isBossPhase = bossModeRef.current;
+    
+    // GOLF D'ANTI-CRASH RENDU
+    const safeQ = (levelQuestions && currentQIndex >= 0 && currentQIndex < levelQuestions.length) ? levelQuestions[currentQIndex] : null;
 
     return (
         <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center overflow-hidden font-sans">
-            {/* BADGE DE VERSION - SOURCE UNIQUE DE VÉRITÉ */}
             <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000] pointer-events-none">
-                VERSION V.2.20
+                VERSION V.2.21
             </div>
 
             <button onClick={onStop} className="absolute top-6 right-6 w-14 h-14 bg-white/10 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-2xl font-black transition-all z-[4000] border-2 border-white/20 hover:scale-110 active:scale-95">✕</button>
@@ -345,9 +365,9 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                             </div>
                             <div className="flex-1 flex flex-col items-center px-4 gap-2">
                                 <div className="bg-indigo-600 text-white px-4 py-1 rounded-full text-xs font-black uppercase tracking-widest shadow-lg border border-indigo-400">{currentLevelData.name || `NIVEAU ${currentLevelIdx + 1}`}</div>
-                                {levelQuestions[currentQIndex] && !isLevelWon && (
+                                {safeQ && !isLevelWon && (
                                     <div className={`bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 shadow-2xl text-xl pointer-events-auto text-center max-w-2xl ${isBossPhase ? 'border-red-500 ring-2 ring-red-500/50' : 'border-slate-600'}`}>
-                                        {feedback === 'CORRECT' ? "✅ BIEN JOUÉ !" : feedback === 'WRONG' ? "❌ MAUVAISE RÉPONSE" : levelQuestions[currentQIndex].q}
+                                        {feedback === 'CORRECT' ? "✅ BIEN JOUÉ !" : feedback === 'WRONG' ? "❌ MAUVAISE RÉPONSE" : safeQ.q}
                                         {isBossPhase && !feedback && <div className="text-[10px] text-red-500 mt-1 animate-pulse uppercase">⚠️ Phase Finale : Saisis la réponse !</div>}
                                     </div>
                                 )}
@@ -381,7 +401,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
                     {showGameOver && (<div className="absolute inset-0 z-[60] bg-red-900/95 flex flex-col items-center justify-center animate-in zoom-in"><h1 className="text-8xl font-black text-white mb-8 tracking-tighter drop-shadow-lg">💀 GAME OVER</h1><button onClick={handleRetry} className="px-10 py-5 bg-white text-red-900 font-black text-2xl rounded-2xl shadow-2xl hover:scale-105 transition-transform uppercase tracking-widest">RÉESSAYER</button></div>)}
 
-                    {!isLevelWon && !isPowerOff && !showGameOver && !showLevelIntro && levelQuestions[currentQIndex] && (
+                    {!isLevelWon && !isPowerOff && !showGameOver && !showLevelIntro && safeQ && (
                         <div className="absolute bottom-10 w-full flex justify-center px-10 pointer-events-auto z-30">
                             {isBossPhase ? (
                                 <div className="flex flex-row items-stretch gap-4 w-full max-w-2xl animate-in slide-in-from-bottom-5">
@@ -390,7 +410,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                                 </div>
                             ) : (
                                 <div className="grid grid-cols-4 gap-4 w-full max-w-5xl">
-                                    {levelQuestions[currentQIndex].options.map((o, i) => (
+                                    {safeQ.options.map((o, i) => (
                                         <button key={i} onClick={() => handleAnswerClick(i)} className="bg-indigo-600 text-white py-6 rounded-2xl font-black uppercase text-lg shadow-xl hover:bg-white hover:text-indigo-600 hover:scale-105 transition-all border-b-8 border-indigo-800 active:border-b-0 active:translate-y-2">{o}</button>
                                     ))}
                                 </div>
