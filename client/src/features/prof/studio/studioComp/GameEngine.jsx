@@ -4,6 +4,12 @@ import SoundExpert from '../../../../services/SoundExpert';
 import { api } from '../../../../services/api';
 import { createGameBase } from '../../../../services/gameCore';
 
+/**
+ * 🕹️ MOTEUR UNIFIÉ V.2.20 (STABILITÉ ABSOLUE)
+ * VERSION : V.2.20
+ * LOGIQUE : Copie conforme du moteur fonctionnel avec UI HD Arcade.
+ */
+
 const ZOMBIE_GAME_CODE = `
 class MiniGame extends MiniGameBase {
     constructor(canvas, assets, callbacks) {
@@ -97,7 +103,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const [isReady, setIsReady] = useState(false);
     const [loadProgress, setLoadProgress] = useState("");
     
-    // Etats Quiz
+    // --- ÉTATS QUIZ (Stables) ---
     const [allLevels, setAllLevels] = useState([]); 
     const [currentLevelIdx, setCurrentLevelIdx] = useState(0);
     const [levelQuestions, setLevelQuestions] = useState([]); 
@@ -108,7 +114,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const [isMuted, setIsMuted] = useState(false);
     const [userInput, setUserInput] = useState("");
 
-    // Etats Visuels
+    // --- ÉTATS VISUELS ---
     const [isLevelWon, setIsLevelWon] = useState(false);
     const [showGameOver, setShowGameOver] = useState(false);
     const [showLevelIntro, setShowLevelIntro] = useState(false);
@@ -130,6 +136,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
     useEffect(() => { projectRef.current = project; }, [project]);
 
+    // 1. INITIALISATION DES NIVEAUX
     useEffect(() => {
         api.get('/games/test-data').then(data => {
             const levelsData = data?.levels?.length > 0 ? data.levels : [{ name: "Test Default", questions: [{ q: "Quelle est la capitale ?", options: ["Lyon", "Paris", "Marseille", "Lille"], a: 1 }] }];
@@ -145,11 +152,11 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
     const getEmbedUrl = (url) => {
         if (!url) return null;
-        let videoId = "";
-        if (url.includes('v=')) videoId = url.split('v=')[1].split('&')[0];
-        else if (url.includes('youtu.be/')) videoId = url.split('youtu.be/')[1].split('?')[0];
-        else if (url.includes('embed/')) videoId = url.split('embed/')[1].split('?')[0];
-        return videoId ? `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0` : url;
+        let vId = "";
+        if (url.includes('v=')) vId = url.split('v=')[1].split('&')[0];
+        else if (url.includes('youtu.be/')) vId = url.split('youtu.be/')[1].split('?')[0];
+        else if (url.includes('embed/')) vId = url.split('embed/')[1].split('?')[0];
+        return vId ? `https://www.youtube.com/embed/${vId}?autoplay=1&rel=0` : url;
     };
 
     const checkAnswerPermissive = (input, target) => {
@@ -180,46 +187,40 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
     const initLevel = (idx, sourceData, silent = false) => {
         if (!sourceData[idx]) return;
-        const questions = sourceData[idx].questions || [];
+        const qs = sourceData[idx].questions || [];
         setCurrentLevelIdx(idx);
-        setLevelQuestions(questions);
-        setQuestionStates(new Array(questions.length).fill(0));
+        setLevelQuestions(qs);
+        setQuestionStates(new Array(qs.length).fill(0));
         setIsLevelWon(false); setShowGameOver(false); isLevelWonRef.current = false; setIsPowerOff(false);
-        if (questions.length > 0) {
+        if (qs.length > 0) {
             setCurrentQIndex(0);
             if (!silent) { setShowLevelIntro(true); triggerGlobalEvent("UPLEVEL"); }
         }
     };
 
+    // 2. CHARGEMENT ASSETS
     useEffect(() => {
         if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
         const scene = project.scenes?.[activeSceneIdx];
         if (!scene) { setIsReady(true); return; }
-        const imgUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url)))].filter(Boolean);
-        let loaded = 0; const total = imgUrls.length;
-        if (total === 0) setIsReady(true);
-        imgUrls.forEach(url => {
-            const img = new Image(); img.crossOrigin = "anonymous";
-            const rKey = resolveUrl(url);
-            img.onload = () => { imageAssetsRef.current.set(rKey, img); loaded++; setLoadProgress(`${Math.round(loaded/total*100)}%`); if (loaded >= total) setIsReady(true); };
-            img.onerror = () => { loaded++; if (loaded >= total) setIsReady(true); };
+        const imgs = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url)))].filter(Boolean);
+        let loaded = 0; if (imgs.length === 0) setIsReady(true);
+        imgs.forEach(url => {
+            const img = new Image(); img.crossOrigin = "anonymous"; const rKey = resolveUrl(url);
+            img.onload = () => { imageAssetsRef.current.set(rKey, img); loaded++; setLoadProgress(`${Math.round(loaded/imgs.length*100)}%`); if (loaded >= imgs.length) setIsReady(true); };
+            img.onerror = () => { loaded++; if (loaded >= imgs.length) setIsReady(true); };
             img.src = rKey;
         });
-        const sndUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url))))].filter(Boolean);
-        sndUrls.forEach(url => { SoundExpert.decodeAudio(resolveUrl(url), audioCtxRef.current).then(buf => { if (buf) audioBuffersRef.current.set(resolveUrl(url), buf); }); });
+        const snds = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url))))].filter(Boolean);
+        snds.forEach(url => { SoundExpert.decodeAudio(resolveUrl(url), audioCtxRef.current).then(buf => { if (buf) audioBuffersRef.current.set(resolveUrl(url), buf); }); });
     }, [project]);
 
-    useEffect(() => {
-        const isBoss = (currentQIndex !== -1 && (questionStates[currentQIndex] || 0) >= 2);
-        bossModeRef.current = isBoss;
-        if (gameInstanceRef.current) gameInstanceRef.current.isBossPhase = isBoss;
-    }, [currentQIndex, questionStates]);
-
+    // 3. LOGIQUE RÉPONSES (ALTERNANCE STABLE)
     const handleAnswerClick = (val) => {
         if (feedback || currentQIndex === -1 || isLevelWonRef.current || showGameOver || showLevelIntro) return;
         const currentQ = levelQuestions[currentQIndex];
-        if (!currentQ) return;
-
+        if(!currentQ) return;
+        
         let isCorrect = false;
         if (typeof val === 'number') isCorrect = currentQ.a === val;
         else isCorrect = checkAnswerPermissive(val, currentQ.options[currentQ.a]);
@@ -241,7 +242,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             setFeedback(null);
             const available = nextStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
             if (available.length > 0) {
-                // LOGIQUE STABLE : On cherche une autre question ou on reste sur la même si seule dispo
                 const others = available.filter(idx => idx !== currentQIndex);
                 setCurrentQIndex(others.length > 0 ? others[Math.floor(Math.random() * others.length)] : available[0]);
             } else triggerWinSequence();
@@ -259,30 +259,29 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     };
 
     const handleBarCheat = (idx) => {
-        if (keysPressed.current['KeyF']) {
-            const newStates = [...questionStates];
-            newStates[idx] = 3;
-            setQuestionStates(newStates);
-            if (newStates.every(s => s >= 3)) triggerWinSequence();
-        } else {
-            const newStates = [...questionStates];
-            newStates[idx] = (newStates[idx] + 1) % 4; 
-            setQuestionStates(newStates);
-            if (newStates.every(s => s >= 3)) triggerWinSequence();
-            else if (newStates[idx] < 3) setCurrentQIndex(idx);
-        }
+        const nS = [...questionStates];
+        if (keysPressed.current['KeyF']) { nS[idx] = 3; } else { nS[idx] = (nS[idx] + 1) % 4; }
+        setQuestionStates(nS);
+        if (nS.every(s => s >= 3)) triggerWinSequence();
+        else if (nS[idx] < 3) setCurrentQIndex(idx);
     };
 
     const triggerGameOver = () => { triggerGlobalEvent("DÉFAITE"); setShowGameOver(true); };
     const handleRetry = () => { setShowGameOver(false); setLives(4); initLevel(currentLevelIdx, allLevels, false); };
     const handleStartGame = async () => { if (audioCtxRef.current) await audioCtxRef.current.resume(); gameHasStartedRef.current = true; setEngineStarted(true); setShowLevelIntro(true); triggerGlobalEvent("UPLEVEL"); };
 
+    // 4. MOTEUR GRAPHIQUE
+    useEffect(() => {
+        const isBoss = (currentQIndex !== -1 && (questionStates[currentQIndex] || 0) >= 2);
+        bossModeRef.current = isBoss;
+        if (gameInstanceRef.current) gameInstanceRef.current.isBossPhase = isBoss;
+    }, [currentQIndex, questionStates]);
+
     useEffect(() => {
         if (!engineStarted || !canvasRef.current) return;
         try {
-            const MiniGameBase = createGameBase({ audioBuffers: audioBuffersRef.current, audioCtx: audioCtxRef.current, projectRef, sceneIdx: activeSceneIdx, imageAssets: imageAssetsRef.current, resolveUrl, canvas: canvasRef.current, ctx: canvasRef.current.getContext('2d'), isMutedRef, playParallelSound: playParallelSoundImpl, callbacks: { onPlayerHit: () => { if (!isLevelWonRef.current) { setLives(prev => { const n = Math.max(0, prev - 1); if (n === 0) triggerGameOver(); return n; }); } } } });
-            const actualCode = code && code.length > 50 ? code : ZOMBIE_GAME_CODE;
-            const factory = new Function('MiniGameBase', `${actualCode}\nreturn MiniGame;`);
+            const MiniGameBase = createGameBase({ audioBuffers: audioBuffersRef.current, audioCtx: audioCtxRef.current, projectRef, sceneIdx: activeSceneIdx, imageAssets: imageAssetsRef.current, resolveUrl, canvas: canvasRef.current, ctx: canvasRef.current.getContext('2d'), isMutedRef, playParallelSound: playParallelSoundImpl, callbacks: { onPlayerHit: () => { if (!isLevelWonRef.current) setLives(l => { const n = Math.max(0, l - 1); if (n === 0) triggerGameOver(); return n; }); } } });
+            const factory = new Function('MiniGameBase', `${code && code.length > 50 ? code : ZOMBIE_GAME_CODE}\nreturn MiniGame;`);
             const GameClass = factory(MiniGameBase);
             const instance = new GameClass(canvasRef.current, {}, { onPlayerHit: () => { if (!isLevelWonRef.current) setLives(l => { const n = Math.max(0, l - 1); if (n === 0) triggerGameOver(); return n; }); } });
             gameInstanceRef.current = instance; if (instance.start) instance.start();
@@ -293,7 +292,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 frameIdRef.current = requestAnimationFrame(tick);
             };
             tick();
-        } catch (e) { console.error("CRASH MOTEUR:", e); }
+        } catch (e) { console.error("Moteur Crash:", e); }
         return () => { if(frameIdRef.current) cancelAnimationFrame(frameIdRef.current); };
     }, [engineStarted]);
 
@@ -302,7 +301,12 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
     return (
         <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center overflow-hidden font-sans">
-            <button onClick={onStop} className="absolute top-6 right-6 w-14 h-14 bg-white/10 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-2xl font-black transition-all z-[3500] border-2 border-white/20 hover:scale-110 active:scale-95">✕</button>
+            {/* BADGE DE VERSION - SOURCE UNIQUE DE VÉRITÉ */}
+            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000] pointer-events-none">
+                VERSION V.2.20
+            </div>
+
+            <button onClick={onStop} className="absolute top-6 right-6 w-14 h-14 bg-white/10 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-2xl font-black transition-all z-[4000] border-2 border-white/20 hover:scale-110 active:scale-95">✕</button>
 
             {showLevelBanner && (
                 <div className="fixed top-[20%] left-0 right-0 z-[5000] flex justify-center pointer-events-none animate-in fade-in zoom-in duration-300">
@@ -311,8 +315,8 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             )}
 
             {zoomMedia && (
-                <div className="fixed inset-0 z-[4000] bg-black flex items-center justify-center p-0 animate-in fade-in duration-300" onClick={() => setZoomMedia(null)}>
-                    <button className="absolute top-8 right-8 w-16 h-16 bg-white hover:bg-red-600 hover:text-white text-black rounded-full flex items-center justify-center text-3xl font-black shadow-2xl transition-all z-[4001] hover:scale-110 active:scale-95">✕</button>
+                <div className="fixed inset-0 z-[6000] bg-black flex items-center justify-center p-0 animate-in fade-in duration-300" onClick={() => setZoomMedia(null)}>
+                    <button className="absolute top-8 right-8 w-16 h-16 bg-white hover:bg-red-600 hover:text-white text-black rounded-full flex items-center justify-center text-3xl font-black shadow-2xl transition-all z-[6001] hover:scale-110 active:scale-95">✕</button>
                     <div className="w-full h-full flex items-center justify-center p-4">
                         {zoomMedia === 'sheet' ? (
                             <img src={resolveUrl(currentLevelData.intro?.sheetUrl)} className="h-[90vh] w-auto max-w-[95vw] object-contain rounded-lg shadow-2xl animate-in zoom-in duration-300" />
@@ -340,7 +344,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                                 <button onClick={() => setIsMuted(!isMuted)} className="bg-slate-900/80 w-14 h-14 rounded-2xl border-2 border-slate-700 text-2xl flex items-center justify-center text-white hover:bg-slate-800">{isMuted ? '🔇' : '🔊'}</button>
                             </div>
                             <div className="flex-1 flex flex-col items-center px-4 gap-2">
-                                <div className="bg-indigo-600 text-white px-4 py-1 rounded-full text-xs font-black uppercase tracking-widest shadow-lg border border-indigo-400">{allLevels[currentLevelIdx]?.name || `NIVEAU ${currentLevelIdx + 1}`}</div>
+                                <div className="bg-indigo-600 text-white px-4 py-1 rounded-full text-xs font-black uppercase tracking-widest shadow-lg border border-indigo-400">{currentLevelData.name || `NIVEAU ${currentLevelIdx + 1}`}</div>
                                 {levelQuestions[currentQIndex] && !isLevelWon && (
                                     <div className={`bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 shadow-2xl text-xl pointer-events-auto text-center max-w-2xl ${isBossPhase ? 'border-red-500 ring-2 ring-red-500/50' : 'border-slate-600'}`}>
                                         {feedback === 'CORRECT' ? "✅ BIEN JOUÉ !" : feedback === 'WRONG' ? "❌ MAUVAISE RÉPONSE" : levelQuestions[currentQIndex].q}
