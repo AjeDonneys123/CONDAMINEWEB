@@ -19,38 +19,28 @@ const LevelStructureSchema = new mongoose.Schema({
 
 const GameLevelSchema = new mongoose.Schema({
     title: { type: String, required: true },
-    
-    // AJOUT OFFICIEL DU CHAMP SUBJECT
     subject: { type: String, default: "GÉNÉRAL" }, 
-
-    // NOUVEAU : FLAG TESTEUR
     isTestGame: { type: Boolean, default: false },
 
     chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter' },
     teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher' },
-    
-    classroom: String,
     targetClassrooms: [String], 
     assignedStudents: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Student' }],
     isAllClass: { type: Boolean, default: true },
 
-    levels: { type: [LevelStructureSchema], default: [] },
+    // --- LE MIROIR STUDIO ---
+    // Ces champs permettent à Julian de voir exactement ce que le prof a créé
+    scenes: { type: Array, default: [] }, 
+    generatedCode: { type: String, default: "" },
     
-    questions: { type: [QuestionSchema], default: [] }, // Legacy
-
+    levels: { type: [LevelStructureSchema], default: [] },
     globalIntro: { type: EducationalAssetSchema, default: () => ({}) },
 
-    isArchived: { type: Boolean, default: false },
     createdAt: { type: Date, default: Date.now }
 }, { 
     collection: 'gamelevels',
-    strict: false, // 🚀 FORCE L'ENREGISTREMENT DE TOUT
-    minimize: false // GARDE LES OBJETS VIDES SI BESOIN
+    strict: false 
 });
 
-// Hack pour forcer la recompilation du modèle si le fichier change
-if (mongoose.models.GameLevel) {
-    delete mongoose.models.GameLevel;
-}
-
+if (mongoose.models.GameLevel) delete mongoose.models.GameLevel;
 module.exports = mongoose.model('GameLevel', GameLevelSchema);
