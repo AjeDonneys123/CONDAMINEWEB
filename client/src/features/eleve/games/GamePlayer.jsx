@@ -1,13 +1,12 @@
-// @signatures: GamePlayer, handleAnswer, handleBarCheat, handleHeartClick, initGame, triggerLevelIntro
+// @signatures: GamePlayer, handleAnswer, handleBarCheat, handleHeartClick, initGame, syncTestData
 import React, { useState, useEffect, useRef } from 'react';
 import './GamePlayer.css';
 import { createGameBase } from '../../../services/gameCore';
 import SoundExpert from '../../../services/SoundExpert';
 
 /**
- * 🕹️ MOTEUR UNIFIÉ V150 (SCÈNE + QUIZ + SONS)
- * SOURCE UNIQUE DE VÉRITÉ : Utilisé par le Studio (Prof) et le Player (Élève).
- * Gère les multi-niveaux, l'intro par niveau, et le moteur graphique.
+ * 🕹️ MOTEUR UNIFIÉ V155 (SCÈNE + QUIZ + SONS)
+ * SOURCE UNIQUE DE VÉRITÉ : Studio Prof & Player Élève.
  */
 export default function GamePlayer({ user, gameData, onExit, isStudioTest = false }) {
     const canvasRef = useRef(null);
@@ -25,7 +24,8 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
     const projectRef = useRef(gameData);
     const keysPressed = useRef({});
 
-    // États du Quiz (Logique JSX)
+    // États du Quiz
+    const [levels, setLevels] = useState(gameData?.levels || []);
     const [currentLevelIdx, setCurrentLevelIdx] = useState(0);
     const [lives, setLives] = useState(4);
     const [score, setScore] = useState(0);
@@ -34,8 +34,6 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
     const [questionStates, setQuestionStates] = useState([]);
     const [isMuted, setIsMuted] = useState(false);
 
-    // Extraction des données de niveau
-    const levels = gameData?.levels || [];
     const currentLevelData = levels[currentLevelIdx] || {};
     const questions = currentLevelData.questions || [];
 
@@ -48,7 +46,8 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
 
     const playParallelSoundImpl = (url) => {
         if (!isRunningRef.current || !audioCtxRef.current || isMuted) return;
-        const buffer = audioBuffersRef.current.get(resolveUrl(url));
+        const resolved = resolveUrl(url);
+        const buffer = audioBuffersRef.current.get(resolved);
         if (buffer) {
             if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
             try {
@@ -61,7 +60,7 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
     };
 
     const triggerGlobalEvent = (eventName) => {
-        const scene = gameData.scenes?.[0];
+        const scene = projectRef.current?.scenes?.[0];
         if (!scene || !scene.globalSounds) return;
         const event = scene.globalSounds.find(g => g.name.toUpperCase().trim() === eventName.toUpperCase().trim());
         if (event && event.sounds) {
@@ -69,7 +68,6 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
         }
     };
 
-    // ⌨️ GESTION CHEATS
     useEffect(() => {
         const hDown = (e) => { keysPressed.current[e.code] = true; };
         const hUp = (e) => { keysPressed.current[e.code] = false; };
@@ -78,14 +76,29 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
         return () => { window.removeEventListener('keydown', hDown); window.removeEventListener('keyup', hUp); };
     }, []);
 
-    // 1. CHARGEMENT COMPLET (ASSETS + INIT MAITRISE)
+    // 1. CHARGEMENT ET SYNC TEST
     useEffect(() => {
         isRunningRef.current = true;
-        const loadAssets = async () => {
+        const load = async () => {
             try {
                 if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
                 
-                const scene = gameData.scenes?.[0] || { actors: [], backdrops: [] };
+                let finalGameData = { ...gameData };
+
+                // ⚡ LE PONT : Si on est en Studio et qu'on n'a pas de questions, on les récupère
+                if (isStudioTest && (!finalGameData.levels || finalGameData.levels.length === 0)) {
+                    const res = await fetch('/api/games/test-data');
+                    const testQuiz = await res.json();
+                    if (testQuiz) {
+                        finalGameData.levels = testQuiz.levels;
+                        setLevels(testQuiz.levels);
+                    }
+                } else {
+                    setLevels(finalGameData.levels || []);
+                }
+
+                projectRef.current = finalGameData;
+                const scene = finalGameData.scenes?.[0] || { actors: [], backdrops: [] };
                 
                 // IMAGES
                 const imgUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url)))].filter(Boolean);
@@ -104,20 +117,16 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
                     if (buf) audioBuffersRef.current.set(rUrl, buf);
                 }));
 
-                // Reset des états de maîtrise pour le niveau actuel
-                setQuestionStates(new Array(questions.length).fill(0));
-                setLoading(false);
+                const qCount = finalGameData.levels?.[0]?.questions?.length || 0;
+                setQuestionStates(new Array(qCount).fill(0));
                 
-                // Si on est en test studio, on force le démarrage sans intro
-                if (isStudioTest) {
-                    setEngineStarted(true);
-                    triggerGlobalEvent("UPLEVEL");
-                }
+                setLoading(false);
+                if (isStudioTest) setEngineStarted(true);
             } catch (e) { console.error("Unified Engine Load Error", e); }
         };
-        loadAssets();
+        load();
         return () => { isRunningRef.current = false; if(frameIdRef.current) cancelAnimationFrame(frameIdRef.current); };
-    }, [gameData, currentLevelIdx]); // On recharge si on change de niveau
+    }, [gameData]);
 
     // 2. MOTEUR GRAPHIQUE
     useEffect(() => {
@@ -125,23 +134,30 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
 
         const MiniGameBase = createGameBase({
             audioBuffers: audioBuffersRef.current, audioCtx: audioCtxRef.current,
-            projectRef: { current: gameData }, sceneIdx: 0, imageAssets: imageAssetsRef.current,
+            projectRef, sceneIdx: 0, imageAssets: imageAssetsRef.current,
             resolveUrl, canvas: canvasRef.current, ctx: canvasRef.current.getContext('2d'),
             playParallelSound: playParallelSoundImpl,
             callbacks: { 
-                onPlayerHit: () => setLives(l => {
-                    if (keysPressed.current['KeyF']) return l;
-                    const next = Math.max(0, l - 1);
-                    if (next === 0) triggerGameOver();
-                    return next;
-                }) 
+                onPlayerHit: () => {
+                    if (keysPressed.current['KeyF']) return;
+                    setLives(l => {
+                        const next = Math.max(0, l - 1);
+                        if (next === 0) triggerGameOver();
+                        return next;
+                    });
+                }
             }
         });
 
         try {
-            const factory = new Function('MiniGameBase', `${gameData.generatedCode}\nreturn MiniGame;`);
+            const factory = new Function('MiniGameBase', `${projectRef.current.generatedCode}\nreturn MiniGame;`);
             const GameClass = factory(MiniGameBase);
-            const instance = new GameClass(canvasRef.current, {}, {});
+            const instance = new GameClass(canvasRef.current, {}, { 
+                onPlayerHit: () => {
+                    if (keysPressed.current['KeyF']) return;
+                    setLives(l => Math.max(0, l - 1));
+                }
+            });
             gameInstanceRef.current = instance;
             if (instance.start) instance.start();
 
@@ -158,16 +174,13 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
             };
             tick();
         } catch (err) { console.error("Engine Crash", err); }
-
         return () => { isRunningRef.current = false; if (frameIdRef.current) cancelAnimationFrame(frameIdRef.current); };
     }, [engineStarted, loading, currentQIdx]);
 
-    // 3. LOGIQUE RÉPONSE
     const handleAnswer = (idx) => {
         if (!questions[currentQIdx]) return;
         const isCorrect = questions[currentQIdx].a === idx;
         setFeedback(isCorrect ? 'GOOD' : 'BAD');
-        
         if (gameInstanceRef.current?.onResult) gameInstanceRef.current.onResult(isCorrect);
 
         const newStates = [...questionStates];
@@ -182,21 +195,8 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
             setFeedback(null);
             if (isCorrect && newStates[currentQIdx] === 3) {
                 const nextQ = newStates.findIndex(s => s < 3);
-                if (nextQ !== -1) {
-                    setCurrentQIdx(nextQ);
-                } else {
-                    // Fin du niveau !
-                    if (levels[currentLevelIdx + 1]) {
-                        triggerGlobalEvent("LEVEL_WIN");
-                        alert("NIVEAU RÉUSSI ! PASSAGE AU SUIVANT...");
-                        setCurrentLevelIdx(prev => prev + 1);
-                        setCurrentQIdx(0);
-                        setShowLevelIntro(true);
-                        setEngineStarted(false);
-                    } else {
-                        triggerWin();
-                    }
-                }
+                if (nextQ !== -1) setCurrentQIdx(nextQ);
+                else triggerWin();
             }
         }, 1000);
     };
@@ -206,37 +206,18 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
         const newStates = [...questionStates];
         newStates[idx] = 3;
         setQuestionStates(newStates);
-        if (newStates.every(s => s === 3)) {
-             if (levels[currentLevelIdx + 1]) {
-                setCurrentLevelIdx(prev => prev + 1);
-                setCurrentQIdx(0);
-                setShowLevelIntro(true);
-                setEngineStarted(false);
-             } else triggerWin();
-        }
     };
 
-    const triggerWin = () => { triggerGlobalEvent("LEVEL_WIN"); alert("VICTOIRE FINALE !"); onExit(); };
+    const triggerWin = () => { triggerGlobalEvent("LEVEL_WIN"); alert("NIVEAU RÉUSSI !"); onExit(); };
     const triggerGameOver = () => { triggerGlobalEvent("DÉFAITE"); alert("GAME OVER"); onExit(); };
 
-    if (loading) return <div className="game-player-fullscreen bg-slate-900 flex items-center justify-center text-white font-black">SYNCHRONISATION DES ASSETS...</div>;
-
-    const hasSheet = currentLevelData.intro?.sheetUrl;
-    const hasVideo = currentLevelData.intro?.videoUrl;
+    if (loading) return <div className="game-player-fullscreen bg-slate-900 flex items-center justify-center text-white font-black">CHARGEMENT DES DONNÉES...</div>;
 
     return (
         <div className="game-player-fullscreen bg-slate-950 flex flex-col items-center justify-center">
             {showLevelIntro ? (
                 <div className="flex flex-col items-center animate-in zoom-in max-w-4xl px-6">
-                    <div className="bg-indigo-600 text-white px-6 py-2 rounded-full font-black uppercase tracking-widest text-sm mb-4">
-                        Niveau {currentLevelIdx + 1} : {currentLevelData.name}
-                    </div>
-                    <h1 className="text-4xl font-black text-white uppercase mb-8 text-center">{gameData.title}</h1>
-                    <div className="flex gap-6 mb-10 h-[320px] w-full justify-center">
-                        {hasSheet && <img src={resolveUrl(hasSheet)} className="h-full rounded-2xl border-4 border-white shadow-2xl bg-white object-contain" />}
-                        {hasVideo && <iframe src={hasVideo.replace("watch?v=", "embed/")} className="h-full aspect-video rounded-2xl border-4 border-white shadow-2xl" />}
-                        {!hasSheet && !hasVideo && <div className="h-full flex items-center text-slate-500 font-black uppercase text-xl">Préparez-vous...</div>}
-                    </div>
+                    <h1 className="text-4xl font-black text-white uppercase mb-8 text-center">{projectRef.current.title}</h1>
                     <button onClick={() => { setShowLevelIntro(false); setEngineStarted(true); triggerGlobalEvent("UPLEVEL"); }} className="px-16 py-6 bg-white text-indigo-600 font-black text-3xl rounded-full shadow-2xl hover:scale-110 transition-all uppercase">
                         🚀 GO !
                     </button>
@@ -247,10 +228,9 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
                         <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl flex gap-1 cursor-pointer pointer-events-auto" onClick={() => keysPressed.current['KeyF'] && setLives(4)}>
                             {"❤️".repeat(lives)}{"🖤".repeat(Math.max(0, 4 - lives))}
                         </div>
-                        
                         <div className="flex-1 flex flex-col items-center px-4 gap-2">
                             <div className="bg-indigo-600 text-white px-4 py-1 rounded-full text-xs font-black uppercase border border-indigo-400">
-                                {gameData.title} • LVL {currentLevelIdx + 1}
+                                {projectRef.current.title}
                             </div>
                             {questions[currentQIdx] && (
                                 <div className="bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 border-slate-600 shadow-2xl text-xl pointer-events-auto">
@@ -258,7 +238,6 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
                                 </div>
                             )}
                         </div>
-
                         <div className="flex gap-2 items-center pointer-events-auto">
                             {questionStates.map((mastery, idx) => (
                                 <div key={idx} onClick={() => handleBarCheat(idx)} className={`w-4 h-12 rounded-md border border-slate-600 relative overflow-hidden cursor-pointer ${currentQIdx === idx ? 'ring-2 ring-indigo-400' : 'opacity-60'}`}>
