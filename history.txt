@@ -8787,3 +8787,8 @@ Build 161: MIGRATION MOTEUR JEU. Extraction de la logique 'BaseFactory' vers 'se
 2026-02-11 17:58 - Intégration du bouton Close (X) universel dans GamePlayer.jsx avec style hover rouge.
 2026-02-11 17:58 - Amélioration de l'intro des niveaux : affichage en grille de la Fiche d'étude et de la Vidéo pédagogique avant le lancement du moteur.
 2026-02-11 17:58 - Ajout du helper getEmbedUrl pour supporter les liens courts youtu.be dans les iframes du moteur.
+
+2026-02-11 18:05 - Modification de GamePlayer.jsx : La pédagogie (Fiche/Vidéo) est affichée immédiatement pendant le chargement des assets en arrière-plan.
+2026-02-11 18:05 - Ajout d'un système de zoom plein écran pour la fiche et la vidéo (Modal dédiée).
+2026-02-11 18:05 - Correction de la fonction getEmbedUrl pour mieux extraire l'ID vidéo YouTube et éviter les erreurs de lecture.
+2026-02-11 18:05 - Désactivation du bouton "Lancer le niveau" tant que le chargement (loading) n'est pas terminé.

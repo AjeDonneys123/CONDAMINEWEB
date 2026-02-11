@@ -1,19 +1,19 @@
-// @signatures: GamePlayer, handleAnswer, handleBarCheat, handleHeartClick, initGame, syncTestData, getEmbedUrl
+// @signatures: GamePlayer, handleAnswer, handleBarCheat, getEmbedUrl
 import React, { useState, useEffect, useRef } from 'react';
 import './GamePlayer.css';
 import { createGameBase } from '../../../services/gameCore';
 import SoundExpert from '../../../services/SoundExpert';
 
 /**
- * 🕹️ MOTEUR UNIFIÉ V160 (SCÈNE + QUIZ + SONS + INTRO RÉVISIONS)
- * SOURCE UNIQUE DE VÉRITÉ : Studio Prof & Player Élève.
- * Ajout : Bouton Fermer & Dashboard d'intro pédagogique.
+ * 🕹️ MOTEUR UNIFIÉ V165 (PEDAGO-LOADER + ZOOM SYSTEM)
+ * Rôle : Affiche la pédagogie PENDANT le chargement des assets.
  */
 export default function GamePlayer({ user, gameData, onExit, isStudioTest = false }) {
     const canvasRef = useRef(null);
     const [engineStarted, setEngineStarted] = useState(false);
     const [showLevelIntro, setShowLevelIntro] = useState(true); 
     const [loading, setLoading] = useState(true);
+    const [zoomMedia, setZoomMedia] = useState(null); // 'sheet' | 'video' | null
     
     // Refs Engine
     const audioCtxRef = useRef(null);
@@ -29,7 +29,6 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
     const [levels, setLevels] = useState(gameData?.levels || []);
     const [currentLevelIdx, setCurrentLevelIdx] = useState(0);
     const [lives, setLives] = useState(4);
-    const [score, setScore] = useState(0);
     const [currentQIdx, setCurrentQIdx] = useState(0);
     const [feedback, setFeedback] = useState(null);
     const [questionStates, setQuestionStates] = useState([]);
@@ -45,12 +44,13 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
         return `/api/proxy/${id}`;
     }
 
-    // Transformateur d'URL YouTube pour Iframe
     const getEmbedUrl = (url) => {
         if (!url) return null;
-        if (url.includes('youtube.com/watch?v=')) return url.replace('watch?v=', 'embed/');
-        if (url.includes('youtu.be/')) return url.split('youtu.be/')[1] ? `https://www.youtube.com/embed/${url.split('youtu.be/')[1]}` : url;
-        return url;
+        let videoId = "";
+        if (url.includes('v=')) videoId = url.split('v=')[1].split('&')[0];
+        else if (url.includes('youtu.be/')) videoId = url.split('youtu.be/')[1].split('?')[0];
+        else if (url.includes('embed/')) videoId = url.split('embed/')[1].split('?')[0];
+        return videoId ? `https://www.youtube.com/embed/${videoId}?autoplay=0&rel=0` : url;
     };
 
     const playParallelSoundImpl = (url) => {
@@ -85,6 +85,7 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
         return () => { window.removeEventListener('keydown', hDown); window.removeEventListener('keyup', hUp); };
     }, []);
 
+    // 1. CHARGEMENT EN ARRIÈRE-PLAN
     useEffect(() => {
         isRunningRef.current = true;
         const load = async () => {
@@ -92,14 +93,10 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
                 if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
                 
                 let finalGameData = { ...gameData };
-
                 if (isStudioTest && (!finalGameData.levels || finalGameData.levels.length === 0)) {
                     const res = await fetch('/api/games/test-data');
                     const testQuiz = await res.json();
-                    if (testQuiz) {
-                        finalGameData.levels = testQuiz.levels;
-                        setLevels(testQuiz.levels);
-                    }
+                    if (testQuiz) { finalGameData.levels = testQuiz.levels; setLevels(testQuiz.levels); }
                 } else {
                     setLevels(finalGameData.levels || []);
                 }
@@ -107,7 +104,6 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
                 projectRef.current = finalGameData;
                 const scene = finalGameData.scenes?.[0] || { actors: [], backdrops: [] };
                 
-                // IMAGES
                 const imgUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url)))].filter(Boolean);
                 await Promise.all(imgUrls.map(url => new Promise(resolve => {
                     const img = new Image(); img.crossOrigin = "anonymous";
@@ -116,7 +112,6 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
                     img.onerror = resolve; img.src = rUrl;
                 })));
 
-                // SONS
                 const sndUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url))))].filter(Boolean);
                 await Promise.all(sndUrls.map(async url => {
                     const rUrl = resolveUrl(url);
@@ -128,12 +123,13 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
                 setQuestionStates(new Array(qCount).fill(0));
                 
                 setLoading(false);
-            } catch (e) { console.error("Unified Engine Load Error", e); }
+            } catch (e) { console.error("Engine Load Error", e); }
         };
         load();
         return () => { isRunningRef.current = false; if(frameIdRef.current) cancelAnimationFrame(frameIdRef.current); };
     }, [gameData]);
 
+    // 2. MOTEUR GRAPHIQUE
     useEffect(() => {
         if (!engineStarted || !canvasRef.current || loading) return;
 
@@ -187,7 +183,6 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
         const isCorrect = questions[currentQIdx].a === idx;
         setFeedback(isCorrect ? 'GOOD' : 'BAD');
         if (gameInstanceRef.current?.onResult) gameInstanceRef.current.onResult(isCorrect);
-
         const newStates = [...questionStates];
         if (isCorrect) newStates[currentQIdx] = Math.min(3, newStates[currentQIdx] + 1);
         else {
@@ -195,7 +190,6 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
             setLives(l => keysPressed.current['KeyF'] ? l : Math.max(0, l - 1));
         }
         setQuestionStates(newStates);
-
         setTimeout(() => {
             setFeedback(null);
             if (isCorrect && newStates[currentQIdx] === 3) {
@@ -216,94 +210,74 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
     const triggerWin = () => { triggerGlobalEvent("LEVEL_WIN"); alert("NIVEAU RÉUSSI !"); onExit(); };
     const triggerGameOver = () => { triggerGlobalEvent("DÉFAITE"); alert("GAME OVER"); onExit(); };
 
-    if (loading) return (
-        <div className="game-player-fullscreen bg-slate-900 flex flex-col items-center justify-center text-white font-black">
-            <div className="text-6xl animate-bounce mb-8">⏳</div>
-            <div className="uppercase tracking-[0.2em]">Chargement des ressources...</div>
-        </div>
-    );
-
     return (
         <div className="game-player-fullscreen bg-slate-950 flex flex-col items-center justify-center">
-            {/* BOUTON FERMER UNIVERSEL */}
-            <button 
-                onClick={onExit}
-                className="fixed top-6 right-6 w-14 h-14 bg-white/10 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-2xl font-black transition-all z-[100] border-2 border-white/20 hover:scale-110 active:scale-95"
-            >
-                ✕
-            </button>
+            {/* BOUTON FERMER UNIVERSEL TOUJOURS LÀ */}
+            <button onClick={onExit} className="fixed top-6 right-6 w-14 h-14 bg-white/10 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-2xl font-black transition-all z-[1000] border-2 border-white/20 hover:scale-110 active:scale-95">✕</button>
+
+            {/* MODALE DE ZOOM MEDIA */}
+            {zoomMedia && (
+                <div className="fixed inset-0 z-[2000] bg-slate-900/98 flex flex-col items-center justify-center p-4 lg:p-12 animate-in fade-in zoom-in duration-200" onClick={() => setZoomMedia(null)}>
+                    <button className="absolute top-10 right-10 w-16 h-16 bg-white text-slate-900 rounded-full font-black text-2xl shadow-2xl">✕</button>
+                    <div className="w-full h-full flex items-center justify-center" onClick={e => e.stopPropagation()}>
+                        {zoomMedia === 'sheet' ? (
+                            <img src={resolveUrl(currentLevelData.intro?.sheetUrl)} className="max-w-full max-h-full object-contain rounded-xl shadow-2xl" />
+                        ) : (
+                            <div className="w-full max-w-6xl aspect-video bg-black rounded-3xl overflow-hidden border-8 border-white/10 shadow-2xl">
+                                <iframe className="w-full h-full" src={getEmbedUrl(currentLevelData.intro?.videoUrl)} frameBorder="0" allow="autoplay; encrypted-media" allowFullScreen></iframe>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {showLevelIntro ? (
                 <div className="fixed inset-0 bg-slate-900/95 backdrop-blur-xl z-50 flex flex-col items-center p-8 overflow-y-auto custom-scrollbar">
                     <div className="w-full max-w-6xl animate-in zoom-in slide-in-from-bottom-10 duration-500">
                         <div className="text-center mb-10">
                             <h1 className="text-5xl font-black text-white uppercase tracking-tighter mb-2">{projectRef.current.title}</h1>
-                            <div className="inline-block px-6 py-2 bg-indigo-600 rounded-full text-white font-black uppercase text-xs">
-                                Niveau {currentLevelIdx + 1} : {currentLevelData.name}
-                            </div>
+                            <div className="inline-block px-6 py-2 bg-indigo-600 rounded-full text-white font-black uppercase text-xs">Niveau {currentLevelIdx + 1} : {currentLevelData.name}</div>
                         </div>
 
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 mb-12">
-                            {/* FICHE D'ÉTUDE */}
+                            {/* CARTE FICHE */}
                             <div className="flex flex-col gap-4">
-                                <h2 className="text-indigo-400 font-black uppercase text-sm tracking-widest">📖 Fiche de révision</h2>
-                                <div className="aspect-[4/5] bg-slate-800 rounded-3xl border-4 border-slate-700 overflow-hidden flex items-center justify-center shadow-2xl group">
+                                <h2 className="text-indigo-400 font-black uppercase text-xs tracking-widest flex items-center gap-2">📖 Fiche de révision <span className="bg-white/10 px-2 py-0.5 rounded text-[10px]">CLIQUE POUR AGRANDIR</span></h2>
+                                <div onClick={() => currentLevelData.intro?.sheetUrl && setZoomMedia('sheet')} className={`aspect-[4/3] bg-slate-800 rounded-3xl border-4 border-slate-700 overflow-hidden flex items-center justify-center shadow-2xl group transition-all ${currentLevelData.intro?.sheetUrl ? 'cursor-pointer hover:border-indigo-500 hover:scale-[1.02]' : 'opacity-50'}`}>
                                     {currentLevelData.intro?.sheetUrl ? (
-                                        <img 
-                                            src={resolveUrl(currentLevelData.intro.sheetUrl)} 
-                                            className="w-full h-full object-contain hover:scale-105 transition-transform duration-700"
-                                            alt="Fiche"
-                                        />
-                                    ) : (
-                                        <div className="text-slate-600 font-black uppercase text-xs text-center p-10">
-                                            Aucune fiche visuelle<br/>disponible pour ce niveau
-                                        </div>
-                                    )}
+                                        <img src={resolveUrl(currentLevelData.intro.sheetUrl)} className="w-full h-full object-contain" />
+                                    ) : <div className="text-slate-600 font-black uppercase text-[10px]">Aucune fiche</div>}
                                 </div>
                             </div>
 
-                            {/* VIDÉO */}
+                            {/* CARTE VIDEO */}
                             <div className="flex flex-col gap-4">
-                                <h2 className="text-indigo-400 font-black uppercase text-sm tracking-widest">🎥 Vidéo explicative</h2>
-                                <div className="aspect-video bg-black rounded-3xl border-4 border-slate-700 overflow-hidden shadow-2xl">
+                                <h2 className="text-indigo-400 font-black uppercase text-xs tracking-widest flex items-center gap-2">🎥 Vidéo explicative <span className="bg-white/10 px-2 py-0.5 rounded text-[10px]">CLIQUE POUR VOIR</span></h2>
+                                <div onClick={() => currentLevelData.intro?.videoUrl && setZoomMedia('video')} className={`aspect-[4/3] bg-black rounded-3xl border-4 border-slate-700 overflow-hidden shadow-2xl flex items-center justify-center group transition-all ${currentLevelData.intro?.videoUrl ? 'cursor-pointer hover:border-indigo-500 hover:scale-[1.02]' : 'opacity-50'}`}>
                                     {currentLevelData.intro?.videoUrl ? (
-                                        <iframe 
-                                            className="w-full h-full" 
-                                            src={getEmbedUrl(currentLevelData.intro.videoUrl)} 
-                                            title="Leçon"
-                                            frameBorder="0" 
-                                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                                            allowFullScreen
-                                        ></iframe>
-                                    ) : (
-                                        <div className="w-full h-full flex items-center justify-center text-slate-600 font-black uppercase text-xs text-center p-10">
-                                            Aucune vidéo<br/>associée à ce niveau
+                                        <div className="flex flex-col items-center gap-4 text-white">
+                                            <div className="w-20 h-20 bg-red-600 rounded-full flex items-center justify-center text-4xl shadow-xl group-hover:scale-110 transition-transform">▶</div>
+                                            <span className="font-black text-xs uppercase">Lancer la vidéo</span>
                                         </div>
-                                    )}
-                                </div>
-                                <div className="bg-slate-800/50 p-6 rounded-3xl border border-slate-700 mt-auto">
-                                    <h3 className="text-white font-black uppercase text-xs mb-2">Objectif :</h3>
-                                    <p className="text-slate-400 text-sm font-bold leading-relaxed">
-                                        Prends le temps de réviser ces ressources. Une fois prêt, clique sur le bouton ci-dessous pour lancer le défi !
-                                    </p>
+                                    ) : <div className="text-slate-600 font-black uppercase text-[10px]">Aucune vidéo</div>}
                                 </div>
                             </div>
                         </div>
 
                         <div className="flex justify-center pb-10">
                             <button 
+                                disabled={loading}
                                 onClick={() => { setShowLevelIntro(false); setEngineStarted(true); triggerGlobalEvent("UPLEVEL"); }} 
-                                className="group relative px-20 py-8 bg-white text-indigo-600 font-black text-4xl rounded-full shadow-[0_0_50px_rgba(255,255,255,0.3)] hover:scale-110 active:scale-95 transition-all uppercase overflow-hidden"
+                                className={`group relative px-20 py-8 ${loading ? 'bg-slate-700 text-slate-400 cursor-wait' : 'bg-white text-indigo-600 hover:scale-110'} font-black text-3xl rounded-full shadow-2xl transition-all uppercase overflow-hidden`}
                             >
-                                <span className="relative z-10">🚀 LANCER LE NIVEAU</span>
-                                <div className="absolute inset-0 bg-gradient-to-r from-indigo-100 to-white opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                                <span className="relative z-10">{loading ? '⌛ CHARGEMENT...' : '🚀 C\'EST PARTI !'}</span>
+                                {!loading && <div className="absolute inset-0 bg-gradient-to-r from-indigo-100 to-white opacity-0 group-hover:opacity-100 transition-opacity"></div>}
                             </button>
                         </div>
                     </div>
                 </div>
             ) : (
                 <>
-                    {/* UI JEU */}
                     <div className="absolute top-6 w-full flex justify-between items-start px-10 pointer-events-none z-30">
                         <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl flex gap-1 cursor-pointer pointer-events-auto" onClick={() => keysPressed.current['KeyF'] && setLives(4)}>
                             {"❤️".repeat(lives)}{"🖤".repeat(Math.max(0, 4 - lives))}
@@ -326,9 +300,7 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
                             ))}
                         </div>
                     </div>
-                    
                     <canvas ref={canvasRef} width={800} height={450} className="rounded-xl shadow-2xl bg-black border-4 border-slate-800" />
-
                     {!loading && questions[currentQIdx] && (
                         <div className="absolute bottom-10 w-full flex justify-center px-10 pointer-events-auto z-30">
                             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 w-full max-w-5xl">
