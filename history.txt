@@ -8725,3 +8725,6 @@ Build 161: MIGRATION MOTEUR JEU. Extraction de la logique 'BaseFactory' vers 'se
 11/02/2026 16:30 - MOTEUR JEU : Migration réussie vers /services.
 11/02/2026 16:45 - FIX 404 ÉLÈVE : Alignement des appels Frontend.
 11/02/2026 16:50 - FIX PERMISSIVITÉ : Assouplissement des filtres backend pour Julian (6D). Ajout du support 'isTestGame' pour faciliter le débug.
+
+11/02/2026 16:30 - MOTEUR JEU : Migration réussie vers /services.
+11/02/2026 16:55 - FIX CRASH LECTEUR : Ajout d'un FALLBACK_SCRIPT dans GamePlayer.jsx pour éviter l'erreur 'MiniGame is not defined' si le code en base de données est manquant ou corrompu.
