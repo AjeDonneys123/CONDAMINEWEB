@@ -1,4 +1,4 @@
-// @signatures: GameEngine, handleBarCheat, handleHeartClick, handleMuteToggle, initLevel, handleAnswerClick, triggerWinSequence, triggerGameOver, handleStartGame, triggerGlobalEvent, handleRetry
+// @signatures: GameEngine, handleBarCheat, handleHeartClick, handleMuteToggle, initLevel, handleAnswerClick, triggerWinSequence, triggerGameOver, handleStartGame, triggerGlobalEvent, handleRetry, triggerLevelIntro
 import React, { useState, useRef, useEffect } from 'react';
 import SoundExpert from './SoundExpert';
 import { api } from '../../../../services/api';
@@ -135,7 +135,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     // Etats Visuels
     const [isLevelWon, setIsLevelWon] = useState(false);
     const [showGameOver, setShowGameOver] = useState(false);
-    const [showLevelIntro, setShowLevelIntro] = useState(false);
+    const [showLevelIntro, setShowLevelIntro] = useState(false); // ECRAN PREP
     
     const isLevelWonRef = useRef(false);
     const [isPowerOff, setIsPowerOff] = useState(false);
@@ -148,8 +148,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const frameIdRef = useRef(null);
     const keysPressed = useRef({});
     
-    // 🛡️ VERROU DE SÉCURITÉ AUDIO
-    // Tant que false, AUCUN SON ne peut sortir, même si le code le demande.
     const gameHasStartedRef = useRef(false);
     
     const projectRef = useRef(project);
@@ -166,7 +164,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 questions: [{ q: "Quelle est la capitale ?", options: ["Lyon", "Paris", "Marseille", "Lille"], a: 1 }] 
             }];
             setAllLevels(levelsData);
-            // On charge, mais on force le SILENCE
             initLevel(0, levelsData, true); 
         });
 
@@ -178,9 +175,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     }, []);
 
     const playParallelSoundImpl = (url) => {
-        // 🛑 STOP : Si le jeu n'est pas démarré (Bouton Jouer), on bloque tout.
         if (!gameHasStartedRef.current) return;
-        
         if (isMutedRef.current || !audioCtxRef.current) return;
         const buffer = audioBuffersRef.current.get(resolveUrl(url));
         if (buffer) {
@@ -217,15 +212,11 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         if (questions.length > 0) {
             setCurrentQIndex(0);
             if (!silent) {
-                triggerLevelIntro();
+                // On déclenche l'écran de préparation SANS timeout
+                setShowLevelIntro(true);
+                triggerGlobalEvent("UPLEVEL");
             }
         }
-    };
-
-    const triggerLevelIntro = () => {
-        setShowLevelIntro(true);
-        triggerGlobalEvent("UPLEVEL");
-        setTimeout(() => setShowLevelIntro(false), 2000);
     };
 
     // 2. CHARGEMENT ASSETS
@@ -344,7 +335,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         setTimeout(() => setIsPowerOff(true), 1500);
         setTimeout(() => {
             if (allLevels[currentLevelIdx + 1]) {
-                // Pas de mode silencieux ici, on veut l'anim !
+                // Passage au niveau suivant (PAS silencieux -> Affiche l'écran de prep)
                 initLevel(currentLevelIdx + 1, allLevels, false);
             }
             else { 
@@ -356,7 +347,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     };
 
     const triggerGameOver = () => {
-        console.log("💀 GAME OVER TRIGGERED");
         triggerGlobalEvent("DÉFAITE"); 
         setShowGameOver(true);
     };
@@ -364,19 +354,17 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const handleRetry = () => {
         setShowGameOver(false);
         setLives(4);
-        initLevel(currentLevelIdx, allLevels, false);
+        initLevel(currentLevelIdx, allLevels, false); // Retry -> Affiche l'écran de prep
     };
 
     const handleStartGame = async () => {
         if (audioCtxRef.current) await audioCtxRef.current.resume();
-        
-        // 🚀 DÉVERROUILLAGE DU SON
         gameHasStartedRef.current = true;
-        
         setEngineStarted(true);
         
-        // MAINTENANT ON PEUT JOUER LE SON
-        triggerLevelIntro();
+        // 🚀 DÉCLENCHE L'ÉCRAN DE PRÉPARATION
+        setShowLevelIntro(true);
+        triggerGlobalEvent("UPLEVEL");
     };
 
     useEffect(() => {
@@ -438,6 +426,11 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         return () => { if(frameIdRef.current) cancelAnimationFrame(frameIdRef.current); };
     }, [engineStarted]);
 
+    // Récupération des données du niveau courant (pour l'affichage)
+    const currentLevelData = allLevels[currentLevelIdx] || {};
+    const hasSheet = currentLevelData.intro?.sheetUrl;
+    const hasVideo = currentLevelData.intro?.videoUrl;
+
     return (
         <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center overflow-hidden font-sans">
              <button onClick={onStop} className="absolute top-6 right-6 bg-red-600 text-white w-12 h-12 rounded-full font-black text-2xl shadow-xl border-4 border-white hover:scale-110 transition-all flex items-center justify-center pointer-events-auto z-50">✕</button>
@@ -469,7 +462,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
                             {/* ZONE CENTRALE : BADGE NIVEAU + QUESTION */}
                             <div className="flex-1 flex flex-col items-center px-4 gap-2">
-                                {/* BADGE NIVEAU RESTAURÉ */}
+                                {/* BADGE NIVEAU */}
                                 <div className="bg-indigo-600 text-white px-4 py-1 rounded-full text-xs font-black uppercase tracking-widest shadow-lg border border-indigo-400">
                                     {allLevels[currentLevelIdx]?.name || `NIVEAU ${currentLevelIdx + 1}`}
                                 </div>
@@ -510,15 +503,46 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                             </div>
                         )}
 
-                        {/* ECRAN DE TRANSITION NIVEAU (LE DIV "LEVEL 1") */}
+                        {/* 🔥 ECRAN DE PRÉPARATION NIVEAU (SHEET + VIDEO) */}
                         {showLevelIntro && !isLevelWon && (
-                            <div className="absolute inset-0 flex items-center justify-center bg-black/90 backdrop-blur-md rounded-xl z-50 animate-in zoom-in">
-                                <div className="text-center">
-                                    <h1 className="text-6xl text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-500 font-black uppercase tracking-tighter drop-shadow-2xl animate-bounce">
-                                        {allLevels[currentLevelIdx]?.name || `NIVEAU ${currentLevelIdx + 1}`}
-                                    </h1>
-                                    <p className="text-white/50 text-sm font-bold uppercase mt-4 tracking-[0.5em]">Préparez-vous...</p>
+                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/95 backdrop-blur-md rounded-xl z-50 animate-in zoom-in p-8">
+                                <h1 className="text-5xl text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-500 font-black uppercase tracking-tighter drop-shadow-2xl mb-6">
+                                    {currentLevelData.name || `NIVEAU ${currentLevelIdx + 1}`}
+                                </h1>
+
+                                <div className="flex gap-6 mb-8 w-full max-w-4xl justify-center items-center h-[280px]">
+                                    {/* FICHE */}
+                                    {hasSheet && (
+                                        <div className="h-full aspect-[3/4] bg-white rounded-xl overflow-hidden border-4 border-indigo-500 shadow-2xl relative group cursor-zoom-in">
+                                            <img src={resolveUrl(hasSheet)} className="w-full h-full object-contain" />
+                                            <div className="absolute bottom-0 left-0 right-0 bg-black/70 text-white text-[10px] font-black text-center py-1 uppercase">Fiche Révision</div>
+                                        </div>
+                                    )}
+
+                                    {/* VIDEO */}
+                                    {hasVideo && (
+                                        <div className="h-full aspect-video bg-black rounded-xl overflow-hidden border-4 border-purple-500 shadow-2xl">
+                                            <iframe 
+                                                src={hasVideo.replace("watch?v=", "embed/")} 
+                                                className="w-full h-full" 
+                                                frameBorder="0" 
+                                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                                                allowFullScreen
+                                            ></iframe>
+                                        </div>
+                                    )}
+                                    
+                                    {!hasSheet && !hasVideo && (
+                                        <div className="text-slate-500 font-bold italic text-sm">Préparez-vous à jouer !</div>
+                                    )}
                                 </div>
+
+                                <button 
+                                    onClick={() => setShowLevelIntro(false)}
+                                    className="px-10 py-4 bg-white text-indigo-900 font-black text-2xl rounded-full shadow-[0_0_30px_rgba(99,102,241,0.6)] hover:scale-110 transition-transform uppercase tracking-widest border-4 border-indigo-500 animate-pulse"
+                                >
+                                    GO ! 🚀
+                                </button>
                             </div>
                         )}
                     </div>
@@ -536,7 +560,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                         </div>
                     )}
 
-                    {/* BOUTONS RÉPONSES */}
+                    {/* BOUTONS RÉPONSES (Masqués pendant l'intro) */}
                     {!isLevelWon && !isPowerOff && !showGameOver && !showLevelIntro && levelQuestions[currentQIndex] && (
                         <div className="absolute bottom-10 w-full flex justify-center px-10 pointer-events-auto z-30">
                             <div className="grid grid-cols-4 gap-4 w-full max-w-5xl">
