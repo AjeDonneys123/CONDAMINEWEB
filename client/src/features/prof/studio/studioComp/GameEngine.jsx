@@ -1,12 +1,10 @@
-// @signatures: GameEngine, initLevel, handleAnswerClick, triggerWinSequence, handleStartGame
+// @signatures: GameEngine, handleBarCheat, handleMuteToggle, initLevel, handleAnswerClick, triggerWinSequence, handleStartGame
 import React, { useState, useRef, useEffect } from 'react';
 import SoundExpert from './SoundExpert';
 import { api } from '../../../../services/api';
-// IMPORT DU MOTEUR PARTAGÉ
 import { createGameBase } from '../../../../services/gameCore';
 
-// --- CODE UTILISATEUR PAR DÉFAUT (ZOMBIE) ---
-// Note : Le moteur "MiniGameBase" est maintenant importé, ce code ne fait qu'étendre la logique métier.
+// --- ZOMBIE V9.9 : LOGIQUE CORRIGÉE (DÉGÂTS + SONS) ---
 const ZOMBIE_GAME_CODE = `
 class MiniGame extends MiniGameBase {
     constructor(canvas, assets, callbacks) {
@@ -16,6 +14,7 @@ class MiniGame extends MiniGameBase {
         this.zombieState = "WALKING"; 
         this.heroState = "IDLE";
         this.heroTimer = 0;
+        this.hasDealtDamage = false; // ANTI-SPAM DÉGÂTS
         this.isStopped = false;
         this.baseSpeed = 0.15;
     }
@@ -33,6 +32,7 @@ class MiniGame extends MiniGameBase {
     resetZombie() {
         this.zombieX = 100;
         this.zombieState = "WALKING";
+        this.hasDealtDamage = false; // RESET DÉGÂTS
         if(this.ZOMBIE) {
             this.ZOMBIE.x = 100;
             this.ZOMBIE.play("AVANCER", true);
@@ -52,7 +52,7 @@ class MiniGame extends MiniGameBase {
     update() {
         if (this.isStopped) return;
 
-        // BOSS PHASE SCALING
+        // BOSS SCALING
         if (this.ZOMBIE) this.ZOMBIE.scale = this.isBossPhase ? this.ZOMBIE.baseScale * 1.6 : this.ZOMBIE.baseScale;
 
         // HERO LOGIC
@@ -68,8 +68,11 @@ class MiniGame extends MiniGameBase {
         if (this.zombieState === "WALKING") {
             let speed = this.isBossPhase ? this.baseSpeed * 0.5 : this.baseSpeed;
             this.zombieX -= speed;
+            
+            // DÉCLENCHEMENT ATTAQUE
             if (this.zombieX < 20) {
                 this.zombieState = "ATTACKING";
+                this.hasDealtDamage = false; // PRÊT À FRAPPER
                 if (this.ZOMBIE) {
                     this.ZOMBIE.x = 20;
                     this.ZOMBIE.play("TAPER", false);
@@ -77,17 +80,24 @@ class MiniGame extends MiniGameBase {
             } else if (this.ZOMBIE) {
                 this.ZOMBIE.x = this.zombieX;
             }
-        } else if (this.zombieState === "ATTACKING") {
-            if (this.ZOMBIE && this.ZOMBIE.frameIdx >= 1 && this.heroState !== "HIT") {
-                if (this.HEROS) {
-                    this.HEROS.play("TOUCHE", false);
-                    this.heroState = "HIT";
-                    this.heroTimer = 60;
+        } 
+        else if (this.zombieState === "ATTACKING") {
+            // COUP AU MOMENT DE L'IMPACT (Frame 1)
+            if (this.ZOMBIE && this.ZOMBIE.frameIdx >= 1 && !this.hasDealtDamage) {
+                this.hasDealtDamage = true;
+                if (this.heroState !== "HIT") {
+                    if (this.HEROS) {
+                        this.HEROS.play("TOUCHE", false);
+                        this.heroState = "HIT";
+                        this.heroTimer = 60;
+                    }
+                    // SIGNAL AU MOTEUR REACT
+                    if (this.callbacks.onPlayerHit) this.callbacks.onPlayerHit();
                 }
-                if (this.callbacks.onPlayerHit) this.callbacks.onPlayerHit();
             }
             if (this.ZOMBIE && this.ZOMBIE.isAnimFinished) this.resetZombie();
-        } else if (this.zombieState === "HIT") {
+        } 
+        else if (this.zombieState === "HIT") {
             this.zombieX += 0.5;
             if (this.ZOMBIE) {
                 this.ZOMBIE.x = this.zombieX;
@@ -142,6 +152,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const [currentQIndex, setCurrentQIndex] = useState(-1);
     const [lives, setLives] = useState(4);
     const [feedback, setFeedback] = useState(null);
+    const [isMuted, setIsMuted] = useState(false);
 
     // Etats Visuels
     const [isLevelWon, setIsLevelWon] = useState(false);
@@ -182,9 +193,8 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
     const initLevel = (idx, sourceData) => {
         if (!sourceData[idx]) return;
-        const lvl = sourceData[idx];
+        const questions = sourceData[idx].questions || [];
         setCurrentLevelIdx(idx);
-        const questions = lvl.questions || [];
         setLevelQuestions(questions);
         setQuestionStates(new Array(questions.length).fill(0));
         setIsLevelWon(false);
@@ -193,14 +203,13 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         if (questions.length > 0) setCurrentQIndex(0);
     };
 
-    // 2. ASSET LOADING (AVEC SYNC DES CLÉS)
+    // 2. ASSET LOADING
     useEffect(() => {
         if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
         
         const scene = project.scenes?.[activeSceneIdx];
         if (!scene) { setIsReady(true); return; }
 
-        // Extraction de toutes les URLs d'images (frames + backdrops)
         const imgUrls = [...new Set(
             (scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url)))
             .concat((scene.backdrops || []).map(b => b.url))
@@ -214,10 +223,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         imgUrls.forEach(url => {
             const img = new Image(); 
             img.crossOrigin = "anonymous";
-            
-            // 🔑 CRITICAL FIX : On utilise resolveUrl pour la clé de stockage
-            // Cela garantit que le moteur (gameCore.js) trouvera l'image quand il appellera imageAssets.get(resolveUrl(url))
-            const resolvedKey = resolveUrl(url);
+            const resolvedKey = resolveUrl(url); // CLÉ HARMONISÉE
 
             img.onload = () => {
                 imageAssetsRef.current.set(resolvedKey, img);
@@ -230,15 +236,13 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 loaded++;
                 if (loaded >= total) setIsReady(true);
             };
-            // L'URL source doit aussi être résolue pour le chargement réseau
             img.src = resolvedKey;
         });
 
-        // Chargement Sons (idem)
         const sndUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url))))].filter(Boolean);
         sndUrls.forEach(url => {
             SoundExpert.decodeAudio(resolveUrl(url), audioCtxRef.current).then(buf => {
-                if (buf) audioBuffersRef.current.set(url, buf);
+                if (buf) audioBuffersRef.current.set(resolveUrl(url), buf);
             });
         });
 
@@ -280,6 +284,40 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         }, 1000);
     };
 
+    // --- CHEAT CODE (CLICK BAR) ---
+    const handleBarCheat = (qIdx) => {
+        const newStates = [...questionStates];
+        newStates[qIdx] = (newStates[qIdx] + 1) % 4; // Cycle 0 -> 1 -> 2 -> 3 -> 0
+        setQuestionStates(newStates);
+        // Si on passe à 3, on vérifie la victoire
+        if (newStates.every(s => s >= 3)) triggerWinSequence();
+        else if (newStates[qIdx] < 3) setCurrentQIndex(qIdx);
+    };
+
+    // --- MUTE ---
+    const handleMuteToggle = () => {
+        const newVal = !isMuted;
+        setIsMuted(newVal);
+        isMutedRef.current = newVal;
+        if (newVal && audioCtxRef.current) audioCtxRef.current.suspend();
+        if (!newVal && audioCtxRef.current) audioCtxRef.current.resume();
+    };
+
+    // --- PLAY SOUND (RÉPARÉ) ---
+    const playParallelSoundImpl = (url) => {
+        if (isMutedRef.current || !audioCtxRef.current) return;
+        const buffer = audioBuffersRef.current.get(resolveUrl(url)); // Clé harmonisée
+        if (buffer) {
+            if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
+            try {
+                const source = audioCtxRef.current.createBufferSource();
+                source.buffer = buffer;
+                source.connect(audioCtxRef.current.destination);
+                source.start(0);
+            } catch(e) {}
+        }
+    };
+
     const triggerWinSequence = () => {
         setIsLevelWon(true);
         isLevelWonRef.current = true;
@@ -300,7 +338,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         if (!engineStarted || !canvasRef.current) return;
 
         try {
-            // Création de la classe de base via la Factory importée
             const MiniGameBase = createGameBase({ 
                 audioBuffers: audioBuffersRef.current, 
                 audioCtx: audioCtxRef.current, 
@@ -311,14 +348,14 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 canvas: canvasRef.current, 
                 ctx: canvasRef.current.getContext('2d'), 
                 isMutedRef, 
-                playParallelSound: (url) => { /* Placeholder pour le playParallelSound */ },
+                playParallelSound: playParallelSoundImpl, // Foncteur passé au service
                 callbacks: {
-                    onPlayerHit: () => { if (!isLevelWonRef.current) setLives(l => Math.max(0, l - 1)); }
+                    onPlayerHit: () => { 
+                        if (!isLevelWonRef.current) setLives(l => Math.max(0, l - 1)); 
+                    }
                 }
             });
 
-            // Injection du code utilisateur (Zombie) qui étend MiniGameBase
-            // Note : on passe 'code' qui est éditable dans le Studio, ou ZOMBIE_GAME_CODE par défaut
             const actualCode = code && code.length > 50 ? code : ZOMBIE_GAME_CODE;
             const UserCodeFactory = new Function('MiniGameBase', `${actualCode}\nreturn MiniGame;`);
             const UserGameClass = UserCodeFactory(MiniGameBase);
@@ -333,8 +370,8 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 instance.isBossPhase = bossModeRef.current;
                 
                 if (instance.update) instance.update();
-                if (instance._render) instance._render(); // Appel à la méthode parente
-                if (instance.draw) instance.draw(); // Appel au HUD utilisateur
+                if (instance._render) instance._render(); 
+                if (instance.draw) instance.draw(); 
                 
                 frameIdRef.current = requestAnimationFrame(tick);
             };
@@ -362,9 +399,17 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
              ) : (
                 <>
                     <div className="absolute top-6 w-full flex justify-between items-start px-10 pointer-events-none z-30">
-                        <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-xl pointer-events-auto flex gap-1">
-                            {"❤️".repeat(lives)}{"🖤".repeat(Math.max(0, 4 - lives))}
+                        
+                        {/* VIES + MUTE */}
+                        <div className="flex gap-4 pointer-events-auto">
+                            <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-xl flex gap-1">
+                                {"❤️".repeat(lives)}{"🖤".repeat(Math.max(0, 4 - lives))}
+                            </div>
+                            <button onClick={handleMuteToggle} className="bg-slate-900/80 w-14 h-14 rounded-2xl border-2 border-slate-700 text-2xl flex items-center justify-center text-white hover:bg-slate-800">
+                                {isMuted ? '🔇' : '🔊'}
+                            </button>
                         </div>
+
                         <div className="flex-1 flex justify-center px-4">
                             {levelQuestions[currentQIndex] && !isLevelWon && (
                                 <div className="bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 border-slate-600 shadow-2xl text-xl pointer-events-auto animate-in slide-in-from-top">
@@ -372,9 +417,15 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                                 </div>
                             )}
                         </div>
+
+                        {/* BARRES DE PROGRESSION (CLIQUABLES POUR CHEAT) */}
                         <div className="flex gap-2 items-center pointer-events-auto mr-20">
                             {questionStates.map((mastery, idx) => (
-                                <div key={idx} className={`w-4 h-12 rounded-md border border-slate-600 relative overflow-hidden transition-all ${currentQIndex === idx ? 'ring-2 ring-indigo-400 scale-110' : 'opacity-60'}`}>
+                                <div 
+                                    key={idx} 
+                                    onClick={() => handleBarCheat(idx)}
+                                    className={`w-4 h-12 rounded-md border border-slate-600 relative overflow-hidden transition-all cursor-pointer hover:border-white ${currentQIndex === idx ? 'ring-2 ring-indigo-400 scale-110' : 'opacity-60'}`}
+                                >
                                     <div className={`absolute bottom-0 left-0 right-0 transition-all duration-500 ${mastery === 3 ? 'bg-green-500 shadow-[0_0_10px_green]' : 'bg-yellow-500'}`} style={{ height: `${(mastery / 3) * 100}%` }} />
                                 </div>
                             ))}
