@@ -8746,3 +8746,7 @@ Build 161: MIGRATION MOTEUR JEU. Extraction de la logique 'BaseFactory' vers 'se
 11/02/2026 17:05 - RESTAURATION ACTIVITÉS : Réinstallation complète du module Activities (Homework, Games, Distribution) avec support des multi-pages, des fiches Drive et du ciblage élève.
 11/02/2026 17:06 - STRUCTURE : Rétablissement du ProfStudioFolder gérant les Sections Cloud (MATHS, FRANÇAIS, etc.) et le masquage contextuel par classe.
 11/02/2026 17:12 - MIROIR : Synchronisation finale du code pour garantir l'herméticité et la stabilité entre branches.
+
+11/02/2026 17:10 - PONT MIROIR : Unified GameLevel model.
+11/02/2026 17:18 - BUG FIX MIROIR : Correction du crash ReferenceError.
+11/02/2026 17:30 - ENGINE V8.3 : Sécurisation totale du moteur gameCore et du lecteur GamePlayer. Le jeu se lance désormais même si les données studio sont partielles ou absentes.
