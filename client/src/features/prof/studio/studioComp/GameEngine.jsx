@@ -1,4 +1,4 @@
-// @signatures: GameEngine, handleBarCheat, handleHeartClick, handleMuteToggle, initLevel, handleAnswerClick, triggerWinSequence, triggerGameOver, handleStartGame, triggerGlobalEvent
+// @signatures: GameEngine, handleBarCheat, handleHeartClick, handleMuteToggle, initLevel, handleAnswerClick, triggerWinSequence, triggerGameOver, handleStartGame, triggerGlobalEvent, handleRetry
 import React, { useState, useRef, useEffect } from 'react';
 import SoundExpert from './SoundExpert';
 import { api } from '../../../../services/api';
@@ -134,6 +134,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
     // Etats Visuels
     const [isLevelWon, setIsLevelWon] = useState(false);
+    const [showGameOver, setShowGameOver] = useState(false); // NOUVEAU STATE POUR L'OVERLAY
     const isLevelWonRef = useRef(false);
     const [isPowerOff, setIsPowerOff] = useState(false);
     
@@ -169,7 +170,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         return () => { window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); };
     }, []);
 
-    // --- LOGIQUE SONS STRUCTURELS ---
     const playParallelSoundImpl = (url) => {
         if (isMutedRef.current || !audioCtxRef.current) return;
         const buffer = audioBuffersRef.current.get(resolveUrl(url));
@@ -200,6 +200,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         setLevelQuestions(questions);
         setQuestionStates(new Array(questions.length).fill(0));
         setIsLevelWon(false);
+        setShowGameOver(false); // Reset Game Over
         isLevelWonRef.current = false;
         setIsPowerOff(false);
         if (questions.length > 0) {
@@ -260,7 +261,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     }, [currentQIndex, questionStates]);
 
     const handleAnswerClick = (choiceIdx) => {
-        if (feedback || currentQIndex === -1 || isLevelWonRef.current) return;
+        if (feedback || currentQIndex === -1 || isLevelWonRef.current || showGameOver) return;
         const isCorrect = levelQuestions[currentQIndex].a === choiceIdx;
         setFeedback(isCorrect ? 'CORRECT' : 'WRONG');
 
@@ -332,20 +333,21 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         }, 4000);
     };
 
-    // --- GAME OVER ---
+    // --- GAME OVER LOGIC ---
     const triggerGameOver = () => {
         console.log("💀 GAME OVER TRIGGERED");
-        setIsPowerOff(true); // Ecran noir
         
-        // SON DE DÉFAITE (Si configuré)
+        // 1. SON DE DÉFAITE (Prioritaire)
         triggerGlobalEvent("GAME_OVER");
 
-        setTimeout(() => {
-            alert("💀 GAME OVER... Réessayez !");
-            // RESET COMPLET
-            setLives(4);
-            initLevel(currentLevelIdx, allLevels); 
-        }, 1000);
+        // 2. VISUEL (Ecran rouge)
+        setShowGameOver(true);
+    };
+
+    const handleRetry = () => {
+        setShowGameOver(false);
+        setLives(4);
+        initLevel(currentLevelIdx, allLevels);
     };
 
     const handleStartGame = async () => {
@@ -362,8 +364,8 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     if (!isLevelWonRef.current) {
                         setLives(prev => {
                             const newLives = Math.max(0, prev - 1);
-                            // 💀 DÉTECTION DE LA MORT ICI
                             if (newLives === 0) {
+                                // On déclenche le Game Over ICI, quand la vie est confirmée à 0
                                 triggerGameOver();
                             }
                             return newLives;
@@ -429,44 +431,48 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                  </button>
              ) : (
                 <>
-                    <div className="absolute top-6 w-full flex justify-between items-start px-10 pointer-events-none z-30">
-                        <div className="flex gap-4 pointer-events-auto">
-                            <div 
-                                className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-xl flex gap-1 cursor-pointer active:scale-95 transition-transform"
-                                onClick={handleHeartClick}
-                                title="Cheat: Maintenez F + Clic pour perdre un cœur"
-                            >
-                                {"❤️".repeat(lives)}{"🖤".repeat(Math.max(0, 4 - lives))}
-                            </div>
-                            <button onClick={handleMuteToggle} className="bg-slate-900/80 w-14 h-14 rounded-2xl border-2 border-slate-700 text-2xl flex items-center justify-center text-white hover:bg-slate-800">
-                                {isMuted ? '🔇' : '🔊'}
-                            </button>
-                        </div>
-
-                        <div className="flex-1 flex justify-center px-4">
-                            {levelQuestions[currentQIndex] && !isLevelWon && (
-                                <div className="bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 border-slate-600 shadow-2xl text-xl pointer-events-auto animate-in slide-in-from-top">
-                                    {feedback === 'CORRECT' ? "✅ BRAVO !" : feedback === 'WRONG' ? "❌ RATÉ..." : levelQuestions[currentQIndex].q}
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="flex gap-2 items-center pointer-events-auto mr-20">
-                            {questionStates.map((mastery, idx) => (
+                    {/* UI DU HAUT (VIES, ETC.) */}
+                    {!showGameOver && (
+                        <div className="absolute top-6 w-full flex justify-between items-start px-10 pointer-events-none z-30">
+                            <div className="flex gap-4 pointer-events-auto">
                                 <div 
-                                    key={idx} 
-                                    onClick={() => handleBarCheat(idx)}
-                                    title="Cheat: Maintenez F + Clic pour valider"
-                                    className={`w-4 h-12 rounded-md border border-slate-600 relative overflow-hidden transition-all cursor-pointer hover:border-white ${currentQIndex === idx ? 'ring-2 ring-indigo-400 scale-110' : 'opacity-60'}`}
+                                    className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-xl flex gap-1 cursor-pointer active:scale-95 transition-transform"
+                                    onClick={handleHeartClick}
                                 >
-                                    <div className={`absolute bottom-0 left-0 right-0 transition-all duration-500 ${mastery === 3 ? 'bg-green-500 shadow-[0_0_10px_green]' : 'bg-yellow-500'}`} style={{ height: `${(mastery / 3) * 100}%` }} />
+                                    {"❤️".repeat(lives)}{"🖤".repeat(Math.max(0, 4 - lives))}
                                 </div>
-                            ))}
-                        </div>
-                    </div>
+                                <button onClick={handleMuteToggle} className="bg-slate-900/80 w-14 h-14 rounded-2xl border-2 border-slate-700 text-2xl flex items-center justify-center text-white hover:bg-slate-800">
+                                    {isMuted ? '🔇' : '🔊'}
+                                </button>
+                            </div>
 
+                            <div className="flex-1 flex justify-center px-4">
+                                {levelQuestions[currentQIndex] && !isLevelWon && (
+                                    <div className="bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 border-slate-600 shadow-2xl text-xl pointer-events-auto animate-in slide-in-from-top">
+                                        {feedback === 'CORRECT' ? "✅ BRAVO !" : feedback === 'WRONG' ? "❌ RATÉ..." : levelQuestions[currentQIndex].q}
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="flex gap-2 items-center pointer-events-auto mr-20">
+                                {questionStates.map((mastery, idx) => (
+                                    <div 
+                                        key={idx} 
+                                        onClick={() => handleBarCheat(idx)}
+                                        className={`w-4 h-12 rounded-md border border-slate-600 relative overflow-hidden transition-all cursor-pointer hover:border-white ${currentQIndex === idx ? 'ring-2 ring-indigo-400 scale-110' : 'opacity-60'}`}
+                                    >
+                                        <div className={`absolute bottom-0 left-0 right-0 transition-all duration-500 ${mastery === 3 ? 'bg-green-500 shadow-[0_0_10px_green]' : 'bg-yellow-500'}`} style={{ height: `${(mastery / 3) * 100}%` }} />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* CANVAS DU JEU */}
                     <div className="relative animate-in zoom-in">
                         <canvas ref={canvasRef} width={800} height={450} className={`aspect-video shadow-2xl bg-black border-4 border-slate-800 rounded-xl transition-opacity duration-1000 ${isPowerOff ? 'opacity-0' : 'opacity-100'}`} />
+                        
+                        {/* ECRAN VICTOIRE */}
                         {isLevelWon && (
                             <div className="absolute inset-0 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm rounded-xl animate-in zoom-in z-40">
                                 <div className="bg-white p-10 rounded-[40px] shadow-2xl text-center border-8 border-green-500">
@@ -477,7 +483,21 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                         )}
                     </div>
 
-                    {!isLevelWon && !isPowerOff && levelQuestions[currentQIndex] && (
+                    {/* OVERLAY GAME OVER (DRAMATIQUE ROUGE) */}
+                    {showGameOver && (
+                        <div className="absolute inset-0 z-[60] bg-red-900/95 flex flex-col items-center justify-center animate-in zoom-in">
+                            <h1 className="text-8xl font-black text-white mb-8 tracking-tighter drop-shadow-lg">💀 GAME OVER</h1>
+                            <button 
+                                onClick={handleRetry} 
+                                className="px-10 py-5 bg-white text-red-900 font-black text-2xl rounded-2xl shadow-2xl hover:scale-105 transition-transform uppercase tracking-widest"
+                            >
+                                RÉESSAYER
+                            </button>
+                        </div>
+                    )}
+
+                    {/* BOUTONS RÉPONSES */}
+                    {!isLevelWon && !isPowerOff && !showGameOver && levelQuestions[currentQIndex] && (
                         <div className="absolute bottom-10 w-full flex justify-center px-10 pointer-events-auto z-30">
                             <div className="grid grid-cols-4 gap-4 w-full max-w-5xl">
                                 {levelQuestions[currentQIndex].options.map((o, i) => (
