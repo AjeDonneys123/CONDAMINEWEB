@@ -8708,3 +8708,7 @@ Build 161: MIGRATION MOTEUR JEU. Extraction de la logique 'BaseFactory' vers 'se
 11/02/2026 16:30 - MOTEUR JEU : Migration réussie du GameCore et SoundExpert vers /services.
 11/02/2026 16:32 - BUG AUTH : Correction du routing dans Login.jsx.
 11/02/2026 16:35 - ACTIVATION ÉLÈVE : GamesGrid.jsx basculé sur le moteur universel GamePlayer. Les filtres de classe (ex: 6D) sont actifs.
+
+11/02/2026 16:30 - MOTEUR JEU : Migration réussie du GameCore et SoundExpert vers /services.
+11/02/2026 16:32 - BUG AUTH : Correction du routing dans Login.jsx.
+11/02/2026 16:35 - ACTIVATION ÉLÈVE : GamesGrid.jsx basculé sur le moteur universel GamePlayer. Les filtres de classe (ex: 6D) sont actifs.
