@@ -5,8 +5,8 @@ import { createGameBase } from '../../../services/gameCore';
 import SoundExpert from '../../../services/SoundExpert';
 
 /**
- * 🕹️ MOTEUR UNIFIÉ V190 (BOSS MODE & KEYBOARD INPUT)
- * Rôle : Gère le passage en mode Boss (2/3 de barre) avec saisie clavier.
+ * 🕹️ MOTEUR UNIFIÉ V195 (BOSS MODE UI REFACTOR)
+ * Rôle : Bouton Attaquer à droite de l'input + Saisie permissive.
  */
 export default function GamePlayer({ user, gameData, onExit, isStudioTest = false }) {
     const canvasRef = useRef(null);
@@ -35,7 +35,7 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
     const [lives, setLives] = useState(4);
     const [currentQIdx, setCurrentQIdx] = useState(0);
     const [feedback, setFeedback] = useState(null);
-    const [questionStates, setQuestionStates] = useState([]); // 0: Vide, 1: 1/3, 2: 2/3 (BOSS), 3: PLEIN
+    const [questionStates, setQuestionStates] = useState([]); 
     const [isMuted, setIsMuted] = useState(false);
 
     const currentLevelData = levels[currentLevelIdx] || {};
@@ -53,8 +53,8 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
     const checkAnswerPermissive = (input, target) => {
         if (!input || !target) return false;
         const clean = (s) => s.toLowerCase()
-            .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // Enlever accents
-            .replace(/\s+/g, '') // Enlever espaces
+            .normalize("NFD").replace(/[\u0300-\u036f]/g, "") 
+            .replace(/\s+/g, '') 
             .trim();
         return clean(input) === clean(target);
     };
@@ -195,15 +195,16 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
             setLives(l => keysPressed.current['KeyF'] ? l : Math.max(0, l - 1));
         }
         setQuestionStates(newStates);
-        setUserInput(""); // Reset input
+        setUserInput("");
 
         setTimeout(() => {
             setFeedback(null);
-            // Si la barre est pleine, on cherche la prochaine question non finie
             if (isCorrect && newStates[currentQIdx] === 3) {
-                const nextQ = newStates.findIndex((s, idx) => s < 3 && idx > currentQIdx) || newStates.findIndex(s => s < 3);
-                if (nextQ !== -1 && nextQ !== currentQIdx) {
-                    setCurrentQIdx(nextQ);
+                const nextQ = newStates.findIndex((s, idx) => s < 3 && idx > currentQIdx);
+                const finalNext = nextQ !== -1 ? nextQ : newStates.findIndex(s => s < 3);
+                
+                if (finalNext !== -1 && finalNext !== currentQIdx) {
+                    setCurrentQIdx(finalNext);
                 } else if (newStates.every(s => s === 3)) {
                     triggerWin();
                 }
@@ -300,23 +301,21 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
 
                     <div className="absolute bottom-10 w-full flex justify-center px-10 pointer-events-auto z-30">
                         {isBossPhase ? (
-                            <div className="flex flex-col items-center gap-4 w-full max-w-xl animate-in slide-in-from-bottom-5">
-                                <div className="relative w-full">
-                                    <input 
-                                        autoFocus
-                                        className="w-full bg-slate-900 border-4 border-red-600 text-white text-3xl font-black py-6 px-10 rounded-3xl text-center outline-none focus:ring-4 ring-red-500/30 uppercase placeholder:text-slate-700"
-                                        placeholder="TAPE LA RÉPONSE..."
-                                        value={userInput}
-                                        onChange={e => setUserInput(e.target.value)}
-                                        onKeyDown={e => e.key === 'Enter' && handleAnswer(userInput)}
-                                    />
-                                    <button 
-                                        onClick={() => handleAnswer(userInput)}
-                                        className="absolute right-4 top-4 bottom-4 bg-red-600 hover:bg-red-500 text-white px-8 rounded-2xl font-black text-xl shadow-lg transition-transform active:scale-95"
-                                    >
-                                        ATTAQUER ⚔️
-                                    </button>
-                                </div>
+                            <div className="flex flex-row items-stretch gap-4 w-full max-w-2xl animate-in slide-in-from-bottom-5">
+                                <input 
+                                    autoFocus
+                                    className="flex-1 bg-slate-900 border-4 border-red-600 text-white text-3xl font-black py-6 px-10 rounded-3xl text-center outline-none focus:ring-4 ring-red-500/30 uppercase placeholder:text-slate-700"
+                                    placeholder="TAPE LA RÉPONSE..."
+                                    value={userInput}
+                                    onChange={e => setUserInput(e.target.value)}
+                                    onKeyDown={e => e.key === 'Enter' && handleAnswer(userInput)}
+                                />
+                                <button 
+                                    onClick={() => handleAnswer(userInput)}
+                                    className="bg-red-600 hover:bg-red-500 text-white px-10 rounded-3xl font-black text-xl shadow-xl transition-all active:scale-95 border-b-8 border-red-800 active:border-b-0 uppercase"
+                                >
+                                    ATTAQUER ⚔️
+                                </button>
                             </div>
                         ) : (
                             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 w-full max-w-5xl">

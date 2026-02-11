@@ -8808,3 +8808,7 @@ Build 161: MIGRATION MOTEUR JEU. Extraction de la logique 'BaseFactory' vers 'se
 2026-02-11 18:21 - Implémentation du Mode Boss : Se déclenche à 2/3 de la barre. La barre devient rouge, le cadre du jeu aussi.
 2026-02-11 18:21 - Ajout du système de saisie clavier pour le Mode Boss : Input textuel avec comparaison permissive (ignore accents, majuscules et espaces).
 2026-02-11 18:21 - Ajout du bouton "ATTAQUER" et support de la touche "Entrée" pour valider la saisie en Mode Boss.
+
+2026-02-11 18:24 - Refonte de l'interface Mode Boss : Le bouton "ATTAQUER" est désormais placé à droite de l'input (flex-row) au lieu d'être à l'intérieur.
+2026-02-11 18:24 - Amélioration du bouton Attaquer : Ajout d'un effet 3D (border-b-8) pour correspondre au style des boutons du quiz.
+2026-02-11 18:24 - Optimisation du passage à la question suivante : Utilisation d'une recherche circulaire intelligente pour éviter de rester bloqué sur une question finie.
