@@ -8803,3 +8803,8 @@ Build 161: MIGRATION MOTEUR JEU. Extraction de la logique 'BaseFactory' vers 'se
 2026-02-11 18:14 - Nettoyage et optimisation de la fonction startCurrentLevel dans GamePlayer.jsx.
 
 2026-02-11 18:15 - Modification du Level Banner : Texte jaune, fond transparent, position haute (top-20%) et durée réduite à 1.5s pour un look arcade.
+
+2026-02-11 18:21 - Correction du bug de plantage lors de la barre pleine : Passage automatique à la question suivante non résolue.
+2026-02-11 18:21 - Implémentation du Mode Boss : Se déclenche à 2/3 de la barre. La barre devient rouge, le cadre du jeu aussi.
+2026-02-11 18:21 - Ajout du système de saisie clavier pour le Mode Boss : Input textuel avec comparaison permissive (ignore accents, majuscules et espaces).
+2026-02-11 18:21 - Ajout du bouton "ATTAQUER" et support de la touche "Entrée" pour valider la saisie en Mode Boss.
