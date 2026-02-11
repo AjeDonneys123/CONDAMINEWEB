@@ -1,73 +1,29 @@
-// @signatures: HomeworkList, loadData, myClass, targets
+// @signatures: HomeworkList, loadData
 import React, { useState, useEffect } from 'react';
 import HomeworkWorkspace from './HomeworkWorkspace';
 import DashboardFolder from '../components/DashboardFolder';
 
 export default function HomeworkList({ user }) {
   const [homeworks, setHomeworks] = useState([]);
-  const [chapters, setChapters] = useState([]);
   const [selectedHw, setSelectedHw] = useState(null);
+  const [loading, setLoading] = useState(false);
 
   const loadData = async () => {
-    // Sécurisation des données utilisateur
+    setLoading(true);
     const myId = String(user._id || user.id);
-    const myClass = (user.currentClass || "").toUpperCase().trim();
     
-    // Vérification du statut punition
-    const isPunished = user.punishmentStatus === 'PENDING' || user.punishmentStatus === 'LATE';
-
     try {
-        const [allHw, allSubs] = await Promise.all([
-            fetch('/api/homework/all').then(r => r.json()),
-            fetch('/api/homework/submissions').then(r => r.json())
-        ]);
-
-        // Liste des IDs de devoirs déjà rendus par l'élève
-        const myDoneHwIds = allSubs
-            .filter(s => s.studentId && String(s.studentId) === myId)
-            .map(s => String(s.homeworkId));
-
-        const filtered = allHw.filter(hw => {
-            // 1. CIBLAGE (Est-ce que ce devoir concerne ma classe ?)
-            const targets = (hw.targetClassrooms || []).map(t => t.toUpperCase().trim());
-            const legacyTarget = hw.classroom ? hw.classroom.toUpperCase().trim() : null;
-            const isMyClassTargeted = targets.includes(myClass) || legacyTarget === myClass;
-
-            // 2. LOGIQUE SPÉCIALE PUNITION
-            if (hw.isPunishment) {
-                // Si ce n'est pas pour ma classe, je ne le vois pas
-                if (!isMyClassTargeted) return false;
-
-                // Si je suis PUNI, je DOIS voir la punition de ma classe
-                if (isPunished) {
-                    // Sauf si je l'ai déjà rendue (auquel cas elle disparaît)
-                    const isDone = myDoneHwIds.includes(String(hw._id));
-                    return !isDone;
-                }
-                
-                // Si je ne suis pas puni, je ne vois jamais les punitions
-                return false;
-            }
-
-            // 3. LOGIQUE DEVOIRS NORMAUX
-            const isAssignedIndividually = hw.assignedStudents?.some(id => String(id) === myId);
-            const isAssigned = isAssignedIndividually || (isMyClassTargeted && hw.isAllClass);
-            
-            return isAssigned;
-
-        }).map(hw => ({
-            ...hw,
-            status: myDoneHwIds.includes(String(hw._id)) ? 'done' : 'todo'
-        }));
-
-        setHomeworks(filtered);
+        // FIX V99 : Route HERMÉTIQUE ÉLÈVE pour les devoirs
+        const res = await fetch(`/api/eleve/homework/list/${myId}`);
+        if (!res.ok) throw new Error("404");
+        const data = await res.json();
+        
+        setHomeworks(data.map(hw => ({ ...hw, status: 'todo' })));
     } catch(e) { console.error("Err loading HW", e); }
+    setLoading(false);
   };
 
-  useEffect(() => {
-    loadData();
-    fetch('/api/structure/chapters').then(r => r.json()).then(setChapters);
-  }, [user]); 
+  useEffect(() => { loadData(); }, [user]);
 
   if (selectedHw) return (
       <HomeworkWorkspace 
@@ -77,5 +33,14 @@ export default function HomeworkList({ user }) {
       />
   );
 
-  return <DashboardFolder items={homeworks} chapters={chapters} type="homework" onSelect={setSelectedHw} />;
+  return (
+      <div className="flex flex-col gap-4">
+          <div className="flex justify-end px-4">
+              <button onClick={loadData} className="text-[10px] font-black text-blue-500 bg-white px-3 py-1 rounded-xl border border-blue-100">
+                  {loading ? '...' : '🔄 ACTUALISER'}
+              </button>
+          </div>
+          <DashboardFolder items={homeworks} type="homework" onSelect={setSelectedHw} />
+      </div>
+  );
 }
