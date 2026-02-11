@@ -8772,3 +8772,7 @@ Build 161: MIGRATION MOTEUR JEU. Extraction de la logique 'BaseFactory' vers 'se
 11/02/2026 18:15 - ARCHITECTURE UNIFIÉE : Suppression de la logique de clonage. GameEngine.jsx (Prof) utilise désormais directement GamePlayer.jsx (Élève).
 11/02/2026 18:16 - RESTAURATION CHEATS : Touche KeyF (Invincibilité + Mastery Skip) et Boss Mode restaurés dans le moteur unifié.
 11/02/2026 18:17 - FIX 500 : Sécurisation des routes /eleve/games pour éviter les crashs si le Studio est vide.
+
+11/02/2026 17:35 - MIROIR STUDIO : Julian branché sur les projets Studio.
+11/02/2026 18:15 - ARCHITECTURE UNIFIÉE : GameEngine (Prof) utilise désormais directement GamePlayer (Élève).
+11/02/2026 18:25 - LOGIQUE JSX RESTAURÉE : Ré-implémentation complète de la gestion des niveaux, des questions, des fiches d'intro et du HUD Condamine dans GamePlayer.jsx pour le Prof et l'Élève.
