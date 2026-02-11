@@ -8783,3 +8783,7 @@ Build 161: MIGRATION MOTEUR JEU. Extraction de la logique 'BaseFactory' vers 'se
 
 11/02/2026 18:45 - SNAPSHOT : Création du script snapGameEngine.js pour capturer l'infrastructure du moteur graphique et sonore.
 11/02/2026 18:46 - SYNC : Mise à jour de gameCore.js (V8.5) et StudioLeftPanel pour une gestion fluide des sons et des animations dans le Studio et chez l'élève.
+
+2026-02-11 17:58 - Intégration du bouton Close (X) universel dans GamePlayer.jsx avec style hover rouge.
+2026-02-11 17:58 - Amélioration de l'intro des niveaux : affichage en grille de la Fiche d'étude et de la Vidéo pédagogique avant le lancement du moteur.
+2026-02-11 17:58 - Ajout du helper getEmbedUrl pour supporter les liens courts youtu.be dans les iframes du moteur.

@@ -1,17 +1,18 @@
-// @signatures: GamePlayer, handleAnswer, handleBarCheat, handleHeartClick, initGame, syncTestData
+// @signatures: GamePlayer, handleAnswer, handleBarCheat, handleHeartClick, initGame, syncTestData, getEmbedUrl
 import React, { useState, useEffect, useRef } from 'react';
 import './GamePlayer.css';
 import { createGameBase } from '../../../services/gameCore';
 import SoundExpert from '../../../services/SoundExpert';
 
 /**
- * 🕹️ MOTEUR UNIFIÉ V155 (SCÈNE + QUIZ + SONS)
+ * 🕹️ MOTEUR UNIFIÉ V160 (SCÈNE + QUIZ + SONS + INTRO RÉVISIONS)
  * SOURCE UNIQUE DE VÉRITÉ : Studio Prof & Player Élève.
+ * Ajout : Bouton Fermer & Dashboard d'intro pédagogique.
  */
 export default function GamePlayer({ user, gameData, onExit, isStudioTest = false }) {
     const canvasRef = useRef(null);
     const [engineStarted, setEngineStarted] = useState(false);
-    const [showLevelIntro, setShowLevelIntro] = useState(!isStudioTest); 
+    const [showLevelIntro, setShowLevelIntro] = useState(true); 
     const [loading, setLoading] = useState(true);
     
     // Refs Engine
@@ -39,10 +40,18 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
 
     function resolveUrl(url) {
         if (!url) return "";
-        if (url.startsWith('/api/proxy')) return url;
+        if (url.startsWith('/api/proxy') || url.startsWith('blob:')) return url;
         const id = url.split('/').pop();
         return `/api/proxy/${id}`;
     }
+
+    // Transformateur d'URL YouTube pour Iframe
+    const getEmbedUrl = (url) => {
+        if (!url) return null;
+        if (url.includes('youtube.com/watch?v=')) return url.replace('watch?v=', 'embed/');
+        if (url.includes('youtu.be/')) return url.split('youtu.be/')[1] ? `https://www.youtube.com/embed/${url.split('youtu.be/')[1]}` : url;
+        return url;
+    };
 
     const playParallelSoundImpl = (url) => {
         if (!isRunningRef.current || !audioCtxRef.current || isMuted) return;
@@ -76,7 +85,6 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
         return () => { window.removeEventListener('keydown', hDown); window.removeEventListener('keyup', hUp); };
     }, []);
 
-    // 1. CHARGEMENT ET SYNC TEST
     useEffect(() => {
         isRunningRef.current = true;
         const load = async () => {
@@ -85,7 +93,6 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
                 
                 let finalGameData = { ...gameData };
 
-                // ⚡ LE PONT : Si on est en Studio et qu'on n'a pas de questions, on les récupère
                 if (isStudioTest && (!finalGameData.levels || finalGameData.levels.length === 0)) {
                     const res = await fetch('/api/games/test-data');
                     const testQuiz = await res.json();
@@ -117,18 +124,16 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
                     if (buf) audioBuffersRef.current.set(rUrl, buf);
                 }));
 
-                const qCount = finalGameData.levels?.[0]?.questions?.length || 0;
+                const qCount = finalGameData.levels?.[currentLevelIdx]?.questions?.length || 0;
                 setQuestionStates(new Array(qCount).fill(0));
                 
                 setLoading(false);
-                if (isStudioTest) setEngineStarted(true);
             } catch (e) { console.error("Unified Engine Load Error", e); }
         };
         load();
         return () => { isRunningRef.current = false; if(frameIdRef.current) cancelAnimationFrame(frameIdRef.current); };
     }, [gameData]);
 
-    // 2. MOTEUR GRAPHIQUE
     useEffect(() => {
         if (!engineStarted || !canvasRef.current || loading) return;
 
@@ -211,29 +216,104 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
     const triggerWin = () => { triggerGlobalEvent("LEVEL_WIN"); alert("NIVEAU RÉUSSI !"); onExit(); };
     const triggerGameOver = () => { triggerGlobalEvent("DÉFAITE"); alert("GAME OVER"); onExit(); };
 
-    if (loading) return <div className="game-player-fullscreen bg-slate-900 flex items-center justify-center text-white font-black">CHARGEMENT DES DONNÉES...</div>;
+    if (loading) return (
+        <div className="game-player-fullscreen bg-slate-900 flex flex-col items-center justify-center text-white font-black">
+            <div className="text-6xl animate-bounce mb-8">⏳</div>
+            <div className="uppercase tracking-[0.2em]">Chargement des ressources...</div>
+        </div>
+    );
 
     return (
         <div className="game-player-fullscreen bg-slate-950 flex flex-col items-center justify-center">
+            {/* BOUTON FERMER UNIVERSEL */}
+            <button 
+                onClick={onExit}
+                className="fixed top-6 right-6 w-14 h-14 bg-white/10 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-2xl font-black transition-all z-[100] border-2 border-white/20 hover:scale-110 active:scale-95"
+            >
+                ✕
+            </button>
+
             {showLevelIntro ? (
-                <div className="flex flex-col items-center animate-in zoom-in max-w-4xl px-6">
-                    <h1 className="text-4xl font-black text-white uppercase mb-8 text-center">{projectRef.current.title}</h1>
-                    <button onClick={() => { setShowLevelIntro(false); setEngineStarted(true); triggerGlobalEvent("UPLEVEL"); }} className="px-16 py-6 bg-white text-indigo-600 font-black text-3xl rounded-full shadow-2xl hover:scale-110 transition-all uppercase">
-                        🚀 GO !
-                    </button>
+                <div className="fixed inset-0 bg-slate-900/95 backdrop-blur-xl z-50 flex flex-col items-center p-8 overflow-y-auto custom-scrollbar">
+                    <div className="w-full max-w-6xl animate-in zoom-in slide-in-from-bottom-10 duration-500">
+                        <div className="text-center mb-10">
+                            <h1 className="text-5xl font-black text-white uppercase tracking-tighter mb-2">{projectRef.current.title}</h1>
+                            <div className="inline-block px-6 py-2 bg-indigo-600 rounded-full text-white font-black uppercase text-xs">
+                                Niveau {currentLevelIdx + 1} : {currentLevelData.name}
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 mb-12">
+                            {/* FICHE D'ÉTUDE */}
+                            <div className="flex flex-col gap-4">
+                                <h2 className="text-indigo-400 font-black uppercase text-sm tracking-widest">📖 Fiche de révision</h2>
+                                <div className="aspect-[4/5] bg-slate-800 rounded-3xl border-4 border-slate-700 overflow-hidden flex items-center justify-center shadow-2xl group">
+                                    {currentLevelData.intro?.sheetUrl ? (
+                                        <img 
+                                            src={resolveUrl(currentLevelData.intro.sheetUrl)} 
+                                            className="w-full h-full object-contain hover:scale-105 transition-transform duration-700"
+                                            alt="Fiche"
+                                        />
+                                    ) : (
+                                        <div className="text-slate-600 font-black uppercase text-xs text-center p-10">
+                                            Aucune fiche visuelle<br/>disponible pour ce niveau
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* VIDÉO */}
+                            <div className="flex flex-col gap-4">
+                                <h2 className="text-indigo-400 font-black uppercase text-sm tracking-widest">🎥 Vidéo explicative</h2>
+                                <div className="aspect-video bg-black rounded-3xl border-4 border-slate-700 overflow-hidden shadow-2xl">
+                                    {currentLevelData.intro?.videoUrl ? (
+                                        <iframe 
+                                            className="w-full h-full" 
+                                            src={getEmbedUrl(currentLevelData.intro.videoUrl)} 
+                                            title="Leçon"
+                                            frameBorder="0" 
+                                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                                            allowFullScreen
+                                        ></iframe>
+                                    ) : (
+                                        <div className="w-full h-full flex items-center justify-center text-slate-600 font-black uppercase text-xs text-center p-10">
+                                            Aucune vidéo<br/>associée à ce niveau
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="bg-slate-800/50 p-6 rounded-3xl border border-slate-700 mt-auto">
+                                    <h3 className="text-white font-black uppercase text-xs mb-2">Objectif :</h3>
+                                    <p className="text-slate-400 text-sm font-bold leading-relaxed">
+                                        Prends le temps de réviser ces ressources. Une fois prêt, clique sur le bouton ci-dessous pour lancer le défi !
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex justify-center pb-10">
+                            <button 
+                                onClick={() => { setShowLevelIntro(false); setEngineStarted(true); triggerGlobalEvent("UPLEVEL"); }} 
+                                className="group relative px-20 py-8 bg-white text-indigo-600 font-black text-4xl rounded-full shadow-[0_0_50px_rgba(255,255,255,0.3)] hover:scale-110 active:scale-95 transition-all uppercase overflow-hidden"
+                            >
+                                <span className="relative z-10">🚀 LANCER LE NIVEAU</span>
+                                <div className="absolute inset-0 bg-gradient-to-r from-indigo-100 to-white opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                            </button>
+                        </div>
+                    </div>
                 </div>
             ) : (
                 <>
+                    {/* UI JEU */}
                     <div className="absolute top-6 w-full flex justify-between items-start px-10 pointer-events-none z-30">
                         <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl flex gap-1 cursor-pointer pointer-events-auto" onClick={() => keysPressed.current['KeyF'] && setLives(4)}>
                             {"❤️".repeat(lives)}{"🖤".repeat(Math.max(0, 4 - lives))}
                         </div>
                         <div className="flex-1 flex flex-col items-center px-4 gap-2">
                             <div className="bg-indigo-600 text-white px-4 py-1 rounded-full text-xs font-black uppercase border border-indigo-400">
-                                {projectRef.current.title}
+                                {projectRef.current.title} • {currentLevelData.name}
                             </div>
                             {questions[currentQIdx] && (
-                                <div className="bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 border-slate-600 shadow-2xl text-xl pointer-events-auto">
+                                <div className="bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 border-slate-600 shadow-2xl text-xl pointer-events-auto text-center max-w-2xl">
                                     {feedback === 'GOOD' ? "✅ BIEN JOUÉ !" : feedback === 'BAD' ? "❌ MAUVAISE RÉPONSE" : questions[currentQIdx].q}
                                 </div>
                             )}
@@ -251,10 +331,10 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
 
                     {!loading && questions[currentQIdx] && (
                         <div className="absolute bottom-10 w-full flex justify-center px-10 pointer-events-auto z-30">
-                            <div className="grid grid-cols-4 gap-4 w-full max-w-5xl">
+                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 w-full max-w-5xl">
                                 {questions[currentQIdx].options.map((o, i) => (
-                                    <button key={i} onClick={() => handleAnswer(i)} className="bg-indigo-600 text-white py-6 rounded-2xl font-black uppercase text-lg shadow-xl hover:bg-indigo-50 hover:scale-105 border-b-8 border-indigo-800 active:border-b-0 active:translate-y-2">
-                                        {o}
+                                    <button key={i} onClick={() => handleAnswer(i)} className="bg-indigo-600 text-white py-6 px-4 rounded-2xl font-black uppercase text-lg shadow-xl hover:bg-white hover:text-indigo-600 hover:scale-105 border-b-8 border-indigo-800 active:border-b-0 active:translate-y-2 transition-all">
+                                        {o || "..."}
                                     </button>
                                 ))}
                             </div>
