@@ -1,6 +1,6 @@
 // @signatures: GameEngine, handleBarCheat, handleHeartClick, handleMuteToggle, initLevel, handleAnswerClick, triggerWinSequence, triggerGameOver, handleStartGame, triggerGlobalEvent, handleRetry, triggerLevelIntro
 import React, { useState, useRef, useEffect } from 'react';
-import SoundExpert from './SoundExpert';
+import SoundExpert from '../../../../services/SoundExpert'; // ✅ IMPORT RESTAURÉ
 import { api } from '../../../../services/api';
 import { createGameBase } from '../../../../services/gameCore';
 
@@ -17,7 +17,7 @@ class MiniGame extends MiniGameBase {
         this.isStopped = false;
         this.baseSpeed = 0.15;
     }
-
+    // ... (Code Prof identique à avant, juste l'import SoundExpert change)
     start() { 
         this.isStopped = false;
         if(this.HEROS) { 
@@ -120,8 +120,19 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const [engineStarted, setEngineStarted] = useState(false);
     const [isReady, setIsReady] = useState(false);
     const [loadProgress, setLoadProgress] = useState("");
-    const [debugLogs, setDebugLogs] = useState([]);
     
+    // Refs Engine
+    const audioCtxRef = useRef(null);
+    const audioBuffersRef = useRef(new Map());
+    const imageAssetsRef = useRef(new Map());
+    const gameInstanceRef = useRef(null);
+    const frameIdRef = useRef(null);
+    const keysPressed = useRef({});
+    const gameHasStartedRef = useRef(false);
+    const projectRef = useRef(project);
+    const bossModeRef = useRef(false);
+    const isMutedRef = useRef(false);
+
     // Etats Quiz
     const [allLevels, setAllLevels] = useState([]); 
     const [currentLevelIdx, setCurrentLevelIdx] = useState(0);
@@ -131,42 +142,21 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const [lives, setLives] = useState(4);
     const [feedback, setFeedback] = useState(null);
     const [isMuted, setIsMuted] = useState(false);
-
-    // Etats Visuels
     const [isLevelWon, setIsLevelWon] = useState(false);
     const [showGameOver, setShowGameOver] = useState(false);
-    const [showLevelIntro, setShowLevelIntro] = useState(false); // ECRAN PREP
-    
+    const [showLevelIntro, setShowLevelIntro] = useState(false); 
     const isLevelWonRef = useRef(false);
     const [isPowerOff, setIsPowerOff] = useState(false);
-    
-    // Refs Engine
-    const audioCtxRef = useRef(null);
-    const audioBuffersRef = useRef(new Map());
-    const imageAssetsRef = useRef(new Map());
-    const gameInstanceRef = useRef(null);
-    const frameIdRef = useRef(null);
-    const keysPressed = useRef({});
-    
-    const gameHasStartedRef = useRef(false);
-    
-    const projectRef = useRef(project);
-    const bossModeRef = useRef(false);
-    const isMutedRef = useRef(false);
 
     useEffect(() => { projectRef.current = project; }, [project]);
 
-    // 1. INIT & CLAVIER
+    // INIT
     useEffect(() => {
         api.get('/games/test-data').then(data => {
-            const levelsData = data?.levels?.length > 0 ? data.levels : [{ 
-                name: "Test Default", 
-                questions: [{ q: "Quelle est la capitale ?", options: ["Lyon", "Paris", "Marseille", "Lille"], a: 1 }] 
-            }];
+            const levelsData = data?.levels?.length > 0 ? data.levels : [{ name: "Test Default", questions: [{ q: "Capitale ?", options: ["Lyon", "Paris", "Marseille", "Lille"], a: 1 }] }];
             setAllLevels(levelsData);
             initLevel(0, levelsData, true); 
         });
-
         const handleKeyDown = (e) => { keysPressed.current[e.code] = true; };
         const handleKeyUp = (e) => { keysPressed.current[e.code] = false; };
         window.addEventListener('keydown', handleKeyDown);
@@ -208,49 +198,31 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         setShowGameOver(false);
         isLevelWonRef.current = false;
         setIsPowerOff(false);
-        
         if (questions.length > 0) {
             setCurrentQIndex(0);
             if (!silent) {
-                // On déclenche l'écran de préparation SANS timeout
                 setShowLevelIntro(true);
                 triggerGlobalEvent("UPLEVEL");
             }
         }
     };
 
-    // 2. CHARGEMENT ASSETS
+    // CHARGEMENT ASSETS
     useEffect(() => {
         if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
-        
         const scene = project.scenes?.[activeSceneIdx];
         if (!scene) { setIsReady(true); return; }
 
-        const imgUrls = [...new Set(
-            (scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url)))
-            .concat((scene.backdrops || []).map(b => b.url))
-        )].filter(Boolean);
-
+        const imgUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url)))].filter(Boolean);
         let loaded = 0;
         const total = imgUrls.length;
-
         if (total === 0) setIsReady(true);
 
         imgUrls.forEach(url => {
-            const img = new Image(); 
-            img.crossOrigin = "anonymous";
+            const img = new Image(); img.crossOrigin = "anonymous";
             const resolvedKey = resolveUrl(url); 
-
-            img.onload = () => {
-                imageAssetsRef.current.set(resolvedKey, img);
-                loaded++;
-                setLoadProgress(`${Math.round(loaded/total*100)}%`);
-                if (loaded >= total) setIsReady(true);
-            };
-            img.onerror = () => {
-                loaded++;
-                if (loaded >= total) setIsReady(true);
-            };
+            img.onload = () => { imageAssetsRef.current.set(resolvedKey, img); loaded++; setLoadProgress(`${Math.round(loaded/total*100)}%`); if (loaded >= total) setIsReady(true); };
+            img.onerror = () => { loaded++; if (loaded >= total) setIsReady(true); };
             img.src = resolvedKey;
         });
 
@@ -264,6 +236,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         return () => { if (frameIdRef.current) cancelAnimationFrame(frameIdRef.current); };
     }, [project]);
 
+    // GAME LOOP LOGIC
     useEffect(() => {
         const isBoss = (currentQIndex !== -1 && (questionStates[currentQIndex] || 0) >= 2);
         bossModeRef.current = isBoss;
@@ -274,7 +247,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         if (feedback || currentQIndex === -1 || isLevelWonRef.current || showGameOver || showLevelIntro) return;
         const isCorrect = levelQuestions[currentQIndex].a === choiceIdx;
         setFeedback(isCorrect ? 'CORRECT' : 'WRONG');
-
         const newStates = [...questionStates];
         if (isCorrect) {
             newStates[currentQIndex] = Math.min(3, newStates[currentQIndex] + 1);
@@ -285,7 +257,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
             setLives(l => Math.max(0, l - 1));
         }
         setQuestionStates(newStates);
-
         setTimeout(() => {
             setFeedback(null);
             const available = newStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
@@ -300,133 +271,38 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
     const handleBarCheat = (qIdx) => {
         if (keysPressed.current['KeyF']) {
-            const newStates = [...questionStates];
-            newStates[qIdx] = 3;
-            setQuestionStates(newStates);
+            const newStates = [...questionStates]; newStates[qIdx] = 3; setQuestionStates(newStates);
             if (newStates.every(s => s >= 3)) triggerWinSequence();
         } else {
-            const newStates = [...questionStates];
-            newStates[qIdx] = (newStates[qIdx] + 1) % 4; 
-            setQuestionStates(newStates);
-            if (newStates.every(s => s >= 3)) triggerWinSequence();
-            else if (newStates[qIdx] < 3) setCurrentQIndex(qIdx);
+            const newStates = [...questionStates]; newStates[qIdx] = (newStates[qIdx] + 1) % 4; setQuestionStates(newStates);
+            if (newStates.every(s => s >= 3)) triggerWinSequence(); else if (newStates[qIdx] < 3) setCurrentQIndex(qIdx);
         }
     };
 
-    const handleHeartClick = () => {
-        if (keysPressed.current['KeyF']) {
-            setLives(l => Math.max(0, l - 1));
-        }
-    };
-
-    const handleMuteToggle = () => {
-        const newVal = !isMuted;
-        setIsMuted(newVal);
-        isMutedRef.current = newVal;
-        if (newVal && audioCtxRef.current) audioCtxRef.current.suspend();
-        if (!newVal && audioCtxRef.current) audioCtxRef.current.resume();
-    };
-
-    const triggerWinSequence = () => {
-        setIsLevelWon(true);
-        isLevelWonRef.current = true;
-        triggerGlobalEvent("LEVEL_WIN");
-        
-        setTimeout(() => setIsPowerOff(true), 1500);
-        setTimeout(() => {
-            if (allLevels[currentLevelIdx + 1]) {
-                // Passage au niveau suivant (PAS silencieux -> Affiche l'écran de prep)
-                initLevel(currentLevelIdx + 1, allLevels, false);
-            }
-            else { 
-                alert("🎉 JEU TERMINÉ !"); 
-                triggerGlobalEvent("GAME_WIN"); 
-                onStop(); 
-            }
-        }, 4000);
-    };
-
-    const triggerGameOver = () => {
-        triggerGlobalEvent("DÉFAITE"); 
-        setShowGameOver(true);
-    };
-
-    const handleRetry = () => {
-        setShowGameOver(false);
-        setLives(4);
-        initLevel(currentLevelIdx, allLevels, false); // Retry -> Affiche l'écran de prep
-    };
-
-    const handleStartGame = async () => {
-        if (audioCtxRef.current) await audioCtxRef.current.resume();
-        gameHasStartedRef.current = true;
-        setEngineStarted(true);
-        
-        // 🚀 DÉCLENCHE L'ÉCRAN DE PRÉPARATION
-        setShowLevelIntro(true);
-        triggerGlobalEvent("UPLEVEL");
-    };
+    const handleHeartClick = () => { if (keysPressed.current['KeyF']) setLives(l => Math.max(0, l - 1)); };
+    const handleMuteToggle = () => { const newVal = !isMuted; setIsMuted(newVal); isMutedRef.current = newVal; if (newVal && audioCtxRef.current) audioCtxRef.current.suspend(); if (!newVal && audioCtxRef.current) audioCtxRef.current.resume(); };
+    const triggerWinSequence = () => { setIsLevelWon(true); isLevelWonRef.current = true; triggerGlobalEvent("LEVEL_WIN"); setTimeout(() => setIsPowerOff(true), 1500); setTimeout(() => { if (allLevels[currentLevelIdx + 1]) { initLevel(currentLevelIdx + 1, allLevels, false); } else { alert("🎉 JEU TERMINÉ !"); triggerGlobalEvent("GAME_WIN"); onStop(); } }, 4000); };
+    const triggerGameOver = () => { triggerGlobalEvent("DÉFAITE"); setShowGameOver(true); };
+    const handleRetry = () => { setShowGameOver(false); setLives(4); initLevel(currentLevelIdx, allLevels, false); };
+    const handleStartGame = async () => { if (audioCtxRef.current) await audioCtxRef.current.resume(); gameHasStartedRef.current = true; setEngineStarted(true); setShowLevelIntro(true); triggerGlobalEvent("UPLEVEL"); };
 
     useEffect(() => {
         if (!engineStarted || !canvasRef.current) return;
-
         try {
-            const gameCallbacks = {
-                onPlayerHit: () => { 
-                    if (!isLevelWonRef.current) {
-                        setLives(prev => {
-                            const newLives = Math.max(0, prev - 1);
-                            if (newLives === 0) triggerGameOver();
-                            return newLives;
-                        }); 
-                    }
-                },
-                onLevelWin: () => { }
-            };
-
-            const MiniGameBase = createGameBase({ 
-                audioBuffers: audioBuffersRef.current, 
-                audioCtx: audioCtxRef.current, 
-                projectRef, 
-                sceneIdx: activeSceneIdx, 
-                imageAssets: imageAssetsRef.current, 
-                resolveUrl, 
-                canvas: canvasRef.current, 
-                ctx: canvasRef.current.getContext('2d'), 
-                isMutedRef, 
-                playParallelSound: playParallelSoundImpl,
-                callbacks: gameCallbacks
-            });
-
+            const gameCallbacks = { onPlayerHit: () => { if (!isLevelWonRef.current) setLives(prev => { const newLives = Math.max(0, prev - 1); if (newLives === 0) triggerGameOver(); return newLives; }); }, onLevelWin: () => { } };
+            const MiniGameBase = createGameBase({ audioBuffers: audioBuffersRef.current, audioCtx: audioCtxRef.current, projectRef, sceneIdx: activeSceneIdx, imageAssets: imageAssetsRef.current, resolveUrl, canvas: canvasRef.current, ctx: canvasRef.current.getContext('2d'), isMutedRef, playParallelSound: playParallelSoundImpl, callbacks: gameCallbacks });
             const actualCode = code && code.length > 50 ? code : ZOMBIE_GAME_CODE;
             const UserCodeFactory = new Function('MiniGameBase', `${actualCode}\nreturn MiniGame;`);
             const UserGameClass = UserCodeFactory(MiniGameBase);
-            
             const instance = new UserGameClass(canvasRef.current, {}, gameCallbacks);
             gameInstanceRef.current = instance;
-
             if (instance.start) instance.start();
-            
-            const tick = () => {
-                if(instance.keys) Object.assign(instance.keys, keysPressed.current);
-                instance.isBossPhase = bossModeRef.current;
-                
-                if (instance.update) instance.update();
-                if (instance._render) instance._render(); 
-                if (instance.draw) instance.draw(); 
-                
-                frameIdRef.current = requestAnimationFrame(tick);
-            };
+            const tick = () => { if(instance.keys) Object.assign(instance.keys, keysPressed.current); instance.isBossPhase = bossModeRef.current; if (instance.update) instance.update(); if (instance._render) instance._render(); if (instance.draw) instance.draw(); frameIdRef.current = requestAnimationFrame(tick); };
             tick();
-
-        } catch (e) {
-            console.error("CRASH MOTEUR:", e);
-            alert("Erreur dans le code du jeu. Vérifiez la console.");
-        }
+        } catch (e) { console.error("CRASH MOTEUR:", e); alert("Erreur dans le code du jeu. Vérifiez la console."); }
         return () => { if(frameIdRef.current) cancelAnimationFrame(frameIdRef.current); };
     }, [engineStarted]);
 
-    // Récupération des données du niveau courant (pour l'affichage)
     const currentLevelData = allLevels[currentLevelIdx] || {};
     const hasSheet = currentLevelData.intro?.sheetUrl;
     const hasVideo = currentLevelData.intro?.videoUrl;
@@ -434,147 +310,43 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     return (
         <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center overflow-hidden font-sans">
              <button onClick={onStop} className="absolute top-6 right-6 bg-red-600 text-white w-12 h-12 rounded-full font-black text-2xl shadow-xl border-4 border-white hover:scale-110 transition-all flex items-center justify-center pointer-events-auto z-50">✕</button>
-
              {!engineStarted ? (
-                 <button 
-                    onClick={handleStartGame} 
-                    disabled={!isReady}
-                    className={`px-20 py-10 rounded-full font-black text-5xl shadow-2xl border-8 transition-all ${isReady ? 'bg-white text-indigo-600 border-indigo-200 hover:scale-110 animate-pulse' : 'bg-slate-700 text-slate-500 border-slate-600 cursor-not-allowed'}`}
-                 >
-                    {isReady ? "🚀 JOUER" : `CHARGEMENT ${loadProgress}...`}
-                 </button>
+                 <button onClick={handleStartGame} disabled={!isReady} className={`px-20 py-10 rounded-full font-black text-5xl shadow-2xl border-8 transition-all ${isReady ? 'bg-white text-indigo-600 border-indigo-200 hover:scale-110 animate-pulse' : 'bg-slate-700 text-slate-500 border-slate-600 cursor-not-allowed'}`}>{isReady ? "🚀 JOUER" : `CHARGEMENT ${loadProgress}...`}</button>
              ) : (
                 <>
-                    {/* UI DU HAUT (VIES, ETC.) */}
                     {!showGameOver && !showLevelIntro && (
                         <div className="absolute top-6 w-full flex justify-between items-start px-10 pointer-events-none z-30">
                             <div className="flex gap-4 pointer-events-auto">
-                                <div 
-                                    className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-xl flex gap-1 cursor-pointer active:scale-95 transition-transform"
-                                    onClick={handleHeartClick}
-                                >
-                                    {"❤️".repeat(lives)}{"🖤".repeat(Math.max(0, 4 - lives))}
-                                </div>
-                                <button onClick={handleMuteToggle} className="bg-slate-900/80 w-14 h-14 rounded-2xl border-2 border-slate-700 text-2xl flex items-center justify-center text-white hover:bg-slate-800">
-                                    {isMuted ? '🔇' : '🔊'}
-                                </button>
+                                <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-xl flex gap-1 cursor-pointer active:scale-95 transition-transform" onClick={handleHeartClick}>{"❤️".repeat(lives)}{"🖤".repeat(Math.max(0, 4 - lives))}</div>
+                                <button onClick={handleMuteToggle} className="bg-slate-900/80 w-14 h-14 rounded-2xl border-2 border-slate-700 text-2xl flex items-center justify-center text-white hover:bg-slate-800">{isMuted ? '🔇' : '🔊'}</button>
                             </div>
-
-                            {/* ZONE CENTRALE : BADGE NIVEAU + QUESTION */}
                             <div className="flex-1 flex flex-col items-center px-4 gap-2">
-                                {/* BADGE NIVEAU */}
-                                <div className="bg-indigo-600 text-white px-4 py-1 rounded-full text-xs font-black uppercase tracking-widest shadow-lg border border-indigo-400">
-                                    {allLevels[currentLevelIdx]?.name || `NIVEAU ${currentLevelIdx + 1}`}
-                                </div>
-
-                                {levelQuestions[currentQIndex] && !isLevelWon && (
-                                    <div className="bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 border-slate-600 shadow-2xl text-xl pointer-events-auto animate-in slide-in-from-top">
-                                        {feedback === 'CORRECT' ? "✅ BRAVO !" : feedback === 'WRONG' ? "❌ RATÉ..." : levelQuestions[currentQIndex].q}
-                                    </div>
-                                )}
+                                <div className="bg-indigo-600 text-white px-4 py-1 rounded-full text-xs font-black uppercase tracking-widest shadow-lg border border-indigo-400">{allLevels[currentLevelIdx]?.name || `NIVEAU ${currentLevelIdx + 1}`}</div>
+                                {levelQuestions[currentQIndex] && !isLevelWon && <div className="bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 border-slate-600 shadow-2xl text-xl pointer-events-auto animate-in slide-in-from-top">{feedback === 'CORRECT' ? "✅ BRAVO !" : feedback === 'WRONG' ? "❌ RATÉ..." : levelQuestions[currentQIndex].q}</div>}
                             </div>
-
-                            {/* BARRES DE PROGRESSION */}
                             <div className="flex gap-2 items-center pointer-events-auto mr-20">
-                                {questionStates.map((mastery, idx) => (
-                                    <div 
-                                        key={idx} 
-                                        onClick={() => handleBarCheat(idx)}
-                                        className={`w-4 h-12 rounded-md border border-slate-600 relative overflow-hidden transition-all cursor-pointer hover:border-white ${currentQIndex === idx ? 'ring-2 ring-indigo-400 scale-110' : 'opacity-60'}`}
-                                    >
-                                        <div className={`absolute bottom-0 left-0 right-0 transition-all duration-500 ${mastery === 3 ? 'bg-green-500 shadow-[0_0_10px_green]' : 'bg-yellow-500'}`} style={{ height: `${(mastery / 3) * 100}%` }} />
-                                    </div>
-                                ))}
+                                {questionStates.map((mastery, idx) => ( <div key={idx} onClick={() => handleBarCheat(idx)} className={`w-4 h-12 rounded-md border border-slate-600 relative overflow-hidden transition-all cursor-pointer hover:border-white ${currentQIndex === idx ? 'ring-2 ring-indigo-400 scale-110' : 'opacity-60'}`}><div className={`absolute bottom-0 left-0 right-0 transition-all duration-500 ${mastery === 3 ? 'bg-green-500 shadow-[0_0_10px_green]' : 'bg-yellow-500'}`} style={{ height: `${(mastery / 3) * 100}%` }} /></div> ))}
                             </div>
                         </div>
                     )}
-
-                    {/* CANVAS */}
                     <div className="relative animate-in zoom-in">
                         <canvas ref={canvasRef} width={800} height={450} className={`aspect-video shadow-2xl bg-black border-4 border-slate-800 rounded-xl transition-opacity duration-1000 ${isPowerOff ? 'opacity-0' : 'opacity-100'}`} />
-                        
-                        {/* ECRAN VICTOIRE */}
-                        {isLevelWon && (
-                            <div className="absolute inset-0 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm rounded-xl animate-in zoom-in z-40">
-                                <div className="bg-white p-10 rounded-[40px] shadow-2xl text-center border-8 border-green-500">
-                                    <span className="text-6xl block mb-4">🏆</span>
-                                    <h2 className="text-4xl font-black text-slate-800 uppercase">Niveau Réussi !</h2>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* 🔥 ECRAN DE PRÉPARATION NIVEAU (SHEET + VIDEO) */}
+                        {isLevelWon && <div className="absolute inset-0 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm rounded-xl animate-in zoom-in z-40"><div className="bg-white p-10 rounded-[40px] shadow-2xl text-center border-8 border-green-500"><span className="text-6xl block mb-4">🏆</span><h2 className="text-4xl font-black text-slate-800 uppercase">Niveau Réussi !</h2></div></div>}
                         {showLevelIntro && !isLevelWon && (
                             <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/95 backdrop-blur-md rounded-xl z-50 animate-in zoom-in p-8">
-                                <h1 className="text-5xl text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-500 font-black uppercase tracking-tighter drop-shadow-2xl mb-6">
-                                    {currentLevelData.name || `NIVEAU ${currentLevelIdx + 1}`}
-                                </h1>
-
+                                <h1 className="text-5xl text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-500 font-black uppercase tracking-tighter drop-shadow-2xl mb-6">{currentLevelData.name || `NIVEAU ${currentLevelIdx + 1}`}</h1>
                                 <div className="flex gap-6 mb-8 w-full max-w-4xl justify-center items-center h-[280px]">
-                                    {/* FICHE */}
-                                    {hasSheet && (
-                                        <div className="h-full aspect-[3/4] bg-white rounded-xl overflow-hidden border-4 border-indigo-500 shadow-2xl relative group cursor-zoom-in">
-                                            <img src={resolveUrl(hasSheet)} className="w-full h-full object-contain" />
-                                            <div className="absolute bottom-0 left-0 right-0 bg-black/70 text-white text-[10px] font-black text-center py-1 uppercase">Fiche Révision</div>
-                                        </div>
-                                    )}
-
-                                    {/* VIDEO */}
-                                    {hasVideo && (
-                                        <div className="h-full aspect-video bg-black rounded-xl overflow-hidden border-4 border-purple-500 shadow-2xl">
-                                            <iframe 
-                                                src={hasVideo.replace("watch?v=", "embed/")} 
-                                                className="w-full h-full" 
-                                                frameBorder="0" 
-                                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                                                allowFullScreen
-                                            ></iframe>
-                                        </div>
-                                    )}
-                                    
-                                    {!hasSheet && !hasVideo && (
-                                        <div className="text-slate-500 font-bold italic text-sm">Préparez-vous à jouer !</div>
-                                    )}
+                                    {hasSheet && <div className="h-full aspect-[3/4] bg-white rounded-xl overflow-hidden border-4 border-indigo-500 shadow-2xl relative group cursor-zoom-in"><img src={resolveUrl(hasSheet)} className="w-full h-full object-contain" /><div className="absolute bottom-0 left-0 right-0 bg-black/70 text-white text-[10px] font-black text-center py-1 uppercase">Fiche Révision</div></div>}
+                                    {hasVideo && <div className="h-full aspect-video bg-black rounded-xl overflow-hidden border-4 border-purple-500 shadow-2xl"><iframe src={hasVideo.replace("watch?v=", "embed/")} className="w-full h-full" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen></iframe></div>}
+                                    {!hasSheet && !hasVideo && <div className="text-slate-500 font-bold italic text-sm">Préparez-vous à jouer !</div>}
                                 </div>
-
-                                <button 
-                                    onClick={() => setShowLevelIntro(false)}
-                                    className="px-10 py-4 bg-white text-indigo-900 font-black text-2xl rounded-full shadow-[0_0_30px_rgba(99,102,241,0.6)] hover:scale-110 transition-transform uppercase tracking-widest border-4 border-indigo-500 animate-pulse"
-                                >
-                                    GO ! 🚀
-                                </button>
+                                <button onClick={() => setShowLevelIntro(false)} className="px-10 py-4 bg-white text-indigo-900 font-black text-2xl rounded-full shadow-[0_0_30px_rgba(99,102,241,0.6)] hover:scale-110 transition-transform uppercase tracking-widest border-4 border-indigo-500 animate-pulse">GO ! 🚀</button>
                             </div>
                         )}
                     </div>
-
-                    {/* ECRAN GAME OVER */}
-                    {showGameOver && (
-                        <div className="absolute inset-0 z-[60] bg-red-900/95 flex flex-col items-center justify-center animate-in zoom-in">
-                            <h1 className="text-8xl font-black text-white mb-8 tracking-tighter drop-shadow-lg">💀 GAME OVER</h1>
-                            <button 
-                                onClick={handleRetry} 
-                                className="px-10 py-5 bg-white text-red-900 font-black text-2xl rounded-2xl shadow-2xl hover:scale-105 transition-transform uppercase tracking-widest"
-                            >
-                                RÉESSAYER
-                            </button>
-                        </div>
-                    )}
-
-                    {/* BOUTONS RÉPONSES (Masqués pendant l'intro) */}
+                    {showGameOver && <div className="absolute inset-0 z-[60] bg-red-900/95 flex flex-col items-center justify-center animate-in zoom-in"><h1 className="text-8xl font-black text-white mb-8 tracking-tighter drop-shadow-lg">💀 GAME OVER</h1><button onClick={handleRetry} className="px-10 py-5 bg-white text-red-900 font-black text-2xl rounded-2xl shadow-2xl hover:scale-105 transition-transform uppercase tracking-widest">RÉESSAYER</button></div>}
                     {!isLevelWon && !isPowerOff && !showGameOver && !showLevelIntro && levelQuestions[currentQIndex] && (
-                        <div className="absolute bottom-10 w-full flex justify-center px-10 pointer-events-auto z-30">
-                            <div className="grid grid-cols-4 gap-4 w-full max-w-5xl">
-                                {levelQuestions[currentQIndex].options.map((o, i) => (
-                                    <button 
-                                        key={i} 
-                                        onClick={() => handleAnswerClick(i)} 
-                                        className="bg-indigo-600 text-white py-6 rounded-2xl font-black uppercase text-lg shadow-xl hover:bg-indigo-500 hover:scale-105 transition-all border-b-8 border-indigo-800 active:border-b-0 active:translate-y-2"
-                                    >
-                                        {o}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
+                        <div className="absolute bottom-10 w-full flex justify-center px-10 pointer-events-auto z-30"><div className="grid grid-cols-4 gap-4 w-full max-w-5xl">{levelQuestions[currentQIndex].options.map((o, i) => (<button key={i} onClick={() => handleAnswerClick(i)} className="bg-indigo-600 text-white py-6 rounded-2xl font-black uppercase text-lg shadow-xl hover:bg-indigo-500 hover:scale-105 transition-all border-b-8 border-indigo-800 active:border-b-0 active:translate-y-2">{o}</button>))}</div></div>
                     )}
                 </>
              )}

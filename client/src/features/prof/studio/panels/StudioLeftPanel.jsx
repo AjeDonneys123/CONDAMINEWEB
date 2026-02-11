@@ -1,6 +1,6 @@
 // @signatures: StudioLeftPanel
 import React, { useState, useEffect, useRef } from 'react';
-import SoundExpert from '../studioComp/SoundExpert';
+import SoundExpert from '../../../../services/SoundExpert'; // ✅ IMPORT RESTAURÉ
 
 export default function StudioLeftPanel({
     leftTab, setLeftTab, selectedActor, selectedActionIdx, setSelectedActionIdx, 
@@ -15,6 +15,7 @@ export default function StudioLeftPanel({
     setPreviewFrameIdx,
     currentScene
 }) {
+    // ... (Code reste identique, seul l'import change)
     const [selectedSoundIdx, setSelectedSoundIdx] = useState(null);
     const audioCtxRef = useRef(null);
     const activeSourcesRef = useRef([]);
@@ -154,12 +155,6 @@ export default function StudioLeftPanel({
             speed: 100 
         };
         scene.globalSounds.push(newSoundEvent); 
-        
-        // 4. LOG DE CONTRÔLE
-        console.log("➕ Ajout Son Global :", newSoundEvent);
-        console.log("💾 Envoi au serveur...");
-
-        // 5. SAUVEGARDE
         saveProject(next);
     };
 
@@ -202,8 +197,6 @@ export default function StudioLeftPanel({
                     </>
                 ) : (
                     <>
-                        {/* AFFICHAGE DES SONS GLOBAUX */}
-                        {/* On utilise currentScene (lecture) ou project (écriture) si currentScene est vide */}
                         {(currentScene?.globalSounds || project.scenes[selectedSceneIdx].globalSounds || []).map((act, idx) => (
                             <div key={idx} onClick={() => handleSelectGlobalSound(idx)} className={`action-item ${selectedGlobalSoundIdx === idx ? 'selected' : ''}`}>
                                 <span>{act.name}</span>

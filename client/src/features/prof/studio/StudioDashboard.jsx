@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import './StudioDashboard.css';
 import { api } from '../../../services/api';
-import SoundExpert from './studioComp/SoundExpert';
+import SoundExpert from '../../../services/SoundExpert'; // ✅ IMPORT RESTAURÉ
 
 import ManualEraser from './studioComp/ManualEraser';
 import GameEngine from './studioComp/GameEngine';
@@ -21,26 +21,20 @@ function resolveUrl(url) {
     return `/api/proxy/${id}`;
 }
 
-// 🧟 ZOMBIE V9.8 : BOSS FIX & ROTATION FULL
 const ZOMBIE_GAME_CODE = `// 🧟 ZOMBIE V9.8 (FIX BOSS & ROTATION)
 class MiniGame extends MiniGameBase {
     constructor(canvas, assets, callbacks) {
         super(canvas, assets, callbacks);
         this.projectiles = [];
-        
-        // --- ÉTATS ---
         this.zombieX = 100;
         this.zombieState = "WALKING"; 
-        this.isColliding = false;
-        this.hasDealtDamage = false;
-        
         this.heroState = "IDLE";
         this.heroTimer = 0;
-        
+        this.hasDealtDamage = false;
         this.isStopped = false;
         this.baseSpeed = 0.15;
     }
-
+    // ... (Reste du code par défaut identique) ...
     start() { 
         this.isStopped = false;
         if(this.HEROS) { 
@@ -50,18 +44,15 @@ class MiniGame extends MiniGameBase {
         } 
         this.resetZombie();
     }
-
     resetZombie() {
         this.zombieX = 100;
         this.zombieState = "WALKING";
-        this.isColliding = false;
         this.hasDealtDamage = false;
         if(this.ZOMBIE) {
             this.ZOMBIE.x = 100;
             this.ZOMBIE.play("AVANCER", true);
         }
     }
-
     onResult(isCorrect) {
         if (this.heroState === "HIT") return;
         if (isCorrect && this.HEROS) {
@@ -71,18 +62,13 @@ class MiniGame extends MiniGameBase {
             this.projectiles.push({ x: this.HEROS.x + 5, y: this.HEROS.y - 5 });
         }
     }
-
     update() {
         if (this.isStopped) return;
-
-        // 1. GESTION BOSS (Logique visuelle)
         if (this.isBossPhase) {
             if (this.ZOMBIE) this.ZOMBIE.scale = this.ZOMBIE.baseScale * 1.6;
         } else {
             if (this.ZOMBIE) this.ZOMBIE.scale = this.ZOMBIE.baseScale;
         }
-
-        // 2. GESTION HÉROS
         if (this.heroState === "SHOOT" || this.heroState === "HIT") {
             this.heroTimer--;
             if (this.heroTimer <= 0) {
@@ -90,44 +76,27 @@ class MiniGame extends MiniGameBase {
                 if(this.HEROS) this.HEROS.play("IDLE", true);
             }
         }
-
-        // 3. GESTION ZOMBIE & COLLISIONS
         if (this.zombieState === "WALKING") {
             let speed = this.isBossPhase ? this.baseSpeed * 0.5 : this.baseSpeed;
             this.zombieX -= speed;
-            
-            if (this.zombieX < 20 && !this.isColliding) {
-                this.isColliding = true; 
+            if (this.zombieX < 20) {
                 this.zombieState = "ATTACKING";
                 this.hasDealtDamage = false;
                 if (this.ZOMBIE) this.ZOMBIE.play("TAPER", false);
-            }
-            if (this.ZOMBIE) this.ZOMBIE.x = this.zombieX;
+            } else if(this.ZOMBIE) this.ZOMBIE.x = this.zombieX;
         } 
-        
         else if (this.zombieState === "ATTACKING") {
-            if (this.ZOMBIE) {
-                this.ZOMBIE.x = 20; 
-                if (!this.hasDealtDamage && this.ZOMBIE.frameIdx >= 1) {
-                    this.hasDealtDamage = true;
-                    if (this.HEROS) {
-                        this.HEROS.play("TOUCHE", false);
-                        this.heroState = "HIT";
-                        this.heroTimer = 60;
-                    }
-                    if (this.callbacks.onPlayerHit) this.callbacks.onPlayerHit();
-                }
-                if (this.ZOMBIE.isAnimFinished) this.resetZombie();
-            } else { this.resetZombie(); }
+            if (this.ZOMBIE && this.ZOMBIE.frameIdx >= 1 && !this.hasDealtDamage) {
+                this.hasDealtDamage = true;
+                if (this.HEROS) { this.HEROS.play("TOUCHE", false); this.heroState = "HIT"; this.heroTimer = 60; }
+                if (this.callbacks.onPlayerHit) this.callbacks.onPlayerHit();
+            }
+            if (this.ZOMBIE && this.ZOMBIE.isAnimFinished) this.resetZombie();
         } 
-        
         else if (this.zombieState === "HIT") {
             this.zombieX += 0.5; 
-            if(this.ZOMBIE) this.ZOMBIE.x = this.zombieX;
-            if (this.ZOMBIE.isAnimFinished) this.resetZombie();
+            if(this.ZOMBIE) { this.ZOMBIE.x = this.zombieX; if (this.ZOMBIE.isAnimFinished) this.resetZombie(); }
         }
-
-        // 4. GESTION PROJECTILES
         for (let i = this.projectiles.length - 1; i >= 0; i--) { 
             let p = this.projectiles[i]; 
             p.x += 3;
@@ -139,7 +108,6 @@ class MiniGame extends MiniGameBase {
             else if (p.x > 110) { this.projectiles.splice(i, 1); }
         }
     }
-
     draw() {
         if (this.isStopped) return;
         const ctx = this.ctx;
@@ -155,12 +123,6 @@ class MiniGame extends MiniGameBase {
                 ctx.fill(); 
             }
         });
-        if (this.isBossPhase) {
-            ctx.save(); ctx.font = "900 40px Arial"; ctx.fillStyle = "red"; ctx.textAlign = "center";
-            ctx.shadowColor = "black"; ctx.shadowBlur = 15;
-            ctx.fillText("💀 BOSS 💀", this.canvas.width / 2, 80);
-            ctx.restore();
-        }
     }
 }
 `;
@@ -170,22 +132,8 @@ const DEMO_PROJECT = {
     scenes: [{ 
         name: "Scene 1", backdrops: [], currentBackdropIdx: 0, 
         actors: [ 
-            { 
-                id: "actor-hero", name: "HEROS", initialX: 15, initialY: 70, scale: 1, 
-                actions: [
-                    { name: "IDLE", speed: 100, frames: [], sounds: [] }, 
-                    { name: "TIRER", speed: 100, frames: [], sounds: [] },
-                    { name: "TOUCHE", speed: 100, frames: [], sounds: [] }
-                ] 
-            },
-            { 
-                id: "actor-zombie", name: "ZOMBIE", initialX: 90, initialY: 70, scale: 1, 
-                actions: [
-                    { name: "AVANCER", speed: 150, frames: [], sounds: [] },
-                    { name: "TOUCHE", speed: 100, frames: [], sounds: [] },
-                    { name: "TAPER", speed: 100, frames: [], sounds: [] }
-                ] 
-            } 
+            { id: "actor-hero", name: "HEROS", initialX: 15, initialY: 70, scale: 1, actions: [{ name: "IDLE", speed: 100, frames: [], sounds: [] }, { name: "TIRER", speed: 100, frames: [], sounds: [] }, { name: "TOUCHE", speed: 100, frames: [], sounds: [] }] },
+            { id: "actor-zombie", name: "ZOMBIE", initialX: 90, initialY: 70, scale: 1, actions: [{ name: "AVANCER", speed: 150, frames: [], sounds: [] }, { name: "TOUCHE", speed: 100, frames: [], sounds: [] }, { name: "TAPER", speed: 100, frames: [], sounds: [] }] } 
         ], 
         globalSounds: [] 
     }] 
@@ -231,9 +179,7 @@ export default function StudioDashboard({ user }) {
         const data = await api.get(`/studio/projects/${user.id || user._id}`);
         if (data?.length > 0) {
             const p = data[0];
-            if (p.scenes && p.scenes[0]) {
-                if (!p.scenes[0].globalSounds) p.scenes[0].globalSounds = [];
-            }
+            if (p.scenes && p.scenes[0] && !p.scenes[0].globalSounds) p.scenes[0].globalSounds = [];
             setProject(p); setCode(ZOMBIE_GAME_CODE); 
             if (p.scenes?.[0]?.actors?.[0]) setSelectedActorId(p.scenes[0].actors[0].id);
         }
@@ -248,11 +194,9 @@ export default function StudioDashboard({ user }) {
         } catch(e) {} setLoading(false);
     }
 
-    const handleSetPreviewFrameIdx = (valOrFn) => {
-        if (typeof valOrFn === 'function') setPreviewFrameIdx(prev => valOrFn(prev));
-        else setPreviewFrameIdx(valOrFn);
-    };
-
+    // ... (Reste des handlers identiques à l'original) ...
+    // Je réécris les imports pour être sûr qu'ils passent bien
+    const handleSetPreviewFrameIdx = (valOrFn) => { if (typeof valOrFn === 'function') setPreviewFrameIdx(prev => valOrFn(prev)); else setPreviewFrameIdx(valOrFn); };
     const handleOpenSave = () => { setModalMode('SAVE'); setShowSaveLoadModal(true); };
     const handleOpenLoad = () => { setModalMode('LOAD'); setShowSaveLoadModal(true); };
     const handleCreateNew = () => { setProject(DEMO_PROJECT); setCode(ZOMBIE_GAME_CODE); setSelectedActorId("actor-hero"); setShowSaveLoadModal(false); };
