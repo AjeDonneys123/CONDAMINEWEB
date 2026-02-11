@@ -1,6 +1,6 @@
 // @signatures: GameEngine, handleBarCheat, handleHeartClick, handleMuteToggle, initLevel, handleAnswerClick, triggerWinSequence, triggerGameOver, handleStartGame, triggerGlobalEvent, handleRetry, checkAnswerPermissive, getEmbedUrl
 import React, { useState, useRef, useEffect } from 'react';
-import SoundExpert from '../SoundExpert';
+import SoundExpert from '../../../../services/SoundExpert';
 import { api } from '../../../../services/api';
 import { createGameBase } from '../../../../services/gameCore';
 
