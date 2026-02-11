@@ -8812,3 +8812,7 @@ Build 161: MIGRATION MOTEUR JEU. Extraction de la logique 'BaseFactory' vers 'se
 2026-02-11 18:24 - Refonte de l'interface Mode Boss : Le bouton "ATTAQUER" est désormais placé à droite de l'input (flex-row) au lieu d'être à l'intérieur.
 2026-02-11 18:24 - Amélioration du bouton Attaquer : Ajout d'un effet 3D (border-b-8) pour correspondre au style des boutons du quiz.
 2026-02-11 18:24 - Optimisation du passage à la question suivante : Utilisation d'une recherche circulaire intelligente pour éviter de rester bloqué sur une question finie.
+
+2026-02-11 18:27 - Correction du bug d'alternance des questions : Le moteur cycle désormais à travers toutes les questions non finies après chaque réponse.
+2026-02-11 18:27 - Sécurisation du changement de question : Utilisation d'un modulo et d'une boucle while pour trouver l'index suivant valide.
+2026-02-11 18:27 - Correction du plantage en fin de jeu (NewStates.every check).

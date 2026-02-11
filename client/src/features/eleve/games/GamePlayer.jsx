@@ -5,8 +5,8 @@ import { createGameBase } from '../../../services/gameCore';
 import SoundExpert from '../../../services/SoundExpert';
 
 /**
- * 🕹️ MOTEUR UNIFIÉ V195 (BOSS MODE UI REFACTOR)
- * Rôle : Bouton Attaquer à droite de l'input + Saisie permissive.
+ * 🕹️ MOTEUR UNIFIÉ V200 (ALTERNANCE & STABILITÉ)
+ * Rôle : Assure le cycle entre les questions et corrige le plantage de fin de barre.
  */
 export default function GamePlayer({ user, gameData, onExit, isStudioTest = false }) {
     const canvasRef = useRef(null);
@@ -15,8 +15,6 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
     const [loading, setLoading] = useState(true);
     const [zoomMedia, setZoomMedia] = useState(null); 
     const [showLevelBanner, setShowLevelBanner] = useState(false); 
-    
-    // Saisie Clavier pour Mode Boss
     const [userInput, setUserInput] = useState("");
     
     // Refs Engine
@@ -52,7 +50,7 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
 
     const checkAnswerPermissive = (input, target) => {
         if (!input || !target) return false;
-        const clean = (s) => s.toLowerCase()
+        const clean = (s) => String(s).toLowerCase()
             .normalize("NFD").replace(/[\u0300-\u036f]/g, "") 
             .replace(/\s+/g, '') 
             .trim();
@@ -197,17 +195,27 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
         setQuestionStates(newStates);
         setUserInput("");
 
+        // LOGIQUE D'ALTERNANCE ET DE FIN
         setTimeout(() => {
             setFeedback(null);
-            if (isCorrect && newStates[currentQIdx] === 3) {
-                const nextQ = newStates.findIndex((s, idx) => s < 3 && idx > currentQIdx);
-                const finalNext = nextQ !== -1 ? nextQ : newStates.findIndex(s => s < 3);
-                
-                if (finalNext !== -1 && finalNext !== currentQIdx) {
-                    setCurrentQIdx(finalNext);
-                } else if (newStates.every(s => s === 3)) {
-                    triggerWin();
-                }
+            
+            // 1. On vérifie si tout est fini
+            if (newStates.every(s => s === 3)) {
+                triggerWin();
+                return;
+            }
+
+            // 2. On cherche la PROCHAINE question non terminée (cycle)
+            let nextIdx = (currentQIdx + 1) % newStates.length;
+            let attempts = 0;
+            while (newStates[nextIdx] === 3 && attempts < newStates.length) {
+                nextIdx = (nextIdx + 1) % newStates.length;
+                attempts++;
+            }
+
+            // 3. On change si on a trouvé un nouvel index valide
+            if (nextIdx !== currentQIdx || newStates[currentQIdx] === 3) {
+                setCurrentQIdx(nextIdx);
             }
         }, 1000);
     };
