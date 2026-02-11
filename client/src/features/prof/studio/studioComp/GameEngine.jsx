@@ -135,8 +135,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     // Etats Visuels
     const [isLevelWon, setIsLevelWon] = useState(false);
     const [showGameOver, setShowGameOver] = useState(false);
-    
-    // NOUVEAU : Etat pour l'intro de niveau (Level 1, Level 2...)
     const [showLevelIntro, setShowLevelIntro] = useState(false);
     
     const isLevelWonRef = useRef(false);
@@ -149,6 +147,10 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const gameInstanceRef = useRef(null);
     const frameIdRef = useRef(null);
     const keysPressed = useRef({});
+    
+    // 🛡️ VERROU DE SÉCURITÉ AUDIO
+    // Tant que false, AUCUN SON ne peut sortir, même si le code le demande.
+    const gameHasStartedRef = useRef(false);
     
     const projectRef = useRef(project);
     const bossModeRef = useRef(false);
@@ -164,7 +166,8 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 questions: [{ q: "Quelle est la capitale ?", options: ["Lyon", "Paris", "Marseille", "Lille"], a: 1 }] 
             }];
             setAllLevels(levelsData);
-            initLevel(0, levelsData);
+            // On charge, mais on force le SILENCE
+            initLevel(0, levelsData, true); 
         });
 
         const handleKeyDown = (e) => { keysPressed.current[e.code] = true; };
@@ -175,6 +178,9 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     }, []);
 
     const playParallelSoundImpl = (url) => {
+        // 🛑 STOP : Si le jeu n'est pas démarré (Bouton Jouer), on bloque tout.
+        if (!gameHasStartedRef.current) return;
+        
         if (isMutedRef.current || !audioCtxRef.current) return;
         const buffer = audioBuffersRef.current.get(resolveUrl(url));
         if (buffer) {
@@ -189,7 +195,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     };
 
     const triggerGlobalEvent = (eventName) => {
-        console.log(`📡 [ENGINE] Trigger Event: ${eventName}`);
         const scene = projectRef.current.scenes?.[activeSceneIdx];
         if (!scene || !scene.globalSounds) return;
         const event = scene.globalSounds.find(g => g.name.toUpperCase().trim() === eventName.toUpperCase().trim());
@@ -198,7 +203,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         }
     };
 
-    const initLevel = (idx, sourceData) => {
+    const initLevel = (idx, sourceData, silent = false) => {
         if (!sourceData[idx]) return;
         const questions = sourceData[idx].questions || [];
         setCurrentLevelIdx(idx);
@@ -209,21 +214,18 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         isLevelWonRef.current = false;
         setIsPowerOff(false);
         
-        // --- ANIMATION D'INTRO NIVEAU ---
         if (questions.length > 0) {
             setCurrentQIndex(0);
-            
-            // 1. Affiche l'écran titre du niveau
-            setShowLevelIntro(true);
-            
-            // 2. Joue le son "UPLEVEL" (correspondant à ta capture)
-            triggerGlobalEvent("UPLEVEL");
-
-            // 3. Cache après 2 secondes pour laisser jouer
-            setTimeout(() => {
-                setShowLevelIntro(false);
-            }, 2000);
+            if (!silent) {
+                triggerLevelIntro();
+            }
         }
+    };
+
+    const triggerLevelIntro = () => {
+        setShowLevelIntro(true);
+        triggerGlobalEvent("UPLEVEL");
+        setTimeout(() => setShowLevelIntro(false), 2000);
     };
 
     // 2. CHARGEMENT ASSETS
@@ -337,14 +339,14 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const triggerWinSequence = () => {
         setIsLevelWon(true);
         isLevelWonRef.current = true;
-        
-        // SON VICTOIRE (Peut-être différent de UPLEVEL ?)
-        // Si tu veux UPLEVEL ici aussi, remplace par "UPLEVEL"
-        triggerGlobalEvent("LEVEL_WIN"); 
+        triggerGlobalEvent("LEVEL_WIN");
         
         setTimeout(() => setIsPowerOff(true), 1500);
         setTimeout(() => {
-            if (allLevels[currentLevelIdx + 1]) initLevel(currentLevelIdx + 1, allLevels);
+            if (allLevels[currentLevelIdx + 1]) {
+                // Pas de mode silencieux ici, on veut l'anim !
+                initLevel(currentLevelIdx + 1, allLevels, false);
+            }
             else { 
                 alert("🎉 JEU TERMINÉ !"); 
                 triggerGlobalEvent("GAME_WIN"); 
@@ -354,7 +356,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     };
 
     const triggerGameOver = () => {
-        // Appelle le son "DÉFAITE" (tel que vu sur le screen)
+        console.log("💀 GAME OVER TRIGGERED");
         triggerGlobalEvent("DÉFAITE"); 
         setShowGameOver(true);
     };
@@ -362,12 +364,19 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const handleRetry = () => {
         setShowGameOver(false);
         setLives(4);
-        initLevel(currentLevelIdx, allLevels);
+        initLevel(currentLevelIdx, allLevels, false);
     };
 
     const handleStartGame = async () => {
         if (audioCtxRef.current) await audioCtxRef.current.resume();
+        
+        // 🚀 DÉVERROUILLAGE DU SON
+        gameHasStartedRef.current = true;
+        
         setEngineStarted(true);
+        
+        // MAINTENANT ON PEUT JOUER LE SON
+        triggerLevelIntro();
     };
 
     useEffect(() => {
@@ -458,9 +467,9 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                                 </button>
                             </div>
 
-                            {/* ZONE QUESTION */}
+                            {/* ZONE CENTRALE : BADGE NIVEAU + QUESTION */}
                             <div className="flex-1 flex flex-col items-center px-4 gap-2">
-                                {/* BADGE NIVEAU */}
+                                {/* BADGE NIVEAU RESTAURÉ */}
                                 <div className="bg-indigo-600 text-white px-4 py-1 rounded-full text-xs font-black uppercase tracking-widest shadow-lg border border-indigo-400">
                                     {allLevels[currentLevelIdx]?.name || `NIVEAU ${currentLevelIdx + 1}`}
                                 </div>
@@ -472,7 +481,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                                 )}
                             </div>
 
-                            {/* BARRES */}
+                            {/* BARRES DE PROGRESSION */}
                             <div className="flex gap-2 items-center pointer-events-auto mr-20">
                                 {questionStates.map((mastery, idx) => (
                                     <div 
