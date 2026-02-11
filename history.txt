@@ -8736,3 +8736,7 @@ Build 161: MIGRATION MOTEUR JEU. Extraction de la logique 'BaseFactory' vers 'se
 11/02/2026 17:10 - PONT MIROIR : Unified GameLevel model to include scenes and code.
 11/02/2026 17:12 - PROF SYNC : GameStudio now injects the current Visual Project and Script into the GameLevel during publish.
 11/02/2026 17:15 - JULIAN MIROIR : GamePlayer now mimics GameEngine (Prof Tester). Julian sees Intro -> Visual Game -> Results.
+
+11/02/2026 17:10 - PONT MIROIR : Unified GameLevel model to include scenes and code.
+11/02/2026 17:15 - JULIAN MIROIR : GamePlayer rewritten to mimic GameEngine.
+11/02/2026 17:18 - BUG FIX MIROIR : Correction du crash ReferenceError (MiniGame undefined) dans GamePlayer.jsx. Ajout d'une injection de code sécurisée avec fallback automatique si le code prof est vide.

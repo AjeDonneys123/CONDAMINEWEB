@@ -1,8 +1,48 @@
-// @signatures: GamePlayer, handleStartGame, triggerWin, triggerGameOver
+// @signatures: GamePlayer, handleStartGame, triggerWin, triggerGameOver, FALLBACK_SCRIPT
 import React, { useState, useEffect, useRef } from 'react';
 import './GamePlayer.css';
 import { createGameBase } from '../../../services/gameCore';
 import SoundExpert from '../../../services/SoundExpert';
+
+/**
+ * 🛡️ SCRIPT DE SÉCURITÉ (ZOMBIE STANDBY)
+ * Utilisé si le code du prof est manquant ou corrompu.
+ */
+const FALLBACK_SCRIPT = `
+class MiniGame extends MiniGameBase {
+    constructor(canvas, assets, callbacks) {
+        super(canvas, assets, callbacks);
+        this.zombieX = 100;
+        this.projectiles = [];
+    }
+    start() {
+        if(this.HEROS) { this.HEROS.x = 15; this.HEROS.y = 70; this.HEROS.play("IDLE"); }
+        if(this.ZOMBIE) { this.ZOMBIE.x = 100; this.ZOMBIE.y = 70; this.ZOMBIE.play("AVANCER"); }
+    }
+    onResult(isCorrect) {
+        if(isCorrect && this.HEROS) {
+            this.HEROS.play("TIRER", false);
+            this.projectiles.push({ x: 20, y: 65 });
+        }
+    }
+    update() {
+        this.zombieX -= 0.15;
+        if(this.ZOMBIE) this.ZOMBIE.x = this.zombieX;
+        if(this.zombieX < 20) {
+            if(this.callbacks.onPlayerHit) this.callbacks.onPlayerHit();
+            this.zombieX = 100;
+        }
+        this.projectiles.forEach(p => p.x += 2);
+    }
+    draw() {
+        this.ctx.fillStyle = "white";
+        this.ctx.font = "12px Arial";
+        if (this.projectiles.length === 0) {
+            this.ctx.fillText("SYSTÈME PRÊT : EN ATTENTE DE RÉPONSE", 10, 20);
+        }
+    }
+}
+`;
 
 export default function GamePlayer({ user, gameData, onExit }) {
     const canvasRef = useRef(null);
@@ -10,7 +50,6 @@ export default function GamePlayer({ user, gameData, onExit }) {
     const [showIntro, setShowIntro] = useState(true);
     const [loading, setLoading] = useState(true);
     
-    // Refs Engine
     const audioCtxRef = useRef(null);
     const audioBuffersRef = useRef(new Map());
     const imageAssetsRef = useRef(new Map());
@@ -18,7 +57,6 @@ export default function GamePlayer({ user, gameData, onExit }) {
     const frameIdRef = useRef(null);
     const projectRef = useRef(gameData);
 
-    // Etats Jeu
     const [currentLevelIdx, setCurrentLevelIdx] = useState(0);
     const [lives, setLives] = useState(4);
     const [score, setScore] = useState(0);
@@ -29,32 +67,48 @@ export default function GamePlayer({ user, gameData, onExit }) {
     const currentLevelData = levels[currentLevelIdx] || {};
     const questions = currentLevelData.questions || [];
 
-    // --- CHARGEMENT MIROIR ---
     useEffect(() => {
         const loadAssets = async () => {
-            if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
-            
-            const scene = gameData.scenes?.[0] || { actors: [], backdrops: [] };
-            
-            // 1. Images
-            const imgUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url)))].filter(Boolean);
-            await Promise.all(imgUrls.map(url => new Promise(resolve => {
-                const img = new Image(); img.crossOrigin = "anonymous";
-                const rUrl = url.startsWith('/api/proxy') ? url : `/api/proxy/${url.split('/').pop()}`;
-                img.onload = () => { imageAssetsRef.current.set(rUrl, img); resolve(); };
-                img.onerror = resolve;
-                img.src = rUrl;
-            })));
+            try {
+                if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+                
+                // Préparation d'une scène par défaut si vide
+                const project = { ...gameData };
+                if (!project.scenes || project.scenes.length === 0) {
+                    project.scenes = [{ 
+                        name: "Default", actors: [
+                            { id: "actor-hero", name: "HEROS", initialX: 15, initialY: 70, actions: [] },
+                            { id: "actor-zombie", name: "ZOMBIE", initialX: 90, initialY: 70, actions: [] }
+                        ], backdrops: [], globalSounds: [] 
+                    }];
+                    projectRef.current = project;
+                }
 
-            // 2. Sons
-            const sndUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url))))].filter(Boolean);
-            await Promise.all(sndUrls.map(async url => {
-                const rUrl = url.startsWith('/api/proxy') ? url : `/api/proxy/${url.split('/').pop()}`;
-                const buf = await SoundExpert.decodeAudio(rUrl, audioCtxRef.current);
-                if (buf) audioBuffersRef.current.set(rUrl, buf);
-            }));
+                const scene = project.scenes[0];
+                
+                // 1. Images
+                const imgUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url)))].filter(Boolean);
+                await Promise.all(imgUrls.map(url => new Promise(resolve => {
+                    const img = new Image(); img.crossOrigin = "anonymous";
+                    const rUrl = url.startsWith('/api/proxy') ? url : `/api/proxy/${url.split('/').pop()}`;
+                    img.onload = () => { imageAssetsRef.current.set(rUrl, img); resolve(); };
+                    img.onerror = resolve;
+                    img.src = rUrl;
+                })));
 
-            setLoading(false);
+                // 2. Sons
+                const sndUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url))))].filter(Boolean);
+                await Promise.all(sndUrls.map(async url => {
+                    const rUrl = url.startsWith('/api/proxy') ? url : `/api/proxy/${url.split('/').pop()}`;
+                    const buf = await SoundExpert.decodeAudio(rUrl, audioCtxRef.current);
+                    if (buf) audioBuffersRef.current.set(rUrl, buf);
+                }));
+
+                setLoading(false);
+            } catch (e) {
+                console.error("Asset Load Error", e);
+                setLoading(false);
+            }
         };
         loadAssets();
     }, [gameData]);
@@ -64,39 +118,59 @@ export default function GamePlayer({ user, gameData, onExit }) {
         setEngineStarted(true);
     };
 
-    // --- INITIALISATION MOTEUR ---
     useEffect(() => {
-        if (!engineStarted || !canvasRef.current) return;
+        if (!engineStarted || !canvasRef.current || loading) return;
 
-        const MiniGameBase = createGameBase({
-            audioBuffers: audioBuffersRef.current,
-            audioCtx: audioCtxRef.current,
-            projectRef,
-            sceneIdx: 0,
-            imageAssets: imageAssetsRef.current,
-            resolveUrl: (u) => u.startsWith('/api/proxy') ? u : `/api/proxy/${u.split('/').pop()}`,
-            canvas: canvasRef.current,
-            ctx: canvasRef.current.getContext('2d'),
-            callbacks: { onPlayerHit: () => setLives(l => Math.max(0, l - 1)) }
-        });
+        try {
+            const MiniGameBase = createGameBase({
+                audioBuffers: audioBuffersRef.current,
+                audioCtx: audioCtxRef.current,
+                projectRef,
+                sceneIdx: 0,
+                imageAssets: imageAssetsRef.current,
+                resolveUrl: (u) => u.startsWith('/api/proxy') ? u : `/api/proxy/${u.split('/').pop()}`,
+                canvas: canvasRef.current,
+                ctx: canvasRef.current.getContext('2d'),
+                callbacks: { onPlayerHit: () => setLives(l => Math.max(0, l - 1)) }
+            });
 
-        const UserGameClass = new Function('MiniGameBase', `${gameData.generatedCode}\nreturn MiniGame;`)(MiniGameBase);
-        const instance = new UserGameClass(canvasRef.current, {}, {});
-        gameInstanceRef.current = instance;
-        if (instance.start) instance.start();
+            // 🛡️ INJECTION SÉCURISÉE V2
+            const rawCode = (gameData.generatedCode && gameData.generatedCode.trim().length > 50) 
+                ? gameData.generatedCode 
+                : FALLBACK_SCRIPT;
 
-        const tick = () => {
-            if (instance.update) instance.update();
-            if (instance._render) instance._render();
-            if (instance.draw) instance.draw();
-            frameIdRef.current = requestAnimationFrame(tick);
+            const safeInjectedCode = `
+                ${rawCode}
+                if (typeof MiniGame === 'undefined') {
+                    ${FALLBACK_SCRIPT}
+                }
+                return MiniGame;
+            `;
+
+            const UserGameClass = new Function('MiniGameBase', safeInjectedCode)(MiniGameBase);
+            const instance = new UserGameClass(canvasRef.current, {}, {});
+            gameInstanceRef.current = instance;
+            if (instance.start) instance.start();
+
+            const tick = () => {
+                if (!gameInstanceRef.current) return;
+                if (instance.update) instance.update();
+                if (instance._render) instance._render();
+                if (instance.draw) instance.draw();
+                frameIdRef.current = requestAnimationFrame(tick);
+            };
+            tick();
+        } catch (err) {
+            console.error("Critical Engine Boot Failure:", err);
+        }
+
+        return () => {
+            if (frameIdRef.current) cancelAnimationFrame(frameIdRef.current);
         };
-        tick();
-
-        return () => cancelAnimationFrame(frameIdRef.current);
-    }, [engineStarted]);
+    }, [engineStarted, loading]);
 
     const handleAnswer = (idx) => {
+        if (!questions[currentQIdx]) return;
         const isCorrect = questions[currentQIdx].a === idx;
         setFeedback(isCorrect ? 'GOOD' : 'BAD');
         if (gameInstanceRef.current?.onResult) gameInstanceRef.current.onResult(isCorrect);
@@ -113,15 +187,8 @@ export default function GamePlayer({ user, gameData, onExit }) {
         }, 1000);
     };
 
-    const triggerWin = () => {
-        alert("VICTOIRE !");
-        saveAndExit(1);
-    };
-
-    const triggerGameOver = () => {
-        alert("GAME OVER...");
-        saveAndExit(0);
-    };
+    const triggerWin = () => { alert("VICTOIRE !"); saveAndExit(1); };
+    const triggerGameOver = () => { alert("GAME OVER..."); saveAndExit(0); };
 
     const saveAndExit = async (status) => {
         await fetch('/api/eleve/games/score', {
@@ -139,7 +206,7 @@ export default function GamePlayer({ user, gameData, onExit }) {
         <div className="game-player-fullscreen bg-slate-950 flex flex-col items-center justify-center">
             {showIntro ? (
                 <div className="flex flex-col items-center animate-in zoom-in">
-                    <h1 className="text-4xl font-black text-white uppercase mb-8">{gameData.title}</h1>
+                    <h1 className="text-4xl font-black text-white uppercase mb-8">{gameData.title || "DÉFI CONDAMINE"}</h1>
                     <div className="flex gap-6 mb-10 h-[300px]">
                         {hasSheet && <img src={hasSheet.startsWith('/api/proxy') ? hasSheet : `/api/proxy/${hasSheet.split('/').pop()}`} className="h-full rounded-xl border-4 border-white shadow-2xl" />}
                         {hasVideo && <iframe src={hasVideo.replace("watch?v=", "embed/")} className="h-full aspect-video rounded-xl border-4 border-white shadow-2xl" />}
@@ -162,7 +229,7 @@ export default function GamePlayer({ user, gameData, onExit }) {
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 {questions[currentQIdx].options.map((o, i) => (
-                                    <button key={i} onClick={() => handleAnswer(i)} className="bg-indigo-600 text-white py-4 rounded-xl font-black uppercase hover:bg-indigo-500 shadow-lg">
+                                    <button key={i} onClick={() => handleAnswer(i)} className="bg-indigo-600 text-white py-4 rounded-xl font-black uppercase hover:bg-indigo-50 shadow-lg">
                                         {o}
                                     </button>
                                 ))}
