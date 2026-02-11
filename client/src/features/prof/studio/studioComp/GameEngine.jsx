@@ -134,7 +134,11 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 
     // Etats Visuels
     const [isLevelWon, setIsLevelWon] = useState(false);
-    const [showGameOver, setShowGameOver] = useState(false); // NOUVEAU STATE POUR L'OVERLAY
+    const [showGameOver, setShowGameOver] = useState(false);
+    
+    // NOUVEAU : Etat pour l'intro de niveau (Level 1, Level 2...)
+    const [showLevelIntro, setShowLevelIntro] = useState(false);
+    
     const isLevelWonRef = useRef(false);
     const [isPowerOff, setIsPowerOff] = useState(false);
     
@@ -185,6 +189,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     };
 
     const triggerGlobalEvent = (eventName) => {
+        console.log(`📡 [ENGINE] Trigger Event: ${eventName}`);
         const scene = projectRef.current.scenes?.[activeSceneIdx];
         if (!scene || !scene.globalSounds) return;
         const event = scene.globalSounds.find(g => g.name.toUpperCase().trim() === eventName.toUpperCase().trim());
@@ -200,12 +205,24 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         setLevelQuestions(questions);
         setQuestionStates(new Array(questions.length).fill(0));
         setIsLevelWon(false);
-        setShowGameOver(false); // Reset Game Over
+        setShowGameOver(false);
         isLevelWonRef.current = false;
         setIsPowerOff(false);
+        
+        // --- ANIMATION D'INTRO NIVEAU ---
         if (questions.length > 0) {
             setCurrentQIndex(0);
-            setTimeout(() => triggerGlobalEvent("LEVEL_START"), 500);
+            
+            // 1. Affiche l'écran titre du niveau
+            setShowLevelIntro(true);
+            
+            // 2. Joue le son "UPLEVEL" (correspondant à ta capture)
+            triggerGlobalEvent("UPLEVEL");
+
+            // 3. Cache après 2 secondes pour laisser jouer
+            setTimeout(() => {
+                setShowLevelIntro(false);
+            }, 2000);
         }
     };
 
@@ -261,7 +278,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     }, [currentQIndex, questionStates]);
 
     const handleAnswerClick = (choiceIdx) => {
-        if (feedback || currentQIndex === -1 || isLevelWonRef.current || showGameOver) return;
+        if (feedback || currentQIndex === -1 || isLevelWonRef.current || showGameOver || showLevelIntro) return;
         const isCorrect = levelQuestions[currentQIndex].a === choiceIdx;
         setFeedback(isCorrect ? 'CORRECT' : 'WRONG');
 
@@ -320,7 +337,10 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const triggerWinSequence = () => {
         setIsLevelWon(true);
         isLevelWonRef.current = true;
-        triggerGlobalEvent("LEVEL_WIN");
+        
+        // SON VICTOIRE (Peut-être différent de UPLEVEL ?)
+        // Si tu veux UPLEVEL ici aussi, remplace par "UPLEVEL"
+        triggerGlobalEvent("LEVEL_WIN"); 
         
         setTimeout(() => setIsPowerOff(true), 1500);
         setTimeout(() => {
@@ -333,14 +353,9 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         }, 4000);
     };
 
-    // --- GAME OVER LOGIC ---
     const triggerGameOver = () => {
-        console.log("💀 GAME OVER TRIGGERED");
-        
-        // 1. SON DE DÉFAITE (Prioritaire)
-        triggerGlobalEvent("GAME_OVER");
-
-        // 2. VISUEL (Ecran rouge)
+        // Appelle le son "DÉFAITE" (tel que vu sur le screen)
+        triggerGlobalEvent("DÉFAITE"); 
         setShowGameOver(true);
     };
 
@@ -364,10 +379,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     if (!isLevelWonRef.current) {
                         setLives(prev => {
                             const newLives = Math.max(0, prev - 1);
-                            if (newLives === 0) {
-                                // On déclenche le Game Over ICI, quand la vie est confirmée à 0
-                                triggerGameOver();
-                            }
+                            if (newLives === 0) triggerGameOver();
                             return newLives;
                         }); 
                     }
@@ -432,7 +444,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
              ) : (
                 <>
                     {/* UI DU HAUT (VIES, ETC.) */}
-                    {!showGameOver && (
+                    {!showGameOver && !showLevelIntro && (
                         <div className="absolute top-6 w-full flex justify-between items-start px-10 pointer-events-none z-30">
                             <div className="flex gap-4 pointer-events-auto">
                                 <div 
@@ -446,7 +458,13 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                                 </button>
                             </div>
 
-                            <div className="flex-1 flex justify-center px-4">
+                            {/* ZONE QUESTION */}
+                            <div className="flex-1 flex flex-col items-center px-4 gap-2">
+                                {/* BADGE NIVEAU */}
+                                <div className="bg-indigo-600 text-white px-4 py-1 rounded-full text-xs font-black uppercase tracking-widest shadow-lg border border-indigo-400">
+                                    {allLevels[currentLevelIdx]?.name || `NIVEAU ${currentLevelIdx + 1}`}
+                                </div>
+
                                 {levelQuestions[currentQIndex] && !isLevelWon && (
                                     <div className="bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 border-slate-600 shadow-2xl text-xl pointer-events-auto animate-in slide-in-from-top">
                                         {feedback === 'CORRECT' ? "✅ BRAVO !" : feedback === 'WRONG' ? "❌ RATÉ..." : levelQuestions[currentQIndex].q}
@@ -454,6 +472,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                                 )}
                             </div>
 
+                            {/* BARRES */}
                             <div className="flex gap-2 items-center pointer-events-auto mr-20">
                                 {questionStates.map((mastery, idx) => (
                                     <div 
@@ -468,7 +487,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                         </div>
                     )}
 
-                    {/* CANVAS DU JEU */}
+                    {/* CANVAS */}
                     <div className="relative animate-in zoom-in">
                         <canvas ref={canvasRef} width={800} height={450} className={`aspect-video shadow-2xl bg-black border-4 border-slate-800 rounded-xl transition-opacity duration-1000 ${isPowerOff ? 'opacity-0' : 'opacity-100'}`} />
                         
@@ -481,9 +500,21 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                                 </div>
                             </div>
                         )}
+
+                        {/* ECRAN DE TRANSITION NIVEAU (LE DIV "LEVEL 1") */}
+                        {showLevelIntro && !isLevelWon && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/90 backdrop-blur-md rounded-xl z-50 animate-in zoom-in">
+                                <div className="text-center">
+                                    <h1 className="text-6xl text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-500 font-black uppercase tracking-tighter drop-shadow-2xl animate-bounce">
+                                        {allLevels[currentLevelIdx]?.name || `NIVEAU ${currentLevelIdx + 1}`}
+                                    </h1>
+                                    <p className="text-white/50 text-sm font-bold uppercase mt-4 tracking-[0.5em]">Préparez-vous...</p>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
-                    {/* OVERLAY GAME OVER (DRAMATIQUE ROUGE) */}
+                    {/* ECRAN GAME OVER */}
                     {showGameOver && (
                         <div className="absolute inset-0 z-[60] bg-red-900/95 flex flex-col items-center justify-center animate-in zoom-in">
                             <h1 className="text-8xl font-black text-white mb-8 tracking-tighter drop-shadow-lg">💀 GAME OVER</h1>
@@ -497,7 +528,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                     )}
 
                     {/* BOUTONS RÉPONSES */}
-                    {!isLevelWon && !isPowerOff && !showGameOver && levelQuestions[currentQIndex] && (
+                    {!isLevelWon && !isPowerOff && !showGameOver && !showLevelIntro && levelQuestions[currentQIndex] && (
                         <div className="absolute bottom-10 w-full flex justify-center px-10 pointer-events-auto z-30">
                             <div className="grid grid-cols-4 gap-4 w-full max-w-5xl">
                                 {levelQuestions[currentQIndex].options.map((o, i) => (
