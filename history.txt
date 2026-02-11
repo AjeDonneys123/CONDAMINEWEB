@@ -8721,3 +8721,7 @@ Build 161: MIGRATION MOTEUR JEU. Extraction de la logique 'BaseFactory' vers 'se
 11/02/2026 16:32 - BUG AUTH : Correction du routing dans Login.jsx.
 11/02/2026 16:45 - FIX 404 ÉLÈVE : Alignement des appels Frontend avec les routes hermétiques.
 11/02/2026 16:48 - FIX JULIAN : Correction de MistakesBook (suppression du fetch 404) et élargissement de la requête Games/Homework pour Julian (6D).
+
+11/02/2026 16:30 - MOTEUR JEU : Migration réussie vers /services.
+11/02/2026 16:45 - FIX 404 ÉLÈVE : Alignement des appels Frontend.
+11/02/2026 16:50 - FIX PERMISSIVITÉ : Assouplissement des filtres backend pour Julian (6D). Ajout du support 'isTestGame' pour faciliter le débug.

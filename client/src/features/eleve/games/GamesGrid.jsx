@@ -10,20 +10,18 @@ export default function GamesGrid({ user }) {
   const [loading, setLoading] = useState(false);
 
   const loadData = async () => {
+    if (!user) return;
     setLoading(true);
-    const myId = String(user._id || user.id);
+    const myId = user._id || user.id;
     
     try {
-        // FIX V99 : Utilisation des routes HERMÉTIQUES ÉLÈVE
-        // On récupère uniquement les jeux qui concernent Julian (via son ID)
         const resGames = await fetch(`/api/eleve/games/list/${myId}`);
         const allGames = await resGames.json();
 
-        // On simplifie pour l'instant : on marque tout à faire
-        // (On ajoutera le fetch de progression une fois la route créée)
+        // On marque les jeux comme "JEU" pour l'affichage des badges
         const mapped = allGames.map(g => ({
             ...g,
-            status: 'todo',
+            status: g.status || 'todo', 
             actType: 'game'
         }));
 
@@ -45,16 +43,24 @@ export default function GamesGrid({ user }) {
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 animate-in">
         <div className="flex justify-between items-center px-4">
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                {loading ? 'Recherche de défis...' : `${quizzes.length} Jeux disponibles`}
+                {loading ? 'Recherche...' : `${quizzes.length} Jeux pour vous`}
             </span>
-            <button onClick={loadData} className="text-[10px] font-black text-pink-500 bg-white px-3 py-1 rounded-xl border border-pink-100 hover:bg-pink-50 transition-colors">
-                🔄 ACTUALISER
+            <button onClick={loadData} className="text-[10px] font-black text-pink-500 bg-white px-4 py-2 rounded-xl border-2 border-pink-100 hover:bg-pink-50 transition-all shadow-sm">
+                {loading ? '...' : '🔄 ACTUALISER'}
             </button>
         </div>
-        <DashboardFolder items={quizzes} type="game" onSelect={(game) => setSelectedGame(game)} />
+        
+        {quizzes.length > 0 ? (
+            <DashboardFolder items={quizzes} type="game" onSelect={(game) => setSelectedGame(game)} />
+        ) : (
+            <div className="flex flex-col items-center justify-center p-20 bg-white/50 rounded-[40px] border-2 border-dashed border-slate-200">
+                <span className="text-5xl mb-4">🏜️</span>
+                <p className="text-slate-400 font-black uppercase text-xs tracking-widest">Aucun jeu n'a été distribué à la classe {user.currentClass}</p>
+            </div>
+        )}
     </div>
   );
 }
