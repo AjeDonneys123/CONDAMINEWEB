@@ -21,8 +21,8 @@ function resolveUrl(url) {
     return `/api/proxy/${id}`;
 }
 
-// 🧟 ZOMBIE V9.7 : BOSS FIX & ROTATION
-const ZOMBIE_GAME_CODE = `// 🧟 ZOMBIE V9.7 (FIX BOSS & ROTATION)
+// 🧟 ZOMBIE V9.8 : BOSS FIX & ROTATION FULL
+const ZOMBIE_GAME_CODE = `// 🧟 ZOMBIE V9.8 (FIX BOSS & ROTATION)
 class MiniGame extends MiniGameBase {
     constructor(canvas, assets, callbacks) {
         super(canvas, assets, callbacks);
@@ -231,7 +231,9 @@ export default function StudioDashboard({ user }) {
         const data = await api.get(`/studio/projects/${user.id || user._id}`);
         if (data?.length > 0) {
             const p = data[0];
-            if (p.scenes && p.scenes[0] && !p.scenes[0].globalSounds) p.scenes[0].globalSounds = [];
+            if (p.scenes && p.scenes[0]) {
+                if (!p.scenes[0].globalSounds) p.scenes[0].globalSounds = [];
+            }
             setProject(p); setCode(ZOMBIE_GAME_CODE); 
             if (p.scenes?.[0]?.actors?.[0]) setSelectedActorId(p.scenes[0].actors[0].id);
         }

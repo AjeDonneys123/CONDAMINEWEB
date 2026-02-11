@@ -1,4 +1,4 @@
-// @signatures: GameEngine, getYoutubeEmbedUrl, processSystemQueue, playSystemSound, playParallelSound
+// @signatures: GameEngine, getYoutubeEmbedUrl, processSystemQueue, playSystemSound, playParallelSound, handleAnswerLogic, handleBarClick, handleForceWin, handleHeartClick
 import React, { useState, useRef, useEffect } from 'react';
 import SoundExpert from './SoundExpert';
 import { api } from '../../../../services/api';
@@ -16,7 +16,7 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
     const isMutedRef = useRef(false);
     const isPausedRef = useRef(false);
     
-    // --- 🎛️ DOUBLE ENGINE AUDIO ---
+    // --- AUDIO SYSTEMS ---
     const systemQueueRef = useRef([]); 
     const isSystemPlayingRef = useRef(false); 
     const activeSourcesRef = useRef([]); 
@@ -57,7 +57,12 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         }
     }, [lives]);
 
-    // --- 🛠️ HELPERS ---
+    useEffect(() => {
+        const isBoss = (currentQIndex !== -1 && questionStates[currentQIndex] >= 2);
+        bossModeRef.current = isBoss;
+        if (gameInstanceRef.current) gameInstanceRef.current.isBossPhase = isBoss;
+    }, [currentQIndex, questionStates]);
+
     const getYoutubeEmbedUrl = (url) => {
         if (!url) return null;
         let v = "";
@@ -78,20 +83,14 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         isSystemPlayingRef.current = false;
     };
 
-    // --- 🔊 AUDIO LOGIC ---
     const playParallelSound = async (url) => {
         if (isMutedRef.current || !audioCtxRef.current) return;
         const buffer = audioBuffersRef.current.get(url);
         if (buffer) {
             if (audioCtxRef.current.state === 'suspended') await audioCtxRef.current.resume();
             const source = audioCtxRef.current.createBufferSource();
-            source.buffer = buffer;
-            source.connect(audioCtxRef.current.destination);
-            source.start(0);
+            source.buffer = buffer; source.connect(audioCtxRef.current.destination); source.start(0);
             activeSourcesRef.current.push(source);
-            source.onended = () => {
-                activeSourcesRef.current = activeSourcesRef.current.filter(s => s !== source);
-            };
         }
     };
 
@@ -101,20 +100,12 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         const nextUrl = systemQueueRef.current.shift();
         const buffer = audioBuffersRef.current.get(nextUrl);
         if (buffer && audioCtxRef.current) {
-            if (audioCtxRef.current.state === 'suspended') await audioCtxRef.current.resume();
             const source = audioCtxRef.current.createBufferSource();
-            source.buffer = buffer;
-            source.connect(audioCtxRef.current.destination);
-            source.onended = () => {
-                isSystemPlayingRef.current = false;
-                processSystemQueue(); 
-            };
+            source.buffer = buffer; source.connect(audioCtxRef.current.destination);
+            source.onended = () => { isSystemPlayingRef.current = false; processSystemQueue(); };
             source.start(0);
             activeSourcesRef.current.push(source);
-        } else {
-            isSystemPlayingRef.current = false;
-            processSystemQueue();
-        }
+        } else { isSystemPlayingRef.current = false; processSystemQueue(); }
     };
 
     const playSystemSound = (soundName) => {
@@ -126,7 +117,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         processSystemQueue();
     };
 
-    // --- 🎮 LOGIQUE JEU ---
     const handleGameOver = () => {
         stopAllSounds();
         setIsGameOver(true);
@@ -155,6 +145,33 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         setIsStudyPhase(true); isPausedRef.current = true;
     };
 
+    // --- CHEAT CODES ---
+    const handleBarClick = (idx) => {
+        if (keysPressed.current['KeyF']) {
+            const ns = [...questionStates]; ns[idx] = Math.min(3, ns[idx] + 1); setQuestionStates(ns);
+            if (idx === currentQIndex && ns[idx] >= 2) setTimeout(() => inputRef.current?.focus(), 50);
+        }
+    };
+
+    const handleForceWin = () => {
+        if (keysPressed.current['KeyF']) {
+            setIsLevelWon(true); isPausedRef.current = true;
+            playSystemSound("UPLEVEL");
+            safeTimeout(() => {
+                setLives(4);
+                if (allLevels[currentLevelIdx + 1]) initLevel(currentLevelIdx + 1, allLevels);
+                else setIsGameCompleted(true);
+            }, 1000);
+        }
+    };
+
+    // ✅ NOUVEAU : TRICHE CLIC SUR COEUR
+    const handleHeartClick = () => {
+        if (keysPressed.current['KeyF']) {
+            triggerPlayerHit();
+        }
+    };
+
     const handleAnswerLogic = (isCorrect) => {
         if (livesRef.current <= 0 || isGameOver) return;
         setFeedback(isCorrect ? 'CORRECT' : 'WRONG');
@@ -169,13 +186,19 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         }
         setQuestionStates(newStates);
         setInputValue("");
+
         safeTimeout(() => {
             setFeedback(null);
             if (livesRef.current > 0 && !isGameOver) {
                 const available = newStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
                 if (available.length > 0) {
-                    if (newStates[currentQIndex] < 3) setCurrentQIndex(currentQIndex);
-                    else setCurrentQIndex(available[Math.floor(Math.random() * available.length)]);
+                    if (newStates[currentQIndex] < 3) {
+                        setCurrentQIndex(currentQIndex);
+                        if (newStates[currentQIndex] >= 2) setTimeout(() => inputRef.current?.focus(), 50);
+                    } else {
+                        const next = available[Math.floor(Math.random() * available.length)];
+                        setCurrentQIndex(next);
+                    }
                 } else {
                     setIsLevelWon(true); isPausedRef.current = true;
                     const isLastLevel = !allLevels[currentLevelIdx + 1];
@@ -189,12 +212,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 }
             }
         }, 1000);
-    };
-
-    const handleBarClick = (idx) => {
-        if (keysPressed.current['KeyF']) {
-            const ns = [...questionStates]; ns[idx] = Math.min(3, ns[idx] + 1); setQuestionStates(ns);
-        }
     };
 
     const handleAnswerClick = (idx) => { if (!feedback && currentQIndex !== -1 && !isGameOver) handleAnswerLogic(levelQuestions[currentQIndex].a === idx); };
@@ -333,21 +350,26 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
                 <>
                     <div className="absolute top-6 w-full flex justify-between items-start px-10 z-30">
                         <div className="flex gap-4">
-                            <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-xl flex gap-1">
+                            {/* ✅ CHEAT : CLIC SUR COEUR POUR PERDRE VIE */}
+                            <div 
+                                onClick={handleHeartClick}
+                                className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-xl flex gap-1 cursor-pointer hover:border-red-500 transition-colors"
+                            >
                                 {"❤️".repeat(lives)}{"🖤".repeat(Math.max(0, 4 - lives))}
                             </div>
                             <button onClick={() => setIsMuted(!isMuted)} className={`w-16 h-16 rounded-2xl border-2 shadow-xl flex items-center justify-center text-2xl transition-all ${isMuted ? 'bg-red-900/80 border-red-500' : 'bg-slate-900/80 border-slate-700'}`}>{isMuted ? '🔇' : '🔊'}</button>
                         </div>
                         <div className="flex-1 flex justify-center px-4">
+                            {/* ✅ CHEAT : CLIC SUR QUESTION POUR GAGNER NIVEAU */}
                             {levelQuestions[currentQIndex] && !isStudyPhase && !isLevelWon && !isGameOver && !showLevelTitle && (
-                                <div className="bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 border-slate-600 shadow-2xl text-xl animate-in slide-in-from-top">
+                                <div onClick={handleForceWin} className="bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 border-slate-600 shadow-2xl text-xl animate-in slide-in-from-top cursor-pointer hover:border-indigo-500 transition-colors">
                                     {feedback === 'CORRECT' ? "✅ BRAVO !" : feedback === 'WRONG' ? "❌ RATÉ..." : levelQuestions[currentQIndex].q}
                                 </div>
                             )}
                         </div>
                         <div className="flex gap-2 items-center mr-20">
                             {questionStates.map((mastery, idx) => (
-                                <div key={idx} onClick={() => handleBarClick(idx)} className={`w-4 h-12 rounded-md border border-slate-600 relative overflow-hidden ${currentQIndex === idx ? 'ring-2 ring-indigo-400 scale-110' : 'opacity-60'}`}>
+                                <div key={idx} onClick={() => handleBarClick(idx)} className={`w-4 h-12 rounded-md border border-slate-600 relative overflow-hidden cursor-pointer ${currentQIndex === idx ? 'ring-2 ring-indigo-400 scale-110' : 'opacity-60'}`}>
                                     <div className={`absolute bottom-0 left-0 right-0 transition-all duration-500 ${mastery === 3 ? 'bg-green-500' : 'bg-yellow-500'}`} style={{ height: `${(mastery / 3) * 100}%` }} />
                                 </div>
                             ))}

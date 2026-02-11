@@ -8675,3 +8675,12 @@
 - Problème : ReferenceError sur 'getYoutubeEmbedUrl' causant le crash de l'app au démarrage.
 - Solution : Ré-introduction de la fonction helper 'getYoutubeEmbedUrl' dans le composant GameEngine.jsx.
 - Statut : Système audio hybride V9.6 préservé et fonctionnel.
+
+10/02/2026 - 19:15 : FIX GAMEPLAY STUDIO (V9.8).
+- Gameplay : Restauration de la rotation des questions (si juste, on change de question).
+- Boss Mode : Le Zombie se transforme bien au palier 2/3 (Scale x1.6 + Vitesse réduite).
+- Cheat Codes (Touche F) : 
+  1. Clic sur barre de progression = +1 point.
+  2. Clic sur bandeau question = Victoire instantanée du niveau.
+  3. Clic sur les cœurs (Vies) = Retrait immédiat d'une vie.
+- Audio : Moteur hybride préservé.
