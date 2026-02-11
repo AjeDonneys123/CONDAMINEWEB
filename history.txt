@@ -8766,3 +8766,9 @@ Build 161: MIGRATION MOTEUR JEU. Extraction de la logique 'BaseFactory' vers 'se
 11/02/2026 17:45 - HUD FIX : Le HUD élève est désormais un clone exact du moteur de test prof (Cœurs, Mastery Bars, Questions centrées).
 11/02/2026 17:46 - AUDIO MIROIR : La fonction playParallelSound est passée au moteur, activant les sons liés aux actions et aux événements globaux.
 11/02/2026 17:47 - LIVES FIX : Les cœurs réagissent désormais aux collisions du moteur graphique.
+
+11/02/2026 17:35 - MIROIR STUDIO : Julian branché sur les projets Studio.
+11/02/2026 17:45 - HUD FIX : Dissolution du score texte pour le HUD Condamine.
+11/02/2026 18:15 - ARCHITECTURE UNIFIÉE : Suppression de la logique de clonage. GameEngine.jsx (Prof) utilise désormais directement GamePlayer.jsx (Élève).
+11/02/2026 18:16 - RESTAURATION CHEATS : Touche KeyF (Invincibilité + Mastery Skip) et Boss Mode restaurés dans le moteur unifié.
+11/02/2026 18:17 - FIX 500 : Sécurisation des routes /eleve/games pour éviter les crashs si le Studio est vide.

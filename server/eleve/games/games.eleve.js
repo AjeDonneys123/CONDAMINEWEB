@@ -4,22 +4,23 @@ const router = express.Router();
 const mongoose = require('mongoose');
 
 /**
- * 🎮 ROUTE MIROIR TOTALE V106
- * Fusionne le visuel du Studio avec les questions du Quiz de Test.
+ * 🎮 ROUTE MIROIR UNIFIÉE V108
+ * Fix : Protection contre les crashs 500 (Check existence modèles)
  */
 router.get('/studio-mirror', async (req, res) => {
     try {
         const StudioProject = mongoose.model('StudioProject');
         const GameLevel = mongoose.model('GameLevel');
 
-        // 1. On prend le dernier visuel du Studio
-        const project = await StudioProject.findOne({}).sort({ updatedAt: -1 }).lean();
-        // 2. On prend les questions du Quiz de Test
-        const testQuiz = await GameLevel.findOne({ isTestGame: true }).sort({ updatedAt: -1 }).lean();
+        // On récupère en parallèle pour gagner du temps
+        const [project, testQuiz] = await Promise.all([
+            StudioProject.findOne({}).sort({ updatedAt: -1 }).lean(),
+            GameLevel.findOne({ isTestGame: true }).sort({ updatedAt: -1 }).lean()
+        ]);
         
-        if (!project) return res.json(null);
+        if (!project) return res.status(404).json({ error: "Aucun projet studio trouvé" });
 
-        // 3. FUSION : On injecte les questions et les fiches dans le projet visuel
+        // FUSION TOTALE
         const fullMirror = {
             ...project,
             levels: testQuiz?.levels || [],
@@ -28,18 +29,22 @@ router.get('/studio-mirror', async (req, res) => {
 
         res.json(fullMirror);
     } catch (e) {
-        res.status(500).json(null);
+        console.error("❌ Erreur Mirror Backend:", e.message);
+        res.status(500).json({ error: "Crash serveur miroir" });
     }
 });
 
 router.post('/score', async (req, res) => {
-    const { studentId, gameId, score, levelReached } = req.body;
-    await mongoose.model('GameProgress').findOneAndUpdate(
-        { studentId, gameId }, 
-        { lastScore: score, levelReached: levelReached || 1, updatedAt: new Date() }, 
-        { upsert: true }
-    );
-    res.json({ ok: true });
+    try {
+        const { studentId, gameId, score, levelReached } = req.body;
+        const GameProgress = mongoose.model('GameProgress');
+        await GameProgress.findOneAndUpdate(
+            { studentId, gameId }, 
+            { lastScore: score, levelReached: levelReached || 1, updatedAt: new Date() }, 
+            { upsert: true }
+        );
+        res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 module.exports = router;
