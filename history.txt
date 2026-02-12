@@ -8883,3 +8883,6 @@ Fix `SoundExpert.js` : Réintégration des méthodes DSP (changeSpeed, applyGain
 
 ...
 Fix `SoundExpert.js` : Réintégration des méthodes DSP (changeSpeed, applyGain, robotize...) qui avaient disparu, causant le crash de l'éditeur audio.
+
+...
+Câblage final Architecture V3 : `GamePlayer` (Élève) et `GameEngine` (Studio) pointent désormais vers `features/shared/games/UnifiedMoteur.jsx`.

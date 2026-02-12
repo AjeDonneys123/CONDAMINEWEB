@@ -1,10 +1,11 @@
 // @signatures: GamePlayer
 import React from 'react';
-import UnifiedMoteur from './UnifiedMoteur';
+// ✅ IMPORT MIS À JOUR : On pointe vers le dossier SHARED
+import UnifiedMoteur from '../../shared/games/UnifiedMoteur';
 
 /**
- * 🎒 SHELL ÉLÈVE V.2.70
- * Rôle : Coquille vide qui appelle le moteur maître.
+ * 🎒 SHELL ÉLÈVE V.3.1 (WIRING SHARED)
+ * Rôle : Coquille vide qui appelle le moteur maître situé dans shared/games.
  */
 export default function GamePlayer({ user, gameData, onExit }) {
     return (

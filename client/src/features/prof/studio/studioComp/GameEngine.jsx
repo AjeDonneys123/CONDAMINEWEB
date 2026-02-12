@@ -1,10 +1,11 @@
 // @signatures: GameEngine
 import React from 'react';
-import UnifiedMoteur from '../../../eleve/games/UnifiedMoteur';
+// ✅ IMPORT MIS À JOUR : On pointe vers le dossier SHARED
+import UnifiedMoteur from '../../../shared/games/UnifiedMoteur';
 
 /**
- * 🎓 SHELL STUDIO V.2.71
- * Rôle : Coquille vide qui appelle le moteur maître.
+ * 🎓 SHELL STUDIO V.3.1 (WIRING SHARED)
+ * Rôle : Coquille vide qui appelle le moteur maître situé dans shared/games.
  */
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
     return (
