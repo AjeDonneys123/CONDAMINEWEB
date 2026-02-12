@@ -8843,3 +8843,8 @@ Build 161: MIGRATION MOTEUR JEU. Extraction de la logique 'BaseFactory' vers 'se
 2026-02-11 19:18 - Correction critique de syntaxe dans GamePlayer.jsx (Ligne 384 : src={...} au lieu de src(...)).
 2026-02-11 19:18 - Déploiement de la VERSION V.2.50 unifiée et stabilisée.
 2026-02-11 19:18 - Vérification des tags d'ouverture et fermeture JSX dans les écrans d'intro.
+
+2026-02-11 19:23 - Évolution V.2.60 : Suppression du bouton Play intermédiaire.
+2026-02-11 19:23 - L'écran de révision devient la porte d'entrée unique.
+2026-02-11 19:23 - Le chargement des assets se fait en background pendant la révision.
+2026-02-11 19:23 - Le bouton GO est verrouillé jusqu'à ce que le chargement (isReady) soit terminé.

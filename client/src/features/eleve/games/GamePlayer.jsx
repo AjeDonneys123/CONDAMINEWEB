@@ -5,9 +5,9 @@ import { api } from '../../../services/api';
 import { createGameBase } from '../../../services/gameCore';
 
 /**
- * 🕹️ MOTEUR MAITRE UNIFIÉ V.2.50 (FIX SYNTAXE & CRASH)
- * VERSION : V.2.50
- * FIX : Correction erreur syntaxe ligne 384 + Alignement stable Quiz.
+ * 🕹️ MOTEUR MAITRE UNIFIÉ V.2.60 (INTÉGRATION TOTALE)
+ * VERSION : V.2.60
+ * LOGIQUE : Chargement invisible pendant la révision + Bouton GO unique.
  */
 
 const ZOMBIE_GAME_CODE = `
@@ -117,7 +117,7 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
     // --- ÉTATS VISUELS ---
     const [isLevelWon, setIsLevelWon] = useState(false);
     const [showGameOver, setShowGameOver] = useState(false);
-    const [showLevelIntro, setShowLevelIntro] = useState(false);
+    const [showLevelIntro, setShowLevelIntro] = useState(true); // ON ARRIVE SUR L'INTRO DIRECT
     const [showLevelBanner, setShowLevelBanner] = useState(false);
     const [zoomMedia, setZoomMedia] = useState(null);
     const [isPowerOff, setIsPowerOff] = useState(false);
@@ -146,22 +146,15 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
     // 1. INITIALISATION ROBUSTE
     useEffect(() => {
         const loadLogic = async () => {
-            console.log("DEBUG [Master] V.2.50 - Syncing Data...");
             let levelsData = gameData?.levels || [];
-            
             if (isStudioTest || levelsData.length === 0) {
                 const res = await api.get('/games/test-data');
                 levelsData = res?.levels?.length > 0 ? res.levels : [{ name: "Default", questions: [{ q: "Capitale ?", options: ["A", "B", "C", "D"], a: 1 }] }];
             }
-            
-            const firstLvl = levelsData[0];
-            const qs = firstLvl?.questions || [];
-            
+            const qs = levelsData[currentLevelIdx]?.questions || [];
             setAllLevels(levelsData);
-            setCurrentLevelIdx(0);
             setLevelQuestions(qs);
             setQuestionStates(new Array(qs.length).fill(0));
-            
             if (qs.length > 0) setCurrentQIndex(0);
         };
         loadLogic();
@@ -217,10 +210,10 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
         if (qs.length > 0) { setCurrentQIndex(0); if (!silent) { setShowLevelIntro(true); triggerGlobalEvent("UPLEVEL"); } }
     };
 
-    // 2. CHARGEMENT ASSETS
+    // 2. CHARGEMENT ASSETS (EN FOND PENDANT RÉVISION)
     useEffect(() => {
         if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
-        const scene = projectRef.current.scenes?.[0];
+        const scene = projectRef.current?.scenes?.[0];
         if (!scene) { setIsReady(true); return; }
         const imgs = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url)))].filter(Boolean);
         let loaded = 0; if (imgs.length === 0) setIsReady(true);
@@ -239,9 +232,7 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
         if (feedback || currentQIndex === -1 || isLevelWonRef.current || showGameOver || showLevelIntro) return;
         const currentQ = levelQuestions[currentQIndex];
         if(!currentQ) return;
-        
         let isCorrect = (typeof val === 'number') ? currentQ.a === val : checkAnswerPermissive(val, currentQ.options[currentQ.a]);
-        
         setFeedback(isCorrect ? 'CORRECT' : 'WRONG');
         const nextStates = [...questionStates];
         if (isCorrect) {
@@ -254,7 +245,6 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
         }
         setQuestionStates(nextStates);
         setUserInput("");
-
         setTimeout(() => {
             setFeedback(null);
             const available = nextStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
@@ -284,7 +274,17 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
     };
 
     const handleRetry = () => { setShowGameOver(false); setLives(4); initLevel(currentLevelIdx, allLevels, false); };
-    const handleStartGame = async () => { if (audioCtxRef.current) await audioCtxRef.current.resume(); gameHasStartedRef.current = true; setEngineStarted(true); setShowLevelIntro(true); triggerGlobalEvent("UPLEVEL"); };
+    
+    // 🚀 LANCE LE JEU APRÈS RÉVISION
+    const handleStartFromIntro = async () => {
+        if (!isReady) return;
+        if (audioCtxRef.current) await audioCtxRef.current.resume();
+        gameHasStartedRef.current = true;
+        setEngineStarted(true);
+        setShowLevelIntro(false);
+        setShowLevelBanner(true);
+        setTimeout(() => setShowLevelBanner(false), 1500);
+    };
 
     // 4. MOTEUR GRAPHIQUE
     useEffect(() => {
@@ -317,7 +317,7 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
 
     return (
         <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center overflow-hidden font-sans">
-            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">VERSION V.2.50</div>
+            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">VERSION V.2.60</div>
             <button onClick={onExit} className="absolute top-6 right-6 w-14 h-14 bg-white/10 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-2xl font-black transition-all z-[4000] border-2 border-white/20">✕</button>
 
             {showLevelBanner && (
@@ -335,13 +335,10 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
                 </div>
             )}
 
-            {!engineStarted ? (
-                <button onClick={handleStartGame} disabled={!isReady} className={`px-20 py-10 rounded-full font-black text-5xl shadow-2xl border-8 transition-all ${isReady ? 'bg-white text-indigo-600 border-indigo-200 hover:scale-110 animate-pulse' : 'bg-slate-700 text-slate-500 border-slate-600 cursor-not-allowed'}`}>
-                    {isReady ? "🚀 JOUER" : `CHARGEMENT ${loadProgress}...`}
-                </button>
-            ) : (
+            {/* ÉCRAN PRINCIPAL : SI PAS D'INTRO, ON VOIT LE JEU */}
+            {engineStarted && !showLevelIntro && (
                 <>
-                    {!showGameOver && !showLevelIntro && (
+                    {!showGameOver && (
                         <div className="absolute top-6 w-full flex justify-between px-10 pointer-events-none z-30">
                             <div className="flex gap-4 pointer-events-auto">
                                 <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-xl flex gap-1 cursor-pointer active:scale-95 transition-transform" onClick={() => handleBarCheat(currentQIndex)}>
@@ -366,44 +363,55 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
                             </div>
                         </div>
                     )}
-
                     <div className="relative animate-in zoom-in">
                         <canvas ref={canvasRef} width={800} height={450} className={`aspect-video shadow-2xl bg-black border-4 transition-all duration-1000 ${isPowerOff ? 'opacity-0' : 'opacity-100'} ${bossModeRef.current ? 'border-red-900 shadow-[0_0_50px_rgba(255,0,0,0.2)]' : 'border-slate-800'}`} />
                         {isLevelWon && (<div className="absolute inset-0 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm rounded-xl animate-in zoom-in z-40"><div className="bg-white p-10 rounded-[40px] shadow-2xl text-center border-8 border-green-500"><span className="text-6xl block mb-4">🏆</span><h2 className="text-4xl font-black text-slate-800 uppercase">Niveau Réussi !</h2></div></div>)}
-                        {showLevelIntro && !isLevelWon && (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/95 backdrop-blur-md rounded-xl z-50 animate-in zoom-in p-8">
-                                <h1 className="text-5xl text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-500 font-black uppercase tracking-tighter drop-shadow-2xl mb-6">{currentLevelIdx + 1} {currentLevelData.name}</h1>
-                                <div className="flex gap-10 mb-12 w-full max-w-4xl justify-center h-[280px]">
-                                    <div onClick={() => currentLevelData.intro?.sheetUrl && setZoomMedia('sheet')} className="h-full aspect-[3/4] bg-slate-800 rounded-3xl border-4 border-slate-700 overflow-hidden flex items-center justify-center shadow-2xl cursor-pointer hover:border-indigo-500 hover:scale-105 transition-all">
-                                        {currentLevelData.intro?.sheetUrl ? <img src={resolveUrl(currentLevelData.intro.sheetUrl)} className="w-full h-full object-contain" alt="Fiche" /> : "Fiche"}
-                                    </div>
-                                    <div onClick={() => currentLevelData.intro?.videoUrl && setZoomMedia('video')} className="h-full aspect-video bg-black rounded-3xl border-4 border-slate-700 overflow-hidden shadow-2xl flex items-center justify-center cursor-pointer hover:border-indigo-500 hover:scale-105 transition-all text-white text-4xl">▶</div>
-                                </div>
-                                <button onClick={() => { setShowLevelIntro(false); setShowLevelBanner(true); setTimeout(() => setShowLevelBanner(false), 1500); }} className="px-16 py-6 bg-white text-indigo-900 font-black text-3xl rounded-full shadow-2xl border-4 border-indigo-500 animate-pulse">C'EST PARTI ! 🚀</button>
-                            </div>
-                        )}
                     </div>
+                </>
+            )}
 
-                    {showGameOver && (<div className="absolute inset-0 z-[60] bg-red-900/95 flex flex-col items-center justify-center animate-in zoom-in"><h1 className="text-8xl font-black text-white mb-8 tracking-tighter drop-shadow-lg">💀 GAME OVER</h1><button onClick={handleRetry} className="px-10 py-5 bg-white text-red-900 font-black text-2xl rounded-2xl shadow-2xl hover:scale-105 transition-transform uppercase tracking-widest">RÉESSAYER</button></div>)}
+            {/* 🔥 ECRAN DE RÉVISION (PREMIER ÉCRAN VISIBLE) */}
+            {showLevelIntro && !isLevelWon && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950 backdrop-blur-md z-50 animate-in zoom-in p-8">
+                    <h1 className="text-5xl text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-500 font-black uppercase tracking-tighter drop-shadow-2xl mb-6">{currentLevelIdx + 1} {currentLevelData.name}</h1>
+                    <div className="flex gap-10 mb-12 w-full max-w-4xl justify-center h-[280px]">
+                        <div onClick={() => currentLevelData.intro?.sheetUrl && setZoomMedia('sheet')} className="h-full aspect-[3/4] bg-slate-800 rounded-3xl border-4 border-slate-700 overflow-hidden flex items-center justify-center shadow-2xl cursor-pointer hover:border-indigo-500 hover:scale-105 transition-all">
+                            {currentLevelData.intro?.sheetUrl ? <img src={resolveUrl(currentLevelData.intro.sheetUrl)} className="w-full h-full object-contain" alt="Fiche" /> : "Fiche"}
+                        </div>
+                        <div onClick={() => currentLevelData.intro?.videoUrl && setZoomMedia('video')} className="h-full aspect-video bg-black rounded-3xl border-4 border-slate-700 overflow-hidden shadow-2xl flex items-center justify-center cursor-pointer hover:border-indigo-500 hover:scale-105 transition-all text-white text-4xl">▶</div>
+                    </div>
+                    
+                    <button 
+                        onClick={handleStartFromIntro} 
+                        disabled={!isReady}
+                        className={`px-16 py-6 rounded-full font-black text-3xl shadow-2xl border-4 transition-all ${isReady ? 'bg-white text-indigo-900 border-indigo-500 animate-pulse hover:scale-110' : 'bg-slate-700 text-slate-500 border-slate-600 cursor-not-allowed'}`}
+                    >
+                        {isReady ? "C'EST PARTI ! 🚀" : `CHARGEMENT ${loadProgress}...`}
+                    </button>
+                    
+                    {!isReady && <div className="mt-4 text-slate-500 text-xs font-bold uppercase tracking-widest">Préparation du moteur de jeu...</div>}
+                </div>
+            )}
 
-                    {!isLevelWon && !isPowerOff && !showGameOver && !showLevelIntro && safeQ && (
-                        <div className="absolute bottom-10 w-full flex justify-center px-10 pointer-events-auto z-30">
-                            {bossModeRef.current ? (
-                                <div className="flex flex-row items-stretch gap-4 w-full max-w-2xl animate-in slide-in-from-bottom-5">
-                                    <input autoFocus className="flex-1 bg-slate-900 border-4 border-red-600 text-white text-3xl font-black py-6 px-10 rounded-3xl text-center outline-none focus:ring-4 ring-red-500/30 uppercase" placeholder="TAPE LA RÉPONSE..." value={userInput} onChange={e => setUserInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAnswerClick(userInput)} />
-                                    <button onClick={() => handleAnswerClick(userInput)} className="bg-red-600 hover:bg-red-500 text-white px-10 rounded-3xl font-black text-xl shadow-xl transition-all active:scale-95 border-b-8 border-red-800 active:border-b-0 uppercase">ATTAQUER ⚔️</button>
-                                </div>
-                            ) : (
-                                <div className="grid grid-cols-4 gap-4 w-full max-w-5xl">
-                                    {safeQ.options.map((o, i) => (
-                                        <button key={i} onClick={() => handleAnswerClick(i)} className="bg-indigo-600 text-white py-6 rounded-2xl font-black uppercase text-lg shadow-xl hover:bg-white hover:text-indigo-600 hover:scale-105 transition-all border-b-8 border-indigo-800 active:border-b-0 active:translate-y-2">{o}</button>
-                                    ))}
-                                </div>
-                            )}
+            {showGameOver && (<div className="absolute inset-0 z-[60] bg-red-900/95 flex flex-col items-center justify-center animate-in zoom-in"><h1 className="text-8xl font-black text-white mb-8 tracking-tighter drop-shadow-lg">💀 GAME OVER</h1><button onClick={handleRetry} className="px-10 py-5 bg-white text-red-900 font-black text-2xl rounded-2xl shadow-2xl hover:scale-105 transition-transform uppercase tracking-widest">RÉESSAYER</button></div>)}
+
+            {/* UI RÉPONSES */}
+            {!isLevelWon && !isPowerOff && !showGameOver && !showLevelIntro && engineStarted && safeQ && (
+                <div className="absolute bottom-10 w-full flex justify-center px-10 pointer-events-auto z-30">
+                    {bossModeRef.current ? (
+                        <div className="flex flex-row items-stretch gap-4 w-full max-w-2xl animate-in slide-in-from-bottom-5">
+                            <input autoFocus className="flex-1 bg-slate-900 border-4 border-red-600 text-white text-3xl font-black py-6 px-10 rounded-3xl text-center outline-none focus:ring-4 ring-red-500/30 uppercase placeholder:text-slate-700" placeholder="TAPE LA RÉPONSE..." value={userInput} onChange={e => setUserInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAnswerClick(userInput)} />
+                            <button onClick={() => handleAnswerClick(userInput)} className="bg-red-600 hover:bg-red-500 text-white px-10 rounded-3xl font-black text-xl shadow-xl transition-all active:scale-95 border-b-8 border-red-800 active:border-b-0 uppercase">ATTAQUER ⚔️</button>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-4 gap-4 w-full max-w-5xl">
+                            {safeQ.options.map((o, i) => (
+                                <button key={i} onClick={() => handleAnswerClick(i)} className="bg-indigo-600 text-white py-6 rounded-2xl font-black uppercase text-lg shadow-xl hover:bg-white hover:text-indigo-600 hover:scale-105 transition-all border-b-8 border-indigo-800 active:border-b-0 active:translate-y-2">{o}</button>
+                            ))}
                         </div>
                     )}
-                </>
-             )}
+                </div>
+            )}
         </div>
     );
 }
