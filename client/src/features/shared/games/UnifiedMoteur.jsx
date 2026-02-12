@@ -1,13 +1,13 @@
-// @signatures: UnifiedMoteur, handleBridgeEvent, updateBarLogic, changeQuestionLogic, triggerWinSequence, startCurrentLevel, handleAnswerClick
+// @signatures: UnifiedMoteur, handleBridgeEvent, updateBarLogic, changeQuestionLogic, triggerWinSequence, startCurrentLevel, handleAnswerClick, handleRetry
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import SoundExpert from '../../../services/SoundExpert';
 import { api } from '../../../services/api';
 import { createGameBase } from '../../../services/gameCore';
 
 /**
- * 🧠 UNIFIED MOTEUR V7.1 (SEQUENCE FIX)
- * CORRECTIF : Réactivation de la transition automatique entre les questions.
- * L'état "BIEN JOUÉ" ne bloque plus le jeu, il déclenche la suite après 1.2s.
+ * 🧠 UNIFIED MOTEUR V7.2 (BOSS RESET FIX)
+ * CORRECTIF : Reset complet des flags "Boss" et de la mémoire "liveData" lors du retry.
+ * Le zombie ne reste plus géant et rose quand on recommence après un échec.
  */
 export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }) {
     // --- ÉTATS VISUELS ---
@@ -46,14 +46,14 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
     const bossModeRef = useRef(false);
     const [assetsSignature, setAssetsSignature] = useState("");
 
-    // 🚀 LIVE DATA : LA MÉMOIRE INSTANTANÉE (Source de vérité logique synchrone)
+    // 🚀 LIVE DATA : MÉMOIRE SYNCHRONE
     const liveData = useRef({
         qStates: [],   
         qIndex: 0,     
         lives: 4
     });
 
-    // --- 1. BRIDGE (INTERACTION SCRIPT <-> MOTEUR) ---
+    // --- 1. BRIDGE (ACTIONS SCRIPT) ---
     const bridgeProxy = useRef((type, value) => {
         switch(type) {
             case 'DAMAGE':
@@ -88,7 +88,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
         }
     });
 
-    // --- 2. LOGIQUE MÉTIER SYNCHRONE ---
+    // --- 2. LOGIQUE MÉTIER ---
 
     const updateBarLogic = (isCorrect) => {
         const idx = liveData.current.qIndex;
@@ -118,11 +118,9 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
         const available = states.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
         
         if (available.length > 0) {
-            // Si on vient de passer à 2/3, on active le mode BOSS sur cette question
             if (states[currentIdx] === 2) {
                 bridgeProxy.current('SET_BOSS', true);
             } else {
-                // Sinon on pioche une autre question disponible
                 const others = available.filter(idx => idx !== currentIdx);
                 let nextIdx = others.length > 0 ? others[Math.floor(Math.random() * others.length)] : available[0];
                 
@@ -150,7 +148,37 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
         }, 3000);
     };
 
-    // --- 3. GESTION DES ASSETS & SONS ---
+    // --- 3. RETRY LOGIC (LE FIX) ---
+    const handleRetry = () => {
+        // 1. Reset UI
+        setShowGameOver(false);
+        setFeedback(null);
+        setUserInput("");
+        setLives(4);
+        
+        // 2. Reset Boss Flags (Important !)
+        setActiveBossVisual(false);
+        bossModeRef.current = false;
+        if (gameInstanceRef.current) {
+            gameInstanceRef.current.isBossPhase = false;
+            gameInstanceRef.current.isStopped = false;
+        }
+
+        // 3. Reset Logique
+        const initialStates = new Array(levelQuestions.length).fill(0);
+        liveData.current.qStates = initialStates;
+        liveData.current.qIndex = 0;
+        liveData.current.lives = 4;
+        
+        setQuestionStates(initialStates);
+        setCurrentQIndex(0);
+
+        // 4. Restart
+        setEngineStarted(false);
+        setShowLevelIntro(true);
+    };
+
+    // --- 4. ASSETS & SOUNDS ---
 
     function resolveUrl(url) {
         if (!url) return "";
@@ -255,30 +283,21 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
         setTimeout(() => setShowLevelBanner(false), 1500); 
     };
 
-    // --- 4. RÉCEPTION RÉPONSE (LE FIX EST ICI) ---
-
     const handleAnswerClick = (val) => {
         if (feedback || showLevelIntro || showStageClear || showGameOver) return;
-        
         const currentQ = levelQuestions[currentQIndex];
         const isCorrect = (typeof val === 'number') ? currentQ.a === val : val === currentQ.options[currentQ.a];
         
-        // 1. Affichage visuel immédiat
         setFeedback(isCorrect ? 'CORRECT' : 'WRONG');
-        
-        // 2. Déclenchement animation dans le script du jeu (ex: Tirer)
-        // Note: createGameBase s'occupe de jouer le son via playParallelSound
         if (gameInstanceRef.current?.onResult) gameInstanceRef.current.onResult(isCorrect);
 
-        // 3. LE DÉCLENCHEUR DE SUITE (Le fix)
-        // On laisse 1.2s à Julian pour savourer sa victoire ou pleurer son échec
         setTimeout(() => {
             updateBarLogic(isCorrect);
             changeQuestionLogic();
         }, 1200);
     };
 
-    // --- 5. MOTEUR DE RENDU CANVAS ---
+    // --- 5. MOTEUR ---
     useEffect(() => {
         if (!engineStarted || !canvasRef.current) return;
         try {
@@ -333,7 +352,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
 
     return (
         <div className={`fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center overflow-hidden font-sans ${isShake ? 'animate-shake' : ''}`}>
-            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">MOTEUR V7.1 (SEQUENCE FIX)</div>
+            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">MOTEUR V7.2 (BOSS RESET FIX)</div>
             <button onClick={onExit} className="absolute top-6 right-6 w-14 h-14 bg-white/10 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-2xl font-black z-[4000] border-2 border-white/20">✕</button>
 
             {showLevelBanner && <div className="fixed top-[20%] z-[5000] animate-in zoom-in"><span className="text-yellow-400 font-black text-6xl uppercase drop-shadow-lg">Niveau {currentLevelIdx + 1}</span></div>}
@@ -425,7 +444,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
             {showGameOver && (
                 <div className="absolute inset-0 bg-black/95 flex flex-col items-center justify-center z-[8000] animate-in zoom-in">
                     <h1 className="text-8xl font-black text-red-600 mb-8 uppercase tracking-widest">GAME OVER</h1>
-                    <button onClick={() => { setShowGameOver(false); setLives(4); setEngineStarted(false); setShowLevelIntro(true); }} className="bg-white text-black px-12 py-5 rounded-2xl font-black text-2xl hover:bg-red-500 hover:text-white transition-all uppercase shadow-2xl">RÉESSAYER 🔄</button>
+                    <button onClick={handleRetry} className="bg-white text-black px-12 py-5 rounded-2xl font-black text-2xl hover:bg-red-500 hover:text-white transition-all uppercase shadow-2xl">RÉESSAYER 🔄</button>
                 </div>
             )}
         </div>
