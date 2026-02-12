@@ -5,10 +5,12 @@ import { api } from '../../../services/api';
 import { createGameBase } from '../../../services/gameCore';
 
 /**
- * 🧠 LE MAITRE UNIFIÉ V.3.02 (ASSET LOADING REVERT)
- * VERSION : V.3.02
- * CORRECTIF : Simplification radicale du chargement des assets pour éviter l'écran noir.
- * Suppression du hash d'assets qui pouvait bloquer le chargement initial.
+ * 🧠 LE MAITRE UNIFIÉ V.3.03 (SMART CACHE)
+ * VERSION : V.3.03
+ * CORRECTIF FINAL :
+ * - Le moteur ne recharge plus les images à chaque frappe clavier dans le Studio.
+ * - Il compare les URLs : si ce sont les mêmes, il ne touche à rien (zéro clignotement).
+ * - L'écran noir est résolu par une persistance des assets.
  */
 
 const ZOMBIE_GAME_CODE = `
@@ -138,8 +140,10 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
     const keysPressed = useRef({});
     const projectRef = useRef(gameData);
     const bossModeRef = useRef(false);
+    
+    // STABILITÉ ASSETS (Signature)
+    const [assetsSignature, setAssetsSignature] = useState("");
 
-    // --- HELPER YOUTUBE ROBUSTE ---
     const getYoutubeEmbed = (url) => {
         if (!url) return "";
         const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
@@ -149,16 +153,28 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
         return url;
     };
 
-    // --- EFFET DE SON : DÉPART DU NIVEAU ---
     useEffect(() => {
         if (showLevelBanner) {
             triggerGlobalEvent("DEPART"); 
         }
     }, [showLevelBanner]);
 
-    // SYNC REF
+    // SYNC REF + DETECTION CHANGEMENT ASSETS SEULEMENT
     useEffect(() => { 
         projectRef.current = gameData; 
+        
+        const scene = gameData?.scenes?.[0];
+        if (scene) {
+            // On génère une signature unique basée uniquement sur les URLs des images et sons
+            // Si le prof change la vitesse, le nom, ou le code, cette signature NE CHANGE PAS -> Pas de rechargement
+            const imgs = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url)))].filter(Boolean).sort().join('|');
+            const snds = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url))))].filter(Boolean).sort().join('|');
+            
+            const sig = `${imgs}__${snds}`;
+            if (sig !== assetsSignature) {
+                setAssetsSignature(sig);
+            }
+        }
     }, [gameData]);
 
     useEffect(() => {
@@ -201,46 +217,48 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
         return () => { window.removeEventListener('keydown', hDown); window.removeEventListener('keyup', hUp); };
     }, [gameData, currentLevelIdx]);
 
-    // 2. ASSETS LOADING (METHODE SIMPLE ET ROBUSTE)
+    // 2. ASSETS LOADING (TRIGGERED ONLY ON SIGNATURE CHANGE)
     useEffect(() => {
+        if (!assetsSignature) return; // Pas d'assets, pas de chargement
+
         if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
         
-        console.log("📥 [MOTEUR] Analyse des assets...");
+        console.log("📥 [MOTEUR] Chargement intelligent des assets...");
+        setIsReady(false); // On bloque le jeu pendant le chargement des nouveaux assets
+
         const scene = projectRef.current?.scenes?.[0];
-        
-        // Si pas de scène, on considère que c'est prêt (mode dégradé)
         if (!scene) { setIsReady(true); return; }
         
-        // 1. IMAGES
+        // --- CHARGEMENT IMAGES ---
         const imgs = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url)))].filter(Boolean);
         
         let loadedImgs = 0;
+        
+        const checkDone = () => {
+            loadedImgs++;
+            setLoadProgress(`${Math.round(loadedImgs/imgs.length*100)}%`);
+            if (loadedImgs >= imgs.length) setIsReady(true);
+        };
+
         if (imgs.length === 0) {
             setIsReady(true);
         } else {
             imgs.forEach(url => {
-                const img = new Image(); 
-                img.crossOrigin = "anonymous"; 
                 const rKey = resolveUrl(url);
-                
-                img.onload = () => { 
-                    imageAssetsRef.current.set(rKey, img); 
-                    loadedImgs++; 
-                    setLoadProgress(`${Math.round(loadedImgs/imgs.length*100)}%`); 
-                    if (loadedImgs >= imgs.length) setIsReady(true); 
-                };
-                
-                img.onerror = () => { 
-                    console.warn("Image error:", url); 
-                    loadedImgs++; 
-                    if (loadedImgs >= imgs.length) setIsReady(true); 
-                };
-                
-                img.src = rKey;
+                // Si l'image est déjà en cache mémoire, on la zappe
+                if (imageAssetsRef.current.has(rKey)) {
+                    checkDone();
+                } else {
+                    const img = new Image(); 
+                    img.crossOrigin = "anonymous"; 
+                    img.onload = () => { imageAssetsRef.current.set(rKey, img); checkDone(); };
+                    img.onerror = () => { console.warn("Image error:", url); checkDone(); };
+                    img.src = rKey;
+                }
             });
         }
 
-        // 2. SONS
+        // --- CHARGEMENT SONS ---
         const snds = [
             ...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url))))
         ].filter(Boolean);
@@ -251,7 +269,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
             }); 
         });
         
-    }, [gameData]); // On recharge si gameData change complètement
+    }, [assetsSignature]); // <-- ICI EST LA CLÉ : On ne recharge que si la signature change
 
     const playParallelSoundImpl = (url, forceAlways = false) => {
         if ((!engineStarted && !forceAlways) || isMuted || !audioCtxRef.current) return;
@@ -414,7 +432,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
 
     return (
         <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center overflow-hidden font-sans">
-            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">VERSION V.3.02 (ASSET SIMPLE)</div>
+            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">VERSION V.3.03 (SMART CACHE)</div>
             <button onClick={onExit} className="absolute top-6 right-6 w-14 h-14 bg-white/10 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-2xl font-black z-[4000] border-2 border-white/20">✕</button>
 
             {showLevelBanner && (
