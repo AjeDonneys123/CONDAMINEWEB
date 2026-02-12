@@ -1,15 +1,14 @@
-// @signatures: UnifiedMoteur, handleAnswerClick, triggerWinSequence, startCurrentLevel, getEmbedUrl, playParallelSoundImpl, normalize, getYoutubeEmbed
+// @signatures: UnifiedMoteur, handleBridgeEvent, handleAnswerClick, handleRoundValidation, pickNextQuestion, handleHeartClick, handleBarClick
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import SoundExpert from '../../../services/SoundExpert';
 import { api } from '../../../services/api';
 import { createGameBase } from '../../../services/gameCore';
 
 /**
- * 🧠 UNIFIED MOTEUR V4.8 (REF PROXY STABLE)
- * CORRECTIF CRITIQUE : Utilisation de refs pour le Bridge afin d'éviter les "Stale Closures".
- * Le moteur ne redémarre plus inutilement et a toujours accès aux états à jour (Index question, Vies...).
+ * 🧠 UNIFIED MOTEUR V4.9 (REAL-TIME REF)
+ * CORRECTIF : Correction du blocage après la 1ère question.
+ * La lecture de l'état (stateRef) se fait désormais À L'INTÉRIEUR du setTimeout pour garantir la fraîcheur des données.
  */
-
 export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }) {
     // --- ÉTATS ---
     const [lives, setLives] = useState(4);
@@ -29,7 +28,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
     const [activeBossVisual, setActiveBossVisual] = useState(false);
     const [isShake, setIsShake] = useState(false);
     
-    // --- REFS TECHNIQUES ---
+    // --- REFS ---
     const canvasRef = useRef(null);
     const [engineStarted, setEngineStarted] = useState(false);
     const [isReady, setIsReady] = useState(false);
@@ -48,7 +47,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
     const pendingResultRef = useRef(null);
     const [assetsSignature, setAssetsSignature] = useState("");
 
-    // 🚀 REF PROXY : Permet d'accéder à l'état frais dans les callbacks du moteur
+    // 🚀 SUPER REF : Contient toujours l'état le plus récent
     const stateRef = useRef({
         currentQIndex,
         questionStates,
@@ -57,84 +56,50 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
         currentLevelIdx
     });
 
-    // Maintient la ref à jour à chaque rendu
+    // Maintien de la Super Ref à jour
     useEffect(() => {
         stateRef.current = { currentQIndex, questionStates, lives, allLevels, currentLevelIdx };
     }, [currentQIndex, questionStates, lives, allLevels, currentLevelIdx]);
 
-    // --- 1. BRIDGE VIA REF (STABILITÉ MAXIMALE) ---
-    // Cette fonction ne change JAMAIS, mais elle accède aux données fraîches via stateRef
+    // --- 1. BRIDGE (L'ASCENSEUR) ---
     const bridgeProxy = useRef((type, value) => {
-        const state = stateRef.current;
-        
         switch(type) {
             case 'DAMAGE':
                 setIsShake(true); setTimeout(() => setIsShake(false), 500);
                 setLives(l => {
                     const n = Math.max(0, l - (value || 1));
-                    if (n === 0) {
-                        setShowGameOver(true);
-                        if (gameInstanceRef.current) gameInstanceRef.current.isStopped = true;
-                    }
+                    if (n === 0) { setShowGameOver(true); if (gameInstanceRef.current) gameInstanceRef.current.isStopped = true; }
                     return n;
                 });
                 break;
-
-            case 'HEAL': 
-                setLives(l => Math.min(4, l + (value || 1))); 
-                break;
-
-            case 'WIN_ROUND': 
-                // Logique Victoire Round avec accès à l'état frais
-                handleRoundValidation(true, state); 
-                break;
-
-            case 'FAIL_ROUND': 
-                handleRoundValidation(false, state); 
-                break;
-
+            case 'HEAL': setLives(l => Math.min(4, l + (value || 1))); break;
+            case 'WIN_ROUND': handleRoundValidation(true); break;
+            case 'FAIL_ROUND': handleRoundValidation(false); break;
             case 'SET_BOSS': 
                 setActiveBossVisual(!!value); 
                 bossModeRef.current = !!value;
                 if(gameInstanceRef.current) gameInstanceRef.current.isBossPhase = !!value;
                 break;
-
-            case 'SHAKE': 
-                setIsShake(true); setTimeout(() => setIsShake(false), 500); 
-                break;
-
-            case 'AUDIO': 
-                /* triggerGlobalEvent(value) */ 
-                break;
-
-            case 'VICTORY': 
-                triggerWinSequence(state); 
-                break;
-
-            case 'GAME_OVER': 
-                setShowGameOver(true); 
-                break;
-            
-            case 'NEXT_Q':
-                forceNextQuestion(state);
-                break;
+            case 'SHAKE': setIsShake(true); setTimeout(() => setIsShake(false), 500); break;
+            case 'VICTORY': triggerWinSequence(); break;
+            case 'GAME_OVER': setShowGameOver(true); break;
         }
     });
 
-    // --- 2. LOGIQUE METIER ---
+    // --- 2. LOGIQUE METIER CORRIGÉE ---
 
-    // Validation Round (Sortie du switch pour lisibilité)
-    const handleRoundValidation = (success, state) => {
+    const handleRoundValidation = (success) => {
         const isCorrect = pendingResultRef.current !== null ? pendingResultRef.current : success;
         
+        // 1. Mise à jour immédiate des barres (UI)
         setQuestionStates(prev => {
             const next = [...prev];
-            const idx = state.currentQIndex; // Utilisation de l'index frais
+            const idx = stateRef.current.currentQIndex; // On prend l'index depuis la Ref
             
             if (isCorrect) next[idx] = Math.min(3, next[idx] + 1);
             else next[idx] = Math.max(0, next[idx] - 1);
             
-            // Si défaite, on gère les vies ici aussi par sécurité (redondant avec DAMAGE mais sûr)
+            // Si raté, on gère la vie ici aussi pour être sûr
             if (!isCorrect) {
                 setLives(l => {
                     const n = Math.max(0, l - 1);
@@ -143,45 +108,48 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
                 });
             }
 
-            // Préparation suite
-            setTimeout(() => {
-                setFeedback(null); setUserInput(""); pendingResultRef.current = null;
-                pickNextQuestion(next, state.currentQIndex);
-            }, 500);
-
             return next;
         });
-    };
 
-    const pickNextQuestion = (nextStates, currentIdx) => {
-        const available = nextStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
-        
-        if (available.length > 0) {
-            // Règle Boss : Si 2/3, on reste dessus
-            if (nextStates[currentIdx] === 2) {
-                bridgeProxy.current('SET_BOSS', true);
-            } else {
-                const others = available.filter(idx => idx !== currentIdx);
-                if (others.length > 0) {
-                    setCurrentQIndex(others[Math.floor(Math.random() * others.length)]);
-                    bridgeProxy.current('SET_BOSS', false);
+        // 2. Décision SUIVANTE après délai (CORRECTIF V4.9)
+        setTimeout(() => {
+            setFeedback(null);
+            setUserInput("");
+            pendingResultRef.current = null;
+
+            // ON LIT L'ÉTAT "FRAIS" ICI (C'est ça qui manquait !)
+            const freshState = stateRef.current;
+            const freshStates = freshState.questionStates;
+            const currentIdx = freshState.currentQIndex;
+
+            // Analyse des disponibilités
+            const available = freshStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
+            
+            if (available.length > 0) {
+                // Règle Boss : Si on est sur un boss (2/3), on reste dessus
+                if (freshStates[currentIdx] === 2) {
+                    bridgeProxy.current('SET_BOSS', true);
+                } else {
+                    // Sinon on change de question
+                    const others = available.filter(idx => idx !== currentIdx);
+                    if (others.length > 0) {
+                        const nextIdx = others[Math.floor(Math.random() * others.length)];
+                        setCurrentQIndex(nextIdx);
+                        bridgeProxy.current('SET_BOSS', false);
+                    }
                 }
+            } else {
+                // Niveau terminé
+                triggerWinSequence();
             }
-        } else {
-            // Niveau fini
-            triggerWinSequence(stateRef.current);
-        }
+        }, 800); // Délai un peu plus long pour laisser lire "BIEN JOUÉ"
     };
 
-    const forceNextQuestion = (state) => {
-        pickNextQuestion(state.questionStates, state.currentQIndex);
-    };
-
-    const triggerWinSequence = (state) => {
+    const triggerWinSequence = () => {
+        const state = stateRef.current; // État frais
         setShowStageClear(true);
         setTimeout(() => {
             setShowStageClear(false);
-            // Vérif niveau suivant
             if (state.allLevels[state.currentLevelIdx + 1]) {
                 setCurrentLevelIdx(p => p + 1);
                 setEngineStarted(false);
@@ -193,7 +161,6 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
     };
 
     // --- 3. CHARGEMENT ET SYNC ---
-
     useEffect(() => { 
         if (!gameData) return;
         projectRef.current = gameData; 
@@ -219,7 +186,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
                 setLevelQuestions(qs);
                 setQuestionStates(new Array(qs.length).fill(0));
                 setCurrentQIndex(0);
-                setShowLevelIntro(true); // Intro visible au changement de niveau
+                setShowLevelIntro(true); 
             }
         };
         initLevel();
@@ -272,7 +239,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
         if (gameInstanceRef.current?.onResult) gameInstanceRef.current.onResult(isCorrect);
     };
 
-    // --- 4. MOTEUR RENDU (STABLE) ---
+    // --- 4. MOTEUR RENDU ---
     useEffect(() => {
         if (!engineStarted || !canvasRef.current) return;
         
@@ -287,14 +254,10 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
                 canvas: canvasRef.current, 
                 ctx: canvasRef.current.getContext('2d'), 
                 playParallelSound: () => {}, 
-                
-                // 🚀 PASSAGE DU PROXY AU LIEU DE LA FONCTION DIRECTE
-                // Cela garantit que le moteur appelle toujours la version la plus fraîche via la ref
                 bridge: { trigger: (t, v) => bridgeProxy.current(t, v) }
             });
 
             const scriptToRun = projectRef.current.generatedCode || "";
-            // Protection script vide
             const safeCode = scriptToRun.length > 20 ? scriptToRun : `class MiniGame extends MiniGameBase { update(){} }`;
 
             const factory = new Function('MiniGameBase', `${safeCode}\nreturn MiniGame;`);
@@ -315,16 +278,9 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
             tick();
         } catch (e) { console.error("🔥 CRASH MOTEUR:", e); }
         return () => { if(frameIdRef.current) cancelAnimationFrame(frameIdRef.current); };
-    }, [engineStarted]); // Plus aucune dépendance instable ici !
+    }, [engineStarted]);
 
-    // --- HELPERS UI ---
-    const getYoutubeEmbed = (url) => {
-        if (!url) return "";
-        const m = url.match(/^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/);
-        return (m && m[2].length === 11) ? `https://www.youtube.com/embed/${m[2]}` : url;
-    };
-
-    // Cheats
+    // Helpers Clavier (Cheats)
     useEffect(() => {
         const hDown = (e) => keysPressed.current[e.code] = true;
         const hUp = (e) => keysPressed.current[e.code] = false;
@@ -333,9 +289,15 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
     }, []);
 
     const isCheat = () => keysPressed.current['KeyS'];
-    const cheatWin = () => isCheat() && bridgeProxy.current('VICTORY');
     const cheatLife = () => isCheat() && bridgeProxy.current('DAMAGE');
+    const cheatWin = () => isCheat() && bridgeProxy.current('VICTORY');
     const cheatBar = (idx) => isCheat() && setQuestionStates(p => { const n=[...p]; n[idx]=3; return n; });
+
+    const getYoutubeEmbed = (url) => {
+        if (!url) return "";
+        const m = url.match(/^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/);
+        return (m && m[2].length === 11) ? `https://www.youtube.com/embed/${m[2]}` : url;
+    };
 
     const currentLevelData = allLevels[currentLevelIdx] || {};
     const safeQ = levelQuestions[currentQIndex];
@@ -343,14 +305,14 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
     return (
         <div className={`fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center overflow-hidden font-sans ${isShake ? 'animate-shake' : ''}`}>
             {/* DEBUGGER */}
-            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">MOTEUR V4.8 (REF PROXY)</div>
+            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">MOTEUR V4.9 (REAL-TIME REF)</div>
             <button onClick={onExit} className="absolute top-6 right-6 w-14 h-14 bg-white/10 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-2xl font-black z-[4000] border-2 border-white/20">✕</button>
 
             {/* OVERLAYS JEU */}
             {showLevelBanner && <div className="fixed top-[20%] z-[5000] animate-in zoom-in"><span className="text-yellow-400 font-black text-6xl uppercase drop-shadow-lg">Niveau {currentLevelIdx + 1}</span></div>}
             {showStageClear && <div className="fixed top-[40%] z-[5000] animate-in zoom-in"><span className="text-green-500 font-black text-8xl uppercase drop-shadow-lg">STAGE CLEAR !</span></div>}
             
-            {/* ECRAN INTRO (FICHE/VIDEO) RESTAURÉ */}
+            {/* ECRAN INTRO */}
             {showLevelIntro && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950 z-[6000] animate-in zoom-in p-8 text-center">
                     <h1 className="text-5xl text-white font-black mb-6 uppercase tracking-tighter">{currentLevelData.name || `Niveau ${currentLevelIdx+1}`}</h1>
@@ -382,7 +344,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
                     <div className="absolute top-6 w-full flex justify-between px-10 pointer-events-none z-30">
                         <div onClick={cheatLife} className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-lg pointer-events-auto cursor-pointer">{"❤️".repeat(lives)}</div>
                         
-                        {/* 🚀 BOITE QUESTION CENTRALE */}
+                        {/* BOITE QUESTION CENTRALE */}
                         {safeQ && (
                             <div onClick={cheatWin} className="flex-1 mx-10 pointer-events-auto cursor-pointer">
                                 <div className={`bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 shadow-2xl text-xl text-center border-slate-600 ${activeBossVisual ? 'border-red-500 ring-2 ring-red-500/50' : ''}`}>
@@ -403,7 +365,6 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
                     
                     <canvas ref={canvasRef} width={800} height={450} className={`aspect-video shadow-2xl bg-black border-4 ${activeBossVisual ? 'border-red-600 shadow-[0_0_50px_red]' : 'border-slate-800'} rounded-lg`} />
                     
-                    {/* BOUTONS RÉPONSES */}
                     {safeQ && !showStageClear && !showGameComplete && (
                         <div className="absolute bottom-10 w-full flex justify-center px-10 pointer-events-auto z-30">
                             <div className="grid grid-cols-4 gap-4 w-full max-w-5xl">
@@ -416,7 +377,6 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
                 </>
             )}
 
-            {/* FIN */}
             {showGameComplete && (
                 <div className="absolute inset-0 z-[7000] bg-gradient-to-br from-yellow-500 to-purple-600 flex flex-col items-center justify-center animate-in zoom-in">
                     <h1 className="text-9xl mb-4">🏆</h1>
