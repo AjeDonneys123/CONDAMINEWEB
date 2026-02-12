@@ -1,7 +1,8 @@
 /**
- * 🎮 CORE ENGINE V8.5 (SHARED ENGINE)
+ * 🎮 CORE ENGINE V8.6 (SHARED ENGINE - FIX HITBOX CALLBACKS)
  * Rôle : Moteur de rendu partagé Prof/Élève.
  * Gère le dessin des personnages, les animations et le Boss Mode.
+ * UPDATE V8.6 : Fusion intelligente des callbacks pour garantir que onPlayerHit fonctionne.
  */
 export const createGameBase = (params) => {
     const { 
@@ -44,7 +45,11 @@ export const createGameBase = (params) => {
             this.canvas = c || canvas; 
             this.ctx = ctx; 
             this.keys = {}; 
-            this.callbacks = cb || callbacks || {}; 
+            
+            // FIX V8.6 : Fusionner les callbacks système avec ceux passés par l'instance
+            // Cela garantit que onPlayerHit (défini dans callbacks système) n'est pas écrasé par un {} vide
+            this.callbacks = { ...(callbacks || {}), ...(cb || {}) };
+            
             this.assets = a || {};
             this.isBossPhase = false;
 

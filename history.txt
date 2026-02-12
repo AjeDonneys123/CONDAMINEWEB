@@ -8871,3 +8871,6 @@ Build 161: MIGRATION MOTEUR JEU. Extraction de la logique 'BaseFactory' vers 'se
 2026-02-11 19:58 - Découplage de l'état des barres et de l'état visuel du Boss (ActiveBossVisual).
 2026-02-11 19:58 - L'état Boss n'est désormais mis à jour qu'au changement d'index de question (après l'animation d'impact).
 2026-02-11 19:58 - Amélioration de la fluidité des transitions inter-questions pour éviter les transformations erratiques des personnages.
+
+...
+Fix majeur : Les cœurs du héros ne descendaient pas. Correction dans `gameCore.js` (fusion des callbacks) et `UnifiedMoteur.jsx` (passage de null).

@@ -5,9 +5,9 @@ import { api } from '../../../services/api';
 import { createGameBase } from '../../../services/gameCore';
 
 /**
- * 🧠 LE MAITRE UNIFIÉ V.2.82 (DELAYED BOSS MUTATION)
- * VERSION : V.2.82
- * FIX : Le zombie ne devient Boss qu'APRÈS son reset de position, au changement de question.
+ * 🧠 LE MAITRE UNIFIÉ V.2.83 (FIX HITBOX ZOMBIE)
+ * VERSION : V.2.83
+ * FIX : Passage de 'null' aux callbacks pour éviter l'écrasement des fonctions système.
  */
 
 const ZOMBIE_GAME_CODE = `
@@ -64,7 +64,8 @@ class MiniGame extends MiniGameBase {
                 this.hasDealtDamage = true;
                 if (this.heroState !== "HIT") {
                     if (this.HEROS) { this.HEROS.play("TOUCHE", false); this.heroState = "HIT"; this.heroTimer = 60; }
-                    if (this.callbacks.onPlayerHit) this.callbacks.onPlayerHit();
+                    // APPEL DU CALLBACK SYSTÈME QUI FAIT PERDRE UNE VIE
+                    if (this.callbacks && this.callbacks.onPlayerHit) this.callbacks.onPlayerHit();
                 }
             }
             if (this.ZOMBIE && this.ZOMBIE.isAnimFinished) this.resetZombie();
@@ -126,7 +127,6 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
     const [zoomMedia, setZoomMedia] = useState(null);
     const [isPowerOff, setIsPowerOff] = useState(false);
     
-    // 🔥 ETAT BOSS MAITRE : Ne change qu'au changement d'index de question
     const [activeBossVisual, setActiveBossVisual] = useState(false);
 
     const audioCtxRef = useRef(null);
@@ -140,7 +140,6 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
 
     useEffect(() => { projectRef.current = gameData; }, [gameData]);
 
-    // 🚀 SYNCHRO BOSS : On ne change le BossMode que quand currentQIndex bouge
     useEffect(() => {
         const isBossNow = (currentQIndex !== -1 && (questionStates[currentQIndex] || 0) === 2);
         setActiveBossVisual(isBossNow);
@@ -233,21 +232,16 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
             setLives(l => Math.max(0, l - 1));
         }
         
-        // On met à jour les points immédiatement pour la barre du haut
         setQuestionStates(nextStates);
         setUserInput("");
 
         setTimeout(() => {
             setFeedback(null);
             
-            // On calcule la suite. Note : on ne change currentQIndex QUE ICI.
-            // C'est ce changement qui déclenchera le useEffect pour activer le BossMode moteur.
             const available = nextStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
             
             if (available.length > 0) {
-                // Si la question actuelle vient de passer à 2 (Boss), on reste dessus.
                 if (isCorrect && nextStates[currentQIndex] === 2) {
-                    // Force le re-render pour activer le mode Boss visuel maintenant que l'impact est fini
                     const bossNow = true;
                     setActiveBossVisual(bossNow);
                     bossModeRef.current = bossNow;
@@ -257,7 +251,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
                     setCurrentQIndex(others.length > 0 ? others[Math.floor(Math.random() * others.length)] : available[0]);
                 }
             } else triggerWinSequence();
-        }, 1000); // On attend la fin de l'animation d'impact
+        }, 1000);
     };
 
     const triggerWinSequence = () => {
@@ -279,14 +273,42 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
     useEffect(() => {
         if (!engineStarted || !canvasRef.current) return;
         try {
-            const MiniGameBase = createGameBase({ audioBuffers: audioBuffersRef.current, audioCtx: audioCtxRef.current, projectRef, sceneIdx: 0, imageAssets: imageAssetsRef.current, resolveUrl, canvas: canvasRef.current, ctx: canvasRef.current.getContext('2d'), playParallelSound: playParallelSoundImpl, callbacks: { onPlayerHit: () => { setLives(l => { const n = Math.max(0, l - 1); if (n === 0) setShowGameOver(true); return n; }); } } });
+            const MiniGameBase = createGameBase({ 
+                audioBuffers: audioBuffersRef.current, 
+                audioCtx: audioCtxRef.current, 
+                projectRef, 
+                sceneIdx: 0, 
+                imageAssets: imageAssetsRef.current, 
+                resolveUrl, 
+                canvas: canvasRef.current, 
+                ctx: canvasRef.current.getContext('2d'), 
+                playParallelSound: playParallelSoundImpl, 
+                callbacks: { 
+                    onPlayerHit: () => { 
+                        // CALLBACK SYSTÈME : PERTE DE VIE
+                        setLives(l => { 
+                            const n = Math.max(0, l - 1); 
+                            if (n === 0) setShowGameOver(true); 
+                            return n; 
+                        }); 
+                    } 
+                } 
+            });
             const factory = new Function('MiniGameBase', `${projectRef.current.generatedCode || ZOMBIE_GAME_CODE}\nreturn MiniGame;`);
-            const instance = new (factory(MiniGameBase))(canvasRef.current, {}, {});
-            gameInstanceRef.current = instance; if (instance.start) instance.start();
+            
+            // FIX V2.83 : Passer 'null' comme 3ème argument pour que le moteur utilise les callbacks système
+            // et ne les écrase pas avec un objet vide {}.
+            const instance = new (factory(MiniGameBase))(canvasRef.current, {}, null);
+            
+            gameInstanceRef.current = instance; 
+            if (instance.start) instance.start();
+            
             const tick = () => {
                 if(instance.keys) Object.assign(instance.keys, keysPressed.current);
                 instance.isBossPhase = bossModeRef.current;
-                if (instance.update) instance.update(); if (instance._render) instance._render(); if (instance.draw) instance.draw();
+                if (instance.update) instance.update(); 
+                if (instance._render) instance._render(); 
+                if (instance.draw) instance.draw();
                 frameIdRef.current = requestAnimationFrame(tick);
             };
             tick();
@@ -299,7 +321,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
 
     return (
         <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center overflow-hidden font-sans">
-            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">VERSION V.2.82</div>
+            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">VERSION V.2.83 (FIX)</div>
             <button onClick={onExit} className="absolute top-6 right-6 w-14 h-14 bg-white/10 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-2xl font-black z-[4000] border-2 border-white/20">✕</button>
 
             {showLevelBanner && (
