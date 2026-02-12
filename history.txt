@@ -8896,3 +8896,9 @@ Build #168 : STABILISATION Moteur (Fix Crash V3.05) - Ajout sécurités null-che
 Build #167 : Gameplay Logic Update (Sync Bar/Mort)
 Build #168 : STABILISATION Moteur (Fix Crash V3.05)
 Build #169 : FIX FINAL LOOP (Correction Stale Closure via Ref Proxy)
+
+Build #170 : FIX BLACK SCREEN (Initialisation sécurisée du moteur)
+Build #171 : PATCH REFERENCE ERROR (Ajout manquant crashError state)
+Build #172 : ROLLBACK V3.04 (Retour version stable)
+Build #173 : ARCHITECTURE EVENEMENTIELLE (Tentative échouée)
+Build #174 : STABILITÉ TOTALE (Event Bus Sécurisé + Error Catching)
