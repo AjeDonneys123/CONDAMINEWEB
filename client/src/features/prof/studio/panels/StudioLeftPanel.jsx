@@ -1,72 +1,168 @@
-// @signatures: StudioLeftPanel, handleSelectAction, handleAddAction
+// @signatures: StudioLeftPanel, handleSelectAction, handleAddAction, handleAddGlobalSound, handleDeleteActionOrSound
 import React, { useState, useEffect, useRef } from 'react';
-import SoundExpert from '../../../../services/SoundExpert';
+import SoundExpert from '../studioComp/SoundExpert';
 
 export default function StudioLeftPanel({
     leftTab, setLeftTab, selectedActor, selectedActionIdx, setSelectedActionIdx, 
     selectedGlobalSoundIdx, setSelectedGlobalSoundIdx,
     setIsPreviewPlaying, saveProject, project, selectedSceneIdx, selectedActorId,
-    selectedAction, handleUpdateActionSpeed, isPreviewPlaying,
+    selectedAction, handleMirrorSequence = () => {}, handleUpdateActionSpeed, isPreviewPlaying,
     previewFrameIdx, selectedFrameIdx, setSelectedFrameIdx, setDraggedFrameIdx,
     handleReorderFrame, resolveUrl, handleDeleteFrame, frameUploadRef,
-    setFrameToErase, setShowSoundModal, handleDeleteSound, handleEditSound,
-    setPreviewFrameIdx
+    eraserActive, setEraserActive, setFrameToErase,
+    handleSmartAIClean = () => {}, cleaning, setShowSoundModal,
+    handleDeleteSound, handleEditSound,
+    setPreviewFrameIdx,
+    currentScene
 }) {
     const [selectedSoundIdx, setSelectedSoundIdx] = useState(null);
     const audioCtxRef = useRef(null);
     const activeSourcesRef = useRef([]);
 
+    // 1. INIT CONTEXTE AUDIO
     useEffect(() => {
-        if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+        if (!audioCtxRef.current) {
+            audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+        }
         return () => stopAllSounds();
     }, []);
+
+    // 2. PRELOAD DES SONS
+    useEffect(() => {
+        if (selectedAction && selectedAction.sounds && selectedAction.sounds.length > 0) {
+            if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+            selectedAction.sounds.forEach(snd => {
+                SoundExpert.decodeAudio(resolveUrl(snd.url), audioCtxRef.current);
+            });
+        }
+    }, [selectedAction]);
 
     const stopAllSounds = () => {
         activeSourcesRef.current.forEach(source => { try { source.stop(); } catch(e) {} });
         activeSourcesRef.current = [];
     };
 
+    // 3. SEQUENCEUR (VISUEL + AUDIO)
     useEffect(() => {
         let visualInterval = null;
         let soundIndex = 0;
         let isPlaying = isPreviewPlaying;
 
         if (isPlaying && selectedAction) {
-            if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
-
-            if (selectedAction.frames?.length > 0) {
-                visualInterval = setInterval(() => {
-                    setPreviewFrameIdx(idx => (idx + 1) % selectedAction.frames.length);
-                }, selectedAction.speed || 100);
+            if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
+                audioCtxRef.current.resume();
             }
 
-            if (selectedAction.sounds?.length > 0) {
-                const play = async () => {
+            // VISUEL (Seulement si frames existantes)
+            if (selectedAction.frames && selectedAction.frames.length > 0) {
+                visualInterval = setInterval(() => {
+                    if (typeof setPreviewFrameIdx === 'function') {
+                        setPreviewFrameIdx(currentIdx => (currentIdx + 1) % selectedAction.frames.length);
+                    }
+                }, selectedAction.speed || 200);
+            }
+
+            // AUDIO (Boucle sur la liste des sons)
+            if (selectedAction.sounds && selectedAction.sounds.length > 0) {
+                const playNextSound = async () => {
                     if (!isPlaying) return;
-                    const snd = selectedAction.sounds[soundIndex];
-                    const buf = await SoundExpert.decodeAudio(resolveUrl(snd.url), audioCtxRef.current);
-                    if (buf) {
+                    const soundData = selectedAction.sounds[soundIndex];
+                    if (!soundData) return;
+                    const buffer = await SoundExpert.decodeAudio(resolveUrl(soundData.url), audioCtxRef.current);
+                    if (!isPlaying || !buffer) return;
+
+                    try {
                         const source = audioCtxRef.current.createBufferSource();
-                        source.buffer = buf; source.connect(audioCtxRef.current.destination);
-                        source.onended = () => { soundIndex = (soundIndex + 1) % selectedAction.sounds.length; play(); };
+                        source.buffer = buffer;
+                        source.connect(audioCtxRef.current.destination);
+                        source.onended = () => {
+                            if (isPlaying) {
+                                soundIndex = (soundIndex + 1) % selectedAction.sounds.length;
+                                playNextSound();
+                            }
+                        };
                         source.start(0);
                         activeSourcesRef.current.push(source);
-                    }
+                    } catch (e) { console.error("Audio Error", e); }
                 };
-                play();
+                playNextSound();
             }
         } else {
             stopAllSounds();
-            setPreviewFrameIdx(0);
+            if (setPreviewFrameIdx) setPreviewFrameIdx(0);
         }
-        return () => { isPlaying = false; clearInterval(visualInterval); stopAllSounds(); };
+
+        return () => {
+            isPlaying = false;
+            if (visualInterval) clearInterval(visualInterval);
+            stopAllSounds();
+        };
     }, [isPreviewPlaying, selectedAction]);
 
+    const handleSelectAction = (idx) => {
+        setSelectedActionIdx(idx);
+        setIsPreviewPlaying(false);
+        setSelectedFrameIdx(null);
+        setSelectedSoundIdx(null);
+        if (setPreviewFrameIdx) setPreviewFrameIdx(0);
+    };
+
+    const handleSelectGlobalSound = (idx) => {
+        setSelectedGlobalSoundIdx(idx);
+        setIsPreviewPlaying(false);
+        setSelectedFrameIdx(null);
+        setSelectedSoundIdx(null);
+    };
+
+    // --- LOGIQUE OUTILS (CRAYON / GOMME / EDIT) ---
+    const handlePenClick = () => {
+        // Cas 1 : Édition Visuelle (Frame sélectionnée)
+        if (selectedFrameIdx !== null && leftTab === 'actions') {
+            const frame = selectedAction.frames[selectedFrameIdx];
+            if (frame) {
+                setFrameToErase({ url: frame.url, idx: selectedFrameIdx });
+            }
+        } 
+        // Cas 2 : Édition Sonore (Son sélectionné)
+        else if (selectedSoundIdx !== null) {
+            handleEditSound(selectedSoundIdx); 
+        }
+    };
+
+    // --- HANDLERS D'AJOUT ---
     const handleAddAction = () => {
-        const name = prompt("Nom de l'action :"); if(!name) return;
-        const next = JSON.parse(JSON.stringify(project));
+        const name = prompt("Nom de l'action (ex: MARCHER) :"); 
+        if(!name) return; 
+        const next = JSON.parse(JSON.stringify(project)); 
         const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
-        actor.actions.push({ name: name.toUpperCase(), frames: [], sounds: [], speed: 100 });
+        if (actor) {
+            actor.actions.push({ name: name.toUpperCase(), frames: [], sounds: [], speed: 100 }); 
+            saveProject(next);
+        }
+    };
+
+    const handleAddGlobalSound = () => {
+        const name = prompt("Nom de l'événement (ex: VICTOIRE, GAME_OVER) :"); 
+        if(!name) return; 
+        const next = JSON.parse(JSON.stringify(project)); 
+        const scene = next.scenes[selectedSceneIdx];
+        if (!scene.globalSounds) scene.globalSounds = [];
+        scene.globalSounds.push({ name: name.toUpperCase(), frames: [], sounds: [], speed: 100 }); 
+        saveProject(next);
+    };
+
+    const handleDeleteActionOrSound = (e, idx) => {
+        e.stopPropagation();
+        if (!confirm("Supprimer cet élément ?")) return;
+        const next = JSON.parse(JSON.stringify(project));
+        if (leftTab === 'actions') {
+            const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
+            actor.actions.splice(idx, 1);
+            setSelectedActionIdx(0);
+        } else {
+            next.scenes[selectedSceneIdx].globalSounds.splice(idx, 1);
+            setSelectedGlobalSoundIdx(0);
+        }
         saveProject(next);
     };
 
@@ -78,39 +174,123 @@ export default function StudioLeftPanel({
             </div>
 
             <div className="studio-action-list custom-scrollbar">
-                {selectedActor?.actions?.map((act, idx) => (
-                    <div key={idx} onClick={() => setSelectedActionIdx(idx)} className={`action-item ${selectedActionIdx === idx ? 'selected' : ''}`}>
-                        <span>{act.name}</span>
-                        <div className="flex gap-2 items-center">
-                            <span className="text-[9px] bg-slate-100 px-1 rounded text-slate-400">{act.frames?.length || 0}f</span>
-                            {act.sounds?.length > 0 && <span className="text-[9px] bg-indigo-100 text-indigo-600 px-1 rounded">🎵</span>}
-                        </div>
-                    </div>
-                ))}
-                <button className="v84-add-btn-minimal" onClick={handleAddAction}>+ Action</button>
+                {leftTab === 'actions' ? (
+                    <>
+                        {selectedActor?.actions?.map((act, idx) => (
+                            <div key={idx} onClick={() => handleSelectAction(idx)} className={`action-item ${selectedActionIdx === idx ? 'selected' : ''}`}>
+                                <span>{act.name}</span>
+                                <div className="flex gap-2 items-center">
+                                    <span className="text-[9px] bg-slate-100 px-1 rounded text-slate-400">{act.frames?.length || 0}f</span>
+                                    {act.sounds?.length > 0 && <span className="text-[9px] bg-indigo-100 text-indigo-600 px-1 rounded">🎵</span>}
+                                    <button onClick={(e) => handleDeleteActionOrSound(e, idx)} className="text-[10px] text-red-300 hover:text-red-500 font-black ml-1">✕</button>
+                                </div>
+                            </div>
+                        ))}
+                        <button type="button" className="v84-add-btn-minimal" onClick={handleAddAction}>+ Action</button>
+                    </>
+                ) : (
+                    <>
+                        {/* LISTE DES SONS GLOBAUX */}
+                        {(currentScene?.globalSounds || project.scenes[selectedSceneIdx].globalSounds || []).map((act, idx) => (
+                            <div key={idx} onClick={() => handleSelectGlobalSound(idx)} className={`action-item ${selectedGlobalSoundIdx === idx ? 'selected' : ''}`}>
+                                <span>{act.name}</span>
+                                <div className="flex gap-2 items-center">
+                                    {act.sounds?.length > 0 && <span className="text-[9px] bg-indigo-100 text-indigo-600 px-1 rounded">🎵</span>}
+                                    <button onClick={(e) => handleDeleteActionOrSound(e, idx)} className="text-[10px] text-red-300 hover:text-red-500 font-black ml-1">✕</button>
+                                </div>
+                            </div>
+                        ))}
+                        <button type="button" className="v84-add-btn-minimal" onClick={handleAddGlobalSound}>+ Événement Sonore</button>
+                    </>
+                )}
             </div>
 
             {selectedAction && (
                 <div className="studio-sequencer-box">
                     <div className="seq-header">
-                        <span className="seq-label">Séquenceur</span>
+                        <span className="seq-label">{leftTab === 'actions' ? 'Séquenceur' : 'Timeline Sonore'}</span>
                         <div className="seq-controls">
-                            <button className="btn-mini-ctrl" onClick={() => handleUpdateActionSpeed(-20)}>-</button>
-                            <span className="speed-indicator">{selectedAction.speed}ms</span>
-                            <button className="btn-mini-ctrl" onClick={() => handleUpdateActionSpeed(20)}>+</button>
-                            <button className="btn-preview-play" onClick={() => setIsPreviewPlaying(!isPreviewPlaying)}>{isPreviewPlaying ? '⏹️' : '▶️'}</button>
+                            {leftTab === 'actions' && <button className="btn-mirror" onClick={handleMirrorSequence} title="Miroir">↔️</button>}
+                            
+                            {/* Contrôle Vitesse (Uniquement pertinent si animation visuelle, mais on laisse pour le rythme) */}
+                            <button className="btn-mini-ctrl" onClick={() => handleUpdateActionSpeed(-50)}>-</button>
+                            <span className="speed-indicator">{selectedAction.speed || 100}ms</span>
+                            <button className="btn-mini-ctrl" onClick={() => handleUpdateActionSpeed(50)}>+</button>
+                            
+                            <button className={`btn-mini-ctrl ${isPreviewPlaying ? 'bg-indigo-100 text-indigo-600' : ''}`} onClick={() => setIsPreviewPlaying(!isPreviewPlaying)}>
+                                {isPreviewPlaying ? '⏹️' : '▶️'}
+                            </button>
                         </div>
                     </div>
-                    <div className="seq-frames-grid">
-                        {selectedAction.frames.map((f, i) => (
-                            <div key={i} className={`seq-frame ${previewFrameIdx === i ? 'active' : ''}`} onClick={() => setSelectedFrameIdx(i)}>
-                                <img src={resolveUrl(f.url)} />
+                    
+                    {/* GRILLE D'IMAGES (Seulement pour les Actions Acteur) */}
+                    {leftTab === 'actions' && (
+                        <div className="seq-frames-grid custom-scrollbar" style={{height: '110px', minHeight: '110px'}}>
+                            {selectedAction.frames.map((frame, fIdx) => (
+                                <div key={fIdx} 
+                                    className={`seq-frame ${isPreviewPlaying && previewFrameIdx === fIdx ? 'active' : ''} ${selectedFrameIdx === fIdx ? 'active' : ''}`} 
+                                    draggable 
+                                    onClick={() => { setSelectedFrameIdx(selectedFrameIdx === fIdx ? null : fIdx); setIsPreviewPlaying(false); setSelectedSoundIdx(null); }} 
+                                    onDragStart={() => setDraggedFrameIdx(fIdx)} 
+                                    onDragOver={e => e.preventDefault()} 
+                                    onDrop={() => handleReorderFrame(fIdx)}>
+                                    <img src={resolveUrl(frame.url)} />
+                                    <button className="frame-del" onClick={e => { e.stopPropagation(); handleDeleteFrame(fIdx); }}>✕</button>
+                                </div>
+                            ))}
+                            <div className="seq-frame seq-frame-add" onClick={() => frameUploadRef.current.click()}>+</div>
+                        </div>
+                    )}
+                    
+                    {/* GRILLE DE SONS (Visible pour Actions ET Global Sounds) */}
+                    {/* Si on est en mode SOUNDS, on agrandit cette zone car il n'y a pas d'images */}
+                    <div className={`border-slate-200 pt-2 ${leftTab === 'actions' ? 'border-t mt-2' : 'h-full flex flex-col'}`}>
+                        <div className="flex justify-between items-center mb-1">
+                            <span className="seq-label text-indigo-500">Piste Audio</span>
+                            <button className="btn-sound-trigger !w-auto px-2 !text-[9px]" onClick={() => setShowSoundModal(true)}>
+                                🔊 Ajouter Son
+                            </button>
+                        </div>
+                        
+                        <div className={`grid grid-cols-3 gap-2 ${leftTab === 'sounds' ? 'flex-1 content-start' : ''}`}>
+                            {(selectedAction.sounds || []).map((snd, sIdx) => (
+                                <div key={sIdx} 
+                                     onClick={() => { setSelectedSoundIdx(selectedSoundIdx === sIdx ? null : sIdx); setSelectedFrameIdx(null); }}
+                                     className={`sound-frame-visual h-16 ${selectedSoundIdx === sIdx ? 'active' : ''} relative group`}>
+                                    <span className="text-xl">🎵</span>
+                                    <span className="text-[8px] font-black text-indigo-800 w-full text-center truncate px-1">{snd.name?.substring(0,10)}</span>
+                                    
+                                    <button 
+                                        className="frame-del !bg-red-500 !text-white !opacity-100 !top-1 !right-1 z-50" 
+                                        onClick={(e) => { e.stopPropagation(); handleDeleteSound(sIdx); }}
+                                        title="Supprimer le son"
+                                    >✕</button>
+                                </div>
+                            ))}
+                            
+                            {/* Emplacement vide pour montrer qu'on peut ajouter */}
+                            <div className="border-2 border-dashed border-slate-200 rounded-lg h-16 flex items-center justify-center text-slate-300 text-[8px] font-bold cursor-pointer hover:border-indigo-300 hover:text-indigo-400" onClick={() => setShowSoundModal(true)}>
+                                +
                             </div>
-                        ))}
-                        <div className="seq-frame seq-frame-add" onClick={() => frameUploadRef.current.click()}>+</div>
+                        </div>
                     </div>
-                    <div className="eraser-bar">
-                        <button className="btn-tool-pen" onClick={() => setShowSoundModal(true)}>🔊 AJOUTER SON</button>
+
+                    {/* BARRE D'OUTILS (Crayon / Baguette) */}
+                    <div className="eraser-bar mt-auto">
+                        <div className="flex gap-2 items-center w-full">
+                            
+                            {/* BOUTON ÉDITER (Ouvre Gomme ou Éditeur Son) */}
+                            <button className="btn-tool-pen" onClick={handlePenClick} disabled={selectedFrameIdx === null && selectedSoundIdx === null} title={selectedSoundIdx !== null ? "Éditer le son (Trim, Effets)" : "Éditer l'image (Gomme)"}>
+                                ✏️ {selectedSoundIdx !== null ? "ÉDITER SON" : "ÉDITER IMG"}
+                            </button>
+                            
+                            {/* BOUTON MAGIC CLEAN (Seulement pour images) */}
+                            {leftTab === 'actions' && (
+                                <button className={`btn-magic-clean ${cleaning ? 'pulse' : ''}`} onClick={handleSmartAIClean} disabled={cleaning || !selectedAction.frames || selectedAction.frames.length === 0} title="Détourage IA">
+                                    ✨ {cleaning ? '...' : (selectedFrameIdx !== null ? 'DÉTOURER' : 'TOUT CLEAN')}
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}
