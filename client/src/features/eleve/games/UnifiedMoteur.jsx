@@ -1,15 +1,16 @@
-// @signatures: UnifiedMoteur, handleAnswerClick, triggerWinSequence, startCurrentLevel, getEmbedUrl, checkAnswerPermissive, triggerGlobalEvent
+// @signatures: UnifiedMoteur, handleAnswerClick, triggerWinSequence, startCurrentLevel, getEmbedUrl, checkAnswerPermissive, triggerGlobalEvent, playParallelSoundImpl, normalize
 import React, { useState, useRef, useEffect } from 'react';
 import SoundExpert from '../../../services/SoundExpert';
 import { api } from '../../../services/api';
 import { createGameBase } from '../../../services/gameCore';
 
 /**
- * 🧠 LE MAITRE UNIFIÉ V.2.85 (SYSTEM SOUNDS INTEGRATION)
- * VERSION : V.2.85
- * AJOUTS :
- * - Câblage des événements sonores structurels (DÉPART, VICTOIRE, DÉFAITE, UPLEVEL).
- * - Ces sons sont joués par React, indépendamment du canvas.
+ * 🧠 LE MAITRE UNIFIÉ V.2.88 (AUDIO EVENT SYNC FIX)
+ * VERSION : V.2.88
+ * CORRECTIFS :
+ * - DÉPART : Se lance via useEffect quand la bannière jaune apparaît (plus fiable).
+ * - UPLEVEL : Se lance immédiatement à la validation de la dernière barre.
+ * - ORTHOGRAPHE : Normalisation des noms de sons (enlève les accents) pour éviter les bugs "DÉPART" vs "DEPART".
  */
 
 const ZOMBIE_GAME_CODE = `
@@ -140,6 +141,14 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
     const projectRef = useRef(gameData);
     const bossModeRef = useRef(false);
 
+    // --- EFFET DE SON : DÉPART DU NIVEAU ---
+    // Se déclenche UNIQUEMENT quand la bannière jaune apparaît
+    useEffect(() => {
+        if (showLevelBanner) {
+            triggerGlobalEvent("DEPART"); // Sans accent, normalisé par la fonction
+        }
+    }, [showLevelBanner]);
+
     useEffect(() => { projectRef.current = gameData; }, [gameData]);
 
     useEffect(() => {
@@ -156,7 +165,6 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
         return `/api/proxy/${id}`;
     }
 
-    // --- CHEAT ENGINE HELPER ---
     const isCheatMode = () => keysPressed.current['KeyS'] && keysPressed.current['KeyT'];
 
     // 1. DATA LOADING
@@ -189,7 +197,6 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
         const scene = projectRef.current?.scenes?.[0];
         if (!scene) { setIsReady(true); return; }
         
-        // CHARGEMENT IMAGES
         const imgs = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url)))].filter(Boolean);
         let loaded = 0; if (imgs.length === 0) setIsReady(true);
         imgs.forEach(url => {
@@ -199,7 +206,6 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
             img.src = rKey;
         });
 
-        // CHARGEMENT SONS (INCLUT LES SONS GLOBAUX : DÉPART, VICTOIRE...)
         const snds = [
             ...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url))))
         ].filter(Boolean);
@@ -211,35 +217,41 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
         });
     }, [gameData]);
 
-    const playParallelSoundImpl = (url) => {
-        if (!engineStarted || isMuted || !audioCtxRef.current) return;
+    const playParallelSoundImpl = (url, forceAlways = false) => {
+        if ((!engineStarted && !forceAlways) || isMuted || !audioCtxRef.current) return;
+        
         const buffer = audioBuffersRef.current.get(resolveUrl(url));
         if (buffer) {
             try {
+                if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
+                
                 const source = audioCtxRef.current.createBufferSource();
-                source.buffer = buffer; source.connect(audioCtxRef.current.destination);
+                source.buffer = buffer; 
+                source.connect(audioCtxRef.current.destination);
                 source.start(0);
-            } catch(e) {}
+            } catch(e) { console.error("Sound Play Error:", e); }
         }
     };
 
     /**
-     * 🔊 DÉCLENCHEUR SONS SYSTÈME (STRUCTURAUX)
-     * Cherche un "Global Sound" (dans l'onglet SONS du Studio) qui correspond au nom.
-     * Exemple : "DÉPART", "VICTOIRE", "DÉFAITE", "UPLEVEL".
+     * 🔊 DÉCLENCHEUR SONS SYSTÈME (ROBUSTE)
+     * Utilise une normalisation stricte pour trouver le son peu importe l'accent.
      */
     const triggerGlobalEvent = (eventName) => {
         const scene = projectRef.current.scenes?.[0];
         if (!scene || !scene.globalSounds) return;
         
-        // Recherche insensible à la casse
-        const event = scene.globalSounds.find(g => g.name.toUpperCase().trim() === eventName.toUpperCase().trim());
+        const cleanTarget = eventName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+        
+        const event = scene.globalSounds.find(g => 
+            g.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim() === cleanTarget
+        );
         
         if (event && event.sounds) {
-            console.log(`🔊 Playing Global Event: ${eventName}`);
-            event.sounds.forEach(snd => playParallelSoundImpl(snd.url));
+            console.log(`🔊 SON SYSTÈME DÉTECTÉ: ${eventName} -> ${event.name}`);
+            event.sounds.forEach(snd => playParallelSoundImpl(snd.url, true));
         } else {
-            console.warn(`⚠️ Son manquant pour l'événement : ${eventName}`);
+            console.warn(`⚠️ SON SYSTÈME INTROUVABLE : ${eventName}`);
         }
     };
 
@@ -279,21 +291,29 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
                     const others = available.filter(idx => idx !== currentQIndex);
                     setCurrentQIndex(others.length > 0 ? others[Math.floor(Math.random() * others.length)] : available[0]);
                 }
-            } else triggerWinSequence();
+            } else {
+                // --- NIVEAU TERMINÉ (PLUS DE QUESTIONS DISPOS) ---
+                // On déclenche le son "UPLEVEL" IMMÉDIATEMENT à la validation de la dernière barre
+                triggerGlobalEvent("UPLEVEL");
+                // On lance la séquence visuelle
+                triggerWinSequence(); 
+            }
         }, 1000);
     };
 
     const triggerWinSequence = () => {
         setShowStageClear(true);
         setTimeout(() => setIsPowerOff(true), 1500);
+        
         setTimeout(() => {
-            setEngineStarted(false); setIsPowerOff(false); setShowStageClear(false);
+            setEngineStarted(false); 
+            setIsPowerOff(false); 
+            setShowStageClear(false);
+            
             if (allLevels[currentLevelIdx + 1]) {
-                // IL RESTE DES NIVEAUX -> UPLEVEL
-                triggerGlobalEvent("UPLEVEL"); 
-                setCurrentLevelIdx(prev => prev + 1); setShowLevelIntro(true); 
+                setCurrentLevelIdx(prev => prev + 1); 
+                setShowLevelIntro(true); 
             } else { 
-                // FIN DU JEU -> VICTOIRE
                 triggerGlobalEvent("VICTOIRE");
                 setShowGameComplete(true);
             }
@@ -302,13 +322,16 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
 
     // CHEAT HANDLERS
     const handleHeartClick = () => { if (isCheatMode()) setLives(l => Math.max(0, l - 1)); };
-    const handleQuestionClick = () => { if (isCheatMode()) triggerWinSequence(); };
+    const handleQuestionClick = () => { if (isCheatMode()) { triggerGlobalEvent("UPLEVEL"); triggerWinSequence(); } };
     const handleBarClick = (idx) => {
         if (isCheatMode()) {
             const nextStates = [...questionStates];
             nextStates[idx] = Math.min(3, nextStates[idx] + 1);
             setQuestionStates(nextStates);
-            if (nextStates.every(s => s >= 3)) triggerWinSequence();
+            if (nextStates.every(s => s >= 3)) {
+                triggerGlobalEvent("UPLEVEL");
+                triggerWinSequence();
+            }
         }
     };
 
@@ -317,14 +340,15 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
     // --- DÉMARRAGE NIVEAU ---
     const startCurrentLevel = async () => { 
         if (!isReady) return; 
-        if (audioCtxRef.current) await audioCtxRef.current.resume(); 
+        
+        if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
+            await audioCtxRef.current.resume();
+        }
         
         setEngineStarted(true); 
         setShowLevelIntro(false); 
         
-        // 🎵 DÉCLENCHEMENT DU SON "DÉPART"
-        triggerGlobalEvent("DÉPART"); 
-        
+        // La bannière déclenchera le son via le useEffect ligne 140
         setShowLevelBanner(true); 
         setTimeout(() => setShowLevelBanner(false), 1500); 
     };
@@ -349,8 +373,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
                             const n = Math.max(0, l - 1); 
                             if (n === 0) {
                                 setShowGameOver(true); 
-                                // 🎵 DÉCLENCHEMENT DU SON "DÉFAITE"
-                                triggerGlobalEvent("DÉFAITE");
+                                triggerGlobalEvent("DEFAITE"); // Normalisation gère "DÉFAITE"
                             }
                             return n; 
                         }); 
@@ -380,7 +403,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
 
     return (
         <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center overflow-hidden font-sans">
-            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">VERSION V.2.85</div>
+            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">VERSION V.2.88</div>
             <button onClick={onExit} className="absolute top-6 right-6 w-14 h-14 bg-white/10 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-2xl font-black z-[4000] border-2 border-white/20">✕</button>
 
             {showLevelBanner && (
