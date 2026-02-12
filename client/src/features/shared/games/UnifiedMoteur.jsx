@@ -5,12 +5,12 @@ import { api } from '../../../services/api';
 import { createGameBase } from '../../../services/gameCore';
 
 /**
- * 🧠 UNIFIED MOTEUR V7.0 (INSTANT MEMORY)
- * CORRECTIF CRITIQUE : Utilisation d'une mémoire synchrone (liveData) pour la logique de jeu.
- * Cela permet d'enchaîner winRound() et nextQuestion() dans la même milliseconde sans bug.
+ * 🧠 UNIFIED MOTEUR V7.1 (SEQUENCE FIX)
+ * CORRECTIF : Réactivation de la transition automatique entre les questions.
+ * L'état "BIEN JOUÉ" ne bloque plus le jeu, il déclenche la suite après 1.2s.
  */
 export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }) {
-    // --- ÉTATS VISUELS (Lents, pour l'affichage) ---
+    // --- ÉTATS VISUELS ---
     const [lives, setLives] = useState(4);
     const [questionStates, setQuestionStates] = useState([]); 
     const [currentQIndex, setCurrentQIndex] = useState(0);
@@ -44,28 +44,26 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
     const keysPressed = useRef({});
     const projectRef = useRef(gameData || {});
     const bossModeRef = useRef(false);
-    const pendingResultRef = useRef(null);
     const [assetsSignature, setAssetsSignature] = useState("");
 
-    // 🚀 LIVE DATA : LA MÉMOIRE INSTANTANÉE (Source de vérité logique)
+    // 🚀 LIVE DATA : LA MÉMOIRE INSTANTANÉE (Source de vérité logique synchrone)
     const liveData = useRef({
-        qStates: [],   // État réel des barres
-        qIndex: 0,     // Index réel de la question
+        qStates: [],   
+        qIndex: 0,     
         lives: 4
     });
 
-    // --- 1. BRIDGE (L'ASCENSEUR) ---
+    // --- 1. BRIDGE (INTERACTION SCRIPT <-> MOTEUR) ---
     const bridgeProxy = useRef((type, value) => {
         switch(type) {
             case 'DAMAGE':
                 setIsShake(true); setTimeout(() => setIsShake(false), 500);
-                // Mise à jour Synchrone
                 liveData.current.lives = Math.max(0, liveData.current.lives - (value || 1));
-                // Mise à jour Visuelle
                 setLives(liveData.current.lives);
                 if (liveData.current.lives === 0) { 
                     setShowGameOver(true); 
                     if (gameInstanceRef.current) gameInstanceRef.current.isStopped = true; 
+                    triggerGlobalEvent("DEFAITE");
                 }
                 break;
 
@@ -74,11 +72,8 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
                 setLives(liveData.current.lives);
                 break;
             
-            // Logique de validation
             case 'WIN_ROUND': updateBarLogic(true); break;
             case 'FAIL_ROUND': updateBarLogic(false); break;
-            
-            // Logique de navigation
             case 'NEXT_Q': changeQuestionLogic(); break;
 
             case 'SET_BOSS': 
@@ -95,11 +90,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
 
     // --- 2. LOGIQUE MÉTIER SYNCHRONE ---
 
-    const updateBarLogic = (success) => {
-        // 1. Déterminer le résultat
-        const isCorrect = pendingResultRef.current !== null ? pendingResultRef.current : success;
-        
-        // 2. Mettre à jour la MÉMOIRE INSTANTANÉE
+    const updateBarLogic = (isCorrect) => {
         const idx = liveData.current.qIndex;
         const currentScore = liveData.current.qStates[idx] || 0;
 
@@ -107,55 +98,39 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
             liveData.current.qStates[idx] = Math.min(3, currentScore + 1);
         } else {
             liveData.current.qStates[idx] = Math.max(0, currentScore - 1);
-            // Perte de vie si échec
             liveData.current.lives = Math.max(0, liveData.current.lives - 1);
             setLives(liveData.current.lives);
-            if(liveData.current.lives === 0) { setShowGameOver(true); if(gameInstanceRef.current) gameInstanceRef.current.isStopped = true; }
+            if(liveData.current.lives === 0) { 
+                setShowGameOver(true); 
+                if(gameInstanceRef.current) gameInstanceRef.current.isStopped = true; 
+                triggerGlobalEvent("DEFAITE");
+            }
         }
-
-        // 3. Mettre à jour l'AFFICHAGE (React suivra quand il pourra)
         setQuestionStates([...liveData.current.qStates]);
     };
 
     const changeQuestionLogic = () => {
-        // Reset UI
         setFeedback(null);
         setUserInput("");
-        pendingResultRef.current = null;
 
-        // Analyse basée sur la MÉMOIRE INSTANTANÉE (Toujours à jour)
         const states = liveData.current.qStates;
         const currentIdx = liveData.current.qIndex;
-
-        // On cherche les questions non finies (< 3)
         const available = states.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
         
         if (available.length > 0) {
-            // Règle Boss : Si on est sur un boss (2/3), on RESTE dessus
+            // Si on vient de passer à 2/3, on active le mode BOSS sur cette question
             if (states[currentIdx] === 2) {
                 bridgeProxy.current('SET_BOSS', true);
-                // On ne change pas l'index
             } else {
-                // Sinon on change (on évite la question actuelle si possible)
+                // Sinon on pioche une autre question disponible
                 const others = available.filter(idx => idx !== currentIdx);
-                let nextIdx;
+                let nextIdx = others.length > 0 ? others[Math.floor(Math.random() * others.length)] : available[0];
                 
-                if (others.length > 0) {
-                    nextIdx = others[Math.floor(Math.random() * others.length)];
-                    bridgeProxy.current('SET_BOSS', false);
-                } else {
-                    // S'il ne reste que la question actuelle (ex: 1/3), on reste dessus
-                    nextIdx = currentIdx;
-                    bridgeProxy.current('SET_BOSS', false);
-                }
-
-                // Mise à jour SYNC
                 liveData.current.qIndex = nextIdx;
-                // Mise à jour UI
                 setCurrentQIndex(nextIdx);
+                bridgeProxy.current('SET_BOSS', states[nextIdx] === 2);
             }
         } else {
-            // Niveau terminé
             triggerWinSequence();
         }
     };
@@ -166,7 +141,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
         setTimeout(() => {
             setShowStageClear(false);
             if (allLevels[currentLevelIdx + 1]) {
-                setCurrentLevelIdx(p => p + 1); // Le useEffect rechargera les nouvelles données
+                setCurrentLevelIdx(p => p + 1);
                 setEngineStarted(false);
                 setShowLevelIntro(true);
             } else {
@@ -174,6 +149,8 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
             }
         }, 3000);
     };
+
+    // --- 3. GESTION DES ASSETS & SONS ---
 
     function resolveUrl(url) {
         if (!url) return "";
@@ -204,8 +181,6 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
         if (event && event.sounds) event.sounds.forEach(snd => playParallelSoundImpl(snd.url));
     };
 
-    // --- 3. CHARGEMENT & INIT ---
-
     useEffect(() => { 
         if (!gameData) return;
         projectRef.current = gameData; 
@@ -234,14 +209,10 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
             if (levelsData[currentLevelIdx]) {
                 const qs = levelsData[currentLevelIdx].questions || [];
                 setLevelQuestions(qs);
-                
-                // INIT LIVE DATA
                 const initialStates = new Array(qs.length).fill(0);
                 liveData.current.qStates = initialStates;
                 liveData.current.qIndex = 0;
                 liveData.current.lives = 4;
-
-                // INIT UI
                 setQuestionStates(initialStates);
                 setCurrentQIndex(0);
                 setLives(4);
@@ -284,19 +255,30 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
         setTimeout(() => setShowLevelBanner(false), 1500); 
     };
 
+    // --- 4. RÉCEPTION RÉPONSE (LE FIX EST ICI) ---
+
     const handleAnswerClick = (val) => {
-        if (feedback || showLevelIntro) return;
+        if (feedback || showLevelIntro || showStageClear || showGameOver) return;
+        
         const currentQ = levelQuestions[currentQIndex];
         const isCorrect = (typeof val === 'number') ? currentQ.a === val : val === currentQ.options[currentQ.a];
         
-        pendingResultRef.current = isCorrect;
+        // 1. Affichage visuel immédiat
         setFeedback(isCorrect ? 'CORRECT' : 'WRONG');
         
-        // Interaction Moteur
+        // 2. Déclenchement animation dans le script du jeu (ex: Tirer)
+        // Note: createGameBase s'occupe de jouer le son via playParallelSound
         if (gameInstanceRef.current?.onResult) gameInstanceRef.current.onResult(isCorrect);
+
+        // 3. LE DÉCLENCHEUR DE SUITE (Le fix)
+        // On laisse 1.2s à Julian pour savourer sa victoire ou pleurer son échec
+        setTimeout(() => {
+            updateBarLogic(isCorrect);
+            changeQuestionLogic();
+        }, 1200);
     };
 
-    // --- 4. MOTEUR RENDU ---
+    // --- 5. MOTEUR DE RENDU CANVAS ---
     useEffect(() => {
         if (!engineStarted || !canvasRef.current) return;
         try {
@@ -308,8 +290,6 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
 
             const scriptToRun = projectRef.current.generatedCode || "class MiniGame extends MiniGameBase { update(){} }";
             const factory = new Function('MiniGameBase', `${scriptToRun}\nreturn MiniGame;`);
-            
-            // Passer {} pour callbacks assure la rétro-compatibilité
             const instance = new (factory(MiniGameBase))(canvasRef.current, {}, {});
             
             gameInstanceRef.current = instance; 
@@ -330,7 +310,6 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
         return () => { if(frameIdRef.current) cancelAnimationFrame(frameIdRef.current); };
     }, [engineStarted]);
 
-    // Helpers UI
     useEffect(() => {
         const hDown = (e) => keysPressed.current[e.code] = true;
         const hUp = (e) => keysPressed.current[e.code] = false;
@@ -341,12 +320,12 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
     const isCheat = () => keysPressed.current['KeyS'];
     const cheatLife = () => isCheat() && bridgeProxy.current('DAMAGE');
     const cheatWin = () => isCheat() && bridgeProxy.current('VICTORY');
-    const cheatBar = (idx) => isCheat() && updateBarLogic(true); // Modif pour utiliser la logique interne
+    const cheatBar = (idx) => isCheat() && updateBarLogic(true);
 
     const getYoutubeEmbed = (url) => {
         if (!url) return "";
         const m = url.match(/^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/);
-        return (m && m[2].length === 11) ? `https://www.youtube.com/embed/${m[2]}` : url;
+        return (m && m[2].length === 11) ? `https://www.youtube.com/embed/${m[2]}?autoplay=1` : url;
     };
 
     const currentLevelData = allLevels[currentLevelIdx] || {};
@@ -354,7 +333,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
 
     return (
         <div className={`fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center overflow-hidden font-sans ${isShake ? 'animate-shake' : ''}`}>
-            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">MOTEUR V7.0 (INSTANT MEMORY)</div>
+            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">MOTEUR V7.1 (SEQUENCE FIX)</div>
             <button onClick={onExit} className="absolute top-6 right-6 w-14 h-14 bg-white/10 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-2xl font-black z-[4000] border-2 border-white/20">✕</button>
 
             {showLevelBanner && <div className="fixed top-[20%] z-[5000] animate-in zoom-in"><span className="text-yellow-400 font-black text-6xl uppercase drop-shadow-lg">Niveau {currentLevelIdx + 1}</span></div>}
@@ -365,13 +344,13 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
                     <h1 className="text-5xl text-white font-black mb-6 uppercase tracking-tighter">{currentLevelData.name || `Niveau ${currentLevelIdx+1}`}</h1>
                     <div className="flex gap-10 mb-12 w-full max-w-4xl justify-center h-[280px]">
                         <div onClick={() => currentLevelData.intro?.sheetUrl && setZoomMedia('sheet')} className="h-full aspect-[3/4] bg-slate-800 rounded-3xl border-4 border-slate-700 overflow-hidden flex items-center justify-center shadow-2xl cursor-pointer hover:border-indigo-500 hover:scale-105 transition-all relative group">
-                            {currentLevelData.intro?.sheetUrl ? <img src={resolveUrl(currentLevelData.intro.sheetUrl)} className="w-full h-full object-contain" /> : <span className="text-slate-500 font-bold">PAS DE FICHE</span>}
+                            {currentLevelData.intro?.sheetUrl ? <img src={resolveUrl(currentLevelData.intro.sheetUrl)} className="w-full h-full object-contain" /> : <span className="text-slate-500 font-bold uppercase text-[10px]">Fiche non disponible</span>}
                         </div>
                         <div onClick={() => currentLevelData.intro?.videoUrl && setZoomMedia('video')} className="h-full aspect-video bg-black rounded-3xl border-4 border-slate-700 overflow-hidden shadow-2xl flex items-center justify-center cursor-pointer hover:border-indigo-500 hover:scale-105 transition-all relative group">
-                            {currentLevelData.intro?.videoUrl ? <span className="text-6xl">▶️</span> : <span className="text-slate-500 font-bold">PAS DE VIDÉO</span>}
+                            {currentLevelData.intro?.videoUrl ? <span className="text-6xl">▶️</span> : <span className="text-slate-500 font-bold uppercase text-[10px]">Vidéo non disponible</span>}
                         </div>
                     </div>
-                    <button onClick={startCurrentLevel} disabled={!isReady} className={`px-16 py-6 rounded-full font-black text-3xl shadow-2xl border-4 transition-all ${isReady ? 'bg-white text-indigo-900 border-indigo-500 hover:scale-110' : 'bg-slate-800 text-slate-500 cursor-not-allowed'}`}>{isReady ? "JOUER 🚀" : `CHARGEMENT ${loadProgress}...`}</button>
+                    <button onClick={startCurrentLevel} disabled={!isReady} className={`px-16 py-6 rounded-full font-black text-3xl shadow-2xl border-4 transition-all ${isReady ? 'bg-white text-indigo-900 border-indigo-500 hover:scale-110 shadow-indigo-500/50' : 'bg-slate-800 text-slate-500 border-slate-600 cursor-not-allowed'}`}>{isReady ? "DÉMARRER 🚀" : `CHARGEMENT ${loadProgress}...`}</button>
                 </div>
             )}
 
@@ -379,7 +358,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
                 <div className="fixed inset-0 z-[7000] bg-black flex items-center justify-center p-0 animate-in fade-in" onClick={() => setZoomMedia(null)}>
                     <button className="absolute top-8 right-8 w-16 h-16 bg-white hover:bg-red-600 hover:text-white text-black rounded-full flex items-center justify-center text-3xl font-black shadow-2xl z-[7001]">✕</button>
                     <div className="w-full h-full flex items-center justify-center p-4">
-                        {zoomMedia === 'sheet' ? <img src={resolveUrl(currentLevelData.intro?.sheetUrl)} className="h-[90vh] object-contain" /> : <div className="h-[90vh] aspect-video"><iframe className="w-full h-full" src={getYoutubeEmbed(currentLevelData.intro?.videoUrl)} frameBorder="0" allowFullScreen></iframe></div>}
+                        {zoomMedia === 'sheet' ? <img src={resolveUrl(currentLevelData.intro?.sheetUrl)} className="h-[90vh] object-contain shadow-2xl" /> : <div className="h-[90vh] aspect-video"><iframe className="w-full h-full" src={getYoutubeEmbed(currentLevelData.intro?.videoUrl)} frameBorder="0" allowFullScreen></iframe></div>}
                     </div>
                 </div>
             )}
@@ -387,7 +366,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
             {engineStarted && !showLevelIntro && (
                 <>
                     <div className="absolute top-6 w-full flex justify-between px-10 pointer-events-none z-30">
-                        <div onClick={cheatLife} className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-lg pointer-events-auto cursor-pointer">{"❤️".repeat(lives)}</div>
+                        <div onClick={cheatLife} className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-lg pointer-events-auto cursor-pointer active:scale-95 transition-transform">{"❤️".repeat(lives)}</div>
                         
                         {safeQ && (
                             <div onClick={cheatWin} className="flex-1 mx-10 pointer-events-auto cursor-pointer">
@@ -401,7 +380,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
                         <div className="flex gap-2 pointer-events-auto">
                             {questionStates.map((s, i) => (
                                 <div key={i} onClick={() => cheatBar(i)} className={`w-6 h-16 rounded-lg border-2 ${currentQIndex === i ? 'border-white scale-110 shadow-lg' : 'border-slate-600 opacity-60'} bg-slate-800 overflow-hidden relative transition-all cursor-pointer`}>
-                                    <div className={`absolute bottom-0 w-full transition-all duration-500 ${s >= 3 ? 'bg-green-500' : s >= 2 ? 'bg-red-500' : 'bg-yellow-500'}`} style={{height: `${(s/3)*100}%`}}></div>
+                                    <div className={`absolute bottom-0 w-full transition-all duration-500 ${s >= 3 ? 'bg-green-500 shadow-[0_0_10px_#22c55e]' : s >= 2 ? 'bg-red-500 shadow-[0_0_10px_#ef4444]' : 'bg-yellow-500'}`} style={{height: `${(s/3)*100}%`}}></div>
                                 </div>
                             ))}
                         </div>
@@ -409,13 +388,27 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
                     
                     <canvas ref={canvasRef} width={800} height={450} className={`aspect-video shadow-2xl bg-black border-4 ${activeBossVisual ? 'border-red-600 shadow-[0_0_50px_red]' : 'border-slate-800'} rounded-lg`} />
                     
-                    {safeQ && !showStageClear && !showGameComplete && (
+                    {safeQ && !showStageClear && !showGameComplete && !showGameOver && (
                         <div className="absolute bottom-10 w-full flex justify-center px-10 pointer-events-auto z-30">
-                            <div className="grid grid-cols-4 gap-4 w-full max-w-5xl">
-                                {safeQ.options.map((o, i) => (
-                                    <button key={i} onClick={() => handleAnswerClick(i)} className="bg-indigo-600 text-white py-6 rounded-2xl font-black uppercase text-lg border-b-8 border-indigo-800 active:border-b-0 active:translate-y-2 hover:bg-indigo-500 transition-colors shadow-lg">{o}</button>
-                                ))}
-                            </div>
+                            {activeBossVisual && !feedback ? (
+                                <div className="flex gap-4 w-full max-w-2xl animate-in slide-in-from-bottom">
+                                    <input 
+                                        autoFocus
+                                        className="flex-1 bg-slate-900 border-4 border-red-600 text-white text-3xl font-black py-4 px-8 rounded-2xl text-center outline-none focus:ring-4 ring-red-500/30"
+                                        value={userInput}
+                                        onChange={e => setUserInput(e.target.value)}
+                                        onKeyDown={e => e.key === 'Enter' && handleAnswerClick(userInput)}
+                                        placeholder="TAPE TA RÉPONSE..."
+                                    />
+                                    <button onClick={() => handleAnswerClick(userInput)} className="bg-red-600 text-white px-10 rounded-2xl font-black text-xl border-b-8 border-red-800 hover:brightness-110 active:border-b-0 active:translate-y-2">ATTAQUER ⚔️</button>
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full max-w-5xl">
+                                    {safeQ.options.map((o, i) => (
+                                        <button key={i} onClick={() => handleAnswerClick(i)} className="bg-indigo-600 text-white py-6 rounded-2xl font-black uppercase text-lg border-b-8 border-indigo-800 active:border-b-0 active:translate-y-2 hover:bg-indigo-500 transition-colors shadow-lg">{o}</button>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     )}
                 </>
@@ -423,16 +416,16 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
 
             {showGameComplete && (
                 <div className="absolute inset-0 z-[7000] bg-gradient-to-br from-yellow-500 to-purple-600 flex flex-col items-center justify-center animate-in zoom-in">
-                    <h1 className="text-9xl mb-4">🏆</h1>
+                    <h1 className="text-9xl mb-4 animate-bounce">🏆</h1>
                     <h1 className="text-8xl font-black text-white drop-shadow-lg uppercase tracking-tighter">VICTOIRE !</h1>
-                    <button onClick={onExit} className="mt-10 px-12 py-5 bg-white text-purple-700 font-black text-2xl rounded-2xl shadow-2xl hover:scale-105 transition-transform uppercase">RETOURNER AU MENU</button>
+                    <button onClick={onExit} className="mt-10 px-12 py-5 bg-white text-purple-700 font-black text-2xl rounded-2xl shadow-2xl hover:scale-110 transition-transform uppercase">RETOURNER AU MENU</button>
                 </div>
             )}
 
             {showGameOver && (
                 <div className="absolute inset-0 bg-black/95 flex flex-col items-center justify-center z-[8000] animate-in zoom-in">
-                    <h1 className="text-8xl font-black text-red-600 mb-8 uppercase tracking-widest glitch-text">GAME OVER</h1>
-                    <button onClick={() => { setShowGameOver(false); setLives(4); setEngineStarted(false); setShowLevelIntro(true); }} className="bg-white text-black px-8 py-4 rounded-full font-black text-xl hover:bg-red-500 hover:text-white transition-colors uppercase">RÉESSAYER</button>
+                    <h1 className="text-8xl font-black text-red-600 mb-8 uppercase tracking-widest">GAME OVER</h1>
+                    <button onClick={() => { setShowGameOver(false); setLives(4); setEngineStarted(false); setShowLevelIntro(true); }} className="bg-white text-black px-12 py-5 rounded-2xl font-black text-2xl hover:bg-red-500 hover:text-white transition-all uppercase shadow-2xl">RÉESSAYER 🔄</button>
                 </div>
             )}
         </div>
