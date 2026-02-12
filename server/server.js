@@ -1,4 +1,4 @@
-// @signatures: SERVER_BOOT_ID, GlobalInfrastructure, KernelV87_RECOVERY
+// @signatures: SERVER_BOOT_ID, GlobalInfrastructure
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
@@ -11,7 +11,7 @@ const port = 3000;
 const SERVER_BOOT_ID = Date.now();
 
 console.log("------------------------------------------------");
-console.log("🚀 KERNEL V87 : RECOVERY MODE");
+console.log("🚀 KERNEL V88 : STABILIZATION RECOVERY");
 console.log("------------------------------------------------");
 
 app.use(express.json({ limit: '70mb' }));
@@ -21,39 +21,31 @@ app.use(express.urlencoded({ extended: true, limit: '70mb' }));
 try {
     console.log("📦 Chargement des Modèles...");
     require('./prof/models/prof.models');
-    console.log("✅ Modèles chargés avec succès.");
+    console.log("✅ Modèles chargés.");
 } catch (e) {
     console.error("💥 ERREUR CRITIQUE MODÈLES :", e.message);
-    console.error("   Le serveur va probablement échouer sur les requêtes BDD.");
 }
 
-// 2. ROUTES SYSTÈME (Toujours actives)
+// 2. ROUTES SYSTÈME
 app.get('/api/check-deploy', (req, res) => res.json({ status: "OK", bootId: SERVER_BOOT_ID }));
-app.get('/api/system/apply-status', (req, res) => res.json({ status: "OK", message: "Kernel V87 Online" }));
+app.get('/api/system/apply-status', (req, res) => res.json({ status: "OK", message: "Kernel Stable" }));
 
-// 3. PROXY RAW (Audio/Image)
+// 3. PROXY RAW
 const ProfDrive = require('./prof/core/drive.prof');
 app.get(['/api/proxy/:id', '/api/structure/proxy/:id'], async (req, res) => {
     try {
         const fileId = req.params.id;
         if (!fileId || fileId === 'undefined') return res.status(400).send("No ID");
-        
         const stream = await ProfDrive.getFileStream(fileId);
         res.setHeader('Access-Control-Allow-Origin', '*');
-        // Pas de Content-Type forcé pour laisser le navigateur détecter (MP3/WAV/PNG)
-        res.setHeader('Accept-Ranges', 'bytes');
         stream.pipe(res);
     } catch (e) { res.status(404).send("Not found"); }
 });
 
-// 4. CHARGEMENT DES SILOS
+// 4. CHARGEMENT DES SILOS (Avec protection Try/Catch)
 const safeLoad = (route, path) => {
-    try { 
-        app.use(route, require(path)); 
-        // console.log(`   Route ${route} OK`);
-    } catch (e) { 
-        console.error(`❌ Échec chargement ${route}:`, e.message); 
-    }
+    try { app.use(route, require(path)); } 
+    catch (e) { console.error(`❌ Échec chargement ${route}:`, e.message); }
 };
 
 safeLoad('/api/auth', './prof/auth/auth.prof');
@@ -65,7 +57,6 @@ safeLoad('/api/scans', './prof/scans/scans.prof');
 safeLoad('/api/structure', './prof/structure/structure.prof');
 safeLoad('/api/studio', './prof/studio/studio.prof');
 
-// Silos Elève
 safeLoad('/api/eleve/auth', './eleve/auth/auth.eleve');
 safeLoad('/api/eleve/homework', './eleve/homework/homework.eleve');
 safeLoad('/api/eleve/classroom', './eleve/classroom/classroom.eleve');
