@@ -8848,3 +8848,9 @@ Build 161: MIGRATION MOTEUR JEU. Extraction de la logique 'BaseFactory' vers 'se
 2026-02-11 19:23 - L'écran de révision devient la porte d'entrée unique.
 2026-02-11 19:23 - Le chargement des assets se fait en background pendant la révision.
 2026-02-11 19:23 - Le bouton GO est verrouillé jusqu'à ce que le chargement (isReady) soit terminé.
+
+2026-02-11 19:30 - Création du UnifiedMoteur.jsx (Maitre unique) pour Prof et Élève.
+2026-02-11 19:30 - GamePlayer.jsx et GameEngine.jsx deviennent des "shells" légers.
+2026-02-11 19:30 - Implémentation du banner "STAGE CLEAR" (Arcade Vert) à la fin d'un niveau.
+2026-02-11 19:30 - Fix du bug de transition : Le jeu s'arrête proprement et affiche le menu de révision du niveau suivant.
+2026-02-11 19:30 - Synchronisation forcée : Le moteur n'est plus lancé tant que l'utilisateur n'a pas révisé et cliqué sur GO.
