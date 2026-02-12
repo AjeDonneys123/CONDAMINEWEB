@@ -8866,3 +8866,8 @@ Build 161: MIGRATION MOTEUR JEU. Extraction de la logique 'BaseFactory' vers 'se
 2026-02-11 19:55 - Le mode Boss est désormais déclenché par l'état de la question à l'écran, pas par l'impact du projectile.
 2026-02-11 19:55 - Ajout d'une interpolation fluide sur le changement de taille du Zombie.
 2026-02-11 19:55 - Synchronisation temps réel de bossModeRef pour éviter toute désynchronisation entre React et le moteur Canvas.
+
+2026-02-11 19:58 - VERSION V.2.82 : Correction du bug de mutation Boss précoce.
+2026-02-11 19:58 - Découplage de l'état des barres et de l'état visuel du Boss (ActiveBossVisual).
+2026-02-11 19:58 - L'état Boss n'est désormais mis à jour qu'au changement d'index de question (après l'animation d'impact).
+2026-02-11 19:58 - Amélioration de la fluidité des transitions inter-questions pour éviter les transformations erratiques des personnages.
