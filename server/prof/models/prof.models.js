@@ -14,7 +14,7 @@ const SectionSchema = new mongoose.Schema({
 const FrameSchema = new mongoose.Schema({
     url: String,
     name: String,
-    type: { type: String, default: 'image' } // image, sound
+    type: { type: String, default: 'image' } 
 }, { _id: false });
 
 const ActionSchema = new mongoose.Schema({
@@ -41,14 +41,11 @@ const SceneSchema = new mongoose.Schema({
     backdrops: [{ name: String, url: String }],
     currentBackdropIdx: { type: Number, default: 0 },
     actors: [ActorSchema],
-    // ✅ AJOUT DU CHAMP MANQUANT QUI PROVOQUAIT LE CRASH
     globalSounds: { type: [ActionSchema], default: [] } 
 }, { _id: false });
 
-
 // --- FONCTION DE RÉCUPÉRATION SÉCURISÉE ---
 const getModel = (name, schema) => {
-    // Si le modèle existe déjà, on le retourne pour éviter l'erreur OverwriteModelError
     if (mongoose.models[name]) return mongoose.models[name];
     return mongoose.model(name, new mongoose.Schema(schema, { timestamps: true }));
 };
@@ -102,7 +99,11 @@ const Models = {
         chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter' },
         teacherId: mongoose.Schema.Types.ObjectId, targetClassrooms: [String],
         questions: Array, levels: Array, assignedStudents: [mongoose.Schema.Types.ObjectId],
-        isAllClass: { type: Boolean, default: true }
+        isAllClass: { type: Boolean, default: true },
+        // MIROIR
+        scenes: { type: Array, default: [] }, 
+        generatedCode: { type: String, default: "" },
+        globalIntro: { type: Object, default: {} }
     }),
 
     ScanSession: getModel('ScanSession', {
