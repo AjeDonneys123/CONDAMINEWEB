@@ -8874,3 +8874,6 @@ Build 161: MIGRATION MOTEUR JEU. Extraction de la logique 'BaseFactory' vers 'se
 
 ...
 Fix majeur : Les cœurs du héros ne descendaient pas. Correction dans `gameCore.js` (fusion des callbacks) et `UnifiedMoteur.jsx` (passage de null).
+
+...
+Ajout Cheat Codes V2.84 : S+T maintenus pour tricher sur vies/niveaux. Ajout écran de victoire final.

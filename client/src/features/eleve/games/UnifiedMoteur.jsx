@@ -5,9 +5,13 @@ import { api } from '../../../services/api';
 import { createGameBase } from '../../../services/gameCore';
 
 /**
- * 🧠 LE MAITRE UNIFIÉ V.2.83 (FIX HITBOX ZOMBIE)
- * VERSION : V.2.83
- * FIX : Passage de 'null' aux callbacks pour éviter l'écrasement des fonctions système.
+ * 🧠 LE MAITRE UNIFIÉ V.2.84 (CHEAT CODES & VICTORY SCREEN)
+ * VERSION : V.2.84
+ * AJOUTS :
+ * - Cheat S+T+Click Cœurs : -1 Vie
+ * - Cheat S+T+Click Question : Win Level
+ * - Cheat S+T+Click Barre : +1 Point barre spécifique
+ * - Nouvel écran de victoire final stylé
  */
 
 const ZOMBIE_GAME_CODE = `
@@ -64,7 +68,6 @@ class MiniGame extends MiniGameBase {
                 this.hasDealtDamage = true;
                 if (this.heroState !== "HIT") {
                     if (this.HEROS) { this.HEROS.play("TOUCHE", false); this.heroState = "HIT"; this.heroTimer = 60; }
-                    // APPEL DU CALLBACK SYSTÈME QUI FAIT PERDRE UNE VIE
                     if (this.callbacks && this.callbacks.onPlayerHit) this.callbacks.onPlayerHit();
                 }
             }
@@ -124,6 +127,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
     const [showLevelBanner, setShowLevelBanner] = useState(false);
     const [showStageClear, setShowStageClear] = useState(false);
     const [showGameOver, setShowGameOver] = useState(false);
+    const [showGameComplete, setShowGameComplete] = useState(false); // NOUVEAU
     const [zoomMedia, setZoomMedia] = useState(null);
     const [isPowerOff, setIsPowerOff] = useState(false);
     
@@ -140,12 +144,13 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
 
     useEffect(() => { projectRef.current = gameData; }, [gameData]);
 
+    // Détection BossMode
     useEffect(() => {
         const isBossNow = (currentQIndex !== -1 && (questionStates[currentQIndex] || 0) === 2);
         setActiveBossVisual(isBossNow);
         bossModeRef.current = isBossNow;
         if (gameInstanceRef.current) gameInstanceRef.current.isBossPhase = isBossNow;
-    }, [currentQIndex]);
+    }, [currentQIndex, questionStates]);
 
     function resolveUrl(url) {
         if (!url) return "";
@@ -153,6 +158,12 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
         const id = url.split('/').pop();
         return `/api/proxy/${id}`;
     }
+
+    // --- CHEAT ENGINE HELPER ---
+    const isCheatMode = () => {
+        // Touche 'S' et 'T' maintenues
+        return keysPressed.current['KeyS'] && keysPressed.current['KeyT'];
+    };
 
     // 1. DATA LOADING
     useEffect(() => {
@@ -262,8 +273,34 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
             setEngineStarted(false); setIsPowerOff(false); setShowStageClear(false);
             if (allLevels[currentLevelIdx + 1]) {
                 setCurrentLevelIdx(prev => prev + 1); setShowLevelIntro(true); 
-            } else { alert("🎉 JEU TERMINÉ !"); onExit(); }
+            } else { 
+                // VICTOIRE FINALE
+                setShowGameComplete(true);
+            }
         }, 3000);
+    };
+
+    // CHEAT HANDLERS
+    const handleHeartClick = () => {
+        if (isCheatMode()) {
+            setLives(l => Math.max(0, l - 1));
+        }
+    };
+
+    const handleQuestionClick = () => {
+        if (isCheatMode()) {
+            triggerWinSequence();
+        }
+    };
+
+    const handleBarClick = (idx) => {
+        if (isCheatMode()) {
+            const nextStates = [...questionStates];
+            nextStates[idx] = Math.min(3, nextStates[idx] + 1);
+            setQuestionStates(nextStates);
+            // Vérifier si tout est fini pour déclencher la victoire
+            if (nextStates.every(s => s >= 3)) triggerWinSequence();
+        }
     };
 
     const handleRetry = () => { setShowGameOver(false); setLives(4); setEngineStarted(false); setShowLevelIntro(true); };
@@ -285,7 +322,6 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
                 playParallelSound: playParallelSoundImpl, 
                 callbacks: { 
                     onPlayerHit: () => { 
-                        // CALLBACK SYSTÈME : PERTE DE VIE
                         setLives(l => { 
                             const n = Math.max(0, l - 1); 
                             if (n === 0) setShowGameOver(true); 
@@ -296,8 +332,6 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
             });
             const factory = new Function('MiniGameBase', `${projectRef.current.generatedCode || ZOMBIE_GAME_CODE}\nreturn MiniGame;`);
             
-            // FIX V2.83 : Passer 'null' comme 3ème argument pour que le moteur utilise les callbacks système
-            // et ne les écrase pas avec un objet vide {}.
             const instance = new (factory(MiniGameBase))(canvasRef.current, {}, null);
             
             gameInstanceRef.current = instance; 
@@ -321,7 +355,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
 
     return (
         <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center overflow-hidden font-sans">
-            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">VERSION V.2.83 (FIX)</div>
+            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">VERSION V.2.84</div>
             <button onClick={onExit} className="absolute top-6 right-6 w-14 h-14 bg-white/10 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-2xl font-black z-[4000] border-2 border-white/20">✕</button>
 
             {showLevelBanner && (
@@ -345,14 +379,36 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
                 </div>
             )}
 
+            {/* --- ÉCRAN DE VICTOIRE FINAL --- */}
+            {showGameComplete && (
+                <div className="absolute inset-0 z-[7000] bg-gradient-to-br from-yellow-500 to-purple-600 flex flex-col items-center justify-center animate-in zoom-in p-10 text-center">
+                    <div className="text-[150px] mb-4 animate-bounce">🏆</div>
+                    <h1 className="text-8xl font-black text-white uppercase tracking-tighter drop-shadow-xl mb-4">VICTOIRE !</h1>
+                    <p className="text-2xl font-bold text-yellow-100 uppercase tracking-widest mb-10">Tu as terminé tous les niveaux !</p>
+                    
+                    <div className="bg-white/20 backdrop-blur-md rounded-3xl p-8 border-4 border-white/40 mb-10 min-w-[300px]">
+                        <span className="block text-sm font-black text-white/60 uppercase mb-2">Score Final</span>
+                        <span className="block text-6xl font-black text-white">{lives * 100 + (allLevels.length * 50)} PTS</span>
+                    </div>
+
+                    <button onClick={onExit} className="px-12 py-5 bg-white text-purple-700 font-black text-2xl rounded-2xl shadow-2xl hover:scale-105 hover:bg-purple-50 transition-all uppercase tracking-widest">
+                        RETOURNER AU MENU
+                    </button>
+                </div>
+            )}
+
             {engineStarted && !showLevelIntro && (
                 <>
                     <div className="absolute top-6 w-full flex justify-between px-10 pointer-events-none z-30">
-                        <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl pointer-events-auto">{"❤️".repeat(lives)}</div>
+                        {/* CHEAT 1: CLIC CŒURS */}
+                        <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl pointer-events-auto cursor-pointer active:scale-95 transition-transform" onClick={handleHeartClick}>
+                            {"❤️".repeat(lives)}
+                        </div>
                         <div className="flex-1 flex flex-col items-center gap-2">
                             <div className="bg-indigo-600 text-white px-4 py-1 rounded-full text-xs font-black uppercase tracking-widest">{currentLevelData.name || `NIVEAU ${currentLevelIdx + 1}`}</div>
                             {safeQ && !showStageClear && (
-                                <div className={`bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 shadow-2xl text-xl pointer-events-auto text-center max-w-2xl ${activeBossVisual ? 'border-red-500 ring-2 ring-red-500/50' : 'border-slate-600'}`}>
+                                /* CHEAT 2: CLIC QUESTION */
+                                <div onClick={handleQuestionClick} className={`bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 shadow-2xl text-xl pointer-events-auto text-center max-w-2xl cursor-pointer ${activeBossVisual ? 'border-red-500 ring-2 ring-red-500/50' : 'border-slate-600'}`}>
                                     {feedback === 'CORRECT' ? "✅ BIEN JOUÉ !" : feedback === 'WRONG' ? "❌ MAUVAISE RÉPONSE" : safeQ.q}
                                     {activeBossVisual && !feedback && <div className="text-[10px] text-red-500 mt-1 animate-pulse uppercase tracking-widest">⚠️ Boss Final : Saisis la réponse !</div>}
                                 </div>
@@ -360,7 +416,8 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
                         </div>
                         <div className="flex gap-2 pointer-events-auto mr-20">
                             {questionStates.map((s, i) => (
-                                <div key={i} className={`w-4 h-12 rounded-md border border-slate-600 relative overflow-hidden ${currentQIndex === i ? 'ring-2 ring-indigo-400 scale-110' : 'opacity-40'}`}>
+                                /* CHEAT 3: CLIC BARRE */
+                                <div key={i} onClick={() => handleBarClick(i)} className={`w-4 h-12 rounded-md border border-slate-600 relative overflow-hidden cursor-pointer ${currentQIndex === i ? 'ring-2 ring-indigo-400 scale-110' : 'opacity-40'}`}>
                                     <div className={`absolute bottom-0 left-0 right-0 transition-all duration-500 ${s >= 3 ? 'bg-green-500 shadow-[0_0_10px_green]' : s >= 2 ? 'bg-red-500 shadow-[0_0_10px_red]' : 'bg-yellow-500'}`} style={{ height: `${(s/3)*100}%` }} />
                                 </div>
                             ))}
@@ -389,7 +446,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
 
             {showGameOver && (<div className="absolute inset-0 z-[60] bg-red-900/95 flex flex-col items-center justify-center animate-in zoom-in"><h1 className="text-8xl font-black text-white mb-8 tracking-tighter drop-shadow-lg">💀 GAME OVER</h1><button onClick={handleRetry} className="px-10 py-5 bg-white text-red-900 font-black text-2xl rounded-2xl shadow-2xl hover:scale-105 transition-transform uppercase tracking-widest">RÉESSAYER</button></div>)}
 
-            {engineStarted && !showLevelIntro && safeQ && !showStageClear && (
+            {engineStarted && !showLevelIntro && safeQ && !showStageClear && !showGameComplete && (
                 <div className="absolute bottom-10 w-full flex justify-center px-10 pointer-events-auto z-30">
                     {activeBossVisual ? (
                         <div className="flex row gap-4 w-full max-w-2xl">
