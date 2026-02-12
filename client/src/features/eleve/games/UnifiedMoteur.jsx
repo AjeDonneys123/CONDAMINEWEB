@@ -5,9 +5,9 @@ import { api } from '../../../services/api';
 import { createGameBase } from '../../../services/gameCore';
 
 /**
- * 🧠 LE MAITRE UNIFIÉ V.2.71 (CORE ENGINE)
- * Rôle : Logique unique pour Prof et Élève.
- * Gère : Chargement -> Révision -> Arcade -> Stage Clear -> Suite.
+ * 🧠 LE MAITRE UNIFIÉ V.2.76 (STABILITÉ TOTALE)
+ * VERSION : V.2.76
+ * FIX : Restauration de showGameOver et nettoyage des dépendances de rendu.
  */
 
 const ZOMBIE_GAME_CODE = `
@@ -118,6 +118,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
     const [showLevelIntro, setShowLevelIntro] = useState(true);
     const [showLevelBanner, setShowLevelBanner] = useState(false);
     const [showStageClear, setShowStageClear] = useState(false);
+    const [showGameOver, setShowGameOver] = useState(false); 
     const [zoomMedia, setZoomMedia] = useState(null);
     const [isPowerOff, setIsPowerOff] = useState(false);
     
@@ -291,12 +292,12 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
 
     return (
         <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center overflow-hidden font-sans">
-            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">VERSION V.2.71</div>
+            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">VERSION V.2.76</div>
             <button onClick={onExit} className="absolute top-6 right-6 w-14 h-14 bg-white/10 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-2xl font-black z-[4000] border-2 border-white/20">✕</button>
 
             {showLevelBanner && (
-                <div className="fixed top-[20%] left-0 right-0 z-[5000] flex justify-center pointer-events-none animate-in fade-in zoom-in">
-                    <span className="text-yellow-400 font-black text-6xl uppercase tracking-tighter italic drop-shadow-xl">Niveau {currentLevelIdx + 1}</span>
+                <div className="fixed top-[20%] left-0 right-0 z-[5000] flex justify-center pointer-events-none animate-in fade-in zoom-in duration-300">
+                    <span className="text-yellow-400 font-black text-6xl uppercase tracking-tighter italic drop-shadow-[0_4px_10px_rgba(0,0,0,0.8)]">Niveau {currentLevelIdx + 1}</span>
                 </div>
             )}
 
