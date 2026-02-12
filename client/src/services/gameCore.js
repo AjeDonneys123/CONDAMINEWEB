@@ -1,7 +1,8 @@
 /**
- * 🎮 CORE ENGINE V10 (HYBRID & SAFE)
- * Rôle : Classe Mère du moteur de jeu.
- * CORRECTIF : Si le bridge est absent (mode dev ou bug), les appels sont ignorés sans crash.
+ * 🎮 CORE ENGINE V11 (BULLETPROOF)
+ * Rôle : Classe Mère du moteur.
+ * CORRECTIF : Initialisation forcée de `this.callbacks` et `this.game`.
+ * Empêche le crash "undefined reading onPlayerHit".
  */
 export const createGameBase = (params) => {
     const { imageAssets, resolveUrl, canvas, ctx, playParallelSound, bridge } = params;
@@ -41,10 +42,9 @@ export const createGameBase = (params) => {
             this.assets = a || {};
             this.isBossPhase = false;
             
-            // 🛡️ SÉCURITÉ BRIDGE ABSOLUE
+            // --- 1. SÉCURITÉ BRIDGE (Nouveau code) ---
             const safeTrigger = (type, val) => {
                 if (bridge && bridge.trigger) bridge.trigger(type, val);
-                // else console.warn(`[Moteur] Commande ignorée : ${type}`);
             };
 
             this.game = {
@@ -58,6 +58,24 @@ export const createGameBase = (params) => {
                 victory: () => safeTrigger('VICTORY'),
                 shake: () => safeTrigger('SHAKE'),
                 playAudio: (n) => safeTrigger('AUDIO', n)
+            };
+
+            // --- 2. SÉCURITÉ CALLBACKS (Vieux code) ---
+            // On mappe les anciens appels vers le nouveau bridge pour éviter le crash
+            this.callbacks = {
+                onPlayerHit: () => {
+                    // console.warn("Legacy call: onPlayerHit -> game.damage()");
+                    this.game.damage(1);
+                },
+                onRoundEnd: (success) => {
+                    if (success) {
+                        this.game.winRound();
+                        this.game.nextQuestion();
+                    } else {
+                        this.game.failRound();
+                    }
+                },
+                ...(cb || {}) // Fusion
             };
 
             const project = params.projectRef?.current || {};
