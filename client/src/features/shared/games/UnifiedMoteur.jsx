@@ -5,11 +5,10 @@ import { api } from '../../../services/api';
 import { createGameBase } from '../../../services/gameCore';
 
 /**
- * 🧠 LE MAITRE UNIFIÉ V.2.89 (YOUTUBE EMBED FIX)
- * VERSION : V.2.89
- * CORRECTIF :
- * - Ajout d'un parseur Regex pour les URLs YouTube (supporte youtu.be, watch?v=, embed/, etc.).
- * - Évite les erreurs "ID de lecture" dans l'iframe.
+ * 🧠 LE MAITRE UNIFIÉ V.3.01 (ASSET STABILITY FIX)
+ * VERSION : V.3.01
+ * CORRECTIF MAJEUR : Stabilisation du chargement des assets.
+ * Empêche le clignotement/disparition des sprites dans le Studio lors de l'édition.
  */
 
 const ZOMBIE_GAME_CODE = `
@@ -139,19 +138,18 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
     const keysPressed = useRef({});
     const projectRef = useRef(gameData);
     const bossModeRef = useRef(false);
+    
+    // STABILISATION DES ASSETS (V3.01)
+    const [assetsHash, setAssetsHash] = useState("");
 
     // --- HELPER YOUTUBE ROBUSTE ---
     const getYoutubeEmbed = (url) => {
         if (!url) return "";
-        // Regex magique qui gère tous les formats (watch?v=, youtu.be, embed/)
         const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
         const match = url.match(regExp);
         const id = (match && match[2].length === 11) ? match[2] : null;
-        
-        if (id) {
-            return `https://www.youtube.com/embed/${id}?autoplay=1&rel=0&modestbranding=1`;
-        }
-        return url; // Retourne l'original si pas matché (fallback)
+        if (id) return `https://www.youtube.com/embed/${id}?autoplay=1&rel=0&modestbranding=1`;
+        return url;
     };
 
     // --- EFFET DE SON : DÉPART DU NIVEAU ---
@@ -161,7 +159,22 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
         }
     }, [showLevelBanner]);
 
-    useEffect(() => { projectRef.current = gameData; }, [gameData]);
+    // UPDATE REF DU PROJET SANS RECHARGER TOUT
+    useEffect(() => { 
+        projectRef.current = gameData; 
+        
+        // On calcule un hash des URLs pour savoir si on doit recharger les images
+        const scene = gameData?.scenes?.[0];
+        if (scene) {
+            const imgs = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url)))].filter(Boolean).sort().join('|');
+            const snds = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url))))].filter(Boolean).sort().join('|');
+            
+            const newHash = imgs + "###" + snds;
+            if (newHash !== assetsHash) {
+                setAssetsHash(newHash);
+            }
+        }
+    }, [gameData]);
 
     useEffect(() => {
         const isBossNow = (currentQIndex !== -1 && (questionStates[currentQIndex] || 0) === 2);
@@ -201,11 +214,17 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
         window.addEventListener('keydown', hDown);
         window.addEventListener('keyup', hUp);
         return () => { window.removeEventListener('keydown', hDown); window.removeEventListener('keyup', hUp); };
-    }, [gameData, currentLevelIdx]);
+    }, [gameData, currentLevelIdx]); // On garde gameData ici pour la structure du quiz, mais pas pour les assets
 
-    // 2. ASSETS LOADING
+    // 2. ASSETS LOADING (STABILISÉ PAR assetsHash)
     useEffect(() => {
         if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+        
+        // Si le hash est vide, on ne charge rien (probablement init)
+        if (!assetsHash) return;
+
+        console.log("📥 [MOTEUR] Chargement des assets...");
+        
         const scene = projectRef.current?.scenes?.[0];
         if (!scene) { setIsReady(true); return; }
         
@@ -214,7 +233,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
         imgs.forEach(url => {
             const img = new Image(); img.crossOrigin = "anonymous"; const rKey = resolveUrl(url);
             img.onload = () => { imageAssetsRef.current.set(rKey, img); loaded++; setLoadProgress(`${Math.round(loaded/imgs.length*100)}%`); if (loaded >= imgs.length) setIsReady(true); };
-            img.onerror = () => { loaded++; if (loaded >= imgs.length) setIsReady(true); };
+            img.onerror = () => { console.warn("Image error:", url); loaded++; if (loaded >= imgs.length) setIsReady(true); };
             img.src = rKey;
         });
 
@@ -227,16 +246,14 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
                 if (buf) audioBuffersRef.current.set(resolveUrl(url), buf); 
             }); 
         });
-    }, [gameData]);
+    }, [assetsHash]); // <-- DÉPENDANCE SUR LE HASH ET NON SUR GAMEDATA
 
     const playParallelSoundImpl = (url, forceAlways = false) => {
         if ((!engineStarted && !forceAlways) || isMuted || !audioCtxRef.current) return;
-        
         const buffer = audioBuffersRef.current.get(resolveUrl(url));
         if (buffer) {
             try {
                 if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
-                
                 const source = audioCtxRef.current.createBufferSource();
                 source.buffer = buffer; 
                 source.connect(audioCtxRef.current.destination);
@@ -248,12 +265,10 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
     const triggerGlobalEvent = (eventName) => {
         const scene = projectRef.current.scenes?.[0];
         if (!scene || !scene.globalSounds) return;
-        
         const cleanTarget = eventName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
         const event = scene.globalSounds.find(g => 
             g.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim() === cleanTarget
         );
-        
         if (event && event.sounds) {
             event.sounds.forEach(snd => playParallelSoundImpl(snd.url, true));
         }
@@ -282,9 +297,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
 
         setTimeout(() => {
             setFeedback(null);
-            
             const available = nextStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
-            
             if (available.length > 0) {
                 if (isCorrect && nextStates[currentQIndex] === 2) {
                     const bossNow = true;
@@ -305,12 +318,10 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
     const triggerWinSequence = () => {
         setShowStageClear(true);
         setTimeout(() => setIsPowerOff(true), 1500);
-        
         setTimeout(() => {
             setEngineStarted(false); 
             setIsPowerOff(false); 
             setShowStageClear(false);
-            
             if (allLevels[currentLevelIdx + 1]) {
                 setCurrentLevelIdx(prev => prev + 1); 
                 setShowLevelIntro(true); 
@@ -321,7 +332,6 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
         }, 3000);
     };
 
-    // CHEAT HANDLERS
     const handleHeartClick = () => { if (isCheatMode()) setLives(l => Math.max(0, l - 1)); };
     const handleQuestionClick = () => { if (isCheatMode()) { triggerGlobalEvent("UPLEVEL"); triggerWinSequence(); } };
     const handleBarClick = (idx) => {
@@ -338,18 +348,13 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
 
     const handleRetry = () => { setShowGameOver(false); setLives(4); setEngineStarted(false); setShowLevelIntro(true); };
     
-    // --- DÉMARRAGE NIVEAU ---
     const startCurrentLevel = async () => { 
         if (!isReady) return; 
-        
         if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
             await audioCtxRef.current.resume();
         }
-        
         setEngineStarted(true); 
         setShowLevelIntro(false); 
-        
-        // La bannière est déclenchée, ce qui lancera le son via useEffect
         setShowLevelBanner(true); 
         setTimeout(() => setShowLevelBanner(false), 1500); 
     };
@@ -404,7 +409,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
 
     return (
         <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center overflow-hidden font-sans">
-            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">VERSION V.2.89 (YOUTUBE FIX)</div>
+            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">VERSION V.3.01 (ASSET STABLE)</div>
             <button onClick={onExit} className="absolute top-6 right-6 w-14 h-14 bg-white/10 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-2xl font-black z-[4000] border-2 border-white/20">✕</button>
 
             {showLevelBanner && (
@@ -423,7 +428,6 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
                 <div className="fixed inset-0 z-[6000] bg-black flex items-center justify-center p-0 animate-in fade-in duration-300" onClick={() => setZoomMedia(null)}>
                     <button className="absolute top-8 right-8 w-16 h-16 bg-white hover:bg-red-600 hover:text-white text-black rounded-full flex items-center justify-center text-3xl font-black shadow-2xl transition-all z-[6001] hover:scale-110 active:scale-95">✕</button>
                     <div className="w-full h-full flex items-center justify-center p-4">
-                        {/* UTILISATION DU HELPER YOUTUBE FIX */}
                         {zoomMedia === 'sheet' ? <img src={resolveUrl(currentLevelData.intro?.sheetUrl)} className="h-[90vh] object-contain" alt="Zoom" /> : <div className="h-[90vh] aspect-video"><iframe className="w-full h-full" src={getYoutubeEmbed(currentLevelData.intro?.videoUrl)} frameBorder="0" allow="autoplay; encrypted-media" allowFullScreen></iframe></div>}
                     </div>
                 </div>
