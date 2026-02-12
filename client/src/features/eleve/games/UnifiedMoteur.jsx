@@ -5,7 +5,7 @@ import { api } from '../../../services/api';
 import { createGameBase } from '../../../services/gameCore';
 
 /**
- * 🧠 LE MAITRE UNIFIÉ V.2.70 (CORE ENGINE)
+ * 🧠 LE MAITRE UNIFIÉ V.2.71 (CORE ENGINE)
  * Rôle : Logique unique pour Prof et Élève.
  * Gère : Chargement -> Révision -> Arcade -> Stage Clear -> Suite.
  */
@@ -239,7 +239,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
             setShowStageClear(false);
             if (allLevels[currentLevelIdx + 1]) {
                 setCurrentLevelIdx(prev => prev + 1);
-                setShowLevelIntro(true); // Retour au menu de révision pour le niveau suivant
+                setShowLevelIntro(true); 
             } else {
                 alert("🎉 JEU TERMINÉ !");
                 onExit();
@@ -291,7 +291,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
 
     return (
         <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center overflow-hidden font-sans">
-            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">VERSION V.2.70</div>
+            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">VERSION V.2.71</div>
             <button onClick={onExit} className="absolute top-6 right-6 w-14 h-14 bg-white/10 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-2xl font-black z-[4000] border-2 border-white/20">✕</button>
 
             {showLevelBanner && (
@@ -307,8 +307,8 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
             )}
 
             {zoomMedia && (
-                <div className="fixed inset-0 z-[6000] bg-black flex items-center justify-center p-0" onClick={() => setZoomMedia(null)}>
-                    <button className="absolute top-8 right-8 w-16 h-16 bg-white text-black rounded-full text-3xl font-black z-[6001]">✕</button>
+                <div className="fixed inset-0 z-[6000] bg-black flex items-center justify-center p-0 animate-in fade-in duration-300" onClick={() => setZoomMedia(null)}>
+                    <button className="absolute top-8 right-8 w-16 h-16 bg-white hover:bg-red-600 hover:text-white text-black rounded-full flex items-center justify-center text-3xl font-black shadow-2xl transition-all z-[6001] hover:scale-110 active:scale-95">✕</button>
                     <div className="w-full h-full flex items-center justify-center p-4">
                         {zoomMedia === 'sheet' ? <img src={resolveUrl(currentLevelData.intro?.sheetUrl)} className="h-[90vh] object-contain" alt="Zoom" /> : <div className="h-[90vh] aspect-video"><iframe className="w-full h-full" src={currentLevelData.intro?.videoUrl?.replace("watch?v=", "embed/") + "?autoplay=1"} frameBorder="0" allow="autoplay; encrypted-media" allowFullScreen></iframe></div>}
                     </div>
