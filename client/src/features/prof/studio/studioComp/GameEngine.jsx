@@ -1,9 +1,9 @@
 // @signatures: GameEngine
 import React from 'react';
-import UnifiedMoteur from '../../../../eleve/games/UnifiedMoteur';
+import UnifiedMoteur from '../../../eleve/games/UnifiedMoteur';
 
 /**
- * 🎓 SHELL STUDIO V.2.70
+ * 🎓 SHELL STUDIO V.2.71
  * Rôle : Coquille vide qui appelle le moteur maître.
  */
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {

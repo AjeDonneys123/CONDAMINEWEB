@@ -8854,3 +8854,6 @@ Build 161: MIGRATION MOTEUR JEU. Extraction de la logique 'BaseFactory' vers 'se
 2026-02-11 19:30 - Implémentation du banner "STAGE CLEAR" (Arcade Vert) à la fin d'un niveau.
 2026-02-11 19:30 - Fix du bug de transition : Le jeu s'arrête proprement et affiche le menu de révision du niveau suivant.
 2026-02-11 19:30 - Synchronisation forcée : Le moteur n'est plus lancé tant que l'utilisateur n'a pas révisé et cliqué sur GO.
+
+2026-02-11 19:33 - Correction de l'import path dans GameEngine.jsx (Passage de 4 à 3 niveaux pour UnifiedMoteur).
+2026-02-11 19:33 - Version V.2.71 : Stabilisation de la structure Shell/Maître unique.
