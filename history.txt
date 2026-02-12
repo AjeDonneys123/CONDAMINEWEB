@@ -8889,3 +8889,6 @@ Câblage final Architecture V3 : `GamePlayer` (Élève) et `GameEngine` (Studio)
 
 Build #165 : Snapshot GameEngine
 Build #166 : Fix Bug Moteur Jeu (Zombie continue d'attaquer après Game Over)
+
+Build #167 : Gameplay Logic Update (Sync Bar/Mort)
+Build #168 : STABILISATION Moteur (Fix Crash V3.05) - Ajout sécurités null-check

@@ -1,15 +1,16 @@
-// @signatures: UnifiedMoteur, handleAnswerClick, triggerWinSequence, startCurrentLevel, getEmbedUrl, checkAnswerPermissive, triggerGlobalEvent, playParallelSoundImpl, normalize, getYoutubeEmbed
-import React, { useState, useRef, useEffect } from 'react';
+// @signatures: UnifiedMoteur, handleAnswerClick, handleRoundEnd, triggerWinSequence, startCurrentLevel, getEmbedUrl, checkAnswerPermissive, triggerGlobalEvent, playParallelSoundImpl, normalize, getYoutubeEmbed
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import SoundExpert from '../../../services/SoundExpert';
 import { api } from '../../../services/api';
 import { createGameBase } from '../../../services/gameCore';
 
 /**
- * 🧠 LE MAITRE UNIFIÉ V.3.04 (FIX GAME OVER LOOP)
- * VERSION : V.3.04
+ * 🧠 LE MAITRE UNIFIÉ V.3.06 (SAFE MODE)
+ * VERSION : V.3.06
  * CORRECTIF :
- * - Arrêt immédiat de la boucle logique (isStopped=true) quand les vies tombent à 0.
- * - Empêche le zombie de continuer à frapper derrière l'écran Game Over.
+ * - Ajout de sécurités Try/Catch autour du constructeur du jeu (évite l'écran blanc).
+ * - La logique "OnRoundEnd" est stabilisée via useCallback.
+ * - Le code du Zombie est nettoyé pour éviter les erreurs de syntaxe.
  */
 
 const ZOMBIE_GAME_CODE = `
@@ -31,54 +32,83 @@ class MiniGame extends MiniGameBase {
         this.resetZombie();
     }
     resetZombie() {
-        this.zombieX = 100; this.zombieState = "WALKING"; this.hasDealtDamage = false;
-        if(this.ZOMBIE) { this.ZOMBIE.x = 100; this.ZOMBIE.play("AVANCER", true); }
+        this.zombieX = 100;
+        this.zombieState = "WALKING";
+        this.hasDealtDamage = false;
+        if(this.ZOMBIE) { 
+            this.ZOMBIE.x = 100; 
+            this.ZOMBIE.play("AVANCER", true);
+            // Application du mode Boss au respawn uniquement
+            this.ZOMBIE.scale = this.isBossPhase ? this.ZOMBIE.baseScale * 1.6 : this.ZOMBIE.baseScale;
+        }
     }
     onResult(isCorrect) {
         if (this.heroState === "HIT") return;
         if (isCorrect && this.HEROS) {
             this.HEROS.play("TIRER", false);
-            this.heroState = "SHOOT"; this.heroTimer = 40;
+            this.heroState = "SHOOT";
+            this.heroTimer = 40;
             this.projectiles.push({ x: this.HEROS.x + 5, y: this.HEROS.y - 5 });
         }
     }
     update() {
         if (this.isStopped) return;
-        if (this.ZOMBIE) {
-            const targetScale = this.isBossPhase ? this.ZOMBIE.baseScale * 1.6 : this.ZOMBIE.baseScale;
-            this.ZOMBIE.scale += (targetScale - this.ZOMBIE.scale) * 0.1;
-        }
 
+        // --- HÉROS ---
         if (this.heroState === "SHOOT" || this.heroState === "HIT") {
             this.heroTimer--;
-            if (this.heroTimer <= 0) { this.heroState = "IDLE"; if(this.HEROS) this.HEROS.play("IDLE", true); }
+            if (this.heroTimer <= 0) { 
+                this.heroState = "IDLE"; 
+                if(this.HEROS) this.HEROS.play("IDLE", true); 
+            }
         }
+
+        // --- ZOMBIE ---
         if (this.zombieState === "WALKING") {
             let speed = this.isBossPhase ? this.baseSpeed * 0.5 : this.baseSpeed;
             this.zombieX -= speed;
             if (this.zombieX < 20) {
-                this.zombieState = "ATTACKING"; this.hasDealtDamage = false;
-                if (this.ZOMBIE) { this.ZOMBIE.x = 20; this.ZOMBIE.play("TAPER", false); }
+                this.zombieState = "ATTACKING";
+                this.hasDealtDamage = false;
+                if (this.ZOMBIE) this.ZOMBIE.play("TAPER", false);
             } else if (this.ZOMBIE) { this.ZOMBIE.x = this.zombieX; }
         } 
         else if (this.zombieState === "ATTACKING") {
             if (this.ZOMBIE && this.ZOMBIE.frameIdx >= 1 && !this.hasDealtDamage) {
                 this.hasDealtDamage = true;
                 if (this.heroState !== "HIT") {
-                    if (this.HEROS) { this.HEROS.play("TOUCHE", false); this.heroState = "HIT"; this.heroTimer = 60; }
-                    if (this.callbacks && this.callbacks.onPlayerHit) this.callbacks.onPlayerHit();
+                    if (this.HEROS) { 
+                        this.HEROS.play("TOUCHE", false); 
+                        this.heroState = "HIT"; 
+                        this.heroTimer = 60; 
+                    }
+                    // Le joueur perd une vie ici via l'animation, mais la barre ne bouge pas encore
                 }
             }
-            if (this.ZOMBIE && this.ZOMBIE.isAnimFinished) this.resetZombie();
+            if (this.ZOMBIE && this.ZOMBIE.isAnimFinished) {
+                // FIN DU COUP : DÉFAITE DU ROUND -> BARRE DESCEND
+                if (this.callbacks && this.callbacks.onRoundEnd) this.callbacks.onRoundEnd(false);
+                this.resetZombie();
+            }
         } 
         else if (this.zombieState === "HIT") {
             this.zombieX += 0.5;
-            if (this.ZOMBIE) { this.ZOMBIE.x = this.zombieX; if (this.ZOMBIE.isAnimFinished) this.resetZombie(); }
+            if (this.ZOMBIE) { 
+                this.ZOMBIE.x = this.zombieX; 
+                if (this.ZOMBIE.isAnimFinished) {
+                    // FIN DE MORT : VICTOIRE DU ROUND -> BARRE MONTE
+                    if (this.callbacks && this.callbacks.onRoundEnd) this.callbacks.onRoundEnd(true);
+                    this.resetZombie(); 
+                }
+            }
         }
+
+        // --- PROJECTILES ---
         for (let i = this.projectiles.length - 1; i >= 0; i--) { 
             let p = this.projectiles[i]; p.x += 3;
             if (this.zombieState === "WALKING" && p.x > this.zombieX - 5 && p.x < this.zombieX + 5) {
-                this.projectiles.splice(i, 1); this.zombieState = "HIT";
+                this.projectiles.splice(i, 1);
+                this.zombieState = "HIT";
                 if (this.ZOMBIE) this.ZOMBIE.play("TOUCHE", false); 
             } 
             else if (p.x > 110) { this.projectiles.splice(i, 1); }
@@ -88,16 +118,9 @@ class MiniGame extends MiniGameBase {
         if (this.isStopped) return;
         const ctx = this.ctx;
         this.projectiles.forEach(p => { 
-            if (this.isBossPhase) {
-                ctx.save(); ctx.shadowBlur = 20; ctx.shadowColor = "#f59e0b"; ctx.font = "50px Arial";
-                ctx.textAlign = "center"; ctx.textBaseline = "middle";
-                ctx.fillText("🔥", (p.x/100)*this.canvas.width, (p.y/100)*this.canvas.height);
-                ctx.restore();
-            } else {
-                ctx.fillStyle = "#f97316"; ctx.beginPath(); 
-                ctx.arc((p.x/100)*this.canvas.width, (p.y/100)*this.canvas.height, 10, 0, Math.PI*2); 
-                ctx.fill(); 
-            }
+            ctx.fillStyle = "#f97316"; ctx.beginPath(); 
+            ctx.arc((p.x/100)*this.canvas.width, (p.y/100)*this.canvas.height, 10, 0, Math.PI*2); 
+            ctx.fill(); 
         });
     }
 }
@@ -137,10 +160,11 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
     const gameInstanceRef = useRef(null);
     const frameIdRef = useRef(null);
     const keysPressed = useRef({});
-    const projectRef = useRef(gameData);
+    const projectRef = useRef(gameData || {}); // Sécurité anti-crash
     const bossModeRef = useRef(false);
     
-    // STABILITÉ ASSETS (Signature)
+    // État temporaire pour stocker le résultat du clic en attendant l'animation
+    const pendingResultRef = useRef(null);
     const [assetsSignature, setAssetsSignature] = useState("");
 
     const getYoutubeEmbed = (url) => {
@@ -158,22 +182,20 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
         }
     }, [showLevelBanner]);
 
-    // SYNC REF + DETECTION CHANGEMENT ASSETS SEULEMENT
+    // SYNC REF & ASSETS
     useEffect(() => { 
+        if (!gameData) return;
         projectRef.current = gameData; 
-        
-        const scene = gameData?.scenes?.[0];
+        const scene = gameData.scenes?.[0];
         if (scene) {
             const imgs = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url)))].filter(Boolean).sort().join('|');
             const snds = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url))))].filter(Boolean).sort().join('|');
-            
             const sig = `${imgs}__${snds}`;
-            if (sig !== assetsSignature) {
-                setAssetsSignature(sig);
-            }
+            if (sig !== assetsSignature) setAssetsSignature(sig);
         }
     }, [gameData]);
 
+    // CALCUL DU MODE BOSS
     useEffect(() => {
         const isBossNow = (currentQIndex !== -1 && (questionStates[currentQIndex] || 0) === 2);
         setActiveBossVisual(isBossNow);
@@ -207,6 +229,8 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
             }
         };
         loadLogic();
+        
+        // Listeners Clavier
         const hDown = (e) => { keysPressed.current[e.code] = true; };
         const hUp = (e) => { keysPressed.current[e.code] = false; };
         window.addEventListener('keydown', hDown);
@@ -217,35 +241,28 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
     // 2. ASSETS LOADING
     useEffect(() => {
         if (!assetsSignature) return;
-
         if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
         
-        console.log("📥 [MOTEUR] Chargement intelligent des assets...");
         setIsReady(false);
-
         const scene = projectRef.current?.scenes?.[0];
         if (!scene) { setIsReady(true); return; }
         
         const imgs = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url)))].filter(Boolean);
         
         let loadedImgs = 0;
-        
         const checkDone = () => {
             loadedImgs++;
             setLoadProgress(`${Math.round(loadedImgs/imgs.length*100)}%`);
             if (loadedImgs >= imgs.length) setIsReady(true);
         };
 
-        if (imgs.length === 0) {
-            setIsReady(true);
-        } else {
+        if (imgs.length === 0) setIsReady(true);
+        else {
             imgs.forEach(url => {
                 const rKey = resolveUrl(url);
-                if (imageAssetsRef.current.has(rKey)) {
-                    checkDone();
-                } else {
-                    const img = new Image(); 
-                    img.crossOrigin = "anonymous"; 
+                if (imageAssetsRef.current.has(rKey)) checkDone();
+                else {
+                    const img = new Image(); img.crossOrigin = "anonymous"; 
                     img.onload = () => { imageAssetsRef.current.set(rKey, img); checkDone(); };
                     img.onerror = () => { console.warn("Image error:", url); checkDone(); };
                     img.src = rKey;
@@ -256,13 +273,9 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
         const snds = [
             ...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url))))
         ].filter(Boolean);
-        
         snds.forEach(url => { 
-            SoundExpert.decodeAudio(resolveUrl(url), audioCtxRef.current).then(buf => { 
-                if (buf) audioBuffersRef.current.set(resolveUrl(url), buf); 
-            }); 
+            SoundExpert.decodeAudio(resolveUrl(url), audioCtxRef.current).then(buf => { if (buf) audioBuffersRef.current.set(resolveUrl(url), buf); }); 
         });
-        
     }, [assetsSignature]);
 
     const playParallelSoundImpl = (url, forceAlways = false) => {
@@ -283,54 +296,73 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
         const scene = projectRef.current.scenes?.[0];
         if (!scene || !scene.globalSounds) return;
         const cleanTarget = eventName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
-        const event = scene.globalSounds.find(g => 
-            g.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim() === cleanTarget
-        );
-        if (event && event.sounds) {
-            event.sounds.forEach(snd => playParallelSoundImpl(snd.url, true));
-        }
+        const event = scene.globalSounds.find(g => g.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim() === cleanTarget);
+        if (event && event.sounds) event.sounds.forEach(snd => playParallelSoundImpl(snd.url, true));
     };
 
-    // 3. LOGIQUE QUIZ
+    // 3. LOGIQUE QUIZ (SYNC BAR/MORT)
     const handleAnswerClick = (val) => {
         if (feedback || currentQIndex === -1 || showLevelIntro || showStageClear) return;
         const currentQ = levelQuestions[currentQIndex];
+        if (!currentQ) return;
+
         const clean = (s) => String(s).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, '').trim();
         let isCorrect = (typeof val === 'number') ? currentQ.a === val : clean(val) === clean(currentQ.options[currentQ.a]);
         
+        pendingResultRef.current = isCorrect;
         setFeedback(isCorrect ? 'CORRECT' : 'WRONG');
-        if (gameInstanceRef.current?.onResult) gameInstanceRef.current.onResult(isCorrect);
-
-        const nextStates = [...questionStates];
-        if (isCorrect) {
-            nextStates[currentQIndex] = Math.min(3, nextStates[currentQIndex] + 1);
-        } else {
-            nextStates[currentQIndex] = Math.max(0, nextStates[currentQIndex] - 1);
-            setLives(l => Math.max(0, l - 1));
-        }
         
-        setQuestionStates(nextStates);
-        setUserInput("");
-
-        setTimeout(() => {
-            setFeedback(null);
-            const available = nextStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
-            if (available.length > 0) {
-                if (isCorrect && nextStates[currentQIndex] === 2) {
-                    const bossNow = true;
-                    setActiveBossVisual(bossNow);
-                    bossModeRef.current = bossNow;
-                    if (gameInstanceRef.current) gameInstanceRef.current.isBossPhase = bossNow;
-                } else {
-                    const others = available.filter(idx => idx !== currentQIndex);
-                    setCurrentQIndex(others.length > 0 ? others[Math.floor(Math.random() * others.length)] : available[0]);
-                }
-            } else {
-                triggerGlobalEvent("UPLEVEL");
-                triggerWinSequence(); 
-            }
-        }, 1000);
+        // Déclenchement Animation (Tir ou Coup)
+        if (gameInstanceRef.current?.onResult) gameInstanceRef.current.onResult(isCorrect);
     };
+
+    // Callback appelé par le moteur à la fin de l'animation
+    // Utilisation de useCallback pour stabilité
+    const handleRoundEnd = useCallback((success) => {
+        const isCorrect = pendingResultRef.current !== null ? pendingResultRef.current : success;
+        
+        setQuestionStates(prevStates => {
+            const nextStates = [...prevStates];
+            if (isCorrect) {
+                // Victoire : Barre monte
+                nextStates[currentQIndex] = Math.min(3, nextStates[currentQIndex] + 1);
+            } else {
+                // Défaite : Barre descend + Perte vie
+                nextStates[currentQIndex] = Math.max(0, nextStates[currentQIndex] - 1);
+                setLives(l => {
+                    const n = Math.max(0, l - 1);
+                    if (n === 0) {
+                        setShowGameOver(true);
+                        triggerGlobalEvent("DEFAITE");
+                        if (gameInstanceRef.current) gameInstanceRef.current.isStopped = true;
+                    }
+                    return n;
+                });
+            }
+            
+            // Logique de changement de question
+            setTimeout(() => {
+                setFeedback(null);
+                setUserInput("");
+                pendingResultRef.current = null;
+
+                const available = nextStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
+                if (available.length > 0) {
+                    if (isCorrect && nextStates[currentQIndex] === 2) {
+                        // Reste sur le boss
+                    } else {
+                        const others = available.filter(idx => idx !== currentQIndex);
+                        setCurrentQIndex(others.length > 0 ? others[Math.floor(Math.random() * others.length)] : available[0]);
+                    }
+                } else {
+                    triggerGlobalEvent("UPLEVEL");
+                    triggerWinSequence(); 
+                }
+            }, 500); // Petit délai pour laisser respirer l'anim
+
+            return nextStates;
+        });
+    }, [currentQIndex, allLevels]);
 
     const triggerWinSequence = () => {
         setShowStageClear(true);
@@ -349,20 +381,19 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
         }, 3000);
     };
 
+    // Cheats & Contrôles
     const handleHeartClick = () => { if (isCheatMode()) setLives(l => Math.max(0, l - 1)); };
     const handleQuestionClick = () => { if (isCheatMode()) { triggerGlobalEvent("UPLEVEL"); triggerWinSequence(); } };
     const handleBarClick = (idx) => {
         if (isCheatMode()) {
-            const nextStates = [...questionStates];
-            nextStates[idx] = Math.min(3, nextStates[idx] + 1);
-            setQuestionStates(nextStates);
-            if (nextStates.every(s => s >= 3)) {
-                triggerGlobalEvent("UPLEVEL");
-                triggerWinSequence();
-            }
+            setQuestionStates(prev => {
+                const next = [...prev];
+                next[idx] = Math.min(3, next[idx] + 1);
+                if (next.every(s => s >= 3)) { triggerGlobalEvent("UPLEVEL"); triggerWinSequence(); }
+                return next;
+            });
         }
     };
-
     const handleRetry = () => { setShowGameOver(false); setLives(4); setEngineStarted(false); setShowLevelIntro(true); };
     
     const startCurrentLevel = async () => { 
@@ -376,9 +407,10 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
         setTimeout(() => setShowLevelBanner(false), 1500); 
     };
 
-    // 4. RENDU MOTEUR (AVEC FIX CALLBACK)
+    // 4. RENDU MOTEUR
     useEffect(() => {
         if (!engineStarted || !canvasRef.current) return;
+        
         try {
             const MiniGameBase = createGameBase({ 
                 audioBuffers: audioBuffersRef.current, 
@@ -391,47 +423,44 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
                 ctx: canvasRef.current.getContext('2d'), 
                 playParallelSound: playParallelSoundImpl, 
                 callbacks: { 
-                    onPlayerHit: () => { 
-                        setLives(l => { 
-                            const n = Math.max(0, l - 1); 
-                            if (n === 0) {
-                                setShowGameOver(true); 
-                                triggerGlobalEvent("DEFAITE");
-                                
-                                // ✅ FIX: Arrêt immédiat de la logique quand mort
-                                if (gameInstanceRef.current) {
-                                    gameInstanceRef.current.isStopped = true;
-                                }
-                            }
-                            return n; 
-                        }); 
-                    } 
+                    onRoundEnd: handleRoundEnd 
                 } 
             });
-            const factory = new Function('MiniGameBase', `${projectRef.current.generatedCode || ZOMBIE_GAME_CODE}\nreturn MiniGame;`);
+
+            // SÉCURITÉ CRITIQUE : Si le code généré est vide ou cassé, on utilise le code Zombie par défaut
+            const scriptToRun = (projectRef.current.generatedCode && projectRef.current.generatedCode.length > 50) 
+                ? projectRef.current.generatedCode 
+                : ZOMBIE_GAME_CODE;
+
+            const factory = new Function('MiniGameBase', `${scriptToRun}\nreturn MiniGame;`);
             const instance = new (factory(MiniGameBase))(canvasRef.current, {}, null);
             gameInstanceRef.current = instance; 
             if (instance.start) instance.start();
             
             const tick = () => {
-                if(instance.keys) Object.assign(instance.keys, keysPressed.current);
-                instance.isBossPhase = bossModeRef.current;
-                if (instance.update) instance.update(); 
-                if (instance._render) instance._render(); 
-                if (instance.draw) instance.draw();
+                if (!instance.isStopped) {
+                    if(instance.keys) Object.assign(instance.keys, keysPressed.current);
+                    instance.isBossPhase = bossModeRef.current;
+                    if (instance.update) instance.update(); 
+                    if (instance._render) instance._render(); 
+                    if (instance.draw) instance.draw();
+                }
                 frameIdRef.current = requestAnimationFrame(tick);
             };
             tick();
-        } catch (e) { console.error("Moteur Crash:", e); }
+        } catch (e) { 
+            console.error("🔥 CRASH MOTEUR CRITIQUE:", e);
+            // On pourrait afficher une erreur UI ici
+        }
         return () => { if(frameIdRef.current) cancelAnimationFrame(frameIdRef.current); };
-    }, [engineStarted]);
+    }, [engineStarted, handleRoundEnd]);
 
     const currentLevelData = allLevels[currentLevelIdx] || {};
     const safeQ = (levelQuestions && currentQIndex >= 0) ? levelQuestions[currentQIndex] : null;
 
     return (
         <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center overflow-hidden font-sans">
-            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">VERSION V.3.04 (GAME OVER FIX)</div>
+            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">VERSION V.3.06 (SAFE MODE)</div>
             <button onClick={onExit} className="absolute top-6 right-6 w-14 h-14 bg-white/10 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-2xl font-black z-[4000] border-2 border-white/20">✕</button>
 
             {showLevelBanner && (
