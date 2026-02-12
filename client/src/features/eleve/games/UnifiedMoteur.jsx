@@ -5,9 +5,9 @@ import { api } from '../../../services/api';
 import { createGameBase } from '../../../services/gameCore';
 
 /**
- * 🧠 LE MAITRE UNIFIÉ V.2.76 (STABILITÉ TOTALE)
- * VERSION : V.2.76
- * FIX : Restauration de showGameOver et nettoyage des dépendances de rendu.
+ * 🧠 LE MAITRE UNIFIÉ V.2.81 (INSTANT BOSS STATE)
+ * VERSION : V.2.81
+ * LOGIQUE : Le mode Boss est lié à l'état de la question posée, pas à l'impact.
  */
 
 const ZOMBIE_GAME_CODE = `
@@ -42,7 +42,13 @@ class MiniGame extends MiniGameBase {
     }
     update() {
         if (this.isStopped) return;
-        if (this.ZOMBIE) this.ZOMBIE.scale = this.isBossPhase ? this.ZOMBIE.baseScale * 1.6 : this.ZOMBIE.baseScale;
+        // 🧟 LOGIQUE BOSS : Mise à jour immédiate selon l'état transmis par le moteur
+        if (this.ZOMBIE) {
+            const targetScale = this.isBossPhase ? this.ZOMBIE.baseScale * 1.6 : this.ZOMBIE.baseScale;
+            // Interpolation légère pour fluidifier le changement de taille
+            this.ZOMBIE.scale += (targetScale - this.ZOMBIE.scale) * 0.1;
+        }
+
         if (this.heroState === "SHOOT" || this.heroState === "HIT") {
             this.heroTimer--;
             if (this.heroTimer <= 0) { this.heroState = "IDLE"; if(this.HEROS) this.HEROS.play("IDLE", true); }
@@ -118,7 +124,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
     const [showLevelIntro, setShowLevelIntro] = useState(true);
     const [showLevelBanner, setShowLevelBanner] = useState(false);
     const [showStageClear, setShowStageClear] = useState(false);
-    const [showGameOver, setShowGameOver] = useState(false); 
+    const [showGameOver, setShowGameOver] = useState(false);
     const [zoomMedia, setZoomMedia] = useState(null);
     const [isPowerOff, setIsPowerOff] = useState(false);
     
@@ -132,6 +138,17 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
     const bossModeRef = useRef(false);
 
     useEffect(() => { projectRef.current = gameData; }, [gameData]);
+
+    // Dérivation temps réel du mode Boss
+    const isBossPhase = (currentQIndex !== -1 && (questionStates[currentQIndex] || 0) === 2);
+    
+    // Synchronisation immédiate avec le moteur
+    useEffect(() => {
+        bossModeRef.current = isBossPhase;
+        if (gameInstanceRef.current) {
+            gameInstanceRef.current.isBossPhase = isBossPhase;
+        }
+    }, [isBossPhase]);
 
     function resolveUrl(url) {
         if (!url) return "";
@@ -222,6 +239,10 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
 
         setTimeout(() => {
             setFeedback(null);
+            
+            // Si la question vient de passer à 2 (Boss), on reste dessus pour le combat clavier
+            if (isCorrect && nextStates[currentQIndex] === 2) return;
+
             const available = nextStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
             if (available.length > 0) {
                 const others = available.filter(idx => idx !== currentQIndex);
@@ -235,40 +256,17 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
         triggerGlobalEvent("LEVEL_WIN");
         setTimeout(() => setIsPowerOff(true), 1500);
         setTimeout(() => {
-            setEngineStarted(false);
-            setIsPowerOff(false);
-            setShowStageClear(false);
+            setEngineStarted(false); setIsPowerOff(false); setShowStageClear(false);
             if (allLevels[currentLevelIdx + 1]) {
-                setCurrentLevelIdx(prev => prev + 1);
-                setShowLevelIntro(true); 
-            } else {
-                alert("🎉 JEU TERMINÉ !");
-                onExit();
-            }
+                setCurrentLevelIdx(prev => prev + 1); setShowLevelIntro(true); 
+            } else { alert("🎉 JEU TERMINÉ !"); onExit(); }
         }, 3000);
     };
 
-    const handleRetry = () => {
-        setShowGameOver(false); setLives(4); setEngineStarted(false); setShowLevelIntro(true);
-    };
-    
-    const startCurrentLevel = async () => {
-        if (!isReady) return;
-        if (audioCtxRef.current) await audioCtxRef.current.resume();
-        setEngineStarted(true);
-        setShowLevelIntro(false);
-        triggerGlobalEvent("UPLEVEL");
-        setShowLevelBanner(true);
-        setTimeout(() => setShowLevelBanner(false), 1500);
-    };
+    const handleRetry = () => { setShowGameOver(false); setLives(4); setEngineStarted(false); setShowLevelIntro(true); };
+    const startCurrentLevel = async () => { if (!isReady) return; if (audioCtxRef.current) await audioCtxRef.current.resume(); setEngineStarted(true); setShowLevelIntro(false); triggerGlobalEvent("UPLEVEL"); setShowLevelBanner(true); setTimeout(() => setShowLevelBanner(false), 1500); };
 
     // 4. RENDU MOTEUR
-    useEffect(() => {
-        const isBoss = (currentQIndex !== -1 && (questionStates[currentQIndex] || 0) >= 2);
-        bossModeRef.current = isBoss;
-        if (gameInstanceRef.current) gameInstanceRef.current.isBossPhase = isBoss;
-    }, [currentQIndex, questionStates]);
-
     useEffect(() => {
         if (!engineStarted || !canvasRef.current) return;
         try {
@@ -278,6 +276,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
             gameInstanceRef.current = instance; if (instance.start) instance.start();
             const tick = () => {
                 if(instance.keys) Object.assign(instance.keys, keysPressed.current);
+                // On passe le mode Boss calculé par l'index actuel
                 instance.isBossPhase = bossModeRef.current;
                 if (instance.update) instance.update(); if (instance._render) instance._render(); if (instance.draw) instance.draw();
                 frameIdRef.current = requestAnimationFrame(tick);
@@ -292,12 +291,12 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
 
     return (
         <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center overflow-hidden font-sans">
-            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">VERSION V.2.76</div>
+            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">VERSION V.2.81</div>
             <button onClick={onExit} className="absolute top-6 right-6 w-14 h-14 bg-white/10 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-2xl font-black z-[4000] border-2 border-white/20">✕</button>
 
             {showLevelBanner && (
                 <div className="fixed top-[20%] left-0 right-0 z-[5000] flex justify-center pointer-events-none animate-in fade-in zoom-in duration-300">
-                    <span className="text-yellow-400 font-black text-6xl uppercase tracking-tighter italic drop-shadow-[0_4px_10px_rgba(0,0,0,0.8)]">Niveau {currentLevelIdx + 1}</span>
+                    <span className="text-yellow-400 font-black text-6xl uppercase tracking-tighter italic drop-shadow-xl">Niveau {currentLevelIdx + 1}</span>
                 </div>
             )}
 
@@ -323,8 +322,9 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
                         <div className="flex-1 flex flex-col items-center gap-2">
                             <div className="bg-indigo-600 text-white px-4 py-1 rounded-full text-xs font-black uppercase tracking-widest">{currentLevelData.name || `NIVEAU ${currentLevelIdx + 1}`}</div>
                             {safeQ && !showStageClear && (
-                                <div className={`bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 shadow-2xl text-xl pointer-events-auto text-center max-w-2xl ${bossModeRef.current ? 'border-red-500 ring-2 ring-red-500/50' : 'border-slate-600'}`}>
+                                <div className={`bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 shadow-2xl text-xl pointer-events-auto text-center max-w-2xl ${isBossPhase ? 'border-red-500 ring-2 ring-red-500/50' : 'border-slate-600'}`}>
                                     {feedback === 'CORRECT' ? "✅ BIEN JOUÉ !" : feedback === 'WRONG' ? "❌ MAUVAISE RÉPONSE" : safeQ.q}
+                                    {isBossPhase && !feedback && <div className="text-[10px] text-red-500 mt-1 animate-pulse uppercase tracking-widest">⚠️ Boss Final : Saisis la réponse !</div>}
                                 </div>
                             )}
                         </div>
@@ -337,7 +337,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
                         </div>
                     </div>
                     <div className="relative animate-in zoom-in">
-                        <canvas ref={canvasRef} width={800} height={450} className={`aspect-video shadow-2xl bg-black border-4 transition-all duration-1000 ${isPowerOff ? 'opacity-0' : 'opacity-100'} ${bossModeRef.current ? 'border-red-900 shadow-[0_0_50px_rgba(255,0,0,0.2)]' : 'border-slate-800'}`} />
+                        <canvas ref={canvasRef} width={800} height={450} className={`aspect-video shadow-2xl bg-black border-4 transition-all duration-1000 ${isPowerOff ? 'opacity-0' : 'opacity-100'} ${isBossPhase ? 'border-red-900 shadow-[0_0_50px_rgba(255,0,0,0.2)]' : 'border-slate-800'}`} />
                     </div>
                 </>
             )}
@@ -359,12 +359,12 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
 
             {showGameOver && (<div className="absolute inset-0 z-[60] bg-red-900/95 flex flex-col items-center justify-center animate-in zoom-in"><h1 className="text-8xl font-black text-white mb-8 tracking-tighter drop-shadow-lg">💀 GAME OVER</h1><button onClick={handleRetry} className="px-10 py-5 bg-white text-red-900 font-black text-2xl rounded-2xl shadow-2xl hover:scale-105 transition-transform uppercase tracking-widest">RÉESSAYER</button></div>)}
 
-            {!showLevelIntro && engineStarted && safeQ && !showStageClear && (
+            {engineStarted && !showLevelIntro && safeQ && !showStageClear && (
                 <div className="absolute bottom-10 w-full flex justify-center px-10 pointer-events-auto z-30">
-                    {bossModeRef.current ? (
+                    {isBossPhase ? (
                         <div className="flex row gap-4 w-full max-w-2xl">
                             <input autoFocus className="flex-1 bg-slate-900 border-4 border-red-600 text-white text-3xl font-black py-6 px-10 rounded-3xl text-center outline-none" value={userInput} onChange={e => setUserInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAnswerClick(userInput)} />
-                            <button onClick={() => handleAnswerClick(userInput)} className="bg-red-600 text-white px-10 rounded-3xl font-black text-xl border-b-8 border-red-800">ATTAQUER ⚔️</button>
+                            <button onClick={() => handleAnswerClick(userInput)} className="bg-red-600 text-white px-10 rounded-3xl font-black text-xl border-b-8 border-red-800 uppercase">ATTAQUER ⚔️</button>
                         </div>
                     ) : (
                         <div className="grid grid-cols-4 gap-4 w-full max-w-5xl">

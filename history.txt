@@ -8861,3 +8861,8 @@ Build 161: MIGRATION MOTEUR JEU. Extraction de la logique 'BaseFactory' vers 'se
 2026-02-11 19:42 - ULTIMATE RECOVERY V.2.76 : Correction de l'erreur "showGameOver is not defined".
 2026-02-11 19:42 - Vérification complète de la liste des variables d'état (useState) dans UnifiedMoteur.
 2026-02-11 19:42 - Moteur stabilisé et unifié opérationnel.
+
+2026-02-11 19:55 - Fluidification de la logique Boss (V.2.81).
+2026-02-11 19:55 - Le mode Boss est désormais déclenché par l'état de la question à l'écran, pas par l'impact du projectile.
+2026-02-11 19:55 - Ajout d'une interpolation fluide sur le changement de taille du Zombie.
+2026-02-11 19:55 - Synchronisation temps réel de bossModeRef pour éviter toute désynchronisation entre React et le moteur Canvas.
