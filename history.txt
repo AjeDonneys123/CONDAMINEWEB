@@ -8880,3 +8880,6 @@ Ajout Cheat Codes V2.84 : S+T maintenus pour tricher sur vies/niveaux. Ajout éc
 
 ...
 Fix `SoundExpert.js` : Réintégration des méthodes DSP (changeSpeed, applyGain, robotize...) qui avaient disparu, causant le crash de l'éditeur audio.
+
+...
+Fix `SoundExpert.js` : Réintégration des méthodes DSP (changeSpeed, applyGain, robotize...) qui avaient disparu, causant le crash de l'éditeur audio.
