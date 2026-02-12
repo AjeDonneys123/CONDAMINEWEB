@@ -1,7 +1,7 @@
 
 ================================================================================
 🎮 RÉFÉRENTIEL TECHNIQUE DU MOTEUR CONDAMINE
-📅 Date : 11/02/2026 17:52:10
+📅 Date : 11/02/2026 19:48:00
 📂 Fichiers capturés : 10
 ================================================================================
 Ce snapshot contient toute l'infrastructure permettant au Prof de créer dans 
@@ -794,17 +794,15 @@ export default function StudioCenterPanel({
 [[[£ FILE: client/src/features/prof/studio/studioComp/GameEngine.jsx £]]]
 // @signatures: GameEngine
 import React from 'react';
-import GamePlayer from '../../../eleve/games/GamePlayer';
+import UnifiedMoteur from '../../../eleve/games/UnifiedMoteur';
 
 /**
- * 🎓 TESTEUR STUDIO UNIFIÉ V140
- * RÔLE : Ce fichier n'est plus un clône, mais une simple porte vers GamePlayer.jsx.
- * Toute modification dans GamePlayer sera répercutée ici automatiquement.
+ * 🎓 SHELL STUDIO V.2.71
+ * Rôle : Coquille vide qui appelle le moteur maître.
  */
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
-    // On passe le flag isStudioTest pour désactiver l'intro et forcer le démarrage direct
     return (
-        <GamePlayer 
+        <UnifiedMoteur 
             gameData={{ ...project, generatedCode: code }} 
             onExit={onStop} 
             isStudioTest={true} 
@@ -1066,271 +1064,22 @@ module.exports = router;
 [[[£ END: server/eleve/games/games.eleve.js £]]]
 
 [[[£ FILE: client/src/features/eleve/games/GamePlayer.jsx £]]]
-// @signatures: GamePlayer, handleAnswer, handleBarCheat, handleHeartClick, initGame, syncTestData
-import React, { useState, useEffect, useRef } from 'react';
-import './GamePlayer.css';
-import { createGameBase } from '../../../services/gameCore';
-import SoundExpert from '../../../services/SoundExpert';
+// @signatures: GamePlayer
+import React from 'react';
+import UnifiedMoteur from './UnifiedMoteur';
 
 /**
- * 🕹️ MOTEUR UNIFIÉ V155 (SCÈNE + QUIZ + SONS)
- * SOURCE UNIQUE DE VÉRITÉ : Studio Prof & Player Élève.
+ * 🎒 SHELL ÉLÈVE V.2.70
+ * Rôle : Coquille vide qui appelle le moteur maître.
  */
-export default function GamePlayer({ user, gameData, onExit, isStudioTest = false }) {
-    const canvasRef = useRef(null);
-    const [engineStarted, setEngineStarted] = useState(false);
-    const [showLevelIntro, setShowLevelIntro] = useState(!isStudioTest); 
-    const [loading, setLoading] = useState(true);
-    
-    // Refs Engine
-    const audioCtxRef = useRef(null);
-    const audioBuffersRef = useRef(new Map());
-    const imageAssetsRef = useRef(new Map());
-    const gameInstanceRef = useRef(null);
-    const frameIdRef = useRef(null);
-    const isRunningRef = useRef(true);
-    const projectRef = useRef(gameData);
-    const keysPressed = useRef({});
-
-    // États du Quiz
-    const [levels, setLevels] = useState(gameData?.levels || []);
-    const [currentLevelIdx, setCurrentLevelIdx] = useState(0);
-    const [lives, setLives] = useState(4);
-    const [score, setScore] = useState(0);
-    const [currentQIdx, setCurrentQIdx] = useState(0);
-    const [feedback, setFeedback] = useState(null);
-    const [questionStates, setQuestionStates] = useState([]);
-    const [isMuted, setIsMuted] = useState(false);
-
-    const currentLevelData = levels[currentLevelIdx] || {};
-    const questions = currentLevelData.questions || [];
-
-    function resolveUrl(url) {
-        if (!url) return "";
-        if (url.startsWith('/api/proxy')) return url;
-        const id = url.split('/').pop();
-        return `/api/proxy/${id}`;
-    }
-
-    const playParallelSoundImpl = (url) => {
-        if (!isRunningRef.current || !audioCtxRef.current || isMuted) return;
-        const resolved = resolveUrl(url);
-        const buffer = audioBuffersRef.current.get(resolved);
-        if (buffer) {
-            if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
-            try {
-                const source = audioCtxRef.current.createBufferSource();
-                source.buffer = buffer;
-                source.connect(audioCtxRef.current.destination);
-                source.start(0);
-            } catch(e) {}
-        }
-    };
-
-    const triggerGlobalEvent = (eventName) => {
-        const scene = projectRef.current?.scenes?.[0];
-        if (!scene || !scene.globalSounds) return;
-        const event = scene.globalSounds.find(g => g.name.toUpperCase().trim() === eventName.toUpperCase().trim());
-        if (event && event.sounds) {
-            event.sounds.forEach(snd => playParallelSoundImpl(snd.url));
-        }
-    };
-
-    useEffect(() => {
-        const hDown = (e) => { keysPressed.current[e.code] = true; };
-        const hUp = (e) => { keysPressed.current[e.code] = false; };
-        window.addEventListener('keydown', hDown);
-        window.addEventListener('keyup', hUp);
-        return () => { window.removeEventListener('keydown', hDown); window.removeEventListener('keyup', hUp); };
-    }, []);
-
-    // 1. CHARGEMENT ET SYNC TEST
-    useEffect(() => {
-        isRunningRef.current = true;
-        const load = async () => {
-            try {
-                if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
-                
-                let finalGameData = { ...gameData };
-
-                // ⚡ LE PONT : Si on est en Studio et qu'on n'a pas de questions, on les récupère
-                if (isStudioTest && (!finalGameData.levels || finalGameData.levels.length === 0)) {
-                    const res = await fetch('/api/games/test-data');
-                    const testQuiz = await res.json();
-                    if (testQuiz) {
-                        finalGameData.levels = testQuiz.levels;
-                        setLevels(testQuiz.levels);
-                    }
-                } else {
-                    setLevels(finalGameData.levels || []);
-                }
-
-                projectRef.current = finalGameData;
-                const scene = finalGameData.scenes?.[0] || { actors: [], backdrops: [] };
-                
-                // IMAGES
-                const imgUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url)))].filter(Boolean);
-                await Promise.all(imgUrls.map(url => new Promise(resolve => {
-                    const img = new Image(); img.crossOrigin = "anonymous";
-                    const rUrl = resolveUrl(url);
-                    img.onload = () => { imageAssetsRef.current.set(rUrl, img); resolve(); };
-                    img.onerror = resolve; img.src = rUrl;
-                })));
-
-                // SONS
-                const sndUrls = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url))))].filter(Boolean);
-                await Promise.all(sndUrls.map(async url => {
-                    const rUrl = resolveUrl(url);
-                    const buf = await SoundExpert.decodeAudio(rUrl, audioCtxRef.current);
-                    if (buf) audioBuffersRef.current.set(rUrl, buf);
-                }));
-
-                const qCount = finalGameData.levels?.[0]?.questions?.length || 0;
-                setQuestionStates(new Array(qCount).fill(0));
-                
-                setLoading(false);
-                if (isStudioTest) setEngineStarted(true);
-            } catch (e) { console.error("Unified Engine Load Error", e); }
-        };
-        load();
-        return () => { isRunningRef.current = false; if(frameIdRef.current) cancelAnimationFrame(frameIdRef.current); };
-    }, [gameData]);
-
-    // 2. MOTEUR GRAPHIQUE
-    useEffect(() => {
-        if (!engineStarted || !canvasRef.current || loading) return;
-
-        const MiniGameBase = createGameBase({
-            audioBuffers: audioBuffersRef.current, audioCtx: audioCtxRef.current,
-            projectRef, sceneIdx: 0, imageAssets: imageAssetsRef.current,
-            resolveUrl, canvas: canvasRef.current, ctx: canvasRef.current.getContext('2d'),
-            playParallelSound: playParallelSoundImpl,
-            callbacks: { 
-                onPlayerHit: () => {
-                    if (keysPressed.current['KeyF']) return;
-                    setLives(l => {
-                        const next = Math.max(0, l - 1);
-                        if (next === 0) triggerGameOver();
-                        return next;
-                    });
-                }
-            }
-        });
-
-        try {
-            const factory = new Function('MiniGameBase', `${projectRef.current.generatedCode}\nreturn MiniGame;`);
-            const GameClass = factory(MiniGameBase);
-            const instance = new GameClass(canvasRef.current, {}, { 
-                onPlayerHit: () => {
-                    if (keysPressed.current['KeyF']) return;
-                    setLives(l => Math.max(0, l - 1));
-                }
-            });
-            gameInstanceRef.current = instance;
-            if (instance.start) instance.start();
-
-            const tick = () => {
-                if (!isRunningRef.current || !gameInstanceRef.current) return;
-                try {
-                    gameInstanceRef.current.isBossPhase = (questionStates[currentQIdx] >= 2);
-                    gameInstanceRef.current.keys = keysPressed.current;
-                    if (instance.update) instance.update();
-                    if (instance._render) instance._render();
-                    if (instance.draw) instance.draw();
-                } catch (e) { }
-                frameIdRef.current = requestAnimationFrame(tick);
-            };
-            tick();
-        } catch (err) { console.error("Engine Crash", err); }
-        return () => { isRunningRef.current = false; if (frameIdRef.current) cancelAnimationFrame(frameIdRef.current); };
-    }, [engineStarted, loading, currentQIdx]);
-
-    const handleAnswer = (idx) => {
-        if (!questions[currentQIdx]) return;
-        const isCorrect = questions[currentQIdx].a === idx;
-        setFeedback(isCorrect ? 'GOOD' : 'BAD');
-        if (gameInstanceRef.current?.onResult) gameInstanceRef.current.onResult(isCorrect);
-
-        const newStates = [...questionStates];
-        if (isCorrect) newStates[currentQIdx] = Math.min(3, newStates[currentQIdx] + 1);
-        else {
-            newStates[currentQIdx] = Math.max(0, newStates[currentQIdx] - 1);
-            setLives(l => keysPressed.current['KeyF'] ? l : Math.max(0, l - 1));
-        }
-        setQuestionStates(newStates);
-
-        setTimeout(() => {
-            setFeedback(null);
-            if (isCorrect && newStates[currentQIdx] === 3) {
-                const nextQ = newStates.findIndex(s => s < 3);
-                if (nextQ !== -1) setCurrentQIdx(nextQ);
-                else triggerWin();
-            }
-        }, 1000);
-    };
-
-    const handleBarCheat = (idx) => {
-        if (!keysPressed.current['KeyF']) return;
-        const newStates = [...questionStates];
-        newStates[idx] = 3;
-        setQuestionStates(newStates);
-    };
-
-    const triggerWin = () => { triggerGlobalEvent("LEVEL_WIN"); alert("NIVEAU RÉUSSI !"); onExit(); };
-    const triggerGameOver = () => { triggerGlobalEvent("DÉFAITE"); alert("GAME OVER"); onExit(); };
-
-    if (loading) return <div className="game-player-fullscreen bg-slate-900 flex items-center justify-center text-white font-black">CHARGEMENT DES DONNÉES...</div>;
-
+export default function GamePlayer({ user, gameData, onExit }) {
     return (
-        <div className="game-player-fullscreen bg-slate-950 flex flex-col items-center justify-center">
-            {showLevelIntro ? (
-                <div className="flex flex-col items-center animate-in zoom-in max-w-4xl px-6">
-                    <h1 className="text-4xl font-black text-white uppercase mb-8 text-center">{projectRef.current.title}</h1>
-                    <button onClick={() => { setShowLevelIntro(false); setEngineStarted(true); triggerGlobalEvent("UPLEVEL"); }} className="px-16 py-6 bg-white text-indigo-600 font-black text-3xl rounded-full shadow-2xl hover:scale-110 transition-all uppercase">
-                        🚀 GO !
-                    </button>
-                </div>
-            ) : (
-                <>
-                    <div className="absolute top-6 w-full flex justify-between items-start px-10 pointer-events-none z-30">
-                        <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl flex gap-1 cursor-pointer pointer-events-auto" onClick={() => keysPressed.current['KeyF'] && setLives(4)}>
-                            {"❤️".repeat(lives)}{"🖤".repeat(Math.max(0, 4 - lives))}
-                        </div>
-                        <div className="flex-1 flex flex-col items-center px-4 gap-2">
-                            <div className="bg-indigo-600 text-white px-4 py-1 rounded-full text-xs font-black uppercase border border-indigo-400">
-                                {projectRef.current.title}
-                            </div>
-                            {questions[currentQIdx] && (
-                                <div className="bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 border-slate-600 shadow-2xl text-xl pointer-events-auto">
-                                    {feedback === 'GOOD' ? "✅ BIEN JOUÉ !" : feedback === 'BAD' ? "❌ MAUVAISE RÉPONSE" : questions[currentQIdx].q}
-                                </div>
-                            )}
-                        </div>
-                        <div className="flex gap-2 items-center pointer-events-auto">
-                            {questionStates.map((mastery, idx) => (
-                                <div key={idx} onClick={() => handleBarCheat(idx)} className={`w-4 h-12 rounded-md border border-slate-600 relative overflow-hidden cursor-pointer ${currentQIdx === idx ? 'ring-2 ring-indigo-400' : 'opacity-60'}`}>
-                                    <div className={`absolute bottom-0 left-0 right-0 transition-all duration-500 ${mastery === 3 ? 'bg-green-500' : 'bg-yellow-500'}`} style={{ height: `${(mastery / 3) * 100}%` }} />
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                    
-                    <canvas ref={canvasRef} width={800} height={450} className="rounded-xl shadow-2xl bg-black border-4 border-slate-800" />
-
-                    {!loading && questions[currentQIdx] && (
-                        <div className="absolute bottom-10 w-full flex justify-center px-10 pointer-events-auto z-30">
-                            <div className="grid grid-cols-4 gap-4 w-full max-w-5xl">
-                                {questions[currentQIdx].options.map((o, i) => (
-                                    <button key={i} onClick={() => handleAnswer(i)} className="bg-indigo-600 text-white py-6 rounded-2xl font-black uppercase text-lg shadow-xl hover:bg-indigo-50 hover:scale-105 border-b-8 border-indigo-800 active:border-b-0 active:translate-y-2">
-                                        {o}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                </>
-            )}
-        </div>
+        <UnifiedMoteur 
+            gameData={gameData} 
+            onExit={onExit} 
+            isStudioTest={false} 
+            user={user}
+        />
     );
 }
 
