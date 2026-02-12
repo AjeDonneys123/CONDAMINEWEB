@@ -8877,3 +8877,6 @@ Fix majeur : Les cœurs du héros ne descendaient pas. Correction dans `gameCore
 
 ...
 Ajout Cheat Codes V2.84 : S+T maintenus pour tricher sur vies/niveaux. Ajout écran de victoire final.
+
+...
+Fix `SoundExpert.js` : Réintégration des méthodes DSP (changeSpeed, applyGain, robotize...) qui avaient disparu, causant le crash de l'éditeur audio.
