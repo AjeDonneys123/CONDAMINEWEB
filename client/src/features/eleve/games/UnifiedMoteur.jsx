@@ -1,16 +1,15 @@
-// @signatures: UnifiedMoteur, handleAnswerClick, triggerWinSequence, startCurrentLevel, getEmbedUrl, checkAnswerPermissive, triggerGlobalEvent, playParallelSoundImpl, normalize
+// @signatures: UnifiedMoteur, handleAnswerClick, triggerWinSequence, startCurrentLevel, getEmbedUrl, checkAnswerPermissive, triggerGlobalEvent, playParallelSoundImpl, normalize, getYoutubeEmbed
 import React, { useState, useRef, useEffect } from 'react';
 import SoundExpert from '../../../services/SoundExpert';
 import { api } from '../../../services/api';
 import { createGameBase } from '../../../services/gameCore';
 
 /**
- * 🧠 LE MAITRE UNIFIÉ V.2.88 (AUDIO EVENT SYNC FIX)
- * VERSION : V.2.88
- * CORRECTIFS :
- * - DÉPART : Se lance via useEffect quand la bannière jaune apparaît (plus fiable).
- * - UPLEVEL : Se lance immédiatement à la validation de la dernière barre.
- * - ORTHOGRAPHE : Normalisation des noms de sons (enlève les accents) pour éviter les bugs "DÉPART" vs "DEPART".
+ * 🧠 LE MAITRE UNIFIÉ V.2.89 (YOUTUBE EMBED FIX)
+ * VERSION : V.2.89
+ * CORRECTIF :
+ * - Ajout d'un parseur Regex pour les URLs YouTube (supporte youtu.be, watch?v=, embed/, etc.).
+ * - Évite les erreurs "ID de lecture" dans l'iframe.
  */
 
 const ZOMBIE_GAME_CODE = `
@@ -141,11 +140,24 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
     const projectRef = useRef(gameData);
     const bossModeRef = useRef(false);
 
+    // --- HELPER YOUTUBE ROBUSTE ---
+    const getYoutubeEmbed = (url) => {
+        if (!url) return "";
+        // Regex magique qui gère tous les formats (watch?v=, youtu.be, embed/)
+        const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+        const match = url.match(regExp);
+        const id = (match && match[2].length === 11) ? match[2] : null;
+        
+        if (id) {
+            return `https://www.youtube.com/embed/${id}?autoplay=1&rel=0&modestbranding=1`;
+        }
+        return url; // Retourne l'original si pas matché (fallback)
+    };
+
     // --- EFFET DE SON : DÉPART DU NIVEAU ---
-    // Se déclenche UNIQUEMENT quand la bannière jaune apparaît
     useEffect(() => {
         if (showLevelBanner) {
-            triggerGlobalEvent("DEPART"); // Sans accent, normalisé par la fonction
+            triggerGlobalEvent("DEPART"); 
         }
     }, [showLevelBanner]);
 
@@ -233,25 +245,17 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
         }
     };
 
-    /**
-     * 🔊 DÉCLENCHEUR SONS SYSTÈME (ROBUSTE)
-     * Utilise une normalisation stricte pour trouver le son peu importe l'accent.
-     */
     const triggerGlobalEvent = (eventName) => {
         const scene = projectRef.current.scenes?.[0];
         if (!scene || !scene.globalSounds) return;
         
         const cleanTarget = eventName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
-        
         const event = scene.globalSounds.find(g => 
             g.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim() === cleanTarget
         );
         
         if (event && event.sounds) {
-            console.log(`🔊 SON SYSTÈME DÉTECTÉ: ${eventName} -> ${event.name}`);
             event.sounds.forEach(snd => playParallelSoundImpl(snd.url, true));
-        } else {
-            console.warn(`⚠️ SON SYSTÈME INTROUVABLE : ${eventName}`);
         }
     };
 
@@ -292,10 +296,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
                     setCurrentQIndex(others.length > 0 ? others[Math.floor(Math.random() * others.length)] : available[0]);
                 }
             } else {
-                // --- NIVEAU TERMINÉ (PLUS DE QUESTIONS DISPOS) ---
-                // On déclenche le son "UPLEVEL" IMMÉDIATEMENT à la validation de la dernière barre
                 triggerGlobalEvent("UPLEVEL");
-                // On lance la séquence visuelle
                 triggerWinSequence(); 
             }
         }, 1000);
@@ -348,7 +349,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
         setEngineStarted(true); 
         setShowLevelIntro(false); 
         
-        // La bannière déclenchera le son via le useEffect ligne 140
+        // La bannière est déclenchée, ce qui lancera le son via useEffect
         setShowLevelBanner(true); 
         setTimeout(() => setShowLevelBanner(false), 1500); 
     };
@@ -373,7 +374,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
                             const n = Math.max(0, l - 1); 
                             if (n === 0) {
                                 setShowGameOver(true); 
-                                triggerGlobalEvent("DEFAITE"); // Normalisation gère "DÉFAITE"
+                                triggerGlobalEvent("DEFAITE");
                             }
                             return n; 
                         }); 
@@ -403,7 +404,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
 
     return (
         <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center overflow-hidden font-sans">
-            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">VERSION V.2.88</div>
+            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">VERSION V.2.89 (YOUTUBE FIX)</div>
             <button onClick={onExit} className="absolute top-6 right-6 w-14 h-14 bg-white/10 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-2xl font-black z-[4000] border-2 border-white/20">✕</button>
 
             {showLevelBanner && (
@@ -422,7 +423,8 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
                 <div className="fixed inset-0 z-[6000] bg-black flex items-center justify-center p-0 animate-in fade-in duration-300" onClick={() => setZoomMedia(null)}>
                     <button className="absolute top-8 right-8 w-16 h-16 bg-white hover:bg-red-600 hover:text-white text-black rounded-full flex items-center justify-center text-3xl font-black shadow-2xl transition-all z-[6001] hover:scale-110 active:scale-95">✕</button>
                     <div className="w-full h-full flex items-center justify-center p-4">
-                        {zoomMedia === 'sheet' ? <img src={resolveUrl(currentLevelData.intro?.sheetUrl)} className="h-[90vh] object-contain" alt="Zoom" /> : <div className="h-[90vh] aspect-video"><iframe className="w-full h-full" src={currentLevelData.intro?.videoUrl?.replace("watch?v=", "embed/") + "?autoplay=1"} frameBorder="0" allow="autoplay; encrypted-media" allowFullScreen></iframe></div>}
+                        {/* UTILISATION DU HELPER YOUTUBE FIX */}
+                        {zoomMedia === 'sheet' ? <img src={resolveUrl(currentLevelData.intro?.sheetUrl)} className="h-[90vh] object-contain" alt="Zoom" /> : <div className="h-[90vh] aspect-video"><iframe className="w-full h-full" src={getYoutubeEmbed(currentLevelData.intro?.videoUrl)} frameBorder="0" allow="autoplay; encrypted-media" allowFullScreen></iframe></div>}
                     </div>
                 </div>
             )}
