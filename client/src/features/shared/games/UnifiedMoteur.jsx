@@ -1,22 +1,19 @@
-// @signatures: UnifiedMoteur, handleBridgeEvent, handleAnswerClick, handleRoundValidation, pickNextQuestion, handleHeartClick, handleBarClick
+// @signatures: UnifiedMoteur, handleAnswerClick, triggerWinSequence, startCurrentLevel, handleRoundValidation, pickNextQuestion
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import SoundExpert from '../../../services/SoundExpert';
 import { api } from '../../../services/api';
 import { createGameBase } from '../../../services/gameCore';
 
 /**
- * 🧠 UNIFIED MOTEUR V4.9 (REAL-TIME REF)
- * CORRECTIF : Correction du blocage après la 1ère question.
- * La lecture de l'état (stateRef) se fait désormais À L'INTÉRIEUR du setTimeout pour garantir la fraîcheur des données.
+ * 🧠 UNIFIED MOTEUR V5.0 (SYNC PERFECT)
+ * CORRECTIF CRITIQUE : Suppression du délai de mise à jour d'état.
+ * Les données "futures" (Next State) sont passées directement à la logique de jeu.
  */
 export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }) {
-    // --- ÉTATS ---
+    // --- ÉTATS VISUELS ---
     const [lives, setLives] = useState(4);
     const [questionStates, setQuestionStates] = useState([]); 
     const [currentQIndex, setCurrentQIndex] = useState(0);
-    const [allLevels, setAllLevels] = useState([]);
-    const [levelQuestions, setLevelQuestions] = useState([]);
-    const [currentLevelIdx, setCurrentLevelIdx] = useState(0);
     
     // --- UI STATES ---
     const [showLevelIntro, setShowLevelIntro] = useState(true);
@@ -28,14 +25,17 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
     const [activeBossVisual, setActiveBossVisual] = useState(false);
     const [isShake, setIsShake] = useState(false);
     
-    // --- REFS ---
-    const canvasRef = useRef(null);
-    const [engineStarted, setEngineStarted] = useState(false);
+    // --- DONNÉES TECHNIQUES ---
+    const [allLevels, setAllLevels] = useState([]);
+    const [levelQuestions, setLevelQuestions] = useState([]);
+    const [currentLevelIdx, setCurrentLevelIdx] = useState(0);
     const [isReady, setIsReady] = useState(false);
     const [loadProgress, setLoadProgress] = useState("");
     const [feedback, setFeedback] = useState(null);
-    const [userInput, setUserInput] = useState("");
+    const [engineStarted, setEngineStarted] = useState(false);
 
+    // --- REFS ---
+    const canvasRef = useRef(null);
     const audioCtxRef = useRef(null);
     const audioBuffersRef = useRef(new Map());
     const imageAssetsRef = useRef(new Map());
@@ -47,110 +47,135 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
     const pendingResultRef = useRef(null);
     const [assetsSignature, setAssetsSignature] = useState("");
 
-    // 🚀 SUPER REF : Contient toujours l'état le plus récent
+    // 🚀 STATE REF (Pour accès instantané dans les callbacks)
     const stateRef = useRef({
         currentQIndex,
         questionStates,
         lives,
         allLevels,
-        currentLevelIdx
+        currentLevelIdx,
+        levelQuestions
     });
 
-    // Maintien de la Super Ref à jour
     useEffect(() => {
-        stateRef.current = { currentQIndex, questionStates, lives, allLevels, currentLevelIdx };
-    }, [currentQIndex, questionStates, lives, allLevels, currentLevelIdx]);
+        stateRef.current = { currentQIndex, questionStates, lives, allLevels, currentLevelIdx, levelQuestions };
+    }, [currentQIndex, questionStates, lives, allLevels, currentLevelIdx, levelQuestions]);
 
     // --- 1. BRIDGE (L'ASCENSEUR) ---
     const bridgeProxy = useRef((type, value) => {
+        const currentState = stateRef.current;
+
         switch(type) {
             case 'DAMAGE':
                 setIsShake(true); setTimeout(() => setIsShake(false), 500);
-                setLives(l => {
-                    const n = Math.max(0, l - (value || 1));
-                    if (n === 0) { setShowGameOver(true); if (gameInstanceRef.current) gameInstanceRef.current.isStopped = true; }
-                    return n;
+                setLives(prev => {
+                    const newVal = Math.max(0, prev - (value || 1));
+                    if (newVal === 0) {
+                        setShowGameOver(true);
+                        if (gameInstanceRef.current) gameInstanceRef.current.isStopped = true;
+                    }
+                    return newVal;
                 });
                 break;
-            case 'HEAL': setLives(l => Math.min(4, l + (value || 1))); break;
-            case 'WIN_ROUND': handleRoundValidation(true); break;
-            case 'FAIL_ROUND': handleRoundValidation(false); break;
+
+            case 'HEAL': 
+                setLives(prev => Math.min(4, prev + (value || 1))); 
+                break;
+
+            case 'WIN_ROUND': 
+                handleRoundValidation(true, currentState); 
+                break;
+
+            case 'FAIL_ROUND': 
+                handleRoundValidation(false, currentState); 
+                break;
+
             case 'SET_BOSS': 
                 setActiveBossVisual(!!value); 
                 bossModeRef.current = !!value;
                 if(gameInstanceRef.current) gameInstanceRef.current.isBossPhase = !!value;
                 break;
-            case 'SHAKE': setIsShake(true); setTimeout(() => setIsShake(false), 500); break;
-            case 'VICTORY': triggerWinSequence(); break;
-            case 'GAME_OVER': setShowGameOver(true); break;
+
+            case 'SHAKE': 
+                setIsShake(true); setTimeout(() => setIsShake(false), 500); 
+                break;
+
+            case 'VICTORY': 
+                triggerWinSequence(currentState); 
+                break;
+
+            case 'GAME_OVER': 
+                setShowGameOver(true); 
+                break;
+            
+            case 'NEXT_Q':
+                forceNextQuestion(currentState);
+                break;
         }
     });
 
-    // --- 2. LOGIQUE METIER CORRIGÉE ---
+    // --- 2. LOGIQUE METIER (SYNC V5.0) ---
 
-    const handleRoundValidation = (success) => {
+    const handleRoundValidation = (success, state) => {
         const isCorrect = pendingResultRef.current !== null ? pendingResultRef.current : success;
         
-        // 1. Mise à jour immédiate des barres (UI)
-        setQuestionStates(prev => {
-            const next = [...prev];
-            const idx = stateRef.current.currentQIndex; // On prend l'index depuis la Ref
-            
-            if (isCorrect) next[idx] = Math.min(3, next[idx] + 1);
-            else next[idx] = Math.max(0, next[idx] - 1);
-            
-            // Si raté, on gère la vie ici aussi pour être sûr
-            if (!isCorrect) {
-                setLives(l => {
-                    const n = Math.max(0, l - 1);
-                    if(n===0) { setShowGameOver(true); if(gameInstanceRef.current) gameInstanceRef.current.isStopped = true; }
-                    return n;
-                });
-            }
+        // 1. Calcul du FUTUR état (Sans attendre React)
+        const nextStates = [...state.questionStates];
+        const idx = state.currentQIndex;
+        
+        if (isCorrect) nextStates[idx] = Math.min(3, nextStates[idx] + 1);
+        else nextStates[idx] = Math.max(0, nextStates[idx] - 1);
 
-            return next;
-        });
+        // 2. Mise à jour UI React
+        setQuestionStates(nextStates);
+        
+        if (!isCorrect) {
+            setLives(prev => {
+                const n = Math.max(0, prev - 1);
+                if(n===0) { setShowGameOver(true); if(gameInstanceRef.current) gameInstanceRef.current.isStopped = true; }
+                return n;
+            });
+        }
 
-        // 2. Décision SUIVANTE après délai (CORRECTIF V4.9)
+        // 3. Décision Navigation (Avec les données FUTURES 'nextStates')
         setTimeout(() => {
             setFeedback(null);
-            setUserInput("");
             pendingResultRef.current = null;
-
-            // ON LIT L'ÉTAT "FRAIS" ICI (C'est ça qui manquait !)
-            const freshState = stateRef.current;
-            const freshStates = freshState.questionStates;
-            const currentIdx = freshState.currentQIndex;
-
-            // Analyse des disponibilités
-            const available = freshStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
-            
-            if (available.length > 0) {
-                // Règle Boss : Si on est sur un boss (2/3), on reste dessus
-                if (freshStates[currentIdx] === 2) {
-                    bridgeProxy.current('SET_BOSS', true);
-                } else {
-                    // Sinon on change de question
-                    const others = available.filter(idx => idx !== currentIdx);
-                    if (others.length > 0) {
-                        const nextIdx = others[Math.floor(Math.random() * others.length)];
-                        setCurrentQIndex(nextIdx);
-                        bridgeProxy.current('SET_BOSS', false);
-                    }
-                }
-            } else {
-                // Niveau terminé
-                triggerWinSequence();
-            }
-        }, 800); // Délai un peu plus long pour laisser lire "BIEN JOUÉ"
+            pickNextQuestion(nextStates, idx);
+        }, 800);
     };
 
-    const triggerWinSequence = () => {
-        const state = stateRef.current; // État frais
+    const pickNextQuestion = (futureStates, currentIdx) => {
+        const available = futureStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
+        
+        if (available.length > 0) {
+            // Règle Boss : Si on est sur un boss (2/3), on reste dessus
+            if (futureStates[currentIdx] === 2) {
+                bridgeProxy.current('SET_BOSS', true);
+            } else {
+                // Sinon on change
+                const others = available.filter(idx => idx !== currentIdx);
+                if (others.length > 0) {
+                    const nextIdx = others[Math.floor(Math.random() * others.length)];
+                    setCurrentQIndex(nextIdx);
+                    bridgeProxy.current('SET_BOSS', false);
+                }
+            }
+        } else {
+            // Niveau fini
+            triggerWinSequence(stateRef.current);
+        }
+    };
+
+    const forceNextQuestion = (state) => {
+        pickNextQuestion(state.questionStates, state.currentQIndex);
+    };
+
+    const triggerWinSequence = (state) => {
         setShowStageClear(true);
         setTimeout(() => {
             setShowStageClear(false);
-            if (state.allLevels[state.currentLevelIdx + 1]) {
+            if (state.allLevels && state.allLevels[state.currentLevelIdx + 1]) {
                 setCurrentLevelIdx(p => p + 1);
                 setEngineStarted(false);
                 setShowLevelIntro(true);
@@ -160,7 +185,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
         }, 3000);
     };
 
-    // --- 3. CHARGEMENT ET SYNC ---
+    // --- 3. CHARGEMENT DONNÉES ---
     useEffect(() => { 
         if (!gameData) return;
         projectRef.current = gameData; 
@@ -186,7 +211,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
                 setLevelQuestions(qs);
                 setQuestionStates(new Array(qs.length).fill(0));
                 setCurrentQIndex(0);
-                setShowLevelIntro(true); 
+                setShowLevelIntro(true);
             }
         };
         initLevel();
@@ -280,7 +305,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
         return () => { if(frameIdRef.current) cancelAnimationFrame(frameIdRef.current); };
     }, [engineStarted]);
 
-    // Helpers Clavier (Cheats)
+    // Helpers UI & Cheats
     useEffect(() => {
         const hDown = (e) => keysPressed.current[e.code] = true;
         const hUp = (e) => keysPressed.current[e.code] = false;
@@ -305,7 +330,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
     return (
         <div className={`fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center overflow-hidden font-sans ${isShake ? 'animate-shake' : ''}`}>
             {/* DEBUGGER */}
-            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">MOTEUR V4.9 (REAL-TIME REF)</div>
+            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">MOTEUR V5.0 (SYNC PERFECT)</div>
             <button onClick={onExit} className="absolute top-6 right-6 w-14 h-14 bg-white/10 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-2xl font-black z-[4000] border-2 border-white/20">✕</button>
 
             {/* OVERLAYS JEU */}
@@ -377,6 +402,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
                 </>
             )}
 
+            {/* FIN */}
             {showGameComplete && (
                 <div className="absolute inset-0 z-[7000] bg-gradient-to-br from-yellow-500 to-purple-600 flex flex-col items-center justify-center animate-in zoom-in">
                     <h1 className="text-9xl mb-4">🏆</h1>
