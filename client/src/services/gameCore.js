@@ -1,8 +1,8 @@
 /**
- * 🎮 CORE ENGINE V11 (BULLETPROOF)
+ * 🎮 CORE ENGINE V11.1 (AUDIO ACTION FIX)
  * Rôle : Classe Mère du moteur.
- * CORRECTIF : Initialisation forcée de `this.callbacks` et `this.game`.
- * Empêche le crash "undefined reading onPlayerHit".
+ * CORRECTIF : Réintégration des sons d'action (TIRER, TOUCHE, etc.).
+ * Quand `hero.play('TIRER')` est appelé, le moteur déclenche maintenant le son associé.
  */
 export const createGameBase = (params) => {
     const { imageAssets, resolveUrl, canvas, ctx, playParallelSound, bridge } = params;
@@ -24,12 +24,18 @@ export const createGameBase = (params) => {
             this.isAnimFinished = false; 
             this.loop = true;
         }
+        
         play(name, loop = true) { 
             if(String(this.currentAction).toUpperCase() !== String(name).toUpperCase()) { 
                 this.currentAction = name; 
                 this.frameIdx = 0; 
                 this.loop = loop; 
                 this.isAnimFinished = false;
+                
+                // 🔊 DÉCLENCHEMENT DU SON (Restauré ici)
+                if (this.engine._triggerActionSounds) {
+                    this.engine._triggerActionSounds(this.id, name);
+                }
             } 
         }
     }
@@ -42,7 +48,36 @@ export const createGameBase = (params) => {
             this.assets = a || {};
             this.isBossPhase = false;
             
-            // --- 1. SÉCURITÉ BRIDGE (Nouveau code) ---
+            // --- SYSTÈME DE SONS INTERNE ---
+            // Cette méthode cherche les sons liés à l'action dans le JSON du projet
+            // et demande à React de les jouer.
+            this._triggerActionSounds = (actorId, actionName) => {
+                try {
+                    const project = params.projectRef?.current || {};
+                    const scenes = project.scenes || [];
+                    const s = scenes[params.sceneIdx];
+                    
+                    if (!s || !s.actors) return;
+
+                    const actor = s.actors.find(a => a.id === actorId);
+                    if (!actor) return;
+
+                    const action = actor.actions.find(act => act.name.toUpperCase() === actionName.toUpperCase());
+                    
+                    if (action && action.sounds && action.sounds.length > 0) {
+                        action.sounds.forEach(snd => {
+                            if (playParallelSound && snd.url) {
+                                // console.log(`🔊 Playing sound for ${actor.name} -> ${action.name}`);
+                                playParallelSound(snd.url);
+                            }
+                        });
+                    }
+                } catch(e) {
+                    console.error("Audio Trigger Error:", e);
+                }
+            };
+
+            // --- SÉCURITÉ BRIDGE ---
             const safeTrigger = (type, val) => {
                 if (bridge && bridge.trigger) bridge.trigger(type, val);
             };
@@ -60,22 +95,13 @@ export const createGameBase = (params) => {
                 playAudio: (n) => safeTrigger('AUDIO', n)
             };
 
-            // --- 2. SÉCURITÉ CALLBACKS (Vieux code) ---
-            // On mappe les anciens appels vers le nouveau bridge pour éviter le crash
             this.callbacks = {
-                onPlayerHit: () => {
-                    // console.warn("Legacy call: onPlayerHit -> game.damage()");
-                    this.game.damage(1);
-                },
+                onPlayerHit: () => this.game.damage(1),
                 onRoundEnd: (success) => {
-                    if (success) {
-                        this.game.winRound();
-                        this.game.nextQuestion();
-                    } else {
-                        this.game.failRound();
-                    }
+                    if (success) { this.game.winRound(); this.game.nextQuestion(); } 
+                    else { this.game.failRound(); }
                 },
-                ...(cb || {}) // Fusion
+                ...(cb || {})
             };
 
             const project = params.projectRef?.current || {};
