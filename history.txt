@@ -8908,3 +8908,7 @@ Build #171 : PATCH REFERENCE ERROR (Ajout manquant crashError state)
 Build #172 : ROLLBACK V3.04 (Retour version stable)
 Build #173 : ARCHITECTURE EVENEMENTIELLE (Tentative échouée)
 Build #174 : STABILITÉ TOTALE (Event Bus Sécurisé + Error Catching)
+
+Build #172 : ROLLBACK V3.04 (Retour version stable)
+Build #173 : ARCHITECTURE EVENEMENTIELLE (Tentative échouée)
+Build #174 : EVENT BUS SIMPLE (Simple substitution d'appel)
