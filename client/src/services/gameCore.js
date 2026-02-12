@@ -1,14 +1,10 @@
 /**
- * 🎮 CORE ENGINE V10 (HYBRID & ROBUST)
- * CORRECTIF CRITIQUE : Rétro-compatibilité totale.
- * Si un vieux script appelle `this.callbacks.onPlayerHit`, le moteur le traduit automatiquement en `this.game.damage(1)`.
- * Plus de crash sur les anciens scripts.
+ * 🎮 CORE ENGINE V10 (HYBRID & SAFE)
+ * Rôle : Classe Mère du moteur de jeu.
+ * CORRECTIF : Si le bridge est absent (mode dev ou bug), les appels sont ignorés sans crash.
  */
 export const createGameBase = (params) => {
-    const { 
-        imageAssets, resolveUrl, canvas, ctx, 
-        playParallelSound, bridge 
-    } = params;
+    const { imageAssets, resolveUrl, canvas, ctx, playParallelSound, bridge } = params;
 
     class ActorProxy {
         constructor(data, engine) { 
@@ -27,7 +23,6 @@ export const createGameBase = (params) => {
             this.isAnimFinished = false; 
             this.loop = true;
         }
-        
         play(name, loop = true) { 
             if(String(this.currentAction).toUpperCase() !== String(name).toUpperCase()) { 
                 this.currentAction = name; 
@@ -45,14 +40,13 @@ export const createGameBase = (params) => {
             this.keys = {}; 
             this.assets = a || {};
             this.isBossPhase = false;
-            this.isStopped = false; // Sécurité boucle
             
-            // --- SYSTÈME DE SECURITÉ BRIDGE ---
+            // 🛡️ SÉCURITÉ BRIDGE ABSOLUE
             const safeTrigger = (type, val) => {
                 if (bridge && bridge.trigger) bridge.trigger(type, val);
+                // else console.warn(`[Moteur] Commande ignorée : ${type}`);
             };
 
-            // 1. NOUVELLE API (Bridge)
             this.game = {
                 damage: (v=1) => safeTrigger('DAMAGE', v),
                 heal: (v=1) => safeTrigger('HEAL', v),
@@ -66,26 +60,6 @@ export const createGameBase = (params) => {
                 playAudio: (n) => safeTrigger('AUDIO', n)
             };
 
-            // 2. ANCIENNE API (Rétro-compatibilité pour éviter le crash 'onPlayerHit')
-            // On mappe les anciens appels vers le nouveau bridge
-            this.callbacks = {
-                onPlayerHit: () => {
-                    console.warn("⚠️ [Legacy] 'onPlayerHit' détecté -> Redirection vers 'game.damage(1)'");
-                    this.game.damage(1);
-                },
-                onRoundEnd: (success) => {
-                    console.warn("⚠️ [Legacy] 'onRoundEnd' détecté -> Redirection Bridge");
-                    if (success) {
-                        this.game.winRound();
-                        this.game.nextQuestion();
-                    } else {
-                        this.game.failRound();
-                    }
-                },
-                ...(cb || {}) // Fusion avec d'éventuels callbacks externes
-            };
-
-            // Init Acteurs
             const project = params.projectRef?.current || {};
             const scenes = project.scenes || [];
             const s = scenes[params.sceneIdx] || { actors: [] };
