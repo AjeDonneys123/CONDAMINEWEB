@@ -1,16 +1,15 @@
 /**
- * 🎮 CORE ENGINE V8.6 (SHARED ENGINE - FIX HITBOX CALLBACKS)
- * Rôle : Moteur de rendu partagé Prof/Élève.
- * Gère le dessin des personnages, les animations et le Boss Mode.
- * UPDATE V8.6 : Fusion intelligente des callbacks pour garantir que onPlayerHit fonctionne.
+ * 🎮 CORE ENGINE V9.1 (BRIDGE FIXED)
+ * Rôle : Classe Mère du moteur de jeu.
+ * CORRECTIF : Garantit que `this.game` est toujours défini, même si le bridge est vide.
  */
 export const createGameBase = (params) => {
     const { 
-        audioBuffers, audioCtx, projectRef, sceneIdx, 
-        imageAssets, resolveUrl, canvas, ctx, isMutedRef, 
-        playParallelSound, callbacks 
+        imageAssets, resolveUrl, canvas, ctx, 
+        playParallelSound, bridge 
     } = params;
 
+    // Proxy pour manipuler les sprites facilement
     class ActorProxy {
         constructor(data, engine) { 
             this.id = data?.id || "unknown"; 
@@ -18,8 +17,7 @@ export const createGameBase = (params) => {
             this.engine = engine;
             this.x = data?.initialX ?? 50; 
             this.y = data?.initialY ?? 50;
-            this.baseScale = data?.scale ?? 1; 
-            this.scale = this.baseScale;
+            this.scale = data?.scale ?? 1;
             this.visible = true; 
             this.direction = data?.direction ?? 0; 
             this.rotationStyle = data?.rotationStyle || 'all';
@@ -29,13 +27,13 @@ export const createGameBase = (params) => {
             this.isAnimFinished = false; 
             this.loop = true;
         }
+        
         play(name, loop = true) { 
             if(String(this.currentAction).toUpperCase() !== String(name).toUpperCase()) { 
                 this.currentAction = name; 
                 this.frameIdx = 0; 
                 this.loop = loop; 
                 this.isAnimFinished = false;
-                if (this.engine._triggerActionSounds) this.engine._triggerActionSounds(this.id, name);
             } 
         }
     }
@@ -45,17 +43,31 @@ export const createGameBase = (params) => {
             this.canvas = c || canvas; 
             this.ctx = ctx; 
             this.keys = {}; 
-            
-            // FIX V8.6 : Fusionner les callbacks système avec ceux passés par l'instance
-            // Cela garantit que onPlayerHit (défini dans callbacks système) n'est pas écrasé par un {} vide
-            this.callbacks = { ...(callbacks || {}), ...(cb || {}) };
-            
             this.assets = a || {};
             this.isBossPhase = false;
+            
+            // 🛡️ SÉCURITÉ BRIDGE : On définit this.game même si bridge est null
+            const safeTrigger = (type, val) => {
+                if (bridge && bridge.trigger) bridge.trigger(type, val);
+                else console.warn(`[Moteur] Bridge déconnecté, event ignoré : ${type}`);
+            };
 
-            const project = projectRef?.current || {};
+            this.game = {
+                damage: (v=1) => safeTrigger('DAMAGE', v),
+                heal: (v=1) => safeTrigger('HEAL', v),
+                winRound: () => safeTrigger('WIN_ROUND'),
+                failRound: () => safeTrigger('FAIL_ROUND'),
+                nextQuestion: () => safeTrigger('NEXT_Q'),
+                setBoss: (v) => safeTrigger('SET_BOSS', v),
+                gameOver: () => safeTrigger('GAME_OVER'),
+                victory: () => safeTrigger('VICTORY'),
+                shake: () => safeTrigger('SHAKE'),
+                playAudio: (n) => safeTrigger('AUDIO', n)
+            };
+
+            const project = params.projectRef?.current || {};
             const scenes = project.scenes || [];
-            const s = scenes[sceneIdx] || { actors: [] };
+            const s = scenes[params.sceneIdx] || { actors: [] };
 
             if(s.actors && Array.isArray(s.actors)) {
                 s.actors.forEach(a => { 
@@ -64,28 +76,14 @@ export const createGameBase = (params) => {
             }
         }
 
-        _triggerActionSounds(actorId, actionName) {
-            try {
-                const s = projectRef.current.scenes[sceneIdx];
-                const actor = s?.actors?.find(a => a.id === actorId);
-                const action = actor?.actions?.find(act => act.name.toUpperCase() === actionName.toUpperCase());
-                if(action?.sounds) {
-                    action.sounds.forEach(snd => {
-                        if(playParallelSound) playParallelSound(snd.url);
-                    });
-                }
-            } catch(e) {}
-        }
-
         _render() {
             if (!this.ctx || !this.canvas) return;
-            const project = projectRef?.current || {};
-            const s = project.scenes?.[sceneIdx] || { actors: [], backdrops: [] };
+            const project = params.projectRef?.current || {};
+            const s = project.scenes?.[params.sceneIdx];
 
-            this.ctx.fillStyle = "#0f172a"; 
-            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
             
-            const bd = s.backdrops?.[s.currentBackdropIdx || 0];
+            const bd = s?.backdrops?.[s.currentBackdropIdx || 0];
             if(bd) { 
                 const img = imageAssets.get(resolveUrl(bd.url)); 
                 if(img) this.ctx.drawImage(img, 0, 0, this.canvas.width, this.canvas.height); 
@@ -116,14 +114,13 @@ export const createGameBase = (params) => {
                         if(spr) {
                             const xPx = (p.x/100)*this.canvas.width; 
                             const yPx = (p.y/100)*this.canvas.height; 
+                            let sz = 150 * (p.scale || 1);
                             
-                            let scaleMultiplier = 1;
                             if (this.isBossPhase && p.name === 'ZOMBIE') {
-                                scaleMultiplier = 1.6;
-                                this.ctx.filter = "drop-shadow(0 0 15px red) hue-rotate(-50deg)";
+                                sz *= 1.5;
+                                this.ctx.filter = "hue-rotate(-50deg) saturate(3)";
                             }
 
-                            let sz = 150 * (p.scale || 1) * scaleMultiplier;
                             this.ctx.save(); 
                             this.ctx.translate(xPx, yPx);
                             
