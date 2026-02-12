@@ -5,9 +5,9 @@ import { api } from '../../../services/api';
 import { createGameBase } from '../../../services/gameCore';
 
 /**
- * 🕹️ MOTEUR MAITRE UNIFIÉ V.2.45 (ANTI-CRASH MIROIR)
- * VERSION : V.2.45
- * FIX : Synchronisation forcée questions/états pour éviter le crash élève.
+ * 🕹️ MOTEUR MAITRE UNIFIÉ V.2.50 (FIX SYNTAXE & CRASH)
+ * VERSION : V.2.50
+ * FIX : Correction erreur syntaxe ligne 384 + Alignement stable Quiz.
  */
 
 const ZOMBIE_GAME_CODE = `
@@ -146,7 +146,7 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
     // 1. INITIALISATION ROBUSTE
     useEffect(() => {
         const loadLogic = async () => {
-            console.log("DEBUG [Master] V.2.45 - Syncing Data...");
+            console.log("DEBUG [Master] V.2.50 - Syncing Data...");
             let levelsData = gameData?.levels || [];
             
             if (isStudioTest || levelsData.length === 0) {
@@ -154,7 +154,6 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
                 levelsData = res?.levels?.length > 0 ? res.levels : [{ name: "Default", questions: [{ q: "Capitale ?", options: ["A", "B", "C", "D"], a: 1 }] }];
             }
             
-            // On s'assure que questions et states sont initialisés ENSEMBLE
             const firstLvl = levelsData[0];
             const qs = firstLvl?.questions || [];
             
@@ -235,16 +234,11 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
         snds.forEach(url => { SoundExpert.decodeAudio(resolveUrl(url), audioCtxRef.current).then(buf => { if (buf) audioBuffersRef.current.set(resolveUrl(url), buf); }); });
     }, [gameData]);
 
-    // 3. LOGIQUE RÉPONSES (BARRIÈRE ANTI-CRASH)
+    // 3. LOGIQUE RÉPONSES
     const handleAnswerClick = (val) => {
         if (feedback || currentQIndex === -1 || isLevelWonRef.current || showGameOver || showLevelIntro) return;
-        
-        // Sécurité : Vérifier si question et states sont alignés
         const currentQ = levelQuestions[currentQIndex];
-        if(!currentQ || !questionStates[currentQIndex] === undefined) {
-            console.warn("DEBUG [Master] Désynchro détectée, abandon du clic.");
-            return;
-        }
+        if(!currentQ) return;
         
         let isCorrect = (typeof val === 'number') ? currentQ.a === val : checkAnswerPermissive(val, currentQ.options[currentQ.a]);
         
@@ -277,7 +271,7 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
         setTimeout(() => setIsPowerOff(true), 1500);
         setTimeout(() => {
             if (allLevels[currentLevelIdx + 1]) initLevel(currentLevelIdx + 1, allLevels, false);
-            else { alert("🎉 JEU TERMINÉ !"); triggerGlobalEvent("GAME_WIN"); onStop(); }
+            else { alert("🎉 JEU TERMINÉ !"); triggerGlobalEvent("GAME_WIN"); onExit(); }
         }, 4000);
     };
 
@@ -323,7 +317,7 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
 
     return (
         <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center overflow-hidden font-sans">
-            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">VERSION V.2.45</div>
+            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">VERSION V.2.50</div>
             <button onClick={onExit} className="absolute top-6 right-6 w-14 h-14 bg-white/10 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-2xl font-black transition-all z-[4000] border-2 border-white/20">✕</button>
 
             {showLevelBanner && (
@@ -336,7 +330,7 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
                 <div className="fixed inset-0 z-[6000] bg-black flex items-center justify-center p-0 animate-in fade-in duration-300" onClick={() => setZoomMedia(null)}>
                     <button className="absolute top-8 right-8 w-16 h-16 bg-white hover:bg-red-600 hover:text-white text-black rounded-full flex items-center justify-center text-3xl font-black shadow-2xl transition-all z-[6001]">✕</button>
                     <div className="w-full h-full flex items-center justify-center p-4">
-                        {zoomMedia === 'sheet' ? <img src={resolveUrl(currentLevelData.intro?.sheetUrl)} className="h-[90vh] w-auto max-w-[95vw] object-contain rounded-lg shadow-2xl animate-in zoom-in" /> : <div className="h-[90vh] aspect-video max-w-[95vw] bg-black rounded-2xl overflow-hidden border-4 border-white/10 shadow-2xl animate-in zoom-in"><iframe className="w-full h-full" src={getEmbedUrl(currentLevelData.intro?.videoUrl)} frameBorder="0" allow="autoplay; encrypted-media" allowFullScreen></iframe></div>}
+                        {zoomMedia === 'sheet' ? <img src={resolveUrl(currentLevelData.intro?.sheetUrl)} className="h-[90vh] w-auto max-w-[95vw] object-contain rounded-lg shadow-2xl animate-in zoom-in" alt="Zoom Fiche" /> : <div className="h-[90vh] aspect-video max-w-[95vw] bg-black rounded-2xl overflow-hidden border-4 border-white/10 shadow-2xl animate-in zoom-in"><iframe className="w-full h-full" src={getEmbedUrl(currentLevelData.intro?.videoUrl)} frameBorder="0" allow="autoplay; encrypted-media" allowFullScreen></iframe></div>}
                     </div>
                 </div>
             )}
@@ -381,7 +375,7 @@ export default function GamePlayer({ user, gameData, onExit, isStudioTest = fals
                                 <h1 className="text-5xl text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-500 font-black uppercase tracking-tighter drop-shadow-2xl mb-6">{currentLevelIdx + 1} {currentLevelData.name}</h1>
                                 <div className="flex gap-10 mb-12 w-full max-w-4xl justify-center h-[280px]">
                                     <div onClick={() => currentLevelData.intro?.sheetUrl && setZoomMedia('sheet')} className="h-full aspect-[3/4] bg-slate-800 rounded-3xl border-4 border-slate-700 overflow-hidden flex items-center justify-center shadow-2xl cursor-pointer hover:border-indigo-500 hover:scale-105 transition-all">
-                                        {currentLevelData.intro?.sheetUrl ? <img src(resolveUrl(currentLevelData.intro.sheetUrl))} className="w-full h-full object-contain" /> : "Fiche"}
+                                        {currentLevelData.intro?.sheetUrl ? <img src={resolveUrl(currentLevelData.intro.sheetUrl)} className="w-full h-full object-contain" alt="Fiche" /> : "Fiche"}
                                     </div>
                                     <div onClick={() => currentLevelData.intro?.videoUrl && setZoomMedia('video')} className="h-full aspect-video bg-black rounded-3xl border-4 border-slate-700 overflow-hidden shadow-2xl flex items-center justify-center cursor-pointer hover:border-indigo-500 hover:scale-105 transition-all text-white text-4xl">▶</div>
                                 </div>

@@ -8839,3 +8839,7 @@ Build 161: MIGRATION MOTEUR JEU. Extraction de la logique 'BaseFactory' vers 'se
 2026-02-11 19:15 - Version V.2.45 : Sécurisation critique de l'indexation Miroir Élève.
 2026-02-11 19:15 - Initialisation synchrone des états de questions et des barres de progression.
 2026-02-11 19:15 - Protection SafeQ étendue pour empêcher le moteur de lire un index hors-limite pendant le swap de question.
+
+2026-02-11 19:18 - Correction critique de syntaxe dans GamePlayer.jsx (Ligne 384 : src={...} au lieu de src(...)).
+2026-02-11 19:18 - Déploiement de la VERSION V.2.50 unifiée et stabilisée.
+2026-02-11 19:18 - Vérification des tags d'ouverture et fermeture JSX dans les écrans d'intro.
