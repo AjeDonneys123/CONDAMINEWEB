@@ -8892,3 +8892,7 @@ Build #166 : Fix Bug Moteur Jeu (Zombie continue d'attaquer après Game Over)
 
 Build #167 : Gameplay Logic Update (Sync Bar/Mort)
 Build #168 : STABILISATION Moteur (Fix Crash V3.05) - Ajout sécurités null-check
+
+Build #167 : Gameplay Logic Update (Sync Bar/Mort)
+Build #168 : STABILISATION Moteur (Fix Crash V3.05)
+Build #169 : FIX FINAL LOOP (Correction Stale Closure via Ref Proxy)
