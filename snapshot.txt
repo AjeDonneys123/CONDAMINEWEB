@@ -59,73 +59,77 @@ STRUCTURE:
 │   │   │   │   │   └── MistakesBook.jsx
 │   │   │   │   └── productions/
 │   │   │   │       └── ProductionsList.jsx
-│   │   │   └── prof/
-│   │   │       ├── Prof.css
-│   │   │       ├── ProfPage.css
-│   │   │       ├── ProfPage.jsx
-│   │   │       ├── activities/
-│   │   │       │   ├── ActivityStudio.css
-│   │   │       │   └── ActivityStudio.jsx
-│   │   │       ├── admin/
-│   │   │       │   ├── AdminDashboard.css
-│   │   │       │   └── AdminDashboard.jsx
-│   │   │       ├── chapters/
-│   │   │       │   └── ChapterManager.jsx
-│   │   │       ├── classroom/
-│   │   │       │   ├── ClassroomManager.css
-│   │   │       │   └── ClassroomManager.jsx
-│   │   │       ├── components/
-│   │   │       │   ├── BadComponent.jsx
-│   │   │       │   ├── ConsoleHUD.jsx
-│   │   │       │   ├── ConsoleReporter.css
-│   │   │       │   ├── ConsoleReporter.jsx
-│   │   │       │   ├── DatabaseViewer.css
-│   │   │       │   ├── DatabaseViewer.jsx
-│   │   │       │   ├── DriveViewer.css
-│   │   │       │   ├── DriveViewer.jsx
-│   │   │       │   ├── ProfHeader.jsx
-│   │   │       │   ├── ProfNav.jsx
-│   │   │       │   ├── ProfStudioFolder.jsx
-│   │   │       │   ├── ProjectTreeViewer.css
-│   │   │       │   ├── ProjectTreeViewer.jsx
-│   │   │       │   ├── StudioDistributionSidebar.jsx
-│   │   │       │   ├── SystemDocs.css
-│   │   │       │   ├── SystemDocs.jsx
-│   │   │       │   ├── SystemStatus.css
-│   │   │       │   ├── SystemStatus.jsx
-│   │   │       │   └── TrapComponent.jsx
-│   │   │       ├── games/
-│   │   │       │   ├── GameStudio.css
-│   │   │       │   └── GameStudio.jsx
-│   │   │       ├── homework/
-│   │   │       │   ├── HomeworkResults.css
-│   │   │       │   ├── HomeworkResults.jsx
-│   │   │       │   ├── HomeworkStudio.css
-│   │   │       │   └── HomeworkStudio.jsx
-│   │   │       ├── scans/
-│   │   │       │   ├── ScansStudio.css
-│   │   │       │   └── ScansStudio.jsx
-│   │   │       ├── students/
-│   │   │       │   ├── StudentsManager.css
-│   │   │       │   └── StudentsManager.jsx
-│   │   │       └── studio/
-│   │   │           ├── StudioDashboard.css
-│   │   │           ├── StudioDashboard.jsx
-│   │   │           ├── panels/
-│   │   │           │   ├── StudioCenterPanel.jsx
-│   │   │           │   ├── StudioLeftPanel.jsx
-│   │   │           │   └── StudioRightPanel.jsx
-│   │   │           └── studioComp/
-│   │   │               ├── GameEngine.jsx
-│   │   │               ├── ManualEraser.css
-│   │   │               ├── ManualEraser.jsx
-│   │   │               ├── SaveLoadModal.css
-│   │   │               ├── SaveLoadModal.jsx
-│   │   │               ├── SoundEditorModal.css
-│   │   │               ├── SoundEditorModal.jsx
-│   │   │               ├── SoundExpert.js
-│   │   │               ├── SoundModal.css
-│   │   │               └── SoundModal.jsx
+│   │   │   ├── prof/
+│   │   │   │   ├── Prof.css
+│   │   │   │   ├── ProfPage.css
+│   │   │   │   ├── ProfPage.jsx
+│   │   │   │   ├── activities/
+│   │   │   │   │   ├── ActivityStudio.css
+│   │   │   │   │   └── ActivityStudio.jsx
+│   │   │   │   ├── admin/
+│   │   │   │   │   ├── AdminDashboard.css
+│   │   │   │   │   └── AdminDashboard.jsx
+│   │   │   │   ├── chapters/
+│   │   │   │   │   └── ChapterManager.jsx
+│   │   │   │   ├── classroom/
+│   │   │   │   │   ├── ClassroomManager.css
+│   │   │   │   │   └── ClassroomManager.jsx
+│   │   │   │   ├── components/
+│   │   │   │   │   ├── BadComponent.jsx
+│   │   │   │   │   ├── ConsoleHUD.jsx
+│   │   │   │   │   ├── ConsoleReporter.css
+│   │   │   │   │   ├── ConsoleReporter.jsx
+│   │   │   │   │   ├── DatabaseViewer.css
+│   │   │   │   │   ├── DatabaseViewer.jsx
+│   │   │   │   │   ├── DriveViewer.css
+│   │   │   │   │   ├── DriveViewer.jsx
+│   │   │   │   │   ├── ProfHeader.jsx
+│   │   │   │   │   ├── ProfNav.jsx
+│   │   │   │   │   ├── ProfStudioFolder.jsx
+│   │   │   │   │   ├── ProjectTreeViewer.css
+│   │   │   │   │   ├── ProjectTreeViewer.jsx
+│   │   │   │   │   ├── StudioDistributionSidebar.jsx
+│   │   │   │   │   ├── SystemDocs.css
+│   │   │   │   │   ├── SystemDocs.jsx
+│   │   │   │   │   ├── SystemStatus.css
+│   │   │   │   │   ├── SystemStatus.jsx
+│   │   │   │   │   └── TrapComponent.jsx
+│   │   │   │   ├── games/
+│   │   │   │   │   ├── GameStudio.css
+│   │   │   │   │   └── GameStudio.jsx
+│   │   │   │   ├── homework/
+│   │   │   │   │   ├── HomeworkResults.css
+│   │   │   │   │   ├── HomeworkResults.jsx
+│   │   │   │   │   ├── HomeworkStudio.css
+│   │   │   │   │   └── HomeworkStudio.jsx
+│   │   │   │   ├── scans/
+│   │   │   │   │   ├── ScansStudio.css
+│   │   │   │   │   └── ScansStudio.jsx
+│   │   │   │   ├── students/
+│   │   │   │   │   ├── StudentsManager.css
+│   │   │   │   │   └── StudentsManager.jsx
+│   │   │   │   └── studio/
+│   │   │   │       ├── StudioDashboard.css
+│   │   │   │       ├── StudioDashboard.jsx
+│   │   │   │       ├── panels/
+│   │   │   │       │   ├── StudioCenterPanel.jsx
+│   │   │   │       │   ├── StudioLeftPanel.jsx
+│   │   │   │       │   └── StudioRightPanel.jsx
+│   │   │   │       └── studioComp/
+│   │   │   │           ├── GameEngine.jsx
+│   │   │   │           ├── ManualEraser.css
+│   │   │   │           ├── ManualEraser.jsx
+│   │   │   │           ├── SaveLoadModal.css
+│   │   │   │           ├── SaveLoadModal.jsx
+│   │   │   │           ├── SoundEditorModal.css
+│   │   │   │           ├── SoundEditorModal.jsx
+│   │   │   │           ├── SoundExpert.js
+│   │   │   │           ├── SoundModal.css
+│   │   │   │           └── SoundModal.jsx
+│   │   │   └── shared/
+│   │   │       ├── 2/
+│   │   │       └── games/
+│   │   │           └── UnifiedMoteur.jsx
 │   │   ├── index.css
 │   │   ├── main.jsx
 │   │   ├── services/
@@ -377,7 +381,7 @@ console.log("🛡️ ARCHITECTE V9.8 - DÉBRIDÉ & COMMIT AUTO ACTIF");
 {
   "status": "OK",
   "message": "Infrastructure mise à jour",
-  "timestamp": 1770856723518
+  "timestamp": 1770919473682
 }
 [[[£ END: apply_status.json £]]]
 
@@ -1760,11 +1764,12 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
 [[[£ FILE: client/src/features/eleve/games/GamePlayer.jsx £]]]
 // @signatures: GamePlayer
 import React from 'react';
-import UnifiedMoteur from './UnifiedMoteur';
+// ✅ IMPORT MIS À JOUR : On pointe vers le dossier SHARED
+import UnifiedMoteur from '../../shared/games/UnifiedMoteur';
 
 /**
- * 🎒 SHELL ÉLÈVE V.2.70
- * Rôle : Coquille vide qui appelle le moteur maître.
+ * 🎒 SHELL ÉLÈVE V.3.1 (WIRING SHARED)
+ * Rôle : Coquille vide qui appelle le moteur maître situé dans shared/games.
  */
 export default function GamePlayer({ user, gameData, onExit }) {
     return (
@@ -1873,16 +1878,18 @@ export default function GamesGrid({ user }) {
 [[[£ END: client/src/features/eleve/games/GamesGrid.jsx £]]]
 
 [[[£ FILE: client/src/features/eleve/games/UnifiedMoteur.jsx £]]]
-// @signatures: UnifiedMoteur, handleAnswerClick, triggerWinSequence, startCurrentLevel, getEmbedUrl, checkAnswerPermissive
+// @signatures: UnifiedMoteur, handleAnswerClick, triggerWinSequence, startCurrentLevel, getEmbedUrl, checkAnswerPermissive, triggerGlobalEvent, playParallelSoundImpl, normalize, getYoutubeEmbed
 import React, { useState, useRef, useEffect } from 'react';
 import SoundExpert from '../../../services/SoundExpert';
 import { api } from '../../../services/api';
 import { createGameBase } from '../../../services/gameCore';
 
 /**
- * 🧠 LE MAITRE UNIFIÉ V.2.82 (DELAYED BOSS MUTATION)
- * VERSION : V.2.82
- * FIX : Le zombie ne devient Boss qu'APRÈS son reset de position, au changement de question.
+ * 🧠 LE MAITRE UNIFIÉ V.2.89 (YOUTUBE EMBED FIX)
+ * VERSION : V.2.89
+ * CORRECTIF :
+ * - Ajout d'un parseur Regex pour les URLs YouTube (supporte youtu.be, watch?v=, embed/, etc.).
+ * - Évite les erreurs "ID de lecture" dans l'iframe.
  */
 
 const ZOMBIE_GAME_CODE = `
@@ -1939,7 +1946,7 @@ class MiniGame extends MiniGameBase {
                 this.hasDealtDamage = true;
                 if (this.heroState !== "HIT") {
                     if (this.HEROS) { this.HEROS.play("TOUCHE", false); this.heroState = "HIT"; this.heroTimer = 60; }
-                    if (this.callbacks.onPlayerHit) this.callbacks.onPlayerHit();
+                    if (this.callbacks && this.callbacks.onPlayerHit) this.callbacks.onPlayerHit();
                 }
             }
             if (this.ZOMBIE && this.ZOMBIE.isAnimFinished) this.resetZombie();
@@ -1998,10 +2005,10 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
     const [showLevelBanner, setShowLevelBanner] = useState(false);
     const [showStageClear, setShowStageClear] = useState(false);
     const [showGameOver, setShowGameOver] = useState(false);
+    const [showGameComplete, setShowGameComplete] = useState(false);
     const [zoomMedia, setZoomMedia] = useState(null);
     const [isPowerOff, setIsPowerOff] = useState(false);
     
-    // 🔥 ETAT BOSS MAITRE : Ne change qu'au changement d'index de question
     const [activeBossVisual, setActiveBossVisual] = useState(false);
 
     const audioCtxRef = useRef(null);
@@ -2013,15 +2020,35 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
     const projectRef = useRef(gameData);
     const bossModeRef = useRef(false);
 
+    // --- HELPER YOUTUBE ROBUSTE ---
+    const getYoutubeEmbed = (url) => {
+        if (!url) return "";
+        // Regex magique qui gère tous les formats (watch?v=, youtu.be, embed/)
+        const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+        const match = url.match(regExp);
+        const id = (match && match[2].length === 11) ? match[2] : null;
+        
+        if (id) {
+            return `https://www.youtube.com/embed/${id}?autoplay=1&rel=0&modestbranding=1`;
+        }
+        return url; // Retourne l'original si pas matché (fallback)
+    };
+
+    // --- EFFET DE SON : DÉPART DU NIVEAU ---
+    useEffect(() => {
+        if (showLevelBanner) {
+            triggerGlobalEvent("DEPART"); 
+        }
+    }, [showLevelBanner]);
+
     useEffect(() => { projectRef.current = gameData; }, [gameData]);
 
-    // 🚀 SYNCHRO BOSS : On ne change le BossMode que quand currentQIndex bouge
     useEffect(() => {
         const isBossNow = (currentQIndex !== -1 && (questionStates[currentQIndex] || 0) === 2);
         setActiveBossVisual(isBossNow);
         bossModeRef.current = isBossNow;
         if (gameInstanceRef.current) gameInstanceRef.current.isBossPhase = isBossNow;
-    }, [currentQIndex]);
+    }, [currentQIndex, questionStates]);
 
     function resolveUrl(url) {
         if (!url) return "";
@@ -2029,6 +2056,8 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
         const id = url.split('/').pop();
         return `/api/proxy/${id}`;
     }
+
+    const isCheatMode = () => keysPressed.current['KeyS'] && keysPressed.current['KeyT'];
 
     // 1. DATA LOADING
     useEffect(() => {
@@ -2059,6 +2088,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
         if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
         const scene = projectRef.current?.scenes?.[0];
         if (!scene) { setIsReady(true); return; }
+        
         const imgs = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url)))].filter(Boolean);
         let loaded = 0; if (imgs.length === 0) setIsReady(true);
         imgs.forEach(url => {
@@ -2067,27 +2097,46 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
             img.onerror = () => { loaded++; if (loaded >= imgs.length) setIsReady(true); };
             img.src = rKey;
         });
-        const snds = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url))))].filter(Boolean);
-        snds.forEach(url => { SoundExpert.decodeAudio(resolveUrl(url), audioCtxRef.current).then(buf => { if (buf) audioBuffersRef.current.set(resolveUrl(url), buf); }); });
+
+        const snds = [
+            ...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url))))
+        ].filter(Boolean);
+        
+        snds.forEach(url => { 
+            SoundExpert.decodeAudio(resolveUrl(url), audioCtxRef.current).then(buf => { 
+                if (buf) audioBuffersRef.current.set(resolveUrl(url), buf); 
+            }); 
+        });
     }, [gameData]);
 
-    const playParallelSoundImpl = (url) => {
-        if (!engineStarted || isMuted || !audioCtxRef.current) return;
+    const playParallelSoundImpl = (url, forceAlways = false) => {
+        if ((!engineStarted && !forceAlways) || isMuted || !audioCtxRef.current) return;
+        
         const buffer = audioBuffersRef.current.get(resolveUrl(url));
         if (buffer) {
             try {
+                if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
+                
                 const source = audioCtxRef.current.createBufferSource();
-                source.buffer = buffer; source.connect(audioCtxRef.current.destination);
+                source.buffer = buffer; 
+                source.connect(audioCtxRef.current.destination);
                 source.start(0);
-            } catch(e) {}
+            } catch(e) { console.error("Sound Play Error:", e); }
         }
     };
 
     const triggerGlobalEvent = (eventName) => {
         const scene = projectRef.current.scenes?.[0];
         if (!scene || !scene.globalSounds) return;
-        const event = scene.globalSounds.find(g => g.name.toUpperCase().trim() === eventName.toUpperCase().trim());
-        if (event && event.sounds) event.sounds.forEach(snd => playParallelSoundImpl(snd.url));
+        
+        const cleanTarget = eventName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+        const event = scene.globalSounds.find(g => 
+            g.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim() === cleanTarget
+        );
+        
+        if (event && event.sounds) {
+            event.sounds.forEach(snd => playParallelSoundImpl(snd.url, true));
+        }
     };
 
     // 3. LOGIQUE QUIZ
@@ -2108,21 +2157,16 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
             setLives(l => Math.max(0, l - 1));
         }
         
-        // On met à jour les points immédiatement pour la barre du haut
         setQuestionStates(nextStates);
         setUserInput("");
 
         setTimeout(() => {
             setFeedback(null);
             
-            // On calcule la suite. Note : on ne change currentQIndex QUE ICI.
-            // C'est ce changement qui déclenchera le useEffect pour activer le BossMode moteur.
             const available = nextStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
             
             if (available.length > 0) {
-                // Si la question actuelle vient de passer à 2 (Boss), on reste dessus.
                 if (isCorrect && nextStates[currentQIndex] === 2) {
-                    // Force le re-render pour activer le mode Boss visuel maintenant que l'impact est fini
                     const bossNow = true;
                     setActiveBossVisual(bossNow);
                     bossModeRef.current = bossNow;
@@ -2131,37 +2175,103 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
                     const others = available.filter(idx => idx !== currentQIndex);
                     setCurrentQIndex(others.length > 0 ? others[Math.floor(Math.random() * others.length)] : available[0]);
                 }
-            } else triggerWinSequence();
-        }, 1000); // On attend la fin de l'animation d'impact
+            } else {
+                triggerGlobalEvent("UPLEVEL");
+                triggerWinSequence(); 
+            }
+        }, 1000);
     };
 
     const triggerWinSequence = () => {
         setShowStageClear(true);
-        triggerGlobalEvent("LEVEL_WIN");
         setTimeout(() => setIsPowerOff(true), 1500);
+        
         setTimeout(() => {
-            setEngineStarted(false); setIsPowerOff(false); setShowStageClear(false);
+            setEngineStarted(false); 
+            setIsPowerOff(false); 
+            setShowStageClear(false);
+            
             if (allLevels[currentLevelIdx + 1]) {
-                setCurrentLevelIdx(prev => prev + 1); setShowLevelIntro(true); 
-            } else { alert("🎉 JEU TERMINÉ !"); onExit(); }
+                setCurrentLevelIdx(prev => prev + 1); 
+                setShowLevelIntro(true); 
+            } else { 
+                triggerGlobalEvent("VICTOIRE");
+                setShowGameComplete(true);
+            }
         }, 3000);
     };
 
+    // CHEAT HANDLERS
+    const handleHeartClick = () => { if (isCheatMode()) setLives(l => Math.max(0, l - 1)); };
+    const handleQuestionClick = () => { if (isCheatMode()) { triggerGlobalEvent("UPLEVEL"); triggerWinSequence(); } };
+    const handleBarClick = (idx) => {
+        if (isCheatMode()) {
+            const nextStates = [...questionStates];
+            nextStates[idx] = Math.min(3, nextStates[idx] + 1);
+            setQuestionStates(nextStates);
+            if (nextStates.every(s => s >= 3)) {
+                triggerGlobalEvent("UPLEVEL");
+                triggerWinSequence();
+            }
+        }
+    };
+
     const handleRetry = () => { setShowGameOver(false); setLives(4); setEngineStarted(false); setShowLevelIntro(true); };
-    const startCurrentLevel = async () => { if (!isReady) return; if (audioCtxRef.current) await audioCtxRef.current.resume(); setEngineStarted(true); setShowLevelIntro(false); triggerGlobalEvent("UPLEVEL"); setShowLevelBanner(true); setTimeout(() => setShowLevelBanner(false), 1500); };
+    
+    // --- DÉMARRAGE NIVEAU ---
+    const startCurrentLevel = async () => { 
+        if (!isReady) return; 
+        
+        if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
+            await audioCtxRef.current.resume();
+        }
+        
+        setEngineStarted(true); 
+        setShowLevelIntro(false); 
+        
+        // La bannière est déclenchée, ce qui lancera le son via useEffect
+        setShowLevelBanner(true); 
+        setTimeout(() => setShowLevelBanner(false), 1500); 
+    };
 
     // 4. RENDU MOTEUR
     useEffect(() => {
         if (!engineStarted || !canvasRef.current) return;
         try {
-            const MiniGameBase = createGameBase({ audioBuffers: audioBuffersRef.current, audioCtx: audioCtxRef.current, projectRef, sceneIdx: 0, imageAssets: imageAssetsRef.current, resolveUrl, canvas: canvasRef.current, ctx: canvasRef.current.getContext('2d'), playParallelSound: playParallelSoundImpl, callbacks: { onPlayerHit: () => { setLives(l => { const n = Math.max(0, l - 1); if (n === 0) setShowGameOver(true); return n; }); } } });
+            const MiniGameBase = createGameBase({ 
+                audioBuffers: audioBuffersRef.current, 
+                audioCtx: audioCtxRef.current, 
+                projectRef, 
+                sceneIdx: 0, 
+                imageAssets: imageAssetsRef.current, 
+                resolveUrl, 
+                canvas: canvasRef.current, 
+                ctx: canvasRef.current.getContext('2d'), 
+                playParallelSound: playParallelSoundImpl, 
+                callbacks: { 
+                    onPlayerHit: () => { 
+                        setLives(l => { 
+                            const n = Math.max(0, l - 1); 
+                            if (n === 0) {
+                                setShowGameOver(true); 
+                                triggerGlobalEvent("DEFAITE");
+                            }
+                            return n; 
+                        }); 
+                    } 
+                } 
+            });
             const factory = new Function('MiniGameBase', `${projectRef.current.generatedCode || ZOMBIE_GAME_CODE}\nreturn MiniGame;`);
-            const instance = new (factory(MiniGameBase))(canvasRef.current, {}, {});
-            gameInstanceRef.current = instance; if (instance.start) instance.start();
+            const instance = new (factory(MiniGameBase))(canvasRef.current, {}, null);
+            gameInstanceRef.current = instance; 
+            if (instance.start) instance.start();
+            
             const tick = () => {
                 if(instance.keys) Object.assign(instance.keys, keysPressed.current);
                 instance.isBossPhase = bossModeRef.current;
-                if (instance.update) instance.update(); if (instance._render) instance._render(); if (instance.draw) instance.draw();
+                if (instance.update) instance.update(); 
+                if (instance._render) instance._render(); 
+                if (instance.draw) instance.draw();
                 frameIdRef.current = requestAnimationFrame(tick);
             };
             tick();
@@ -2174,7 +2284,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
 
     return (
         <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center overflow-hidden font-sans">
-            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">VERSION V.2.82</div>
+            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">VERSION V.2.89 (YOUTUBE FIX)</div>
             <button onClick={onExit} className="absolute top-6 right-6 w-14 h-14 bg-white/10 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-2xl font-black z-[4000] border-2 border-white/20">✕</button>
 
             {showLevelBanner && (
@@ -2193,19 +2303,35 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
                 <div className="fixed inset-0 z-[6000] bg-black flex items-center justify-center p-0 animate-in fade-in duration-300" onClick={() => setZoomMedia(null)}>
                     <button className="absolute top-8 right-8 w-16 h-16 bg-white hover:bg-red-600 hover:text-white text-black rounded-full flex items-center justify-center text-3xl font-black shadow-2xl transition-all z-[6001] hover:scale-110 active:scale-95">✕</button>
                     <div className="w-full h-full flex items-center justify-center p-4">
-                        {zoomMedia === 'sheet' ? <img src={resolveUrl(currentLevelData.intro?.sheetUrl)} className="h-[90vh] object-contain" alt="Zoom" /> : <div className="h-[90vh] aspect-video"><iframe className="w-full h-full" src={currentLevelData.intro?.videoUrl?.replace("watch?v=", "embed/") + "?autoplay=1"} frameBorder="0" allow="autoplay; encrypted-media" allowFullScreen></iframe></div>}
+                        {/* UTILISATION DU HELPER YOUTUBE FIX */}
+                        {zoomMedia === 'sheet' ? <img src={resolveUrl(currentLevelData.intro?.sheetUrl)} className="h-[90vh] object-contain" alt="Zoom" /> : <div className="h-[90vh] aspect-video"><iframe className="w-full h-full" src={getYoutubeEmbed(currentLevelData.intro?.videoUrl)} frameBorder="0" allow="autoplay; encrypted-media" allowFullScreen></iframe></div>}
                     </div>
+                </div>
+            )}
+
+            {showGameComplete && (
+                <div className="absolute inset-0 z-[7000] bg-gradient-to-br from-yellow-500 to-purple-600 flex flex-col items-center justify-center animate-in zoom-in p-10 text-center">
+                    <div className="text-[150px] mb-4 animate-bounce">🏆</div>
+                    <h1 className="text-8xl font-black text-white uppercase tracking-tighter drop-shadow-xl mb-4">VICTOIRE !</h1>
+                    <p className="text-2xl font-bold text-yellow-100 uppercase tracking-widest mb-10">Tu as terminé tous les niveaux !</p>
+                    <div className="bg-white/20 backdrop-blur-md rounded-3xl p-8 border-4 border-white/40 mb-10 min-w-[300px]">
+                        <span className="block text-sm font-black text-white/60 uppercase mb-2">Score Final</span>
+                        <span className="block text-6xl font-black text-white">{lives * 100 + (allLevels.length * 50)} PTS</span>
+                    </div>
+                    <button onClick={onExit} className="px-12 py-5 bg-white text-purple-700 font-black text-2xl rounded-2xl shadow-2xl hover:scale-105 hover:bg-purple-50 transition-all uppercase tracking-widest">RETOURNER AU MENU</button>
                 </div>
             )}
 
             {engineStarted && !showLevelIntro && (
                 <>
                     <div className="absolute top-6 w-full flex justify-between px-10 pointer-events-none z-30">
-                        <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl pointer-events-auto">{"❤️".repeat(lives)}</div>
+                        <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl pointer-events-auto cursor-pointer active:scale-95 transition-transform" onClick={handleHeartClick}>
+                            {"❤️".repeat(lives)}
+                        </div>
                         <div className="flex-1 flex flex-col items-center gap-2">
                             <div className="bg-indigo-600 text-white px-4 py-1 rounded-full text-xs font-black uppercase tracking-widest">{currentLevelData.name || `NIVEAU ${currentLevelIdx + 1}`}</div>
                             {safeQ && !showStageClear && (
-                                <div className={`bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 shadow-2xl text-xl pointer-events-auto text-center max-w-2xl ${activeBossVisual ? 'border-red-500 ring-2 ring-red-500/50' : 'border-slate-600'}`}>
+                                <div onClick={handleQuestionClick} className={`bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 shadow-2xl text-xl pointer-events-auto text-center max-w-2xl cursor-pointer ${activeBossVisual ? 'border-red-500 ring-2 ring-red-500/50' : 'border-slate-600'}`}>
                                     {feedback === 'CORRECT' ? "✅ BIEN JOUÉ !" : feedback === 'WRONG' ? "❌ MAUVAISE RÉPONSE" : safeQ.q}
                                     {activeBossVisual && !feedback && <div className="text-[10px] text-red-500 mt-1 animate-pulse uppercase tracking-widest">⚠️ Boss Final : Saisis la réponse !</div>}
                                 </div>
@@ -2213,7 +2339,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
                         </div>
                         <div className="flex gap-2 pointer-events-auto mr-20">
                             {questionStates.map((s, i) => (
-                                <div key={i} className={`w-4 h-12 rounded-md border border-slate-600 relative overflow-hidden ${currentQIndex === i ? 'ring-2 ring-indigo-400 scale-110' : 'opacity-40'}`}>
+                                <div key={i} onClick={() => handleBarClick(i)} className={`w-4 h-12 rounded-md border border-slate-600 relative overflow-hidden cursor-pointer ${currentQIndex === i ? 'ring-2 ring-indigo-400 scale-110' : 'opacity-40'}`}>
                                     <div className={`absolute bottom-0 left-0 right-0 transition-all duration-500 ${s >= 3 ? 'bg-green-500 shadow-[0_0_10px_green]' : s >= 2 ? 'bg-red-500 shadow-[0_0_10px_red]' : 'bg-yellow-500'}`} style={{ height: `${(s/3)*100}%` }} />
                                 </div>
                             ))}
@@ -2242,7 +2368,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
 
             {showGameOver && (<div className="absolute inset-0 z-[60] bg-red-900/95 flex flex-col items-center justify-center animate-in zoom-in"><h1 className="text-8xl font-black text-white mb-8 tracking-tighter drop-shadow-lg">💀 GAME OVER</h1><button onClick={handleRetry} className="px-10 py-5 bg-white text-red-900 font-black text-2xl rounded-2xl shadow-2xl hover:scale-105 transition-transform uppercase tracking-widest">RÉESSAYER</button></div>)}
 
-            {engineStarted && !showLevelIntro && safeQ && !showStageClear && (
+            {engineStarted && !showLevelIntro && safeQ && !showStageClear && !showGameComplete && (
                 <div className="absolute bottom-10 w-full flex justify-center px-10 pointer-events-auto z-30">
                     {activeBossVisual ? (
                         <div className="flex row gap-4 w-full max-w-2xl">
@@ -7783,75 +7909,171 @@ export default function StudioCenterPanel({
 [[[£ END: client/src/features/prof/studio/panels/StudioCenterPanel.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/studio/panels/StudioLeftPanel.jsx £]]]
-// @signatures: StudioLeftPanel, handleSelectAction, handleAddAction
+// @signatures: StudioLeftPanel, handleSelectAction, handleAddAction, handleAddGlobalSound, handleDeleteActionOrSound
 import React, { useState, useEffect, useRef } from 'react';
-import SoundExpert from '../../../../services/SoundExpert';
+import SoundExpert from '../studioComp/SoundExpert';
 
 export default function StudioLeftPanel({
     leftTab, setLeftTab, selectedActor, selectedActionIdx, setSelectedActionIdx, 
     selectedGlobalSoundIdx, setSelectedGlobalSoundIdx,
     setIsPreviewPlaying, saveProject, project, selectedSceneIdx, selectedActorId,
-    selectedAction, handleUpdateActionSpeed, isPreviewPlaying,
+    selectedAction, handleMirrorSequence = () => {}, handleUpdateActionSpeed, isPreviewPlaying,
     previewFrameIdx, selectedFrameIdx, setSelectedFrameIdx, setDraggedFrameIdx,
     handleReorderFrame, resolveUrl, handleDeleteFrame, frameUploadRef,
-    setFrameToErase, setShowSoundModal, handleDeleteSound, handleEditSound,
-    setPreviewFrameIdx
+    eraserActive, setEraserActive, setFrameToErase,
+    handleSmartAIClean = () => {}, cleaning, setShowSoundModal,
+    handleDeleteSound, handleEditSound,
+    setPreviewFrameIdx,
+    currentScene
 }) {
     const [selectedSoundIdx, setSelectedSoundIdx] = useState(null);
     const audioCtxRef = useRef(null);
     const activeSourcesRef = useRef([]);
 
+    // 1. INIT CONTEXTE AUDIO
     useEffect(() => {
-        if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+        if (!audioCtxRef.current) {
+            audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+        }
         return () => stopAllSounds();
     }, []);
+
+    // 2. PRELOAD DES SONS
+    useEffect(() => {
+        if (selectedAction && selectedAction.sounds && selectedAction.sounds.length > 0) {
+            if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+            selectedAction.sounds.forEach(snd => {
+                SoundExpert.decodeAudio(resolveUrl(snd.url), audioCtxRef.current);
+            });
+        }
+    }, [selectedAction]);
 
     const stopAllSounds = () => {
         activeSourcesRef.current.forEach(source => { try { source.stop(); } catch(e) {} });
         activeSourcesRef.current = [];
     };
 
+    // 3. SEQUENCEUR (VISUEL + AUDIO)
     useEffect(() => {
         let visualInterval = null;
         let soundIndex = 0;
         let isPlaying = isPreviewPlaying;
 
         if (isPlaying && selectedAction) {
-            if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
-
-            if (selectedAction.frames?.length > 0) {
-                visualInterval = setInterval(() => {
-                    setPreviewFrameIdx(idx => (idx + 1) % selectedAction.frames.length);
-                }, selectedAction.speed || 100);
+            if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
+                audioCtxRef.current.resume();
             }
 
-            if (selectedAction.sounds?.length > 0) {
-                const play = async () => {
+            // VISUEL (Seulement si frames existantes)
+            if (selectedAction.frames && selectedAction.frames.length > 0) {
+                visualInterval = setInterval(() => {
+                    if (typeof setPreviewFrameIdx === 'function') {
+                        setPreviewFrameIdx(currentIdx => (currentIdx + 1) % selectedAction.frames.length);
+                    }
+                }, selectedAction.speed || 200);
+            }
+
+            // AUDIO (Boucle sur la liste des sons)
+            if (selectedAction.sounds && selectedAction.sounds.length > 0) {
+                const playNextSound = async () => {
                     if (!isPlaying) return;
-                    const snd = selectedAction.sounds[soundIndex];
-                    const buf = await SoundExpert.decodeAudio(resolveUrl(snd.url), audioCtxRef.current);
-                    if (buf) {
+                    const soundData = selectedAction.sounds[soundIndex];
+                    if (!soundData) return;
+                    const buffer = await SoundExpert.decodeAudio(resolveUrl(soundData.url), audioCtxRef.current);
+                    if (!isPlaying || !buffer) return;
+
+                    try {
                         const source = audioCtxRef.current.createBufferSource();
-                        source.buffer = buf; source.connect(audioCtxRef.current.destination);
-                        source.onended = () => { soundIndex = (soundIndex + 1) % selectedAction.sounds.length; play(); };
+                        source.buffer = buffer;
+                        source.connect(audioCtxRef.current.destination);
+                        source.onended = () => {
+                            if (isPlaying) {
+                                soundIndex = (soundIndex + 1) % selectedAction.sounds.length;
+                                playNextSound();
+                            }
+                        };
                         source.start(0);
                         activeSourcesRef.current.push(source);
-                    }
+                    } catch (e) { console.error("Audio Error", e); }
                 };
-                play();
+                playNextSound();
             }
         } else {
             stopAllSounds();
-            setPreviewFrameIdx(0);
+            if (setPreviewFrameIdx) setPreviewFrameIdx(0);
         }
-        return () => { isPlaying = false; clearInterval(visualInterval); stopAllSounds(); };
+
+        return () => {
+            isPlaying = false;
+            if (visualInterval) clearInterval(visualInterval);
+            stopAllSounds();
+        };
     }, [isPreviewPlaying, selectedAction]);
 
+    const handleSelectAction = (idx) => {
+        setSelectedActionIdx(idx);
+        setIsPreviewPlaying(false);
+        setSelectedFrameIdx(null);
+        setSelectedSoundIdx(null);
+        if (setPreviewFrameIdx) setPreviewFrameIdx(0);
+    };
+
+    const handleSelectGlobalSound = (idx) => {
+        setSelectedGlobalSoundIdx(idx);
+        setIsPreviewPlaying(false);
+        setSelectedFrameIdx(null);
+        setSelectedSoundIdx(null);
+    };
+
+    // --- LOGIQUE OUTILS (CRAYON / GOMME / EDIT) ---
+    const handlePenClick = () => {
+        // Cas 1 : Édition Visuelle (Frame sélectionnée)
+        if (selectedFrameIdx !== null && leftTab === 'actions') {
+            const frame = selectedAction.frames[selectedFrameIdx];
+            if (frame) {
+                setFrameToErase({ url: frame.url, idx: selectedFrameIdx });
+            }
+        } 
+        // Cas 2 : Édition Sonore (Son sélectionné)
+        else if (selectedSoundIdx !== null) {
+            handleEditSound(selectedSoundIdx); 
+        }
+    };
+
+    // --- HANDLERS D'AJOUT ---
     const handleAddAction = () => {
-        const name = prompt("Nom de l'action :"); if(!name) return;
-        const next = JSON.parse(JSON.stringify(project));
+        const name = prompt("Nom de l'action (ex: MARCHER) :"); 
+        if(!name) return; 
+        const next = JSON.parse(JSON.stringify(project)); 
         const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
-        actor.actions.push({ name: name.toUpperCase(), frames: [], sounds: [], speed: 100 });
+        if (actor) {
+            actor.actions.push({ name: name.toUpperCase(), frames: [], sounds: [], speed: 100 }); 
+            saveProject(next);
+        }
+    };
+
+    const handleAddGlobalSound = () => {
+        const name = prompt("Nom de l'événement (ex: VICTOIRE, GAME_OVER) :"); 
+        if(!name) return; 
+        const next = JSON.parse(JSON.stringify(project)); 
+        const scene = next.scenes[selectedSceneIdx];
+        if (!scene.globalSounds) scene.globalSounds = [];
+        scene.globalSounds.push({ name: name.toUpperCase(), frames: [], sounds: [], speed: 100 }); 
+        saveProject(next);
+    };
+
+    const handleDeleteActionOrSound = (e, idx) => {
+        e.stopPropagation();
+        if (!confirm("Supprimer cet élément ?")) return;
+        const next = JSON.parse(JSON.stringify(project));
+        if (leftTab === 'actions') {
+            const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
+            actor.actions.splice(idx, 1);
+            setSelectedActionIdx(0);
+        } else {
+            next.scenes[selectedSceneIdx].globalSounds.splice(idx, 1);
+            setSelectedGlobalSoundIdx(0);
+        }
         saveProject(next);
     };
 
@@ -7863,39 +8085,123 @@ export default function StudioLeftPanel({
             </div>
 
             <div className="studio-action-list custom-scrollbar">
-                {selectedActor?.actions?.map((act, idx) => (
-                    <div key={idx} onClick={() => setSelectedActionIdx(idx)} className={`action-item ${selectedActionIdx === idx ? 'selected' : ''}`}>
-                        <span>{act.name}</span>
-                        <div className="flex gap-2 items-center">
-                            <span className="text-[9px] bg-slate-100 px-1 rounded text-slate-400">{act.frames?.length || 0}f</span>
-                            {act.sounds?.length > 0 && <span className="text-[9px] bg-indigo-100 text-indigo-600 px-1 rounded">🎵</span>}
-                        </div>
-                    </div>
-                ))}
-                <button className="v84-add-btn-minimal" onClick={handleAddAction}>+ Action</button>
+                {leftTab === 'actions' ? (
+                    <>
+                        {selectedActor?.actions?.map((act, idx) => (
+                            <div key={idx} onClick={() => handleSelectAction(idx)} className={`action-item ${selectedActionIdx === idx ? 'selected' : ''}`}>
+                                <span>{act.name}</span>
+                                <div className="flex gap-2 items-center">
+                                    <span className="text-[9px] bg-slate-100 px-1 rounded text-slate-400">{act.frames?.length || 0}f</span>
+                                    {act.sounds?.length > 0 && <span className="text-[9px] bg-indigo-100 text-indigo-600 px-1 rounded">🎵</span>}
+                                    <button onClick={(e) => handleDeleteActionOrSound(e, idx)} className="text-[10px] text-red-300 hover:text-red-500 font-black ml-1">✕</button>
+                                </div>
+                            </div>
+                        ))}
+                        <button type="button" className="v84-add-btn-minimal" onClick={handleAddAction}>+ Action</button>
+                    </>
+                ) : (
+                    <>
+                        {/* LISTE DES SONS GLOBAUX */}
+                        {(currentScene?.globalSounds || project.scenes[selectedSceneIdx].globalSounds || []).map((act, idx) => (
+                            <div key={idx} onClick={() => handleSelectGlobalSound(idx)} className={`action-item ${selectedGlobalSoundIdx === idx ? 'selected' : ''}`}>
+                                <span>{act.name}</span>
+                                <div className="flex gap-2 items-center">
+                                    {act.sounds?.length > 0 && <span className="text-[9px] bg-indigo-100 text-indigo-600 px-1 rounded">🎵</span>}
+                                    <button onClick={(e) => handleDeleteActionOrSound(e, idx)} className="text-[10px] text-red-300 hover:text-red-500 font-black ml-1">✕</button>
+                                </div>
+                            </div>
+                        ))}
+                        <button type="button" className="v84-add-btn-minimal" onClick={handleAddGlobalSound}>+ Événement Sonore</button>
+                    </>
+                )}
             </div>
 
             {selectedAction && (
                 <div className="studio-sequencer-box">
                     <div className="seq-header">
-                        <span className="seq-label">Séquenceur</span>
+                        <span className="seq-label">{leftTab === 'actions' ? 'Séquenceur' : 'Timeline Sonore'}</span>
                         <div className="seq-controls">
-                            <button className="btn-mini-ctrl" onClick={() => handleUpdateActionSpeed(-20)}>-</button>
-                            <span className="speed-indicator">{selectedAction.speed}ms</span>
-                            <button className="btn-mini-ctrl" onClick={() => handleUpdateActionSpeed(20)}>+</button>
-                            <button className="btn-preview-play" onClick={() => setIsPreviewPlaying(!isPreviewPlaying)}>{isPreviewPlaying ? '⏹️' : '▶️'}</button>
+                            {leftTab === 'actions' && <button className="btn-mirror" onClick={handleMirrorSequence} title="Miroir">↔️</button>}
+                            
+                            {/* Contrôle Vitesse (Uniquement pertinent si animation visuelle, mais on laisse pour le rythme) */}
+                            <button className="btn-mini-ctrl" onClick={() => handleUpdateActionSpeed(-50)}>-</button>
+                            <span className="speed-indicator">{selectedAction.speed || 100}ms</span>
+                            <button className="btn-mini-ctrl" onClick={() => handleUpdateActionSpeed(50)}>+</button>
+                            
+                            <button className={`btn-mini-ctrl ${isPreviewPlaying ? 'bg-indigo-100 text-indigo-600' : ''}`} onClick={() => setIsPreviewPlaying(!isPreviewPlaying)}>
+                                {isPreviewPlaying ? '⏹️' : '▶️'}
+                            </button>
                         </div>
                     </div>
-                    <div className="seq-frames-grid">
-                        {selectedAction.frames.map((f, i) => (
-                            <div key={i} className={`seq-frame ${previewFrameIdx === i ? 'active' : ''}`} onClick={() => setSelectedFrameIdx(i)}>
-                                <img src={resolveUrl(f.url)} />
+                    
+                    {/* GRILLE D'IMAGES (Seulement pour les Actions Acteur) */}
+                    {leftTab === 'actions' && (
+                        <div className="seq-frames-grid custom-scrollbar" style={{height: '110px', minHeight: '110px'}}>
+                            {selectedAction.frames.map((frame, fIdx) => (
+                                <div key={fIdx} 
+                                    className={`seq-frame ${isPreviewPlaying && previewFrameIdx === fIdx ? 'active' : ''} ${selectedFrameIdx === fIdx ? 'active' : ''}`} 
+                                    draggable 
+                                    onClick={() => { setSelectedFrameIdx(selectedFrameIdx === fIdx ? null : fIdx); setIsPreviewPlaying(false); setSelectedSoundIdx(null); }} 
+                                    onDragStart={() => setDraggedFrameIdx(fIdx)} 
+                                    onDragOver={e => e.preventDefault()} 
+                                    onDrop={() => handleReorderFrame(fIdx)}>
+                                    <img src={resolveUrl(frame.url)} />
+                                    <button className="frame-del" onClick={e => { e.stopPropagation(); handleDeleteFrame(fIdx); }}>✕</button>
+                                </div>
+                            ))}
+                            <div className="seq-frame seq-frame-add" onClick={() => frameUploadRef.current.click()}>+</div>
+                        </div>
+                    )}
+                    
+                    {/* GRILLE DE SONS (Visible pour Actions ET Global Sounds) */}
+                    {/* Si on est en mode SOUNDS, on agrandit cette zone car il n'y a pas d'images */}
+                    <div className={`border-slate-200 pt-2 ${leftTab === 'actions' ? 'border-t mt-2' : 'h-full flex flex-col'}`}>
+                        <div className="flex justify-between items-center mb-1">
+                            <span className="seq-label text-indigo-500">Piste Audio</span>
+                            <button className="btn-sound-trigger !w-auto px-2 !text-[9px]" onClick={() => setShowSoundModal(true)}>
+                                🔊 Ajouter Son
+                            </button>
+                        </div>
+                        
+                        <div className={`grid grid-cols-3 gap-2 ${leftTab === 'sounds' ? 'flex-1 content-start' : ''}`}>
+                            {(selectedAction.sounds || []).map((snd, sIdx) => (
+                                <div key={sIdx} 
+                                     onClick={() => { setSelectedSoundIdx(selectedSoundIdx === sIdx ? null : sIdx); setSelectedFrameIdx(null); }}
+                                     className={`sound-frame-visual h-16 ${selectedSoundIdx === sIdx ? 'active' : ''} relative group`}>
+                                    <span className="text-xl">🎵</span>
+                                    <span className="text-[8px] font-black text-indigo-800 w-full text-center truncate px-1">{snd.name?.substring(0,10)}</span>
+                                    
+                                    <button 
+                                        className="frame-del !bg-red-500 !text-white !opacity-100 !top-1 !right-1 z-50" 
+                                        onClick={(e) => { e.stopPropagation(); handleDeleteSound(sIdx); }}
+                                        title="Supprimer le son"
+                                    >✕</button>
+                                </div>
+                            ))}
+                            
+                            {/* Emplacement vide pour montrer qu'on peut ajouter */}
+                            <div className="border-2 border-dashed border-slate-200 rounded-lg h-16 flex items-center justify-center text-slate-300 text-[8px] font-bold cursor-pointer hover:border-indigo-300 hover:text-indigo-400" onClick={() => setShowSoundModal(true)}>
+                                +
                             </div>
-                        ))}
-                        <div className="seq-frame seq-frame-add" onClick={() => frameUploadRef.current.click()}>+</div>
+                        </div>
                     </div>
-                    <div className="eraser-bar">
-                        <button className="btn-tool-pen" onClick={() => setShowSoundModal(true)}>🔊 AJOUTER SON</button>
+
+                    {/* BARRE D'OUTILS (Crayon / Baguette) */}
+                    <div className="eraser-bar mt-auto">
+                        <div className="flex gap-2 items-center w-full">
+                            
+                            {/* BOUTON ÉDITER (Ouvre Gomme ou Éditeur Son) */}
+                            <button className="btn-tool-pen" onClick={handlePenClick} disabled={selectedFrameIdx === null && selectedSoundIdx === null} title={selectedSoundIdx !== null ? "Éditer le son (Trim, Effets)" : "Éditer l'image (Gomme)"}>
+                                ✏️ {selectedSoundIdx !== null ? "ÉDITER SON" : "ÉDITER IMG"}
+                            </button>
+                            
+                            {/* BOUTON MAGIC CLEAN (Seulement pour images) */}
+                            {leftTab === 'actions' && (
+                                <button className={`btn-magic-clean ${cleaning ? 'pulse' : ''}`} onClick={handleSmartAIClean} disabled={cleaning || !selectedAction.frames || selectedAction.frames.length === 0} title="Détourage IA">
+                                    ✨ {cleaning ? '...' : (selectedFrameIdx !== null ? 'DÉTOURER' : 'TOUT CLEAN')}
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}
@@ -7981,11 +8287,12 @@ export default function StudioRightPanel({
 [[[£ FILE: client/src/features/prof/studio/studioComp/GameEngine.jsx £]]]
 // @signatures: GameEngine
 import React from 'react';
-import UnifiedMoteur from '../../../eleve/games/UnifiedMoteur';
+// ✅ IMPORT MIS À JOUR : On pointe vers le dossier SHARED
+import UnifiedMoteur from '../../../shared/games/UnifiedMoteur';
 
 /**
- * 🎓 SHELL STUDIO V.2.71
- * Rôle : Coquille vide qui appelle le moteur maître.
+ * 🎓 SHELL STUDIO V.3.1 (WIRING SHARED)
+ * Rôle : Coquille vide qui appelle le moteur maître situé dans shared/games.
  */
 export default function GameEngine({ code, project, activeSceneIdx, onStop, resolveUrl }) {
     return (
@@ -9139,6 +9446,546 @@ export default function SoundModal({ onSave, onClose }) {
 
 [[[£ END: client/src/features/prof/studio/studioComp/SoundModal.jsx £]]]
 
+[[[£ FILE: client/src/features/shared/games/UnifiedMoteur.jsx £]]]
+// @signatures: UnifiedMoteur, handleAnswerClick, triggerWinSequence, startCurrentLevel, getEmbedUrl, checkAnswerPermissive, triggerGlobalEvent, playParallelSoundImpl, normalize, getYoutubeEmbed
+import React, { useState, useRef, useEffect } from 'react';
+import SoundExpert from '../../../services/SoundExpert';
+import { api } from '../../../services/api';
+import { createGameBase } from '../../../services/gameCore';
+
+/**
+ * 🧠 LE MAITRE UNIFIÉ V.3.03 (SMART CACHE)
+ * VERSION : V.3.03
+ * CORRECTIF FINAL :
+ * - Le moteur ne recharge plus les images à chaque frappe clavier dans le Studio.
+ * - Il compare les URLs : si ce sont les mêmes, il ne touche à rien (zéro clignotement).
+ * - L'écran noir est résolu par une persistance des assets.
+ */
+
+const ZOMBIE_GAME_CODE = `
+class MiniGame extends MiniGameBase {
+    constructor(canvas, assets, callbacks) {
+        super(canvas, assets, callbacks);
+        this.projectiles = [];
+        this.zombieX = 100;
+        this.zombieState = "WALKING"; 
+        this.heroState = "IDLE";
+        this.heroTimer = 0;
+        this.hasDealtDamage = false;
+        this.isStopped = false;
+        this.baseSpeed = 0.15;
+    }
+    start() { 
+        this.isStopped = false;
+        if(this.HEROS) { this.HEROS.x = 15; this.HEROS.y = 70; this.HEROS.play("IDLE", true); } 
+        this.resetZombie();
+    }
+    resetZombie() {
+        this.zombieX = 100; this.zombieState = "WALKING"; this.hasDealtDamage = false;
+        if(this.ZOMBIE) { this.ZOMBIE.x = 100; this.ZOMBIE.play("AVANCER", true); }
+    }
+    onResult(isCorrect) {
+        if (this.heroState === "HIT") return;
+        if (isCorrect && this.HEROS) {
+            this.HEROS.play("TIRER", false);
+            this.heroState = "SHOOT"; this.heroTimer = 40;
+            this.projectiles.push({ x: this.HEROS.x + 5, y: this.HEROS.y - 5 });
+        }
+    }
+    update() {
+        if (this.isStopped) return;
+        if (this.ZOMBIE) {
+            const targetScale = this.isBossPhase ? this.ZOMBIE.baseScale * 1.6 : this.ZOMBIE.baseScale;
+            this.ZOMBIE.scale += (targetScale - this.ZOMBIE.scale) * 0.1;
+        }
+
+        if (this.heroState === "SHOOT" || this.heroState === "HIT") {
+            this.heroTimer--;
+            if (this.heroTimer <= 0) { this.heroState = "IDLE"; if(this.HEROS) this.HEROS.play("IDLE", true); }
+        }
+        if (this.zombieState === "WALKING") {
+            let speed = this.isBossPhase ? this.baseSpeed * 0.5 : this.baseSpeed;
+            this.zombieX -= speed;
+            if (this.zombieX < 20) {
+                this.zombieState = "ATTACKING"; this.hasDealtDamage = false;
+                if (this.ZOMBIE) { this.ZOMBIE.x = 20; this.ZOMBIE.play("TAPER", false); }
+            } else if (this.ZOMBIE) { this.ZOMBIE.x = this.zombieX; }
+        } 
+        else if (this.zombieState === "ATTACKING") {
+            if (this.ZOMBIE && this.ZOMBIE.frameIdx >= 1 && !this.hasDealtDamage) {
+                this.hasDealtDamage = true;
+                if (this.heroState !== "HIT") {
+                    if (this.HEROS) { this.HEROS.play("TOUCHE", false); this.heroState = "HIT"; this.heroTimer = 60; }
+                    if (this.callbacks && this.callbacks.onPlayerHit) this.callbacks.onPlayerHit();
+                }
+            }
+            if (this.ZOMBIE && this.ZOMBIE.isAnimFinished) this.resetZombie();
+        } 
+        else if (this.zombieState === "HIT") {
+            this.zombieX += 0.5;
+            if (this.ZOMBIE) { this.ZOMBIE.x = this.zombieX; if (this.ZOMBIE.isAnimFinished) this.resetZombie(); }
+        }
+        for (let i = this.projectiles.length - 1; i >= 0; i--) { 
+            let p = this.projectiles[i]; p.x += 3;
+            if (this.zombieState === "WALKING" && p.x > this.zombieX - 5 && p.x < this.zombieX + 5) {
+                this.projectiles.splice(i, 1); this.zombieState = "HIT";
+                if (this.ZOMBIE) this.ZOMBIE.play("TOUCHE", false); 
+            } 
+            else if (p.x > 110) { this.projectiles.splice(i, 1); }
+        }
+    }
+    draw() {
+        if (this.isStopped) return;
+        const ctx = this.ctx;
+        this.projectiles.forEach(p => { 
+            if (this.isBossPhase) {
+                ctx.save(); ctx.shadowBlur = 20; ctx.shadowColor = "#f59e0b"; ctx.font = "50px Arial";
+                ctx.textAlign = "center"; ctx.textBaseline = "middle";
+                ctx.fillText("🔥", (p.x/100)*this.canvas.width, (p.y/100)*this.canvas.height);
+                ctx.restore();
+            } else {
+                ctx.fillStyle = "#f97316"; ctx.beginPath(); 
+                ctx.arc((p.x/100)*this.canvas.width, (p.y/100)*this.canvas.height, 10, 0, Math.PI*2); 
+                ctx.fill(); 
+            }
+        });
+    }
+}
+`;
+
+export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }) {
+    const canvasRef = useRef(null);
+    const [engineStarted, setEngineStarted] = useState(false);
+    const [isReady, setIsReady] = useState(false);
+    const [loadProgress, setLoadProgress] = useState("");
+    
+    // --- ÉTATS ---
+    const [allLevels, setAllLevels] = useState([]); 
+    const [currentLevelIdx, setCurrentLevelIdx] = useState(0);
+    const [levelQuestions, setLevelQuestions] = useState([]); 
+    const [questionStates, setQuestionStates] = useState([]); 
+    const [currentQIndex, setCurrentQIndex] = useState(-1);
+    const [lives, setLives] = useState(4);
+    const [feedback, setFeedback] = useState(null);
+    const [isMuted, setIsMuted] = useState(false);
+    const [userInput, setUserInput] = useState("");
+
+    // --- VISUELS ---
+    const [showLevelIntro, setShowLevelIntro] = useState(true);
+    const [showLevelBanner, setShowLevelBanner] = useState(false);
+    const [showStageClear, setShowStageClear] = useState(false);
+    const [showGameOver, setShowGameOver] = useState(false);
+    const [showGameComplete, setShowGameComplete] = useState(false);
+    const [zoomMedia, setZoomMedia] = useState(null);
+    const [isPowerOff, setIsPowerOff] = useState(false);
+    
+    const [activeBossVisual, setActiveBossVisual] = useState(false);
+
+    const audioCtxRef = useRef(null);
+    const audioBuffersRef = useRef(new Map());
+    const imageAssetsRef = useRef(new Map());
+    const gameInstanceRef = useRef(null);
+    const frameIdRef = useRef(null);
+    const keysPressed = useRef({});
+    const projectRef = useRef(gameData);
+    const bossModeRef = useRef(false);
+    
+    // STABILITÉ ASSETS (Signature)
+    const [assetsSignature, setAssetsSignature] = useState("");
+
+    const getYoutubeEmbed = (url) => {
+        if (!url) return "";
+        const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+        const match = url.match(regExp);
+        const id = (match && match[2].length === 11) ? match[2] : null;
+        if (id) return `https://www.youtube.com/embed/${id}?autoplay=1&rel=0&modestbranding=1`;
+        return url;
+    };
+
+    useEffect(() => {
+        if (showLevelBanner) {
+            triggerGlobalEvent("DEPART"); 
+        }
+    }, [showLevelBanner]);
+
+    // SYNC REF + DETECTION CHANGEMENT ASSETS SEULEMENT
+    useEffect(() => { 
+        projectRef.current = gameData; 
+        
+        const scene = gameData?.scenes?.[0];
+        if (scene) {
+            // On génère une signature unique basée uniquement sur les URLs des images et sons
+            // Si le prof change la vitesse, le nom, ou le code, cette signature NE CHANGE PAS -> Pas de rechargement
+            const imgs = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url)))].filter(Boolean).sort().join('|');
+            const snds = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url))))].filter(Boolean).sort().join('|');
+            
+            const sig = `${imgs}__${snds}`;
+            if (sig !== assetsSignature) {
+                setAssetsSignature(sig);
+            }
+        }
+    }, [gameData]);
+
+    useEffect(() => {
+        const isBossNow = (currentQIndex !== -1 && (questionStates[currentQIndex] || 0) === 2);
+        setActiveBossVisual(isBossNow);
+        bossModeRef.current = isBossNow;
+        if (gameInstanceRef.current) gameInstanceRef.current.isBossPhase = isBossNow;
+    }, [currentQIndex, questionStates]);
+
+    function resolveUrl(url) {
+        if (!url) return "";
+        if (url.startsWith('/api/proxy') || url.startsWith('blob:')) return url;
+        const id = url.split('/').pop();
+        return `/api/proxy/${id}`;
+    }
+
+    const isCheatMode = () => keysPressed.current['KeyS'] && keysPressed.current['KeyT'];
+
+    // 1. DATA LOADING
+    useEffect(() => {
+        const loadLogic = async () => {
+            let levelsData = gameData?.levels || [];
+            if (isStudioTest || levelsData.length === 0) {
+                const res = await api.get('/games/test-data');
+                levelsData = res?.levels?.length > 0 ? res.levels : [];
+            }
+            setAllLevels(levelsData);
+            if (levelsData[currentLevelIdx]) {
+                const qs = levelsData[currentLevelIdx].questions || [];
+                setLevelQuestions(qs);
+                setQuestionStates(new Array(qs.length).fill(0));
+                setCurrentQIndex(0);
+            }
+        };
+        loadLogic();
+        const hDown = (e) => { keysPressed.current[e.code] = true; };
+        const hUp = (e) => { keysPressed.current[e.code] = false; };
+        window.addEventListener('keydown', hDown);
+        window.addEventListener('keyup', hUp);
+        return () => { window.removeEventListener('keydown', hDown); window.removeEventListener('keyup', hUp); };
+    }, [gameData, currentLevelIdx]);
+
+    // 2. ASSETS LOADING (TRIGGERED ONLY ON SIGNATURE CHANGE)
+    useEffect(() => {
+        if (!assetsSignature) return; // Pas d'assets, pas de chargement
+
+        if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+        
+        console.log("📥 [MOTEUR] Chargement intelligent des assets...");
+        setIsReady(false); // On bloque le jeu pendant le chargement des nouveaux assets
+
+        const scene = projectRef.current?.scenes?.[0];
+        if (!scene) { setIsReady(true); return; }
+        
+        // --- CHARGEMENT IMAGES ---
+        const imgs = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url)))].filter(Boolean);
+        
+        let loadedImgs = 0;
+        
+        const checkDone = () => {
+            loadedImgs++;
+            setLoadProgress(`${Math.round(loadedImgs/imgs.length*100)}%`);
+            if (loadedImgs >= imgs.length) setIsReady(true);
+        };
+
+        if (imgs.length === 0) {
+            setIsReady(true);
+        } else {
+            imgs.forEach(url => {
+                const rKey = resolveUrl(url);
+                // Si l'image est déjà en cache mémoire, on la zappe
+                if (imageAssetsRef.current.has(rKey)) {
+                    checkDone();
+                } else {
+                    const img = new Image(); 
+                    img.crossOrigin = "anonymous"; 
+                    img.onload = () => { imageAssetsRef.current.set(rKey, img); checkDone(); };
+                    img.onerror = () => { console.warn("Image error:", url); checkDone(); };
+                    img.src = rKey;
+                }
+            });
+        }
+
+        // --- CHARGEMENT SONS ---
+        const snds = [
+            ...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url))))
+        ].filter(Boolean);
+        
+        snds.forEach(url => { 
+            SoundExpert.decodeAudio(resolveUrl(url), audioCtxRef.current).then(buf => { 
+                if (buf) audioBuffersRef.current.set(resolveUrl(url), buf); 
+            }); 
+        });
+        
+    }, [assetsSignature]); // <-- ICI EST LA CLÉ : On ne recharge que si la signature change
+
+    const playParallelSoundImpl = (url, forceAlways = false) => {
+        if ((!engineStarted && !forceAlways) || isMuted || !audioCtxRef.current) return;
+        const buffer = audioBuffersRef.current.get(resolveUrl(url));
+        if (buffer) {
+            try {
+                if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
+                const source = audioCtxRef.current.createBufferSource();
+                source.buffer = buffer; 
+                source.connect(audioCtxRef.current.destination);
+                source.start(0);
+            } catch(e) { console.error("Sound Play Error:", e); }
+        }
+    };
+
+    const triggerGlobalEvent = (eventName) => {
+        const scene = projectRef.current.scenes?.[0];
+        if (!scene || !scene.globalSounds) return;
+        const cleanTarget = eventName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+        const event = scene.globalSounds.find(g => 
+            g.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim() === cleanTarget
+        );
+        if (event && event.sounds) {
+            event.sounds.forEach(snd => playParallelSoundImpl(snd.url, true));
+        }
+    };
+
+    // 3. LOGIQUE QUIZ
+    const handleAnswerClick = (val) => {
+        if (feedback || currentQIndex === -1 || showLevelIntro || showStageClear) return;
+        const currentQ = levelQuestions[currentQIndex];
+        const clean = (s) => String(s).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, '').trim();
+        let isCorrect = (typeof val === 'number') ? currentQ.a === val : clean(val) === clean(currentQ.options[currentQ.a]);
+        
+        setFeedback(isCorrect ? 'CORRECT' : 'WRONG');
+        if (gameInstanceRef.current?.onResult) gameInstanceRef.current.onResult(isCorrect);
+
+        const nextStates = [...questionStates];
+        if (isCorrect) {
+            nextStates[currentQIndex] = Math.min(3, nextStates[currentQIndex] + 1);
+        } else {
+            nextStates[currentQIndex] = Math.max(0, nextStates[currentQIndex] - 1);
+            setLives(l => Math.max(0, l - 1));
+        }
+        
+        setQuestionStates(nextStates);
+        setUserInput("");
+
+        setTimeout(() => {
+            setFeedback(null);
+            const available = nextStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
+            if (available.length > 0) {
+                if (isCorrect && nextStates[currentQIndex] === 2) {
+                    const bossNow = true;
+                    setActiveBossVisual(bossNow);
+                    bossModeRef.current = bossNow;
+                    if (gameInstanceRef.current) gameInstanceRef.current.isBossPhase = bossNow;
+                } else {
+                    const others = available.filter(idx => idx !== currentQIndex);
+                    setCurrentQIndex(others.length > 0 ? others[Math.floor(Math.random() * others.length)] : available[0]);
+                }
+            } else {
+                triggerGlobalEvent("UPLEVEL");
+                triggerWinSequence(); 
+            }
+        }, 1000);
+    };
+
+    const triggerWinSequence = () => {
+        setShowStageClear(true);
+        setTimeout(() => setIsPowerOff(true), 1500);
+        setTimeout(() => {
+            setEngineStarted(false); 
+            setIsPowerOff(false); 
+            setShowStageClear(false);
+            if (allLevels[currentLevelIdx + 1]) {
+                setCurrentLevelIdx(prev => prev + 1); 
+                setShowLevelIntro(true); 
+            } else { 
+                triggerGlobalEvent("VICTOIRE");
+                setShowGameComplete(true);
+            }
+        }, 3000);
+    };
+
+    const handleHeartClick = () => { if (isCheatMode()) setLives(l => Math.max(0, l - 1)); };
+    const handleQuestionClick = () => { if (isCheatMode()) { triggerGlobalEvent("UPLEVEL"); triggerWinSequence(); } };
+    const handleBarClick = (idx) => {
+        if (isCheatMode()) {
+            const nextStates = [...questionStates];
+            nextStates[idx] = Math.min(3, nextStates[idx] + 1);
+            setQuestionStates(nextStates);
+            if (nextStates.every(s => s >= 3)) {
+                triggerGlobalEvent("UPLEVEL");
+                triggerWinSequence();
+            }
+        }
+    };
+
+    const handleRetry = () => { setShowGameOver(false); setLives(4); setEngineStarted(false); setShowLevelIntro(true); };
+    
+    const startCurrentLevel = async () => { 
+        if (!isReady) return; 
+        if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
+            await audioCtxRef.current.resume();
+        }
+        setEngineStarted(true); 
+        setShowLevelIntro(false); 
+        setShowLevelBanner(true); 
+        setTimeout(() => setShowLevelBanner(false), 1500); 
+    };
+
+    // 4. RENDU MOTEUR
+    useEffect(() => {
+        if (!engineStarted || !canvasRef.current) return;
+        try {
+            const MiniGameBase = createGameBase({ 
+                audioBuffers: audioBuffersRef.current, 
+                audioCtx: audioCtxRef.current, 
+                projectRef, 
+                sceneIdx: 0, 
+                imageAssets: imageAssetsRef.current, 
+                resolveUrl, 
+                canvas: canvasRef.current, 
+                ctx: canvasRef.current.getContext('2d'), 
+                playParallelSound: playParallelSoundImpl, 
+                callbacks: { 
+                    onPlayerHit: () => { 
+                        setLives(l => { 
+                            const n = Math.max(0, l - 1); 
+                            if (n === 0) {
+                                setShowGameOver(true); 
+                                triggerGlobalEvent("DEFAITE");
+                            }
+                            return n; 
+                        }); 
+                    } 
+                } 
+            });
+            const factory = new Function('MiniGameBase', `${projectRef.current.generatedCode || ZOMBIE_GAME_CODE}\nreturn MiniGame;`);
+            const instance = new (factory(MiniGameBase))(canvasRef.current, {}, null);
+            gameInstanceRef.current = instance; 
+            if (instance.start) instance.start();
+            
+            const tick = () => {
+                if(instance.keys) Object.assign(instance.keys, keysPressed.current);
+                instance.isBossPhase = bossModeRef.current;
+                if (instance.update) instance.update(); 
+                if (instance._render) instance._render(); 
+                if (instance.draw) instance.draw();
+                frameIdRef.current = requestAnimationFrame(tick);
+            };
+            tick();
+        } catch (e) { console.error("Moteur Crash:", e); }
+        return () => { if(frameIdRef.current) cancelAnimationFrame(frameIdRef.current); };
+    }, [engineStarted]);
+
+    const currentLevelData = allLevels[currentLevelIdx] || {};
+    const safeQ = (levelQuestions && currentQIndex >= 0) ? levelQuestions[currentQIndex] : null;
+
+    return (
+        <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center overflow-hidden font-sans">
+            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">VERSION V.3.03 (SMART CACHE)</div>
+            <button onClick={onExit} className="absolute top-6 right-6 w-14 h-14 bg-white/10 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-2xl font-black z-[4000] border-2 border-white/20">✕</button>
+
+            {showLevelBanner && (
+                <div className="fixed top-[20%] left-0 right-0 z-[5000] flex justify-center pointer-events-none animate-in fade-in zoom-in duration-300">
+                    <span className="text-yellow-400 font-black text-6xl uppercase tracking-tighter italic drop-shadow-[0_4px_10px_rgba(0,0,0,0.8)]">Niveau {currentLevelIdx + 1}</span>
+                </div>
+            )}
+
+            {showStageClear && (
+                <div className="fixed top-[40%] left-0 right-0 z-[5000] flex justify-center pointer-events-none animate-in zoom-in">
+                    <span className="text-green-500 font-black text-8xl uppercase tracking-tighter italic drop-shadow-[0_0_30px_rgba(34,197,94,0.5)]">STAGE CLEAR !</span>
+                </div>
+            )}
+
+            {zoomMedia && (
+                <div className="fixed inset-0 z-[6000] bg-black flex items-center justify-center p-0 animate-in fade-in duration-300" onClick={() => setZoomMedia(null)}>
+                    <button className="absolute top-8 right-8 w-16 h-16 bg-white hover:bg-red-600 hover:text-white text-black rounded-full flex items-center justify-center text-3xl font-black shadow-2xl transition-all z-[6001] hover:scale-110 active:scale-95">✕</button>
+                    <div className="w-full h-full flex items-center justify-center p-4">
+                        {zoomMedia === 'sheet' ? <img src={resolveUrl(currentLevelData.intro?.sheetUrl)} className="h-[90vh] object-contain" alt="Zoom" /> : <div className="h-[90vh] aspect-video"><iframe className="w-full h-full" src={getYoutubeEmbed(currentLevelData.intro?.videoUrl)} frameBorder="0" allow="autoplay; encrypted-media" allowFullScreen></iframe></div>}
+                    </div>
+                </div>
+            )}
+
+            {showGameComplete && (
+                <div className="absolute inset-0 z-[7000] bg-gradient-to-br from-yellow-500 to-purple-600 flex flex-col items-center justify-center animate-in zoom-in p-10 text-center">
+                    <div className="text-[150px] mb-4 animate-bounce">🏆</div>
+                    <h1 className="text-8xl font-black text-white uppercase tracking-tighter drop-shadow-xl mb-4">VICTOIRE !</h1>
+                    <p className="text-2xl font-bold text-yellow-100 uppercase tracking-widest mb-10">Tu as terminé tous les niveaux !</p>
+                    <div className="bg-white/20 backdrop-blur-md rounded-3xl p-8 border-4 border-white/40 mb-10 min-w-[300px]">
+                        <span className="block text-sm font-black text-white/60 uppercase mb-2">Score Final</span>
+                        <span className="block text-6xl font-black text-white">{lives * 100 + (allLevels.length * 50)} PTS</span>
+                    </div>
+                    <button onClick={onExit} className="px-12 py-5 bg-white text-purple-700 font-black text-2xl rounded-2xl shadow-2xl hover:scale-105 hover:bg-purple-50 transition-all uppercase tracking-widest">RETOURNER AU MENU</button>
+                </div>
+            )}
+
+            {engineStarted && !showLevelIntro && (
+                <>
+                    <div className="absolute top-6 w-full flex justify-between px-10 pointer-events-none z-30">
+                        <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl pointer-events-auto cursor-pointer active:scale-95 transition-transform" onClick={handleHeartClick}>
+                            {"❤️".repeat(lives)}
+                        </div>
+                        <div className="flex-1 flex flex-col items-center gap-2">
+                            <div className="bg-indigo-600 text-white px-4 py-1 rounded-full text-xs font-black uppercase tracking-widest">{currentLevelData.name || `NIVEAU ${currentLevelIdx + 1}`}</div>
+                            {safeQ && !showStageClear && (
+                                <div onClick={handleQuestionClick} className={`bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 shadow-2xl text-xl pointer-events-auto text-center max-w-2xl cursor-pointer ${activeBossVisual ? 'border-red-500 ring-2 ring-red-500/50' : 'border-slate-600'}`}>
+                                    {feedback === 'CORRECT' ? "✅ BIEN JOUÉ !" : feedback === 'WRONG' ? "❌ MAUVAISE RÉPONSE" : safeQ.q}
+                                    {activeBossVisual && !feedback && <div className="text-[10px] text-red-500 mt-1 animate-pulse uppercase tracking-widest">⚠️ Boss Final : Saisis la réponse !</div>}
+                                </div>
+                            )}
+                        </div>
+                        <div className="flex gap-2 pointer-events-auto mr-20">
+                            {questionStates.map((s, i) => (
+                                <div key={i} onClick={() => handleBarClick(i)} className={`w-4 h-12 rounded-md border border-slate-600 relative overflow-hidden cursor-pointer ${currentQIndex === i ? 'ring-2 ring-indigo-400 scale-110' : 'opacity-40'}`}>
+                                    <div className={`absolute bottom-0 left-0 right-0 transition-all duration-500 ${s >= 3 ? 'bg-green-500 shadow-[0_0_10px_green]' : s >= 2 ? 'bg-red-500 shadow-[0_0_10px_red]' : 'bg-yellow-500'}`} style={{ height: `${(s/3)*100}%` }} />
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="relative animate-in zoom-in">
+                        <canvas ref={canvasRef} width={800} height={450} className={`aspect-video shadow-2xl bg-black border-4 transition-all duration-1000 ${isPowerOff ? 'opacity-0' : 'opacity-100'} ${activeBossVisual ? 'border-red-900 shadow-[0_0_50px_rgba(255,0,0,0.2)]' : 'border-slate-800'}`} />
+                    </div>
+                </>
+            )}
+
+            {showLevelIntro && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950 z-50 animate-in zoom-in p-8 text-center">
+                    <h1 className="text-5xl text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-500 font-black uppercase tracking-tighter drop-shadow-2xl mb-6">{currentLevelIdx + 1} {currentLevelData.name}</h1>
+                    <div className="flex gap-10 mb-12 w-full max-w-4xl justify-center h-[280px]">
+                        <div onClick={() => currentLevelData.intro?.sheetUrl && setZoomMedia('sheet')} className="h-full aspect-[3/4] bg-slate-800 rounded-3xl border-4 border-slate-700 overflow-hidden flex items-center justify-center shadow-2xl cursor-pointer hover:border-indigo-500 hover:scale-105 transition-all">
+                            {currentLevelData.intro?.sheetUrl ? <img src={resolveUrl(currentLevelData.intro.sheetUrl)} className="w-full h-full object-contain" alt="Fiche" /> : "Fiche"}
+                        </div>
+                        <div onClick={() => currentLevelData.intro?.videoUrl && setZoomMedia('video')} className="h-full aspect-video bg-black rounded-3xl border-4 border-slate-700 overflow-hidden shadow-2xl flex items-center justify-center cursor-pointer hover:border-indigo-500 hover:scale-105 transition-all text-white text-4xl">▶</div>
+                    </div>
+                    <button onClick={startCurrentLevel} disabled={!isReady} className={`px-16 py-6 rounded-full font-black text-3xl shadow-2xl border-4 transition-all ${isReady ? 'bg-white text-indigo-900 border-indigo-500 animate-pulse hover:scale-110' : 'bg-slate-700 text-slate-500 border-slate-600 cursor-not-allowed'}`}>
+                        {isReady ? "C'EST PARTI ! 🚀" : `CHARGEMENT ${loadProgress}...`}
+                    </button>
+                </div>
+            )}
+
+            {showGameOver && (<div className="absolute inset-0 z-[60] bg-red-900/95 flex flex-col items-center justify-center animate-in zoom-in"><h1 className="text-8xl font-black text-white mb-8 tracking-tighter drop-shadow-lg">💀 GAME OVER</h1><button onClick={handleRetry} className="px-10 py-5 bg-white text-red-900 font-black text-2xl rounded-2xl shadow-2xl hover:scale-105 transition-transform uppercase tracking-widest">RÉESSAYER</button></div>)}
+
+            {engineStarted && !showLevelIntro && safeQ && !showStageClear && !showGameComplete && (
+                <div className="absolute bottom-10 w-full flex justify-center px-10 pointer-events-auto z-30">
+                    {activeBossVisual ? (
+                        <div className="flex row gap-4 w-full max-w-2xl">
+                            <input autoFocus className="flex-1 bg-slate-900 border-4 border-red-600 text-white text-3xl font-black py-6 px-10 rounded-3xl text-center outline-none" value={userInput} onChange={e => setUserInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAnswerClick(userInput)} />
+                            <button onClick={() => handleAnswerClick(userInput)} className="bg-red-600 text-white px-10 rounded-3xl font-black text-xl border-b-8 border-red-800 uppercase">ATTAQUER ⚔️</button>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-4 gap-4 w-full max-w-5xl">
+                            {safeQ.options.map((o, i) => (
+                                <button key={i} onClick={() => handleAnswerClick(i)} className="bg-indigo-600 text-white py-6 rounded-2xl font-black uppercase text-lg border-b-8 border-indigo-800 active:border-b-0 active:translate-y-2">{o}</button>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
+[[[£ END: client/src/features/shared/games/UnifiedMoteur.jsx £]]]
+
 [[[£ FILE: client/src/index.css £]]]
 @tailwind base; @tailwind components; @tailwind utilities;
 :root { --primary: #2563eb; }
@@ -9215,37 +10062,39 @@ ReactDOM.createRoot(document.getElementById('root')).render(
 
 [[[£ FILE: client/src/services/SoundExpert.js £]]]
 /**
- * 🎛️ SOUND EXPERT V550 (SHARED SERVICE)
- * Stocke les sons en mémoire pour une lecture instantanée (0ms latence).
- * Accessible par le Prof (Studio) ET l'Élève (Jeu).
+ * 🎛️ SOUND EXPERT V555 (FULL DSP SUITE)
+ * Service partagé pour la gestion audio (Décodage + Effets).
+ * Comprend : Decode, Trim, Speed, Gain, Reverse, Robotize, WavExport.
  */
 
+// Cache mémoire pour éviter de re-télécharger/re-décoder les sons en boucle
 const audioCache = new Map();
 
 const SoundExpert = {
-    // 1. DÉCODAGE AVEC CACHE
+    // --- 1. CORE : DÉCODAGE ---
+    
     decodeAudio: async (url, audioCtx) => {
         if (!audioCtx) return null;
         
-        // A. SI DÉJÀ EN MÉMOIRE, ON RENVOIE DIRECTEMENT
+        // A. SI DÉJÀ EN MÉMOIRE
         if (audioCache.has(url)) {
             return audioCache.get(url);
         }
 
         try {
-            // console.log("📥 [SoundExpert] Téléchargement:", url);
             const response = await fetch(url, { mode: 'cors' });
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             
             const arrayBuffer = await response.arrayBuffer();
             if (arrayBuffer.byteLength < 100) throw new Error("Fichier trop petit");
 
+            // On copie le buffer car decodeAudioData le détache
             const tempBuffer = arrayBuffer.slice(0);
             
             return await new Promise((resolve, reject) => {
                 audioCtx.decodeAudioData(tempBuffer, 
                     (decoded) => {
-                        // B. ON STOCKE EN MÉMOIRE POUR LA PROCHAINE FOIS
+                        // B. MISE EN CACHE
                         audioCache.set(url, decoded);
                         resolve(decoded);
                     },
@@ -9262,26 +10111,132 @@ const SoundExpert = {
         }
     },
 
-    // --- OUTILS DSP (Traitement du signal) ---
+    // --- 2. DSP : EFFETS AUDIO ---
+
+    /**
+     * Coupe le son (Trim)
+     */
     trim: (buffer, startPct, endPct) => {
         if (!buffer || !buffer.getChannelData) return buffer;
+        
         const start = Math.floor(startPct * buffer.length);
         const end = Math.floor(endPct * buffer.length);
         const newLen = end - start;
+        
         if (newLen <= 0) return buffer;
+
         const newCtx = new (window.AudioContext || window.webkitAudioContext)();
         const newBuffer = newCtx.createBuffer(buffer.numberOfChannels, newLen, buffer.sampleRate);
+
         for (let i = 0; i < buffer.numberOfChannels; i++) {
             const channel = buffer.getChannelData(i);
             const newChannel = newBuffer.getChannelData(i);
-            for (let j = 0; j < newLen; j++) newChannel[j] = channel[start + j];
+            for (let j = 0; j < newLen; j++) {
+                newChannel[j] = channel[start + j];
+            }
         }
         return newBuffer;
     },
     
-    // (Autres méthodes utilitaires conservées...)
+    /**
+     * Change la vitesse (Pitch shift via resampling basique)
+     */
+    changeSpeed: (buffer, rate) => {
+        if (!buffer || !buffer.getChannelData) return buffer;
+        
+        // Nouvelle longueur estimée
+        const newLen = Math.floor(buffer.length / rate);
+        const newCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const newBuffer = newCtx.createBuffer(buffer.numberOfChannels, newLen, buffer.sampleRate);
+
+        for (let i = 0; i < buffer.numberOfChannels; i++) {
+            const data = buffer.getChannelData(i);
+            const newData = newBuffer.getChannelData(i);
+            
+            // Interpolation linéaire pour redimensionner le signal
+            for (let j = 0; j < newLen; j++) {
+                const originalPos = j * rate;
+                const index = Math.floor(originalPos);
+                const frac = originalPos - index;
+                
+                const a = data[Math.min(index, buffer.length - 1)];
+                const b = data[Math.min(index + 1, buffer.length - 1)];
+                
+                newData[j] = a + (b - a) * frac;
+            }
+        }
+        return newBuffer;
+    },
+
+    /**
+     * Applique un gain (Volume)
+     */
+    applyGain: (buffer, val) => {
+        if (!buffer || !buffer.getChannelData) return buffer;
+        
+        const newCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const newBuffer = newCtx.createBuffer(buffer.numberOfChannels, buffer.length, buffer.sampleRate);
+        
+        for (let i = 0; i < buffer.numberOfChannels; i++) {
+            const d = buffer.getChannelData(i);
+            const n = newBuffer.getChannelData(i);
+            for (let j = 0; j < buffer.length; j++) {
+                // Clipping simple pour éviter la saturation brutale
+                let sample = d[j] * val;
+                if (sample > 1) sample = 1;
+                if (sample < -1) sample = -1;
+                n[j] = sample;
+            }
+        }
+        return newBuffer;
+    },
+
+    /**
+     * Inverse le son (Reverse)
+     */
+    reverse: (buffer) => {
+        if (!buffer || !buffer.getChannelData) return buffer;
+        
+        const newCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const newBuffer = newCtx.createBuffer(buffer.numberOfChannels, buffer.length, buffer.sampleRate);
+        
+        for (let i = 0; i < buffer.numberOfChannels; i++) {
+            const d = buffer.getChannelData(i);
+            const n = newBuffer.getChannelData(i);
+            for (let j = 0; j < buffer.length; j++) {
+                n[j] = d[buffer.length - 1 - j];
+            }
+        }
+        return newBuffer;
+    },
+
+    /**
+     * Effet Robot (Modulation en anneau)
+     */
+    robotize: (buffer) => {
+        if (!buffer || !buffer.getChannelData) return buffer;
+        
+        const newCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const newBuffer = newCtx.createBuffer(buffer.numberOfChannels, buffer.length, buffer.sampleRate);
+        const freq = 50; // Fréquence de modulation (Hz)
+        
+        for (let i = 0; i < buffer.numberOfChannels; i++) {
+            const d = buffer.getChannelData(i);
+            const n = newBuffer.getChannelData(i);
+            for (let j = 0; j < buffer.length; j++) {
+                // Onde porteuse sinusoïdale
+                const carrier = Math.sin(j / buffer.sampleRate * 2 * Math.PI * freq);
+                n[j] = d[j] * carrier;
+            }
+        }
+        return newBuffer;
+    },
+
+    // --- 3. EXPORT : BUFFER VERS WAV (BLOB) ---
+
     bufferToWav: (buffer) => {
         if (!buffer || !buffer.getChannelData) return null;
+
         const numOfChan = buffer.numberOfChannels;
         const length = buffer.length * numOfChan * 2 + 44;
         const out = new ArrayBuffer(length);
@@ -9290,18 +10245,42 @@ const SoundExpert = {
         let sample;
         let offset = 0;
         let pos = 0;
-        setUint32(0x46464952); setUint32(length - 8); setUint32(0x45564157); setUint32(0x20746d66); setUint32(16); setUint16(1); setUint16(numOfChan); setUint32(buffer.sampleRate); setUint32(buffer.sampleRate * 2 * numOfChan); setUint16(numOfChan * 2); setUint16(16); setUint32(0x61746164); setUint32(length - pos - 4);
+
+        // Écriture Header WAV
+        setUint32(0x46464952); // "RIFF"
+        setUint32(length - 8); // file length - 8
+        setUint32(0x45564157); // "WAVE"
+
+        setUint32(0x20746d66); // "fmt " chunk
+        setUint32(16); // length = 16
+        setUint16(1); // PCM (uncompressed)
+        setUint16(numOfChan);
+        setUint32(buffer.sampleRate);
+        setUint32(buffer.sampleRate * 2 * numOfChan); // avg. bytes/sec
+        setUint16(numOfChan * 2); // block-align
+        setUint16(16); // 16-bit (hardcoded in this loop)
+
+        setUint32(0x61746164); // "data" - chunk
+        setUint32(length - pos - 4); // chunk length
+
+        // Préparation des canaux
         for(let i = 0; i < buffer.numberOfChannels; i++) channels.push(buffer.getChannelData(i));
+
+        // Entrelacement et conversion 16-bit
         while(pos < buffer.length) {
             for(let i = 0; i < numOfChan; i++) {
+                // Clamp entre -1 et 1
                 sample = Math.max(-1, Math.min(1, channels[i][pos])); 
+                // Conversion float -> int16
                 sample = (0.5 + sample < 0 ? sample * 32768 : sample * 32767)|0; 
                 view.setInt16(44 + offset, sample, true); 
                 offset += 2;
             }
             pos++;
         }
+
         return new Blob([out], { type: "audio/wav" });
+
         function setUint16(data) { view.setUint16(pos, data, true); pos += 2; }
         function setUint32(data) { view.setUint32(pos, data, true); pos += 4; }
     }
@@ -9321,9 +10300,10 @@ export const api = {
 
 [[[£ FILE: client/src/services/gameCore.js £]]]
 /**
- * 🎮 CORE ENGINE V8.5 (SHARED ENGINE)
+ * 🎮 CORE ENGINE V8.6 (SHARED ENGINE - FIX HITBOX CALLBACKS)
  * Rôle : Moteur de rendu partagé Prof/Élève.
  * Gère le dessin des personnages, les animations et le Boss Mode.
+ * UPDATE V8.6 : Fusion intelligente des callbacks pour garantir que onPlayerHit fonctionne.
  */
 export const createGameBase = (params) => {
     const { 
@@ -9366,7 +10346,11 @@ export const createGameBase = (params) => {
             this.canvas = c || canvas; 
             this.ctx = ctx; 
             this.keys = {}; 
-            this.callbacks = cb || callbacks || {}; 
+            
+            // FIX V8.6 : Fusionner les callbacks système avec ceux passés par l'instance
+            // Cela garantit que onPlayerHit (défini dans callbacks système) n'est pas écrasé par un {} vide
+            this.callbacks = { ...(callbacks || {}), ...(cb || {}) };
+            
             this.assets = a || {};
             this.isBossPhase = false;
 
