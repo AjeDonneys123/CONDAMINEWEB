@@ -1,7 +1,8 @@
 /**
- * 🎮 CORE ENGINE V9.1 (BRIDGE FIXED)
- * Rôle : Classe Mère du moteur de jeu.
- * CORRECTIF : Garantit que `this.game` est toujours défini, même si le bridge est vide.
+ * 🎮 CORE ENGINE V10 (HYBRID & ROBUST)
+ * CORRECTIF CRITIQUE : Rétro-compatibilité totale.
+ * Si un vieux script appelle `this.callbacks.onPlayerHit`, le moteur le traduit automatiquement en `this.game.damage(1)`.
+ * Plus de crash sur les anciens scripts.
  */
 export const createGameBase = (params) => {
     const { 
@@ -9,7 +10,6 @@ export const createGameBase = (params) => {
         playParallelSound, bridge 
     } = params;
 
-    // Proxy pour manipuler les sprites facilement
     class ActorProxy {
         constructor(data, engine) { 
             this.id = data?.id || "unknown"; 
@@ -45,13 +45,14 @@ export const createGameBase = (params) => {
             this.keys = {}; 
             this.assets = a || {};
             this.isBossPhase = false;
+            this.isStopped = false; // Sécurité boucle
             
-            // 🛡️ SÉCURITÉ BRIDGE : On définit this.game même si bridge est null
+            // --- SYSTÈME DE SECURITÉ BRIDGE ---
             const safeTrigger = (type, val) => {
                 if (bridge && bridge.trigger) bridge.trigger(type, val);
-                else console.warn(`[Moteur] Bridge déconnecté, event ignoré : ${type}`);
             };
 
+            // 1. NOUVELLE API (Bridge)
             this.game = {
                 damage: (v=1) => safeTrigger('DAMAGE', v),
                 heal: (v=1) => safeTrigger('HEAL', v),
@@ -65,6 +66,26 @@ export const createGameBase = (params) => {
                 playAudio: (n) => safeTrigger('AUDIO', n)
             };
 
+            // 2. ANCIENNE API (Rétro-compatibilité pour éviter le crash 'onPlayerHit')
+            // On mappe les anciens appels vers le nouveau bridge
+            this.callbacks = {
+                onPlayerHit: () => {
+                    console.warn("⚠️ [Legacy] 'onPlayerHit' détecté -> Redirection vers 'game.damage(1)'");
+                    this.game.damage(1);
+                },
+                onRoundEnd: (success) => {
+                    console.warn("⚠️ [Legacy] 'onRoundEnd' détecté -> Redirection Bridge");
+                    if (success) {
+                        this.game.winRound();
+                        this.game.nextQuestion();
+                    } else {
+                        this.game.failRound();
+                    }
+                },
+                ...(cb || {}) // Fusion avec d'éventuels callbacks externes
+            };
+
+            // Init Acteurs
             const project = params.projectRef?.current || {};
             const scenes = project.scenes || [];
             const s = scenes[params.sceneIdx] || { actors: [] };
