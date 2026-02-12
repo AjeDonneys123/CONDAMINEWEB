@@ -1,13 +1,15 @@
-// @signatures: UnifiedMoteur, handleBridgeEvent, handleAnswerClick, handleRoundValidation, pickNextQuestion, handleHeartClick, handleBarClick, playParallelSoundImpl, triggerGlobalEvent, getYoutubeEmbed
+// @signatures: UnifiedMoteur, handleBridgeEvent, updateBarOnly, changeQuestionNow, triggerWinSequence, startCurrentLevel, handleAnswerClick
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import SoundExpert from '../../../services/SoundExpert';
 import { api } from '../../../services/api';
 import { createGameBase } from '../../../services/gameCore';
 
 /**
- * 🧠 UNIFIED MOTEUR V5.2 (STATE PASSING - FINAL FIX)
- * Ce moteur résout le problème de synchronisation en passant l'état futur (nextStates)
- * directement à la logique de navigation sans attendre le rendu React.
+ * 🧠 UNIFIED MOTEUR V6.1 (MANUAL TRIGGER)
+ * Séparation totale des responsabilités :
+ * - WIN_ROUND : Met à jour la barre visuelle (Stats).
+ * - NEXT_Q : Effectue la transition (Navigation).
+ * Le script JS doit appeler les deux successivement.
  */
 export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }) {
     // --- ÉTATS ---
@@ -18,7 +20,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
     const [levelQuestions, setLevelQuestions] = useState([]);
     const [currentLevelIdx, setCurrentLevelIdx] = useState(0);
     
-    // --- UI STATES ---
+    // --- UI ---
     const [showLevelIntro, setShowLevelIntro] = useState(true);
     const [showLevelBanner, setShowLevelBanner] = useState(false);
     const [showStageClear, setShowStageClear] = useState(false);
@@ -47,7 +49,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
     const pendingResultRef = useRef(null);
     const [assetsSignature, setAssetsSignature] = useState("");
 
-    // 🚀 STATE REF (Accès instantané à l'état frais)
+    // 🚀 STATE REF (État frais instantané)
     const stateRef = useRef({ currentQIndex, questionStates, lives, allLevels, currentLevelIdx, levelQuestions });
     useEffect(() => { stateRef.current = { currentQIndex, questionStates, lives, allLevels, currentLevelIdx, levelQuestions }; }, [currentQIndex, questionStates, lives, allLevels, currentLevelIdx, levelQuestions]);
 
@@ -58,7 +60,6 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
         return `/api/proxy/${id}`;
     }
 
-    // --- MOTEUR SONORE ---
     const playParallelSoundImpl = (url) => {
         if (!url || !audioCtxRef.current) return;
         const buffer = audioBuffersRef.current.get(resolveUrl(url));
@@ -66,9 +67,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
             try {
                 if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
                 const source = audioCtxRef.current.createBufferSource();
-                source.buffer = buffer; 
-                source.connect(audioCtxRef.current.destination);
-                source.start(0);
+                source.buffer = buffer; source.connect(audioCtxRef.current.destination); source.start(0);
             } catch(e) {}
         }
     };
@@ -88,17 +87,20 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
             case 'DAMAGE':
                 setIsShake(true); setTimeout(() => setIsShake(false), 500);
                 setLives(prev => {
-                    const newVal = Math.max(0, prev - (value || 1));
-                    if (newVal === 0) { setShowGameOver(true); if (gameInstanceRef.current) gameInstanceRef.current.isStopped = true; }
-                    return newVal;
+                    const n = Math.max(0, prev - (value || 1));
+                    if (n === 0) { setShowGameOver(true); if (gameInstanceRef.current) gameInstanceRef.current.isStopped = true; }
+                    return n;
                 });
                 break;
             case 'HEAL': setLives(prev => Math.min(4, prev + (value || 1))); break;
             
-            // Validation et Navigation
-            case 'WIN_ROUND': handleRoundValidation(true, currentState); break;
-            case 'FAIL_ROUND': handleRoundValidation(false, currentState); break;
+            // ACTION 1 : Monter la barre (Visuel uniquement)
+            case 'WIN_ROUND': updateBarOnly(true, currentState); break;
+            case 'FAIL_ROUND': updateBarOnly(false, currentState); break;
             
+            // ACTION 2 : Tourner la page (Navigation)
+            case 'NEXT_Q': changeQuestionNow(currentState); break;
+
             case 'SET_BOSS': 
                 setActiveBossVisual(!!value); 
                 bossModeRef.current = !!value;
@@ -108,74 +110,69 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
             case 'AUDIO': triggerGlobalEvent(value); break;
             case 'VICTORY': triggerWinSequence(currentState); break;
             case 'GAME_OVER': setShowGameOver(true); break;
-            case 'NEXT_Q': forceNextQuestion(currentState); break;
         }
     });
 
-    // --- 2. LOGIQUE METIER (STATE PASSING) ---
+    // --- 2. LOGIQUE DÉCOUPLÉE ---
 
-    const handleRoundValidation = (success, state) => {
+    // Étape 1 : On met juste à jour la barre (Score)
+    const updateBarOnly = (success, state) => {
+        // On récupère le résultat (clic ou auto)
         const isCorrect = pendingResultRef.current !== null ? pendingResultRef.current : success;
         
-        // 1. Calcul du FUTUR état (Instantané)
         const nextStates = [...state.questionStates];
         const idx = state.currentQIndex;
         
         if (isCorrect) nextStates[idx] = Math.min(3, nextStates[idx] + 1);
-        else nextStates[idx] = Math.max(0, nextStates[idx] - 1);
-
-        // 2. Mise à jour React (Asynchrone)
-        setQuestionStates(nextStates);
-        
-        // 3. Gestion Vies
-        if (!isCorrect) {
+        else {
+            nextStates[idx] = Math.max(0, nextStates[idx] - 1);
             setLives(prev => {
                 const n = Math.max(0, prev - 1);
                 if(n===0) { setShowGameOver(true); if(gameInstanceRef.current) gameInstanceRef.current.isStopped = true; }
                 return n;
             });
         }
-
-        // 4. TRANSITION (On passe nextStates EXPLICITEMENT)
-        setTimeout(() => {
-            setFeedback(null);
-            setUserInput("");
-            pendingResultRef.current = null;
-            // ICI LE SECRET : On utilise nextStates calculé ci-dessus, pas le stateRef qui peut être vieux
-            pickNextQuestion(nextStates, idx);
-        }, 800);
+        
+        setQuestionStates(nextStates);
+        // ON NE LANCE PAS DE TIMEOUT ICI. C'EST LE SCRIPT JS QUI DÉCIDERA QUAND PASSER À LA SUITE.
     };
 
-    const pickNextQuestion = (futureStates, currentIdx) => {
-        // Logique de sélection basée sur les données futures garanties
-        const available = futureStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
+    // Étape 2 : On change de question (Navigation)
+    const changeQuestionNow = (state) => {
+        // Reset Feedback
+        setFeedback(null);
+        setUserInput("");
+        pendingResultRef.current = null;
+
+        // On doit RE-LIRE l'état car updateBarOnly a pu changer les barres juste avant
+        // Comme setState est async, on va faire une petite projection optimiste
+        // On regarde l'état actuel des barres.
+        const currentStates = state.questionStates;
+        const currentIdx = state.currentQIndex;
+
+        // Logique de sélection
+        const available = currentStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
         
         if (available.length > 0) {
-            // Règle Boss : Si on est sur un boss (2/3), on RESTE dessus
-            if (futureStates[currentIdx] === 2) {
+            // Si on est sur un boss (2/3), on reste dessus
+            if (currentStates[currentIdx] === 2) {
                 bridgeProxy.current('SET_BOSS', true);
             } else {
-                // Sinon on change
+                // Sinon on cherche ailleurs
                 const others = available.filter(idx => idx !== currentIdx);
                 if (others.length > 0) {
                     const nextIdx = others[Math.floor(Math.random() * others.length)];
                     setCurrentQIndex(nextIdx);
                     bridgeProxy.current('SET_BOSS', false);
                 } else {
-                    // S'il ne reste que la question actuelle (ex: 0/3 ou 1/3)
-                    // On reste dessus
+                    // S'il ne reste que la question actuelle (ex: 0/3 ou 1/3), on reste dessus mais on relance le round
                     bridgeProxy.current('SET_BOSS', false);
                 }
             }
         } else {
-            // Plus rien de disponible -> Niveau Fini
-            triggerWinSequence(stateRef.current);
+            // Niveau fini
+            triggerWinSequence(state);
         }
-    };
-
-    const forceNextQuestion = (state) => {
-        // Appelé manuellement par le script JS si besoin
-        pickNextQuestion(state.questionStates, state.currentQIndex);
     };
 
     const triggerWinSequence = (state) => {
@@ -193,7 +190,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
         }, 3000);
     };
 
-    // --- 3. CHARGEMENT ---
+    // --- 3. CHARGEMENT (Classique) ---
     useEffect(() => { 
         if (!gameData) return;
         projectRef.current = gameData; 
@@ -300,7 +297,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
         return () => { if(frameIdRef.current) cancelAnimationFrame(frameIdRef.current); };
     }, [engineStarted]);
 
-    // Helpers UI
+    // Helpers UI & Cheats
     useEffect(() => {
         const hDown = (e) => keysPressed.current[e.code] = true;
         const hUp = (e) => keysPressed.current[e.code] = false;
@@ -325,7 +322,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
     return (
         <div className={`fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center overflow-hidden font-sans ${isShake ? 'animate-shake' : ''}`}>
             {/* DEBUGGER */}
-            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">MOTEUR V5.2 (STATE PASSING)</div>
+            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">MOTEUR V6.1 (MANUAL TRIGGER)</div>
             <button onClick={onExit} className="absolute top-6 right-6 w-14 h-14 bg-white/10 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-2xl font-black z-[4000] border-2 border-white/20">✕</button>
 
             {/* OVERLAYS JEU */}
