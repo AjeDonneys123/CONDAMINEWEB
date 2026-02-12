@@ -1,19 +1,22 @@
-// @signatures: UnifiedMoteur, handleAnswerClick, triggerWinSequence, startCurrentLevel, handleRoundValidation, pickNextQuestion
+// @signatures: UnifiedMoteur, handleBridgeEvent, handleAnswerClick, handleRoundValidation, pickNextQuestion, handleHeartClick, handleBarClick, playParallelSoundImpl, triggerGlobalEvent
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import SoundExpert from '../../../services/SoundExpert';
 import { api } from '../../../services/api';
 import { createGameBase } from '../../../services/gameCore';
 
 /**
- * 🧠 UNIFIED MOTEUR V5.0 (SYNC PERFECT)
- * CORRECTIF CRITIQUE : Suppression du délai de mise à jour d'état.
- * Les données "futures" (Next State) sont passées directement à la logique de jeu.
+ * 🧠 UNIFIED MOTEUR V5.1 (AUDIO FIXED)
+ * - Synchro Jeu/UI : OK (V5.0)
+ * - Moteur Sonore : RÉACTIVÉ (V5.1)
  */
 export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }) {
-    // --- ÉTATS VISUELS ---
+    // --- ÉTATS ---
     const [lives, setLives] = useState(4);
     const [questionStates, setQuestionStates] = useState([]); 
     const [currentQIndex, setCurrentQIndex] = useState(0);
+    const [allLevels, setAllLevels] = useState([]);
+    const [levelQuestions, setLevelQuestions] = useState([]);
+    const [currentLevelIdx, setCurrentLevelIdx] = useState(0);
     
     // --- UI STATES ---
     const [showLevelIntro, setShowLevelIntro] = useState(true);
@@ -25,17 +28,14 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
     const [activeBossVisual, setActiveBossVisual] = useState(false);
     const [isShake, setIsShake] = useState(false);
     
-    // --- DONNÉES TECHNIQUES ---
-    const [allLevels, setAllLevels] = useState([]);
-    const [levelQuestions, setLevelQuestions] = useState([]);
-    const [currentLevelIdx, setCurrentLevelIdx] = useState(0);
+    // --- REFS ---
+    const canvasRef = useRef(null);
+    const [engineStarted, setEngineStarted] = useState(false);
     const [isReady, setIsReady] = useState(false);
     const [loadProgress, setLoadProgress] = useState("");
     const [feedback, setFeedback] = useState(null);
-    const [engineStarted, setEngineStarted] = useState(false);
+    const [userInput, setUserInput] = useState("");
 
-    // --- REFS ---
-    const canvasRef = useRef(null);
     const audioCtxRef = useRef(null);
     const audioBuffersRef = useRef(new Map());
     const imageAssetsRef = useRef(new Map());
@@ -47,88 +47,88 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
     const pendingResultRef = useRef(null);
     const [assetsSignature, setAssetsSignature] = useState("");
 
-    // 🚀 STATE REF (Pour accès instantané dans les callbacks)
-    const stateRef = useRef({
-        currentQIndex,
-        questionStates,
-        lives,
-        allLevels,
-        currentLevelIdx,
-        levelQuestions
-    });
+    // 🚀 STATE REF
+    const stateRef = useRef({ currentQIndex, questionStates, lives, allLevels, currentLevelIdx, levelQuestions });
+    useEffect(() => { stateRef.current = { currentQIndex, questionStates, lives, allLevels, currentLevelIdx, levelQuestions }; }, [currentQIndex, questionStates, lives, allLevels, currentLevelIdx, levelQuestions]);
 
-    useEffect(() => {
-        stateRef.current = { currentQIndex, questionStates, lives, allLevels, currentLevelIdx, levelQuestions };
-    }, [currentQIndex, questionStates, lives, allLevels, currentLevelIdx, levelQuestions]);
+    function resolveUrl(url) {
+        if (!url) return "";
+        if (url.startsWith('/api/proxy') || url.startsWith('blob:')) return url;
+        const id = url.split('/').pop();
+        return `/api/proxy/${id}`;
+    }
 
-    // --- 1. BRIDGE (L'ASCENSEUR) ---
+    // --- MOTEUR SONORE (RESTAURÉ) ---
+    const playParallelSoundImpl = (url) => {
+        if (!url || !audioCtxRef.current) return;
+        const buffer = audioBuffersRef.current.get(resolveUrl(url));
+        if (buffer) {
+            try {
+                if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
+                const source = audioCtxRef.current.createBufferSource();
+                source.buffer = buffer; 
+                source.connect(audioCtxRef.current.destination);
+                source.start(0);
+            } catch(e) { console.error("Sound Error:", e); }
+        }
+    };
+
+    const triggerGlobalEvent = (eventName) => {
+        const scene = projectRef.current.scenes?.[0];
+        if (!scene || !scene.globalSounds) return;
+        
+        // Recherche insensible à la casse/accents
+        const cleanTarget = eventName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+        const event = scene.globalSounds.find(g => 
+            g.name && g.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim() === cleanTarget
+        );
+        
+        if (event && event.sounds) {
+            event.sounds.forEach(snd => playParallelSoundImpl(snd.url));
+        }
+    };
+
+    // --- 1. BRIDGE ---
     const bridgeProxy = useRef((type, value) => {
         const currentState = stateRef.current;
-
         switch(type) {
             case 'DAMAGE':
                 setIsShake(true); setTimeout(() => setIsShake(false), 500);
                 setLives(prev => {
                     const newVal = Math.max(0, prev - (value || 1));
-                    if (newVal === 0) {
-                        setShowGameOver(true);
-                        if (gameInstanceRef.current) gameInstanceRef.current.isStopped = true;
-                    }
+                    if (newVal === 0) { setShowGameOver(true); if (gameInstanceRef.current) gameInstanceRef.current.isStopped = true; }
                     return newVal;
                 });
                 break;
-
-            case 'HEAL': 
-                setLives(prev => Math.min(4, prev + (value || 1))); 
-                break;
-
-            case 'WIN_ROUND': 
-                handleRoundValidation(true, currentState); 
-                break;
-
-            case 'FAIL_ROUND': 
-                handleRoundValidation(false, currentState); 
-                break;
-
+            case 'HEAL': setLives(prev => Math.min(4, prev + (value || 1))); break;
+            case 'WIN_ROUND': handleRoundValidation(true, currentState); break;
+            case 'FAIL_ROUND': handleRoundValidation(false, currentState); break;
             case 'SET_BOSS': 
                 setActiveBossVisual(!!value); 
                 bossModeRef.current = !!value;
                 if(gameInstanceRef.current) gameInstanceRef.current.isBossPhase = !!value;
                 break;
-
-            case 'SHAKE': 
-                setIsShake(true); setTimeout(() => setIsShake(false), 500); 
-                break;
-
-            case 'VICTORY': 
-                triggerWinSequence(currentState); 
-                break;
-
-            case 'GAME_OVER': 
-                setShowGameOver(true); 
-                break;
+            case 'SHAKE': setIsShake(true); setTimeout(() => setIsShake(false), 500); break;
             
-            case 'NEXT_Q':
-                forceNextQuestion(currentState);
-                break;
+            // 🔊 AUDIO CONNECTÉ
+            case 'AUDIO': triggerGlobalEvent(value); break;
+            
+            case 'VICTORY': triggerWinSequence(currentState); break;
+            case 'GAME_OVER': setShowGameOver(true); break;
+            case 'NEXT_Q': forceNextQuestion(currentState); break;
         }
     });
 
-    // --- 2. LOGIQUE METIER (SYNC V5.0) ---
-
+    // --- 2. LOGIQUE METIER ---
     const handleRoundValidation = (success, state) => {
         const isCorrect = pendingResultRef.current !== null ? pendingResultRef.current : success;
-        
-        // 1. Calcul du FUTUR état (Sans attendre React)
         const nextStates = [...state.questionStates];
         const idx = state.currentQIndex;
         
         if (isCorrect) nextStates[idx] = Math.min(3, nextStates[idx] + 1);
         else nextStates[idx] = Math.max(0, nextStates[idx] - 1);
 
-        // 2. Mise à jour UI React
         setQuestionStates(nextStates);
-        
         if (!isCorrect) {
             setLives(prev => {
                 const n = Math.max(0, prev - 1);
@@ -137,23 +137,17 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
             });
         }
 
-        // 3. Décision Navigation (Avec les données FUTURES 'nextStates')
         setTimeout(() => {
-            setFeedback(null);
-            pendingResultRef.current = null;
+            setFeedback(null); setUserInput(""); pendingResultRef.current = null;
             pickNextQuestion(nextStates, idx);
         }, 800);
     };
 
     const pickNextQuestion = (futureStates, currentIdx) => {
         const available = futureStates.map((s, i) => s < 3 ? i : -1).filter(i => i !== -1);
-        
         if (available.length > 0) {
-            // Règle Boss : Si on est sur un boss (2/3), on reste dessus
-            if (futureStates[currentIdx] === 2) {
-                bridgeProxy.current('SET_BOSS', true);
-            } else {
-                // Sinon on change
+            if (futureStates[currentIdx] === 2) { bridgeProxy.current('SET_BOSS', true); }
+            else {
                 const others = available.filter(idx => idx !== currentIdx);
                 if (others.length > 0) {
                     const nextIdx = others[Math.floor(Math.random() * others.length)];
@@ -162,37 +156,33 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
                 }
             }
         } else {
-            // Niveau fini
             triggerWinSequence(stateRef.current);
         }
     };
 
-    const forceNextQuestion = (state) => {
-        pickNextQuestion(state.questionStates, state.currentQIndex);
-    };
+    const forceNextQuestion = (state) => { pickNextQuestion(state.questionStates, state.currentQIndex); };
 
     const triggerWinSequence = (state) => {
         setShowStageClear(true);
+        triggerGlobalEvent("VICTOIRE"); // Son de victoire global si défini
         setTimeout(() => {
             setShowStageClear(false);
             if (state.allLevels && state.allLevels[state.currentLevelIdx + 1]) {
-                setCurrentLevelIdx(p => p + 1);
-                setEngineStarted(false);
-                setShowLevelIntro(true);
-            } else {
-                setShowGameComplete(true);
-            }
+                setCurrentLevelIdx(p => p + 1); setEngineStarted(false); setShowLevelIntro(true);
+            } else { setShowGameComplete(true); }
         }, 3000);
     };
 
-    // --- 3. CHARGEMENT DONNÉES ---
+    // --- 3. CHARGEMENT ---
     useEffect(() => { 
         if (!gameData) return;
         projectRef.current = gameData; 
         const scene = gameData.scenes?.[0];
         if (scene) {
             const imgs = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url)))].filter(Boolean).sort().join('|');
-            if (imgs !== assetsSignature) setAssetsSignature(imgs);
+            const snds = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url))))].filter(Boolean).sort().join('|');
+            const sig = `${imgs}__${snds}`;
+            if (sig !== assetsSignature) setAssetsSignature(sig);
         }
     }, [gameData]);
 
@@ -224,33 +214,34 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
         const scene = projectRef.current?.scenes?.[0];
         if (!scene) { setIsReady(true); return; }
         
+        // Images
         const imgs = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url)))].filter(Boolean);
         let loadedImgs = 0;
+        const checkDone = () => { loadedImgs++; setLoadProgress(`${Math.round(loadedImgs/imgs.length*100)}%`); if (loadedImgs >= imgs.length) setIsReady(true); };
+        
         if (imgs.length === 0) setIsReady(true);
         else {
             imgs.forEach(url => {
                 const rKey = resolveUrl(url);
-                const img = new Image(); 
-                img.crossOrigin = "anonymous"; 
-                img.onload = () => { imageAssetsRef.current.set(rKey, img); loadedImgs++; setLoadProgress(`${Math.round(loadedImgs/imgs.length*100)}%`); if (loadedImgs >= imgs.length) setIsReady(true); }; 
-                img.onerror = () => { loadedImgs++; if (loadedImgs >= imgs.length) setIsReady(true); }; 
+                const img = new Image(); img.crossOrigin = "anonymous"; 
+                img.onload = () => { imageAssetsRef.current.set(rKey, img); checkDone(); }; 
+                img.onerror = () => { checkDone(); }; 
                 img.src = rKey;
             });
         }
+
+        // Sons (Préchargement)
+        const snds = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url))))].filter(Boolean);
+        snds.forEach(url => { 
+            SoundExpert.decodeAudio(resolveUrl(url), audioCtxRef.current).then(buf => { if (buf) audioBuffersRef.current.set(resolveUrl(url), buf); }); 
+        });
+
     }, [assetsSignature]);
 
-    function resolveUrl(url) {
-        if (!url) return "";
-        if (url.startsWith('/api/proxy') || url.startsWith('blob:')) return url;
-        const id = url.split('/').pop();
-        return `/api/proxy/${id}`;
-    }
-
     const startCurrentLevel = async () => { 
-        setEngineStarted(true); 
-        setShowLevelIntro(false); 
-        setShowLevelBanner(true); 
+        setEngineStarted(true); setShowLevelIntro(false); setShowLevelBanner(true); 
         if (audioCtxRef.current?.state === 'suspended') await audioCtxRef.current.resume();
+        triggerGlobalEvent("DEPART"); // Son de départ si défini
         setTimeout(() => setShowLevelBanner(false), 1500); 
     };
 
@@ -258,7 +249,6 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
         if (feedback || showLevelIntro) return;
         const currentQ = levelQuestions[currentQIndex];
         const isCorrect = (typeof val === 'number') ? currentQ.a === val : val === currentQ.options[currentQ.a];
-        
         pendingResultRef.current = isCorrect;
         setFeedback(isCorrect ? 'CORRECT' : 'WRONG');
         if (gameInstanceRef.current?.onResult) gameInstanceRef.current.onResult(isCorrect);
@@ -267,7 +257,6 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
     // --- 4. MOTEUR RENDU ---
     useEffect(() => {
         if (!engineStarted || !canvasRef.current) return;
-        
         try {
             const MiniGameBase = createGameBase({ 
                 audioBuffers: audioBuffersRef.current, 
@@ -278,13 +267,12 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
                 resolveUrl, 
                 canvas: canvasRef.current, 
                 ctx: canvasRef.current.getContext('2d'), 
-                playParallelSound: () => {}, 
+                playParallelSound: playParallelSoundImpl, // Restauration du lien sonore interne
                 bridge: { trigger: (t, v) => bridgeProxy.current(t, v) }
             });
 
             const scriptToRun = projectRef.current.generatedCode || "";
             const safeCode = scriptToRun.length > 20 ? scriptToRun : `class MiniGame extends MiniGameBase { update(){} }`;
-
             const factory = new Function('MiniGameBase', `${safeCode}\nreturn MiniGame;`);
             const instance = new (factory(MiniGameBase))(canvasRef.current, {}, null);
             gameInstanceRef.current = instance; 
@@ -329,15 +317,12 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
 
     return (
         <div className={`fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center overflow-hidden font-sans ${isShake ? 'animate-shake' : ''}`}>
-            {/* DEBUGGER */}
-            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">MOTEUR V5.0 (SYNC PERFECT)</div>
+            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">MOTEUR V5.1 (AUDIO FIXED)</div>
             <button onClick={onExit} className="absolute top-6 right-6 w-14 h-14 bg-white/10 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-2xl font-black z-[4000] border-2 border-white/20">✕</button>
 
-            {/* OVERLAYS JEU */}
             {showLevelBanner && <div className="fixed top-[20%] z-[5000] animate-in zoom-in"><span className="text-yellow-400 font-black text-6xl uppercase drop-shadow-lg">Niveau {currentLevelIdx + 1}</span></div>}
             {showStageClear && <div className="fixed top-[40%] z-[5000] animate-in zoom-in"><span className="text-green-500 font-black text-8xl uppercase drop-shadow-lg">STAGE CLEAR !</span></div>}
             
-            {/* ECRAN INTRO */}
             {showLevelIntro && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950 z-[6000] animate-in zoom-in p-8 text-center">
                     <h1 className="text-5xl text-white font-black mb-6 uppercase tracking-tighter">{currentLevelData.name || `Niveau ${currentLevelIdx+1}`}</h1>
@@ -353,7 +338,6 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
                 </div>
             )}
 
-            {/* ZOOM MEDIA */}
             {zoomMedia && (
                 <div className="fixed inset-0 z-[7000] bg-black flex items-center justify-center p-0 animate-in fade-in" onClick={() => setZoomMedia(null)}>
                     <button className="absolute top-8 right-8 w-16 h-16 bg-white hover:bg-red-600 hover:text-white text-black rounded-full flex items-center justify-center text-3xl font-black shadow-2xl z-[7001]">✕</button>
@@ -363,13 +347,11 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
                 </div>
             )}
 
-            {/* GAMEPLAY */}
             {engineStarted && !showLevelIntro && (
                 <>
                     <div className="absolute top-6 w-full flex justify-between px-10 pointer-events-none z-30">
                         <div onClick={cheatLife} className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-lg pointer-events-auto cursor-pointer">{"❤️".repeat(lives)}</div>
                         
-                        {/* BOITE QUESTION CENTRALE */}
                         {safeQ && (
                             <div onClick={cheatWin} className="flex-1 mx-10 pointer-events-auto cursor-pointer">
                                 <div className={`bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 shadow-2xl text-xl text-center border-slate-600 ${activeBossVisual ? 'border-red-500 ring-2 ring-red-500/50' : ''}`}>
@@ -402,7 +384,6 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
                 </>
             )}
 
-            {/* FIN */}
             {showGameComplete && (
                 <div className="absolute inset-0 z-[7000] bg-gradient-to-br from-yellow-500 to-purple-600 flex flex-col items-center justify-center animate-in zoom-in">
                     <h1 className="text-9xl mb-4">🏆</h1>
