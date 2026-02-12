@@ -5,10 +5,10 @@ import { api } from '../../../services/api';
 import { createGameBase } from '../../../services/gameCore';
 
 /**
- * 🧠 LE MAITRE UNIFIÉ V.3.01 (ASSET STABILITY FIX)
- * VERSION : V.3.01
- * CORRECTIF MAJEUR : Stabilisation du chargement des assets.
- * Empêche le clignotement/disparition des sprites dans le Studio lors de l'édition.
+ * 🧠 LE MAITRE UNIFIÉ V.3.02 (ASSET LOADING REVERT)
+ * VERSION : V.3.02
+ * CORRECTIF : Simplification radicale du chargement des assets pour éviter l'écran noir.
+ * Suppression du hash d'assets qui pouvait bloquer le chargement initial.
  */
 
 const ZOMBIE_GAME_CODE = `
@@ -138,9 +138,6 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
     const keysPressed = useRef({});
     const projectRef = useRef(gameData);
     const bossModeRef = useRef(false);
-    
-    // STABILISATION DES ASSETS (V3.01)
-    const [assetsHash, setAssetsHash] = useState("");
 
     // --- HELPER YOUTUBE ROBUSTE ---
     const getYoutubeEmbed = (url) => {
@@ -159,21 +156,9 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
         }
     }, [showLevelBanner]);
 
-    // UPDATE REF DU PROJET SANS RECHARGER TOUT
+    // SYNC REF
     useEffect(() => { 
         projectRef.current = gameData; 
-        
-        // On calcule un hash des URLs pour savoir si on doit recharger les images
-        const scene = gameData?.scenes?.[0];
-        if (scene) {
-            const imgs = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url)))].filter(Boolean).sort().join('|');
-            const snds = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url))))].filter(Boolean).sort().join('|');
-            
-            const newHash = imgs + "###" + snds;
-            if (newHash !== assetsHash) {
-                setAssetsHash(newHash);
-            }
-        }
     }, [gameData]);
 
     useEffect(() => {
@@ -214,29 +199,48 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
         window.addEventListener('keydown', hDown);
         window.addEventListener('keyup', hUp);
         return () => { window.removeEventListener('keydown', hDown); window.removeEventListener('keyup', hUp); };
-    }, [gameData, currentLevelIdx]); // On garde gameData ici pour la structure du quiz, mais pas pour les assets
+    }, [gameData, currentLevelIdx]);
 
-    // 2. ASSETS LOADING (STABILISÉ PAR assetsHash)
+    // 2. ASSETS LOADING (METHODE SIMPLE ET ROBUSTE)
     useEffect(() => {
         if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
         
-        // Si le hash est vide, on ne charge rien (probablement init)
-        if (!assetsHash) return;
-
-        console.log("📥 [MOTEUR] Chargement des assets...");
-        
+        console.log("📥 [MOTEUR] Analyse des assets...");
         const scene = projectRef.current?.scenes?.[0];
+        
+        // Si pas de scène, on considère que c'est prêt (mode dégradé)
         if (!scene) { setIsReady(true); return; }
         
+        // 1. IMAGES
         const imgs = [...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.frames || []).map(f => f.url))).concat((scene.backdrops || []).map(b => b.url)))].filter(Boolean);
-        let loaded = 0; if (imgs.length === 0) setIsReady(true);
-        imgs.forEach(url => {
-            const img = new Image(); img.crossOrigin = "anonymous"; const rKey = resolveUrl(url);
-            img.onload = () => { imageAssetsRef.current.set(rKey, img); loaded++; setLoadProgress(`${Math.round(loaded/imgs.length*100)}%`); if (loaded >= imgs.length) setIsReady(true); };
-            img.onerror = () => { console.warn("Image error:", url); loaded++; if (loaded >= imgs.length) setIsReady(true); };
-            img.src = rKey;
-        });
+        
+        let loadedImgs = 0;
+        if (imgs.length === 0) {
+            setIsReady(true);
+        } else {
+            imgs.forEach(url => {
+                const img = new Image(); 
+                img.crossOrigin = "anonymous"; 
+                const rKey = resolveUrl(url);
+                
+                img.onload = () => { 
+                    imageAssetsRef.current.set(rKey, img); 
+                    loadedImgs++; 
+                    setLoadProgress(`${Math.round(loadedImgs/imgs.length*100)}%`); 
+                    if (loadedImgs >= imgs.length) setIsReady(true); 
+                };
+                
+                img.onerror = () => { 
+                    console.warn("Image error:", url); 
+                    loadedImgs++; 
+                    if (loadedImgs >= imgs.length) setIsReady(true); 
+                };
+                
+                img.src = rKey;
+            });
+        }
 
+        // 2. SONS
         const snds = [
             ...new Set((scene.actors || []).flatMap(a => (a.actions || []).flatMap(act => (act.sounds || []).map(s => s.url))).concat((scene.globalSounds || []).flatMap(gs => (gs.sounds || []).map(s => s.url))))
         ].filter(Boolean);
@@ -246,7 +250,8 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
                 if (buf) audioBuffersRef.current.set(resolveUrl(url), buf); 
             }); 
         });
-    }, [assetsHash]); // <-- DÉPENDANCE SUR LE HASH ET NON SUR GAMEDATA
+        
+    }, [gameData]); // On recharge si gameData change complètement
 
     const playParallelSoundImpl = (url, forceAlways = false) => {
         if ((!engineStarted && !forceAlways) || isMuted || !audioCtxRef.current) return;
@@ -409,7 +414,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
 
     return (
         <div className="fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center overflow-hidden font-sans">
-            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">VERSION V.3.01 (ASSET STABLE)</div>
+            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">VERSION V.3.02 (ASSET SIMPLE)</div>
             <button onClick={onExit} className="absolute top-6 right-6 w-14 h-14 bg-white/10 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-2xl font-black z-[4000] border-2 border-white/20">✕</button>
 
             {showLevelBanner && (
