@@ -5,10 +5,10 @@ import { api } from '../../../services/api';
 import { createGameBase } from '../../../services/gameCore';
 
 /**
- * 🧠 UNIFIED MOTEUR V7.6 (SYNTAX FIX)
+ * 🧠 UNIFIED MOTEUR V7.7 (DYNAMIC AUDIO FIX)
  * CORRECTIF : 
- * - Correction de la balise <img> qui causait le crash Vite (src={...} au lieu de src(...)).
- * - Bouton Mute (🔊/🔇) fonctionnel.
+ * - Mute Dynamique : Utilisation de isMutedRef pour que le changement de son soit instantané.
+ * - Le moteur peut maintenant couper/remettre le son n'importe quand.
  * - Cheat Codes (S+T) et reset par niveau maintenus.
  */
 
@@ -98,8 +98,12 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
     const [allLevels, setAllLevels] = useState([]);
     const [levelQuestions, setLevelQuestions] = useState([]);
     const [currentLevelIdx, setCurrentLevelIdx] = useState(0);
-    const [isMuted, setIsMuted] = useState(false); 
     
+    // --- AUDIO DYNAMIQUE ---
+    const [isMuted, setIsMuted] = useState(false); 
+    const isMutedRef = useRef(false);
+    useEffect(() => { isMutedRef.current = isMuted; }, [isMuted]);
+
     const [showLevelIntro, setShowLevelIntro] = useState(true);
     const [showLevelBanner, setShowLevelBanner] = useState(false);
     const [showStageClear, setShowStageClear] = useState(false);
@@ -223,7 +227,8 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
     }
 
     const playParallelSoundImpl = (url) => {
-        if (isMuted || !url || !audioCtxRef.current) return;
+        // --- CHECK DYNAMIQUE DU REF ---
+        if (isMutedRef.current || !url || !audioCtxRef.current) return;
         const buffer = audioBuffersRef.current.get(resolveUrl(url));
         if (buffer) {
             try {
@@ -332,7 +337,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
 
     return (
         <div className={`fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center overflow-hidden font-sans ${isShake ? 'animate-shake' : ''}`}>
-            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">MOTEUR V7.6 (SYNTAX FIX)</div>
+            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">MOTEUR V7.7 (DYNAMIC AUDIO FIX)</div>
             
             <div className="absolute top-2 right-4 flex gap-2 z-[6000]">
                 <button onClick={() => setIsMuted(!isMuted)} className="w-10 h-10 bg-white/10 hover:bg-white/20 text-white rounded-full flex items-center justify-center text-lg border-2 border-white/20 transition-all">{isMuted ? '🔇' : '🔊'}</button>
