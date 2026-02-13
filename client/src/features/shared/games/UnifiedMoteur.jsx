@@ -5,11 +5,11 @@ import { api } from '../../../services/api';
 import { createGameBase } from '../../../services/gameCore';
 
 /**
- * 🧠 UNIFIED MOTEUR V7.5 (AUDIO CONTROL)
+ * 🧠 UNIFIED MOTEUR V7.6 (SYNTAX FIX)
  * CORRECTIF : 
- * - Ajout d'un bouton Mute (🔊/🔇) en haut à droite.
- * - Centralisation du blocage sonore via l'état isMuted.
- * - Maintien des Cheat Codes (S+T) et du reset par niveau.
+ * - Correction de la balise <img> qui causait le crash Vite (src={...} au lieu de src(...)).
+ * - Bouton Mute (🔊/🔇) fonctionnel.
+ * - Cheat Codes (S+T) et reset par niveau maintenus.
  */
 
 const ZOMBIE_GAME_CODE = `class MiniGame extends MiniGameBase {
@@ -98,7 +98,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
     const [allLevels, setAllLevels] = useState([]);
     const [levelQuestions, setLevelQuestions] = useState([]);
     const [currentLevelIdx, setCurrentLevelIdx] = useState(0);
-    const [isMuted, setIsMuted] = useState(false); // NOUVEAU : Mode Muet
+    const [isMuted, setIsMuted] = useState(false); 
     
     const [showLevelIntro, setShowLevelIntro] = useState(true);
     const [showLevelBanner, setShowLevelBanner] = useState(false);
@@ -127,7 +127,6 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
 
     const liveData = useRef({ qStates: [], qIndex: 0, lives: 4 });
 
-    // --- CHEAT ENGINE ---
     const isCheatActive = () => keysPressed.current['KeyS'] && keysPressed.current['KeyT'];
 
     const bridgeProxy = useRef((type, value) => {
@@ -224,7 +223,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
     }
 
     const playParallelSoundImpl = (url) => {
-        if (isMuted || !url || !audioCtxRef.current) return; // BLOQUAGE SI MUTE
+        if (isMuted || !url || !audioCtxRef.current) return;
         const buffer = audioBuffersRef.current.get(resolveUrl(url));
         if (buffer) {
             try {
@@ -333,14 +332,10 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
 
     return (
         <div className={`fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center overflow-hidden font-sans ${isShake ? 'animate-shake' : ''}`}>
-            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">MOTEUR V7.5 (AUDIO CONTROL)</div>
+            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">MOTEUR V7.6 (SYNTAX FIX)</div>
             
             <div className="absolute top-2 right-4 flex gap-2 z-[6000]">
-                {/* BOUTON MUTE */}
-                <button onClick={() => setIsMuted(!isMuted)} className="w-10 h-10 bg-white/10 hover:bg-white/20 text-white rounded-full flex items-center justify-center text-lg border-2 border-white/20 transition-all">
-                    {isMuted ? '🔇' : '🔊'}
-                </button>
-                {/* BOUTON QUITTER */}
+                <button onClick={() => setIsMuted(!isMuted)} className="w-10 h-10 bg-white/10 hover:bg-white/20 text-white rounded-full flex items-center justify-center text-lg border-2 border-white/20 transition-all">{isMuted ? '🔇' : '🔊'}</button>
                 <button onClick={onExit} className="w-10 h-10 bg-white/10 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-xl font-black border-2 border-white/20 transition-all">✕</button>
             </div>
 
@@ -352,7 +347,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
                     <h1 className="text-5xl text-white font-black mb-6 uppercase tracking-tighter">{allLevels[currentLevelIdx]?.name || `Niveau ${currentLevelIdx+1}`}</h1>
                     <div className="flex gap-10 mb-12 w-full max-w-4xl justify-center h-[280px]">
                         <div onClick={() => allLevels[currentLevelIdx]?.intro?.sheetUrl && setZoomMedia('sheet')} className="h-full aspect-[3/4] bg-slate-800 rounded-3xl border-4 border-slate-700 overflow-hidden flex items-center justify-center shadow-2xl cursor-pointer hover:border-indigo-500 hover:scale-105 transition-all">
-                            {allLevels[currentLevelIdx]?.intro?.sheetUrl ? <img src(resolveUrl(allLevels[currentLevelIdx].intro.sheetUrl))} className="w-full h-full object-contain" /> : <span className="text-slate-500 font-bold uppercase text-[10px]">Fiche</span>}
+                            {allLevels[currentLevelIdx]?.intro?.sheetUrl ? <img src={resolveUrl(allLevels[currentLevelIdx].intro.sheetUrl)} className="w-full h-full object-contain" /> : <span className="text-slate-500 font-bold uppercase text-[10px]">Fiche</span>}
                         </div>
                         <div onClick={() => allLevels[currentLevelIdx]?.intro?.videoUrl && setZoomMedia('video')} className="h-full aspect-video bg-black rounded-3xl border-4 border-slate-700 overflow-hidden shadow-2xl flex items-center justify-center cursor-pointer hover:border-indigo-500 hover:scale-105 transition-all relative group">
                             {allLevels[currentLevelIdx]?.intro?.videoUrl ? <span className="text-6xl">▶️</span> : <span className="text-slate-500 font-bold uppercase text-[10px]">Vidéo</span>}
