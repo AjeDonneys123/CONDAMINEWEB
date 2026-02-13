@@ -1,8 +1,10 @@
 /**
- * 🎮 CORE ENGINE V11.2 (UI BRIDGE)
+ * 🎮 CORE ENGINE V11.3 (PLATFORMER READY)
+ * - Transmission des questions au script.
+ * - Ajout de submitAnswer(index) pour les collisions.
  */
 export const createGameBase = (params) => {
-    const { imageAssets, resolveUrl, canvas, ctx, playParallelSound, bridge } = params;
+    const { imageAssets, resolveUrl, canvas, ctx, playParallelSound, bridge, questions } = params;
 
     class ActorProxy {
         constructor(data, engine) { 
@@ -40,6 +42,11 @@ export const createGameBase = (params) => {
             this.keys = {}; 
             this.assets = a || {};
             this.isBossPhase = false;
+            
+            // ✅ ACCÈS AUX QUESTIONS DU NIVEAU
+            this.questions = questions || [];
+            this.currentQIndex = 0;
+
             this._triggerActionSounds = (actorId, actionName) => {
                 const project = params.projectRef?.current || {};
                 const s = project.scenes?.[params.sceneIdx];
@@ -48,7 +55,9 @@ export const createGameBase = (params) => {
                 const action = actor?.actions.find(act => act.name.toUpperCase() === actionName.toUpperCase());
                 if (action?.sounds) action.sounds.forEach(snd => playParallelSound(snd.url));
             };
+
             const safeTrigger = (type, val) => { if (bridge && bridge.trigger) bridge.trigger(type, val); };
+            
             this.game = {
                 damage: (v=1) => safeTrigger('DAMAGE', v),
                 heal: (v=1) => safeTrigger('HEAL', v),
@@ -56,21 +65,25 @@ export const createGameBase = (params) => {
                 failRound: () => safeTrigger('FAIL_ROUND'),
                 nextQuestion: () => safeTrigger('NEXT_Q'),
                 setBoss: (v) => safeTrigger('SET_BOSS', v),
-                setUI: (v) => safeTrigger('SET_UI', v), // ✅ AJOUT ICI
+                setUI: (v) => safeTrigger('SET_UI', v),
+                submitAnswer: (index) => safeTrigger('SUBMIT_ANSWER', index), // ✅ APPEL MARIO
                 gameOver: () => safeTrigger('GAME_OVER'),
                 victory: () => safeTrigger('VICTORY'),
                 shake: () => safeTrigger('SHAKE'),
                 playAudio: (n) => safeTrigger('AUDIO', n)
             };
+
             this.callbacks = {
                 onPlayerHit: () => this.game.damage(1),
                 onRoundEnd: (success) => { if (success) { this.game.winRound(); this.game.nextQuestion(); } else { this.game.failRound(); } },
                 ...(cb || {})
             };
+
             const project = params.projectRef?.current || {};
             const s = project.scenes?.[params.sceneIdx] || { actors: [] };
             if(s.actors) s.actors.forEach(a => { this[a.name.toUpperCase()] = new ActorProxy(a, this); });
         }
+        
         _render() {
             if (!this.ctx || !this.canvas) return;
             const project = params.projectRef?.current || {};
