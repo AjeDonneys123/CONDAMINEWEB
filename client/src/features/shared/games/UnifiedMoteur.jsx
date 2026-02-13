@@ -1,15 +1,15 @@
-// @signatures: UnifiedMoteur, handleAnswerClick, triggerWinSequence, startCurrentLevel, handleRetry, performDeepReset, isCheatActive
+// @signatures: UnifiedMoteur, handleAnswerClick, triggerWinSequence, startCurrentLevel, handleRetry, performDeepReset, isCheatActive, toggleMute
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import SoundExpert from '../../../services/SoundExpert';
 import { api } from '../../../services/api';
 import { createGameBase } from '../../../services/gameCore';
 
 /**
- * 🧠 UNIFIED MOTEUR V7.4 (MASTER CHEATS)
+ * 🧠 UNIFIED MOTEUR V7.5 (AUDIO CONTROL)
  * CORRECTIF : 
- * - Bouton "X" déplacé en haut à droite (top-2) pour libérer les barres.
- * - Cheat Codes (S+T) : Cœurs (Vie -1), Question (Skip Level), Barres (Level +1).
- * - Maintien du reset total par niveau (Hearts Refill).
+ * - Ajout d'un bouton Mute (🔊/🔇) en haut à droite.
+ * - Centralisation du blocage sonore via l'état isMuted.
+ * - Maintien des Cheat Codes (S+T) et du reset par niveau.
  */
 
 const ZOMBIE_GAME_CODE = `class MiniGame extends MiniGameBase {
@@ -98,6 +98,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
     const [allLevels, setAllLevels] = useState([]);
     const [levelQuestions, setLevelQuestions] = useState([]);
     const [currentLevelIdx, setCurrentLevelIdx] = useState(0);
+    const [isMuted, setIsMuted] = useState(false); // NOUVEAU : Mode Muet
     
     const [showLevelIntro, setShowLevelIntro] = useState(true);
     const [showLevelBanner, setShowLevelBanner] = useState(false);
@@ -195,7 +196,6 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
         }
     };
 
-    // --- HANDLERS CHEATS ---
     const handleHeartClick = () => { if (isCheatActive()) bridgeProxy.current('DAMAGE', 1); };
     const handleQuestionClick = () => { if (isCheatActive()) triggerWinSequence(); };
     const handleBarClick = (idx) => {
@@ -224,7 +224,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
     }
 
     const playParallelSoundImpl = (url) => {
-        if (!url || !audioCtxRef.current) return;
+        if (isMuted || !url || !audioCtxRef.current) return; // BLOQUAGE SI MUTE
         const buffer = audioBuffersRef.current.get(resolveUrl(url));
         if (buffer) {
             try {
@@ -333,10 +333,16 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
 
     return (
         <div className={`fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center overflow-hidden font-sans ${isShake ? 'animate-shake' : ''}`}>
-            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">MOTEUR V7.4 (MASTER CHEATS)</div>
+            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">MOTEUR V7.5 (AUDIO CONTROL)</div>
             
-            {/* BOUTON QUITTER DÉPLACÉ PLUS HAUT POUR NE PAS GÊNER LE CLIC SUR LES BARRES */}
-            <button onClick={onExit} className="absolute top-2 right-4 w-10 h-10 bg-white/10 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-xl font-black z-[6000] border-2 border-white/20">✕</button>
+            <div className="absolute top-2 right-4 flex gap-2 z-[6000]">
+                {/* BOUTON MUTE */}
+                <button onClick={() => setIsMuted(!isMuted)} className="w-10 h-10 bg-white/10 hover:bg-white/20 text-white rounded-full flex items-center justify-center text-lg border-2 border-white/20 transition-all">
+                    {isMuted ? '🔇' : '🔊'}
+                </button>
+                {/* BOUTON QUITTER */}
+                <button onClick={onExit} className="w-10 h-10 bg-white/10 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-xl font-black border-2 border-white/20 transition-all">✕</button>
+            </div>
 
             {showLevelBanner && <div className="fixed top-[20%] z-[5000] animate-in zoom-in"><span className="text-yellow-400 font-black text-6xl uppercase drop-shadow-lg">Niveau {currentLevelIdx + 1}</span></div>}
             {showStageClear && <div className="fixed top-[40%] z-[5000] animate-in zoom-in text-center"><span className="text-green-500 font-black text-8xl uppercase drop-shadow-lg block">STAGE CLEAR !</span></div>}
@@ -346,7 +352,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
                     <h1 className="text-5xl text-white font-black mb-6 uppercase tracking-tighter">{allLevels[currentLevelIdx]?.name || `Niveau ${currentLevelIdx+1}`}</h1>
                     <div className="flex gap-10 mb-12 w-full max-w-4xl justify-center h-[280px]">
                         <div onClick={() => allLevels[currentLevelIdx]?.intro?.sheetUrl && setZoomMedia('sheet')} className="h-full aspect-[3/4] bg-slate-800 rounded-3xl border-4 border-slate-700 overflow-hidden flex items-center justify-center shadow-2xl cursor-pointer hover:border-indigo-500 hover:scale-105 transition-all">
-                            {allLevels[currentLevelIdx]?.intro?.sheetUrl ? <img src={resolveUrl(allLevels[currentLevelIdx].intro.sheetUrl)} className="w-full h-full object-contain" /> : <span className="text-slate-500 font-bold uppercase text-[10px]">Fiche</span>}
+                            {allLevels[currentLevelIdx]?.intro?.sheetUrl ? <img src(resolveUrl(allLevels[currentLevelIdx].intro.sheetUrl))} className="w-full h-full object-contain" /> : <span className="text-slate-500 font-bold uppercase text-[10px]">Fiche</span>}
                         </div>
                         <div onClick={() => allLevels[currentLevelIdx]?.intro?.videoUrl && setZoomMedia('video')} className="h-full aspect-video bg-black rounded-3xl border-4 border-slate-700 overflow-hidden shadow-2xl flex items-center justify-center cursor-pointer hover:border-indigo-500 hover:scale-105 transition-all relative group">
                             {allLevels[currentLevelIdx]?.intro?.videoUrl ? <span className="text-6xl">▶️</span> : <span className="text-slate-500 font-bold uppercase text-[10px]">Vidéo</span>}
@@ -368,10 +374,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
             {engineStarted && !showLevelIntro && (
                 <>
                     <div className="absolute top-6 w-full flex justify-between px-10 pointer-events-none z-30">
-                        {/* CHEAT LIFE */}
                         <div onClick={handleHeartClick} className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-lg pointer-events-auto cursor-pointer active:scale-95 transition-transform">{"❤️".repeat(lives)}</div>
-                        
-                        {/* CHEAT SKIP LEVEL */}
                         {levelQuestions[currentQIndex] && (
                             <div onClick={handleQuestionClick} className="flex-1 mx-10 pointer-events-auto cursor-pointer">
                                 <div className={`bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 shadow-2xl text-xl text-center border-slate-600 ${activeBossVisual ? 'border-red-500 ring-2 ring-red-500/50' : ''}`}>
@@ -380,19 +383,15 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
                                 </div>
                             </div>
                         )}
-
                         <div className="flex gap-2 pointer-events-auto">
                             {questionStates.map((s, i) => (
-                                /* CHEAT INCREMENT BAR */
                                 <div key={i} onClick={() => handleBarClick(i)} className={`w-6 h-16 rounded-lg border-2 cursor-pointer transition-all ${currentQIndex === i ? 'border-white scale-110 shadow-lg' : 'border-slate-600 opacity-60'} bg-slate-800 overflow-hidden relative`}>
                                     <div className={`absolute bottom-0 w-full transition-all duration-500 ${s >= 3 ? 'bg-green-500 shadow-[0_0_10px_#22c55e]' : s >= 2 ? 'bg-red-500 shadow-[0_0_10px_#ef4444]' : 'bg-yellow-500'}`} style={{height: `${(s/3)*100}%`}}></div>
                                 </div>
                             ))}
                         </div>
                     </div>
-                    
                     <canvas ref={canvasRef} width={800} height={450} className={`aspect-video shadow-2xl bg-black border-4 ${activeBossVisual ? 'border-red-600 shadow-[0_0_50px_red]' : 'border-slate-800'} rounded-lg`} />
-                    
                     {levelQuestions[currentQIndex] && !showStageClear && !showGameComplete && !showGameOver && (
                         <div className="absolute bottom-10 w-full flex justify-center px-10 pointer-events-auto z-30">
                             {activeBossVisual && !feedback ? (
