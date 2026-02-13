@@ -5,9 +5,10 @@ import { api } from '../../../services/api';
 import { createGameBase } from '../../../services/gameCore';
 
 /**
- * 🧠 UNIFIED MOTEUR V8.0 (TRUE UNIVERSAL)
- * Rôle : Coque vide capable d'exécuter n'importe quel script.
- * Fonctionne avec : Zombie (Sprites/Questions) ET Tapping (Script Pur).
+ * 🧠 UNIFIED MOTEUR V8.2 (UI CONTROL)
+ * CORRECTIF : 
+ * - Ajout de state showAnswerUI contrôlable via le bridge.
+ * - Possibilité de masquer les boutons de réponse pour les jeux 100% clavier/souris.
  */
 
 const ZOMBIE_FALLBACK_CODE = `class MiniGame extends MiniGameBase {
@@ -21,6 +22,7 @@ const ZOMBIE_FALLBACK_CODE = `class MiniGame extends MiniGameBase {
         this.isStopped = false; this.baseSpeed = 0.15;
     }
     start() { 
+        this.game.setUI(true); // On s'assure que Julian voit les réponses
         this.resetInternalState();
         if(this.HEROS) { this.HEROS.x = 15; this.HEROS.y = 70; this.HEROS.play("IDLE", true); } 
         this.resetZombie();
@@ -34,6 +36,8 @@ const ZOMBIE_FALLBACK_CODE = `class MiniGame extends MiniGameBase {
         if (isCorrect && this.HEROS) {
             this.HEROS.play("TIRER", false); this.heroState = "SHOOT"; this.heroTimer = 40;
             this.projectiles.push({ x: this.HEROS.x + 5, y: this.HEROS.y - 5 });
+        } else if (!isCorrect) {
+            this.zombieX -= 12; this.game.shake();
         }
     }
     update() {
@@ -55,7 +59,7 @@ const ZOMBIE_FALLBACK_CODE = `class MiniGame extends MiniGameBase {
             if (this.ZOMBIE && this.ZOMBIE.frameIdx >= 1 && !this.hasDealtDamage) {
                 this.hasDealtDamage = true;
                 if (this.HEROS) { this.HEROS.play("TOUCHE", false); this.heroState = "HIT"; this.heroTimer = 60; }
-                if (this.callbacks.onPlayerHit) this.callbacks.onPlayerHit();
+                this.game.damage(1); 
             }
             if (this.ZOMBIE && this.ZOMBIE.isAnimFinished) this.resetZombie();
         } 
@@ -96,6 +100,8 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
     const [allLevels, setAllLevels] = useState([]);
     const [levelQuestions, setLevelQuestions] = useState([]);
     const [currentLevelIdx, setCurrentLevelIdx] = useState(0);
+    const [showAnswerUI, setShowAnswerUI] = useState(true); // NOUVEAU
+    
     const [isMuted, setIsMuted] = useState(false); 
     const isMutedRef = useRef(false);
     useEffect(() => { isMutedRef.current = isMuted; }, [isMuted]);
@@ -148,6 +154,9 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
                 setActiveBossVisual(!!value); bossModeRef.current = !!value;
                 if(gameInstanceRef.current) gameInstanceRef.current.isBossPhase = !!value;
                 break;
+            case 'SET_UI': // NOUVEAU
+                setShowAnswerUI(!!value);
+                break;
             case 'SHAKE': setIsShake(true); setTimeout(() => setIsShake(false), 500); break;
             case 'AUDIO': triggerGlobalEvent(value); break;
             case 'VICTORY': triggerWinSequence(); break;
@@ -159,11 +168,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
         const idx = liveData.current.qIndex;
         const currentScore = liveData.current.qStates[idx] || 0;
         if (isCorrect) { liveData.current.qStates[idx] = Math.min(3, currentScore + 1); } 
-        else {
-            liveData.current.qStates[idx] = Math.max(0, currentScore - 1);
-            liveData.current.lives = Math.max(0, liveData.current.lives - 1);
-            setLives(liveData.current.lives);
-        }
+        else { liveData.current.qStates[idx] = Math.max(0, currentScore - 1); }
         setQuestionStates([...liveData.current.qStates]);
     };
 
@@ -208,6 +213,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
 
     const performDeepReset = () => {
         setLives(4); setActiveBossVisual(false); bossModeRef.current = false;
+        setShowAnswerUI(true); // Reset UI Visibility
         if (gameInstanceRef.current) { gameInstanceRef.current.isBossPhase = false; gameInstanceRef.current.isStopped = false; gameInstanceRef.current.start(); }
         const initialStates = new Array(levelQuestions.length).fill(0);
         liveData.current.qStates = initialStates; liveData.current.qIndex = 0; liveData.current.lives = 4;
@@ -329,9 +335,11 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
         return (m && m[2].length === 11) ? ("https://www.youtube.com/embed/" + m[2] + "?autoplay=1") : url;
     };
 
+    const currentLvlData = allLevels[currentLevelIdx] || {};
+
     return (
         <div className={"fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center overflow-hidden font-sans " + (isShake ? 'animate-shake' : '')}>
-            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">MOTEUR V8.0 (UNIVERSAL)</div>
+            <div className="absolute top-2 left-4 px-3 py-1 bg-black/50 text-[10px] font-black text-yellow-500 rounded-full border border-yellow-500/30 z-[5000]">MOTEUR V8.2 (UI CONTROL)</div>
             
             <div className="absolute top-2 right-4 flex gap-2 z-[6000]">
                 <button onClick={() => setIsMuted(!isMuted)} className="w-10 h-10 bg-white/10 hover:bg-white/20 text-white rounded-full flex items-center justify-center text-lg border-2 border-white/20 transition-all">{isMuted ? '🔇' : '🔊'}</button>
@@ -343,13 +351,13 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
             
             {showLevelIntro && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950 z-[6000] animate-in zoom-in p-8 text-center">
-                    <h1 className="text-5xl text-white font-black mb-6 uppercase tracking-tighter">{allLevels[currentLevelIdx]?.name || ("Niveau " + (currentLevelIdx+1))}</h1>
+                    <h1 className="text-5xl text-white font-black mb-6 uppercase tracking-tighter">{currentLvlData.name || ("Niveau " + (currentLevelIdx+1))}</h1>
                     <div className="flex gap-10 mb-12 w-full max-w-4xl justify-center h-[280px]">
-                        <div onClick={() => allLevels[currentLevelIdx]?.intro?.sheetUrl && setZoomMedia('sheet')} className="h-full aspect-[3/4] bg-slate-800 rounded-3xl border-4 border-slate-700 overflow-hidden flex items-center justify-center shadow-2xl cursor-pointer hover:border-indigo-500 hover:scale-105 transition-all">
-                            {allLevels[currentLevelIdx]?.intro?.sheetUrl ? <img src={resolveUrl(allLevels[currentLevelIdx].intro.sheetUrl)} className="w-full h-full object-contain" alt="Fiche" /> : <span className="text-slate-500 font-bold uppercase text-[10px]">Fiche</span>}
+                        <div onClick={() => currentLvlData.intro?.sheetUrl && setZoomMedia('sheet')} className="h-full aspect-[3/4] bg-slate-800 rounded-3xl border-4 border-slate-700 overflow-hidden flex items-center justify-center shadow-2xl cursor-pointer hover:border-indigo-500 hover:scale-105 transition-all">
+                            {currentLvlData.intro?.sheetUrl ? <img src={resolveUrl(currentLvlData.intro.sheetUrl)} className="w-full h-full object-contain" alt="Fiche" /> : <span className="text-slate-500 font-bold uppercase text-[10px]">Fiche</span>}
                         </div>
-                        <div onClick={() => allLevels[currentLevelIdx]?.intro?.videoUrl && setZoomMedia('video')} className="h-full aspect-video bg-black rounded-3xl border-4 border-slate-700 overflow-hidden shadow-2xl flex items-center justify-center cursor-pointer hover:border-indigo-500 hover:scale-105 transition-all relative group">
-                            {allLevels[currentLevelIdx]?.intro?.videoUrl ? <span className="text-6xl">▶️</span> : <span className="text-slate-500 font-bold uppercase text-[10px]">Vidéo</span>}
+                        <div onClick={() => currentLvlData.intro?.videoUrl && setZoomMedia('video')} className="h-full aspect-video bg-black rounded-3xl border-4 border-slate-700 overflow-hidden shadow-2xl flex items-center justify-center cursor-pointer hover:border-indigo-500 hover:scale-105 transition-all relative group">
+                            {currentLvlData.intro?.videoUrl ? <span className="text-6xl">▶️</span> : <span className="text-slate-500 font-bold uppercase text-[10px]">Vidéo</span>}
                         </div>
                     </div>
                     <button onClick={startCurrentLevel} disabled={!isReady} className="px-16 py-6 rounded-full font-black text-3xl shadow-2xl border-4 bg-white text-indigo-900 border-indigo-500 hover:scale-110">DÉMARRER 🚀</button>
@@ -360,7 +368,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
                 <div className="fixed inset-0 z-[7000] bg-black flex items-center justify-center p-0 animate-in fade-in" onClick={() => setZoomMedia(null)}>
                     <button className="absolute top-4 right-4 w-12 h-12 bg-white text-black rounded-full flex items-center justify-center text-3xl font-black z-[7001]">✕</button>
                     <div className="w-full h-full flex items-center justify-center p-4">
-                        {zoomMedia === 'sheet' ? <img src={resolveUrl(allLevels[currentLevelIdx]?.intro?.sheetUrl)} className="h-[90vh] object-contain shadow-2xl" alt="Zoom" /> : <div className="h-[90vh] aspect-video"><iframe className="w-full h-full" src={getYoutubeEmbed(allLevels[currentLevelIdx]?.intro?.videoUrl)} frameBorder="0" allowFullScreen></iframe></div>}
+                        {zoomMedia === 'sheet' ? <img src={resolveUrl(currentLvlData.intro?.sheetUrl)} className="h-[90vh] object-contain shadow-2xl" alt="Zoom" /> : <div className="h-[90vh] aspect-video"><iframe className="w-full h-full" src={getYoutubeEmbed(currentLvlData.intro?.videoUrl)} frameBorder="0" allowFullScreen></iframe></div>}
                     </div>
                 </div>
             )}
@@ -386,7 +394,9 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
                         </div>
                     </div>
                     <canvas ref={canvasRef} width={800} height={450} className={"aspect-video shadow-2xl bg-black border-4 " + (activeBossVisual ? 'border-red-600 shadow-[0_0_50px_red]' : 'border-slate-800') + " rounded-lg"} />
-                    {levelQuestions[currentQIndex] && !showStageClear && !showGameComplete && !showGameOver && (
+                    
+                    {/* MODIFICATION CRITIQUE : MASQUAGE DES RÉPONSES SI DEMANDÉ */}
+                    {showAnswerUI && levelQuestions[currentQIndex] && !showStageClear && !showGameComplete && !showGameOver && (
                         <div className="absolute bottom-10 w-full flex justify-center px-10 pointer-events-auto z-30">
                             {activeBossVisual && !feedback ? (
                                 <div className="flex gap-4 w-full max-w-2xl animate-in slide-in-from-bottom">
