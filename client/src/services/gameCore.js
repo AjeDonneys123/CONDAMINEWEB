@@ -1,8 +1,5 @@
 /**
- * 🎮 CORE ENGINE V11.1 (AUDIO ACTION FIX)
- * Rôle : Classe Mère du moteur.
- * CORRECTIF : Réintégration des sons d'action (TIRER, TOUCHE, etc.).
- * Quand `hero.play('TIRER')` est appelé, le moteur déclenche maintenant le son associé.
+ * 🎮 CORE ENGINE V11.2 (UI BRIDGE)
  */
 export const createGameBase = (params) => {
     const { imageAssets, resolveUrl, canvas, ctx, playParallelSound, bridge } = params;
@@ -15,6 +12,7 @@ export const createGameBase = (params) => {
             this.x = data?.initialX ?? 50; 
             this.y = data?.initialY ?? 50;
             this.scale = data?.scale ?? 1;
+            this.baseScale = data?.scale ?? 1;
             this.visible = true; 
             this.direction = data?.direction ?? 0; 
             this.rotationStyle = data?.rotationStyle || 'all';
@@ -24,18 +22,13 @@ export const createGameBase = (params) => {
             this.isAnimFinished = false; 
             this.loop = true;
         }
-        
         play(name, loop = true) { 
             if(String(this.currentAction).toUpperCase() !== String(name).toUpperCase()) { 
                 this.currentAction = name; 
                 this.frameIdx = 0; 
                 this.loop = loop; 
                 this.isAnimFinished = false;
-                
-                // 🔊 DÉCLENCHEMENT DU SON (Restauré ici)
-                if (this.engine._triggerActionSounds) {
-                    this.engine._triggerActionSounds(this.id, name);
-                }
+                if (this.engine._triggerActionSounds) this.engine._triggerActionSounds(this.id, name);
             } 
         }
     }
@@ -47,41 +40,15 @@ export const createGameBase = (params) => {
             this.keys = {}; 
             this.assets = a || {};
             this.isBossPhase = false;
-            
-            // --- SYSTÈME DE SONS INTERNE ---
-            // Cette méthode cherche les sons liés à l'action dans le JSON du projet
-            // et demande à React de les jouer.
             this._triggerActionSounds = (actorId, actionName) => {
-                try {
-                    const project = params.projectRef?.current || {};
-                    const scenes = project.scenes || [];
-                    const s = scenes[params.sceneIdx];
-                    
-                    if (!s || !s.actors) return;
-
-                    const actor = s.actors.find(a => a.id === actorId);
-                    if (!actor) return;
-
-                    const action = actor.actions.find(act => act.name.toUpperCase() === actionName.toUpperCase());
-                    
-                    if (action && action.sounds && action.sounds.length > 0) {
-                        action.sounds.forEach(snd => {
-                            if (playParallelSound && snd.url) {
-                                // console.log(`🔊 Playing sound for ${actor.name} -> ${action.name}`);
-                                playParallelSound(snd.url);
-                            }
-                        });
-                    }
-                } catch(e) {
-                    console.error("Audio Trigger Error:", e);
-                }
+                const project = params.projectRef?.current || {};
+                const s = project.scenes?.[params.sceneIdx];
+                if (!s) return;
+                const actor = s.actors.find(a => a.id === actorId);
+                const action = actor?.actions.find(act => act.name.toUpperCase() === actionName.toUpperCase());
+                if (action?.sounds) action.sounds.forEach(snd => playParallelSound(snd.url));
             };
-
-            // --- SÉCURITÉ BRIDGE ---
-            const safeTrigger = (type, val) => {
-                if (bridge && bridge.trigger) bridge.trigger(type, val);
-            };
-
+            const safeTrigger = (type, val) => { if (bridge && bridge.trigger) bridge.trigger(type, val); };
             this.game = {
                 damage: (v=1) => safeTrigger('DAMAGE', v),
                 heal: (v=1) => safeTrigger('HEAL', v),
@@ -89,89 +56,50 @@ export const createGameBase = (params) => {
                 failRound: () => safeTrigger('FAIL_ROUND'),
                 nextQuestion: () => safeTrigger('NEXT_Q'),
                 setBoss: (v) => safeTrigger('SET_BOSS', v),
+                setUI: (v) => safeTrigger('SET_UI', v), // ✅ AJOUT ICI
                 gameOver: () => safeTrigger('GAME_OVER'),
                 victory: () => safeTrigger('VICTORY'),
                 shake: () => safeTrigger('SHAKE'),
                 playAudio: (n) => safeTrigger('AUDIO', n)
             };
-
             this.callbacks = {
                 onPlayerHit: () => this.game.damage(1),
-                onRoundEnd: (success) => {
-                    if (success) { this.game.winRound(); this.game.nextQuestion(); } 
-                    else { this.game.failRound(); }
-                },
+                onRoundEnd: (success) => { if (success) { this.game.winRound(); this.game.nextQuestion(); } else { this.game.failRound(); } },
                 ...(cb || {})
             };
-
             const project = params.projectRef?.current || {};
-            const scenes = project.scenes || [];
-            const s = scenes[params.sceneIdx] || { actors: [] };
-
-            if(s.actors && Array.isArray(s.actors)) {
-                s.actors.forEach(a => { 
-                    this[a.name.toUpperCase()] = new ActorProxy(a, this); 
-                });
-            }
+            const s = project.scenes?.[params.sceneIdx] || { actors: [] };
+            if(s.actors) s.actors.forEach(a => { this[a.name.toUpperCase()] = new ActorProxy(a, this); });
         }
-
         _render() {
             if (!this.ctx || !this.canvas) return;
             const project = params.projectRef?.current || {};
             const s = project.scenes?.[params.sceneIdx];
-
             this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-            
             const bd = s?.backdrops?.[s.currentBackdropIdx || 0];
-            if(bd) { 
-                const img = imageAssets.get(resolveUrl(bd.url)); 
-                if(img) this.ctx.drawImage(img, 0, 0, this.canvas.width, this.canvas.height); 
-            }
-
+            if(bd) { const img = imageAssets.get(resolveUrl(bd.url)); if(img) this.ctx.drawImage(img, 0, 0, this.canvas.width, this.canvas.height); }
             for(let key in this) {
                 const p = this[key];
                 if(p instanceof ActorProxy && p.visible) {
                     const aData = s.actors?.find(ac => ac.id === p.id);
-                    if(!aData) continue;
-                    const act = (aData.actions || []).find(x => x.name.toUpperCase() === p.currentAction.toUpperCase()) || aData.actions?.[0];
-                    
+                    const act = (aData?.actions || []).find(x => x.name.toUpperCase() === p.currentAction.toUpperCase()) || aData?.actions?.[0];
                     if(act?.frames?.length > 0) {
                         const now = Date.now();
-                        const speed = parseInt(act.speed) || 100;
-                        if (now - p.lastAnimTime > speed) { 
+                        if (now - p.lastAnimTime > (parseInt(act.speed) || 100)) { 
                             if (!p.isAnimFinished) {
                                 p.frameIdx++;
-                                if (p.frameIdx >= act.frames.length) { 
-                                    if (p.loop) p.frameIdx = 0; 
-                                    else { p.frameIdx = act.frames.length - 1; p.isAnimFinished = true; } 
-                                }
+                                if (p.frameIdx >= act.frames.length) { if (p.loop) p.frameIdx = 0; else { p.frameIdx = act.frames.length - 1; p.isAnimFinished = true; } }
                                 p.lastAnimTime = now; 
                             }
                         }
-                        const frame = act.frames[Math.min(p.frameIdx, act.frames.length - 1)];
-                        const spr = imageAssets.get(resolveUrl(frame.url));
+                        const spr = imageAssets.get(resolveUrl(act.frames[Math.min(p.frameIdx, act.frames.length - 1)].url));
                         if(spr) {
-                            const xPx = (p.x/100)*this.canvas.width; 
-                            const yPx = (p.y/100)*this.canvas.height; 
-                            let sz = 150 * (p.scale || 1);
-                            
-                            if (this.isBossPhase && p.name === 'ZOMBIE') {
-                                sz *= 1.5;
-                                this.ctx.filter = "hue-rotate(-50deg) saturate(3)";
-                            }
-
-                            this.ctx.save(); 
-                            this.ctx.translate(xPx, yPx);
-                            
-                            if (p.rotationStyle === 'left-right' && p.direction > 90 && p.direction < 270) {
-                                this.ctx.scale(-1, 1);
-                            } else if (p.rotationStyle === 'all') {
-                                this.ctx.rotate(p.direction * Math.PI / 180);
-                            }
-                            
-                            this.ctx.drawImage(spr, -sz/2, -sz/2, sz, sz); 
-                            this.ctx.restore();
-                            this.ctx.filter = "none";
+                            const xPx = (p.x/100)*this.canvas.width; const yPx = (p.y/100)*this.canvas.height; let sz = 150 * (p.scale || 1);
+                            if (this.isBossPhase && p.name === 'ZOMBIE') { sz *= 1.5; this.ctx.filter = "hue-rotate(-50deg) saturate(3)"; }
+                            this.ctx.save(); this.ctx.translate(xPx, yPx);
+                            if (p.rotationStyle === 'left-right' && p.direction > 90 && p.direction < 270) this.ctx.scale(-1, 1);
+                            else if (p.rotationStyle === 'all') this.ctx.rotate(p.direction * Math.PI / 180);
+                            this.ctx.drawImage(spr, -sz/2, -sz/2, sz, sz); this.ctx.restore(); this.ctx.filter = "none";
                         }
                     }
                 }
