@@ -1,5 +1,5 @@
 /**
- * 🎛️ SOUND EXPERT V556 (CACHE INVALIDATION)
+ * 🎛️ SOUND EXPERT V557 (CACHE INVALIDATION)
  * Service partagé pour la gestion audio avec gestion de la mémoire vive.
  */
 
@@ -8,7 +8,7 @@ const audioCache = new Map();
 const SoundExpert = {
     // 1. DÉCODAGE AVEC CACHE
     decodeAudio: async (url, audioCtx) => {
-        if (!audioCtx) return null;
+        if (!audioCtx || !url) return null;
         if (audioCache.has(url)) return audioCache.get(url);
 
         try {
@@ -29,11 +29,11 @@ const SoundExpert = {
         } catch (e) { return null; }
     },
 
-    // --- NOUVEAU : NETTOYAGE DU CACHE ---
+    // --- NOUVEAU : NETTOYAGE DU CACHE (ANTI-SONS ZOMBIES) ---
     removeFromCache: (url) => {
         if (audioCache.has(url)) {
             audioCache.delete(url);
-            console.log("🧹 [SoundExpert] Cache invalidé pour :", url);
+            console.log("🧹 [SoundExpert] Cache vidé pour :", url);
         }
     },
 

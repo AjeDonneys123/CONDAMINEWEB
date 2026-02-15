@@ -8918,3 +8918,5 @@ Build #174 : EVENT BUS SIMPLE (Simple substitution d'appel)
 15/02/2026 15:31 - FIX : Correction du sélecteur CSS pour afficher le bouton de suppression (X) lors du survol des tuiles sonores dans le Left Panel.
 
 15/02/2026 15:32 - BUG FIX : Le séquenceur jouait d'anciens sons supprimés à cause du cache RAM de SoundExpert. Ajout de l'invalidation de cache (removeFromCache) lors de la suppression de sons ou d'actions.
+
+15/02/2026 15:47 - MERGE & FIX : Reprise de la version UI fonctionnelle du StudioLeftPanel avec injection du correctif de cache audio (SoundExpert.removeFromCache) pour éradiquer les sons zombies lors de la suppression.
