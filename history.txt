@@ -8916,3 +8916,5 @@ Build #174 : EVENT BUS SIMPLE (Simple substitution d'appel)
 15/02/2026 15:02 - RESTORE : Cheatcodes (HUD clicks), sons de départ ("DEPART"), et support bridge pour le jeu Tapping.
 
 15/02/2026 15:31 - FIX : Correction du sélecteur CSS pour afficher le bouton de suppression (X) lors du survol des tuiles sonores dans le Left Panel.
+
+15/02/2026 15:32 - BUG FIX : Le séquenceur jouait d'anciens sons supprimés à cause du cache RAM de SoundExpert. Ajout de l'invalidation de cache (removeFromCache) lors de la suppression de sons ou d'actions.

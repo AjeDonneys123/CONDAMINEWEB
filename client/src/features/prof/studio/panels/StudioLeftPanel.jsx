@@ -1,4 +1,4 @@
-// @signatures: StudioLeftPanel, handleSelectAction, handleAddAction, handleAddGlobalSound, handleDeleteActionOrSound
+// @signatures: StudioLeftPanel, handleSelectAction, handleAddAction, handleAddGlobalSound, handleDeleteActionOrSound, handleDeleteSound
 import React, { useState, useEffect, useRef } from 'react';
 import SoundExpert from '../studioComp/SoundExpert';
 
@@ -89,11 +89,38 @@ export default function StudioLeftPanel({
         saveProject(next);
     };
 
+    // --- FIX : NETTOYAGE CACHE AUDIO LORS DE LA SUPPRESSION ---
+    const handleInternalDeleteSound = (sIdx) => {
+        if (!selectedAction || !selectedAction.sounds) return;
+        const soundToDelete = selectedAction.sounds[sIdx];
+        if (soundToDelete) {
+            // 1. On retire physiquement du cache RAM
+            SoundExpert.removeFromCache(resolveUrl(soundToDelete.url));
+        }
+        // 2. On appelle la fonction parente pour mettre à jour l'état BDD
+        handleDeleteSound(sIdx);
+    };
+
     const handleDeleteActionOrSound = (e, idx) => {
         e.stopPropagation(); if (!confirm("Supprimer ?")) return;
         const next = JSON.parse(JSON.stringify(project));
-        if (leftTab === 'actions') { next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId).actions.splice(idx, 1); setSelectedActionIdx(0); }
-        else { next.scenes[selectedSceneIdx].globalSounds.splice(idx, 1); setSelectedGlobalSoundIdx(0); }
+        if (leftTab === 'actions') { 
+            const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
+            // Invalider le cache de tous les sons de l'action supprimée
+            if (actor.actions[idx].sounds) {
+                actor.actions[idx].sounds.forEach(s => SoundExpert.removeFromCache(resolveUrl(s.url)));
+            }
+            actor.actions.splice(idx, 1); 
+            setSelectedActionIdx(0); 
+        }
+        else { 
+            // Invalider le cache des sons de l'événement sonore global
+            if (next.scenes[selectedSceneIdx].globalSounds[idx].sounds) {
+                next.scenes[selectedSceneIdx].globalSounds[idx].sounds.forEach(s => SoundExpert.removeFromCache(resolveUrl(s.url)));
+            }
+            next.scenes[selectedSceneIdx].globalSounds.splice(idx, 1); 
+            setSelectedGlobalSoundIdx(0); 
+        }
         saveProject(next);
     };
 
@@ -164,7 +191,7 @@ export default function StudioLeftPanel({
                             {(selectedAction.sounds || []).map((snd, sIdx) => (
                                 <div key={sIdx} onClick={() => { setSelectedSoundIdx(sIdx); setSelectedFrameIdx(null); }} className={`sound-frame-visual h-12 ${selectedSoundIdx === sIdx ? 'active' : ''}`}>
                                     <span className="text-[10px]">🎵</span>
-                                    <button className="frame-del" onClick={(e) => { e.stopPropagation(); handleDeleteSound(sIdx); }}>✕</button>
+                                    <button className="frame-del" onClick={(e) => { e.stopPropagation(); handleInternalDeleteSound(sIdx); }}>✕</button>
                                 </div>
                             ))}
                         </div>
