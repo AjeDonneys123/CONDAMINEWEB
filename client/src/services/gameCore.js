@@ -1,7 +1,8 @@
 /**
- * 🎮 CORE ENGINE V11.3 (PLATFORMER READY)
+ * 🎮 CORE ENGINE V11.5 (PLATFORMER RECOVERY)
+ * - Mapping sécurisé des acteurs (fallback sur le premier si nom introuvable).
+ * - Bridge de communication bidirectionnel.
  * - Transmission des questions au script.
- * - Ajout de submitAnswer(index) pour les collisions.
  */
 export const createGameBase = (params) => {
     const { imageAssets, resolveUrl, canvas, ctx, playParallelSound, bridge, questions } = params;
@@ -26,10 +27,7 @@ export const createGameBase = (params) => {
         }
         play(name, loop = true) { 
             if(String(this.currentAction).toUpperCase() !== String(name).toUpperCase()) { 
-                this.currentAction = name; 
-                this.frameIdx = 0; 
-                this.loop = loop; 
-                this.isAnimFinished = false;
+                this.currentAction = name; this.frameIdx = 0; this.loop = loop; this.isAnimFinished = false;
                 if (this.engine._triggerActionSounds) this.engine._triggerActionSounds(this.id, name);
             } 
         }
@@ -37,15 +35,24 @@ export const createGameBase = (params) => {
 
     return class MiniGameBase {
         constructor(c, a, cb) {
-            this.canvas = c || canvas; 
-            this.ctx = ctx; 
-            this.keys = {}; 
-            this.assets = a || {};
-            this.isBossPhase = false;
-            
-            // ✅ ACCÈS AUX QUESTIONS DU NIVEAU
-            this.questions = questions || [];
+            this.canvas = c || canvas; this.ctx = ctx; this.keys = {}; this.assets = a || {};
+            this.isBossPhase = false; 
+            this.questions = questions || []; 
             this.currentQIndex = 0;
+
+            const safeTrigger = (type, val) => { if (bridge && bridge.trigger) bridge.trigger(type, val); };
+            
+            this.game = {
+                damage: (v=1) => safeTrigger('DAMAGE', v),
+                winRound: () => safeTrigger('WIN_ROUND'),
+                failRound: () => safeTrigger('FAIL_ROUND'),
+                nextQuestion: () => safeTrigger('NEXT_Q'),
+                setBoss: (v) => safeTrigger('SET_BOSS', v),
+                setUI: (v) => safeTrigger('SET_UI', v),
+                submitAnswer: (idx) => safeTrigger('SUBMIT_ANSWER', idx),
+                shake: () => safeTrigger('SHAKE'),
+                start: () => {}
+            };
 
             this._triggerActionSounds = (actorId, actionName) => {
                 const project = params.projectRef?.current || {};
@@ -56,45 +63,27 @@ export const createGameBase = (params) => {
                 if (action?.sounds) action.sounds.forEach(snd => playParallelSound(snd.url));
             };
 
-            const safeTrigger = (type, val) => { if (bridge && bridge.trigger) bridge.trigger(type, val); };
-            
-            this.game = {
-                damage: (v=1) => safeTrigger('DAMAGE', v),
-                heal: (v=1) => safeTrigger('HEAL', v),
-                winRound: () => safeTrigger('WIN_ROUND'),
-                failRound: () => safeTrigger('FAIL_ROUND'),
-                nextQuestion: () => safeTrigger('NEXT_Q'),
-                setBoss: (v) => safeTrigger('SET_BOSS', v),
-                setUI: (v) => safeTrigger('SET_UI', v),
-                submitAnswer: (index) => safeTrigger('SUBMIT_ANSWER', index), // ✅ APPEL MARIO
-                gameOver: () => safeTrigger('GAME_OVER'),
-                victory: () => safeTrigger('VICTORY'),
-                shake: () => safeTrigger('SHAKE'),
-                playAudio: (n) => safeTrigger('AUDIO', n)
-            };
-
-            this.callbacks = {
-                onPlayerHit: () => this.game.damage(1),
-                onRoundEnd: (success) => { if (success) { this.game.winRound(); this.game.nextQuestion(); } else { this.game.failRound(); } },
-                ...(cb || {})
-            };
-
             const project = params.projectRef?.current || {};
-            const s = project.scenes?.[params.sceneIdx] || { actors: [] };
-            if(s.actors) s.actors.forEach(a => { this[a.name.toUpperCase()] = new ActorProxy(a, this); });
+            const scene = project.scenes?.[params.sceneIdx] || { actors: [] };
+            
+            if(scene.actors) {
+                scene.actors.forEach(a => { this[a.name.toUpperCase()] = new ActorProxy(a, this); });
+                if (!this.HEROS && scene.actors.length > 0) this.HEROS = new ActorProxy(scene.actors[0], this);
+                if (!this.ZOMBIE && scene.actors.length > 1) this.ZOMBIE = new ActorProxy(scene.actors[1], this);
+            }
         }
         
         _render() {
             if (!this.ctx || !this.canvas) return;
             const project = params.projectRef?.current || {};
-            const s = project.scenes?.[params.sceneIdx];
+            const scene = project.scenes?.[params.sceneIdx];
             this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-            const bd = s?.backdrops?.[s.currentBackdropIdx || 0];
+            const bd = scene?.backdrops?.[scene.currentBackdropIdx || 0];
             if(bd) { const img = imageAssets.get(resolveUrl(bd.url)); if(img) this.ctx.drawImage(img, 0, 0, this.canvas.width, this.canvas.height); }
             for(let key in this) {
                 const p = this[key];
                 if(p instanceof ActorProxy && p.visible) {
-                    const aData = s.actors?.find(ac => ac.id === p.id);
+                    const aData = scene.actors?.find(ac => ac.id === p.id);
                     const act = (aData?.actions || []).find(x => x.name.toUpperCase() === p.currentAction.toUpperCase()) || aData?.actions?.[0];
                     if(act?.frames?.length > 0) {
                         const now = Date.now();
@@ -107,7 +96,7 @@ export const createGameBase = (params) => {
                         }
                         const spr = imageAssets.get(resolveUrl(act.frames[Math.min(p.frameIdx, act.frames.length - 1)].url));
                         if(spr) {
-                            const xPx = (p.x/100)*this.canvas.width; const yPx = (p.y/100)*this.canvas.height; let sz = 150 * (p.scale || 1);
+                            const xPx = (p.x/100)*this.canvas.width, yPx = (p.y/100)*this.canvas.height; let sz = 150 * (p.scale || 1);
                             if (this.isBossPhase && p.name === 'ZOMBIE') { sz *= 1.5; this.ctx.filter = "hue-rotate(-50deg) saturate(3)"; }
                             this.ctx.save(); this.ctx.translate(xPx, yPx);
                             if (p.rotationStyle === 'left-right' && p.direction > 90 && p.direction < 270) this.ctx.scale(-1, 1);
