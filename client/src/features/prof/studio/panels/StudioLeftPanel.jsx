@@ -16,21 +16,15 @@ export default function StudioLeftPanel({
     const audioCtxRef = useRef(null);
     const activeSourcesRef = useRef([]);
 
-    // 1. INIT CONTEXTE AUDIO
     useEffect(() => {
-        if (!audioCtxRef.current) {
-            audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
-        }
+        if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
         return () => stopAllSounds();
     }, []);
 
-    // 2. PRELOAD DES SONS
     useEffect(() => {
-        if (selectedAction && selectedAction.sounds && selectedAction.sounds.length > 0) {
+        if (selectedAction?.sounds?.length > 0) {
             if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
-            selectedAction.sounds.forEach(snd => {
-                SoundExpert.decodeAudio(resolveUrl(snd.url), audioCtxRef.current);
-            });
+            selectedAction.sounds.forEach(snd => SoundExpert.decodeAudio(resolveUrl(snd.url), audioCtxRef.current));
         }
     }, [selectedAction, resolveUrl]);
 
@@ -39,120 +33,67 @@ export default function StudioLeftPanel({
         activeSourcesRef.current = [];
     };
 
-    // 3. SEQUENCEUR (VISUEL + AUDIO)
     useEffect(() => {
         let visualInterval = null;
         let soundIndex = 0;
         let isPlaying = isPreviewPlaying;
-
         if (isPlaying && selectedAction) {
-            if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
-                audioCtxRef.current.resume();
-            }
-
-            // VISUEL (Seulement si frames existantes)
-            if (selectedAction.frames && selectedAction.frames.length > 0) {
+            if (audioCtxRef.current?.state === 'suspended') audioCtxRef.current.resume();
+            if (selectedAction.frames?.length > 0) {
                 visualInterval = setInterval(() => {
-                    if (typeof setPreviewFrameIdx === 'function') {
-                        setPreviewFrameIdx(currentIdx => (currentIdx + 1) % selectedAction.frames.length);
-                    }
+                    if (typeof setPreviewFrameIdx === 'function') setPreviewFrameIdx(c => (c + 1) % selectedAction.frames.length);
                 }, selectedAction.speed || 200);
             }
-
-            // AUDIO (Boucle sur la liste des sons)
-            if (selectedAction.sounds && selectedAction.sounds.length > 0) {
+            if (selectedAction.sounds?.length > 0) {
                 const playNextSound = async () => {
                     if (!isPlaying) return;
                     const soundData = selectedAction.sounds[soundIndex];
                     if (!soundData) return;
                     const buffer = await SoundExpert.decodeAudio(resolveUrl(soundData.url), audioCtxRef.current);
                     if (!isPlaying || !buffer) return;
-
                     try {
                         const source = audioCtxRef.current.createBufferSource();
-                        source.buffer = buffer;
-                        source.connect(audioCtxRef.current.destination);
-                        source.onended = () => {
-                            if (isPlaying) {
-                                soundIndex = (soundIndex + 1) % selectedAction.sounds.length;
-                                playNextSound();
-                            }
-                        };
-                        source.start(0);
-                        activeSourcesRef.current.push(source);
-                    } catch (e) { console.error("Audio Error", e); }
+                        source.buffer = buffer; source.connect(audioCtxRef.current.destination);
+                        source.onended = () => { if (isPlaying) { soundIndex = (soundIndex + 1) % selectedAction.sounds.length; playNextSound(); } };
+                        source.start(0); activeSourcesRef.current.push(source);
+                    } catch (e) {}
                 };
                 playNextSound();
             }
-        } else {
-            stopAllSounds();
-            if (setPreviewFrameIdx) setPreviewFrameIdx(0);
-        }
-
-        return () => {
-            isPlaying = false;
-            if (visualInterval) clearInterval(visualInterval);
-            stopAllSounds();
-        };
+        } else { stopAllSounds(); if (setPreviewFrameIdx) setPreviewFrameIdx(0); }
+        return () => { isPlaying = false; if (visualInterval) clearInterval(visualInterval); stopAllSounds(); };
     }, [isPreviewPlaying, selectedAction, resolveUrl, setPreviewFrameIdx]);
 
-    const handleSelectAction = (idx) => {
-        setSelectedActionIdx(idx);
-        setIsPreviewPlaying(false);
-        setSelectedFrameIdx(null);
-        setSelectedSoundIdx(null);
-        if (setPreviewFrameIdx) setPreviewFrameIdx(0);
-    };
-
-    const handleSelectGlobalSound = (idx) => {
-        setSelectedGlobalSoundIdx(idx);
-        setIsPreviewPlaying(false);
-        setSelectedFrameIdx(null);
-        setSelectedSoundIdx(null);
-    };
+    const handleSelectAction = (idx) => { setSelectedActionIdx(idx); setIsPreviewPlaying(false); setSelectedFrameIdx(null); setSelectedSoundIdx(null); if (setPreviewFrameIdx) setPreviewFrameIdx(0); };
+    const handleSelectGlobalSound = (idx) => { setSelectedGlobalSoundIdx(idx); setIsPreviewPlaying(false); setSelectedFrameIdx(null); setSelectedSoundIdx(null); };
 
     const handlePenClick = () => {
         if (selectedFrameIdx !== null && leftTab === 'actions') {
             const frame = selectedAction.frames[selectedFrameIdx];
             if (frame) setFrameToErase({ url: frame.url, idx: selectedFrameIdx });
-        } else if (selectedSoundIdx !== null) {
-            handleEditSound(selectedSoundIdx); 
-        }
+        } else if (selectedSoundIdx !== null) handleEditSound(selectedSoundIdx); 
     };
 
     const handleAddAction = () => {
-        const name = prompt("Nom de l'action (ex: MARCHER) :"); 
-        if(!name) return; 
+        const name = prompt("Nom de l'action :"); if(!name) return; 
         const next = JSON.parse(JSON.stringify(project)); 
         const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
-        if (actor) {
-            actor.actions.push({ name: name.toUpperCase(), frames: [], sounds: [], speed: 100 }); 
-            saveProject(next);
-        }
+        if (actor) { actor.actions.push({ name: name.toUpperCase(), frames: [], sounds: [], speed: 100 }); saveProject(next); }
     };
 
     const handleAddGlobalSound = () => {
-        const name = prompt("Nom de l'événement (ex: VICTOIRE, GAME_OVER) :"); 
-        if(!name) return; 
+        const name = prompt("Nom de l'événement :"); if(!name) return; 
         const next = JSON.parse(JSON.stringify(project)); 
-        const scene = next.scenes[selectedSceneIdx];
-        if (!scene.globalSounds) scene.globalSounds = [];
-        scene.globalSounds.push({ name: name.toUpperCase(), frames: [], sounds: [], speed: 100 }); 
+        if (!next.scenes[selectedSceneIdx].globalSounds) next.scenes[selectedSceneIdx].globalSounds = [];
+        next.scenes[selectedSceneIdx].globalSounds.push({ name: name.toUpperCase(), frames: [], sounds: [], speed: 100 }); 
         saveProject(next);
     };
 
     const handleDeleteActionOrSound = (e, idx) => {
-        e.stopPropagation();
-        if (!confirm("Supprimer cet élément ?")) return;
+        e.stopPropagation(); if (!confirm("Supprimer ?")) return;
         const next = JSON.parse(JSON.stringify(project));
-        if (leftTab === 'actions') {
-            const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
-            actor.actions.splice(idx, 1);
-            setSelectedActionIdx(0);
-        } else {
-            next.scenes[selectedSceneIdx].globalSounds.splice(idx, 1);
-            setSelectedGlobalSoundIdx(0);
-        }
+        if (leftTab === 'actions') { next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId).actions.splice(idx, 1); setSelectedActionIdx(0); }
+        else { next.scenes[selectedSceneIdx].globalSounds.splice(idx, 1); setSelectedGlobalSoundIdx(0); }
         saveProject(next);
     };
 
@@ -162,7 +103,6 @@ export default function StudioLeftPanel({
                 <button className={`studio-tab-btn ${leftTab === 'actions' ? 'active' : ''}`} onClick={() => setLeftTab('actions')}>⚡ Actions</button>
                 <button className={`studio-tab-btn ${leftTab === 'sounds' ? 'active' : ''}`} onClick={() => setLeftTab('sounds')}>🎵 Sons</button>
             </div>
-
             <div className="studio-action-list custom-scrollbar">
                 {leftTab === 'actions' ? (
                     <>
@@ -189,11 +129,10 @@ export default function StudioLeftPanel({
                                 </div>
                             </div>
                         ))}
-                        <button type="button" className="v84-add-btn-minimal" onClick={handleAddGlobalSound}>+ Événement Sonore</button>
+                        <button type="button" className="v84-add-btn-minimal" onClick={handleAddGlobalSound}>+ Événement</button>
                     </>
                 )}
             </div>
-
             {selectedAction && (
                 <div className="studio-sequencer-box">
                     <div className="seq-header">
@@ -202,22 +141,13 @@ export default function StudioLeftPanel({
                             <button className="btn-mini-ctrl" onClick={() => handleUpdateActionSpeed(-50)}>-</button>
                             <span className="speed-indicator">{selectedAction.speed || 100}ms</span>
                             <button className="btn-mini-ctrl" onClick={() => handleUpdateActionSpeed(50)}>+</button>
-                            <button className={`btn-mini-ctrl ${isPreviewPlaying ? 'bg-indigo-100 text-indigo-600' : ''}`} onClick={() => setIsPreviewPlaying(!isPreviewPlaying)}>
-                                {isPreviewPlaying ? '⏹️' : '▶️'}
-                            </button>
+                            <button className={`btn-mini-ctrl ${isPreviewPlaying ? 'bg-indigo-100 text-indigo-600' : ''}`} onClick={() => setIsPreviewPlaying(!isPreviewPlaying)}>{isPreviewPlaying ? '⏹️' : '▶️'}</button>
                         </div>
                     </div>
-                    
                     {leftTab === 'actions' && (
                         <div className="seq-frames-grid custom-scrollbar">
                             {selectedAction.frames.map((frame, fIdx) => (
-                                <div key={fIdx} 
-                                    className={`seq-frame ${selectedFrameIdx === fIdx ? 'active' : ''}`} 
-                                    draggable 
-                                    onClick={() => { setSelectedFrameIdx(selectedFrameIdx === fIdx ? null : fIdx); setIsPreviewPlaying(false); }} 
-                                    onDragStart={() => setDraggedFrameIdx(fIdx)} 
-                                    onDragOver={e => e.preventDefault()} 
-                                    onDrop={() => handleReorderFrame(fIdx)}>
+                                <div key={fIdx} className={`seq-frame ${selectedFrameIdx === fIdx ? 'active' : ''}`} draggable onClick={() => { setSelectedFrameIdx(selectedFrameIdx === fIdx ? null : fIdx); setIsPreviewPlaying(false); }} onDragStart={() => setDraggedFrameIdx(fIdx)} onDragOver={e => e.preventDefault()} onDrop={() => handleReorderFrame(fIdx)}>
                                     <img src={resolveUrl(frame.url)} />
                                     <button className="frame-del" onClick={e => { e.stopPropagation(); handleDeleteFrame(fIdx); }}>✕</button>
                                 </div>
@@ -225,7 +155,6 @@ export default function StudioLeftPanel({
                             <div className="seq-frame seq-frame-add" onClick={() => frameUploadRef.current.click()}>+</div>
                         </div>
                     )}
-                    
                     <div className="border-slate-200 pt-2 border-t mt-2">
                         <div className="flex justify-between items-center mb-1">
                             <span className="seq-label text-indigo-500">Audio</span>
@@ -233,24 +162,17 @@ export default function StudioLeftPanel({
                         </div>
                         <div className="grid grid-cols-3 gap-2">
                             {(selectedAction.sounds || []).map((snd, sIdx) => (
-                                <div key={sIdx} onClick={() => { setSelectedSoundIdx(sIdx); setSelectedFrameIdx(null); }} className={`sound-frame-visual h-12 ${selectedSoundIdx === sIdx ? 'active' : ''} relative group`}>
+                                <div key={sIdx} onClick={() => { setSelectedSoundIdx(sIdx); setSelectedFrameIdx(null); }} className={`sound-frame-visual h-12 ${selectedSoundIdx === sIdx ? 'active' : ''}`}>
                                     <span className="text-[10px]">🎵</span>
-                                    <button className="frame-del !bg-red-500 !top-0 !right-0" onClick={(e) => { e.stopPropagation(); handleDeleteSound(sIdx); }}>✕</button>
+                                    <button className="frame-del" onClick={(e) => { e.stopPropagation(); handleDeleteSound(sIdx); }}>✕</button>
                                 </div>
                             ))}
                         </div>
                     </div>
-
                     <div className="eraser-bar mt-auto">
                         <div className="flex gap-2 items-center w-full">
-                            <button className="btn-tool-pen" onClick={handlePenClick} disabled={selectedFrameIdx === null && selectedSoundIdx === null}>
-                                ✏️ ÉDITER
-                            </button>
-                            {leftTab === 'actions' && (
-                                <button className={`btn-magic-clean ${cleaning ? 'pulse' : ''}`} onClick={handleSmartAIClean} disabled={cleaning || !selectedAction.frames || selectedAction.frames.length === 0}>
-                                    ✨ {cleaning ? '...' : (selectedFrameIdx !== null ? 'DÉTOURER 1' : 'TOUT CLEAN')}
-                                </button>
-                            )}
+                            <button className="btn-tool-pen" onClick={handlePenClick} disabled={selectedFrameIdx === null && selectedSoundIdx === null}>✏️ ÉDITER</button>
+                            {leftTab === 'actions' && <button className={`btn-magic-clean ${cleaning ? 'pulse' : ''}`} onClick={handleSmartAIClean} disabled={cleaning || !selectedAction.frames?.length}>✨ {cleaning ? '...' : 'TOUT CLEAN'}</button>}
                         </div>
                     </div>
                 </div>

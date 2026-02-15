@@ -8914,3 +8914,5 @@ Build #173 : ARCHITECTURE EVENEMENTIELLE (Tentative échouée)
 Build #174 : EVENT BUS SIMPLE (Simple substitution d'appel)
 
 15/02/2026 15:02 - RESTORE : Cheatcodes (HUD clicks), sons de départ ("DEPART"), et support bridge pour le jeu Tapping.
+
+15/02/2026 15:31 - FIX : Correction du sélecteur CSS pour afficher le bouton de suppression (X) lors du survol des tuiles sonores dans le Left Panel.
