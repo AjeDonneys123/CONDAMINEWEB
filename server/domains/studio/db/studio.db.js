@@ -1,44 +1,38 @@
 const mongoose = require('mongoose');
 
 /**
- * 💾 COUCHE DB STUDIO
- * Accès aux projets de théâtre/jeux.
+ * 💾 COUCHE DB STUDIO - V480 (REPLACEMENT SECURE)
  */
 const StudioDB = {
-    // Créer ou mettre à jour un projet (UPSERT ROBUSTE)
+    // Upsert qui écrase totalement les tableaux pour éviter les "sons fantômes"
     upsertProject: async (data) => {
         const Model = mongoose.model('StudioProject');
-        
-        // 1. Nettoyage de l'objet pour éviter les injections d'ID null
         const cleanData = { ...data };
         
-        // Nettoyage ID principal
         if (!cleanData._id || cleanData._id === 'null' || cleanData._id === 'undefined') {
             delete cleanData._id;
+            return await Model.create(cleanData);
         }
 
-        // NETTOYAGE DES SCÈNES (CÔTÉ SERVEUR AUSSI)
-        if (cleanData.scenes && Array.isArray(cleanData.scenes)) {
-            cleanData.scenes = cleanData.scenes.map(s => {
-                // Si l'ID n'est pas valide (pas un ObjectId), on le supprime pour que Mongoose en génère un nouveau
-                if (s._id && !mongoose.Types.ObjectId.isValid(s._id)) {
-                    delete s._id;
-                }
-                return s;
-            });
-        }
-
-        // 2. Tentative de mise à jour SI on a un ID valide
-        if (cleanData._id && mongoose.Types.ObjectId.isValid(cleanData._id)) {
-            const updated = await Model.findByIdAndUpdate(cleanData._id, cleanData, { new: true });
-            if (updated) return updated;
+        // --- STRATÉGIE DE REPLACEMENT ABSOLU ---
+        try {
+            const doc = await Model.findById(cleanData._id);
+            if (!doc) {
+                delete cleanData._id;
+                return await Model.create(cleanData);
+            }
             
-            // SINON (ID introuvable), on le supprime pour forcer une création
-            delete cleanData._id;
+            // On écrase les champs
+            doc.set(cleanData);
+            
+            // On force Mongoose à voir que les scènes (contenant les sons) ont changé
+            doc.markModified('scenes');
+            
+            return await doc.save();
+        } catch (e) {
+            console.error("❌ DB Studio Upsert Error:", e.message);
+            throw e;
         }
-        
-        // 3. Création
-        return await Model.create(cleanData);
     },
 
     findProjectsByTeacher: async (teacherId) => {

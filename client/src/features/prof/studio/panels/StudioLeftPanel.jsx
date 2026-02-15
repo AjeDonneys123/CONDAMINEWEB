@@ -124,7 +124,7 @@ export default function StudioLeftPanel({
     };
 
     const handleAddAction = () => {
-        const name = prompt("Nom de l'action (ex: MARCHER) :"); 
+        const name = prompt("Nom de l'action :"); 
         if(!name) return; 
         const next = JSON.parse(JSON.stringify(project)); 
         const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
@@ -135,7 +135,7 @@ export default function StudioLeftPanel({
     };
 
     const handleAddGlobalSound = () => {
-        const name = prompt("Nom de l'événement (ex: VICTOIRE, GAME_OVER) :"); 
+        const name = prompt("Nom de l'événement :"); 
         if(!name) return; 
         const next = JSON.parse(JSON.stringify(project)); 
         const scene = next.scenes[selectedSceneIdx];
@@ -145,10 +145,12 @@ export default function StudioLeftPanel({
     };
 
     // --- FIX : SUPPRESSION AVEC NETTOYAGE RAM ---
-    const handleInternalDeleteSound = (sIdx) => {
+    const onInternalDeleteSound = (e, sIdx) => {
+        e.stopPropagation();
         if (!selectedAction || !selectedAction.sounds) return;
         const snd = selectedAction.sounds[sIdx];
         if (snd) {
+            // On vide physiquement la RAM pour cet URL avant la suppression
             SoundExpert.removeFromCache(resolveUrl(snd.url));
         }
         handleDeleteSound(sIdx);
@@ -268,7 +270,7 @@ export default function StudioLeftPanel({
                                     <span className="text-[8px] font-black text-indigo-800 w-full text-center truncate px-1">{snd.name?.substring(0,10)}</span>
                                     <button 
                                         className="frame-del !bg-red-500 !text-white !opacity-100 !top-1 !right-1 z-50" 
-                                        onClick={(e) => handleInternalDeleteSound(sIdx)}
+                                        onClick={(e) => onInternalDeleteSound(e, sIdx)}
                                     >✕</button>
                                 </div>
                             ))}

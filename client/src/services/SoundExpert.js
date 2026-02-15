@@ -1,12 +1,10 @@
 /**
- * 🎛️ SOUND EXPERT V557 (CACHE INVALIDATION)
- * Service partagé pour la gestion audio avec gestion de la mémoire vive.
+ * 🎛️ SOUND EXPERT V558 (RAM CACHE + INVALIDATION)
+ * Gère le décodage et le stockage des sons en mémoire vive.
  */
-
 const audioCache = new Map();
 
 const SoundExpert = {
-    // 1. DÉCODAGE AVEC CACHE
     decodeAudio: async (url, audioCtx) => {
         if (!audioCtx || !url) return null;
         if (audioCache.has(url)) return audioCache.get(url);
@@ -29,17 +27,16 @@ const SoundExpert = {
         } catch (e) { return null; }
     },
 
-    // --- NOUVEAU : NETTOYAGE DU CACHE (ANTI-SONS ZOMBIES) ---
+    // --- NETTOYAGE PHYSIQUE DE LA RAM (ANTI-FANTÔME) ---
     removeFromCache: (url) => {
         if (audioCache.has(url)) {
             audioCache.delete(url);
-            console.log("🧹 [SoundExpert] Cache vidé pour :", url);
+            console.log("🧹 [SoundExpert] RAM libérée pour :", url);
         }
     },
 
     clearAllCache: () => audioCache.clear(),
 
-    // --- DSP TOOLS ---
     trim: (buffer, startPct, endPct) => {
         if (!buffer || !buffer.getChannelData) return buffer;
         const start = Math.floor(startPct * buffer.length);
