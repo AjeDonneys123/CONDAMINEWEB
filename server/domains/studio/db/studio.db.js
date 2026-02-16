@@ -16,19 +16,23 @@ const StudioDB = {
 
         try {
             // --- STRATÉGIE DE REPLACEMENT ABSOLU ---
-            // findByIdAndUpdate est dangereux pour les tableaux imbriqués (il merge).
-            // On récupère le document, on vide les scènes, et on ré-injecte tout.
             const doc = await Model.findById(cleanData._id);
             if (!doc) {
                 delete cleanData._id;
                 return await Model.create(cleanData);
             }
             
-            // On utilise .set() pour remplacer les données par l'objet propre venant du front
+            // On utilise .set() pour remplacer les données
             doc.set(cleanData);
             
-            // On force Mongoose à marquer le champ 'scenes' comme modifié pour qu'il réécrive tout en BDD
+            // SÉCURITÉ CODE CONSOLE : On force l'assignation explicite
+            if (cleanData.generatedCode !== undefined) {
+                doc.generatedCode = cleanData.generatedCode;
+            }
+            
+            // On force Mongoose à marquer les champs complexes comme modifiés
             doc.markModified('scenes');
+            doc.markModified('generatedCode');
             
             return await doc.save();
         } catch (e) {
