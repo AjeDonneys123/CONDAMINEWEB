@@ -31,8 +31,6 @@ const SceneSchema = new mongoose.Schema({
     backdrops: [{ name: String, url: String }],
     currentBackdropIdx: { type: Number, default: 0 },
     actors: [ActorSchema],
-    
-    // On déclare quand même le champ pour aider, mais le strict: false fera le travail
     globalSounds: { type: [ActionSchema], default: [] }
 }, { _id: false });
 
@@ -40,13 +38,15 @@ const StudioProjectSchema = new mongoose.Schema({
     title: { type: String, required: true },
     teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher' },
     scenes: [SceneSchema],
-    generatedCode: String,
+    
+    // CHAMP CRITIQUE : DÉCLARATION EXPLICITE
+    generatedCode: { type: String, default: "" },
+    
     createdAt: { type: Date, default: Date.now }
 }, { 
     collection: 'studioprojects',
-    // 🚀 MODIFICATION CRITIQUE ICI :
-    strict: false,   // Accepte les champs inconnus (comme globalSounds s'il bug)
-    minimize: false  // Sauvegarde même les objets vides
+    strict: false,
+    minimize: false
 });
 
 module.exports = mongoose.models.StudioProject || mongoose.model('StudioProject', StudioProjectSchema);
