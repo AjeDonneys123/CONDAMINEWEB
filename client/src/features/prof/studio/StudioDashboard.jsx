@@ -146,9 +146,7 @@ export default function StudioDashboard({ user }) {
     async function loadProjects() {
         const data = await api.get(`/studio/projects/${user.id || user._id}`);
         if (data?.length > 0) {
-            setProject(data[0]);
-            if (data[0].generatedCode) setCode(data[0].generatedCode);
-            if (data[0].scenes?.[0]?.actors?.[0]) setSelectedActorId(data[0].scenes[0].actors[0].id);
+            handleLoadProject(data[0]);
         }
     }
 
@@ -156,12 +154,20 @@ export default function StudioDashboard({ user }) {
         if (!p) return;
         setLoading(true); setStatusText("Sync...");
         try {
-            const saved = await api.post('/studio', { ...p, teacherId: user.id || user._id, generatedCode: code });
+            // FIX CRITIQUE : On force l'utilisation du state 'code' actuel
+            // On s'assure que 'generatedCode' n'est pas écrasé par une vieille version présente dans 'p'
+            const payload = {
+                ...p,
+                teacherId: user.id || user._id,
+                generatedCode: code 
+            };
+            const saved = await api.post('/studio', payload);
             setProject(saved);
-        } catch(e) {} setLoading(false);
+        } catch(e) { console.error(e); } 
+        setLoading(false);
     }
 
-    // ✅ FONCTION DE DÉTOURAGE RESTAURÉE
+    // ✅ FONCTION DE DÉTOURAGE
     const handleSmartAIClean = async () => {
         if (selectedFrameIdx === null || !selectedAction) return;
         const frame = selectedAction.frames[selectedFrameIdx];
@@ -189,8 +195,22 @@ export default function StudioDashboard({ user }) {
     const handleSetPreviewFrameIdx = (valOrFn) => { if (typeof valOrFn === 'function') setPreviewFrameIdx(prev => valOrFn(prev)); else setPreviewFrameIdx(valOrFn); };
     const handleOpenSave = () => { setModalMode('SAVE'); setShowSaveLoadModal(true); };
     const handleOpenLoad = () => { setModalMode('LOAD'); setShowSaveLoadModal(true); };
-    const handleCreateNew = () => { setProject(DEMO_PROJECT); setCode(ZOMBIE_GAME_CODE); setSelectedActorId(null); setShowSaveLoadModal(false); };
-    const handleLoadProject = (p) => { setProject(p); setCode(p.generatedCode || ZOMBIE_GAME_CODE); if (p.scenes?.[0]?.actors?.[0]) setSelectedActorId(p.scenes[0].actors[0].id); setShowSaveLoadModal(false); };
+    
+    const handleCreateNew = () => { 
+        setProject(DEMO_PROJECT); 
+        setCode(ZOMBIE_GAME_CODE); 
+        setSelectedActorId(null); 
+        setShowSaveLoadModal(false); 
+    };
+    
+    const handleLoadProject = (p) => { 
+        setProject(p); 
+        // FIX : Priorité au code du projet chargé, sinon défaut
+        setCode(p.generatedCode || ZOMBIE_GAME_CODE); 
+        if (p.scenes?.[0]?.actors?.[0]) setSelectedActorId(p.scenes[0].actors[0].id); 
+        setShowSaveLoadModal(false); 
+    };
+
     const handleUpdateActionSpeed = (delta) => { if (!selectedAction) return; const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); if (actor && actor.actions[selectedActionIdx]) actor.actions[selectedActionIdx].speed = Math.max(20, Math.min(2000, (actor.actions[selectedActionIdx].speed || 100) + delta)); } else { if (next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx]) next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].speed = Math.max(20, Math.min(2000, (next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].speed || 100) + delta)); } setProject(next); saveProject(next); };
     const handleSelectActor = (actorId) => { setSelectedActorId(actorId); setSelectedFrameIdx(null); };
     const handleStageMouseDown = (e, actorId) => { e.preventDefault(); e.stopPropagation(); handleSelectActor(actorId); setIsDraggingOnStage(true); };
