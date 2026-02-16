@@ -1,5 +1,5 @@
 /**
- * 🎛️ SOUND EXPERT V558 (RAM CACHE + INVALIDATION)
+ * 🎛️ SOUND EXPERT V565 (RAM CACHE + INVALIDATION)
  * Gère le décodage et le stockage des sons en mémoire vive.
  */
 const audioCache = new Map();
@@ -27,7 +27,7 @@ const SoundExpert = {
         } catch (e) { return null; }
     },
 
-    // --- NETTOYAGE PHYSIQUE DE LA RAM (ANTI-FANTÔME) ---
+    // --- NETTOYAGE DE LA RAM (ÉVITE LES SONS FANTÔMES) ---
     removeFromCache: (url) => {
         if (audioCache.has(url)) {
             audioCache.delete(url);
@@ -122,21 +122,38 @@ const SoundExpert = {
         const length = buffer.length * numOfChan * 2 + 44;
         const out = new ArrayBuffer(length);
         const view = new DataView(out);
-        setUint32(0x46464952); setUint32(length - 8); setUint32(0x45564157); setUint32(0x20746d66); setUint32(16); setUint16(1); setUint16(numOfChan); setUint32(buffer.sampleRate); setUint32(buffer.sampleRate * 2 * numOfChan); setUint16(numOfChan * 2); setUint16(16); setUint32(0x61746164); setUint32(length - 44);
+        
+        let pos = 0;
+        function setUint16(data) { view.setUint16(pos, data, true); pos += 2; }
+        function setUint32(data) { view.setUint32(pos, data, true); pos += 4; }
+
+        setUint32(0x46464952); // "RIFF"
+        setUint32(length - 8); 
+        setUint32(0x45564157); // "WAVE"
+        setUint32(0x20746d66); // "fmt "
+        setUint32(16); 
+        setUint16(1); 
+        setUint16(numOfChan);
+        setUint32(buffer.sampleRate);
+        setUint32(buffer.sampleRate * 2 * numOfChan);
+        setUint16(numOfChan * 2);
+        setUint16(16);
+        setUint32(0x61746164); // "data"
+        setUint32(length - 44);
+
         const channels = [];
         for(let i = 0; i < buffer.numberOfChannels; i++) channels.push(buffer.getChannelData(i));
-        let pos = 0, offset = 44;
-        while(pos < buffer.length) {
+        
+        let sampleIdx = 0;
+        while(sampleIdx < buffer.length) {
             for(let i = 0; i < numOfChan; i++) {
-                let sample = Math.max(-1, Math.min(1, channels[i][pos]));
-                view.setInt16(offset, sample < 0 ? sample * 32768 : sample * 32767, true);
-                offset += 2;
+                let sample = Math.max(-1, Math.min(1, channels[i][sampleIdx]));
+                view.setInt16(pos, sample < 0 ? sample * 32768 : sample * 32767, true);
+                pos += 2;
             }
-            pos++;
+            sampleIdx++;
         }
         return new Blob([out], { type: "audio/wav" });
-        function setUint16(d) { view.setUint16(offset, d, true); offset += 2; }
-        function setUint32(d) { view.setUint32(offset, d, true); offset += 4; }
     }
 };
 

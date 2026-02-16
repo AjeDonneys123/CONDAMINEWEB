@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 /**
- * 💾 COUCHE DB STUDIO - V480 (REPLACEMENT SECURE)
+ * 💾 COUCHE DB STUDIO - V485 (DEEP OVERWRITE STRATEGY)
  */
 const StudioDB = {
     // Upsert qui écrase totalement les tableaux pour éviter les "sons fantômes"
@@ -14,23 +14,25 @@ const StudioDB = {
             return await Model.create(cleanData);
         }
 
-        // --- STRATÉGIE DE REPLACEMENT ABSOLU ---
         try {
+            // --- STRATÉGIE DE REPLACEMENT ABSOLU ---
+            // findByIdAndUpdate est dangereux pour les tableaux imbriqués (il merge).
+            // On récupère le document, on vide les scènes, et on ré-injecte tout.
             const doc = await Model.findById(cleanData._id);
             if (!doc) {
                 delete cleanData._id;
                 return await Model.create(cleanData);
             }
             
-            // On écrase les champs
+            // On utilise .set() pour remplacer les données par l'objet propre venant du front
             doc.set(cleanData);
             
-            // On force Mongoose à voir que les scènes (contenant les sons) ont changé
+            // On force Mongoose à marquer le champ 'scenes' comme modifié pour qu'il réécrive tout en BDD
             doc.markModified('scenes');
             
             return await doc.save();
         } catch (e) {
-            console.error("❌ DB Studio Upsert Error:", e.message);
+            console.error("❌ DB Studio Deep Upsert Error:", e.message);
             throw e;
         }
     },

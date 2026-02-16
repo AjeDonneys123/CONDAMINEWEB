@@ -8924,3 +8924,7 @@ Build #174 : EVENT BUS SIMPLE (Simple substitution d'appel)
 15/02/2026 15:52 - CRITICAL FIX : Éradication définitive des sons fantômes.
 - Frontend : Merge du StudioLeftPanel fonctionnel avec SoundExpert.removeFromCache() pour libérer la RAM navigateur.
 - Backend : Mise à jour de studio.db.js pour utiliser doc.save() et doc.markModified('scenes'), garantissant que MongoDB remplace tout le tableau de sons au lieu de le fusionner.
+
+15/02/2026 19:42 - BUGFIX DEFINITIF : Sons fantômes et ReferenceError.
+- Frontend : Intégration de SoundExpert.removeFromCache() lors du clic sur ✕.
+- Backend : Remplacement de findByIdAndUpdate par doc.set() + doc.save() pour garantir l'écrasement propre des tableaux de sons en BDD.
