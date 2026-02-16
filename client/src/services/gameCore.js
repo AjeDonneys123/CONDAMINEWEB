@@ -1,11 +1,10 @@
 /**
- * 🎮 CORE ENGINE V11.5 (PLATFORMER RECOVERY)
- * - Mapping sécurisé des acteurs (fallback sur le premier si nom introuvable).
- * - Bridge de communication bidirectionnel.
- * - Transmission des questions au script.
+ * 🎮 CORE ENGINE V12.0 (MODERN STANDARD)
+ * - Architecture : Bridge Pattern (this.game.*)
+ * - Sécurité : Adaptateur Legacy automatique (convertit les vieux appels en nouveaux).
  */
 export const createGameBase = (params) => {
-    const { imageAssets, resolveUrl, canvas, ctx, playParallelSound, bridge, questions } = params;
+    const { imageAssets, resolveUrl, canvas, ctx, playParallelSound, bridge, questions, callbacks } = params;
 
     class ActorProxy {
         constructor(data, engine) { 
@@ -35,11 +34,16 @@ export const createGameBase = (params) => {
 
     return class MiniGameBase {
         constructor(c, a, cb) {
-            this.canvas = c || canvas; this.ctx = ctx; this.keys = {}; this.assets = a || {};
+            this.canvas = c || canvas; 
+            this.ctx = ctx; 
+            this.keys = {}; 
+            this.assets = a || {};
+            
             this.isBossPhase = false; 
             this.questions = questions || []; 
             this.currentQIndex = 0;
 
+            // --- 1. SYSTÈME MODERNE (BRIDGE) ---
             const safeTrigger = (type, val) => { if (bridge && bridge.trigger) bridge.trigger(type, val); };
             
             this.game = {
@@ -53,6 +57,16 @@ export const createGameBase = (params) => {
                 shake: () => safeTrigger('SHAKE'),
                 start: () => {}
             };
+
+            // --- 2. ADAPTATEUR LEGACY (ANTI-CRASH) ---
+            // Si un vieux script appelle this.callbacks.onPlayerHit, on le redirige vers this.game.damage
+            this.callbacks = cb || {};
+            if (!this.callbacks.onPlayerHit) {
+                this.callbacks.onPlayerHit = () => {
+                    console.warn("⚠️ Legacy Call: onPlayerHit -> Redirection vers this.game.damage(1)");
+                    this.game.damage(1);
+                };
+            }
 
             this._triggerActionSounds = (actorId, actionName) => {
                 const project = params.projectRef?.current || {};
