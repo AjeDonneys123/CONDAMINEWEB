@@ -4,7 +4,8 @@ const router = express.Router();
 const { StudioProject } = require('../models/prof.models');
 const ProfDrive = require('../core/drive.prof');
 const StudioExpert = require('../../domains/studio/experts/studio.expert'); 
-const EditionExpert = require('../../domains/studio/experts/edition.expert'); // V459
+const EditionExpert = require('../../domains/studio/experts/edition.expert'); 
+const mongoose = require('mongoose');
 const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
@@ -13,16 +14,20 @@ const tempDir = path.join(process.cwd(), 'public', 'uploads', 'temp');
 if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 const upload = multer({ dest: tempDir });
 
+// --- CHARGEMENT PROJETS (SÉCURISÉ) ---
 router.get('/projects/:userId', async (req, res) => {
     try {
-        const projects = await StudioProject.find({ teacherId: req.params.userId }).sort({ updatedAt: -1 }).lean();
+        const { userId } = req.params;
+        if (!userId || !mongoose.Types.ObjectId.isValid(userId)) return res.json([]);
+        const projects = await StudioProject.find({ teacherId: userId }).sort({ updatedAt: -1 }).lean();
         res.json(projects);
-    } catch (e) { res.status(500).json([]); }
+    } catch (e) { res.json([]); }
 });
 
 router.post('/', async (req, res) => {
     try {
         const data = req.body;
+        if (data._id === "null" || data._id === "") delete data._id;
         let result;
         if (data._id) result = await StudioProject.findByIdAndUpdate(data._id, data, { new: true });
         else result = await StudioProject.create(data);
@@ -40,24 +45,28 @@ router.post('/upload-asset', upload.single('file'), async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ✅ NOUVELLE ROUTE : SAUVEGARDE ÉDITION (GOMME) V459
+// SAUVEGARDE GOMME MANUELLE
 router.post('/save-edition', upload.single('file'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: "Blob manquant" });
         const result = await EditionExpert.saveErasedImage(req.file.path, req.file.originalname);
         res.json(result);
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ROUTE DÉTOURAGE IA (Celle qui plantait)
 router.post('/remove-bg-specialized', async (req, res) => {
     try {
         const { url } = req.body;
+        // On appelle l'expert pour traiter l'image
         const result = await StudioExpert.specializedBgRemoval(url);
+        
         if (result) res.json(result);
-        else res.status(500).json({ error: "Échec détourage" });
-    } catch (e) { res.status(500).json({ error: e.message }); }
+        else res.status(500).json({ error: "Échec détourage (API Error ou Clé manquante)" });
+    } catch (e) { 
+        console.error("Crash Route RemoveBG:", e);
+        res.status(500).json({ error: e.message }); 
+    }
 });
 
 module.exports = router;
