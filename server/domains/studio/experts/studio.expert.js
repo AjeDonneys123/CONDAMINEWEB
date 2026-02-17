@@ -17,19 +17,16 @@ const StudioExpert = {
         
         if (!apiKey) {
             console.error("❌ ERREUR : Clé REMOVE_BG_API_KEY absente du .env");
-            return null;
+            // On renvoie une erreur propre au lieu de planter
+            throw new Error("Clé API Remove.bg manquante. Configurez le fichier .env");
         }
 
         try {
-            // 1. Extraction ID Drive ou URL locale
-            // Si c'est une URL proxy (/api/proxy/XXX), on prend l'ID
             const fileId = imageUrl.split('/').pop();
             console.log("   Cible ID:", fileId);
 
-            // 2. Récupération du flux depuis Google Drive
             const stream = await ProfDrive.getFileStream(fileId);
             
-            // 3. Préparation FormData pour Remove.bg
             const formData = new FormData();
             formData.append('size', 'auto');
             formData.append('image_file', stream);
@@ -44,35 +41,32 @@ const StudioExpert = {
             if (!response.ok) {
                 const errorText = await response.text();
                 console.error("❌ ERREUR API Remove.bg :", response.status, errorText);
-                return null;
+                throw new Error(`Remove.bg Refus: ${response.status} - ${errorText}`);
             }
 
-            // 4. Réception du résultat
             const buffer = await response.buffer();
 
-            // 5. Sauvegarde temporaire locale
-            const fileName = `ai-cleaned-${Date.now()}.png`;
-            const localPath = path.join(process.cwd(), 'public', 'uploads', 'temp', fileName);
-            
-            // Assure-toi que le dossier existe
-            if (!fs.existsSync(path.dirname(localPath))) {
-                fs.mkdirSync(path.dirname(localPath), { recursive: true });
+            // SÉCURITÉ : CRÉATION DU DOSSIER TEMP SI INEXISTANT
+            const tempDir = path.join(process.cwd(), 'public', 'uploads', 'temp');
+            if (!fs.existsSync(tempDir)) {
+                fs.mkdirSync(tempDir, { recursive: true });
             }
+
+            const fileName = `ai-cleaned-${Date.now()}.png`;
+            const localPath = path.join(tempDir, fileName);
             
             fs.writeFileSync(localPath, buffer);
 
-            // 6. Upload final vers Drive (Dossier Studio Assets)
             const driveData = await StudioDrive.uploadAsset(localPath, fileName);
             console.log("   Upload Drive réussi :", driveData.id);
 
-            // Nettoyage
             try { fs.unlinkSync(localPath); } catch(e) {}
 
             return { url: `/api/proxy/${driveData.id}` };
 
         } catch (e) {
             console.error("💥 CRASH DÉTOURAGE :", e.message);
-            return null;
+            throw e; // On propage l'erreur pour que le front l'affiche
         }
     },
 
