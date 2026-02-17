@@ -1,10 +1,11 @@
-// @signatures: ProfStudio, projects, save, uploadAsset, detectBg, removeBgSpecialized, saveEdition
+// @signatures: ProfStudio, projects, save, uploadAsset, detectBg, removeBgSpecialized, saveEdition, importZombieSounds
 const express = require('express');
 const router = express.Router();
 const { StudioProject } = require('../models/prof.models');
 const ProfDrive = require('../core/drive.prof');
 const StudioExpert = require('../../domains/studio/experts/studio.expert'); 
-const EditionExpert = require('../../domains/studio/experts/edition.expert'); 
+const EditionExpert = require('../../domains/studio/experts/edition.expert');
+const SoundLibraryExpert = require('../../domains/studio/experts/sound-library.expert'); // ✅ IMPORT AJOUTÉ
 const mongoose = require('mongoose');
 const multer = require('multer');
 const fs = require('fs');
@@ -66,6 +67,17 @@ router.post('/remove-bg-specialized', async (req, res) => {
     } catch (e) { 
         console.error("Crash Route RemoveBG:", e);
         res.status(500).json({ error: e.message }); 
+    }
+});
+
+// ✅ ROUTE IMPORTATION SONS ZOMBIE (Celle qui manquait et causait le 404)
+router.post('/import-zombie-sounds', async (req, res) => {
+    try {
+        const sounds = await SoundLibraryExpert.getZombieDefaults();
+        res.json({ sounds });
+    } catch (e) {
+        console.error("Import Zombie Sounds Error:", e);
+        res.status(500).json({ error: e.message });
     }
 });
 
