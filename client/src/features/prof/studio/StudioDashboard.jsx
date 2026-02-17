@@ -1,4 +1,4 @@
-// @signatures: StudioDashboard, handleSmartAIClean
+// @signatures: StudioDashboard, handleSmartAIClean, localAutoClean
 import React, { useState, useRef, useEffect } from 'react';
 import './StudioDashboard.css';
 import { api } from '../../../services/api';
@@ -21,93 +21,7 @@ function resolveUrl(url) {
     return `/api/proxy/${id}`;
 }
 
-const ZOMBIE_GAME_CODE = `class MiniGame extends MiniGameBase {
-    constructor(canvas, assets, callbacks) {
-        super(canvas, assets, callbacks);
-        this.resetInternalState();
-    }
-    resetInternalState() {
-        this.projectiles = []; this.zombieX = 100; this.zombieState = "WALKING"; 
-        this.heroState = "IDLE"; this.heroTimer = 0; this.hasDealtDamage = false;
-        this.isStopped = false; this.baseSpeed = 0.15;
-    }
-    start() { 
-        this.resetInternalState();
-        if(this.HEROS) { this.HEROS.x = 15; this.HEROS.y = 70; this.HEROS.play("IDLE", true); } 
-        this.resetZombie();
-    }
-    resetZombie() {
-        this.zombieX = 100; this.zombieState = "WALKING"; this.hasDealtDamage = false;
-        if(this.ZOMBIE) { this.ZOMBIE.x = 100; this.ZOMBIE.play("AVANCER", true); }
-    }
-    onResult(isCorrect) {
-        if (isCorrect && this.HEROS) {
-            this.HEROS.play("TIRER", false); this.heroState = "SHOOT"; this.heroTimer = 40;
-            this.projectiles.push({ x: this.HEROS.x + 5, y: this.HEROS.y - 5 });
-        } else if (!isCorrect) { this.zombieX -= 12; this.game.shake(); }
-    }
-    update() {
-        if (this.isStopped) return;
-        if (this.isBossPhase && this.ZOMBIE) { this.ZOMBIE.scale = this.ZOMBIE.baseScale * 1.6; } 
-        else if (this.ZOMBIE) { this.ZOMBIE.scale = this.ZOMBIE.baseScale; }
-        if (this.heroState === "SHOOT" || this.heroState === "HIT") {
-            this.heroTimer--; if (this.heroTimer <= 0) { this.heroState = "IDLE"; if(this.HEROS) this.HEROS.play("IDLE", true); }
-        }
-        if (this.zombieState === "WALKING") {
-            let speed = this.isBossPhase ? this.baseSpeed * 0.5 : this.baseSpeed;
-            this.zombieX -= speed;
-            if (this.zombieX < 20) {
-                this.zombieState = "ATTACKING"; this.hasDealtDamage = false;
-                if (this.ZOMBIE) { this.ZOMBIE.x = 20; this.ZOMBIE.play("TAPER", false); }
-            } else if(this.ZOMBIE) this.ZOMBIE.x = this.zombieX;
-        } 
-        else if (this.zombieState === "ATTACKING") {
-            if (this.ZOMBIE && this.ZOMBIE.frameIdx >= 1 && !this.hasDealtDamage) {
-                this.hasDealtDamage = true;
-                if (this.HEROS) { this.HEROS.play("TOUCHE", false); this.heroState = "HIT"; this.heroTimer = 60; }
-                this.game.damage(1);
-            }
-            if (this.ZOMBIE && this.ZOMBIE.isAnimFinished) this.resetZombie();
-        } 
-        else if (this.zombieState === "HIT") {
-            this.zombieX += 0.5; if(this.ZOMBIE) { this.ZOMBIE.x = this.zombieX; if (this.ZOMBIE.isAnimFinished) this.resetZombie(); }
-        }
-        for (let i = this.projectiles.length - 1; i >= 0; i--) { 
-            let p = this.projectiles[i]; p.x += 3;
-            if (this.zombieState === "WALKING" && p.x > this.zombieX - 5 && p.x < this.zombieX + 5) {
-                this.projectiles.splice(i, 1); this.zombieState = "HIT";
-                if (this.ZOMBIE) this.ZOMBIE.play("TOUCHE", false); 
-            } 
-            else if (p.x > 110) { this.projectiles.splice(i, 1); }
-        }
-    }
-    draw() {
-        if (this.isStopped) return;
-        const ctx = this.ctx;
-        this.projectiles.forEach(p => { 
-            if (this.isBossPhase) {
-                ctx.save(); ctx.shadowBlur = 20; ctx.shadowColor = "#f59e0b"; ctx.font = "50px Arial";
-                ctx.textAlign = "center"; ctx.textBaseline = "middle";
-                ctx.fillText("🔥", (p.x/100)*this.canvas.width, (p.y/100)*this.canvas.height);
-                ctx.restore();
-            } else {
-                ctx.fillStyle = "#f97316"; ctx.beginPath(); 
-                ctx.arc((p.x/100)*this.canvas.width, (p.y/100)*this.canvas.height, 10, 0, Math.PI*2); 
-                ctx.fill(); 
-            }
-        });
-    }
-}
-`;
-
-const DEMO_PROJECT = { 
-    title: "Nouveau Projet", 
-    scenes: [{ 
-        name: "Scene 1", backdrops: [], currentBackdropIdx: 0, 
-        actors: [], 
-        globalSounds: [] 
-    }] 
-};
+const DEMO_PROJECT = { title: "Nouveau Projet", scenes: [{ name: "Scene 1", backdrops: [], currentBackdropIdx: 0, actors: [], globalSounds: [] }] };
 
 export default function StudioDashboard({ user }) {
     const [project, setProject] = useState(DEMO_PROJECT);
@@ -115,7 +29,7 @@ export default function StudioDashboard({ user }) {
     const [selectedActionIdx, setSelectedActionIdx] = useState(0);
     const [selectedGlobalSoundIdx, setSelectedGlobalSoundIdx] = useState(0);
     const [leftTab, setLeftTab] = useState('actions');
-    const [code, setCode] = useState(ZOMBIE_GAME_CODE);
+    const [code, setCode] = useState("");
     const [isPlaying, setIsPlaying] = useState(false);
     const [loading, setLoading] = useState(false);
     const [cleaning, setCleaning] = useState(false);
@@ -144,9 +58,11 @@ export default function StudioDashboard({ user }) {
     useEffect(() => { loadProjects(); }, [user]);
 
     async function loadProjects() {
-        const data = await api.get(`/studio/projects/${user.id || user._id}`);
-        if (data?.length > 0) {
-            handleLoadProject(data[0]);
+        if(user && (user.id || user._id)) {
+            try {
+                const data = await api.get(`/studio/projects/${user.id || user._id}`);
+                if (data?.length > 0) handleLoadProject(data[0]);
+            } catch(e){}
         }
     }
 
@@ -154,62 +70,158 @@ export default function StudioDashboard({ user }) {
         if (!p) return;
         setLoading(true); setStatusText("Sync...");
         try {
-            // FIX CRITIQUE : On force l'utilisation du state 'code' actuel
-            // On s'assure que 'generatedCode' n'est pas écrasé par une vieille version présente dans 'p'
-            const payload = {
-                ...p,
-                teacherId: user.id || user._id,
-                generatedCode: code 
-            };
+            const payload = { ...p, teacherId: user.id || user._id, generatedCode: code };
             const saved = await api.post('/studio', payload);
             setProject(saved);
         } catch(e) { console.error(e); } 
         setLoading(false);
     }
 
-    // ✅ FONCTION DE DÉTOURAGE
+    // --- ALGORITHME DE DÉTOURAGE LOCAL (Plan B - Flood Fill) ---
+    const localAutoClean = (imageUrl) => {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.crossOrigin = "Anonymous";
+            img.src = resolveUrl(imageUrl);
+            
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0);
+                
+                const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const data = imgData.data;
+                const width = canvas.width;
+                const height = canvas.height;
+
+                // 1. Détection couleur Haut-Droit (Pixel de référence)
+                const startX = width - 1;
+                const startY = 0;
+                const startPos = (startY * width + startX) * 4;
+                
+                const targetR = data[startPos];
+                const targetG = data[startPos + 1];
+                const targetB = data[startPos + 2];
+                const targetA = data[startPos + 3];
+
+                // Si déjà transparent, on arrête
+                if (targetA === 0) {
+                    resolve(null); 
+                    return;
+                }
+
+                // 2. Flood Fill (Algorithme de remplissage)
+                const tolerance = 40; 
+                const stack = [[startX, startY]];
+                const visited = new Uint8Array(width * height);
+
+                const matchColor = (pos) => {
+                    const r = data[pos];
+                    const g = data[pos+1];
+                    const b = data[pos+2];
+                    return Math.abs(r - targetR) < tolerance &&
+                           Math.abs(g - targetG) < tolerance &&
+                           Math.abs(b - targetB) < tolerance;
+                };
+
+                while (stack.length > 0) {
+                    const [x, y] = stack.pop();
+                    const pos = (y * width + x) * 4;
+                    const visitIdx = y * width + x;
+
+                    if (visited[visitIdx]) continue;
+                    visited[visitIdx] = 1;
+
+                    if (matchColor(pos)) {
+                        data[pos + 3] = 0; // Alpha à 0 (Transparent)
+
+                        if (x > 0) stack.push([x - 1, y]);
+                        if (x < width - 1) stack.push([x + 1, y]);
+                        if (y > 0) stack.push([x, y - 1]);
+                        if (y < height - 1) stack.push([x, y + 1]);
+                    }
+                }
+
+                // 3. Export
+                ctx.putImageData(imgData, 0, 0);
+                canvas.toBlob((blob) => {
+                    resolve(blob);
+                }, 'image/png');
+            };
+            
+            img.onerror = (e) => reject(e);
+        });
+    };
+
+    // --- SMART CLEAN HYBRIDE ---
     const handleSmartAIClean = async () => {
-        if (selectedFrameIdx === null || !selectedAction) return;
-        const frame = selectedAction.frames[selectedFrameIdx];
-        if (!frame) return;
+        if (!selectedAction) return;
+        
+        let targetIdx = selectedFrameIdx;
+        if (targetIdx === null) {
+            if (selectedAction.frames && selectedAction.frames.length > 0) targetIdx = 0;
+            else return alert("Aucune image à nettoyer !");
+        }
+
+        const frame = selectedAction.frames[targetIdx];
+        if (frame.url.startsWith('blob:')) return alert("Sauvegardez d'abord !");
 
         setCleaning(true); setStatusText("Détourage IA...");
+        
+        let newUrl = null;
+
         try {
+            // TENTATIVE 1 : IA SERVEUR
             const res = await fetch('/api/studio/remove-bg-specialized', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ url: frame.url })
             });
             const data = await res.json();
-            if (data.url) {
+
+            if (res.ok && !data.warning && data.url) {
+                newUrl = data.url;
+            } else {
+                // TENTATIVE 2 : FALLBACK LOCAL
+                setStatusText("IA indisponible. Détourage manuel...");
+                console.warn("Passage en mode Détourage Local (Haut-Droite)");
+                
+                const blob = await localAutoClean(frame.url);
+                if (blob) {
+                    const fd = new FormData();
+                    fd.append('file', blob, `autoclean-${Date.now()}.png`);
+                    
+                    const uploadRes = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd });
+                    const uploadData = await uploadRes.json();
+                    if (uploadData.url) newUrl = uploadData.url;
+                } else {
+                    alert("Image déjà propre ou erreur de lecture.");
+                }
+            }
+
+            // APPLIQUER SI SUCCÈS
+            if (newUrl) {
                 const next = JSON.parse(JSON.stringify(project));
                 const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
-                actor.actions[selectedActionIdx].frames[selectedFrameIdx].url = data.url;
+                actor.actions[selectedActionIdx].frames[targetIdx].url = newUrl;
                 setProject(next);
                 await saveProject(next);
             }
-        } catch(e) { alert("Erreur IA"); }
+
+        } catch(e) { 
+            console.error("Échec total détourage", e);
+            alert("Impossible de détourer cette image.");
+        }
         setCleaning(false);
     };
 
     const handleSetPreviewFrameIdx = (valOrFn) => { if (typeof valOrFn === 'function') setPreviewFrameIdx(prev => valOrFn(prev)); else setPreviewFrameIdx(valOrFn); };
     const handleOpenSave = () => { setModalMode('SAVE'); setShowSaveLoadModal(true); };
     const handleOpenLoad = () => { setModalMode('LOAD'); setShowSaveLoadModal(true); };
-    
-    const handleCreateNew = () => { 
-        setProject(DEMO_PROJECT); 
-        setCode(ZOMBIE_GAME_CODE); 
-        setSelectedActorId(null); 
-        setShowSaveLoadModal(false); 
-    };
-    
-    const handleLoadProject = (p) => { 
-        setProject(p); 
-        // FIX : Priorité au code du projet chargé, sinon défaut
-        setCode(p.generatedCode || ZOMBIE_GAME_CODE); 
-        if (p.scenes?.[0]?.actors?.[0]) setSelectedActorId(p.scenes[0].actors[0].id); 
-        setShowSaveLoadModal(false); 
-    };
+    const handleCreateNew = () => { setProject(DEMO_PROJECT); setCode(""); setSelectedActorId(null); setShowSaveLoadModal(false); };
+    const handleLoadProject = (p) => { setProject(p); setCode(p.generatedCode || ""); if (p.scenes?.[0]?.actors?.[0]) setSelectedActorId(p.scenes[0].actors[0].id); setShowSaveLoadModal(false); };
 
     const handleUpdateActionSpeed = (delta) => { if (!selectedAction) return; const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); if (actor && actor.actions[selectedActionIdx]) actor.actions[selectedActionIdx].speed = Math.max(20, Math.min(2000, (actor.actions[selectedActionIdx].speed || 100) + delta)); } else { if (next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx]) next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].speed = Math.max(20, Math.min(2000, (next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].speed || 100) + delta)); } setProject(next); saveProject(next); };
     const handleSelectActor = (actorId) => { setSelectedActorId(actorId); setSelectedFrameIdx(null); };
