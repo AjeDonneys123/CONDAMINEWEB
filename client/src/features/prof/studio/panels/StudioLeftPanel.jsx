@@ -1,4 +1,4 @@
-// @signatures: StudioLeftPanel, handleSelectAction, handleAddAction, handleAddGlobalSound, handleDeleteActionOrSound
+// @signatures: StudioLeftPanel, handleSelectAction, handleAddAction, handleAddGlobalSound, handleDeleteActionOrSound, handleImportZombieSounds
 import React, { useState, useEffect, useRef } from 'react';
 import SoundExpert from '../studioComp/SoundExpert';
 
@@ -16,6 +16,7 @@ export default function StudioLeftPanel({
     currentScene
 }) {
     const [selectedSoundIdx, setSelectedSoundIdx] = useState(null);
+    const [importingSounds, setImportingSounds] = useState(false); // État pour le chargement import
     const audioCtxRef = useRef(null);
     const activeSourcesRef = useRef([]);
 
@@ -151,6 +152,40 @@ export default function StudioLeftPanel({
         saveProject(next);
     };
 
+    // --- NOUVEAU : IMPORT AUTOMATIQUE DES SONS ZOMBIE ---
+    const handleImportZombieSounds = async () => {
+        if (!confirm("Importer les sons standards (Victoire, Défaite...) du jeu Zombie ?")) return;
+        setImportingSounds(true);
+        try {
+            const res = await fetch('/api/studio/import-zombie-sounds', { method: 'POST' });
+            const data = await res.json();
+            
+            if (data.sounds && data.sounds.length > 0) {
+                const next = JSON.parse(JSON.stringify(project));
+                const scene = next.scenes[selectedSceneIdx];
+                if (!scene.globalSounds) scene.globalSounds = [];
+                
+                // Fusion intelligente : on n'ajoute que ceux qui n'existent pas
+                let count = 0;
+                data.sounds.forEach(newSnd => {
+                    const exists = scene.globalSounds.some(s => s.name === newSnd.name);
+                    if (!exists) {
+                        scene.globalSounds.push(newSnd);
+                        count++;
+                    }
+                });
+                
+                saveProject(next);
+                alert(`${count} événements sonores importés !`);
+            } else {
+                alert("Aucun son trouvé dans le projet Zombie de référence.");
+            }
+        } catch (e) {
+            alert("Erreur import : " + e.message);
+        }
+        setImportingSounds(false);
+    };
+
     const handleDeleteActionOrSound = (e, idx) => {
         e.stopPropagation();
         if (!confirm("Supprimer cet élément ?")) return;
@@ -200,7 +235,19 @@ export default function StudioLeftPanel({
                                 </div>
                             </div>
                         ))}
-                        <button type="button" className="v84-add-btn-minimal" onClick={handleAddGlobalSound}>+ Événement Sonore</button>
+                        <div className="flex gap-2 mt-2">
+                            <button type="button" className="v84-add-btn-minimal" style={{flex:2}} onClick={handleAddGlobalSound}>+ Son</button>
+                            {/* BOUTON IMPORT ZOMBIE */}
+                            <button 
+                                type="button" 
+                                className="v84-add-btn-minimal" 
+                                style={{flex:1, borderColor: '#a855f7', color: '#a855f7', fontSize:'9px'}} 
+                                onClick={handleImportZombieSounds}
+                                disabled={importingSounds}
+                            >
+                                {importingSounds ? '...' : '📥 ZOMBIE'}
+                            </button>
+                        </div>
                     </>
                 )}
             </div>
@@ -212,7 +259,7 @@ export default function StudioLeftPanel({
                         <div className="seq-controls">
                             {leftTab === 'actions' && <button className="btn-mirror" onClick={handleMirrorSequence} title="Miroir">↔️</button>}
                             
-                            {/* Contrôle Vitesse (Uniquement pertinent si animation visuelle, mais on laisse pour le rythme) */}
+                            {/* Contrôle Vitesse */}
                             <button className="btn-mini-ctrl" onClick={() => handleUpdateActionSpeed(-50)}>-</button>
                             <span className="speed-indicator">{selectedAction.speed || 100}ms</span>
                             <button className="btn-mini-ctrl" onClick={() => handleUpdateActionSpeed(50)}>+</button>
@@ -242,8 +289,7 @@ export default function StudioLeftPanel({
                         </div>
                     )}
                     
-                    {/* GRILLE DE SONS (Visible pour Actions ET Global Sounds) */}
-                    {/* Si on est en mode SOUNDS, on agrandit cette zone car il n'y a pas d'images */}
+                    {/* GRILLE DE SONS */}
                     <div className={`border-slate-200 pt-2 ${leftTab === 'actions' ? 'border-t mt-2' : 'h-full flex flex-col'}`}>
                         <div className="flex justify-between items-center mb-1">
                             <span className="seq-label text-indigo-500">Piste Audio</span>
@@ -284,9 +330,9 @@ export default function StudioLeftPanel({
                                 ✏️ {selectedSoundIdx !== null ? "ÉDITER SON" : "ÉDITER IMG"}
                             </button>
                             
-                            {/* BOUTON MAGIC CLEAN (Seulement pour images) */}
+                            {/* BOUTON MAGIC CLEAN */}
                             {leftTab === 'actions' && (
-                                <button className={`btn-magic-clean ${cleaning ? 'pulse' : ''}`} onClick={handleSmartAIClean} disabled={cleaning || !selectedAction.frames || selectedAction.frames.length === 0} title="Détourage IA">
+                                <button className={`btn-magic-clean ${cleaning ? 'pulse' : ''}`} onClick={() => handleSmartAIClean()} disabled={cleaning || !selectedAction?.frames || selectedAction?.frames?.length === 0} title="Détourage IA">
                                     ✨ {cleaning ? '...' : (selectedFrameIdx !== null ? 'DÉTOURER' : 'TOUT CLEAN')}
                                 </button>
                             )}
