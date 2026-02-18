@@ -2,8 +2,8 @@
 import React, { useState, useEffect } from 'react';
 
 /**
- * 📁 PROF STUDIO FOLDER - VERSION RESTAURÉE (UI SECTIONS)
- * Restitution des boutons de survol (Edit/Delete) sur les sections.
+ * 📁 PROF STUDIO FOLDER - VERSION AUTO CH1
+ * Crée automatiquement CH1 à l'ajout de section et rafraîchit.
  */
 export default function ProfStudioFolder({ items, chapters, studentsRef, classFilter, levelFilter, user, onEditItem, onCreateActivity, onRefresh, onDeleteItem }) {
     const [customSections, setCustomSections] = useState([]);
@@ -59,7 +59,15 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ teacherId: getUserId(), sectionName: newSectionName.toUpperCase(), scope: newSectionScope, target: newSectionScope === 'CLASS' ? classFilter : levelFilter })
         });
-        if (res.ok) { setNewSectionName(""); setShowSectionModal(false); fetchSections(); }
+        if (res.ok) { 
+            // On bascule directement sur la nouvelle section
+            setActiveSection(newSectionName.toUpperCase());
+            setNewSectionName(""); 
+            setShowSectionModal(false); 
+            fetchSections();
+            // IMPORTANT : On force le rafraîchissement global pour voir le nouveau CH1
+            if (onRefresh) onRefresh(); 
+        }
     }
 
     const handleOpenEditSection = (s) => {

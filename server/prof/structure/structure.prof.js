@@ -6,7 +6,7 @@ const ProfDrive = require('../core/drive.prof');
 const mongoose = require('mongoose');
 
 /**
- * 🛠️ BLOC STRUCTURE PROF V450 - RÉPARÉ (FIX DELETE & PROXY)
+ * 🛠️ BLOC STRUCTURE PROF V451 - AUTO CH1 FIX
  * RÔLE : Gestion des sections et dossiers + Proxy d'images partagé.
  */
 
@@ -41,7 +41,19 @@ router.post('/sections', async (req, res) => {
                 if (scope) user.subjectSections[existingIdx].scope = scope;
                 if (target) user.subjectSections[existingIdx].target = target;
             } else {
+                // ➤ CRÉATION NOUVELLE SECTION
                 user.subjectSections.push({ name, color: color || getRandomColor(), scope: scope || 'GLOBAL', target: target || null, hiddenIn: [] });
+                
+                // ➤ AUTO-CREATION DU CH1 (Le Fix est ici)
+                console.log(`✨ [STRUCTURE] Auto-création CH1 pour la section : ${name}`);
+                await Chapter.create({
+                    title: "CH1",
+                    section: name,
+                    teacherId: user._id,
+                    classroom: (scope === 'CLASS') ? (target || "") : "", 
+                    sharedLevel: (scope === 'LEVEL') ? (target || "") : "", 
+                    isArchived: false
+                });
             }
         }
         await user.save();
