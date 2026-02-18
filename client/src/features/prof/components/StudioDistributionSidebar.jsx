@@ -1,9 +1,9 @@
-// @signatures: StudioDistributionSidebar, findBestDefaultChapter, handleToggleStudent, toggleAllStudents
+// @signatures: StudioDistributionSidebar, findBestDefaultChapter, handleToggleStudent, toggleAllStudents, availableClasses
 import React, { useEffect } from 'react';
 
 /**
- * 📦 COMPOSANT CERVEAU : LOGIQUE DE DISTRIBUTION UNIFIÉE
- * C'est lui qui calcule quelles classes afficher, qui est sélectionné, et dans quel dossier ça va.
+ * 📦 STUDIO DISTRIBUTION SIDEBAR - CERVEAU DE LA DISTRIBUTION
+ * Restitution de la logique de filtrage des classes et de l'auto-sélection.
  */
 export default function StudioDistributionSidebar({ 
     user, allClasses, allStudents, chapters, distribution, setDistribution, 
@@ -11,9 +11,10 @@ export default function StudioDistributionSidebar({
     targetLevel, targetSection, loading, onSave, saveLabel = "PUBLIER 🚀"
 }) {
 
-    // 1. CALCUL DES CLASSES DISPONIBLES
-    // Si on est dans un dossier "Niveau 6ème", on ne montre que les 6èmes.
+    // 1. FILTRAGE ROBUSTE DES CLASSES DISPONIBLES
+    // Cette logique était manquante ou simplifiée dans la version cassée.
     const availableClasses = (allClasses || []).filter(c => {
+        // Filtrage par Niveau (Si on est dans un dossier "Niveau 6ème")
         if (targetLevel && String(c.level) !== String(targetLevel)) return false;
         
         // Admin ou Dev voit tout
@@ -31,7 +32,7 @@ export default function StudioDistributionSidebar({
         }
     }, [availableClasses, viewingClass]);
 
-    // 2. CHERCHER LE MEILLEUR DOSSIER PAR DÉFAUT
+    // 2. RECHERCHE DU BON DOSSIER PAR DÉFAUT
     const findBestDefaultChapter = (clsName) => {
         const cleanSection = (targetSection || "GÉNÉRAL").toUpperCase().trim();
         const clsObj = (allClasses || []).find(c => c.name === clsName);
@@ -75,22 +76,17 @@ export default function StudioDistributionSidebar({
         `${s.firstName} ${s.lastName}`.toLowerCase().includes((studentSearch || "").toLowerCase())
     );
 
-    // Toggle un élève
+    // Toggle un élève (Logique inversée : Liste vide = Tous, Liste pleine = Subset)
     const handleToggleStudent = (sId) => { 
         const next = { ...distribution }; 
         const cfg = next[viewingClass] || { 
             chapterId: findBestDefaultChapter(viewingClass), 
-            studentIds: [], 
-            // Par défaut, si on clique un élève, on passe en mode "Subset"
-            // Donc on initialise studentIds avec "tous sauf celui cliqué" ? Non, on commence vide.
+            studentIds: []
         };
         
         let currentIds = cfg.studentIds || [];
         
-        // Cas spécial : Si la liste était vide (Mode "Toute la classe"), et qu'on clique un élève,
-        // cela veut dire qu'on veut désélectionner cet élève ? Ou qu'on veut ne sélectionner QUE lui ?
-        // Convention Condamine : Vide = Tout le monde. Si on clique, on passe en mode sélection manuelle.
-        // Donc si vide, on remplit avec TOUS les autres sauf lui.
+        // Si la liste était vide (Mode "Toute la classe"), on la remplit avec TOUS sauf celui cliqué
         if (currentIds.length === 0) {
             currentIds = rawStudents.map(s => s._id).filter(id => id !== sId);
         } else {
@@ -99,29 +95,15 @@ export default function StudioDistributionSidebar({
             else currentIds.push(sId);
         }
 
-        // Si on a tout vidé, ça veut dire "Personne" ? Non, dans notre logique vide = tout le monde.
-        // C'est le piège. Il faut un flag explicite isAllClass.
-        // SIMPLIFICATION : 
-        // studentIds contient la liste des élèves CIBLÉS.
-        // Si je clique un élève, il entre/sort de la liste.
-        
-        // RE-REFLEXION : La logique précédente : 
-        // "Si studentIds est vide, c'est toute la classe".
-        // "Si je clique un élève, je veux l'enlever de la distribution ?"
-        // NON. Le plus simple : Cocher = Assigner.
-        // Par défaut, on coche tout le monde visuellement, mais la liste est vide dans le state.
-        
-        // Nouvelle logique robuste :
-        // On stocke explicitement les IDs des élèves CIBLÉS.
-        
         if (!next[viewingClass]) {
-            // Initialisation : On veut enlever cet élève, donc on met tous les autres
+            // Initialisation
             const allIds = rawStudents.map(s => s._id);
             next[viewingClass] = {
                 chapterId: findBestDefaultChapter(viewingClass),
                 studentIds: allIds.filter(id => id !== sId)
             };
         } else {
+            // Update existant
             const ids = next[viewingClass].studentIds;
             if (ids.includes(sId)) {
                 next[viewingClass].studentIds = ids.filter(id => id !== sId);
@@ -130,8 +112,6 @@ export default function StudioDistributionSidebar({
             }
         }
         
-        // Si la liste devient égale à "Tous", on peut repasser en mode "Vide" (Optimisation) ou laisser tel quel.
-        // On laisse tel quel pour la stabilité.
         setDistribution(next);
     };
 
@@ -139,7 +119,7 @@ export default function StudioDistributionSidebar({
     const toggleAllStudents = () => {
         const next = { ...distribution };
         if (next[viewingClass]) {
-            // Déjà actif -> on supprime (désactive pour cette classe)
+            // Déjà actif -> on désactive
             delete next[viewingClass];
         } else {
             // On active -> Mode "Toute la classe" (studentIds vide par convention backend)
@@ -154,7 +134,7 @@ export default function StudioDistributionSidebar({
     const isClassSelected = !!distribution[viewingClass];
     const cfg = distribution[viewingClass];
     
-    // Calcul de quels élèves sont cochés visuellement
+    // Calcul visuel : qui est coché ?
     const isStudentSelected = (sId) => {
         if (!isClassSelected) return false;
         // Si liste vide = Tout le monde
@@ -165,7 +145,7 @@ export default function StudioDistributionSidebar({
     const availableChapters = (chapters || []).filter(c => {
         const cleanSection = (targetSection || "GÉNÉRAL").toUpperCase().trim();
         return !c.isArchived && (c.section || "GÉNÉRAL").toUpperCase().trim() === cleanSection;
-    }).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt)); // Tri antéchronologique
+    }).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
 
     return (
         <div className="v84-dist-sidebar custom-scrollbar">

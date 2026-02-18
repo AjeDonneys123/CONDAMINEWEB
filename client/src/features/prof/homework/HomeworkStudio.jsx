@@ -21,15 +21,11 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
         return base;
     });
 
-    // Données contextuelles
     const [allStudents, setAllStudents] = useState([]);
     const [allClasses, setAllClasses] = useState([]);
-    
-    // États Sidebar
     const [distribution, setDistribution] = useState({});
     const [viewingClass, setViewingClass] = useState("");
     const [studentSearch, setStudentSearch] = useState("");
-    
     const [loading, setLoading] = useState(false);
     const fileInputRef = useRef(null);
 
@@ -79,7 +75,7 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
             const res = await fetch('/api/homework/upload', { method: 'POST', body: fd }).then(r => r.json());
             if (res.urls && res.urls.length > 0) {
                 const lvls = [...formData.levels];
-                lvls[0].attachmentUrls.push(res.urls[0]); // Ajout au niveau 1 par défaut
+                lvls[0].attachmentUrls.push(res.urls[0]); 
                 setFormData(p => ({ ...p, levels: lvls }));
             }
         } catch(e) { alert("Erreur upload"); }
@@ -87,28 +83,28 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
         fileInputRef.current.value = "";
     };
 
+    // ALGORITHME DE SAUVEGARDE GROUPÉE
     const handleSave = async () => {
         const targets = Object.keys(distribution);
         if (!formData.title || targets.length === 0) return alert("❌ Titre et au moins une Classe requis !");
         
         setLoading(true);
         try {
-            // On groupe les classes qui partagent la MEME config (Chapitre + Sélection)
-            // Pour éviter de créer 15 devoirs identiques.
             const groups = {};
             
             targets.forEach(cls => {
                 const cfg = distribution[cls];
-                if (!cfg.chapterId) return; // Ignore si pas de dossier
+                if (!cfg.chapterId) return; 
                 
                 const isAllClass = cfg.studentIds.length === 0;
+                // Clé unique pour regrouper les configurations identiques
                 const key = `${cfg.chapterId}_${isAllClass ? 'ALL' : 'SUBSET_' + cfg.studentIds.sort().join('-')}`;
                 
                 if (!groups[key]) {
                     groups[key] = {
                         chapterId: cfg.chapterId,
                         classrooms: [],
-                        assignedStudents: cfg.studentIds, // Vide si AllClass
+                        assignedStudents: cfg.studentIds,
                         isAllClass: isAllClass
                     };
                 }
@@ -129,12 +125,12 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
                 
                 // Si on édite, le premier groupe garde l'ID (Update), les autres sont des clones (Create)
                 if (formData._id && key === Object.keys(groups)[0]) {
-                    // Update
+                    // Garde l'ID
                 } else {
                     delete payload._id; // Force Create
                 }
 
-                await api.post('/homeworks', payload);
+                await api.post('/homework', payload); // Utilisation de /homework (Singulier, corrigé selon le router)
             }
             onClose();
         } catch(e) { alert("Erreur sauvegarde: " + e.message); }
@@ -161,7 +157,6 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
             </div>
 
             <div className="v84-hw-body">
-                {/* PARTIE GAUCHE : ÉDITEUR */}
                 <div className="v84-hw-editor custom-scrollbar">
                     <div className="v84-hw-card">
                         <textarea 
@@ -170,7 +165,6 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
                             value={formData.levels[0].instruction} 
                             onChange={e => handleLevelInput(0, 'instruction', e.target.value)} 
                         />
-                        
                         <div className="v84-hw-attachments">
                             {formData.levels[0].attachmentUrls.map((url, i) => (
                                 <div key={i} className="v84-att-chip">
@@ -187,7 +181,6 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
                     </div>
                 </div>
 
-                {/* PARTIE DROITE : SIDEBAR UNIFIÉE */}
                 <StudioDistributionSidebar 
                     user={user}
                     allClasses={allClasses}
@@ -199,7 +192,7 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
                     setViewingClass={setViewingClass}
                     studentSearch={studentSearch}
                     setStudentSearch={setStudentSearch}
-                    targetSection={targetSection} // "MATHS", "FRANCAIS"...
+                    targetSection={targetSection} 
                     loading={loading}
                     onSave={handleSave}
                 />

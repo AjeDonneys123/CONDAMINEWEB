@@ -26,10 +26,11 @@ router.get('/all', async (req, res) => {
     } catch (e) { res.status(500).json([]); }
 });
 
+// ROUTE RESTAURÉE AVEC NETTOYAGE D'ID
 router.post('/', async (req, res) => {
     try {
         const data = req.body;
-        // Nettoyage IDs vides dans les sous-documents
+        // Nettoyage IDs vides dans les sous-documents (Questions/Niveaux)
         if (data.levels) {
             data.levels.forEach(l => {
                 if(l._id === "") delete l._id;
@@ -49,7 +50,6 @@ router.post('/', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ROUTE DELETE RESTAURÉE
 router.delete('/:id', async (req, res) => {
     try {
         await GameLevel.findByIdAndDelete(req.params.id);

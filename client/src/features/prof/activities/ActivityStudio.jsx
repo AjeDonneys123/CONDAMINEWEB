@@ -8,7 +8,7 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
     const [activities, setActivities] = useState([]);
     const [chapters, setChapters] = useState([]);
     const [allStudents, setAllStudents] = useState([]);
-    const [allClasses, setAllClasses] = useState([]);
+    const [allClasses, setAllClasses] = useState([]); // Ajouté
     const [editingItem, setEditingItem] = useState(null);
     const [loading, setLoading] = useState(false);
 
@@ -26,25 +26,17 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
                 fetchJson('/api/scans/sessions'), 
                 fetchJson('/api/structure/chapters'),
                 fetchJson('/api/admin/students'),
-                fetchJson('/api/admin/classrooms')
+                fetchJson('/api/admin/classrooms') // Ajouté
             ]);
             
             setActivities([
-                ...(hw || []).map(x => ({
-                    ...x, 
-                    actType: 'homework', 
-                    typeLabel: (x.subject && x.subject.toUpperCase() !== 'GÉNÉRAL') ? `📝 DM ${x.subject.toUpperCase()}` : '📝 DM'
-                })), 
-                ...(gm || []).map(x => ({
-                    ...x, 
-                    actType: 'game', 
-                    typeLabel: (x.subject && x.subject.toUpperCase() !== 'GÉNÉRAL') ? `🎮 JEU ${x.subject.toUpperCase()}` : '🎮 JEU'
-                })),
+                ...(hw || []).map(x => ({...x, actType: 'homework', typeLabel: '📝 DM'})), 
+                ...(gm || []).map(x => ({...x, actType: 'game', typeLabel: '🎮 JEU'})),
                 ...(sc || []).map(x => ({...x, actType: 'scan', typeLabel: '📸 DC', title: x.title || 'Scan sans titre'})) 
             ]);
             setChapters(cp || []);
             setAllStudents(sts || []);
-            setAllClasses(cls || []);
+            setAllClasses(cls || []); // Stocké
         } catch (e) { console.error("ActivityStudio Load Error", e); }
         setLoading(false);
     };
@@ -54,9 +46,10 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
     const handleDeleteItem = async (id, type) => {
         if (!confirm(`⚠️ Supprimer cet élément ?`)) return;
         
+        // CORRECTION ROUTES API
         let url;
         if (type === 'game') url = `/api/games/${id}`;
-        else if (type === 'homework') url = `/api/homework/${id}`; // ✅ ROUTE CORRIGÉE
+        else if (type === 'homework') url = `/api/homework/${id}`;
         else if (type === 'scan') url = `/api/scans/sessions/${id}`;
         else url = `/api/structure/chapters/${id}`;
 
@@ -70,8 +63,8 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
         const props = {
             initialData: editingItem.data,
             chapters,
-            allClasses, // Ajouté pour la Sidebar
-            allStudents, // Ajouté pour la Sidebar
+            allClasses, // Passé aux enfants
+            allStudents, // Passé aux enfants
             globalClass,
             globalLevel,
             user,
@@ -89,7 +82,7 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
                 chapters={chapters} 
                 items={activities} 
                 studentsRef={allStudents}
-                allClasses={allClasses}
+                allClasses={allClasses} // Passé
                 classFilter={globalClass}
                 levelFilter={globalLevel}
                 user={user}
