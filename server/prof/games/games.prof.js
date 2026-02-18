@@ -1,8 +1,7 @@
-// @signatures: ProfGamesRouter, all, create, generate, generateContent, streamToBuffer, uploadAsset
+// @signatures: ProfGamesRouter, all, create, delete, generate, generateContent, streamToBuffer, uploadAsset
 const express = require('express');
 const router = express.Router();
-// On require le modèle ici pour être sûr qu'il est chargé
-const GameLevel = require('../../models/GameLevel'); 
+const { GameLevel } = require('../models/prof.models');
 const ProfAI = require('../core/prof.ai');
 const ProfDrive = require('../core/drive.prof'); 
 const multer = require('multer');
@@ -28,19 +27,9 @@ router.get('/all', async (req, res) => {
 });
 
 router.post('/', async (req, res) => {
-    console.log("💾 [GAMES] Sauvegarde...");
-    console.log("   DATA REÇUE:", JSON.stringify(req.body).substring(0, 200) + "...");
-    
-    if (req.body.levels) {
-        console.log(`   ✅ LEVELS PRÉSENTS: ${req.body.levels.length}`);
-    } else {
-        console.error("   ❌ LEVELS MANQUANTS DANS LE PAYLOAD !");
-    }
-
     try {
         const data = req.body;
-        
-        // Nettoyage IDs vides
+        // Nettoyage IDs vides dans les sous-documents
         if (data.levels) {
             data.levels.forEach(l => {
                 if(l._id === "") delete l._id;
@@ -48,21 +37,24 @@ router.post('/', async (req, res) => {
                 if(l.questions) l.questions.forEach(q => { if(q._id === "") delete q._id; });
             });
         }
+        if (data._id === "" || data._id === "null") delete data._id;
 
         let quiz;
         if (data._id) {
-            // On force l'update avec le nouveau contenu
             quiz = await GameLevel.findByIdAndUpdate(data._id, { $set: data }, { new: true });
         } else {
             quiz = await GameLevel.create(data);
         }
-        
-        console.log("   ✅ Sauvegardé ID:", quiz._id);
         res.json(quiz);
-    } catch (e) { 
-        console.error("   ❌ ERREUR:", e.message);
-        res.status(500).json({ error: e.message }); 
-    }
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ROUTE DELETE RESTAURÉE
+router.delete('/:id', async (req, res) => {
+    try {
+        await GameLevel.findByIdAndDelete(req.params.id);
+        res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.post('/upload-asset', upload.single('file'), async (req, res) => {
@@ -73,22 +65,17 @@ router.post('/upload-asset', upload.single('file'), async (req, res) => {
         const url = `/api/structure/proxy/${driveFile.id}`;
         try { fs.unlinkSync(req.file.path); } catch(e){}
         res.json({ url, name: req.file.originalname });
-    } catch (e) {
-        res.status(500).json({ error: "Erreur Drive" });
-    }
+    } catch (e) { res.status(500).json({ error: "Erreur Drive" }); }
 });
 
 router.post('/generate-content', upload.single('file'), async (req, res) => {
     const { topic, count, contextText, sheetUrl } = req.body;
-    console.log(`🎮 [GAMES] Génération IA. Topic: "${topic}"`);
-
     const system = `Tu es un expert pédagogique créateur de Quiz.
     TA MISSION : Créer un QCM de ${count || 5} questions.
-    RÈGLE DE REDACTION : Format "Texte à trous" si possible.
     FORMAT SORTIE : Un tableau JSON [ { "q": "...", "options": ["...",...], "a": 0 } ].`;
 
     const promptParts = [];
-    if (topic) promptParts.push({ text: `Sujet/Consigne : "${topic}".` });
+    if (topic) promptParts.push({ text: `Sujet : "${topic}".` });
     if (contextText) promptParts.push({ text: `CONTENU :\n${contextText}` });
 
     try {
@@ -108,20 +95,9 @@ router.post('/generate-content', upload.single('file'), async (req, res) => {
 
         const raw = await ProfAI.ask(promptParts, system);
         const questions = ProfAI.sanitize(raw);
-        
-        const shuffled = questions.map(q => {
-            const corr = q.options[q.a];
-            const opts = [...q.options].sort(() => Math.random() - 0.5);
-            return { ...q, options: opts, a: opts.indexOf(corr) };
-        });
-
-        res.json(shuffled);
-    } catch (e) {
-        console.error("❌ [GAMES] Erreur IA:", e);
-        res.status(500).json({ error: "Erreur IA" });
-    } finally {
-        if (req.file) { try { fs.unlinkSync(req.file.path); } catch(e){} }
-    }
+        res.json(questions);
+    } catch (e) { res.status(500).json({ error: "Erreur IA" }); } 
+    finally { if (req.file) try { fs.unlinkSync(req.file.path); } catch(e){} }
 });
 
 module.exports = router;

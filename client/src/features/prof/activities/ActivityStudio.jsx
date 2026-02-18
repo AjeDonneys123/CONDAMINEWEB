@@ -1,4 +1,4 @@
-// @signatures: ActivityStudio, loadData
+// @signatures: ActivityStudio, fetchJson, handleDeleteItem, loadData
 import React, { useState, useEffect } from 'react';
 import HomeworkStudio from '../homework/HomeworkStudio';
 import GameStudio from '../games/GameStudio';
@@ -53,12 +53,16 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
 
     const handleDeleteItem = async (id, type) => {
         if (!confirm(`⚠️ Supprimer cet élément ?`)) return;
-        const url = type === 'game' ? `/api/games/${id}` 
-                  : (type === 'homework' ? `/api/homework/${id}` 
-                  : (type === 'scan' ? `/api/scans/sessions/${id}` 
-                  : `/api/structure/chapters/${id}`));
+        
+        let url;
+        if (type === 'game') url = `/api/games/${id}`;
+        else if (type === 'homework') url = `/api/homework/${id}`; // ✅ ROUTE CORRIGÉE
+        else if (type === 'scan') url = `/api/scans/sessions/${id}`;
+        else url = `/api/structure/chapters/${id}`;
+
         const res = await fetch(url, { method: 'DELETE' });
         if (res.ok) loadData();
+        else alert("Erreur suppression");
     };
 
     if (editingItem) {
@@ -66,8 +70,8 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
         const props = {
             initialData: editingItem.data,
             chapters,
-            allClasses,
-            allStudents,
+            allClasses, // Ajouté pour la Sidebar
+            allStudents, // Ajouté pour la Sidebar
             globalClass,
             globalLevel,
             user,
@@ -82,8 +86,8 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
             {loading && <div className="absolute top-4 right-4 z-50 bg-indigo-600 text-white px-3 py-1 rounded-full text-[10px] font-black animate-pulse shadow-lg">SYNCHRONISATION...</div>}
             
             <ProfStudioFolder 
-                items={activities}
                 chapters={chapters} 
+                items={activities} 
                 studentsRef={allStudents}
                 allClasses={allClasses}
                 classFilter={globalClass}
