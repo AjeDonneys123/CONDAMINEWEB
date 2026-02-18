@@ -1,4 +1,4 @@
-// @signatures: HomeworkStudio, handleAddLevel, handleDeleteLevel, handleInput, handleSave, handleUpload, loadData, updateLevel, findBestDefaultChapter
+ // @signatures: HomeworkStudio, handleAddLevel, handleDeleteLevel, handleInput, handleSave, handleUpload, loadData, updateLevel, findBestDefaultChapter
 import React, { useState, useEffect, useRef } from 'react';
 import './HomeworkStudio.css';
 import { api } from '../../../services/api';
