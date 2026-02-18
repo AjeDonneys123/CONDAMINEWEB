@@ -1,4 +1,4 @@
-// @signatures: ActivityStudio, fetchJson, handleDeleteItem, loadData
+// @signatures: ActivityStudio, loadData
 import React, { useState, useEffect } from 'react';
 import HomeworkStudio from '../homework/HomeworkStudio';
 import GameStudio from '../games/GameStudio';
@@ -82,8 +82,8 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
             {loading && <div className="absolute top-4 right-4 z-50 bg-indigo-600 text-white px-3 py-1 rounded-full text-[10px] font-black animate-pulse shadow-lg">SYNCHRONISATION...</div>}
             
             <ProfStudioFolder 
+                items={activities}
                 chapters={chapters} 
-                items={activities} 
                 studentsRef={allStudents}
                 allClasses={allClasses}
                 classFilter={globalClass}
