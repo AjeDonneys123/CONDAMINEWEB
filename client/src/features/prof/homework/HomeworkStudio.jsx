@@ -1,189 +1,284 @@
- // @signatures: HomeworkStudio, handleAddLevel, handleDeleteLevel, handleInput, handleSave, handleUpload, loadData, updateLevel, findBestDefaultChapter
+// @signatures: HomeworkStudio, StudioUtils, getAvailableChapters, handleAddAttachment, handleDateChange, handleDrop, handleFileSelect, handleInput, handlePaste, handleRemoveAttachment, handleSave, handleToggleStudent, loadData, toggleAllStudents
 import React, { useState, useEffect, useRef } from 'react';
 import './HomeworkStudio.css';
 import { api } from '../../../services/api';
-import StudioDistributionSidebar from '../components/StudioDistributionSidebar';
 
-const DEFAULT_HW_DATA = { 
-    title: '', chapterId: '', teacherId: null, 
-    targetClassrooms: [], assignedStudents: [], isAllClass: true,
-    isPunishment: false,
-    levels: [ { instruction: '', instructionUrls: [], aiHints: '', attachmentUrls: [] } ]
+const StudioUtils = {
+    getStudentsForViewingClass: (clsName, allStudents, allClasses) => {
+        if (!clsName) return [];
+        const clsObj = allClasses.find(c => c.name === clsName);
+        const clsId = clsObj ? String(clsObj._id) : null;
+        return allStudents.filter(s => {
+            const mainClass = (s.currentClass || "").trim().toUpperCase();
+            if (mainClass === clsName) return true;
+            if (clsId && (s.assignedGroups || []).some(g => String(g) === clsId || String(g._id) === clsId)) return true;
+            return false;
+        }).sort((a,b) => a.lastName.localeCompare(b.lastName));
+    }
 };
 
-export default function HomeworkStudio({ initialData, chapters, allClasses, allStudents, globalClass, globalLevel, user, targetSection, onClose }) {
-    const [distribution, setDistribution] = useState({});
-    const [viewingClass, setViewingClass] = useState(globalClass || "");
-    const [studentSearch, setStudentSearch] = useState(""); 
-    const [loading, setLoading] = useState(false);
-    const [activeLevelIdx, setActiveLevelIdx] = useState(0);
-    const fileInputRef = useRef(null);
-    const [uploadMode, setUploadMode] = useState(null); 
+const DEFAULT_HW_DATA = { 
+    title: '', content: '', date: '', chapterId: '', teacherId: null, 
+    targetClassrooms: [], assignedStudents: [], attachments: [], isAllClass: true 
+};
 
-    const [formData, setFormData] = useState(() => {
+export default function HomeworkStudio({ initialData, chapters, classFilter, user, targetSection, onClose }) {
+
+    // --- INIT ---
+    const initData = () => {
         let base = initialData ? JSON.parse(JSON.stringify(initialData)) : { ...DEFAULT_HW_DATA };
         base.teacherId = user.id || user._id;
+        if (!base.targetClassrooms || base.targetClassrooms.length === 0) {
+            if (base.classroom) base.targetClassrooms = [base.classroom];
+            else if (classFilter) base.targetClassrooms = [classFilter];
+            else base.targetClassrooms = [];
+        }
+        if (!base.date) {
+            const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+            base.date = tomorrow.toISOString().split('T')[0];
+        } else { base.date = base.date.split('T')[0]; }
         return base;
-    });
+    };
 
-    const findBestDefaultChapter = (clsName) => {
+    const [formData, setFormData] = useState(initData());
+    const [allStudents, setAllStudents] = useState([]);
+    const [allClasses, setAllClasses] = useState([]);
+    const [distribution, setDistribution] = useState({});
+    const [viewingClass, setViewingClass] = useState(classFilter || "");
+    const [studentSearch, setStudentSearch] = useState(""); 
+    const [loading, setLoading] = useState(false);
+    const fileInputRef = useRef(null);
+
+    // --- LOGIQUE ---
+    const getAvailableChapters = (clsName) => {
         const safeChapters = Array.isArray(chapters) ? chapters : [];
+        if (safeChapters.length === 0) return [];
         const cleanSection = (targetSection || "GÉNÉRAL").toUpperCase().trim();
-        const clsObj = (allClasses || []).find(c => c.name === clsName);
-        const matches = safeChapters.filter(c => {
-            if (c.isArchived) return false;
-            if ((c.section || "GÉNÉRAL").toUpperCase().trim() !== cleanSection) return false;
+        const clsObj = allClasses.find(c => c.name === clsName);
+
+        let matches = safeChapters.filter(c => 
+            !c.isArchived && (c.section || "GÉNÉRAL").toUpperCase().trim() === cleanSection
+        );
+
+        matches = matches.filter(c => {
             if (c.classroom === clsName) return true;
             if (c.sharedLevel && clsObj && String(c.sharedLevel) === String(clsObj.level)) return true;
             if (!c.classroom && !c.sharedLevel) return !c.hiddenIn || !c.hiddenIn.includes(clsName);
             return false;
-        }).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
-        return matches.length > 0 ? matches[0]._id : "";
+        });
+        return matches.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
     };
 
-    useEffect(() => {
-        if (formData && initialData) {
-            const newDist = {};
-            const targets = formData.targetClassrooms && formData.targetClassrooms.length > 0 ? formData.targetClassrooms : [globalClass];
-            targets.forEach(clsName => {
-                if (!clsName) return;
-                const clsObj = (allClasses || []).find(c => c.name === clsName);
-                const ids = (allStudents || []).filter(s => {
-                    const isM = (s.currentClass||"").trim().toUpperCase() === clsName.toUpperCase();
-                    const isO = clsObj && (s.assignedGroups||[]).some(gId => String(gId) === String(clsObj._id));
-                    return (isM || isO) && (formData.assignedStudents||[]).includes(String(s._id));
-                }).map(s => String(s._id));
-                newDist[clsName] = { chapterId: formData.chapterId || findBestDefaultChapter(clsName), studentIds: ids };
-            });
-            setDistribution(newDist);
-        }
-    }, [initialData]);
+    const findBestDefaultChapter = (clsName) => {
+        const available = getAvailableChapters(clsName);
+        if (available.length > 0) return available[0]._id;
+        return "";
+    };
 
-    const handleInput = (field, value) => setFormData(p => ({ ...p, [field]: value }));
-    const updateLevel = (field, value) => { setFormData(p => { const next = p.levels.map((lvl, idx) => idx === activeLevelIdx ? { ...lvl, [field]: value } : lvl); return { ...p, levels: next }; }); };
-    const handleAddLevel = () => { setFormData(p => ({ ...p, levels: [...p.levels, { instruction: '', instructionUrls: [], aiHints: '', attachmentUrls: [] }] })); setActiveLevelIdx(formData.levels.length); };
-    const handleDeleteLevel = (e, idx) => { e.stopPropagation(); if (formData.levels.length === 1) return; if(!confirm("Supprimer cette page ?")) return; setFormData(p => { const next = p.levels.filter((_, i) => i !== idx); return { ...p, levels: next }; }); setActiveLevelIdx(0); };
-
-    const handleUpload = async (e) => {
-        const files = Array.from(e.target.files); if (files.length === 0 || !uploadMode) return;
-        const currentMode = uploadMode; const currentLvl = activeLevelIdx;
-        setLoading(true); const fd = new FormData(); files.forEach(f => fd.append('files', f)); if (e.target) e.target.value = "";
+    const loadData = async () => {
+        setLoading(true);
         try {
-            const res = await fetch('/api/homework/upload', { method: 'POST', body: fd });
-            const data = await res.json();
-            if (data.urls) {
-                setFormData(prev => {
-                    const next = { ...prev }; const newLevels = next.levels.map((lvl, idx) => {
-                        if (idx === currentLvl) {
-                            const field = currentMode === 'instruction' ? 'instructionUrls' : 'attachmentUrls';
-                            return { ...lvl, [field]: Array.from(new Set([...(lvl[field] || []), ...data.urls])) };
-                        }
-                        return lvl;
-                    });
-                    return { ...next, levels: newLevels };
+            const [sts, cls] = await Promise.all([ api.get('/admin/students'), api.get('/admin/classrooms') ]);
+            const safeSts = Array.isArray(sts) ? sts : [];
+            const safeCls = Array.isArray(cls) ? cls : [];
+            setAllStudents(safeSts); setAllClasses(safeCls); 
+            
+            if (formData) {
+                const targets = formData.targetClassrooms || [];
+                const newDist = {};
+                targets.forEach(clsName => {
+                    const clsObj = safeCls.find(c => c.name === clsName);
+                    const clsId = clsObj ? String(clsObj._id) : null;
+                    let classStudentIds = safeSts.filter(s => {
+                        const isMain = (s.currentClass||"").trim().toUpperCase() === clsName.trim().toUpperCase();
+                        const isOption = clsId && (s.assignedGroups||[]).some(gId => String(gId) === clsId);
+                        return (isMain || isOption) && (formData.assignedStudents||[]).includes(s._id);
+                    }).map(s => s._id);
+
+                    let chId = formData.chapterId;
+                    if (!chId || chId === "") {
+                        const localClsObj = safeCls.find(c => c.name === clsName);
+                        const cleanSection = (targetSection || "GÉNÉRAL").toUpperCase().trim();
+                        const matches = (chapters || []).filter(c => 
+                            !c.isArchived && (c.section || "GÉNÉRAL").toUpperCase().trim() === cleanSection &&
+                            (c.classroom === clsName || (c.sharedLevel && localClsObj && String(c.sharedLevel) === String(localClsObj.level)) || (!c.classroom && !c.sharedLevel && (!c.hiddenIn || !c.hiddenIn.includes(clsName))))
+                        ).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+                        if (matches.length > 0) chId = matches[0]._id;
+                    }
+                    newDist[clsName] = { chapterId: chId || "", studentIds: classStudentIds };
                 });
+                setDistribution(newDist);
+                if (targets.length > 0 && !viewingClass) setViewingClass(targets[0]);
             }
-        } catch(e) { alert("Erreur upload"); } finally { setLoading(false); setUploadMode(null); }
+        } catch(e) { console.error("Load Error", e); }
+        setLoading(false);
     };
+
+    useEffect(() => { loadData(); }, []);
+
+    // AUTO-SELECT
+    useEffect(() => {
+        if (!viewingClass && allClasses.length > 0) {
+            const myClassesIds = (user.assignedClasses || []).map(c => String(c._id || c));
+            const myClasses = allClasses.filter(c => user.isDeveloper || user.role === 'admin' || myClassesIds.includes(String(c._id))).sort((a,b) => a.name.localeCompare(b.name));
+            if (myClasses.length > 0) setViewingClass(myClasses[0].name);
+        }
+    }, [allClasses, viewingClass, user]);
+
+    // --- HANDLERS ---
+    const handleInput = (field, value) => setFormData(p => ({ ...p, [field]: value }));
+    const handleDateChange = (e) => setFormData(p => ({ ...p, date: e.target.value }));
+    const handleAddAttachment = async (file) => {
+        setLoading(true); const fd = new FormData(); fd.append('file', file);
+        try { const res = await fetch('/api/games/upload-asset', { method: 'POST', body: fd }); const data = await res.json(); if (data.url) setFormData(p => ({ ...p, attachments: [...p.attachments, { name: data.name, url: data.url, type: file.type }] })); } catch(e) { alert("Erreur upload"); } setLoading(false);
+    };
+    const handleRemoveAttachment = (idx) => setFormData(p => ({ ...p, attachments: p.attachments.filter((_, i) => i !== idx) }));
+    const handleFileSelect = (e) => { if (e.target.files[0]) handleAddAttachment(e.target.files[0]); e.target.value = null; };
+    const handlePaste = (e) => { const items = e.clipboardData.items; for (let i=0; i<items.length; i++) { if (items[i].kind === 'file') { handleAddAttachment(items[i].getAsFile()); return; } } };
+    const handleDrop = (e) => { e.preventDefault(); if(e.dataTransfer.files[0]) handleAddAttachment(e.dataTransfer.files[0]); };
+
+    // --- RENDER ---
+    const targetLevel = allClasses.find(c => c.name === viewingClass)?.level;
+    const myClassesIds = (user.assignedClasses || []).map(c => String(c._id || c));
+    const availableClasses = allClasses.filter(c => { 
+        if (targetLevel && String(c.level) !== String(targetLevel)) return false; 
+        if (user.isDeveloper || user.role === 'admin') return true; 
+        return myClassesIds.includes(String(c._id)); 
+    }).sort((a,b) => a.name.localeCompare(b.name));
+    
+    const rawStudents = StudioUtils.getStudentsForViewingClass(viewingClass, allStudents, allClasses);
+    const studentsToDisplay = rawStudents.filter(s => `${s.firstName} ${s.lastName}`.toLowerCase().includes(studentSearch.toLowerCase()));
+
+    const handleToggleStudent = (sId) => { 
+        setDistribution(prev => { 
+            const next = { ...prev }; const cfg = next[viewingClass]; 
+            if (!cfg) { const defId = findBestDefaultChapter(viewingClass); next[viewingClass] = { chapterId: defId, studentIds: [sId] }; } 
+            else { 
+                let newIds = cfg.studentIds.length === 0 ? rawStudents.map(s => s._id).filter(id => id !== sId) : (cfg.studentIds.includes(sId) ? cfg.studentIds.filter(id => id !== sId) : [...cfg.studentIds, sId]); 
+                if (newIds.length === 0) delete next[viewingClass]; else if (newIds.length === rawStudents.length) next[viewingClass] = { ...cfg, studentIds: [] }; else next[viewingClass] = { ...cfg, studentIds: newIds }; 
+            } 
+            return next; 
+        }); 
+    };
+
+    const toggleAllStudents = () => { 
+        setDistribution(prev => { 
+            const next = { ...prev }; 
+            if (next[viewingClass]) delete next[viewingClass]; else { const defId = findBestDefaultChapter(viewingClass); next[viewingClass] = { chapterId: defId, studentIds: [] }; } 
+            return next; 
+        }); 
+    };
+
+    const isClassSelected = !!distribution[viewingClass];
+    const distCfg = distribution[viewingClass];
+    const availableChapters = getAvailableChapters(viewingClass);
 
     const handleSave = async () => {
         const targets = Object.keys(distribution);
-        if (!formData.title.trim()) return alert("❌ Titre requis !");
-        if (targets.length === 0) return alert("❌ Sélectionnez au moins une classe !");
+        if (!formData.title || targets.length === 0) return alert("❌ Titre et Classe requis !");
         setLoading(true);
         try {
-            const originalId = initialData?._id;
-            const originalClass = initialData?.targetClassrooms?.[0];
-            let idUsed = false;
-            for (const clsName of targets) {
-                const cfg = distribution[clsName];
-                const payload = { 
-                    ...formData, 
-                    chapterId: cfg.chapterId || findBestDefaultChapter(clsName), 
-                    targetClassrooms: [clsName], 
-                    assignedStudents: cfg.studentIds, 
-                    isAllClass: (cfg.studentIds || []).length === 0, 
-                    teacherId: user.id || user._id, 
-                    subject: targetSection || "GÉNÉRAL"
-                };
-                if (originalId && clsName === originalClass && !idUsed) { payload._id = originalId; idUsed = true; } 
-                else { delete payload._id; }
-                await api.post('/homework', payload);
+            const groups = {};
+            targets.forEach(cls => {
+                const cfg = distribution[cls];
+                const realChapterId = cfg.chapterId || findBestDefaultChapter(cls);
+                if (!realChapterId) return;
+                const finalIds = cfg.studentIds.length > 0 ? cfg.studentIds : StudioUtils.getStudentsForViewingClass(cls, allStudents, allClasses).map(s => s._id);
+                const isAllClass = cfg.studentIds.length === 0;
+                const groupKey = `${realChapterId}_${isAllClass ? 'ALL' : 'SUBSET'}`;
+                if (!groups[groupKey]) { groups[groupKey] = { chapterId: realChapterId, classrooms: [], assignedStudents: [], isAllClass: isAllClass }; }
+                groups[groupKey].classrooms.push(cls);
+                if (!isAllClass) { groups[groupKey].assignedStudents.push(...finalIds); }
+            });
+            const groupKeys = Object.keys(groups);
+            for (let i = 0; i < groupKeys.length; i++) {
+                const key = groupKeys[i];
+                const grp = groups[key];
+                const payload = { ...formData, chapterId: grp.chapterId, targetClassrooms: grp.classrooms, assignedStudents: grp.isAllClass ? [] : grp.assignedStudents, isAllClass: grp.isAllClass, teacherId: user.id || user._id, type: 'homework' };
+                if (formData._id && i > 0) { delete payload._id; }
+                await api.post('/homeworks', payload);
             }
             onClose();
-        } catch(e) { alert("Erreur sauvegarde."); } finally { setLoading(false); }
+        } catch(e) { console.error(e); alert("Erreur sauvegarde."); }
+        setLoading(false);
     };
 
     return (
         <div className="v84-hw-container">
-            <input type="file" ref={fileInputRef} multiple className="hidden" onChange={handleUpload} />
+            <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileSelect} />
             <div className="v84-hw-header">
-                <div className="flex items-center gap-4 flex-1">
-                    <span className="text-3xl bg-orange-500 text-white p-2 rounded-xl">📝</span>
-                    <input className="v84-hw-title-input" value={formData.title} onChange={e => handleInput('title', e.target.value)} placeholder="TITRE DU DEVOIR..." />
-                    <button onClick={() => handleInput('isPunishment', !formData.isPunishment)} className={`ml-4 px-4 py-2 rounded-xl font-black text-[10px] uppercase transition-all ${formData.isPunishment ? 'bg-red-600 text-white shadow-lg animate-pulse' : 'bg-slate-100 text-slate-400'}`}>
-                        {formData.isPunishment ? '🚨 MODE PUNITION ACTIF' : '⚖️ DÉFINIR COMME PUNITION'}
-                    </button>
+                <div className="flex items-center gap-3">
+                    <span className="text-3xl">📝</span>
+                    <input className="v84-hw-title-input" value={formData.title} onChange={e => handleInput('title', e.target.value)} placeholder="TITRE DU DEVOIR..." autoFocus />
                 </div>
-                <button onClick={onClose} className="v84-close-btn">✕</button>
+                <div className="flex items-center gap-3">
+                    <input type="date" className="v84-hw-date-input" value={formData.date} onChange={handleDateChange} />
+                    <button onClick={onClose} className="v84-close-btn">✕</button>
+                </div>
             </div>
 
             <div className="v84-hw-body">
-                <div className="v84-q-list-sidebar custom-scrollbar">
-                    <div className="text-[10px] font-black text-slate-400 mb-4 uppercase tracking-widest px-2">Pages du Devoir</div>
-                    {formData.levels.map((lvl, idx) => (
-                        <div key={idx} className={`v84-level-header ${activeLevelIdx === idx ? 'active-lvl' : ''}`} onClick={() => setActiveLevelIdx(idx)}>
-                            <span className="flex items-center gap-2"><span className="opacity-30">#</span> PAGE {idx + 1}</span>
-                            {formData.levels.length > 1 && <button className="v84-del-btn" onClick={(e) => handleDeleteLevel(e, idx)}>✕</button>}
+                {/* EDITOR GAUCHE AVEC CARTE BLANCHE */}
+                <div className="v84-hw-editor custom-scrollbar" onPaste={handlePaste} onDrop={handleDrop} onDragOver={e => e.preventDefault()}>
+                    <div className="v84-hw-card">
+                        <textarea className="v84-hw-textarea custom-scrollbar" placeholder="Description, consignes, liens..." value={formData.content} onChange={e => handleInput('content', e.target.value)} />
+                        <div className="v84-hw-attachments">
+                            {(formData.attachments || []).map((att, idx) => (
+                                <div key={idx} className="v84-att-chip">
+                                    <span>📎 {att.name.substring(0, 20)}</span>
+                                    <button onClick={() => handleRemoveAttachment(idx)} className="ml-2 text-red-400 hover:text-red-600 font-bold">✕</button>
+                                </div>
+                            ))}
+                            <button onClick={() => fileInputRef.current.click()} className="v84-att-add-btn">+ AJOUTER FICHIER</button>
                         </div>
-                    ))}
-                    <button className="v84-add-level-btn mt-6" onClick={handleAddLevel}>+ NOUVELLE PAGE</button>
+                    </div>
                 </div>
 
-                <div className="v84-hw-editor custom-scrollbar">
-                    {formData.levels[activeLevelIdx] ? (
-                        <div className="v84-hw-card animate-in fade-in">
-                            <div className="mb-6">
-                                <label className="v84-folder-label">CONSIGNE TEXTUELLE</label>
-                                <textarea className="v84-hw-textarea !h-32 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl" placeholder="Instructions..." value={formData.levels[activeLevelIdx].instruction} onChange={e => updateLevel('instruction', e.target.value)} />
+                {/* SIDEBAR DROITE */}
+                <div className="v84-dist-sidebar custom-scrollbar">
+                    <div className="v84-classes-tabs">
+                        {availableClasses.map(c => (
+                            <button key={c._id} onClick={() => { setViewingClass(c.name); setStudentSearch(""); }} className={`v84-tab-btn ${distribution[c.name] ? 'active' : 'inactive'} ${viewingClass === c.name ? 'border-2 border-purple-700' : ''}`} style={c.type === 'GROUP' ? { color: '#f59e0b', borderColor: '#fcd34d' } : {}}>
+                                {c.name}
+                            </button>
+                        ))}
+                    </div>
+
+                    {viewingClass && (
+                        <div className="v84-class-card">
+                            <div className="v84-class-header" onClick={toggleAllStudents}>
+                                <span className="v84-class-title">{viewingClass}</span>
+                                <div className={`v84-check-badge ${isClassSelected ? 'checked' : ''}`}>{isClassSelected && '✓'}</div>
                             </div>
-                            <div className="grid grid-cols-2 gap-8">
-                                <div className="p-6 bg-slate-50 rounded-[30px] border-2 border-slate-100">
-                                    <label className="v84-folder-label mb-4 block">📸 Consigne Images</label>
-                                    <div className="flex flex-wrap gap-3">
-                                        {(formData.levels[activeLevelIdx].instructionUrls || []).map((url, i) => (
-                                            <div key={i} className="group relative w-20 h-20 bg-white border-2 border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                                                <img src={url} className="w-full h-full object-cover" />
-                                                <button className="absolute top-1 right-1 bg-red-500 text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black" onClick={() => updateLevel('instructionUrls', formData.levels[activeLevelIdx].instructionUrls.filter((_, j) => i !== j))}>✕</button>
-                                            </div>
-                                        ))}
-                                        <button className="w-20 h-20 border-3 border-dashed border-slate-200 rounded-xl flex items-center justify-center text-3xl text-slate-300" onClick={() => { setUploadMode('instruction'); fileInputRef.current.click(); }}>+</button>
-                                    </div>
-                                </div>
-                                <div className="p-6 bg-indigo-50/50 rounded-[30px] border-2 border-indigo-100/50">
-                                    <label className="v84-folder-label !text-indigo-500 mb-4 block"> support documents</label>
-                                    <div className="flex flex-wrap gap-3">
-                                        {(formData.levels[activeLevelIdx].attachmentUrls || []).map((url, i) => (
-                                            <div key={i} className="group relative w-20 h-20 bg-white border-2 border-indigo-200 rounded-xl overflow-hidden shadow-sm">
-                                                <img src={url} className="w-full h-full object-cover" />
-                                                <button className="absolute top-1 right-1 bg-red-500 text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black" onClick={() => updateLevel('attachmentUrls', formData.levels[activeLevelIdx].attachmentUrls.filter((_, j) => i !== j))}>✕</button>
-                                            </div>
-                                        ))}
-                                        <button className="w-20 h-20 border-3 border-dashed border-indigo-200 rounded-xl flex items-center justify-center text-3xl text-indigo-300" onClick={() => { setUploadMode('attachment'); fileInputRef.current.click(); }}>+</button>
-                                    </div>
-                                </div>
+                            <div className="v84-folder-select-box">
+                                <label className="v84-folder-label">Dossier :</label>
+                                <select className="v84-folder-select" value={distCfg?.chapterId || findBestDefaultChapter(viewingClass)} onChange={(e) => setDistribution(p => ({ ...p, [viewingClass]: { ...p[viewingClass], chapterId: e.target.value } }))} disabled={loading}>
+                                    <option value="">-- CHOISIR --</option>
+                                    {availableChapters.map(c => <option key={c._id} value={c._id}>{c.title}</option>)}
+                                </select>
                             </div>
-                            <div className="mt-8 pt-6 border-t-2 border-slate-50">
-                                <label className="v84-folder-label !text-purple-600 mb-2 block">🤖 Intelligence Artificielle (Secret Prof)</label>
-                                <textarea className="v84-hw-textarea !h-24 !bg-purple-50/50 !p-4 !text-sm border-2 border-purple-100 rounded-2xl" value={formData.levels[activeLevelIdx].aiHints} onChange={e => updateLevel('aiHints', e.target.value)} placeholder="Énumérez ici les éléments indispensables de la réponse..." />
+                            <div className="v84-search-box">
+                                <span>🔎</span>
+                                <input className="v84-search-input" placeholder="Chercher un élève..." value={studentSearch} onChange={e => setStudentSearch(e.target.value)} />
+                            </div>
+                            <div className="v84-students-list custom-scrollbar">
+                                {studentsToDisplay.map(s => { 
+                                    const checked = isClassSelected && (distribution[viewingClass].studentIds.length === 0 || distribution[viewingClass].studentIds.includes(s._id));
+                                    return (
+                                        <div key={s._id} onClick={() => handleToggleStudent(s._id)} className={`v84-student-item ${checked ? 'selected' : ''}`}>
+                                            <div className="v84-student-checkbox">{checked && '✓'}</div>
+                                            <span className="v84-student-name">{s.lastName} {s.firstName}</span>
+                                        </div>
+                                    ); 
+                                })}
                             </div>
                         </div>
-                    ) : <div className="p-20 text-center text-slate-300">Sélectionnez une page</div>}
+                    )}
+                    
+                    <button className="v84-publish-btn" onClick={handleSave} disabled={loading}>
+                        {loading ? '...' : (initialData ? 'MODIFIER' : 'PUBLIER 🚀')}
+                    </button>
                 </div>
-
-                <StudioDistributionSidebar 
-                    user={user} allClasses={allClasses} allStudents={allStudents} chapters={chapters} distribution={distribution} setDistribution={setDistribution} viewingClass={viewingClass} setViewingClass={setViewingClass} studentSearch={studentSearch} setStudentSearch={setStudentSearch} targetLevel={globalLevel} targetSection={targetSection} loading={loading} onSave={handleSave} saveLabel={initialData ? "MODIFIER" : "PUBLIER LE DEVOIR 🚀"}
-                />
             </div>
         </div>
     );
