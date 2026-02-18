@@ -2,58 +2,71 @@
 import React, { useEffect } from 'react';
 import './StudioDistributionSidebar.css';
 
-/**
- * 📦 BARRE LATÉRALE ROBUSTE
- * Sécurisée contre les props manquantes (undefined/null).
- */
 export default function StudioDistributionSidebar({ 
-    user, allClasses = [], allStudents = [], chapters = [], distribution, setDistribution, 
+    user, allClasses, allStudents, chapters, distribution, setDistribution, 
     viewingClass, setViewingClass, studentSearch, setStudentSearch,
     targetLevel, targetSection, loading, onSave, saveLabel = "PUBLIER 🚀"
 }) {
 
-    // 1. FILTRAGE SÉCURISÉ DES CLASSES
-    const availableClasses = allClasses.filter(c => {
-        // Filtre Niveau (si appliqué)
+    // 1. FILTRAGE STRICT DES CLASSES (NIVEAU & PROF)
+    const availableClasses = (allClasses || []).filter(c => {
+        // A. Filtre Niveau (Le plus important)
+        // Si un targetLevel est fourni (ex: "4"), on cache tout ce qui n'est pas "4"
         if (targetLevel && String(c.level) !== String(targetLevel)) return false;
         
-        // Filtre Permissions
-        if (user?.isDeveloper || user?.role === 'admin') return true;
-        const myIds = (user?.assignedClasses || []).map(id => String(id._id || id));
+        // B. Filtre Permissions
+        if (user.isDeveloper || user.role === 'admin') return true;
+        
+        // C. Filtre Prof (Mes classes uniquement)
+        const myIds = (user.assignedClasses || []).map(id => String(id._id || id));
         return myIds.includes(String(c._id));
     }).sort((a,b) => a.name.localeCompare(b.name));
 
-    // Auto-select si vide
+    // Auto-select première classe si rien n'est sélectionné
     useEffect(() => {
-        if (!viewingClass && availableClasses.length > 0) {
+        // Si la classe active n'est pas dans la liste filtrée, on reset sur la première dispo
+        const currentIsAvailable = availableClasses.some(c => c.name === viewingClass);
+        if ((!viewingClass || !currentIsAvailable) && availableClasses.length > 0) {
             setViewingClass(availableClasses[0].name);
         }
-    }, [availableClasses.length, viewingClass]);
+    }, [availableClasses, viewingClass]);
 
-    // 2. RECHERCHE DOSSIER PAR DÉFAUT
-    const findBestDefaultChapter = (clsName) => {
+    // 2. FILTRAGE STRICT DES DOSSIERS
+    const availableChapters = (chapters || []).filter(c => {
+        // A. Filtre Section (Matière)
         const cleanSection = (targetSection || "GÉNÉRAL").toUpperCase().trim();
-        const clsObj = allClasses.find(c => c.name === clsName);
-        
-        const matches = chapters.filter(c => {
-            if (c.isArchived) return false;
-            if ((c.section || "GÉNÉRAL").toUpperCase().trim() !== cleanSection) return false;
-            
-            if (c.classroom === clsName) return true;
-            if (c.sharedLevel && clsObj && String(c.sharedLevel) === String(clsObj.level)) return true;
-            if (!c.classroom && !c.sharedLevel) return !c.hiddenIn || !c.hiddenIn.includes(clsName);
-            
-            return false;
-        }).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+        const chapSection = (c.section || "GÉNÉRAL").toUpperCase().trim();
+        if (chapSection !== cleanSection) return false;
 
-        return matches.length > 0 ? matches[0]._id : "";
+        if (c.isArchived) return false;
+
+        // B. Filtre Contextuel (Basé sur la classe qu'on regarde)
+        if (viewingClass) {
+             const currentClassObj = allClasses.find(cl => cl.name === viewingClass);
+             const currentLevel = currentClassObj ? String(currentClassObj.level) : null;
+
+             // Si le dossier est spécifique à une AUTRE classe -> CACHÉ
+             if (c.classroom && c.classroom !== viewingClass) return false;
+
+             // Si le dossier est spécifique à un AUTRE niveau -> CACHÉ
+             if (c.sharedLevel && String(c.sharedLevel) !== String(currentLevel)) return false;
+
+             // Si le dossier a été masqué manuellement -> CACHÉ
+             if (c.hiddenIn && c.hiddenIn.includes(viewingClass)) return false;
+        }
+
+        return true;
+    }).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    // Helper pour trouver le dossier par défaut
+    const findBestDefaultChapter = () => {
+        return availableChapters.length > 0 ? availableChapters[0]._id : "";
     };
 
     // 3. LOGIQUE ÉLÈVES
-    const rawStudents = allStudents.filter(s => {
+    const rawStudents = (allStudents || []).filter(s => {
         if (!viewingClass) return false;
         if ((s.currentClass || "").trim() === viewingClass) return true;
-        
         const clsObj = allClasses.find(c => c.name === viewingClass);
         if (clsObj && clsObj.type === 'GROUP') {
             const clsId = String(clsObj._id);
@@ -66,29 +79,50 @@ export default function StudioDistributionSidebar({
         `${s.firstName} ${s.lastName}`.toLowerCase().includes((studentSearch || "").toLowerCase())
     );
 
+    // --- CORRECTION LOGIQUE DE SÉLECTION ---
     const handleToggleStudent = (sId) => { 
         const next = { ...distribution }; 
-        const defaultChapter = findBestDefaultChapter(viewingClass);
+        const defaultChapter = findBestDefaultChapter();
+        
+        // On récupère ou initialise la config de cette classe
         const cfg = next[viewingClass] || { chapterId: defaultChapter, studentIds: [] };
         let currentIds = cfg.studentIds || [];
         
-        // Logique "Tout le monde sauf..." (Si vide = tous)
+        // --- LOGIQUE CORRIGÉE ---
+        // Liste vide = "Toute la classe" (Mode par défaut)
+        // Liste remplie = "Seulement ces élèves" (Mode Subset)
+
         if (currentIds.length === 0) {
-            currentIds = rawStudents.map(s => s._id).filter(id => id !== sId);
+            // Si on est en mode "Tout le monde" et qu'on clique sur un élève :
+            // L'utilisateur veut sélectionner UNIQUEMENT cet élève.
+            currentIds = [sId];
         } else {
-            if (currentIds.includes(sId)) currentIds = currentIds.filter(id => id !== sId);
-            else currentIds.push(sId);
+            // Mode normal : on ajoute ou on enlève
+            if (currentIds.includes(sId)) {
+                currentIds = currentIds.filter(id => id !== sId);
+            } else {
+                currentIds.push(sId);
+            }
         }
 
-        if (!next[viewingClass]) {
-            const allIds = rawStudents.map(s => s._id);
-            next[viewingClass] = {
-                chapterId: defaultChapter,
-                studentIds: allIds.filter(id => id !== sId)
-            };
+        // Si on a désélectionné le dernier élève, on revient au mode "Tout le monde" ?
+        // NON. Vide = Tout le monde. Donc si on vide la liste manuellement, ça re-coche tout le monde visuellement.
+        // C'est contre-intuitif.
+        // CORRECTION UX : Si la liste devient vide (0 élève sélectionné), on la laisse vide, mais le système backend doit comprendre "Personne".
+        // ATTENTION : La convention actuelle est Vide = Tout le monde.
+        // Si l'utilisateur veut sélectionner "Personne", il ne publie pas pour cette classe.
+        
+        // Donc, si on décoche le dernier, on revient techniquement à "Tout le monde".
+        // Pour éviter ça, si la liste devient vide, on supprime carrément l'entrée de la classe (Désactivée).
+        if (currentIds.length === 0) {
+            delete next[viewingClass];
         } else {
-            next[viewingClass].studentIds = currentIds;
+             next[viewingClass] = {
+                chapterId: cfg.chapterId || defaultChapter,
+                studentIds: currentIds
+            };
         }
+       
         setDistribution(next);
     };
 
@@ -96,8 +130,8 @@ export default function StudioDistributionSidebar({
         const next = { ...distribution };
         if (next[viewingClass]) delete next[viewingClass];
         else {
-             const defaultChapter = findBestDefaultChapter(viewingClass);
-             next[viewingClass] = { chapterId: defaultChapter, studentIds: [] };
+             const defaultChapter = findBestDefaultChapter();
+             next[viewingClass] = { chapterId: defaultChapter, studentIds: [] }; // Vide = Tout le monde
         }
         setDistribution(next);
     };
@@ -105,22 +139,20 @@ export default function StudioDistributionSidebar({
     const isClassSelected = !!distribution[viewingClass];
     const cfg = distribution[viewingClass];
     
+    // Visuel : Est-ce que la case est cochée ?
     const isStudentSelected = (sId) => {
         if (!isClassSelected) return false;
+        // Si tableau vide = Tout le monde est sélectionné (Convention Backend)
         if (cfg.studentIds.length === 0) return true;
         return cfg.studentIds.includes(sId);
     };
 
-    const availableChapters = chapters.filter(c => {
-        const cleanSection = (targetSection || "GÉNÉRAL").toUpperCase().trim();
-        return !c.isArchived && (c.section || "GÉNÉRAL").toUpperCase().trim() === cleanSection;
-    }).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
-
-    // Calcul valeur select
-    const selectedChapterValue = cfg?.chapterId || findBestDefaultChapter(viewingClass);
+    // Calcul du chapitre sélectionné pour l'affichage du select
+    const selectedChapterValue = cfg?.chapterId || findBestDefaultChapter();
 
     return (
         <div className="v84-dist-sidebar custom-scrollbar">
+            {/* 1. ONGLETS CLASSES (FILTRÉS) */}
             <div className="v84-classes-tabs">
                 {availableClasses.map(c => (
                     <button 
@@ -132,9 +164,10 @@ export default function StudioDistributionSidebar({
                         {c.name}
                     </button>
                 ))}
-                {availableClasses.length === 0 && <div className="text-xs text-slate-400 italic">Aucune classe disponible.</div>}
+                {availableClasses.length === 0 && <div className="text-xs text-slate-400 italic">Aucune classe pour ce niveau.</div>}
             </div>
 
+            {/* 2. PANNEAU CLASSE ACTIVE */}
             {viewingClass && (
                 <div className="v84-class-card animate-in slide-in-from-right">
                     <div className="v84-class-header" onClick={toggleAllStudents}>
