@@ -10,10 +10,12 @@ const DEFAULT_HW_DATA = {
     isPunishment: false
 };
 
-// 👉 NOTE : targetLevel (ex: "3") est maintenant destructuré et passé à la Sidebar
-export default function HomeworkStudio({ initialData, chapters, user, targetSection, targetLevel, onClose, allStudents: propStudents, allClasses: propClasses }) {
+export default function HomeworkStudio({ initialData, chapters, user, targetSection, targetLevel, onClose }) {
+    // --- 1. ÉTATS AUTONOMES ---
+    // On ne dépend plus des props 'allStudents' du parent pour éviter les bugs de chargement
+    const [allStudents, setAllStudents] = useState([]);
+    const [allClasses, setAllClasses] = useState([]);
     
-    // --- ÉTATS DONNÉES ---
     const [formData, setFormData] = useState(() => {
         let base = initialData ? JSON.parse(JSON.stringify(initialData)) : { ...DEFAULT_HW_DATA };
         if (!base.levels || base.levels.length === 0) base.levels = [{ instruction: '', instructionUrls: [], attachmentUrls: [], aiHints: '' }];
@@ -25,51 +27,45 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
     });
 
     const [activeLevelIdx, setActiveLevelIdx] = useState(0);
-
-    // --- ÉTATS CONTEXTUELS ---
-    const [allStudents, setAllStudents] = useState(propStudents || []);
-    const [allClasses, setAllClasses] = useState(propClasses || []);
-    
     const [distribution, setDistribution] = useState({});
     const [viewingClass, setViewingClass] = useState("");
     const [studentSearch, setStudentSearch] = useState("");
-    
     const [loading, setLoading] = useState(false);
     const fileInputRef = useRef(null);
     const [uploadType, setUploadType] = useState(null);
 
-    // CHARGEMENT DONNÉES DE SECOURS
+    // --- 2. CHARGEMENT INDÉPENDANT ---
     useEffect(() => {
-        const initDistribution = () => {
-            if (initialData && initialData.targetClassrooms) {
-                const dist = {};
-                initialData.targetClassrooms.forEach(clsName => {
-                    dist[clsName] = {
-                        chapterId: initialData.chapterId || "",
-                        studentIds: initialData.isAllClass ? [] : (initialData.assignedStudents || [])
-                    };
-                });
-                setDistribution(dist);
-                if (initialData.targetClassrooms.length > 0) setViewingClass(initialData.targetClassrooms[0]);
-            }
-        };
-
-        if ((!propStudents || propStudents.length === 0) || (!propClasses || propClasses.length === 0)) {
+        const loadContext = async () => {
             setLoading(true);
-            Promise.all([api.get('/admin/students'), api.get('/admin/classrooms')])
-                .then(([sts, cls]) => {
-                    setAllStudents(sts || []);
-                    setAllClasses(cls || []);
-                    initDistribution();
-                    setLoading(false);
-                })
-                .catch(() => setLoading(false));
-        } else {
-            initDistribution();
-        }
+            try {
+                // On recharge TOUJOURS les classes et élèves pour être sûr d'avoir la dernière version
+                const [sts, cls] = await Promise.all([
+                    api.get('/admin/students'),
+                    api.get('/admin/classrooms')
+                ]);
+                setAllStudents(sts || []);
+                setAllClasses(cls || []);
+
+                // Si on édite, on pré-remplit la distribution
+                if (initialData && initialData.targetClassrooms) {
+                    const dist = {};
+                    initialData.targetClassrooms.forEach(clsName => {
+                        dist[clsName] = {
+                            chapterId: initialData.chapterId || "",
+                            studentIds: initialData.isAllClass ? [] : (initialData.assignedStudents || [])
+                        };
+                    });
+                    setDistribution(dist);
+                    if (initialData.targetClassrooms.length > 0) setViewingClass(initialData.targetClassrooms[0]);
+                }
+            } catch(e) { console.error(e); }
+            setLoading(false);
+        };
+        loadContext();
     }, []);
 
-    // HANDLERS...
+    // --- 3. HANDLERS ---
     const handleInput = (f, v) => setFormData(p => ({ ...p, [f]: v }));
     const handleLevelInput = (idx, f, v) => {
         const lvls = [...formData.levels];
@@ -88,11 +84,6 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
         setFormData(prev => ({ ...prev, levels: newLevels }));
         setActiveLevelIdx(prev => Math.min(prev, newLevels.length - 1));
     };
-    const updateCurrentLevel = (field, value) => {
-        const newLevels = [...formData.levels];
-        newLevels[activeLevelIdx] = { ...newLevels[activeLevelIdx], [field]: value };
-        setFormData(prev => ({ ...prev, levels: newLevels }));
-    };
     const triggerUpload = (type) => { setUploadType(type); fileInputRef.current.click(); };
     const handleFileChange = async (e) => {
         const files = e.target.files; if (!files || files.length === 0) return;
@@ -100,14 +91,18 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
         try {
             const res = await fetch('/api/homework/upload', { method: 'POST', body: fd }).then(r => r.json());
             if (res.urls && res.urls.length > 0) {
-                if (uploadType === 'sheet') updateCurrentLevel('instructionUrls', [res.urls[0]]);
-                else updateCurrentLevel('attachmentUrls', [...formData.levels[activeLevelIdx].attachmentUrls, ...res.urls]);
+                const lvls = [...formData.levels];
+                if (uploadType === 'sheet') lvls[activeLevelIdx].instructionUrls = [res.urls[0]];
+                else lvls[activeLevelIdx].attachmentUrls.push(...res.urls);
+                setFormData(p => ({ ...p, levels: lvls }));
             }
         } catch(err) { alert("Erreur Upload"); } setLoading(false); e.target.value = "";
     };
     const removeAttachment = (type, urlIdx) => {
-        if (type === 'sheet') updateCurrentLevel('instructionUrls', []);
-        else updateCurrentLevel('attachmentUrls', formData.levels[activeLevelIdx].attachmentUrls.filter((_, i) => i !== urlIdx));
+        const lvls = [...formData.levels];
+        if (type === 'sheet') lvls[activeLevelIdx].instructionUrls = [];
+        else lvls[activeLevelIdx].attachmentUrls = lvls[activeLevelIdx].attachmentUrls.filter((_, i) => i !== urlIdx);
+        setFormData(p => ({ ...p, levels: lvls }));
     };
 
     const handleSave = async () => {
@@ -128,7 +123,14 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
 
             for (const key of Object.keys(groups)) {
                 const grp = groups[key];
-                const payload = { ...formData, chapterId: grp.chapterId, targetClassrooms: grp.classrooms, assignedStudents: grp.assignedStudents, isAllClass: grp.isAllClass, teacherId: user.id || user._id };
+                const payload = {
+                    ...formData,
+                    chapterId: grp.chapterId,
+                    targetClassrooms: grp.classrooms,
+                    assignedStudents: grp.assignedStudents,
+                    isAllClass: grp.isAllClass,
+                    teacherId: user.id || user._id
+                };
                 if (formData._id && key === Object.keys(groups)[0]) { /* update */ } else { delete payload._id; }
                 await api.post('/homework', payload); 
             }
@@ -158,17 +160,17 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
                         <button className="hw-tab-add" onClick={handleAddLevel}>+</button>
                     </div>
                     <div className="v84-hw-card">
-                        <div><div className="hw-section-title">Consigne textuelle</div><textarea className="v84-hw-textarea custom-scrollbar" placeholder="Écrivez votre question ou consigne ici..." value={currentLvl.instruction} onChange={e => updateCurrentLevel('instruction', e.target.value)} /></div>
+                        <div><div className="hw-section-title">Consigne textuelle</div><textarea className="v84-hw-textarea custom-scrollbar" placeholder="Écrivez votre question ou consigne ici..." value={currentLvl.instruction} onChange={e => handleLevelInput(activeLevelIdx, 'instruction', e.target.value)} /></div>
                         <div><div className="hw-section-title">Fiche Question (Image/Scan)</div>{currentLvl.instructionUrls && currentLvl.instructionUrls.length > 0 ? (<div className="hw-sheet-zone" style={{borderColor: '#22c55e', background: '#f0fdf4'}}><img src={currentLvl.instructionUrls[0]} className="hw-sheet-preview" alt="Sujet" /><button className="hw-sheet-remove" onClick={() => removeAttachment('sheet')}>Supprimer</button></div>) : (<div className="hw-sheet-zone" onClick={() => triggerUpload('sheet')}><div className="hw-sheet-placeholder"><span style={{fontSize: '2rem'}}>🖼️</span><span>Déposer la fiche ici</span></div></div>)}</div>
                         <div><div className="hw-section-title">Documents de travail (Aide)</div><div className="v84-hw-attachments">{currentLvl.attachmentUrls.map((url, i) => (<div key={i} className="v84-att-chip"><span>📎 Doc {i+1}</span><button onClick={() => removeAttachment('docs', i)} className="ml-2 text-red-400 font-bold hover:text-red-600">✕</button></div>))}<button onClick={() => triggerUpload('docs')} className="v84-att-add-btn">+ DOC</button></div></div>
-                        <div><div className="hw-section-title" style={{color: '#7c3aed'}}>🧠 Indices Correction IA (Secret)</div><div className="hw-ai-box"><textarea className="hw-ai-input custom-scrollbar" placeholder="Donnez ici les mots-clés ou les réponses attendues pour aider l'IA à corriger..." value={currentLvl.aiHints} onChange={e => updateCurrentLevel('aiHints', e.target.value)}/></div></div>
+                        <div><div className="hw-section-title" style={{color: '#7c3aed'}}>🧠 Indices Correction IA (Secret)</div><div className="hw-ai-box"><textarea className="hw-ai-input custom-scrollbar" placeholder="Donnez ici les mots-clés ou les réponses attendues pour aider l'IA à corriger..." value={currentLvl.aiHints} onChange={e => handleLevelInput(activeLevelIdx, 'aiHints', e.target.value)}/></div></div>
                     </div>
                 </div>
 
                 <StudioDistributionSidebar 
                     user={user}
-                    allClasses={allClasses}
-                    allStudents={allStudents}
+                    allClasses={allClasses} // Maintenant chargé localement
+                    allStudents={allStudents} // Maintenant chargé localement
                     chapters={chapters}
                     distribution={distribution}
                     setDistribution={setDistribution}
@@ -177,7 +179,7 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
                     studentSearch={studentSearch}
                     setStudentSearch={setStudentSearch}
                     targetSection={targetSection} 
-                    targetLevel={targetLevel} // 🚀 TRANSMISSION DU FILTRE DE NIVEAU
+                    targetLevel={targetLevel} 
                     loading={loading}
                     onSave={handleSave}
                 />
