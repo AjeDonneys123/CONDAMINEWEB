@@ -1,7 +1,7 @@
 /* --- CONTAINER GLOBAL --- */
 .v84-hw-container {
     position: fixed; inset: 0; z-index: 9500;
-    background: #f8fafc; /* Slate 50 */
+    background: #f8fafc;
     display: flex; flex-direction: column;
     font-family: 'Inter', sans-serif;
 }
@@ -42,7 +42,7 @@
     display: flex; flex-direction: column; gap: 20px;
 }
 
-/* NAVIGATION DES QUESTIONS (TABS) */
+/* NAVIGATION TABS (Q1, Q2...) */
 .hw-level-tabs {
     display: flex; gap: 10px; align-items: center;
     padding-bottom: 10px; flex-wrap: wrap;
@@ -68,21 +68,19 @@
 }
 .hw-tab-delete:hover { background: #ef4444; }
 
-/* CONTENU DE LA QUESTION (CARTE BLANCHE) */
+/* CARTE DEVOIR */
 .v84-hw-card {
     background: white; border-radius: 30px; padding: 30px;
     border: 1px solid #e2e8f0; box-shadow: 0 10px 30px -10px rgba(0,0,0,0.05);
     display: flex; flex-direction: column; gap: 25px;
 }
 
-/* SECTION COMMUNE */
 .hw-section-title {
     font-size: 0.7rem; font-weight: 950; text-transform: uppercase;
     color: #94a3b8; letter-spacing: 0.05em; margin-bottom: 8px;
     display: flex; justify-content: space-between; align-items: center;
 }
 
-/* 1. CONSIGNE */
 .v84-hw-textarea {
     width: 100%; min-height: 100px;
     border: 2px solid #f1f5f9; border-radius: 15px; padding: 15px;
@@ -91,7 +89,7 @@
 }
 .v84-hw-textarea:focus { border-color: #3b82f6; background: white; }
 
-/* 2. FICHE SUJET (UNIQUE) */
+/* FICHE SUJET */
 .hw-sheet-zone {
     height: 120px; border: 2px dashed #cbd5e1; border-radius: 20px;
     display: flex; align-items: center; justify-content: center;
@@ -108,7 +106,7 @@
     border: none; cursor: pointer; text-transform: uppercase;
 }
 
-/* 3. DOCUMENTS (MULTIPLE) */
+/* DOCUMENTS */
 .v84-hw-attachments {
     display: flex; flex-wrap: wrap; gap: 10px;
     padding: 15px; background: #f8fafc; border-radius: 20px;
@@ -129,7 +127,7 @@
 }
 .v84-att-add-btn:hover { background: #bae6fd; }
 
-/* 4. IA HINTS */
+/* IA HINTS */
 .hw-ai-box {
     background: #f5f3ff; border: 1px solid #ddd6fe;
     border-radius: 20px; padding: 15px;
@@ -141,15 +139,5 @@
 }
 .hw-ai-input::placeholder { color: #a78bfa; font-style: italic; }
 
-/* --- SIDEBAR DROITE (Réutilisé) --- */
-.v84-dist-sidebar {
-    width: 360px; background: white;
-    border-left: 2px solid #f1f5f9;
-    padding: 20px; display: flex; flex-direction: column;
-}
-/* ... (Le reste des styles sidebar est déjà dans GameStudio ou commun) ... */
-
-/* Scrollbar */
-.custom-scrollbar::-webkit-scrollbar { width: 5px; }
-.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-.custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+/* NETTOYAGE DES STYLES SIDEBAR (DÉPLACÉS) */
+/* Les styles v84-dist-sidebar et enfants sont maintenant gérés par le composant dédié */

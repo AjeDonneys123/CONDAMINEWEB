@@ -1,0 +1,239 @@
+/* 📦 SIDEBAR DE DISTRIBUTION (STYLE AUTONOME) */
+.v84-dist-sidebar {
+    width: 360px;
+    background: white;
+    border-left: 2px solid #f1f5f9;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    overflow: hidden; /* Pour gérer le scroll interne */
+}
+
+/* 1. ONGLETS CLASSES */
+.v84-classes-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-bottom: 20px;
+    flex-shrink: 0;
+}
+
+.v84-tab-btn {
+    padding: 8px 12px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 950;
+    border: 1px solid transparent;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: all 0.2s;
+    background: #f1f5f9;
+    color: #94a3b8;
+}
+
+.v84-tab-btn:hover {
+    background: #e2e8f0;
+    color: #64748b;
+}
+
+.v84-tab-btn.active {
+    background: #9333ea;
+    color: white;
+    box-shadow: 0 4px 10px rgba(147, 51, 234, 0.3);
+}
+
+.v84-tab-btn.inactive {
+    opacity: 0.7;
+}
+
+/* 2. CARTE CLASSE ACTIVE */
+.v84-class-card {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 20px;
+    padding: 15px;
+    overflow: hidden; /* Contient la liste scrollable */
+    min-height: 0; /* Crucial pour le flex child scroll */
+}
+
+.v84-class-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    cursor: pointer;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.v84-class-title {
+    font-weight: 950;
+    font-size: 1rem;
+    color: #1e293b;
+    text-transform: uppercase;
+}
+
+.v84-check-badge {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid #cbd5e1;
+    color: transparent;
+    font-size: 12px;
+    transition: all 0.2s;
+}
+
+.v84-check-badge.checked {
+    background: #9333ea;
+    border-color: #9333ea;
+    color: white;
+    font-weight: 900;
+}
+
+/* SÉLECTEUR DOSSIER */
+.v84-folder-select-box {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 10px;
+    margin-bottom: 10px;
+    flex-shrink: 0;
+}
+
+.v84-folder-label {
+    font-size: 9px;
+    font-weight: 900;
+    color: #94a3b8;
+    text-transform: uppercase;
+    display: block;
+    margin-bottom: 5px;
+}
+
+.v84-folder-select {
+    width: 100%;
+    font-size: 11px;
+    font-weight: 700;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: #1e293b;
+    cursor: pointer;
+}
+
+/* RECHERCHE ÉLÈVE */
+.v84-search-box {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 8px 12px;
+    margin-bottom: 10px;
+    flex-shrink: 0;
+}
+
+.v84-search-input {
+    border: none;
+    outline: none;
+    font-size: 10px;
+    font-weight: 600;
+    width: 100%;
+    color: #475569;
+}
+
+/* LISTE ÉLÈVES */
+.v84-students-list {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-right: 5px; /* Espace scrollbar */
+}
+
+.v84-student-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.1s;
+}
+
+.v84-student-item:hover {
+    background: #e2e8f0;
+}
+
+.v84-student-item.selected {
+    background: #f3e8ff;
+}
+
+.v84-student-checkbox {
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    border: 2px solid #cbd5e1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 10px;
+    color: transparent;
+}
+
+.v84-student-item.selected .v84-student-checkbox {
+    background: #9333ea;
+    border-color: #9333ea;
+    color: white;
+}
+
+.v84-student-name {
+    font-size: 10px;
+    font-weight: 700;
+    color: #475569;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.v84-student-item.selected .v84-student-name {
+    color: #6b21a8;
+}
+
+/* BOUTON PUBLIER */
+.v84-publish-btn {
+    width: 100%;
+    padding: 15px;
+    margin-top: 15px;
+    background: #10b981; /* Vert pour publier */
+    color: white;
+    font-weight: 950;
+    font-size: 11px;
+    border: none;
+    border-radius: 15px;
+    cursor: pointer;
+    text-transform: uppercase;
+    box-shadow: 0 10px 20px rgba(16, 185, 129, 0.3);
+    transition: transform 0.1s;
+    flex-shrink: 0;
+}
+
+.v84-publish-btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    background: #059669;
+}
+
+.v84-publish-btn:disabled {
+    background: #cbd5e1;
+    cursor: not-allowed;
+    box-shadow: none;
+}
