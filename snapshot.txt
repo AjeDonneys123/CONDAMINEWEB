@@ -88,6 +88,7 @@ STRUCTURE:
 │   │   │   │   │   ├── ProfStudioFolder.jsx
 │   │   │   │   │   ├── ProjectTreeViewer.css
 │   │   │   │   │   ├── ProjectTreeViewer.jsx
+│   │   │   │   │   ├── StudioDistributionSidebar.css
 │   │   │   │   │   ├── StudioDistributionSidebar.jsx
 │   │   │   │   │   ├── SystemDocs.css
 │   │   │   │   │   ├── SystemDocs.jsx
@@ -382,7 +383,7 @@ console.log("🛡️ ARCHITECTE V9.8 - DÉBRIDÉ & COMMIT AUTO ACTIF");
 {
   "status": "OK",
   "message": "Infrastructure mise à jour",
-  "timestamp": 1771362133505
+  "timestamp": 1771454538181
 }
 [[[£ END: apply_status.json £]]]
 
@@ -3910,7 +3911,7 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
     const [activities, setActivities] = useState([]);
     const [chapters, setChapters] = useState([]);
     const [allStudents, setAllStudents] = useState([]);
-    const [allClasses, setAllClasses] = useState([]);
+    const [allClasses, setAllClasses] = useState([]); // Ajouté
     const [editingItem, setEditingItem] = useState(null);
     const [loading, setLoading] = useState(false);
 
@@ -3928,25 +3929,17 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
                 fetchJson('/api/scans/sessions'), 
                 fetchJson('/api/structure/chapters'),
                 fetchJson('/api/admin/students'),
-                fetchJson('/api/admin/classrooms')
+                fetchJson('/api/admin/classrooms') // Ajouté
             ]);
             
             setActivities([
-                ...(hw || []).map(x => ({
-                    ...x, 
-                    actType: 'homework', 
-                    typeLabel: (x.subject && x.subject.toUpperCase() !== 'GÉNÉRAL') ? `📝 DM ${x.subject.toUpperCase()}` : '📝 DM'
-                })), 
-                ...(gm || []).map(x => ({
-                    ...x, 
-                    actType: 'game', 
-                    typeLabel: (x.subject && x.subject.toUpperCase() !== 'GÉNÉRAL') ? `🎮 JEU ${x.subject.toUpperCase()}` : '🎮 JEU'
-                })),
+                ...(hw || []).map(x => ({...x, actType: 'homework', typeLabel: '📝 DM'})), 
+                ...(gm || []).map(x => ({...x, actType: 'game', typeLabel: '🎮 JEU'})),
                 ...(sc || []).map(x => ({...x, actType: 'scan', typeLabel: '📸 DC', title: x.title || 'Scan sans titre'})) 
             ]);
             setChapters(cp || []);
             setAllStudents(sts || []);
-            setAllClasses(cls || []);
+            setAllClasses(cls || []); // Stocké
         } catch (e) { console.error("ActivityStudio Load Error", e); }
         setLoading(false);
     };
@@ -3955,12 +3948,16 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
 
     const handleDeleteItem = async (id, type) => {
         if (!confirm(`⚠️ Supprimer cet élément ?`)) return;
-        const url = type === 'game' ? `/api/games/${id}` 
-                  : (type === 'homework' ? `/api/homework/${id}` 
-                  : (type === 'scan' ? `/api/scans/sessions/${id}` 
-                  : `/api/structure/chapters/${id}`));
+        
+        let url;
+        if (type === 'game') url = `/api/games/${id}`;
+        else if (type === 'homework') url = `/api/homework/${id}`;
+        else if (type === 'scan') url = `/api/scans/sessions/${id}`;
+        else url = `/api/structure/chapters/${id}`;
+
         const res = await fetch(url, { method: 'DELETE' });
         if (res.ok) loadData();
+        else alert("Erreur suppression");
     };
 
     if (editingItem) {
@@ -3968,8 +3965,8 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
         const props = {
             initialData: editingItem.data,
             chapters,
-            allClasses,
-            allStudents,
+            allClasses, // Transmis
+            allStudents, // Transmis
             globalClass,
             globalLevel,
             user,
@@ -3987,7 +3984,7 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
                 chapters={chapters} 
                 items={activities} 
                 studentsRef={allStudents}
-                allClasses={allClasses}
+                allClasses={allClasses} // Transmis
                 classFilter={globalClass}
                 levelFilter={globalLevel}
                 user={user}
@@ -5397,105 +5394,446 @@ export default function ProfNav({ activeTab, onTabChange, user }) {
 [[[£ END: client/src/features/prof/components/ProfNav.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/components/ProfStudioFolder.jsx £]]]
-// @signatures: StudioDistributionSidebar
-import React from 'react';
+// @signatures: ProfStudioFolder, executeDelete, fetchSections, handleArchiveChapter, handleCreateChapter, handleCreateSection, handleOpenEditSection, handleRenameChapter, handleSaveSectionEdit, handleUpdateChapterComplete, prepareDelete
+import React, { useState, useEffect } from 'react';
 
-export default function StudioDistributionSidebar({ 
-    user, allClasses, allStudents, chapters, distribution, setDistribution, 
-    viewingClass, setViewingClass, studentSearch, setStudentSearch,
-    targetLevel, targetSection, loading, onSave, saveLabel = "PUBLIER 🚀"
-}) {
+/**
+ * 📁 PROF STUDIO FOLDER - VERSION RESTAURÉE (UI SECTIONS)
+ * Restitution des boutons de survol (Edit/Delete) sur les sections.
+ */
+export default function ProfStudioFolder({ items, chapters, studentsRef, classFilter, levelFilter, user, onEditItem, onCreateActivity, onRefresh, onDeleteItem }) {
+    const [customSections, setCustomSections] = useState([]);
+    const [activeSection, setActiveSection] = useState("GÉNÉRAL"); 
+    const [openChaps, setOpenChaps] = useState({}); 
+    const [showArchived, setShowArchived] = useState(false); 
+    
+    // MODALES DOSSIERS
+    const [showChapterModal, setShowChapterModal] = useState(false);
+    const [newChapterTitle, setNewChapterTitle] = useState("");
+    const [newChapterScope, setNewChapterScope] = useState("LEVEL"); 
+    const [showEditChapterModal, setShowEditChapterModal] = useState(false);
+    const [editingChapter, setEditingChapter] = useState(null); 
 
-    const findBestDefaultChapter = (clsName) => {
-        const safeChapters = Array.isArray(chapters) ? chapters : [];
-        const cleanSection = (targetSection || "GÉNÉRAL").toUpperCase().trim();
-        const clsObj = (allClasses || []).find(c => c.name === clsName);
-        const matches = safeChapters.filter(c => {
-            if (c.isArchived) return false;
-            if ((c.section || "GÉNÉRAL").toUpperCase().trim() !== cleanSection) return false;
-            if (c.classroom === clsName) return true;
-            if (c.sharedLevel && clsObj && String(c.sharedLevel) === String(clsObj.level)) return true;
-            if (!c.classroom && !c.sharedLevel) return !c.hiddenIn || !c.hiddenIn.includes(clsName);
-            return false;
-        }).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
-        return matches.length > 0 ? matches[0]._id : "";
+    // MODALES SECTIONS
+    const [showSectionModal, setShowSectionModal] = useState(false);
+    const [newSectionName, setNewSectionName] = useState("");
+    const [newSectionScope, setNewSectionScope] = useState("GLOBAL"); 
+    const [showEditSectionModal, setShowEditSectionModal] = useState(false);
+    const [editingSection, setEditingSection] = useState(null); 
+
+    const [deleteTarget, setDeleteTarget] = useState(null); 
+
+    const PRESET_COLORS = ["#ef4444", "#f97316", "#f59e0b", "#10b981", "#06b6d4", "#3b82f6", "#6366f1", "#8b5cf6", "#d946ef", "#f43f5e", "#64748b"];
+    const getUserId = () => user?.id || user?._id;
+
+    // SÉCURITÉ DATA
+    const safeItems = Array.isArray(items) ? items : [];
+    const safeChapters = Array.isArray(chapters) ? chapters : [];
+    const safeSections = Array.isArray(customSections) ? customSections : [];
+
+    // --- CHARGEMENT ---
+    async function fetchSections() {
+        const uid = getUserId();
+        if (!uid) return;
+        try {
+            const res = await fetch(`/api/structure/sections/${uid}?classContext=${classFilter || ""}`);
+            if (res.ok) {
+                const data = await res.json();
+                let list = (Array.isArray(data) ? data : []).filter(s => s.name.toUpperCase() !== "GÉNÉRAL");
+                list.unshift({ name: 'GÉNÉRAL', color: '#64748b', scope: 'GLOBAL' });
+                setCustomSections(list);
+            }
+        } catch(e) { console.error("Fetch Sections Error", e); }
+    }
+    useEffect(() => { fetchSections(); }, [user, classFilter, onRefresh]);
+
+    // --- LOGIQUE SECTIONS (CRUD) ---
+    async function handleCreateSection() {
+        if (!newSectionName) return;
+        const res = await fetch('/api/structure/sections', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ teacherId: getUserId(), sectionName: newSectionName.toUpperCase(), scope: newSectionScope, target: newSectionScope === 'CLASS' ? classFilter : levelFilter })
+        });
+        if (res.ok) { setNewSectionName(""); setShowSectionModal(false); fetchSections(); }
+    }
+
+    const handleOpenEditSection = (s) => {
+        setEditingSection({ oldName: s.name, name: s.name, color: s.color, scope: s.scope, target: s.target });
+        setShowEditSectionModal(true);
     };
 
-    const handleToggleStudent = (sId) => { 
-        const next = { ...distribution }; 
-        const cfg = next[viewingClass] || { chapterId: findBestDefaultChapter(viewingClass), studentIds: [] };
-        let currentIds = [...cfg.studentIds];
-        if (currentIds.includes(sId)) currentIds = currentIds.filter(id => id !== sId);
-        else currentIds.push(sId);
-        if (currentIds.length === 0) delete next[viewingClass];
-        else next[viewingClass] = { ...cfg, studentIds: currentIds };
-        setDistribution(next);
+    const handleSaveSectionEdit = async () => {
+        if (!editingSection.name) return;
+        const res = await fetch('/api/structure/sections', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                teacherId: getUserId(), 
+                oldName: editingSection.oldName, 
+                sectionName: editingSection.name.toUpperCase(), 
+                color: editingSection.color,
+                scope: editingSection.scope,
+                target: editingSection.scope === 'CLASS' ? classFilter : (editingSection.scope === 'LEVEL' ? levelFilter : editingSection.target)
+            })
+        });
+        if (res.ok) {
+            if (activeSection === editingSection.oldName) setActiveSection(editingSection.name.toUpperCase());
+            setShowEditSectionModal(false);
+            fetchSections();
+            if (onRefresh) onRefresh(); 
+        }
     };
 
-    const availableClasses = (allClasses || []).filter(c => {
-        if (targetLevel && c.level !== targetLevel) return false;
-        return user.isDeveloper || (user.assignedClasses || []).some(id => String(id) === String(c._id));
-    }).sort((a,b) => a.name.localeCompare(b.name));
+    // --- LOGIQUE DOSSIERS (CRUD) ---
+    async function handleCreateChapter() {
+        if (!newChapterTitle) return;
+        await fetch('/api/structure/chapters', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title: newChapterTitle.toUpperCase(), section: activeSection, teacherId: getUserId(), scope: newChapterScope, target: newChapterScope === 'CLASS' ? classFilter : levelFilter })
+        });
+        setNewChapterTitle(""); setShowChapterModal(false); if (onRefresh) onRefresh();
+    }
 
-    const studentsToDisplay = (allStudents || []).filter(s => 
-        (s.currentClass === viewingClass) && 
-        `${s.firstName} ${s.lastName}`.toLowerCase().includes((studentSearch || "").toLowerCase())
-    ).sort((a,b) => a.lastName.localeCompare(b.lastName));
+    function handleRenameChapter(e, chapId, oldTitle) {
+        e.stopPropagation();
+        const chap = safeChapters.find(c => c._id === chapId);
+        let scope = chap?.classroom ? "CLASS" : (chap?.sharedLevel ? "LEVEL" : "GLOBAL");
+        setEditingChapter({ id: chapId, title: oldTitle, scope });
+        setShowEditChapterModal(true);
+    }
+
+    async function handleUpdateChapterComplete() {
+        if (!editingChapter || !editingChapter.title) return;
+        const target = editingChapter.scope === 'CLASS' ? classFilter : (editingChapter.scope === 'LEVEL' ? levelFilter : "");
+        const res = await fetch(`/api/structure/chapters/${editingChapter.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title: editingChapter.title.toUpperCase().trim(), scope: editingChapter.scope, target: target })
+        });
+        if (res.ok) { setShowEditChapterModal(false); setEditingChapter(null); if (onRefresh) onRefresh(); }
+    }
+
+    async function handleArchiveChapter(e, chapId, shouldArchive) {
+        e.stopPropagation();
+        const res = await fetch(`/api/structure/chapters/${chapId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ isArchived: shouldArchive })
+        });
+        if (res.ok && onRefresh) onRefresh();
+    }
+
+    // --- SUPPRESSION UNIFIÉE ---
+    function prepareDelete(e, item, type) {
+        e.stopPropagation();
+        const name = type === 'section' ? item.name : item.title;
+        
+        // Protection Racine
+        if (type === 'chapter' && activeSection.toUpperCase() === "GÉNÉRAL" && name.trim().toUpperCase() === "GÉNÉRAL") {
+            alert("🔒 PROTECTION : Racine indestructible.");
+            return;
+        }
+
+        const id = item._id || item.id;
+        
+        // Calcul si partagé
+        let isShared = false;
+        if (type === 'section') isShared = item.scope !== 'CLASS';
+        else if (type === 'chapter') isShared = !!item.sharedLevel;
+        else if (type === 'homework' || type === 'game' || type === 'scan') {
+            // Pour les activités simples, on utilise le callback parent direct
+            if (onDeleteItem) onDeleteItem(id, type);
+            return;
+        }
+
+        setDeleteTarget({ id, type, name, isShared });
+    }
+
+    async function executeDelete(id, type, permanent) {
+        const uid = getUserId();
+        const url = (type === 'section') ? '/api/structure/sections/delete-request' : '/api/structure/chapters/delete-request';
+        
+        const body = { 
+            teacherId: uid, 
+            classId: classFilter, 
+            permanent, 
+            id, 
+            type, 
+            chapterId: id, 
+            sectionName: deleteTarget?.name || id 
+        };
+
+        const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+
+        if (res.ok) { 
+            setDeleteTarget(null); 
+            if (type === 'section') setActiveSection("GÉNÉRAL"); 
+            if (onRefresh) onRefresh(); 
+        } else {
+            alert("Erreur lors de la suppression.");
+        }
+    }
+
+    const activeColor = safeSections.find(s => s.name.toUpperCase() === activeSection.toUpperCase())?.color || '#64748b';
+
+    const filteredChapters = safeChapters.filter(c => {
+        if (c.section.toUpperCase() !== activeSection.toUpperCase() || c.isArchived !== showArchived) return false;
+        if (c.hiddenIn && c.hiddenIn.includes(classFilter)) return false;
+        // Toujours afficher la racine si on est dans GÉNÉRAL
+        if (activeSection.toUpperCase() === "GÉNÉRAL" && c.title.toUpperCase() === "GÉNÉRAL") return true;
+        
+        const isForMyClass = c.classroom && c.classroom.toUpperCase() === (classFilter || "").toUpperCase();
+        const isForMyLevel = c.sharedLevel && String(c.sharedLevel) === String(levelFilter);
+        const isGlobal = !c.classroom && !c.sharedLevel;
+        return isForMyClass || isForMyLevel || isGlobal;
+    });
+
+    const uniqueItems = Array.from(new Map(safeItems.map(item => [item._id, item])).values());
 
     return (
-        <div className="v84-dist-sidebar custom-scrollbar">
-            <div className="mb-4 flex flex-wrap gap-2">
-                {availableClasses.map(c => (
-                    <button key={c._id} onClick={() => setViewingClass(c.name)} className={`v84-tab-btn ${distribution[c.name] ? 'active' : 'inactive'} ${viewingClass === c.name ? 'border-2 border-purple-700' : ''}`}>
-                        {c.name}
-                    </button>
-                ))}
+        <div className="animate-in fade-in">
+            {/* --- BARRE DES SECTIONS (AVEC BOUTONS ÉDITION RESTAURÉS) --- */}
+            <div className="p-6 rounded-b-[40px] bg-slate-900 shadow-xl overflow-visible">
+                <div className="flex justify-between items-center mb-2 px-4">
+                    <h3 className="text-white font-black text-[10px] uppercase tracking-widest opacity-40">Sections Cloud</h3>
+                    <div className="flex gap-2">
+                        <button onClick={() => setShowArchived(!showArchived)} className={`px-4 py-2 rounded-xl font-black text-[10px] transition-all ${showArchived ? 'bg-orange-500 text-white' : 'bg-slate-800 text-slate-400'}`}>{showArchived ? '📂 Actifs' : '📦 Archives'}</button>
+                        <button onClick={() => setShowSectionModal(true)} className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-black text-[10px] shadow-lg">+ Section</button>
+                    </div>
+                </div>
+                
+                <div className="flex gap-3 overflow-x-auto no-scrollbar pb-6 pt-8 px-4 overflow-y-visible">
+                    {safeSections.map((s, idx) => {
+                        const isGeneral = s.name.toUpperCase() === "GÉNÉRAL";
+                        const isActive = activeSection.toUpperCase() === s.name.toUpperCase();
+                        
+                        return (
+                            <div key={idx} className="relative group shrink-0">
+                                <button 
+                                    onClick={() => { setActiveSection(s.name); setShowArchived(false); }} 
+                                    className={`min-w-[140px] p-4 rounded-2xl border-2 transition-all flex flex-col items-center justify-center ${isActive ? 'bg-slate-800 border-white/20 scale-105 shadow-lg' : 'bg-slate-800/40 border-transparent opacity-40 hover:opacity-100'}`}
+                                >
+                                    <span className="font-black text-[11px] uppercase truncate w-full px-2" style={{ color: s.color }}>{s.name}</span>
+                                    <div className="text-[7px] font-black text-white/30 mt-1 uppercase tracking-widest">{s.scope === 'GLOBAL' ? 'GLOBAL' : s.scope}</div>
+                                </button>
+
+                                {/* 🔥 BOUTONS D'ÉDITION DE SECTION RESTAURÉS 🔥 */}
+                                {!isGeneral && (
+                                    <div className="absolute -top-3 -right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-20">
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); handleOpenEditSection(s); }}
+                                            className="w-7 h-7 bg-white text-slate-600 shadow-xl rounded-full flex items-center justify-center text-[12px] border border-slate-200 hover:scale-110 transition-transform cursor-pointer"
+                                            title="Modifier"
+                                        >
+                                            ✏️
+                                        </button>
+                                        <button 
+                                            onClick={(e) => prepareDelete(e, s, 'section')}
+                                            className="w-7 h-7 bg-red-500 text-white shadow-xl rounded-full flex items-center justify-center text-[10px] font-black hover:scale-110 transition-transform cursor-pointer"
+                                            title="Supprimer"
+                                        >
+                                            ✕
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
             </div>
 
-            {viewingClass && (
-                <div className="v84-class-card animate-in slide-in-from-right">
-                    <div className="v84-class-header" onClick={() => {
-                        const next = { ...distribution };
-                        if (next[viewingClass]) delete next[viewingClass];
-                        else next[viewingClass] = { chapterId: findBestDefaultChapter(viewingClass), studentIds: [] };
-                        setDistribution(next);
-                    }}>
-                        <span className="v84-class-title">{viewingClass}</span>
-                        <div className={`v84-check-badge ${distribution[viewingClass] ? 'checked' : ''}`}>{distribution[viewingClass] && '✓'}</div>
-                    </div>
+            {/* --- CONTENU DOSSIERS --- */}
+            <div className="px-6 mt-10">
+                <div className="flex justify-between items-end mb-8">
+                    <h2 className="text-5xl font-black uppercase tracking-tighter" style={{ color: activeColor }}>{activeSection}</h2>
+                    {!showArchived && (
+                        <div className="flex gap-2">
+                            <button onClick={() => onCreateActivity('homework', activeSection)} className="px-5 py-3 rounded-xl bg-orange-500 text-white text-[11px] font-black uppercase shadow-lg">+ Devoir</button>
+                            <button onClick={() => onCreateActivity('game', activeSection)} className="px-5 py-3 rounded-xl bg-purple-600 text-white text-[11px] font-black uppercase shadow-lg">+ Jeu</button>
+                            <button onClick={() => setShowChapterModal(true)} className="px-5 py-3 rounded-xl bg-slate-900 text-white text-[11px] font-black uppercase shadow-lg">+ Dossier</button>
+                        </div>
+                    )}
+                </div>
 
-                    <div className="v84-folder-select-box">
-                        <label className="v84-folder-label">Dossier :</label>
-                        <select className="v84-folder-select" value={distribution[viewingClass]?.chapterId || ""} onChange={e => {
-                            const next = { ...distribution };
-                            if (next[viewingClass]) { next[viewingClass].chapterId = e.target.value; setDistribution(next); }
-                        }}>
-                            {chapters.filter(c => c.section.toUpperCase() === (targetSection || "GÉNÉRAL").toUpperCase()).map(c => <option key={c._id} value={c._id}>{c.title}</option>)}
-                        </select>
-                    </div>
+                <div className="grid grid-cols-1 gap-4 pb-20">
+                    {filteredChapters.sort((a,b) => a.title.localeCompare(b.title)).map(chap => {
+                        const chapItems = uniqueItems.filter(it => String(it.chapterId) === String(chap._id) && (!it.targetClassrooms || it.targetClassrooms.includes(classFilter) || !classFilter));
+                        const isOpen = openChaps[chap._id];
+                        const isRoot = activeSection.toUpperCase() === "GÉNÉRAL" && chap.title.toUpperCase() === "GÉNÉRAL";
+                        const isLastSurvivor = activeSection.toUpperCase() === "GÉNÉRAL" && filteredChapters.length <= 1;
 
-                    <div className="v84-search-box">
-                        <span>🔎</span>
-                        <input className="v84-search-input" placeholder="Chercher un élève..." value={studentSearch} onChange={e => setStudentSearch(e.target.value)} />
-                    </div>
-
-                    <div className="v84-students-list custom-scrollbar">
-                        {studentsToDisplay.map(s => { 
-                            const isSelected = distribution[viewingClass]?.studentIds?.includes(String(s._id)); 
-                            return (
-                                <div key={s._id} onClick={() => handleToggleStudent(String(s._id))} className={`v84-student-item ${isSelected ? 'selected' : ''}`}>
-                                    <div className="v84-student-checkbox">{isSelected && '✓'}</div>
-                                    <span className="v84-student-name">{s.lastName} {s.firstName}</span>
+                        return (
+                            <div key={chap._id} className="bg-white border-2 rounded-[30px] overflow-hidden shadow-sm border-slate-100">
+                                <div className="p-5 flex justify-between items-center cursor-pointer hover:bg-slate-50" onClick={() => setOpenChaps({...openChaps, [chap._id]: !isOpen})}>
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-xl shadow-inner" style={{ backgroundColor: activeColor }}>{isOpen ? '📂' : '📁'}</div>
+                                        <div>
+                                            <div className="flex items-center gap-2">
+                                                <h3 className="font-black text-slate-800 text-md uppercase">{chap.title}</h3>
+                                                {chap.sharedLevel ? (
+                                                    <span className="bg-purple-100 text-purple-600 text-[7px] font-black px-2 py-0.5 rounded uppercase tracking-widest border border-purple-200">🎓 NIVEAU</span>
+                                                ) : (!chap.classroom && !chap.sharedLevel && !isRoot) ? (
+                                                    <span className="bg-emerald-50 text-emerald-500 text-[7px] font-black px-2 py-0.5 rounded uppercase tracking-widest border border-emerald-100">🌍 GLOBAL</span>
+                                                ) : !isRoot ? (
+                                                    <span className="bg-indigo-50 text-indigo-400 text-[7px] font-black px-2 py-0.5 rounded uppercase tracking-widest border border-indigo-100">🏫 CLASSE</span>
+                                                ) : null}
+                                            </div>
+                                            <span className="text-[8px] font-black text-slate-400 uppercase">{chapItems.length} ÉLÉMENTS</span>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-1">
+                                        <button onClick={(e) => handleRenameChapter(e, chap._id, chap.title)} title="Modifier" className="p-2 text-slate-300 hover:text-indigo-500 transition-colors">✏️</button>
+                                        <button onClick={(e) => handleArchiveChapter(e, chap._id, !showArchived)} title={showArchived ? "Désarchiver" : "Archiver"} className="p-2 text-slate-300 hover:text-orange-500 transition-colors text-xl">{showArchived ? '♻️' : '📦'}</button>
+                                        {!isLastSurvivor && <button onClick={(e) => prepareDelete(e, chap, 'chapter')} className="p-2 text-red-200 hover:text-red-500 transition-colors text-xl font-bold">✕</button>}
+                                    </div>
                                 </div>
-                            ); 
-                        })}
+                                
+                                {isOpen && (
+                                    <div className="bg-slate-50/50 border-t p-4 space-y-2">
+                                        {chapItems.map(it => (
+                                            <div key={it._id} className="bg-white p-3 rounded-2xl flex justify-between items-center shadow-sm border border-slate-100">
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-xl">{it.actType === 'game' ? '🎮' : (it.actType === 'scan' ? '📸' : '📝')}</span>
+                                                    <span className="font-black text-slate-700 text-xs uppercase">{it.title}</span>
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    {/* BOUTON DÉPLACEMENT (Pas encore implémenté côté serveur pour activité, placeholder) */}
+                                                    <button onClick={() => onEditItem(it, activeSection)} className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-[8px] font-black uppercase">ÉDITER</button>
+                                                    <button onClick={(e) => prepareDelete(e, it, it.actType)} className="px-2 py-1.5 rounded-lg bg-red-50 text-red-500 text-[10px]">✕</button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {chapItems.length === 0 && <div className="text-center p-8 text-[10px] font-bold text-slate-300 uppercase italic tracking-widest">Dossier Vide</div>}
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+
+            {/* --- MODALE SUPPRESSION RESTAURÉE --- */}
+            {deleteTarget && (
+                <div className="fixed inset-0 z-[40000] flex items-center justify-center bg-slate-900/95 backdrop-blur-md">
+                    <div className="bg-white p-10 rounded-[50px] w-full max-w-lg shadow-2xl animate-in zoom-in text-center">
+                        <div className="w-20 h-20 bg-red-100 text-red-500 rounded-full flex items-center justify-center text-4xl mx-auto mb-6">🗑️</div>
+                        <h3 className="text-2xl font-black mb-2 uppercase text-slate-800">Action sur "{deleteTarget.name}"</h3>
+                        
+                        {deleteTarget.isShared ? (
+                            <>
+                                <p className="text-sm text-slate-400 mb-8 px-6">Cet élément est partagé. Voulez-vous le supprimer partout ou simplement le masquer ici ?</p>
+                                <div className="flex flex-col gap-3">
+                                    <button onClick={() => executeDelete(deleteTarget.id, deleteTarget.type, false)} className="w-full p-5 rounded-2xl font-black text-xs bg-slate-900 text-white uppercase shadow-lg hover:scale-105 transition-transform">🙈 Masquer ici (conserver ailleurs)</button>
+                                    <button onClick={() => executeDelete(deleteTarget.id, deleteTarget.type, true)} className="w-full p-5 rounded-2xl font-black text-xs bg-red-600 text-white uppercase shadow-lg hover:scale-105 transition-transform">🔥 Supprimer partout</button>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <p className="text-sm text-slate-400 mb-8 px-6">Voulez-vous supprimer définitivement cet élément propre à la classe ?</p>
+                                <div className="flex flex-col gap-3">
+                                    <button onClick={() => executeDelete(deleteTarget.id, deleteTarget.type, true)} className="w-full p-5 rounded-2xl font-black text-xs bg-red-600 text-white uppercase shadow-lg hover:scale-105 transition-transform">🔥 Supprimer définitivement</button>
+                                </div>
+                            </>
+                        )}
+                        <button onClick={() => setDeleteTarget(null)} className="w-full p-4 rounded-2xl font-black text-xs bg-slate-100 text-slate-400 uppercase mt-4">Annuler</button>
                     </div>
                 </div>
             )}
-            
-            <button className="v84-publish-btn" onClick={onSave} disabled={loading || Object.keys(distribution).length === 0}>
-                {loading ? 'PUBLICATION...' : saveLabel}
-            </button>
+
+            {/* --- MODALE ÉDITION SECTION RESTAURÉE --- */}
+            {showEditSectionModal && editingSection && (
+                <div className="fixed inset-0 z-[40000] flex items-center justify-center bg-slate-900/90 backdrop-blur-sm">
+                    <div className="bg-white p-10 rounded-[50px] w-full max-w-lg shadow-2xl animate-in zoom-in">
+                        <h3 className="text-2xl font-black mb-2 uppercase text-slate-800">Édition Section</h3>
+                        <div className="mb-6">
+                            <label className="text-[10px] font-black text-slate-400 uppercase ml-2 block mb-1">Nom de la section</label>
+                            <input className="w-full p-5 rounded-2xl bg-slate-100 border-none font-bold outline-none focus:ring-4 ring-indigo-500/20" value={editingSection.name} onChange={e => setEditingSection({...editingSection, name: e.target.value})} />
+                        </div>
+                        <div className="mb-6">
+                            <label className="text-[10px] font-black text-slate-400 uppercase ml-2 block mb-3">Thème Couleur</label>
+                            <div className="grid grid-cols-6 gap-2 px-2">
+                                {PRESET_COLORS.map(c => (
+                                    <button key={c} onClick={() => setEditingSection({...editingSection, color: c})} className={`w-10 h-10 rounded-xl border-4 transition-all ${editingSection.color === c ? 'border-slate-900 scale-110 shadow-lg' : 'border-transparent opacity-60 hover:opacity-100'}`} style={{ backgroundColor: c }} />
+                                ))}
+                            </div>
+                        </div>
+                        <div className="mb-8">
+                            <label className="text-[10px] font-black text-slate-400 uppercase ml-2 block mb-3">Statut / Portée</label>
+                            <div className="grid grid-cols-3 gap-3">
+                                {['GLOBAL', 'LEVEL', 'CLASS'].map(s => (
+                                    <button key={s} onClick={() => setEditingSection({...editingSection, scope: s})} className={`p-4 rounded-2xl font-black text-[9px] border-2 transition-all ${editingSection.scope === s ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg' : 'bg-slate-50 text-slate-400'}`}>
+                                        {s === 'GLOBAL' ? '🌍 GÉNÉRAL' : s === 'LEVEL' ? '🎓 NIVEAU' : '🏫 CETTE CLASSE'}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="flex gap-4">
+                            <button onClick={() => setShowEditSectionModal(false)} className="flex-1 p-5 rounded-2xl font-black text-xs bg-slate-100 text-slate-400 uppercase">Annuler</button>
+                            <button onClick={handleSaveSectionEdit} className="flex-1 p-5 rounded-2xl font-black text-xs bg-indigo-600 text-white uppercase shadow-xl">Sauvegarder ✨</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* --- MODALE CRÉATION SECTION --- */}
+            {showSectionModal && (
+                <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-900/90 backdrop-blur-sm">
+                    <div className="bg-white p-10 rounded-[50px] w-full max-w-lg shadow-2xl animate-in zoom-in">
+                        <h3 className="text-2xl font-black mb-6 uppercase text-slate-800">Nouvelle Section</h3>
+                        <input className="w-full p-5 rounded-2xl bg-slate-100 border-none font-bold mb-6 outline-none focus:ring-4 ring-indigo-500/20" placeholder="Nom de la matière" value={newSectionName} onChange={e => setNewSectionName(e.target.value)} />
+                        <div className="grid grid-cols-3 gap-3 mb-8">
+                            <button onClick={() => setNewSectionScope("GLOBAL")} className={`p-4 rounded-2xl font-black text-[10px] border-2 transition-all ${newSectionScope === "GLOBAL" ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg' : 'bg-slate-50 text-slate-400'}`}>🌍 GLOBAL</button>
+                            <button onClick={() => setNewSectionScope("LEVEL")} className={`p-4 rounded-2xl font-black text-[10px] border-2 transition-all ${newSectionScope === "LEVEL" ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg' : 'bg-slate-50 text-slate-400'}`}>🎓 NIVEAU</button>
+                            <button onClick={() => setNewSectionScope("CLASS")} className={`p-4 rounded-2xl font-black text-[10px] border-2 transition-all ${newSectionScope === "CLASS" ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg' : 'bg-slate-50 text-slate-400'}`}>🏫 CLASSE</button>
+                        </div>
+                        <div className="flex gap-4"><button onClick={() => setShowSectionModal(false)} className="flex-1 p-5 rounded-2xl font-black text-xs bg-slate-100 text-slate-400 uppercase">Annuler</button><button onClick={handleCreateSection} className="flex-1 p-5 rounded-2xl font-black text-xs bg-indigo-600 text-white uppercase shadow-xl">Valider ✨</button></div>
+                    </div>
+                </div>
+            )}
+
+            {/* --- MODALE CRÉATION DOSSIER --- */}
+            {showChapterModal && (
+                <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-900/90 backdrop-blur-sm">
+                    <div className="bg-white p-10 rounded-[50px] w-full max-w-md shadow-2xl animate-in zoom-in">
+                        <h3 className="text-2xl font-black mb-2 uppercase text-slate-800">Nouveau Dossier</h3>
+                        <input className="w-full p-5 rounded-2xl bg-slate-100 border-none font-bold mb-6 outline-none focus:ring-4 ring-slate-900/10" placeholder="Titre (ex: CH1, CH2...)" value={newChapterTitle} onChange={e => setNewChapterTitle(e.target.value)} autoFocus />
+                        <div className="grid grid-cols-2 gap-3 mb-8">
+                            <button onClick={() => setNewChapterScope("LEVEL")} className={`p-4 rounded-2xl font-black text-[10px] border-2 transition-all ${newChapterScope === "LEVEL" ? 'bg-slate-900 text-white' : 'bg-slate-50 text-slate-400'}`}>🎓 TOUTES LES {levelFilter || '?'}</button>
+                            <button onClick={() => setNewChapterScope("CLASS")} className={`p-4 rounded-2xl font-black text-[10px] border-2 transition-all ${newChapterScope === "CLASS" ? 'bg-slate-900 text-white' : 'bg-slate-50 text-slate-400'}`}>🏫 UNIQUEMENT {classFilter}</button>
+                        </div>
+                        <div className="flex gap-4">
+                            <button onClick={() => setShowChapterModal(false)} className="flex-1 p-5 rounded-2xl font-black text-xs bg-slate-100 text-slate-400 uppercase">Annuler</button>
+                            <button onClick={handleCreateChapter} className="flex-1 p-5 rounded-2xl font-black text-xs bg-slate-900 text-white uppercase shadow-xl">Créer</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+             {/* --- MODALE ÉDITION DOSSIER --- */}
+             {showEditChapterModal && editingChapter && (
+                <div className="fixed inset-0 z-[40000] flex items-center justify-center bg-slate-900/90 backdrop-blur-sm">
+                    <div className="bg-white p-10 rounded-[50px] w-full max-w-md shadow-2xl animate-in zoom-in">
+                        <h3 className="text-2xl font-black mb-2 uppercase text-slate-800">Édition Dossier</h3>
+                        <div className="mb-6">
+                            <label className="text-[10px] font-black text-slate-400 uppercase ml-2 block mb-1">Titre</label>
+                            <input className="w-full p-5 rounded-2xl bg-slate-100 border-none font-bold outline-none focus:ring-4 ring-indigo-500/20" value={editingChapter.title} onChange={e => setEditingChapter({...editingChapter, title: e.target.value})} />
+                        </div>
+                        <div className="mb-8">
+                            <label className="text-[10px] font-black text-slate-400 uppercase ml-2 block mb-3">Portée</label>
+                            <div className="grid grid-cols-2 gap-3">
+                                <button onClick={() => setEditingChapter({...editingChapter, scope: "LEVEL"})} className={`p-4 rounded-2xl font-black text-[10px] border-2 transition-all ${editingChapter.scope === "LEVEL" ? 'bg-slate-900 text-white' : 'bg-slate-50 text-slate-400'}`}>🎓 NIVEAU</button>
+                                <button onClick={() => setEditingChapter({...editingChapter, scope: "CLASS"})} className={`p-4 rounded-2xl font-black text-[10px] border-2 transition-all ${editingChapter.scope === "CLASS" ? 'bg-slate-900 text-white' : 'bg-slate-50 text-slate-400'}`}>🏫 CLASSE</button>
+                            </div>
+                        </div>
+                        <div className="flex gap-4">
+                            <button onClick={() => setShowEditChapterModal(false)} className="flex-1 p-5 rounded-2xl font-black text-xs bg-slate-100 text-slate-400 uppercase">Annuler</button>
+                            <button onClick={handleUpdateChapterComplete} className="flex-1 p-5 rounded-2xl font-black text-xs bg-indigo-600 text-white uppercase shadow-xl">Sauvegarder ✨</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
@@ -5606,9 +5944,253 @@ export default function ProjectTreeViewer({ onClose }) {
 
 [[[£ END: client/src/features/prof/components/ProjectTreeViewer.jsx £]]]
 
+[[[£ FILE: client/src/features/prof/components/StudioDistributionSidebar.css £]]]
+/* 📦 SIDEBAR DE DISTRIBUTION (STYLE AUTONOME) */
+.v84-dist-sidebar {
+    width: 360px;
+    background: white;
+    border-left: 2px solid #f1f5f9;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    overflow: hidden; /* Pour gérer le scroll interne */
+}
+
+/* 1. ONGLETS CLASSES */
+.v84-classes-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-bottom: 20px;
+    flex-shrink: 0;
+}
+
+.v84-tab-btn {
+    padding: 8px 12px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 950;
+    border: 1px solid transparent;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: all 0.2s;
+    background: #f1f5f9;
+    color: #94a3b8;
+}
+
+.v84-tab-btn:hover {
+    background: #e2e8f0;
+    color: #64748b;
+}
+
+.v84-tab-btn.active {
+    background: #9333ea;
+    color: white;
+    box-shadow: 0 4px 10px rgba(147, 51, 234, 0.3);
+}
+
+.v84-tab-btn.inactive {
+    opacity: 0.7;
+}
+
+/* 2. CARTE CLASSE ACTIVE */
+.v84-class-card {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 20px;
+    padding: 15px;
+    overflow: hidden; /* Contient la liste scrollable */
+    min-height: 0; /* Crucial pour le flex child scroll */
+}
+
+.v84-class-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    cursor: pointer;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.v84-class-title {
+    font-weight: 950;
+    font-size: 1rem;
+    color: #1e293b;
+    text-transform: uppercase;
+}
+
+.v84-check-badge {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid #cbd5e1;
+    color: transparent;
+    font-size: 12px;
+    transition: all 0.2s;
+}
+
+.v84-check-badge.checked {
+    background: #9333ea;
+    border-color: #9333ea;
+    color: white;
+    font-weight: 900;
+}
+
+/* SÉLECTEUR DOSSIER */
+.v84-folder-select-box {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 10px;
+    margin-bottom: 10px;
+    flex-shrink: 0;
+}
+
+.v84-folder-label {
+    font-size: 9px;
+    font-weight: 900;
+    color: #94a3b8;
+    text-transform: uppercase;
+    display: block;
+    margin-bottom: 5px;
+}
+
+.v84-folder-select {
+    width: 100%;
+    font-size: 11px;
+    font-weight: 700;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: #1e293b;
+    cursor: pointer;
+}
+
+/* RECHERCHE ÉLÈVE */
+.v84-search-box {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 8px 12px;
+    margin-bottom: 10px;
+    flex-shrink: 0;
+}
+
+.v84-search-input {
+    border: none;
+    outline: none;
+    font-size: 10px;
+    font-weight: 600;
+    width: 100%;
+    color: #475569;
+}
+
+/* LISTE ÉLÈVES */
+.v84-students-list {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-right: 5px; /* Espace scrollbar */
+}
+
+.v84-student-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.1s;
+}
+
+.v84-student-item:hover {
+    background: #e2e8f0;
+}
+
+.v84-student-item.selected {
+    background: #f3e8ff;
+}
+
+.v84-student-checkbox {
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    border: 2px solid #cbd5e1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 10px;
+    color: transparent;
+}
+
+.v84-student-item.selected .v84-student-checkbox {
+    background: #9333ea;
+    border-color: #9333ea;
+    color: white;
+}
+
+.v84-student-name {
+    font-size: 10px;
+    font-weight: 700;
+    color: #475569;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.v84-student-item.selected .v84-student-name {
+    color: #6b21a8;
+}
+
+/* BOUTON PUBLIER */
+.v84-publish-btn {
+    width: 100%;
+    padding: 15px;
+    margin-top: 15px;
+    background: #10b981; /* Vert pour publier */
+    color: white;
+    font-weight: 950;
+    font-size: 11px;
+    border: none;
+    border-radius: 15px;
+    cursor: pointer;
+    text-transform: uppercase;
+    box-shadow: 0 10px 20px rgba(16, 185, 129, 0.3);
+    transition: transform 0.1s;
+    flex-shrink: 0;
+}
+
+.v84-publish-btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    background: #059669;
+}
+
+.v84-publish-btn:disabled {
+    background: #cbd5e1;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+[[[£ END: client/src/features/prof/components/StudioDistributionSidebar.css £]]]
+
 [[[£ FILE: client/src/features/prof/components/StudioDistributionSidebar.jsx £]]]
-// @signatures: StudioDistributionSidebar
-import React from 'react';
+// @signatures: StudioDistributionSidebar, findBestDefaultChapter, handleToggleStudent, toggleAllStudents
+import React, { useEffect } from 'react';
+import './StudioDistributionSidebar.css';
 
 export default function StudioDistributionSidebar({ 
     user, allClasses, allStudents, chapters, distribution, setDistribution, 
@@ -5616,89 +6198,212 @@ export default function StudioDistributionSidebar({
     targetLevel, targetSection, loading, onSave, saveLabel = "PUBLIER 🚀"
 }) {
 
-    const findBestDefaultChapter = (clsName) => {
-        const safeChapters = Array.isArray(chapters) ? chapters : [];
+    // 1. FILTRAGE STRICT DES CLASSES (NIVEAU & PROF)
+    const availableClasses = (allClasses || []).filter(c => {
+        // A. Filtre Niveau (Le plus important)
+        // Si un targetLevel est fourni (ex: "4"), on cache tout ce qui n'est pas "4"
+        if (targetLevel && String(c.level) !== String(targetLevel)) return false;
+        
+        // B. Filtre Permissions
+        if (user.isDeveloper || user.role === 'admin') return true;
+        
+        // C. Filtre Prof (Mes classes uniquement)
+        const myIds = (user.assignedClasses || []).map(id => String(id._id || id));
+        return myIds.includes(String(c._id));
+    }).sort((a,b) => a.name.localeCompare(b.name));
+
+    // Auto-select première classe si rien n'est sélectionné
+    useEffect(() => {
+        // Si la classe active n'est pas dans la liste filtrée, on reset sur la première dispo
+        const currentIsAvailable = availableClasses.some(c => c.name === viewingClass);
+        if ((!viewingClass || !currentIsAvailable) && availableClasses.length > 0) {
+            setViewingClass(availableClasses[0].name);
+        }
+    }, [availableClasses, viewingClass]);
+
+    // 2. FILTRAGE STRICT DES DOSSIERS
+    const availableChapters = (chapters || []).filter(c => {
+        // A. Filtre Section (Matière)
         const cleanSection = (targetSection || "GÉNÉRAL").toUpperCase().trim();
-        const clsObj = (allClasses || []).find(c => c.name === clsName);
-        const matches = safeChapters.filter(c => {
-            if (c.isArchived) return false;
-            if ((c.section || "GÉNÉRAL").toUpperCase().trim() !== cleanSection) return false;
-            if (c.classroom === clsName) return true;
-            if (c.sharedLevel && clsObj && String(c.sharedLevel) === String(clsObj.level)) return true;
-            if (!c.classroom && !c.sharedLevel) return !c.hiddenIn || !c.hiddenIn.includes(clsName);
-            return false;
-        }).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
-        return matches.length > 0 ? matches[0]._id : "";
+        const chapSection = (c.section || "GÉNÉRAL").toUpperCase().trim();
+        if (chapSection !== cleanSection) return false;
+
+        if (c.isArchived) return false;
+
+        // B. Filtre Contextuel (Basé sur la classe qu'on regarde)
+        if (viewingClass) {
+             const currentClassObj = allClasses.find(cl => cl.name === viewingClass);
+             const currentLevel = currentClassObj ? String(currentClassObj.level) : null;
+
+             // Si le dossier est spécifique à une AUTRE classe -> CACHÉ
+             if (c.classroom && c.classroom !== viewingClass) return false;
+
+             // Si le dossier est spécifique à un AUTRE niveau -> CACHÉ
+             if (c.sharedLevel && String(c.sharedLevel) !== String(currentLevel)) return false;
+
+             // Si le dossier a été masqué manuellement -> CACHÉ
+             if (c.hiddenIn && c.hiddenIn.includes(viewingClass)) return false;
+        }
+
+        return true;
+    }).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    // Helper pour trouver le dossier par défaut
+    const findBestDefaultChapter = () => {
+        return availableChapters.length > 0 ? availableChapters[0]._id : "";
     };
 
+    // 3. LOGIQUE ÉLÈVES
+    const rawStudents = (allStudents || []).filter(s => {
+        if (!viewingClass) return false;
+        if ((s.currentClass || "").trim() === viewingClass) return true;
+        const clsObj = allClasses.find(c => c.name === viewingClass);
+        if (clsObj && clsObj.type === 'GROUP') {
+            const clsId = String(clsObj._id);
+            return (s.assignedGroups || []).some(g => String(g._id || g) === clsId);
+        }
+        return false;
+    }).sort((a,b) => a.lastName.localeCompare(b.lastName));
+
+    const studentsToDisplay = rawStudents.filter(s => 
+        `${s.firstName} ${s.lastName}`.toLowerCase().includes((studentSearch || "").toLowerCase())
+    );
+
+    // --- CORRECTION LOGIQUE DE SÉLECTION ---
     const handleToggleStudent = (sId) => { 
         const next = { ...distribution }; 
-        const cfg = next[viewingClass] || { chapterId: findBestDefaultChapter(viewingClass), studentIds: [] };
-        let currentIds = [...cfg.studentIds];
-        if (currentIds.includes(sId)) currentIds = currentIds.filter(id => id !== sId);
-        else currentIds.push(sId);
-        if (currentIds.length === 0) delete next[viewingClass];
-        else next[viewingClass] = { ...cfg, studentIds: currentIds };
+        const defaultChapter = findBestDefaultChapter();
+        
+        // On récupère ou initialise la config de cette classe
+        const cfg = next[viewingClass] || { chapterId: defaultChapter, studentIds: [] };
+        let currentIds = cfg.studentIds || [];
+        
+        // --- LOGIQUE CORRIGÉE ---
+        // Liste vide = "Toute la classe" (Mode par défaut)
+        // Liste remplie = "Seulement ces élèves" (Mode Subset)
+
+        if (currentIds.length === 0) {
+            // Si on est en mode "Tout le monde" et qu'on clique sur un élève :
+            // L'utilisateur veut sélectionner UNIQUEMENT cet élève.
+            currentIds = [sId];
+        } else {
+            // Mode normal : on ajoute ou on enlève
+            if (currentIds.includes(sId)) {
+                currentIds = currentIds.filter(id => id !== sId);
+            } else {
+                currentIds.push(sId);
+            }
+        }
+
+        // Si on a désélectionné le dernier élève, on revient au mode "Tout le monde" ?
+        // NON. Vide = Tout le monde. Donc si on vide la liste manuellement, ça re-coche tout le monde visuellement.
+        // C'est contre-intuitif.
+        // CORRECTION UX : Si la liste devient vide (0 élève sélectionné), on la laisse vide, mais le système backend doit comprendre "Personne".
+        // ATTENTION : La convention actuelle est Vide = Tout le monde.
+        // Si l'utilisateur veut sélectionner "Personne", il ne publie pas pour cette classe.
+        
+        // Donc, si on décoche le dernier, on revient techniquement à "Tout le monde".
+        // Pour éviter ça, si la liste devient vide, on supprime carrément l'entrée de la classe (Désactivée).
+        if (currentIds.length === 0) {
+            delete next[viewingClass];
+        } else {
+             next[viewingClass] = {
+                chapterId: cfg.chapterId || defaultChapter,
+                studentIds: currentIds
+            };
+        }
+       
         setDistribution(next);
     };
 
-    const availableClasses = (allClasses || []).filter(c => {
-        if (targetLevel && c.level !== targetLevel) return false;
-        return user.isDeveloper || (user.assignedClasses || []).some(id => String(id) === String(c._id));
-    }).sort((a,b) => a.name.localeCompare(b.name));
+    const toggleAllStudents = () => {
+        const next = { ...distribution };
+        if (next[viewingClass]) delete next[viewingClass];
+        else {
+             const defaultChapter = findBestDefaultChapter();
+             next[viewingClass] = { chapterId: defaultChapter, studentIds: [] }; // Vide = Tout le monde
+        }
+        setDistribution(next);
+    };
 
-    const studentsToDisplay = (allStudents || []).filter(s => 
-        (s.currentClass === viewingClass) && 
-        `${s.firstName} ${s.lastName}`.toLowerCase().includes((studentSearch || "").toLowerCase())
-    ).sort((a,b) => a.lastName.localeCompare(b.lastName));
+    const isClassSelected = !!distribution[viewingClass];
+    const cfg = distribution[viewingClass];
+    
+    // Visuel : Est-ce que la case est cochée ?
+    const isStudentSelected = (sId) => {
+        if (!isClassSelected) return false;
+        // Si tableau vide = Tout le monde est sélectionné (Convention Backend)
+        if (cfg.studentIds.length === 0) return true;
+        return cfg.studentIds.includes(sId);
+    };
+
+    // Calcul du chapitre sélectionné pour l'affichage du select
+    const selectedChapterValue = cfg?.chapterId || findBestDefaultChapter();
 
     return (
         <div className="v84-dist-sidebar custom-scrollbar">
-            <div className="mb-4 flex flex-wrap gap-2">
+            {/* 1. ONGLETS CLASSES (FILTRÉS) */}
+            <div className="v84-classes-tabs">
                 {availableClasses.map(c => (
-                    <button key={c._id} onClick={() => setViewingClass(c.name)} className={`v84-tab-btn ${distribution[c.name] ? 'active' : 'inactive'} ${viewingClass === c.name ? 'border-2 border-purple-700' : ''}`}>
+                    <button 
+                        key={c._id} 
+                        onClick={() => { setViewingClass(c.name); setStudentSearch(""); }} 
+                        className={`v84-tab-btn ${distribution[c.name] ? 'active' : 'inactive'} ${viewingClass === c.name ? 'border-2 border-purple-700' : ''}`}
+                        style={c.type === 'GROUP' ? { borderColor: '#f59e0b', color: distribution[c.name] ? 'white' : '#f59e0b' } : {}}
+                    >
                         {c.name}
                     </button>
                 ))}
+                {availableClasses.length === 0 && <div className="text-xs text-slate-400 italic">Aucune classe pour ce niveau.</div>}
             </div>
 
+            {/* 2. PANNEAU CLASSE ACTIVE */}
             {viewingClass && (
                 <div className="v84-class-card animate-in slide-in-from-right">
-                    <div className="v84-class-header" onClick={() => {
-                        const next = { ...distribution };
-                        if (next[viewingClass]) delete next[viewingClass];
-                        else next[viewingClass] = { chapterId: findBestDefaultChapter(viewingClass), studentIds: [] };
-                        setDistribution(next);
-                    }}>
+                    <div className="v84-class-header" onClick={toggleAllStudents}>
                         <span className="v84-class-title">{viewingClass}</span>
-                        <div className={`v84-check-badge ${distribution[viewingClass] ? 'checked' : ''}`}>{distribution[viewingClass] && '✓'}</div>
+                        <div className={`v84-check-badge ${isClassSelected ? 'checked' : ''}`}>{isClassSelected && '✓'}</div>
                     </div>
 
                     <div className="v84-folder-select-box">
-                        <label className="v84-folder-label">Dossier :</label>
-                        <select className="v84-folder-select" value={distribution[viewingClass]?.chapterId || ""} onChange={e => {
-                            const next = { ...distribution };
-                            if (next[viewingClass]) { next[viewingClass].chapterId = e.target.value; setDistribution(next); }
-                        }}>
-                            {chapters.filter(c => c.section.toUpperCase() === (targetSection || "GÉNÉRAL").toUpperCase()).map(c => <option key={c._id} value={c._id}>{c.title}</option>)}
+                        <label className="v84-folder-label">Dossier de destination :</label>
+                        <select 
+                            className="v84-folder-select" 
+                            value={selectedChapterValue} 
+                            onChange={(e) => setDistribution(p => ({ 
+                                ...p, 
+                                [viewingClass]: { ...(p[viewingClass] || { studentIds: [] }), chapterId: e.target.value } 
+                            }))} 
+                            disabled={loading}
+                        >
+                            {availableChapters.length === 0 && <option value="">(Aucun dossier dans {targetSection})</option>}
+                            {availableChapters.map(c => (
+                                <option key={c._id} value={c._id}>{c.title}</option>
+                            ))}
                         </select>
                     </div>
 
                     <div className="v84-search-box">
                         <span>🔎</span>
-                        <input className="v84-search-input" placeholder="Chercher un élève..." value={studentSearch} onChange={e => setStudentSearch(e.target.value)} />
+                        <input 
+                            className="v84-search-input" 
+                            placeholder="Chercher un élève..." 
+                            value={studentSearch} 
+                            onChange={e => setStudentSearch(e.target.value)} 
+                        />
                     </div>
 
                     <div className="v84-students-list custom-scrollbar">
                         {studentsToDisplay.map(s => { 
-                            const isSelected = distribution[viewingClass]?.studentIds?.includes(String(s._id)); 
+                            const checked = isStudentSelected(s._id);
                             return (
-                                <div key={s._id} onClick={() => handleToggleStudent(String(s._id))} className={`v84-student-item ${isSelected ? 'selected' : ''}`}>
-                                    <div className="v84-student-checkbox">{isSelected && '✓'}</div>
+                                <div key={s._id} onClick={() => handleToggleStudent(s._id)} className={`v84-student-item ${checked ? 'selected' : ''}`}>
+                                    <div className="v84-student-checkbox">{checked && '✓'}</div>
                                     <span className="v84-student-name">{s.lastName} {s.firstName}</span>
                                 </div>
                             ); 
                         })}
+                        {studentsToDisplay.length === 0 && <div className="text-xs text-slate-400 text-center p-2">Aucun élève trouvé.</div>}
                     </div>
                 </div>
             )}
@@ -5911,82 +6616,50 @@ export default function TrapComponent() {
 [[[£ END: client/src/features/prof/components/TrapComponent.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/games/GameStudio.css £]]]
-/* ... (Styles précédents conservés) ... */
-
-/* HEADER */
+/* --- CONTAINER GLOBAL --- */
 .v84-game-container { position: fixed; inset: 0; background: #f8fafc; z-index: 9500; display: flex; flex-direction: column; font-family: 'Inter', sans-serif; }
 .v84-game-header { height: 90px; background: white; border-bottom: 2px solid #f1f5f9; display: flex; align-items: center; padding: 0 40px; justify-content: space-between; }
-.v84-game-icon { font-size: 2rem; background: #9333ea; color: white; padding: 10px; border-radius: 18px; flex-shrink: 0; }
-
-/* FIX VISIBILITÉ BOUTON : FLEX 1 AU LIEU DE WIDTH 100% */
-.v84-game-title-input { 
-    border: none; font-size: 1.8rem; font-weight: 950; 
-    color: #0f172a; outline: none; flex: 1; 
-    text-transform: uppercase; margin-left: 20px; background: transparent;
-    min-width: 200px;
-}
+.v84-game-icon { font-size: 2rem; background: #9333ea; color: white; padding: 10px; border-radius: 18px; }
+.v84-game-title-input { border: none; font-size: 1.8rem; font-weight: 950; color: #0f172a; outline: none; width: 100%; text-transform: uppercase; margin-left: 20px; }
+.v84-close-btn { width: 40px; height: 40px; border-radius: 50%; border: 2px solid #f1f5f9; background: white; color: #94a3b8; font-size: 1.2rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 
 .v84-game-body { flex: 1; display: flex; overflow: hidden; }
 
-/* SIDEBAR GAUCHE */
+/* SIDEBAR GAUCHE (NIVEAUX) */
 .v84-q-list-sidebar { width: 340px; background: white; padding: 20px; display: flex; flex-direction: column; border-right: 2px solid #f1f5f9; }
 .v84-level-block { margin-bottom: 15px; border: 2px solid #f1f5f9; border-radius: 16px; overflow: hidden; background: #fff; }
 .v84-level-header { background: #f8fafc; padding: 10px 15px; display: flex; justify-content: space-between; align-items: center; font-size: 10px; font-weight: 950; color: #64748b; text-transform: uppercase; border-bottom: 2px solid #f1f5f9; cursor: pointer; transition: background 0.2s; position: relative; }
 .v84-level-header:hover { background: #f1f5f9; color: #1e293b; }
 .v84-level-header.active-lvl { background: #f5f3ff; color: #7c3aed; border-bottom-color: #ddd6fe; }
 .v84-q-list { padding: 5px; display: flex; flex-direction: column; gap: 5px; background: #fff; }
-.v84-q-item { padding: 10px 10px 10px 10px; border-bottom: 1px solid #f1f5f9; cursor: pointer; transition: all 0.2s; position: relative; background: white; display: flex; align-items: center; gap: 8px; }
+.v84-q-item { padding: 10px; border-bottom: 1px solid #f1f5f9; cursor: pointer; transition: all 0.2s; position: relative; background: white; display: flex; align-items: center; gap: 8px; }
 .v84-q-item:hover { background: #fafafa; }
 .v84-q-item.active { background: #f3e8ff; border-left: 4px solid #a855f7; }
 .v84-q-checkbox { width: 16px; height: 16px; cursor: pointer; accent-color: #7c3aed; border: 2px solid #cbd5e1; border-radius: 4px; }
 .v84-q-preview { font-weight: 800; font-size: 10px; color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; padding-right: 25px; }
-
-.v84-del-btn { 
-    position: absolute; right: 8px; top: 50%; transform: translateY(-50%); 
-    width: 20px; height: 20px; border-radius: 50%; 
-    background: #fee2e2; color: #ef4444; border: 1px solid #fecaca; 
-    font-weight: 900; font-size: 10px; cursor: pointer; 
-    display: flex; align-items: center; justify-content: center; 
-    opacity: 0.6; transition: all 0.2s; 
-    z-index: 20;
-}
-.v84-q-item:hover .v84-del-btn, .v84-level-header:hover .v84-del-btn { opacity: 1; }
-.v84-del-btn:hover { background: #ef4444; color: white; transform: translateY(-50%) scale(1.1); }
-
+.v84-del-btn { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 20px; height: 20px; border-radius: 50%; background: #fee2e2; color: #ef4444; border: 1px solid #fecaca; font-weight: 900; font-size: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; opacity: 0.6; transition: all 0.2s; }
 .v84-add-q-btn { width: 100%; padding: 8px; font-size: 9px; font-weight: 900; color: #94a3b8; background: #f8fafc; border: none; border-top: 1px dashed #e2e8f0; cursor: pointer; text-transform: uppercase; }
-.v84-add-q-btn:hover { color: #7c3aed; background: #f5f3ff; }
 .v84-add-level-btn { width: 100%; padding: 15px; background: #1e293b; color: white; border-radius: 15px; font-weight: 900; font-size: 10px; border: none; cursor: pointer; text-transform: uppercase; }
-.v84-move-box { background: #7c3aed; padding: 12px; border-radius: 15px; margin-top: auto; margin-bottom: 10px; color: white; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 10px 20px rgba(124, 58, 237, 0.3); animation: slideUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
-.v84-move-title { font-size: 9px; font-weight: 900; text-transform: uppercase; opacity: 0.8; }
-.v84-move-actions { display: flex; gap: 5px; }
-.v84-move-select { flex: 1; padding: 6px; border-radius: 8px; border: none; font-size: 10px; color: #4c1d95; font-weight: 800; outline: none; background: rgba(255,255,255,0.9); }
-.v84-move-go-btn { background: #fbbf24; color: #78350f; border: none; padding: 6px 12px; border-radius: 8px; font-weight: 950; font-size: 10px; cursor: pointer; text-transform: uppercase; }
-.v84-move-go-btn:hover { background: #f59e0b; }
 
 /* EDITOR CENTER */
 .v84-game-editor { flex: 1; padding: 40px; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; background: #f8fafc; }
 
-/* WIDGET IA MODIFIÉ */
+/* WIDGET IA & RESOURCES */
+.v84-resources-global { background: white; border: 2px solid #3b82f6; border-radius: 20px; padding: 15px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 4px 15px rgba(59, 130, 246, 0.1); }
+.v84-resources-level { background: #f8fafc; border: 1px dashed #94a3b8; border-radius: 15px; padding: 15px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 10px; }
+.v84-res-title { font-size: 10px; font-weight: 950; text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; gap: 5px; }
+.v84-res-title.global { color: #3b82f6; }
+.v84-res-title.local { color: #64748b; }
+.v84-res-row { display: flex; gap: 10px; align-items: center; }
+.v84-res-input { flex: 1; background: #f1f5f9; border: 1px solid #cbd5e1; padding: 8px 12px; border-radius: 10px; font-size: 11px; color: #334155; font-weight: 600; outline: none; }
+.v84-res-btn { padding: 8px 15px; border-radius: 10px; font-weight: 900; font-size: 10px; border: none; cursor: pointer; text-transform: uppercase; display: flex; align-items: center; gap: 5px; }
+.v84-res-btn.upload { background: #e2e8f0; color: #475569; }
+.v84-res-badge { font-size: 9px; font-weight: 900; color: #fff; background: #10b981; padding: 4px 8px; border-radius: 6px; display: flex; align-items: center; gap: 5px; cursor: pointer; }
+.v84-res-remove { cursor: pointer; opacity: 0.8; font-size: 10px; margin-left: 2px; width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.2); border-radius: 50%; }
+
 .v84-ai-widget { background: #fff; padding: 20px; border-radius: 25px; margin-bottom: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; }
 .v84-ai-row { display: flex; gap: 10px; align-items: center; width: 100%; margin-bottom: 10px; }
-
-/* INPUT COUNT (NOUVEAU) */
-.v84-ai-count-input {
-    width: 60px; padding: 12px; border: 2px solid #e2e8f0; border-radius: 15px;
-    font-weight: 900; color: #475569; text-align: center; font-size: 12px; outline: none;
-}
-.v84-ai-count-input:focus { border-color: #7e22ce; color: #7e22ce; }
-
 .v84-ai-input { flex: 1; background: #f8fafc; border: 2px solid #f1f5f9; padding: 12px 15px; border-radius: 15px; color: #475569; font-weight: 700; outline: none; font-size: 12px; }
-.v84-ai-input:focus { border-color: #a855f7; background: white; }
-.v84-ai-dropzone { background: #fff7ed; border: 2px dashed #fed7aa; border-radius: 15px; min-height: 80px; position: relative; display: flex; flex-direction: column; padding: 10px; transition: all 0.2s; }
-.v84-ai-dropzone:hover { border-color: #f97316; background: #ffedd5; }
-.v84-ai-textarea { width: 100%; height: 60px; background: transparent; border: none; outline: none; resize: none; font-size: 11px; color: #c2410c; font-weight: 600; text-align: center; }
-.v84-ai-textarea::placeholder { color: #fdba74; text-transform: uppercase; font-weight: 700; padding-top: 20px; }
-.v84-ai-plus-btn { position: absolute; bottom: 8px; right: 8px; width: 24px; height: 24px; background: #f97316; color: white; border-radius: 50%; border: none; font-weight: 900; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(249, 115, 22, 0.3); transition: transform 0.2s; }
-.v84-ai-plus-btn:hover { transform: scale(1.1); }
-.v84-file-tag { position: absolute; top: 8px; left: 8px; background: #fff; border: 1px solid #f97316; padding: 4px 10px; border-radius: 8px; font-size: 9px; font-weight: 900; color: #ea580c; display: flex; align-items: center; gap: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-.v84-file-close { cursor: pointer; color: #ef4444; font-size: 10px; }
 .v84-gen-btn { width: 100%; padding: 12px; background: #7e22ce; color: white; border: none; border-radius: 15px; font-weight: 900; font-size: 10px; margin-top: 10px; cursor: pointer; }
 
 /* Q CARD */
@@ -5999,245 +6672,88 @@ export default function TrapComponent() {
 .v84-ans-row.correct .v84-correct-radio { background: #22c55e; border-color: #22c55e; color: white; }
 .v84-ans-input { flex: 1; background: transparent; border: none; padding: 10px; font-weight: 700; font-size: 0.9rem; outline: none; }
 
-/* RESSOURCES */
-.v84-resources-global { background: white; border: 2px solid #3b82f6; border-radius: 20px; padding: 15px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 4px 15px rgba(59, 130, 246, 0.1); }
-.v84-resources-level { background: #f8fafc; border: 1px dashed #94a3b8; border-radius: 15px; padding: 15px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 10px; }
-.v84-res-title { font-size: 10px; font-weight: 950; text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; gap: 5px; }
-.v84-res-title.global { color: #3b82f6; }
-.v84-res-title.local { color: #64748b; }
-.v84-res-row { display: flex; gap: 10px; align-items: center; }
-.v84-res-input { flex: 1; background: #f1f5f9; border: 1px solid #cbd5e1; padding: 8px 12px; border-radius: 10px; font-size: 11px; color: #334155; font-weight: 600; outline: none; }
-.v84-res-input:focus { background: white; border-color: #3b82f6; }
-.v84-res-btn { padding: 8px 15px; border-radius: 10px; font-weight: 900; font-size: 10px; border: none; cursor: pointer; text-transform: uppercase; display: flex; align-items: center; gap: 5px; transition: transform 0.1s; }
-.v84-res-btn.upload { background: #e2e8f0; color: #475569; }
-.v84-res-btn.upload:hover { background: #cbd5e1; }
-.v84-res-btn.view { background: #dcfce7; color: #16a34a; }
-.v84-res-badge { font-size: 9px; font-weight: 900; color: #fff; background: #10b981; padding: 4px 8px; border-radius: 6px; display: flex; align-items: center; gap: 5px; cursor: pointer; transition: filter 0.2s; }
-.v84-res-badge:hover { filter: brightness(1.1); }
-.v84-res-remove { cursor: pointer; opacity: 0.8; font-size: 10px; margin-left: 2px; width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.2); border-radius: 50%; }
-.v84-res-remove:hover { background: #ef4444; opacity: 1; }
-
-.v84-dist-sidebar { width: 350px; background: white; border-left: 2px solid #f1f5f9; padding: 30px; display: flex; flex-direction: column; }
-.v84-tab-btn-game { padding: 8px 16px; border-radius: 12px; font-size: 10px; font-weight: 900; transition: all 0.2s; border: 1px solid transparent; margin-right: 5px; }
-.v84-tab-btn-game.active { background: #9333ea; color: white; shadow: 0 4px 10px rgba(147, 51, 234, 0.3); }
-.v84-tab-btn-game.inactive { background: #f1f5f9; color: #94a3b8; }
-.v84-game-publish-btn { width: 100%; padding: 20px; background: #9333ea; color: white; font-weight: 950; border-radius: 20px; border: none; margin-top: 20px; font-size: 12px; cursor: pointer; box-shadow: 0 10px 30px rgba(147, 51, 234, 0.3); transition: transform 0.1s; }
-.v84-game-publish-btn:hover { transform: translateY(-2px); }
-
-/* --- MODALE PRÉVISUALISATION --- */
-.v84-preview-overlay {
-    position: fixed; inset: 0; z-index: 20000;
-    background: rgba(15, 23, 42, 0.9);
-    display: flex; align-items: center; justify-content: center;
-    backdrop-filter: blur(5px); animation: fadeIn 0.2s ease-out;
-}
-.v84-preview-content {
-    background: transparent; max-width: 90vw; max-height: 90vh;
-    position: relative; display: flex; align-items: center; justify-content: center;
-}
-.v84-preview-img {
-    max-width: 100%; max-height: 90vh;
-    border-radius: 15px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
-    border: 4px solid white;
-}
-.v84-preview-close {
-    position: absolute; top: -20px; right: -20px;
-    background: #ef4444; color: white; border: 4px solid white;
-    width: 50px; height: 50px; border-radius: 50%;
-    font-size: 1.5rem; font-weight: 900; cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 10px 15px rgba(0,0,0,0.2);
-    transition: transform 0.2s;
-}
-.v84-preview-close:hover { transform: scale(1.1); background: #dc2626; }
+/* NETTOYAGE SIDEBAR (Utilise le composant dédié) */
 
 [[[£ END: client/src/features/prof/games/GameStudio.css £]]]
 
 [[[£ FILE: client/src/features/prof/games/GameStudio.jsx £]]]
-// @signatures: GameStudio, getAvailableChapters, handleAddLevel, handleAddQuestion, handleDeleteLevel, handleDeleteQuestion, handleDrop, handleFileSelect, handleGenerateAI, handleInput, handleMoveQuestions, handleOpenSheet, handlePaste, handleRemoveAsset, handleRemoveFile, handleSave, handleSelectQuestion, handleToggleSelect, handleToggleStudent, handleUpdateAssetVideo, handleUploadAsset, isQuestionSelected, loadData, toggleAllStudents, updateQuestion
+// @signatures: GameStudio, handleAddLevel, handleAddQuestion, handleDeleteLevel, handleDeleteQuestion, handleDrop, handleFileSelect, handleGenerateAI, handleInput, handleMoveQuestions, handleOpenSheet, handlePaste, handleRemoveAsset, handleRemoveFile, handleSave, handleSelectQuestion, handleToggleSelect, handleUpdateAssetVideo, handleUploadAsset, isQuestionSelected, updateQuestion
 import React, { useState, useEffect, useRef } from 'react';
 import './GameStudio.css';
 import { api } from '../../../services/api';
+import StudioDistributionSidebar from '../components/StudioDistributionSidebar';
 
-// --- DEFINITION LOCALE POUR CASSER LA DEPENDANCE CIRCULAIRE ---
-const StudioUtils = {
-    getStudentsForViewingClass: (clsName, allStudents, allClasses) => {
-        if (!clsName) return [];
-        const clsObj = allClasses.find(c => c.name === clsName);
-        const clsId = clsObj ? String(clsObj._id) : null;
-        return allStudents.filter(s => {
-            const mainClass = (s.currentClass || "").trim().toUpperCase();
-            if (mainClass === clsName) return true;
-            if (clsId && (s.assignedGroups || []).some(g => String(g) === clsId || String(g._id) === clsId)) return true;
-            return false;
-        }).sort((a,b) => a.lastName.localeCompare(b.lastName));
-    }
-};
-
-const DEFAULT_QUIZ_DATA = { 
-    title: '', chapterId: '', teacherId: null, 
-    targetClassrooms: [], assignedStudents: [], isAllClass: true, 
-    globalIntro: { sheetUrl: "", videoUrl: "" },
-    levels: [
-        { 
-            name: "Niveau 1", 
-            intro: { sheetUrl: "", videoUrl: "" },
-            questions: [{ q: 'Nouvelle question', options: ['', '', '', ''], a: 0 }] 
-        }
-    ]
-};
-
-export default function GameStudio({ initialData, chapters, classFilter, user, targetSection, onClose }) {
+export default function GameStudio({ initialData, chapters, user, targetSection, targetLevel, onClose, allStudents: propStudents, allClasses: propClasses }) {
     
-    // --- INIT ---
-    const initData = () => {
-        let base = initialData ? JSON.parse(JSON.stringify(initialData)) : { ...DEFAULT_QUIZ_DATA };
-        
-        if (base.questions && base.questions.length > 0) {
-            base.levels = [{ name: "Niveau 1", questions: base.questions, intro: {} }];
-            delete base.questions;
-        } else if (!base.levels || base.levels.length === 0) {
-            base.levels = [{ name: "Niveau 1", questions: [], intro: {} }];
-        }
-
-        if (!base.globalIntro) base.globalIntro = { sheetUrl: "", videoUrl: "" };
-        base.levels.forEach(l => { 
-            if(!l.intro) l.intro = { sheetUrl: "", videoUrl: "" };
-            if(!l.questions) l.questions = [];
-            l.questions.forEach(q => {
-                if (!q.options || !Array.isArray(q.options)) q.options = ['', '', '', ''];
-                if (q.a === undefined) q.a = 0;
-            });
-        });
-
-        base.teacherId = user.id || user._id;
-        // Correction préventive des cibles
-        if (!base.targetClassrooms || base.targetClassrooms.length === 0) {
-            if (base.classroom) base.targetClassrooms = [base.classroom];
-            else if (classFilter) base.targetClassrooms = [classFilter];
-            else base.targetClassrooms = [];
-        }
-        
-        return base;
-    };
-
-    const [formData, setFormData] = useState(initData());
+    // --- ÉTATS DONNÉES ---
+    const [formData, setFormData] = useState(initialData || { 
+        title: '', 
+        levels: [{ name: "Niveau 1", questions: [{ q: 'Nouvelle question', options: ['', '', '', ''], a: 0 }], intro: {} }],
+        globalIntro: { sheetUrl: "", videoUrl: "" }
+    });
+    
+    // --- ÉTATS UI ÉDITEUR ---
     const [activeLevelIdx, setActiveLevelIdx] = useState(0);
     const [activeQIdx, setActiveQIdx] = useState(0);
     const [selectedForMove, setSelectedForMove] = useState([]); 
     const [moveTargetLevel, setMoveTargetLevel] = useState("");
-    const [allStudents, setAllStudents] = useState([]);
-    const [allClasses, setAllClasses] = useState([]);
+    
+    // --- ÉTATS DISTRIBUTION (SIDEBAR) ---
+    const [allStudents, setAllStudents] = useState(propStudents || []);
+    const [allClasses, setAllClasses] = useState(propClasses || []);
     const [distribution, setDistribution] = useState({});
-    const [viewingClass, setViewingClass] = useState(classFilter || "");
-    const [studentSearch, setStudentSearch] = useState(""); 
+    const [viewingClass, setViewingClass] = useState("");
+    const [studentSearch, setStudentSearch] = useState("");
+    
     const [loading, setLoading] = useState(false);
     
-    // IA & ASSETS
+    // --- ÉTATS IA & ASSETS ---
     const [aiTopic, setAiTopic] = useState('');
-    const [aiFile, setAiFile] = useState(null);
     const [aiGenerating, setAiGenerating] = useState(false);
     
     const fileInputRef = useRef(null);
     const assetInputRef = useRef(null);
-    const [uploadTarget, setUploadTarget] = useState(null);
+    const [uploadTarget, setUploadTarget] = useState(null); // -1 = Global, 0+ = Level Index
 
-    // --- LOGIQUE CHAPITRES LOCALE ---
-    const getAvailableChapters = (clsName) => {
-        const safeChapters = Array.isArray(chapters) ? chapters : [];
-        if (safeChapters.length === 0) return [];
-        const cleanSection = (targetSection || "GÉNÉRAL").toUpperCase().trim();
-        const clsObj = allClasses.find(c => c.name === clsName);
+    // CHARGEMENT DE SECOURS SI PROPS MANQUANTES
+    useEffect(() => {
+        if ((!propStudents || propStudents.length === 0) || (!propClasses || propClasses.length === 0)) {
+            const load = async () => {
+                setLoading(true);
+                try {
+                    const [sts, cls] = await Promise.all([api.get('/admin/students'), api.get('/admin/classrooms')]);
+                    setAllStudents(sts || []);
+                    setAllClasses(cls || []);
+                } catch(e) {}
+                setLoading(false);
+            };
+            load();
+        }
 
-        let matches = safeChapters.filter(c => 
-            !c.isArchived && 
-            (c.section || "GÉNÉRAL").toUpperCase().trim() === cleanSection
-        );
+        // RECONSTRUCTION DISTRIBUTION SI ÉDITION
+        if (initialData && initialData.targetClassrooms) {
+            const dist = {};
+            initialData.targetClassrooms.forEach(clsName => {
+                dist[clsName] = {
+                    chapterId: initialData.chapterId || "",
+                    studentIds: initialData.isAllClass ? [] : (initialData.assignedStudents || [])
+                };
+            });
+            setDistribution(dist);
+            if (initialData.targetClassrooms.length > 0) setViewingClass(initialData.targetClassrooms[0]);
+        }
+    }, []);
 
-        matches = matches.filter(c => {
-            if (c.classroom === clsName) return true;
-            if (c.sharedLevel && clsObj && String(c.sharedLevel) === String(clsObj.level)) return true;
-            if (!c.classroom && !c.sharedLevel) {
-                return !c.hiddenIn || !c.hiddenIn.includes(clsName);
-            }
-            return false;
-        });
-
-        return matches.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
-    };
-
-    const findBestDefaultChapter = (clsName) => {
-        const available = getAvailableChapters(clsName);
-        if (available.length > 0) return available[0]._id;
-        return "";
-    };
-
-    const loadData = async () => {
-        setLoading(true);
-        try {
-            const [sts, cls] = await Promise.all([ api.get('/admin/students'), api.get('/admin/classrooms') ]);
-            const safeSts = Array.isArray(sts) ? sts : [];
-            const safeCls = Array.isArray(cls) ? cls : [];
-            setAllStudents(safeSts); 
-            setAllClasses(safeCls); 
-            
-            if (formData) {
-                const targets = formData.targetClassrooms || [];
-                const newDist = {};
-                
-                targets.forEach(clsName => {
-                    const clsObj = safeCls.find(c => c.name === clsName);
-                    const clsId = clsObj ? String(clsObj._id) : null;
-                    
-                    let classStudentIds = safeSts.filter(s => {
-                        const isMain = (s.currentClass||"").trim().toUpperCase() === clsName.trim().toUpperCase();
-                        const isOption = clsId && (s.assignedGroups||[]).some(gId => String(gId) === clsId);
-                        return (isMain || isOption) && (formData.assignedStudents||[]).includes(s._id);
-                    }).map(s => s._id);
-
-                    let chId = formData.chapterId;
-                    // Logique de fallback intelligent pour le chapitre
-                    if (!chId || chId === "") {
-                        const localClsObj = safeCls.find(c => c.name === clsName);
-                        const cleanSection = (targetSection || "GÉNÉRAL").toUpperCase().trim();
-                        const matches = (chapters || []).filter(c => 
-                            !c.isArchived && 
-                            (c.section || "GÉNÉRAL").toUpperCase().trim() === cleanSection &&
-                            (
-                                c.classroom === clsName ||
-                                (c.sharedLevel && localClsObj && String(c.sharedLevel) === String(localClsObj.level)) ||
-                                (!c.classroom && !c.sharedLevel && (!c.hiddenIn || !c.hiddenIn.includes(clsName)))
-                            )
-                        ).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
-
-                        if (matches.length > 0) chId = matches[0]._id;
-                    }
-
-                    newDist[clsName] = { 
-                        chapterId: chId || "", 
-                        studentIds: classStudentIds 
-                    };
-                });
-                setDistribution(newDist);
-                if (targets.length > 0 && !viewingClass) setViewingClass(targets[0]);
-            }
-        } catch(e) { console.error("Load Error", e); }
-        setLoading(false);
-    };
-
-    useEffect(() => { loadData(); }, []);
-
+    // --- LOGIQUE ÉDITEUR (RESTAURÉE) ---
     const handleInput = (field, value) => setFormData(p => ({ ...p, [field]: value }));
     const handleSelectQuestion = (lIdx, qIdx) => { setActiveLevelIdx(lIdx); setActiveQIdx(qIdx); };
     
-    // --- GESTION NIVEAUX & QUESTIONS ---
     const handleAddLevel = () => { setFormData(p => ({ ...p, levels: [...p.levels, { name: `Niveau ${p.levels.length + 1}`, questions: [], intro: { sheetUrl: "", videoUrl: "" } }] })); setActiveLevelIdx(formData.levels.length); setActiveQIdx(0); };
     const handleDeleteLevel = (e, lIdx) => { e.stopPropagation(); if(!confirm("Supprimer ce niveau ?")) return; setFormData(p => { let newLevels = p.levels.filter((_, i) => i !== lIdx); if (newLevels.length === 0) newLevels = [{ name: "Niveau 1", questions: [], intro: {} }]; return { ...p, levels: newLevels }; }); setActiveLevelIdx(0); setActiveQIdx(0); };
     const handleAddQuestion = () => { setFormData(p => { const newLevels = [...p.levels]; newLevels[activeLevelIdx].questions.push({ q: 'Nouvelle question', options: ['', '', '', ''], a: 0 }); return { ...p, levels: newLevels }; }); setTimeout(() => setActiveQIdx(formData.levels[activeLevelIdx].questions.length), 0); };
     const handleDeleteQuestion = (e, lIdx, qIdx) => { e.stopPropagation(); if(!confirm("Supprimer ?")) return; setFormData(p => { const newLevels = [...p.levels]; newLevels[lIdx].questions = newLevels[lIdx].questions.filter((_, i) => i !== qIdx); return { ...p, levels: newLevels }; }); if(activeQIdx >= qIdx) setActiveQIdx(Math.max(0, activeQIdx - 1)); setSelectedForMove(prev => prev.filter(s => !(s.lIdx === lIdx && s.qIdx === qIdx))); };
     const updateQuestion = (field, value, optionIndex = null) => { setFormData(p => { const newLevels = [...p.levels]; if(!newLevels[activeLevelIdx] || !newLevels[activeLevelIdx].questions[activeQIdx]) return p; const currentQ = { ...newLevels[activeLevelIdx].questions[activeQIdx] }; if (field === 'q' || field === 'a') { currentQ[field] = value; } else if (field === 'options' && optionIndex !== null) { const nextOptions = [...currentQ.options]; nextOptions[optionIndex] = value; currentQ.options = nextOptions; } newLevels[activeLevelIdx].questions[activeQIdx] = currentQ; return { ...p, levels: newLevels }; }); };
 
-    // --- MOVE & ASSETS ---
     const handleToggleSelect = (e, lIdx, qIdx) => { e.stopPropagation(); const exists = selectedForMove.some(s => s.lIdx === lIdx && s.qIdx === qIdx); if (exists) setSelectedForMove(prev => prev.filter(s => !(s.lIdx === lIdx && s.qIdx === qIdx))); else setSelectedForMove(prev => [...prev, { lIdx, qIdx }]); };
     const isQuestionSelected = (lIdx, qIdx) => selectedForMove.some(s => s.lIdx === lIdx && s.qIdx === qIdx);
     const handleMoveQuestions = () => { if (moveTargetLevel === "" || isNaN(parseInt(moveTargetLevel))) return; const targetIdx = parseInt(moveTargetLevel); setFormData(prev => { const newLevels = prev.levels.map(l => ({ ...l, questions: [...l.questions] })); const questionsToMove = []; newLevels.forEach((lvl, lIdx) => { lvl.questions.forEach((q, qIdx) => { if (isQuestionSelected(lIdx, qIdx)) questionsToMove.push(q); }); }); newLevels.forEach((lvl, lIdx) => { lvl.questions = lvl.questions.filter((_, qIdx) => !isQuestionSelected(lIdx, qIdx)); }); newLevels[targetIdx].questions.push(...questionsToMove); return { ...prev, levels: newLevels }; }); setSelectedForMove([]); setActiveLevelIdx(targetIdx); setActiveQIdx(0); };
@@ -6246,11 +6762,8 @@ export default function GameStudio({ initialData, chapters, classFilter, user, t
     const handleRemoveAsset = (idx) => { setFormData(prev => { const next = { ...prev }; if (idx === -1) next.globalIntro.sheetUrl = ""; else next.levels[idx].intro.sheetUrl = ""; return next; }); };
     const handleUpdateAssetVideo = (idx, url) => { setFormData(prev => { const next = { ...prev }; if (idx === -1) next.globalIntro.videoUrl = url; else next.levels[idx].intro.videoUrl = url; return next; }); };
     const handleOpenSheet = (url) => { window.open(url, '_blank'); };
-    const handlePaste = (e) => { const items = e.clipboardData.items; for (let i = 0; i < items.length; i++) { if (items[i].kind === 'file') { setAiFile(items[i].getAsFile()); e.preventDefault(); return; } } };
-    const handleDrop = (e) => { e.preventDefault(); if (e.dataTransfer.files[0]) setAiFile(e.dataTransfer.files[0]); };
-    const handleFileSelect = (e) => { if (e.target.files[0]) setAiFile(e.target.files[0]); };
-    const handleRemoveFile = (e) => { e.stopPropagation(); setAiFile(null); if(fileInputRef.current) fileInputRef.current.value = ""; };
-
+    
+    // --- LOGIQUE IA ---
     const handleGenerateAI = async (mode = 'manual') => {
         setAiGenerating(true);
         try {
@@ -6267,139 +6780,60 @@ export default function GameStudio({ initialData, chapters, classFilter, user, t
         } catch(e) { alert("Erreur IA"); } setAiGenerating(false); 
     };
 
+    // --- SAUVEGARDE ---
+    const handleSave = async () => {
+        const targets = Object.keys(distribution);
+        if (!formData.title || targets.length === 0) return alert("❌ Titre et Classe requis !");
+        
+        setLoading(true);
+        try {
+            const groups = {};
+            targets.forEach(cls => {
+                const cfg = distribution[cls];
+                if (!cfg.chapterId) return; 
+
+                const isAllClass = cfg.studentIds.length === 0;
+                const key = `${cfg.chapterId}_${isAllClass ? 'ALL' : 'SUBSET'}`;
+                
+                if (!groups[key]) groups[key] = { chapterId: cfg.chapterId, classrooms: [], assignedStudents: cfg.studentIds, isAllClass };
+                groups[key].classrooms.push(cls);
+            });
+
+            for (const key of Object.keys(groups)) {
+                const grp = groups[key];
+                const payload = {
+                    ...formData,
+                    chapterId: grp.chapterId,
+                    targetClassrooms: grp.classrooms,
+                    assignedStudents: grp.assignedStudents,
+                    isAllClass: grp.isAllClass,
+                    teacherId: user.id || user._id,
+                    type: 'zombie' // Par défaut pour le moment
+                };
+                if (formData._id && key === Object.keys(groups)[0]) { /* update */ } else { delete payload._id; }
+                await api.post('/games', payload);
+            }
+            onClose();
+        } catch(e) { alert("Erreur sauvegarde."); }
+        setLoading(false);
+    };
+
     const currentLevel = formData.levels[activeLevelIdx];
     const currentQ = currentLevel ? currentLevel.questions[activeQIdx] : null;
     const hasLevelSheet = !!currentLevel?.intro?.sheetUrl;
     const totalQuestionsCount = formData.levels.reduce((acc, l) => acc + l.questions.length, 0);
 
-    const targetLevel = allClasses.find(c => c.name === viewingClass)?.level;
-    const myClassesIds = (user.assignedClasses || []).map(c => String(c._id || c));
-    const availableClasses = allClasses.filter(c => { if (targetLevel) if (String(c.level) !== String(targetLevel)) return false; if (user.isDeveloper || user.role === 'admin') return true; return myClassesIds.includes(String(c._id)); }).sort((a,b) => a.name.localeCompare(b.name));
-    const rawStudents = StudioUtils.getStudentsForViewingClass(viewingClass, allStudents, allClasses);
-    const studentsToDisplay = rawStudents.filter(s => `${s.firstName} ${s.lastName}`.toLowerCase().includes(studentSearch.toLowerCase()));
-    
-    // --- LOGIQUE CIBLAGE ÉLÈVES ---
-    const handleToggleStudent = (sId) => { 
-        setDistribution(prev => { 
-            const next = { ...prev }; 
-            const cfg = next[viewingClass]; 
-            if (!cfg) { 
-                const defId = findBestDefaultChapter(viewingClass);
-                next[viewingClass] = { chapterId: defId, studentIds: [sId] }; 
-            } else { 
-                // Logique de toggle : Si vide (tout le monde), on remplit avec "tous sauf un".
-                let newIds = cfg.studentIds.length === 0 ? rawStudents.map(s => s._id).filter(id => id !== sId) : (cfg.studentIds.includes(sId) ? cfg.studentIds.filter(id => id !== sId) : [...cfg.studentIds, sId]); 
-                if (newIds.length === 0) delete next[viewingClass]; 
-                else if (newIds.length === rawStudents.length) next[viewingClass] = { ...cfg, studentIds: [] }; 
-                else next[viewingClass] = { ...cfg, studentIds: newIds }; 
-            } 
-            return next; 
-        }); 
-    };
-
-    const toggleAllStudents = () => { 
-        setDistribution(prev => { 
-            const next = { ...prev }; 
-            if (next[viewingClass]) delete next[viewingClass]; 
-            else { 
-                const defId = findBestDefaultChapter(viewingClass); 
-                next[viewingClass] = { chapterId: defId, studentIds: [] }; 
-            } 
-            return next; 
-        }); 
-    };
-    
-    const isClassSelected = !!distribution[viewingClass];
-    const distCfg = distribution[viewingClass];
-    const availableChapters = getAvailableChapters(viewingClass);
-
-    // 🚀 SAUVEGARDE ULTRA-ROBUSTE (FIX DUPLICATION ET CIBLAGE)
-    const handleSave = async () => {
-        const targets = Object.keys(distribution);
-        if (!formData.title || targets.length === 0) return alert("❌ Titre et Classe requis !");
-        if (totalQuestionsCount === 0) return alert("Ajoutez au moins une question !");
-        
-        setLoading(true);
-        try {
-            // 1. REGROUPEMENT PAR (CHAPITRE + TYPE DE CIBLAGE)
-            // Cela empêche la fusion destructrice entre une classe complète (ex: 5B) et une partielle (ex: 5C)
-            const groups = {};
-
-            targets.forEach(cls => {
-                const cfg = distribution[cls];
-                const realChapterId = cfg.chapterId || findBestDefaultChapter(cls);
-                if (!realChapterId) return;
-
-                const finalIds = cfg.studentIds.length > 0 
-                    ? cfg.studentIds 
-                    : StudioUtils.getStudentsForViewingClass(cls, allStudents, allClasses).map(s => s._id);
-
-                // IMPORTANT : Si studentIds est vide, c'est "Toute la classe" (Mode défaut).
-                // Si studentIds n'est PAS vide, c'est "Subset".
-                const isAllClass = cfg.studentIds.length === 0; 
-                
-                // Clé composite pour forcer la séparation des requêtes
-                const groupKey = `${realChapterId}_${isAllClass ? 'ALL' : 'SUBSET'}`;
-
-                if (!groups[groupKey]) {
-                    groups[groupKey] = {
-                        chapterId: realChapterId,
-                        classrooms: [],
-                        assignedStudents: [],
-                        isAllClass: isAllClass
-                    };
-                }
-
-                groups[groupKey].classrooms.push(cls);
-                
-                // Si Subset, on ajoute les élèves. Si All, on ne met rien dans la liste (backend gère).
-                if (!isAllClass) {
-                    groups[groupKey].assignedStudents.push(...finalIds);
-                }
-            });
-
-            const groupKeys = Object.keys(groups);
-            
-            // 2. ENVOI SEQUENTIEL
-            for (let i = 0; i < groupKeys.length; i++) {
-                const key = groupKeys[i];
-                const grp = groups[key];
-                
-                // Construction propre du payload
-                const payload = {
-                    ...formData,
-                    chapterId: grp.chapterId,
-                    targetClassrooms: grp.classrooms,
-                    // Si c'est toute la classe, on force vide. Sinon on envoie la liste.
-                    assignedStudents: grp.isAllClass ? [] : grp.assignedStudents,
-                    isAllClass: grp.isAllClass,
-                    teacherId: user.id || user._id,
-                    type: 'zombie' 
-                };
-
-                // GESTION ID : Seul le PREMIER groupe hérite de l'ID pour Update (s'il existe).
-                // Les autres perdent l'ID pour forcer un Create (Clone).
-                // Cela règle le problème où l'update de 5B écrase 5C.
-                if (formData._id && i > 0) {
-                    delete payload._id; 
-                }
-
-                await api.post('/games', payload);
-            }
-            
-            onClose();
-        } catch(e) { console.error(e); alert("Erreur sauvegarde."); }
-        setLoading(false);
-    };
-
     return (
         <div className="v84-game-container">
-            <input type="file" ref={assetInputRef} className="hidden" accept="image/*,application/pdf" onChange={handleUploadAsset} />
-            <div className="v84-game-header">
-                <div className="flex items-center"><span className="v84-game-icon">🎮</span><input className="v84-game-title-input" value={formData.title} onChange={e => handleInput('title', e.target.value)} placeholder="TITRE DU QUIZ..." disabled={loading} /></div>
+             <input type="file" ref={assetInputRef} className="hidden" accept="image/*,application/pdf" onChange={handleUploadAsset} />
+             <div className="v84-game-header">
+                <div className="flex items-center"><span className="v84-game-icon">🎮</span><input className="v84-game-title-input" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} placeholder="TITRE DU QUIZ..." /></div>
                 <button onClick={onClose} className="v84-close-btn">✕</button>
             </div>
+            
             <div className="v84-game-body">
+                
+                {/* 1. SIDEBAR GAUCHE : ARBRE DES NIVEAUX */}
                 <div className="v84-q-list-sidebar custom-scrollbar">
                     {formData.levels.map((lvl, lIdx) => (
                         <div key={lIdx} className="v84-level-block">
@@ -6432,7 +6866,10 @@ export default function GameStudio({ initialData, chapters, classFilter, user, t
                     )}
                     <button className="v84-add-level-btn" onClick={handleAddLevel}>+ NOUVEAU NIVEAU</button>
                 </div>
+
+                {/* 2. CENTRE : ÉDITEUR DE CONTENU */}
                 <div className="v84-game-editor custom-scrollbar">
+                    {/* ZONE RESSOURCES (INTRO) */}
                     {activeLevelIdx === 0 && activeQIdx === 0 && (
                         <div className="v84-resources-global">
                             <div className="v84-res-title global"><span>🌍</span> RESSOURCES GLOBALES (INTRO JEU)</div>
@@ -6455,11 +6892,15 @@ export default function GameStudio({ initialData, chapters, classFilter, user, t
                             </div>
                         </div>
                     )}
+                    
+                    {/* ZONE IA */}
                     <div className="v84-ai-widget">
                         <div className="v84-ai-row"><span className="text-2xl">🤖</span><input className="v84-ai-input" placeholder="Sujet / Consigne IA..." value={aiTopic} onChange={e => setAiTopic(e.target.value)} /></div>
                         {hasLevelSheet && <button className="v84-gen-btn mb-2" onClick={() => handleGenerateAI('sheet')} disabled={aiGenerating}>{aiGenerating ? 'ANALYSE...' : '📄 GÉNÉRER D\'APRÈS LA FICHE DU NIVEAU'}</button>}
                         <button className={`v84-gen-btn ${hasLevelSheet ? 'bg-slate-400' : ''}`} onClick={() => handleGenerateAI('manual')} disabled={aiGenerating}>{aiGenerating ? '...' : (hasLevelSheet ? 'OU GÉNÉRER VIA LE SUJET' : 'GÉNÉRER VIA CE SUJET')}</button>
                     </div>
+
+                    {/* ZONE QUESTION */}
                     {currentQ ? (
                         <div className="v84-q-card">
                             <span className="text-xs font-black text-slate-400 uppercase mb-4 block">{currentLevel.name} - Question {activeQIdx + 1}</span>
@@ -6468,37 +6909,24 @@ export default function GameStudio({ initialData, chapters, classFilter, user, t
                         </div>
                     ) : <div className="flex items-center justify-center h-full text-slate-300 font-bold uppercase">Sélectionnez une question</div>}
                 </div>
-                <div className="v84-dist-sidebar custom-scrollbar">
-                    <div className="mb-4 flex flex-wrap gap-2">{availableClasses.map(c => (<button key={c._id} onClick={() => { setViewingClass(c.name); setStudentSearch(""); }} className={`v84-tab-btn-game ${distribution[c.name] ? 'active' : 'inactive'} ${viewingClass === c.name ? 'border-2 border-purple-700' : ''}`} style={c.type === 'GROUP' ? { color: '#f59e0b', borderColor: '#fcd34d' } : {}}>{c.name}</button>))}</div>
-                    {viewingClass && (
-                        <div className="flex-1 flex flex-col bg-slate-50 rounded-2xl overflow-hidden border border-slate-200 p-4">
-                            <div className="flex justify-between items-center mb-4 cursor-pointer" onClick={toggleAllStudents}><span className="font-black text-slate-700 uppercase">{viewingClass}</span><div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${isClassSelected ? 'bg-purple-600 border-purple-600' : 'border-slate-300'}`}>{isClassSelected && <span className="text-white text-xs">✓</span>}</div></div>
-                            <div className="p-3 bg-white rounded-xl border border-slate-200 mb-4">
-                                <label className="text-[9px] font-black text-slate-400 uppercase mb-1 block">Dossier :</label>
-                                <select 
-                                    className="w-full p-2 rounded-lg text-xs font-bold border border-slate-100 outline-none bg-slate-50" 
-                                    value={distCfg?.chapterId || findBestDefaultChapter(viewingClass)} 
-                                    onChange={(e) => setDistribution(p => ({ ...p, [viewingClass]: { ...p[viewingClass], chapterId: e.target.value } }))} 
-                                    disabled={loading}
-                                >
-                                    <option value="">-- CHOISIR --</option>
-                                    {availableChapters.map(c => <option key={c._id} value={c._id}>{c.title}</option>)}
-                                </select>
-                            </div>
-                            <div className="relative mb-2"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px]">🔎</span><input className="w-full pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-[10px] font-bold outline-none focus:border-purple-400" placeholder="Chercher..." value={studentSearch} onChange={e => setStudentSearch(e.target.value)} /></div>
-                            <div className="flex-1 overflow-y-auto custom-scrollbar">
-                                {studentsToDisplay.map(s => { 
-                                    const checked = isClassSelected && (distribution[viewingClass].studentIds.length === 0 || distribution[viewingClass].studentIds.includes(s._id));
-                                    return (<div key={s._id} onClick={() => handleToggleStudent(s._id)} className={`flex items-center gap-3 p-2 rounded cursor-pointer transition-colors ${checked ? 'bg-purple-50 text-purple-700' : 'hover:bg-slate-100 text-slate-400'}`}>
-                                        <div className={`w-4 h-4 rounded border shrink-0 ${checked ? 'bg-purple-600 border-purple-600' : 'border-slate-300'}`}></div>
-                                        <span className="text-[11px] font-bold truncate">{s.lastName} {s.firstName}</span>
-                                    </div>); 
-                                })}
-                            </div>
-                        </div>
-                    )}
-                    <button className="v84-game-publish-btn" onClick={handleSave} disabled={loading || totalQuestionsCount === 0}>{loading ? '...' : (initialData ? 'MODIFIER' : 'PUBLIER 🚀')}</button>
-                </div>
+
+                {/* 3. SIDEBAR DROITE : DISTRIBUTION UNIFIÉE */}
+                <StudioDistributionSidebar 
+                    user={user}
+                    allClasses={allClasses}
+                    allStudents={allStudents}
+                    chapters={chapters}
+                    distribution={distribution}
+                    setDistribution={setDistribution}
+                    viewingClass={viewingClass}
+                    setViewingClass={setViewingClass}
+                    studentSearch={studentSearch}
+                    setStudentSearch={setStudentSearch}
+                    targetSection={targetSection}
+                    targetLevel={targetLevel} // 🚀 TRANSMISSION DU FILTRE
+                    loading={loading}
+                    onSave={handleSave}
+                />
             </div>
         </div>
     );
@@ -6522,7 +6950,7 @@ export default function HomeworkResults({ onBack }) { return <div>Résultats dev
 /* --- CONTAINER GLOBAL --- */
 .v84-hw-container {
     position: fixed; inset: 0; z-index: 9500;
-    background: #f8fafc; /* Slate 50 */
+    background: #f8fafc;
     display: flex; flex-direction: column;
     font-family: 'Inter', sans-serif;
 }
@@ -6559,417 +6987,314 @@ export default function HomeworkResults({ onBack }) { return <div>Résultats dev
 
 /* --- ÉDITEUR GAUCHE --- */
 .v84-hw-editor {
-    flex: 1; padding: 40px; overflow-y: auto;
+    flex: 1; padding: 30px; overflow-y: auto;
     display: flex; flex-direction: column; gap: 20px;
 }
 
-/* 🔥 NOUVEAU STYLE : LA CARTE "FEUILLE" */
+/* NAVIGATION TABS (Q1, Q2...) */
+.hw-level-tabs {
+    display: flex; gap: 10px; align-items: center;
+    padding-bottom: 10px; flex-wrap: wrap;
+}
+.hw-tab-btn {
+    padding: 10px 20px; border-radius: 15px; border: 2px solid transparent;
+    font-weight: 900; font-size: 0.8rem; color: #94a3b8; background: white;
+    cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 8px;
+}
+.hw-tab-btn:hover { border-color: #e2e8f0; color: #64748b; }
+.hw-tab-btn.active {
+    background: #3b82f6; color: white; box-shadow: 0 4px 10px rgba(59, 130, 246, 0.3);
+}
+.hw-tab-add {
+    width: 40px; height: 40px; border-radius: 12px; background: #e0f2fe;
+    color: #0284c7; font-size: 1.2rem; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; border: none; font-weight: bold;
+}
+.hw-tab-delete {
+    width: 18px; height: 18px; background: rgba(255,255,255,0.2); border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; font-size: 0.6rem;
+    color: white; margin-left: 5px; cursor: pointer;
+}
+.hw-tab-delete:hover { background: #ef4444; }
+
+/* CARTE DEVOIR */
 .v84-hw-card {
-    background: white;
-    border-radius: 30px;
-    padding: 30px;
-    border: 1px solid #e2e8f0;
-    box-shadow: 0 10px 30px -10px rgba(0,0,0,0.05);
-    min-height: 400px;
-    display: flex;
-    flex-direction: column;
+    background: white; border-radius: 30px; padding: 30px;
+    border: 1px solid #e2e8f0; box-shadow: 0 10px 30px -10px rgba(0,0,0,0.05);
+    display: flex; flex-direction: column; gap: 25px;
+}
+
+.hw-section-title {
+    font-size: 0.7rem; font-weight: 950; text-transform: uppercase;
+    color: #94a3b8; letter-spacing: 0.05em; margin-bottom: 8px;
+    display: flex; justify-content: space-between; align-items: center;
 }
 
 .v84-hw-textarea {
-    width: 100%; flex: 1;
-    border: none; background: transparent;
-    font-size: 1.1rem; line-height: 1.6; color: #334155;
-    outline: none; resize: none;
+    width: 100%; min-height: 100px;
+    border: 2px solid #f1f5f9; border-radius: 15px; padding: 15px;
+    font-size: 1rem; line-height: 1.5; color: #334155;
+    outline: none; resize: vertical; background: #f8fafc;
+}
+.v84-hw-textarea:focus { border-color: #3b82f6; background: white; }
+
+/* FICHE SUJET */
+.hw-sheet-zone {
+    height: 120px; border: 2px dashed #cbd5e1; border-radius: 20px;
+    display: flex; align-items: center; justify-content: center;
+    background: #f8fafc; cursor: pointer; position: relative; overflow: hidden;
+    transition: all 0.2s;
+}
+.hw-sheet-zone:hover { border-color: #3b82f6; background: #eff6ff; }
+.hw-sheet-placeholder { display: flex; flex-direction: column; align-items: center; gap: 5px; color: #94a3b8; font-weight: 800; font-size: 0.7rem; text-transform: uppercase; }
+.hw-sheet-preview { height: 100%; width: 100%; object-fit: contain; padding: 5px; }
+.hw-sheet-remove {
+    position: absolute; top: 10px; right: 10px;
+    background: #ef4444; color: white; padding: 5px 10px;
+    border-radius: 8px; font-weight: 900; font-size: 0.6rem;
+    border: none; cursor: pointer; text-transform: uppercase;
 }
 
-/* --- ATTACHMENTS --- */
+/* DOCUMENTS */
 .v84-hw-attachments {
     display: flex; flex-wrap: wrap; gap: 10px;
-    margin-top: 20px; padding-top: 20px;
-    border-top: 2px dashed #e2e8f0;
+    padding: 15px; background: #f8fafc; border-radius: 20px;
+    border: 1px solid #f1f5f9; min-height: 60px;
 }
 .v84-att-chip {
-    background: #f8fafc; border: 1px solid #e2e8f0;
+    background: white; border: 1px solid #e2e8f0;
     padding: 8px 12px; border-radius: 10px;
     display: flex; align-items: center; gap: 8px;
-    color: #475569; font-weight: 600; font-size: 0.8rem;
+    color: #475569; font-weight: 700; font-size: 0.75rem;
     box-shadow: 0 2px 5px rgba(0,0,0,0.02);
 }
 .v84-att-add-btn {
-    padding: 8px 15px; background: #f0f9ff;
+    padding: 8px 15px; background: #e0f2fe;
     color: #0284c7; border: 1px dashed #7dd3fc;
-    border-radius: 10px; font-size: 0.75rem;
+    border-radius: 10px; font-size: 0.7rem;
     font-weight: 900; cursor: pointer; text-transform: uppercase;
 }
-.v84-att-add-btn:hover { background: #e0f2fe; }
+.v84-att-add-btn:hover { background: #bae6fd; }
 
-/* --- SIDEBAR DROITE --- */
-.v84-dist-sidebar {
-    width: 360px; background: white;
-    border-left: 2px solid #f1f5f9;
-    padding: 20px; display: flex; flex-direction: column;
+/* IA HINTS */
+.hw-ai-box {
+    background: #f5f3ff; border: 1px solid #ddd6fe;
+    border-radius: 20px; padding: 15px;
 }
+.hw-ai-input {
+    width: 100%; background: transparent; border: none;
+    outline: none; font-size: 0.9rem; color: #5b21b6;
+    min-height: 40px; resize: vertical;
+}
+.hw-ai-input::placeholder { color: #a78bfa; font-style: italic; }
 
-.v84-classes-tabs { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 20px; }
-.v84-tab-btn {
-    padding: 8px 12px; border-radius: 10px;
-    font-size: 10px; font-weight: 900; border: 1px solid transparent;
-    cursor: pointer; text-transform: uppercase; transition: all 0.2s;
-}
-.v84-tab-btn.active { background: #9333ea; color: white; box-shadow: 0 4px 10px rgba(147, 51, 234, 0.3); }
-.v84-tab-btn.inactive { background: #f1f5f9; color: #94a3b8; }
-
-.v84-class-card {
-    flex: 1; display: flex; flex-direction: column;
-    background: #f8fafc; border: 1px solid #e2e8f0;
-    border-radius: 20px; padding: 15px; overflow: hidden;
-}
-.v84-class-header {
-    display: flex; justify-content: space-between; align-items: center;
-    margin-bottom: 15px; cursor: pointer;
-}
-.v84-class-title { font-weight: 950; font-size: 1rem; color: #1e293b; text-transform: uppercase; }
-.v84-check-badge {
-    width: 24px; height: 24px; border-radius: 6px;
-    display: flex; align-items: center; justify-content: center;
-    border: 2px solid #cbd5e1; color: white; font-size: 12px;
-}
-.v84-check-badge.checked { background: #9333ea; border-color: #9333ea; }
-
-.v84-folder-select-box {
-    background: white; border: 1px solid #e2e8f0;
-    border-radius: 12px; padding: 10px; margin-bottom: 10px;
-}
-.v84-folder-label { font-size: 9px; font-weight: 900; color: #94a3b8; text-transform: uppercase; display: block; margin-bottom: 5px; }
-.v84-folder-select {
-    width: 100%; font-size: 11px; font-weight: 700;
-    border: none; outline: none; background: transparent; color: #334155;
-}
-
-.v84-search-box {
-    display: flex; align-items: center; gap: 5px;
-    background: white; border: 1px solid #e2e8f0;
-    border-radius: 10px; padding: 8px 12px; margin-bottom: 10px;
-}
-.v84-search-input { border: none; outline: none; font-size: 10px; font-weight: 600; width: 100%; color: #475569; }
-
-.v84-students-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
-.v84-student-item {
-    display: flex; align-items: center; gap: 10px;
-    padding: 8px; border-radius: 8px; cursor: pointer;
-    transition: background 0.1s;
-}
-.v84-student-item:hover { background: #e2e8f0; }
-.v84-student-item.selected { background: #f3e8ff; }
-.v84-student-checkbox {
-    width: 16px; height: 16px; border-radius: 4px; border: 2px solid #cbd5e1;
-    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-}
-.v84-student-item.selected .v84-student-checkbox { background: #9333ea; border-color: #9333ea; }
-.v84-student-name { font-size: 10px; font-weight: 700; color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.v84-student-item.selected .v84-student-name { color: #6b21a8; }
-
-.v84-publish-btn {
-    width: 100%; padding: 15px; margin-top: 15px;
-    background: #9333ea; color: white;
-    font-weight: 950; font-size: 11px;
-    border: none; border-radius: 15px;
-    cursor: pointer; text-transform: uppercase;
-    box-shadow: 0 10px 20px rgba(147, 51, 234, 0.3);
-    transition: transform 0.1s;
-}
-.v84-publish-btn:hover:not(:disabled) { transform: translateY(-2px); }
-.v84-publish-btn:disabled { background: #cbd5e1; cursor: not-allowed; box-shadow: none; }
-
-/* Scrollbar */
-.custom-scrollbar::-webkit-scrollbar { width: 5px; }
-.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-.custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+/* NETTOYAGE DES STYLES SIDEBAR (DÉPLACÉS) */
+/* Les styles v84-dist-sidebar et enfants sont maintenant gérés par le composant dédié */
 
 [[[£ END: client/src/features/prof/homework/HomeworkStudio.css £]]]
 
 [[[£ FILE: client/src/features/prof/homework/HomeworkStudio.jsx £]]]
-// @signatures: HomeworkStudio, StudioUtils, getAvailableChapters, handleAddAttachment, handleDateChange, handleDrop, handleFileSelect, handleInput, handlePaste, handleRemoveAttachment, handleSave, handleToggleStudent, loadData, toggleAllStudents
+// @signatures: HomeworkStudio, handleSave
 import React, { useState, useEffect, useRef } from 'react';
 import './HomeworkStudio.css';
 import { api } from '../../../services/api';
-
-const StudioUtils = {
-    getStudentsForViewingClass: (clsName, allStudents, allClasses) => {
-        if (!clsName) return [];
-        const clsObj = allClasses.find(c => c.name === clsName);
-        const clsId = clsObj ? String(clsObj._id) : null;
-        return allStudents.filter(s => {
-            const mainClass = (s.currentClass || "").trim().toUpperCase();
-            if (mainClass === clsName) return true;
-            if (clsId && (s.assignedGroups || []).some(g => String(g) === clsId || String(g._id) === clsId)) return true;
-            return false;
-        }).sort((a,b) => a.lastName.localeCompare(b.lastName));
-    }
-};
+import StudioDistributionSidebar from '../components/StudioDistributionSidebar';
 
 const DEFAULT_HW_DATA = { 
-    title: '', content: '', date: '', chapterId: '', teacherId: null, 
-    targetClassrooms: [], assignedStudents: [], attachments: [], isAllClass: true 
+    title: '', content: '', date: '', teacherId: null, 
+    levels: [{ instruction: '', instructionUrls: [], attachmentUrls: [], aiHints: '' }],
+    isPunishment: false
 };
 
-export default function HomeworkStudio({ initialData, chapters, classFilter, user, targetSection, onClose }) {
-
-    // --- INIT ---
-    const initData = () => {
+export default function HomeworkStudio({ initialData, chapters, user, targetSection, targetLevel, onClose, allStudents: propStudents, allClasses: propClasses }) {
+    
+    // 1. ÉTATS DU DEVOIR
+    const [formData, setFormData] = useState(() => {
         let base = initialData ? JSON.parse(JSON.stringify(initialData)) : { ...DEFAULT_HW_DATA };
-        base.teacherId = user.id || user._id;
-        if (!base.targetClassrooms || base.targetClassrooms.length === 0) {
-            if (base.classroom) base.targetClassrooms = [base.classroom];
-            else if (classFilter) base.targetClassrooms = [classFilter];
-            else base.targetClassrooms = [];
-        }
+        if (!base.levels || base.levels.length === 0) base.levels = [{ instruction: '', instructionUrls: [], attachmentUrls: [], aiHints: '' }];
         if (!base.date) {
             const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
             base.date = tomorrow.toISOString().split('T')[0];
-        } else { base.date = base.date.split('T')[0]; }
+        } else base.date = base.date.split('T')[0];
         return base;
-    };
+    });
 
-    const [formData, setFormData] = useState(initData());
-    const [allStudents, setAllStudents] = useState([]);
-    const [allClasses, setAllClasses] = useState([]);
-    const [distribution, setDistribution] = useState({});
-    const [viewingClass, setViewingClass] = useState(classFilter || "");
-    const [studentSearch, setStudentSearch] = useState(""); 
-    const [loading, setLoading] = useState(false);
-    const fileInputRef = useRef(null);
+    const [activeLevelIdx, setActiveLevelIdx] = useState(0);
 
-    // --- LOGIQUE ---
-    const getAvailableChapters = (clsName) => {
-        const safeChapters = Array.isArray(chapters) ? chapters : [];
-        if (safeChapters.length === 0) return [];
-        const cleanSection = (targetSection || "GÉNÉRAL").toUpperCase().trim();
-        const clsObj = allClasses.find(c => c.name === clsName);
-
-        let matches = safeChapters.filter(c => 
-            !c.isArchived && (c.section || "GÉNÉRAL").toUpperCase().trim() === cleanSection
-        );
-
-        matches = matches.filter(c => {
-            if (c.classroom === clsName) return true;
-            if (c.sharedLevel && clsObj && String(c.sharedLevel) === String(clsObj.level)) return true;
-            if (!c.classroom && !c.sharedLevel) return !c.hiddenIn || !c.hiddenIn.includes(clsName);
-            return false;
-        });
-        return matches.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
-    };
-
-    const findBestDefaultChapter = (clsName) => {
-        const available = getAvailableChapters(clsName);
-        if (available.length > 0) return available[0]._id;
-        return "";
-    };
-
-    const loadData = async () => {
-        setLoading(true);
-        try {
-            const [sts, cls] = await Promise.all([ api.get('/admin/students'), api.get('/admin/classrooms') ]);
-            const safeSts = Array.isArray(sts) ? sts : [];
-            const safeCls = Array.isArray(cls) ? cls : [];
-            setAllStudents(safeSts); setAllClasses(safeCls); 
-            
-            if (formData) {
-                const targets = formData.targetClassrooms || [];
-                const newDist = {};
-                targets.forEach(clsName => {
-                    const clsObj = safeCls.find(c => c.name === clsName);
-                    const clsId = clsObj ? String(clsObj._id) : null;
-                    let classStudentIds = safeSts.filter(s => {
-                        const isMain = (s.currentClass||"").trim().toUpperCase() === clsName.trim().toUpperCase();
-                        const isOption = clsId && (s.assignedGroups||[]).some(gId => String(gId) === clsId);
-                        return (isMain || isOption) && (formData.assignedStudents||[]).includes(s._id);
-                    }).map(s => s._id);
-
-                    let chId = formData.chapterId;
-                    if (!chId || chId === "") {
-                        const localClsObj = safeCls.find(c => c.name === clsName);
-                        const cleanSection = (targetSection || "GÉNÉRAL").toUpperCase().trim();
-                        const matches = (chapters || []).filter(c => 
-                            !c.isArchived && (c.section || "GÉNÉRAL").toUpperCase().trim() === cleanSection &&
-                            (c.classroom === clsName || (c.sharedLevel && localClsObj && String(c.sharedLevel) === String(localClsObj.level)) || (!c.classroom && !c.sharedLevel && (!c.hiddenIn || !c.hiddenIn.includes(clsName))))
-                        ).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
-                        if (matches.length > 0) chId = matches[0]._id;
-                    }
-                    newDist[clsName] = { chapterId: chId || "", studentIds: classStudentIds };
-                });
-                setDistribution(newDist);
-                if (targets.length > 0 && !viewingClass) setViewingClass(targets[0]);
-            }
-        } catch(e) { console.error("Load Error", e); }
-        setLoading(false);
-    };
-
-    useEffect(() => { loadData(); }, []);
-
-    // AUTO-SELECT
-    useEffect(() => {
-        if (!viewingClass && allClasses.length > 0) {
-            const myClassesIds = (user.assignedClasses || []).map(c => String(c._id || c));
-            const myClasses = allClasses.filter(c => user.isDeveloper || user.role === 'admin' || myClassesIds.includes(String(c._id))).sort((a,b) => a.name.localeCompare(b.name));
-            if (myClasses.length > 0) setViewingClass(myClasses[0].name);
-        }
-    }, [allClasses, viewingClass, user]);
-
-    // --- HANDLERS ---
-    const handleInput = (field, value) => setFormData(p => ({ ...p, [field]: value }));
-    const handleDateChange = (e) => setFormData(p => ({ ...p, date: e.target.value }));
-    const handleAddAttachment = async (file) => {
-        setLoading(true); const fd = new FormData(); fd.append('file', file);
-        try { const res = await fetch('/api/games/upload-asset', { method: 'POST', body: fd }); const data = await res.json(); if (data.url) setFormData(p => ({ ...p, attachments: [...p.attachments, { name: data.name, url: data.url, type: file.type }] })); } catch(e) { alert("Erreur upload"); } setLoading(false);
-    };
-    const handleRemoveAttachment = (idx) => setFormData(p => ({ ...p, attachments: p.attachments.filter((_, i) => i !== idx) }));
-    const handleFileSelect = (e) => { if (e.target.files[0]) handleAddAttachment(e.target.files[0]); e.target.value = null; };
-    const handlePaste = (e) => { const items = e.clipboardData.items; for (let i=0; i<items.length; i++) { if (items[i].kind === 'file') { handleAddAttachment(items[i].getAsFile()); return; } } };
-    const handleDrop = (e) => { e.preventDefault(); if(e.dataTransfer.files[0]) handleAddAttachment(e.dataTransfer.files[0]); };
-
-    // --- RENDER ---
-    const targetLevel = allClasses.find(c => c.name === viewingClass)?.level;
-    const myClassesIds = (user.assignedClasses || []).map(c => String(c._id || c));
-    const availableClasses = allClasses.filter(c => { 
-        if (targetLevel && String(c.level) !== String(targetLevel)) return false; 
-        if (user.isDeveloper || user.role === 'admin') return true; 
-        return myClassesIds.includes(String(c._id)); 
-    }).sort((a,b) => a.name.localeCompare(b.name));
+    // 2. DONNÉES CONTEXTUELLES (Robustesse)
+    const [allStudents, setAllStudents] = useState(propStudents || []);
+    const [allClasses, setAllClasses] = useState(propClasses || []);
     
-    const rawStudents = StudioUtils.getStudentsForViewingClass(viewingClass, allStudents, allClasses);
-    const studentsToDisplay = rawStudents.filter(s => `${s.firstName} ${s.lastName}`.toLowerCase().includes(studentSearch.toLowerCase()));
+    // 3. ÉTATS DISTRIBUTION
+    const [distribution, setDistribution] = useState({});
+    const [viewingClass, setViewingClass] = useState("");
+    const [studentSearch, setStudentSearch] = useState("");
+    const [loading, setLoading] = useState(false);
+    
+    const fileInputRef = useRef(null);
+    const [uploadType, setUploadType] = useState(null);
 
-    const handleToggleStudent = (sId) => { 
-        setDistribution(prev => { 
-            const next = { ...prev }; const cfg = next[viewingClass]; 
-            if (!cfg) { const defId = findBestDefaultChapter(viewingClass); next[viewingClass] = { chapterId: defId, studentIds: [sId] }; } 
-            else { 
-                let newIds = cfg.studentIds.length === 0 ? rawStudents.map(s => s._id).filter(id => id !== sId) : (cfg.studentIds.includes(sId) ? cfg.studentIds.filter(id => id !== sId) : [...cfg.studentIds, sId]); 
-                if (newIds.length === 0) delete next[viewingClass]; else if (newIds.length === rawStudents.length) next[viewingClass] = { ...cfg, studentIds: [] }; else next[viewingClass] = { ...cfg, studentIds: newIds }; 
-            } 
-            return next; 
-        }); 
+    // 4. CHARGEMENT DE SECOURS (Si les props sont vides)
+    useEffect(() => {
+        const initDistribution = () => {
+            if (initialData && initialData.targetClassrooms) {
+                const dist = {};
+                initialData.targetClassrooms.forEach(clsName => {
+                    dist[clsName] = {
+                        chapterId: initialData.chapterId || "",
+                        studentIds: initialData.isAllClass ? [] : (initialData.assignedStudents || [])
+                    };
+                });
+                setDistribution(dist);
+                if (initialData.targetClassrooms.length > 0) setViewingClass(initialData.targetClassrooms[0]);
+            }
+        };
+
+        if ((!propStudents || propStudents.length === 0) || (!propClasses || propClasses.length === 0)) {
+            setLoading(true);
+            Promise.all([api.get('/admin/students'), api.get('/admin/classrooms')])
+                .then(([sts, cls]) => {
+                    setAllStudents(sts || []);
+                    setAllClasses(cls || []);
+                    initDistribution();
+                    setLoading(false);
+                })
+                .catch(() => setLoading(false));
+        } else {
+            initDistribution();
+        }
+    }, []);
+
+    // 5. HANDLERS
+    const handleInput = (f, v) => setFormData(p => ({ ...p, [f]: v }));
+    const handleLevelInput = (idx, f, v) => {
+        const lvls = [...formData.levels];
+        lvls[idx][f] = v;
+        setFormData(p => ({ ...p, levels: lvls }));
+    };
+    const handleAddLevel = () => {
+        setFormData(prev => ({ ...prev, levels: [...prev.levels, { instruction: '', instructionUrls: [], attachmentUrls: [], aiHints: '' }] }));
+        setActiveLevelIdx(formData.levels.length); 
+    };
+    const handleRemoveLevel = (e, idx) => {
+        e.stopPropagation();
+        if (formData.levels.length === 1) return alert("Il faut au moins une question.");
+        if (!confirm("Supprimer cette question ?")) return;
+        const newLevels = formData.levels.filter((_, i) => i !== idx);
+        setFormData(prev => ({ ...prev, levels: newLevels }));
+        setActiveLevelIdx(prev => Math.min(prev, newLevels.length - 1));
+    };
+    const updateCurrentLevel = (field, value) => {
+        const newLevels = [...formData.levels];
+        newLevels[activeLevelIdx] = { ...newLevels[activeLevelIdx], [field]: value };
+        setFormData(prev => ({ ...prev, levels: newLevels }));
+    };
+    const triggerUpload = (type) => { setUploadType(type); fileInputRef.current.click(); };
+    const handleFileChange = async (e) => {
+        const files = e.target.files; if (!files || files.length === 0) return;
+        setLoading(true); const fd = new FormData(); Array.from(files).forEach(f => fd.append('files', f));
+        try {
+            const res = await fetch('/api/homework/upload', { method: 'POST', body: fd }).then(r => r.json());
+            if (res.urls && res.urls.length > 0) {
+                if (uploadType === 'sheet') updateCurrentLevel('instructionUrls', [res.urls[0]]);
+                else updateCurrentLevel('attachmentUrls', [...formData.levels[activeLevelIdx].attachmentUrls, ...res.urls]);
+            }
+        } catch(err) { alert("Erreur Upload"); } setLoading(false); e.target.value = "";
+    };
+    const removeAttachment = (type, urlIdx) => {
+        const lvls = [...formData.levels];
+        if (type === 'sheet') updateCurrentLevel('instructionUrls', []);
+        else updateCurrentLevel('attachmentUrls', formData.levels[activeLevelIdx].attachmentUrls.filter((_, i) => i !== urlIdx));
     };
 
-    const toggleAllStudents = () => { 
-        setDistribution(prev => { 
-            const next = { ...prev }; 
-            if (next[viewingClass]) delete next[viewingClass]; else { const defId = findBestDefaultChapter(viewingClass); next[viewingClass] = { chapterId: defId, studentIds: [] }; } 
-            return next; 
-        }); 
-    };
-
-    const isClassSelected = !!distribution[viewingClass];
-    const distCfg = distribution[viewingClass];
-    const availableChapters = getAvailableChapters(viewingClass);
-
+    // 6. SAUVEGARDE GROUPÉE
     const handleSave = async () => {
         const targets = Object.keys(distribution);
-        if (!formData.title || targets.length === 0) return alert("❌ Titre et Classe requis !");
+        if (!formData.title || targets.length === 0) return alert("❌ Titre et au moins une Classe requis !");
+        
         setLoading(true);
         try {
             const groups = {};
             targets.forEach(cls => {
                 const cfg = distribution[cls];
-                const realChapterId = cfg.chapterId || findBestDefaultChapter(cls);
-                if (!realChapterId) return;
-                const finalIds = cfg.studentIds.length > 0 ? cfg.studentIds : StudioUtils.getStudentsForViewingClass(cls, allStudents, allClasses).map(s => s._id);
+                if (!cfg.chapterId) return; 
+                
                 const isAllClass = cfg.studentIds.length === 0;
-                const groupKey = `${realChapterId}_${isAllClass ? 'ALL' : 'SUBSET'}`;
-                if (!groups[groupKey]) { groups[groupKey] = { chapterId: realChapterId, classrooms: [], assignedStudents: [], isAllClass: isAllClass }; }
-                groups[groupKey].classrooms.push(cls);
-                if (!isAllClass) { groups[groupKey].assignedStudents.push(...finalIds); }
+                const key = `${cfg.chapterId}_${isAllClass ? 'ALL' : 'SUBSET_' + cfg.studentIds.sort().join('-')}`;
+                
+                if (!groups[key]) {
+                    groups[key] = {
+                        chapterId: cfg.chapterId,
+                        classrooms: [],
+                        assignedStudents: cfg.studentIds,
+                        isAllClass: isAllClass
+                    };
+                }
+                groups[key].classrooms.push(cls);
             });
-            const groupKeys = Object.keys(groups);
-            for (let i = 0; i < groupKeys.length; i++) {
-                const key = groupKeys[i];
+
+            for (const key of Object.keys(groups)) {
                 const grp = groups[key];
-                const payload = { ...formData, chapterId: grp.chapterId, targetClassrooms: grp.classrooms, assignedStudents: grp.isAllClass ? [] : grp.assignedStudents, isAllClass: grp.isAllClass, teacherId: user.id || user._id, type: 'homework' };
-                if (formData._id && i > 0) { delete payload._id; }
-                await api.post('/homeworks', payload);
+                const payload = {
+                    ...formData,
+                    chapterId: grp.chapterId,
+                    targetClassrooms: grp.classrooms,
+                    assignedStudents: grp.assignedStudents,
+                    isAllClass: grp.isAllClass,
+                    teacherId: user.id || user._id
+                };
+                if (formData._id && key === Object.keys(groups)[0]) { /* update */ } else { delete payload._id; }
+                await api.post('/homework', payload); 
             }
             onClose();
-        } catch(e) { console.error(e); alert("Erreur sauvegarde."); }
+        } catch(e) { alert("Erreur sauvegarde: " + e.message); }
         setLoading(false);
     };
 
+    const currentLvl = formData.levels[activeLevelIdx];
+
     return (
         <div className="v84-hw-container">
-            <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileSelect} />
+            <input type="file" ref={fileInputRef} className="hidden" multiple={uploadType === 'docs'} onChange={handleFileChange} />
             <div className="v84-hw-header">
+                <div className="flex items-center gap-3"><span className="text-3xl">📝</span><input className="v84-hw-title-input" value={formData.title} onChange={e => handleInput('title', e.target.value)} placeholder="TITRE DU DEVOIR..." autoFocus /></div>
                 <div className="flex items-center gap-3">
-                    <span className="text-3xl">📝</span>
-                    <input className="v84-hw-title-input" value={formData.title} onChange={e => handleInput('title', e.target.value)} placeholder="TITRE DU DEVOIR..." autoFocus />
-                </div>
-                <div className="flex items-center gap-3">
-                    <input type="date" className="v84-hw-date-input" value={formData.date} onChange={handleDateChange} />
+                    <label className="text-[10px] font-black uppercase text-red-500 flex items-center gap-2 cursor-pointer bg-red-50 px-3 py-1 rounded-lg border border-red-100"><input type="checkbox" checked={formData.isPunishment} onChange={e => handleInput('isPunishment', e.target.checked)} />Punition</label>
+                    <input type="date" className="v84-hw-date-input" value={formData.date} onChange={e => handleInput('date', e.target.value)} />
                     <button onClick={onClose} className="v84-close-btn">✕</button>
                 </div>
             </div>
 
             <div className="v84-hw-body">
-                {/* EDITOR GAUCHE AVEC CARTE BLANCHE */}
-                <div className="v84-hw-editor custom-scrollbar" onPaste={handlePaste} onDrop={handleDrop} onDragOver={e => e.preventDefault()}>
+                <div className="v84-hw-editor custom-scrollbar">
+                    <div className="hw-level-tabs">
+                        {formData.levels.map((lvl, idx) => (<div key={idx} onClick={() => setActiveLevelIdx(idx)} className={`hw-tab-btn ${activeLevelIdx === idx ? 'active' : ''}`}><span>Question {idx + 1}</span>{formData.levels.length > 1 && (<span className="hw-tab-delete" onClick={(e) => handleRemoveLevel(e, idx)}>✕</span>)}</div>))}
+                        <button className="hw-tab-add" onClick={handleAddLevel}>+</button>
+                    </div>
                     <div className="v84-hw-card">
-                        <textarea className="v84-hw-textarea custom-scrollbar" placeholder="Description, consignes, liens..." value={formData.content} onChange={e => handleInput('content', e.target.value)} />
-                        <div className="v84-hw-attachments">
-                            {(formData.attachments || []).map((att, idx) => (
-                                <div key={idx} className="v84-att-chip">
-                                    <span>📎 {att.name.substring(0, 20)}</span>
-                                    <button onClick={() => handleRemoveAttachment(idx)} className="ml-2 text-red-400 hover:text-red-600 font-bold">✕</button>
-                                </div>
-                            ))}
-                            <button onClick={() => fileInputRef.current.click()} className="v84-att-add-btn">+ AJOUTER FICHIER</button>
-                        </div>
+                        <div><div className="hw-section-title">Consigne textuelle</div><textarea className="v84-hw-textarea custom-scrollbar" placeholder="Écrivez votre question ou consigne ici..." value={currentLvl.instruction} onChange={e => updateCurrentLevel('instruction', e.target.value)} /></div>
+                        <div><div className="hw-section-title">Fiche Question (Image/Scan)</div>{currentLvl.instructionUrls && currentLvl.instructionUrls.length > 0 ? (<div className="hw-sheet-zone" style={{borderColor: '#22c55e', background: '#f0fdf4'}}><img src={currentLvl.instructionUrls[0]} className="hw-sheet-preview" alt="Sujet" /><button className="hw-sheet-remove" onClick={() => removeAttachment('sheet')}>Supprimer</button></div>) : (<div className="hw-sheet-zone" onClick={() => triggerUpload('sheet')}><div className="hw-sheet-placeholder"><span style={{fontSize: '2rem'}}>🖼️</span><span>Déposer la fiche ici</span></div></div>)}</div>
+                        <div><div className="hw-section-title">Documents de travail (Aide)</div><div className="v84-hw-attachments">{currentLvl.attachmentUrls.map((url, i) => (<div key={i} className="v84-att-chip"><span>📎 Doc {i+1}</span><button onClick={() => removeAttachment('docs', i)} className="ml-2 text-red-400 font-bold hover:text-red-600">✕</button></div>))}<button onClick={() => triggerUpload('docs')} className="v84-att-add-btn">+ DOC</button></div></div>
+                        <div><div className="hw-section-title" style={{color: '#7c3aed'}}>🧠 Indices Correction IA (Secret)</div><div className="hw-ai-box"><textarea className="hw-ai-input custom-scrollbar" placeholder="Donnez ici les mots-clés ou les réponses attendues pour aider l'IA à corriger..." value={currentLvl.aiHints} onChange={e => updateCurrentLevel('aiHints', e.target.value)}/></div></div>
                     </div>
                 </div>
 
-                {/* SIDEBAR DROITE */}
-                <div className="v84-dist-sidebar custom-scrollbar">
-                    <div className="v84-classes-tabs">
-                        {availableClasses.map(c => (
-                            <button key={c._id} onClick={() => { setViewingClass(c.name); setStudentSearch(""); }} className={`v84-tab-btn ${distribution[c.name] ? 'active' : 'inactive'} ${viewingClass === c.name ? 'border-2 border-purple-700' : ''}`} style={c.type === 'GROUP' ? { color: '#f59e0b', borderColor: '#fcd34d' } : {}}>
-                                {c.name}
-                            </button>
-                        ))}
-                    </div>
-
-                    {viewingClass && (
-                        <div className="v84-class-card">
-                            <div className="v84-class-header" onClick={toggleAllStudents}>
-                                <span className="v84-class-title">{viewingClass}</span>
-                                <div className={`v84-check-badge ${isClassSelected ? 'checked' : ''}`}>{isClassSelected && '✓'}</div>
-                            </div>
-                            <div className="v84-folder-select-box">
-                                <label className="v84-folder-label">Dossier :</label>
-                                <select className="v84-folder-select" value={distCfg?.chapterId || findBestDefaultChapter(viewingClass)} onChange={(e) => setDistribution(p => ({ ...p, [viewingClass]: { ...p[viewingClass], chapterId: e.target.value } }))} disabled={loading}>
-                                    <option value="">-- CHOISIR --</option>
-                                    {availableChapters.map(c => <option key={c._id} value={c._id}>{c.title}</option>)}
-                                </select>
-                            </div>
-                            <div className="v84-search-box">
-                                <span>🔎</span>
-                                <input className="v84-search-input" placeholder="Chercher un élève..." value={studentSearch} onChange={e => setStudentSearch(e.target.value)} />
-                            </div>
-                            <div className="v84-students-list custom-scrollbar">
-                                {studentsToDisplay.map(s => { 
-                                    const checked = isClassSelected && (distribution[viewingClass].studentIds.length === 0 || distribution[viewingClass].studentIds.includes(s._id));
-                                    return (
-                                        <div key={s._id} onClick={() => handleToggleStudent(s._id)} className={`v84-student-item ${checked ? 'selected' : ''}`}>
-                                            <div className="v84-student-checkbox">{checked && '✓'}</div>
-                                            <span className="v84-student-name">{s.lastName} {s.firstName}</span>
-                                        </div>
-                                    ); 
-                                })}
-                            </div>
-                        </div>
-                    )}
-                    
-                    <button className="v84-publish-btn" onClick={handleSave} disabled={loading}>
-                        {loading ? '...' : (initialData ? 'MODIFIER' : 'PUBLIER 🚀')}
-                    </button>
-                </div>
+                <StudioDistributionSidebar 
+                    user={user}
+                    allClasses={allClasses} // Données passées
+                    allStudents={allStudents} // Données passées
+                    chapters={chapters}
+                    distribution={distribution}
+                    setDistribution={setDistribution}
+                    viewingClass={viewingClass}
+                    setViewingClass={setViewingClass}
+                    studentSearch={studentSearch}
+                    setStudentSearch={setStudentSearch}
+                    targetSection={targetSection} 
+                    targetLevel={targetLevel} 
+                    loading={loading}
+                    onSave={handleSave}
+                />
             </div>
         </div>
     );
@@ -14483,11 +14808,10 @@ module.exports = ProfAI;
 [[[£ END: server/prof/core/prof.ai.js £]]]
 
 [[[£ FILE: server/prof/games/games.prof.js £]]]
-// @signatures: ProfGamesRouter, all, create, generate, generateContent, streamToBuffer, uploadAsset
+// @signatures: ProfGamesRouter, all, create, delete, generate, generateContent, getById, streamToBuffer, testData, uploadAsset
 const express = require('express');
 const router = express.Router();
-// On require le modèle ici pour être sûr qu'il est chargé
-const GameLevel = require('../../models/GameLevel'); 
+const { GameLevel } = require('../models/prof.models');
 const ProfAI = require('../core/prof.ai');
 const ProfDrive = require('../core/drive.prof'); 
 const multer = require('multer');
@@ -14496,58 +14820,21 @@ const path = require('path');
 
 const upload = multer({ dest: path.join(process.cwd(), 'public', 'uploads', 'temp') });
 
-const streamToBuffer = async (stream) => {
-    const chunks = [];
-    return new Promise((resolve, reject) => {
-        stream.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
-        stream.on('error', (err) => reject(err));
-        stream.on('end', () => resolve(Buffer.concat(chunks)));
-    });
-};
+/**
+ * 🛡️ ROUTEUR HYBRIDE : STUDIO & ACTIVITÉS
+ * Ce fichier est le point critique de partage.
+ * ORDRE IMPÉRATIF : Routes spécifiques (/test-data, /upload) AVANT les routes dynamiques (/:id).
+ */
 
-router.get('/all', async (req, res) => {
+// --- 1. ROUTES POUR LE STUDIO (Moteur de Jeu) ---
+
+// 🔥 CRITIQUE : Cette route alimente le bouton "TESTER" du Studio
+router.get('/test-data', async (req, res) => {
     try {
-        const list = await GameLevel.find({}).lean();
-        res.json(list);
-    } catch (e) { res.status(500).json([]); }
-});
-
-router.post('/', async (req, res) => {
-    console.log("💾 [GAMES] Sauvegarde...");
-    console.log("   DATA REÇUE:", JSON.stringify(req.body).substring(0, 200) + "...");
-    
-    if (req.body.levels) {
-        console.log(`   ✅ LEVELS PRÉSENTS: ${req.body.levels.length}`);
-    } else {
-        console.error("   ❌ LEVELS MANQUANTS DANS LE PAYLOAD !");
-    }
-
-    try {
-        const data = req.body;
-        
-        // Nettoyage IDs vides
-        if (data.levels) {
-            data.levels.forEach(l => {
-                if(l._id === "") delete l._id;
-                if(l.intro && l.intro._id === "") delete l.intro._id;
-                if(l.questions) l.questions.forEach(q => { if(q._id === "") delete q._id; });
-            });
-        }
-
-        let quiz;
-        if (data._id) {
-            // On force l'update avec le nouveau contenu
-            quiz = await GameLevel.findByIdAndUpdate(data._id, { $set: data }, { new: true });
-        } else {
-            quiz = await GameLevel.create(data);
-        }
-        
-        console.log("   ✅ Sauvegardé ID:", quiz._id);
-        res.json(quiz);
-    } catch (e) { 
-        console.error("   ❌ ERREUR:", e.message);
-        res.status(500).json({ error: e.message }); 
-    }
+        const game = await GameLevel.findOne({ isTestGame: true }).sort({ updatedAt: -1 }).lean()
+                  || await GameLevel.findOne({}).sort({ updatedAt: -1 }).lean();
+        res.json(game || null);
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.post('/upload-asset', upload.single('file'), async (req, res) => {
@@ -14558,55 +14845,57 @@ router.post('/upload-asset', upload.single('file'), async (req, res) => {
         const url = `/api/structure/proxy/${driveFile.id}`;
         try { fs.unlinkSync(req.file.path); } catch(e){}
         res.json({ url, name: req.file.originalname });
-    } catch (e) {
-        res.status(500).json({ error: "Erreur Drive" });
-    }
+    } catch (e) { res.status(500).json({ error: "Erreur Drive" }); }
 });
 
 router.post('/generate-content', upload.single('file'), async (req, res) => {
-    const { topic, count, contextText, sheetUrl } = req.body;
-    console.log(`🎮 [GAMES] Génération IA. Topic: "${topic}"`);
-
-    const system = `Tu es un expert pédagogique créateur de Quiz.
-    TA MISSION : Créer un QCM de ${count || 5} questions.
-    RÈGLE DE REDACTION : Format "Texte à trous" si possible.
-    FORMAT SORTIE : Un tableau JSON [ { "q": "...", "options": ["...",...], "a": 0 } ].`;
-
-    const promptParts = [];
-    if (topic) promptParts.push({ text: `Sujet/Consigne : "${topic}".` });
-    if (contextText) promptParts.push({ text: `CONTENU :\n${contextText}` });
-
+    const { topic } = req.body;
     try {
-        if (req.file) {
-            const fileData = fs.readFileSync(req.file.path).toString('base64');
-            promptParts.push({ inlineData: { mimeType: req.file.mimetype, data: fileData } });
-        } 
-        else if (sheetUrl && sheetUrl.includes('/proxy/')) {
-            const fileId = sheetUrl.split('/proxy/')[1];
-            const stream = await ProfDrive.getFileStream(fileId);
-            const buffer = await streamToBuffer(stream);
-            const mime = sheetUrl.endsWith('.pdf') ? 'application/pdf' : 'image/jpeg'; 
-            promptParts.push({ inlineData: { mimeType: mime, data: buffer.toString('base64') } });
-        }
+        const promptParts = [{ text: `Sujet : "${topic}".` }];
+        const raw = await ProfAI.ask(promptParts, "Tu es un expert Quiz JSON.");
+        res.json(ProfAI.sanitize(raw));
+    } catch (e) { res.status(500).json({ error: "Erreur IA" }); }
+    if (req.file) try { fs.unlinkSync(req.file.path); } catch(e){}
+});
 
-        if (promptParts.length === 0) return res.status(400).json({ error: "Aucun contexte" });
+// --- 2. ROUTES POUR L'ONGLET ACTIVITÉS (Gestion) ---
 
-        const raw = await ProfAI.ask(promptParts, system);
-        const questions = ProfAI.sanitize(raw);
-        
-        const shuffled = questions.map(q => {
-            const corr = q.options[q.a];
-            const opts = [...q.options].sort(() => Math.random() - 0.5);
-            return { ...q, options: opts, a: opts.indexOf(corr) };
-        });
+router.get('/all', async (req, res) => {
+    try {
+        const list = await GameLevel.find({}).lean();
+        res.json(list);
+    } catch (e) { res.status(500).json([]); }
+});
 
-        res.json(shuffled);
-    } catch (e) {
-        console.error("❌ [GAMES] Erreur IA:", e);
-        res.status(500).json({ error: "Erreur IA" });
-    } finally {
-        if (req.file) { try { fs.unlinkSync(req.file.path); } catch(e){} }
-    }
+router.post('/', async (req, res) => {
+    try {
+        const data = req.body;
+        // Nettoyage préventif
+        if (data.levels) data.levels.forEach(l => { if(!l._id) delete l._id; });
+        if (!data._id || data._id === "null") delete data._id;
+
+        const quiz = data._id 
+            ? await GameLevel.findByIdAndUpdate(data._id, { $set: data }, { new: true })
+            : await GameLevel.create(data);
+        res.json(quiz);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// 🔥 CRITIQUE : Route de suppression pour l'onglet Activité
+router.delete('/:id', async (req, res) => {
+    try {
+        await GameLevel.findByIdAndDelete(req.params.id);
+        res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Récupération par ID (DOIT ÊTRE EN DERNIER)
+router.get('/:id', async (req, res) => {
+    try {
+        const game = await GameLevel.findById(req.params.id).lean();
+        if (!game) return res.status(404).json({ error: "Jeu introuvable" });
+        res.json(game);
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 module.exports = router;
@@ -14614,26 +14903,46 @@ module.exports = router;
 [[[£ END: server/prof/games/games.prof.js £]]]
 
 [[[£ FILE: server/prof/homework/homework.prof.js £]]]
-// @signatures: ProfHomeworkRouter, listAll
+// @signatures: ProfHomeworkRouter, listAll, create, delete, getOne
 const express = require('express');
 const router = express.Router();
 const { Homework } = require('../models/prof.models');
 
 /**
- * 📝 BLOC DEVOIRS PROF (/api/homework)
+ * 📝 BLOC DEVOIRS - ISOLÉ
+ * Contient toutes les opérations CRUD pour les devoirs.
  */
 
 router.get('/all', async (req, res) => {
+    try { res.json(await Homework.find({}).sort({ date: -1 }).lean()); } 
+    catch (e) { res.status(500).json({ error: "DB FAIL" }); }
+});
+
+router.get('/:id', async (req, res) => {
     try {
-        const list = await Homework.find({}).sort({ date: -1 }).lean();
-        res.json(list);
-    } catch (e) { res.status(500).json({ error: "DB FAIL" }); }
+        const hw = await Homework.findById(req.params.id).lean();
+        if (!hw) return res.status(404).json({ error: "Introuvable" });
+        res.json(hw);
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.post('/', async (req, res) => {
     try {
-        const hw = await Homework.create(req.body);
+        const data = req.body;
+        if (!data._id) delete data._id;
+        
+        const hw = data._id 
+            ? await Homework.findByIdAndUpdate(data._id, data, { new: true })
+            : await Homework.create(data);
         res.json(hw);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ✅ ROUTE DELETE RESTAURÉE
+router.delete('/:id', async (req, res) => {
+    try {
+        await Homework.findByIdAndDelete(req.params.id);
+        res.json({ ok: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
