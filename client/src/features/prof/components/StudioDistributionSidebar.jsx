@@ -1,74 +1,59 @@
-// @signatures: StudioDistributionSidebar
+// @signatures: StudioDistributionSidebar, findBestDefaultChapter, handleToggleStudent, toggleAllStudents
 import React, { useEffect } from 'react';
 import './StudioDistributionSidebar.css';
 
+/**
+ * 📦 BARRE LATÉRALE ROBUSTE
+ * Sécurisée contre les props manquantes (undefined/null).
+ */
 export default function StudioDistributionSidebar({ 
-    user, allClasses, allStudents, chapters, distribution, setDistribution, 
+    user, allClasses = [], allStudents = [], chapters = [], distribution, setDistribution, 
     viewingClass, setViewingClass, studentSearch, setStudentSearch,
     targetLevel, targetSection, loading, onSave, saveLabel = "PUBLIER 🚀"
 }) {
 
-    // 1. FILTRAGE STRICT DES CLASSES
-    // On ne montre que les classes du prof, et si un niveau est ciblé, que ce niveau.
-    const availableClasses = (allClasses || []).filter(c => {
-        // Filtre de niveau strict (ex: Si je suis dans l'onglet "4ème", je ne veux pas voir les "3ème")
-        if (targetLevel && c.level && String(c.level) !== String(targetLevel)) return false;
+    // 1. FILTRAGE SÉCURISÉ DES CLASSES
+    const availableClasses = allClasses.filter(c => {
+        // Filtre Niveau (si appliqué)
+        if (targetLevel && String(c.level) !== String(targetLevel)) return false;
         
-        // Admin ou Dev voit tout
-        if (user.isDeveloper || user.role === 'admin') return true;
-        
-        // Prof ne voit que ses classes assignées
-        const myIds = (user.assignedClasses || []).map(id => String(id._id || id));
+        // Filtre Permissions
+        if (user?.isDeveloper || user?.role === 'admin') return true;
+        const myIds = (user?.assignedClasses || []).map(id => String(id._id || id));
         return myIds.includes(String(c._id));
     }).sort((a,b) => a.name.localeCompare(b.name));
 
-    // Auto-select première classe si rien n'est sélectionné
+    // Auto-select si vide
     useEffect(() => {
-        // Si la classe en cours de visionnage n'est pas dans la liste disponible (ex: changement de filtre), on reset
-        const currentIsAvailable = availableClasses.some(c => c.name === viewingClass);
-        if (!currentIsAvailable && availableClasses.length > 0) {
-            setViewingClass(availableClasses[0].name);
-        } else if (!viewingClass && availableClasses.length > 0) {
+        if (!viewingClass && availableClasses.length > 0) {
             setViewingClass(availableClasses[0].name);
         }
-    }, [availableClasses, viewingClass]);
+    }, [availableClasses.length, viewingClass]);
 
-    // 2. FILTRAGE STRICT DES DOSSIERS (CHAPTERS)
-    const availableChapters = (chapters || []).filter(c => {
-        // A. Filtre par Section (Matière)
+    // 2. RECHERCHE DOSSIER PAR DÉFAUT
+    const findBestDefaultChapter = (clsName) => {
         const cleanSection = (targetSection || "GÉNÉRAL").toUpperCase().trim();
-        const chapSection = (c.section || "GÉNÉRAL").toUpperCase().trim();
-        if (chapSection !== cleanSection) return false;
+        const clsObj = allClasses.find(c => c.name === clsName);
+        
+        const matches = chapters.filter(c => {
+            if (c.isArchived) return false;
+            if ((c.section || "GÉNÉRAL").toUpperCase().trim() !== cleanSection) return false;
+            
+            if (c.classroom === clsName) return true;
+            if (c.sharedLevel && clsObj && String(c.sharedLevel) === String(clsObj.level)) return true;
+            if (!c.classroom && !c.sharedLevel) return !c.hiddenIn || !c.hiddenIn.includes(clsName);
+            
+            return false;
+        }).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-        if (c.isArchived) return false;
-
-        // B. Filtre Contextuel (Classe active)
-        if (viewingClass) {
-             const currentClassObj = allClasses.find(cl => cl.name === viewingClass);
-             const currentLevel = currentClassObj ? String(currentClassObj.level) : null;
-
-             // Si le dossier est exclusif à une AUTRE classe -> CACHÉ
-             if (c.classroom && c.classroom !== viewingClass) return false;
-
-             // Si le dossier est exclusif à un AUTRE niveau -> CACHÉ
-             if (c.sharedLevel && String(c.sharedLevel) !== currentLevel) return false;
-
-             // Si le dossier a été masqué manuellement dans cette classe -> CACHÉ
-             if (c.hiddenIn && c.hiddenIn.includes(viewingClass)) return false;
-        }
-
-        return true;
-    }).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
-
-    // 3. RECHERCHE DOSSIER DEFAUT (Parmis les filtrés)
-    const findBestDefaultChapter = () => {
-        return availableChapters.length > 0 ? availableChapters[0]._id : "";
+        return matches.length > 0 ? matches[0]._id : "";
     };
 
-    // 4. LOGIQUE ÉLÈVES
-    const rawStudents = (allStudents || []).filter(s => {
+    // 3. LOGIQUE ÉLÈVES
+    const rawStudents = allStudents.filter(s => {
         if (!viewingClass) return false;
         if ((s.currentClass || "").trim() === viewingClass) return true;
+        
         const clsObj = allClasses.find(c => c.name === viewingClass);
         if (clsObj && clsObj.type === 'GROUP') {
             const clsId = String(clsObj._id);
@@ -83,12 +68,11 @@ export default function StudioDistributionSidebar({
 
     const handleToggleStudent = (sId) => { 
         const next = { ...distribution }; 
-        const defaultChapter = findBestDefaultChapter();
-        
+        const defaultChapter = findBestDefaultChapter(viewingClass);
         const cfg = next[viewingClass] || { chapterId: defaultChapter, studentIds: [] };
         let currentIds = cfg.studentIds || [];
         
-        // Logique "Tout le monde sauf..."
+        // Logique "Tout le monde sauf..." (Si vide = tous)
         if (currentIds.length === 0) {
             currentIds = rawStudents.map(s => s._id).filter(id => id !== sId);
         } else {
@@ -103,9 +87,7 @@ export default function StudioDistributionSidebar({
                 studentIds: allIds.filter(id => id !== sId)
             };
         } else {
-            const ids = next[viewingClass].studentIds;
-            if (ids.includes(sId)) next[viewingClass].studentIds = ids.filter(id => id !== sId);
-            else next[viewingClass].studentIds = [...ids, sId];
+            next[viewingClass].studentIds = currentIds;
         }
         setDistribution(next);
     };
@@ -114,7 +96,7 @@ export default function StudioDistributionSidebar({
         const next = { ...distribution };
         if (next[viewingClass]) delete next[viewingClass];
         else {
-             const defaultChapter = findBestDefaultChapter();
+             const defaultChapter = findBestDefaultChapter(viewingClass);
              next[viewingClass] = { chapterId: defaultChapter, studentIds: [] };
         }
         setDistribution(next);
@@ -129,12 +111,16 @@ export default function StudioDistributionSidebar({
         return cfg.studentIds.includes(sId);
     };
 
-    // Calcul du chapitre sélectionné pour l'affichage du select
-    const selectedChapterValue = cfg?.chapterId || findBestDefaultChapter();
+    const availableChapters = chapters.filter(c => {
+        const cleanSection = (targetSection || "GÉNÉRAL").toUpperCase().trim();
+        return !c.isArchived && (c.section || "GÉNÉRAL").toUpperCase().trim() === cleanSection;
+    }).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    // Calcul valeur select
+    const selectedChapterValue = cfg?.chapterId || findBestDefaultChapter(viewingClass);
 
     return (
         <div className="v84-dist-sidebar custom-scrollbar">
-            {/* 1. ONGLETS CLASSES */}
             <div className="v84-classes-tabs">
                 {availableClasses.map(c => (
                     <button 
@@ -149,7 +135,6 @@ export default function StudioDistributionSidebar({
                 {availableClasses.length === 0 && <div className="text-xs text-slate-400 italic">Aucune classe disponible.</div>}
             </div>
 
-            {/* 2. PANNEAU CLASSE ACTIVE */}
             {viewingClass && (
                 <div className="v84-class-card animate-in slide-in-from-right">
                     <div className="v84-class-header" onClick={toggleAllStudents}>

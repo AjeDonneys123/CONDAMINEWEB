@@ -46,7 +46,6 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
     const handleDeleteItem = async (id, type) => {
         if (!confirm(`⚠️ Supprimer cet élément ?`)) return;
         
-        // CORRECTION ROUTES API
         let url;
         if (type === 'game') url = `/api/games/${id}`;
         else if (type === 'homework') url = `/api/homework/${id}`;
@@ -63,8 +62,8 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
         const props = {
             initialData: editingItem.data,
             chapters,
-            allClasses, // Passé aux enfants
-            allStudents, // Passé aux enfants
+            allClasses, // Transmis
+            allStudents, // Transmis
             globalClass,
             globalLevel,
             user,
@@ -82,7 +81,7 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
                 chapters={chapters} 
                 items={activities} 
                 studentsRef={allStudents}
-                allClasses={allClasses} // Passé
+                allClasses={allClasses} // Transmis
                 classFilter={globalClass}
                 levelFilter={globalLevel}
                 user={user}
