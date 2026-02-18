@@ -10,7 +10,9 @@ const DEFAULT_HW_DATA = {
     isPunishment: false
 };
 
-export default function HomeworkStudio({ initialData, chapters, user, targetSection, onClose }) {
+export default function HomeworkStudio({ initialData, chapters, user, targetSection, onClose, allStudents: propStudents, allClasses: propClasses }) {
+    
+    // --- ÉTATS DONNÉES ---
     const [formData, setFormData] = useState(() => {
         let base = initialData ? JSON.parse(JSON.stringify(initialData)) : { ...DEFAULT_HW_DATA };
         if (!base.levels || base.levels.length === 0) base.levels = [{ instruction: '', instructionUrls: [], attachmentUrls: [], aiHints: '' }];
@@ -21,43 +23,45 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
         return base;
     });
 
-    const [allStudents, setAllStudents] = useState([]);
-    const [allClasses, setAllClasses] = useState([]);
+    // --- ÉTATS DISTRIBUTION ---
+    const [allStudents, setAllStudents] = useState(propStudents || []);
+    const [allClasses, setAllClasses] = useState(propClasses || []);
     const [distribution, setDistribution] = useState({});
     const [viewingClass, setViewingClass] = useState("");
     const [studentSearch, setStudentSearch] = useState("");
     const [loading, setLoading] = useState(false);
     const fileInputRef = useRef(null);
 
-    // CHARGEMENT DONNÉES
+    // CHARGEMENT DE SECOURS & RECONSTRUCTION (Si props manquantes)
     useEffect(() => {
-        const load = async () => {
-            setLoading(true);
-            try {
-                const [sts, cls] = await Promise.all([ 
-                    api.get('/admin/students'), 
-                    api.get('/admin/classrooms') 
-                ]);
-                setAllStudents(sts || []);
-                setAllClasses(cls || []);
-
-                // RECONSTRUCTION DE LA DISTRIBUTION SI EDITION
-                if (initialData && initialData.targetClassrooms) {
-                    const dist = {};
-                    initialData.targetClassrooms.forEach(clsName => {
-                        dist[clsName] = {
-                            chapterId: initialData.chapterId || "",
-                            // Si isAllClass est true, studentIds est vide. Sinon on met les IDs assignés.
-                            studentIds: initialData.isAllClass ? [] : (initialData.assignedStudents || [])
-                        };
-                    });
-                    setDistribution(dist);
-                    if (initialData.targetClassrooms.length > 0) setViewingClass(initialData.targetClassrooms[0]);
-                }
-            } catch(e) {}
-            setLoading(false);
+        const initDistribution = () => {
+            if (initialData && initialData.targetClassrooms) {
+                const dist = {};
+                initialData.targetClassrooms.forEach(clsName => {
+                    dist[clsName] = {
+                        chapterId: initialData.chapterId || "",
+                        // Si isAllClass est true, studentIds est vide. Sinon on met les IDs assignés.
+                        studentIds: initialData.isAllClass ? [] : (initialData.assignedStudents || [])
+                    };
+                });
+                setDistribution(dist);
+                if (initialData.targetClassrooms.length > 0) setViewingClass(initialData.targetClassrooms[0]);
+            }
         };
-        load();
+
+        if ((!propStudents || propStudents.length === 0) || (!propClasses || propClasses.length === 0)) {
+            setLoading(true);
+            Promise.all([api.get('/admin/students'), api.get('/admin/classrooms')])
+                .then(([sts, cls]) => {
+                    setAllStudents(sts || []);
+                    setAllClasses(cls || []);
+                    initDistribution();
+                    setLoading(false);
+                })
+                .catch(() => setLoading(false));
+        } else {
+            initDistribution();
+        }
     }, []);
 
     // HANDLERS
@@ -75,7 +79,7 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
             const res = await fetch('/api/homework/upload', { method: 'POST', body: fd }).then(r => r.json());
             if (res.urls && res.urls.length > 0) {
                 const lvls = [...formData.levels];
-                lvls[0].attachmentUrls.push(res.urls[0]); 
+                lvls[0].attachmentUrls.push(res.urls[0]); // Ajout au niveau 1 par défaut
                 setFormData(p => ({ ...p, levels: lvls }));
             }
         } catch(e) { alert("Erreur upload"); }
@@ -83,7 +87,6 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
         fileInputRef.current.value = "";
     };
 
-    // ALGORITHME DE SAUVEGARDE GROUPÉE
     const handleSave = async () => {
         const targets = Object.keys(distribution);
         if (!formData.title || targets.length === 0) return alert("❌ Titre et au moins une Classe requis !");
@@ -94,17 +97,16 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
             
             targets.forEach(cls => {
                 const cfg = distribution[cls];
-                if (!cfg.chapterId) return; 
+                if (!cfg.chapterId) return; // Ignore si pas de dossier
                 
                 const isAllClass = cfg.studentIds.length === 0;
-                // Clé unique pour regrouper les configurations identiques
                 const key = `${cfg.chapterId}_${isAllClass ? 'ALL' : 'SUBSET_' + cfg.studentIds.sort().join('-')}`;
                 
                 if (!groups[key]) {
                     groups[key] = {
                         chapterId: cfg.chapterId,
                         classrooms: [],
-                        assignedStudents: cfg.studentIds,
+                        assignedStudents: cfg.studentIds, // Vide si AllClass
                         isAllClass: isAllClass
                     };
                 }
@@ -125,12 +127,12 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
                 
                 // Si on édite, le premier groupe garde l'ID (Update), les autres sont des clones (Create)
                 if (formData._id && key === Object.keys(groups)[0]) {
-                    // Garde l'ID
+                    // Update
                 } else {
                     delete payload._id; // Force Create
                 }
 
-                await api.post('/homework', payload); // Utilisation de /homework (Singulier, corrigé selon le router)
+                await api.post('/homework', payload); 
             }
             onClose();
         } catch(e) { alert("Erreur sauvegarde: " + e.message); }
@@ -157,6 +159,7 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
             </div>
 
             <div className="v84-hw-body">
+                {/* PARTIE GAUCHE : ÉDITEUR */}
                 <div className="v84-hw-editor custom-scrollbar">
                     <div className="v84-hw-card">
                         <textarea 
@@ -165,6 +168,7 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
                             value={formData.levels[0].instruction} 
                             onChange={e => handleLevelInput(0, 'instruction', e.target.value)} 
                         />
+                        
                         <div className="v84-hw-attachments">
                             {formData.levels[0].attachmentUrls.map((url, i) => (
                                 <div key={i} className="v84-att-chip">
@@ -181,6 +185,7 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
                     </div>
                 </div>
 
+                {/* PARTIE DROITE : SIDEBAR UNIFIÉE */}
                 <StudioDistributionSidebar 
                     user={user}
                     allClasses={allClasses}
@@ -192,7 +197,7 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
                     setViewingClass={setViewingClass}
                     studentSearch={studentSearch}
                     setStudentSearch={setStudentSearch}
-                    targetSection={targetSection} 
+                    targetSection={targetSection} // "MATHS", "FRANCAIS"...
                     loading={loading}
                     onSave={handleSave}
                 />
