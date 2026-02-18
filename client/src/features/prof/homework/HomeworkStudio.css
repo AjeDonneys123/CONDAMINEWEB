@@ -38,127 +38,116 @@
 
 /* --- ÉDITEUR GAUCHE --- */
 .v84-hw-editor {
-    flex: 1; padding: 40px; overflow-y: auto;
+    flex: 1; padding: 30px; overflow-y: auto;
     display: flex; flex-direction: column; gap: 20px;
 }
 
-/* 🔥 NOUVEAU STYLE : LA CARTE "FEUILLE" */
+/* NAVIGATION DES QUESTIONS (TABS) */
+.hw-level-tabs {
+    display: flex; gap: 10px; align-items: center;
+    padding-bottom: 10px; flex-wrap: wrap;
+}
+.hw-tab-btn {
+    padding: 10px 20px; border-radius: 15px; border: 2px solid transparent;
+    font-weight: 900; font-size: 0.8rem; color: #94a3b8; background: white;
+    cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 8px;
+}
+.hw-tab-btn:hover { border-color: #e2e8f0; color: #64748b; }
+.hw-tab-btn.active {
+    background: #3b82f6; color: white; box-shadow: 0 4px 10px rgba(59, 130, 246, 0.3);
+}
+.hw-tab-add {
+    width: 40px; height: 40px; border-radius: 12px; background: #e0f2fe;
+    color: #0284c7; font-size: 1.2rem; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; border: none; font-weight: bold;
+}
+.hw-tab-delete {
+    width: 18px; height: 18px; background: rgba(255,255,255,0.2); border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; font-size: 0.6rem;
+    color: white; margin-left: 5px; cursor: pointer;
+}
+.hw-tab-delete:hover { background: #ef4444; }
+
+/* CONTENU DE LA QUESTION (CARTE BLANCHE) */
 .v84-hw-card {
-    background: white;
-    border-radius: 30px;
-    padding: 30px;
-    border: 1px solid #e2e8f0;
-    box-shadow: 0 10px 30px -10px rgba(0,0,0,0.05);
-    min-height: 400px;
-    display: flex;
-    flex-direction: column;
+    background: white; border-radius: 30px; padding: 30px;
+    border: 1px solid #e2e8f0; box-shadow: 0 10px 30px -10px rgba(0,0,0,0.05);
+    display: flex; flex-direction: column; gap: 25px;
 }
 
+/* SECTION COMMUNE */
+.hw-section-title {
+    font-size: 0.7rem; font-weight: 950; text-transform: uppercase;
+    color: #94a3b8; letter-spacing: 0.05em; margin-bottom: 8px;
+    display: flex; justify-content: space-between; align-items: center;
+}
+
+/* 1. CONSIGNE */
 .v84-hw-textarea {
-    width: 100%; flex: 1;
-    border: none; background: transparent;
-    font-size: 1.1rem; line-height: 1.6; color: #334155;
-    outline: none; resize: none;
+    width: 100%; min-height: 100px;
+    border: 2px solid #f1f5f9; border-radius: 15px; padding: 15px;
+    font-size: 1rem; line-height: 1.5; color: #334155;
+    outline: none; resize: vertical; background: #f8fafc;
+}
+.v84-hw-textarea:focus { border-color: #3b82f6; background: white; }
+
+/* 2. FICHE SUJET (UNIQUE) */
+.hw-sheet-zone {
+    height: 120px; border: 2px dashed #cbd5e1; border-radius: 20px;
+    display: flex; align-items: center; justify-content: center;
+    background: #f8fafc; cursor: pointer; position: relative; overflow: hidden;
+    transition: all 0.2s;
+}
+.hw-sheet-zone:hover { border-color: #3b82f6; background: #eff6ff; }
+.hw-sheet-placeholder { display: flex; flex-direction: column; align-items: center; gap: 5px; color: #94a3b8; font-weight: 800; font-size: 0.7rem; text-transform: uppercase; }
+.hw-sheet-preview { height: 100%; width: 100%; object-fit: contain; padding: 5px; }
+.hw-sheet-remove {
+    position: absolute; top: 10px; right: 10px;
+    background: #ef4444; color: white; padding: 5px 10px;
+    border-radius: 8px; font-weight: 900; font-size: 0.6rem;
+    border: none; cursor: pointer; text-transform: uppercase;
 }
 
-/* --- ATTACHMENTS --- */
+/* 3. DOCUMENTS (MULTIPLE) */
 .v84-hw-attachments {
     display: flex; flex-wrap: wrap; gap: 10px;
-    margin-top: 20px; padding-top: 20px;
-    border-top: 2px dashed #e2e8f0;
+    padding: 15px; background: #f8fafc; border-radius: 20px;
+    border: 1px solid #f1f5f9; min-height: 60px;
 }
 .v84-att-chip {
-    background: #f8fafc; border: 1px solid #e2e8f0;
+    background: white; border: 1px solid #e2e8f0;
     padding: 8px 12px; border-radius: 10px;
     display: flex; align-items: center; gap: 8px;
-    color: #475569; font-weight: 600; font-size: 0.8rem;
+    color: #475569; font-weight: 700; font-size: 0.75rem;
     box-shadow: 0 2px 5px rgba(0,0,0,0.02);
 }
 .v84-att-add-btn {
-    padding: 8px 15px; background: #f0f9ff;
+    padding: 8px 15px; background: #e0f2fe;
     color: #0284c7; border: 1px dashed #7dd3fc;
-    border-radius: 10px; font-size: 0.75rem;
+    border-radius: 10px; font-size: 0.7rem;
     font-weight: 900; cursor: pointer; text-transform: uppercase;
 }
-.v84-att-add-btn:hover { background: #e0f2fe; }
+.v84-att-add-btn:hover { background: #bae6fd; }
 
-/* --- SIDEBAR DROITE --- */
+/* 4. IA HINTS */
+.hw-ai-box {
+    background: #f5f3ff; border: 1px solid #ddd6fe;
+    border-radius: 20px; padding: 15px;
+}
+.hw-ai-input {
+    width: 100%; background: transparent; border: none;
+    outline: none; font-size: 0.9rem; color: #5b21b6;
+    min-height: 40px; resize: vertical;
+}
+.hw-ai-input::placeholder { color: #a78bfa; font-style: italic; }
+
+/* --- SIDEBAR DROITE (Réutilisé) --- */
 .v84-dist-sidebar {
     width: 360px; background: white;
     border-left: 2px solid #f1f5f9;
     padding: 20px; display: flex; flex-direction: column;
 }
-
-.v84-classes-tabs { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 20px; }
-.v84-tab-btn {
-    padding: 8px 12px; border-radius: 10px;
-    font-size: 10px; font-weight: 900; border: 1px solid transparent;
-    cursor: pointer; text-transform: uppercase; transition: all 0.2s;
-}
-.v84-tab-btn.active { background: #9333ea; color: white; box-shadow: 0 4px 10px rgba(147, 51, 234, 0.3); }
-.v84-tab-btn.inactive { background: #f1f5f9; color: #94a3b8; }
-
-.v84-class-card {
-    flex: 1; display: flex; flex-direction: column;
-    background: #f8fafc; border: 1px solid #e2e8f0;
-    border-radius: 20px; padding: 15px; overflow: hidden;
-}
-.v84-class-header {
-    display: flex; justify-content: space-between; align-items: center;
-    margin-bottom: 15px; cursor: pointer;
-}
-.v84-class-title { font-weight: 950; font-size: 1rem; color: #1e293b; text-transform: uppercase; }
-.v84-check-badge {
-    width: 24px; height: 24px; border-radius: 6px;
-    display: flex; align-items: center; justify-content: center;
-    border: 2px solid #cbd5e1; color: white; font-size: 12px;
-}
-.v84-check-badge.checked { background: #9333ea; border-color: #9333ea; }
-
-.v84-folder-select-box {
-    background: white; border: 1px solid #e2e8f0;
-    border-radius: 12px; padding: 10px; margin-bottom: 10px;
-}
-.v84-folder-label { font-size: 9px; font-weight: 900; color: #94a3b8; text-transform: uppercase; display: block; margin-bottom: 5px; }
-.v84-folder-select {
-    width: 100%; font-size: 11px; font-weight: 700;
-    border: none; outline: none; background: transparent; color: #334155;
-}
-
-.v84-search-box {
-    display: flex; align-items: center; gap: 5px;
-    background: white; border: 1px solid #e2e8f0;
-    border-radius: 10px; padding: 8px 12px; margin-bottom: 10px;
-}
-.v84-search-input { border: none; outline: none; font-size: 10px; font-weight: 600; width: 100%; color: #475569; }
-
-.v84-students-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
-.v84-student-item {
-    display: flex; align-items: center; gap: 10px;
-    padding: 8px; border-radius: 8px; cursor: pointer;
-    transition: background 0.1s;
-}
-.v84-student-item:hover { background: #e2e8f0; }
-.v84-student-item.selected { background: #f3e8ff; }
-.v84-student-checkbox {
-    width: 16px; height: 16px; border-radius: 4px; border: 2px solid #cbd5e1;
-    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-}
-.v84-student-item.selected .v84-student-checkbox { background: #9333ea; border-color: #9333ea; }
-.v84-student-name { font-size: 10px; font-weight: 700; color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.v84-student-item.selected .v84-student-name { color: #6b21a8; }
-
-.v84-publish-btn {
-    width: 100%; padding: 15px; margin-top: 15px;
-    background: #9333ea; color: white;
-    font-weight: 950; font-size: 11px;
-    border: none; border-radius: 15px;
-    cursor: pointer; text-transform: uppercase;
-    box-shadow: 0 10px 20px rgba(147, 51, 234, 0.3);
-    transition: transform 0.1s;
-}
-.v84-publish-btn:hover:not(:disabled) { transform: translateY(-2px); }
-.v84-publish-btn:disabled { background: #cbd5e1; cursor: not-allowed; box-shadow: none; }
+/* ... (Le reste des styles sidebar est déjà dans GameStudio ou commun) ... */
 
 /* Scrollbar */
 .custom-scrollbar::-webkit-scrollbar { width: 5px; }
