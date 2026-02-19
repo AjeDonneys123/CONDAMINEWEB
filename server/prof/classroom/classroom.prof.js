@@ -94,8 +94,8 @@ router.post('/move', async (req, res) => {
 
 router.post('/layout', async (req, res) => {
     try {
-        await Classroom.findByIdAndUpdate(req.body.classId, { "layout.separators": req.body.separators });
-        res.json({ ok: true });
+        const result = await ClassroomExpert.updateLayout(req.body.classId, req.body);
+        res.json(result);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

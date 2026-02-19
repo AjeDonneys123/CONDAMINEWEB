@@ -1,5 +1,5 @@
 {
-  "status": "READY",
-  "message": "2 fichiers en attente",
-  "timestamp": 1771512248439
+  "status": "PENDING",
+  "message": "Suggestion en attente de vérification par l'agent",
+  "timestamp": 1771518387966
 }

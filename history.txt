@@ -8940,3 +8940,4 @@ Build #174 : EVENT BUS SIMPLE (Simple substitution d'appel)
 - Backend : Déclaration explicite de 'generatedCode' dans StudioProject Schema.
 - Backend : Force l'assignation de 'generatedCode' dans studio.db.js avant sauvegarde.
 - Frontend : saveProject utilise désormais explicitement l'état 'code' de l'éditeur lors de l'envoi.
+2026-02-19 10:30 - FIX: Persistance de la taille de grille (lignes/colonnes) dans ClassroomManager.

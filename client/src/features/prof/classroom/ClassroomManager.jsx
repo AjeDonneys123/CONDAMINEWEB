@@ -29,22 +29,20 @@ export default function ClassroomManager({ globalClassId, user }) {
             const resClass = await fetch(`/api/classroom/${globalClassId}`);
             if (resClass.ok) {
                 const clsInfo = await resClass.json();
-                if (clsInfo.layout && clsInfo.layout.separators) setSeparators(clsInfo.layout.separators);
+                if (clsInfo.layout) {
+                    setSeparators(clsInfo.layout.separators || []);
+                    setGridSize({ 
+                        cols: clsInfo.layout.cols || 6, 
+                        rows: clsInfo.layout.rows || 5 
+                    });
+                }
             }
             const queryParams = myId ? `?teacherId=${myId}` : '';
             const res = await fetch(`/api/classroom/plan/${globalClassId}${queryParams}`);
             
             if (res.ok) {
                 const data = await res.json();
-                if (Array.isArray(data)) {
-                    let maxCol = 5; let maxRow = 4;
-                    data.forEach(s => {
-                        if (s.seatX >= maxCol) maxCol = s.seatX + 1;
-                        if (s.seatY >= maxRow) maxRow = s.seatY + 1;
-                    });
-                    setGridSize(prev => ({ cols: Math.max(prev.cols, maxCol), rows: Math.max(prev.rows, maxRow) }));
-                    setStudents(data);
-                } else { setStudents([]); }
+                setStudents(Array.isArray(data) ? data : []);
             }
         } catch(e) { console.error(e); }
         setLoading(false);
@@ -53,7 +51,17 @@ export default function ClassroomManager({ globalClassId, user }) {
     useEffect(() => { loadData(); }, [globalClassId, myId]);
 
     const toggleSeparator = async (colIndex) => { let newSeps = [...separators]; if (newSeps.includes(colIndex)) newSeps = newSeps.filter(s => s !== colIndex); else newSeps.push(colIndex); setSeparators(newSeps); try { await fetch('/api/classroom/layout', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ classId: globalClassId, separators: newSeps }) }); } catch(e){} };
-    const changeGrid = (dC, dR) => { setGridSize(p => ({ cols: Math.max(2, p.cols + dC), rows: Math.max(2, p.rows + dR) })); };
+    const changeGrid = async (dC, dR) => { 
+        const newSize = { cols: Math.max(2, gridSize.cols + dC), rows: Math.max(2, gridSize.rows + dR) };
+        setGridSize(newSize); 
+        try {
+            await fetch('/api/classroom/layout', { 
+                method: 'POST', 
+                headers: {'Content-Type':'application/json'}, 
+                body: JSON.stringify({ classId: globalClassId, cols: newSize.cols, rows: newSize.rows }) 
+            });
+        } catch(e) {}
+    };
     const handleDragStart = (e, sId) => { setDraggingId(sId); e.dataTransfer.setData("text/plain", sId); e.dataTransfer.effectAllowed = "move"; };
     const handleDragOver = (e, x, y) => { e.preventDefault(); setDragOverCell(`${x}-${y}`); };
     const handleDrop = async (e, x, y) => { e.preventDefault(); setDragOverCell(null); const sId = draggingId; if (!sId) return; const targetStudent = students.find(s => s.seatX === x && s.seatY === y); const movedStudent = students.find(s => s._id === sId); if (targetStudent && targetStudent._id !== sId) { const oldX = movedStudent.seatX; const oldY = movedStudent.seatY; setStudents(prev => prev.map(s => { if (s._id === sId) return { ...s, seatX: x, seatY: y }; if (s._id === targetStudent._id) return { ...s, seatX: oldX, seatY: oldY }; return s; })); } else { setStudents(prev => prev.map(s => s._id === sId ? { ...s, seatX: x, seatY: y } : s)); } try { await fetch('/api/classroom/move', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ studentId: sId, x, y }) }); } catch(err) { loadData(); } setDraggingId(null); };

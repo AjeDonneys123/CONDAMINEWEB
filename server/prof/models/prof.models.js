@@ -66,7 +66,11 @@ const Models = {
         name: String,
         level: String,
         type: { type: String, default: 'CLASS' },
-        layout: { separators: { type: [Number], default: [] } }
+        layout: { 
+            separators: { type: [Number], default: [] },
+            cols: { type: Number, default: 6 },
+            rows: { type: Number, default: 5 }
+        }
     }),
 
     Student: getModel('Student', {

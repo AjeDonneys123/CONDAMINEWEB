@@ -2,7 +2,9 @@ const mongoose = require('mongoose');
 
 // Sous-schéma pour le layout (plus sûr qu'un objet imbriqué direct)
 const LayoutSchema = new mongoose.Schema({
-    separators: { type: [Number], default: [] }
+    separators: { type: [Number], default: [] },
+    cols: { type: Number, default: 6 },
+    rows: { type: Number, default: 5 }
 }, { _id: false });
 
 const ClassroomSchema = new mongoose.Schema({

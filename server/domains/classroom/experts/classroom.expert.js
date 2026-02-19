@@ -157,7 +157,15 @@ const ClassroomExpert = {
     },
 
     applyWeeklyRedemption: async (cid, tid) => { const S = mongoose.model('Student'); const sts = await S.find({classId:cid}); let c=0; for(const s of sts){if(!s.behaviorRecords)continue;const r=s.behaviorRecords.find(x=>x.teacherId===String(tid));if(r&&r.crosses>0){r.weeksToRedemption=(r.weeksToRedemption||3)-1;if(r.weeksToRedemption<=0){r.crosses=Math.max(0,r.crosses-1);r.weeksToRedemption=3;}s.markModified('behaviorRecords');await s.save();c++;}} return {ok:true,count:c}; },
-    updateLayoutSeparators: async (cid, seps) => { await mongoose.model('Classroom').findByIdAndUpdate(cid, {'layout.separators':seps}); return {ok:true}; }
+    updateLayout: async (cid, data) => { 
+        const update = {};
+        if (data.separators !== undefined) update['layout.separators'] = data.separators;
+        if (data.cols !== undefined) update['layout.cols'] = data.cols;
+        if (data.rows !== undefined) update['layout.rows'] = data.rows;
+        
+        await mongoose.model('Classroom').findByIdAndUpdate(cid, { $set: update }); 
+        return { ok: true }; 
+    }
 };
 
 module.exports = ClassroomExpert;

@@ -30,6 +30,7 @@ export default function GameStudio({ initialData, chapters, user, targetSection,
     
     // --- ÉTATS IA & ASSETS ---
     const [aiTopic, setAiTopic] = useState('');
+    const [aiCount, setAiCount] = useState(5);
     const [aiGenerating, setAiGenerating] = useState(false);
     
     const fileInputRef = useRef(null);
@@ -69,15 +70,121 @@ export default function GameStudio({ initialData, chapters, user, targetSection,
     const handleInput = (field, value) => setFormData(p => ({ ...p, [field]: value }));
     const handleSelectQuestion = (lIdx, qIdx) => { setActiveLevelIdx(lIdx); setActiveQIdx(qIdx); };
     
-    const handleAddLevel = () => { setFormData(p => ({ ...p, levels: [...p.levels, { name: `Niveau ${p.levels.length + 1}`, questions: [], intro: { sheetUrl: "", videoUrl: "" } }] })); setActiveLevelIdx(formData.levels.length); setActiveQIdx(0); };
-    const handleDeleteLevel = (e, lIdx) => { e.stopPropagation(); if(!confirm("Supprimer ce niveau ?")) return; setFormData(p => { let newLevels = p.levels.filter((_, i) => i !== lIdx); if (newLevels.length === 0) newLevels = [{ name: "Niveau 1", questions: [], intro: {} }]; return { ...p, levels: newLevels }; }); setActiveLevelIdx(0); setActiveQIdx(0); };
-    const handleAddQuestion = () => { setFormData(p => { const newLevels = [...p.levels]; newLevels[activeLevelIdx].questions.push({ q: 'Nouvelle question', options: ['', '', '', ''], a: 0 }); return { ...p, levels: newLevels }; }); setTimeout(() => setActiveQIdx(formData.levels[activeLevelIdx].questions.length), 0); };
-    const handleDeleteQuestion = (e, lIdx, qIdx) => { e.stopPropagation(); if(!confirm("Supprimer ?")) return; setFormData(p => { const newLevels = [...p.levels]; newLevels[lIdx].questions = newLevels[lIdx].questions.filter((_, i) => i !== qIdx); return { ...p, levels: newLevels }; }); if(activeQIdx >= qIdx) setActiveQIdx(Math.max(0, activeQIdx - 1)); setSelectedForMove(prev => prev.filter(s => !(s.lIdx === lIdx && s.qIdx === qIdx))); };
-    const updateQuestion = (field, value, optionIndex = null) => { setFormData(p => { const newLevels = [...p.levels]; if(!newLevels[activeLevelIdx] || !newLevels[activeLevelIdx].questions[activeQIdx]) return p; const currentQ = { ...newLevels[activeLevelIdx].questions[activeQIdx] }; if (field === 'q' || field === 'a') { currentQ[field] = value; } else if (field === 'options' && optionIndex !== null) { const nextOptions = [...currentQ.options]; nextOptions[optionIndex] = value; currentQ.options = nextOptions; } newLevels[activeLevelIdx].questions[activeQIdx] = currentQ; return { ...p, levels: newLevels }; }); };
+    const handleAddLevel = () => { 
+        setFormData(p => ({ 
+            ...p, 
+            levels: [...p.levels, { name: `Niveau ${p.levels.length + 1}`, questions: [{ q: 'Nouvelle question', options: ['', '', '', ''], a: 0 }], intro: { sheetUrl: "", videoUrl: "" } }] 
+        })); 
+        setTimeout(() => {
+            setActiveLevelIdx(formData.levels.length); 
+            setActiveQIdx(0);
+        }, 0); 
+    };
 
-    const handleToggleSelect = (e, lIdx, qIdx) => { e.stopPropagation(); const exists = selectedForMove.some(s => s.lIdx === lIdx && s.qIdx === qIdx); if (exists) setSelectedForMove(prev => prev.filter(s => !(s.lIdx === lIdx && s.qIdx === qIdx))); else setSelectedForMove(prev => [...prev, { lIdx, qIdx }]); };
+    const handleDeleteLevel = (e, lIdx) => { 
+        e.stopPropagation(); 
+        if(!confirm("Supprimer ce niveau ?")) return; 
+        setFormData(p => { 
+            let newLevels = p.levels.filter((_, i) => i !== lIdx); 
+            if (newLevels.length === 0) newLevels = [{ name: "Niveau 1", questions: [{ q: 'Nouvelle question', options: ['', '', '', ''], a: 0 }], intro: {} }]; 
+            return { ...p, levels: newLevels }; 
+        }); 
+        setActiveLevelIdx(0); 
+        setActiveQIdx(0); 
+    };
+
+    const handleAddQuestion = () => { 
+        setFormData(p => { 
+            const newLevels = p.levels.map((lvl, idx) => {
+                if (idx !== activeLevelIdx) return lvl;
+                return {
+                    ...lvl,
+                    questions: [...lvl.questions, { q: 'Nouvelle question', options: ['', '', '', ''], a: 0 }]
+                };
+            });
+            return { ...p, levels: newLevels }; 
+        }); 
+        setTimeout(() => setActiveQIdx(formData.levels[activeLevelIdx].questions.length), 0); 
+    };
+
+    const handleDeleteQuestion = (e, lIdx, qIdx) => { 
+        e.stopPropagation(); 
+        setFormData(p => { 
+            const newLevels = p.levels.map((lvl, idx) => {
+                if (idx !== lIdx) return lvl;
+                return {
+                    ...lvl,
+                    questions: lvl.questions.filter((_, i) => i !== qIdx)
+                };
+            });
+            return { ...p, levels: newLevels }; 
+        }); 
+        if(activeQIdx >= qIdx) setActiveQIdx(Math.max(0, activeQIdx - 1)); 
+        setSelectedForMove(prev => prev.filter(s => !(s.lIdx === lIdx && s.qIdx === qIdx))); 
+    };
+    const updateQuestion = (field, value, optionIndex = null) => { 
+        setFormData(p => { 
+            const newLevels = p.levels.map((lvl, idx) => {
+                if (idx !== activeLevelIdx) return lvl;
+                
+                const newQuestions = lvl.questions.map((q, qIdx) => {
+                    if (qIdx !== activeQIdx) return q;
+                    
+                    const updatedQ = { ...q };
+                    if (field === 'q' || field === 'a') { 
+                        updatedQ[field] = value; 
+                    } else if (field === 'options' && optionIndex !== null) { 
+                        updatedQ.options = updatedQ.options.map((opt, optIdx) => optIdx === optionIndex ? value : opt);
+                    }
+                    return updatedQ;
+                });
+                
+                return { ...lvl, questions: newQuestions };
+            });
+            return { ...p, levels: newLevels }; 
+        }); 
+    };
+
+    const handleToggleSelect = (e, lIdx, qIdx) => { 
+        e.stopPropagation(); 
+        const exists = selectedForMove.some(s => s.lIdx === lIdx && s.qIdx === qIdx); 
+        if (exists) setSelectedForMove(prev => prev.filter(s => !(s.lIdx === lIdx && s.qIdx === qIdx))); 
+        else setSelectedForMove(prev => [...prev, { lIdx, qIdx }]); 
+    };
+
     const isQuestionSelected = (lIdx, qIdx) => selectedForMove.some(s => s.lIdx === lIdx && s.qIdx === qIdx);
-    const handleMoveQuestions = () => { if (moveTargetLevel === "" || isNaN(parseInt(moveTargetLevel))) return; const targetIdx = parseInt(moveTargetLevel); setFormData(prev => { const newLevels = prev.levels.map(l => ({ ...l, questions: [...l.questions] })); const questionsToMove = []; newLevels.forEach((lvl, lIdx) => { lvl.questions.forEach((q, qIdx) => { if (isQuestionSelected(lIdx, qIdx)) questionsToMove.push(q); }); }); newLevels.forEach((lvl, lIdx) => { lvl.questions = lvl.questions.filter((_, qIdx) => !isQuestionSelected(lIdx, qIdx)); }); newLevels[targetIdx].questions.push(...questionsToMove); return { ...prev, levels: newLevels }; }); setSelectedForMove([]); setActiveLevelIdx(targetIdx); setActiveQIdx(0); };
+
+    const handleMoveQuestions = () => { 
+        if (moveTargetLevel === "" || isNaN(parseInt(moveTargetLevel))) return; 
+        const targetIdx = parseInt(moveTargetLevel); 
+        
+        setFormData(prev => { 
+            const questionsToMove = [];
+            prev.levels.forEach((lvl, lIdx) => {
+                lvl.questions.forEach((q, qIdx) => {
+                    if (isQuestionSelected(lIdx, qIdx)) questionsToMove.push(q);
+                });
+            });
+
+            const newLevels = prev.levels.map((lvl, lIdx) => {
+                // 1. On filtre les questions qui partent
+                let filteredQuestions = lvl.questions.filter((_, qIdx) => !isQuestionSelected(lIdx, qIdx));
+                
+                // 2. Si c'est le niveau cible, on ajoute les questions
+                if (lIdx === targetIdx) {
+                    filteredQuestions = [...filteredQuestions, ...questionsToMove];
+                }
+                
+                return { ...lvl, questions: filteredQuestions };
+            });
+
+            return { ...prev, levels: newLevels }; 
+        }); 
+
+        setSelectedForMove([]); 
+        setActiveLevelIdx(targetIdx); 
+        setActiveQIdx(0); 
+    };
 
     const handleUploadAsset = async (e) => { const file = e.target.files[0]; if (!file || uploadTarget === null) return; setLoading(true); const fd = new FormData(); fd.append('file', file); try { const res = await fetch('/api/games/upload-asset', { method: 'POST', body: fd }); const data = await res.json(); if (data.url) { setFormData(prev => { const next = { ...prev }; if (uploadTarget === -1) next.globalIntro = { ...next.globalIntro, sheetUrl: data.url }; else next.levels[uploadTarget].intro = { ...next.levels[uploadTarget].intro, sheetUrl: data.url }; return next; }); } } catch(err) { alert("Erreur upload"); } setLoading(false); e.target.value = null; };
     const handleRemoveAsset = (idx) => { setFormData(prev => { const next = { ...prev }; if (idx === -1) next.globalIntro.sheetUrl = ""; else next.levels[idx].intro.sheetUrl = ""; return next; }); };
@@ -89,16 +196,42 @@ export default function GameStudio({ initialData, chapters, user, targetSection,
         setAiGenerating(true);
         try {
             const fd = new FormData();
-            if (mode === 'sheet') { const sheetUrl = currentLevel.intro?.sheetUrl; if (!sheetUrl) return alert("Pas de fiche !"); fd.append('sheetUrl', sheetUrl); } 
-            else { if (!aiTopic) { setAiGenerating(false); return alert("Sujet requis !"); } }
-            fd.append('topic', aiTopic || "Quiz"); fd.append('count', 5);
+            if (mode === 'sheet') { 
+                const sheetUrl = currentLevel.intro?.sheetUrl; 
+                if (!sheetUrl) { setAiGenerating(false); return alert("Pas de fiche !"); }
+                fd.append('sheetUrl', sheetUrl); 
+            } else { 
+                if (!aiTopic) { setAiGenerating(false); return alert("Sujet requis !"); } 
+            }
+            fd.append('topic', aiTopic || "Quiz"); 
+            fd.append('count', aiCount);
+            
             const res = await fetch('/api/games/generate-content', { method: 'POST', body: fd });
             const cleaned = await res.json();
+            
             if (Array.isArray(cleaned) && cleaned.length > 0) {
-                setFormData(p => { const newLevels = [...p.levels]; if (newLevels[activeLevelIdx].questions.length === 1 && newLevels[activeLevelIdx].questions[0].q === 'Nouvelle question') { newLevels[activeLevelIdx].questions = cleaned; } else { newLevels[activeLevelIdx].questions = [...newLevels[activeLevelIdx].questions, ...cleaned]; } return { ...p, levels: newLevels }; });
-                setActiveQIdx(0); setAiTopic("");
-            } else { alert("Rien généré."); }
-        } catch(e) { alert("Erreur IA"); } setAiGenerating(false); 
+                setFormData(p => {
+                    const newLevels = p.levels.map((lvl, idx) => {
+                        if (idx !== activeLevelIdx) return lvl;
+                        
+                        // Détermination de la destination (remplacement ou ajout)
+                        const isDummy = lvl.questions.length === 1 && lvl.questions[0].q === 'Nouvelle question';
+                        return {
+                            ...lvl,
+                            questions: isDummy ? [...cleaned] : [...lvl.questions, ...cleaned]
+                        };
+                    });
+                    return { ...p, levels: newLevels };
+                });
+                setActiveQIdx(0); 
+                setAiTopic("");
+            } else { 
+                alert("Rien généré."); 
+            }
+        } catch(e) { 
+            alert("Erreur IA"); 
+        } 
+        setAiGenerating(false); 
     };
 
     // --- SAUVEGARDE ---
@@ -216,7 +349,14 @@ export default function GameStudio({ initialData, chapters, user, targetSection,
                     
                     {/* ZONE IA */}
                     <div className="v84-ai-widget">
-                        <div className="v84-ai-row"><span className="text-2xl">🤖</span><input className="v84-ai-input" placeholder="Sujet / Consigne IA..." value={aiTopic} onChange={e => setAiTopic(e.target.value)} /></div>
+                        <div className="v84-ai-row">
+                            <span className="text-2xl">🤖</span>
+                            <input className="v84-ai-input" placeholder="Sujet / Consigne IA..." value={aiTopic} onChange={e => setAiTopic(e.target.value)} />
+                            <div className="flex items-center gap-2 bg-slate-100 rounded px-2 ml-2">
+                                <label className="text-[10px] font-bold text-slate-500">NB:</label>
+                                <input type="number" min="1" max="20" className="w-12 bg-transparent text-center font-bold" value={aiCount} onChange={e => setAiCount(parseInt(e.target.value) || 1)} />
+                            </div>
+                        </div>
                         {hasLevelSheet && <button className="v84-gen-btn mb-2" onClick={() => handleGenerateAI('sheet')} disabled={aiGenerating}>{aiGenerating ? 'ANALYSE...' : '📄 GÉNÉRER D\'APRÈS LA FICHE DU NIVEAU'}</button>}
                         <button className={`v84-gen-btn ${hasLevelSheet ? 'bg-slate-400' : ''}`} onClick={() => handleGenerateAI('manual')} disabled={aiGenerating}>{aiGenerating ? '...' : (hasLevelSheet ? 'OU GÉNÉRER VIA LE SUJET' : 'GÉNÉRER VIA CE SUJET')}</button>
                     </div>
