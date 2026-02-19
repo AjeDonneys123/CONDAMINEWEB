@@ -54,32 +54,19 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
     // --- LOGIQUE SECTIONS (CRUD) ---
     async function handleCreateSection() {
         if (!newSectionName) return;
-        const nameToSelect = newSectionName.toUpperCase();
-        
-        try {
-            const res = await fetch('/api/structure/sections', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    teacherId: getUserId(), 
-                    sectionName: nameToSelect, 
-                    scope: newSectionScope, 
-                    target: newSectionScope === 'CLASS' ? classFilter : levelFilter 
-                })
-            });
-
-            if (res.ok) { 
-                setNewSectionName(""); 
-                setShowSectionModal(false); 
-                // 1. On bascule l'UI sur la nouvelle section
-                setActiveSection(nameToSelect);
-                // 2. On recharge les données
-                await fetchSections();
-                if (onRefresh) onRefresh(); 
-            }
-        } catch (e) {
-            console.error("Creation Error", e);
-            alert("Erreur lors de la création de la section.");
+        const res = await fetch('/api/structure/sections', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ teacherId: getUserId(), sectionName: newSectionName.toUpperCase(), scope: newSectionScope, target: newSectionScope === 'CLASS' ? classFilter : levelFilter })
+        });
+        if (res.ok) { 
+            // On bascule directement sur la nouvelle section
+            setActiveSection(newSectionName.toUpperCase());
+            setNewSectionName(""); 
+            setShowSectionModal(false); 
+            fetchSections();
+            // IMPORTANT : On force le rafraîchissement global pour voir le nouveau CH1
+            if (onRefresh) onRefresh(); 
         }
     }
 

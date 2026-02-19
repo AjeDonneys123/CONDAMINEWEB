@@ -2,8 +2,8 @@
 import React, { useState, useEffect } from 'react';
 
 /**
- * 📁 PROF STUDIO FOLDER - VERSION AUTO CH1
- * Crée automatiquement CH1 à l'ajout de section et rafraîchit.
+ * 📁 PROF STUDIO FOLDER - VERSION RESTAURÉE (UI SECTIONS)
+ * Restitution des boutons de survol (Edit/Delete) sur les sections.
  */
 export default function ProfStudioFolder({ items, chapters, studentsRef, classFilter, levelFilter, user, onEditItem, onCreateActivity, onRefresh, onDeleteItem }) {
     const [customSections, setCustomSections] = useState([]);
@@ -54,33 +54,12 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
     // --- LOGIQUE SECTIONS (CRUD) ---
     async function handleCreateSection() {
         if (!newSectionName) return;
-        const nameToSelect = newSectionName.toUpperCase();
-        
-        try {
-            const res = await fetch('/api/structure/sections', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    teacherId: getUserId(), 
-                    sectionName: nameToSelect, 
-                    scope: newSectionScope, 
-                    target: newSectionScope === 'CLASS' ? classFilter : levelFilter 
-                })
-            });
-
-            if (res.ok) { 
-                setNewSectionName(""); 
-                setShowSectionModal(false); 
-                // 1. On bascule l'UI sur la nouvelle section
-                setActiveSection(nameToSelect);
-                // 2. On recharge les données
-                await fetchSections();
-                if (onRefresh) onRefresh(); 
-            }
-        } catch (e) {
-            console.error("Creation Error", e);
-            alert("Erreur lors de la création de la section.");
-        }
+        const res = await fetch('/api/structure/sections', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ teacherId: getUserId(), sectionName: newSectionName.toUpperCase(), scope: newSectionScope, target: newSectionScope === 'CLASS' ? classFilter : levelFilter })
+        });
+        if (res.ok) { setNewSectionName(""); setShowSectionModal(false); fetchSections(); }
     }
 
     const handleOpenEditSection = (s) => {
@@ -163,15 +142,12 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
 
         const id = item._id || item.id;
         
-        // --- FIX : On force le passage par la modale pour TOUTES les sections ---
-        if (type === 'section') {
-            setDeleteTarget({ id, type, name, isShared: true });
-            return;
-        }
-
+        // Calcul si partagé
         let isShared = false;
-        if (type === 'chapter') isShared = !!item.sharedLevel;
+        if (type === 'section') isShared = item.scope !== 'CLASS';
+        else if (type === 'chapter') isShared = !!item.sharedLevel;
         else if (type === 'homework' || type === 'game' || type === 'scan') {
+            // Pour les activités simples, on utilise le callback parent direct
             if (onDeleteItem) onDeleteItem(id, type);
             return;
         }
