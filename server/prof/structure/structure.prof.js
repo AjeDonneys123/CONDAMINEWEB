@@ -75,6 +75,9 @@ router.post('/sections/delete-request', async (req, res) => {
             if (section) {
                 if (!section.hiddenIn) section.hiddenIn = [];
                 if (!section.hiddenIn.includes(classId)) section.hiddenIn.push(classId);
+                
+                // --- AJOUT CRITIQUE POUR LA PERSISTANCE ---
+                user.markModified('subjectSections');
             }
         }
         await user.save();

@@ -1,0 +1,73 @@
+Le problème était double : le frontend ne déclenchait pas la modale de choix si la section n'était pas marquée "Global", et le backend ne validait pas la modification du tableau imbriqué dans la base de données.
+Mémoire Vive (history.txt)
+[[[£ FILE: history.txt £]]]
+2026-02-19 11:20 - FIX: Restauration du choix "Masquer" pour les sections (ProfStudioFolder).
+2026-02-19 11:20 - FIX: Ajout de markModified('subjectSections') pour persister le masquage en BDD.
+[[[£ END: history.txt £]]]
+Modifications Logiques[[[£ FILE: client/src/features/prof/components/ProfStudioFolder.jsx £]]]
+// 1. Localise la fonction prepareDelete (autour de la ligne 145)
+// 2. Remplace le bloc de calcul du "isShared" pour les sections par celui-ci :
+
+    function prepareDelete(e, item, type) {
+        e.stopPropagation();
+        const name = type === 'section' ? item.name : item.title;
+        
+        // Protection Racine (Inchangé)
+        if (type === 'chapter' && activeSection.toUpperCase() === "GÉNÉRAL" && name.trim().toUpperCase() === "GÉNÉRAL") {
+            alert("🔒 PROTECTION : Racine indestructible.");
+            return;
+        }
+
+        const id = item._id || item.id;
+        
+        // --- FIX : On force le passage par la modale pour TOUTES les sections ---
+        if (type === 'section') {
+            setDeleteTarget({ id, type, name, isShared: true });
+            return;
+        }
+
+        let isShared = false;
+        if (type === 'chapter') isShared = !!item.sharedLevel;
+        else if (type === 'homework' || type === 'game' || type === 'scan') {
+            if (onDeleteItem) onDeleteItem(id, type);
+            return;
+        }
+
+        setDeleteTarget({ id, type, name, isShared });
+    }
+[[[£ END: client/src/features/prof/components/ProfStudioFolder.jsx £]]]
+
+
+[[[£ FILE: server/prof/structure/structure.prof.js £]]]
+// 1. Localise la route POST /sections/delete-request (autour de la ligne 55)
+// 2. Ajoute la ligne user.markModified dans le bloc "else" (masquage) :
+
+router.post('/sections/delete-request', async (req, res) => {
+    try {
+        const { teacherId, sectionName, permanent, classId } = req.body;
+        const user = await Teacher.findById(teacherId) || await Admin.findById(teacherId);
+        if (!user) return res.status(404).json({ error: "Prof introuvable" });
+
+        if (permanent) {
+            await Chapter.updateMany({ teacherId: user._id, section: sectionName.toUpperCase() }, { $set: { section: "GÉNÉRAL" } });
+            user.subjectSections = user.subjectSections.filter(s => s.name !== sectionName.toUpperCase());
+        } else {
+            const section = user.subjectSections.find(s => s.name === sectionName.toUpperCase());
+            if (section) {
+                if (!section.hiddenIn) section.hiddenIn = [];
+                if (!section.hiddenIn.includes(classId)) section.hiddenIn.push(classId);
+                
+                // --- AJOUT CRITIQUE POUR LA PERSISTANCE ---
+                user.markModified('subjectSections');
+            }
+        }
+        await user.save();
+        res.json(user.subjectSections);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+[[[£ END: server/prof/structure/structure.prof.js £]]]
+code
+JavaScript
+Explications pour le Bâtisseur :
+Frontend (ProfStudioFolder.jsx) : Auparavant, si une section avait un scope CLASS, le code considérait qu'elle n'était pas "partagée" et lançait une suppression immédiate sans demander. En forçant isShared: true spécifiquement pour le type section, on affiche systématiquement la modale proposant de soit "Masquer ici", soit "Supprimer partout".
+Backend (structure.prof.js) : Dans Mongoose, modifier un élément à l'intérieur d'un tableau d'objets (comme hiddenIn dans subjectSections) n'est pas toujours détecté automatiquement. L'appel à user.markModified('subjectSections') force le serveur à enregistrer les changements du tableau dans MongoDB.

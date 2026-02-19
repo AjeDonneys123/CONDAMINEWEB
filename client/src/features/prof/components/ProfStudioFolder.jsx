@@ -150,12 +150,15 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
 
         const id = item._id || item.id;
         
-        // Calcul si partagé
+        // --- FIX : On force le passage par la modale pour TOUTES les sections ---
+        if (type === 'section') {
+            setDeleteTarget({ id, type, name, isShared: true });
+            return;
+        }
+
         let isShared = false;
-        if (type === 'section') isShared = item.scope !== 'CLASS';
-        else if (type === 'chapter') isShared = !!item.sharedLevel;
+        if (type === 'chapter') isShared = !!item.sharedLevel;
         else if (type === 'homework' || type === 'game' || type === 'scan') {
-            // Pour les activités simples, on utilise le callback parent direct
             if (onDeleteItem) onDeleteItem(id, type);
             return;
         }
