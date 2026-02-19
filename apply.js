@@ -2,42 +2,60 @@ const fs = require('fs');
 const path = require('path');
 
 /**
- * 🛡️ APPLY.JS V10.0 - MODE PASSIF (SIGNAL POUR ANTIGRAVITY)
- * - Ne modifie PLUS jamais les fichiers du projet automatiquement.
- * - Son rôle est désormais de transférer les suggestions vers 'update.agent.txt'.
- * - Antigravity lit ce fichier et effectue la greffe chirurgicale après vérification.
+ * 🛠️ APPLY.JS V12.0 - MODE OBSERVATEUR & GREFFEUR
+ * - Lit 'update.txt' et applique les changements sur le disque.
+ * - NE VIDE JAMAIS le fichier lui-même (Laisse l'Agent le faire après vérification).
+ * - Utilise un hash/comparaison pour ne pas ré-écrire en boucle le même code.
  */
 
-const statusFile = 'apply_status.json';
 const inputFile = 'update.txt';
-const agentMailbox = 'update.agent.txt';
+const statusFile = 'apply_status.json';
+let lastProcessedContent = "";
 
 function writeStatus(type, message) {
     const data = { status: type, message, timestamp: Date.now() };
     try { fs.writeFileSync(statusFile, JSON.stringify(data, null, 2)); } catch(e) {}
 }
 
-function processMailbox() {
+function applyUpdates() {
     try {
         if (!fs.existsSync(inputFile)) return;
-        const rawContent = fs.readFileSync(inputFile, 'utf8');
-        if (!rawContent || rawContent.length < 10) return;
+        const content = fs.readFileSync(inputFile, 'utf8').trim();
+        
+        // Si le fichier est vide ou si c'est le même contenu que la dernière fois, on ne fait rien
+        if (content.length < 10 || content === lastProcessedContent) return;
 
-        // On vide l'input pour ne pas boucler
-        fs.writeFileSync(inputFile, ''); 
-        
-        // On transfère simplement le contenu brut vers la boîte aux lettres de l'agent
-        // L'agent (Antigravity) verra ce changement de fichier et le lira
-        fs.writeFileSync(agentMailbox, rawContent);
-        
-        console.log(`📩 [MAILBOX] Nouvelle suggestion reçue dans ${agentMailbox}`);
-        writeStatus('PENDING', 'Suggestion en attente de vérification par l\'agent');
+        console.log("🚀 [APPLY] Nouveau code détecté. Application de la greffe...");
+        const fileBlocks = content.split('[[[£ FILE:');
+        fileBlocks.shift(); 
+
+        for (const block of fileBlocks) {
+            const parts = block.split('£]]]');
+            if (parts.length < 2) continue;
+
+            const filePath = parts[0].trim();
+            const fileContent = parts.slice(1).join('£]]]').split('[[[£ END:')[0].trim();
+
+            const fullPath = path.join(__dirname, filePath);
+            const dir = path.dirname(fullPath);
+
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+            
+            fs.writeFileSync(fullPath, fileContent);
+            console.log(`✅ [DISK WRITE] ${filePath}`);
+        }
+
+        lastProcessedContent = content; // Mémorise pour ne pas boucler
+        writeStatus('VERIFICATION_REQUIRED', 'Fichiers écrits. En attente de vérification par l\'agent.');
+        console.log("✨ Greffe terminée. En attente de nettoyage par l'Agent.");
+
     } catch (e) {
-        console.log(`💥 ERREUR MAILBOX : ${e.message}`);
+        console.log(`💥 [ERROR] ${e.message}`);
         writeStatus('ERROR', e.message);
     }
 }
 
-setInterval(processMailbox, 1000);
-console.log("🛡️ APPLY V10.0 : MODE PASSIF ACTIVÉ (GARDRE-FOU)");
-console.log("Les fichiers du projet sont désormais protégés contre l'écrasement automatique.");
+// Vérification toutes les 2 secondes
+setInterval(applyUpdates, 2000);
+console.log("🛡️ APPLY V12.0 : MODE PERSISTANT ACTIVÉ.");
+console.log("Les fichiers seront écrits, mais 'update.txt' restera plein pour vérification.");

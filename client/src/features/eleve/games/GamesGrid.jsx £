@@ -15,14 +15,23 @@ export default function GamesGrid({ user }) {
     setLoading(true);
     try {
         const sId = user._id || user.id;
-        const [actRes, skinRes] = await Promise.all([
-            fetch(`/api/eleve/games/list/${sId}`).then(r => r.json()),
-            fetch(`/api/eleve/games/skins`).then(r => r.json())
-        ]);
+        
+        // FIX : On vérifie que les réponses sont bien du JSON avant de parser
+        const resList = await fetch(`/api/eleve/games/list/${sId}`);
+        const resSkins = await fetch(`/api/eleve/games/skins`);
+        
+        if (!resList.ok || !resSkins.ok) {
+            throw new Error(`Serveur API indisponible (404 ou 500)`);
+        }
+
+        const actRes = await resList.json();
+        const skinRes = await resSkins.json();
         
         setActivities((actRes || []).map(a => ({ ...a, actType: 'game' })));
         setSkins(skinRes || []);
-    } catch(e) { console.error("Load Games Error", e); }
+    } catch(e) { 
+        console.error("❌ Load Games Error:", e.message); 
+    }
     setLoading(false);
   };
 
@@ -34,6 +43,7 @@ export default function GamesGrid({ user }) {
   };
 
   const handleStartGame = (skin) => {
+      // Fusion contenu Prof + Visuel Studio
       const finalGameData = {
           ...skin,
           levels: selectedActivity.levels && selectedActivity.levels.length > 0 
@@ -74,7 +84,7 @@ export default function GamesGrid({ user }) {
                 <div className="bg-white rounded-[40px] w-full max-w-4xl p-8 shadow-2xl animate-in zoom-in">
                     <div className="flex justify-between items-center mb-8">
                         <div>
-                            <h3 className="text-2xl font-black text-slate-800 uppercase">Choisis ton univers 🎮</h3>
+                            <h3 className="text-2xl font-black text-slate-800 uppercase">Choisis ta modalité 🎮</h3>
                             <p className="text-xs font-bold text-indigo-500 uppercase tracking-widest">Activité : {selectedActivity?.title}</p>
                         </div>
                         <button onClick={() => setShowSkinSelector(false)} className="w-10 h-10 rounded-full bg-slate-100 font-black">✕</button>
@@ -92,11 +102,11 @@ export default function GamesGrid({ user }) {
                                 <div 
                                     key={skin._id} 
                                     onClick={() => handleStartGame(skin)}
-                                    className="group bg-slate-50 border-4 border-slate-100 hover:border-indigo-500 rounded-[35px] p-8 cursor-pointer transition-all hover:scale-[1.05] flex flex-col items-center text-center shadow-sm"
+                                    className="group bg-slate-50 border-4 border-slate-100 hover:border-indigo-500 rounded-[35px] p-8 cursor-pointer transition-all hover:scale-[1.05] flex flex-col items-center text-center"
                                 >
                                     <div className="text-6xl mb-4 group-hover:animate-bounce">{icon}</div>
                                     <div className="font-black text-slate-700 uppercase text-sm leading-tight">{skin.title}</div>
-                                    <div className="text-[9px] font-black text-slate-400 mt-2 uppercase tracking-tighter">Entrer dans ce monde</div>
+                                    <div className="text-[9px] font-black text-slate-400 mt-2 uppercase">Lancer</div>
                                 </div>
                             );
                         })}
