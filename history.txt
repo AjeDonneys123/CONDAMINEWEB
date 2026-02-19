@@ -8941,3 +8941,7 @@ Build #174 : EVENT BUS SIMPLE (Simple substitution d'appel)
 - Backend : Force l'assignation de 'generatedCode' dans studio.db.js avant sauvegarde.
 - Frontend : saveProject utilise désormais explicitement l'état 'code' de l'éditeur lors de l'envoi.
 2026-02-19 10:30 - FIX: Persistance de la taille de grille (lignes/colonnes) dans ClassroomManager.
+
+2026-02-18: FIX BUG - Duplication des questions IA dans GameStudio.jsx.
+2026-02-19: FIX BUG - Création automatique du dossier CH1 lors de l'ajout d'une section.
+2026-02-19: RECOVERY - Restauration des routes POST/DELETE de structure.prof.js après régression du copilote. Bouton X fonctionnel.

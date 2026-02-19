@@ -1,8 +1,32 @@
-// @signatures: EleveGames, studioMirror, score
-const express = require('express');
-const router = express.Router();
-const mongoose = require('mongoose');
+// 1. Liste des activités Jeux assignées à l'élève
+router.get('/list/:studentId', async (req, res) => {
+    try {
+        const Student = mongoose.model('Student');
+        const GameLevel = mongoose.model('GameLevel');
+        const student = await Student.findById(req.params.studentId).lean();
+        if (!student) return res.json([]);
 
+        const myClass = (student.currentClass || "").trim().toUpperCase();
+        const games = await GameLevel.find({
+            $or: [
+                { targetClassrooms: myClass, isAllClass: true },
+                { assignedStudents: student._id }
+            ]
+        }).sort({ createdAt: -1 }).lean();
+
+        res.json(games);
+    } catch (e) { res.status(500).json([]); }
+});
+
+// 2. Liste des univers (Skins) créés dans le Studio
+router.get('/skins', async (req, res) => {
+    try {
+        const skins = await mongoose.model('StudioProject').find({}, 'title scenes').lean();
+        res.json(skins);
+    } catch (e) { res.status(500).json([]); }
+});
+
+// @signatures: EleveGames, studioMirror, score
 /**
  * 🎮 ROUTE MIROIR UNIFIÉE V108
  * Fix : Protection contre les crashs 500 (Check existence modèles)

@@ -99,6 +99,7 @@ const Models = {
     GameLevel: getModel('GameLevel', {
         title: String, 
         subject: { type: String, default: "GÉNÉRAL" }, 
+        type: { type: String, default: 'zombie' }, // zombie, starship, etc.
         isTestGame: { type: Boolean, default: false }, 
         chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter' },
         teacherId: mongoose.Schema.Types.ObjectId, targetClassrooms: [String],

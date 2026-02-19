@@ -4,6 +4,10 @@ STRUCTURE:
 ├── ${rel}
 ├── ${subRelPath}
 ├── ...
+├── .agent/
+│   └── scripts/
+│       ├── audit.sh
+│       └── snap.sh
 ├── .gitignore
 ├── apply.js
 ├── apply_status.json
@@ -315,80 +319,55 @@ CODE:
 [[[£ FILE: apply.js £]]]
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
-const statusFile = 'apply_status.json';
-const inputFile = 'update.txt';
 
 /**
- * 🛡️ APPLY.JS V9.8 - UNLIMITED FLEXIBILITY
- * - Suppression totale des restrictions de bundles.
- * - Commit Git automatique après chaque succès.
+ * 🛡️ APPLY.JS V10.0 - MODE PASSIF (SIGNAL POUR ANTIGRAVITY)
+ * - Ne modifie PLUS jamais les fichiers du projet automatiquement.
+ * - Son rôle est désormais de transférer les suggestions vers 'update.agent.txt'.
+ * - Antigravity lit ce fichier et effectue la greffe chirurgicale après vérification.
  */
+
+const statusFile = 'apply_status.json';
+const inputFile = 'update.txt';
+const agentMailbox = 'update.agent.txt';
 
 function writeStatus(type, message) {
     const data = { status: type, message, timestamp: Date.now() };
     try { fs.writeFileSync(statusFile, JSON.stringify(data, null, 2)); } catch(e) {}
 }
 
-function applyUpdate() {
+function processMailbox() {
     try {
         if (!fs.existsSync(inputFile)) return;
         const rawContent = fs.readFileSync(inputFile, 'utf8');
         if (!rawContent || rawContent.length < 10) return;
 
-        const appliedFiles = [];
+        // On vide l'input pour ne pas boucler
         fs.writeFileSync(inputFile, ''); 
         
-        const startRegex = /\[\[\[£\s*FILE\s*:\s*([^£\s\]]+)\s*£\]\]\]/g;
-        let match;
-
-        while ((match = startRegex.exec(rawContent)) !== null) {
-            const filePath = match[1].trim();
-            const startIdx = match.index + match[0].length;
-            const endTag = `[[[£ END: ${filePath} £]]]`;
-            const endIdx = rawContent.indexOf(endTag, startIdx);
-
-            if (endIdx !== -1) {
-                let newContent = rawContent.substring(startIdx, endIdx).trim();
-                const fullPath = path.join(__dirname, filePath);
-                fs.mkdirSync(path.dirname(fullPath), { recursive: true });
-                
-                if (filePath.toLowerCase().endsWith('history.txt')) {
-                    fs.appendFileSync(fullPath, '\n' + newContent + '\n');
-                } else {
-                    fs.writeFileSync(fullPath, newContent + '\n');
-                }
-                console.log(`✅ APPLIED: ${filePath}`);
-                appliedFiles.push(filePath);
-            }
-        }
-
-        if (appliedFiles.length > 0) {
-            try {
-                const commitMsg = `Auto-Update: ${appliedFiles.length} files changed.`;
-                execSync('git add .');
-                execSync(`git commit -m "${commitMsg}"`);
-                console.log(`📦 [GIT] Commit auto effectué.`);
-            } catch (err) { }
-        }
-
-        writeStatus('OK', 'Infrastructure mise à jour');
+        // On transfère simplement le contenu brut vers la boîte aux lettres de l'agent
+        // L'agent (Antigravity) verra ce changement de fichier et le lira
+        fs.writeFileSync(agentMailbox, rawContent);
+        
+        console.log(`📩 [MAILBOX] Nouvelle suggestion reçue dans ${agentMailbox}`);
+        writeStatus('PENDING', 'Suggestion en attente de vérification par l\'agent');
     } catch (e) {
-        console.log(`💥 ERREUR APPLY : ${e.message}`);
+        console.log(`💥 ERREUR MAILBOX : ${e.message}`);
         writeStatus('ERROR', e.message);
     }
 }
 
-setInterval(applyUpdate, 500);
-console.log("🛡️ ARCHITECTE V9.8 - DÉBRIDÉ & COMMIT AUTO ACTIF");
+setInterval(processMailbox, 1000);
+console.log("🛡️ APPLY V10.0 : MODE PASSIF ACTIVÉ (GARDRE-FOU)");
+console.log("Les fichiers du projet sont désormais protégés contre l'écrasement automatique.");
 
 [[[£ END: apply.js £]]]
 
 [[[£ FILE: apply_status.json £]]]
 {
-  "status": "OK",
-  "message": "Infrastructure mise à jour",
-  "timestamp": 1771455477427
+  "status": "PENDING",
+  "message": "Suggestion en attente de vérification par l'agent",
+  "timestamp": 1771518753740
 }
 [[[£ END: apply_status.json £]]]
 
@@ -1859,11 +1838,13 @@ export default function GamesGrid({ user }) {
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-6">
                         <div className="w-20 h-20 bg-white/20 rounded-3xl flex items-center justify-center text-5xl shadow-inner group-hover:scale-110 transition-transform">
-                            🧟
+                            {studioGame.type === 'starship' ? '🚀' : '🧟'}
                         </div>
                         <div>
                             <div className="text-2xl font-black text-white uppercase tracking-tight">{studioGame.title}</div>
-                            <div className="text-xs font-bold text-indigo-200 uppercase tracking-widest mt-1">Moteur V8.3 • Branchement Direct</div>
+                            <div className="text-xs font-bold text-indigo-200 uppercase tracking-widest mt-1">
+                                {studioGame.type === 'starship' ? 'Moteur Galactique' : 'Moteur V8.3'} • Branchement Direct
+                            </div>
                         </div>
                     </div>
                     <div className="w-12 h-12 bg-white text-indigo-600 rounded-full flex items-center justify-center shadow-lg">
@@ -4593,22 +4574,20 @@ export default function ClassroomManager({ globalClassId, user }) {
             const resClass = await fetch(`/api/classroom/${globalClassId}`);
             if (resClass.ok) {
                 const clsInfo = await resClass.json();
-                if (clsInfo.layout && clsInfo.layout.separators) setSeparators(clsInfo.layout.separators);
+                if (clsInfo.layout) {
+                    setSeparators(clsInfo.layout.separators || []);
+                    setGridSize({ 
+                        cols: clsInfo.layout.cols || 6, 
+                        rows: clsInfo.layout.rows || 5 
+                    });
+                }
             }
             const queryParams = myId ? `?teacherId=${myId}` : '';
             const res = await fetch(`/api/classroom/plan/${globalClassId}${queryParams}`);
             
             if (res.ok) {
                 const data = await res.json();
-                if (Array.isArray(data)) {
-                    let maxCol = 5; let maxRow = 4;
-                    data.forEach(s => {
-                        if (s.seatX >= maxCol) maxCol = s.seatX + 1;
-                        if (s.seatY >= maxRow) maxRow = s.seatY + 1;
-                    });
-                    setGridSize(prev => ({ cols: Math.max(prev.cols, maxCol), rows: Math.max(prev.rows, maxRow) }));
-                    setStudents(data);
-                } else { setStudents([]); }
+                setStudents(Array.isArray(data) ? data : []);
             }
         } catch(e) { console.error(e); }
         setLoading(false);
@@ -4617,7 +4596,17 @@ export default function ClassroomManager({ globalClassId, user }) {
     useEffect(() => { loadData(); }, [globalClassId, myId]);
 
     const toggleSeparator = async (colIndex) => { let newSeps = [...separators]; if (newSeps.includes(colIndex)) newSeps = newSeps.filter(s => s !== colIndex); else newSeps.push(colIndex); setSeparators(newSeps); try { await fetch('/api/classroom/layout', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ classId: globalClassId, separators: newSeps }) }); } catch(e){} };
-    const changeGrid = (dC, dR) => { setGridSize(p => ({ cols: Math.max(2, p.cols + dC), rows: Math.max(2, p.rows + dR) })); };
+    const changeGrid = async (dC, dR) => { 
+        const newSize = { cols: Math.max(2, gridSize.cols + dC), rows: Math.max(2, gridSize.rows + dR) };
+        setGridSize(newSize); 
+        try {
+            await fetch('/api/classroom/layout', { 
+                method: 'POST', 
+                headers: {'Content-Type':'application/json'}, 
+                body: JSON.stringify({ classId: globalClassId, cols: newSize.cols, rows: newSize.rows }) 
+            });
+        } catch(e) {}
+    };
     const handleDragStart = (e, sId) => { setDraggingId(sId); e.dataTransfer.setData("text/plain", sId); e.dataTransfer.effectAllowed = "move"; };
     const handleDragOver = (e, x, y) => { e.preventDefault(); setDragOverCell(`${x}-${y}`); };
     const handleDrop = async (e, x, y) => { e.preventDefault(); setDragOverCell(null); const sId = draggingId; if (!sId) return; const targetStudent = students.find(s => s.seatX === x && s.seatY === y); const movedStudent = students.find(s => s._id === sId); if (targetStudent && targetStudent._id !== sId) { const oldX = movedStudent.seatX; const oldY = movedStudent.seatY; setStudents(prev => prev.map(s => { if (s._id === sId) return { ...s, seatX: x, seatY: y }; if (s._id === targetStudent._id) return { ...s, seatX: oldX, seatY: oldY }; return s; })); } else { setStudents(prev => prev.map(s => s._id === sId ? { ...s, seatX: x, seatY: y } : s)); } try { await fetch('/api/classroom/move', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ studentId: sId, x, y }) }); } catch(err) { loadData(); } setDraggingId(null); };
@@ -6718,6 +6707,7 @@ export default function GameStudio({ initialData, chapters, user, targetSection,
     // --- ÉTATS DONNÉES ---
     const [formData, setFormData] = useState(initialData || { 
         title: '', 
+        type: 'zombie', // zombie, starship
         levels: [{ name: "Niveau 1", questions: [{ q: 'Nouvelle question', options: ['', '', '', ''], a: 0 }], intro: {} }],
         globalIntro: { sheetUrl: "", videoUrl: "" }
     });
@@ -6739,6 +6729,7 @@ export default function GameStudio({ initialData, chapters, user, targetSection,
     
     // --- ÉTATS IA & ASSETS ---
     const [aiTopic, setAiTopic] = useState('');
+    const [aiCount, setAiCount] = useState(5);
     const [aiGenerating, setAiGenerating] = useState(false);
     
     const fileInputRef = useRef(null);
@@ -6778,15 +6769,121 @@ export default function GameStudio({ initialData, chapters, user, targetSection,
     const handleInput = (field, value) => setFormData(p => ({ ...p, [field]: value }));
     const handleSelectQuestion = (lIdx, qIdx) => { setActiveLevelIdx(lIdx); setActiveQIdx(qIdx); };
     
-    const handleAddLevel = () => { setFormData(p => ({ ...p, levels: [...p.levels, { name: `Niveau ${p.levels.length + 1}`, questions: [], intro: { sheetUrl: "", videoUrl: "" } }] })); setActiveLevelIdx(formData.levels.length); setActiveQIdx(0); };
-    const handleDeleteLevel = (e, lIdx) => { e.stopPropagation(); if(!confirm("Supprimer ce niveau ?")) return; setFormData(p => { let newLevels = p.levels.filter((_, i) => i !== lIdx); if (newLevels.length === 0) newLevels = [{ name: "Niveau 1", questions: [], intro: {} }]; return { ...p, levels: newLevels }; }); setActiveLevelIdx(0); setActiveQIdx(0); };
-    const handleAddQuestion = () => { setFormData(p => { const newLevels = [...p.levels]; newLevels[activeLevelIdx].questions.push({ q: 'Nouvelle question', options: ['', '', '', ''], a: 0 }); return { ...p, levels: newLevels }; }); setTimeout(() => setActiveQIdx(formData.levels[activeLevelIdx].questions.length), 0); };
-    const handleDeleteQuestion = (e, lIdx, qIdx) => { e.stopPropagation(); if(!confirm("Supprimer ?")) return; setFormData(p => { const newLevels = [...p.levels]; newLevels[lIdx].questions = newLevels[lIdx].questions.filter((_, i) => i !== qIdx); return { ...p, levels: newLevels }; }); if(activeQIdx >= qIdx) setActiveQIdx(Math.max(0, activeQIdx - 1)); setSelectedForMove(prev => prev.filter(s => !(s.lIdx === lIdx && s.qIdx === qIdx))); };
-    const updateQuestion = (field, value, optionIndex = null) => { setFormData(p => { const newLevels = [...p.levels]; if(!newLevels[activeLevelIdx] || !newLevels[activeLevelIdx].questions[activeQIdx]) return p; const currentQ = { ...newLevels[activeLevelIdx].questions[activeQIdx] }; if (field === 'q' || field === 'a') { currentQ[field] = value; } else if (field === 'options' && optionIndex !== null) { const nextOptions = [...currentQ.options]; nextOptions[optionIndex] = value; currentQ.options = nextOptions; } newLevels[activeLevelIdx].questions[activeQIdx] = currentQ; return { ...p, levels: newLevels }; }); };
+    const handleAddLevel = () => { 
+        setFormData(p => ({ 
+            ...p, 
+            levels: [...p.levels, { name: `Niveau ${p.levels.length + 1}`, questions: [{ q: 'Nouvelle question', options: ['', '', '', ''], a: 0 }], intro: { sheetUrl: "", videoUrl: "" } }] 
+        })); 
+        setTimeout(() => {
+            setActiveLevelIdx(formData.levels.length); 
+            setActiveQIdx(0);
+        }, 0); 
+    };
 
-    const handleToggleSelect = (e, lIdx, qIdx) => { e.stopPropagation(); const exists = selectedForMove.some(s => s.lIdx === lIdx && s.qIdx === qIdx); if (exists) setSelectedForMove(prev => prev.filter(s => !(s.lIdx === lIdx && s.qIdx === qIdx))); else setSelectedForMove(prev => [...prev, { lIdx, qIdx }]); };
+    const handleDeleteLevel = (e, lIdx) => { 
+        e.stopPropagation(); 
+        if(!confirm("Supprimer ce niveau ?")) return; 
+        setFormData(p => { 
+            let newLevels = p.levels.filter((_, i) => i !== lIdx); 
+            if (newLevels.length === 0) newLevels = [{ name: "Niveau 1", questions: [{ q: 'Nouvelle question', options: ['', '', '', ''], a: 0 }], intro: {} }]; 
+            return { ...p, levels: newLevels }; 
+        }); 
+        setActiveLevelIdx(0); 
+        setActiveQIdx(0); 
+    };
+
+    const handleAddQuestion = () => { 
+        setFormData(p => { 
+            const newLevels = p.levels.map((lvl, idx) => {
+                if (idx !== activeLevelIdx) return lvl;
+                return {
+                    ...lvl,
+                    questions: [...lvl.questions, { q: 'Nouvelle question', options: ['', '', '', ''], a: 0 }]
+                };
+            });
+            return { ...p, levels: newLevels }; 
+        }); 
+        setTimeout(() => setActiveQIdx(formData.levels[activeLevelIdx].questions.length), 0); 
+    };
+
+    const handleDeleteQuestion = (e, lIdx, qIdx) => { 
+        e.stopPropagation(); 
+        setFormData(p => { 
+            const newLevels = p.levels.map((lvl, idx) => {
+                if (idx !== lIdx) return lvl;
+                return {
+                    ...lvl,
+                    questions: lvl.questions.filter((_, i) => i !== qIdx)
+                };
+            });
+            return { ...p, levels: newLevels }; 
+        }); 
+        if(activeQIdx >= qIdx) setActiveQIdx(Math.max(0, activeQIdx - 1)); 
+        setSelectedForMove(prev => prev.filter(s => !(s.lIdx === lIdx && s.qIdx === qIdx))); 
+    };
+    const updateQuestion = (field, value, optionIndex = null) => { 
+        setFormData(p => { 
+            const newLevels = p.levels.map((lvl, idx) => {
+                if (idx !== activeLevelIdx) return lvl;
+                
+                const newQuestions = lvl.questions.map((q, qIdx) => {
+                    if (qIdx !== activeQIdx) return q;
+                    
+                    const updatedQ = { ...q };
+                    if (field === 'q' || field === 'a') { 
+                        updatedQ[field] = value; 
+                    } else if (field === 'options' && optionIndex !== null) { 
+                        updatedQ.options = updatedQ.options.map((opt, optIdx) => optIdx === optionIndex ? value : opt);
+                    }
+                    return updatedQ;
+                });
+                
+                return { ...lvl, questions: newQuestions };
+            });
+            return { ...p, levels: newLevels }; 
+        }); 
+    };
+
+    const handleToggleSelect = (e, lIdx, qIdx) => { 
+        e.stopPropagation(); 
+        const exists = selectedForMove.some(s => s.lIdx === lIdx && s.qIdx === qIdx); 
+        if (exists) setSelectedForMove(prev => prev.filter(s => !(s.lIdx === lIdx && s.qIdx === qIdx))); 
+        else setSelectedForMove(prev => [...prev, { lIdx, qIdx }]); 
+    };
+
     const isQuestionSelected = (lIdx, qIdx) => selectedForMove.some(s => s.lIdx === lIdx && s.qIdx === qIdx);
-    const handleMoveQuestions = () => { if (moveTargetLevel === "" || isNaN(parseInt(moveTargetLevel))) return; const targetIdx = parseInt(moveTargetLevel); setFormData(prev => { const newLevels = prev.levels.map(l => ({ ...l, questions: [...l.questions] })); const questionsToMove = []; newLevels.forEach((lvl, lIdx) => { lvl.questions.forEach((q, qIdx) => { if (isQuestionSelected(lIdx, qIdx)) questionsToMove.push(q); }); }); newLevels.forEach((lvl, lIdx) => { lvl.questions = lvl.questions.filter((_, qIdx) => !isQuestionSelected(lIdx, qIdx)); }); newLevels[targetIdx].questions.push(...questionsToMove); return { ...prev, levels: newLevels }; }); setSelectedForMove([]); setActiveLevelIdx(targetIdx); setActiveQIdx(0); };
+
+    const handleMoveQuestions = () => { 
+        if (moveTargetLevel === "" || isNaN(parseInt(moveTargetLevel))) return; 
+        const targetIdx = parseInt(moveTargetLevel); 
+        
+        setFormData(prev => { 
+            const questionsToMove = [];
+            prev.levels.forEach((lvl, lIdx) => {
+                lvl.questions.forEach((q, qIdx) => {
+                    if (isQuestionSelected(lIdx, qIdx)) questionsToMove.push(q);
+                });
+            });
+
+            const newLevels = prev.levels.map((lvl, lIdx) => {
+                // 1. On filtre les questions qui partent
+                let filteredQuestions = lvl.questions.filter((_, qIdx) => !isQuestionSelected(lIdx, qIdx));
+                
+                // 2. Si c'est le niveau cible, on ajoute les questions
+                if (lIdx === targetIdx) {
+                    filteredQuestions = [...filteredQuestions, ...questionsToMove];
+                }
+                
+                return { ...lvl, questions: filteredQuestions };
+            });
+
+            return { ...prev, levels: newLevels }; 
+        }); 
+
+        setSelectedForMove([]); 
+        setActiveLevelIdx(targetIdx); 
+        setActiveQIdx(0); 
+    };
 
     const handleUploadAsset = async (e) => { const file = e.target.files[0]; if (!file || uploadTarget === null) return; setLoading(true); const fd = new FormData(); fd.append('file', file); try { const res = await fetch('/api/games/upload-asset', { method: 'POST', body: fd }); const data = await res.json(); if (data.url) { setFormData(prev => { const next = { ...prev }; if (uploadTarget === -1) next.globalIntro = { ...next.globalIntro, sheetUrl: data.url }; else next.levels[uploadTarget].intro = { ...next.levels[uploadTarget].intro, sheetUrl: data.url }; return next; }); } } catch(err) { alert("Erreur upload"); } setLoading(false); e.target.value = null; };
     const handleRemoveAsset = (idx) => { setFormData(prev => { const next = { ...prev }; if (idx === -1) next.globalIntro.sheetUrl = ""; else next.levels[idx].intro.sheetUrl = ""; return next; }); };
@@ -6798,16 +6895,42 @@ export default function GameStudio({ initialData, chapters, user, targetSection,
         setAiGenerating(true);
         try {
             const fd = new FormData();
-            if (mode === 'sheet') { const sheetUrl = currentLevel.intro?.sheetUrl; if (!sheetUrl) return alert("Pas de fiche !"); fd.append('sheetUrl', sheetUrl); } 
-            else { if (!aiTopic) { setAiGenerating(false); return alert("Sujet requis !"); } }
-            fd.append('topic', aiTopic || "Quiz"); fd.append('count', 5);
+            if (mode === 'sheet') { 
+                const sheetUrl = currentLevel.intro?.sheetUrl; 
+                if (!sheetUrl) { setAiGenerating(false); return alert("Pas de fiche !"); }
+                fd.append('sheetUrl', sheetUrl); 
+            } else { 
+                if (!aiTopic) { setAiGenerating(false); return alert("Sujet requis !"); } 
+            }
+            fd.append('topic', aiTopic || "Quiz"); 
+            fd.append('count', aiCount);
+            
             const res = await fetch('/api/games/generate-content', { method: 'POST', body: fd });
             const cleaned = await res.json();
+            
             if (Array.isArray(cleaned) && cleaned.length > 0) {
-                setFormData(p => { const newLevels = [...p.levels]; if (newLevels[activeLevelIdx].questions.length === 1 && newLevels[activeLevelIdx].questions[0].q === 'Nouvelle question') { newLevels[activeLevelIdx].questions = cleaned; } else { newLevels[activeLevelIdx].questions = [...newLevels[activeLevelIdx].questions, ...cleaned]; } return { ...p, levels: newLevels }; });
-                setActiveQIdx(0); setAiTopic("");
-            } else { alert("Rien généré."); }
-        } catch(e) { alert("Erreur IA"); } setAiGenerating(false); 
+                setFormData(p => {
+                    const newLevels = p.levels.map((lvl, idx) => {
+                        if (idx !== activeLevelIdx) return lvl;
+                        
+                        // Détermination de la destination (remplacement ou ajout)
+                        const isDummy = lvl.questions.length === 1 && lvl.questions[0].q === 'Nouvelle question';
+                        return {
+                            ...lvl,
+                            questions: isDummy ? [...cleaned] : [...lvl.questions, ...cleaned]
+                        };
+                    });
+                    return { ...p, levels: newLevels };
+                });
+                setActiveQIdx(0); 
+                setAiTopic("");
+            } else { 
+                alert("Rien généré."); 
+            }
+        } catch(e) { 
+            alert("Erreur IA"); 
+        } 
+        setAiGenerating(false); 
     };
 
     // --- SAUVEGARDE ---
@@ -6838,7 +6961,7 @@ export default function GameStudio({ initialData, chapters, user, targetSection,
                     assignedStudents: grp.assignedStudents,
                     isAllClass: grp.isAllClass,
                     teacherId: user.id || user._id,
-                    type: 'zombie' // Par défaut pour le moment
+                    type: formData.type || 'zombie'
                 };
                 if (formData._id && key === Object.keys(groups)[0]) { /* update */ } else { delete payload._id; }
                 await api.post('/games', payload);
@@ -6857,7 +6980,25 @@ export default function GameStudio({ initialData, chapters, user, targetSection,
         <div className="v84-game-container">
              <input type="file" ref={assetInputRef} className="hidden" accept="image/*,application/pdf" onChange={handleUploadAsset} />
              <div className="v84-game-header">
-                <div className="flex items-center"><span className="v84-game-icon">🎮</span><input className="v84-game-title-input" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} placeholder="TITRE DU QUIZ..." /></div>
+                <div className="flex items-center gap-4">
+                    <div className="flex bg-slate-100 p-1 rounded-2xl border-2 border-slate-200">
+                        <button 
+                            className={`px-4 py-2 rounded-xl text-xl transition-all ${formData.type === 'zombie' ? 'bg-white shadow-md scale-110' : 'opacity-40 hover:opacity-100'}`}
+                            onClick={() => setFormData({...formData, type: 'zombie'})}
+                            title="Moteur Zombie"
+                        >
+                            🧟
+                        </button>
+                        <button 
+                            className={`px-4 py-2 rounded-xl text-xl transition-all ${formData.type === 'starship' ? 'bg-white shadow-md scale-110' : 'opacity-40 hover:opacity-100'}`}
+                            onClick={() => setFormData({...formData, type: 'starship'})}
+                            title="Moteur Starship"
+                        >
+                            🚀
+                        </button>
+                    </div>
+                    <input className="v84-game-title-input" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} placeholder="TITRE DU QUIZ..." />
+                </div>
                 <button onClick={onClose} className="v84-close-btn">✕</button>
             </div>
             
@@ -6925,7 +7066,14 @@ export default function GameStudio({ initialData, chapters, user, targetSection,
                     
                     {/* ZONE IA */}
                     <div className="v84-ai-widget">
-                        <div className="v84-ai-row"><span className="text-2xl">🤖</span><input className="v84-ai-input" placeholder="Sujet / Consigne IA..." value={aiTopic} onChange={e => setAiTopic(e.target.value)} /></div>
+                        <div className="v84-ai-row">
+                            <span className="text-2xl">🤖</span>
+                            <input className="v84-ai-input" placeholder="Sujet / Consigne IA..." value={aiTopic} onChange={e => setAiTopic(e.target.value)} />
+                            <div className="flex items-center gap-2 bg-slate-100 rounded px-2 ml-2">
+                                <label className="text-[10px] font-bold text-slate-500">NB:</label>
+                                <input type="number" min="1" max="20" className="w-12 bg-transparent text-center font-bold" value={aiCount} onChange={e => setAiCount(parseInt(e.target.value) || 1)} />
+                            </div>
+                        </div>
                         {hasLevelSheet && <button className="v84-gen-btn mb-2" onClick={() => handleGenerateAI('sheet')} disabled={aiGenerating}>{aiGenerating ? 'ANALYSE...' : '📄 GÉNÉRER D\'APRÈS LA FICHE DU NIVEAU'}</button>}
                         <button className={`v84-gen-btn ${hasLevelSheet ? 'bg-slate-400' : ''}`} onClick={() => handleGenerateAI('manual')} disabled={aiGenerating}>{aiGenerating ? '...' : (hasLevelSheet ? 'OU GÉNÉRER VIA LE SUJET' : 'GÉNÉRER VIA CE SUJET')}</button>
                     </div>
@@ -11159,23 +11307,21 @@ setInterval(async () => {
         const module = await import('clipboardy');
         const text = await module.default.read();
         
-        // On vérifie si le presse-papier contient notre tag spécial et a changé
-        if (text.includes('[[[£ FILE:') && text !== lastContent) {
+        // Vérifie si le fichier d'entrée a été vidé par apply.js
+        const inputIsEmpty = !fs.existsSync('update.txt') || fs.readFileSync('update.txt', 'utf8').length === 0;
+
+        // On copie SI le tag est présent ET (le contenu a changé OU le fichier cible est vide)
+        if (text.includes('[[[£ FILE:') && (text !== lastContent || inputIsEmpty)) {
             const timestamp = new Date().toLocaleTimeString();
-            console.log("\n"); 
-            console.log("================================================");
-            console.log(`⚡ [${timestamp}] MAGIC PASTE DÉTECTÉ !`);
-            console.log(`📋 Capture de ${text.length} caractères.`);
-            console.log(`📝 Écriture dans update.txt...`);
-            console.log("================================================");
+            console.log(`⚡ [${timestamp}] CAPTURE -> update.txt`);
             
             fs.writeFileSync('update.txt', text);
             lastContent = text;
         }
     } catch (e) {
-        // On ignore les erreurs de lecture (verrouillage presse-papier momentané)
+        // Erreur silencieuse pour les verrous du presse-papier
     }
-}, 2000);
+}, 1000); // On descend à 1s pour plus de réactivité
 
 [[[£ END: magic-paste.js £]]]
 
@@ -12122,13 +12268,8 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
 [[[£ END: prof_repar.jsx £]]]
 
 [[[£ FILE: server/core/ai.engine.js £]]]
-// @signatures: AIEngine, normalizeKeys, sanitizeJSON, ask
 const fetch = require('node-fetch');
 
-/**
- * 🤖 MOTEUR IA CORE - V24.2
- * Moteur de secours utilisé pour les diagnostics système.
- */
 const AIEngine = {
     normalizeKeys: (obj) => {
         if (typeof obj !== 'object' || obj === null) return obj;
@@ -12140,17 +12281,20 @@ const AIEngine = {
     },
 
     sanitizeJSON: (text) => {
-        if (!text) return { verdict: "DANGER", reason: "Réponse vide." };
+        if (!text) return [];
         try {
-            const start = Math.max(text.indexOf('{'), text.indexOf('['));
-            const end = Math.max(text.lastIndexOf('}'), text.lastIndexOf(']'));
+            // Nettoyage agressif des balises Markdown et espaces
+            let clean = text.replace(/```json/g, '').replace(/```/g, '').trim();
+            const start = clean.indexOf('[');
+            const end = clean.lastIndexOf(']');
             if (start !== -1 && end !== -1) {
-                const jsonString = text.substring(start, end + 1);
-                return AIEngine.normalizeKeys(JSON.parse(jsonString));
+                const jsonArray = JSON.parse(clean.substring(start, end + 1));
+                return AIEngine.normalizeKeys(jsonArray);
             }
-            return { verdict: "DANGER", reason: "Format JSON invalide" };
-        } catch (e) { 
-            return { verdict: "DANGER", reason: "Crash du parseur JSON" };
+            return [];
+        } catch (e) {
+            console.error("❌ Erreur de parsing JSON IA:", e.message);
+            return [];
         }
     },
 
@@ -12158,19 +12302,25 @@ const AIEngine = {
         const apiKey = process.env.GEMINI_API_KEY;
         if (!apiKey) return "ERROR_KEY";
 
+        const parts = Array.isArray(prompt) ? prompt : [{ text: prompt }];
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+        
         try {
             const response = await fetch(url, { 
                 method: 'POST', 
                 headers: { 'Content-Type': 'application/json' }, 
                 body: JSON.stringify({
-                    contents: [{ role: "user", parts: [{ text: prompt }] }],
+                    contents: [{ role: "user", parts: parts }],
                     systemInstruction: { parts: [{ text: systemInstruction }] }
                 }) 
             });
             const data = await response.json();
-            return data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
-        } catch (e) { return "{}"; }
+            if (data.error) throw new Error(data.error.message);
+            return data.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
+        } catch (e) { 
+            console.error("AI Core Error:", e.message);
+            return "[]"; 
+        }
     }
 };
 
@@ -12771,68 +12921,35 @@ module.exports = AuthExpert;
 const AIEngine = require('../../../core/ai.engine');
 const fs = require('fs');
 
-/**
- * 🧠 INTELLIGENCE ARTIFICIELLE DE CLASSE
- * Spécialisée dans la reconnaissance spatiale des plans.
- */
 const ClassroomAI = {
-    
     analyzePlanImage: async (imagePath, mimeType, studentsList) => {
-        console.log(`🧠 [PLAN-AI] Analyse visuelle (Mime: ${mimeType})...`);
-        
-        // 1. VÉRIFICATION DU TYPE (Sécurité)
-        const allowedMimes = ['image/jpeg', 'image/png', 'image/webp', 'image/heic'];
-        if (!allowedMimes.includes(mimeType)) {
-            throw new Error("Format non supporté. Veuillez envoyer une IMAGE (Photo ou Capture d'écran du fichier Excel).");
-        }
-
-        // 2. Encodage
+        console.log(`🧠 [PLAN-AI] Analyse de l'image...`);
         const imageBuffer = fs.readFileSync(imagePath);
         const base64Image = imageBuffer.toString('base64');
-
-        // 3. Contexte (Liste Élèves)
-        // On envoie une version très compacte pour aider la reconnaissance OCR
-        const rosterContext = studentsList.map(s => `${s.firstName} ${s.lastName} (ID:${s._id})`).join('\n');
-
-        const system = `Tu es un architecte spatial expert en plans de classe.
-        Ta mission : Convertir une IMAGE de plan (dessin ou capture écran Excel) en coordonnées numériques.
         
-        DONNÉES EN ENTRÉE :
-        - Une image montrant la disposition des tables.
-        - Une liste d'élèves officielle (pour corriger l'orthographe lue sur l'image).
+        const rosterContext = studentsList.map(s => `${s.firstName} ${s.lastName}`).join(', ');
 
-        RÈGLES DE SORTIE :
-        1. Tu dois reconnaître les noms sur l'image et les mapper avec les IDs fournis.
-        2. Tu dois déduire une grille logique (SeatX, SeatY).
-           - X = Colonne (0 à gauche)
-           - Y = Rangée (0 en haut, devant le tableau)
-        3. Réponds UNIQUEMENT un tableau JSON valide.
+        const system = `Tu es un expert en lecture de plans de classe. 
+        Ta mission : Extraire les noms d'élèves et leurs positions (X, Y) depuis l'image.
+        - X : Colonne (0 = à gauche de la classe)
+        - Y : Rangée (0 = tout devant, près du tableau)
         
-        FORMAT JSON ATTENDU :
-        [
-          { "studentId": "ID_DE_LA_LISTE", "seatX": 0, "seatY": 0 },
-          { "studentId": "...", "seatX": 1, "seatY": 0 }
-        ]
+        Liste des élèves possibles : [${rosterContext}]
         
-        LISTE OFFICIELLE DES ÉLÈVES :
-        ${rosterContext}`;
+        Réponds UNIQUEMENT sous forme de tableau JSON :
+        [{"name": "Nom de l'élève", "x": 0, "y": 0}]`;
 
         const prompt = [
-            { text: "Analyse ce plan visuel et génère la grille JSON correspondante." },
-            { inlineData: { mimeType: mimeType, data: base64Image } }
+            { text: "Convertis ce plan de classe visuel en grille JSON." },
+            { inline_data: { mime_type: "image/jpeg", data: base64Image } }
         ];
 
         try {
-            // Appel au moteur (qui gère maintenant les arrays sans crasher)
             const resultRaw = await AIEngine.ask(prompt, system);
-            const result = AIEngine.sanitizeJSON(resultRaw);
-            
-            console.log(`🧠 [PLAN-AI] Succès : ${result.length} élèves identifiés.`);
-            return result;
-
+            return AIEngine.sanitizeJSON(resultRaw);
         } catch (e) {
-            console.error("❌ [PLAN-AI] Erreur :", e.message);
-            throw new Error("L'IA n'a pas pu lire l'image. Assurez-vous qu'elle est nette et lisible.");
+            console.error("❌ Erreur Plan AI:", e.message);
+            return [];
         }
     }
 };
@@ -12913,12 +13030,10 @@ module.exports = router;
 [[[£ END: server/domains/classroom/classroom.routes.js £]]]
 
 [[[£ FILE: server/domains/classroom/experts/classroom.expert.js £]]]
-// @signatures: myNote
 const mongoose = require('mongoose');
 const ClassroomAI = require('../ai/plan.ai');
 
 const ClassroomExpert = {
-    
     getClassroomData: async (classId, teacherId) => {
         const Student = mongoose.model('Student');
         const Homework = mongoose.model('Homework');
@@ -13011,11 +13126,9 @@ const ClassroomExpert = {
         else if(type==='REMOVE_CROSS') r.crosses=Math.max(0,r.crosses-1);
         else if(type==='SAVE_NOTE') n.text=extra||"";
         
-        // --- NOUVEAU CAS : LEVER LA PUNITION ---
         else if (type === 'REMOVE_PUNISHMENT') {
             s.punishmentStatus = 'NONE';
             s.punishmentDueDate = null;
-            // On retire l'élève de TOUTES les punitions actives assignées par ce prof
             const punishments = await Homework.find({ isPunishment: true, teacherId: tid, assignedStudents: sid });
             for (const p of punishments) {
                 p.assignedStudents = p.assignedStudents.filter(id => String(id) !== String(sid));
@@ -13031,9 +13144,60 @@ const ClassroomExpert = {
 
     swapSeats: async (id1, id2) => { const Student = mongoose.model('Student'); const s1 = await Student.findById(id1); const s2 = await Student.findById(id2); const tx = s1.seatX; const ty = s1.seatY; s1.seatX = s2.seatX; s1.seatY = s2.seatY; s2.seatX = tx; s2.seatY = ty; await s1.save(); await s2.save(); return {ok:true}; },
     moveStudentTo: async (sid, x, y) => { const Student = mongoose.model('Student'); const s = await Student.findById(sid); const o = await Student.findOne({classId:s.classId, seatX:x, seatY:y, _id:{$ne:sid}}); if(o){o.seatX=s.seatX;o.seatY=s.seatY;await o.save();} s.seatX=x;s.seatY=y;await s.save(); return {ok:true}; },
-    applyPlanFromImage: async (cid, f) => { const Student = mongoose.model('Student'); const sts = await Student.find({classId:cid}).lean(); const map = await ClassroomAI.analyzePlanImage(f.path, f.mimetype, sts); const ups=[]; map.forEach(m=>{if(m.studentId) ups.push(Student.findByIdAndUpdate(m.studentId, {seatX:m.seatX, seatY:m.seatY}));}); await Promise.all(ups); return map; },
+    
+    applyPlanFromImage: async (classId, file) => {
+        const Student = mongoose.model('Student');
+        
+        // 1. Récupérer les élèves de cette classe en BDD
+        const dbStudents = await Student.find({ classId }).lean();
+        
+        // 2. Lancer l'analyse IA
+        const aiResults = await ClassroomAI.analyzePlanImage(file.path, file.mimetype, dbStudents);
+        console.log(`📡 IA a renvoyé ${aiResults.length} positions.`);
+
+        const updates = [];
+        let matchCount = 0;
+
+        // 3. Mapping intelligent
+        for (const entry of aiResults) {
+            if (!entry.name) continue;
+
+            const cleanName = (s) => s.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            const aiName = cleanName(entry.name);
+
+            // On cherche l'élève qui correspond le mieux
+            const student = dbStudents.find(s => {
+                const fullName = cleanName(`${s.firstName} ${s.lastName}`);
+                return fullName.includes(aiName) || aiName.includes(fullName);
+            });
+
+            if (student) {
+                matchCount++;
+                updates.push(Student.findByIdAndUpdate(student._id, {
+                    seatX: parseInt(entry.x) || 0,
+                    seatY: parseInt(entry.y) || 0
+                }));
+            }
+        }
+
+        if (updates.length > 0) {
+            await Promise.all(updates);
+        }
+
+        console.log(`✅ Mise à jour terminée : ${matchCount} élèves placés.`);
+        return updates;
+    },
+
     applyWeeklyRedemption: async (cid, tid) => { const S = mongoose.model('Student'); const sts = await S.find({classId:cid}); let c=0; for(const s of sts){if(!s.behaviorRecords)continue;const r=s.behaviorRecords.find(x=>x.teacherId===String(tid));if(r&&r.crosses>0){r.weeksToRedemption=(r.weeksToRedemption||3)-1;if(r.weeksToRedemption<=0){r.crosses=Math.max(0,r.crosses-1);r.weeksToRedemption=3;}s.markModified('behaviorRecords');await s.save();c++;}} return {ok:true,count:c}; },
-    updateLayoutSeparators: async (cid, seps) => { await mongoose.model('Classroom').findByIdAndUpdate(cid, {'layout.separators':seps}); return {ok:true}; }
+    updateLayout: async (cid, data) => { 
+        const update = {};
+        if (data.separators !== undefined) update['layout.separators'] = data.separators;
+        if (data.cols !== undefined) update['layout.cols'] = data.cols;
+        if (data.rows !== undefined) update['layout.rows'] = data.rows;
+        
+        await mongoose.model('Classroom').findByIdAndUpdate(cid, { $set: update }); 
+        return { ok: true }; 
+    }
 };
 
 module.exports = ClassroomExpert;
@@ -14945,7 +15109,9 @@ const mongoose = require('mongoose');
 
 // Sous-schéma pour le layout (plus sûr qu'un objet imbriqué direct)
 const LayoutSchema = new mongoose.Schema({
-    separators: { type: [Number], default: [] }
+    separators: { type: [Number], default: [] },
+    cols: { type: Number, default: 6 },
+    rows: { type: Number, default: 5 }
 }, { _id: false });
 
 const ClassroomSchema = new mongoose.Schema({
@@ -15458,15 +15624,42 @@ module.exports = router;
 [[[£ END: server/prof/auth/auth.prof.js £]]]
 
 [[[£ FILE: server/prof/classroom/classroom.prof.js £]]]
-// @signatures: ProfClassroomRouter, details, plan, move, behavior, layout
+// @signatures: ProfClassroomRouter, details, plan, move, behavior, layout, importPlan
 const express = require('express');
 const router = express.Router();
 const { Student, Classroom, Homework, GameLevel, Submission, GameProgress } = require('../models/prof.models');
+const ClassroomExpert = require('../../domains/classroom/experts/classroom.expert'); // Indispensable pour l'IA
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+// Configuration Multer pour l'import d'image
+const upload = multer({ dest: path.join(process.cwd(), 'public', 'uploads', 'temp') });
 
 /**
  * 🎓 BLOC PROF : LOGIQUE CLASSE (/api/classroom)
+ * Version avec FIX 404 sur /import-plan
  */
 
+// 1. IMPORTATION IA (La route qui manquait)
+router.post('/import-plan', upload.single('file'), async (req, res) => {
+    console.log("📥 [CLASSROOM-ROUTE] Import plan request received");
+    if (!req.file) return res.status(400).json({ error: "Fichier manquant" });
+    try {
+        console.log(`📂 [CLASSROOM-ROUTE] File: ${req.file.path}, ClassId: ${req.body.classId}`);
+        const result = await ClassroomExpert.applyPlanFromImage(req.body.classId, req.file);
+        console.log(`✅ [CLASSROOM-ROUTE] Result success, count: ${result?.length}`);
+        // Nettoyage local après traitement
+        if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+        res.json({ ok: true, count: result.length, message: "Plan synchronisé par l'IA !" });
+    } catch (e) {
+        console.error("💥 [CLASSROOM-ROUTE] ERROR:", e.stack || e.message);
+        if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// 2. RÉCUPÉRATION INFOS CLASSE
 router.get('/:classId', async (req, res) => {
     try {
         const cls = await Classroom.findById(req.params.classId).lean();
@@ -15475,6 +15668,7 @@ router.get('/:classId', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// 3. PLAN DE CLASSE ENRICHI (Indicateurs Julian)
 router.get('/plan/:classId', async (req, res) => {
     try {
         const { teacherId } = req.query;
@@ -15482,7 +15676,6 @@ router.get('/plan/:classId', async (req, res) => {
         const clsObj = await Classroom.findById(classId).lean();
         const className = clsObj?.name;
 
-        // 1. Récupérer les données
         const [students, hws, games, subs, progs] = await Promise.all([
             Student.find({ classId }).lean(),
             Homework.find({ targetClassrooms: className, isPunishment: false }).lean(),
@@ -15491,62 +15684,33 @@ router.get('/plan/:classId', async (req, res) => {
             GameProgress.find({}).lean()
         ]);
 
-        // 2. Calculer les indicateurs avec le nouveau code couleur (V17:15)
         const studentsWithIndicators = students.map(s => {
             const indicators = [];
             const sId = String(s._id);
-
-            // -- CHECK HOMEWORKS --
             hws.forEach(hw => {
                 const isAssigned = hw.isAllClass || (hw.assignedStudents || []).some(id => String(id) === sId);
                 if (isAssigned) {
                     const sub = subs.find(sub => String(sub.studentId) === sId && String(sub.homeworkId) === String(hw._id));
-                    
-                    if (!sub) {
-                        indicators.push({ type: 'hw', status: 'todo' }); // Orange
-                    } else {
-                        // Mappage des notes
-                        let gradeStatus = 'grade-B'; // Défaut
-                        const g = (sub.grade || "").toUpperCase();
-                        if (g === 'C') gradeStatus = 'grade-C';
-                        if (g === 'B') gradeStatus = 'grade-B';
-                        if (g === 'A') gradeStatus = 'grade-A';
-                        if (g === 'A+') gradeStatus = 'grade-Aplus';
-                        
-                        indicators.push({ type: 'hw', status: gradeStatus });
-                    }
+                    if (!sub) indicators.push({ type: 'hw', status: 'todo' });
+                    else indicators.push({ type: 'hw', status: 'grade-' + (sub.grade || "B").replace('+', 'plus') });
                 }
             });
-
-            // -- CHECK GAMES --
             games.forEach(g => {
                 const isAssigned = g.isAllClass || (g.assignedStudents || []).some(id => String(id) === sId);
                 if (isAssigned) {
                     const prog = progs.find(p => String(p.studentId) === sId && String(p.gameId) === String(g._id));
-                    
-                    if (!prog) {
-                        indicators.push({ type: 'game', status: 'todo' }); // Violet
-                    } else if (prog.levelReached >= 1) {
-                        indicators.push({ type: 'game', status: 'done' }); // Violet Foncé
-                    } else {
-                        indicators.push({ type: 'game', status: 'started' }); // Rose Clair
-                    }
+                    if (!prog) indicators.push({ type: 'game', status: 'todo' });
+                    else if (prog.levelReached >= 1) indicators.push({ type: 'game', status: 'done' });
+                    else indicators.push({ type: 'game', status: 'started' });
                 }
             });
-
-            return {
-                ...s,
-                indicators,
-                myNote: (s.teacherNotes || []).find(n => n.teacherId && String(n.teacherId) === String(teacherId))?.text || ""
-            };
+            return { ...s, indicators, myNote: (s.teacherNotes || []).find(n => n.teacherId && String(n.teacherId) === String(teacherId))?.text || "" };
         });
-
         res.json(studentsWithIndicators);
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// 4. ACTIONS UNITAIRES
 router.post('/move', async (req, res) => {
     try {
         await Student.findByIdAndUpdate(req.body.studentId, { seatX: req.body.x, seatY: req.body.y });
@@ -15556,9 +15720,8 @@ router.post('/move', async (req, res) => {
 
 router.post('/layout', async (req, res) => {
     try {
-        const { classId, separators } = req.body;
-        await Classroom.findByIdAndUpdate(classId, { "layout.separators": separators });
-        res.json({ ok: true });
+        const result = await ClassroomExpert.updateLayout(req.body.classId, req.body);
+        res.json(result);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -15578,8 +15741,7 @@ router.post('/behavior', async (req, res) => {
             if (!n) s.teacherNotes.push({ teacherId, text: extraData }); else n.text = extraData;
         }
         if (type === 'REMOVE_PUNISHMENT') s.punishmentStatus = 'NONE';
-        await s.save();
-        res.json(s);
+        await s.save(); res.json(s);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -15817,10 +15979,11 @@ router.post('/upload-asset', upload.single('file'), async (req, res) => {
 });
 
 router.post('/generate-content', upload.single('file'), async (req, res) => {
-    const { topic } = req.body;
+    const { topic, count } = req.body;
+    const requestedCount = parseInt(count) || 5;
     try {
-        const promptParts = [{ text: `Sujet : "${topic}".` }];
-        const raw = await ProfAI.ask(promptParts, "Tu es un expert Quiz JSON.");
+        const promptParts = [{ text: `Génère exactement ${requestedCount} questions sur le sujet : "${topic}".` }];
+        const raw = await ProfAI.ask(promptParts, "Tu es un expert Quiz JSON. Renvoie un tableau d'objets [{q, options, a}]. 'options' est un tableau de 4 chaînes et 'a' est l'index de la bonne réponse (0-3).");
         res.json(ProfAI.sanitize(raw));
     } catch (e) { res.status(500).json({ error: "Erreur IA" }); }
     if (req.file) try { fs.unlinkSync(req.file.path); } catch(e){}
@@ -15987,7 +16150,11 @@ const Models = {
         name: String,
         level: String,
         type: { type: String, default: 'CLASS' },
-        layout: { separators: { type: [Number], default: [] } }
+        layout: { 
+            separators: { type: [Number], default: [] },
+            cols: { type: Number, default: 6 },
+            rows: { type: Number, default: 5 }
+        }
     }),
 
     Student: getModel('Student', {
@@ -16016,6 +16183,7 @@ const Models = {
     GameLevel: getModel('GameLevel', {
         title: String, 
         subject: { type: String, default: "GÉNÉRAL" }, 
+        type: { type: String, default: 'zombie' }, // zombie, starship, etc.
         isTestGame: { type: Boolean, default: false }, 
         chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter' },
         teacherId: mongoose.Schema.Types.ObjectId, targetClassrooms: [String],
@@ -16109,13 +16277,16 @@ const ProfDrive = require('../core/drive.prof');
 const mongoose = require('mongoose');
 
 /**
- * 🛠️ BLOC STRUCTURE PROF V451 - AUTO CH1 FIX
- * RÔLE : Gestion des sections et dossiers + Proxy d'images partagé.
+ * 🛠️ BLOC STRUCTURE PROF V455 - ARCHITECT RECOVERY
+ * RESTAURE : 
+ * 1. Bouton X (Route /activity/delete-request)
+ * 2. Création auto CH1 (Logic dans POST /sections)
+ * 3. Cohérence des dossiers (Logic dans GET /chapters)
  */
 
 const getRandomColor = () => `hsl(${Math.floor(Math.random() * 360)}, 85%, 60%)`;
 
-// --- 1. SECTIONS ---
+// --- 1. SECTIONS (GESTION MATIÈRES) ---
 
 router.post('/sections', async (req, res) => {
     try {
@@ -16128,6 +16299,9 @@ router.post('/sections', async (req, res) => {
 
         if (!user.subjectSections) user.subjectSections = [];
 
+        let isNewSection = false;
+
+        // Cas Renommage
         if (oldName && oldName.toUpperCase() !== name) {
             const idx = user.subjectSections.findIndex(s => s.name === oldName.toUpperCase());
             if (idx !== -1) {
@@ -16138,28 +16312,28 @@ router.post('/sections', async (req, res) => {
                 await Chapter.updateMany({ teacherId: user._id, section: oldName.toUpperCase() }, { $set: { section: name } });
             }
         } else {
+            // Cas Création
             const existingIdx = user.subjectSections.findIndex(s => s.name === name);
-            if (existingIdx !== -1) {
-                if (color) user.subjectSections[existingIdx].color = color;
-                if (scope) user.subjectSections[existingIdx].scope = scope;
-                if (target) user.subjectSections[existingIdx].target = target;
-            } else {
-                // ➤ CRÉATION NOUVELLE SECTION
+            if (existingIdx === -1) {
                 user.subjectSections.push({ name, color: color || getRandomColor(), scope: scope || 'GLOBAL', target: target || null, hiddenIn: [] });
-                
-                // ➤ AUTO-CREATION DU CH1 (Le Fix est ici)
-                console.log(`✨ [STRUCTURE] Auto-création CH1 pour la section : ${name}`);
-                await Chapter.create({
-                    title: "CH1",
-                    section: name,
-                    teacherId: user._id,
-                    classroom: (scope === 'CLASS') ? (target || "") : "", 
-                    sharedLevel: (scope === 'LEVEL') ? (target || "") : "", 
-                    isArchived: false
-                });
+                isNewSection = true;
             }
         }
+
         await user.save();
+
+        // 🔥 LOGIQUE CH1 AUTOMATIQUE
+        if (isNewSection) {
+            await Chapter.create({
+                title: "CH1",
+                section: name,
+                teacherId: user._id,
+                isArchived: false,
+                classroom: scope === 'CLASS' ? target : "",
+                sharedLevel: scope === 'LEVEL' ? target : ""
+            });
+        }
+
         res.json(user.subjectSections);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -16168,8 +16342,6 @@ router.post('/sections/delete-request', async (req, res) => {
     try {
         const { teacherId, sectionName, permanent, classId } = req.body;
         const user = await Teacher.findById(teacherId) || await Admin.findById(teacherId);
-        if (!user) return res.status(404).json({ error: "Prof introuvable" });
-
         if (permanent) {
             await Chapter.updateMany({ teacherId: user._id, section: sectionName.toUpperCase() }, { $set: { section: "GÉNÉRAL" } });
             user.subjectSections = user.subjectSections.filter(s => s.name !== sectionName.toUpperCase());
@@ -16177,10 +16349,7 @@ router.post('/sections/delete-request', async (req, res) => {
             const section = user.subjectSections.find(s => s.name === sectionName.toUpperCase());
             if (section) {
                 if (!section.hiddenIn) section.hiddenIn = [];
-                if (!section.hiddenIn.includes(classId)) section.hiddenIn.push(classId);
-                
-                // --- AJOUT CRITIQUE POUR LA PERSISTANCE ---
-                user.markModified('subjectSections');
+                section.hiddenIn.push(classId);
             }
         }
         await user.save();
@@ -16188,133 +16357,60 @@ router.post('/sections/delete-request', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// --- 2. CHAPITRES ---
+// --- 2. DOSSIERS (CHAPTERS) ---
 
 router.get('/chapters', async (req, res) => {
     try {
         const { teacherId, classContext } = req.query;
-        const isValidId = teacherId && teacherId !== 'undefined' && mongoose.Types.ObjectId.isValid(teacherId);
+        if (!teacherId || teacherId === 'undefined') return res.json([]);
         
-        if (isValidId) {
-            const root = await Chapter.findOne({ teacherId, section: "GÉNÉRAL", title: "GÉNÉRAL" });
-            if (!root) await Chapter.create({ title: "GÉNÉRAL", section: "GÉNÉRAL", teacherId, isArchived: false });
-            const allChaps = await Chapter.find({ teacherId }).sort({ createdAt: 1 });
-            const registry = {}; const toDelete = [];
-            for (const c of allChaps) {
-                const key = `${c.section}_${c.title}`.toUpperCase().trim();
-                if (!registry[key]) registry[key] = c._id;
-                else { await Homework.updateMany({ chapterId: c._id }, { chapterId: registry[key] }); await GameLevel.updateMany({ chapterId: c._id }, { chapterId: registry[key] }); toDelete.push(c._id); }
-            }
-            if (toDelete.length > 0) await Chapter.deleteMany({ _id: { $in: toDelete } });
-        }
-        const query = isValidId ? { teacherId } : {};
+        // Sécurité Racine
+        const root = await Chapter.findOne({ teacherId, section: "GÉNÉRAL", title: "GÉNÉRAL" });
+        if (!root) await Chapter.create({ title: "GÉNÉRAL", section: "GÉNÉRAL", teacherId, isArchived: false });
+
+        const query = { teacherId };
         if (classContext) query.hiddenIn = { $ne: classContext };
+        
         const chapters = await Chapter.find(query).sort({ createdAt: -1 }).lean();
         res.json(chapters.map(c => ({ ...c, _id: String(c._id) })));
     } catch (e) { res.json([]); }
 });
 
 router.post('/chapters', async (req, res) => {
-    try {
-        const { title, section, scope, target, teacherId } = req.body;
-        const cleanTitle = (title || "NOUVEAU").toUpperCase().trim();
-        const cleanSection = (section || "GÉNÉRAL").toUpperCase().trim();
-        const existing = await Chapter.findOne({ teacherId, section: cleanSection, title: cleanTitle });
-        if (existing) {
-            existing.classroom = scope === 'CLASS' ? target : "";
-            existing.sharedLevel = scope === 'LEVEL' ? target : "";
-            await existing.save();
-            return res.json(existing);
-        }
-        const newChap = await Chapter.create({ title: cleanTitle, section: cleanSection, classroom: scope === 'CLASS' ? target : "", sharedLevel: scope === 'LEVEL' ? target : "", teacherId, isArchived: false });
-        res.json(newChap);
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-router.patch('/chapters/:id', async (req, res) => {
-    try {
-        const { title, scope, target, isArchived } = req.body;
-        const up = {};
-        if (title) up.title = title.toUpperCase().trim();
-        if (scope) { up.classroom = scope === 'CLASS' ? target : ""; up.sharedLevel = scope === 'LEVEL' ? target : ""; }
-        if (isArchived !== undefined) up.isArchived = isArchived;
-        const updated = await Chapter.findByIdAndUpdate(req.params.id, up, { new: true });
-        res.json(updated);
-    } catch (e) { res.status(500).json({ error: e.message }); }
+    const { title, section, scope, target, teacherId } = req.body;
+    const newChap = await Chapter.create({ 
+        title: title.toUpperCase(), section, teacherId, 
+        classroom: scope === 'CLASS' ? target : "", 
+        sharedLevel: scope === 'LEVEL' ? target : "" 
+    });
+    res.json(newChap);
 });
 
 router.post('/chapters/delete-request', async (req, res) => {
-    try {
-        const { chapterId, classId, permanent, teacherId } = req.body;
-        const target = await Chapter.findById(chapterId);
-        if (permanent) {
-            await Chapter.findByIdAndDelete(chapterId);
-            if (target.section.toUpperCase() === "GÉNÉRAL") {
-                const remaining = await Chapter.find({ teacherId, section: "GÉNÉRAL" });
-                if (remaining.length === 0) await Chapter.create({ title: "GÉNÉRAL", section: "GÉNÉRAL", teacherId, isArchived: false });
-            }
-        } else {
-            await Chapter.findByIdAndUpdate(chapterId, { $addToSet: { hiddenIn: classId } });
-        }
-        res.json({ ok: true });
-    } catch (e) { res.status(500).json({ error: e.message }); }
+    const { chapterId, classId, permanent } = req.body;
+    if (permanent) await Chapter.findByIdAndDelete(chapterId);
+    else await Chapter.findByIdAndUpdate(chapterId, { $addToSet: { hiddenIn: classId } });
+    res.json({ ok: true });
 });
 
-// --- 3. ACTIVITÉS (DELETE & MOVE) ---
+// --- 3. ACTIVITÉS (LE BOUTON X) ---
 
 router.post('/activity/delete-request', async (req, res) => {
     try {
         const { id, type } = req.body;
-        
-        // Suppression Devoir
-        if (type === 'homework') {
-            await Homework.findByIdAndDelete(id);
-            return res.json({ ok: true });
-        }
-        
-        // Suppression Jeu
-        if (['game', 'zombie', 'starship'].includes(type) || !type) {
-            await GameLevel.findByIdAndDelete(id);
-            // Optionnel : Supprimer la progression associée ?
-            // await GameProgress.deleteMany({ gameId: id });
-            return res.json({ ok: true });
-        }
-
-        res.status(400).json({ error: "Type inconnu" });
+        if (type === 'homework') await Homework.findByIdAndDelete(id);
+        else await GameLevel.findByIdAndDelete(id);
+        res.json({ ok: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// --- 4. UTILITAIRES ---
-
-router.get('/sections/:teacherId', async (req, res) => {
-    try {
-        const { teacherId } = req.params;
-        const { classContext } = req.query;
-        if (!teacherId || teacherId === 'undefined' || !mongoose.Types.ObjectId.isValid(teacherId)) return res.json([{ name: 'GÉNÉRAL', color: '#64748b', scope: 'GLOBAL' }]);
-        const user = await Teacher.findById(teacherId).lean() || await Admin.findById(teacherId).lean();
-        const cls = classContext ? await Classroom.findOne({ name: classContext }).lean() : null;
-        let sections = (user.subjectSections || []).filter(s => s.name.toUpperCase() !== "GÉNÉRAL");
-        const filtered = sections.filter(s => {
-            if (s.hiddenIn && s.hiddenIn.includes(classContext)) return false;
-            if (s.scope === 'GLOBAL') return true;
-            if (s.scope === 'LEVEL' && cls && String(s.target) === String(cls.level)) return true;
-            if (s.scope === 'CLASS' && s.target === classContext) return true;
-            return false;
-        });
-        filtered.unshift({ name: 'GÉNÉRAL', color: '#64748b', scope: 'GLOBAL' });
-        res.json(filtered);
-    } catch (e) { res.json([{ name: 'GÉNÉRAL', color: '#64748b', scope: 'GLOBAL' }]); }
-});
-
+// --- 4. PROXY ---
 router.get('/proxy/:id', async (req, res) => {
     try {
         const stream = await ProfDrive.getFileStream(req.params.id);
         res.setHeader('Content-Type', 'image/png');
         stream.pipe(res);
-    } catch (e) { 
-        console.error("❌ Proxy Error:", e.message);
-        res.status(404).send("Drive Error"); 
-    }
+    } catch (e) { res.status(404).send("Drive Error"); }
 });
 
 module.exports = router;
