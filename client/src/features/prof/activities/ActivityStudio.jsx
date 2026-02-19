@@ -66,6 +66,7 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
             allStudents, // Transmis
             globalClass,
             globalLevel,
+            targetLevel: globalLevel, 
             user,
             targetSection: activeSectionName,
             onClose: () => { setEditingItem(null); loadData(); }

@@ -10,7 +10,7 @@ const DEFAULT_HW_DATA = {
     isPunishment: false
 };
 
-export default function HomeworkStudio({ initialData, chapters, user, targetSection, targetLevel, onClose, allStudents: propStudents, allClasses: propClasses }) {
+export default function HomeworkStudio({ initialData, chapters, user, targetSection, targetLevel, onClose, allStudents: propStudents, allClasses: propClasses, globalClass }) {
     
     // 1. ÉTATS DU DEVOIR
     const [formData, setFormData] = useState(() => {
@@ -31,7 +31,7 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
     
     // 3. ÉTATS DISTRIBUTION
     const [distribution, setDistribution] = useState({});
-    const [viewingClass, setViewingClass] = useState("");
+    const [viewingClass, setViewingClass] = useState(globalClass || "");
     const [studentSearch, setStudentSearch] = useState("");
     const [loading, setLoading] = useState(false);
     
