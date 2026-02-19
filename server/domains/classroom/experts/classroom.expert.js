@@ -1,9 +1,7 @@
-// @signatures: myNote
 const mongoose = require('mongoose');
 const ClassroomAI = require('../ai/plan.ai');
 
 const ClassroomExpert = {
-    
     getClassroomData: async (classId, teacherId) => {
         const Student = mongoose.model('Student');
         const Homework = mongoose.model('Homework');
@@ -96,11 +94,9 @@ const ClassroomExpert = {
         else if(type==='REMOVE_CROSS') r.crosses=Math.max(0,r.crosses-1);
         else if(type==='SAVE_NOTE') n.text=extra||"";
         
-        // --- NOUVEAU CAS : LEVER LA PUNITION ---
         else if (type === 'REMOVE_PUNISHMENT') {
             s.punishmentStatus = 'NONE';
             s.punishmentDueDate = null;
-            // On retire l'élève de TOUTES les punitions actives assignées par ce prof
             const punishments = await Homework.find({ isPunishment: true, teacherId: tid, assignedStudents: sid });
             for (const p of punishments) {
                 p.assignedStudents = p.assignedStudents.filter(id => String(id) !== String(sid));
@@ -116,7 +112,50 @@ const ClassroomExpert = {
 
     swapSeats: async (id1, id2) => { const Student = mongoose.model('Student'); const s1 = await Student.findById(id1); const s2 = await Student.findById(id2); const tx = s1.seatX; const ty = s1.seatY; s1.seatX = s2.seatX; s1.seatY = s2.seatY; s2.seatX = tx; s2.seatY = ty; await s1.save(); await s2.save(); return {ok:true}; },
     moveStudentTo: async (sid, x, y) => { const Student = mongoose.model('Student'); const s = await Student.findById(sid); const o = await Student.findOne({classId:s.classId, seatX:x, seatY:y, _id:{$ne:sid}}); if(o){o.seatX=s.seatX;o.seatY=s.seatY;await o.save();} s.seatX=x;s.seatY=y;await s.save(); return {ok:true}; },
-    applyPlanFromImage: async (cid, f) => { const Student = mongoose.model('Student'); const sts = await Student.find({classId:cid}).lean(); const map = await ClassroomAI.analyzePlanImage(f.path, f.mimetype, sts); const ups=[]; map.forEach(m=>{if(m.studentId) ups.push(Student.findByIdAndUpdate(m.studentId, {seatX:m.seatX, seatY:m.seatY}));}); await Promise.all(ups); return map; },
+    
+    applyPlanFromImage: async (classId, file) => {
+        const Student = mongoose.model('Student');
+        
+        // 1. Récupérer les élèves de cette classe en BDD
+        const dbStudents = await Student.find({ classId }).lean();
+        
+        // 2. Lancer l'analyse IA
+        const aiResults = await ClassroomAI.analyzePlanImage(file.path, file.mimetype, dbStudents);
+        console.log(`📡 IA a renvoyé ${aiResults.length} positions.`);
+
+        const updates = [];
+        let matchCount = 0;
+
+        // 3. Mapping intelligent
+        for (const entry of aiResults) {
+            if (!entry.name) continue;
+
+            const cleanName = (s) => s.toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            const aiName = cleanName(entry.name);
+
+            // On cherche l'élève qui correspond le mieux
+            const student = dbStudents.find(s => {
+                const fullName = cleanName(`${s.firstName} ${s.lastName}`);
+                return fullName.includes(aiName) || aiName.includes(fullName);
+            });
+
+            if (student) {
+                matchCount++;
+                updates.push(Student.findByIdAndUpdate(student._id, {
+                    seatX: parseInt(entry.x) || 0,
+                    seatY: parseInt(entry.y) || 0
+                }));
+            }
+        }
+
+        if (updates.length > 0) {
+            await Promise.all(updates);
+        }
+
+        console.log(`✅ Mise à jour terminée : ${matchCount} élèves placés.`);
+        return updates;
+    },
+
     applyWeeklyRedemption: async (cid, tid) => { const S = mongoose.model('Student'); const sts = await S.find({classId:cid}); let c=0; for(const s of sts){if(!s.behaviorRecords)continue;const r=s.behaviorRecords.find(x=>x.teacherId===String(tid));if(r&&r.crosses>0){r.weeksToRedemption=(r.weeksToRedemption||3)-1;if(r.weeksToRedemption<=0){r.crosses=Math.max(0,r.crosses-1);r.weeksToRedemption=3;}s.markModified('behaviorRecords');await s.save();c++;}} return {ok:true,count:c}; },
     updateLayoutSeparators: async (cid, seps) => { await mongoose.model('Classroom').findByIdAndUpdate(cid, {'layout.separators':seps}); return {ok:true}; }
 };
