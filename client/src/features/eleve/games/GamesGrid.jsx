@@ -45,6 +45,7 @@ export default function GamesGrid({ user }) {
           levels: selectedActivity.levels && selectedActivity.levels.length > 0 
                   ? selectedActivity.levels 
                   : [{ name: "Niveau 1", questions: selectedActivity.questions || [] }],
+          globalIntro: selectedActivity.globalIntro || {},
           title: selectedActivity.title,
           _id: selectedActivity._id,
           generatedCode: skin.generatedCode // On passe le script de l'univers

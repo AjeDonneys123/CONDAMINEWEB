@@ -45,6 +45,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
     const [questionStates, setQuestionStates] = useState([]); 
     const [currentQIndex, setCurrentQIndex] = useState(0);
     const [allLevels, setAllLevels] = useState([]);
+    const [globalIntroData, setGlobalIntroData] = useState({});
     const [levelQuestions, setLevelQuestions] = useState([]);
     const [currentLevelIdx, setCurrentLevelIdx] = useState(0);
     const [showAnswerUI, setShowAnswerUI] = useState(true);
@@ -109,6 +110,49 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
         if (!url) return "";
         const m = String(url).match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/))([^?&/]+)/i);
         return m?.[1] ? `https://www.youtube.com/embed/${m[1]}?autoplay=1&rel=0&modestbranding=1` : url;
+    };
+
+    const isYoutubeUrl = (url = "") => /(?:youtu\.be\/|youtube\.com\/)/i.test(String(url));
+    const pickMediaFromObject = (obj, type) => {
+        if (!obj || typeof obj !== 'object') return "";
+        const exactKeys = type === 'video'
+            ? ['videoUrl', 'videoURL', 'video', 'youtubeUrl', 'videoLink', 'video_link', 'urlVideo', 'url_video']
+            : ['sheetUrl', 'ficheUrl', 'sheet', 'fiche', 'imageUrl', 'imageURL', 'urlFiche', 'url_fiche'];
+        for (const k of exactKeys) {
+            if (typeof obj[k] === 'string' && obj[k].trim()) return obj[k].trim();
+        }
+        for (const [k, v] of Object.entries(obj)) {
+            if (typeof v === 'string' && v.trim()) {
+                const lk = k.toLowerCase();
+                const isMatch = type === 'video'
+                    ? (lk.includes('video') || lk.includes('youtube'))
+                    : (lk.includes('sheet') || lk.includes('fiche') || lk.includes('image'));
+                if (isMatch) return v.trim();
+            }
+        }
+        return "";
+    };
+
+    const getIntroMedia = () => {
+        const level = allLevels[currentLevelIdx] || {};
+        const levelIntro = level.intro || {};
+        const rootIntro = gameData?.intro || {};
+        const globalIntro = globalIntroData || {};
+        const sheetUrl =
+            pickMediaFromObject(levelIntro, 'sheet') ||
+            pickMediaFromObject(level, 'sheet') ||
+            pickMediaFromObject(rootIntro, 'sheet') ||
+            pickMediaFromObject(globalIntro, 'sheet') ||
+            pickMediaFromObject(gameData, 'sheet') ||
+            "";
+        const videoUrl =
+            pickMediaFromObject(levelIntro, 'video') ||
+            pickMediaFromObject(level, 'video') ||
+            pickMediaFromObject(rootIntro, 'video') ||
+            pickMediaFromObject(globalIntro, 'video') ||
+            pickMediaFromObject(gameData, 'video') ||
+            "";
+        return { sheetUrl, videoUrl };
     };
 
     const triggerGlobalEvent = (eventName) => {
@@ -183,11 +227,17 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
 
     useEffect(() => {
         const initGame = async () => {
-            let levelsData = gameData?.levels || [];
+            let sourceGame = gameData || null;
+            let levelsData = sourceGame?.levels || [];
             if (levelsData.length === 0) {
-                 try { const res = await api.get('/games/test-data'); levelsData = res?.levels?.length > 0 ? res.levels : []; } catch(e) {} 
+                 try {
+                    const res = await api.get('/games/test-data');
+                    if (res) sourceGame = res;
+                    levelsData = res?.levels?.length > 0 ? res.levels : [];
+                 } catch(e) {}
             }
             if (levelsData.length === 0) levelsData = [{ name: "Niveau 1", questions: [{q:"Prêt ?",options:["OUI","NON"],a:0}] }];
+            setGlobalIntroData(sourceGame?.globalIntro || {});
             setAllLevels(levelsData);
             if (levelsData[currentLevelIdx]) {
                 const qs = levelsData[currentLevelIdx].questions || [];
@@ -337,6 +387,8 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
         return () => { window.removeEventListener('keydown', hDown); window.removeEventListener('keyup', hUp); };
     }, []);
 
+    const introMedia = getIntroMedia();
+
     return (
         <div className={"fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center " + (isShake ? 'animate-shake' : '')}>
             
@@ -356,16 +408,34 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
                     <button onClick={() => setZoomMedia(null)} className="absolute top-6 right-6 w-14 h-14 bg-white hover:bg-red-600 hover:text-white text-black rounded-full flex items-center justify-center text-2xl font-black shadow-2xl">✕</button>
                     <div className="w-full h-full flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
                         {zoomMedia === 'sheet' ? (
-                            <img src={resolveUrl(allLevels[currentLevelIdx]?.intro?.sheetUrl)} className="h-[90vh] max-w-[95vw] object-contain rounded-2xl shadow-2xl" alt="Fiche" />
-                        ) : (
+                            <img src={resolveUrl(introMedia.sheetUrl)} className="h-[90vh] max-w-[95vw] object-contain rounded-2xl shadow-2xl" alt="Fiche" />
+                        ) : !introMedia.videoUrl ? (
+                            <div className="h-[90vh] w-[95vw] max-w-[1400px] bg-slate-900 rounded-2xl overflow-hidden shadow-2xl border border-slate-700 flex items-center justify-center">
+                                <div className="text-center px-6">
+                                    <div className="text-5xl mb-4">🎬</div>
+                                    <div className="text-white font-black uppercase text-xl">Aucune vidéo configurée</div>
+                                    <div className="text-slate-400 text-sm mt-2">Ajoute un lien vidéo dans le studio pour ce niveau.</div>
+                                </div>
+                            </div>
+                        ) : isYoutubeUrl(introMedia.videoUrl) ? (
                             <div className="h-[90vh] w-[95vw] max-w-[1400px] bg-black rounded-2xl overflow-hidden shadow-2xl">
                                 <iframe
                                     className="w-full h-full"
-                                    src={getYoutubeEmbed(allLevels[currentLevelIdx]?.intro?.videoUrl)}
+                                    src={getYoutubeEmbed(introMedia.videoUrl)}
                                     frameBorder="0"
                                     allow="autoplay; encrypted-media; picture-in-picture"
                                     allowFullScreen
                                     title="Video"
+                                />
+                            </div>
+                        ) : (
+                            <div className="h-[90vh] w-[95vw] max-w-[1400px] bg-black rounded-2xl overflow-hidden shadow-2xl">
+                                <video
+                                    className="w-full h-full"
+                                    src={resolveUrl(introMedia.videoUrl)}
+                                    controls
+                                    autoPlay
+                                    playsInline
                                 />
                             </div>
                         )}
@@ -390,11 +460,11 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
                 <div className={`absolute inset-0 flex flex-col items-center justify-center bg-slate-950 z-[6000] p-8 text-center animate-in zoom-in ${zoomMedia ? 'pointer-events-none' : ''}`}>
                     <h1 className="text-5xl text-white font-black mb-6 uppercase">{allLevels[currentLevelIdx]?.name || ("Niveau " + (currentLevelIdx+1))}</h1>
                     <div className="flex gap-10 mb-12 w-full max-w-4xl justify-center h-[280px]">
-                        <div onClick={() => allLevels[currentLevelIdx]?.intro?.sheetUrl && setZoomMedia('sheet')} className="h-full aspect-[3/4] bg-slate-800 rounded-3xl border-4 border-slate-700 overflow-hidden flex items-center justify-center shadow-2xl cursor-pointer hover:border-indigo-500 hover:scale-105 transition-all">
-                            {allLevels[currentLevelIdx]?.intro?.sheetUrl ? <img src={resolveUrl(allLevels[currentLevelIdx].intro.sheetUrl)} className="w-full h-full object-contain" /> : <span className="text-slate-500 font-bold uppercase text-[10px]">Fiche</span>}
+                        <div onClick={() => introMedia.sheetUrl && setZoomMedia('sheet')} className="h-full aspect-[3/4] bg-slate-800 rounded-3xl border-4 border-slate-700 overflow-hidden flex items-center justify-center shadow-2xl cursor-pointer hover:border-indigo-500 hover:scale-105 transition-all">
+                            {introMedia.sheetUrl ? <img src={resolveUrl(introMedia.sheetUrl)} className="w-full h-full object-contain" /> : <span className="text-slate-500 font-bold uppercase text-[10px]">Fiche</span>}
                         </div>
-                        <div onClick={() => allLevels[currentLevelIdx]?.intro?.videoUrl && setZoomMedia('video')} className="h-full aspect-video bg-black rounded-3xl border-4 border-slate-700 overflow-hidden shadow-2xl flex items-center justify-center cursor-pointer hover:border-indigo-500 hover:scale-105 transition-all relative group">
-                            {allLevels[currentLevelIdx]?.intro?.videoUrl ? <span className="text-6xl">▶️</span> : <span className="text-slate-500 font-bold uppercase text-[10px]">Vidéo</span>}
+                        <div onClick={() => setZoomMedia('video')} className="h-full aspect-video bg-black rounded-3xl border-4 border-slate-700 overflow-hidden shadow-2xl flex items-center justify-center cursor-pointer hover:border-indigo-500 hover:scale-105 transition-all relative group">
+                            {introMedia.videoUrl ? <span className="text-6xl">▶️</span> : <span className="text-slate-500 font-bold uppercase text-[10px]">Vidéo</span>}
                         </div>
                     </div>
                     <button onClick={startCurrentLevel} disabled={!isReady} className="px-16 py-6 rounded-full font-black text-3xl shadow-2xl border-4 bg-white text-indigo-900 border-indigo-500 hover:scale-110">
