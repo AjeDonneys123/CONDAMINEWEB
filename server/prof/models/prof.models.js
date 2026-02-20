@@ -79,7 +79,10 @@ const Models = {
         assignedGroups: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Classroom' }],
         behaviorRecords: [{
             teacherId: mongoose.Schema.Types.ObjectId,
-            crosses: { type: Number, default: 0 }, bonuses: { type: Number, default: 0 }, weeksToRedemption: { type: Number, default: 3 }
+            crosses: { type: Number, default: 0 },
+            bonuses: { type: Number, default: 0 },
+            weeksToRedemption: { type: Number, default: 3 },
+            nextCrossRemovalAt: { type: Date, default: null }
         }],
         teacherNotes: [{ teacherId: mongoose.Schema.Types.ObjectId, text: String }],
         punishmentStatus: { type: String, default: 'NONE' },
@@ -144,6 +147,8 @@ const Models = {
         teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher' },
         scenes: [SceneSchema],
         generatedCode: String,
+        isProduction: { type: Boolean, default: false },
+        isTrashed: { type: Boolean, default: false },
         createdAt: { type: Date, default: Date.now }
     })
 };

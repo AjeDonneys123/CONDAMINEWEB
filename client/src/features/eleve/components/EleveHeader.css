@@ -58,6 +58,13 @@
 .ms-label { font-weight: 950; min-width: 50px; text-align: right; }
 .ms-visual { letter-spacing: 2px; }
 .ms-info { opacity: 0.6; margin-left: 5px; font-size: 0.65rem; }
+.ms-countdown {
+    margin-left: 5px;
+    font-size: 0.66rem;
+    font-weight: 900;
+    color: #16a34a;
+    letter-spacing: 1px;
+}
 
 /* COULEURS */
 .row-cross { color: #ef4444; }

@@ -1,12 +1,15 @@
-// @signatures: UnifiedMoteur, handleAnswerClick, triggerWinSequence, startCurrentLevel
+// @signatures: UnifiedMoteur, handleAnswerClick, triggerWinSequence, startCurrentLevel, updateBarLogic, changeQuestionLogic
 import React, { useState, useRef, useEffect } from 'react';
 import SoundExpert from '../../../services/SoundExpert';
 import { api } from '../../../services/api';
 import { createGameBase } from '../../../services/gameCore';
 
 /**
- * 🧠 UNIFIED MOTEUR V8.8 (FIX COMPLET)
- * Gère les questions de l'activité, le visuel du studio et les assets.
+ * 🧠 UNIFIED MOTEUR V9.5 (DEBUG & BRIDGE)
+ * REPAIRS: 
+ * - Error Reporting UI (Affiche les crashs de script).
+ * - Complete Bridge (SHAKE, SUBMIT_ANSWER).
+ * - Multi-level reset fix.
  */
 
 const ZOMBIE_FALLBACK_CODE = `class MiniGame extends MiniGameBase {
@@ -16,75 +19,23 @@ const ZOMBIE_FALLBACK_CODE = `class MiniGame extends MiniGameBase {
     }
     resetInternalState() {
         this.projectiles = []; this.zombieX = 100; this.zombieState = "WALKING"; 
-        this.heroState = "IDLE"; this.heroTimer = 0; this.hasDealtDamage = false;
-        this.isStopped = false; this.baseSpeed = 0.15;
+        this.heroState = "IDLE"; this.heroTimer = 0; this.isStopped = false;
     }
-    start() { 
-        this.game.setUI(true);
-        this.resetInternalState();
-        if(this.HEROS) { this.HEROS.x = 15; this.HEROS.y = 70; this.HEROS.play("IDLE", true); } 
-        this.resetZombie();
-    }
-    resetZombie() {
-        this.zombieX = 100; this.zombieState = "WALKING"; this.hasDealtDamage = false;
-        if(this.ZOMBIE) { this.ZOMBIE.x = 100; this.ZOMBIE.play("AVANCER", true); }
-    }
+    start() { this.game.setUI(true); if(this.HEROS) this.HEROS.play("IDLE", true); }
     onResult(isCorrect) {
         if (isCorrect && this.HEROS) {
             this.HEROS.play("TIRER", false); this.heroState = "SHOOT"; this.heroTimer = 40;
             this.projectiles.push({ x: this.HEROS.x + 5, y: this.HEROS.y - 5 });
-        } else if (!isCorrect) { this.zombieX -= 12; this.game.shake(); }
+        } else if (!isCorrect) { this.zombieX -= 10; this.game.shake(); }
     }
     update() {
         if (this.isStopped) return;
-        if (this.isBossPhase && this.ZOMBIE) { this.ZOMBIE.scale = this.ZOMBIE.baseScale * 1.6; } 
-        else if (this.ZOMBIE) { this.ZOMBIE.scale = this.ZOMBIE.baseScale; }
-        if (this.heroState === "SHOOT" || this.heroState === "HIT") {
-            this.heroTimer--; if (this.heroTimer <= 0) { this.heroState = "IDLE"; if(this.HEROS) this.HEROS.play("IDLE", true); }
-        }
         if (this.zombieState === "WALKING") {
-            let speed = this.isBossPhase ? this.baseSpeed * 0.5 : this.baseSpeed;
-            this.zombieX -= speed;
-            if (this.zombieX < 20) {
-                this.zombieState = "ATTACKING"; this.hasDealtDamage = false;
-                if (this.ZOMBIE) { this.ZOMBIE.x = 20; this.ZOMBIE.play("TAPER", false); }
-            } else if(this.ZOMBIE) this.ZOMBIE.x = this.zombieX;
-        } 
-        else if (this.zombieState === "ATTACKING") {
-            if (this.ZOMBIE && this.ZOMBIE.frameIdx >= 1 && !this.hasDealtDamage) {
-                this.hasDealtDamage = true;
-                if (this.HEROS) { this.HEROS.play("TOUCHE", false); this.heroState = "HIT"; this.heroTimer = 60; }
-                this.game.damage(1); 
-            }
-            if (this.ZOMBIE && this.ZOMBIE.isAnimFinished) this.resetZombie();
-        } 
-        else if (this.zombieState === "HIT") {
-            this.zombieX += 0.5; if(this.ZOMBIE) { this.zombieX = this.zombieX; if (this.ZOMBIE.isAnimFinished) this.resetZombie(); }
+            this.zombieX -= this.isBossPhase ? 0.08 : 0.15;
+            if (this.ZOMBIE) this.ZOMBIE.x = this.zombieX;
+            if (this.zombieX < 20) { this.game.damage(1); this.zombieX = 100; }
         }
-        for (let i = this.projectiles.length - 1; i >= 0; i--) { 
-            let p = this.projectiles[i]; p.x += 3;
-            if (this.zombieState === "WALKING" && p.x > this.zombieX - 5 && p.x < this.zombieX + 5) {
-                this.projectiles.splice(i, 1); this.zombieState = "HIT";
-                if (this.ZOMBIE) { this.ZOMBIE.play("TOUCHE", false); } 
-            } 
-            else if (p.x > 110) { this.projectiles.splice(i, 1); }
-        }
-    }
-    draw() {
-        if (this.isStopped) return;
-        const ctx = this.ctx;
-        this.projectiles.forEach(p => { 
-            if (this.isBossPhase) {
-                ctx.save(); ctx.shadowBlur = 20; ctx.shadowColor = "#f59e0b"; ctx.font = "50px Arial";
-                ctx.textAlign = "center"; ctx.textBaseline = "middle";
-                ctx.fillText("🔥", (p.x/100)*this.canvas.width, (p.y/100)*this.canvas.height);
-                ctx.restore();
-            } else {
-                ctx.fillStyle = "#f97316"; ctx.beginPath(); 
-                ctx.arc((p.x/100)*this.canvas.width, (p.y/100)*this.canvas.height, 10, 0, Math.PI*2); 
-                ctx.fill(); 
-            }
-        });
+        this.projectiles.forEach((p,i) => { p.x += 3; if(p.x > 100) this.projectiles.splice(i,1); });
     }
 }`;
 
@@ -104,22 +55,25 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
     const [zoomMedia, setZoomMedia] = useState(null);
     const [activeBossVisual, setActiveBossVisual] = useState(false);
     const [isShake, setIsShake] = useState(false);
-    const canvasRef = useRef(null);
-    const [engineStarted, setEngineStarted] = useState(false);
-    const [isReady, setIsReady] = useState(false);
-    const [loadProgress, setLoadProgress] = useState("");
     const [feedback, setFeedback] = useState(null);
     const [userInput, setUserInput] = useState("");
+    const [loadProgress, setLoadProgress] = useState("");
+    const [isReady, setIsReady] = useState(false);
+    const [engineStarted, setEngineStarted] = useState(false);
+    
+    // --- NOUVEAU : GESTION DES ERREURS DE SCRIPT ---
+    const [scriptError, setScriptError] = useState(null);
 
+    const canvasRef = useRef(null);
+    const frameIdRef = useRef(null);
+    const gameInstanceRef = useRef(null);
     const audioCtxRef = useRef(null);
     const audioBuffersRef = useRef(new Map());
     const imageAssetsRef = useRef(new Map());
-    const gameInstanceRef = useRef(null);
-    const frameIdRef = useRef(null);
-    const keysPressed = useRef({});
     const projectRef = useRef(gameData || {});
     const bossModeRef = useRef(false);
     const liveData = useRef({ qStates: [], qIndex: 0, lives: 4 });
+    const keysPressed = useRef({});
 
     const bridgeProxy = useRef((type, value) => {
         switch(type) {
@@ -136,19 +90,41 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
             case 'WIN_ROUND': updateBarLogic(true); break;
             case 'FAIL_ROUND': updateBarLogic(false); break;
             case 'NEXT_Q': changeQuestionLogic(); break;
-            case 'SET_BOSS': setActiveBossVisual(!!value); bossModeRef.current = !!value; if(gameInstanceRef.current) gameInstanceRef.current.isBossPhase = !!value; break;
+            case 'SET_BOSS': setActiveBossVisual(!!value); bossModeRef.current = !!value; break;
             case 'SET_UI': setShowAnswerUI(!!value); break;
-            case 'SHAKE': setIsShake(true); setTimeout(() => setIsShake(false), 500); break;
+            case 'SHAKE': setIsShake(true); setTimeout(() => setIsShake(false), 600); break;
+            case 'SUBMIT_ANSWER': handleAnswerClick(value); break;
             case 'AUDIO': triggerGlobalEvent(value); break;
-            case 'VICTORY': triggerWinSequence(); break;
         }
     });
 
+    const resolveUrl = (url) => {
+        if (!url) return "";
+        if (url.startsWith('blob:') || url.startsWith('data:')) return url;
+        const id = url.split('/').pop();
+        return `/api/proxy/${id}`;
+    };
+
+    const triggerGlobalEvent = (eventName) => {
+        const scene = projectRef.current.scenes?.[0];
+        if (!scene || !scene.globalSounds) return;
+        const cleanTarget = eventName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+        const event = scene.globalSounds.find(g => g.name && g.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim() === cleanTarget);
+        if (event && event.sounds && audioCtxRef.current) {
+            if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
+            event.sounds.forEach(snd => {
+                const buffer = audioBuffersRef.current.get(resolveUrl(snd.url));
+                if (buffer) {
+                    const s = audioCtxRef.current.createBufferSource(); s.buffer = buffer; s.connect(audioCtxRef.current.destination); s.start(0);
+                }
+            });
+        }
+    };
+
     const updateBarLogic = (isCorrect) => {
         const idx = liveData.current.qIndex;
-        const currentScore = liveData.current.qStates[idx] || 0;
-        if (isCorrect) { liveData.current.qStates[idx] = Math.min(3, currentScore + 1); } 
-        else { liveData.current.qStates[idx] = Math.max(0, currentScore - 1); }
+        if (isCorrect) { liveData.current.qStates[idx] = Math.min(3, (liveData.current.qStates[idx] || 0) + 1); } 
+        else { liveData.current.qStates[idx] = Math.max(0, (liveData.current.qStates[idx] || 0) - 1); }
         setQuestionStates([...liveData.current.qStates]);
     };
 
@@ -180,39 +156,21 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
                 });
             } catch(e) {}
         }
-        if (isGameFinished) { 
-            triggerGlobalEvent("VICTOIRE"); 
-            setShowGameComplete(true); 
-        } else { 
+        if (isGameFinished) { triggerGlobalEvent("VICTOIRE"); setShowGameComplete(true); } 
+        else { 
             triggerGlobalEvent("UPLEVEL"); 
             setShowStageClear(true); 
-            setTimeout(() => { setShowStageClear(false); setCurrentLevelIdx(p => p + 1); setEngineStarted(false); setShowLevelIntro(true); }, 3000); 
-        }
-    };
-
-    function resolveUrl(url) {
-        if (!url) return "";
-        if (url.startsWith('blob:') || url.startsWith('data:')) return url;
-        const id = url.split('/').pop();
-        return `/api/proxy/${id}`;
-    }
-
-    const triggerGlobalEvent = (eventName) => {
-        const scene = projectRef.current.scenes?.[0];
-        if (!scene || !scene.globalSounds) return;
-        const cleanTarget = eventName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
-        const event = scene.globalSounds.find(g => g.name && g.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim() === cleanTarget);
-        if (event && event.sounds && audioCtxRef.current) {
-            if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
-            event.sounds.forEach(snd => {
-                const buffer = audioBuffersRef.current.get(resolveUrl(snd.url));
-                if (buffer) { const s = audioCtxRef.current.createBufferSource(); s.buffer = buffer; s.connect(audioCtxRef.current.destination); s.start(0); }
-            });
+            setTimeout(() => { 
+                setShowStageClear(false); 
+                setCurrentLevelIdx(p => p + 1); 
+                setEngineStarted(false);
+                setShowLevelIntro(true); 
+            }, 3000); 
         }
     };
 
     useEffect(() => {
-        const initLevel = async () => {
+        const initGame = async () => {
             let levelsData = gameData?.levels || [];
             if (levelsData.length === 0) {
                  try { const res = await api.get('/games/test-data'); levelsData = res?.levels?.length > 0 ? res.levels : []; } catch(e) {} 
@@ -226,10 +184,10 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
                 liveData.current.qStates = initialStates;
                 liveData.current.qIndex = 0; liveData.current.lives = 4;
                 setQuestionStates(initialStates); setCurrentQIndex(0); setLives(4); setActiveBossVisual(false); bossModeRef.current = false;
-                setShowLevelIntro(true);
+                setShowLevelIntro(true); setScriptError(null);
             }
         };
-        initLevel();
+        initGame();
     }, [gameData, currentLevelIdx]);
 
     useEffect(() => {
@@ -271,8 +229,6 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
         setTimeout(() => setShowLevelBanner(false), 1500); 
     };
 
-    const handleRetry = () => { setShowGameOver(false); setLives(4); liveData.current.lives = 4; setCurrentLevelIdx(0); setEngineStarted(false); setShowLevelIntro(true); };
-
     useEffect(() => {
         if (!engineStarted || !canvasRef.current) return;
         try {
@@ -281,21 +237,39 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
                 playParallelSound: (url) => { if(audioCtxRef.current) { const b = audioBuffersRef.current.get(resolveUrl(url)); if(b){ const s = audioCtxRef.current.createBufferSource(); s.buffer=b; s.connect(audioCtxRef.current.destination); s.start(0); } } },
                 bridge: { trigger: (t, v) => bridgeProxy.current(t, v) }, questions: levelQuestions
             });
+            
             const scriptToRun = projectRef.current.generatedCode || ZOMBIE_FALLBACK_CODE;
-            const factory = new Function('MiniGameBase', scriptToRun + "\n return MiniGame;");
-            const instance = new (factory(MiniGameBase))(canvasRef.current, {}, {});
+            
+            // --- WRAPPER DE SÉCURITÉ ---
+            let factory, instance;
+            try {
+                factory = new Function('MiniGameBase', scriptToRun + "\n return MiniGame;");
+                instance = new (factory(MiniGameBase))(canvasRef.current, {}, {});
+            } catch (initErr) {
+                setScriptError(`Erreur d'initialisation : ${initErr.message}`);
+                return;
+            }
+
             gameInstanceRef.current = instance; if (instance.start) instance.start();
+            
             const tick = () => {
-                if (instance && !instance.isStopped) {
-                    if(instance.keys) Object.assign(instance.keys, keysPressed.current);
-                    instance.isBossPhase = bossModeRef.current;
-                    instance.currentQIndex = liveData.current.qIndex;
-                    if (instance.update) instance.update(); if (instance._render) instance._render(); if (instance.draw) instance.draw();
+                try {
+                    if (instance && !instance.isStopped) {
+                        if(instance.keys) Object.assign(instance.keys, keysPressed.current);
+                        instance.isBossPhase = bossModeRef.current;
+                        instance.currentQIndex = liveData.current.qIndex;
+                        if (instance.update) instance.update(); 
+                        if (instance._render) instance._render(); 
+                        if (instance.draw) instance.draw();
+                    }
+                    frameIdRef.current = requestAnimationFrame(tick);
+                } catch (runtimeErr) {
+                    setScriptError(`Erreur d'exécution : ${runtimeErr.message}`);
+                    cancelAnimationFrame(frameIdRef.current);
                 }
-                frameIdRef.current = requestAnimationFrame(tick);
             };
             tick();
-        } catch (e) { console.error("🔥 CRASH MOTEUR:", e); }
+        } catch (e) { setScriptError(`Crash Moteur : ${e.message}`); }
         return () => { if(frameIdRef.current) cancelAnimationFrame(frameIdRef.current); };
     }, [engineStarted]);
 
@@ -306,16 +280,20 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
         return () => { window.removeEventListener('keydown', hDown); window.removeEventListener('keyup', hUp); };
     }, []);
 
-    const getYoutubeEmbed = (url) => {
-        if (!url) return "";
-        const m = url.match(/^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/);
-        return (m && m[2].length === 11) ? ("https://www.youtube.com/embed/" + m[2] + "?autoplay=1") : url;
-    };
-
     return (
         <div className={"fixed inset-0 z-[99999] bg-slate-950 flex flex-col items-center justify-center " + (isShake ? 'animate-shake' : '')}>
+            
+            {/* ALERT ERREUR SCRIPT */}
+            {scriptError && (
+                <div className="absolute top-0 left-0 right-0 bg-red-600 text-white p-4 text-center font-black z-[100000] animate-in slide-in-from-top">
+                    ⚠️ ERREUR SCRIPT STUDIO : {scriptError}
+                    <button onClick={() => setScriptError(null)} className="ml-4 underline">Fermer</button>
+                </div>
+            )}
+
             {showLevelBanner && <div className="fixed top-[20%] z-[5000] animate-in zoom-in"><span className="text-yellow-400 font-black text-6xl uppercase drop-shadow-lg">Niveau {currentLevelIdx + 1}</span></div>}
             {showStageClear && <div className="fixed top-[40%] z-[5000] animate-in zoom-in text-center"><span className="text-green-500 font-black text-8xl uppercase drop-shadow-lg block">STAGE CLEAR !</span></div>}
+            
             {showLevelIntro && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950 z-[6000] p-8 text-center animate-in zoom-in">
                     <h1 className="text-5xl text-white font-black mb-6 uppercase">{allLevels[currentLevelIdx]?.name || ("Niveau " + (currentLevelIdx+1))}</h1>
@@ -332,18 +310,11 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
                     </button>
                 </div>
             )}
-            {zoomMedia && (
-                <div className="fixed inset-0 z-[7000] bg-black flex items-center justify-center p-0 animate-in fade-in" onClick={() => setZoomMedia(null)}>
-                    <button className="absolute top-4 right-4 w-12 h-12 bg-white text-black rounded-full flex items-center justify-center text-3xl font-black z-[7001]">✕</button>
-                    <div className="w-full h-full flex items-center justify-center p-4">
-                        {zoomMedia === 'sheet' ? <img src={resolveUrl(allLevels[currentLevelIdx]?.intro?.sheetUrl)} className="h-[90vh] object-contain shadow-2xl" alt="Zoom" /> : <div className="h-[90vh] aspect-video"><iframe className="w-full h-full" src={getYoutubeEmbed(allLevels[currentLevelIdx]?.intro?.videoUrl)} frameBorder="0" allowFullScreen></iframe></div>}
-                    </div>
-                </div>
-            )}
+            
             {engineStarted && !showLevelIntro && (
                 <>
                     <div className="absolute top-6 w-full flex justify-between px-10 pointer-events-none z-30">
-                        <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-lg pointer-events-auto cursor-pointer" onClick={() => isStudioTest && setLives(l => l-1)}>{"❤️".repeat(lives)}</div>
+                        <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-lg pointer-events-auto">{"❤️".repeat(lives)}</div>
                         <div className="flex-1 mx-10">
                             <div className={"bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 text-xl text-center border-slate-600 " + (activeBossVisual ? 'border-red-500 ring-2 ring-red-500/50' : '')}>
                                 {feedback === 'CORRECT' ? "✅ BIEN JOUÉ !" : feedback === 'WRONG' ? "❌ MAUVAISE RÉPONSE" : levelQuestions[currentQIndex]?.q}
@@ -374,13 +345,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
                     )}
                 </>
             )}
-            {showGameComplete && (
-                <div className="absolute inset-0 z-[7000] bg-gradient-to-br from-yellow-500 to-purple-600 flex flex-col items-center justify-center animate-in zoom-in">
-                    <h1 className="text-9xl mb-4 animate-bounce">🏆</h1>
-                    <h1 className="text-8xl font-black text-white drop-shadow-lg uppercase tracking-tighter">VICTOIRE TOTALE !</h1>
-                    <button onClick={onExit} className="mt-10 px-12 py-5 bg-white text-purple-700 font-black text-2xl rounded-2xl shadow-2xl hover:scale-110 transition-transform uppercase">RETOURNER AU MENU</button>
-                </div>
-            )}
+
             <button onClick={onExit} className="absolute top-2 right-4 w-10 h-10 bg-white/10 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-xl font-black z-[7000] border-2 border-white/20">✕</button>
             {showGameOver && (<div className="absolute inset-0 bg-black/95 flex flex-col items-center justify-center z-[8000] animate-in zoom-in"><h1 className="text-8xl font-black text-red-600 mb-8 uppercase tracking-widest">GAME OVER</h1><button onClick={handleRetry} className="bg-white text-black px-12 py-5 rounded-2xl font-black text-2xl hover:bg-red-500 hover:text-white transition-all uppercase">RÉESSAYER 🔄</button></div>)}
         </div>

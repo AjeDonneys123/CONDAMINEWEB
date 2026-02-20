@@ -1,9 +1,10 @@
 // @signatures: EleveHeader, record
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import './EleveHeader.css';
 
 export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, onTabChange }) {
   const isJean = user.firstName === 'Jean' && user.lastName === 'Vuillet';
+  const [nowMs, setNowMs] = useState(Date.now());
 
   // --- LOGIQUE STATS ---
   const record = (user.behaviorRecords && user.behaviorRecords.length > 0) 
@@ -19,6 +20,26 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
 
   const crossVisual = "❌".repeat(crosses) + ".".repeat(3 - crosses);
   const bonusVisual = "🌟".repeat(currentBonuses) + ".".repeat(4 - currentBonuses);
+
+  useEffect(() => {
+    if (!(crosses > 0 && record.nextCrossRemovalAt)) return;
+    const t = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [crosses, record.nextCrossRemovalAt]);
+
+  const crossCountdown = useMemo(() => {
+    if (!(crosses > 0 && record.nextCrossRemovalAt)) return null;
+    const target = new Date(record.nextCrossRemovalAt).getTime();
+    if (!target || Number.isNaN(target)) return null;
+    const diff = Math.max(0, target - nowMs);
+    const totalSec = Math.floor(diff / 1000);
+    const days = Math.floor(totalSec / 86400);
+    const hours = Math.floor((totalSec % 86400) / 3600);
+    const mins = Math.floor((totalSec % 3600) / 60);
+    const secs = totalSec % 60;
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${pad(days)}:${pad(hours)}:${pad(mins)}:${pad(secs)}`;
+  }, [crosses, record.nextCrossRemovalAt, nowMs]);
 
   // --- LOGIQUE PUNITION (COMPTE À REBOURS) ---
   let punishmentAlert = null;
@@ -87,6 +108,7 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
       <div className="nav-bar-container">
         {/* Onglets à Gauche */}
         <div className="nav-tabs">
+            <button onClick={() => onTabChange('status')} className={`tab-item ${activeTab === 'status' ? 'tab-active' : ''}`}>📊 STATUS</button>
             <button onClick={() => onTabChange('devoirs')} className={`tab-item ${activeTab === 'devoirs' ? 'tab-active' : ''}`}>📚 DEVOIRS</button>
             <button onClick={() => onTabChange('francais')} className={`tab-item ${activeTab === 'francais' ? 'tab-active' : ''}`}>🇫🇷 FRANÇAIS</button>
             <button onClick={() => onTabChange('jeux')} className={`tab-item ${activeTab === 'jeux' ? 'tab-active' : ''}`}>🎮 JEUX</button>
@@ -98,7 +120,8 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
             <div className="mini-stat-row row-cross">
                 <span className="ms-label">CROIX:</span>
                 <span className="ms-visual">{crosses > 0 ? crossVisual : "..."}</span>
-                {crosses > 0 && <span className="ms-info">(Annul. {weeksLeft} sem.)</span>}
+                {crosses > 0 && crossCountdown && <span className="ms-countdown">{crossCountdown}</span>}
+                {crosses > 0 && !crossCountdown && <span className="ms-info">(Annul. {weeksLeft} sem.)</span>}
             </div>
             
             {/* LIGNE BONUS */}

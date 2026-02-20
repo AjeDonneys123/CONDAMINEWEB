@@ -12,6 +12,7 @@ export default function SaveLoadModal({ mode, user, currentProject, onClose, onL
     const [projects, setProjects] = useState([]);
     const [loading, setLoading] = useState(false);
     const [saveName, setSaveName] = useState(currentProject?.title || "Nouveau Projet");
+    const [showTrash, setShowTrash] = useState(false);
 
     const loadList = () => {
         setLoading(true);
@@ -27,24 +28,62 @@ export default function SaveLoadModal({ mode, user, currentProject, onClose, onL
         }
     }, [mode, user]);
 
+    useEffect(() => {
+        if (mode !== 'LOAD') setShowTrash(false);
+    }, [mode]);
+
     const handleSaveClick = () => {
         if (!saveName.trim()) return alert("Nom requis !");
         onSave({ ...currentProject, title: saveName });
     };
 
-    const handleDeleteProject = async (e, id) => {
-        e.stopPropagation(); // Évite de charger le projet en cliquant sur le X
-        if (!confirm("⚠️ Supprimer définitivement ce projet ?")) return;
-        
+    const patchProject = async (baseProject, patch) => {
+        await api.post('/studio', { ...baseProject, ...patch });
+        loadList();
+    };
+
+    const handleDeleteProject = async (e, project) => {
+        e.stopPropagation();
+        if (!confirm("Déplacer ce projet dans la corbeille ?")) return;
         try {
-            const res = await fetch(`/api/studio/${id}`, { method: 'DELETE' });
-            if (res.ok) {
-                loadList(); // Rafraîchit la liste
-            }
+            await patchProject(project, { isTrashed: true });
         } catch (e) {
-            alert("Erreur lors de la suppression.");
+            alert("Erreur lors du déplacement vers la corbeille.");
         }
     };
+
+    const handleToggleProjectStatus = async (e, project) => {
+        e.stopPropagation();
+        try {
+            await patchProject(project, { isProduction: !project.isProduction });
+        } catch (e2) {
+            alert("Erreur lors du changement de statut.");
+        }
+    };
+
+    const handleRestoreProject = async (e, project) => {
+        e.stopPropagation();
+        try {
+            await patchProject(project, { isTrashed: false });
+        } catch (e2) {
+            alert("Erreur lors de la restauration.");
+        }
+    };
+
+    const handlePermanentDelete = async (e, projectId) => {
+        e.stopPropagation();
+        if (!confirm("Supprimer définitivement ce projet de la corbeille ?")) return;
+        try {
+            const res = await fetch(`/api/studio/${projectId}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error('delete-failed');
+            loadList();
+        } catch (e2) {
+            alert("Erreur lors de la suppression définitive.");
+        }
+    };
+
+    const activeProjects = projects.filter(p => !p.isTrashed);
+    const trashedProjects = projects.filter(p => !!p.isTrashed);
 
     return (
         <div className="sl-modal-overlay" onClick={onClose}>
@@ -59,38 +98,95 @@ export default function SaveLoadModal({ mode, user, currentProject, onClose, onL
                 <div className="sl-body custom-scrollbar">
                     {mode === 'LOAD' && (
                         <>
-                            <button className="sl-new-btn" onClick={onNew}>
-                                <span>✨</span> Créer un nouveau projet vide
-                            </button>
+                            <div className="sl-toolbar">
+                                <button className="sl-new-btn !mb-0" onClick={onNew}>
+                                    <span>✨</span> Créer un nouveau projet vide
+                                </button>
+                                <button
+                                    className="sl-trash-btn"
+                                    onClick={() => setShowTrash(v => !v)}
+                                    title="Afficher la corbeille"
+                                >
+                                    {showTrash ? '↩ Projets' : `🗑 Corbeille (${trashedProjects.length})`}
+                                </button>
+                            </div>
                             <div className="h-px bg-slate-100 mb-4"></div>
                             
                             {loading ? (
                                 <div className="text-center text-slate-400 font-bold p-4 animate-pulse">Chargement...</div>
                             ) : (
                                 <div className="flex flex-col gap-2">
-                                    {projects.map((p, index) => (
+                                    {!showTrash && activeProjects.map((p) => (
                                         <div key={p._id} className="sl-project-item group" onClick={() => onLoad(p)}>
                                             <div className="flex flex-col">
-                                                <span className="sl-p-name">{p.title}</span>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="sl-p-name">{p.title}</span>
+                                                    <span className={`sl-p-status ${p.isProduction ? 'prod' : 'ready'}`}>
+                                                        {p.isProduction ? 'PRODUCTION' : 'PRÊT'}
+                                                    </span>
+                                                </div>
                                                 <span className="sl-p-date">{new Date(p.updatedAt).toLocaleDateString()}</span>
                                             </div>
-                                            
-                                            {/* ❌ BOUTON SUPPRIMER : Présent sur tous sauf le premier (index 0) */}
-                                            {index !== 0 && (
-                                                <button 
-                                                    className="w-8 h-8 rounded-full bg-red-50 text-red-500 opacity-0 group-hover:opacity-100 transition-opacity font-black text-xs border border-red-100 hover:bg-red-500 hover:text-white"
-                                                    onClick={(e) => handleDeleteProject(e, p._id)}
-                                                    title="Supprimer ce projet"
+
+                                            <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <button
+                                                    className={`px-2 py-1 rounded-lg text-[9px] font-black border ${
+                                                        p.isProduction
+                                                            ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                                            : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                                    }`}
+                                                    onClick={(e) => handleToggleProjectStatus(e, p)}
+                                                    title={p.isProduction ? "Passer en PRÊT" : "Passer en PRODUCTION"}
+                                                >
+                                                    {p.isProduction ? '-> PRÊT' : '-> PROD'}
+                                                </button>
+                                                <button
+                                                    className="w-8 h-8 rounded-full bg-red-50 text-red-500 font-black text-xs border border-red-100 hover:bg-red-500 hover:text-white"
+                                                    onClick={(e) => handleDeleteProject(e, p)}
+                                                    title="Déplacer dans la corbeille"
                                                 >
                                                     ✕
                                                 </button>
-                                            )}
+                                            </div>
+                                        </div>
+                                    ))}
+
+                                    {showTrash && trashedProjects.map((p) => (
+                                        <div key={p._id} className="sl-project-item sl-project-item-trash group">
+                                            <div className="flex flex-col">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="sl-p-name">{p.title}</span>
+                                                    <span className={`sl-p-status ${p.isProduction ? 'prod' : 'ready'}`}>
+                                                        {p.isProduction ? 'PRODUCTION' : 'PRÊT'}
+                                                    </span>
+                                                </div>
+                                                <span className="sl-p-date">{new Date(p.updatedAt).toLocaleDateString()}</span>
+                                            </div>
+                                            <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <button
+                                                    className="px-2 py-1 rounded-lg text-[9px] font-black border bg-sky-50 text-sky-700 border-sky-200"
+                                                    onClick={(e) => handleRestoreProject(e, p)}
+                                                    title="Restaurer le projet"
+                                                >
+                                                    Restaurer
+                                                </button>
+                                                <button
+                                                    className="px-2 py-1 rounded-lg text-[9px] font-black border bg-red-50 text-red-700 border-red-200"
+                                                    onClick={(e) => handlePermanentDelete(e, p._id)}
+                                                    title="Supprimer définitivement"
+                                                >
+                                                    Purger
+                                                </button>
+                                            </div>
                                         </div>
                                     ))}
                                 </div>
                             )}
-                            {projects.length === 0 && !loading && (
+                            {!showTrash && activeProjects.length === 0 && !loading && (
                                 <div className="text-center text-slate-300 font-bold italic p-10">Aucun projet sauvegardé.</div>
+                            )}
+                            {showTrash && trashedProjects.length === 0 && !loading && (
+                                <div className="text-center text-slate-300 font-bold italic p-10">Corbeille vide.</div>
                             )}
                         </>
                     )}
@@ -112,9 +208,14 @@ export default function SaveLoadModal({ mode, user, currentProject, onClose, onL
                             <div className="mt-6">
                                 <span className="text-[10px] font-black text-slate-300 uppercase mb-3 block tracking-widest">Écraser une version existante :</span>
                                 <div className="flex flex-col gap-2 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar">
-                                    {projects.map(p => (
+                                    {projects.filter(p => !p.isTrashed).map(p => (
                                         <div key={p._id} className="sl-project-item !py-2 !border-dashed opacity-60 hover:opacity-100" onClick={() => setSaveName(p.title)}>
-                                            <span className="sl-p-name text-xs">{p.title}</span>
+                                            <div className="flex items-center gap-2">
+                                                <span className="sl-p-name text-xs">{p.title}</span>
+                                                <span className={`sl-p-status ${p.isProduction ? 'prod' : 'ready'}`}>
+                                                    {p.isProduction ? 'PRODUCTION' : 'PRÊT'}
+                                                </span>
+                                            </div>
                                         </div>
                                     ))}
                                 </div>

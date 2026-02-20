@@ -1,10 +1,13 @@
 /**
- * 🎮 CORE ENGINE V12.0 (MODERN STANDARD)
- * - Architecture : Bridge Pattern (this.game.*)
- * - Sécurité : Adaptateur Legacy automatique (convertit les vieux appels en nouveaux).
+ * 🎮 CORE ENGINE V12.5 (ACTOR ALIASING)
+ * REPAIRS:
+ * - Normalisation des noms d'acteurs pour usage direct dans le code (Dot Notation).
+ * - Alias de secours ACTOR_1, ACTOR_2.
  */
 export const createGameBase = (params) => {
     const { imageAssets, resolveUrl, canvas, ctx, playParallelSound, bridge, questions, callbacks } = params;
+
+    const normalizeKey = (str) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]/g, "_").toUpperCase();
 
     class ActorProxy {
         constructor(data, engine) { 
@@ -38,12 +41,10 @@ export const createGameBase = (params) => {
             this.ctx = ctx; 
             this.keys = {}; 
             this.assets = a || {};
-            
             this.isBossPhase = false; 
             this.questions = questions || []; 
             this.currentQIndex = 0;
 
-            // --- 1. SYSTÈME MODERNE (BRIDGE) ---
             const safeTrigger = (type, val) => { if (bridge && bridge.trigger) bridge.trigger(type, val); };
             
             this.game = {
@@ -53,24 +54,16 @@ export const createGameBase = (params) => {
                 nextQuestion: () => safeTrigger('NEXT_Q'),
                 setBoss: (v) => safeTrigger('SET_BOSS', v),
                 setUI: (v) => safeTrigger('SET_UI', v),
-                submitAnswer: (idx) => safeTrigger('SUBMIT_ANSWER', idx),
                 shake: () => safeTrigger('SHAKE'),
+                submitAnswer: (idx) => safeTrigger('SUBMIT_ANSWER', idx),
                 start: () => {}
             };
 
-            // --- 2. ADAPTATEUR LEGACY (ANTI-CRASH) ---
-            // Si un vieux script appelle this.callbacks.onPlayerHit, on le redirige vers this.game.damage
             this.callbacks = cb || {};
-            if (!this.callbacks.onPlayerHit) {
-                this.callbacks.onPlayerHit = () => {
-                    console.warn("⚠️ Legacy Call: onPlayerHit -> Redirection vers this.game.damage(1)");
-                    this.game.damage(1);
-                };
-            }
-
+            
             this._triggerActionSounds = (actorId, actionName) => {
                 const project = params.projectRef?.current || {};
-                const s = project.scenes?.[params.sceneIdx];
+                const s = project.scenes?.[0];
                 if (!s) return;
                 const actor = s.actors.find(a => a.id === actorId);
                 const action = actor?.actions.find(act => act.name.toUpperCase() === actionName.toUpperCase());
@@ -78,19 +71,26 @@ export const createGameBase = (params) => {
             };
 
             const project = params.projectRef?.current || {};
-            const scene = project.scenes?.[params.sceneIdx] || { actors: [] };
+            const scene = project.scenes?.[0] || { actors: [] };
             
             if(scene.actors) {
-                scene.actors.forEach(a => { this[a.name.toUpperCase()] = new ActorProxy(a, this); });
-                if (!this.HEROS && scene.actors.length > 0) this.HEROS = new ActorProxy(scene.actors[0], this);
-                if (!this.ZOMBIE && scene.actors.length > 1) this.ZOMBIE = new ActorProxy(scene.actors[1], this);
+                scene.actors.forEach((a, index) => { 
+                    const safeName = normalizeKey(a.name);
+                    const proxy = new ActorProxy(a, this);
+                    this[safeName] = proxy; 
+                    this[`ACTOR_${index+1}`] = proxy; // Alias de secours numérique
+                });
+                
+                // Defaults pour compatibilité
+                if (!this.HEROS && scene.actors.length > 0) this.HEROS = this[normalizeKey(scene.actors[0].name)];
+                if (!this.ZOMBIE && scene.actors.length > 1) this.ZOMBIE = this[normalizeKey(scene.actors[1].name)];
             }
         }
         
         _render() {
             if (!this.ctx || !this.canvas) return;
             const project = params.projectRef?.current || {};
-            const scene = project.scenes?.[params.sceneIdx];
+            const scene = project.scenes?.[0];
             this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
             const bd = scene?.backdrops?.[scene.currentBackdropIdx || 0];
             if(bd) { const img = imageAssets.get(resolveUrl(bd.url)); if(img) this.ctx.drawImage(img, 0, 0, this.canvas.width, this.canvas.height); }

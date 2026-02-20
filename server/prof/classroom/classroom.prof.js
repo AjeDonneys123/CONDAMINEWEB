@@ -9,6 +9,50 @@ const fs = require('fs');
 
 // Configuration Multer pour l'import d'image
 const upload = multer({ dest: path.join(process.cwd(), 'public', 'uploads', 'temp') });
+const CROSS_DECAY_MS = 14 * 24 * 60 * 60 * 1000;
+
+function applyCrossDecay(behaviorRecords = []) {
+    const now = Date.now();
+    let changed = false;
+    for (const r of behaviorRecords) {
+        let crosses = Number(r.crosses || 0);
+        let nextTs = r.nextCrossRemovalAt ? new Date(r.nextCrossRemovalAt).getTime() : null;
+
+        if (crosses <= 0) {
+            if (r.crosses !== 0) { r.crosses = 0; changed = true; }
+            if (r.nextCrossRemovalAt) { r.nextCrossRemovalAt = null; changed = true; }
+            continue;
+        }
+
+        if (!nextTs || Number.isNaN(nextTs)) {
+            nextTs = now + CROSS_DECAY_MS;
+            r.nextCrossRemovalAt = new Date(nextTs);
+            changed = true;
+        }
+
+        while (crosses > 0 && nextTs <= now) {
+            crosses -= 1;
+            changed = true;
+            if (crosses > 0) nextTs += CROSS_DECAY_MS;
+        }
+
+        if (crosses !== Number(r.crosses || 0)) {
+            r.crosses = crosses;
+            changed = true;
+        }
+
+        if (crosses <= 0) {
+            if (r.nextCrossRemovalAt) { r.nextCrossRemovalAt = null; changed = true; }
+        } else {
+            const currentTs = r.nextCrossRemovalAt ? new Date(r.nextCrossRemovalAt).getTime() : null;
+            if (currentTs !== nextTs) {
+                r.nextCrossRemovalAt = new Date(nextTs);
+                changed = true;
+            }
+        }
+    }
+    return changed;
+}
 
 /**
  * 🎓 BLOC PROF : LOGIQUE CLASSE (/api/classroom)
@@ -104,17 +148,27 @@ router.post('/behavior', async (req, res) => {
         const { studentId, type, teacherId, extraData } = req.body;
         const s = await Student.findById(studentId);
         if (!s) return res.status(404).json({ error: "Élève non trouvé" });
+        applyCrossDecay(s.behaviorRecords || []);
         let r = s.behaviorRecords.find(x => x.teacherId && String(x.teacherId) === String(teacherId));
-        if (!r) { s.behaviorRecords.push({ teacherId, crosses: 0, bonuses: 0 }); r = s.behaviorRecords[s.behaviorRecords.length-1]; }
-        if (type === 'CROSS') r.crosses++;
+        if (!r) { s.behaviorRecords.push({ teacherId, crosses: 0, bonuses: 0, nextCrossRemovalAt: null }); r = s.behaviorRecords[s.behaviorRecords.length-1]; }
+        if (type === 'CROSS') {
+            const hadNoCross = Number(r.crosses || 0) <= 0;
+            r.crosses = Number(r.crosses || 0) + 1;
+            if (hadNoCross || !r.nextCrossRemovalAt) r.nextCrossRemovalAt = new Date(Date.now() + CROSS_DECAY_MS);
+        }
         if (type === 'BONUS') r.bonuses++;
-        if (type === 'REMOVE_CROSS') r.crosses = Math.max(0, r.crosses - 1);
+        if (type === 'REMOVE_CROSS') {
+            r.crosses = Math.max(0, Number(r.crosses || 0) - 1);
+            if (r.crosses <= 0) r.nextCrossRemovalAt = null;
+            else if (!r.nextCrossRemovalAt) r.nextCrossRemovalAt = new Date(Date.now() + CROSS_DECAY_MS);
+        }
         if (type === 'REMOVE_BONUS') r.bonuses = Math.max(0, r.bonuses - 1);
         if (type === 'SAVE_NOTE') {
             let n = s.teacherNotes.find(x => String(x.teacherId) === String(teacherId));
             if (!n) s.teacherNotes.push({ teacherId, text: extraData }); else n.text = extraData;
         }
         if (type === 'REMOVE_PUNISHMENT') s.punishmentStatus = 'NONE';
+        s.markModified('behaviorRecords');
         await s.save(); res.json(s);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });

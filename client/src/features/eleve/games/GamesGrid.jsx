@@ -3,6 +3,12 @@ import React, { useState, useEffect } from 'react';
 import GamePlayer from './GamePlayer';
 import DashboardFolder from '../components/DashboardFolder';
 
+/**
+ * 🎮 GRILLE ÉLÈVE FUSIONNÉE V2
+ * REPAIRS:
+ * - Fixed fallback levels check (length > 0).
+ * - Correctly passing generatedCode for univers choice.
+ */
 export default function GamesGrid({ user }) {
   const [activities, setActivities] = useState([]);
   const [skins, setSkins] = useState([]);
@@ -17,7 +23,7 @@ export default function GamesGrid({ user }) {
         const sId = user._id || user.id;
         const [actRes, skinRes] = await Promise.all([
             fetch(`/api/eleve/games/list/${sId}`).then(r => r.json()),
-            fetch(`/api/eleve/games/skins`).then(r => r.json())
+            fetch(`/api/eleve/games/skins?studentId=${sId}`).then(r => r.json())
         ]);
         
         setActivities((actRes || []).map(a => ({ ...a, actType: 'game' })));
@@ -41,7 +47,7 @@ export default function GamesGrid({ user }) {
                   : [{ name: "Niveau 1", questions: selectedActivity.questions || [] }],
           title: selectedActivity.title,
           _id: selectedActivity._id,
-          generatedCode: skin.generatedCode 
+          generatedCode: skin.generatedCode // On passe le script de l'univers
       };
       
       setPlayingGame(finalGameData);
@@ -60,46 +66,28 @@ export default function GamesGrid({ user }) {
 
   return (
     <div className="flex flex-col gap-4 animate-in">
-        <div className="flex justify-between items-center px-4">
-            <h2 className="text-xl font-black text-slate-800 uppercase">Mes Jeux Assignés</h2>
-            <button onClick={loadData} className="text-[10px] font-black text-purple-500 bg-white px-3 py-1 rounded-xl border border-purple-100">
-                {loading ? '...' : '🔄 ACTUALISER'}
-            </button>
-        </div>
-
+        <h2 className="text-xl font-black text-slate-800 uppercase px-4">Mes Jeux Assignés</h2>
         <DashboardFolder items={activities} type="game" onSelect={handleSelectActivity} />
 
         {showSkinSelector && (
             <div className="fixed inset-0 z-[10000] bg-slate-900/90 backdrop-blur-md flex items-center justify-center p-6">
-                <div className="bg-white rounded-[40px] w-full max-w-4xl p-8 shadow-2xl animate-in zoom-in">
+                <div className="bg-white rounded-[40px] w-full max-w-4xl p-8 animate-in zoom-in">
                     <div className="flex justify-between items-center mb-8">
-                        <div>
-                            <h3 className="text-2xl font-black text-slate-800 uppercase">Choisis ton univers 🎮</h3>
-                            <p className="text-xs font-bold text-indigo-500 uppercase tracking-widest">Activité : {selectedActivity?.title}</p>
-                        </div>
+                        <h3 className="text-2xl font-black text-slate-800 uppercase text-center flex-1">Choisis ton univers 🎮</h3>
                         <button onClick={() => setShowSkinSelector(false)} className="w-10 h-10 rounded-full bg-slate-100 font-black">✕</button>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
-                        {skins.map(skin => {
-                            let icon = "🎮";
-                            const t = (skin.title || "").toUpperCase();
-                            if (t.includes("ZOMBIE")) icon = "🧟";
-                            else if (t.includes("STAR") || t.includes("SHIP")) icon = "🚀";
-                            else if (t.includes("JUMP")) icon = "🦘";
-
-                            return (
-                                <div 
-                                    key={skin._id} 
-                                    onClick={() => handleStartGame(skin)}
-                                    className="group bg-slate-50 border-4 border-slate-100 hover:border-indigo-500 rounded-[35px] p-8 cursor-pointer transition-all hover:scale-[1.05] flex flex-col items-center text-center shadow-sm"
-                                >
-                                    <div className="text-6xl mb-4 group-hover:animate-bounce">{icon}</div>
-                                    <div className="font-black text-slate-700 uppercase text-sm leading-tight">{skin.title}</div>
-                                    <div className="text-[9px] font-black text-slate-400 mt-2 uppercase tracking-tighter">Entrer dans ce monde</div>
-                                </div>
-                            );
-                        })}
+                        {skins.map(skin => (
+                            <div 
+                                key={skin._id} 
+                                onClick={() => handleStartGame(skin)}
+                                className="group bg-slate-50 border-4 border-slate-100 hover:border-indigo-500 rounded-[35px] p-8 cursor-pointer transition-all hover:scale-[1.05] flex flex-col items-center text-center shadow-sm"
+                            >
+                                <div className="text-6xl mb-4 group-hover:animate-bounce">🎮</div>
+                                <div className="font-black text-slate-700 uppercase text-sm leading-tight">{skin.title}</div>
+                            </div>
+                        ))}
                     </div>
                 </div>
             </div>

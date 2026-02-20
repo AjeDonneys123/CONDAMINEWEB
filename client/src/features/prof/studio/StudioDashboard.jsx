@@ -61,14 +61,15 @@ export default function StudioDashboard({ user }) {
         if(user && (user.id || user._id)) {
             try {
                 const data = await api.get(`/studio/projects/${user.id || user._id}`);
-                if (data?.length > 0) handleLoadProject(data[0]);
+                const firstActive = (data || []).find(p => !p.isTrashed) || (data || [])[0];
+                if (firstActive) handleLoadProject(firstActive);
             } catch(e){}
         }
     }
 
     async function saveProject(p = project) {
         if (!p) return;
-        setLoading(true); setStatusText("Sync...");
+        setLoading(true); setStatusText(`Sync... ${p?.isProduction ? '🟠 PRODUCTION' : '🟢 PRÊT'}`);
         try {
             const payload = { ...p, teacherId: user.id || user._id, generatedCode: code };
             const saved = await api.post('/studio', payload);
@@ -255,7 +256,7 @@ export default function StudioDashboard({ user }) {
                     leftTab={leftTab} setLeftTab={setLeftTab} selectedActor={selectedActor} selectedActionIdx={selectedActionIdx} setSelectedActionIdx={setSelectedActionIdx} selectedGlobalSoundIdx={selectedGlobalSoundIdx} setSelectedGlobalSoundIdx={setSelectedGlobalSoundIdx} setIsPreviewPlaying={setIsPreviewPlaying} saveProject={saveProject} project={project} selectedSceneIdx={selectedSceneIdx} selectedActorId={selectedActorId} selectedAction={selectedAction} handleUpdateActionSpeed={handleUpdateActionSpeed} isPreviewPlaying={isPreviewPlaying} previewFrameIdx={previewFrameIdx} selectedFrameIdx={selectedFrameIdx} setSelectedFrameIdx={setSelectedFrameIdx} setDraggedFrameIdx={setDraggedFrameIdx} handleReorderFrame={handleReorderFrame} resolveUrl={resolveUrl} handleDeleteFrame={handleDeleteFrame} frameUploadRef={frameUploadRef} setFrameToErase={setFrameToErase} setShowSoundModal={setShowSoundModal} handleDeleteSound={handleDeleteSound} handleEditSound={handleEditSound} setPreviewFrameIdx={handleSetPreviewFrameIdx} handleSmartAIClean={handleSmartAIClean} cleaning={cleaning}
                 />
                 <StudioCenterPanel 
-                    stageRef={stageRef} currentScene={currentScene} resolveUrl={resolveUrl} selectedActorId={selectedActorId} selectedAction={selectedAction} isPreviewPlaying={isPreviewPlaying} previewFrameIdx={previewFrameIdx} selectedFrameIdx={selectedFrameIdx} handleStageMouseDown={handleStageMouseDown} selectedActor={selectedActor} handleUpdateProp={handleUpdateProp} saveProject={saveProject} setIsPlaying={setIsPlaying} code={code} setCode={setCode}
+                    stageRef={stageRef} currentScene={currentScene} resolveUrl={resolveUrl} selectedActorId={selectedActorId} selectedAction={selectedAction} isPreviewPlaying={isPreviewPlaying} previewFrameIdx={previewFrameIdx} selectedFrameIdx={selectedFrameIdx} handleStageMouseDown={handleStageMouseDown} selectedActor={selectedActor} handleUpdateProp={handleUpdateProp} saveProject={saveProject} setIsPlaying={setIsPlaying} project={project} code={code} setCode={setCode}
                 />
                 <StudioRightPanel 
                     project={project} setProject={setProject} handleOpenSave={handleOpenSave} handleOpenLoad={handleOpenLoad} actorUploadRef={actorUploadRef} currentScene={currentScene} selectedActorId={selectedActorId} handleSelectActor={handleSelectActor} handleDeleteActor={handleDeleteActor} resolveUrl={resolveUrl} backdropUploadRef={backdropUploadRef} handleDeleteBackdrop={handleDeleteBackdrop} saveProject={saveProject} selectedSceneIdx={selectedSceneIdx}

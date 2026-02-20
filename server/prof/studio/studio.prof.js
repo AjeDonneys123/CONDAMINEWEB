@@ -20,7 +20,7 @@ router.get('/projects/:userId', async (req, res) => {
     try {
         const { userId } = req.params;
         if (!userId || !mongoose.Types.ObjectId.isValid(userId)) return res.json([]);
-        const projects = await StudioProject.find({ teacherId: userId }).sort({ updatedAt: -1 }).lean();
+        const projects = await StudioProject.find({ teacherId: userId }).sort({ isTrashed: 1, updatedAt: -1 }).lean();
         res.json(projects);
     } catch (e) { res.json([]); }
 });
@@ -34,6 +34,15 @@ router.post('/', async (req, res) => {
         else result = await StudioProject.create(data);
         res.json(result);
     } catch (e) { res.status(500).json({ error: "Save fail" }); }
+});
+
+router.delete('/:id', async (req, res) => {
+    try {
+        await StudioProject.findByIdAndDelete(req.params.id);
+        res.json({ ok: true });
+    } catch (e) {
+        res.status(500).json({ error: "Delete fail" });
+    }
 });
 
 router.post('/upload-asset', upload.single('file'), async (req, res) => {

@@ -6,7 +6,8 @@ const BehaviorRecordSchema = new mongoose.Schema({
     crosses: { type: Number, default: 0 },
     bonuses: { type: Number, default: 0 },
     lastCrossDate: { type: Date, default: null },
-    weeksToRedemption: { type: Number, default: 3 }
+    weeksToRedemption: { type: Number, default: 3 },
+    nextCrossRemovalAt: { type: Date, default: null }
 }, { _id: false });
 
 // Schéma pour les notes prof

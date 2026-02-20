@@ -41,6 +41,8 @@ const StudioProjectSchema = new mongoose.Schema({
     
     // CHAMP CRITIQUE : DÉCLARATION EXPLICITE
     generatedCode: { type: String, default: "" },
+    isProduction: { type: Boolean, default: false },
+    isTrashed: { type: Boolean, default: false },
     
     createdAt: { type: Date, default: Date.now }
 }, { 

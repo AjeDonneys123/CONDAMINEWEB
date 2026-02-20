@@ -4,10 +4,11 @@ import EleveHeader from './components/EleveHeader';
 import HomeworkList from './homework/HomeworkList';
 import MistakesBook from './mistakes/MistakesBook';
 import GamesGrid from './games/GamesGrid';
+import StatusOverview from './status/StatusOverview';
 import './ElevePage.css';
 
 export default function ElevePage({ user, onLogout, onBackToProf }) {
-  const [tab, setTab] = useState('devoirs');
+  const [tab, setTab] = useState('status');
   const [freshUser, setFreshUser] = useState(user);
 
   useEffect(() => {
@@ -32,6 +33,7 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
         <div className="eleve-page-container">
           <EleveHeader user={freshUser} onLogout={onLogout} onBackToProf={onBackToProf} activeTab={tab} onTabChange={setTab} />
           <div className="mt-8">
+            {tab === 'status' && <StatusOverview user={freshUser} />}
             {tab === 'devoirs' && <HomeworkList user={freshUser} />}
             {tab === 'francais' && <MistakesBook user={freshUser} />}
             {tab === 'jeux' && <GamesGrid user={freshUser} />}
