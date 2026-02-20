@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import './StudioDashboard.css';
 import { api } from '../../../services/api';
 import SoundExpert from '../../../services/SoundExpert';
+import { resolveDriveAssetUrl } from '../../../utils/driveUrl';
 
 import ManualEraser from './studioComp/ManualEraser';
 import GameEngine from './studioComp/GameEngine';
@@ -14,12 +15,7 @@ import StudioLeftPanel from './panels/StudioLeftPanel';
 import StudioCenterPanel from './panels/StudioCenterPanel';
 import StudioRightPanel from './panels/StudioRightPanel';
 
-function resolveUrl(url) {
-    if (!url) return "";
-    if (url.startsWith('/api/proxy') || url.startsWith('blob:')) return url;
-    const id = url.split('/').pop();
-    return `/api/proxy/${id}`;
-}
+const resolveUrl = (url) => resolveDriveAssetUrl(url);
 
 const DEMO_PROJECT = { title: "Nouveau Projet", scenes: [{ name: "Scene 1", backdrops: [], currentBackdropIdx: 0, actors: [], globalSounds: [] }] };
 

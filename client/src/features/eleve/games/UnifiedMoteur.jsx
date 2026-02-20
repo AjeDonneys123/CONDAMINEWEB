@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import SoundExpert from '../../../services/SoundExpert';
 import { api } from '../../../services/api';
 import { createGameBase } from '../../../services/gameCore';
+import { resolveDriveAssetUrl } from '../../../utils/driveUrl';
 
 /**
  * 🧠 LE MAITRE UNIFIÉ V.2.89 (YOUTUBE EMBED FIX)
@@ -171,10 +172,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false }
     }, [currentQIndex, questionStates]);
 
     function resolveUrl(url) {
-        if (!url) return "";
-        if (url.startsWith('/api/proxy') || url.startsWith('blob:')) return url;
-        const id = url.split('/').pop();
-        return `/api/proxy/${id}`;
+        return resolveDriveAssetUrl(url);
     }
 
     const isCheatMode = () => keysPressed.current['KeyS'] && keysPressed.current['KeyT'];

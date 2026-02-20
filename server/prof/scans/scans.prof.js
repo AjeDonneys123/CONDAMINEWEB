@@ -18,7 +18,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
     const { sessionId, type } = req.body;
     const folderId = await ProfDrive.getOrCreateFolder("SCANS");
     const driveFile = await ProfDrive.uploadFile(req.file.originalname, req.file.path, folderId);
-    const url = `/api/prof/structure/proxy/${driveFile.id}`;
+    const url = `/api/structure/proxy/${driveFile.id}`;
     
     const update = type === 'SUBJECT' ? { $push: { subjectUrls: url } } : { $push: { copyUrls: url } };
     await ScanSession.findByIdAndUpdate(sessionId, update);

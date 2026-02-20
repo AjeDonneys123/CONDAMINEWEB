@@ -2,12 +2,10 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
-const fs = require('fs');
-const path = require('path');
 
 dotenv.config();
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000;
 const SERVER_BOOT_ID = Date.now();
 
 console.log("------------------------------------------------");
@@ -32,14 +30,26 @@ app.get('/api/system/apply-status', (req, res) => res.json({ status: "OK", messa
 
 // 3. PROXY RAW
 const ProfDrive = require('./prof/core/drive.prof');
-app.get(['/api/proxy/:id', '/api/structure/proxy/:id'], async (req, res) => {
+app.get(['/api/proxy/:id', '/api/structure/proxy/:id', '/api/prof/structure/proxy/:id'], async (req, res) => {
     try {
         const fileId = req.params.id;
-        if (!fileId || fileId === 'undefined') return res.status(400).send("No ID");
+        if (!fileId || fileId === 'undefined') {
+            return res.status(404).json({ error: "Drive fileId missing" });
+        }
         const stream = await ProfDrive.getFileStream(fileId);
         res.setHeader('Access-Control-Allow-Origin', '*');
         stream.pipe(res);
-    } catch (e) { res.status(404).send("Not found"); }
+    } catch (e) {
+        const status = e?.response?.status || e?.code || null;
+        console.error(`❌ [DRIVE PROXY] fileId=${req.params.id} status=${status || 'unknown'} msg=${e.message}`);
+        if (status === 404 || status === '404') {
+            return res.status(404).json({ error: "Drive file not found", fileId: req.params.id });
+        }
+        if (status === 401 || status === 403 || status === '401' || status === '403') {
+            return res.status(502).json({ error: "Drive upstream auth error", fileId: req.params.id });
+        }
+        return res.status(500).json({ error: "Drive proxy failure", fileId: req.params.id });
+    }
 });
 
 // 4. CHARGEMENT DES SILOS (Avec protection Try/Catch)
