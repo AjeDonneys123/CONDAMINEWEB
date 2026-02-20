@@ -1,12 +1,18 @@
 {
-  "rewrites": [
+  "version": 2,
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "routes": [
     {
-      "source": "/api/(.*)",
-      "destination": "https://hgeoentraineur.onrender.com/api/$1"
+      "src": "^/api/(.*)$",
+      "dest": "https://hgeoentraineur.onrender.com/api/$1"
     },
     {
-      "source": "/(.*)",
-      "destination": "/index.html"
+      "handle": "filesystem"
+    },
+    {
+      "src": "^(?!/api/).*$",
+      "dest": "/index.html"
     }
   ]
 }
