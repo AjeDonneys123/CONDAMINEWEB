@@ -103,6 +103,14 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
         return resolveDriveAssetUrl(url);
     };
 
+    const isCheatMode = () => keysPressed.current['KeyS'] && keysPressed.current['KeyT'];
+
+    const getYoutubeEmbed = (url = "") => {
+        if (!url) return "";
+        const m = String(url).match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/))([^?&/]+)/i);
+        return m?.[1] ? `https://www.youtube.com/embed/${m[1]}?autoplay=1&rel=0&modestbranding=1` : url;
+    };
+
     const triggerGlobalEvent = (eventName) => {
         const scene = projectRef.current.scenes?.[0];
         if (!scene || !scene.globalSounds) return;
@@ -154,14 +162,20 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
                 });
             } catch(e) {}
         }
-        if (isGameFinished) { triggerGlobalEvent("VICTOIRE"); setShowGameComplete(true); } 
+        if (isGameFinished) {
+            triggerGlobalEvent("VICTOIRE");
+            if (gameInstanceRef.current) gameInstanceRef.current.isStopped = true;
+            setEngineStarted(false);
+            setShowGameComplete(true);
+        } 
         else { 
             triggerGlobalEvent("UPLEVEL"); 
+            if (gameInstanceRef.current) gameInstanceRef.current.isStopped = true;
+            setEngineStarted(false);
             setShowStageClear(true); 
             setTimeout(() => { 
                 setShowStageClear(false); 
                 setCurrentLevelIdx(p => p + 1); 
-                setEngineStarted(false);
                 setShowLevelIntro(true); 
             }, 3000); 
         }
@@ -227,6 +241,42 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
         setTimeout(() => setShowLevelBanner(false), 1500); 
     };
 
+    const handleHeartClick = () => {
+        if (!isCheatMode()) return;
+        liveData.current.lives = Math.max(0, liveData.current.lives - 1);
+        setLives(liveData.current.lives);
+        if (liveData.current.lives <= 0) {
+            setShowGameOver(true);
+            triggerGlobalEvent("DEFAITE");
+        }
+    };
+
+    const handleQuestionClick = () => {
+        if (!isCheatMode()) return;
+        triggerGlobalEvent("UPLEVEL");
+        triggerWinSequence();
+    };
+
+    const handleBarClick = (idx) => {
+        if (!isCheatMode()) return;
+        const nextStates = [...liveData.current.qStates];
+        nextStates[idx] = Math.min(3, (nextStates[idx] || 0) + 1);
+        liveData.current.qStates = nextStates;
+        setQuestionStates(nextStates);
+        if (nextStates.every(s => s >= 3)) {
+            triggerGlobalEvent("UPLEVEL");
+            triggerWinSequence();
+        }
+    };
+
+    const handleRetry = () => {
+        setShowGameOver(false);
+        setLives(4);
+        liveData.current.lives = 4;
+        setEngineStarted(false);
+        setShowLevelIntro(true);
+    };
+
     useEffect(() => {
         if (!engineStarted || !canvasRef.current) return;
         try {
@@ -242,7 +292,16 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
             let factory, instance;
             try {
                 factory = new Function('MiniGameBase', scriptToRun + "\n return MiniGame;");
-                instance = new (factory(MiniGameBase))(canvasRef.current, {}, {});
+                instance = new (factory(MiniGameBase))(canvasRef.current, {}, {
+                    onPlayerHit: () => {
+                        liveData.current.lives = Math.max(0, liveData.current.lives - 1);
+                        setLives(liveData.current.lives);
+                        if (liveData.current.lives <= 0) {
+                            setShowGameOver(true);
+                            triggerGlobalEvent("DEFAITE");
+                        }
+                    }
+                });
             } catch (initErr) {
                 setScriptError(`Erreur d'initialisation : ${initErr.message}`);
                 return;
@@ -290,10 +349,45 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
             )}
 
             {showLevelBanner && <div className="fixed top-[20%] z-[5000] animate-in zoom-in"><span className="text-yellow-400 font-black text-6xl uppercase drop-shadow-lg">Niveau {currentLevelIdx + 1}</span></div>}
-            {showStageClear && <div className="fixed top-[40%] z-[5000] animate-in zoom-in text-center"><span className="text-green-500 font-black text-8xl uppercase drop-shadow-lg block">STAGE CLEAR !</span></div>}
+            {showStageClear && <div className="fixed top-[40%] z-[5000] animate-in zoom-in text-center"><span className="text-yellow-400 font-black text-8xl uppercase drop-shadow-lg block">STAGE CLEAR !</span></div>}
+
+            {zoomMedia && (
+                <div className="fixed inset-0 z-[12000] bg-black/95 flex items-center justify-center p-4 animate-in fade-in pointer-events-auto" onClick={() => setZoomMedia(null)}>
+                    <button onClick={() => setZoomMedia(null)} className="absolute top-6 right-6 w-14 h-14 bg-white hover:bg-red-600 hover:text-white text-black rounded-full flex items-center justify-center text-2xl font-black shadow-2xl">✕</button>
+                    <div className="w-full h-full flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+                        {zoomMedia === 'sheet' ? (
+                            <img src={resolveUrl(allLevels[currentLevelIdx]?.intro?.sheetUrl)} className="h-[90vh] max-w-[95vw] object-contain rounded-2xl shadow-2xl" alt="Fiche" />
+                        ) : (
+                            <div className="h-[90vh] w-[95vw] max-w-[1400px] bg-black rounded-2xl overflow-hidden shadow-2xl">
+                                <iframe
+                                    className="w-full h-full"
+                                    src={getYoutubeEmbed(allLevels[currentLevelIdx]?.intro?.videoUrl)}
+                                    frameBorder="0"
+                                    allow="autoplay; encrypted-media; picture-in-picture"
+                                    allowFullScreen
+                                    title="Video"
+                                />
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {showGameComplete && (
+                <div className="absolute inset-0 z-[7000] bg-gradient-to-br from-yellow-500 to-indigo-700 flex flex-col items-center justify-center animate-in zoom-in p-10 text-center">
+                    <div className="text-[120px] mb-2">🏆</div>
+                    <h1 className="text-7xl font-black text-white uppercase tracking-tighter mb-4">VICTOIRE</h1>
+                    <p className="text-white/90 font-bold uppercase tracking-widest mb-8">Tous les niveaux sont terminés</p>
+                    <div className="bg-white/20 backdrop-blur-md rounded-3xl p-6 border-2 border-white/40 mb-8">
+                        <div className="text-xs font-black text-white/70 uppercase mb-2">Score Final</div>
+                        <div className="text-5xl font-black text-white">{lives * 100 + (allLevels.length * 50)} PTS</div>
+                    </div>
+                    <button onClick={onExit} className="px-10 py-4 bg-white text-indigo-700 font-black text-xl rounded-2xl uppercase">Retour menu</button>
+                </div>
+            )}
             
             {showLevelIntro && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950 z-[6000] p-8 text-center animate-in zoom-in">
+                <div className={`absolute inset-0 flex flex-col items-center justify-center bg-slate-950 z-[6000] p-8 text-center animate-in zoom-in ${zoomMedia ? 'pointer-events-none' : ''}`}>
                     <h1 className="text-5xl text-white font-black mb-6 uppercase">{allLevels[currentLevelIdx]?.name || ("Niveau " + (currentLevelIdx+1))}</h1>
                     <div className="flex gap-10 mb-12 w-full max-w-4xl justify-center h-[280px]">
                         <div onClick={() => allLevels[currentLevelIdx]?.intro?.sheetUrl && setZoomMedia('sheet')} className="h-full aspect-[3/4] bg-slate-800 rounded-3xl border-4 border-slate-700 overflow-hidden flex items-center justify-center shadow-2xl cursor-pointer hover:border-indigo-500 hover:scale-105 transition-all">
@@ -312,15 +406,15 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
             {engineStarted && !showLevelIntro && (
                 <>
                     <div className="absolute top-6 w-full flex justify-between px-10 pointer-events-none z-30">
-                        <div className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-lg pointer-events-auto">{"❤️".repeat(lives)}</div>
+                        <div onClick={handleHeartClick} className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-lg pointer-events-auto cursor-pointer">{"❤️".repeat(lives)}</div>
                         <div className="flex-1 mx-10">
-                            <div className={"bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 text-xl text-center border-slate-600 " + (activeBossVisual ? 'border-red-500 ring-2 ring-red-500/50' : '')}>
+                            <div onClick={handleQuestionClick} className={"bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 text-xl text-center border-slate-600 cursor-pointer pointer-events-auto " + (activeBossVisual ? 'border-red-500 ring-2 ring-red-500/50' : '')}>
                                 {feedback === 'CORRECT' ? "✅ BIEN JOUÉ !" : feedback === 'WRONG' ? "❌ MAUVAISE RÉPONSE" : levelQuestions[currentQIndex]?.q}
                             </div>
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 pointer-events-auto">
                             {questionStates.map((s, i) => (
-                                <div key={i} className={"w-6 h-16 rounded-lg border-2 " + (currentQIndex === i ? 'border-white scale-110' : 'border-slate-600 opacity-60') + " bg-slate-800 overflow-hidden relative"}>
+                                <div key={i} onClick={() => handleBarClick(i)} className={"w-6 h-16 rounded-lg border-2 cursor-pointer " + (currentQIndex === i ? 'border-white scale-110' : 'border-slate-600 opacity-60') + " bg-slate-800 overflow-hidden relative"}>
                                     <div className={"absolute bottom-0 w-full transition-all duration-500 " + (s >= 3 ? 'bg-green-500 shadow-[0_0_10px_#22c55e]' : s >= 2 ? 'bg-red-500 shadow-[0_0_10px_#ef4444]' : 'bg-yellow-500')} style={{height: (s/3*100) + "%" }}></div>
                                 </div>
                             ))}
