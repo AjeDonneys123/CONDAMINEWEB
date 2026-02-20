@@ -11,7 +11,7 @@ const ProfDrive = {
         try {
             const clientId = (process.env.GOOGLE_CLIENT_ID || "").trim();
             const clientSecret = (process.env.GOOGLE_CLIENT_SECRET || "").trim();
-            const redirectUri = "http://localhost:3000/api/auth/google/callback";
+            const redirectUri = (process.env.GOOGLE_REDIRECT_URI || "http://localhost:3000/api/auth/google/callback").trim();
 
             if (!clientId || !clientSecret) {
                 console.error("❌ [DRIVE] CREDENTIALS MANQUANTS");
