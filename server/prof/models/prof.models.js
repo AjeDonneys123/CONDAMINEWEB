@@ -75,6 +75,8 @@ const Models = {
 
     Student: getModel('Student', {
         firstName: String, lastName: String, currentClass: String,
+        email: { type: String, lowercase: true, trim: true },
+        parentEmail: { type: String, lowercase: true, trim: true },
         classId: mongoose.Schema.Types.ObjectId,
         assignedGroups: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Classroom' }],
         behaviorRecords: [{
@@ -87,6 +89,9 @@ const Models = {
         teacherNotes: [{ teacherId: mongoose.Schema.Types.ObjectId, text: String }],
         punishmentStatus: { type: String, default: 'NONE' },
         punishmentDueDate: Date, seatX: Number, seatY: Number, gender: String,
+        punishmentLateMailSentAt: { type: Date, default: null },
+        punishmentLateMailTo: { type: String, default: "" },
+        punishmentLateMailError: { type: String, default: "" },
         indicators: Array,
         spellingMistakes: [{ wrong: String, correct: String, date: { type: Date, default: Date.now } }]
     }),

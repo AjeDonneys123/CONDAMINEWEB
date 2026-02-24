@@ -2,19 +2,33 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import './EleveHeader.css';
 
-export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, onTabChange }) {
+export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, onTabChange, hidePunishmentAlert = false }) {
   const isJean = user.firstName === 'Jean' && user.lastName === 'Vuillet';
   const [nowMs, setNowMs] = useState(Date.now());
 
   // --- LOGIQUE STATS ---
-  const record = (user.behaviorRecords && user.behaviorRecords.length > 0) 
-      ? user.behaviorRecords[user.behaviorRecords.length - 1] 
-      : { crosses: 0, bonuses: 0, weeksToRedemption: 3 };
+  const behaviorRecords = Array.isArray(user.behaviorRecords) ? user.behaviorRecords : [];
+  const primaryRecord = behaviorRecords
+    .map((r) => ({
+      ...r,
+      _crosses: Number(r?.crosses || 0),
+      _bonuses: Number(r?.bonuses || 0),
+      _nextTs: r?.nextCrossRemovalAt ? new Date(r.nextCrossRemovalAt).getTime() : null
+    }))
+    .sort((a, b) => {
+      // Priorité au même affichage que la carte prof: croix d'abord, puis bonus.
+      if (b._crosses !== a._crosses) return b._crosses - a._crosses;
+      if (b._bonuses !== a._bonuses) return b._bonuses - a._bonuses;
+      const aTs = Number.isFinite(a._nextTs) ? a._nextTs : Number.MAX_SAFE_INTEGER;
+      const bTs = Number.isFinite(b._nextTs) ? b._nextTs : Number.MAX_SAFE_INTEGER;
+      return aTs - bTs;
+    })[0] || { _crosses: 0, _bonuses: 0, weeksToRedemption: 3, _nextTs: null };
 
-  const crosses = record.crosses || 0;
-  const weeksLeft = record.weeksToRedemption || 3;
+  const crosses = primaryRecord._crosses;
+  const weeksLeft = Number(primaryRecord.weeksToRedemption || 3);
+  const nextCrossRemovalAt = Number.isFinite(primaryRecord._nextTs) ? primaryRecord._nextTs : null;
   
-  const totalBonuses = record.bonuses || 0;
+  const totalBonuses = primaryRecord._bonuses;
   const currentBonuses = totalBonuses % 4; // 0, 1, 2, 3
   const nextAPlus = 4 - currentBonuses;
 
@@ -22,14 +36,16 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
   const bonusVisual = "🌟".repeat(currentBonuses) + ".".repeat(4 - currentBonuses);
 
   useEffect(() => {
-    if (!(crosses > 0 && record.nextCrossRemovalAt)) return;
+    const needsCrossTimer = crosses > 0 && nextCrossRemovalAt;
+    const needsPunishTimer = user.punishmentStatus === 'PENDING' && user.punishmentDueDate;
+    if (!needsCrossTimer && !needsPunishTimer) return;
     const t = setInterval(() => setNowMs(Date.now()), 1000);
     return () => clearInterval(t);
-  }, [crosses, record.nextCrossRemovalAt]);
+  }, [crosses, nextCrossRemovalAt, user.punishmentStatus, user.punishmentDueDate]);
 
   const crossCountdown = useMemo(() => {
-    if (!(crosses > 0 && record.nextCrossRemovalAt)) return null;
-    const target = new Date(record.nextCrossRemovalAt).getTime();
+    if (!(crosses > 0 && nextCrossRemovalAt)) return null;
+    const target = nextCrossRemovalAt;
     if (!target || Number.isNaN(target)) return null;
     const diff = Math.max(0, target - nowMs);
     const totalSec = Math.floor(diff / 1000);
@@ -38,18 +54,27 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
     const mins = Math.floor((totalSec % 3600) / 60);
     const secs = totalSec % 60;
     const pad = (n) => String(n).padStart(2, '0');
-    return `${pad(days)}:${pad(hours)}:${pad(mins)}:${pad(secs)}`;
-  }, [crosses, record.nextCrossRemovalAt, nowMs]);
+    return `${pad(days)}j:${pad(hours)}h:${pad(mins)}:${pad(secs)}`;
+  }, [crosses, nextCrossRemovalAt, nowMs]);
+
+  const punishmentCountdown = useMemo(() => {
+    if (!(user.punishmentStatus === 'PENDING' && user.punishmentDueDate)) return null;
+    const target = new Date(user.punishmentDueDate).getTime();
+    if (!target || Number.isNaN(target)) return null;
+    const diff = Math.max(0, target - nowMs);
+    const totalSec = Math.floor(diff / 1000);
+    const hours = Math.floor(totalSec / 3600);
+    const mins = Math.floor((totalSec % 3600) / 60);
+    const secs = totalSec % 60;
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${pad(hours)}:${pad(mins)}:${pad(secs)}`;
+  }, [user.punishmentStatus, user.punishmentDueDate, nowMs]);
 
   // --- LOGIQUE PUNITION (COMPTE À REBOURS) ---
   let punishmentAlert = null;
   
-  if (user.punishmentStatus === 'PENDING' || user.punishmentStatus === 'LATE') {
-      const dueDate = user.punishmentDueDate ? new Date(user.punishmentDueDate) : new Date();
-      const now = new Date();
-      const diffTime = dueDate - now;
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      const isLate = diffDays < 0 || user.punishmentStatus === 'LATE';
+  if (!hidePunishmentAlert && (user.punishmentStatus === 'PENDING' || user.punishmentStatus === 'LATE')) {
+      const isLate = user.punishmentStatus === 'LATE';
 
       punishmentAlert = (
           <div className={`punishment-alert ${isLate ? 'late' : ''}`}>
@@ -60,10 +85,10 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
                       {isLate ? "Rendez votre travail immédiatement." : "Travail à rendre dans la section Devoirs."}
                   </span>
               </div>
-              {!isLate && (
+              {!isLate && punishmentCountdown && (
                   <div className="flex items-center gap-2 ml-4">
                       <span className="text-xs font-bold opacity-60">IL RESTE</span>
-                      <span className="punishment-days">{diffDays}j</span>
+                      <span className="punishment-days">{punishmentCountdown}</span>
                   </div>
               )}
           </div>

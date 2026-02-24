@@ -121,10 +121,60 @@
 }
 @keyframes flash { from { opacity: 1; } to { opacity: 0; } }
 
-.s-mobile-shoot {
-    position: absolute; bottom: 20px; right: 20px;
-    width: 70px; height: 70px; background: rgba(255,255,255,0.1);
-    border: 2px solid rgba(255,255,255,0.3); border-radius: 50%;
-    font-size: 2rem; display: flex; align-items: center; justify-content: center;
-    color: white; z-index: 50;
+.s-mobile-controls {
+    position: absolute;
+    inset-inline: 12px;
+    bottom: 12px;
+    display: none;
+    justify-content: space-between;
+    align-items: flex-end;
+    z-index: 70;
+    pointer-events: none;
+}
+.s-mobile-move, .s-mobile-actions {
+    display: flex;
+    gap: 8px;
+    pointer-events: auto;
+}
+.s-mobile-btn {
+    width: 62px;
+    height: 62px;
+    border-radius: 14px;
+    border: 2px solid rgba(255,255,255,0.35);
+    background: rgba(15, 23, 42, 0.78);
+    color: white;
+    font-size: 1.5rem;
+    font-weight: 900;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-transform: uppercase;
+    user-select: none;
+}
+.s-mobile-fire {
+    background: rgba(220, 38, 38, 0.85);
+    border-color: rgba(252, 165, 165, 0.9);
+    font-size: 0.75rem;
+}
+.s-mobile-jump {
+    background: rgba(5, 150, 105, 0.85);
+    border-color: rgba(110, 231, 183, 0.9);
+    font-size: 0.75rem;
+}
+
+@media (max-width: 900px) {
+    .s-mobile-controls {
+        display: flex;
+    }
+    .s-ship {
+        bottom: 90px;
+    }
+    .s-boss-interface {
+        bottom: 170px;
+        padding-inline: 12px;
+    }
+    .s-boss-input {
+        width: 60%;
+        font-size: 1rem;
+    }
 }

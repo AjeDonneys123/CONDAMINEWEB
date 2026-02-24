@@ -34,7 +34,16 @@ export function initStarshipGame(root, api, onExit) {
                 <input type="text" id="s-boss-input" class="s-boss-input" placeholder="CODE DE TIR !" autocomplete="off">
                 <button id="s-nuke-btn" class="s-nuke-btn">☢️ NUKE</button>
             </div>
-            <button class="s-mobile-shoot" id="s-mobile-fire">🔥</button>
+            <div class="s-mobile-controls">
+                <div class="s-mobile-move">
+                    <button class="s-mobile-btn" id="s-mobile-left">◀</button>
+                    <button class="s-mobile-btn" id="s-mobile-right">▶</button>
+                </div>
+                <div class="s-mobile-actions">
+                    <button class="s-mobile-btn s-mobile-fire" id="s-mobile-fire">TIR</button>
+                    <button class="s-mobile-btn s-mobile-jump" id="s-mobile-jump">SAUT</button>
+                </div>
+            </div>
         </div>
     `;
 
@@ -228,8 +237,31 @@ export function initStarshipGame(root, api, onExit) {
     root.querySelector('.s-quit-btn').onclick = onExit;
     const handleKey = (e) => { if (e.key === 'ArrowLeft') moveShip(-5); if (e.key === 'ArrowRight') moveShip(5); if (e.code === 'Space') { e.preventDefault(); fire(); } };
     document.addEventListener('keydown', handleKey);
-    root.addEventListener('touchstart', (e) => { if(e.target.tagName !== 'BUTTON' && e.target.tagName !== 'INPUT') { const x = e.touches[0].clientX; if (x < window.innerWidth / 2) moveShip(-5); else moveShip(5); } });
-    root.querySelector('#s-mobile-fire').onclick = (e) => { e.stopPropagation(); fire(); };
+    const bindHold = (id, onPress, onRelease = null) => {
+        const btn = root.querySelector(id);
+        if (!btn) return;
+        let t = null;
+        const start = (e) => {
+            e.preventDefault();
+            onPress();
+            if (!t) t = setInterval(onPress, 70);
+        };
+        const stop = (e) => {
+            if (e) e.preventDefault();
+            if (t) { clearInterval(t); t = null; }
+            if (onRelease) onRelease();
+        };
+        btn.addEventListener('mousedown', start);
+        btn.addEventListener('mouseup', stop);
+        btn.addEventListener('mouseleave', stop);
+        btn.addEventListener('touchstart', start, { passive: false });
+        btn.addEventListener('touchend', stop, { passive: false });
+        btn.addEventListener('touchcancel', stop, { passive: false });
+    };
+    bindHold('#s-mobile-left', () => moveShip(-3));
+    bindHold('#s-mobile-right', () => moveShip(3));
+    bindHold('#s-mobile-fire', () => fire());
+    bindHold('#s-mobile-jump', () => fire());
     els.bossInput.onkeydown = (e) => { if(e.key === 'Enter') handleBossInput(); };
     els.nukeBtn.onclick = handleBossInput;
 

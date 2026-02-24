@@ -5,7 +5,7 @@ import './StudioDistributionSidebar.css';
 export default function StudioDistributionSidebar({ 
     user, allClasses, allStudents, chapters, distribution, setDistribution, 
     viewingClass, setViewingClass, studentSearch, setStudentSearch,
-    targetLevel, targetSection, loading, onSave, saveLabel = "PUBLIER 🚀"
+    targetLevel, targetSection, loading, onSave, saveLabel = "PUBLIER 🚀", punishmentMode = false
 }) {
 
     // 1. FILTRAGE STRICT DES CLASSES (NIVEAU & PROF)
@@ -58,10 +58,30 @@ export default function StudioDistributionSidebar({
         return true;
     }).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
 
+    const [punishmentChapterId, setPunishmentChapterId] = React.useState("");
+
     // Helper pour trouver le dossier par défaut
     const findBestDefaultChapter = () => {
         return availableChapters.length > 0 ? availableChapters[0]._id : "";
     };
+
+    useEffect(() => {
+        if (!punishmentMode) return;
+        const def = findBestDefaultChapter();
+        if (!punishmentChapterId && def) setPunishmentChapterId(def);
+    }, [punishmentMode, availableChapters]);
+
+    useEffect(() => {
+        if (!punishmentMode) return;
+        const chapterId = punishmentChapterId || findBestDefaultChapter();
+        const next = {};
+        availableClasses.forEach(c => {
+            next[c.name] = { chapterId, studentIds: [] };
+        });
+        const cur = JSON.stringify(distribution || {});
+        const nxt = JSON.stringify(next);
+        if (cur !== nxt) setDistribution(next);
+    }, [punishmentMode, availableClasses, punishmentChapterId]);
 
     // 3. LOGIQUE ÉLÈVES
     const rawStudents = (allStudents || []).filter(s => {
@@ -149,6 +169,43 @@ export default function StudioDistributionSidebar({
 
     // Calcul du chapitre sélectionné pour l'affichage du select
     const selectedChapterValue = cfg?.chapterId || findBestDefaultChapter();
+
+    if (punishmentMode) {
+        return (
+            <div className="v84-dist-sidebar custom-scrollbar">
+                <div className="v84-class-card animate-in slide-in-from-right">
+                    <div className="v84-class-header">
+                        <span className="v84-class-title">MODE PUNITION ({targetLevel || 'NIVEAU'})</span>
+                        <div className="v84-check-badge checked">✓</div>
+                    </div>
+
+                    <div className="v84-folder-select-box">
+                        <label className="v84-folder-label">Dossier de destination (commun) :</label>
+                        <select
+                            className="v84-folder-select"
+                            value={punishmentChapterId || findBestDefaultChapter()}
+                            onChange={(e) => setPunishmentChapterId(e.target.value)}
+                            disabled={loading}
+                        >
+                            {availableChapters.length === 0 && <option value="">(Aucun dossier dans {targetSection})</option>}
+                            {availableChapters.map(c => (
+                                <option key={c._id} value={c._id}>{c.title}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div className="text-[10px] font-black text-slate-500 uppercase leading-5 bg-amber-50 border border-amber-200 rounded-xl p-3 mt-2">
+                        Classes ciblées automatiquement : {availableClasses.map(c => c.name).join(', ') || 'Aucune'}.
+                        Élèves assignés automatiquement quand ils atteignent 3 croix.
+                    </div>
+                </div>
+
+                <button className="v84-publish-btn" onClick={onSave} disabled={loading || availableClasses.length === 0 || !findBestDefaultChapter()}>
+                    {loading ? 'PUBLICATION...' : saveLabel}
+                </button>
+            </div>
+        );
+    }
 
     return (
         <div className="v84-dist-sidebar custom-scrollbar">

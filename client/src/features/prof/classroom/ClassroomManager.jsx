@@ -22,6 +22,13 @@ export default function ClassroomManager({ globalClassId, user }) {
     const fileInputRef = useRef(null);
     
     const myId = user ? (user._id || user.id) : null;
+    const isPunishmentLate = (student) => {
+        if (!student) return false;
+        if (student.punishmentStatus === 'LATE') return true;
+        if (student.punishmentStatus !== 'PENDING' || !student.punishmentDueDate) return false;
+        const dueTs = new Date(student.punishmentDueDate).getTime();
+        return Number.isFinite(dueTs) && dueTs <= Date.now();
+    };
 
     const loadData = async () => {
         if (!globalClassId) return;
@@ -126,7 +133,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                             <div className={`student-card-drag ${draggingId === student._id ? 'dragging' : ''} ${getMyStats(student).crosses >= 3 ? 'punished' : ''}`} draggable="true" onDragStart={(e) => handleDragStart(e, student._id)} onClick={(e) => { e.stopPropagation(); handleOpenStudent(student); }}>
                                 {getMyStats(student).crosses > 0 && <div className="sc-badge">⏳ {getMyStats(student).weeksToRedemption}</div>}
                                 {student.myNote && <div className="sc-note-badge">N</div>}
-                                {student.punishmentStatus && student.punishmentStatus !== 'NONE' && (<div className={`sc-punishment-badge ${student.punishmentStatus === 'LATE' ? 'late' : 'pending'}`}>P</div>)}
+                                {student.punishmentStatus && student.punishmentStatus !== 'NONE' && (<div className={`sc-punishment-badge ${isPunishmentLate(student) ? 'late' : 'pending'}`}>P</div>)}
                                 <div className="sc-indicators">{(student.indicators || []).map((ind, i) => (<div key={i} className={`indicator-dot indicator-${ind.type}-${ind.status}`} title={`${ind.type} : ${ind.status}`}></div>))}</div>
                                 <div className="sc-avatar">{student.gender === 'F' ? '👧' : '👦'}</div>
                                 <div className="sc-name">{student.firstName}<br/>{student.lastName.slice(0,1)}.</div>
@@ -161,7 +168,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                     const stats = getMyStats(s);
                     return (
                         <div key={s._id} className="student-list-row">
-                            <div className="list-info" onClick={() => handleOpenStudent(s)}><span className="list-name">{s.lastName} {s.firstName}</span><span className="list-stats">❌ {stats.crosses} | ⭐ {stats.bonuses} {s.punishmentStatus !== 'NONE' ? '| ⚠️ PUNI' : ''}</span></div>
+                            <div className="list-info" onClick={() => handleOpenStudent(s)}><span className="list-name">{s.lastName} {s.firstName}</span><span className="list-stats">❌ {stats.crosses} | ⭐ {stats.bonuses} {s.punishmentStatus !== 'NONE' ? `| ${isPunishmentLate(s) ? '🚨 RETARD' : '⚠️ PUNI'}` : ''}</span></div>
                             <div className="list-actions"><button className="btn-list-action btn-x" onClick={() => addBehavior(s._id, 'CROSS')}>❌</button><button className="btn-list-action btn-v" onClick={() => addBehavior(s._id, 'BONUS')}>⭐</button><button className="btn-list-action btn-c" onClick={() => handleOpenStudent(s)}>📝</button></div>
                         </div>
                     );

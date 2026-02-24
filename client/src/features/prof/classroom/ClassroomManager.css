@@ -102,7 +102,12 @@
     box-shadow: 0 2px 5px rgba(0,0,0,0.2); 
 }
 .sc-punishment-badge.pending { background: #f472b6; animation: pulse-pink 2s infinite; }
-.sc-punishment-badge.late { background: #dc2626; animation: pulse-red 1s infinite; }
+.sc-punishment-badge.late { 
+    background: #ff0000; 
+    border: 1px solid #fff;
+    box-shadow: 0 0 0 2px rgba(255,0,0,0.35), 0 0 12px rgba(255,0,0,0.95);
+    animation: pulse-red 0.7s infinite; 
+}
 
 .sc-avatar { font-size: 1.4rem; margin-bottom: 2px; }
 .sc-name { font-size: 0.65rem; font-weight: 800; color: #334155; text-align: center; line-height: 1.1; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

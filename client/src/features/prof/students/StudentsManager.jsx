@@ -8,6 +8,7 @@ export default function StudentsManager({ globalClassId }) {
   const [trackingData, setTrackingData] = useState({}); 
   const [loading, setLoading] = useState(true);
   const [className, setClassName] = useState("");
+  const [latePunishmentNames, setLatePunishmentNames] = useState([]);
 
   // MODALES
   const [editingSub, setEditingSub] = useState(null); 
@@ -38,6 +39,10 @@ export default function StudentsManager({ globalClassId }) {
 
         const myStudents = sts.filter(s => String(s.classId) === String(globalClassId)).sort((a,b) => a.lastName.localeCompare(b.lastName));
         setStudents(myStudents);
+        const lateNames = myStudents
+            .filter(s => s.punishmentStatus === 'LATE' || (s.punishmentStatus === 'PENDING' && s.punishmentDueDate && new Date(s.punishmentDueDate).getTime() <= Date.now()))
+            .map(s => `${s.firstName} ${s.lastName}`);
+        setLatePunishmentNames(lateNames);
 
         // On charge TOUTES les activités (pour pouvoir filtrer dans la modale individuelle)
         const allActs = [
@@ -229,6 +234,12 @@ export default function StudentsManager({ globalClassId }) {
                 <h3 className="font-black text-slate-700 text-lg uppercase">📊 SUIVI D'ACTIVITÉ : {className}</h3>
                 <span className="text-xs font-bold text-slate-400">{students.length} Élèves</span>
             </div>
+
+            {latePunishmentNames.length > 0 && (
+                <div className="mx-6 mt-4 mb-0 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-red-700 text-xs font-black uppercase">
+                    ⚠️ Punitions en retard : {latePunishmentNames.join(', ')}
+                </div>
+            )}
             
             <div className="overflow-auto flex-1 custom-scrollbar">
                 <table className="students-table w-full">

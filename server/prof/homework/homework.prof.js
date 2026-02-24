@@ -23,8 +23,13 @@ router.get('/:id', async (req, res) => {
 
 router.post('/', async (req, res) => {
     try {
-        const data = req.body;
+        const data = { ...req.body };
         if (!data._id) delete data._id;
+        data.targetClassrooms = [...new Set((data.targetClassrooms || []).map(c => String(c || '').trim().toUpperCase()).filter(Boolean))];
+        if (data.isPunishment) {
+            data.isAllClass = false;
+            data.assignedStudents = [];
+        }
         
         const hw = data._id 
             ? await Homework.findByIdAndUpdate(data._id, data, { new: true })

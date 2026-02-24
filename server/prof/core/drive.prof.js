@@ -33,7 +33,11 @@ const ProfDrive = {
         if (!oauth2Client) throw new Error("Client OAuth non initialisé.");
         return oauth2Client.generateAuthUrl({
             access_type: 'offline',
-            scope: ['https://www.googleapis.com/auth/drive.file', 'https://www.googleapis.com/auth/drive.readonly'],
+            scope: [
+                'https://www.googleapis.com/auth/drive.file',
+                'https://www.googleapis.com/auth/drive.readonly',
+                'https://www.googleapis.com/auth/gmail.send'
+            ],
             prompt: 'consent'
         });
     },

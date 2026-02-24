@@ -38,7 +38,10 @@ const DriveEngine = {
         if (!DriveEngine.oauth2Client) throw new Error("OAuth Client non initialisé");
         return DriveEngine.oauth2Client.generateAuthUrl({
             access_type: 'offline', // CRUCIAL pour avoir le Refresh Token
-            scope: ['https://www.googleapis.com/auth/drive.file'],
+            scope: [
+                'https://www.googleapis.com/auth/drive.file',
+                'https://www.googleapis.com/auth/gmail.send'
+            ],
             prompt: 'consent' // Force la génération du refresh token
         });
     },

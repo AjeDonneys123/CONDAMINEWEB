@@ -147,6 +147,12 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
                     isAllClass: grp.isAllClass,
                     teacherId: user.id || user._id
                 };
+                if (formData.isPunishment) {
+                    // Une punition est un template ciblé par classe:
+                    // elle ne doit jamais être publiée en "classe entière" classique.
+                    payload.isAllClass = false;
+                    payload.assignedStudents = [];
+                }
                 if (formData._id && key === Object.keys(groups)[0]) { /* update */ } else { delete payload._id; }
                 await api.post('/homework', payload); 
             }
@@ -196,6 +202,7 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
                     setStudentSearch={setStudentSearch}
                     targetSection={targetSection} 
                     targetLevel={targetLevel} 
+                    punishmentMode={formData.isPunishment}
                     loading={loading}
                     onSave={handleSave}
                 />

@@ -62,6 +62,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
     const [loadProgress, setLoadProgress] = useState("");
     const [isReady, setIsReady] = useState(false);
     const [engineStarted, setEngineStarted] = useState(false);
+    const [isMobileViewport, setIsMobileViewport] = useState(false);
     
     // --- NOUVEAU : GESTION DES ERREURS DE SCRIPT ---
     const [scriptError, setScriptError] = useState(null);
@@ -76,6 +77,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
     const bossModeRef = useRef(false);
     const liveData = useRef({ qStates: [], qIndex: 0, lives: 4 });
     const keysPressed = useRef({});
+    const mobileControlTimers = useRef({});
 
     const bridgeProxy = useRef((type, value) => {
         switch(type) {
@@ -113,6 +115,63 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
     };
 
     const isYoutubeUrl = (url = "") => /(?:youtu\.be\/|youtube\.com\/)/i.test(String(url));
+    const getGameFamily = () => {
+        const type = String(gameData?.type || "").toLowerCase();
+        const title = String(gameData?.title || "").toLowerCase();
+        const code = String(gameData?.generatedCode || "").toLowerCase();
+        if (type.includes('starship') || title.includes('starship') || code.includes('starship')) return 'starship';
+        if (type.includes('jumper') || title.includes('jumper') || code.includes('jumper')) return 'jumper';
+        return 'other';
+    };
+    const supportsMobilePad = () => {
+        const family = getGameFamily();
+        return family === 'starship' || family === 'jumper';
+    };
+
+    const mobileActionToCodes = (action) => {
+        const family = getGameFamily();
+        if (action === 'left') return ['ArrowLeft', 'KeyA'];
+        if (action === 'right') return ['ArrowRight', 'KeyD'];
+        if (action === 'jump') {
+            if (family === 'jumper') return ['ArrowUp', 'Space', 'KeyW'];
+            return ['ArrowUp', 'KeyW'];
+        }
+        if (action === 'shoot') {
+            if (family === 'starship') return ['Space', 'KeyX', 'KeyF'];
+            return ['KeyX', 'KeyF', 'Enter'];
+        }
+        return [];
+    };
+
+    const setCodesState = (codes, pressed) => {
+        codes.forEach(code => { keysPressed.current[code] = pressed; });
+    };
+
+    const startMobileAction = (action) => {
+        const codes = mobileActionToCodes(action);
+        if (codes.length === 0) return;
+        setCodesState(codes, true);
+        if (mobileControlTimers.current[action]) return;
+        mobileControlTimers.current[action] = setInterval(() => setCodesState(codes, true), 60);
+    };
+
+    const stopMobileAction = (action) => {
+        const codes = mobileActionToCodes(action);
+        setCodesState(codes, false);
+        if (mobileControlTimers.current[action]) {
+            clearInterval(mobileControlTimers.current[action]);
+            delete mobileControlTimers.current[action];
+        }
+    };
+
+    const bindControlPress = (action) => ({
+        onMouseDown: (e) => { e.preventDefault(); startMobileAction(action); },
+        onMouseUp: (e) => { e.preventDefault(); stopMobileAction(action); },
+        onMouseLeave: (e) => { e.preventDefault(); stopMobileAction(action); },
+        onTouchStart: (e) => { e.preventDefault(); startMobileAction(action); },
+        onTouchEnd: (e) => { e.preventDefault(); stopMobileAction(action); },
+        onTouchCancel: (e) => { e.preventDefault(); stopMobileAction(action); }
+    });
     const pickMediaFromObject = (obj, type) => {
         if (!obj || typeof obj !== 'object') return "";
         const exactKeys = type === 'video'
@@ -387,6 +446,22 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
         return () => { window.removeEventListener('keydown', hDown); window.removeEventListener('keyup', hUp); };
     }, []);
 
+    useEffect(() => {
+        const onResize = () => setIsMobileViewport(window.innerWidth <= 900);
+        onResize();
+        window.addEventListener('resize', onResize);
+        return () => window.removeEventListener('resize', onResize);
+    }, []);
+
+    useEffect(() => {
+        return () => {
+            Object.keys(mobileControlTimers.current).forEach((key) => {
+                clearInterval(mobileControlTimers.current[key]);
+            });
+            mobileControlTimers.current = {};
+        };
+    }, []);
+
     const introMedia = getIntroMedia();
 
     return (
@@ -475,34 +550,49 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
             
             {engineStarted && !showLevelIntro && (
                 <>
-                    <div className="absolute top-6 w-full flex justify-between px-10 pointer-events-none z-30">
-                        <div onClick={handleHeartClick} className="bg-slate-900/80 p-3 px-6 rounded-2xl border-2 border-slate-700 text-3xl shadow-lg pointer-events-auto cursor-pointer">{"❤️".repeat(lives)}</div>
-                        <div className="flex-1 mx-10">
-                            <div onClick={handleQuestionClick} className={"bg-slate-900/95 text-white font-black py-4 px-10 rounded-2xl border-2 text-xl text-center border-slate-600 cursor-pointer pointer-events-auto " + (activeBossVisual ? 'border-red-500 ring-2 ring-red-500/50' : '')}>
+                    <div className={"absolute w-full flex justify-between pointer-events-none z-30 " + (isMobileViewport ? 'top-2 px-2 gap-2' : 'top-6 px-10')}>
+                        <div onClick={handleHeartClick} className={"bg-slate-900/80 rounded-2xl border-2 border-slate-700 shadow-lg pointer-events-auto cursor-pointer " + (isMobileViewport ? 'p-2 px-3 text-2xl' : 'p-3 px-6 text-3xl')}>{"❤️".repeat(lives)}</div>
+                        <div className={isMobileViewport ? 'flex-1 mx-1' : 'flex-1 mx-10'}>
+                            <div onClick={handleQuestionClick} className={"bg-slate-900/95 text-white font-black rounded-2xl border-2 text-center border-slate-600 cursor-pointer pointer-events-auto " + (isMobileViewport ? 'py-2 px-3 text-base leading-tight' : 'py-4 px-10 text-xl') + " " + (activeBossVisual ? 'border-red-500 ring-2 ring-red-500/50' : '')}>
                                 {feedback === 'CORRECT' ? "✅ BIEN JOUÉ !" : feedback === 'WRONG' ? "❌ MAUVAISE RÉPONSE" : levelQuestions[currentQIndex]?.q}
                             </div>
                         </div>
-                        <div className="flex gap-2 pointer-events-auto">
+                        <div className={"flex pointer-events-auto " + (isMobileViewport ? 'gap-1.5' : 'gap-2')}>
                             {questionStates.map((s, i) => (
-                                <div key={i} onClick={() => handleBarClick(i)} className={"w-6 h-16 rounded-lg border-2 cursor-pointer " + (currentQIndex === i ? 'border-white scale-110' : 'border-slate-600 opacity-60') + " bg-slate-800 overflow-hidden relative"}>
+                                <div key={i} onClick={() => handleBarClick(i)} className={(isMobileViewport ? 'w-4 h-12' : 'w-6 h-16') + " rounded-lg border-2 cursor-pointer " + (currentQIndex === i ? 'border-white scale-110' : 'border-slate-600 opacity-60') + " bg-slate-800 overflow-hidden relative"}>
                                     <div className={"absolute bottom-0 w-full transition-all duration-500 " + (s >= 3 ? 'bg-green-500 shadow-[0_0_10px_#22c55e]' : s >= 2 ? 'bg-red-500 shadow-[0_0_10px_#ef4444]' : 'bg-yellow-500')} style={{height: (s/3*100) + "%" }}></div>
                                 </div>
                             ))}
                         </div>
                     </div>
-                    <canvas ref={canvasRef} width={800} height={450} className={"aspect-video shadow-2xl bg-black border-4 " + (activeBossVisual ? 'border-red-600 shadow-[0_0_50px_red]' : 'border-slate-800') + " rounded-lg"} />
+                    <canvas ref={canvasRef} width={800} height={450} className={(isMobileViewport ? "w-[96vw] h-[56vh] max-h-[62vh] aspect-auto " : "aspect-video ") + "shadow-2xl bg-black border-4 " + (activeBossVisual ? 'border-red-600 shadow-[0_0_50px_red]' : 'border-slate-800') + " rounded-lg"} />
                     {showAnswerUI && levelQuestions[currentQIndex] && !showStageClear && !showGameComplete && !showGameOver && (
-                        <div className="absolute bottom-10 w-full flex justify-center px-10 pointer-events-auto z-30">
+                        <div className={"absolute w-full flex justify-center pointer-events-auto z-30 " + (isMobileViewport ? 'bottom-3 px-2' : 'bottom-10 px-10')}>
                             {activeBossVisual ? (
-                                <div className="flex gap-4 w-full max-w-2xl animate-in slide-in-from-bottom">
-                                    <input autoFocus className="flex-1 bg-slate-900 border-4 border-red-600 text-white text-3xl font-black py-4 px-8 rounded-2xl text-center outline-none" value={userInput} onChange={e => setUserInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAnswerClick(userInput)} placeholder="TAPE TA RÉPONSE..." />
-                                    <button onClick={() => handleAnswerClick(userInput)} className="bg-red-600 text-white px-10 rounded-2xl font-black text-xl border-b-8 border-red-800 uppercase">Attaquer</button>
+                                <div className={"flex w-full max-w-2xl animate-in slide-in-from-bottom " + (isMobileViewport ? 'gap-2' : 'gap-4')}>
+                                    <input autoFocus className={"flex-1 bg-slate-900 border-4 border-red-600 text-white font-black rounded-2xl text-center outline-none " + (isMobileViewport ? 'text-xl py-2 px-3' : 'text-3xl py-4 px-8')} value={userInput} onChange={e => setUserInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAnswerClick(userInput)} placeholder="TAPE TA RÉPONSE..." />
+                                    <button onClick={() => handleAnswerClick(userInput)} className={"bg-red-600 text-white rounded-2xl font-black border-b-8 border-red-800 uppercase " + (isMobileViewport ? 'px-4 text-sm' : 'px-10 text-xl')}>Attaquer</button>
                                 </div>
                             ) : (
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full max-w-5xl">
-                                    {levelQuestions[currentQIndex].options.map((o, i) => (<button key={i} onClick={() => handleAnswerClick(i)} className="bg-indigo-600 text-white py-6 rounded-2xl font-black uppercase text-lg border-b-8 border-indigo-800 active:border-b-0 active:translate-y-2">{o}</button>))}
+                                <div className={"grid grid-cols-2 md:grid-cols-4 w-full max-w-5xl " + (isMobileViewport ? 'gap-2' : 'gap-4')}>
+                                    {levelQuestions[currentQIndex].options.map((o, i) => (<button key={i} onClick={() => handleAnswerClick(i)} className={"bg-indigo-600 text-white rounded-2xl font-black uppercase border-b-8 border-indigo-800 active:border-b-0 active:translate-y-2 " + (isMobileViewport ? 'py-3 text-base' : 'py-6 text-lg')}>{o}</button>))}
                                 </div>
                             )}
+                        </div>
+                    )}
+
+                    {isMobileViewport && supportsMobilePad() && (
+                        <div className="absolute inset-x-0 bottom-2 z-40 px-3 pointer-events-none">
+                            <div className="w-full flex items-end justify-between">
+                                <div className="flex gap-2 pointer-events-auto">
+                                    <button {...bindControlPress('left')} className="w-16 h-16 rounded-2xl border-2 border-white/30 bg-slate-900/75 text-white text-2xl font-black active:scale-95 select-none">◀</button>
+                                    <button {...bindControlPress('right')} className="w-16 h-16 rounded-2xl border-2 border-white/30 bg-slate-900/75 text-white text-2xl font-black active:scale-95 select-none">▶</button>
+                                </div>
+                                <div className="flex gap-2 pointer-events-auto">
+                                    <button {...bindControlPress('shoot')} className="w-16 h-16 rounded-2xl border-2 border-red-300/70 bg-red-600/80 text-white text-xs font-black uppercase tracking-wider active:scale-95 select-none">TIR</button>
+                                    <button {...bindControlPress('jump')} className="w-16 h-16 rounded-2xl border-2 border-emerald-300/70 bg-emerald-600/80 text-white text-xs font-black uppercase tracking-wider active:scale-95 select-none">SAUT</button>
+                                </div>
+                            </div>
                         </div>
                     )}
                 </>

@@ -6,10 +6,51 @@ const ClassroomExpert = require('../../domains/classroom/experts/classroom.exper
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const { sendLatePunishmentMail, resetLateMailState } = require('../../services/punishmentMailer');
 
 // Configuration Multer pour l'import d'image
 const upload = multer({ dest: path.join(process.cwd(), 'public', 'uploads', 'temp') });
 const CROSS_DECAY_MS = 14 * 24 * 60 * 60 * 1000;
+// MODE TEST: 1 minute. Basculer plus tard à 7 * 24 * 60 * 60 * 1000.
+const PUNISHMENT_DUE_MS = 60 * 1000;
+
+function normalizeClassName(v = '') {
+    const raw = String(v || '').trim().toUpperCase();
+    return { raw, clean: raw.replace(/\s+/g, '') };
+}
+
+async function assignPunishmentTemplate(student, teacherId) {
+    const { raw, clean } = normalizeClassName(student.currentClass || '');
+    if (!raw) return false;
+
+    const punishments = await Homework.find({
+        isPunishment: true,
+        teacherId,
+        targetClassrooms: { $in: [raw, clean] }
+    }).sort({ updatedAt: -1 });
+
+    const selected = punishments.find(p => {
+        const targets = (p.targetClassrooms || []).map(c => String(c || '').trim().toUpperCase());
+        return targets.includes(raw) || targets.includes(clean);
+    });
+
+    if (!selected) return false;
+
+    const sid = String(student._id);
+    const alreadyAssigned = (selected.assignedStudents || []).some(id => String(id) === sid);
+    if (!alreadyAssigned) {
+        selected.assignedStudents = [...(selected.assignedStudents || []), student._id];
+        await selected.save();
+    }
+
+    if (student.punishmentStatus === 'NONE' || !student.punishmentDueDate) {
+        student.punishmentStatus = 'PENDING';
+        student.punishmentDueDate = new Date(Date.now() + PUNISHMENT_DUE_MS);
+        resetLateMailState(student);
+    }
+
+    return true;
+}
 
 function applyCrossDecay(behaviorRecords = []) {
     const now = Date.now();
@@ -155,6 +196,9 @@ router.post('/behavior', async (req, res) => {
             const hadNoCross = Number(r.crosses || 0) <= 0;
             r.crosses = Number(r.crosses || 0) + 1;
             if (hadNoCross || !r.nextCrossRemovalAt) r.nextCrossRemovalAt = new Date(Date.now() + CROSS_DECAY_MS);
+            if (Number(r.crosses || 0) >= 3) {
+                await assignPunishmentTemplate(s, teacherId);
+            }
         }
         if (type === 'BONUS') r.bonuses++;
         if (type === 'REMOVE_CROSS') {
@@ -167,7 +211,20 @@ router.post('/behavior', async (req, res) => {
             let n = s.teacherNotes.find(x => String(x.teacherId) === String(teacherId));
             if (!n) s.teacherNotes.push({ teacherId, text: extraData }); else n.text = extraData;
         }
-        if (type === 'REMOVE_PUNISHMENT') s.punishmentStatus = 'NONE';
+        if (type === 'REMOVE_PUNISHMENT') {
+            s.punishmentStatus = 'NONE';
+            s.punishmentDueDate = null;
+            resetLateMailState(s);
+        }
+
+        if ((s.punishmentStatus === 'PENDING' || s.punishmentStatus === 'LATE') && s.punishmentDueDate) {
+            const dueTs = new Date(s.punishmentDueDate).getTime();
+            if (Number.isFinite(dueTs) && dueTs <= Date.now()) {
+                s.punishmentStatus = 'LATE';
+                await sendLatePunishmentMail(s);
+            }
+        }
+
         s.markModified('behaviorRecords');
         await s.save(); res.json(s);
     } catch (e) { res.status(500).json({ error: e.message }); }
