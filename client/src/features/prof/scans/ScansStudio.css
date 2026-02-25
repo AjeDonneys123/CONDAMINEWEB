@@ -117,22 +117,6 @@
     font-weight: 900;
     cursor: pointer;
 }
-.thumb-status {
-    position: absolute;
-    left: 6px;
-    bottom: 6px;
-    font-size: 10px;
-    font-weight: 900;
-    text-transform: uppercase;
-    color: white;
-    padding: 3px 6px;
-    border-radius: 999px;
-    background: rgba(15, 23, 42, 0.9);
-}
-.thumb-uploading { background: rgba(59, 130, 246, 0.95); }
-.thumb-pending { background: rgba(234, 179, 8, 0.95); color: #111827; }
-.thumb-error { background: rgba(239, 68, 68, 0.95); }
-.thumb-draft { background: rgba(34, 197, 94, 0.95); }
 .capture-empty {
     color: #64748b;
     font-weight: 800;
@@ -154,3 +138,75 @@
 .scan-loading-overlay { position: absolute; inset: 0; background: rgba(15, 23, 42, 0.9); z-index: 200; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; }
 .scan-spinner { width: 60px; height: 60px; border: 6px solid #3b82f6; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 900px) {
+    .scan-page { padding: 1rem; }
+    .scan-page > .flex {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 14px;
+        margin-bottom: 1.2rem;
+    }
+    .scan-page h2 { font-size: 2rem; line-height: 1.02; }
+    .scan-page > .flex > button {
+        width: 100%;
+        padding: 14px 18px;
+        border-radius: 16px;
+    }
+
+    .session-card {
+        padding: 16px;
+        border-radius: 24px;
+        align-items: flex-start;
+        gap: 14px;
+    }
+    .session-card-actions {
+        width: 100%;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    .act-btn {
+        flex: 1 1 calc(50% - 4px);
+        padding: 10px 12px;
+        border-radius: 12px;
+        font-size: 10px;
+    }
+    .btn-delete {
+        flex: 0 0 44px;
+        width: 44px;
+    }
+
+    .workspace-header {
+        height: auto;
+        padding: 10px 12px;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    .ws-title { font-size: 1rem; }
+    .ws-back-btn, .ws-save-btn {
+        padding: 8px 12px;
+        border-radius: 10px;
+        font-size: 10px;
+    }
+    .cam-wrapper {
+        max-width: calc(100vw - 24px);
+        border-width: 6px;
+        border-radius: 22px;
+    }
+}
+
+@media (max-width: 480px) {
+    .session-card { padding: 12px; }
+    .s-title { font-size: 1rem; }
+    .s-meta { gap: 6px; font-size: 0.65rem; }
+    .act-btn { flex: 1 1 calc(50% - 4px); font-size: 9px; padding: 9px 8px; }
+    .capture-thumb {
+        min-width: 110px;
+        width: 110px;
+        height: 92px;
+    }
+    .capture-strip, .uploaded-strip {
+        gap: 8px;
+        padding: 8px;
+    }
+}

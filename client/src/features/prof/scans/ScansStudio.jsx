@@ -251,9 +251,6 @@ export default function ScansStudio({ user, globalClass }) {
                                     <div key={img.id} className="capture-thumb">
                                         <img src={img.url} />
                                         <button onClick={() => handleRemoveQueued(img.id)} className="thumb-del">✕</button>
-                                        <span className={`thumb-status thumb-${img.status || 'draft'}`}>
-                                            {img.status === 'uploading' ? 'Envoi...' : img.status === 'pending' ? 'Attente' : img.status === 'error' ? 'Erreur' : 'Prête'}
-                                        </span>
                                     </div>
                                 ))}
                             </div>
