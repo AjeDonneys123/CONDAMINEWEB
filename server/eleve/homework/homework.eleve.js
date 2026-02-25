@@ -4,8 +4,7 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const EleveAI = require('../core/eleve.ai');
 const { sendLatePunishmentMail, resetLateMailState } = require('../../services/punishmentMailer');
-// MODE TEST: 1 minute. Basculer plus tard à 7 jours.
-const PUNISHMENT_DUE_MS = 60 * 1000;
+const PUNISHMENT_DUE_MS = 7 * 24 * 60 * 60 * 1000;
 
 function normalizeClassName(v = '') {
     const raw = String(v || '').trim().toUpperCase();

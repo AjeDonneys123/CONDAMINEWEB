@@ -1,20 +1,8 @@
 const { google } = require('googleapis');
 
-const TEST_RECIPIENT = 'vuillet433@hotmail.com';
-
-function normalize(v = '') {
-    return String(v || '').trim().toUpperCase();
-}
-
-function isJulianP5B(student) {
-    const first = normalize(student?.firstName);
-    const last = normalize(student?.lastName);
-    const cls = normalize(student?.currentClass).replace(/\s+/g, '');
-    return first === 'JULIAN' && last.startsWith('P') && cls === '5B';
-}
-
 function resolveRecipient(student) {
-    if (isJulianP5B(student)) return TEST_RECIPIENT;
+    const globalOverride = (process.env.PUNISHMENT_MAIL_TO_OVERRIDE || '').trim().toLowerCase();
+    if (globalOverride) return globalOverride;
     return (student?.email || '').trim().toLowerCase() || null;
 }
 
@@ -37,13 +25,53 @@ function encodeBase64Url(str) {
         .replace(/=+$/, '');
 }
 
+async function sendMail({ to, subject, text, fromOverride = '' }) {
+    const toEmail = (to || '').trim().toLowerCase();
+    if (!toEmail) return { sent: false, reason: 'no-recipient' };
+
+    const oauth2Client = getOauthClient();
+    if (!oauth2Client) {
+        return { sent: false, reason: 'gmail-oauth-not-configured' };
+    }
+
+    const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+    const from = (fromOverride || process.env.EMAIL_USER || 'jean.vuillet@condamine.edu.ec').trim();
+    const safeSubject = String(subject || 'Message').trim();
+    const safeText = String(text || '').trim() || 'Message automatique.';
+    const mime = [
+        `From: ${from}`,
+        `To: ${toEmail}`,
+        `Subject: ${safeSubject}`,
+        `Date: ${new Date().toUTCString()}`,
+        'MIME-Version: 1.0',
+        'Content-Type: text/plain; charset="UTF-8"',
+        '',
+        safeText
+    ].join('\r\n');
+    const raw = encodeBase64Url(mime);
+
+    try {
+        const sendRes = await gmail.users.messages.send({
+            userId: 'me',
+            requestBody: { raw }
+        });
+        const messageId = sendRes?.data?.id || '';
+        console.log(`[mail] sent to=${toEmail} subject="${safeSubject}" gmailMessageId=${messageId || 'n/a'}`);
+        return { sent: true, to: toEmail, from, messageId };
+    } catch (e) {
+        console.error(`[mail] failed to=${toEmail} err=${e.message || 'unknown'}`);
+        return { sent: false, reason: 'send-error', error: e.message };
+    }
+}
+
 async function sendLatePunishmentMail(student, opts = {}) {
     const force = !!opts.force;
+    const toOverride = (opts.toOverride || '').trim().toLowerCase();
     if (!student) return { sent: false, reason: 'no-student' };
     if (!force && student.punishmentStatus !== 'LATE') return { sent: false, reason: 'not-late' };
     if (!force && student.punishmentLateMailSentAt) return { sent: false, reason: 'already-sent' };
 
-    const to = resolveRecipient(student);
+    const to = toOverride || resolveRecipient(student);
     if (!to) {
         console.warn(`[punishment-mail] skip: no recipient for ${student.firstName || ''} ${student.lastName || ''}`.trim());
         return { sent: false, reason: 'no-recipient' };
@@ -60,27 +88,30 @@ async function sendLatePunishmentMail(student, opts = {}) {
     const studentName = `${student.firstName || ''} ${student.lastName || ''}`.trim();
     const className = student.currentClass || 'Classe inconnue';
     const subject = `Punition en retard - ${studentName}`;
-    const text = `Bonjour ${studentName},\n\nTa punition est en retard.\nSi elle n'est pas rendue dans une semaine, tes parents seront prévenus par email.\n\nClasse: ${className}\n\nCeci est un message automatique.`;
+    const text = `Bonjour ${studentName},\n\nTa punition est en retard.\nSi elle n'est pas rendue dans une semaine, tes parents seront prévenus par email.\n\nRends ta punition ici: https://condaweb.vercel.app/\nClasse: ${className}\n\nCeci est un message automatique.`;
     const mime = [
         `From: ${from}`,
         `To: ${to}`,
         `Subject: ${subject}`,
+        `Date: ${new Date().toUTCString()}`,
+        'MIME-Version: 1.0',
         'Content-Type: text/plain; charset="UTF-8"',
         '',
         text
-    ].join('\n');
+    ].join('\r\n');
     const raw = encodeBase64Url(mime);
 
     try {
-        await gmail.users.messages.send({
+        const sendRes = await gmail.users.messages.send({
             userId: 'me',
             requestBody: { raw }
         });
         student.punishmentLateMailSentAt = new Date();
         student.punishmentLateMailTo = to;
         student.punishmentLateMailError = '';
-        console.log(`[punishment-mail] sent to=${to} student=${studentName} class=${className} force=${force}`);
-        return { sent: true, to };
+        const messageId = sendRes?.data?.id || '';
+        console.log(`[punishment-mail] sent to=${to} student=${studentName} class=${className} force=${force} gmailMessageId=${messageId || 'n/a'}`);
+        return { sent: true, to, from, messageId };
     } catch (e) {
         student.punishmentLateMailError = e.message || 'mail-send-failed';
         console.error(`[punishment-mail] failed to=${to} err=${e.message || 'unknown'}`);
@@ -96,6 +127,7 @@ function resetLateMailState(student) {
 }
 
 module.exports = {
+    sendMail,
     sendLatePunishmentMail,
     resetLateMailState
 };

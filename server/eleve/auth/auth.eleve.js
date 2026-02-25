@@ -4,8 +4,7 @@ const router = express.Router();
 const { Student } = require('../models/eleve.models');
 const { sendLatePunishmentMail, resetLateMailState } = require('../../services/punishmentMailer');
 const CROSS_DECAY_MS = 14 * 24 * 60 * 60 * 1000;
-// MODE TEST: 1 minute. Basculer plus tard à 7 jours.
-const PUNISHMENT_DUE_MS = 60 * 1000;
+const PUNISHMENT_DUE_MS = 7 * 24 * 60 * 60 * 1000;
 
 function normalizeClassName(v = '') {
     const raw = String(v || '').trim().toUpperCase();

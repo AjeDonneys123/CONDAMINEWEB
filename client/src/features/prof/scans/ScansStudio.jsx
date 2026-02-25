@@ -10,9 +10,13 @@ export default function ScansStudio({ user, globalClass }) {
     const [activeResult, setActiveResult] = useState(null);
     const [loading, setLoading] = useState(false);
     const [status, setStatus] = useState("");
+    const [cameraError, setCameraError] = useState("");
+    const [cameraReady, setCameraReady] = useState(false);
 
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
+    const queueTimersRef = useRef({});
+    const localQueueRef = useRef([]);
 
     const loadSessions = async () => {
         const res = await fetch('/api/scans/sessions');
@@ -25,17 +29,67 @@ export default function ScansStudio({ user, globalClass }) {
     };
 
     useEffect(() => { loadSessions(); }, []);
+    useEffect(() => { localQueueRef.current = localQueue; }, [localQueue]);
+    useEffect(() => () => {
+        Object.values(queueTimersRef.current).forEach(tid => clearTimeout(tid));
+    }, []);
 
     useEffect(() => {
-        if ((view === 'sujets' || view === 'scan') && !loading) {
-            navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-                .then(stream => { if (videoRef.current) videoRef.current.srcObject = stream; })
-                .catch(err => console.error("Camera error", err));
-        }
+        const startCamera = async () => {
+            if (!(view === 'sujets' || view === 'scan') || loading) return;
+            setCameraError("");
+            setCameraReady(false);
+            if (!navigator?.mediaDevices?.getUserMedia) {
+                setCameraError("Caméra non supportée sur ce navigateur.");
+                return;
+            }
+            const host = window?.location?.hostname || '';
+            const isLocalhost = host === 'localhost' || host === '127.0.0.1' || host === '::1';
+            if (!window.isSecureContext && !isLocalhost) {
+                setCameraError("Caméra bloquée: ouvre ce site en HTTPS (ou localhost).");
+                return;
+            }
+            let devices = [];
+            try {
+                devices = await navigator.mediaDevices.enumerateDevices();
+            } catch (_) {}
+            const hasVideoInput = devices.some(d => d.kind === 'videoinput');
+            if (!hasVideoInput) {
+                setCameraError("Aucune caméra détectée sur cet appareil.");
+                return;
+            }
+            const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
+            const attempts = isMobile
+                ? [
+                    { video: { facingMode: { ideal: 'environment' } } },
+                    { video: { facingMode: 'user' } },
+                    { video: true }
+                ]
+                : [
+                    { video: { facingMode: 'user' } },
+                    { video: true },
+                    { video: { facingMode: { ideal: 'environment' } } }
+                ];
+            let lastErr = null;
+            for (const constraints of attempts) {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                    if (videoRef.current) videoRef.current.srcObject = stream;
+                    return;
+                } catch (err) {
+                    lastErr = err;
+                }
+            }
+            setCameraError(lastErr?.name === 'NotAllowedError'
+                ? "Accès caméra refusé. Autorise la caméra dans le navigateur."
+                : "Caméra introuvable ou indisponible.");
+        };
+        startCamera();
         return () => {
             if (videoRef.current && videoRef.current.srcObject) {
                 videoRef.current.srcObject.getTracks().forEach(track => track.stop());
             }
+            setCameraReady(false);
         };
     }, [view, loading]);
 
@@ -43,13 +97,52 @@ export default function ScansStudio({ user, globalClass }) {
         const video = videoRef.current;
         const canvas = canvasRef.current;
         if (!video || !canvas) return;
+        if (!cameraReady || !video.videoWidth || !video.videoHeight) {
+            setCameraError("Caméra pas encore prête. Réessaie dans 1 seconde.");
+            return;
+        }
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         canvas.getContext('2d').drawImage(video, 0, 0);
         canvas.toBlob(blob => {
+            if (!blob) {
+                setCameraError("Échec capture photo. Vérifie l'accès caméra.");
+                return;
+            }
             const url = URL.createObjectURL(blob);
-            setLocalQueue(prev => [...prev, { blob, url, id: Date.now() }]);
+            const id = Date.now() + Math.floor(Math.random() * 1000);
+            const item = { blob, url, id, status: view === 'scan' ? 'pending' : 'draft' };
+            setLocalQueue(prev => [...prev, item]);
+            if (view === 'scan' && activeSession?._id) {
+                const timer = setTimeout(() => {
+                    handleUploadSingle(id, activeSession._id, 'COPY');
+                }, 2200);
+                queueTimersRef.current[id] = timer;
+            }
         }, 'image/jpeg', 0.9);
+    };
+
+    const handleUploadSingle = async (id, sessionId, type) => {
+        const item = localQueueRef.current.find(x => x.id === id);
+        if (!item) return;
+        setLocalQueue(prev => prev.map(x => x.id === id ? { ...x, status: 'uploading' } : x));
+        const formData = new FormData();
+        formData.append('file', item.blob, `scan_${Date.now()}.jpg`);
+        formData.append('sessionId', sessionId);
+        formData.append('type', type);
+        try {
+            await fetch('/api/scans/upload', { method: 'POST', body: formData });
+            URL.revokeObjectURL(item.url);
+            setLocalQueue(prev => prev.filter(x => x.id !== id));
+            await loadSessions();
+        } catch (e) {
+            setLocalQueue(prev => prev.map(x => x.id === id ? { ...x, status: 'error' } : x));
+        } finally {
+            if (queueTimersRef.current[id]) {
+                clearTimeout(queueTimersRef.current[id]);
+                delete queueTimersRef.current[id];
+            }
+        }
     };
 
     const handleUploadQueue = async () => {
@@ -59,17 +152,38 @@ export default function ScansStudio({ user, globalClass }) {
         const type = view === 'sujets' ? 'SUBJECT' : 'COPY';
 
         for (const item of localQueue) {
+            if (item.status === 'uploading') continue;
             const formData = new FormData();
             formData.append('file', item.blob, `scan_${Date.now()}.jpg`);
             formData.append('sessionId', activeSession._id);
             formData.append('type', type);
             await fetch('/api/scans/upload', { method: 'POST', body: formData });
+            URL.revokeObjectURL(item.url);
         }
 
         setLocalQueue([]);
         await loadSessions();
         setLoading(false);
         setView('list');
+    };
+
+    const handleRemoveQueued = (id) => {
+        const item = localQueue.find(x => x.id === id);
+        if (queueTimersRef.current[id]) {
+            clearTimeout(queueTimersRef.current[id]);
+            delete queueTimersRef.current[id];
+        }
+        if (item?.url) URL.revokeObjectURL(item.url);
+        setLocalQueue(prev => prev.filter(i => i.id !== id));
+    };
+
+    const handleDeleteUploaded = async (url, type) => {
+        await fetch('/api/scans/delete-file', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId: activeSession._id, url, type })
+        });
+        await loadSessions();
     };
 
     const handleLaunchCorrection = async (sessionId) => {
@@ -90,6 +204,7 @@ export default function ScansStudio({ user, globalClass }) {
     };
 
     if (activeSession && view !== 'list') {
+        const uploaded = view === 'sujets' ? (activeSession.subjectUrls || []) : (activeSession.copyUrls || []);
         return (
             <div className="scan-workspace animate-in">
                 {loading && (
@@ -114,17 +229,46 @@ export default function ScansStudio({ user, globalClass }) {
                     {(view === 'sujets' || view === 'scan') && (
                         <div className="camera-view">
                             <div className="cam-wrapper">
-                                <video ref={videoRef} autoPlay playsInline className="cam-video" />
+                                <video
+                                    ref={videoRef}
+                                    autoPlay
+                                    playsInline
+                                    className="cam-video"
+                                    onLoadedMetadata={() => {
+                                        setCameraReady(true);
+                                        setCameraError("");
+                                    }}
+                                />
                                 <button onClick={handleCapture} className="cam-trigger" />
                                 <canvas ref={canvasRef} className="hidden" />
                             </div>
+                            {cameraError && <div className="camera-error">{cameraError}</div>}
                             <div className="capture-strip custom-scrollbar">
+                                {localQueue.length === 0 && view === 'scan' && (
+                                    <div className="capture-empty">Les captures apparaissent ici avant envoi.</div>
+                                )}
                                 {localQueue.map(img => (
                                     <div key={img.id} className="capture-thumb">
                                         <img src={img.url} />
-                                        <button onClick={() => setLocalQueue(localQueue.filter(i => i.id !== img.id))} className="thumb-del">✕</button>
+                                        <button onClick={() => handleRemoveQueued(img.id)} className="thumb-del">✕</button>
+                                        <span className={`thumb-status thumb-${img.status || 'draft'}`}>
+                                            {img.status === 'uploading' ? 'Envoi...' : img.status === 'pending' ? 'Attente' : img.status === 'error' ? 'Erreur' : 'Prête'}
+                                        </span>
                                     </div>
                                 ))}
+                            </div>
+                            <div className="uploaded-strip custom-scrollbar">
+                                {uploaded.map((url, idx) => (
+                                    <div key={`${url}-${idx}`} className="capture-thumb uploaded">
+                                        <img src={url} />
+                                        <button onClick={() => handleDeleteUploaded(url, view === 'sujets' ? 'SUBJECT' : 'COPY')} className="thumb-del">✕</button>
+                                    </div>
+                                ))}
+                                {uploaded.length === 0 && (
+                                    <div className="capture-empty">
+                                        {view === 'sujets' ? 'Aucun sujet enregistré.' : 'Aucune copie enregistrée.'}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}

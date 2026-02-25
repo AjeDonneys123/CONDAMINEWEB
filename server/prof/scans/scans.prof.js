@@ -25,4 +25,34 @@ router.post('/upload', upload.single('file'), async (req, res) => {
     res.json({ url });
 });
 
+router.post('/delete-file', async (req, res) => {
+    try {
+        const { sessionId, url, type } = req.body || {};
+        if (!sessionId || !url) return res.status(400).json({ error: "sessionId/url manquants" });
+        const session = await ScanSession.findById(sessionId);
+        if (!session) return res.status(404).json({ error: "Session introuvable" });
+
+        const fileId = String(url).includes('/proxy/') ? String(url).split('/proxy/')[1] : '';
+        if (fileId) {
+            try {
+                await ProfDrive.deleteFile(fileId);
+            } catch (e) {
+                console.error(`❌ [SCANS] Drive delete fail fileId=${fileId}:`, e.message);
+            }
+        }
+
+        if (type === 'SUBJECT') {
+            await ScanSession.updateOne({ _id: sessionId }, { $pull: { subjectUrls: url } });
+        } else {
+            await ScanSession.updateOne(
+                { _id: sessionId },
+                { $pull: { copyUrls: url, corrections: { originalUrl: url } } }
+            );
+        }
+        res.json({ ok: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 module.exports = router;

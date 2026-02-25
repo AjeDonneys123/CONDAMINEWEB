@@ -62,6 +62,85 @@
 .cam-wrapper { width: 100%; max-width: 600px; aspect-ratio: 3/4; background: black; border-radius: 35px; overflow: hidden; position: relative; border: 10px solid #1e293b; margin: 20px auto; }
 .cam-video { width: 100%; height: 100%; object-fit: cover; }
 .cam-trigger { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); width: 80px; height: 80px; background: white; border: 8px solid rgba(0,0,0,0.1); border-radius: 50%; cursor: pointer; }
+.camera-error {
+    max-width: 980px;
+    margin: 2px auto 8px;
+    background: #fef2f2;
+    color: #b91c1c;
+    border: 1px solid #fecaca;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 800;
+    padding: 8px 12px;
+}
+.capture-strip, .uploaded-strip {
+    display: flex;
+    gap: 12px;
+    overflow-x: auto;
+    padding: 10px 12px;
+    margin: 4px auto 8px;
+    max-width: 980px;
+    width: 100%;
+}
+.uploaded-strip {
+    border-top: 1px dashed #cbd5e1;
+    padding-top: 14px;
+}
+.capture-thumb {
+    min-width: 130px;
+    width: 130px;
+    height: 110px;
+    border-radius: 14px;
+    overflow: hidden;
+    border: 2px solid #cbd5e1;
+    position: relative;
+    background: #fff;
+    flex-shrink: 0;
+}
+.capture-thumb.uploaded { border-color: #94a3b8; }
+.capture-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+.thumb-del {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 24px;
+    height: 24px;
+    border-radius: 999px;
+    border: none;
+    background: rgba(239, 68, 68, 0.95);
+    color: white;
+    font-weight: 900;
+    cursor: pointer;
+}
+.thumb-status {
+    position: absolute;
+    left: 6px;
+    bottom: 6px;
+    font-size: 10px;
+    font-weight: 900;
+    text-transform: uppercase;
+    color: white;
+    padding: 3px 6px;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.9);
+}
+.thumb-uploading { background: rgba(59, 130, 246, 0.95); }
+.thumb-pending { background: rgba(234, 179, 8, 0.95); color: #111827; }
+.thumb-error { background: rgba(239, 68, 68, 0.95); }
+.thumb-draft { background: rgba(34, 197, 94, 0.95); }
+.capture-empty {
+    color: #64748b;
+    font-weight: 800;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    padding: 12px 6px;
+}
 
 /* MODALE HD V133 */
 .v132-correction-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.98); z-index: 30000; display: flex; align-items: center; justify-content: center; padding: 10px; backdrop-filter: blur(15px); }

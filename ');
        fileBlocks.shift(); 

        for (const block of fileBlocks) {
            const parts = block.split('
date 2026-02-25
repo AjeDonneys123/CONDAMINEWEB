@@ -1,0 +1,5 @@
+');
+            if (parts.length < 2) continue;
+
+            const filePath = parts[0].trim();
+            const fileContent = parts.slice(1).join('£]]]').split('

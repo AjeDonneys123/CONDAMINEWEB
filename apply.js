@@ -26,36 +26,4 @@ function applyUpdates() {
         if (content.length < 10 || content === lastProcessedContent) return;
 
         console.log("🚀 [APPLY] Nouveau code détecté. Application de la greffe...");
-        const fileBlocks = content.split('[[[£ FILE:');
-        fileBlocks.shift(); 
-
-        for (const block of fileBlocks) {
-            const parts = block.split('£]]]');
-            if (parts.length < 2) continue;
-
-            const filePath = parts[0].trim();
-            const fileContent = parts.slice(1).join('£]]]').split('[[[£ END:')[0].trim();
-
-            const fullPath = path.join(__dirname, filePath);
-            const dir = path.dirname(fullPath);
-
-            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-            
-            fs.writeFileSync(fullPath, fileContent);
-            console.log(`✅ [DISK WRITE] ${filePath}`);
-        }
-
-        lastProcessedContent = content; // Mémorise pour ne pas boucler
-        writeStatus('VERIFICATION_REQUIRED', 'Fichiers écrits. En attente de vérification par l\'agent.');
-        console.log("✨ Greffe terminée. En attente de nettoyage par l'Agent.");
-
-    } catch (e) {
-        console.log(`💥 [ERROR] ${e.message}`);
-        writeStatus('ERROR', e.message);
-    }
-}
-
-// Vérification toutes les 2 secondes
-setInterval(applyUpdates, 2000);
-console.log("🛡️ APPLY V12.0 : MODE PERSISTANT ACTIVÉ.");
-console.log("Les fichiers seront écrits, mais 'update.txt' restera plein pour vérification.");
+        const fileBlocks = content.split('

@@ -4,7 +4,7 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const AdminExpert = require('./experts/admin.expert');
 const StructureDrive = require('../structure/experts/structure.drive');
-const { sendLatePunishmentMail, resetLateMailState } = require('../../services/punishmentMailer');
+const { sendMail, sendLatePunishmentMail, resetLateMailState } = require('../../services/punishmentMailer');
 
 const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
@@ -43,7 +43,7 @@ router.get('/database-dump', asyncHandler(async (req, res) => res.json(await Adm
 // 7. Test envoi mail punition (diagnostic)
 router.post('/punishment-mail-test', asyncHandler(async (req, res) => {
     const Student = mongoose.model('Student');
-    const { studentId, reset = false } = req.body || {};
+    const { studentId, reset = false, toOverride = '' } = req.body || {};
 
     let student = null;
     if (studentId && mongoose.Types.ObjectId.isValid(studentId)) {
@@ -62,7 +62,7 @@ router.post('/punishment-mail-test', asyncHandler(async (req, res) => {
         resetLateMailState(student);
     }
     student.punishmentStatus = 'LATE';
-    const result = await sendLatePunishmentMail(student, { force: true });
+    const result = await sendLatePunishmentMail(student, { force: true, toOverride });
     await student.save();
 
     res.json({
@@ -83,6 +83,22 @@ router.post('/punishment-mail-test', asyncHandler(async (req, res) => {
             hasEmailPass: Boolean(process.env.EMAIL_PASS)
         }
     });
+}));
+
+router.post('/send-mail', asyncHandler(async (req, res) => {
+    const { to, subject, text } = req.body || {};
+    if (!to || !subject || !text) {
+        return res.status(400).json({ ok: false, error: 'Missing to/subject/text' });
+    }
+
+    const list = Array.isArray(to) ? to : [to];
+    const results = [];
+    for (const recipient of list) {
+        // Envoi séquentiel pour logs lisibles.
+        const r = await sendMail({ to: recipient, subject, text });
+        results.push({ to: recipient, ...r });
+    }
+    res.json({ ok: true, results });
 }));
 
 module.exports = router;

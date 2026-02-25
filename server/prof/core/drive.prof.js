@@ -63,6 +63,13 @@ const ProfDrive = {
         }
     },
 
+    deleteFile: async (fileId) => {
+        if (!oauth2Client) throw new Error("Drive non connecté");
+        if (!fileId) throw new Error("fileId manquant");
+        const drive = google.drive({ version: 'v3', auth: oauth2Client });
+        await drive.files.update({ fileId, resource: { trashed: true } });
+    },
+
     getOrCreateFolder: async (name, parentId = null) => {
         if (!oauth2Client) throw new Error("Drive non connecté");
         try {

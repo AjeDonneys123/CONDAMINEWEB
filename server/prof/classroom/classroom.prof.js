@@ -11,8 +11,7 @@ const { sendLatePunishmentMail, resetLateMailState } = require('../../services/p
 // Configuration Multer pour l'import d'image
 const upload = multer({ dest: path.join(process.cwd(), 'public', 'uploads', 'temp') });
 const CROSS_DECAY_MS = 14 * 24 * 60 * 60 * 1000;
-// MODE TEST: 1 minute. Basculer plus tard à 7 * 24 * 60 * 60 * 1000.
-const PUNISHMENT_DUE_MS = 60 * 1000;
+const PUNISHMENT_DUE_MS = 7 * 24 * 60 * 60 * 1000;
 
 function normalizeClassName(v = '') {
     const raw = String(v || '').trim().toUpperCase();
