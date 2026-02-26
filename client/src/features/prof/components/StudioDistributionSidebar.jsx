@@ -2,6 +2,21 @@
 import React, { useEffect } from 'react';
 import './StudioDistributionSidebar.css';
 
+const normalizeClassLabel = (value = '') =>
+    String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '');
+
+const extractId = (value) => String(value?._id || value?.id || value || '');
+const inferLevelFromName = (name = '') => {
+    const cleaned = String(name || '').trim().toUpperCase();
+    const m = cleaned.match(/^([1-6])/);
+    if (m) return m[1];
+    return '';
+};
+
 export default function StudioDistributionSidebar({ 
     user, allClasses, allStudents, chapters, distribution, setDistribution, 
     viewingClass, setViewingClass, studentSearch, setStudentSearch,
@@ -12,7 +27,10 @@ export default function StudioDistributionSidebar({
     const availableClasses = (allClasses || []).filter(c => {
         // A. Filtre Niveau (Le plus important)
         // Si un targetLevel est fourni (ex: "4"), on cache tout ce qui n'est pas "4"
-        if (targetLevel && String(c.level) !== String(targetLevel)) return false;
+        if (targetLevel) {
+            const effectiveLevel = String(c.level || inferLevelFromName(c.name));
+            if (effectiveLevel !== String(targetLevel)) return false;
+        }
         
         // B. Filtre Permissions
         if (user.isDeveloper || user.role === 'admin') return true;
@@ -86,11 +104,20 @@ export default function StudioDistributionSidebar({
     // 3. LOGIQUE ÉLÈVES
     const rawStudents = (allStudents || []).filter(s => {
         if (!viewingClass) return false;
-        if ((s.currentClass || "").trim() === viewingClass) return true;
+        const normalizedViewingClass = normalizeClassLabel(viewingClass);
+        const normalizedStudentClass = normalizeClassLabel(s.currentClass || "");
+
+        // Classe principale : on tolère les variantes d'écriture
+        if (normalizedStudentClass && normalizedStudentClass === normalizedViewingClass) return true;
+
         const clsObj = allClasses.find(c => c.name === viewingClass);
         if (clsObj && clsObj.type === 'GROUP') {
-            const clsId = String(clsObj._id);
-            return (s.assignedGroups || []).some(g => String(g._id || g) === clsId);
+            const clsId = extractId(clsObj);
+            const inAssignedGroups = (s.assignedGroups || []).some(g => extractId(g) === clsId);
+            if (inAssignedGroups) return true;
+
+            // Fallback legacy: certains imports mettent le nom du groupe dans currentClass
+            return normalizedStudentClass === normalizedViewingClass;
         }
         return false;
     }).sort((a,b) => a.lastName.localeCompare(b.lastName));

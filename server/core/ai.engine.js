@@ -11,20 +11,36 @@ const AIEngine = {
     },
 
     sanitizeJSON: (text) => {
-        if (!text) return [];
+        if (!text) return null;
+        const tryParse = (candidate) => {
+            if (!candidate) return null;
+            try { return JSON.parse(candidate); } catch (_) { return null; }
+        };
+        const repairJsonLike = (candidate) => String(candidate || '')
+            .replace(/,\s*([}\]])/g, '$1') // trailing commas
+            .replace(/\u0000/g, '')
+            .trim();
         try {
             // Nettoyage agressif des balises Markdown et espaces
             let clean = text.replace(/```json/g, '').replace(/```/g, '').trim();
-            const start = clean.indexOf('[');
-            const end = clean.lastIndexOf(']');
-            if (start !== -1 && end !== -1) {
-                const jsonArray = JSON.parse(clean.substring(start, end + 1));
-                return AIEngine.normalizeKeys(jsonArray);
+            const objStart = clean.indexOf('{');
+            const objEnd = clean.lastIndexOf('}');
+            if (objStart !== -1 && objEnd !== -1 && objEnd > objStart) {
+                const rawObject = clean.substring(objStart, objEnd + 1);
+                const parsedObject = tryParse(rawObject) || tryParse(repairJsonLike(rawObject));
+                if (parsedObject) return AIEngine.normalizeKeys(parsedObject);
             }
-            return [];
+            const arrStart = clean.indexOf('[');
+            const arrEnd = clean.lastIndexOf(']');
+            if (arrStart !== -1 && arrEnd !== -1 && arrEnd > arrStart) {
+                const rawArray = clean.substring(arrStart, arrEnd + 1);
+                const parsedArray = tryParse(rawArray) || tryParse(repairJsonLike(rawArray));
+                if (parsedArray) return AIEngine.normalizeKeys(parsedArray);
+            }
+            return null;
         } catch (e) {
             console.error("❌ Erreur de parsing JSON IA:", e.message);
-            return [];
+            return null;
         }
     },
 

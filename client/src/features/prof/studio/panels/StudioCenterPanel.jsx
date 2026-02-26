@@ -42,6 +42,33 @@ export default function StudioCenterPanel({
         await saveProject(next);
     };
 
+    const isStarshipProject = /starship|bosscharge|supermissile|boss final/i.test(String(code || '') + ' ' + String(project?.title || ''));
+    const selectedActorIdx = currentScene?.actors?.findIndex(a => a.id === selectedActorId) ?? -1;
+    const isStarshipCoreActor = isStarshipProject && (selectedActorIdx === 0 || selectedActorIdx === 1);
+    const expectedStarshipName = selectedActorIdx === 0 ? 'P1' : (selectedActorIdx === 1 ? 'P2' : '');
+
+    const handleNameChange = (rawValue) => {
+        const value = String(rawValue || '').trim();
+        if (isStarshipCoreActor) {
+            handleUpdateProp('name', expectedStarshipName);
+            return;
+        }
+        if (!value) return;
+        handleUpdateProp('name', value);
+    };
+
+    const handleScaleChange = (rawValue) => {
+        const numeric = Number(rawValue);
+        if (!Number.isFinite(numeric)) return;
+        const clampedPct = Math.max(10, Math.min(300, numeric));
+        handleUpdateProp('scale', clampedPct / 100);
+    };
+
+    const handlePlayTest = async () => {
+        await saveProject();
+        setIsPlaying(true);
+    };
+
     return (
         <div className="studio-col-center custom-scrollbar relative">
             {showQuizManager && testGame && (
@@ -93,17 +120,29 @@ export default function StudioCenterPanel({
                 {/* RESTAURATION DES CONTRÔLES ACTEUR */}
                 <div className="prop-item">
                     <span className="prop-label">Nom</span>
-                    <input className="prop-input" value={selectedActor?.name || ""} onChange={e => handleUpdateProp('name', e.target.value)} />
+                    <input
+                        className="prop-input"
+                        value={isStarshipCoreActor ? expectedStarshipName : (selectedActor?.name || "")}
+                        onChange={e => handleNameChange(e.target.value)}
+                        title={isStarshipCoreActor ? 'Starship: noms verrouillés sur P1/P2' : ''}
+                    />
                 </div>
                 <div className="prop-item">
                     <span className="prop-label">Taille (%)</span>
-                    <input type="number" className="prop-input" value={Math.round((selectedActor?.scale || 1) * 100)} onChange={e => handleUpdateProp('scale', parseFloat(e.target.value)/100)} />
+                    <input
+                        type="number"
+                        min="10"
+                        max="300"
+                        className="prop-input"
+                        value={Math.round((selectedActor?.scale || 1) * 100)}
+                        onChange={e => handleScaleChange(e.target.value)}
+                    />
                 </div>
                 
                 <button onClick={openQuizManager} className={`btn-view-quiz ${loading ? 'animate-pulse' : ''}`}>
                     {loading ? '...' : '🎓 CONFIG TEST & PROD'}
                 </button>
-                <button onClick={() => { saveProject(); setIsPlaying(true); }} className="ml-auto bg-indigo-600 text-white px-6 py-2 rounded-xl font-black text-[10px] shadow-lg tracking-widest">▶ TESTER</button>
+                <button onClick={handlePlayTest} className="ml-auto bg-indigo-600 text-white px-6 py-2 rounded-xl font-black text-[10px] shadow-lg tracking-widest">▶ TESTER</button>
             </div>
 
             <div className="code-editor-box">

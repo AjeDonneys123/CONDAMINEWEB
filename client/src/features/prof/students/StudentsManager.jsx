@@ -2,6 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import './StudentsManager.css';
 
+const extractId = (value) => String(value?._id || value?.id || value || '');
+
 export default function StudentsManager({ globalClassId }) {
   const [students, setStudents] = useState([]);
   const [activities, setActivities] = useState([]);
@@ -37,7 +39,15 @@ export default function StudentsManager({ globalClassId }) {
         const currentClassName = currentClassObj ? currentClassObj.name : "";
         setClassName(currentClassName);
 
-        const myStudents = sts.filter(s => String(s.classId) === String(globalClassId)).sort((a,b) => a.lastName.localeCompare(b.lastName));
+        const myStudents = sts
+            .filter(s => {
+                if (!currentClassObj) return false;
+                if (currentClassObj.type === 'GROUP') {
+                    return (s.assignedGroups || []).some(g => extractId(g) === String(globalClassId));
+                }
+                return String(s.classId) === String(globalClassId);
+            })
+            .sort((a,b) => a.lastName.localeCompare(b.lastName));
         setStudents(myStudents);
         const lateNames = myStudents
             .filter(s => s.punishmentStatus === 'LATE' || (s.punishmentStatus === 'PENDING' && s.punishmentDueDate && new Date(s.punishmentDueDate).getTime() <= Date.now()))

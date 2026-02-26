@@ -4,6 +4,7 @@ const router = express.Router();
 const { Teacher, Admin, Student, Classroom } = require('../models/prof.models');
 const ProfDrive = require('../core/drive.prof');
 const bcrypt = require('bcryptjs');
+const BCRYPT_HASH_RE = /^\$2[aby]\$/;
 
 /**
  * 🔐 AUTHENTIFICATION CÔTÉ PROF (HERMÉTIQUE)
@@ -17,10 +18,18 @@ router.post('/login', async (req, res) => {
     let user = await Teacher.findOne({ firstName: new RegExp(`^${fName}$`, 'i'), lastName: new RegExp(`^${lName}$`, 'i') }) 
             || await Admin.findOne({ firstName: new RegExp(`^${fName}$`, 'i'), lastName: new RegExp(`^${lName}$`, 'i') });
 
-    if (user && (user.password.startsWith('$2a$') ? await bcrypt.compare(password, user.password) : user.password === password)) {
-        const obj = user.toObject();
-        delete obj.password;
-        return res.json({ ok: true, user: { ...obj, id: obj._id, role: obj.role || 'prof' } });
+    if (user) {
+        const storedPassword = String(user.password || '');
+        const isBcryptHash = BCRYPT_HASH_RE.test(storedPassword);
+        const isValid = isBcryptHash
+            ? await bcrypt.compare(password, storedPassword)
+            : storedPassword === password;
+
+        if (isValid) {
+            const obj = user.toObject();
+            delete obj.password;
+            return res.json({ ok: true, user: { ...obj, id: obj._id, role: obj.role || 'prof' } });
+        }
     }
     res.status(401).json({ ok: false, message: "Identifiants prof incorrects" });
 });

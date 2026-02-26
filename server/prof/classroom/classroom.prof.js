@@ -18,6 +18,18 @@ function normalizeClassName(v = '') {
     return { raw, clean: raw.replace(/\s+/g, '') };
 }
 
+async function getStudentsForClassOrGroup(classId) {
+    const clsObj = await Classroom.findById(classId).lean();
+    if (!clsObj) return { clsObj: null, students: [] };
+
+    const query = clsObj.type === 'GROUP'
+        ? { assignedGroups: clsObj._id }
+        : { classId: clsObj._id };
+
+    const students = await Student.find(query).lean();
+    return { clsObj, students };
+}
+
 async function assignPunishmentTemplate(student, teacherId) {
     const { raw, clean } = normalizeClassName(student.currentClass || '');
     if (!raw) return false;
@@ -131,11 +143,11 @@ router.get('/plan/:classId', async (req, res) => {
     try {
         const { teacherId } = req.query;
         const classId = req.params.classId;
-        const clsObj = await Classroom.findById(classId).lean();
+        const { clsObj, students } = await getStudentsForClassOrGroup(classId);
+        if (!clsObj) return res.status(404).json({ error: "Classe/Groupe introuvable" });
         const className = clsObj?.name;
 
-        const [students, hws, games, subs, progs] = await Promise.all([
-            Student.find({ classId }).lean(),
+        const [hws, games, subs, progs] = await Promise.all([
             Homework.find({ targetClassrooms: className, isPunishment: false }).lean(),
             GameLevel.find({ targetClassrooms: className }).lean(),
             Submission.find({}).lean(),

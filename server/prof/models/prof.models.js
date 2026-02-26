@@ -121,7 +121,9 @@ const Models = {
 
     ScanSession: getModel('ScanSession', {
         title: String, teacherId: String, chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter' },
-        subjectUrls: [String], copyUrls: [String], corrections: Array, date: { type: Date, default: Date.now }
+        subjectUrls: [String], copyUrls: [String], corrections: Array,
+        aiInstructions: { type: String, default: "Corrige sévèrement la syntaxe." },
+        date: { type: Date, default: Date.now }
     }),
 
     Teacher: getModel('Teacher', {

@@ -1,4 +1,14 @@
 STRUCTURE:
+├── ${fPath.replace(/
+│   └── \\/
+│       └── g, '/
+│           └── ')}
+├── ${relPath}
+├── ');
+        fileBlocks.shift(); 
+
+        for (const block of fileBlocks) {
+            const parts = block.split('
 ├── ...
 ├── .agent/
 │   ├── scripts/
@@ -210,6 +220,7 @@ STRUCTURE:
 │   │   │   └── homework.routes.js
 │   │   ├── scans/
 │   │   │   ├── ai/
+│   │   │   │   ├── image.preprocess.js
 │   │   │   │   └── scan.ai.js
 │   │   │   └── scans.routes.js
 │   │   ├── structure/
@@ -353,46 +364,14 @@ function applyUpdates() {
         if (content.length < 10 || content === lastProcessedContent) return;
 
         console.log("🚀 [APPLY] Nouveau code détecté. Application de la greffe...");
-        const fileBlocks = content.split('[[[£ FILE:');
-        fileBlocks.shift(); 
-
-        for (const block of fileBlocks) {
-            const parts = block.split('£]]]');
-            if (parts.length < 2) continue;
-
-            const filePath = parts[0].trim();
-            const fileContent = parts.slice(1).join('£]]]').split('[[[£ END:')[0].trim();
-
-            const fullPath = path.join(__dirname, filePath);
-            const dir = path.dirname(fullPath);
-
-            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-            
-            fs.writeFileSync(fullPath, fileContent);
-            console.log(`✅ [DISK WRITE] ${filePath}`);
-        }
-
-        lastProcessedContent = content; // Mémorise pour ne pas boucler
-        writeStatus('VERIFICATION_REQUIRED', 'Fichiers écrits. En attente de vérification par l\'agent.');
-        console.log("✨ Greffe terminée. En attente de nettoyage par l'Agent.");
-
-    } catch (e) {
-        console.log(`💥 [ERROR] ${e.message}`);
-        writeStatus('ERROR', e.message);
-    }
-}
-
-// Vérification toutes les 2 secondes
-setInterval(applyUpdates, 2000);
-console.log("🛡️ APPLY V12.0 : MODE PERSISTANT ACTIVÉ.");
-console.log("Les fichiers seront écrits, mais 'update.txt' restera plein pour vérification.");
+        const fileBlocks = content.split('
 [[[£ END: apply.js £]]]
 
 [[[£ FILE: apply_status.json £]]]
 {
-  "status": "VERIFICATION_REQUIRED",
-  "message": "Fichiers écrits. En attente de vérification par l'agent.",
-  "timestamp": 1771612503251
+  "status": "ERROR",
+  "message": "ENAMETOOLONG: name too long, mkdir '/Users/jean/Desktop/code/DEVPROJECT/') && (text !== lastContent || inputIsEmpty)) {\n            const timestamp = new Date().toLocaleTimeString();\n            console.log(`⚡ [${timestamp}] CAPTURE -> update.txt`);\n            \n            fs.writeFileSync('update.txt', text);\n            lastContent = text;\n        }\n    } catch (e) {\n        / Erreur silencieuse pour les verrous du presse-papier\n    }\n}, 1000); '",
+  "timestamp": 1771982215952
 }
 [[[£ END: apply_status.json £]]]
 
@@ -415,7 +394,6 @@ async function check() {
     }
 }
 check();
-
 [[[£ END: check-google.js £]]]
 
 [[[£ FILE: cleanup.js £]]]
@@ -471,7 +449,6 @@ cleanDirectory(UPLOADS_DIR);
 
 console.log("\n✨ NETTOYAGE TERMINÉ.");
 console.log("   Les fichiers sont désormais stockés sur le Drive.");
-
 [[[£ END: cleanup.js £]]]
 
 [[[£ FILE: client/index.html £]]]
@@ -490,7 +467,6 @@ console.log("   Les fichiers sont désormais stockés sur le Drive.");
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
-
 [[[£ END: client/index.html £]]]
 
 [[[£ FILE: client/package.json £]]]
@@ -518,7 +494,6 @@ console.log("   Les fichiers sont désormais stockés sur le Drive.");
     "vite": "^4.4.5"
   }
 }
-
 [[[£ END: client/package.json £]]]
 
 [[[£ FILE: client/src/App.css £]]]
@@ -570,7 +545,6 @@ console.log("   Les fichiers sont désormais stockés sur le Drive.");
     display: flex; align-items: center; justify-content: center;
     z-index: 9999999;
 }
-
 [[[£ END: client/src/App.css £]]]
 
 [[[£ FILE: client/src/App.jsx £]]]
@@ -659,7 +633,6 @@ export default function App() {
     </div>
   );
 }
-
 [[[£ END: client/src/App.jsx £]]]
 
 [[[£ FILE: client/src/features/auth/Login.css £]]]
@@ -725,7 +698,6 @@ export default function App() {
     background: #065f46; color: white; width: 30px; height: 30px; border-radius: 50%;
     border: none; cursor: pointer; display: flex; align-items: center; justify-content: center;
 }
-
 [[[£ END: client/src/features/auth/Login.css £]]]
 
 [[[£ FILE: client/src/features/auth/Login.jsx £]]]
@@ -947,7 +919,6 @@ export default function Login({ onLoginSuccess }) {
     </div>
   );
 }
-
 [[[£ END: client/src/features/auth/Login.jsx £]]]
 
 [[[£ FILE: client/src/features/eleve/ElevePage.css £]]]
@@ -1008,7 +979,6 @@ export default function Login({ onLoginSuccess }) {
     text-transform: uppercase;
     cursor: pointer;
 }
-
 [[[£ END: client/src/features/eleve/ElevePage.css £]]]
 
 [[[£ FILE: client/src/features/eleve/ElevePage.jsx £]]]
@@ -1115,7 +1085,6 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
     </div>
   );
 }
-
 [[[£ END: client/src/features/eleve/ElevePage.jsx £]]]
 
 [[[£ FILE: client/src/features/eleve/components/BehaviorTimer.css £]]]
@@ -1260,7 +1229,6 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
     from { opacity: 0; transform: translateY(-20px); }
     to { opacity: 1; transform: translateY(0); }
 }
-
 [[[£ END: client/src/features/eleve/components/BehaviorTimer.css £]]]
 
 [[[£ FILE: client/src/features/eleve/components/BehaviorTimer.jsx £]]]
@@ -1361,7 +1329,6 @@ export default function BehaviorTimer({ studentData }) {
         </div>
     );
 }
-
 [[[£ END: client/src/features/eleve/components/BehaviorTimer.jsx £]]]
 
 [[[£ FILE: client/src/features/eleve/components/DashboardFolder.css £]]]
@@ -1492,7 +1459,6 @@ export default function BehaviorTimer({ studentData }) {
 }
 .empty-icon { font-size: 3rem; margin-bottom: 10px; display: block; }
 .empty-text { font-weight: 800; font-size: 0.9rem; text-transform: uppercase; color: #94a3b8; }
-
 [[[£ END: client/src/features/eleve/components/DashboardFolder.css £]]]
 
 [[[£ FILE: client/src/features/eleve/components/DashboardFolder.jsx £]]]
@@ -1578,7 +1544,6 @@ export default function DashboardFolder({ items, type, onSelect }) {
     </div>
   );
 }
-
 [[[£ END: client/src/features/eleve/components/DashboardFolder.jsx £]]]
 
 [[[£ FILE: client/src/features/eleve/components/EleveHeader.css £]]]
@@ -1706,7 +1671,6 @@ export default function DashboardFolder({ items, type, onSelect }) {
     .nav-tabs { overflow-x: auto; }
     .mini-stats-box { border-top: 1px solid #f1f5f9; padding-top: 10px; padding-right: 0; align-items: center; }
 }
-
 [[[£ END: client/src/features/eleve/components/EleveHeader.css £]]]
 
 [[[£ FILE: client/src/features/eleve/components/EleveHeader.jsx £]]]
@@ -1872,7 +1836,6 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
     </div>
   );
 }
-
 [[[£ END: client/src/features/eleve/components/EleveHeader.jsx £]]]
 
 [[[£ FILE: client/src/features/eleve/games/GamePlayer.css £]]]
@@ -1938,7 +1901,6 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
     transition: transform 0.1s;
 }
 .quiz-option-btn:active { transform: translateY(5px); box-shadow: none; }
-
 [[[£ END: client/src/features/eleve/games/GamePlayer.css £]]]
 
 [[[£ FILE: client/src/features/eleve/games/GamePlayer.jsx £]]]
@@ -1961,7 +1923,6 @@ export default function GamePlayer({ user, gameData, onExit }) {
         />
     );
 }
-
 [[[£ END: client/src/features/eleve/games/GamePlayer.jsx £]]]
 
 [[[£ FILE: client/src/features/eleve/games/GamesGrid.css £]]]
@@ -1970,7 +1931,6 @@ export default function GamePlayer({ user, gameData, onExit }) {
 .game-choice-btn { height: 180px; width: 220px; border-radius: 40px; border: none; cursor: pointer; font-weight: 900; color: white; font-size: 1.2rem; }
 .zombie-btn { background: #22c55e; margin-right: 20px; }
 .starship-btn { background: #3b82f6; }
-
 [[[£ END: client/src/features/eleve/games/GamesGrid.css £]]]
 
 [[[£ FILE: client/src/features/eleve/games/GamesGrid.jsx £]]]
@@ -2072,7 +2032,6 @@ export default function GamesGrid({ user }) {
     </div>
   );
 }
-
 [[[£ END: client/src/features/eleve/games/GamesGrid.jsx £]]]
 
 [[[£ FILE: client/src/features/eleve/games/mainGames.js £]]]
@@ -2103,7 +2062,6 @@ export class GameProgression {
     }
     getLives() { return this.lives; }
 }
-
 [[[£ END: client/src/features/eleve/games/mainGames.js £]]]
 
 [[[£ FILE: client/src/features/eleve/games/starship/StarshipWrapper.jsx £]]]
@@ -2153,7 +2111,6 @@ export default function StarshipWrapper({ user, level, onClose }) {
         </div>
     );
 }
-
 [[[£ END: client/src/features/eleve/games/starship/StarshipWrapper.jsx £]]]
 
 [[[£ FILE: client/src/features/eleve/games/starship/starship_core.js £]]]
@@ -2429,7 +2386,6 @@ export function initStarshipGame(root, api, onExit) {
 
     return { destroy: () => { cancelAnimationFrame(frameId); clearInterval(spawnInterval); document.removeEventListener('keydown', handleKey); } };
 }
-
 [[[£ END: client/src/features/eleve/games/starship/starship_core.js £]]]
 
 [[[£ FILE: client/src/features/eleve/games/starship/starship_style.css £]]]
@@ -2613,13 +2569,11 @@ export function initStarshipGame(root, api, onExit) {
         font-size: 1rem;
     }
 }
-
 [[[£ END: client/src/features/eleve/games/starship/starship_style.css £]]]
 
 [[[£ FILE: client/src/features/eleve/games/zombie/ZombieGame.css £]]]
 .z-container { width: 100%; max-width: 800px; background: white; border-radius: 30px; border: 4px solid #1e293b; overflow: hidden; }
 #zombie-arena { height: 200px; background: #1e293b; position: relative; }
-
 [[[£ END: client/src/features/eleve/games/zombie/ZombieGame.css £]]]
 
 [[[£ FILE: client/src/features/eleve/games/zombie/ZombieGame.js £]]]
@@ -2628,7 +2582,6 @@ export class ZombieGame {
     constructor(container, ctrl) { this.c = container; this.ctrl = ctrl; }
     loadQuestion(q) { this.c.querySelector('#z-q').textContent = q.q; }
 }
-
 [[[£ END: client/src/features/eleve/games/zombie/ZombieGame.js £]]]
 
 [[[£ FILE: client/src/features/eleve/games/zombie/ZombieWrapper.jsx £]]]
@@ -2682,7 +2635,6 @@ export default function ZombieWrapper({ user, level, onClose }) {
         </div>
     );
 }
-
 [[[£ END: client/src/features/eleve/games/zombie/ZombieWrapper.jsx £]]]
 
 [[[£ FILE: client/src/features/eleve/games/zombie/zombie_core.js £]]]
@@ -2970,7 +2922,6 @@ export function initZombieGame(root, api, onExit) {
 
     return { destroy: () => cancelAnimationFrame(frameId) };
 }
-
 [[[£ END: client/src/features/eleve/games/zombie/zombie_core.js £]]]
 
 [[[£ FILE: client/src/features/eleve/games/zombie/zombie_style.css £]]]
@@ -3116,7 +3067,6 @@ export function initZombieGame(root, api, onExit) {
 #validate-btn:active { transform: translateY(2px); box-shadow: none; }
 
 @keyframes pulse-border { 0% { border-color: #ef4444; } 50% { border-color: #fca5a5; } 100% { border-color: #ef4444; } }
-
 [[[£ END: client/src/features/eleve/games/zombie/zombie_style.css £]]]
 
 [[[£ FILE: client/src/features/eleve/homework/Homework.css £]]]
@@ -3282,7 +3232,6 @@ export function initZombieGame(root, api, onExit) {
 .v8-feedback-content { background: #f8fafc; padding: 20px; border-radius: 20px; max-height: 250px; overflow-y: auto; font-size: 15px; line-height: 1.6; color: #475569; margin-bottom: 25px; text-align: left; border: 1px solid #e2e8f0; }
 .v8-next-page-btn { width: 100%; padding: 20px; background: #1e293b; color: white; border-radius: 20px; font-weight: 950; font-size: 14px; border: none; cursor: pointer; transition: background 0.2s; }
 .v8-next-page-btn:hover { background: #0f172a; }
-
 [[[£ END: client/src/features/eleve/homework/Homework.css £]]]
 
 [[[£ FILE: client/src/features/eleve/homework/HomeworkList.jsx £]]]
@@ -3341,7 +3290,6 @@ export default function HomeworkList({ user, openPunishmentDirect = false, onPun
       </div>
   );
 }
-
 [[[£ END: client/src/features/eleve/homework/HomeworkList.jsx £]]]
 
 [[[£ FILE: client/src/features/eleve/homework/HomeworkWorkspace.jsx £]]]
@@ -3478,7 +3426,6 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
     </div>
   );
 }
-
 [[[£ END: client/src/features/eleve/homework/HomeworkWorkspace.jsx £]]]
 
 [[[£ FILE: client/src/features/eleve/mistakes/MistakesBook.jsx £]]]
@@ -3511,14 +3458,12 @@ export default function MistakesBook({ user }) {
     </div>
   );
 }
-
 [[[£ END: client/src/features/eleve/mistakes/MistakesBook.jsx £]]]
 
 [[[£ FILE: client/src/features/eleve/productions/ProductionsList.jsx £]]]
 // @signatures: ProductionsList
 import React from 'react';
 export default function ProductionsList() { return <div>Mes productions</div>; }
-
 [[[£ END: client/src/features/eleve/productions/ProductionsList.jsx £]]]
 
 [[[£ FILE: client/src/features/eleve/status/StatusOverview.css £]]]
@@ -3604,7 +3549,6 @@ export default function ProductionsList() { return <div>Mes productions</div>; }
   font-weight: 800;
   color: #64748b;
 }
-
 [[[£ END: client/src/features/eleve/status/StatusOverview.css £]]]
 
 [[[£ FILE: client/src/features/eleve/status/StatusOverview.jsx £]]]
@@ -3691,12 +3635,10 @@ export default function StatusOverview({ user }) {
     </div>
   );
 }
-
 [[[£ END: client/src/features/eleve/status/StatusOverview.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/Prof.css £]]]
 .prof-table th { color: #94a3b8; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; }
-
 [[[£ END: client/src/features/prof/Prof.css £]]]
 
 [[[£ FILE: client/src/features/prof/ProfPage.css £]]]
@@ -3723,7 +3665,6 @@ export default function StatusOverview({ user }) {
         display: none !important;
     }
 }
-
 [[[£ END: client/src/features/prof/ProfPage.css £]]]
 
 [[[£ FILE: client/src/features/prof/ProfPage.jsx £]]]
@@ -3839,12 +3780,10 @@ export default function ProfPage({ user, onLogout }) {
     </div>
   );
 }
-
 [[[£ END: client/src/features/prof/ProfPage.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/activities/ActivityStudio.css £]]]
 .assign-card { background: #fff; padding: 1rem; border-radius: 20px; border: 1px solid #eee; }
-
 [[[£ END: client/src/features/prof/activities/ActivityStudio.css £]]]
 
 [[[£ FILE: client/src/features/prof/activities/ActivityStudio.jsx £]]]
@@ -3944,7 +3883,6 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
         </div>
     );
 }
-
 [[[£ END: client/src/features/prof/activities/ActivityStudio.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/admin/AdminDashboard.css £]]]
@@ -4024,7 +3962,6 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
 .finder-results-mini { max-height: 150px; overflow-y: auto; background: white; border: 2px solid #e2e8f0; border-radius: 12px; margin-top: 5px; }
 .finder-row-mini { padding: 8px 12px; font-size: 10px; font-weight: 700; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
 .finder-row-mini:hover { background: #eff6ff; color: #2563eb; }
-
 [[[£ END: client/src/features/prof/admin/AdminDashboard.css £]]]
 
 [[[£ FILE: client/src/features/prof/admin/AdminDashboard.jsx £]]]
@@ -4302,14 +4239,12 @@ export default function AdminDashboard({ user, onRefresh }) {
         </>
     );
 }
-
 [[[£ END: client/src/features/prof/admin/AdminDashboard.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/chapters/ChapterManager.jsx £]]]
 // @signatures: ChapterManager
 import React from 'react';
 export default function ChapterManager() { return <div>Gestion des chapitres</div>; }
-
 [[[£ END: client/src/features/prof/chapters/ChapterManager.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/classroom/ClassroomManager.css £]]]
@@ -4505,7 +4440,6 @@ export default function ChapterManager() { return <div>Gestion des chapitres</di
 }
 .btn-cancel-punish:hover { background: #e11d48; color: white; }
 .btn-cancel-punish:active { transform: scale(0.95); }
-
 [[[£ END: client/src/features/prof/classroom/ClassroomManager.css £]]]
 
 [[[£ FILE: client/src/features/prof/classroom/ClassroomManager.jsx £]]]
@@ -4745,7 +4679,6 @@ export default function ClassroomManager({ globalClassId, user }) {
         </div>
     );
 }
-
 [[[£ END: client/src/features/prof/classroom/ClassroomManager.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/components/BadComponent.jsx £]]]
@@ -4761,7 +4694,6 @@ export default function BadComponent() {
         </div>
     );
 }
-
 [[[£ END: client/src/features/prof/components/BadComponent.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/components/ConsoleHUD.jsx £]]]
@@ -4819,7 +4751,6 @@ export default function ConsoleHUD() {
         </div>
     );
 }
-
 [[[£ END: client/src/features/prof/components/ConsoleHUD.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/components/ConsoleReporter.css £]]]
@@ -4839,7 +4770,6 @@ export default function ConsoleHUD() {
 .banner-icon { font-size: 18px; margin-right: 15px; }
 .banner-text { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-transform: uppercase; letter-spacing: 0.5px; }
 .banner-hint { background: rgba(0,0,0,0.3); padding: 5px 10px; border-radius: 8px; font-size: 9px; margin-left: 20px; font-weight: 950; }
-
 [[[£ END: client/src/features/prof/components/ConsoleReporter.css £]]]
 
 [[[£ FILE: client/src/features/prof/components/ConsoleReporter.jsx £]]]
@@ -4938,7 +4868,6 @@ GEMINI : Le code précédent a causé une régression. Analyse la raison et renv
         </div>
     );
 }
-
 [[[£ END: client/src/features/prof/components/ConsoleReporter.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/components/DatabaseViewer.css £]]]
@@ -4953,7 +4882,6 @@ GEMINI : Le code précédent a causé une régression. Analyse la raison et renv
 .db-table { width: 100%; border-collapse: collapse; font-family: monospace; font-size: 0.65rem; }
 .db-table th { background: #f8fafc; text-align: left; padding: 0.8rem; border-bottom: 2px solid #eee; position: sticky; top: 0; }
 .db-table td { padding: 0.6rem 0.8rem; border-bottom: 1px solid #f1f5f9; }
-
 [[[£ END: client/src/features/prof/components/DatabaseViewer.css £]]]
 
 [[[£ FILE: client/src/features/prof/components/DatabaseViewer.jsx £]]]
@@ -5111,7 +5039,6 @@ export default function DatabaseViewer({ onClose }) {
         </div>
     );
 }
-
 [[[£ END: client/src/features/prof/components/DatabaseViewer.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/components/DriveViewer.css £]]]
@@ -5139,7 +5066,6 @@ export default function DatabaseViewer({ onClose }) {
 .v14-loader { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 20px; color: #10b981; font-weight: 950; }
 .spinner { width: 40px; height: 40px; border: 4px solid #f1f5f9; border-top-color: #10b981; border-radius: 50%; animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-
 [[[£ END: client/src/features/prof/components/DriveViewer.css £]]]
 
 [[[£ FILE: client/src/features/prof/components/DriveViewer.jsx £]]]
@@ -5240,7 +5166,6 @@ export default function DriveViewer({ onClose }) {
         </div>
     );
 }
-
 [[[£ END: client/src/features/prof/components/DriveViewer.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/components/ProfHeader.jsx £]]]
@@ -5308,7 +5233,6 @@ export default function ProfHeader({ user, onLogout }) {
     </>
   );
 }
-
 [[[£ END: client/src/features/prof/components/ProfHeader.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/components/ProfNav.jsx £]]]
@@ -5386,7 +5310,6 @@ export default function ProfNav({ activeTab, onTabChange, user }) {
     </div>
   );
 }
-
 [[[£ END: client/src/features/prof/components/ProfNav.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/components/ProfStudioFolder.jsx £]]]
@@ -5857,7 +5780,6 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
         </div>
     );
 }
-
 [[[£ END: client/src/features/prof/components/ProfStudioFolder.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/components/ProjectTreeViewer.css £]]]
@@ -5881,7 +5803,6 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
 .btn-tree.primary { background: #f97316; color: white; box-shadow: 0 4px 15px rgba(249, 115, 22, 0.4); }
 .btn-tree.secondary { background: #334155; color: #94a3b8; }
 .btn-tree:hover { transform: translateY(-2px); filter: brightness(1.1); }
-
 [[[£ END: client/src/features/prof/components/ProjectTreeViewer.css £]]]
 
 [[[£ FILE: client/src/features/prof/components/ProjectTreeViewer.jsx £]]]
@@ -5961,7 +5882,6 @@ export default function ProjectTreeViewer({ onClose }) {
         </div>
     );
 }
-
 [[[£ END: client/src/features/prof/components/ProjectTreeViewer.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/components/StudioDistributionSidebar.css £]]]
@@ -6204,13 +6124,27 @@ export default function ProjectTreeViewer({ onClose }) {
     cursor: not-allowed;
     box-shadow: none;
 }
-
 [[[£ END: client/src/features/prof/components/StudioDistributionSidebar.css £]]]
 
 [[[£ FILE: client/src/features/prof/components/StudioDistributionSidebar.jsx £]]]
 // @signatures: StudioDistributionSidebar, findBestDefaultChapter, handleToggleStudent, toggleAllStudents
 import React, { useEffect } from 'react';
 import './StudioDistributionSidebar.css';
+
+const normalizeClassLabel = (value = '') =>
+    String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '');
+
+const extractId = (value) => String(value?._id || value?.id || value || '');
+const inferLevelFromName = (name = '') => {
+    const cleaned = String(name || '').trim().toUpperCase();
+    const m = cleaned.match(/^([1-6])/);
+    if (m) return m[1];
+    return '';
+};
 
 export default function StudioDistributionSidebar({ 
     user, allClasses, allStudents, chapters, distribution, setDistribution, 
@@ -6222,7 +6156,10 @@ export default function StudioDistributionSidebar({
     const availableClasses = (allClasses || []).filter(c => {
         // A. Filtre Niveau (Le plus important)
         // Si un targetLevel est fourni (ex: "4"), on cache tout ce qui n'est pas "4"
-        if (targetLevel && String(c.level) !== String(targetLevel)) return false;
+        if (targetLevel) {
+            const effectiveLevel = String(c.level || inferLevelFromName(c.name));
+            if (effectiveLevel !== String(targetLevel)) return false;
+        }
         
         // B. Filtre Permissions
         if (user.isDeveloper || user.role === 'admin') return true;
@@ -6296,11 +6233,20 @@ export default function StudioDistributionSidebar({
     // 3. LOGIQUE ÉLÈVES
     const rawStudents = (allStudents || []).filter(s => {
         if (!viewingClass) return false;
-        if ((s.currentClass || "").trim() === viewingClass) return true;
+        const normalizedViewingClass = normalizeClassLabel(viewingClass);
+        const normalizedStudentClass = normalizeClassLabel(s.currentClass || "");
+
+        // Classe principale : on tolère les variantes d'écriture
+        if (normalizedStudentClass && normalizedStudentClass === normalizedViewingClass) return true;
+
         const clsObj = allClasses.find(c => c.name === viewingClass);
         if (clsObj && clsObj.type === 'GROUP') {
-            const clsId = String(clsObj._id);
-            return (s.assignedGroups || []).some(g => String(g._id || g) === clsId);
+            const clsId = extractId(clsObj);
+            const inAssignedGroups = (s.assignedGroups || []).some(g => extractId(g) === clsId);
+            if (inAssignedGroups) return true;
+
+            // Fallback legacy: certains imports mettent le nom du groupe dans currentClass
+            return normalizedStudentClass === normalizedViewingClass;
         }
         return false;
     }).sort((a,b) => a.lastName.localeCompare(b.lastName));
@@ -6528,7 +6474,6 @@ export default function StudioDistributionSidebar({
 
 .btn-close-docs { background: rgba(255,255,255,0.1); color: white; width: 50px; height: 50px; border-radius: 50%; border: none; cursor: pointer; font-size: 1.5rem; transition: all 0.3s; }
 .btn-close-docs:hover { background: #ef4444; transform: rotate(90deg); }
-
 [[[£ END: client/src/features/prof/components/SystemDocs.css £]]]
 
 [[[£ FILE: client/src/features/prof/components/SystemDocs.jsx £]]]
@@ -6615,7 +6560,6 @@ export default function SystemDocs({ onClose }) {
         </div>
     );
 }
-
 [[[£ END: client/src/features/prof/components/SystemDocs.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/components/SystemStatus.css £]]]
@@ -6624,7 +6568,6 @@ export default function SystemDocs({ onClose }) {
     /* Placeholder pour futures animations complexes */
     display: block;
 }
-
 [[[£ END: client/src/features/prof/components/SystemStatus.css £]]]
 
 [[[£ FILE: client/src/features/prof/components/SystemStatus.jsx £]]]
@@ -6672,7 +6615,6 @@ export default function SystemStatus() {
         </div>
     );
 }
-
 [[[£ END: client/src/features/prof/components/SystemStatus.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/components/TrapComponent.jsx £]]]
@@ -6689,7 +6631,6 @@ export default function TrapComponent() {
         </div>
     );
 }
-
 [[[£ END: client/src/features/prof/components/TrapComponent.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/games/GameStudio.css £]]]
@@ -6750,7 +6691,6 @@ export default function TrapComponent() {
 .v84-ans-input { flex: 1; background: transparent; border: none; padding: 10px; font-weight: 700; font-size: 0.9rem; outline: none; }
 
 /* NETTOYAGE SIDEBAR (Utilise le composant dédié) */
-
 [[[£ END: client/src/features/prof/games/GameStudio.css £]]]
 
 [[[£ FILE: client/src/features/prof/games/GameStudio.jsx £]]]
@@ -7167,19 +7107,16 @@ export default function GameStudio({ initialData, chapters, user, targetSection,
         </div>
     );
 }
-
 [[[£ END: client/src/features/prof/games/GameStudio.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/homework/HomeworkResults.css £]]]
 .results-overlay { position: fixed; inset: 0; background: white; z-index: 7000; padding: 2rem; }
-
 [[[£ END: client/src/features/prof/homework/HomeworkResults.css £]]]
 
 [[[£ FILE: client/src/features/prof/homework/HomeworkResults.jsx £]]]
 // @signatures: HomeworkResults
 import React from 'react';
 export default function HomeworkResults({ onBack }) { return <div>Résultats devoirs <button onClick={onBack}>Retour</button></div>; }
-
 [[[£ END: client/src/features/prof/homework/HomeworkResults.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/homework/HomeworkStudio.css £]]]
@@ -7326,7 +7263,6 @@ export default function HomeworkResults({ onBack }) { return <div>Résultats dev
 
 /* NETTOYAGE DES STYLES SIDEBAR (DÉPLACÉS) */
 /* Les styles v84-dist-sidebar et enfants sont maintenant gérés par le composant dédié */
-
 [[[£ END: client/src/features/prof/homework/HomeworkStudio.css £]]]
 
 [[[£ FILE: client/src/features/prof/homework/HomeworkStudio.jsx £]]]
@@ -7542,7 +7478,6 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
         </div>
     );
 }
-
 [[[£ END: client/src/features/prof/homework/HomeworkStudio.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/scans/ScansStudio.css £]]]
@@ -7558,8 +7493,8 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
     border-radius: 35px;
     border: 2px solid #f1f5f9;
     display: flex;
-    justify-content: space-between;
-    align-items: center;
+    flex-direction: column;
+    gap: 12px;
     box-shadow: 0 10px 25px rgba(0,0,0,0.02);
     transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
@@ -7570,25 +7505,30 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
     border-color: #e2e8f0;
 }
 
-.session-card-info { display: flex; flex-direction: column; gap: 5px; }
+.session-card-top { display: flex; flex-direction: column; gap: 10px; }
+.session-card-title-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.session-card-info { display: flex; flex-direction: column; gap: 5px; border-top: 1px solid #eef2ff; padding-top: 8px; }
 .s-title { font-weight: 950; color: #1e293b; text-transform: uppercase; font-size: 1.2rem; margin: 0; letter-spacing: -0.5px; }
 
 .s-meta { display: flex; align-items: center; gap: 10px; font-size: 0.75rem; font-weight: 800; color: #94a3b8; text-transform: uppercase; }
 .s-count { color: #6366f1; background: #eef2ff; padding: 2px 8px; border-radius: 6px; }
 
 /* BOUTONS ACTIONS */
-.session-card-actions { display: flex; gap: 10px; }
+.session-card-actions { display: flex; gap: 8px; flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; }
 
 .act-btn {
-    padding: 12px 20px;
-    border-radius: 15px;
+    flex: 0 0 auto;
+    padding: 8px 11px;
+    border-radius: 12px;
     border: none;
     font-weight: 950;
-    font-size: 11px;
+    font-size: 10px;
+    line-height: 1;
     cursor: pointer;
     text-transform: uppercase;
     transition: all 0.2s;
     box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+    white-space: nowrap;
 }
 
 .act-btn:active { transform: scale(0.95); }
@@ -7597,14 +7537,82 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
 .btn-scan { background: #f0fdf4; color: #22c55e; }
 .btn-results { background: #fff7ed; color: #f97316; }
 .btn-ia { background: #f5f3ff; color: #8b5cf6; border: 2px solid #ddd6fe; }
-.btn-delete { background: #fee2e2; color: #ef4444; width: 40px; border-radius: 50%; }
+.btn-delete { background: #fee2e2; color: #ef4444; width: 30px; height: 30px; border-radius: 50%; padding: 0; }
+.session-collapse-btn {
+    width: 30px;
+    height: 30px;
+    border-radius: 999px;
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
+    color: #334155;
+    font-weight: 900;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+}
 
 /* --- WORKSPACE & MODALE --- */
-.scan-workspace { position: fixed; inset: 0; background: #f8fafc; z-index: 10000; display: flex; flex-direction: column; }
-.workspace-header { height: 90px; background: white; border-bottom: 2px solid #e2e8f0; display: flex; align-items: center; padding: 0 40px; justify-content: space-between; }
+.scan-workspace-inline { position: relative; margin-top: 10px; border: 2px solid #e2e8f0; border-radius: 18px; overflow: hidden; background: #f8fafc; }
+.workspace-header { min-height: 86px; background: white; border-bottom: 2px solid #e2e8f0; display: flex; align-items: center; padding: 8px 16px; justify-content: space-between; }
 .ws-back-btn { background: #1e293b; color: white; padding: 10px 20px; border-radius: 12px; font-weight: 900; font-size: 11px; border: none; cursor: pointer; }
+.workspace-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    max-width: 52%;
+}
 .ws-title { font-weight: 950; color: #0f172a; text-transform: uppercase; font-size: 1.4rem; margin: 0; }
 .ws-save-btn { background: #22c55e; color: white; padding: 15px 30px; border-radius: 18px; font-weight: 950; border: none; cursor: pointer; }
+.workspace-content { padding: 8px 10px 14px; }
+.ia-menu-panel {
+    border-top: 1px solid #e2e8f0;
+    background: #ffffff;
+    padding: 10px 16px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.ia-run-btn, .ia-save-btn, .ia-close-btn {
+    border: none;
+    border-radius: 10px;
+    padding: 9px 12px;
+    font-size: 12px;
+    font-weight: 900;
+    text-transform: uppercase;
+    cursor: pointer;
+}
+.ia-run-btn { background: #4f46e5; color: #fff; align-self: flex-start; }
+.ia-instructions-input {
+    width: 100%;
+    min-height: 84px;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    padding: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #1e293b;
+    resize: vertical;
+}
+.ia-menu-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.ia-save-btn { background: #10b981; color: #fff; }
+.ia-close-btn { background: #e2e8f0; color: #334155; }
+.ws-title-toggle {
+    border: none;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+    padding: 0;
+}
+.ws-title-toggle:hover .ws-title,
+.ws-title-toggle:hover .ws-subtitle {
+    color: #334155;
+}
 
 /* CAMERA */
 .cam-wrapper { width: 100%; max-width: 600px; aspect-ratio: 3/4; background: black; border-radius: 35px; overflow: hidden; position: relative; border: 10px solid #1e293b; margin: 20px auto; }
@@ -7665,22 +7673,6 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
     font-weight: 900;
     cursor: pointer;
 }
-.thumb-status {
-    position: absolute;
-    left: 6px;
-    bottom: 6px;
-    font-size: 10px;
-    font-weight: 900;
-    text-transform: uppercase;
-    color: white;
-    padding: 3px 6px;
-    border-radius: 999px;
-    background: rgba(15, 23, 42, 0.9);
-}
-.thumb-uploading { background: rgba(59, 130, 246, 0.95); }
-.thumb-pending { background: rgba(234, 179, 8, 0.95); color: #111827; }
-.thumb-error { background: rgba(239, 68, 68, 0.95); }
-.thumb-draft { background: rgba(34, 197, 94, 0.95); }
 .capture-empty {
     color: #64748b;
     font-weight: 800;
@@ -7690,18 +7682,352 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
     padding: 12px 6px;
 }
 
+/* RESULTS */
+.results-view { padding: 12px 16px; }
+.results-head { margin-bottom: 10px; }
+.results-title { margin: 0; font-size: 1.05rem; font-weight: 900; color: #0f172a; text-transform: uppercase; }
+.results-sub { margin: 3px 0 0; font-size: 12px; font-weight: 700; color: #64748b; }
+.results-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+}
+.res-card {
+    background: #fff;
+    border: 1px solid #dbe3f1;
+    border-radius: 14px;
+    padding: 12px;
+    cursor: pointer;
+}
+.res-card-top { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+.res-card-actions { display: flex; justify-content: flex-end; margin: 8px 0 2px; }
+.res-retry-btn {
+    border: 1px solid #c7d2fe;
+    background: #eef2ff;
+    color: #4338ca;
+    border-radius: 999px;
+    padding: 4px 8px;
+    font-size: 11px;
+    font-weight: 900;
+    cursor: pointer;
+}
+.res-retry-btn:disabled {
+    opacity: 0.6;
+    cursor: wait;
+}
+.res-name { font-weight: 900; color: #1e293b; font-size: 13px; }
+.res-grade {
+    font-weight: 900;
+    font-size: 12px;
+    padding: 4px 8px;
+    border-radius: 999px;
+}
+.results-empty {
+    grid-column: 1 / -1;
+    border: 1px dashed #cbd5e1;
+    border-radius: 12px;
+    padding: 14px;
+    font-weight: 800;
+    color: #64748b;
+    background: #f8fafc;
+}
+
 /* MODALE HD V133 */
 .v132-correction-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.98); z-index: 30000; display: flex; align-items: center; justify-content: center; padding: 10px; backdrop-filter: blur(15px); }
 .v132-modal-window { background: white; width: 100%; max-width: 1400px; height: 98vh; border-radius: 40px; display: flex; flex-direction: column; overflow: hidden; position: relative; }
-.v132-image-container { flex: 1; background: #0f172a; overflow-y: auto; display: flex; justify-content: center; padding: 30px; border-bottom: 6px solid #3b82f6; }
-.v132-copy-img { width: 100%; max-width: 1000px; height: auto; box-shadow: 0 0 80px rgba(0,0,0,0.9); border: 2px solid #334155; border-radius: 15px; }
-.v132-text-panel { height: 40%; background: #fff; overflow-y: auto; padding: 40px; border-top: 1px solid #f1f5f9; }
+.v132-close-btn {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 20;
+    width: 36px;
+    height: 36px;
+    border-radius: 999px;
+    border: 1px solid #cbd5e1;
+    background: rgba(255, 255, 255, 0.95);
+    color: #0f172a;
+    font-weight: 900;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+}
+.v132-close-btn:hover { background: #fee2e2; color: #991b1b; }
+.v132-image-container {
+    height: 50%;
+    background: #0f172a;
+    overflow: auto;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 20px;
+    border-bottom: 6px solid #3b82f6;
+}
+.v132-copy-img {
+    width: 100%;
+    max-width: none;
+    height: auto;
+    display: block;
+    box-shadow: 0 0 80px rgba(0,0,0,0.9);
+    border: 2px solid #334155;
+    border-radius: 15px;
+}
+.v132-text-panel { height: 50%; background: #fff; overflow-y: auto; padding: 18px; border-top: 1px solid #f1f5f9; }
+.v132-info-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 8px; }
+.v132-student-name { margin: 0; font-size: 1.1rem; font-weight: 950; color: #0f172a; }
+.v132-info-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: #fff;
+    padding: 2px 0;
+}
+.v132-grade-badge { font-weight: 900; padding: 6px 10px; border-radius: 999px; font-size: 13px; }
+.v132-close-btn-inline {
+    width: 30px;
+    height: 30px;
+    border-radius: 999px;
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    color: #0f172a;
+    font-weight: 900;
+    font-size: 15px;
+    line-height: 1;
+    cursor: pointer;
+}
+.v132-close-btn-inline:hover { background: #fee2e2; color: #991b1b; }
+.v132-content-box { display: flex; flex-direction: column; gap: 8px; }
+.v132-label { margin: 0; color: #334155; font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: .2px; }
+.v132-main-text {
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 10px;
+    background: #fff;
+    white-space: pre-wrap;
+    line-height: 1.45;
+}
+.v132-quality-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+.v132-quality-chip {
+    font-size: 11px;
+    font-weight: 900;
+    color: #0369a1;
+    background: #e0f2fe;
+    border: 1px solid #bae6fd;
+    border-radius: 999px;
+    padding: 3px 8px;
+}
+.v132-quality-flags {
+    font-size: 11px;
+    font-weight: 800;
+    color: #991b1b;
+    background: #fee2e2;
+    border: 1px solid #fecaca;
+    border-radius: 999px;
+    padding: 3px 8px;
+}
+.v132-appreciation-box {
+    border: 1px solid #e2e8f0;
+    border-left: 5px solid #334155;
+    border-radius: 10px;
+    padding: 10px;
+    background: #f8fafc;
+    font-weight: 700;
+    color: #0f172a;
+}
+.v132-spelling-list {
+    margin: 0;
+    padding: 8px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #f8fafc;
+}
+.v132-spelling-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 800;
+    margin-bottom: 4px;
+}
+.v132-spelling-item:last-child { margin-bottom: 0; }
+.v132-spelling-item .wrong { color: #b91c1c; text-decoration: line-through; }
+.v132-spelling-item .arrow { color: #64748b; }
+.v132-spelling-item .correct { color: #047857; }
+.v132-empty-spelling {
+    border: 1px dashed #cbd5e1;
+    border-radius: 10px;
+    padding: 8px 10px;
+    color: #64748b;
+    font-weight: 700;
+    font-size: 12px;
+}
+.v132-feedback-list {
+    margin: 0;
+    padding: 8px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #fffaf0;
+}
+.v132-feedback-item {
+    font-size: 13px;
+    font-weight: 700;
+    color: #334155;
+    margin-bottom: 4px;
+}
+.v132-feedback-item:last-child { margin-bottom: 0; }
+.v132-transcript-tabs {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.v132-transcript-tab {
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
+    color: #334155;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 900;
+    padding: 6px 10px;
+    cursor: pointer;
+}
+.v132-transcript-tab.active {
+    border-color: #6366f1;
+    background: #eef2ff;
+    color: #4338ca;
+}
 .ai-red-mark { color: #ef4444; font-weight: 900; background: #fee2e2; padding: 2px 4px; border-radius: 4px; }
+.grade-aplus { background: #14532d; color: #dcfce7; border: 1px solid #166534; }
+.grade-a { background: #22c55e; color: #052e16; border: 1px solid #16a34a; }
+.grade-b { background: #facc15; color: #422006; border: 1px solid #eab308; }
+.grade-c { background: #ef4444; color: #fff; border: 1px solid #dc2626; }
 
 /* LOADING */
 .scan-loading-overlay { position: absolute; inset: 0; background: rgba(15, 23, 42, 0.9); z-index: 200; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; }
 .scan-spinner { width: 60px; height: 60px; border: 6px solid #3b82f6; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 900px) {
+    .scan-page { padding: 1rem; }
+    .scan-page > .flex {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 14px;
+        margin-bottom: 1.2rem;
+    }
+    .scan-page h2 { font-size: 2rem; line-height: 1.02; }
+    .scan-page > .flex > button {
+        width: 100%;
+        padding: 14px 18px;
+        border-radius: 16px;
+    }
+
+    .session-card {
+        padding: 16px;
+        border-radius: 24px;
+        gap: 14px;
+    }
+    .session-card-actions {
+        width: 100%;
+        gap: 6px;
+    }
+    .act-btn {
+        padding: 7px 9px;
+        border-radius: 10px;
+        font-size: 9px;
+    }
+    .btn-delete {
+        width: 28px;
+        height: 28px;
+    }
+
+    .workspace-header {
+        min-height: 64px;
+        padding: 8px 10px;
+        flex-wrap: nowrap;
+        gap: 6px;
+        overflow-x: auto;
+    }
+    .workspace-actions {
+        max-width: none;
+        width: auto;
+        flex: 0 0 auto;
+    }
+    .workspace-actions .act-btn {
+        font-size: 8px;
+        padding: 6px 7px;
+        border-radius: 9px;
+    }
+    .workspace-actions .btn-delete {
+        width: 24px;
+        height: 24px;
+    }
+    .ia-menu-panel { padding: 8px 10px; }
+    .ia-run-btn, .ia-save-btn, .ia-close-btn { font-size: 10px; padding: 7px 9px; }
+    .ia-instructions-input { min-height: 72px; font-size: 12px; }
+    .ws-title-box {
+        flex: 1 1 auto;
+        min-width: 70px;
+    }
+    .ws-title {
+        font-size: 0.95rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .ws-subtitle {
+        display: block;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .ws-save-btn {
+        flex: 0 0 auto;
+        padding: 7px 9px;
+        border-radius: 10px;
+        font-size: 9px;
+        white-space: nowrap;
+    }
+    .cam-wrapper {
+        max-width: calc(100vw - 24px);
+        border-width: 6px;
+        border-radius: 22px;
+    }
+    .v132-modal-window { border-radius: 18px; height: 95vh; }
+    .v132-image-container { padding: 10px; }
+    .v132-text-panel { padding: 10px; }
+    .results-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 480px) {
+    .session-card { padding: 12px; }
+    .s-title { font-size: 1rem; }
+    .s-meta { gap: 6px; font-size: 0.65rem; }
+    .session-card-actions { gap: 4px; }
+    .act-btn { font-size: 8px; padding: 7px 7px; border-radius: 9px; }
+    .session-collapse-btn { width: 26px; height: 26px; font-size: 16px; }
+    .workspace-header { gap: 4px; padding: 6px 8px; }
+    .workspace-actions .act-btn { font-size: 7px; padding: 5px 6px; }
+    .ws-title { font-size: 0.82rem; }
+    .ws-subtitle { font-size: 0.66rem; }
+    .ws-save-btn { font-size: 8px; padding: 6px 7px; }
+    .capture-thumb {
+        min-width: 110px;
+        width: 110px;
+        height: 92px;
+    }
+    .capture-strip, .uploaded-strip {
+        gap: 8px;
+        padding: 8px;
+    }
+}
 
 [[[£ END: client/src/features/prof/scans/ScansStudio.css £]]]
 
@@ -7719,16 +8045,92 @@ export default function ScansStudio({ user, globalClass }) {
     const [loading, setLoading] = useState(false);
     const [status, setStatus] = useState("");
     const [cameraError, setCameraError] = useState("");
+    const [cameraReady, setCameraReady] = useState(false);
+    const [collapsedSessions, setCollapsedSessions] = useState({});
+    const [workspaceCollapsed, setWorkspaceCollapsed] = useState(false);
+    const [iaDraftBySession, setIaDraftBySession] = useState({});
+    const [transcriptView, setTranscriptView] = useState('literal_final');
+    const [reCorrectingUrl, setReCorrectingUrl] = useState('');
 
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
     const queueTimersRef = useRef({});
     const localQueueRef = useRef([]);
+    const gradeClass = (corr = {}) => {
+        const g = String(corr.grade || '').toUpperCase();
+        if (g === 'A+') return 'grade-aplus';
+        if (g === 'A') return 'grade-a';
+        if (g === 'B') return 'grade-b';
+        return 'grade-c';
+    };
+    const gradeLabel = (corr = {}) => {
+        if (corr.isLycee) {
+            const n = Number(corr.score20);
+            return Number.isFinite(n) ? `${n}/20` : `--/20`;
+        }
+        return String(corr.grade || 'B').toUpperCase();
+    };
+    const confidenceLabel = (corr = {}) => {
+        const n = Number(corr.ocrConfidence);
+        if (!Number.isFinite(n)) return 'Confiance: inconnue';
+        if (n >= 0.8) return `Confiance: haute (${Math.round(n * 100)}%)`;
+        if (n >= 0.55) return `Confiance: moyenne (${Math.round(n * 100)}%)`;
+        return `Confiance: faible (${Math.round(n * 100)}%)`;
+    };
+    const getTranscriptTabs = (corr = {}) => {
+        const variants = (corr && typeof corr.transcriptionVariants === 'object' && corr.transcriptionVariants)
+            ? corr.transcriptionVariants
+            : {};
+        const firstNonEmpty = (...vals) => vals.find(v => String(v || '').trim()) || '';
+        const feedbackText = Array.isArray(corr.questionFeedback) && corr.questionFeedback.length
+            ? corr.questionFeedback.map((fb, idx) => `Q${idx + 1}. ${fb}`).join('\n')
+            : String(corr.appreciation || '');
+
+        return [
+            {
+                key: 'literal_final',
+                label: 'Transcription fidèle',
+                text: firstNonEmpty(
+                    variants.literal_final?.text,
+                    variants.literal_ocr?.text,
+                    variants.meaning_final?.text,
+                    corr.literalTranscription,
+                    corr.transcription
+                )
+            },
+            {
+                key: 'orthography_corrected',
+                label: 'Orthographe corrigée',
+                text: firstNonEmpty(
+                    variants.orthography_corrected?.text,
+                    corr.transcription,
+                    variants.corrected_legacy?.text
+                )
+            },
+            {
+                key: 'content_feedback',
+                label: 'Feedback fond',
+                text: firstNonEmpty(
+                    variants.content_feedback?.text,
+                    feedbackText
+                )
+            }
+        ];
+    };
 
     const loadSessions = async () => {
         const res = await fetch('/api/scans/sessions');
         const data = await res.json();
         setSessions(data);
+        setIaDraftBySession(prev => {
+            const next = { ...prev };
+            data.forEach(s => {
+                if (typeof next[s._id] !== 'string') {
+                    next[s._id] = String(s.aiInstructions || '');
+                }
+            });
+            return next;
+        });
         if (activeSession) {
             const updated = data.find(s => s._id === activeSession._id);
             setActiveSession(updated);
@@ -7737,6 +8139,12 @@ export default function ScansStudio({ user, globalClass }) {
 
     useEffect(() => { loadSessions(); }, []);
     useEffect(() => { localQueueRef.current = localQueue; }, [localQueue]);
+    useEffect(() => {
+        if (!activeResult) return;
+        const tabs = getTranscriptTabs(activeResult);
+        const first = tabs[0]?.key || 'literal_final';
+        setTranscriptView(first);
+    }, [activeResult?._id, activeResult?.originalUrl]);
     useEffect(() => () => {
         Object.values(queueTimersRef.current).forEach(tid => clearTimeout(tid));
     }, []);
@@ -7745,8 +8153,15 @@ export default function ScansStudio({ user, globalClass }) {
         const startCamera = async () => {
             if (!(view === 'sujets' || view === 'scan') || loading) return;
             setCameraError("");
+            setCameraReady(false);
             if (!navigator?.mediaDevices?.getUserMedia) {
                 setCameraError("Caméra non supportée sur ce navigateur.");
+                return;
+            }
+            const host = window?.location?.hostname || '';
+            const isLocalhost = host === 'localhost' || host === '127.0.0.1' || host === '::1';
+            if (!window.isSecureContext && !isLocalhost) {
+                setCameraError("Caméra bloquée: ouvre ce site en HTTPS (ou localhost).");
                 return;
             }
             let devices = [];
@@ -7758,11 +8173,18 @@ export default function ScansStudio({ user, globalClass }) {
                 setCameraError("Aucune caméra détectée sur cet appareil.");
                 return;
             }
-            const attempts = [
-                { video: { facingMode: { ideal: 'environment' } } },
-                { video: { facingMode: 'user' } },
-                { video: true }
-            ];
+            const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
+            const attempts = isMobile
+                ? [
+                    { video: { facingMode: { ideal: 'environment' } } },
+                    { video: { facingMode: 'user' } },
+                    { video: true }
+                ]
+                : [
+                    { video: { facingMode: 'user' } },
+                    { video: true },
+                    { video: { facingMode: { ideal: 'environment' } } }
+                ];
             let lastErr = null;
             for (const constraints of attempts) {
                 try {
@@ -7782,6 +8204,7 @@ export default function ScansStudio({ user, globalClass }) {
             if (videoRef.current && videoRef.current.srcObject) {
                 videoRef.current.srcObject.getTracks().forEach(track => track.stop());
             }
+            setCameraReady(false);
         };
     }, [view, loading]);
 
@@ -7789,7 +8212,7 @@ export default function ScansStudio({ user, globalClass }) {
         const video = videoRef.current;
         const canvas = canvasRef.current;
         if (!video || !canvas) return;
-        if (!video.videoWidth || !video.videoHeight) {
+        if (!cameraReady || !video.videoWidth || !video.videoHeight) {
             setCameraError("Caméra pas encore prête. Réessaie dans 1 seconde.");
             return;
         }
@@ -7884,8 +8307,40 @@ export default function ScansStudio({ user, globalClass }) {
         try {
             await fetch(`/api/scans/correct/${sessionId}`, { method: 'POST' });
             await loadSessions();
-            setView('list'); // On revient à la liste pour voir les résultats sur la carte
+            setView('results');
         } catch (e) { alert("Erreur IA"); }
+        setLoading(false);
+    };
+    const handleReCorrectOne = async (sessionId, copyUrl) => {
+        if (!sessionId || !copyUrl) return;
+        setReCorrectingUrl(copyUrl);
+        try {
+            await fetch(`/api/scans/correct-one/${sessionId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ copyUrl })
+            });
+            await loadSessions();
+        } catch (e) {
+            alert("Erreur relance IA sur cette copie");
+        } finally {
+            setReCorrectingUrl('');
+        }
+    };
+    const handleSaveAIInstructions = async (sessionId) => {
+        setLoading(true);
+        setStatus("Sauvegarde des consignes IA...");
+        try {
+            const aiInstructions = String(iaDraftBySession[sessionId] || '').trim();
+            await fetch(`/api/scans/sessions/${sessionId}/instructions`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ aiInstructions })
+            });
+            await loadSessions();
+        } catch (e) {
+            alert("Erreur sauvegarde consignes IA");
+        }
         setLoading(false);
     };
 
@@ -7894,11 +8349,13 @@ export default function ScansStudio({ user, globalClass }) {
         await fetch(`/api/scans/sessions/${id}`, { method: 'DELETE' });
         loadSessions();
     };
-
-    if (activeSession && view !== 'list') {
-        const uploaded = view === 'sujets' ? (activeSession.subjectUrls || []) : (activeSession.copyUrls || []);
+    const toggleSessionCollapse = (sessionId) => {
+        setCollapsedSessions(prev => ({ ...prev, [sessionId]: !prev[sessionId] }));
+    };
+    const renderWorkspace = (session) => {
+        const uploaded = view === 'sujets' ? (session.subjectUrls || []) : (session.copyUrls || []);
         return (
-            <div className="scan-workspace animate-in">
+            <div className="scan-workspace-inline animate-in">
                 {loading && (
                     <div className="scan-loading-overlay">
                         <div className="scan-spinner"></div>
@@ -7907,73 +8364,142 @@ export default function ScansStudio({ user, globalClass }) {
                 )}
 
                 <div className="workspace-header">
-                    <button onClick={() => setView('list')} className="ws-back-btn">⬅ RETOUR</button>
-                    <div className="ws-title-box">
-                        <h2 className="ws-title">{activeSession.title}</h2>
+                    <button
+                        type="button"
+                        className="ws-title-box ws-title-toggle"
+                        onClick={() => setWorkspaceCollapsed(prev => !prev)}
+                        title={workspaceCollapsed ? "Ouvrir le panneau" : "Fermer le panneau"}
+                    >
+                        <h2 className="ws-title">{session.title}</h2>
                         <span className="ws-subtitle">{view.toUpperCase()}</span>
+                    </button>
+                    <div className="workspace-actions">
+                        <button onClick={() => { setActiveSession(session); setView('sujets'); setWorkspaceCollapsed(false); }} className="act-btn btn-sujet">Sujets</button>
+                        <button onClick={() => { setActiveSession(session); setView('scan'); setWorkspaceCollapsed(false); }} className="act-btn btn-scan">Scan</button>
+                        <button onClick={() => { setActiveSession(session); setView('results'); setWorkspaceCollapsed(false); }} className="act-btn btn-results">Résultats</button>
+                        <button
+                            onClick={() => {
+                                setActiveSession(session);
+                                setView('ia');
+                                setWorkspaceCollapsed(false);
+                            }}
+                            className="act-btn btn-ia"
+                        >
+                            IA
+                        </button>
+                        <button onClick={() => { setView('list'); setActiveSession(null); setWorkspaceCollapsed(false); }} className="act-btn btn-delete">✕</button>
                     </div>
                     {localQueue.length > 0 && (
                         <button onClick={handleUploadQueue} className="ws-save-btn">SAUVEGARDER ({localQueue.length})</button>
                     )}
                 </div>
 
-                <div className="workspace-content">
-                    {(view === 'sujets' || view === 'scan') && (
-                        <div className="camera-view">
-                            <div className="cam-wrapper">
-                                <video ref={videoRef} autoPlay playsInline className="cam-video" />
-                                <button onClick={handleCapture} className="cam-trigger" />
-                                <canvas ref={canvasRef} className="hidden" />
-                            </div>
-                            {cameraError && <div className="camera-error">{cameraError}</div>}
-                            <div className="capture-strip custom-scrollbar">
-                                {localQueue.length === 0 && view === 'scan' && (
-                                    <div className="capture-empty">Les captures apparaissent ici avant envoi.</div>
-                                )}
-                                {localQueue.map(img => (
-                                    <div key={img.id} className="capture-thumb">
-                                        <img src={img.url} />
-                                        <button onClick={() => handleRemoveQueued(img.id)} className="thumb-del">✕</button>
-                                        <span className={`thumb-status thumb-${img.status || 'draft'}`}>
-                                            {img.status === 'uploading' ? 'Envoi...' : img.status === 'pending' ? 'Attente' : img.status === 'error' ? 'Erreur' : 'Prête'}
-                                        </span>
-                                    </div>
-                                ))}
-                            </div>
-                            <div className="uploaded-strip custom-scrollbar">
-                                {uploaded.map((url, idx) => (
-                                    <div key={`${url}-${idx}`} className="capture-thumb uploaded">
-                                        <img src={url} />
-                                        <button onClick={() => handleDeleteUploaded(url, view === 'sujets' ? 'SUBJECT' : 'COPY')} className="thumb-del">✕</button>
-                                    </div>
-                                ))}
-                                {uploaded.length === 0 && (
-                                    <div className="capture-empty">
-                                        {view === 'sujets' ? 'Aucun sujet enregistré.' : 'Aucune copie enregistrée.'}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    )}
-
-                    {view === 'results' && (
-                        <div className="results-view">
-                            <div className="results-grid">
-                                {activeSession.corrections?.map((corr, i) => (
-                                    <div key={i} className="res-card" onClick={() => setActiveResult(corr)}>
-                                        <div className="res-card-top">
-                                            <span className="res-name">{corr.studentName}</span>
-                                            <span className={`res-grade grade-${corr.grade[0]}`}>{corr.grade}</span>
+                {!workspaceCollapsed && (
+                    <div className="workspace-content">
+                        {(view === 'sujets' || view === 'scan') && (
+                            <div className="camera-view">
+                                <div className="cam-wrapper">
+                                    <video
+                                        ref={videoRef}
+                                        autoPlay
+                                        playsInline
+                                        className="cam-video"
+                                        onLoadedMetadata={() => {
+                                            setCameraReady(true);
+                                            setCameraError("");
+                                        }}
+                                    />
+                                    <button onClick={handleCapture} className="cam-trigger" />
+                                    <canvas ref={canvasRef} className="hidden" />
+                                </div>
+                                {cameraError && <div className="camera-error">{cameraError}</div>}
+                                <div className="capture-strip custom-scrollbar">
+                                    {localQueue.length === 0 && view === 'scan' && (
+                                        <div className="capture-empty">Les captures apparaissent ici avant envoi.</div>
+                                    )}
+                                    {localQueue.map(img => (
+                                        <div key={img.id} className="capture-thumb">
+                                            <img src={img.url} />
+                                            <button onClick={() => handleRemoveQueued(img.id)} className="thumb-del">✕</button>
                                         </div>
-                                        <p className="res-text">{corr.appreciation}</p>
-                                    </div>
-                                ))}
+                                    ))}
+                                </div>
+                                <div className="uploaded-strip custom-scrollbar">
+                                    {uploaded.map((url, idx) => (
+                                        <div key={`${url}-${idx}`} className="capture-thumb uploaded">
+                                            <img src={url} />
+                                            <button onClick={() => handleDeleteUploaded(url, view === 'sujets' ? 'SUBJECT' : 'COPY')} className="thumb-del">✕</button>
+                                        </div>
+                                    ))}
+                                    {uploaded.length === 0 && (
+                                        <div className="capture-empty">
+                                            {view === 'sujets' ? 'Aucun sujet enregistré.' : 'Aucune copie enregistrée.'}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
-                        </div>
-                    )}
-                </div>
+                        )}
 
-                {activeResult && (
+                        {view === 'results' && (
+                            <div className="results-view">
+                                <div className="results-head">
+                                    <h3 className="results-title">Copies corrigées ({session.corrections?.length || 0})</h3>
+                                    <p className="results-sub">Clique sur une copie pour ouvrir la vue détaillée.</p>
+                                </div>
+                                <div className="results-grid">
+                                    {session.corrections?.map((corr, i) => (
+                                        <div key={i} className="res-card" onClick={() => setActiveResult(corr)}>
+                                            <div className="res-card-top">
+                                                <span className="res-name">{corr.studentName}{corr.studentClass ? ` • ${corr.studentClass}` : ''}</span>
+                                                <span className={`res-grade ${gradeClass(corr)}`}>{gradeLabel(corr)}</span>
+                                            </div>
+                                            <div className="res-card-actions">
+                                                <button
+                                                    type="button"
+                                                    className="res-retry-btn"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleReCorrectOne(session._id, corr.originalUrl);
+                                                    }}
+                                                    disabled={reCorrectingUrl === corr.originalUrl}
+                                                    title="Relancer l'IA pour cette copie uniquement"
+                                                >
+                                                    {reCorrectingUrl === corr.originalUrl ? 'IA…' : 'IA ↻'}
+                                                </button>
+                                            </div>
+                                            <p className="res-text">{corr.appreciation}</p>
+                                        </div>
+                                    ))}
+                                    {(!session.corrections || session.corrections.length === 0) && (
+                                        <div className="results-empty">Aucune copie corrigée. Lance l'IA pour générer les résultats.</div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {view === 'ia' && (
+                            <div className="ia-menu-panel">
+                                <button
+                                    onClick={() => handleLaunchCorrection(session._id)}
+                                    className="ia-run-btn"
+                                >
+                                    Lancer l'IA
+                                </button>
+                                <textarea
+                                    className="ia-instructions-input"
+                                    value={iaDraftBySession[session._id] || ''}
+                                    onChange={(e) => setIaDraftBySession(prev => ({ ...prev, [session._id]: e.target.value }))}
+                                    placeholder="Consignes de correction pour cette session (style, niveau d'exigence, feedback attendu par question...)"
+                                />
+                                <div className="ia-menu-actions">
+                                    <button className="ia-save-btn" onClick={() => handleSaveAIInstructions(session._id)}>Sauvegarder consignes</button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {activeResult && !workspaceCollapsed && (
                     <div className="v132-correction-overlay animate-in fade-in" onClick={() => setActiveResult(null)}>
                         <div className="v132-modal-window" onClick={e => e.stopPropagation()}>
                             <button className="v132-close-btn" onClick={() => setActiveResult(null)}>✕</button>
@@ -7982,14 +8508,77 @@ export default function ScansStudio({ user, globalClass }) {
                             </div>
                             <div className="v132-text-panel custom-scrollbar">
                                 <div className="v132-info-row">
-                                    <h3 className="v132-student-name">{activeResult.studentName}</h3>
-                                    <div className={`v132-grade-badge grade-${activeResult.grade[0]}`}>{activeResult.grade}</div>
+                                    <h3 className="v132-student-name">{activeResult.studentName}{activeResult.studentClass ? ` • ${activeResult.studentClass}` : ''}</h3>
+                                    <div className="v132-info-actions">
+                                        <div className={`v132-grade-badge ${gradeClass(activeResult)}`}>{gradeLabel(activeResult)}</div>
+                                        <button className="v132-close-btn-inline" onClick={() => setActiveResult(null)}>✕</button>
+                                    </div>
                                 </div>
                                 <div className="v132-content-box">
-                                    <h4 className="v132-label">📝 TRANSCRIPTION & CORRECTIONS</h4>
-                                    <div className="v132-main-text" dangerouslySetInnerHTML={{ __html: activeResult.transcription }} />
-                                    <h4 className="v132-label mt-8">🤖 APPRÉCIATION GÉNÉRALE</h4>
-                                    <div className="v132-appreciation-box">{activeResult.appreciation}</div>
+                                    <h4 className="v132-label">🤖 APPRÉCIATION GÉNÉRALE</h4>
+                                    <div className="v132-appreciation-box">{activeResult.appreciation || "Pas d'appréciation."}</div>
+                                    <div className="v132-quality-row">
+                                        <span className="v132-quality-chip">{confidenceLabel(activeResult)}</span>
+                                        {Array.isArray(activeResult.qualityFlags) && activeResult.qualityFlags.length > 0 && (
+                                            <span className="v132-quality-flags">{activeResult.qualityFlags.join(' • ')}</span>
+                                        )}
+                                    </div>
+                                    {transcriptView === 'orthography_corrected' && (
+                                        <>
+                                            <h4 className="v132-label mt-8">✍️ CORRECTIONS D'ORTHOGRAPHE</h4>
+                                            {Array.isArray(activeResult.spellingMistakes) && activeResult.spellingMistakes.length > 0 ? (
+                                                <ul className="v132-spelling-list">
+                                                    {activeResult.spellingMistakes.map((m, idx) => (
+                                                        <li key={`${m.wrong}-${m.correct}-${idx}`} className="v132-spelling-item">
+                                                            <span className="wrong">{m.wrong || '...'}</span>
+                                                            <span className="arrow">→</span>
+                                                            <span className="correct">{m.correct || '...'}</span>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            ) : (
+                                                <div className="v132-empty-spelling">Aucune faute d'orthographe détectée.</div>
+                                            )}
+                                        </>
+                                    )}
+                                    {transcriptView === 'content_feedback' && Array.isArray(activeResult.questionFeedback) && activeResult.questionFeedback.length > 0 && (
+                                        <>
+                                            <h4 className="v132-label">📌 FEEDBACK PAR QUESTION</h4>
+                                            <ul className="v132-feedback-list">
+                                                {activeResult.questionFeedback.map((fb, idx) => (
+                                                    <li key={`${idx}-${fb}`} className="v132-feedback-item">{fb}</li>
+                                                ))}
+                                            </ul>
+                                        </>
+                                    )}
+                                    <h4 className="v132-label">📝 TRANSCRIPTIONS</h4>
+                                    {(() => {
+                                        const tabs = getTranscriptTabs(activeResult);
+                                        const current = tabs.find(t => t.key === transcriptView) || tabs[0];
+                                        const isHtmlLegacy = current?.key === 'orthography_corrected' && String(current?.text || '').includes('<span');
+                                        const safeText = String(current?.text || '').trim() || "[vide]";
+                                        return (
+                                            <>
+                                                <div className="v132-transcript-tabs">
+                                                    {tabs.map(tab => (
+                                                        <button
+                                                            key={tab.key}
+                                                            type="button"
+                                                            className={`v132-transcript-tab ${transcriptView === tab.key ? 'active' : ''}`}
+                                                            onClick={() => setTranscriptView(tab.key)}
+                                                        >
+                                                            {tab.label}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                                {isHtmlLegacy ? (
+                                                    <div className="v132-main-text" dangerouslySetInnerHTML={{ __html: safeText }} />
+                                                ) : (
+                                                    <div className="v132-main-text">{safeText}</div>
+                                                )}
+                                            </>
+                                        );
+                                    })()}
                                 </div>
                             </div>
                         </div>
@@ -7997,7 +8586,7 @@ export default function ScansStudio({ user, globalClass }) {
                 )}
             </div>
         );
-    }
+    };
 
     return (
         <div className="scan-page animate-in fade-in">
@@ -8017,25 +8606,55 @@ export default function ScansStudio({ user, globalClass }) {
             </div>
 
             <div className="sessions-list">
-                {sessions.map(s => (
+                {sessions.map(s => {
+                    const isCollapsed = !!collapsedSessions[s._id];
+                    const isActiveWorkspace = activeSession?._id === s._id && view !== 'list';
+                    return (
                     <div key={s._id} className="session-card">
-                        <div className="session-card-info">
-                            <h3 className="s-title">{s.title}</h3>
-                            <div className="s-meta">
-                                <span className="s-date">{new Date(s.date).toLocaleDateString()}</span>
-                                <span className="s-divider">•</span>
-                                <span className="s-count">{s.copyUrls?.length || 0} COPIES</span>
-                            </div>
-                        </div>
-                        <div className="session-card-actions">
-                            <button onClick={() => { setActiveSession(s); setView('sujets'); }} className="act-btn btn-sujet">Sujets</button>
-                            <button onClick={() => { setActiveSession(s); setView('scan'); }} className="act-btn btn-scan">Scan</button>
-                            <button onClick={() => { setActiveSession(s); setView('results'); }} className="act-btn btn-results">Résultats</button>
-                            <button onClick={() => handleLaunchCorrection(s._id)} className="act-btn btn-ia">Lancer IA</button>
-                            <button onClick={() => handleDeleteSession(s._id)} className="act-btn btn-delete">✕</button>
-                        </div>
+                        {!isActiveWorkspace && (
+                            <>
+                                <div className="session-card-top">
+                                    <div className="session-card-title-row">
+                                        <h3 className="s-title">{s.title}</h3>
+                                        <button
+                                            onClick={() => toggleSessionCollapse(s._id)}
+                                            className="session-collapse-btn"
+                                            title={isCollapsed ? "Ouvrir" : "Fermer"}
+                                        >
+                                            {isCollapsed ? "+" : "−"}
+                                        </button>
+                                    </div>
+                                    <div className="session-card-actions">
+                                        <button onClick={() => { setActiveSession(s); setView('sujets'); }} className="act-btn btn-sujet">Sujets</button>
+                                        <button onClick={() => { setActiveSession(s); setView('scan'); }} className="act-btn btn-scan">Scan</button>
+                                        <button onClick={() => { setActiveSession(s); setView('results'); }} className="act-btn btn-results">Résultats</button>
+                                        <button
+                                            onClick={() => {
+                                                setActiveSession(s);
+                                                setView('ia');
+                                                setWorkspaceCollapsed(false);
+                                            }}
+                                            className="act-btn btn-ia"
+                                        >
+                                            IA
+                                        </button>
+                                        <button onClick={() => handleDeleteSession(s._id)} className="act-btn btn-delete">✕</button>
+                                    </div>
+                                </div>
+                                {!isCollapsed && (
+                                    <div className="session-card-info">
+                                        <div className="s-meta">
+                                            <span className="s-date">{new Date(s.date).toLocaleDateString()}</span>
+                                            <span className="s-divider">•</span>
+                                            <span className="s-count">{s.copyUrls?.length || 0} COPIES</span>
+                                        </div>
+                                    </div>
+                                )}
+                            </>
+                        )}
+                        {isActiveWorkspace && renderWorkspace(s)}
                     </div>
-                ))}
+                )})}
             </div>
         </div>
     );
@@ -8082,13 +8701,14 @@ export default function ScansStudio({ user, globalClass }) {
 .corr-footer { padding: 1.5rem; background: white; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 15px; }
 .corr-btn-save { padding: 1rem 3rem; background: #16a34a; color: white; border-radius: 15px; font-weight: 900; border: none; cursor: pointer; }
 .corr-btn-cancel { padding: 1rem 2rem; background: #f1f5f9; color: #64748b; border-radius: 15px; font-weight: 800; border: none; cursor: pointer; }
-
 [[[£ END: client/src/features/prof/students/StudentsManager.css £]]]
 
 [[[£ FILE: client/src/features/prof/students/StudentsManager.jsx £]]]
 // @signatures: StudentsManager, getStudentWorkload, handleOpenCorrection, handleRemovePunishment, handleSaveCorrection, loadMatrix
 import React, { useState, useEffect } from 'react';
 import './StudentsManager.css';
+
+const extractId = (value) => String(value?._id || value?.id || value || '');
 
 export default function StudentsManager({ globalClassId }) {
   const [students, setStudents] = useState([]);
@@ -8125,7 +8745,15 @@ export default function StudentsManager({ globalClassId }) {
         const currentClassName = currentClassObj ? currentClassObj.name : "";
         setClassName(currentClassName);
 
-        const myStudents = sts.filter(s => String(s.classId) === String(globalClassId)).sort((a,b) => a.lastName.localeCompare(b.lastName));
+        const myStudents = sts
+            .filter(s => {
+                if (!currentClassObj) return false;
+                if (currentClassObj.type === 'GROUP') {
+                    return (s.assignedGroups || []).some(g => extractId(g) === String(globalClassId));
+                }
+                return String(s.classId) === String(globalClassId);
+            })
+            .sort((a,b) => a.lastName.localeCompare(b.lastName));
         setStudents(myStudents);
         const lateNames = myStudents
             .filter(s => s.punishmentStatus === 'LATE' || (s.punishmentStatus === 'PENDING' && s.punishmentDueDate && new Date(s.punishmentDueDate).getTime() <= Date.now()))
@@ -8556,7 +9184,6 @@ export default function StudentsManager({ globalClassId }) {
 
 @keyframes hourglass-flip { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(180deg); } }
 @keyframes pulse-purple { 0% { box-shadow: 0 0 0 0 rgba(168, 85, 247, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(168, 85, 247, 0); } 100% { box-shadow: 0 0 0 0 rgba(168, 85, 247, 0); } }
-
 [[[£ END: client/src/features/prof/studio/StudioDashboard.css £]]]
 
 [[[£ FILE: client/src/features/prof/studio/StudioDashboard.jsx £]]]
@@ -8823,7 +9450,6 @@ export default function StudioDashboard({ user }) {
         </div>
     );
 }
-
 [[[£ END: client/src/features/prof/studio/StudioDashboard.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/studio/panels/StudioCenterPanel.jsx £]]]
@@ -8869,6 +9495,33 @@ export default function StudioCenterPanel({
         if (!project) return;
         const next = { ...project, isProduction: !project.isProduction };
         await saveProject(next);
+    };
+
+    const isStarshipProject = /starship|bosscharge|supermissile|boss final/i.test(String(code || '') + ' ' + String(project?.title || ''));
+    const selectedActorIdx = currentScene?.actors?.findIndex(a => a.id === selectedActorId) ?? -1;
+    const isStarshipCoreActor = isStarshipProject && (selectedActorIdx === 0 || selectedActorIdx === 1);
+    const expectedStarshipName = selectedActorIdx === 0 ? 'P1' : (selectedActorIdx === 1 ? 'P2' : '');
+
+    const handleNameChange = (rawValue) => {
+        const value = String(rawValue || '').trim();
+        if (isStarshipCoreActor) {
+            handleUpdateProp('name', expectedStarshipName);
+            return;
+        }
+        if (!value) return;
+        handleUpdateProp('name', value);
+    };
+
+    const handleScaleChange = (rawValue) => {
+        const numeric = Number(rawValue);
+        if (!Number.isFinite(numeric)) return;
+        const clampedPct = Math.max(10, Math.min(300, numeric));
+        handleUpdateProp('scale', clampedPct / 100);
+    };
+
+    const handlePlayTest = async () => {
+        await saveProject();
+        setIsPlaying(true);
     };
 
     return (
@@ -8922,17 +9575,29 @@ export default function StudioCenterPanel({
                 {/* RESTAURATION DES CONTRÔLES ACTEUR */}
                 <div className="prop-item">
                     <span className="prop-label">Nom</span>
-                    <input className="prop-input" value={selectedActor?.name || ""} onChange={e => handleUpdateProp('name', e.target.value)} />
+                    <input
+                        className="prop-input"
+                        value={isStarshipCoreActor ? expectedStarshipName : (selectedActor?.name || "")}
+                        onChange={e => handleNameChange(e.target.value)}
+                        title={isStarshipCoreActor ? 'Starship: noms verrouillés sur P1/P2' : ''}
+                    />
                 </div>
                 <div className="prop-item">
                     <span className="prop-label">Taille (%)</span>
-                    <input type="number" className="prop-input" value={Math.round((selectedActor?.scale || 1) * 100)} onChange={e => handleUpdateProp('scale', parseFloat(e.target.value)/100)} />
+                    <input
+                        type="number"
+                        min="10"
+                        max="300"
+                        className="prop-input"
+                        value={Math.round((selectedActor?.scale || 1) * 100)}
+                        onChange={e => handleScaleChange(e.target.value)}
+                    />
                 </div>
                 
                 <button onClick={openQuizManager} className={`btn-view-quiz ${loading ? 'animate-pulse' : ''}`}>
                     {loading ? '...' : '🎓 CONFIG TEST & PROD'}
                 </button>
-                <button onClick={() => { saveProject(); setIsPlaying(true); }} className="ml-auto bg-indigo-600 text-white px-6 py-2 rounded-xl font-black text-[10px] shadow-lg tracking-widest">▶ TESTER</button>
+                <button onClick={handlePlayTest} className="ml-auto bg-indigo-600 text-white px-6 py-2 rounded-xl font-black text-[10px] shadow-lg tracking-widest">▶ TESTER</button>
             </div>
 
             <div className="code-editor-box">
@@ -9290,7 +9955,6 @@ export default function StudioLeftPanel({
         </div>
     );
 }
-
 [[[£ END: client/src/features/prof/studio/panels/StudioLeftPanel.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/studio/panels/StudioRightPanel.jsx £]]]
@@ -9363,7 +10027,6 @@ export default function StudioRightPanel({
         </div>
     );
 }
-
 [[[£ END: client/src/features/prof/studio/panels/StudioRightPanel.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/studio/studioComp/GameEngine.jsx £]]]
@@ -9386,7 +10049,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
         />
     );
 }
-
 [[[£ END: client/src/features/prof/studio/studioComp/GameEngine.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/studio/studioComp/ManualEraser.css £]]]
@@ -9454,7 +10116,6 @@ export default function GameEngine({ code, project, activeSceneIdx, onStop, reso
 .eraser-actions { display: flex; gap: 15px; }
 .btn-eraser-save { background: #10b981; color: white; padding: 15px 40px; border-radius: 20px; font-weight: 950; border: none; cursor: pointer; box-shadow: 0 10px 20px rgba(16, 185, 129, 0.3); }
 .btn-eraser-cancel { background: #ef4444; color: white; padding: 15px 30px; border-radius: 20px; font-weight: 950; border: none; cursor: pointer; }
-
 [[[£ END: client/src/features/prof/studio/studioComp/ManualEraser.css £]]]
 
 [[[£ FILE: client/src/features/prof/studio/studioComp/ManualEraser.jsx £]]]
@@ -9618,7 +10279,6 @@ export default function ManualEraser({ imageUrl, initialSize, onSave, onCancel, 
         </div>
     );
 }
-
 [[[£ END: client/src/features/prof/studio/studioComp/ManualEraser.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/studio/studioComp/SaveLoadModal.css £]]]
@@ -9723,7 +10383,6 @@ export default function ManualEraser({ imageUrl, initialSize, onSave, onCancel, 
 .sl-confirm-btn { padding: 15px; background: #10b981; color: white; border: none; border-radius: 15px; font-weight: 900; cursor: pointer; text-transform: uppercase; }
 
 @keyframes sl-pop { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-
 [[[£ END: client/src/features/prof/studio/studioComp/SaveLoadModal.css £]]]
 
 [[[£ FILE: client/src/features/prof/studio/studioComp/SaveLoadModal.jsx £]]]
@@ -9956,7 +10615,6 @@ export default function SaveLoadModal({ mode, user, currentProject, onClose, onL
         </div>
     );
 }
-
 [[[£ END: client/src/features/prof/studio/studioComp/SaveLoadModal.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/studio/studioComp/SoundEditorModal.css £]]]
@@ -10051,7 +10709,6 @@ export default function SaveLoadModal({ mode, user, currentProject, onClose, onL
 .se-play-big.playing { background: #ef4444; box-shadow: 0 5px 15px rgba(239, 68, 68, 0.4); }
 
 @keyframes se-pop { 0% { transform: scale(0.9); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
-
 [[[£ END: client/src/features/prof/studio/studioComp/SoundEditorModal.css £]]]
 
 [[[£ FILE: client/src/features/prof/studio/studioComp/SoundEditorModal.jsx £]]]
@@ -10259,7 +10916,6 @@ export default function SoundEditorModal({ soundUrl, soundName, onSave, onClose,
         </div>
     );
 }
-
 [[[£ END: client/src/features/prof/studio/studioComp/SoundEditorModal.jsx £]]]
 
 [[[£ FILE: client/src/features/prof/studio/studioComp/SoundExpert.js £]]]
@@ -10417,7 +11073,6 @@ const SoundExpert = {
 };
 
 export default SoundExpert;
-
 [[[£ END: client/src/features/prof/studio/studioComp/SoundExpert.js £]]]
 
 [[[£ FILE: client/src/features/prof/studio/studioComp/SoundModal.css £]]]
@@ -10490,7 +11145,6 @@ export default SoundExpert;
 
 @keyframes sound-pop { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 @keyframes pulse-red { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
-
 [[[£ END: client/src/features/prof/studio/studioComp/SoundModal.css £]]]
 
 [[[£ FILE: client/src/features/prof/studio/studioComp/SoundModal.jsx £]]]
@@ -10678,7 +11332,6 @@ export default function SoundModal({ onSave, onClose }) {
         </div>
     );
 }
-
 [[[£ END: client/src/features/prof/studio/studioComp/SoundModal.jsx £]]]
 
 [[[£ FILE: client/src/features/shared/games/UnifiedMoteur.jsx £]]]
@@ -11296,7 +11949,6 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
 body { margin: 0; font-family: 'Inter', sans-serif; background: #f1f5f9; }
 .custom-scrollbar::-webkit-scrollbar { width: 6px; }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-
 [[[£ END: client/src/index.css £]]]
 
 [[[£ FILE: client/src/main.jsx £]]]
@@ -11361,7 +12013,6 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     </SafetyNet>
   </React.StrictMode>
 );
-
 [[[£ END: client/src/main.jsx £]]]
 
 [[[£ FILE: client/src/services/SoundExpert.js £]]]
@@ -11525,7 +12176,6 @@ const SoundExpert = {
 };
 
 export default SoundExpert;
-
 [[[£ END: client/src/services/SoundExpert.js £]]]
 
 [[[£ FILE: client/src/services/api.js £]]]
@@ -11533,7 +12183,6 @@ export const api = {
     get: (url) => fetch(`/api${url}`).then(r => r.json()),
     post: (url, data) => fetch(`/api${url}`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) }).then(r => r.json())
 };
-
 [[[£ END: client/src/services/api.js £]]]
 
 [[[£ FILE: client/src/services/gameCore.js £]]]
@@ -11673,7 +12322,6 @@ console.log("Le bandeau rouge a disparu, et le fichier est maintenant complet.")
 export default function TestTokenValid() {
     return "Tout est opérationnel chef !";
 }
-
 [[[£ END: client/src/test_token_crash.js £]]]
 
 [[[£ FILE: client/src/utils/driveUrl.js £]]]
@@ -11720,7 +12368,6 @@ export function resolveDriveAssetUrl(url) {
     }
     return `/api/proxy/${id}`;
 }
-
 [[[£ END: client/src/utils/driveUrl.js £]]]
 
 [[[£ FILE: client/vercel.json £]]]
@@ -11742,7 +12389,6 @@ export function resolveDriveAssetUrl(url) {
     }
   ]
 }
-
 [[[£ END: client/vercel.json £]]]
 
 [[[£ FILE: client/vite.config.js £]]]
@@ -11766,7 +12412,6 @@ export default defineConfig({
     }
   }
 })
-
 [[[£ END: client/vite.config.js £]]]
 
 [[[£ FILE: debug_snap.js £]]]
@@ -11799,7 +12444,6 @@ console.log("DEBUG TREE:");
 const tree = buildTree(__dirname);
 console.log("PRODUCED TREE LENGTH:", tree.length);
 console.log(tree.substring(0, 500));
-
 [[[£ END: debug_snap.js £]]]
 
 [[[£ FILE: git-auto.js £]]]
@@ -11843,7 +12487,6 @@ async function doPush() {
 }
 // Lance toutes les 10 minutes (600 000 ms)
 setInterval(doPush, 600000);
-
 [[[£ END: git-auto.js £]]]
 
 [[[£ FILE: homeworkSnap.js £]]]
@@ -11898,53 +12541,7 @@ function capturePaths(paths) {
                 const absoluteFPath = path.join(__dirname, fPath);
                 if (fs.existsSync(absoluteFPath) && fs.statSync(absoluteFPath).isFile()) {
                     const code = fs.readFileSync(absoluteFPath, 'utf8');
-                    content += `\n[[[£ FILE: ${fPath.replace(/\\/g, '/')} £]]]\n${code}\n[[[£ END: ${fPath.replace(/\\/g, '/')} £]]]\n`;
-                }
-            });
-        } else {
-            const code = fs.readFileSync(fullPath, 'utf8');
-            const relPath = p.replace(/\\/g, '/');
-            content += `\n[[[£ FILE: ${relPath} £]]]\n${code}\n[[[£ END: ${relPath} £]]]\n`;
-        }
-    });
-    return content;
-}
-
-function run() {
-    console.log("------------------------------------------------");
-    console.log("🔒 GÉNÉRATION DU SNAPSHOT DE PROTECTION HOMEWORK");
-    console.log("------------------------------------------------");
-    
-    const stories = extractStories('STRUCTURE'); 
-    const homeworkCode = capturePaths(HOMEWORK_PATHS);
-    const dangerCode = capturePaths(DANGER_PATHS);
-
-    const report = `
-================================================================================
-📜 RÉFÉRENTIEL FONCTIONNEL (HOMEWORK)
-================================================================================
-${stories}
-
-================================================================================
-🛡️ FICHIERS PROTÉGÉS (SILO HOMEWORK)
-================================================================================
-${homeworkCode}
-
-================================================================================
-⚠️ FICHIERS DANGEREUX (COMPOSANTS PARTAGÉS)
-================================================================================
-Ceux-ci peuvent casser les devoirs s'ils sont modifiés pour les jeux ou la structure.
-${dangerCode}
-`;
-
-    fs.writeFileSync(OUTPUT_FILE, report);
-    console.log(`✅ Snapshot créé avec succès : ${OUTPUT_FILE}`);
-    console.log(`🚀 Tu peux maintenant taper : git checkout -b stable-homework`);
-    console.log("------------------------------------------------");
-}
-
-run();
-
+                    content += `\n
 [[[£ END: homeworkSnap.js £]]]
 
 [[[£ FILE: init-db.js £]]]
@@ -11957,7 +12554,6 @@ async function init() {
     process.exit();
 }
 init();
-
 [[[£ END: init-db.js £]]]
 
 [[[£ FILE: magic-paste.js £]]]
@@ -11977,18 +12573,7 @@ setInterval(async () => {
         const inputIsEmpty = !fs.existsSync('update.txt') || fs.readFileSync('update.txt', 'utf8').length === 0;
 
         // On copie SI le tag est présent ET (le contenu a changé OU le fichier cible est vide)
-        if (text.includes('[[[£ FILE:') && (text !== lastContent || inputIsEmpty)) {
-            const timestamp = new Date().toLocaleTimeString();
-            console.log(`⚡ [${timestamp}] CAPTURE -> update.txt`);
-            
-            fs.writeFileSync('update.txt', text);
-            lastContent = text;
-        }
-    } catch (e) {
-        // Erreur silencieuse pour les verrous du presse-papier
-    }
-}, 1000); // On descend à 1s pour plus de réactivité
-
+        if (text.includes('
 [[[£ END: magic-paste.js £]]]
 
 [[[£ FILE: package.json £]]]
@@ -11997,7 +12582,7 @@ setInterval(async () => {
   "version": "1.161.0",
   "scripts": {
     "start": "node server/server.js",
-    "server-dev": "nodemon --ignore 'update.txt' --ignore 'apply_status.json' --ignore 'temp_diff.json' server/server.js",
+    "server-dev": "nodemon --watch server --ext js,json --ignore 'public/uploads/**' --ignore 'update.txt' --ignore 'apply_status.json' --ignore 'temp_diff.json' server/server.js",
     "client": "npm run dev --prefix client",
     "test": "node tests/integrity.test.js",
     "migrate:drive-urls": "node scripts/migrate-drive-proxy-urls.js",
@@ -12008,19 +12593,20 @@ setInterval(async () => {
   "dependencies": {
     "@google/generative-ai": "^0.1.3",
     "bcryptjs": "^2.4.3",
+    "clipboardy": "^4.0.0",
     "concurrently": "^8.2.2",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "express-mongo-sanitize": "^2.2.0",
     "express-rate-limit": "^7.1.5",
+    "form-data": "^4.0.1",
     "googleapis": "^126.0.0",
     "helmet": "^7.1.0",
     "mongoose": "7.8.2",
-    "node-fetch": "^2.7.0",
     "multer": "^1.4.5-lts.1",
-    "clipboardy": "^4.0.0",
-    "form-data": "^4.0.1"
+    "node-fetch": "^2.7.0",
+    "sharp": "^0.34.5"
   },
   "devDependencies": {
     "nodemon": "^3.0.3"
@@ -12948,20 +13534,36 @@ const AIEngine = {
     },
 
     sanitizeJSON: (text) => {
-        if (!text) return [];
+        if (!text) return null;
+        const tryParse = (candidate) => {
+            if (!candidate) return null;
+            try { return JSON.parse(candidate); } catch (_) { return null; }
+        };
+        const repairJsonLike = (candidate) => String(candidate || '')
+            .replace(/,\s*([}\]])/g, '$1') // trailing commas
+            .replace(/\u0000/g, '')
+            .trim();
         try {
             // Nettoyage agressif des balises Markdown et espaces
             let clean = text.replace(/```json/g, '').replace(/```/g, '').trim();
-            const start = clean.indexOf('[');
-            const end = clean.lastIndexOf(']');
-            if (start !== -1 && end !== -1) {
-                const jsonArray = JSON.parse(clean.substring(start, end + 1));
-                return AIEngine.normalizeKeys(jsonArray);
+            const objStart = clean.indexOf('{');
+            const objEnd = clean.lastIndexOf('}');
+            if (objStart !== -1 && objEnd !== -1 && objEnd > objStart) {
+                const rawObject = clean.substring(objStart, objEnd + 1);
+                const parsedObject = tryParse(rawObject) || tryParse(repairJsonLike(rawObject));
+                if (parsedObject) return AIEngine.normalizeKeys(parsedObject);
             }
-            return [];
+            const arrStart = clean.indexOf('[');
+            const arrEnd = clean.lastIndexOf(']');
+            if (arrStart !== -1 && arrEnd !== -1 && arrEnd > arrStart) {
+                const rawArray = clean.substring(arrStart, arrEnd + 1);
+                const parsedArray = tryParse(rawArray) || tryParse(repairJsonLike(rawArray));
+                if (parsedArray) return AIEngine.normalizeKeys(parsedArray);
+            }
+            return null;
         } catch (e) {
             console.error("❌ Erreur de parsing JSON IA:", e.message);
-            return [];
+            return null;
         }
     },
 
@@ -13127,6 +13729,58 @@ module.exports = DriveEngine;
 [[[£ FILE: server/core/ocr.engine.js £]]]
 const fetch = require('node-fetch');
 
+const buildFilteredText = (fullTextAnnotation) => {
+    try {
+        const pages = Array.isArray(fullTextAnnotation?.pages) ? fullTextAnnotation.pages : [];
+        const words = [];
+        pages.forEach((page) => {
+            const pageH = Number(page?.height || 0);
+            (page.blocks || []).forEach((block) => {
+                (block.paragraphs || []).forEach((par) => {
+                    (par.words || []).forEach((w) => {
+                        const token = (w.symbols || []).map(s => s?.text || '').join('').trim();
+                        if (!token) return;
+                        const vertices = w?.boundingBox?.vertices || [];
+                        const ys = vertices.map(v => Number(v?.y || 0));
+                        const yMid = ys.length ? ys.reduce((a, b) => a + b, 0) / ys.length : 0;
+                        words.push({
+                            token,
+                            conf: typeof w.confidence === 'number' ? w.confidence : null,
+                            yMid,
+                            pageH
+                        });
+                    });
+                });
+            });
+        });
+        if (!words.length) return '';
+
+        // Remove likely header overlays / teacher notes and ultra-low-confidence noise.
+        const filtered = words.filter((w) => {
+            if (!w.pageH) return true;
+            if (w.yMid < w.pageH * 0.11) return false;
+            if (typeof w.conf === 'number' && w.conf < 0.35) return false;
+            return true;
+        });
+        if (!filtered.length) return '';
+
+        const all = filtered.sort((a, b) => a.yMid - b.yMid);
+        const lineThreshold = Math.max(10, (all[0]?.pageH || 1000) * 0.015);
+        const lines = [];
+        all.forEach((w) => {
+            const last = lines[lines.length - 1];
+            if (!last || Math.abs(last.y - w.yMid) > lineThreshold) {
+                lines.push({ y: w.yMid, tokens: [w.token] });
+            } else {
+                last.tokens.push(w.token);
+            }
+        });
+        return lines.map(l => l.tokens.join(' ')).join('\n').trim();
+    } catch (_) {
+        return '';
+    }
+};
+
 /**
  * 👁️ MOTEUR OCR V2 (AVEC RETOUR D'ERREUR)
  * Renvoie l'erreur exacte si Google refuse de lire.
@@ -13159,12 +13813,34 @@ const OCREngine = {
                 return { success: false, error: data.error.message };
             }
 
-            const fullText = data.responses[0]?.fullTextAnnotation?.text;
+            const fullTextAnnotation = data.responses[0]?.fullTextAnnotation;
+            const fullText = fullTextAnnotation?.text;
+            const filteredText = buildFilteredText(fullTextAnnotation);
+            const pages = Array.isArray(fullTextAnnotation?.pages) ? fullTextAnnotation.pages : [];
+            const confidences = [];
+            pages.forEach((p) => {
+                (p.blocks || []).forEach((b) => {
+                    (b.paragraphs || []).forEach((par) => {
+                        (par.words || []).forEach((w) => {
+                            if (typeof w.confidence === 'number') confidences.push(w.confidence);
+                        });
+                    });
+                });
+            });
+            const confidence = confidences.length
+                ? (confidences.reduce((a, b) => a + b, 0) / confidences.length)
+                : null;
             if (!fullText) {
-                return { success: true, text: "" }; // Image lue mais vide
+                return { success: true, text: "", filteredText: "", confidence, wordsCount: confidences.length }; // Image lue mais vide
             }
 
-            return { success: true, text: fullText };
+            return {
+                success: true,
+                text: fullText,
+                filteredText,
+                confidence,
+                wordsCount: confidences.length
+            };
 
         } catch (e) {
             return { success: false, error: "Crash Réseau: " + e.message };
@@ -13554,6 +14230,7 @@ module.exports = AuthDB;
 // @signatures: fName, lName, pass
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs'); // Librairie de hachage
+const BCRYPT_HASH_RE = /^\$2[aby]\$/;
 
 /**
  * 🔐 EXPERT AUTH - V150 (CRYPTAGE DYNAMIQUE)
@@ -13573,8 +14250,36 @@ const AuthExpert = {
     },
 
     getStudentsForSelection: async (classId) => {
-        const enrollments = await mongoose.model('Enrollment').find({ classId }).populate('studentId').lean();
-        return enrollments.filter(e => e.studentId).map(e => ({ id: e.studentId._id, name: `${e.studentId.firstName} ${e.studentId.lastName}` })).sort((a,b) => a.name.localeCompare(b.name));
+        if (!mongoose.Types.ObjectId.isValid(classId)) return [];
+
+        const Classroom = mongoose.model('Classroom');
+        const Student = mongoose.model('Student');
+        const Enrollment = mongoose.model('Enrollment');
+        const cls = await Classroom.findById(classId).lean();
+        if (!cls) return [];
+
+        // Source 1 (legacy): table Enrollment
+        const enrollments = await Enrollment.find({ classId }).populate('studentId').lean();
+        const enrollmentStudents = enrollments.filter(e => e.studentId).map(e => e.studentId);
+
+        // Source 2 (canonique actuelle): Student.classId / Student.assignedGroups
+        let directStudents = [];
+        if (cls.type === 'GROUP') {
+            directStudents = await Student.find({ assignedGroups: cls._id }).lean();
+        } else {
+            directStudents = await Student.find({ classId: cls._id }).lean();
+        }
+
+        // Fusion sans doublons
+        const map = new Map();
+        [...enrollmentStudents, ...directStudents].forEach(s => {
+            if (!s || !s._id) return;
+            map.set(String(s._id), s);
+        });
+
+        return [...map.values()]
+            .map(s => ({ id: s._id, name: `${s.firstName} ${s.lastName}` }))
+            .sort((a, b) => a.name.localeCompare(b.name));
     },
 
     verify: async ({ role, studentId, firstName, lastName, password }) => {
@@ -13608,8 +14313,8 @@ const AuthExpert = {
             // VÉRIFICATION DU MOT DE PASSE
             let isValid = false;
 
-            // A. Est-ce que le mot de passe est déjà crypté (commence par $2a$...) ?
-            if (user.password.startsWith('$2a$')) {
+            // A. Mot de passe déjà hashé bcrypt ($2a$ / $2b$ / $2y$)
+            if (BCRYPT_HASH_RE.test(String(user.password || ''))) {
                 isValid = await bcrypt.compare(pass, user.password);
             } 
             // B. Sinon, c'est un vieux mot de passe en clair (Legacy)
@@ -13706,12 +14411,15 @@ const upload = multer({ dest: path.join(process.cwd(), 'public', 'uploads', 'tem
 // GET PLAN CLASSE (Sécurisé anti-crash)
 router.get('/plan/:classId', asyncHandler(async (req, res) => {
     const teacherId = req.query.teacherId;
+    const cls = await mongoose.model('Classroom').findById(req.params.classId).lean();
+    if (!cls) return res.status(404).json({ error: "Classe/Groupe introuvable" });
+    const studentQuery = cls.type === 'GROUP' ? { assignedGroups: cls._id } : { classId: cls._id };
 
     // MODE SECOURS : Si pas de teacherId, on renvoie juste les élèves (sans notes/indicateurs)
     // Cela évite l'erreur 400 "Bad Request" qui masque les élèves
     if (!teacherId || teacherId === 'undefined' || teacherId === 'null') {
         console.warn("⚠️ [PLAN] Pas de TeacherID, chargement simple.");
-        const students = await mongoose.model('Student').find({ classId: req.params.classId }).lean();
+        const students = await mongoose.model('Student').find(studentQuery).lean();
         return res.json(students);
     }
 
@@ -13721,7 +14429,7 @@ router.get('/plan/:classId', asyncHandler(async (req, res) => {
     } catch (e) {
         console.error("❌ [PLAN] Erreur Data Enrichie:", e);
         // En cas d'erreur de l'expert, on fallback sur la liste simple aussi
-        const students = await mongoose.model('Student').find({ classId: req.params.classId }).lean();
+        const students = await mongoose.model('Student').find(studentQuery).lean();
         res.json(students);
     }
 }));
@@ -13768,13 +14476,17 @@ const ClassroomAI = require('../ai/plan.ai');
 const ClassroomExpert = {
     getClassroomData: async (classId, teacherId) => {
         const Student = mongoose.model('Student');
+        const Classroom = mongoose.model('Classroom');
         const Homework = mongoose.model('Homework');
         const Game = mongoose.model('GameLevel');
         const Submission = mongoose.model('Submission');
         const GameProgress = mongoose.model('GameProgress');
         const Chapter = mongoose.model('Chapter');
 
-        const students = await Student.find({ classId }).lean();
+        const cls = await Classroom.findById(classId).lean();
+        if (!cls) return [];
+        const studentQuery = cls.type === 'GROUP' ? { assignedGroups: cls._id } : { classId: cls._id };
+        const students = await Student.find(studentQuery).lean();
         const activeChapters = await Chapter.find({ teacherId, isArchived: false }, '_id').lean();
         const activeChapIds = activeChapters.map(c => c._id);
 
@@ -13879,9 +14591,12 @@ const ClassroomExpert = {
     
     applyPlanFromImage: async (classId, file) => {
         const Student = mongoose.model('Student');
+        const Classroom = mongoose.model('Classroom');
+        const cls = await Classroom.findById(classId).lean();
+        if (!cls) throw new Error('Classe/Groupe introuvable');
         
         // 1. Récupérer les élèves de cette classe en BDD
-        const dbStudents = await Student.find({ classId }).lean();
+        const dbStudents = await Student.find(cls.type === 'GROUP' ? { assignedGroups: cls._id } : { classId: cls._id }).lean();
         
         // 2. Lancer l'analyse IA
         const aiResults = await ClassroomAI.analyzePlanImage(file.path, file.mimetype, dbStudents);
@@ -14363,11 +15078,139 @@ module.exports = router;
 
 [[[£ END: server/domains/homework/homework.routes.js £]]]
 
+[[[£ FILE: server/domains/scans/ai/image.preprocess.js £]]]
+let sharpLib = null;
+try {
+    // Optional dependency: if unavailable, fallback keeps original image.
+    sharpLib = require('sharp');
+} catch (_) {
+    sharpLib = null;
+}
+
+const DEFAULT_UPSCALE = 1.7;
+
+const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
+
+const getBufferFromB64 = (base64Image = '') => Buffer.from(String(base64Image || ''), 'base64');
+const getB64FromBuffer = (buffer) => Buffer.from(buffer).toString('base64');
+
+const preprocessForScan = async (base64Image = '', options = {}) => {
+    const startedAt = Date.now();
+    const upscale = clamp(Number(options.upscale || DEFAULT_UPSCALE), 1, 2);
+    const result = {
+        ok: true,
+        usedSharp: Boolean(sharpLib),
+        originalB64: String(base64Image || ''),
+        preprocessedB64: String(base64Image || ''),
+        meta: {
+            original: {},
+            preprocessed: {},
+            ms: 0
+        }
+    };
+
+    if (!base64Image) {
+        result.ok = false;
+        result.meta.ms = Date.now() - startedAt;
+        return result;
+    }
+
+    if (!sharpLib) {
+        result.meta.ms = Date.now() - startedAt;
+        return result;
+    }
+
+    try {
+        const sharp = sharpLib;
+        const inputBuffer = getBufferFromB64(base64Image);
+        const input = sharp(inputBuffer, { failOnError: false });
+        const meta = await input.metadata();
+        const width = Number(meta.width || 0);
+        const height = Number(meta.height || 0);
+        result.meta.original = { width, height, size: inputBuffer.length };
+
+        const targetWidth = width > 0 ? Math.round(width * upscale) : null;
+        const targetHeight = height > 0 ? Math.round(height * upscale) : null;
+
+        let pipeline = sharp(inputBuffer, { failOnError: false })
+            .greyscale()
+            .linear(1.2, -10)
+            .median(1)
+            .sharpen({ sigma: 0.8, m1: 0.5, m2: 1.2 });
+
+        if (targetWidth && targetHeight) {
+            pipeline = pipeline.resize(targetWidth, targetHeight, { fit: 'fill', kernel: sharp.kernel.lanczos3 });
+        }
+
+        const outBuffer = await pipeline.jpeg({ quality: 96, mozjpeg: true }).toBuffer();
+        const outMeta = await sharp(outBuffer).metadata();
+        result.preprocessedB64 = getB64FromBuffer(outBuffer);
+        result.meta.preprocessed = {
+            width: Number(outMeta.width || 0),
+            height: Number(outMeta.height || 0),
+            size: outBuffer.length
+        };
+        result.meta.ms = Date.now() - startedAt;
+        return result;
+    } catch (e) {
+        return {
+            ...result,
+            ok: false,
+            preprocessedB64: String(base64Image || ''),
+            error: e.message,
+            meta: { ...result.meta, ms: Date.now() - startedAt }
+        };
+    }
+};
+
+const splitIntoZones = async (base64Image = '', options = {}) => {
+    const zones = [];
+    if (!base64Image || !sharpLib) return zones;
+    try {
+        const sharp = sharpLib;
+        const source = getBufferFromB64(base64Image);
+        const meta = await sharp(source, { failOnError: false }).metadata();
+        const width = Number(meta.width || 0);
+        const height = Number(meta.height || 0);
+        if (!width || !height) return zones;
+
+        const zoneCount = Math.max(3, Math.min(6, Number(options.zoneCount || 4)));
+        const topMargin = Math.round(height * 0.14); // ignore header area
+        const bottomMargin = Math.round(height * 0.05);
+        const usableHeight = Math.max(1, height - topMargin - bottomMargin);
+        const zoneHeight = Math.max(30, Math.floor(usableHeight / zoneCount));
+
+        for (let i = 0; i < zoneCount; i += 1) {
+            const top = topMargin + (i * zoneHeight);
+            if (top >= height) break;
+            const h = Math.min(zoneHeight + 16, height - top);
+            const crop = await sharp(source, { failOnError: false })
+                .extract({ left: 0, top, width, height: h })
+                .jpeg({ quality: 96, mozjpeg: true })
+                .toBuffer();
+            zones.push({
+                idx: i,
+                top,
+                height: h,
+                b64: getB64FromBuffer(crop)
+            });
+        }
+        return zones;
+    } catch (_) {
+        return [];
+    }
+};
+
+module.exports = { preprocessForScan, splitIntoZones };
+
+[[[£ END: server/domains/scans/ai/image.preprocess.js £]]]
+
 [[[£ FILE: server/domains/scans/ai/scan.ai.js £]]]
 // @signatures: getImageData, streamToBuffer
 const AIEngine = require('../../../core/ai.engine');
 const OCREngine = require('../../../core/ocr.engine'); 
 const StructureDrive = require('../../structure/experts/structure.drive'); 
+const { preprocessForScan, splitIntoZones } = require('./image.preprocess');
 
 const streamToBuffer = async (stream) => {
     const chunks = [];
@@ -14378,62 +15221,445 @@ const streamToBuffer = async (stream) => {
     });
 };
 
+const escapeHtml = (s = '') => String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+const ensureRedMarkup = (transcription = '', mistakes = []) => {
+    const text = String(transcription || '');
+    if (text.includes('ai-red-mark')) return text;
+    if (!Array.isArray(mistakes) || mistakes.length === 0) return text;
+    const fixes = mistakes
+        .filter(m => m && (m.wrong || m.correct))
+        .slice(0, 8)
+        .map(m => {
+            const wrong = escapeHtml(String(m.wrong || '').trim() || '...');
+            const correct = escapeHtml(String(m.correct || '').trim() || '...');
+            return `<span class="ai-red-mark">${wrong} → ${correct}</span>`;
+        });
+    if (fixes.length === 0) return text;
+    return `${text}\n\n${fixes.join(' ')}`;
+};
+
+const stripHtml = (html = '') => String(html || '').replace(/<[^>]*>/g, ' ');
+const normalizeTxt = (s = '') => String(s || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9 ]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+const tokenize = (s = '') => normalizeTxt(s).split(' ').filter(Boolean);
+const weirdTokenRatio = (text = '') => {
+    const tokens = tokenize(text);
+    if (!tokens.length) return 1;
+    let weird = 0;
+    tokens.forEach((t) => {
+        if (t.length <= 3) return;
+        const vowels = (t.match(/[aeiouy]/g) || []).length;
+        const hasLongConsonantRun = /[bcdfghjklmnpqrstvwxz]{5,}/.test(t);
+        if (vowels === 0 || hasLongConsonantRun) weird += 1;
+    });
+    return weird / tokens.length;
+};
+const confidenceLabel = (confidence) => {
+    const n = Number(confidence);
+    if (!Number.isFinite(n)) return 'unknown';
+    if (n >= 0.8) return 'high';
+    if (n >= 0.55) return 'medium';
+    return 'low';
+};
+
+const buildQualityFlags = ({ substitutionRatio, ocrConfidence, literalText }) => {
+    const flags = [];
+    if (Number.isFinite(substitutionRatio) && substitutionRatio > 0.2) flags.push('HIGH_SUBSTITUTION');
+    if (Number.isFinite(ocrConfidence) && ocrConfidence < 0.55) flags.push('LOW_CONFIDENCE_OCR');
+    const ilCount = (String(literalText || '').match(/\[illisible\]/gi) || []).length;
+    if (ilCount >= 3) flags.push('HEAVY_ILLEGIBLE');
+    return flags;
+};
+
+const computeSubstitutionRatio = (literalTranscription = '', correctedTranscription = '', spellingMistakes = []) => {
+    const literal = tokenize(literalTranscription);
+    const corrected = tokenize(stripHtml(correctedTranscription));
+    if (!literal.length || !corrected.length) return 0;
+
+    const literalSet = new Set(literal);
+    const tolerated = new Set();
+    (Array.isArray(spellingMistakes) ? spellingMistakes : []).forEach((m) => {
+        const w = tokenize(m?.wrong || '');
+        const c = tokenize(m?.correct || '');
+        w.forEach(t => tolerated.add(t));
+        c.forEach(t => tolerated.add(t));
+    });
+
+    let suspicious = 0;
+    corrected.forEach((tok) => {
+        if (tok.length < 4) return;
+        if (!literalSet.has(tok) && !tolerated.has(tok)) suspicious += 1;
+    });
+    return suspicious / corrected.length;
+};
+const tokenCount = (s = '') => tokenize(s).length;
+
+const defaultInstructions = `Comprendre le sens réel écrit par l'élève.
+Ne pas corriger l'orthographe pour l'instant.
+Rester proche des mots visibles de la copie.`;
+
+const clampNum = (n, min, max, fallback) => {
+    const v = Number(n);
+    if (!Number.isFinite(v)) return fallback;
+    return Math.max(min, Math.min(max, v));
+};
+
+const cleanModelText = (raw = '') => {
+    const txt = String(raw || '').trim();
+    if (!txt) return '';
+    return txt
+        .replace(/```json/gi, '')
+        .replace(/```/g, '')
+        .trim();
+};
+
+const toVariant = (label, text) => ({ label, text: String(text || '').trim() });
+
+const parseOrFirstObject = (raw = '') => {
+    const parsedRaw = AIEngine.sanitizeJSON(raw);
+    return Array.isArray(parsedRaw) ? (parsedRaw[0] || {}) : (parsedRaw || {});
+};
+
+const fallbackText = (raw = '', minLen = 20) => {
+    const cleaned = cleanModelText(raw);
+    return cleaned && cleaned.length >= minLen ? cleaned : '';
+};
+
+const normalizeMistakes = (mistakes = []) => (
+    Array.isArray(mistakes)
+        ? mistakes
+            .filter((m) => m && (m.wrong || m.correct))
+            .map((m) => ({
+                wrong: String(m.wrong || '').trim(),
+                correct: String(m.correct || '').trim(),
+                context: String(m.context || '').trim()
+            }))
+        : []
+);
+
+const buildCanonicalVariants = ({ literal = '', orthography = '', feedback = '' }) => ({
+    literal_final: toVariant('Transcription fidèle', literal),
+    orthography_corrected: toVariant('Orthographe corrigée', orthography),
+    content_feedback: toVariant('Feedback fond', feedback)
+});
+
 const ScanAI = {
-    correctCopy: async (copyUrl, subjectUrls, instructions, studentList) => {
-        console.log("👁️ [SCAN-AI] Correction V132 (Fusion Transcription/Correction)...");
+    correctCopy: async (copyUrl, subjectUrls, instructions, studentList, options = {}) => {
+        const scanAiV2Enabled = String(process.env.SCAN_AI_V2 || 'true').toLowerCase() !== 'false';
+        const zoneSplitEnabled = String(process.env.SCAN_ZONE_SPLIT || 'false').toLowerCase() !== 'false';
+        const envOcrMode = String(process.env.SCAN_OCR_MODE || '').trim().toLowerCase();
+        const defaultOcrMode = envOcrMode || 'none';
+        const ocrMode = String(options.ocrMode || defaultOcrMode).toLowerCase(); // none | light | full
+        const useOcrHints = ocrMode !== 'none';
+        const zoneCount = clampNum(options.zoneCount, 3, 8, 6);
+        const upscale = clampNum(options.upscale, 1, 2.3, 2.1);
+        const seedTranscription = String(options.seedTranscription || '').trim();
+        const threeTabPipelineEnabled = String(process.env.SCAN_THREE_TAB_PIPELINE || 'true').toLowerCase() !== 'false';
+        console.log(`👁️ [SCAN-AI] Correction V2=${scanAiV2Enabled ? 'ON' : 'OFF'} (3 passes)...`);
 
         const rosterText = studentList.map(s => `${s.firstName} ${s.lastName}`).join(', ');
 
+        const extractFileId = (url = '') => {
+            const raw = String(url || '');
+            const idx = raw.indexOf('/proxy/');
+            if (idx === -1) return '';
+            return raw.slice(idx + '/proxy/'.length).split('?')[0].split('#')[0].trim();
+        };
+
         const getImageData = async (url) => {
             try {
-                if (url.includes('/proxy/')) {
-                    const fileId = url.split('/proxy/')[1];
-                    const stream = await StructureDrive.getFileStream(fileId);
-                    const buffer = await streamToBuffer(stream);
-                    return buffer.toString('base64');
-                }
+                const fileId = extractFileId(url);
+                if (!fileId) return null;
+                const stream = await StructureDrive.getFileStream(fileId);
+                const buffer = await streamToBuffer(stream);
+                return buffer.toString('base64');
+            } catch (e) {
                 return null;
-            } catch (e) { return null; }
+            }
         };
 
         const copyB64 = await getImageData(copyUrl);
         if (!copyB64) return { studentName: "Erreur", grade: "?", appreciation: "Image non chargée" };
 
-        const ocrResult = await OCREngine.extractText(copyB64);
-        
-        // --- NOUVEAU SYSTÈME DE SCRIBE HYBRIDE ---
-        const scribeSystem = `Tu es un PROFESSEUR CORRECTEUR. Ta mission est de retranscrire la copie de l'élève tout en y insérant tes corrections.
-        
-        RÈGLES DE RENDU (TRÈS IMPORTANT) :
-        1. TRANSCRIPTION : Écris le texte original de l'élève en noir (texte brut).
-        2. CORRECTIONS : Dès que tu vois une faute (orthographe, grammaire, syntaxe) ou une erreur de fond, entoure ta correction par <span class="ai-red-mark">...</span>.
-        3. FUSION : Ne sépare pas la transcription et la correction. La correction doit être insérée immédiatement après l'erreur ou remplacer l'erreur si elle est illisible.
-        4. APPRÉCIATION : Finis toujours par une courte appréciation globale.
-        5. IDENTITÉ : Trouve le nom parmi cette liste : [${rosterText}].
+        const preprocess = scanAiV2Enabled
+            ? await preprocessForScan(copyB64, { upscale })
+            : { preprocessedB64: copyB64, meta: { original: {}, preprocessed: {}, ms: 0 }, usedSharp: false };
 
-        EXEMPLE DE SORTIE DANS LE CHAMP 'transcription' :
-        "Le chat <span class="ai-red-mark">mange</span> (au lieu de manj) sa souris. C'était une <span class="ai-red-mark">belle</span> journée."
-
-        FORMAT JSON REQUIS :
-        {
-            "studentName": "Nom",
-            "grade": "A+, A, B ou C",
-            "appreciation": "Ton avis global ici",
-            "transcription": "LE TEXTE COMPLET AVEC LES BALISES HTML ROUGES"
-        }`;
-
-        const promptParts = [
-            { text: `Consignes du prof : "${instructions}"` },
-            { text: `OCR de base pour aide : "${ocrResult.success ? ocrResult.text : 'Non disponible'}"` },
-            { inlineData: { mimeType: "image/jpeg", data: copyB64 } }
+        const targetForOCR = preprocess?.preprocessedB64 || copyB64;
+        const ocrResult = useOcrHints
+            ? await OCREngine.extractText(targetForOCR)
+            : { success: false, text: '', filteredText: '', confidence: null, wordsCount: 0 };
+        const ocrBaseText = String(ocrResult?.filteredText || ocrResult?.text || '').trim();
+        const zones = (scanAiV2Enabled && zoneSplitEnabled)
+            ? await splitIntoZones(targetForOCR, { zoneCount })
+            : [];
+        const zoneOcrResults = await Promise.all(
+            zones.map(async (z) => {
+                if (!useOcrHints) return '';
+                const zOcr = await OCREngine.extractText(z.b64);
+                return String(zOcr?.filteredText || zOcr?.text || '').trim();
+            })
+        );
+        const zoneTexts = zoneOcrResults.filter(Boolean);
+        const zoneLiteralSeed = zoneTexts.join('\n').trim();
+        const zoneImageParts = zones
+            .filter(z => z?.b64)
+            .slice(0, 4)
+            .map((z) => ({ inlineData: { mimeType: "image/jpeg", data: z.b64 } }));
+        const subjectB64List = await Promise.all((subjectUrls || []).slice(0, 2).map(getImageData));
+        const subjectImageParts = subjectB64List
+            .filter(Boolean)
+            .map((b64) => ({ inlineData: { mimeType: "image/jpeg", data: b64 } }));
+        const imagePartsPrimary = [
+            { inlineData: { mimeType: "image/jpeg", data: copyB64 } },
+            ...(targetForOCR !== copyB64 ? [{ inlineData: { mimeType: "image/jpeg", data: targetForOCR } }] : []),
+            ...zoneImageParts
         ];
 
+        const runLegacy = async () => {
+            const legacySystem = `Tu es un PROFESSEUR CORRECTEUR francophone.
+Mission: corriger la copie en gardant le sens.
+Règles:
+1) corrections visibles avec <span class="ai-red-mark">...</span>
+2) pas d'invention
+3) réponse JSON strict:
+{
+  "studentName":"Nom",
+  "grade":"A+, A, B ou C",
+  "score20":0,
+  "appreciation":"...",
+  "transcription":"...",
+  "spellingMistakes":[{"wrong":"...","correct":"..."}],
+  "questionFeedback":[]
+}`;
+            const legacyParts = [
+                { text: `Consignes prof: "${String(instructions || '').trim()}"` },
+                { text: `OCR filtré prioritaire: "${ocrResult.success ? ocrBaseText : 'Non disponible'}"` },
+                { text: `OCR complet (secours): "${ocrResult.success ? ocrResult.text : 'Non disponible'}"` },
+                ...subjectImageParts,
+                { inlineData: { mimeType: "image/jpeg", data: copyB64 } }
+            ];
+            const legacyRaw = await AIEngine.ask(legacyParts, legacySystem);
+            const legacyParsedRaw = AIEngine.sanitizeJSON(legacyRaw);
+            const legacyParsed = Array.isArray(legacyParsedRaw) ? (legacyParsedRaw[0] || {}) : (legacyParsedRaw || {});
+            const normalizedMistakes = Array.isArray(legacyParsed.spellingMistakes)
+                ? legacyParsed.spellingMistakes
+                    .filter(m => m && (m.wrong || m.correct))
+                    .map(m => ({ wrong: String(m.wrong || '').trim(), correct: String(m.correct || '').trim() }))
+                : [];
+            return {
+                studentName: legacyParsed.studentName || "Inconnu",
+                grade: legacyParsed.grade || "B",
+                score20: Number.isFinite(Number(legacyParsed.score20)) ? Number(legacyParsed.score20) : null,
+                appreciation: legacyParsed.appreciation || "Pas d'avis.",
+                transcription: ensureRedMarkup(String(legacyParsed.transcription || "..."), normalizedMistakes),
+                literalTranscription: ocrBaseText,
+                spellingMistakes: normalizedMistakes,
+                questionFeedback: Array.isArray(legacyParsed.questionFeedback) ? legacyParsed.questionFeedback : [],
+                transcriptionVariants: buildCanonicalVariants({
+                    literal: String(legacyParsed.transcription || ocrBaseText || "..."),
+                    orthography: String(legacyParsed.transcription || "..."),
+                    feedback: String(legacyParsed.appreciation || "Pas d'avis.")
+                }),
+                qualityFlags: [],
+                ocrConfidence: Number.isFinite(Number(ocrResult.confidence)) ? Number(ocrResult.confidence) : null
+            };
+        };
+
         try {
-            const rawText = await AIEngine.ask(promptParts, scribeSystem);
-            return AIEngine.sanitizeJSON(rawText);
+            if (!scanAiV2Enabled || !threeTabPipelineEnabled) return await runLegacy();
+
+            // PASS A - Transcription fidèle
+            const passASystem = `Tu es un transcripteur de copies manuscrites françaises.
+MISSION: produire une transcription fidèle (pas de correction orthographique).
+RÈGLES:
+1) Priorité absolue à l'image.
+2) OCR seulement comme indice secondaire.
+3) Pas de reformulation créative, pas de synonymes.
+4) Si mot incertain: [mot?], si illisible: [illisible].
+5) Déduis le nom parmi: [${rosterText}].
+Réponds en JSON strict:
+{
+  "studentName":"Nom",
+  "literalTranscription":"...",
+  "confidence":0.0,
+  "uncertainTokens":["..."],
+  "illegibleSpans":["..."]
+}`;
+            const passAParts = [
+                { text: `Consignes prof: "${String(instructions || defaultInstructions).trim()}"` },
+                ...(seedTranscription ? [{ text: `Candidat base (optionnel): "${seedTranscription}"` }] : []),
+                ...(useOcrHints ? [
+                    { text: `OCR filtré (indice): "${ocrResult.success ? ocrBaseText : 'Non disponible'}"` },
+                    { text: `OCR zones (indice):\n${zoneLiteralSeed || 'non disponible'}` }
+                ] : []),
+                ...subjectImageParts,
+                ...imagePartsPrimary
+            ];
+            const passARaw = await AIEngine.ask(passAParts, passASystem);
+            const passAParsed = parseOrFirstObject(passARaw);
+            const passAConfidence = Number.isFinite(Number(passAParsed.confidence)) ? Number(passAParsed.confidence) : null;
+            let literalTranscription = String(passAParsed.literalTranscription || '').trim();
+            if (!literalTranscription) literalTranscription = fallbackText(passARaw);
+            if (!literalTranscription) literalTranscription = String(seedTranscription || zoneLiteralSeed || ocrBaseText || '').trim();
+            if (!literalTranscription) literalTranscription = '[illisible]';
+            const uncertainTokens = Array.isArray(passAParsed.uncertainTokens) ? passAParsed.uncertainTokens.map((v) => String(v || '').trim()).filter(Boolean) : [];
+            const illegibleSpans = Array.isArray(passAParsed.illegibleSpans) ? passAParsed.illegibleSpans.map((v) => String(v || '').trim()).filter(Boolean) : [];
+            const studentName = String(passAParsed.studentName || '').trim() || 'Inconnu';
+
+            // PASS B - Orthographe (comparaison fidèle <-> image)
+            const passBSystem = `Tu es correcteur orthographique, sans changer le sens.
+MISSION: corriger seulement l'orthographe/grammaire de surface à partir de la transcription fidèle et de l'image.
+RÈGLES:
+1) Ne pas réécrire les idées.
+2) Pas de synonymes non nécessaires.
+3) Corrections minimales.
+Réponds en JSON strict:
+{
+  "orthographyCorrected":"...",
+  "spellingMistakes":[{"wrong":"...","correct":"...","context":"..."}]
+}`;
+            const passBParts = [
+                { text: `Transcription fidèle: "${literalTranscription}"` },
+                ...subjectImageParts,
+                ...imagePartsPrimary
+            ];
+            const passBRaw = await AIEngine.ask(passBParts, passBSystem);
+            const passBParsed = parseOrFirstObject(passBRaw);
+            let orthographyCorrected = String(passBParsed.orthographyCorrected || '').trim();
+            if (!orthographyCorrected) orthographyCorrected = fallbackText(passBRaw);
+            if (!orthographyCorrected) orthographyCorrected = literalTranscription;
+            const spellingMistakes = normalizeMistakes(passBParsed.spellingMistakes);
+
+            // PASS C - Feedback fond par question
+            const passCSystem = `Tu es professeur correcteur.
+MISSION: donner un feedback de fond par question à partir de la copie et du sujet.
+RÈGLES:
+1) Ne pas corriger l'orthographe ici.
+2) Feedback actionnable, par question.
+3) Note lettre: A+, A, B, C.
+Réponds en JSON strict:
+{
+  "appreciation":"...",
+  "questionFeedback":["..."],
+  "grade":"A+|A|B|C",
+  "score20":0
+}`;
+            const passCParts = [
+                { text: `Consignes prof: "${String(instructions || defaultInstructions).trim()}"` },
+                { text: `Transcription fidèle: "${literalTranscription}"` },
+                { text: `Version orthographe corrigée: "${orthographyCorrected}"` },
+                ...subjectImageParts,
+                ...imagePartsPrimary
+            ];
+            const passCRaw = await AIEngine.ask(passCParts, passCSystem);
+            const passCParsed = parseOrFirstObject(passCRaw);
+            const appreciation = String(passCParsed.appreciation || '').trim() || 'Pas d’avis.';
+            const questionFeedback = Array.isArray(passCParsed.questionFeedback)
+                ? passCParsed.questionFeedback.map((v) => String(v || '').trim()).filter(Boolean)
+                : [];
+            const gradeRaw = String(passCParsed.grade || 'B').trim().toUpperCase();
+            const grade = ['A+', 'A', 'B', 'C'].includes(gradeRaw) ? gradeRaw : 'B';
+            const score20 = Number.isFinite(Number(passCParsed.score20)) ? Number(passCParsed.score20) : null;
+
+            const ocrConfidence = Number.isFinite(Number(ocrResult.confidence))
+                ? Number(ocrResult.confidence)
+                : passAConfidence;
+            const literalNoise = weirdTokenRatio(literalTranscription);
+            const literalTokens = tokenCount(literalTranscription);
+            const substitutionRatio = computeSubstitutionRatio(literalTranscription, orthographyCorrected, spellingMistakes);
+            const qualityFlags = buildQualityFlags({
+                substitutionRatio,
+                ocrConfidence: Number(ocrConfidence),
+                literalText: literalTranscription
+            });
+            if (literalNoise > 0.22) qualityFlags.push('NOISY_TRANSCRIPTION');
+            if (literalTokens < 12) qualityFlags.push('SHORT_TRANSCRIPTION');
+
+            const feedbackText = questionFeedback.length
+                ? questionFeedback.map((fb, idx) => `Q${idx + 1}. ${fb}`).join('\n')
+                : appreciation;
+            const transcriptionVariants = buildCanonicalVariants({
+                literal: literalTranscription,
+                orthography: orthographyCorrected,
+                feedback: feedbackText
+            });
+
+            const logPayload = {
+                usedSharp: Boolean(preprocess?.usedSharp),
+                preprocessMs: preprocess?.meta?.ms || 0,
+                originalSize: preprocess?.meta?.original?.size || 0,
+                preprocessedSize: preprocess?.meta?.preprocessed?.size || 0,
+                ocrWords: ocrResult.wordsCount || 0,
+                ocrConfidence: Number.isFinite(Number(ocrConfidence)) ? Number(ocrConfidence) : null,
+                confidenceLabel: confidenceLabel(ocrConfidence),
+                zonesUsed: zoneTexts.length,
+                literalNoise: Number(literalNoise.toFixed(3)),
+                literalTokens,
+                substitutionRatio: Number(substitutionRatio.toFixed(3)),
+                uncertainTokens: uncertainTokens.length,
+                illegibleSpans: illegibleSpans.length,
+                qualityFlags
+            };
+            console.log(`[SCAN-AI][metrics] ${JSON.stringify(logPayload)}`);
+
+            return {
+                studentName,
+                grade,
+                score20,
+                appreciation,
+                transcription: orthographyCorrected,
+                literalTranscription,
+                spellingMistakes,
+                questionFeedback,
+                transcriptionVariants,
+                qualityFlags,
+                ocrConfidence: Number.isFinite(Number(ocrConfidence)) ? Number(ocrConfidence) : null
+            };
         } catch (e) {
-            return { studentName: "Erreur", grade: "?", appreciation: "Échec analyse", transcription: "Impossible de générer la correction." };
+            console.error("❌ [SCAN-AI] Pipeline failure:", e.message);
+            return {
+                studentName: "Erreur",
+                grade: "?",
+                score20: null,
+                appreciation: "Échec analyse",
+                transcription: "Impossible de générer la correction.",
+                literalTranscription: "",
+                spellingMistakes: [],
+                questionFeedback: [],
+                qualityFlags: ["PIPELINE_ERROR"],
+                ocrConfidence: null
+            };
         }
+    },
+
+    correctCopyVariants: async (copyUrl, subjectUrls, instructions, studentList) => {
+        const common = { zoneCount: 6, upscale: 2.2 };
+        const imageOnly = await ScanAI.correctCopy(copyUrl, subjectUrls, instructions, studentList, {
+            ...common,
+            ocrMode: 'none'
+        });
+        const hybrid = await ScanAI.correctCopy(copyUrl, subjectUrls, instructions, studentList, {
+            ...common,
+            ocrMode: 'light'
+        });
+        const ocrRefine = await ScanAI.correctCopy(copyUrl, subjectUrls, instructions, studentList, {
+            ...common,
+            ocrMode: 'full',
+            seedTranscription: imageOnly?.literalTranscription || imageOnly?.transcription || ''
+        });
+        return { imageOnly, hybrid, ocrRefine };
     }
 };
 
@@ -16798,6 +18024,7 @@ const router = express.Router();
 const { Teacher, Admin, Student, Classroom } = require('../models/prof.models');
 const ProfDrive = require('../core/drive.prof');
 const bcrypt = require('bcryptjs');
+const BCRYPT_HASH_RE = /^\$2[aby]\$/;
 
 /**
  * 🔐 AUTHENTIFICATION CÔTÉ PROF (HERMÉTIQUE)
@@ -16811,10 +18038,18 @@ router.post('/login', async (req, res) => {
     let user = await Teacher.findOne({ firstName: new RegExp(`^${fName}$`, 'i'), lastName: new RegExp(`^${lName}$`, 'i') }) 
             || await Admin.findOne({ firstName: new RegExp(`^${fName}$`, 'i'), lastName: new RegExp(`^${lName}$`, 'i') });
 
-    if (user && (user.password.startsWith('$2a$') ? await bcrypt.compare(password, user.password) : user.password === password)) {
-        const obj = user.toObject();
-        delete obj.password;
-        return res.json({ ok: true, user: { ...obj, id: obj._id, role: obj.role || 'prof' } });
+    if (user) {
+        const storedPassword = String(user.password || '');
+        const isBcryptHash = BCRYPT_HASH_RE.test(storedPassword);
+        const isValid = isBcryptHash
+            ? await bcrypt.compare(password, storedPassword)
+            : storedPassword === password;
+
+        if (isValid) {
+            const obj = user.toObject();
+            delete obj.password;
+            return res.json({ ok: true, user: { ...obj, id: obj._id, role: obj.role || 'prof' } });
+        }
     }
     res.status(401).json({ ok: false, message: "Identifiants prof incorrects" });
 });
@@ -16909,6 +18144,18 @@ const PUNISHMENT_DUE_MS = 7 * 24 * 60 * 60 * 1000;
 function normalizeClassName(v = '') {
     const raw = String(v || '').trim().toUpperCase();
     return { raw, clean: raw.replace(/\s+/g, '') };
+}
+
+async function getStudentsForClassOrGroup(classId) {
+    const clsObj = await Classroom.findById(classId).lean();
+    if (!clsObj) return { clsObj: null, students: [] };
+
+    const query = clsObj.type === 'GROUP'
+        ? { assignedGroups: clsObj._id }
+        : { classId: clsObj._id };
+
+    const students = await Student.find(query).lean();
+    return { clsObj, students };
 }
 
 async function assignPunishmentTemplate(student, teacherId) {
@@ -17024,11 +18271,11 @@ router.get('/plan/:classId', async (req, res) => {
     try {
         const { teacherId } = req.query;
         const classId = req.params.classId;
-        const clsObj = await Classroom.findById(classId).lean();
+        const { clsObj, students } = await getStudentsForClassOrGroup(classId);
+        if (!clsObj) return res.status(404).json({ error: "Classe/Groupe introuvable" });
         const className = clsObj?.name;
 
-        const [students, hws, games, subs, progs] = await Promise.all([
-            Student.find({ classId }).lean(),
+        const [hws, games, subs, progs] = await Promise.all([
             Homework.find({ targetClassrooms: className, isPunishment: false }).lean(),
             GameLevel.find({ targetClassrooms: className }).lean(),
             Submission.find({}).lean(),
@@ -17598,7 +18845,9 @@ const Models = {
 
     ScanSession: getModel('ScanSession', {
         title: String, teacherId: String, chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter' },
-        subjectUrls: [String], copyUrls: [String], corrections: Array, date: { type: Date, default: Date.now }
+        subjectUrls: [String], copyUrls: [String], corrections: Array,
+        aiInstructions: { type: String, default: "Corrige sévèrement la syntaxe." },
+        date: { type: Date, default: Date.now }
     }),
 
     Teacher: getModel('Teacher', {
@@ -17643,10 +18892,14 @@ module.exports = Models;
 // @signatures: ProfScansRouter, sessions, upload
 const express = require('express');
 const router = express.Router();
-const { ScanSession } = require('../models/prof.models');
+const { ScanSession, Student } = require('../models/prof.models');
 const ProfDrive = require('../core/drive.prof');
+const ScanAI = require('../../domains/scans/ai/scan.ai');
 const multer = require('multer');
 const upload = multer({ dest: 'public/uploads/temp' });
+const defaultAiInstructions = `Objectif prioritaire: comprendre le sens réel de ce que l'élève a écrit.
+Ne pas corriger l'orthographe pour l'instant.
+Rester proche des mots originaux quand ils sont lisibles.`;
 
 /**
  * 📸 BLOC PROF : LOGIQUE SCANS (/api/scans)
@@ -17654,6 +18907,40 @@ const upload = multer({ dest: 'public/uploads/temp' });
 
 router.get('/sessions', async (req, res) => {
     res.json(await ScanSession.find({}).sort({ date: -1 }).lean());
+});
+
+router.post('/sessions', async (req, res) => {
+    try {
+        const { title, teacherId } = req.body || {};
+        const created = await ScanSession.create({ title, teacherId, aiInstructions: defaultAiInstructions });
+        res.json(created);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+router.put('/sessions/:id/instructions', async (req, res) => {
+    try {
+        const aiInstructions = String(req.body?.aiInstructions || '').trim();
+        const updated = await ScanSession.findByIdAndUpdate(
+            req.params.id,
+            { $set: { aiInstructions } },
+            { new: true }
+        );
+        if (!updated) return res.status(404).json({ error: "Session introuvable" });
+        res.json(updated);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+router.delete('/sessions/:id', async (req, res) => {
+    try {
+        await ScanSession.findByIdAndDelete(req.params.id);
+        res.json({ ok: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 });
 
 router.post('/upload', upload.single('file'), async (req, res) => {
@@ -17692,6 +18979,226 @@ router.post('/delete-file', async (req, res) => {
             );
         }
         res.json({ ok: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+function norm(v = '') {
+    return String(v || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9 ]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function isLyceeClass(className = '') {
+    const c = String(className || '').toUpperCase().replace(/\s+/g, '');
+    return /^(2DE|2NDE|1ERE|1ER|PREMIERE|TERM|TERMINALE|TLE)/.test(c);
+}
+
+function gradeToScore20(letter = '') {
+    const g = String(letter || '').toUpperCase().trim();
+    if (g === 'A+') return 19;
+    if (g === 'A') return 16;
+    if (g === 'B') return 13;
+    if (g === 'C') return 8;
+    return 10;
+}
+
+function sanitizeLetterGrade(grade = '') {
+    const g = String(grade || '').toUpperCase().trim();
+    if (g === 'A+' || g === 'A' || g === 'B' || g === 'C') return g;
+    return 'B';
+}
+
+async function buildCorrectionForCopy(session, copyUrl, roster, students) {
+    if (!String(copyUrl).includes('/proxy/')) return null;
+    const aiResult = await ScanAI.correctCopy(copyUrl, session.subjectUrls || [], session.aiInstructions || '', students);
+    const studentName = String(aiResult.studentName || 'Inconnu').trim();
+    const n = norm(studentName);
+    const matched = roster.find(s => s.fullNameNorm === n)
+        || roster.find(s => s.fullNameNorm.includes(n) || n.includes(s.fullNameNorm));
+    const studentClass = matched?.className || '';
+    const lycee = isLyceeClass(studentClass);
+    const letter = sanitizeLetterGrade(aiResult.grade || 'B');
+    const score20 = lycee
+        ? (Number.isFinite(Number(aiResult.score20)) ? Number(aiResult.score20) : gradeToScore20(letter))
+        : null;
+
+    return {
+        originalUrl: copyUrl,
+        studentName: studentName || "Inconnu",
+        studentClass,
+        isLycee: lycee,
+        grade: letter,
+        score20,
+        appreciation: aiResult.appreciation || "Pas d'avis.",
+        transcription: aiResult.transcription || "...",
+        literalTranscription: aiResult.literalTranscription || "",
+        spellingMistakes: Array.isArray(aiResult.spellingMistakes) ? aiResult.spellingMistakes : [],
+        questionFeedback: Array.isArray(aiResult.questionFeedback) ? aiResult.questionFeedback : [],
+        transcriptionVariants: (aiResult && typeof aiResult.transcriptionVariants === 'object' && aiResult.transcriptionVariants)
+            ? aiResult.transcriptionVariants
+            : {
+                literal_final: { label: 'Transcription fidèle', text: aiResult.literalTranscription || aiResult.transcription || "..." },
+                orthography_corrected: { label: 'Orthographe corrigée', text: aiResult.transcription || "..." },
+                content_feedback: { label: 'Feedback fond', text: Array.isArray(aiResult.questionFeedback) && aiResult.questionFeedback.length ? aiResult.questionFeedback.join('\n') : (aiResult.appreciation || "Pas d'avis.") }
+            },
+        qualityFlags: Array.isArray(aiResult.qualityFlags) ? aiResult.qualityFlags : [],
+        ocrConfidence: Number.isFinite(Number(aiResult.ocrConfidence)) ? Number(aiResult.ocrConfidence) : null,
+        mistakes: Array.isArray(aiResult.spellingMistakes) ? aiResult.spellingMistakes : []
+    };
+}
+
+function buildCorrectionFromAiResult(aiResult, copyUrl, roster) {
+    const studentName = String(aiResult?.studentName || 'Inconnu').trim();
+    const n = norm(studentName);
+    const matched = roster.find(s => s.fullNameNorm === n)
+        || roster.find(s => s.fullNameNorm.includes(n) || n.includes(s.fullNameNorm));
+    const studentClass = matched?.className || '';
+    const lycee = isLyceeClass(studentClass);
+    const letter = sanitizeLetterGrade(aiResult?.grade || 'B');
+    const score20 = lycee
+        ? (Number.isFinite(Number(aiResult?.score20)) ? Number(aiResult.score20) : gradeToScore20(letter))
+        : null;
+
+    return {
+        originalUrl: copyUrl,
+        studentName: studentName || "Inconnu",
+        studentClass,
+        isLycee: lycee,
+        grade: letter,
+        score20,
+        appreciation: aiResult?.appreciation || "Pas d'avis.",
+        transcription: aiResult?.transcription || "...",
+        literalTranscription: aiResult?.literalTranscription || "",
+        spellingMistakes: Array.isArray(aiResult?.spellingMistakes) ? aiResult.spellingMistakes : [],
+        questionFeedback: Array.isArray(aiResult?.questionFeedback) ? aiResult.questionFeedback : [],
+        transcriptionVariants: (aiResult && typeof aiResult.transcriptionVariants === 'object' && aiResult.transcriptionVariants)
+            ? aiResult.transcriptionVariants
+            : {
+                literal_final: { label: 'Transcription fidèle', text: aiResult?.literalTranscription || aiResult?.transcription || "..." },
+                orthography_corrected: { label: 'Orthographe corrigée', text: aiResult?.transcription || "..." },
+                content_feedback: { label: 'Feedback fond', text: Array.isArray(aiResult?.questionFeedback) && aiResult.questionFeedback.length ? aiResult.questionFeedback.join('\n') : (aiResult?.appreciation || "Pas d'avis.") }
+            },
+        qualityFlags: Array.isArray(aiResult?.qualityFlags) ? aiResult.qualityFlags : [],
+        ocrConfidence: Number.isFinite(Number(aiResult?.ocrConfidence)) ? Number(aiResult.ocrConfidence) : null,
+        mistakes: Array.isArray(aiResult?.spellingMistakes) ? aiResult.spellingMistakes : []
+    };
+}
+
+router.post('/correct/:sessionId', async (req, res) => {
+    try {
+        const session = await ScanSession.findById(req.params.sessionId);
+        if (!session) return res.status(404).json({ error: "Session introuvable" });
+        const students = await Student.find({}, 'firstName lastName currentClass').lean();
+        const roster = students.map(s => ({
+            id: s._id,
+            fullName: `${s.firstName || ''} ${s.lastName || ''}`.trim(),
+            fullNameNorm: norm(`${s.firstName || ''} ${s.lastName || ''}`),
+            className: s.currentClass || ''
+        }));
+
+        const finalResults = [];
+        for (const copyUrl of (session.copyUrls || [])) {
+            try {
+                const one = await buildCorrectionForCopy(session, copyUrl, roster, students);
+                if (one) finalResults.push(one);
+            } catch (e) {
+                console.error("❌ [SCANS] Corr Error:", e.message);
+            }
+        }
+        session.corrections = finalResults;
+        await session.save();
+        res.json(session);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+router.post('/correct-one/:sessionId', async (req, res) => {
+    try {
+        const session = await ScanSession.findById(req.params.sessionId);
+        if (!session) return res.status(404).json({ error: "Session introuvable" });
+        const copyUrl = String(req.body?.copyUrl || '');
+        if (!copyUrl) return res.status(400).json({ error: "copyUrl manquant" });
+        if (!(session.copyUrls || []).includes(copyUrl)) {
+            return res.status(404).json({ error: "Copie introuvable dans la session" });
+        }
+
+        const students = await Student.find({}, 'firstName lastName currentClass').lean();
+        const roster = students.map(s => ({
+            id: s._id,
+            fullName: `${s.firstName || ''} ${s.lastName || ''}`.trim(),
+            fullNameNorm: norm(`${s.firstName || ''} ${s.lastName || ''}`),
+            className: s.currentClass || ''
+        }));
+        const one = await buildCorrectionForCopy(session, copyUrl, roster, students);
+        if (!one) return res.status(400).json({ error: "URL copie invalide" });
+
+        const existing = Array.isArray(session.corrections) ? session.corrections : [];
+        const idx = existing.findIndex(c => String(c.originalUrl) === copyUrl);
+        if (idx >= 0) existing[idx] = one;
+        else existing.push(one);
+        session.corrections = existing;
+        await session.save();
+        res.json({ ok: true, correction: one, session });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+router.post('/correct-one-compare/:sessionId', async (req, res) => {
+    try {
+        const session = await ScanSession.findById(req.params.sessionId);
+        if (!session) return res.status(404).json({ error: "Session introuvable" });
+        const copyUrl = String(req.body?.copyUrl || '');
+        if (!copyUrl) return res.status(400).json({ error: "copyUrl manquant" });
+        if (!(session.copyUrls || []).includes(copyUrl)) {
+            return res.status(404).json({ error: "Copie introuvable dans la session" });
+        }
+
+        const students = await Student.find({}, 'firstName lastName currentClass').lean();
+        const roster = students.map(s => ({
+            id: s._id,
+            fullName: `${s.firstName || ''} ${s.lastName || ''}`.trim(),
+            fullNameNorm: norm(`${s.firstName || ''} ${s.lastName || ''}`),
+            className: s.currentClass || ''
+        }));
+
+        const variants = await ScanAI.correctCopyVariants(copyUrl, session.subjectUrls || [], session.aiInstructions || '', students);
+        const response = {
+            imageOnly: buildCorrectionFromAiResult(variants.imageOnly, copyUrl, roster),
+            hybrid: buildCorrectionFromAiResult(variants.hybrid, copyUrl, roster),
+            ocrRefine: buildCorrectionFromAiResult(variants.ocrRefine, copyUrl, roster)
+        };
+
+        const mergeTranscriptionVariants = {
+            literal_final: response.hybrid?.transcriptionVariants?.literal_final || { label: 'Transcription fidèle', text: response.hybrid?.literalTranscription || response.hybrid?.transcription || '' },
+            orthography_corrected: response.hybrid?.transcriptionVariants?.orthography_corrected || { label: 'Orthographe corrigée', text: response.hybrid?.transcription || '' },
+            content_feedback: response.hybrid?.transcriptionVariants?.content_feedback || {
+                label: 'Feedback fond',
+                text: Array.isArray(response.hybrid?.questionFeedback) && response.hybrid.questionFeedback.length
+                    ? response.hybrid.questionFeedback.join('\n')
+                    : (response.hybrid?.appreciation || '')
+            }
+        };
+        const mergedCorrection = {
+            ...response.hybrid,
+            transcriptionVariants: mergeTranscriptionVariants,
+            appreciation: 'Comparatif A/B/C généré (hybride utilisé comme base).'
+        };
+        const existing = Array.isArray(session.corrections) ? session.corrections : [];
+        const idx = existing.findIndex(c => String(c.originalUrl) === copyUrl);
+        if (idx >= 0) existing[idx] = mergedCorrection;
+        else existing.push(mergedCorrection);
+        session.corrections = existing;
+        await session.save();
+
+        res.json({ ok: true, variants: response, mergedCorrection, session });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }

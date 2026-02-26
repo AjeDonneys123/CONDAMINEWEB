@@ -4,13 +4,17 @@ const ClassroomAI = require('../ai/plan.ai');
 const ClassroomExpert = {
     getClassroomData: async (classId, teacherId) => {
         const Student = mongoose.model('Student');
+        const Classroom = mongoose.model('Classroom');
         const Homework = mongoose.model('Homework');
         const Game = mongoose.model('GameLevel');
         const Submission = mongoose.model('Submission');
         const GameProgress = mongoose.model('GameProgress');
         const Chapter = mongoose.model('Chapter');
 
-        const students = await Student.find({ classId }).lean();
+        const cls = await Classroom.findById(classId).lean();
+        if (!cls) return [];
+        const studentQuery = cls.type === 'GROUP' ? { assignedGroups: cls._id } : { classId: cls._id };
+        const students = await Student.find(studentQuery).lean();
         const activeChapters = await Chapter.find({ teacherId, isArchived: false }, '_id').lean();
         const activeChapIds = activeChapters.map(c => c._id);
 
@@ -115,9 +119,12 @@ const ClassroomExpert = {
     
     applyPlanFromImage: async (classId, file) => {
         const Student = mongoose.model('Student');
+        const Classroom = mongoose.model('Classroom');
+        const cls = await Classroom.findById(classId).lean();
+        if (!cls) throw new Error('Classe/Groupe introuvable');
         
         // 1. Récupérer les élèves de cette classe en BDD
-        const dbStudents = await Student.find({ classId }).lean();
+        const dbStudents = await Student.find(cls.type === 'GROUP' ? { assignedGroups: cls._id } : { classId: cls._id }).lean();
         
         // 2. Lancer l'analyse IA
         const aiResults = await ClassroomAI.analyzePlanImage(file.path, file.mimetype, dbStudents);

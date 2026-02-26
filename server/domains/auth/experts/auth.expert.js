@@ -1,6 +1,7 @@
 // @signatures: fName, lName, pass
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs'); // Librairie de hachage
+const BCRYPT_HASH_RE = /^\$2[aby]\$/;
 
 /**
  * 🔐 EXPERT AUTH - V150 (CRYPTAGE DYNAMIQUE)
@@ -20,8 +21,36 @@ const AuthExpert = {
     },
 
     getStudentsForSelection: async (classId) => {
-        const enrollments = await mongoose.model('Enrollment').find({ classId }).populate('studentId').lean();
-        return enrollments.filter(e => e.studentId).map(e => ({ id: e.studentId._id, name: `${e.studentId.firstName} ${e.studentId.lastName}` })).sort((a,b) => a.name.localeCompare(b.name));
+        if (!mongoose.Types.ObjectId.isValid(classId)) return [];
+
+        const Classroom = mongoose.model('Classroom');
+        const Student = mongoose.model('Student');
+        const Enrollment = mongoose.model('Enrollment');
+        const cls = await Classroom.findById(classId).lean();
+        if (!cls) return [];
+
+        // Source 1 (legacy): table Enrollment
+        const enrollments = await Enrollment.find({ classId }).populate('studentId').lean();
+        const enrollmentStudents = enrollments.filter(e => e.studentId).map(e => e.studentId);
+
+        // Source 2 (canonique actuelle): Student.classId / Student.assignedGroups
+        let directStudents = [];
+        if (cls.type === 'GROUP') {
+            directStudents = await Student.find({ assignedGroups: cls._id }).lean();
+        } else {
+            directStudents = await Student.find({ classId: cls._id }).lean();
+        }
+
+        // Fusion sans doublons
+        const map = new Map();
+        [...enrollmentStudents, ...directStudents].forEach(s => {
+            if (!s || !s._id) return;
+            map.set(String(s._id), s);
+        });
+
+        return [...map.values()]
+            .map(s => ({ id: s._id, name: `${s.firstName} ${s.lastName}` }))
+            .sort((a, b) => a.name.localeCompare(b.name));
     },
 
     verify: async ({ role, studentId, firstName, lastName, password }) => {
@@ -55,8 +84,8 @@ const AuthExpert = {
             // VÉRIFICATION DU MOT DE PASSE
             let isValid = false;
 
-            // A. Est-ce que le mot de passe est déjà crypté (commence par $2a$...) ?
-            if (user.password.startsWith('$2a$')) {
+            // A. Mot de passe déjà hashé bcrypt ($2a$ / $2b$ / $2y$)
+            if (BCRYPT_HASH_RE.test(String(user.password || ''))) {
                 isValid = await bcrypt.compare(pass, user.password);
             } 
             // B. Sinon, c'est un vieux mot de passe en clair (Legacy)

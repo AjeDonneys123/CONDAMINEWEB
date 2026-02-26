@@ -13,12 +13,15 @@ const upload = multer({ dest: path.join(process.cwd(), 'public', 'uploads', 'tem
 // GET PLAN CLASSE (Sécurisé anti-crash)
 router.get('/plan/:classId', asyncHandler(async (req, res) => {
     const teacherId = req.query.teacherId;
+    const cls = await mongoose.model('Classroom').findById(req.params.classId).lean();
+    if (!cls) return res.status(404).json({ error: "Classe/Groupe introuvable" });
+    const studentQuery = cls.type === 'GROUP' ? { assignedGroups: cls._id } : { classId: cls._id };
 
     // MODE SECOURS : Si pas de teacherId, on renvoie juste les élèves (sans notes/indicateurs)
     // Cela évite l'erreur 400 "Bad Request" qui masque les élèves
     if (!teacherId || teacherId === 'undefined' || teacherId === 'null') {
         console.warn("⚠️ [PLAN] Pas de TeacherID, chargement simple.");
-        const students = await mongoose.model('Student').find({ classId: req.params.classId }).lean();
+        const students = await mongoose.model('Student').find(studentQuery).lean();
         return res.json(students);
     }
 
@@ -28,7 +31,7 @@ router.get('/plan/:classId', asyncHandler(async (req, res) => {
     } catch (e) {
         console.error("❌ [PLAN] Erreur Data Enrichie:", e);
         // En cas d'erreur de l'expert, on fallback sur la liste simple aussi
-        const students = await mongoose.model('Student').find({ classId: req.params.classId }).lean();
+        const students = await mongoose.model('Student').find(studentQuery).lean();
         res.json(students);
     }
 }));
