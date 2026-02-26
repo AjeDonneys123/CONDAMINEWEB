@@ -11940,7 +11940,6 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
         </div>
     );
 }
-
 [[[£ END: client/src/features/shared/games/UnifiedMoteur.jsx £]]]
 
 [[[£ FILE: client/src/index.css £]]]
