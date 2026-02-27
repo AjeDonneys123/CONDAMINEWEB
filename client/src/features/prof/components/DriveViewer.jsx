@@ -37,14 +37,15 @@ const DriveNode = ({ node, depth = 0, onDelete }) => {
     );
 };
 
-export default function DriveViewer({ onClose }) {
+export default function DriveViewer({ user, onClose }) {
     const [tree, setTree] = useState(null);
     const [loading, setLoading] = useState(true);
     const [syncing, setSyncing] = useState(false);
 
     const loadTree = async () => {
         setLoading(true);
-        const res = await fetch('/api/structure/drive-tree');
+        const userId = user?.id || user?._id;
+        const res = await fetch(`/api/structure/drive-tree?userId=${encodeURIComponent(userId || '')}`);
         setTree(await res.json());
         setLoading(false);
     };
@@ -53,7 +54,12 @@ export default function DriveViewer({ onClose }) {
         if(!confirm("Lancer l'alignement ? Cela créera les dossiers et les élèves de test manquants.")) return;
         setSyncing(true);
         try {
-            const res = await fetch('/api/structure/sync-root', { method: 'POST' });
+            const userId = user?.id || user?._id;
+            const res = await fetch('/api/structure/sync-root', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId })
+            });
             if (res.ok) {
                 alert("ALIGNEMENT V58 RÉUSSI : Tous les élèves test sont provisionnés !");
                 await loadTree();
@@ -64,7 +70,8 @@ export default function DriveViewer({ onClose }) {
 
     const handleDelete = async (id, name) => {
         if (!confirm(`Supprimer ${name} ?`)) return;
-        await fetch(`/api/structure/drive/${id}`, { method: 'DELETE' });
+        const userId = user?.id || user?._id;
+        await fetch(`/api/structure/drive/${id}?userId=${encodeURIComponent(userId || '')}`, { method: 'DELETE' });
         loadTree();
     };
 

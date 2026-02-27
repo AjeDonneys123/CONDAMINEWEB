@@ -55,6 +55,7 @@ export const createGameBase = (params) => {
                 setBoss: (v) => safeTrigger('SET_BOSS', v),
                 setUI: (v) => safeTrigger('SET_UI', v),
                 shake: () => safeTrigger('SHAKE'),
+                audio: (eventName) => safeTrigger('AUDIO', eventName),
                 submitAnswer: (idx) => safeTrigger('SUBMIT_ANSWER', idx),
                 start: () => {}
             };

@@ -305,6 +305,9 @@ export default function StudentsManager({ globalClassId }) {
                                     <div className="text-[11px] text-slate-700 font-semibold">
                                         Mode réponse ouverte: {editorData?.antiCheat?.verification?.mode || 'texte'}
                                     </div>
+                                    <div className="text-[11px] text-slate-700 font-semibold">
+                                        Temps réponse ouverte: {formatMs(editorData?.antiCheat?.verification?.responseDurationMs || 0)}
+                                    </div>
                                     <div className="mt-2 text-[11px] text-slate-700">
                                         <span className="font-black uppercase text-slate-500">Transcription / Réponse ouverte</span>
                                         <div className="mt-1 p-2 rounded border border-slate-100 bg-slate-50 whitespace-pre-wrap">

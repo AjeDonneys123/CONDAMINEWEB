@@ -9,8 +9,13 @@ export default function ProfHeader({ user, onLogout }) {
   const [drive, setDrive] = useState({ loading: true, ok: false, email: '' });
 
   const checkDrive = async () => {
+    if (!user?.isDeveloper) {
+      setDrive({ loading: false, ok: false, email: '' });
+      return;
+    }
     try {
-      const res = await fetch('/api/admin/drive-check');
+      const userId = user.id || user._id;
+      const res = await fetch(`/api/admin/drive-check?userId=${encodeURIComponent(userId || '')}`);
       const data = await res.json();
       setDrive({ loading: false, ok: data.ok, email: data.email });
     } catch (e) { setDrive({ loading: false, ok: false }); }
@@ -32,8 +37,12 @@ export default function ProfHeader({ user, onLogout }) {
             </div>
           </div>
           <div className="flex gap-3">
-            <button onClick={() => setShowDrive(true)} className="bg-cyan-600 text-white px-4 py-2 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:scale-105 transition-transform">☁️ DRIVE</button>
-            <button onClick={() => setShowDB(true)} className="bg-slate-900 text-white px-4 py-2 rounded-2xl font-black text-[10px] uppercase hover:scale-105 transition-transform">📊 BDD</button>
+            {user?.isDeveloper && (
+              <>
+                <button onClick={() => setShowDrive(true)} className="bg-cyan-600 text-white px-4 py-2 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:scale-105 transition-transform">☁️ DRIVE</button>
+                <button onClick={() => setShowDB(true)} className="bg-slate-900 text-white px-4 py-2 rounded-2xl font-black text-[10px] uppercase hover:scale-105 transition-transform">📊 BDD</button>
+              </>
+            )}
             <button onClick={onLogout} className="bg-white text-slate-300 px-4 py-2 rounded-2xl font-bold border text-[10px] hover:text-red-500">✕</button>
           </div>
         </div>
@@ -50,15 +59,19 @@ export default function ProfHeader({ user, onLogout }) {
 
             {/* DROITE : ACTIONS COMPACTES */}
             <div className="flex items-center gap-2 shrink-0">
-                <button onClick={() => setShowDrive(true)} className="bg-cyan-600 text-white px-2 py-1 rounded-lg font-black text-[8px] uppercase">☁️ DRIVE</button>
-                <button onClick={() => setShowDB(true)} className="bg-slate-900 text-white px-2 py-1 rounded-lg font-black text-[8px] uppercase">📊 BDD</button>
+                {user?.isDeveloper && (
+                  <>
+                    <button onClick={() => setShowDrive(true)} className="bg-cyan-600 text-white px-2 py-1 rounded-lg font-black text-[8px] uppercase">☁️ DRIVE</button>
+                    <button onClick={() => setShowDB(true)} className="bg-slate-900 text-white px-2 py-1 rounded-lg font-black text-[8px] uppercase">📊 BDD</button>
+                  </>
+                )}
                 <button onClick={onLogout} className="w-6 h-6 flex items-center justify-center bg-slate-100 text-slate-400 rounded-full font-bold text-xs ml-1 border border-slate-200">✕</button>
             </div>
         </div>
       
         {/* MODALES */}
-        {showDB && <DatabaseViewer onClose={() => setShowDB(false)} />}
-        {showDrive && <DriveViewer onClose={() => setShowDrive(false)} />}
+        {showDB && user?.isDeveloper && <DatabaseViewer user={user} onClose={() => setShowDB(false)} />}
+        {showDrive && user?.isDeveloper && <DriveViewer user={user} onClose={() => setShowDrive(false)} />}
     </>
   );
 }

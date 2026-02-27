@@ -3,7 +3,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import './AdminDashboard.css';
 
 export default function AdminDashboard({ user, onRefresh }) {
-    const [view, setView] = useState('classes'); 
+    const isDeveloperBugMode = user?.isDeveloper === true;
+    const [view, setView] = useState(isDeveloperBugMode ? 'bugs' : 'classes');
     const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(false);
     const [importing, setImporting] = useState(false);
@@ -31,12 +32,21 @@ export default function AdminDashboard({ user, onRefresh }) {
     const [filterSub, setFilterSub] = useState("");
     const [filterClass, setFilterClass] = useState("");
     const [filterGroup, setFilterGroup] = useState("");
+    const [openedBug, setOpenedBug] = useState(null);
     
     const fileInputRef = useRef(null);
 
     const loadData = async () => {
         setLoading(true);
         try {
+            if (isDeveloperBugMode) {
+                const r = await fetch(`/api/admin/bug-reports?userId=${encodeURIComponent(user?.id || user?._id || '')}`);
+                const data = r.ok ? await r.json() : [];
+                setItems(Array.isArray(data) ? data : []);
+                setLoading(false);
+                return;
+            }
+
             const [rC, rS, rSt] = await Promise.all([
                 fetch('/api/admin/classrooms').then(r => r.ok ? r.json() : []),
                 fetch('/api/admin/subjects').then(r => r.ok ? r.json() : []),
@@ -46,7 +56,7 @@ export default function AdminDashboard({ user, onRefresh }) {
             setAllSubjects(Array.isArray(rS) ? rS : []);
             setAllStudents(Array.isArray(rSt) ? rSt : []);
 
-            const map = { 'classes': 'classrooms', 'groups': 'classrooms', 'teachers': 'teachers', 'staff': 'admins', 'subjects': 'subjects', 'students': 'students' };
+            const map = { 'classes': 'classrooms', 'groups': 'classrooms', 'teachers': 'teachers', 'staff': 'admins', 'subjects': 'subjects', 'students': 'students', 'bugs': `bug-reports?userId=${encodeURIComponent(user?.id || user?._id || '')}` };
             const r = await fetch(`/api/admin/${map[view]}`);
             if (r.ok) {
                 const data = await r.json();
@@ -59,7 +69,12 @@ export default function AdminDashboard({ user, onRefresh }) {
         setLoading(false);
     };
 
-    useEffect(() => { loadData(); setSearchTerm(''); if (view !== 'students') setActiveClassTab('ALL'); }, [view]);
+    useEffect(() => {
+        if (isDeveloperBugMode && view !== 'bugs') setView('bugs');
+        loadData();
+        setSearchTerm('');
+        if (view !== 'students') setActiveClassTab('ALL');
+    }, [view, isDeveloperBugMode]);
 
     useEffect(() => {
         if (modalMode) { setFilterSub(""); setFilterClass(""); setFilterGroup(""); }
@@ -74,7 +89,9 @@ export default function AdminDashboard({ user, onRefresh }) {
                 const n = item.name ? item.name.toLowerCase() : '';
                 const f = item.firstName ? item.firstName.toLowerCase() : '';
                 const l = item.lastName ? item.lastName.toLowerCase() : '';
-                return n.includes(term) || f.includes(term) || l.includes(term);
+                const b = item.description ? item.description.toLowerCase() : '';
+                const r = item.reporterName ? item.reporterName.toLowerCase() : '';
+                return n.includes(term) || f.includes(term) || l.includes(term) || b.includes(term) || r.includes(term);
             });
         }
         return res;
@@ -94,7 +111,8 @@ export default function AdminDashboard({ user, onRefresh }) {
 
     const getActiveContext = () => { if (activeClassTab && activeClassTab !== 'ALL') { const cls = allClasses.find(c => c._id === activeClassTab); return cls ? { name: cls.name, level: cls.level, id: cls._id } : null; } return null; };
     
-    const handleOpenCreate = () => { 
+    const handleOpenCreate = () => {
+        if (view === 'bugs') return;
         let defaults = { firstName: '', lastName: '', email: '', parentEmail: '', classId: '', currentLevel: '', assignedGroups: [], name: '', level: '', type: 'CLASS', password: '', taughtSubjects: [], assignedClasses: [] }; 
         const context = getActiveContext(); 
         if (view === 'groups') { defaults.type = 'GROUP'; if (context) defaults.level = context.level; } 
@@ -121,8 +139,14 @@ export default function AdminDashboard({ user, onRefresh }) {
     const potentialMembers = memberSearch.length > 1 ? allStudents.filter(s => { const isInside = currentMembers.some(m => m._id === s._id); if (isInside) return false; return s.firstName.toLowerCase().includes(memberSearch.toLowerCase()) || s.lastName.toLowerCase().includes(memberSearch.toLowerCase()); }) : [];
     const openEdit = (it) => { setCurrentItem({ ...it }); setModalMode('edit'); };
     const handleSave = async () => { const map = { 'classes': 'classrooms', 'groups': 'classrooms', 'teachers': 'teachers', 'staff': 'admins', 'subjects': 'subjects', 'students': 'students' }; if (view === 'students' && currentItem.classId) currentItem.currentClass = allClasses.find(c => c._id === currentItem.classId)?.name || ''; try { const res = await fetch(`/api/admin/${map[view]}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(currentItem) }); if (res.ok) { setModalMode(null); loadData(); if(['classes','groups','teachers'].includes(view)) onRefresh(); } else { const err = await res.json(); alert("Erreur: " + err.error); } } catch(e) { alert("Erreur Réseau"); } };
-    const handleDelete = async (id) => { if (!confirm("Supprimer ?")) return; const map = { 'classes': 'classrooms', 'groups': 'classrooms', 'teachers': 'teachers', 'staff': 'admins', 'subjects': 'subjects', 'students': 'students' }; await fetch(`/api/admin/${map[view]}/${id}`, { method: 'DELETE' }); loadData(); };
+    const handleDelete = async (id) => { if (view === 'bugs') return; if (!confirm("Supprimer ?")) return; const map = { 'classes': 'classrooms', 'groups': 'classrooms', 'teachers': 'teachers', 'staff': 'admins', 'subjects': 'subjects', 'students': 'students' }; await fetch(`/api/admin/${map[view]}/${id}`, { method: 'DELETE' }); loadData(); };
     const isGroupMode = view === 'groups';
+    const formatDateTime = (value) => {
+        if (!value) return '';
+        const d = new Date(value);
+        if (Number.isNaN(d.getTime())) return '';
+        return d.toLocaleString('fr-FR');
+    };
 
     return (
         <>
@@ -223,12 +247,12 @@ export default function AdminDashboard({ user, onRefresh }) {
             <div className="admin-container animate-in fade-in">
                 <div className="flex flex-col gap-4 mb-6">
                     <div className="flex justify-between items-center bg-white p-4 rounded-[30px] shadow-sm">
-                        <div className="flex gap-1 overflow-x-auto no-scrollbar">{['classes', 'groups', 'subjects', 'teachers', 'students', 'staff'].map(v => <button key={v} onClick={() => setView(v)} className={`admin-tab ${view === v ? 'active' : ''}`}>{v.toUpperCase()}</button>)}</div>
+                        <div className="flex gap-1 overflow-x-auto no-scrollbar">{(isDeveloperBugMode ? ['bugs'] : ['classes', 'groups', 'subjects', 'teachers', 'students', 'staff']).map(v => <button key={v} onClick={() => setView(v)} className={`admin-tab ${view === v ? 'active' : ''}`}>{v.toUpperCase()}</button>)}</div>
                         <div className="flex gap-2">
-                            {view === 'students' && <button onClick={handleMigration} className="bg-orange-500 text-white px-6 py-2.5 rounded-2xl font-black text-[10px] uppercase shadow-lg">🧹 CLEAN BDD</button>}
-                            <button onClick={handleResetActivities} className="bg-red-600 text-white px-6 py-2.5 rounded-2xl font-black text-[10px] uppercase shadow-lg animate-pulse hover:bg-red-700 transition-colors">🔥 VIDER CONTENU</button>
-                            {(view === 'classes' || view === 'groups' || view === 'students') && <button onClick={handleOpenMagic} className="bg-purple-600 text-white px-6 py-2.5 rounded-2xl font-black text-[10px] uppercase shadow-lg">🔮 IMPORT</button>}
-                            <button onClick={handleOpenCreate} className="bg-slate-900 text-white px-6 py-2.5 rounded-2xl font-black text-[10px] uppercase shadow-lg">+ AJOUTER</button>
+                            {!isDeveloperBugMode && view !== 'bugs' && view === 'students' && <button onClick={handleMigration} className="bg-orange-500 text-white px-6 py-2.5 rounded-2xl font-black text-[10px] uppercase shadow-lg">🧹 CLEAN BDD</button>}
+                            {!isDeveloperBugMode && view !== 'bugs' && <button onClick={handleResetActivities} className="bg-red-600 text-white px-6 py-2.5 rounded-2xl font-black text-[10px] uppercase shadow-lg animate-pulse hover:bg-red-700 transition-colors">🔥 VIDER CONTENU</button>}
+                            {!isDeveloperBugMode && view !== 'bugs' && (view === 'classes' || view === 'groups' || view === 'students') && <button onClick={handleOpenMagic} className="bg-purple-600 text-white px-6 py-2.5 rounded-2xl font-black text-[10px] uppercase shadow-lg">🔮 IMPORT</button>}
+                            {!isDeveloperBugMode && view !== 'bugs' && <button onClick={handleOpenCreate} className="bg-slate-900 text-white px-6 py-2.5 rounded-2xl font-black text-[10px] uppercase shadow-lg">+ AJOUTER</button>}
                         </div>
                     </div>
                     
@@ -246,29 +270,67 @@ export default function AdminDashboard({ user, onRefresh }) {
                 </div>
 
                 <div className="bg-white rounded-[40px] border shadow-sm overflow-hidden min-h-[400px]">
-                    <table className="admin-table">
-                        <tbody>
-                            {displayedItems.map(it => (
-                                <tr key={it._id} className="border-t hover:bg-slate-50 transition-colors">
-                                    <td className="p-6">
-                                        <div className="font-black text-slate-700 uppercase text-sm flex items-center gap-2">
-                                            {it.name || `${it.firstName} ${it.lastName}`}
-                                            {['classes','groups'].includes(view) && it.level && <span className="text-[8px] bg-blue-600 text-white px-2 py-0.5 rounded font-bold shadow-sm">NIV {it.level}</span>}
-                                            {view === 'students' && <span className="text-[8px] bg-blue-600 text-white px-2 py-0.5 rounded font-bold shadow-sm">{it.currentClass || allClasses.find(c=>c._id===it.classId)?.name}</span>}
-                                        </div>
-                                        <span className="text-[8px] font-black text-slate-300 uppercase block mb-1">{it.type || it.role || 'PROFIL'}</span>
-                                    </td>
-                                    <td className="p-6 text-right flex justify-end gap-2">
-                                        {(view === 'classes' || view === 'groups') && (<button onClick={() => { setManageItem(it); setMemberSearch(""); }} className="bg-purple-100 text-purple-600 px-4 py-2 rounded-xl font-bold text-[10px] hover:bg-purple-200 transition-colors">👥 GÉRER</button>)}
-                                        <button onClick={() => openEdit(it)} className="bg-slate-100 text-slate-600 px-4 py-2 rounded-xl font-bold text-[10px] hover:bg-slate-200">MODIFIER</button>
-                                        <button onClick={() => handleDelete(it._id)} className="w-8 h-8 rounded-lg bg-red-50 text-red-500 font-bold hover:bg-red-100 flex items-center justify-center">✕</button>
-                                    </td>
-                                </tr>
+                    {view === 'bugs' ? (
+                        <div className="p-5 md:p-8 space-y-3">
+                            {displayedItems.map((it) => (
+                                <div key={it._id} className="border border-slate-200 rounded-2xl p-4 bg-slate-50/50">
+                                    <div className="flex items-center justify-between gap-3 mb-2">
+                                        <div className="font-black text-slate-800 uppercase text-xs">{it.reporterName || 'Utilisateur'}</div>
+                                        <div className="text-[10px] font-bold text-slate-400">{formatDateTime(it.createdAt)}</div>
+                                    </div>
+                                    <div className="text-[10px] font-black uppercase text-indigo-500 mb-2">{it.reporterRole || 'unknown'} {it.page ? `• ${it.page}` : ''}</div>
+                                    <div className="text-sm text-slate-700 whitespace-pre-wrap line-clamp-2">{it.description}</div>
+                                    <div className="mt-3">
+                                        <button onClick={() => setOpenedBug(it)} className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-[10px] font-black uppercase">Ouvrir</button>
+                                    </div>
+                                </div>
                             ))}
-                        </tbody>
-                    </table>
+                            {displayedItems.length === 0 && (
+                                <div className="text-center p-10 text-slate-400 font-black uppercase">Aucun bug signalé.</div>
+                            )}
+                        </div>
+                    ) : (
+                        <table className="admin-table">
+                            <tbody>
+                                {displayedItems.map(it => (
+                                    <tr key={it._id} className="border-t hover:bg-slate-50 transition-colors">
+                                        <td className="p-6">
+                                            <div className="font-black text-slate-700 uppercase text-sm flex items-center gap-2">
+                                                {it.name || `${it.firstName} ${it.lastName}`}
+                                                {['classes','groups'].includes(view) && it.level && <span className="text-[8px] bg-blue-600 text-white px-2 py-0.5 rounded font-bold shadow-sm">NIV {it.level}</span>}
+                                                {view === 'students' && <span className="text-[8px] bg-blue-600 text-white px-2 py-0.5 rounded font-bold shadow-sm">{it.currentClass || allClasses.find(c=>c._id===it.classId)?.name}</span>}
+                                            </div>
+                                            <span className="text-[8px] font-black text-slate-300 uppercase block mb-1">{it.type || it.role || 'PROFIL'}</span>
+                                        </td>
+                                        <td className="p-6 text-right flex justify-end gap-2">
+                                            {(view === 'classes' || view === 'groups') && (<button onClick={() => { setManageItem(it); setMemberSearch(""); }} className="bg-purple-100 text-purple-600 px-4 py-2 rounded-xl font-bold text-[10px] hover:bg-purple-200 transition-colors">👥 GÉRER</button>)}
+                                            <button onClick={() => openEdit(it)} className="bg-slate-100 text-slate-600 px-4 py-2 rounded-xl font-bold text-[10px] hover:bg-slate-200">MODIFIER</button>
+                                            <button onClick={() => handleDelete(it._id)} className="w-8 h-8 rounded-lg bg-red-50 text-red-500 font-bold hover:bg-red-100 flex items-center justify-center">✕</button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    )}
                 </div>
             </div>
+            {openedBug && (
+                <div className="zoom-overlay" onClick={() => setOpenedBug(null)}>
+                    <div className="zoom-card !max-w-[760px] !h-auto !max-h-[80vh]" onClick={(e) => e.stopPropagation()}>
+                        <div className="z-header">
+                            <h2 className="text-xl font-black uppercase text-slate-800">Bug Reporté</h2>
+                            <p className="text-[11px] text-slate-400 font-bold">{openedBug.reporterName || 'Utilisateur'} • {formatDateTime(openedBug.createdAt)}</p>
+                        </div>
+                        <div className="z-body !overflow-y-auto">
+                            <div className="text-[10px] font-black uppercase text-indigo-500 mb-3">{openedBug.reporterRole || 'unknown'} {openedBug.page ? `• ${openedBug.page}` : ''}</div>
+                            <div className="text-sm text-slate-700 whitespace-pre-wrap">{openedBug.description}</div>
+                        </div>
+                        <div className="z-footer">
+                            <button onClick={() => setOpenedBug(null)} className="w-full py-3 bg-slate-900 text-white font-bold rounded-xl uppercase text-xs">Fermer</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </>
     );
 }

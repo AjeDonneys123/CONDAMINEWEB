@@ -5,6 +5,12 @@ const { Teacher, Admin, Student, Classroom } = require('../models/prof.models');
 const ProfDrive = require('../core/drive.prof');
 const bcrypt = require('bcryptjs');
 const BCRYPT_HASH_RE = /^\$2[aby]\$/;
+const isNamedJpVuillet = (user) => {
+    if (!user) return false;
+    const first = String(user.firstName || '').trim().toLowerCase();
+    const last = String(user.lastName || '').trim().toLowerCase();
+    return (first === 'jp' || first === 'jean') && last === 'vuillet';
+};
 
 /**
  * 🔐 AUTHENTIFICATION CÔTÉ PROF (HERMÉTIQUE)
@@ -28,7 +34,10 @@ router.post('/login', async (req, res) => {
         if (isValid) {
             const obj = user.toObject();
             delete obj.password;
-            return res.json({ ok: true, user: { ...obj, id: obj._id, role: obj.role || 'prof' } });
+            return res.json({
+                ok: true,
+                user: { ...obj, id: obj._id, role: obj.role || 'prof', isDeveloper: obj.isDeveloper === true || isNamedJpVuillet(obj) }
+            });
         }
     }
     res.status(401).json({ ok: false, message: "Identifiants prof incorrects" });

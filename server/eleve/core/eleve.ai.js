@@ -1,4 +1,4 @@
-// @signatures: EleveAI, analyze, assessAnswerQuality, evaluateIntegrityResponse, generateIntegrityChallenge
+// @signatures: EleveAI, analyze, assessAnswerQuality, evaluateIntegrityResponse, generateIntegrityChallenge, extractSpellingMistakes
 const fetch = require('node-fetch');
 
 /**
@@ -87,6 +87,28 @@ const EleveAI = {
         ].join('\n');
         const system = "Réponds en JSON strict: {ok:boolean, confidence:number, feedback:string}. confidence entre 0 et 1.";
         return EleveAI._askJSON(prompt, system, { ok: false, confidence: 0.3, feedback: "Vérification indisponible." });
+    },
+
+    extractSpellingMistakes: async ({ userText = '', instruction = '', studentClass = '' }) => {
+        const level = EleveAI._levelLabel(studentClass);
+        const prompt = [
+            `Niveau élève: ${level}`,
+            `Consigne: ${instruction || ''}`,
+            `Texte élève: """${String(userText || '').slice(0, 5000)}"""`,
+            "Trouve seulement les fautes d'orthographe explicites (pas la reformulation de style)."
+        ].join('\n');
+        const system = "Réponds en JSON strict: {spellingMistakes:[{wrong:string,correct:string,context:string}]}.";
+        const fallback = { spellingMistakes: [] };
+        const res = await EleveAI._askJSON(prompt, system, fallback);
+        const rows = Array.isArray(res?.spellingMistakes) ? res.spellingMistakes : [];
+        return rows
+            .map((m) => ({
+                wrong: String(m?.wrong || '').trim(),
+                correct: String(m?.correct || '').trim(),
+                context: String(m?.context || '').trim()
+            }))
+            .filter((m) => m.wrong && m.correct && m.wrong.toLowerCase() !== m.correct.toLowerCase())
+            .slice(0, 80);
     }
 };
 module.exports = EleveAI;

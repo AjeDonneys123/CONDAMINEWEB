@@ -33,7 +33,7 @@ export default function ProfNav({ activeTab, onTabChange, user }) {
   } else if (user.role === 'admin') {
       tabs = [ { id: 'admin', label: '🛡️ ADMIN', color: 'bg-slate-800' } ];
   } else {
-      tabs = [allTabs.activities, allTabs.classroom, allTabs.scans, allTabs.studio, allTabs.students];
+      tabs = [allTabs.activities, allTabs.classroom, allTabs.scans, allTabs.students];
   }
   return (
     <div className="flex flex-col border-b sticky top-0 z-30 bg-white">

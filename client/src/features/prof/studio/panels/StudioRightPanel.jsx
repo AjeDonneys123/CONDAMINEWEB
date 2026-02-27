@@ -6,6 +6,17 @@ export default function StudioRightPanel({
     actorUploadRef, currentScene, selectedActorId, handleSelectActor, handleDeleteActor, resolveUrl,
     backdropUploadRef, handleDeleteBackdrop, saveProject, selectedSceneIdx
 }) {
+    const projectId = String(project?._id || '').trim();
+    const handleCopyProjectId = async () => {
+        if (!projectId) return;
+        try {
+            await navigator.clipboard.writeText(projectId);
+            alert(`ID copié: ${projectId}`);
+        } catch (e) {
+            prompt("Copie l'ID du projet :", projectId);
+        }
+    };
+
     return (
         <div className="studio-col-right">
             
@@ -23,6 +34,18 @@ export default function StudioRightPanel({
                 <div className="project-actions-row">
                     <button onClick={handleOpenSave} className="btn-mini-action btn-save-mini">💾 SAUVER</button>
                     <button onClick={handleOpenLoad} className="btn-mini-action btn-load-mini">📂 CHARGER</button>
+                </div>
+                <div className="project-id-row">
+                    <span className="project-id-label">ID BDD</span>
+                    <code className="project-id-value">{projectId || 'NON SAUVEGARDE'}</code>
+                    <button
+                        onClick={handleCopyProjectId}
+                        disabled={!projectId}
+                        className="btn-copy-id"
+                        title="Copier l'ID"
+                    >
+                        Copier
+                    </button>
                 </div>
             </div>
             

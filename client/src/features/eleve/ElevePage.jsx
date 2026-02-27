@@ -5,6 +5,7 @@ import HomeworkList from './homework/HomeworkList';
 import MistakesBook from './mistakes/MistakesBook';
 import GamesGrid from './games/GamesGrid';
 import StatusOverview from './status/StatusOverview';
+import BugReportWidget from '../shared/BugReportWidget';
 import './ElevePage.css';
 
 export default function ElevePage({ user, onLogout, onBackToProf }) {
@@ -98,6 +99,7 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
             {tab === 'jeux' && <GamesGrid user={freshUser} />}
           </div>
         </div>
+        <BugReportWidget user={freshUser} />
     </div>
   );
 }

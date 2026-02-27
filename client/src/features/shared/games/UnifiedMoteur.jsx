@@ -63,6 +63,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
     const [isReady, setIsReady] = useState(false);
     const [engineStarted, setEngineStarted] = useState(false);
     const [isMobileViewport, setIsMobileViewport] = useState(false);
+    const [isSoundOn, setIsSoundOn] = useState(true);
     
     // --- NOUVEAU : GESTION DES ERREURS DE SCRIPT ---
     const [scriptError, setScriptError] = useState(null);
@@ -78,6 +79,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
     const liveData = useRef({ qStates: [], qIndex: 0, lives: 4 });
     const keysPressed = useRef({});
     const mobileControlTimers = useRef({});
+    const soundEnabledRef = useRef(true);
 
     const bridgeProxy = useRef((type, value) => {
         switch(type) {
@@ -104,6 +106,14 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
 
     const resolveUrl = (url) => {
         return resolveDriveAssetUrl(url);
+    };
+
+    const playBufferedSound = (buffer) => {
+        if (!audioCtxRef.current || !buffer || !soundEnabledRef.current) return;
+        const source = audioCtxRef.current.createBufferSource();
+        source.buffer = buffer;
+        source.connect(audioCtxRef.current.destination);
+        source.start(0);
     };
 
     const isCheatMode = () => keysPressed.current['KeyS'] && keysPressed.current['KeyT'];
@@ -223,9 +233,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
             if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
             event.sounds.forEach(snd => {
                 const buffer = audioBuffersRef.current.get(resolveUrl(snd.url));
-                if (buffer) {
-                    const s = audioCtxRef.current.createBufferSource(); s.buffer = buffer; s.connect(audioCtxRef.current.destination); s.start(0);
-                }
+                playBufferedSound(buffer);
             });
         }
     };
@@ -391,7 +399,10 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
         try {
             const MiniGameBase = createGameBase({ 
                 audioBuffers: audioBuffersRef.current, audioCtx: audioCtxRef.current, projectRef, sceneIdx: 0, imageAssets: imageAssetsRef.current, resolveUrl, canvas: canvasRef.current, ctx: canvasRef.current.getContext('2d'), 
-                playParallelSound: (url) => { if(audioCtxRef.current) { const b = audioBuffersRef.current.get(resolveUrl(url)); if(b){ const s = audioCtxRef.current.createBufferSource(); s.buffer=b; s.connect(audioCtxRef.current.destination); s.start(0); } } },
+                playParallelSound: (url) => {
+                    const b = audioBuffersRef.current.get(resolveUrl(url));
+                    playBufferedSound(b);
+                },
                 bridge: { trigger: (t, v) => bridgeProxy.current(t, v) }, questions: levelQuestions
             });
             
@@ -438,6 +449,10 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
         } catch (e) { setScriptError(`Crash Moteur : ${e.message}`); }
         return () => { if(frameIdRef.current) cancelAnimationFrame(frameIdRef.current); };
     }, [engineStarted]);
+
+    useEffect(() => {
+        soundEnabledRef.current = isSoundOn;
+    }, [isSoundOn]);
 
     useEffect(() => {
         const hDown = (e) => keysPressed.current[e.code] = true;
@@ -598,7 +613,16 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
                 </>
             )}
 
-            <button onClick={onExit} className="absolute top-2 right-4 w-10 h-10 bg-white/10 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-xl font-black z-[7000] border-2 border-white/20">✕</button>
+            <div className="absolute top-2 right-4 flex items-center gap-2 z-[7000]">
+                <button
+                    onClick={() => setIsSoundOn(prev => !prev)}
+                    className="w-10 h-10 bg-white/10 hover:bg-white/20 text-white rounded-full flex items-center justify-center text-base font-black border-2 border-white/20"
+                    title={isSoundOn ? 'Son ON' : 'Son OFF'}
+                >
+                    {isSoundOn ? '🔊' : '🔇'}
+                </button>
+                <button onClick={onExit} className="w-10 h-10 bg-white/10 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-xl font-black border-2 border-white/20">✕</button>
+            </div>
             {showGameOver && (<div className="absolute inset-0 bg-black/95 flex flex-col items-center justify-center z-[8000] animate-in zoom-in"><h1 className="text-8xl font-black text-red-600 mb-8 uppercase tracking-widest">GAME OVER</h1><button onClick={handleRetry} className="bg-white text-black px-12 py-5 rounded-2xl font-black text-2xl hover:bg-red-500 hover:text-white transition-all uppercase">RÉESSAYER 🔄</button></div>)}
         </div>
     );

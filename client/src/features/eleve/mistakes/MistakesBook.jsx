@@ -1,10 +1,23 @@
 // @signatures: MistakesBook
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 
 export default function MistakesBook({ user }) {
-  // FIX V101 : On utilise directement les données de l'utilisateur passées par ElevePage
-  // (Plus besoin de fetch /api/players qui causait le 404)
-  const mistakes = user?.spellingMistakes || [];
+  const [mistakes, setMistakes] = useState([]);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const studentId = user?._id || user?.id;
+        if (!studentId) return;
+        const res = await fetch(`/api/eleve/homework/mistakes/${studentId}`);
+        const data = await res.json();
+        setMistakes(Array.isArray(data) ? data : []);
+      } catch (e) {
+        setMistakes([]);
+      }
+    };
+    load();
+  }, [user?._id, user?.id]);
 
   return (
     <div className="bg-white p-8 rounded-[40px] shadow-sm animate-in">

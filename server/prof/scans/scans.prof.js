@@ -4,6 +4,7 @@ const router = express.Router();
 const { ScanSession, Student } = require('../models/prof.models');
 const ProfDrive = require('../core/drive.prof');
 const ScanAI = require('../../domains/scans/ai/scan.ai');
+const MistakeService = require('../../services/mistake.service');
 const multer = require('multer');
 const upload = multer({ dest: 'public/uploads/temp' });
 const defaultAiInstructions = `Objectif prioritaire: comprendre le sens réel de ce que l'élève a écrit.
@@ -131,6 +132,7 @@ async function buildCorrectionForCopy(session, copyUrl, roster, students) {
     const matched = roster.find(s => s.fullNameNorm === n)
         || roster.find(s => s.fullNameNorm.includes(n) || n.includes(s.fullNameNorm));
     const studentClass = matched?.className || '';
+    const studentId = matched?.id || null;
     const lycee = isLyceeClass(studentClass);
     const letter = sanitizeLetterGrade(aiResult.grade || 'B');
     const score20 = lycee
@@ -140,6 +142,7 @@ async function buildCorrectionForCopy(session, copyUrl, roster, students) {
     return {
         originalUrl: copyUrl,
         studentName: studentName || "Inconnu",
+        studentId,
         studentClass,
         isLycee: lycee,
         grade: letter,
@@ -168,6 +171,7 @@ function buildCorrectionFromAiResult(aiResult, copyUrl, roster) {
     const matched = roster.find(s => s.fullNameNorm === n)
         || roster.find(s => s.fullNameNorm.includes(n) || n.includes(s.fullNameNorm));
     const studentClass = matched?.className || '';
+    const studentId = matched?.id || null;
     const lycee = isLyceeClass(studentClass);
     const letter = sanitizeLetterGrade(aiResult?.grade || 'B');
     const score20 = lycee
@@ -177,6 +181,7 @@ function buildCorrectionFromAiResult(aiResult, copyUrl, roster) {
     return {
         originalUrl: copyUrl,
         studentName: studentName || "Inconnu",
+        studentId,
         studentClass,
         isLycee: lycee,
         grade: letter,
@@ -215,7 +220,18 @@ router.post('/correct/:sessionId', async (req, res) => {
         for (const copyUrl of (session.copyUrls || [])) {
             try {
                 const one = await buildCorrectionForCopy(session, copyUrl, roster, students);
-                if (one) finalResults.push(one);
+                if (one) {
+                    finalResults.push(one);
+                    if (one.studentId) {
+                        await MistakeService.recordForStudent({
+                            studentId: one.studentId,
+                            mistakes: one.spellingMistakes || [],
+                            sourceType: 'scan',
+                            sourceRef: `${session._id}:${copyUrl}`,
+                            context: one.studentName || ''
+                        });
+                    }
+                }
             } catch (e) {
                 console.error("❌ [SCANS] Corr Error:", e.message);
             }
@@ -247,6 +263,15 @@ router.post('/correct-one/:sessionId', async (req, res) => {
         }));
         const one = await buildCorrectionForCopy(session, copyUrl, roster, students);
         if (!one) return res.status(400).json({ error: "URL copie invalide" });
+        if (one.studentId) {
+            await MistakeService.recordForStudent({
+                studentId: one.studentId,
+                mistakes: one.spellingMistakes || [],
+                sourceType: 'scan',
+                sourceRef: `${session._id}:${copyUrl}`,
+                context: one.studentName || ''
+            });
+        }
 
         const existing = Array.isArray(session.corrections) ? session.corrections : [];
         const idx = existing.findIndex(c => String(c.originalUrl) === copyUrl);
@@ -300,6 +325,15 @@ router.post('/correct-one-compare/:sessionId', async (req, res) => {
             transcriptionVariants: mergeTranscriptionVariants,
             appreciation: 'Comparatif A/B/C généré (hybride utilisé comme base).'
         };
+        if (mergedCorrection.studentId) {
+            await MistakeService.recordForStudent({
+                studentId: mergedCorrection.studentId,
+                mistakes: mergedCorrection.spellingMistakes || [],
+                sourceType: 'scan',
+                sourceRef: `${session._id}:${copyUrl}`,
+                context: mergedCorrection.studentName || ''
+            });
+        }
         const existing = Array.isArray(session.corrections) ? session.corrections : [];
         const idx = existing.findIndex(c => String(c.originalUrl) === copyUrl);
         if (idx >= 0) existing[idx] = mergedCorrection;

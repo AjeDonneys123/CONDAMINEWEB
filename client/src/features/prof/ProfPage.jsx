@@ -1,4 +1,4 @@
-// @signatures: ProfPage, getInitialUser, isJean, loadProfileAndClasses
+// @signatures: ProfPage, getInitialUser, loadProfileAndClasses
 import React, { useState, useEffect } from 'react';
 import ProfHeader from './components/ProfHeader';
 import ProfNav from './components/ProfNav';
@@ -9,13 +9,11 @@ import ConsoleReporter from './components/ConsoleReporter';
 import StudioDashboard from './studio/StudioDashboard'; 
 import ClassroomManager from './classroom/ClassroomManager'; 
 import ScansStudio from './scans/ScansStudio';
+import BugReportWidget from '../shared/BugReportWidget';
 import './ProfPage.css';
 
 export default function ProfPage({ user, onLogout }) {
-  const getInitialUser = () => {
-      const isJean = (user.firstName === 'Jean' && user.lastName === 'Vuillet');
-      return { ...user, isDeveloper: user.isDeveloper === true || isJean };
-  };
+  const getInitialUser = () => ({ ...user, isDeveloper: user.isDeveloper === true });
 
   const [liveUser, setLiveUser] = useState(getInitialUser());
   const [tab, setTab] = useState('activities');
@@ -35,10 +33,13 @@ export default function ProfPage({ user, onLogout }) {
         const resMe = await fetch(`/api/admin/teachers/${userId}?report-silent=true`);
         if (!resMe.ok) throw new Error("Erreur chargement profil");
         const freshProfile = await resMe.json();
-        setLiveUser(prev => ({ ...prev, ...freshProfile, isDeveloper: prev.isDeveloper }));
+        const isDeveloper = freshProfile?.isDeveloper === true;
+        setLiveUser(prev => ({ ...prev, ...freshProfile, isDeveloper }));
         let filteredCls = [];
-        if (liveUser.isDeveloper) filteredCls = allCls;
-        else {
+        const isAdminUser = String(freshProfile?.role || '').toLowerCase() === 'admin';
+        if (isAdminUser) {
+            filteredCls = allCls;
+        } else {
             const assignedIds = freshProfile.assignedClasses || [];
             filteredCls = allCls.filter(c => assignedIds.some(id => String(id) === String(c._id)));
         }
@@ -52,6 +53,12 @@ export default function ProfPage({ user, onLogout }) {
   };
 
   useEffect(() => { loadProfileAndClasses(); }, [tab]);
+
+  useEffect(() => {
+    if (!liveUser.isDeveloper && (tab === 'studio' || tab === 'admin')) {
+      setTab('activities');
+    }
+  }, [liveUser.isDeveloper, tab]);
 
   const currentClassObj = classes.find(c => String(c._id) === String(selectedClassId));
   const currentClassName = currentClassObj?.name || "";
@@ -99,14 +106,19 @@ export default function ProfPage({ user, onLogout }) {
                 {tab === 'activities' && <ActivityStudio globalClass={currentClassName} globalClassId={selectedClassId} globalLevel={currentLevel} user={liveUser} onRefreshRequest={loadProfileAndClasses} />}
                 {tab === 'classroom' && <ClassroomManager globalClassId={selectedClassId} user={liveUser} />}
                 {tab === 'scans' && <ScansStudio user={liveUser} globalClass={currentClassName} />}
-                {tab === 'studio' && <StudioDashboard user={liveUser} />}
+                {tab === 'studio' && liveUser.isDeveloper && <StudioDashboard user={liveUser} />}
                 {tab === 'students' && <StudentsManager globalClassId={selectedClassId} />}
-                {tab === 'admin' && <AdminDashboard user={liveUser} onRefresh={loadProfileAndClasses} />}
+                {tab === 'admin' && liveUser.isDeveloper && <AdminDashboard user={liveUser} onRefresh={loadProfileAndClasses} />}
              </>
           )}
         </div>
       </div>
       {liveUser.isDeveloper && <ConsoleReporter user={liveUser} />}
+      <BugReportWidget
+        user={liveUser}
+        isDeveloperMode={liveUser.isDeveloper}
+        onOpenDeveloperBugs={() => setTab('admin')}
+      />
     </div>
   );
 }

@@ -3,11 +3,19 @@ const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 const EleveAI = require('../core/eleve.ai');
+const MistakeService = require('../../services/mistake.service');
 const { sendLatePunishmentMail, resetLateMailState } = require('../../services/punishmentMailer');
 const crypto = require('crypto');
 const PUNISHMENT_DUE_MS = 7 * 24 * 60 * 60 * 1000;
-const VERIFY_TTL_MS = 45 * 1000;
+const VERIFY_TTL_MS = 2 * 60 * 60 * 1000;
 const verifyStore = new Map();
+
+const stripUnderlinedMarkup = (html = '') => {
+    return String(html || '')
+        .replace(/<span[^>]*class=["'][^"']*ai-red-mark[^"']*["'][^>]*>([\s\S]*?)<\/span>/gi, '$1')
+        .replace(/<u[^>]*>([\s\S]*?)<\/u>/gi, '$1')
+        .replace(/ style=["'][^"']*text-decoration\s*:\s*underline[^"']*["']/gi, '');
+};
 
 function shuffle(arr = []) {
     const a = [...arr];
@@ -84,7 +92,8 @@ function sanitizeAntiCheat(payload = {}) {
             qcmDurationsMs: Array.isArray(src?.verification?.qcmDurationsMs)
                 ? src.verification.qcmDurationsMs.map((x) => Number(x || 0)).slice(0, 6)
                 : [],
-            transcript: String(src?.verification?.transcript || '').slice(0, 2000)
+            transcript: String(src?.verification?.transcript || '').slice(0, 2000),
+            responseDurationMs: Number(src?.verification?.responseDurationMs || 0)
         },
         telemetry: {
             requiredDocs: Number(src?.telemetry?.requiredDocs || 0),
@@ -289,6 +298,21 @@ router.get('/submissions/:studentId', async (req, res) => {
     }
 });
 
+router.get('/mistakes/:studentId', async (req, res) => {
+    try {
+        const MistakesBook = mongoose.model('MistakesBook');
+        const studentId = String(req.params.studentId || '');
+        if (!studentId || !mongoose.Types.ObjectId.isValid(studentId)) return res.json([]);
+        const rows = await MistakesBook.find({ studentId })
+            .sort({ date: -1 })
+            .limit(300)
+            .lean();
+        res.json(rows);
+    } catch (e) {
+        res.status(500).json([]);
+    }
+});
+
 router.post('/anti-cheat/challenge', async (req, res) => {
     try {
         const {
@@ -340,10 +364,7 @@ router.post('/anti-cheat/challenge', async (req, res) => {
         }
 
         const generated = await EleveAI.generateIntegrityChallenge(instruction || '', baseText, student?.currentClass || '');
-        const qcmQuestions = buildKeywordQcm(
-            Array.isArray(generated?.expected_keywords) ? generated.expected_keywords : [],
-            baseText
-        );
+        const qcmQuestions = [];
         const openPrompt = String(generated?.question || "En une phrase, explique l'idée principale de ta réponse.");
         const challengeId = crypto.randomUUID();
         const expiresAt = Date.now() + VERIFY_TTL_MS;
@@ -381,7 +402,7 @@ router.post('/anti-cheat/challenge', async (req, res) => {
 
 router.post('/anti-cheat/verify', async (req, res) => {
     try {
-        const { challengeId, responseText, playerId, qcmAnswers = [], qcmDurationsMs = [], responseMode = 'text' } = req.body || {};
+        const { challengeId, responseText, playerId, qcmAnswers = [], qcmDurationsMs = [], responseMode = 'text', responseDurationMs = 0 } = req.body || {};
         const challenge = verifyStore.get(String(challengeId || ''));
         if (!challenge) return res.status(404).json({ ok: false, error: "Challenge introuvable ou expiré." });
         if (Date.now() > challenge.expiresAt) {
@@ -424,7 +445,8 @@ router.post('/anti-cheat/verify', async (req, res) => {
             qcmScore,
             monitoring: {
                 qcmDurationsMs: Array.isArray(qcmDurationsMs) ? qcmDurationsMs.map((x) => Number(x || 0)).slice(0, 6) : [],
-                responseMode: String(responseMode || 'text')
+                responseMode: String(responseMode || 'text'),
+                responseDurationMs: Number(responseDurationMs || 0)
             }
         });
     } catch (e) {
@@ -443,12 +465,25 @@ router.post('/submit', async (req, res) => {
 
     const student = await Student.findById(playerId, 'currentClass').lean();
     const analysis = await EleveAI.analyze(userText, lvl.instruction, lvl.aiHints, student?.currentClass || '');
+    const spellingMistakes = await EleveAI.extractSpellingMistakes({
+        userText,
+        instruction: lvl?.instruction || '',
+        studentClass: student?.currentClass || ''
+    });
+    const cleanFeedback = stripUnderlinedMarkup(analysis?.feedback_fond || '');
     
     const antiCheatSnapshot = sanitizeAntiCheat(antiCheat);
     await Submission.create({ 
         studentId: playerId, homeworkId, levelIndex, 
-        content: userText, feedback: analysis.feedback_fond, grade: analysis.grade,
+        content: userText, feedback: cleanFeedback, grade: analysis.grade,
         antiCheat: antiCheatSnapshot
+    });
+    await MistakeService.recordForStudent({
+        studentId: playerId,
+        mistakes: spellingMistakes,
+        sourceType: 'homework',
+        sourceRef: `${homeworkId}:${levelIndex}`,
+        context: String(lvl?.instruction || '').slice(0, 300)
     });
 
     if (hw?.isPunishment) {
@@ -464,7 +499,7 @@ router.post('/submit', async (req, res) => {
         });
     }
 
-    res.json(analysis);
+    res.json({ ...analysis, feedback_fond: cleanFeedback, spellingMistakes });
 });
 
 module.exports = router;

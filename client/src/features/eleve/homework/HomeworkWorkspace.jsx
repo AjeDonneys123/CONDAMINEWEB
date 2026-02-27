@@ -34,13 +34,13 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
     qcmAnswers: [],
     qcmDurationsMs: [],
     qcmStartedAt: 0,
+    verifyStartedAt: 0,
     challengeId: '',
     expiresAt: 0,
     responseText: '',
     error: '',
     verifying: false
   });
-  const [verifyRemainingMs, setVerifyRemainingMs] = useState(0);
   const [speechStatus, setSpeechStatus] = useState({ supported: false, listening: false });
   const [visibilityStart, setVisibilityStart] = useState(null);
   const [lastInputTs, setLastInputTs] = useState(Date.now());
@@ -332,21 +332,9 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
   }, [visibilityStart]);
 
   useEffect(() => {
-    if (!verifyState.open) return;
-    verifyOpenRef.current = true;
-    const timer = setInterval(() => {
-      const left = Math.max(0, verifyState.expiresAt - Date.now());
-      setVerifyRemainingMs(left);
-      if (left <= 0) {
-        setVerifyState((prev) => ({ ...prev, error: "Temps écoulé. Relance l'envoi.", open: false }));
-        clearInterval(timer);
-      }
-    }, 250);
-    return () => {
-      verifyOpenRef.current = false;
-      clearInterval(timer);
-    };
-  }, [verifyState.open, verifyState.expiresAt]);
+    verifyOpenRef.current = !!verifyState.open;
+    return () => { verifyOpenRef.current = false; };
+  }, [verifyState.open]);
 
   const handleModalAction = () => {
       if (!aiResult) return;
@@ -556,7 +544,8 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
         feedback: String(verification.feedback || ''),
         qcmScore: Number(verification.qcmScore || 0),
         qcmDurationsMs: Array.isArray(verification.qcmDurationsMs) ? verification.qcmDurationsMs.map((x) => Number(x || 0)) : [],
-        transcript: String(verification.transcript || '')
+        transcript: String(verification.transcript || ''),
+        responseDurationMs: Number(verification.responseDurationMs || 0)
       },
       telemetry: {
         requiredDocs: Number(thinking?.docConsult?.requiredDocs || 0),
@@ -709,6 +698,7 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
         qcmAnswers: [],
         qcmDurationsMs: [],
         qcmStartedAt: Date.now(),
+        verifyStartedAt: Date.now(),
         challengeId: '',
         expiresAt: 0,
         responseText: '',
@@ -763,6 +753,7 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
                 qcmAnswers: [],
                 qcmDurationsMs: [],
                 qcmStartedAt: 0,
+                verifyStartedAt: 0,
                 challengeId: '',
                 expiresAt: 0,
                 responseText: '',
@@ -782,13 +773,13 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
             qcmAnswers: qcms.map(() => -1),
             qcmDurationsMs: qcms.map(() => 0),
             qcmStartedAt: Date.now(),
+            verifyStartedAt: Date.now(),
             challengeId: res.challengeId,
             expiresAt: Number(res.expiresAt || 0),
             responseText: '',
             error: '',
             verifying: false
           });
-          setVerifyRemainingMs(Math.max(0, Number(res.expiresAt || 0) - Date.now()));
       } catch (e) {
           setVerifyState({
             open: false,
@@ -798,6 +789,7 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
             qcmAnswers: [],
             qcmDurationsMs: [],
             qcmStartedAt: 0,
+            verifyStartedAt: 0,
             challengeId: '',
             expiresAt: 0,
             responseText: '',
@@ -808,27 +800,15 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
       }
   };
 
-  const handleQcmPick = (qIdx, optionIdx) => {
-      setVerifyState((prev) => {
-          const answers = [...(prev.qcmAnswers || [])];
-          const timings = [...(prev.qcmDurationsMs || [])];
-          if (answers[qIdx] === -1 || answers[qIdx] === undefined) {
-              const baseTs = Number(prev.qcmStartedAt || Date.now());
-              timings[qIdx] = Math.max(0, Date.now() - baseTs);
-          }
-          answers[qIdx] = optionIdx;
-          return { ...prev, qcmAnswers: answers, qcmDurationsMs: timings };
-      });
-  };
-
   const confirmVerification = async () => {
       if (!verifyState.responseText.trim()) return;
-      if ((verifyState.qcmAnswers || []).some((x) => Number(x) < 0)) {
-          setVerifyState((prev) => ({ ...prev, error: "Réponds à tous les QCM de vérification." }));
+      if (!verifyOralEvidence.used) {
+          setVerifyState((prev) => ({ ...prev, error: "Réponse audio requise." }));
           return;
       }
       setVerifyState((prev) => ({ ...prev, verifying: true, error: '' }));
       try {
+          const responseDurationMs = Math.max(0, Date.now() - Number(verifyState.verifyStartedAt || Date.now()));
           const verdict = await fetch('/api/eleve/homework/anti-cheat/verify', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -836,9 +816,10 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
                   challengeId: verifyState.challengeId,
                   responseText: verifyState.responseText,
                   playerId: user._id || user.id,
-                  qcmAnswers: verifyState.qcmAnswers,
-                  qcmDurationsMs: verifyState.qcmDurationsMs,
-                  responseMode: verifyOralEvidence.used ? 'voice' : 'text'
+                  qcmAnswers: [],
+                  qcmDurationsMs: [],
+                  responseMode: 'voice',
+                  responseDurationMs
               })
           }).then(r => r.json());
 
@@ -854,6 +835,7 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
             qcmAnswers: [],
             qcmDurationsMs: [],
             qcmStartedAt: 0,
+            verifyStartedAt: 0,
             challengeId: '',
             expiresAt: 0,
             responseText: '',
@@ -867,10 +849,11 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
               passed: true,
               confidence: Number(verdict?.confidence || 0),
               feedback: String(verdict?.feedback || ''),
-              mode: verifyOralEvidence.used ? 'voice' : 'text',
+              mode: 'voice',
               qcmScore: Number(verdict?.qcmScore || 0),
-              qcmDurationsMs: Array.isArray(verdict?.monitoring?.qcmDurationsMs) ? verdict.monitoring.qcmDurationsMs : (verifyState.qcmDurationsMs || []),
-              transcript: String(verifyState.responseText || '')
+              qcmDurationsMs: [],
+              transcript: String(verifyState.responseText || ''),
+              responseDurationMs: Number(verdict?.monitoring?.responseDurationMs || responseDurationMs)
             })
           });
       } catch (e) {
@@ -1123,40 +1106,13 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
                   <div className="v8-verify-head">
                       <strong>Vérification de compréhension</strong>
                   </div>
-                  {Array.isArray(verifyState.qcmQuestions) && verifyState.qcmQuestions.length > 0 && (
-                      <div className="mb-3">
-                          {verifyState.qcmQuestions.map((q, qIdx) => (
-                              <div key={q.id || qIdx} className="mb-2">
-                                  <div className="v8-verify-question">{qIdx + 1}. {q.question}</div>
-                                  <div className="flex flex-wrap gap-2 mt-1">
-                                      {(q.options || []).map((opt, optIdx) => {
-                                          const selected = Number(verifyState.qcmAnswers?.[qIdx]) === optIdx;
-                                          return (
-                                              <button
-                                                  key={`${qIdx}_${optIdx}`}
-                                                  type="button"
-                                                  className={`v8-verify-btn ${selected ? '' : 'ghost'}`}
-                                                  onClick={() => handleQcmPick(qIdx, optIdx)}
-                                              >
-                                                  {String(opt || '')}
-                                              </button>
-                                          );
-                                      })}
-                                  </div>
-                              </div>
-                          ))}
-                      </div>
-                  )}
                   <div className="v8-verify-question">{verifyState.loading ? 'Chargement...' : verifyState.question}</div>
-                  <textarea
-                      className="v8-verify-input"
-                      value={verifyState.responseText}
-                      onChange={(e) => setVerifyState((prev) => ({ ...prev, responseText: e.target.value }))}
-                      placeholder="Explique ce que tu as compris avec tes mots (ou utilise le micro)..."
-                  />
+                  <div className="v8-verify-input min-h-[220px] overflow-y-auto whitespace-pre-wrap">
+                      {verifyState.responseText || "Ta réponse audio transcrite apparaîtra ici..."}
+                  </div>
                   <div className="v8-verify-actions">
                       <button className="v8-verify-btn ghost" onClick={() => setVerifyState((prev) => ({ ...prev, open: false }))}>Annuler</button>
-                      {speechStatus.supported && <button className="v8-verify-btn ghost" onClick={beginVoiceTranscript}>{speechStatus.listening ? 'Écoute...' : 'Dicter ma réponse 🎤'}</button>}
+                      {speechStatus.supported && <button className="v8-verify-btn ghost" onClick={beginVoiceTranscript}>{speechStatus.listening ? 'Écoute...' : 'Commencer la réponse audio 🎤'}</button>}
                       <button className="v8-verify-btn" onClick={confirmVerification} disabled={verifyState.verifying || !verifyState.responseText.trim()}>
                           {verifyState.verifying ? 'Vérification...' : 'Valider'}
                       </button>
@@ -1172,7 +1128,7 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
                   <div className="v8-grade-badge" style={{backgroundColor: modalConfig.color}}>{aiResult.grade}</div>
                   <h2 style={{color: modalConfig.color, fontWeight:900, marginBottom: '5px', textTransform:'uppercase'}}>{modalConfig.title}</h2>
                   <p className="text-xs text-slate-400 font-bold mb-4 uppercase">{modalConfig.msg}</p>
-                  <div dangerouslySetInnerHTML={{__html: aiResult.feedback_fond}} className="v8-feedback-content custom-scrollbar" />
+                  <div dangerouslySetInnerHTML={{__html: sanitizeFeedbackHtml(aiResult.feedback_fond)}} className="v8-feedback-content custom-scrollbar" />
                   <button onClick={handleModalAction} className="v8-next-page-btn" style={{backgroundColor: modalConfig.color}}>{modalConfig.btn}</button>
               </div>
           </div>
@@ -1180,3 +1136,9 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
     </div>
   );
 }
+  const sanitizeFeedbackHtml = (html = '') => {
+    return String(html || '')
+      .replace(/<span[^>]*class=["'][^"']*ai-red-mark[^"']*["'][^>]*>([\s\S]*?)<\/span>/gi, '$1')
+      .replace(/<u[^>]*>([\s\S]*?)<\/u>/gi, '$1')
+      .replace(/ style=["'][^"']*text-decoration\s*:\s*underline[^"']*["']/gi, '');
+  };

@@ -22,7 +22,7 @@ const DESCRIPTIONS = {
     studioprojects: "🎬 Projets Studio."
 };
 
-export default function DatabaseViewer({ onClose }) {
+export default function DatabaseViewer({ user, onClose }) {
     const [data, setData] = useState(null);
     const [activeTab, setActiveTab] = useState('gamelevels'); // Focus Quiz
     const [loading, setLoading] = useState(true);
@@ -31,7 +31,8 @@ export default function DatabaseViewer({ onClose }) {
     const loadData = () => {
         setLoading(true);
         setError(null);
-        fetch('/api/admin/database-dump')
+        const userId = user?.id || user?._id;
+        fetch(`/api/admin/database-dump?userId=${encodeURIComponent(userId || '')}`)
             .then(async res => {
                 if(!res.ok) throw new Error(await res.text());
                 return res.json();

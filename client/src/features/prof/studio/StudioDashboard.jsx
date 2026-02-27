@@ -155,26 +155,29 @@ export default function StudioDashboard({ user }) {
     // --- SMART CLEAN HYBRIDE ---
     const handleSmartAIClean = async () => {
         if (!selectedAction) return;
-        
-        let targetIdx = selectedFrameIdx;
-        if (targetIdx === null) {
-            if (selectedAction.frames && selectedAction.frames.length > 0) targetIdx = 0;
-            else return alert("Aucune image à nettoyer !");
+
+        const frames = selectedAction.frames || [];
+        if (frames.length === 0) return alert("Aucune image à nettoyer !");
+
+        const targetIndexes = selectedFrameIdx !== null
+            ? [selectedFrameIdx]
+            : frames.map((_, idx) => idx);
+
+        if (targetIndexes.some((idx) => String(frames[idx]?.url || '').startsWith('blob:'))) {
+            return alert("Sauvegardez d'abord !");
         }
 
-        const frame = selectedAction.frames[targetIdx];
-        if (frame.url.startsWith('blob:')) return alert("Sauvegardez d'abord !");
+        setCleaning(true);
 
-        setCleaning(true); setStatusText("Détourage IA...");
-        
-        let newUrl = null;
+        const cleanFrameUrl = async (frameUrl, currentIdx, total) => {
+            let newUrl = null;
+            setStatusText(`Détourage IA... (${currentIdx}/${total})`);
 
-        try {
             // TENTATIVE 1 : IA SERVEUR
             const res = await fetch('/api/studio/remove-bg-specialized', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url: frame.url })
+                body: JSON.stringify({ url: frameUrl })
             });
             const data = await res.json();
 
@@ -182,32 +185,45 @@ export default function StudioDashboard({ user }) {
                 newUrl = data.url;
             } else {
                 // TENTATIVE 2 : FALLBACK LOCAL
-                setStatusText("IA indisponible. Détourage manuel...");
-                console.warn("Passage en mode Détourage Local (Haut-Droite)");
-                
-                const blob = await localAutoClean(frame.url);
+                setStatusText(`Détourage local... (${currentIdx}/${total})`);
+                const blob = await localAutoClean(frameUrl);
                 if (blob) {
                     const fd = new FormData();
-                    fd.append('file', blob, `autoclean-${Date.now()}.png`);
-                    
+                    fd.append('file', blob, `autoclean-${Date.now()}-${currentIdx}.png`);
                     const uploadRes = await fetch('/api/studio/upload-asset', { method: 'POST', body: fd });
                     const uploadData = await uploadRes.json();
                     if (uploadData.url) newUrl = uploadData.url;
-                } else {
-                    alert("Image déjà propre ou erreur de lecture.");
                 }
             }
 
-            // APPLIQUER SI SUCCÈS
-            if (newUrl) {
-                const next = JSON.parse(JSON.stringify(project));
-                const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
-                actor.actions[selectedActionIdx].frames[targetIdx].url = newUrl;
-                setProject(next);
-                await saveProject(next);
+            return newUrl;
+        };
+
+        try {
+            const next = JSON.parse(JSON.stringify(project));
+            const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId);
+            if (!actor || !actor.actions?.[selectedActionIdx]) throw new Error("Action introuvable");
+            const actionFrames = actor.actions[selectedActionIdx].frames || [];
+
+            let changed = 0;
+            for (let i = 0; i < targetIndexes.length; i += 1) {
+                const fIdx = targetIndexes[i];
+                const frame = actionFrames[fIdx];
+                if (!frame?.url) continue;
+                const cleanedUrl = await cleanFrameUrl(frame.url, i + 1, targetIndexes.length);
+                if (cleanedUrl) {
+                    actionFrames[fIdx].url = cleanedUrl;
+                    changed += 1;
+                }
             }
 
-        } catch(e) { 
+            if (changed > 0) {
+                setProject(next);
+                await saveProject(next);
+            } else {
+                alert("Aucune image modifiée.");
+            }
+        } catch(e) {
             console.error("Échec total détourage", e);
             alert("Impossible de détourer cette image.");
         }
