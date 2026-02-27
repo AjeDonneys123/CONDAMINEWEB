@@ -9,7 +9,9 @@
     "migrate:drive-urls": "node scripts/migrate-drive-proxy-urls.js",
     "homework": "node homeworkSnap.js",
     "dev": "concurrently -n \"APPLY,MAGIC,SERVER,CLIENT\" -c \"green,yellow,magenta,cyan\" \"node apply.js\" \"node magic-paste.js\" \"npm run server-dev\" \"npm run client\"",
-    "build": "npm install --prefix client && npm run build --prefix client"
+    "build": "npm install --prefix client && npm run build --prefix client",
+    "game:pull": "node scripts/studio-game-sync.js pull",
+    "game:push": "node scripts/studio-game-sync.js push"
   },
   "dependencies": {
     "@google/generative-ai": "^0.1.3",

@@ -182,7 +182,7 @@ router.get('/skins', async (req, res) => {
                 { isAllClass: true },
                 { assignedStudents: student._id }
             ]
-        }, 'teacherId').lean();
+        }, 'teacherId assignedStudents isAllClass targetClassrooms').lean();
         const assignedGames = rawAssignedGames.filter(g => {
             const assigned = (g.assignedStudents || []).some(id => String(id) === String(student._id));
             if (assigned) return true;

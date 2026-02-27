@@ -18,9 +18,10 @@ import StudioRightPanel from './panels/StudioRightPanel';
 const resolveUrl = (url) => resolveDriveAssetUrl(url);
 
 const DEMO_PROJECT = { title: "Nouveau Projet", scenes: [{ name: "Scene 1", backdrops: [], currentBackdropIdx: 0, actors: [], globalSounds: [] }] };
+const LOCAL_STUDIO_PREFIX = 'studio-local-session-v1';
 
 export default function StudioDashboard({ user }) {
-    const [project, setProject] = useState(DEMO_PROJECT);
+    const [project, setProject] = useState({ ...DEMO_PROJECT, localSessionId: `local-${Date.now()}` });
     const [selectedActorId, setSelectedActorId] = useState(null);
     const [selectedActionIdx, setSelectedActionIdx] = useState(0);
     const [selectedGlobalSoundIdx, setSelectedGlobalSoundIdx] = useState(0);
@@ -40,6 +41,7 @@ export default function StudioDashboard({ user }) {
     const [isDraggingOnStage, setIsDraggingOnStage] = useState(false);
     const [showSaveLoadModal, setShowSaveLoadModal] = useState(false);
     const [modalMode, setModalMode] = useState('LOAD'); 
+    const [localStudioMode, setLocalStudioMode] = useState(true);
 
     const frameUploadRef = useRef(null);
     const actorUploadRef = useRef(null);
@@ -51,27 +53,102 @@ export default function StudioDashboard({ user }) {
     const selectedActor = currentScene?.actors?.find(a => a.id === selectedActorId);
     const selectedAction = leftTab === 'actions' ? selectedActor?.actions?.[selectedActionIdx] : currentScene?.globalSounds?.[selectedGlobalSoundIdx];
 
+    const userId = user?.id || user?._id || 'unknown-user';
+    const localModeStorageKey = `studio-local-mode:${userId}`;
+
+    const withLocalSessionId = (projectLike) => {
+        if (!projectLike) return projectLike;
+        if (projectLike._id || projectLike.localSessionId) return projectLike;
+        return { ...projectLike, localSessionId: `local-${Date.now()}` };
+    };
+
+    const getLocalProjectKey = (projectLike) => {
+        const withId = withLocalSessionId(projectLike);
+        const projectKey = withId?._id || withId?.localSessionId || 'draft';
+        return `${LOCAL_STUDIO_PREFIX}:${userId}:${projectKey}`;
+    };
+
+    const persistLocalSession = (nextProject, nextCode) => {
+        try {
+            if (!nextProject) return;
+            localStorage.setItem(
+                getLocalProjectKey(nextProject),
+                JSON.stringify({
+                    project: withLocalSessionId(nextProject),
+                    code: String(nextCode ?? ''),
+                    updatedAt: Date.now()
+                })
+            );
+        } catch (e) {}
+    };
+
+    const hydrateWithLocalSession = (baseProject) => {
+        const safeBase = withLocalSessionId(baseProject);
+        try {
+            const raw = localStorage.getItem(getLocalProjectKey(safeBase));
+            if (!raw) return { project: safeBase, code: safeBase?.generatedCode || '' };
+            const parsed = JSON.parse(raw);
+            if (!parsed?.project) return { project: safeBase, code: safeBase?.generatedCode || '' };
+            const localProject = { ...safeBase, ...parsed.project };
+            return { project: localProject, code: String(parsed.code ?? localProject.generatedCode ?? '') };
+        } catch (e) {
+            return { project: safeBase, code: safeBase?.generatedCode || '' };
+        }
+    };
+
+    useEffect(() => {
+        try {
+            const savedMode = localStorage.getItem(localModeStorageKey);
+            if (savedMode === 'false') setLocalStudioMode(false);
+        } catch (e) {}
+    }, [localModeStorageKey]);
+
+    useEffect(() => {
+        try {
+            localStorage.setItem(localModeStorageKey, String(localStudioMode));
+        } catch (e) {}
+    }, [localModeStorageKey, localStudioMode]);
+
     useEffect(() => { loadProjects(); }, [user]);
+
+    useEffect(() => {
+        persistLocalSession(project, code);
+    }, [project, code, userId]);
 
     async function loadProjects() {
         if(user && (user.id || user._id)) {
             try {
                 const data = await api.get(`/studio/projects/${user.id || user._id}`);
                 const firstActive = (data || []).find(p => !p.isTrashed) || (data || [])[0];
-                if (firstActive) handleLoadProject(firstActive);
+                if (firstActive) {
+                    handleLoadProject(firstActive);
+                    return;
+                }
+                const fallback = withLocalSessionId({ ...DEMO_PROJECT });
+                setProject(fallback);
+                setCode("");
             } catch(e){}
         }
     }
 
-    async function saveProject(p = project) {
+    async function saveProject(p = project, options = {}) {
         if (!p) return;
-        setLoading(true); setStatusText(`Sync... ${p?.isProduction ? '🟠 PRODUCTION' : '🟢 PRÊT'}`);
+        const nextProject = withLocalSessionId(JSON.parse(JSON.stringify(p)));
+        setProject(nextProject);
+        persistLocalSession(nextProject, code);
+        const shouldSyncRemote = options.remote === true || !localStudioMode;
+        if (!shouldSyncRemote) return nextProject;
+        setLoading(true); setStatusText(`Sync... ${nextProject?.isProduction ? '🟠 PRODUCTION' : '🟢 PRÊT'}`);
         try {
-            const payload = { ...p, teacherId: user.id || user._id, generatedCode: code };
+            const payload = { ...nextProject, teacherId: user.id || user._id, generatedCode: code };
             const saved = await api.post('/studio', payload);
             setProject(saved);
+            persistLocalSession(saved, code);
+            return saved;
         } catch(e) { console.error(e); } 
-        setLoading(false);
+        finally {
+            setLoading(false);
+        }
     }
 
     // --- ALGORITHME DE DÉTOURAGE LOCAL (Plan B - Flood Fill) ---
@@ -233,8 +310,20 @@ export default function StudioDashboard({ user }) {
     const handleSetPreviewFrameIdx = (valOrFn) => { if (typeof valOrFn === 'function') setPreviewFrameIdx(prev => valOrFn(prev)); else setPreviewFrameIdx(valOrFn); };
     const handleOpenSave = () => { setModalMode('SAVE'); setShowSaveLoadModal(true); };
     const handleOpenLoad = () => { setModalMode('LOAD'); setShowSaveLoadModal(true); };
-    const handleCreateNew = () => { setProject(DEMO_PROJECT); setCode(""); setSelectedActorId(null); setShowSaveLoadModal(false); };
-    const handleLoadProject = (p) => { setProject(p); setCode(p.generatedCode || ""); if (p.scenes?.[0]?.actors?.[0]) setSelectedActorId(p.scenes[0].actors[0].id); setShowSaveLoadModal(false); };
+    const handleCreateNew = () => {
+        const next = withLocalSessionId({ ...DEMO_PROJECT });
+        setProject(next);
+        setCode("");
+        setSelectedActorId(null);
+        setShowSaveLoadModal(false);
+    };
+    const handleLoadProject = (p) => {
+        const hydrated = hydrateWithLocalSession(p);
+        setProject(hydrated.project);
+        setCode(hydrated.code || "");
+        if (hydrated.project?.scenes?.[0]?.actors?.[0]) setSelectedActorId(hydrated.project.scenes[0].actors[0].id);
+        setShowSaveLoadModal(false);
+    };
 
     const handleUpdateActionSpeed = (delta) => { if (!selectedAction) return; const next = JSON.parse(JSON.stringify(project)); if (leftTab === 'actions') { const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); if (actor && actor.actions[selectedActionIdx]) actor.actions[selectedActionIdx].speed = Math.max(20, Math.min(2000, (actor.actions[selectedActionIdx].speed || 100) + delta)); } else { if (next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx]) next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].speed = Math.max(20, Math.min(2000, (next.scenes[selectedSceneIdx].globalSounds[selectedGlobalSoundIdx].speed || 100) + delta)); } setProject(next); saveProject(next); };
     const handleSelectActor = (actorId) => { setSelectedActorId(actorId); setSelectedFrameIdx(null); };
@@ -252,7 +341,7 @@ export default function StudioDashboard({ user }) {
 
     return (
         <div className="studio-wrapper" onMouseMove={handleStageMouseMove} onMouseUp={() => setIsDraggingOnStage(false)}>
-            {showSaveLoadModal && (<SaveLoadModal mode={modalMode} user={user} currentProject={project} onClose={() => setShowSaveLoadModal(false)} onLoad={handleLoadProject} onNew={handleCreateNew} onSave={(p) => { saveProject(p).then(() => setShowSaveLoadModal(false)); }} />)}
+            {showSaveLoadModal && (<SaveLoadModal mode={modalMode} user={user} currentProject={project} onClose={() => setShowSaveLoadModal(false)} onLoad={handleLoadProject} onNew={handleCreateNew} onSave={(p) => { saveProject(p, { remote: true }).then(() => setShowSaveLoadModal(false)); }} />)}
             {frameToErase && (<ManualEraser imageUrl={frameToErase.url} resolveUrl={resolveUrl} onCancel={() => setFrameToErase(null)} onSave={(newUrl) => { const next = JSON.parse(JSON.stringify(project)); const actor = next.scenes[selectedSceneIdx].actors.find(a => a.id === selectedActorId); actor.actions[selectedActionIdx].frames[frameToErase.idx].url = newUrl; setProject(next); saveProject(next); setFrameToErase(null); }} />)}
             {showSoundModal && <SoundModal onSave={handleSaveSound} onClose={() => setShowSoundModal(false)} />}
             {soundToEdit && (<SoundEditorModal soundUrl={soundToEdit.url} soundName={soundToEdit.name} onSave={handleSaveEditedSound} onClose={() => setSoundToEdit(null)} resolveUrl={resolveUrl} />)}
@@ -272,6 +361,8 @@ export default function StudioDashboard({ user }) {
                 />
                 <StudioRightPanel 
                     project={project} setProject={setProject} handleOpenSave={handleOpenSave} handleOpenLoad={handleOpenLoad} actorUploadRef={actorUploadRef} currentScene={currentScene} selectedActorId={selectedActorId} handleSelectActor={handleSelectActor} handleDeleteActor={handleDeleteActor} resolveUrl={resolveUrl} backdropUploadRef={backdropUploadRef} handleDeleteBackdrop={handleDeleteBackdrop} saveProject={saveProject} selectedSceneIdx={selectedSceneIdx}
+                    localStudioMode={localStudioMode}
+                    setLocalStudioMode={setLocalStudioMode}
                 />
             </div>
         </div>

@@ -14,6 +14,13 @@ const path = require('path');
 const tempDir = path.join(process.cwd(), 'public', 'uploads', 'temp');
 if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 const upload = multer({ dest: tempDir });
+const localGamesDir = path.join(process.cwd(), 'studio-games');
+if (!fs.existsSync(localGamesDir)) fs.mkdirSync(localGamesDir, { recursive: true });
+
+const sanitizeProjectKey = (raw) => String(raw || '')
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]/g, '')
+    .slice(0, 120);
 
 // --- CHARGEMENT PROJETS (SÉCURISÉ) ---
 router.get('/projects/:userId', async (req, res) => {
@@ -86,6 +93,35 @@ router.post('/import-zombie-sounds', async (req, res) => {
         res.json({ sounds });
     } catch (e) {
         console.error("Import Zombie Sounds Error:", e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// BRIDGE LOCAL STUDIO: lecture script console depuis fichier local
+router.get('/local-code/:projectKey', async (req, res) => {
+    try {
+        const projectKey = sanitizeProjectKey(req.params.projectKey);
+        if (!projectKey) return res.status(400).json({ error: "projectKey manquant" });
+        const filePath = path.join(localGamesDir, `${projectKey}.js`);
+        if (!fs.existsSync(filePath)) return res.status(404).json({ error: "Script local introuvable" });
+        const code = fs.readFileSync(filePath, 'utf8');
+        res.json({ ok: true, projectKey, code });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// BRIDGE LOCAL STUDIO: écriture script console vers fichier local
+router.post('/local-code/:projectKey', async (req, res) => {
+    try {
+        const projectKey = sanitizeProjectKey(req.params.projectKey);
+        const code = String(req.body?.code || '');
+        if (!projectKey) return res.status(400).json({ error: "projectKey manquant" });
+        if (!code.trim()) return res.status(400).json({ error: "code manquant" });
+        const filePath = path.join(localGamesDir, `${projectKey}.js`);
+        fs.writeFileSync(filePath, code, 'utf8');
+        res.json({ ok: true, projectKey, filePath });
+    } catch (e) {
         res.status(500).json({ error: e.message });
     }
 });

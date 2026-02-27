@@ -17,6 +17,24 @@ export default function StudioCenterPanel({
     const [showQuizManager, setShowQuizManager] = useState(false);
     const [testGame, setTestGame] = useState(null);
     const [loading, setLoading] = useState(false);
+    const [bridgeBusy, setBridgeBusy] = useState(false);
+
+    const projectKey = String(project?._id || project?.localSessionId || '').trim();
+
+    const handleImportLocalCode = async () => {
+        if (!projectKey) return alert("Projet local sans ID.");
+        setBridgeBusy(true);
+        try {
+            const res = await fetch(`/api/studio/local-code/${encodeURIComponent(projectKey)}`);
+            const data = await res.json();
+            if (!res.ok) throw new Error(data?.error || 'Import impossible');
+            setCode(String(data.code || ''));
+            alert("Code importé depuis fichier local.");
+        } catch (e) {
+            alert(`Import local échoué: ${e.message}`);
+        }
+        setBridgeBusy(false);
+    };
 
     const openQuizManager = async () => {
         setLoading(true);
@@ -146,6 +164,15 @@ export default function StudioCenterPanel({
             </div>
 
             <div className="code-editor-box">
+                <div className="flex items-center gap-2 mb-2">
+                    <button
+                        onClick={handleImportLocalCode}
+                        className="bg-slate-200 text-slate-800 px-3 py-1 rounded-lg text-[10px] font-black tracking-wider"
+                        disabled={bridgeBusy || !projectKey}
+                    >
+                        {bridgeBusy ? '...' : '⬇ IMPORT LOCAL'}
+                    </button>
+                </div>
                 <textarea value={code} onChange={e => setCode(e.target.value)} spellCheck="false" placeholder="Script Condamine Engine..." />
             </div>
         </div>

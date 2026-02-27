@@ -4,7 +4,8 @@ import React from 'react';
 export default function StudioRightPanel({
     project, setProject, handleOpenSave, handleOpenLoad,
     actorUploadRef, currentScene, selectedActorId, handleSelectActor, handleDeleteActor, resolveUrl,
-    backdropUploadRef, handleDeleteBackdrop, saveProject, selectedSceneIdx
+    backdropUploadRef, handleDeleteBackdrop, saveProject, selectedSceneIdx,
+    localStudioMode, setLocalStudioMode
 }) {
     const projectId = String(project?._id || '').trim();
     const handleCopyProjectId = async () => {
@@ -34,6 +35,20 @@ export default function StudioRightPanel({
                 <div className="project-actions-row">
                     <button onClick={handleOpenSave} className="btn-mini-action btn-save-mini">💾 SAUVER</button>
                     <button onClick={handleOpenLoad} className="btn-mini-action btn-load-mini">📂 CHARGER</button>
+                </div>
+                <div className="project-actions-row">
+                    <button
+                        onClick={() => setLocalStudioMode(v => !v)}
+                        className="btn-mini-action"
+                        style={{
+                            width: '100%',
+                            background: localStudioMode ? '#dcfce7' : '#fee2e2',
+                            color: localStudioMode ? '#166534' : '#991b1b',
+                            border: `1px solid ${localStudioMode ? '#86efac' : '#fca5a5'}`
+                        }}
+                    >
+                        {localStudioMode ? 'LOCAL ACTIF (AUCUN PUSH AUTO BDD)' : 'SYNC SERVEUR ACTIVE'}
+                    </button>
                 </div>
                 <div className="project-id-row">
                     <span className="project-id-label">ID BDD</span>
