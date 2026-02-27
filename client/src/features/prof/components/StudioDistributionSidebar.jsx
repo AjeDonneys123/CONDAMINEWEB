@@ -50,7 +50,7 @@ export default function StudioDistributionSidebar({
     }, [availableClasses, viewingClass]);
 
     // 2. FILTRAGE STRICT DES DOSSIERS
-    const availableChapters = (chapters || []).filter(c => {
+    const getAvailableChaptersForClass = (className) => (chapters || []).filter(c => {
         // A. Filtre Section (Matière)
         const cleanSection = (targetSection || "GÉNÉRAL").toUpperCase().trim();
         const chapSection = (c.section || "GÉNÉRAL").toUpperCase().trim();
@@ -59,12 +59,12 @@ export default function StudioDistributionSidebar({
         if (c.isArchived) return false;
 
         // B. Filtre Contextuel (Basé sur la classe qu'on regarde)
-        if (viewingClass) {
-             const currentClassObj = allClasses.find(cl => cl.name === viewingClass);
+        if (className) {
+             const currentClassObj = allClasses.find(cl => cl.name === className);
              const currentLevel = currentClassObj ? String(currentClassObj.level) : null;
 
              // Si le dossier est spécifique à une AUTRE classe -> CACHÉ
-             if (c.classroom && c.classroom !== viewingClass) return false;
+             if (c.classroom && c.classroom !== className) return false;
 
              // Si le dossier est spécifique à un AUTRE niveau -> CACHÉ
              if (c.sharedLevel && String(c.sharedLevel) !== String(currentLevel)) return false;
@@ -75,12 +75,14 @@ export default function StudioDistributionSidebar({
 
         return true;
     }).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+    const availableChapters = getAvailableChaptersForClass(viewingClass);
 
     const [punishmentChapterId, setPunishmentChapterId] = React.useState("");
 
     // Helper pour trouver le dossier par défaut
-    const findBestDefaultChapter = () => {
-        return availableChapters.length > 0 ? availableChapters[0]._id : "";
+    const findBestDefaultChapter = (className = viewingClass) => {
+        const chaptersForClass = getAvailableChaptersForClass(className);
+        return chaptersForClass.length > 0 ? chaptersForClass[0]._id : "";
     };
 
     useEffect(() => {
@@ -183,6 +185,22 @@ export default function StudioDistributionSidebar({
         setDistribution(next);
     };
 
+    const selectAllClasses = () => {
+        const next = { ...distribution };
+        availableClasses.forEach((c) => {
+            const existing = next[c.name];
+            const fallbackChapter = findBestDefaultChapter(c.name);
+            next[c.name] = {
+                chapterId: existing?.chapterId || fallbackChapter,
+                studentIds: existing?.studentIds || []
+            };
+        });
+        setDistribution(next);
+        if (!viewingClass && availableClasses.length > 0) {
+            setViewingClass(availableClasses[0].name);
+        }
+    };
+
     const isClassSelected = !!distribution[viewingClass];
     const cfg = distribution[viewingClass];
     
@@ -237,6 +255,15 @@ export default function StudioDistributionSidebar({
     return (
         <div className="v84-dist-sidebar custom-scrollbar">
             {/* 1. ONGLETS CLASSES (FILTRÉS) */}
+            <div className="v84-classes-toolbar">
+                <button
+                    className="v84-classes-select-all-btn"
+                    onClick={selectAllClasses}
+                    disabled={loading || availableClasses.length === 0}
+                >
+                    TOUS
+                </button>
+            </div>
             <div className="v84-classes-tabs">
                 {availableClasses.map(c => (
                     <button 

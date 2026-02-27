@@ -2,7 +2,43 @@
 import React, { useState, useEffect } from 'react';
 import './StudentsManager.css';
 
-const extractId = (value) => String(value?._id || value?.id || value || '');
+const extractId = (value) => {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number') return String(value);
+  if (typeof value?.toHexString === 'function') return value.toHexString();
+  if (typeof value?.toString === 'function' && value?.toString !== Object.prototype.toString) {
+    const asString = value.toString();
+    if (asString && asString !== '[object Object]') return asString;
+  }
+  if (typeof value === 'object') {
+    if (value._id) return extractId(value._id);
+    if (typeof value.id === 'string') return value.id;
+    if (typeof value.$oid === 'string') return value.$oid;
+  }
+  return '';
+};
+const norm = (value = '') =>
+  String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+const antiCheatTone = (antiCheat = {}) => {
+  const lvl = String(antiCheat?.level || '').toUpperCase();
+  const score = Number(antiCheat?.score || 0);
+  if (lvl === 'RED' || score >= 8) return { label: 'TRICHE: ROUGE', chip: 'bg-red-100 text-red-700 border-red-200' };
+  if (lvl === 'ORANGE' || score >= 4) return { label: 'TRICHE: ORANGE', chip: 'bg-amber-100 text-amber-700 border-amber-200' };
+  return { label: 'TRICHE: VERTE', chip: 'bg-emerald-100 text-emerald-700 border-emerald-200' };
+};
+const formatMs = (ms = 0) => {
+  const v = Math.max(0, Number(ms || 0));
+  const sec = Math.floor(v / 1000);
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+};
 
 export default function StudentsManager({ globalClassId }) {
   const [students, setStudents] = useState([]);
@@ -54,16 +90,41 @@ export default function StudentsManager({ globalClassId }) {
             .map(s => `${s.firstName} ${s.lastName}`);
         setLatePunishmentNames(lateNames);
 
-        // On charge TOUTES les activités (pour pouvoir filtrer dans la modale individuelle)
         const allActs = [
             ...hws.map(h => ({ ...h, type: 'homework', label: '📝 ' + h.title })),
             ...gms.map(g => ({ ...g, type: 'game', label: '🎮 ' + g.title }))
         ];
-        setActivities(allActs);
+        const classTargetKey = norm(currentClassName);
+        const classStudentIds = new Set(myStudents.map((s) => extractId(s._id)));
+        const scopedActs = allActs.filter((act) => {
+            const targets = (act.targetClassrooms || []).map(norm);
+            const hitsClassTarget = targets.includes(classTargetKey);
+            const hasAssignedInClass = (act.assignedStudents || []).some((id) => classStudentIds.has(String(id)));
+            return hitsClassTarget || hasAssignedInClass;
+        });
+        setActivities(scopedActs);
 
         const map = {};
-        subs.forEach(sub => { map[`${sub.studentId}_${sub.homeworkId}`] = { done: true, score: sub.grade, subId: sub._id }; });
-        progs.forEach(prog => { map[`${prog.studentId}_${prog.gameId}`] = { done: true, score: prog.lastScore ? `${prog.lastScore}pts` : 'JOUÉ' }; });
+        const hwTitleById = new Map((hws || []).map((h) => [String(h._id), h.title || '']));
+        const studentNameKeyById = new Map(
+            (sts || []).map((s) => [String(s._id), norm(`${s.firstName || ''} ${s.lastName || ''}`)])
+        );
+        subs.forEach(sub => {
+            const sid = extractId(sub.studentId);
+            const hid = extractId(sub.homeworkId);
+            const hwTitleFromSub = typeof sub.homeworkId === 'object' ? sub.homeworkId?.title : '';
+            const hwTitle = hwTitleFromSub || hwTitleById.get(String(hid)) || '';
+            const sNameKey = studentNameKeyById.get(sid) || '';
+            const payload = { done: true, score: sub.grade, subId: sub._id, antiCheat: sub.antiCheat || {} };
+            if (hid) map[`${sid}_${hid}`] = payload;
+            if (hwTitle) map[`${sid}_TITLE_${norm(hwTitle)}`] = payload;
+            if (hwTitle && sNameKey) map[`${sNameKey}_TITLE_${norm(hwTitle)}`] = payload;
+        });
+        progs.forEach(prog => {
+            const sid = extractId(prog.studentId);
+            const gid = extractId(prog.gameId);
+            map[`${sid}_${gid}`] = { done: true, score: prog.lastScore ? `${prog.lastScore}pts` : 'JOUÉ' };
+        });
         setTrackingData(map);
 
     } catch (e) { console.error("Matrix Load Error", e); }
@@ -97,33 +158,33 @@ export default function StudentsManager({ globalClassId }) {
 
   // --- HELPER POUR LA MODALE SUIVI ---
   const getStudentWorkload = (sId) => {
-      const student = students.find(s => s._id === sId);
+      const currentStudentId = extractId(sId);
+      const student = students.find((s) => extractId(s._id) === currentStudentId);
       if(!student) return [];
       
       const workload = [];
-      const myClass = student.currentClass;
-      const myGroups = student.assignedGroups || [];
+      const classTargetKey = norm(className);
+      const studentId = currentStudentId;
+      const studentNameKey = norm(`${student.firstName || ''} ${student.lastName || ''}`);
 
       activities.forEach(act => {
           // 1. CIBLAGE
-          let isAssigned = false;
-          if (act.type === 'homework' && !act.isAllClass) {
-              isAssigned = (act.assignedStudents || []).includes(sId);
-          } else {
-              // Devoir classe entière ou Jeu
-              const targets = act.targetClassrooms || (act.classroom ? [act.classroom] : []);
-              // Est-ce que ça vise ma classe ou un de mes groupes ?
-              isAssigned = targets.includes(myClass); 
-              // Ou suis-je assigné individuellement ? (cas punition ou jeu specifique)
-              if (!isAssigned && act.assignedStudents && act.assignedStudents.includes(sId)) isAssigned = true;
-          }
+          const assignedIds = (act.assignedStudents || []).map((id) => String(id));
+          const isAssignedDirect = assignedIds.includes(studentId);
+          const targets = (act.targetClassrooms || (act.classroom ? [act.classroom] : [])).map(norm);
+          const isAssignedByClass = !!act.isAllClass && targets.includes(classTargetKey);
+          const isAssigned = isAssignedDirect || isAssignedByClass;
 
           if (isAssigned) {
-              const status = trackingData[`${sId}_${act._id}`];
+              const status =
+                  trackingData[`${studentId}_${extractId(act._id)}`] ||
+                  trackingData[`${studentId}_TITLE_${norm(act.title)}`] ||
+                  trackingData[`${studentNameKey}_TITLE_${norm(act.title)}`];
               workload.push({
                   ...act,
                   isDone: !!status,
-                  score: status ? status.score : null
+                  score: status ? status.score : null,
+                  antiCheat: status ? (status.antiCheat || {}) : {}
               });
           }
       });
@@ -179,6 +240,11 @@ export default function StudentsManager({ globalClassId }) {
                                     <div className={`text-[10px] font-black uppercase ${w.isDone ? 'text-green-600' : 'text-red-400'}`}>
                                         {w.isDone ? `✅ FAIT (${w.score})` : '⭕ À FAIRE'}
                                     </div>
+                                    {w.isDone && (
+                                        <div className={`inline-flex mt-2 px-2 py-1 rounded-full border text-[9px] font-black ${antiCheatTone(w.antiCheat).chip}`}>
+                                            {antiCheatTone(w.antiCheat).label}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         ))}
@@ -215,6 +281,37 @@ export default function StudentsManager({ globalClassId }) {
                     ) : (
                         <>
                             <div className="corr-body">
+                                <div className="mb-3">
+                                    <div className={`inline-flex px-3 py-1 rounded-full border text-[10px] font-black ${antiCheatTone(editorData?.antiCheat || {}).chip}`}>
+                                        {antiCheatTone(editorData?.antiCheat || {}).label}
+                                    </div>
+                                    {Array.isArray(editorData?.antiCheat?.reasons) && editorData.antiCheat.reasons.length > 0 && (
+                                        <div className="mt-2 text-[11px] font-semibold text-slate-600">
+                                            {editorData.antiCheat.reasons.slice(0, 3).join(' • ')}
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="mb-3 rounded-xl border border-slate-200 bg-white p-3">
+                                    <div className="text-[10px] font-black text-slate-500 uppercase mb-2">Surveillance</div>
+                                    <div className="text-[11px] text-slate-700 font-semibold">
+                                        Temps réflexion avant écriture: {formatMs(editorData?.antiCheat?.telemetry?.firstWriteDelayMs || 0)}
+                                    </div>
+                                    <div className="text-[11px] text-slate-700 font-semibold">
+                                        QCM vérification (durées): {(editorData?.antiCheat?.verification?.qcmDurationsMs || []).length > 0 ? (editorData.antiCheat.verification.qcmDurationsMs.map(formatMs).join(' / ')) : 'n/a'}
+                                    </div>
+                                    <div className="text-[11px] text-slate-700 font-semibold">
+                                        Score QCM: {Number(editorData?.antiCheat?.verification?.qcmScore || 0).toFixed(2)}
+                                    </div>
+                                    <div className="text-[11px] text-slate-700 font-semibold">
+                                        Mode réponse ouverte: {editorData?.antiCheat?.verification?.mode || 'texte'}
+                                    </div>
+                                    <div className="mt-2 text-[11px] text-slate-700">
+                                        <span className="font-black uppercase text-slate-500">Transcription / Réponse ouverte</span>
+                                        <div className="mt-1 p-2 rounded border border-slate-100 bg-slate-50 whitespace-pre-wrap">
+                                            {editorData?.antiCheat?.verification?.transcript || 'Aucune donnée'}
+                                        </div>
+                                    </div>
+                                </div>
                                 <div className="corr-panel-student">
                                     <label className="corr-label">✍️ TEXTE ÉLÈVE</label>
                                     <textarea className="corr-textarea student" value={editorData.content} onChange={e => setEditorData({...editorData, content: e.target.value})} />
@@ -273,11 +370,17 @@ export default function StudentsManager({ globalClassId }) {
                                     <button onClick={() => setViewingStudent(s)} className="bg-slate-100 text-slate-500 px-3 py-1 rounded hover:bg-indigo-100 hover:text-indigo-600 text-[10px] font-black">📋 SUIVI</button>
                                 </td>
                                 {activities.filter(a => !a.isPunishment).map(act => {
-                                    const status = trackingData[`${s._id}_${act._id}`];
+                                    const studentNameKey = norm(`${s.firstName || ''} ${s.lastName || ''}`);
+                                    const sid = extractId(s._id);
+                                    const aid = extractId(act._id);
+                                    const status =
+                                        trackingData[`${sid}_${aid}`] ||
+                                        trackingData[`${sid}_TITLE_${norm(act.title)}`] ||
+                                        trackingData[`${studentNameKey}_TITLE_${norm(act.title)}`];
                                     return (
                                         <td key={act._id} className="p-2 text-center border-b">
                                             {status ? (
-                                                <button onClick={() => act.type === 'homework' && handleOpenCorrection(status.subId)} className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-black border shadow-sm ${act.type === 'homework' ? 'bg-green-100 text-green-700 border-green-200' : 'bg-purple-100 text-purple-700 border-purple-200'}`}>{status.score || 'OK'}</button>
+                                                <button onClick={() => act.type === 'homework' && handleOpenCorrection(status.subId)} className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-black border shadow-sm ${act.type === 'homework' ? 'bg-green-100 text-green-700 border-green-200' : 'bg-purple-100 text-purple-700 border-purple-200'}`} title={act.type === 'homework' ? antiCheatTone(status.antiCheat).label : ''}>{status.score || 'OK'}</button>
                                             ) : <div className="text-slate-200 text-xs">•</div>}
                                         </td>
                                     );

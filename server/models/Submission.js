@@ -5,6 +5,7 @@ const SubmissionSchema = new mongoose.Schema({
     content: String,
     feedback: String,
     grade: String,
+    antiCheat: { type: Object, default: {} },
     createdAt: { type: Date, default: Date.now }
 }, { collection: 'submissions' });
 module.exports = mongoose.models.Submission || mongoose.model('Submission', SubmissionSchema);

@@ -27,6 +27,7 @@ const GameLevelSchema = new mongoose.Schema({
     targetClassrooms: [String], 
     assignedStudents: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Student' }],
     isAllClass: { type: Boolean, default: true },
+    isEnabled: { type: Boolean, default: true },
 
     // --- LE MIROIR STUDIO ---
     // Ces champs permettent à Julian de voir exactement ce que le prof a créé

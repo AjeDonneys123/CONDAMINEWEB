@@ -34,8 +34,13 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
     const [viewingClass, setViewingClass] = useState(globalClass || "");
     const [studentSearch, setStudentSearch] = useState("");
     const [loading, setLoading] = useState(false);
+    const [previewAsset, setPreviewAsset] = useState(null);
+    const [previewAsImage, setPreviewAsImage] = useState(true);
+    const [dragDocIndex, setDragDocIndex] = useState(null);
+    const [dropDocIndex, setDropDocIndex] = useState(null);
     
     const fileInputRef = useRef(null);
+    const uploadTypeRef = useRef(null);
     const [uploadType, setUploadType] = useState(null);
 
     // 4. CHARGEMENT DE SECOURS (Si les props sont vides)
@@ -93,23 +98,67 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
         newLevels[activeLevelIdx] = { ...newLevels[activeLevelIdx], [field]: value };
         setFormData(prev => ({ ...prev, levels: newLevels }));
     };
-    const triggerUpload = (type) => { setUploadType(type); fileInputRef.current.click(); };
+    const triggerUpload = (type) => {
+        uploadTypeRef.current = type;
+        setUploadType(type);
+        if (fileInputRef.current) {
+            fileInputRef.current.multiple = type === 'docs';
+            fileInputRef.current.click();
+        }
+    };
     const handleFileChange = async (e) => {
         const files = e.target.files; if (!files || files.length === 0) return;
+        const currentUploadType = uploadTypeRef.current || uploadType;
         setLoading(true); const fd = new FormData(); Array.from(files).forEach(f => fd.append('files', f));
         try {
             const res = await fetch('/api/homework/upload', { method: 'POST', body: fd }).then(r => r.json());
             if (res.urls && res.urls.length > 0) {
-                if (uploadType === 'sheet') updateCurrentLevel('instructionUrls', [res.urls[0]]);
+                if (currentUploadType === 'sheet') updateCurrentLevel('instructionUrls', [res.urls[0]]);
                 else updateCurrentLevel('attachmentUrls', [...formData.levels[activeLevelIdx].attachmentUrls, ...res.urls]);
             }
         } catch(err) { alert("Erreur Upload"); } setLoading(false); e.target.value = "";
+        uploadTypeRef.current = null;
     };
     const removeAttachment = (type, urlIdx) => {
-        const lvls = [...formData.levels];
         if (type === 'sheet') updateCurrentLevel('instructionUrls', []);
         else updateCurrentLevel('attachmentUrls', formData.levels[activeLevelIdx].attachmentUrls.filter((_, i) => i !== urlIdx));
     };
+    const moveAttachment = (fromIndex, toIndex) => {
+        const list = [...formData.levels[activeLevelIdx].attachmentUrls];
+        if (toIndex < 0 || toIndex >= list.length) return;
+        const [moved] = list.splice(fromIndex, 1);
+        list.splice(toIndex, 0, moved);
+        updateCurrentLevel('attachmentUrls', list);
+    };
+    const handleDocDragStart = (e, index) => {
+        setDragDocIndex(index);
+        setDropDocIndex(index);
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', String(index));
+    };
+    const handleDocDragOver = (e, index) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        if (dropDocIndex !== index) setDropDocIndex(index);
+    };
+    const handleDocDrop = (e, index) => {
+        e.preventDefault();
+        if (dragDocIndex !== null && dragDocIndex !== index) {
+            moveAttachment(dragDocIndex, index);
+        }
+        setDragDocIndex(null);
+        setDropDocIndex(null);
+    };
+    const handleDocDragEnd = () => {
+        setDragDocIndex(null);
+        setDropDocIndex(null);
+    };
+
+    const openPreview = (url, label) => {
+        setPreviewAsImage(true);
+        setPreviewAsset({ url, label });
+    };
+    const closePreview = () => setPreviewAsset(null);
 
     // 6. SAUVEGARDE GROUPÉE
     const handleSave = async () => {
@@ -165,7 +214,7 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
 
     return (
         <div className="v84-hw-container">
-            <input type="file" ref={fileInputRef} className="hidden" multiple={uploadType === 'docs'} onChange={handleFileChange} />
+            <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileChange} />
             <div className="v84-hw-header">
                 <div className="flex items-center gap-3"><span className="text-3xl">📝</span><input className="v84-hw-title-input" value={formData.title} onChange={e => handleInput('title', e.target.value)} placeholder="TITRE DU DEVOIR..." autoFocus /></div>
                 <div className="flex items-center gap-3">
@@ -183,8 +232,43 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
                     </div>
                     <div className="v84-hw-card">
                         <div><div className="hw-section-title">Consigne textuelle</div><textarea className="v84-hw-textarea custom-scrollbar" placeholder="Écrivez votre question ou consigne ici..." value={currentLvl.instruction} onChange={e => updateCurrentLevel('instruction', e.target.value)} /></div>
-                        <div><div className="hw-section-title">Fiche Question (Image/Scan)</div>{currentLvl.instructionUrls && currentLvl.instructionUrls.length > 0 ? (<div className="hw-sheet-zone" style={{borderColor: '#22c55e', background: '#f0fdf4'}}><img src={currentLvl.instructionUrls[0]} className="hw-sheet-preview" alt="Sujet" /><button className="hw-sheet-remove" onClick={() => removeAttachment('sheet')}>Supprimer</button></div>) : (<div className="hw-sheet-zone" onClick={() => triggerUpload('sheet')}><div className="hw-sheet-placeholder"><span style={{fontSize: '2rem'}}>🖼️</span><span>Déposer la fiche ici</span></div></div>)}</div>
-                        <div><div className="hw-section-title">Documents de travail (Aide)</div><div className="v84-hw-attachments">{currentLvl.attachmentUrls.map((url, i) => (<div key={i} className="v84-att-chip"><span>📎 Doc {i+1}</span><button onClick={() => removeAttachment('docs', i)} className="ml-2 text-red-400 font-bold hover:text-red-600">✕</button></div>))}<button onClick={() => triggerUpload('docs')} className="v84-att-add-btn">+ DOC</button></div></div>
+                        <div>
+                            <div className="hw-section-title">Fiche Question (Image/Scan)</div>
+                            {currentLvl.instructionUrls && currentLvl.instructionUrls.length > 0 ? (
+                                <div className="hw-sheet-zone hw-sheet-zone-preview" style={{borderColor: '#22c55e', background: '#f0fdf4'}} onClick={() => openPreview(currentLvl.instructionUrls[0], 'Fiche Question')}>
+                                    <img src={currentLvl.instructionUrls[0]} className="hw-sheet-preview" alt="Sujet" />
+                                    <button className="hw-sheet-remove" onClick={(e) => { e.stopPropagation(); removeAttachment('sheet'); }}>Supprimer</button>
+                                </div>
+                            ) : (
+                                <div className="hw-sheet-zone" onClick={() => triggerUpload('sheet')}>
+                                    <div className="hw-sheet-placeholder"><span style={{fontSize: '2rem'}}>🖼️</span><span>Déposer la fiche ici</span></div>
+                                </div>
+                            )}
+                        </div>
+                        <div>
+                            <div className="hw-section-title">Documents de travail (Aide)</div>
+                            <div className="v84-hw-attachments">
+                                {currentLvl.attachmentUrls.map((url, i) => (
+                                    <div
+                                        key={i}
+                                        className={`v84-att-card${dragDocIndex === i ? ' is-dragging' : ''}${dropDocIndex === i && dragDocIndex !== i ? ' is-drop-target' : ''}`}
+                                        draggable
+                                        onDragStart={(e) => handleDocDragStart(e, i)}
+                                        onDragOver={(e) => handleDocDragOver(e, i)}
+                                        onDrop={(e) => handleDocDrop(e, i)}
+                                        onDragEnd={handleDocDragEnd}
+                                        onClick={() => openPreview(url, `Document ${i + 1}`)}
+                                    >
+                                        <img src={url} className="v84-att-thumb" alt={`Doc ${i + 1}`} />
+                                        <div className="v84-att-meta">
+                                            <span>📎 Doc {i + 1}</span>
+                                            <button onClick={(e) => { e.stopPropagation(); removeAttachment('docs', i); }} className="v84-att-remove-btn">✕</button>
+                                        </div>
+                                    </div>
+                                ))}
+                                <button onClick={() => triggerUpload('docs')} className="v84-att-add-btn">+ DOC</button>
+                            </div>
+                        </div>
                         <div><div className="hw-section-title" style={{color: '#7c3aed'}}>🧠 Indices Correction IA (Secret)</div><div className="hw-ai-box"><textarea className="hw-ai-input custom-scrollbar" placeholder="Donnez ici les mots-clés ou les réponses attendues pour aider l'IA à corriger..." value={currentLvl.aiHints} onChange={e => updateCurrentLevel('aiHints', e.target.value)}/></div></div>
                     </div>
                 </div>
@@ -207,6 +291,24 @@ export default function HomeworkStudio({ initialData, chapters, user, targetSect
                     onSave={handleSave}
                 />
             </div>
+
+            {previewAsset && (
+                <div className="hw-preview-modal" onClick={closePreview}>
+                    <div className="hw-preview-dialog" onClick={(e) => e.stopPropagation()}>
+                        <div className="hw-preview-head">
+                            <strong>{previewAsset.label}</strong>
+                            <button className="hw-preview-close" onClick={closePreview}>✕</button>
+                        </div>
+                        <div className="hw-preview-body">
+                            {previewAsImage ? (
+                                <img src={previewAsset.url} alt={previewAsset.label} className="hw-preview-image" onError={() => setPreviewAsImage(false)} />
+                            ) : (
+                                <iframe src={previewAsset.url} title={previewAsset.label} className="hw-preview-frame" />
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

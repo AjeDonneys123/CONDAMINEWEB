@@ -13,12 +13,19 @@ export default function HomeworkList({ user, openPunishmentDirect = false, onPun
     const myId = String(user._id || user.id);
     
     try {
-        // FIX V99 : Route HERMÉTIQUE ÉLÈVE pour les devoirs
-        const res = await fetch(`/api/eleve/homework/list/${myId}`);
-        if (!res.ok) throw new Error("404");
-        const data = await res.json();
-        
-        setHomeworks(data.map(hw => ({ ...hw, status: 'todo' })));
+        const [hwRes, subRes] = await Promise.all([
+          fetch(`/api/eleve/homework/list/${myId}`),
+          fetch(`/api/eleve/homework/submissions/${myId}`)
+        ]);
+        if (!hwRes.ok) throw new Error("404");
+        const data = await hwRes.json();
+        const subs = subRes.ok ? await subRes.json() : [];
+        const submittedByHomeworkId = new Set((subs || []).map(s => String(s.homeworkId)));
+
+        setHomeworks(data.map(hw => ({
+          ...hw,
+          status: submittedByHomeworkId.has(String(hw._id)) ? 'done' : 'todo'
+        })));
     } catch(e) { console.error("Err loading HW", e); }
     setLoading(false);
   };

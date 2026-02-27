@@ -4,11 +4,167 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const EleveAI = require('../core/eleve.ai');
 const { sendLatePunishmentMail, resetLateMailState } = require('../../services/punishmentMailer');
+const crypto = require('crypto');
 const PUNISHMENT_DUE_MS = 7 * 24 * 60 * 60 * 1000;
+const VERIFY_TTL_MS = 45 * 1000;
+const verifyStore = new Map();
+
+function shuffle(arr = []) {
+    const a = [...arr];
+    for (let i = a.length - 1; i > 0; i -= 1) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+}
+
+function tokenizeWords(text = '') {
+    return [...new Set(
+        String(text || '')
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .split(/[^a-z0-9]+/g)
+            .map((w) => w.trim())
+            .filter((w) => w.length >= 4)
+    )];
+}
+
+function buildKeywordQcm(expectedKeywords = [], sourceText = '') {
+    const sourceWords = tokenizeWords(sourceText);
+    const sourceSet = new Set(sourceWords);
+    const expected = [...new Set((expectedKeywords || []).map((k) => String(k || '').trim().toLowerCase()).filter(Boolean))];
+    const presentExpected = expected.filter((k) => sourceSet.has(k));
+    const keywords = [...new Set([...presentExpected, ...sourceWords])].slice(0, 3);
+    const wordPool = sourceWords.filter((w) => !keywords.map((k) => k.toLowerCase()).includes(w));
+    const fallbackPool = ['contexte', 'idee', 'argument', 'document', 'notion', 'analyse', 'explication', 'cause'];
+    const pool = [...new Set([...wordPool, ...fallbackPool])];
+    return keywords.slice(0, 3).map((k, idx) => {
+        const correct = String(k || '').toLowerCase();
+        const distractors = shuffle(pool.filter((w) => w !== correct)).slice(0, 3);
+        const options = shuffle([correct, ...distractors]);
+        const correctIndex = options.findIndex((o) => o === correct);
+        return {
+            id: `qcm_${idx + 1}`,
+            question: "Quel mot-clé de ta copie est central ?",
+            options,
+            correctIndex
+        };
+    }).filter((q) => q.options.length === 4 && q.correctIndex >= 0);
+}
+
+function sanitizeAntiCheat(payload = {}) {
+    const src = payload && typeof payload === 'object' ? payload : {};
+    const score = Math.max(0, Math.min(10, Number(src.score || 0)));
+    let level = String(src.level || '').toUpperCase();
+    if (!['GREEN', 'ORANGE', 'RED'].includes(level)) {
+        if (score >= 8) level = 'RED';
+        else if (score >= 4) level = 'ORANGE';
+        else level = 'GREEN';
+    }
+    return {
+        score,
+        level,
+        reasons: Array.isArray(src.reasons) ? src.reasons.map((r) => String(r || '')).filter(Boolean).slice(0, 12) : [],
+        flags: {
+            pasteBursts: Number(src?.flags?.pasteBursts || 0),
+            largeInserts: Number(src?.flags?.largeInserts || 0),
+            tabSwitches: Number(src?.flags?.tabSwitches || 0),
+            hiddenMs: Number(src?.flags?.hiddenMs || 0),
+            oralAIAssist: Number(src?.flags?.oralAIAssist || 0),
+            fullscreenExits: Number(src?.flags?.fullscreenExits || 0)
+        },
+        verification: {
+            asked: Boolean(src?.verification?.asked),
+            passed: src?.verification?.passed === true,
+            confidence: Number(src?.verification?.confidence || 0),
+            mode: String(src?.verification?.mode || ''),
+            feedback: String(src?.verification?.feedback || ''),
+            qcmScore: Number(src?.verification?.qcmScore || 0),
+            qcmDurationsMs: Array.isArray(src?.verification?.qcmDurationsMs)
+                ? src.verification.qcmDurationsMs.map((x) => Number(x || 0)).slice(0, 6)
+                : [],
+            transcript: String(src?.verification?.transcript || '').slice(0, 2000)
+        },
+        telemetry: {
+            requiredDocs: Number(src?.telemetry?.requiredDocs || 0),
+            consultedDocs: Number(src?.telemetry?.consultedDocs || 0),
+            firstWriteDelayMs: Number(src?.telemetry?.firstWriteDelayMs || 0),
+            expectedElapsedMs: Number(src?.telemetry?.expectedElapsedMs || 0),
+            actualElapsedMs: Number(src?.telemetry?.actualElapsedMs || 0)
+        }
+    };
+}
 
 function normalizeClassName(v = '') {
     const raw = String(v || '').trim().toUpperCase();
     return { raw, clean: raw.replace(/\s+/g, '') };
+}
+
+function addClassTarget(set, value) {
+    const normalized = String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '');
+    if (!normalized) return;
+    set.add(normalized);
+}
+
+function normalizeTargetKey(value = '') {
+    return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '');
+}
+
+function matchesClassTargets(itemTargets, targetKeys) {
+    return (itemTargets || []).some(t => targetKeys.has(normalizeTargetKey(t)));
+}
+
+async function buildStudentClassTargets(student) {
+    const Classroom = mongoose.model('Classroom');
+    const Enrollment = mongoose.models.Enrollment ? mongoose.model('Enrollment') : null;
+    const targets = new Set();
+
+    addClassTarget(targets, student?.currentClass);
+
+    const classId = student?.classId && String(student.classId);
+    if (classId && mongoose.Types.ObjectId.isValid(classId)) {
+        const cls = await Classroom.findById(classId, 'name').lean();
+        addClassTarget(targets, cls?.name);
+    } else if (classId) {
+        addClassTarget(targets, classId);
+    }
+
+    const groupRaw = (student?.assignedGroups || [])
+        .map(g => String((g && g._id) ? g._id : g))
+        .filter(Boolean);
+    const groupIds = groupRaw.filter(id => mongoose.Types.ObjectId.isValid(id));
+    const groupNames = groupRaw.filter(id => !mongoose.Types.ObjectId.isValid(id));
+
+    if (groupIds.length > 0) {
+        const groups = await Classroom.find({ _id: { $in: groupIds } }, 'name').lean();
+        groups.forEach(g => addClassTarget(targets, g?.name));
+    }
+    groupNames.forEach(name => addClassTarget(targets, name));
+
+    const studentId = student?._id ? String(student._id) : '';
+    if (Enrollment && studentId && mongoose.Types.ObjectId.isValid(studentId)) {
+        const enrollments = await Enrollment.find({ studentId }, 'classId').lean();
+        const enrollClassIds = enrollments
+            .map(e => String(e?.classId || ''))
+            .filter(id => mongoose.Types.ObjectId.isValid(id));
+        if (enrollClassIds.length > 0) {
+            const enrollClasses = await Classroom.find({ _id: { $in: enrollClassIds } }, 'name').lean();
+            enrollClasses.forEach(c => addClassTarget(targets, c?.name));
+        }
+    }
+
+    return [...targets];
 }
 
 async function ensurePunishmentState(student, Homework, Submission) {
@@ -93,25 +249,191 @@ router.get('/list/:studentId', async (req, res) => {
         if (!student) return res.json([]);
         await ensurePunishmentState(student, Homework, Submission);
 
-        const myClass = (student.currentClass || "").trim().toUpperCase();
-        const myClassClean = myClass.replace(/\s+/g, '');
+        const classTargets = await buildStudentClassTargets(student);
+        const classTargetKeys = new Set(classTargets.map(normalizeTargetKey).filter(Boolean));
 
         // On cherche les devoirs pour toute la classe OU assignés à Julian
-        const homeworks = await Homework.find({
+        const rawHomeworks = await Homework.find({
+            isEnabled: { $ne: false },
             $or: [
-                { targetClassrooms: { $in: [myClass, myClassClean] }, isAllClass: true, isPunishment: { $ne: true } },
+                { isAllClass: true, isPunishment: { $ne: true } },
                 { assignedStudents: student._id }
             ]
         }).sort({ date: -1 }).lean();
+        const homeworks = rawHomeworks.filter(hw => {
+            const assigned = (hw.assignedStudents || []).some(id => String(id) === String(student._id));
+            if (assigned) return true;
+            if (!hw.isAllClass) return false;
+            return matchesClassTargets(hw.targetClassrooms, classTargetKeys);
+        });
 
         res.json(homeworks);
+    } catch (e) {
+        console.error("❌ [ELEVE HW LIST] studentId=%s error=%s", req.params.studentId, e.message);
+        res.status(500).json([]);
+    }
+});
+
+router.get('/submissions/:studentId', async (req, res) => {
+    try {
+        const Submission = mongoose.model('Submission');
+        const studentId = String(req.params.studentId || '');
+        if (!studentId || !mongoose.Types.ObjectId.isValid(studentId)) return res.json([]);
+        const subs = await Submission.find(
+            { studentId },
+            'homeworkId grade createdAt updatedAt'
+        ).sort({ createdAt: -1 }).lean();
+        res.json(subs);
     } catch (e) {
         res.status(500).json([]);
     }
 });
 
+router.post('/anti-cheat/challenge', async (req, res) => {
+    try {
+        const {
+            userText, instruction, playerId, homeworkId, levelIndex,
+            cheatFlags = {}, suspicion = {}, docConsultation = {}, writingTrace = {}
+        } = req.body || {};
+        const baseText = String(userText || '').trim();
+        if (!baseText) return res.status(400).json({ error: "Réponse vide" });
+
+        const Student = mongoose.model('Student');
+        const student = playerId ? await Student.findById(playerId, 'currentClass').lean() : null;
+        const quality = await EleveAI.assessAnswerQuality({
+            userText: baseText,
+            instruction: instruction || '',
+            studentClass: student?.currentClass || ''
+        });
+        const qScore = Number(quality?.quality_score || 0);
+        const levelFit = Number(quality?.level_fit || 0);
+        const clientRisk = Number(suspicion?.score || 0);
+        const pasteBursts = Number(cheatFlags?.pasteBursts || 0);
+        const tabSwitches = Number(cheatFlags?.tabSwitches || 0);
+        const hiddenMs = Number(cheatFlags?.hiddenMs || 0);
+        const oralAIAssist = Number(cheatFlags?.oralAIAssist || 0);
+        const fullscreenExits = Number(cheatFlags?.fullscreenExits || 0);
+        const docRequired = Number(docConsultation?.requiredDocs || 0);
+        const docConsulted = Number(docConsultation?.consultedDocs || 0);
+        const firstWriteDelayMs = Number(writingTrace?.firstWriteDelayMs || 0);
+        const answerLen = Number(writingTrace?.answerLen || 0);
+        const forcedBySignals =
+            pasteBursts > 0 ||
+            oralAIAssist > 0 ||
+            clientRisk >= 2 ||
+            tabSwitches >= 2 ||
+            hiddenMs >= 15000 ||
+            fullscreenExits > 0 ||
+            (docRequired > 0 && docConsulted < docRequired) ||
+            (answerLen >= 140 && firstWriteDelayMs <= 6000);
+        const shouldAsk = forcedBySignals || (Boolean(quality?.should_ask_security) && qScore >= 0.45 && levelFit >= 0.35);
+        if (!shouldAsk) {
+            return res.json({
+                requireSecurity: false,
+                clearSuspicion: true,
+                quality: {
+                    score: qScore,
+                    levelFit,
+                    reason: quality?.reason || "Qualité insuffisante: la correction standard est plus pertinente."
+                }
+            });
+        }
+
+        const generated = await EleveAI.generateIntegrityChallenge(instruction || '', baseText, student?.currentClass || '');
+        const qcmQuestions = buildKeywordQcm(
+            Array.isArray(generated?.expected_keywords) ? generated.expected_keywords : [],
+            baseText
+        );
+        const openPrompt = String(generated?.question || "En une phrase, explique l'idée principale de ta réponse.");
+        const challengeId = crypto.randomUUID();
+        const expiresAt = Date.now() + VERIFY_TTL_MS;
+
+        verifyStore.set(challengeId, {
+            playerId: String(playerId || ''),
+            homeworkId: String(homeworkId || ''),
+            levelIndex: Number(levelIndex || 0),
+            question: openPrompt,
+            qcmQuestions,
+            expectedKeywords: Array.isArray(generated?.expected_keywords) ? generated.expected_keywords : [],
+            referenceExcerpt: String(generated?.reference_excerpt || ''),
+            createdAt: Date.now(),
+            expiresAt
+        });
+
+        setTimeout(() => verifyStore.delete(challengeId), VERIFY_TTL_MS + 1000);
+
+        res.json({
+            requireSecurity: true,
+            challengeId,
+            question: openPrompt,
+            qcmQuestions,
+            expiresAt,
+            quality: {
+                score: qScore,
+                levelFit,
+                reason: quality?.reason || ''
+            }
+        });
+    } catch (e) {
+        res.status(500).json({ error: "Impossible de générer la vérification." });
+    }
+});
+
+router.post('/anti-cheat/verify', async (req, res) => {
+    try {
+        const { challengeId, responseText, playerId, qcmAnswers = [], qcmDurationsMs = [], responseMode = 'text' } = req.body || {};
+        const challenge = verifyStore.get(String(challengeId || ''));
+        if (!challenge) return res.status(404).json({ ok: false, error: "Challenge introuvable ou expiré." });
+        if (Date.now() > challenge.expiresAt) {
+            verifyStore.delete(String(challengeId || ''));
+            return res.status(410).json({ ok: false, error: "Temps écoulé." });
+        }
+        if (challenge.playerId && String(challenge.playerId) !== String(playerId || '')) {
+            return res.status(403).json({ ok: false, error: "Challenge invalide pour cet élève." });
+        }
+
+        const qcms = Array.isArray(challenge.qcmQuestions) ? challenge.qcmQuestions : [];
+        let qcmScore = 0;
+        if (qcms.length > 0) {
+            let good = 0;
+            qcms.forEach((q, i) => {
+                const ans = Number((qcmAnswers || [])[i]);
+                if (Number.isInteger(ans) && ans === Number(q.correctIndex)) good += 1;
+            });
+            qcmScore = good / qcms.length;
+        }
+
+        const Student = mongoose.model('Student');
+        const student = playerId ? await Student.findById(playerId, 'currentClass').lean() : null;
+        const verdict = await EleveAI.evaluateIntegrityResponse({
+            question: challenge.question,
+            expectedKeywords: challenge.expectedKeywords,
+            referenceExcerpt: challenge.referenceExcerpt,
+            studentResponse: String(responseText || '').trim(),
+            studentClass: student?.currentClass || ''
+        });
+
+        const openConfidence = Number(verdict?.confidence || 0);
+        const openOk = Boolean(verdict?.ok) || openConfidence >= 0.6;
+        const ok = (qcms.length === 0 ? true : qcmScore >= 0.5) && (openOk || openConfidence >= 0.5);
+        verifyStore.delete(String(challengeId || ''));
+        res.json({
+            ok,
+            confidence: openConfidence,
+            feedback: verdict?.feedback || '',
+            qcmScore,
+            monitoring: {
+                qcmDurationsMs: Array.isArray(qcmDurationsMs) ? qcmDurationsMs.map((x) => Number(x || 0)).slice(0, 6) : [],
+                responseMode: String(responseMode || 'text')
+            }
+        });
+    } catch (e) {
+        res.status(500).json({ ok: false, error: "Erreur de vérification." });
+    }
+});
+
 router.post('/submit', async (req, res) => {
-    const { userText, homeworkId, levelIndex, playerId } = req.body;
+    const { userText, homeworkId, levelIndex, playerId, antiCheat } = req.body;
     const Homework = mongoose.model('Homework');
     const Submission = mongoose.model('Submission');
     const Student = mongoose.model('Student');
@@ -119,11 +441,14 @@ router.post('/submit', async (req, res) => {
     const hw = await Homework.findById(homeworkId);
     const lvl = hw.levels[levelIndex];
 
-    const analysis = await EleveAI.analyze(userText, lvl.instruction, lvl.aiHints);
+    const student = await Student.findById(playerId, 'currentClass').lean();
+    const analysis = await EleveAI.analyze(userText, lvl.instruction, lvl.aiHints, student?.currentClass || '');
     
+    const antiCheatSnapshot = sanitizeAntiCheat(antiCheat);
     await Submission.create({ 
         studentId: playerId, homeworkId, levelIndex, 
-        content: userText, feedback: analysis.feedback_fond, grade: analysis.grade 
+        content: userText, feedback: analysis.feedback_fond, grade: analysis.grade,
+        antiCheat: antiCheatSnapshot
     });
 
     if (hw?.isPunishment) {

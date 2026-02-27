@@ -101,6 +101,7 @@ const Models = {
         targetClassrooms: [String], chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter' },
         teacherId: mongoose.Schema.Types.ObjectId, levels: Array,
         assignedStudents: [mongoose.Schema.Types.ObjectId], isAllClass: { type: Boolean, default: true },
+        isEnabled: { type: Boolean, default: true },
         date: { type: Date, default: Date.now }
     }),
 
@@ -113,6 +114,7 @@ const Models = {
         teacherId: mongoose.Schema.Types.ObjectId, targetClassrooms: [String],
         questions: Array, levels: Array, assignedStudents: [mongoose.Schema.Types.ObjectId],
         isAllClass: { type: Boolean, default: true },
+        isEnabled: { type: Boolean, default: true },
         // MIROIR
         scenes: { type: Array, default: [] }, 
         generatedCode: { type: String, default: "" },
@@ -141,7 +143,8 @@ const Models = {
     
     Submission: getModel('Submission', {
         studentId: mongoose.Schema.Types.ObjectId, homeworkId: mongoose.Schema.Types.ObjectId,
-        levelIndex: Number, content: String, feedback: String, grade: String
+        levelIndex: Number, content: String, feedback: String, grade: String,
+        antiCheat: { type: Object, default: {} }
     }),
 
     GameProgress: getModel('GameProgress', {

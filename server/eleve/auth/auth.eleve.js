@@ -127,7 +127,7 @@ function applyCrossDecay(behaviorRecords = []) {
 
 router.post('/login', async (req, res) => {
     const { studentId } = req.body;
-    const student = await Student.findById(studentId);
+    const student = await Student.findById(studentId).populate('assignedGroups', 'name type level');
     if (student) {
         if (applyCrossDecay(student.behaviorRecords || [])) {
             student.markModified('behaviorRecords');
@@ -144,7 +144,7 @@ router.post('/login', async (req, res) => {
 });
 
 router.get('/student-fresh/:id', async (req, res) => {
-    const student = await Student.findById(req.params.id);
+    const student = await Student.findById(req.params.id).populate('assignedGroups', 'name type level');
     if (!student) return res.json(null);
     if (applyCrossDecay(student.behaviorRecords || [])) {
         student.markModified('behaviorRecords');

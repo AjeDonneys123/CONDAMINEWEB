@@ -281,24 +281,8 @@ export default function GameStudio({ initialData, chapters, user, targetSection,
     return (
         <div className="v84-game-container">
              <input type="file" ref={assetInputRef} className="hidden" accept="image/*,application/pdf" onChange={handleUploadAsset} />
-             <div className="v84-game-header">
+            <div className="v84-game-header">
                 <div className="flex items-center gap-4">
-                    <div className="flex bg-slate-100 p-1 rounded-2xl border-2 border-slate-200">
-                        <button 
-                            className={`px-4 py-2 rounded-xl text-xl transition-all ${formData.type === 'zombie' ? 'bg-white shadow-md scale-110' : 'opacity-40 hover:opacity-100'}`}
-                            onClick={() => setFormData({...formData, type: 'zombie'})}
-                            title="Moteur Zombie"
-                        >
-                            🧟
-                        </button>
-                        <button 
-                            className={`px-4 py-2 rounded-xl text-xl transition-all ${formData.type === 'starship' ? 'bg-white shadow-md scale-110' : 'opacity-40 hover:opacity-100'}`}
-                            onClick={() => setFormData({...formData, type: 'starship'})}
-                            title="Moteur Starship"
-                        >
-                            🚀
-                        </button>
-                    </div>
                     <input className="v84-game-title-input" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} placeholder="TITRE DU QUIZ..." />
                 </div>
                 <button onClick={onClose} className="v84-close-btn">✕</button>

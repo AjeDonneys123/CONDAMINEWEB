@@ -1,7 +1,7 @@
 // @signatures: ProfGamesRouter, all, create, delete, generate, generateContent, getById, streamToBuffer, testData, uploadAsset
 const express = require('express');
 const router = express.Router();
-const { GameLevel } = require('../models/prof.models');
+const { GameLevel, GameProgress } = require('../models/prof.models');
 const ProfAI = require('../core/prof.ai');
 const ProfDrive = require('../core/drive.prof'); 
 const multer = require('multer');
@@ -58,17 +58,41 @@ router.get('/all', async (req, res) => {
     } catch (e) { res.status(500).json([]); }
 });
 
+// Utilisé par l'onglet Élèves (suivi activité)
+router.get('/progress', async (req, res) => {
+    try {
+        const progs = await GameProgress.find({}, 'studentId gameId levelReached lastScore').lean();
+        res.json(progs);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 router.post('/', async (req, res) => {
     try {
         const data = req.body;
         // Nettoyage préventif
         if (data.levels) data.levels.forEach(l => { if(!l._id) delete l._id; });
         if (!data._id || data._id === "null") delete data._id;
+        if (typeof data.isEnabled !== 'boolean') data.isEnabled = true;
 
         const quiz = data._id 
             ? await GameLevel.findByIdAndUpdate(data._id, { $set: data }, { new: true })
             : await GameLevel.create(data);
         res.json(quiz);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.patch('/:id/enabled', async (req, res) => {
+    try {
+        const isEnabled = req.body?.isEnabled !== false;
+        const game = await GameLevel.findByIdAndUpdate(
+            req.params.id,
+            { $set: { isEnabled } },
+            { new: true }
+        ).lean();
+        if (!game) return res.status(404).json({ error: "Jeu introuvable" });
+        res.json(game);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

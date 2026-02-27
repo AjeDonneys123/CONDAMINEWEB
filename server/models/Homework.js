@@ -27,6 +27,7 @@ const HomeworkSchema = new mongoose.Schema({
 
     assignedStudents: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Student' }],
     isAllClass: { type: Boolean, default: true },
+    isEnabled: { type: Boolean, default: true },
     
     date: { type: Date, default: Date.now }
 }, { collection: 'homeworks' });

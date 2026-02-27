@@ -148,8 +148,8 @@ router.get('/plan/:classId', async (req, res) => {
         const className = clsObj?.name;
 
         const [hws, games, subs, progs] = await Promise.all([
-            Homework.find({ targetClassrooms: className, isPunishment: false }).lean(),
-            GameLevel.find({ targetClassrooms: className }).lean(),
+            Homework.find({ targetClassrooms: className, isPunishment: false, isEnabled: { $ne: false } }).lean(),
+            GameLevel.find({ targetClassrooms: className, isEnabled: { $ne: false } }).lean(),
             Submission.find({}).lean(),
             GameProgress.find({}).lean()
         ]);

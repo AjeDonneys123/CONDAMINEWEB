@@ -4,6 +4,72 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const CROSS_DECAY_MS = 14 * 24 * 60 * 60 * 1000;
 
+function addClassTarget(set, value) {
+    const normalized = String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '');
+    if (!normalized) return;
+    set.add(normalized);
+}
+
+function normalizeTargetKey(value = '') {
+    return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '');
+}
+
+function matchesClassTargets(itemTargets, targetKeys) {
+    return (itemTargets || []).some(t => targetKeys.has(normalizeTargetKey(t)));
+}
+
+async function buildStudentClassTargets(student) {
+    const Classroom = mongoose.model('Classroom');
+    const Enrollment = mongoose.models.Enrollment ? mongoose.model('Enrollment') : null;
+    const targets = new Set();
+
+    addClassTarget(targets, student?.currentClass);
+
+    const classId = student?.classId && String(student.classId);
+    if (classId && mongoose.Types.ObjectId.isValid(classId)) {
+        const cls = await Classroom.findById(classId, 'name').lean();
+        addClassTarget(targets, cls?.name);
+    } else if (classId) {
+        addClassTarget(targets, classId);
+    }
+
+    const groupRaw = (student?.assignedGroups || [])
+        .map(g => String((g && g._id) ? g._id : g))
+        .filter(Boolean);
+    const groupIds = groupRaw.filter(id => mongoose.Types.ObjectId.isValid(id));
+    const groupNames = groupRaw.filter(id => !mongoose.Types.ObjectId.isValid(id));
+
+    if (groupIds.length > 0) {
+        const groups = await Classroom.find({ _id: { $in: groupIds } }, 'name').lean();
+        groups.forEach(g => addClassTarget(targets, g?.name));
+    }
+    groupNames.forEach(name => addClassTarget(targets, name));
+
+    const studentId = student?._id ? String(student._id) : '';
+    if (Enrollment && studentId && mongoose.Types.ObjectId.isValid(studentId)) {
+        const enrollments = await Enrollment.find({ studentId }, 'classId').lean();
+        const enrollClassIds = enrollments
+            .map(e => String(e?.classId || ''))
+            .filter(id => mongoose.Types.ObjectId.isValid(id));
+        if (enrollClassIds.length > 0) {
+            const enrollClasses = await Classroom.find({ _id: { $in: enrollClassIds } }, 'name').lean();
+            enrollClasses.forEach(c => addClassTarget(targets, c?.name));
+        }
+    }
+
+    return [...targets];
+}
+
 function applyCrossDecay(behaviorRecords = []) {
     const now = Date.now();
     let changed = false;
@@ -68,6 +134,7 @@ router.get('/status-summary/:studentId', async (req, res) => {
         const Chapter = mongoose.model('Chapter');
         const Submission = mongoose.model('Submission');
         const GameProgress = mongoose.model('GameProgress');
+        const Enrollment = mongoose.models.Enrollment ? mongoose.model('Enrollment') : null;
 
         const studentDoc = await Student.findById(req.params.studentId, '_id currentClass classId assignedGroups behaviorRecords');
         if (!studentDoc) return res.json({ disciplines: [] });
@@ -77,11 +144,17 @@ router.get('/status-summary/:studentId', async (req, res) => {
         }
         const student = studentDoc.toObject();
 
-        const classRaw = (student.currentClass || '').trim().toUpperCase();
-        const classClean = classRaw.replace(/\s+/g, '');
+        const classTargets = await buildStudentClassTargets(studentDoc);
+        const classTargetKeys = new Set(classTargets.map(normalizeTargetKey).filter(Boolean));
         const classScopeIds = []
             .concat(student.classId ? [student.classId] : [])
             .concat((student.assignedGroups || []).map(g => (typeof g === 'object' ? g._id : g)).filter(Boolean));
+        if (Enrollment && student?._id) {
+            const enrollments = await Enrollment.find({ studentId: student._id }, 'classId').lean();
+            enrollments.forEach(e => {
+                if (e?.classId) classScopeIds.push(e.classId);
+            });
+        }
 
         const teachers = await Teacher.find(
             classScopeIds.length > 0 ? { assignedClasses: { $in: classScopeIds } } : { _id: null },
@@ -162,24 +235,34 @@ router.get('/status-summary/:studentId', async (req, res) => {
             entry.bonuses += Number(record.bonuses || 0);
         }
 
-        if (disciplineMap.size === 0) return res.json({ disciplines: [] });
-
-        const homeworks = await Homework.find({
-            $or: [
-                { targetClassrooms: classRaw, isAllClass: true },
-                { targetClassrooms: classClean, isAllClass: true },
-                { assignedStudents: student._id }
-            ]
-        }, '_id title subject chapterId teacherId').lean();
-
-        const games = await GameLevel.find({
+        const rawHomeworks = await Homework.find({
             isEnabled: { $ne: false },
             $or: [
-                { targetClassrooms: classRaw, isAllClass: true },
-                { targetClassrooms: classClean, isAllClass: true },
+                { isAllClass: true },
                 { assignedStudents: student._id }
             ]
-        }, '_id title subject chapterId teacherId').lean();
+        }, '_id title subject chapterId teacherId assignedStudents isAllClass targetClassrooms').lean();
+        const homeworks = rawHomeworks.filter(hw => {
+            const assigned = (hw.assignedStudents || []).some(id => String(id) === String(student._id));
+            if (assigned) return true;
+            if (!hw.isAllClass) return false;
+            return matchesClassTargets(hw.targetClassrooms, classTargetKeys);
+        });
+
+        const rawGames = await GameLevel.find({
+            isTestGame: { $ne: true },
+            isEnabled: { $ne: false },
+            $or: [
+                { isAllClass: true },
+                { assignedStudents: student._id }
+            ]
+        }, '_id title subject chapterId teacherId assignedStudents isAllClass targetClassrooms').lean();
+        const games = rawGames.filter(game => {
+            const assigned = (game.assignedStudents || []).some(id => String(id) === String(student._id));
+            if (assigned) return true;
+            if (!game.isAllClass) return false;
+            return matchesClassTargets(game.targetClassrooms, classTargetKeys);
+        });
 
         const chapterIds = [...new Set(
             [...homeworks, ...games]
@@ -212,10 +295,9 @@ router.get('/status-summary/:studentId', async (req, res) => {
         const submittedHomeworkIds = new Set(submissions.map(s => String(s.homeworkId)));
         const progressByGameId = new Map(progressRows.map(p => [String(p.gameId), Number(p.levelReached || 0)]));
         for (const hw of homeworks) {
-            const subject = resolveItemSubject(hw);
-            if (!subject) continue;
-            if (!disciplineMap.has(subject)) continue;
-            const entry = disciplineMap.get(subject);
+            const fallbackSubject = mapToParentDiscipline(hw.subject || 'GÉNÉRAL');
+            const subject = resolveItemSubject(hw) || fallbackSubject || 'GÉNÉRAL';
+            const entry = ensureDiscipline(subject);
             const done = submittedHomeworkIds.has(String(hw._id));
             entry.homework.total += 1;
             if (done) entry.homework.done += 1;
@@ -226,10 +308,9 @@ router.get('/status-summary/:studentId', async (req, res) => {
         }
 
         for (const game of games) {
-            const subject = resolveItemSubject(game);
-            if (!subject) continue;
-            if (!disciplineMap.has(subject)) continue;
-            const entry = disciplineMap.get(subject);
+            const fallbackSubject = mapToParentDiscipline(game.subject || 'GÉNÉRAL');
+            const subject = resolveItemSubject(game) || fallbackSubject || 'GÉNÉRAL';
+            const entry = ensureDiscipline(subject);
             const levelReached = progressByGameId.get(String(game._id));
             entry.games.total += 1;
             if (levelReached === undefined) {

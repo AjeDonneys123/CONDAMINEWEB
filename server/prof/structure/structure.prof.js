@@ -69,6 +69,8 @@ router.post('/sections/delete-request', async (req, res) => {
 
         if (permanent) {
             await Chapter.updateMany({ teacherId: user._id, section: sectionName.toUpperCase() }, { $set: { section: "GÉNÉRAL" } });
+            const root = await Chapter.findOne({ teacherId: user._id, section: "GÉNÉRAL", title: "GÉNÉRAL" });
+            if (!root) await Chapter.create({ title: "GÉNÉRAL", section: "GÉNÉRAL", teacherId: user._id, isArchived: false });
             user.subjectSections = user.subjectSections.filter(s => s.name !== sectionName.toUpperCase());
         } else {
             const section = user.subjectSections.find(s => s.name === sectionName.toUpperCase());
@@ -130,9 +132,10 @@ router.post('/chapters', async (req, res) => {
 
 router.patch('/chapters/:id', async (req, res) => {
     try {
-        const { title, scope, target, isArchived } = req.body;
+        const { title, scope, target, isArchived, section } = req.body;
         const up = {};
         if (title) up.title = title.toUpperCase().trim();
+        if (section) up.section = section.toUpperCase().trim();
         if (scope) { up.classroom = scope === 'CLASS' ? target : ""; up.sharedLevel = scope === 'LEVEL' ? target : ""; }
         if (isArchived !== undefined) up.isArchived = isArchived;
         const updated = await Chapter.findByIdAndUpdate(req.params.id, up, { new: true });

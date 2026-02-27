@@ -125,7 +125,7 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
         e.stopPropagation();
         const chap = safeChapters.find(c => c._id === chapId);
         let scope = chap?.classroom ? "CLASS" : (chap?.sharedLevel ? "LEVEL" : "GLOBAL");
-        setEditingChapter({ id: chapId, title: oldTitle, scope });
+        setEditingChapter({ id: chapId, title: oldTitle, scope, section: (chap?.section || activeSection || "GÉNÉRAL").toUpperCase() });
         setShowEditChapterModal(true);
     }
 
@@ -135,7 +135,12 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
         const res = await fetch(`/api/structure/chapters/${editingChapter.id}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title: editingChapter.title.toUpperCase().trim(), scope: editingChapter.scope, target: target })
+            body: JSON.stringify({
+                title: editingChapter.title.toUpperCase().trim(),
+                scope: editingChapter.scope,
+                target: target,
+                section: (editingChapter.section || "GÉNÉRAL").toUpperCase()
+            })
         });
         if (res.ok) { setShowEditChapterModal(false); setEditingChapter(null); if (onRefresh) onRefresh(); }
     }
@@ -148,6 +153,24 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
             body: JSON.stringify({ isArchived: shouldArchive })
         });
         if (res.ok && onRefresh) onRefresh();
+    }
+
+    async function handleToggleActivityEnabled(e, item) {
+        e.stopPropagation();
+        if (!item?._id) return;
+        if (!['homework', 'game'].includes(item.actType)) return;
+        const nextValue = item.isEnabled === false;
+        const base = item.actType === 'homework' ? '/api/homework' : '/api/games';
+        const res = await fetch(`${base}/${item._id}/enabled`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ isEnabled: nextValue })
+        });
+        if (!res.ok) {
+            alert("Impossible de changer le statut actif/inactif.");
+            return;
+        }
+        if (onRefresh) onRefresh();
     }
 
     // --- SUPPRESSION UNIFIÉE ---
@@ -328,6 +351,18 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
                                                 </div>
                                                 <div className="flex gap-2">
                                                     {/* BOUTON DÉPLACEMENT (Pas encore implémenté côté serveur pour activité, placeholder) */}
+                                                    {(it.actType === 'homework' || it.actType === 'game') && (
+                                                        <button
+                                                            onClick={(e) => handleToggleActivityEnabled(e, it)}
+                                                            className={`px-3 py-1.5 rounded-lg text-[8px] font-black uppercase border ${
+                                                                it.isEnabled === false
+                                                                    ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                                                    : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                                            }`}
+                                                        >
+                                                            {it.isEnabled === false ? 'INACTIF' : 'ACTIF'}
+                                                        </button>
+                                                    )}
                                                     <button onClick={() => onEditItem(it, activeSection)} className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-[8px] font-black uppercase">ÉDITER</button>
                                                     <button onClick={(e) => prepareDelete(e, it, it.actType)} className="px-2 py-1.5 rounded-lg bg-red-50 text-red-500 text-[10px]">✕</button>
                                                 </div>
@@ -440,7 +475,7 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
             )}
 
              {/* --- MODALE ÉDITION DOSSIER --- */}
-             {showEditChapterModal && editingChapter && (
+            {showEditChapterModal && editingChapter && (
                 <div className="fixed inset-0 z-[40000] flex items-center justify-center bg-slate-900/90 backdrop-blur-sm">
                     <div className="bg-white p-10 rounded-[50px] w-full max-w-md shadow-2xl animate-in zoom-in">
                         <h3 className="text-2xl font-black mb-2 uppercase text-slate-800">Édition Dossier</h3>
@@ -449,6 +484,18 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
                             <input className="w-full p-5 rounded-2xl bg-slate-100 border-none font-bold outline-none focus:ring-4 ring-indigo-500/20" value={editingChapter.title} onChange={e => setEditingChapter({...editingChapter, title: e.target.value})} />
                         </div>
                         <div className="mb-8">
+                            <label className="text-[10px] font-black text-slate-400 uppercase ml-2 block mb-1">Section</label>
+                            <select
+                                className="w-full p-5 rounded-2xl bg-slate-100 border-none font-bold mb-5 outline-none focus:ring-4 ring-indigo-500/20"
+                                value={editingChapter.section || "GÉNÉRAL"}
+                                onChange={e => setEditingChapter({ ...editingChapter, section: e.target.value })}
+                            >
+                                {safeSections.map(s => (
+                                    <option key={s.name} value={s.name.toUpperCase()}>
+                                        {s.name}
+                                    </option>
+                                ))}
+                            </select>
                             <label className="text-[10px] font-black text-slate-400 uppercase ml-2 block mb-3">Portée</label>
                             <div className="grid grid-cols-2 gap-3">
                                 <button onClick={() => setEditingChapter({...editingChapter, scope: "LEVEL"})} className={`p-4 rounded-2xl font-black text-[10px] border-2 transition-all ${editingChapter.scope === "LEVEL" ? 'bg-slate-900 text-white' : 'bg-slate-50 text-slate-400'}`}>🎓 NIVEAU</button>

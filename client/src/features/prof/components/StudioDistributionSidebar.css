@@ -19,6 +19,36 @@
     flex-shrink: 0;
 }
 
+.v84-classes-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 8px;
+    flex-shrink: 0;
+}
+
+.v84-classes-select-all-btn {
+    padding: 6px 10px;
+    border-radius: 9px;
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
+    color: #475569;
+    font-size: 10px;
+    font-weight: 900;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.v84-classes-select-all-btn:hover:not(:disabled) {
+    background: #e2e8f0;
+    color: #1e293b;
+}
+
+.v84-classes-select-all-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 .v84-tab-btn {
     padding: 8px 12px;
     border-radius: 10px;

@@ -19,6 +19,7 @@ app.use(express.urlencoded({ extended: true, limit: '70mb' }));
 try {
     console.log("📦 Chargement des Modèles...");
     require('./prof/models/prof.models');
+    require('./models/Enrollment');
     console.log("✅ Modèles chargés.");
 } catch (e) {
     console.error("💥 ERREUR CRITIQUE MODÈLES :", e.message);
