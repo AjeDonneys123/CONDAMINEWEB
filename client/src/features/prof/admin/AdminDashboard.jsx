@@ -33,6 +33,13 @@ export default function AdminDashboard({ user, onRefresh }) {
     const [filterClass, setFilterClass] = useState("");
     const [filterGroup, setFilterGroup] = useState("");
     const [openedBug, setOpenedBug] = useState(null);
+    const [finderPool, setFinderPool] = useState([]);
+    const [finderClass, setFinderClass] = useState('');
+    const [finderLast, setFinderLast] = useState('');
+    const [finderFirst, setFinderFirst] = useState('');
+    const [finderSuggestions, setFinderSuggestions] = useState([]);
+    const [selectedConnectAs, setSelectedConnectAs] = useState(null);
+    const [connectBusy, setConnectBusy] = useState(false);
     
     const fileInputRef = useRef(null);
 
@@ -67,6 +74,82 @@ export default function AdminDashboard({ user, onRefresh }) {
             }
         } catch (e) { console.error("Error", e); }
         setLoading(false);
+    };
+
+    useEffect(() => {
+        if (!isDeveloperBugMode) return;
+        fetch('/api/auth/finder-data')
+            .then(r => r.ok ? r.json() : [])
+            .then(data => setFinderPool(Array.isArray(data) ? data : []))
+            .catch(() => setFinderPool([]));
+    }, [isDeveloperBugMode]);
+
+    useEffect(() => {
+        if (!isDeveloperBugMode) return;
+        if (selectedConnectAs) return;
+        const clean = (str) => (str || '').toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        const sClass = clean(finderClass);
+        const sLast = clean(finderLast);
+        const sFirst = clean(finderFirst);
+        if (!sClass && !sLast && !sFirst) {
+            setFinderSuggestions([]);
+            return;
+        }
+        const matches = finderPool.filter(p => {
+            const matchClass = p.type === 'student'
+                ? clean(p.className || '').includes(sClass)
+                : true;
+            const matchLast = clean(p.lastName || '').includes(sLast);
+            const matchFirst = clean(p.firstName || '').includes(sFirst);
+            return matchClass && matchLast && matchFirst;
+        });
+        setFinderSuggestions(matches.slice(0, 12));
+    }, [isDeveloperBugMode, finderClass, finderLast, finderFirst, finderPool, selectedConnectAs]);
+
+    const handleSelectConnectAs = (profile) => {
+        setSelectedConnectAs(profile);
+        setFinderClass(profile.className || '');
+        setFinderLast(profile.lastName || '');
+        setFinderFirst(profile.firstName || '');
+        setFinderSuggestions([]);
+    };
+
+    const handleConnectAs = async () => {
+        const clean = (str) => (str || '').toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        let target = selectedConnectAs;
+        if (!target) {
+            const typedLast = clean(finderLast);
+            const typedFirst = clean(finderFirst);
+            const typedClass = clean(finderClass);
+            const exact = finderPool.find(p => {
+                if (clean(p.lastName || '') !== typedLast) return false;
+                if (clean(p.firstName || '') !== typedFirst) return false;
+                if (p.type === 'student' && typedClass) return clean(p.className || '') === typedClass;
+                return true;
+            });
+            if (exact) target = exact;
+        }
+        if (!target?.id) return alert('Choisis un profil valide.');
+
+        setConnectBusy(true);
+        try {
+            const requesterId = user?.id || user?._id || '';
+            const res = await fetch(`/api/admin/connect-as?userId=${encodeURIComponent(requesterId)}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: requesterId, targetId: target.id })
+            });
+            const data = await res.json();
+            if (!res.ok || !data?.user) throw new Error(data?.error || 'Connexion impossible');
+
+            const popup = window.open('', '_blank');
+            if (!popup) throw new Error('Popup bloquée');
+            popup.sessionStorage.setItem('player_override', JSON.stringify(data.user));
+            popup.location.href = '/';
+        } catch (e) {
+            alert(`Connect as échoué: ${e.message}`);
+        }
+        setConnectBusy(false);
     };
 
     useEffect(() => {
@@ -255,6 +338,55 @@ export default function AdminDashboard({ user, onRefresh }) {
                             {!isDeveloperBugMode && view !== 'bugs' && <button onClick={handleOpenCreate} className="bg-slate-900 text-white px-6 py-2.5 rounded-2xl font-black text-[10px] uppercase shadow-lg">+ AJOUTER</button>}
                         </div>
                     </div>
+                    {isDeveloperBugMode && (
+                        <div className="connect-as-box">
+                            <div className="connect-as-title">CONNECT AS</div>
+                            <div className="connect-as-grid">
+                                <input
+                                    type="text"
+                                    className="connect-as-input"
+                                    placeholder="Classe"
+                                    value={finderClass}
+                                    onChange={(e) => { setFinderClass(e.target.value); setSelectedConnectAs(null); }}
+                                />
+                                <input
+                                    type="text"
+                                    className="connect-as-input"
+                                    placeholder="Nom"
+                                    value={finderLast}
+                                    onChange={(e) => { setFinderLast(e.target.value); setSelectedConnectAs(null); }}
+                                />
+                                <input
+                                    type="text"
+                                    className="connect-as-input"
+                                    placeholder="Prénom"
+                                    value={finderFirst}
+                                    onChange={(e) => { setFinderFirst(e.target.value); setSelectedConnectAs(null); }}
+                                />
+                                <button
+                                    onClick={handleConnectAs}
+                                    className="connect-as-btn"
+                                    disabled={connectBusy}
+                                >
+                                    {connectBusy ? '...' : 'CONNECTER'}
+                                </button>
+                            </div>
+                            {finderSuggestions.length > 0 && (
+                                <div className="connect-as-suggestions custom-scrollbar">
+                                    {finderSuggestions.map((p) => (
+                                        <button
+                                            key={`${p.type}-${p.id}`}
+                                            className={`connect-as-item ${selectedConnectAs?.id === p.id ? 'active' : ''}`}
+                                            onClick={() => handleSelectConnectAs(p)}
+                                        >
+                                            <span>{p.firstName} {p.lastName}</span>
+                                            <span className="connect-as-badge">{p.type === 'teacher' ? 'PROF' : (p.className || 'ELEVE')}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
                     
                     <div className="relative">
                         <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg">🔎</span>

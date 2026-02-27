@@ -130,6 +130,7 @@ const Models = {
 
     Teacher: getModel('Teacher', {
         firstName: String, lastName: String, password: { type: String, required: true },
+        mail: { type: String, default: '', trim: true, lowercase: true },
         subjectSections: [SectionSchema], taughtSubjects: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Subject' }],
         assignedClasses: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Classroom' }]
     }),

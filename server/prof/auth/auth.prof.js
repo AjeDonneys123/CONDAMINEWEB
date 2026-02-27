@@ -66,8 +66,29 @@ router.get('/config', async (req, res) => {
 });
 
 router.get('/finder-data', async (req, res) => {
-    const list = await Student.find({}, 'firstName lastName currentClass').lean();
-    res.json(list.map(s => ({ id: s._id, firstName: s.firstName, lastName: s.lastName, className: s.currentClass })));
+    const [students, teachers, admins] = await Promise.all([
+        Student.find({}, 'firstName lastName currentClass').lean(),
+        Teacher.find({}, 'firstName lastName').lean(),
+        Admin.find({}, 'firstName lastName').lean()
+    ]);
+
+    const studentItems = (students || []).map(s => ({
+        id: s._id,
+        type: 'student',
+        firstName: s.firstName,
+        lastName: s.lastName,
+        className: s.currentClass || ''
+    }));
+
+    const teacherItems = [...(teachers || []), ...(admins || [])].map(t => ({
+        id: t._id,
+        type: 'teacher',
+        firstName: t.firstName,
+        lastName: t.lastName,
+        className: ''
+    }));
+
+    res.json([...studentItems, ...teacherItems]);
 });
 
 // --- 🚀 NOUVELLES ROUTES OAUTH (FIX CANNOT GET) ---

@@ -153,6 +153,34 @@ router.get('/bug-reports', requireDeveloper, asyncHandler(async (req, res) => {
     res.json(list);
 }));
 
+// 10. Connect-as (dev only) : ouvre une session miroir prof/élève
+router.post('/connect-as', requireDeveloper, asyncHandler(async (req, res) => {
+    const requesterId = String(req.query.userId || req.body?.userId || '').trim();
+    const targetId = String(req.body?.targetId || '').trim();
+    if (!mongoose.Types.ObjectId.isValid(requesterId) || !mongoose.Types.ObjectId.isValid(targetId)) {
+        return res.status(400).json({ error: 'ID invalide' });
+    }
+
+    const Teacher = mongoose.model('Teacher');
+    const Admin = mongoose.model('Admin');
+    const Student = mongoose.model('Student');
+
+    const targetTeacher = await Teacher.findById(targetId).lean();
+    const targetAdmin = !targetTeacher ? await Admin.findById(targetId).lean() : null;
+    const targetStudent = (!targetTeacher && !targetAdmin) ? await Student.findById(targetId).lean() : null;
+    const target = targetTeacher || targetAdmin || targetStudent;
+    if (!target) return res.status(404).json({ error: 'Profil introuvable' });
+
+    const role = targetTeacher ? 'prof' : targetAdmin ? 'admin' : 'student';
+    const isDeveloper = (targetTeacher || targetAdmin)
+        ? (target.isDeveloper === true || isNamedJpVuillet(target))
+        : false;
+    const sanitized = { ...target, id: target._id, role, isDeveloper };
+    delete sanitized.password;
+
+    res.json({ ok: true, user: sanitized });
+}));
+
 router.post('/send-mail', asyncHandler(async (req, res) => {
     const { to, subject, text } = req.body || {};
     if (!to || !subject || !text) {

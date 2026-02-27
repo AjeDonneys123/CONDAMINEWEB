@@ -47,6 +47,7 @@ export default function StudentsManager({ globalClassId }) {
   const [loading, setLoading] = useState(true);
   const [className, setClassName] = useState("");
   const [latePunishmentNames, setLatePunishmentNames] = useState([]);
+  const [chapterNameById, setChapterNameById] = useState({});
 
   // MODALES
   const [editingSub, setEditingSub] = useState(null); 
@@ -62,13 +63,14 @@ export default function StudentsManager({ globalClassId }) {
   const loadMatrix = async () => {
     setLoading(true);
     try {
-        const [sts, clsList, hws, gms, subs, progs] = await Promise.all([
+        const [sts, clsList, hws, gms, subs, progs, chapters] = await Promise.all([
             fetch('/api/admin/students').then(r => r.json()),
             fetch('/api/admin/classrooms').then(r => r.json()),
             fetch('/api/homework/all').then(r => r.json()),
             fetch('/api/games/all').then(r => r.json()),
             fetch('/api/homework/submissions').then(r => r.json()),
-            fetch('/api/games/progress').then(r => r.json())
+            fetch('/api/games/progress').then(r => r.json()),
+            fetch('/api/structure/chapters').then(r => r.ok ? r.json() : [])
         ]);
 
         const currentClassObj = clsList.find(c => c._id === globalClassId);
@@ -90,18 +92,34 @@ export default function StudentsManager({ globalClassId }) {
             .map(s => `${s.firstName} ${s.lastName}`);
         setLatePunishmentNames(lateNames);
 
+        const chapterMap = {};
+        (Array.isArray(chapters) ? chapters : []).forEach((ch) => {
+            const id = extractId(ch?._id);
+            if (!id) return;
+            const section = String(ch?.section || '').trim();
+            const title = String(ch?.title || '').trim();
+            chapterMap[id] = section && title ? `${section} / ${title}` : (title || section || 'CHAPITRE');
+        });
+        setChapterNameById(chapterMap);
+
         const allActs = [
-            ...hws.map(h => ({ ...h, type: 'homework', label: '📝 ' + h.title })),
-            ...gms.map(g => ({ ...g, type: 'game', label: '🎮 ' + g.title }))
+            ...hws.map(h => ({ ...h, type: 'homework', chapterIdStr: extractId(h.chapterId), label: '📝 ' + h.title })),
+            ...gms.map(g => ({ ...g, type: 'game', chapterIdStr: extractId(g.chapterId), label: '🎮 ' + g.title }))
         ];
         const classTargetKey = norm(currentClassName);
         const classStudentIds = new Set(myStudents.map((s) => extractId(s._id)));
         const scopedActs = allActs.filter((act) => {
+            const chapterId = act.chapterIdStr || '';
+            // Règle anti-fantôme: activité visible uniquement si liée à un chapitre existant.
+            if (!chapterId || !chapterMap[chapterId]) return false;
             const targets = (act.targetClassrooms || []).map(norm);
             const hitsClassTarget = targets.includes(classTargetKey);
             const hasAssignedInClass = (act.assignedStudents || []).some((id) => classStudentIds.has(String(id)));
             return hitsClassTarget || hasAssignedInClass;
-        });
+        }).map((act) => ({
+            ...act,
+            chapterLabel: chapterMap[act.chapterIdStr] || ''
+        }));
         setActivities(scopedActs);
 
         const map = {};
@@ -237,6 +255,7 @@ export default function StudentsManager({ globalClassId }) {
                             <div key={w._id} className={`p-4 rounded-xl border flex justify-between items-center mb-2 ${w.isDone ? 'bg-green-50 border-green-200' : 'bg-white border-slate-200'}`}>
                                 <div>
                                     <div className="font-bold text-slate-700">{w.title}</div>
+                                    <div className="text-[9px] font-black text-slate-400 uppercase">{w.chapterLabel || chapterNameById[extractId(w.chapterId)] || ''}</div>
                                     <div className={`text-[10px] font-black uppercase ${w.isDone ? 'text-green-600' : 'text-red-400'}`}>
                                         {w.isDone ? `✅ FAIT (${w.score})` : '⭕ À FAIRE'}
                                     </div>
@@ -255,6 +274,7 @@ export default function StudentsManager({ globalClassId }) {
                             <div key={w._id} className={`p-4 rounded-xl border flex justify-between items-center mb-2 ${w.isDone ? 'bg-purple-50 border-purple-200' : 'bg-white border-slate-200'}`}>
                                 <div>
                                     <div className="font-bold text-slate-700">{w.title}</div>
+                                    <div className="text-[9px] font-black text-slate-400 uppercase">{w.chapterLabel || chapterNameById[extractId(w.chapterId)] || ''}</div>
                                     <div className={`text-[10px] font-black uppercase ${w.isDone ? 'text-purple-600' : 'text-red-400'}`}>
                                         {w.isDone ? `✅ JOUÉ (${w.score})` : '⭕ PAS ENCORE JOUÉ'}
                                     </div>
@@ -358,7 +378,10 @@ export default function StudentsManager({ globalClassId }) {
                             <th className="p-4 text-[10px] font-black text-slate-400 uppercase text-left bg-slate-50 min-w-[200px] border-b border-r">Élève</th>
                             <th className="p-4 text-[10px] font-black text-slate-400 uppercase text-center bg-slate-50 border-b w-[100px]">Action</th>
                             {activities.filter(a => !a.isPunishment).map(act => (
-                                <th key={act._id} className="p-4 text-[9px] font-black text-slate-600 uppercase text-center border-b min-w-[100px] max-w-[150px] truncate" title={act.title}>{act.label}</th>
+                                <th key={act._id} className="p-4 text-[9px] font-black text-slate-600 uppercase text-center border-b min-w-[100px] max-w-[170px]" title={`${act.title} • ${act.chapterLabel || ''}`}>
+                                    <div className="truncate">{act.label}</div>
+                                    <div className="text-[8px] text-slate-400 font-black truncate">{act.chapterLabel || ''}</div>
+                                </th>
                             ))}
                         </tr>
                     </thead>

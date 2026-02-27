@@ -33,7 +33,8 @@ export default function StudioDistributionSidebar({
         }
         
         // B. Filtre Permissions
-        if (user.isDeveloper || user.role === 'admin') return true;
+        // Admin: voit tout. Prof (même développeur): uniquement ses classes assignées.
+        if (user.role === 'admin') return true;
         
         // C. Filtre Prof (Mes classes uniquement)
         const myIds = (user.assignedClasses || []).map(id => String(id._id || id));

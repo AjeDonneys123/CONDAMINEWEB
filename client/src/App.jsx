@@ -8,6 +8,7 @@ import './App.css';
 export default function App() {
   const [user, setUser] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isSessionOverride, setIsSessionOverride] = useState(false);
   const bootIdRef = useRef(null);
 
   useEffect(() => {
@@ -27,6 +28,17 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const sessionOverrideRaw = sessionStorage.getItem('player_override');
+    if (sessionOverrideRaw) {
+      try {
+        const parsed = JSON.parse(sessionOverrideRaw);
+        setUser({ ...parsed, id: parsed._id || parsed.id });
+        setIsSessionOverride(true);
+        return;
+      } catch (e) {
+        sessionStorage.removeItem('player_override');
+      }
+    }
     const saved = localStorage.getItem('player');
     if (saved) {
         const parsed = JSON.parse(saved);
@@ -34,7 +46,15 @@ export default function App() {
     }
   }, []);
 
-  const handleLogout = () => { localStorage.clear(); setUser(null); };
+  const handleLogout = () => {
+    if (isSessionOverride) {
+      sessionStorage.removeItem('player_override');
+      setUser(null);
+      return;
+    }
+    localStorage.clear();
+    setUser(null);
+  };
 
   const handleBackToDev = async () => {
       try {
