@@ -315,25 +315,78 @@ class MiniGame extends MiniGameBase {
         const ctx = this.ctx;
         const W = this.canvas.width;
         const H = this.canvas.height;
-        const drawFittedText = (text, centerX, centerY, maxWidth) => {
-            const raw = String(text || "");
-            let size = 18;
+        const drawWrappedText = (text, centerX, topY, maxWidth, boxH) => {
+            const raw = String(text || "").trim() || "?";
+            const maxLines = 3;
+            let best = { size: 10, lines: [raw] };
+
+            const buildLines = (fontSize) => {
+                ctx.font = `900 ${fontSize}px Arial`;
+                const words = raw.split(/\s+/).filter(Boolean);
+                const lines = [];
+                let current = "";
+
+                const pushWord = (word) => {
+                    const candidate = current ? `${current} ${word}` : word;
+                    if (ctx.measureText(candidate).width <= maxWidth) {
+                        current = candidate;
+                        return;
+                    }
+                    if (current) lines.push(current);
+                    current = word;
+                };
+
+                words.forEach(pushWord);
+                if (current) lines.push(current);
+
+                // Si un mot reste trop long, coupe par caractères.
+                for (let i = 0; i < lines.length; i += 1) {
+                    if (ctx.measureText(lines[i]).width <= maxWidth) continue;
+                    const chunked = [];
+                    let chunk = "";
+                    for (const ch of lines[i]) {
+                        const next = chunk + ch;
+                        if (ctx.measureText(next).width <= maxWidth) chunk = next;
+                        else {
+                            if (chunk) chunked.push(chunk);
+                            chunk = ch;
+                        }
+                    }
+                    if (chunk) chunked.push(chunk);
+                    lines.splice(i, 1, ...chunked);
+                    i += chunked.length - 1;
+                }
+                return lines;
+            };
+
+            for (let size = 16; size >= 9; size -= 1) {
+                const lines = buildLines(size);
+                const lineH = Math.round(size * 1.1);
+                const totalH = lines.slice(0, maxLines).length * lineH;
+                if (lines.length <= maxLines && totalH <= boxH - 8) {
+                    best = { size, lines };
+                    break;
+                }
+                best = { size, lines: lines.slice(0, maxLines) };
+            }
+
+            ctx.font = `900 ${best.size}px Arial`;
+            ctx.fillStyle = "white";
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
-            while (size > 9) {
-                ctx.font = `900 ${size}px Arial`;
-                if (ctx.measureText(raw).width <= maxWidth) break;
-                size -= 1;
-            }
-            let label = raw;
-            if (ctx.measureText(label).width > maxWidth) {
-                while (label.length > 3 && ctx.measureText(`${label}…`).width > maxWidth) {
-                    label = label.slice(0, -1);
+            const lineH = Math.round(best.size * 1.1);
+            const drawLines = best.lines.slice(0, maxLines);
+            const totalH = drawLines.length * lineH;
+            let y = topY + (boxH - totalH) / 2 + lineH / 2;
+            drawLines.forEach((line, idx) => {
+                let txt = line;
+                if (idx === maxLines - 1 && best.lines.length > maxLines) {
+                    while (txt.length > 3 && ctx.measureText(`${txt}…`).width > maxWidth) txt = txt.slice(0, -1);
+                    txt = `${txt}…`;
                 }
-                label = `${label}…`;
-            }
-            ctx.fillStyle = "white";
-            ctx.fillText(label, centerX, centerY);
+                ctx.fillText(txt, centerX, y);
+                y += lineH;
+            });
         };
 
         // N'affiche les blocs réponses que si on N'EST PAS en phase Boss
@@ -344,12 +397,12 @@ class MiniGame extends MiniGameBase {
             this.answerPlats.forEach((p, i) => {
                 const px = (p.x/100)*W, pw = (p.w/100)*W, py = (4/100)*H;
                 const boxW = pw + 26;
-                const boxH = 44;
+                const boxH = 66;
                 ctx.fillStyle = p.color;
                 ctx.beginPath();
                 ctx.roundRect(px - 13, py, boxW, boxH, 9);
                 ctx.fill();
-                drawFittedText(opts[i] || "", px + pw/2, py + boxH / 2, boxW - 12);
+                drawWrappedText(opts[i] || "", px + pw/2, py, boxW - 14, boxH);
                 
                 // Plateforme physique
                 ctx.fillStyle = p.color;

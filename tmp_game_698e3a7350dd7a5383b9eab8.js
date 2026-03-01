@@ -315,6 +315,78 @@ class MiniGame extends MiniGameBase {
         const ctx = this.ctx;
         const W = this.canvas.width;
         const H = this.canvas.height;
+        const drawWrappedText = (text, centerX, topY, maxWidth, boxH) => {
+            const raw = String(text || "").trim() || "?";
+            const maxLines = 3;
+            let best = { size: 10, lines: [raw] };
+
+            const buildLines = (fontSize) => {
+                ctx.font = `900 ${fontSize}px Arial`;
+                const words = raw.split(/\s+/).filter(Boolean);
+                const lines = [];
+                let current = "";
+
+                const pushWord = (word) => {
+                    const candidate = current ? `${current} ${word}` : word;
+                    if (ctx.measureText(candidate).width <= maxWidth) {
+                        current = candidate;
+                        return;
+                    }
+                    if (current) lines.push(current);
+                    current = word;
+                };
+
+                words.forEach(pushWord);
+                if (current) lines.push(current);
+
+                for (let i = 0; i < lines.length; i += 1) {
+                    if (ctx.measureText(lines[i]).width <= maxWidth) continue;
+                    const chunked = [];
+                    let chunk = "";
+                    for (const ch of lines[i]) {
+                        const next = chunk + ch;
+                        if (ctx.measureText(next).width <= maxWidth) chunk = next;
+                        else {
+                            if (chunk) chunked.push(chunk);
+                            chunk = ch;
+                        }
+                    }
+                    if (chunk) chunked.push(chunk);
+                    lines.splice(i, 1, ...chunked);
+                    i += chunked.length - 1;
+                }
+                return lines;
+            };
+
+            for (let size = 16; size >= 9; size -= 1) {
+                const lines = buildLines(size);
+                const lineH = Math.round(size * 1.1);
+                const totalH = lines.slice(0, maxLines).length * lineH;
+                if (lines.length <= maxLines && totalH <= boxH - 8) {
+                    best = { size, lines };
+                    break;
+                }
+                best = { size, lines: lines.slice(0, maxLines) };
+            }
+
+            ctx.font = `900 ${best.size}px Arial`;
+            ctx.fillStyle = "white";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            const lineH = Math.round(best.size * 1.1);
+            const drawLines = best.lines.slice(0, maxLines);
+            const totalH = drawLines.length * lineH;
+            let y = topY + (boxH - totalH) / 2 + lineH / 2;
+            drawLines.forEach((line, idx) => {
+                let txt = line;
+                if (idx === maxLines - 1 && best.lines.length > maxLines) {
+                    while (txt.length > 3 && ctx.measureText(`${txt}…`).width > maxWidth) txt = txt.slice(0, -1);
+                    txt = `${txt}…`;
+                }
+                ctx.fillText(txt, centerX, y);
+                y += lineH;
+            });
+        };
 
         // N'affiche les blocs réponses que si on N'EST PAS en phase Boss
         if (!this.isBossPhase) {
@@ -322,17 +394,17 @@ class MiniGame extends MiniGameBase {
             const opts = (this.questions && this.questions[qIdx]) ? this.questions[qIdx].options : ["?", "?", "?", "?"];
             
             this.answerPlats.forEach((p, i) => {
-                const px = (p.x/100)*W, pw = (p.w/100)*W, py = (5/100)*H; 
+                const px = (p.x/100)*W, pw = (p.w/100)*W, py = (4/100)*H;
+                const boxW = pw + 26;
+                const boxH = 66;
                 ctx.fillStyle = p.color;
                 ctx.beginPath();
-                ctx.roundRect(px - 5, py, pw + 10, 35, 8);
+                ctx.roundRect(px - 13, py, boxW, boxH, 9);
                 ctx.fill();
-                ctx.fillStyle = "white";
-                ctx.font = "bold 12px Arial";
-                ctx.textAlign = "center";
-                ctx.fillText(opts[i] || "", px + pw/2, py + 22);
+                drawWrappedText(opts[i] || "", px + pw/2, py, boxW - 14, boxH);
                 
                 // Plateforme physique
+                ctx.fillStyle = p.color;
                 ctx.fillRect((p.x/100)*W, (p.y/100)*H, (p.w/100)*W, 8);
             });
         }

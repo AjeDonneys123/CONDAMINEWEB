@@ -50,6 +50,7 @@
 /* STUDENT CARD */
 .student-card-drag { background: white; border-radius: 12px; padding: 2px; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 2px solid #f1f5f9; cursor: grab; user-select: none; position: relative; height: 100%; width: 100%; transition: transform 0.1s; overflow: hidden; }
 .student-card-drag:active { cursor: grabbing; transform: scale(1.05); z-index: 10; }
+.student-card-drag.has-note:not(.punished) { background: #fef9c3; border-color: #facc15; }
 .student-card-drag.punished { border-color: #ef4444; background: #fef2f2; }
 
 /* --- INDICATORS POSITIONING --- */
@@ -143,6 +144,7 @@
 .list-finder { width: 100%; padding: 12px; border: 2px solid #e2e8f0; border-radius: 12px; font-weight: 700; outline: none; margin-bottom: 10px; }
 .list-finder:focus { border-color: #3b82f6; }
 .student-list-row { display: flex; align-items: center; justify-content: space-between; padding: 12px; border-radius: 12px; border: 1px solid #f1f5f9; background: #f8fafc; transition: background 0.1s; }
+.student-list-row.has-note { background: #fef9c3; border-color: #fde68a; }
 .student-list-row:hover { background: #f1f5f9; }
 .list-info { flex: 1; display: flex; flex-direction: column; }
 .list-name { font-weight: 900; color: #1e293b; font-size: 0.85rem; }
