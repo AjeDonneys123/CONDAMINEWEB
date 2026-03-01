@@ -17,6 +17,7 @@ export default function ClassroomManager({ globalClassId, user }) {
     const [showNoteInput, setShowNoteInput] = useState(false);
     const [currentNote, setCurrentNote] = useState("");
     const [swapSource, setSwapSource] = useState(null);
+    const [isSwapMode, setIsSwapMode] = useState(false);
     const [draggingId, setDraggingId] = useState(null);
     const [dragOverCell, setDragOverCell] = useState(null);
     const fileInputRef = useRef(null);
@@ -74,7 +75,55 @@ export default function ClassroomManager({ globalClassId, user }) {
     const handleDrop = async (e, x, y) => { e.preventDefault(); setDragOverCell(null); const sId = draggingId; if (!sId) return; const targetStudent = students.find(s => s.seatX === x && s.seatY === y); const movedStudent = students.find(s => s._id === sId); if (targetStudent && targetStudent._id !== sId) { const oldX = movedStudent.seatX; const oldY = movedStudent.seatY; setStudents(prev => prev.map(s => { if (s._id === sId) return { ...s, seatX: x, seatY: y }; if (s._id === targetStudent._id) return { ...s, seatX: oldX, seatY: oldY }; return s; })); } else { setStudents(prev => prev.map(s => s._id === sId ? { ...s, seatX: x, seatY: y } : s)); } try { await fetch('/api/classroom/move', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ studentId: sId, x, y }) }); } catch(err) { loadData(); } setDraggingId(null); };
     const handleFileSelect = async (e) => { const file = e.target.files[0]; if (!file) return; if(!confirm(`📸 Analyser ${file.name} ?`)) return; setIaLoading(true); const formData = new FormData(); formData.append('file', file); formData.append('classId', globalClassId); try { await fetch('/api/classroom/import-plan', { method: 'POST', body: formData }); await loadData(); } catch(e) { alert("Erreur IA"); } setIaLoading(false); e.target.value = null; };
     const getMyStats = (stu) => { if (!stu.behaviorRecords) return { crosses: 0, bonuses: 0, weeksToRedemption: 3 }; return stu.behaviorRecords.find(r => r.teacherId === myId) || { crosses: 0, bonuses: 0, weeksToRedemption: 3 }; };
-    const handleOpenStudent = (stu) => { if (swapSource) { moveStudentTo(swapSource._id, stu.seatX, stu.seatY); setSwapSource(null); return; } setSelectedStudent(stu); setCurrentNote(stu.myNote || ""); setShowNoteInput(false); };
+    const handleSwapStudents = async (a, b) => {
+        if (!a || !b || String(a._id) === String(b._id)) return;
+        const aX = a.seatX, aY = a.seatY;
+        const bX = b.seatX, bY = b.seatY;
+        if (aX === undefined || aY === undefined || bX === undefined || bY === undefined) return;
+
+        // Optimistic UI
+        setStudents(prev => prev.map(s => {
+            if (String(s._id) === String(a._id)) return { ...s, seatX: bX, seatY: bY };
+            if (String(s._id) === String(b._id)) return { ...s, seatX: aX, seatY: aY };
+            return s;
+        }));
+
+        try {
+            await fetch('/api/classroom/move', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ studentId: a._id, x: bX, y: bY })
+            });
+            await fetch('/api/classroom/move', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ studentId: b._id, x: aX, y: aY })
+            });
+            await loadData();
+        } catch (e) {
+            loadData();
+        }
+    };
+
+    const handleOpenStudent = (stu) => {
+        if (isSwapMode) {
+            if (!swapSource) {
+                setSwapSource(stu);
+                return;
+            }
+            if (String(swapSource._id) === String(stu._id)) {
+                setSwapSource(null);
+                return;
+            }
+            handleSwapStudents(swapSource, stu);
+            setSwapSource(null);
+            setIsSwapMode(false);
+            return;
+        }
+        setSelectedStudent(stu);
+        setCurrentNote(stu.myNote || "");
+        setShowNoteInput(false);
+    };
     
     // --- GESTION DES ACTIONS ---
     const addBehavior = async (sid, type, extra = null) => { 
@@ -128,9 +177,9 @@ export default function ClassroomManager({ globalClassId, user }) {
                 const isOver = dragOverCell === `${x}-${y}`;
                 const hasSep = separators.includes(x);
                 cells.push(
-                    <div key={`${x}-${y}`} className={`grid-cell-wrapper ${isOver ? 'drag-over' : ''} ${hasSep ? 'has-separator' : ''}`} style={{ gridColumn: x + 1, gridRow: y + 1 }} onDragOver={(e) => handleDragOver(e, x, y)} onDrop={(e) => handleDrop(e, x, y)} onClick={() => !student && swapSource && moveStudentTo(swapSource._id, x, y) && setSwapSource(null)}>
+                    <div key={`${x}-${y}`} className={`grid-cell-wrapper ${isOver ? 'drag-over' : ''} ${hasSep ? 'has-separator' : ''}`} style={{ gridColumn: x + 1, gridRow: y + 1 }} onDragOver={(e) => handleDragOver(e, x, y)} onDrop={(e) => handleDrop(e, x, y)} onClick={() => !isSwapMode && !student && swapSource && moveStudentTo(swapSource._id, x, y) && setSwapSource(null)}>
                         {student ? (
-                            <div className={`student-card-drag ${draggingId === student._id ? 'dragging' : ''} ${getMyStats(student).crosses >= 3 ? 'punished' : ''} ${student.myNote ? 'has-note' : ''}`} draggable="true" onDragStart={(e) => handleDragStart(e, student._id)} onClick={(e) => { e.stopPropagation(); handleOpenStudent(student); }}>
+                            <div className={`student-card-drag ${draggingId === student._id ? 'dragging' : ''} ${getMyStats(student).crosses >= 3 ? 'punished' : ''} ${student.myNote ? 'has-note' : ''} ${isSwapMode && String(swapSource?._id) === String(student._id) ? 'swap-source' : ''}`} draggable="true" onDragStart={(e) => handleDragStart(e, student._id)} onClick={(e) => { e.stopPropagation(); handleOpenStudent(student); }}>
                                 {getMyStats(student).crosses > 0 && <div className="sc-badge">⏳ {getMyStats(student).weeksToRedemption}</div>}
                                 {student.myNote && <div className="sc-note-badge">N</div>}
                                 {student.punishmentStatus && student.punishmentStatus !== 'NONE' && (<div className={`sc-punishment-badge ${isPunishmentLate(student) ? 'late' : 'pending'}`}>P</div>)}
@@ -167,7 +216,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                 {filtered.map(s => {
                     const stats = getMyStats(s);
                     return (
-                        <div key={s._id} className={`student-list-row ${s.myNote ? 'has-note' : ''}`}>
+                        <div key={s._id} className={`student-list-row ${s.myNote ? 'has-note' : ''} ${isSwapMode && String(swapSource?._id) === String(s._id) ? 'swap-source' : ''}`}>
                             <div className="list-info" onClick={() => handleOpenStudent(s)}><span className="list-name">{s.lastName} {s.firstName}</span><span className="list-stats">❌ {stats.crosses} | ⭐ {stats.bonuses} {s.punishmentStatus !== 'NONE' ? `| ${isPunishmentLate(s) ? '🚨 RETARD' : '⚠️ PUNI'}` : ''}</span></div>
                             <div className="list-actions"><button className="btn-list-action btn-x" onClick={() => addBehavior(s._id, 'CROSS')}>❌</button><button className="btn-list-action btn-v" onClick={() => addBehavior(s._id, 'BONUS')}>⭐</button><button className="btn-list-action btn-c" onClick={() => handleOpenStudent(s)}>📝</button></div>
                         </div>
@@ -188,6 +237,20 @@ export default function ClassroomManager({ globalClassId, user }) {
                     <button className={`view-btn ${viewMode === 'PLAN' ? 'active' : ''}`} onClick={() => setViewMode('PLAN')}>📍 PLAN</button>
                     <button className={`view-btn ${viewMode === 'LIST' ? 'active' : ''}`} onClick={() => setViewMode('LIST')}>📋 LISTE</button>
                 </div>
+                <button
+                    className={`cm-swap-btn ${isSwapMode ? 'active' : ''}`}
+                    onClick={() => {
+                        setIsSwapMode(prev => {
+                            const next = !prev;
+                            if (!next) setSwapSource(null);
+                            return next;
+                        });
+                        setSelectedStudent(null);
+                    }}
+                    title="Intervertir deux élèves"
+                >
+                    {isSwapMode ? (swapSource ? '🔁 CHOISIS 2E ÉLÈVE' : '🔁 CHOISIS 1ER ÉLÈVE') : '🔁 INTERVERTIR'}
+                </button>
             </div>
             
             {viewMode === 'PLAN' ? (
