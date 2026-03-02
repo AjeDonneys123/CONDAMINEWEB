@@ -135,6 +135,7 @@ export default function EleveHeader({ user, onLogout, onBackToProf, activeTab, o
         <div className="nav-tabs">
             <button onClick={() => onTabChange('status')} className={`tab-item ${activeTab === 'status' ? 'tab-active' : ''}`}>📊 STATUS</button>
             <button onClick={() => onTabChange('devoirs')} className={`tab-item ${activeTab === 'devoirs' ? 'tab-active' : ''}`}>📚 DEVOIRS</button>
+            <button onClick={() => onTabChange('apprentissage')} className={`tab-item ${activeTab === 'apprentissage' ? 'tab-active' : ''}`}>🧠 APPRENTISSAGE</button>
             <button onClick={() => onTabChange('francais')} className={`tab-item ${activeTab === 'francais' ? 'tab-active' : ''}`}>🇫🇷 FRANÇAIS</button>
             <button onClick={() => onTabChange('jeux')} className={`tab-item ${activeTab === 'jeux' ? 'tab-active' : ''}`}>🎮 JEUX</button>
         </div>

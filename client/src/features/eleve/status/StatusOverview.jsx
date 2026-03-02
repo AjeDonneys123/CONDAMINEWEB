@@ -1,30 +1,35 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import './StatusOverview.css';
 
 export default function StatusOverview({ user }) {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState({ disciplines: [] });
+  const hasLoadedOnceRef = useRef(false);
+  const userId = user?._id || user?.id;
 
   useEffect(() => {
     const load = async () => {
-      setLoading(true);
+      // Affiche le loader uniquement au tout premier chargement
+      if (!hasLoadedOnceRef.current) setLoading(true);
       try {
-        const id = user?._id || user?.id;
-        if (!id) {
-          setData({ disciplines: [] });
+        if (!userId) {
+          if (!hasLoadedOnceRef.current) setData({ disciplines: [] });
           return;
         }
-        const res = await fetch(`/api/eleve/classroom/status-summary/${id}`);
+        const res = await fetch(`/api/eleve/classroom/status-summary/${userId}`);
         const json = await res.json();
         setData(json || { disciplines: [] });
+        hasLoadedOnceRef.current = true;
       } catch (e) {
-        setData({ disciplines: [] });
+        // En cas d'erreur réseau ponctuelle, on garde l'ancien état affiché
+        if (!hasLoadedOnceRef.current) setData({ disciplines: [] });
       } finally {
-        setLoading(false);
+        if (!hasLoadedOnceRef.current) setLoading(false);
+        else setLoading(false);
       }
     };
     load();
-  }, [user]);
+  }, [userId]);
 
   if (loading) {
     return <div className="status-page">Chargement du statut...</div>;

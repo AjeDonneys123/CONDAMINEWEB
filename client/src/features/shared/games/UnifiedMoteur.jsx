@@ -123,6 +123,11 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
         const m = String(url).match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/))([^?&/]+)/i);
         return m?.[1] ? `https://www.youtube.com/embed/${m[1]}?autoplay=1&rel=0&modestbranding=1` : url;
     };
+    const getYoutubeThumb = (url = "") => {
+        if (!url) return "";
+        const m = String(url).match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/))([^?&/]+)/i);
+        return m?.[1] ? `https://img.youtube.com/vi/${m[1]}/hqdefault.jpg` : "";
+    };
 
     const isYoutubeUrl = (url = "") => /(?:youtu\.be\/|youtube\.com\/)/i.test(String(url));
     const getGameFamily = () => {
@@ -550,11 +555,33 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
                 <div className={`absolute inset-0 flex flex-col items-center justify-center bg-slate-950 z-[6000] p-8 text-center animate-in zoom-in ${zoomMedia ? 'pointer-events-none' : ''}`}>
                     <h1 className="text-5xl text-white font-black mb-6 uppercase">{allLevels[currentLevelIdx]?.name || ("Niveau " + (currentLevelIdx+1))}</h1>
                     <div className="flex gap-10 mb-12 w-full max-w-4xl justify-center h-[280px]">
-                        <div onClick={() => introMedia.sheetUrl && setZoomMedia('sheet')} className="h-full aspect-[3/4] bg-slate-800 rounded-3xl border-4 border-slate-700 overflow-hidden flex items-center justify-center shadow-2xl cursor-pointer hover:border-indigo-500 hover:scale-105 transition-all">
-                            {introMedia.sheetUrl ? <img src={resolveUrl(introMedia.sheetUrl)} className="w-full h-full object-contain" /> : <span className="text-slate-500 font-bold uppercase text-[10px]">Fiche</span>}
+                        <div className="h-full aspect-[3/4] flex flex-col">
+                            <div className="text-white text-xs font-black uppercase tracking-widest mb-2 text-left">FICHE</div>
+                            <div onClick={() => introMedia.sheetUrl && setZoomMedia('sheet')} className="flex-1 bg-slate-800 rounded-3xl border-4 border-slate-700 overflow-hidden flex items-center justify-center shadow-2xl cursor-pointer hover:border-indigo-500 hover:scale-105 transition-all">
+                                {introMedia.sheetUrl ? <img src={resolveUrl(introMedia.sheetUrl)} className="w-full h-full object-contain" /> : <span className="text-slate-500 font-bold uppercase text-[10px]">Aucune fiche</span>}
+                            </div>
                         </div>
-                        <div onClick={() => setZoomMedia('video')} className="h-full aspect-video bg-black rounded-3xl border-4 border-slate-700 overflow-hidden shadow-2xl flex items-center justify-center cursor-pointer hover:border-indigo-500 hover:scale-105 transition-all relative group">
-                            {introMedia.videoUrl ? <span className="text-6xl">▶️</span> : <span className="text-slate-500 font-bold uppercase text-[10px]">Vidéo</span>}
+                        <div className="h-full aspect-video flex flex-col">
+                            <div className="text-white text-xs font-black uppercase tracking-widest mb-2 text-left">VIDÉO</div>
+                            <div onClick={() => setZoomMedia('video')} className="flex-1 bg-black rounded-3xl border-4 border-slate-700 overflow-hidden shadow-2xl flex items-center justify-center cursor-pointer hover:border-indigo-500 hover:scale-105 transition-all relative group">
+                                {introMedia.videoUrl ? (
+                                    <>
+                                        {isYoutubeUrl(introMedia.videoUrl) ? (
+                                            <img src={getYoutubeThumb(introMedia.videoUrl)} alt="Miniature vidéo" className="absolute inset-0 w-full h-full object-cover" />
+                                        ) : (
+                                            <video
+                                                className="absolute inset-0 w-full h-full object-cover"
+                                                src={resolveUrl(introMedia.videoUrl)}
+                                                muted
+                                                playsInline
+                                                preload="metadata"
+                                            />
+                                        )}
+                                        <div className="absolute inset-0 bg-black/25"></div>
+                                        <span className="text-6xl z-10 drop-shadow-2xl">▶️</span>
+                                    </>
+                                ) : <span className="text-slate-500 font-bold uppercase text-[10px]">Aucune vidéo</span>}
+                            </div>
                         </div>
                     </div>
                     <button onClick={startCurrentLevel} disabled={!isReady} className="px-16 py-6 rounded-full font-black text-3xl shadow-2xl border-4 bg-white text-indigo-900 border-indigo-500 hover:scale-110">

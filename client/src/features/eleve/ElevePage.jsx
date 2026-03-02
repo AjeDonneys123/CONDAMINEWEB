@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import EleveHeader from './components/EleveHeader';
 import HomeworkList from './homework/HomeworkList';
+import LearningList from './learning/LearningList';
 import MistakesBook from './mistakes/MistakesBook';
 import GamesGrid from './games/GamesGrid';
 import StatusOverview from './status/StatusOverview';
@@ -95,6 +96,7 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
                 onPunishmentOpened={() => setOpenPunishmentDirect(false)}
               />
             )}
+            {tab === 'apprentissage' && <LearningList user={freshUser} />}
             {tab === 'francais' && <MistakesBook user={freshUser} />}
             {tab === 'jeux' && <GamesGrid user={freshUser} />}
           </div>

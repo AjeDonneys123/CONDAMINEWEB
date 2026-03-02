@@ -63,6 +63,7 @@ safeLoad('/api/auth', './prof/auth/auth.prof');
 safeLoad('/api/admin', './prof/admin/admin.prof');
 safeLoad('/api/homework', './prof/homework/homework.prof');
 safeLoad('/api/games', './prof/games/games.prof');
+safeLoad('/api/learning', './prof/learning/learning.prof');
 safeLoad('/api/classroom', './prof/classroom/classroom.prof');
 safeLoad('/api/scans', './prof/scans/scans.prof');
 safeLoad('/api/structure', './prof/structure/structure.prof');
@@ -72,6 +73,7 @@ safeLoad('/api/eleve/auth', './eleve/auth/auth.eleve');
 safeLoad('/api/eleve/homework', './eleve/homework/homework.eleve');
 safeLoad('/api/eleve/classroom', './eleve/classroom/classroom.eleve');
 safeLoad('/api/eleve/games', './eleve/games/games.eleve');
+safeLoad('/api/eleve/learning', './eleve/learning/learning.eleve');
 
 // 5. DEMARRAGE MONGOOSE
 mongoose.connect(process.env.MONGODB_URI)

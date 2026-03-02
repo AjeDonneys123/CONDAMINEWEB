@@ -75,6 +75,7 @@ const Models = {
 
     Student: getModel('Student', {
         firstName: String, lastName: String, currentClass: String,
+        nickname: { type: String, default: '', trim: true },
         email: { type: String, lowercase: true, trim: true },
         parentEmail: { type: String, lowercase: true, trim: true },
         classId: mongoose.Schema.Types.ObjectId,
@@ -119,6 +120,31 @@ const Models = {
         scenes: { type: Array, default: [] }, 
         generatedCode: { type: String, default: "" },
         globalIntro: { type: Object, default: {} }
+    }),
+
+    LearningModule: getModel('LearningModule', {
+        title: { type: String, default: "APPRENTISSAGE" },
+        subject: { type: String, default: "GÉNÉRAL" },
+        chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter' },
+        teacherId: mongoose.Schema.Types.ObjectId,
+        targetClassrooms: [String],
+        assignedStudents: [mongoose.Schema.Types.ObjectId],
+        isAllClass: { type: Boolean, default: true },
+        isEnabled: { type: Boolean, default: true },
+        steps: {
+            type: [Object],
+            default: []
+        },
+        completions: {
+            type: [{
+                studentId: mongoose.Schema.Types.ObjectId,
+                completedAt: Date,
+                currentStep: { type: Number, default: 0 },
+                lastUpdateAt: Date
+            }],
+            default: []
+        },
+        date: { type: Date, default: Date.now }
     }),
 
     ScanSession: getModel('ScanSession', {

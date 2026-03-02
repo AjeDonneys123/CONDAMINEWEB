@@ -222,6 +222,9 @@ router.post('/behavior', async (req, res) => {
             let n = s.teacherNotes.find(x => String(x.teacherId) === String(teacherId));
             if (!n) s.teacherNotes.push({ teacherId, text: extraData }); else n.text = extraData;
         }
+        if (type === 'SAVE_NICKNAME') {
+            s.nickname = String(extraData || '').trim().slice(0, 40);
+        }
         if (type === 'REMOVE_PUNISHMENT') {
             s.punishmentStatus = 'NONE';
             s.punishmentDueDate = null;

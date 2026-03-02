@@ -6,7 +6,8 @@ import React, { useState, useEffect } from 'react';
  * Crée automatiquement CH1 à l'ajout de section et rafraîchit.
  */
 export default function ProfStudioFolder({ items, chapters, studentsRef, classFilter, levelFilter, user, onEditItem, onCreateActivity, onRefresh, onDeleteItem }) {
-    const [customSections, setCustomSections] = useState([]);
+    const DEFAULT_SECTIONS = [{ name: 'GÉNÉRAL', color: '#64748b', scope: 'GLOBAL' }];
+    const [customSections, setCustomSections] = useState(DEFAULT_SECTIONS);
     const [activeSection, setActiveSection] = useState("GÉNÉRAL"); 
     const [openChaps, setOpenChaps] = useState({}); 
     const [showArchived, setShowArchived] = useState(false); 
@@ -28,7 +29,40 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
     const [deleteTarget, setDeleteTarget] = useState(null); 
 
     const PRESET_COLORS = ["#ef4444", "#f97316", "#f59e0b", "#10b981", "#06b6d4", "#3b82f6", "#6366f1", "#8b5cf6", "#d946ef", "#f43f5e", "#64748b"];
-    const getUserId = () => user?.id || user?._id;
+    const isObjectId = (v) => /^[a-f0-9]{24}$/i.test(String(v || '').trim());
+    const inferLevelFromName = (name = '') => {
+        const m = String(name || '').trim().toUpperCase().match(/^([1-6])/);
+        return m ? m[1] : '';
+    };
+    const getUserId = () => {
+        const fromUnderscore = String(user?._id || '').trim();
+        const fromId = String(user?.id || '').trim();
+        if (isObjectId(fromUnderscore)) return fromUnderscore;
+        if (isObjectId(fromId)) return fromId;
+        return '';
+    };
+    const getSectionsFromUserProfile = () => {
+        const raw = Array.isArray(user?.subjectSections) ? user.subjectSections : [];
+        const currentLevel = String(levelFilter || inferLevelFromName(classFilter || ''));
+        const filtered = raw
+            .filter(s => String(s?.name || '').toUpperCase() !== 'GÉNÉRAL')
+            .filter(s => {
+                const scope = String(s?.scope || 'GLOBAL').toUpperCase();
+                if (Array.isArray(s?.hiddenIn) && s.hiddenIn.includes(classFilter)) return false;
+                if (scope === 'GLOBAL') return true;
+                if (scope === 'LEVEL') return String(s?.target || '') === currentLevel;
+                if (scope === 'CLASS') return String(s?.target || '') === String(classFilter || '');
+                return true;
+            })
+            .map(s => ({
+                name: String(s?.name || '').toUpperCase(),
+                color: s?.color || '#64748b',
+                scope: s?.scope || 'GLOBAL',
+                target: s?.target || null,
+                hiddenIn: Array.isArray(s?.hiddenIn) ? s.hiddenIn : []
+            }));
+        return [DEFAULT_SECTIONS[0], ...filtered];
+    };
 
     // SÉCURITÉ DATA
     const safeItems = Array.isArray(items) ? items : [];
@@ -38,16 +72,25 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
     // --- CHARGEMENT ---
     async function fetchSections() {
         const uid = getUserId();
-        if (!uid) return;
+        if (!uid) {
+            setCustomSections(getSectionsFromUserProfile());
+            return;
+        }
         try {
             const res = await fetch(`/api/structure/sections/${uid}?classContext=${classFilter || ""}`);
             if (res.ok) {
                 const data = await res.json();
                 let list = (Array.isArray(data) ? data : []).filter(s => s.name.toUpperCase() !== "GÉNÉRAL");
                 list.unshift({ name: 'GÉNÉRAL', color: '#64748b', scope: 'GLOBAL' });
-                setCustomSections(list);
+                const fallback = getSectionsFromUserProfile();
+                setCustomSections(list.length > 1 ? list : fallback);
+            } else {
+                setCustomSections(getSectionsFromUserProfile());
             }
-        } catch(e) { console.error("Fetch Sections Error", e); }
+        } catch(e) {
+            console.error("Fetch Sections Error", e);
+            setCustomSections(getSectionsFromUserProfile());
+        }
     }
     useEffect(() => { fetchSections(); }, [user, classFilter, onRefresh]);
 
@@ -158,9 +201,9 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
     async function handleToggleActivityEnabled(e, item) {
         e.stopPropagation();
         if (!item?._id) return;
-        if (!['homework', 'game'].includes(item.actType)) return;
+        if (!['homework', 'game', 'learning'].includes(item.actType)) return;
         const nextValue = item.isEnabled === false;
-        const base = item.actType === 'homework' ? '/api/homework' : '/api/games';
+        const base = item.actType === 'homework' ? '/api/homework' : (item.actType === 'game' ? '/api/games' : '/api/learning');
         const res = await fetch(`${base}/${item._id}/enabled`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
@@ -194,7 +237,7 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
 
         let isShared = false;
         if (type === 'chapter') isShared = !!item.sharedLevel;
-        else if (type === 'homework' || type === 'game' || type === 'scan') {
+        else if (type === 'homework' || type === 'game' || type === 'learning' || type === 'scan') {
             if (onDeleteItem) onDeleteItem(id, type);
             return;
         }
@@ -230,12 +273,14 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
     const activeColor = safeSections.find(s => s.name.toUpperCase() === activeSection.toUpperCase())?.color || '#64748b';
 
     const filteredChapters = safeChapters.filter(c => {
-        if (c.section.toUpperCase() !== activeSection.toUpperCase() || c.isArchived !== showArchived) return false;
+        const sectionName = String(c?.section || 'GÉNÉRAL').toUpperCase();
+        const archived = c?.isArchived === true;
+        if (sectionName !== activeSection.toUpperCase() || archived !== showArchived) return false;
         if (c.hiddenIn && c.hiddenIn.includes(classFilter)) return false;
         // Toujours afficher la racine si on est dans GÉNÉRAL
-        if (activeSection.toUpperCase() === "GÉNÉRAL" && c.title.toUpperCase() === "GÉNÉRAL") return true;
+        if (activeSection.toUpperCase() === "GÉNÉRAL" && String(c?.title || '').toUpperCase() === "GÉNÉRAL") return true;
         
-        const isForMyClass = c.classroom && c.classroom.toUpperCase() === (classFilter || "").toUpperCase();
+        const isForMyClass = c.classroom && String(c.classroom).toUpperCase() === String(classFilter || "").toUpperCase();
         const isForMyLevel = c.sharedLevel && String(c.sharedLevel) === String(levelFilter);
         const isGlobal = !c.classroom && !c.sharedLevel;
         return isForMyClass || isForMyLevel || isGlobal;
@@ -303,6 +348,7 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
                         <div className="flex gap-2">
                             <button onClick={() => onCreateActivity('homework', activeSection)} className="px-5 py-3 rounded-xl bg-orange-500 text-white text-[11px] font-black uppercase shadow-lg">+ Devoir</button>
                             <button onClick={() => onCreateActivity('game', activeSection)} className="px-5 py-3 rounded-xl bg-purple-600 text-white text-[11px] font-black uppercase shadow-lg">+ Jeu</button>
+                            <button onClick={() => onCreateActivity('learning', activeSection)} className="px-5 py-3 rounded-xl bg-emerald-600 text-white text-[11px] font-black uppercase shadow-lg">+ Apprentissage</button>
                             <button onClick={() => setShowChapterModal(true)} className="px-5 py-3 rounded-xl bg-slate-900 text-white text-[11px] font-black uppercase shadow-lg">+ Dossier</button>
                         </div>
                     )}
@@ -346,12 +392,12 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
                                         {chapItems.map(it => (
                                             <div key={it._id} className="bg-white p-3 rounded-2xl flex justify-between items-center shadow-sm border border-slate-100">
                                                 <div className="flex items-center gap-3">
-                                                    <span className="text-xl">{it.actType === 'game' ? '🎮' : (it.actType === 'scan' ? '📸' : '📝')}</span>
+                                                    <span className="text-xl">{it.actType === 'game' ? '🎮' : (it.actType === 'scan' ? '📸' : (it.actType === 'learning' ? '🧠' : '📝'))}</span>
                                                     <span className="font-black text-slate-700 text-xs uppercase">{it.title}</span>
                                                 </div>
                                                 <div className="flex gap-2">
                                                     {/* BOUTON DÉPLACEMENT (Pas encore implémenté côté serveur pour activité, placeholder) */}
-                                                    {(it.actType === 'homework' || it.actType === 'game') && (
+                                                    {(it.actType === 'homework' || it.actType === 'game' || it.actType === 'learning') && (
                                                         <button
                                                             onClick={(e) => handleToggleActivityEnabled(e, it)}
                                                             className={`px-3 py-1.5 rounded-lg text-[8px] font-black uppercase border ${

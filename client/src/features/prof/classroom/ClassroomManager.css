@@ -162,13 +162,19 @@
 .btn-c { background: #eff6ff; color: #3b82f6; border: 1px solid #bfdbfe; font-size: 0.8rem; }
 .action-drawer { position: fixed; bottom: 0; left: 0; right: 0; background: white; padding: 20px; border-radius: 30px 30px 0 0; box-shadow: 0 -10px 40px rgba(0,0,0,0.15); z-index: 100; transform: translateY(100%); transition: transform 0.3s; }
 .action-drawer.open { transform: translateY(0); }
+.action-drawer.flash-cross { animation: drawerFlashCross 1s ease; }
+.action-drawer.flash-bonus { animation: drawerFlashBonus 1s ease; }
 .drawer-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.drawer-header-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 .drawer-name { font-size: 1.2rem; font-weight: 900; color: #0f172a; }
+.drawer-name-input { flex: 1; font-size: 1.1rem; font-weight: 900; color: #0f172a; background: #f8fafc; border: 2px solid #cbd5e1; border-radius: 10px; padding: 8px 12px; outline: none; margin-right: 10px; }
+.drawer-name-input:focus { border-color: #3b82f6; }
 .drawer-close { background: #f1f5f9; border: none; width: 35px; height: 35px; border-radius: 50%; font-weight: bold; cursor: pointer; }
 .drawer-grid-complex { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 10px; }
 .act-btn { padding: 12px; border-radius: 12px; font-weight: 900; border: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 0.7rem; text-transform: uppercase; }
 .act-btn:active { transform: scale(0.95); }
 .btn-cross { background: #fee2e2; color: #ef4444; border: 2px solid #fecaca; }
+.btn-pen { background: #eff6ff; color: #1d4ed8; border: 2px solid #bfdbfe; width: 42px; min-width: 42px; height: 42px; padding: 0; justify-self: end; align-self: center; }
 .btn-rem-cross { background: white; color: #94a3b8; border: 2px dashed #e2e8f0; }
 .btn-bonus { background: #dcfce7; color: #16a34a; border: 2px solid #bbf7d0; }
 .btn-rem-bonus { background: white; color: #94a3b8; border: 2px dashed #e2e8f0; }
@@ -181,6 +187,14 @@
 .ia-loader { position: fixed; inset: 0; background: rgba(15,23,42,0.9); z-index: 2000; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; }
 .spinner-ia { width: 50px; height: 50px; border: 5px solid rgba(255,255,255,0.2); border-top-color: #a855f7; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px; }
 @keyframes spin { to { transform: rotate(360deg); } }
+@keyframes drawerFlashCross {
+    0%, 100% { background: #ffffff; }
+    30% { background: #fee2e2; }
+}
+@keyframes drawerFlashBonus {
+    0%, 100% { background: #ffffff; }
+    30% { background: #dcfce7; }
+}
 
 /* BOUTON LEVER PUNITION (NOUVEAU) */
 .btn-cancel-punish {

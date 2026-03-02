@@ -1,22 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 
 export default function ProfNav({ activeTab, onTabChange, user }) {
-  const [auditStatus, setAuditStatus] = useState({ state: 'IDLE', message: 'Système Stable' });
-
-  useEffect(() => {
-    const checkStatus = async () => {
-        try {
-            const res = await fetch('/apply_status.json');
-            if (res.ok) {
-                const data = await res.json();
-                setAuditStatus({ state: data.status, message: data.message });
-            }
-        } catch(e) {}
-    };
-    const it = setInterval(checkStatus, 2000);
-    return () => clearInterval(it);
-  }, []);
-  
   const allTabs = {
       activities: { id: 'activities', label: '⚡ ACTIVITÉS', color: 'bg-purple-600' },
       classroom: { id: 'classroom', label: '🎓 CLASSE', color: 'bg-emerald-600' },
@@ -37,20 +21,6 @@ export default function ProfNav({ activeTab, onTabChange, user }) {
   }
   return (
     <div className="flex flex-col border-b sticky top-0 z-30 bg-white">
-      {/* 🛡️ BANDEAU D'AUDIT AGENT */}
-      {auditStatus.state !== 'IDLE' && (
-        <div className={`p-2 px-6 flex items-center justify-between text-[10px] font-black uppercase tracking-tighter ${
-            auditStatus.state === 'ERROR' ? 'bg-red-600 text-white' : 
-            auditStatus.state === 'PENDING' ? 'bg-indigo-600 text-white animate-pulse' : 
-            'bg-slate-100 text-slate-500'
-        }`}>
-            <div className="flex items-center gap-2">
-                <span>{auditStatus.state === 'ERROR' ? '🚫' : '🛡️'} AUDIT AGENT : {auditStatus.message}</span>
-            </div>
-            {auditStatus.state === 'PENDING' && <span>ANALYSE EN COURS...</span>}
-        </div>
-      )}
-
       <div className="flex gap-2 md:gap-4 p-2 md:p-6 overflow-x-auto no-scrollbar justify-between md:justify-start">
       {tabs.map(t => (
         <button 
