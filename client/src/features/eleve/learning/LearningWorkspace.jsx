@@ -8,6 +8,54 @@ const normalize = (txt = '') =>
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '');
 
+const normalizeRanges = (ranges = [], textLen = 0) => {
+    const clean = (ranges || [])
+        .map((r) => ({
+            start: Math.max(0, Math.min(textLen, Number(r?.start || 0))),
+            end: Math.max(0, Math.min(textLen, Number(r?.end || 0)))
+        }))
+        .filter((r) => r.end > r.start)
+        .sort((a, b) => a.start - b.start);
+    const merged = [];
+    clean.forEach((r) => {
+        const last = merged[merged.length - 1];
+        if (!last || r.start > last.end) merged.push({ ...r });
+        else last.end = Math.max(last.end, r.end);
+    });
+    return merged;
+};
+
+const normalizeMarkers = (markers = [], textLen = 0) =>
+    [...new Set((markers || [])
+        .map((m) => Math.max(0, Math.min(textLen, Number(m || 0))))
+        .filter((m) => Number.isFinite(m) && m > 0 && m < textLen))]
+        .sort((a, b) => a - b);
+
+const buildSegments = (text = '', markers = []) => {
+    const source = String(text || '');
+    const points = [0, ...normalizeMarkers(markers, source.length), source.length];
+    const segments = [];
+    for (let i = 0; i < points.length - 1; i += 1) {
+        const start = points[i];
+        const end = points[i + 1];
+        if (end <= start) continue;
+        segments.push({ index: i, start, end, text: source.slice(start, end) });
+    }
+    return segments;
+};
+
+const rangesToSnippets = (text = '', ranges = []) =>
+    [...new Set((ranges || [])
+        .map((r) => String(text || '').slice(r.start, r.end).replace(/\s+/g, ' ').trim())
+        .filter(Boolean))];
+
+const snippetKeywords = (snippets = []) =>
+    [...new Set((snippets || [])
+        .flatMap((s) => normalize(s).split(/[^a-z0-9'-]+/i))
+        .map((w) => w.trim())
+        .filter((w) => w.length >= 4))]
+        .slice(0, 12);
+
 function buildQuestion(step, module) {
     if (step?.customQuestion) return step.customQuestion;
     const chapter = module?.chapterTitle || module?.title || 'ce chapitre';
@@ -54,12 +102,41 @@ export default function LearningWorkspace({ module, user, onQuit }) {
     const [recordError, setRecordError] = useState('');
     const [saving, setSaving] = useState(false);
     const [gateHint, setGateHint] = useState('');
+    const [oralQueue, setOralQueue] = useState([]);
+    const [activeOral, setActiveOral] = useState(null);
+    const [oralAnswerText, setOralAnswerText] = useState('');
+    const [oralError, setOralError] = useState('');
 
     const sheetRef = useRef(null);
     const videoRef = useRef(null);
     const sheetStartedAt = useRef(Date.now());
     const speechRef = useRef(null);
+    const seenOralSeqRef = useRef(new Set());
+    const sequenceNodeRefs = useRef({});
     const currentStep = steps[stepIndex];
+    const sheetText = String(currentStep?.sheetText || '');
+    const sheetPinkRanges = useMemo(() => normalizeRanges(currentStep?.sheetPinkRanges || [], sheetText.length), [currentStep?.sheetPinkRanges, sheetText.length]);
+    const sheetZoneMarkers = useMemo(() => {
+        if (Array.isArray(currentStep?.sheetZoneMarkers) && currentStep.sheetZoneMarkers.length > 0) {
+            return normalizeMarkers(currentStep.sheetZoneMarkers, sheetText.length);
+        }
+        const legacyRanges = normalizeRanges(currentStep?.sheetZoneRanges || [], sheetText.length);
+        return normalizeMarkers(legacyRanges.map((r) => r.end), sheetText.length);
+    }, [currentStep?.sheetZoneMarkers, currentStep?.sheetZoneRanges, sheetText.length]);
+    const sheetSegments = useMemo(() => {
+        const segs = buildSegments(sheetText, sheetZoneMarkers);
+        return segs.map((seg) => {
+            const overlaps = sheetPinkRanges
+                .filter((r) => r.start < seg.end && r.end > seg.start)
+                .map((r) => ({ start: Math.max(seg.start, r.start), end: Math.min(seg.end, r.end) }));
+            const snippets = rangesToSnippets(sheetText, overlaps);
+            return {
+                ...seg,
+                snippets,
+                keywords: snippetKeywords(snippets)
+            };
+        });
+    }, [sheetText, sheetZoneMarkers, sheetPinkRanges]);
 
     useEffect(() => {
         sheetStartedAt.current = Date.now();
@@ -71,6 +148,12 @@ export default function LearningWorkspace({ module, user, onQuit }) {
         setVideoManualDone(false);
         setAnswerText('');
         setGateHint('');
+        setOralQueue([]);
+        setActiveOral(null);
+        setOralAnswerText('');
+        setOralError('');
+        seenOralSeqRef.current = new Set();
+        sequenceNodeRefs.current = {};
         if (speechRef.current) speechRef.current.cancel?.();
     }, [stepIndex]);
 
@@ -83,20 +166,80 @@ export default function LearningWorkspace({ module, user, onQuit }) {
             const max = Math.max(1, el.scrollHeight - el.clientHeight);
             if (max <= 2) {
                 setSheetScrollRatio(1);
-                return;
+            } else {
+                const ratio = Math.max(0, Math.min(1, el.scrollTop / max));
+                setSheetScrollRatio(ratio);
             }
-            const ratio = Math.max(0, Math.min(1, el.scrollTop / max));
-            setSheetScrollRatio(ratio);
+            if (!sheetSegments.length) return;
+            const containerRect = el.getBoundingClientRect();
+            const newlyPassed = [];
+            sheetSegments.forEach((seg) => {
+                if (seenOralSeqRef.current.has(seg.index)) return;
+                if (!seg.snippets.length) return;
+                const node = sequenceNodeRefs.current[seg.index];
+                if (!node) return;
+                const rect = node.getBoundingClientRect();
+                if (rect.bottom < containerRect.top + 2) {
+                    seenOralSeqRef.current.add(seg.index);
+                    newlyPassed.push(seg);
+                }
+            });
+            if (newlyPassed.length > 0) {
+                setOralQueue((prev) => {
+                    const existing = new Set((prev || []).map((s) => s.index));
+                    const toAdd = newlyPassed.filter((s) => !existing.has(s.index) && (!activeOral || activeOral.index !== s.index));
+                    return toAdd.length ? [...prev, ...toAdd] : prev;
+                });
+            }
         }, 250);
         return () => clearInterval(timer);
-    }, [currentStep]);
+    }, [currentStep, sheetSegments, activeOral]);
 
     const generatedQuestion = useMemo(() => buildQuestion(currentStep, module), [currentStep, module]);
+
+    useEffect(() => {
+        if (activeOral || oralQueue.length === 0) return;
+        const [first, ...rest] = oralQueue;
+        setActiveOral(first || null);
+        setOralQueue(rest);
+        setOralAnswerText('');
+        setOralError('');
+    }, [oralQueue, activeOral]);
+
+    useEffect(() => {
+        if (!activeOral || !window.speechSynthesis) return;
+        const base = activeOral.snippets[0]
+            ? `Explique avec tes mots ce passage: ${activeOral.snippets[0]}`
+            : `Explique ce que tu viens de lire dans cette séquence.`;
+        const utter = new SpeechSynthesisUtterance(base);
+        utter.lang = 'fr-FR';
+        utter.rate = 0.95;
+        window.speechSynthesis.cancel();
+        window.speechSynthesis.speak(utter);
+        return () => window.speechSynthesis.cancel();
+    }, [activeOral]);
+
+    const validateOralAnswer = () => {
+        if (!activeOral) return;
+        const txt = normalize(oralAnswerText);
+        if (txt.length < 12) {
+            setOralError("Réponse trop courte.");
+            return;
+        }
+        const keys = activeOral.keywords || [];
+        if (keys.length > 0 && !keys.some((k) => txt.includes(normalize(k)))) {
+            setOralError("Ajoute un élément clé du passage rose.");
+            return;
+        }
+        setOralError('');
+        setOralAnswerText('');
+        setActiveOral(null);
+    };
 
     const canValidateCurrent = useMemo(() => {
         if (!currentStep) return false;
         if (currentStep.type === 'sheet') {
-            return sheetScrollRatio >= 0.9;
+            return sheetScrollRatio >= 0.9 && !activeOral && oralQueue.length === 0;
         }
         if (currentStep.type === 'video') return videoUnlocked;
         if (currentStep.type === 'question') {
@@ -266,6 +409,30 @@ export default function LearningWorkspace({ module, user, onQuit }) {
         return () => el.removeEventListener('timeupdate', onTime);
     }, [currentStep, segmentEnd, directVideo]);
 
+    const renderSegmentWithPink = (segment) => {
+        const source = String(segment?.text || '');
+        const base = Number(segment?.start || 0);
+        if (!source) return null;
+        const localRanges = sheetPinkRanges
+            .filter((r) => r.start < segment.end && r.end > segment.start)
+            .map((r) => ({ start: Math.max(0, r.start - base), end: Math.min(source.length, r.end - base) }))
+            .filter((r) => r.end > r.start);
+        if (localRanges.length === 0) return source;
+        const cuts = [0, source.length, ...localRanges.flatMap((r) => [r.start, r.end])];
+        const points = [...new Set(cuts)].sort((a, b) => a - b);
+        const out = [];
+        for (let i = 0; i < points.length - 1; i += 1) {
+            const start = points[i];
+            const end = points[i + 1];
+            if (end <= start) continue;
+            const chunk = source.slice(start, end);
+            const inPink = localRanges.some((r) => start >= r.start && end <= r.end);
+            if (!inPink) out.push(<React.Fragment key={`t_${segment.index}_${start}`}>{chunk}</React.Fragment>);
+            else out.push(<mark key={`p_${segment.index}_${start}`} className="bg-pink-200 text-pink-900 rounded px-[2px]">{chunk}</mark>);
+        }
+        return out;
+    };
+
     return (
         <div className="learning-wrap">
             <div className="learning-top">
@@ -287,12 +454,31 @@ export default function LearningWorkspace({ module, user, onQuit }) {
                     <>
                         <div className="learning-hint">Lis la fiche, puis scrolle jusqu'en bas.</div>
                         <div className="learning-sheet" ref={sheetRef}>
-                            {currentStep.sheetUrl
-                                ? <iframe src={currentStep.sheetUrl} title="fiche" className="learning-iframe" />
+                            {sheetText
+                                ? (
+                                    <div className="learning-sheet-text">
+                                        {sheetSegments.map((seg, idx) => (
+                                            <React.Fragment key={`seg_${seg.index}`}>
+                                                <span
+                                                    ref={(node) => {
+                                                        if (node) sequenceNodeRefs.current[seg.index] = node;
+                                                    }}
+                                                    className="learning-segment"
+                                                >
+                                                    {renderSegmentWithPink(seg)}
+                                                </span>
+                                                {idx < sheetSegments.length - 1 && <span className="learning-zone-marker" aria-hidden="true" />}
+                                            </React.Fragment>
+                                        ))}
+                                    </div>
+                                )
+                                : currentStep.sheetUrl
+                                    ? <iframe src={currentStep.sheetUrl} title="fiche" className="learning-iframe" />
                                 : <div className="learning-missing">Aucune fiche configurée.</div>}
                         </div>
                         <div className="learning-meta">
                             <span>Scroll: {Math.round(sheetScrollRatio * 100)}%</span>
+                            {activeOral && <span className="text-red-600">Question orale en attente</span>}
                         </div>
                     </>
                 )}
@@ -381,6 +567,31 @@ export default function LearningWorkspace({ module, user, onQuit }) {
                 </button>
             </div>
             {gateHint && <div className="learning-error">{gateHint}</div>}
+            {activeOral && (
+                <div className="learning-oral-overlay">
+                    <div className="learning-oral-card">
+                        <div className="learning-question">🎤 Question orale</div>
+                        <div className="learning-hint">
+                            Explique la séquence sortie de l’écran en t’appuyant sur les passages roses.
+                        </div>
+                        {activeOral.snippets?.[0] && (
+                            <div className="learning-oral-focus">
+                                {activeOral.snippets[0]}
+                            </div>
+                        )}
+                        <textarea
+                            value={oralAnswerText}
+                            onChange={(e) => setOralAnswerText(e.target.value)}
+                            className="learning-answer"
+                            placeholder="Réponse orale / transcription..."
+                        />
+                        {oralError && <div className="learning-error">{oralError}</div>}
+                        <div className="learning-actions">
+                            <button className="learning-btn ghost" onClick={validateOralAnswer}>Valider réponse</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

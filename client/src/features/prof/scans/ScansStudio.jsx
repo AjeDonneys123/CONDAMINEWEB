@@ -321,7 +321,7 @@ export default function ScansStudio({ user, globalClass }) {
     const renderWorkspace = (session) => {
         const uploaded = view === 'sujets' ? (session.subjectUrls || []) : (session.copyUrls || []);
         return (
-            <div className="scan-workspace-inline animate-in">
+            <div className={`scan-workspace-inline animate-in view-${view}`}>
                 {loading && (
                     <div className="scan-loading-overlay">
                         <div className="scan-spinner"></div>

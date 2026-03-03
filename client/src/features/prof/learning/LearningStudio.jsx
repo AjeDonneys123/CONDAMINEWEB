@@ -86,6 +86,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     const [eraseMode, setEraseMode] = useState(false);
     const [autoHighlighting, setAutoHighlighting] = useState(false);
     const [keywordSelectionSpan, setKeywordSelectionSpan] = useState(null);
+    const [keywordActiveZoneIdx, setKeywordActiveZoneIdx] = useState(null);
     const videoEditorRef = useRef(null);
     const keywordSelectionRef = useRef(null);
     const teacherId = String(user?._id || user?.id || '').trim();
@@ -546,11 +547,42 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         if (step.type === 'sheet') return Array.isArray(step.sheetZoneRanges) ? step.sheetZoneRanges : [];
         return [];
     };
-    const applyRangesToStep = ({ responseRanges = null, zoneRanges = null } = {}) => {
+    const normalizeMarkers = (markers = [], textLen = 0) =>
+        [...new Set((markers || [])
+            .map((n) => Math.max(0, Math.min(textLen, Number(n))))
+            .filter((n) => Number.isFinite(n) && n > 0 && n < textLen))]
+            .sort((a, b) => a - b);
+    const markersToRanges = (markers = [], textLen = 0) => {
+        const cuts = [0, ...normalizeMarkers(markers, textLen), textLen];
+        const ranges = [];
+        for (let i = 0; i < cuts.length - 1; i += 1) {
+            ranges.push({ start: cuts[i], end: cuts[i + 1] });
+        }
+        return normalizeRanges(ranges, textLen);
+    };
+    const getCurrentZoneMarkers = () => {
+        if (!step) return [];
+        const textLen = String(keywordMaterialText || '').length;
+        if (step.type === 'question') {
+            if (Array.isArray(step.questionZoneMarkers)) return normalizeMarkers(step.questionZoneMarkers, textLen);
+            return normalizeMarkers((step.questionZoneRanges || []).map((r) => r?.end), textLen);
+        }
+        if (step.type === 'video') {
+            if (Array.isArray(step.videoZoneMarkers)) return normalizeMarkers(step.videoZoneMarkers, textLen);
+            return normalizeMarkers((step.videoZoneRanges || []).map((r) => r?.end), textLen);
+        }
+        if (step.type === 'sheet') {
+            if (Array.isArray(step.sheetZoneMarkers)) return normalizeMarkers(step.sheetZoneMarkers, textLen);
+            return normalizeMarkers((step.sheetZoneRanges || []).map((r) => r?.end), textLen);
+        }
+        return [];
+    };
+    const applyRangesToStep = ({ responseRanges = null, zoneRanges = null, zoneMarkers = null } = {}) => {
         if (!step) return;
         const source = String(keywordMaterialText || '');
         const finalResponseRanges = normalizeRanges(responseRanges ?? getCurrentResponseRanges(), source.length);
-        const finalZoneRanges = normalizeRanges(zoneRanges ?? getCurrentZoneRanges(), source.length);
+        const finalZoneMarkers = normalizeMarkers(zoneMarkers ?? getCurrentZoneMarkers(), source.length);
+        const finalZoneRanges = normalizeRanges(zoneRanges ?? markersToRanges(finalZoneMarkers, source.length), source.length);
         const snippets = rangesToSnippets(source, finalResponseRanges);
         const zoneSnippets = rangesToSnippets(source, finalZoneRanges);
         const words = snippets
@@ -562,6 +594,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             words.forEach((w) => keywordSet.add(w));
             updateStep(activeStep, {
                 questionPinkRanges: finalResponseRanges,
+                questionZoneMarkers: finalZoneMarkers,
                 questionZoneRanges: finalZoneRanges,
                 redHighlights: snippets,
                 zoneHighlights: zoneSnippets,
@@ -576,6 +609,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             words.forEach((w) => keywordSet.add(w));
             updateStep(activeStep, {
                 videoPinkRanges: finalResponseRanges,
+                videoZoneMarkers: finalZoneMarkers,
                 videoZoneRanges: finalZoneRanges,
                 videoPinkHighlights: snippets,
                 videoZoneHighlights: zoneSnippets,
@@ -589,6 +623,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             words.forEach((w) => keywordSet.add(w));
             updateStep(activeStep, {
                 sheetPinkRanges: finalResponseRanges,
+                sheetZoneMarkers: finalZoneMarkers,
                 sheetZoneRanges: finalZoneRanges,
                 sheetPinkHighlights: snippets,
                 sheetZoneHighlights: zoneSnippets,
@@ -613,23 +648,34 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         });
         return normalizeRanges(next, textLen);
     };
-    const highlightTextWithPink = (text = '', responseRanges = [], zoneRanges = []) => {
+    const getZoneBounds = (zoneIdx = 0, markers = [], textLen = 0) => {
+        const points = [0, ...normalizeMarkers(markers, textLen), textLen];
+        const idx = Math.max(0, Math.min(points.length - 2, Number(zoneIdx || 0)));
+        return { start: points[idx], end: points[idx + 1] };
+    };
+    const highlightTextWithPink = (text = '', responseRanges = [], zoneMarkers = [], activeZoneIdx = null) => {
         const source = String(text || '');
         const pink = normalizeRanges(responseRanges, source.length);
-        const zone = normalizeRanges(zoneRanges, source.length);
-        if (!source || (pink.length === 0 && zone.length === 0)) return source;
+        const markers = normalizeMarkers(zoneMarkers, source.length);
+        const zone = Number.isFinite(activeZoneIdx) ? getZoneBounds(activeZoneIdx, markers, source.length) : null;
+        if (!source || (pink.length === 0 && markers.length === 0 && !zone)) return source;
         const points = [0, source.length];
         pink.forEach((r) => { points.push(r.start, r.end); });
-        zone.forEach((r) => { points.push(r.start, r.end); });
+        markers.forEach((m) => { points.push(m); });
+        if (zone) points.push(zone.start, zone.end);
         const cuts = [...new Set(points)].sort((a, b) => a - b);
         const out = [];
+        const markerSet = new Set(markers);
         for (let i = 0; i < cuts.length - 1; i += 1) {
             const start = cuts[i];
             const end = cuts[i + 1];
+            if (markerSet.has(start)) {
+                out.push(<span key={`mk_${start}`} className="inline-block h-[1.1em] align-middle border-l-4 border-red-600 mx-[2px]" />);
+            }
             if (end <= start) continue;
             const chunk = source.slice(start, end);
             const inPink = pink.some((r) => start >= r.start && end <= r.end);
-            const inZone = zone.some((r) => start >= r.start && end <= r.end);
+            const inZone = !!zone && start >= zone.start && end <= zone.end;
             if (!inPink && !inZone) {
                 out.push(<React.Fragment key={`txt_${start}`}>{chunk}</React.Fragment>);
             } else if (inPink && inZone) {
@@ -637,9 +683,10 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             } else if (inPink) {
                 out.push(<mark key={`pink_${start}`} className="bg-pink-200 text-pink-900 rounded px-[2px]">{chunk}</mark>);
             } else {
-                out.push(<mark key={`zone_${start}`} className="bg-indigo-100 text-indigo-900 rounded px-[2px] border border-indigo-300">{chunk}</mark>);
+                out.push(<mark key={`zone_${start}`} className="bg-slate-200 text-slate-900 rounded px-[2px] border border-slate-300">{chunk}</mark>);
             }
         }
+        if (markerSet.has(source.length)) out.push(<span key="mk_end" className="inline-block h-[1.1em] align-middle border-l-4 border-red-600 mx-[2px]" />);
         return out;
     };
 
@@ -729,7 +776,6 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     };
 
     const captureKeywordSelection = () => {
-        if (!activeTarget) return;
         const root = keywordSelectionRef.current;
         const sel = window.getSelection ? window.getSelection() : null;
         if (!root || !sel || sel.rangeCount === 0) {
@@ -749,27 +795,6 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         const end = start + txt.length;
         const span = { start, end };
         setKeywordSelectionSpan(span);
-        if (eraseMode) {
-            const sourceLen = String(keywordMaterialText || '').length;
-            if (activeTarget === 'zone') {
-                const nextZone = subtractRange(getCurrentZoneRanges(), span, sourceLen);
-                applyRangesToStep({ zoneRanges: nextZone });
-            } else {
-                const nextResp = subtractRange(getCurrentResponseRanges(), span, sourceLen);
-                applyRangesToStep({ responseRanges: nextResp });
-            }
-            setKeywordSelectedText('');
-            setKeywordSelectionSpan(null);
-        } else {
-            const sourceLen = String(keywordMaterialText || '').length;
-            if (activeTarget === 'zone') {
-                const currentZone = normalizeRanges(getCurrentZoneRanges(), sourceLen);
-                applyRangesToStep({ zoneRanges: [...currentZone, span] });
-            } else {
-                const currentResp = normalizeRanges(getCurrentResponseRanges(), sourceLen);
-                applyRangesToStep({ responseRanges: [...currentResp, span] });
-            }
-        }
     };
 
     const getLiveSelectionInKeywordBox = () => {
@@ -789,13 +814,26 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         if (end <= start) return null;
         return { text: cleaned, span: { start, end } };
     };
+    const getLiveCursorPosInKeywordBox = () => {
+        const root = keywordSelectionRef.current;
+        const sel = window.getSelection ? window.getSelection() : null;
+        if (!root || !sel || sel.rangeCount === 0) return null;
+        const range = sel.getRangeAt(0);
+        if (!root.contains(range.commonAncestorContainer)) return null;
+        const pre = range.cloneRange();
+        pre.selectNodeContents(root);
+        pre.setEnd(range.startContainer, range.startOffset);
+        const sourceLen = String(keywordMaterialText || '').length;
+        const pos = pre.toString().length;
+        return Math.max(0, Math.min(sourceLen, pos));
+    };
 
     const applyCurrentSelectionForMode = (target = activeTarget, remove = eraseMode) => {
         const live = getLiveSelectionInKeywordBox();
-        const selectionText = live?.text || String(keywordSelectedText || '').trim();
         const selectionSpan = live?.span || keywordSelectionSpan;
-        if (!selectionText || !selectionSpan) return;
-        setKeywordSelectedText(selectionText);
+        if (!selectionSpan) return;
+        const selectionText = live?.text || String(keywordSelectedText || '').trim();
+        if (selectionText) setKeywordSelectedText(selectionText);
         setKeywordSelectionSpan(selectionSpan);
         const sourceLen = String(keywordMaterialText || '').length;
         if (remove) {
@@ -817,6 +855,21 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             const currentResp = normalizeRanges(getCurrentResponseRanges(), sourceLen);
             applyRangesToStep({ responseRanges: [...currentResp, selectionSpan] });
         }
+    };
+    const onCutAction = () => {
+        const sourceLen = String(keywordMaterialText || '').length;
+        const pos = getLiveCursorPosInKeywordBox();
+        if (!Number.isFinite(pos) || pos <= 0 || pos >= sourceLen) return;
+        const markers = normalizeMarkers(getCurrentZoneMarkers(), sourceLen);
+        if (markers.includes(pos)) return;
+        applyRangesToStep({ zoneMarkers: [...markers, pos] });
+    };
+    const onNextAction = () => {
+        const sourceLen = String(keywordMaterialText || '').length;
+        const markers = normalizeMarkers(getCurrentZoneMarkers(), sourceLen);
+        const zoneCount = markers.length + 1;
+        if (zoneCount <= 0) return;
+        setKeywordActiveZoneIdx((prev) => Number.isFinite(prev) ? ((prev + 1) % zoneCount) : 0);
     };
 
     const addSelectedPinkKeyword = (forcedSnippet = '') => {
@@ -1558,7 +1611,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                     <option key={src.id} value={src.id}>{src.label}</option>
                                 ))}
                             </select>
-                            <button type="button" className="v84-close-btn" onClick={() => { setActiveTarget('response'); setEraseMode(false); setKeywordSelectionSpan(null); setShowKeywordModal(false); }}>✕</button>
+                            <button type="button" className="v84-close-btn" onClick={() => { setActiveTarget('response'); setEraseMode(false); setKeywordSelectionSpan(null); setKeywordActiveZoneIdx(null); setShowKeywordModal(false); }}>✕</button>
                         </div>
                         <div className="grid grid-cols-2 gap-4 p-4 min-h-0 flex-1">
                             <div className="min-h-0 flex flex-col">
@@ -1577,14 +1630,21 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                 )}
                             </div>
                             <div className="min-h-0 flex flex-col">
-                                <div className="text-[11px] font-black uppercase text-slate-400 mb-2">Active “Réponses” ou “Zone”, puis surligne le passage</div>
+                                <div className="text-[11px] font-black uppercase text-slate-400 mb-2">Sélectionne puis clique “Réponses”. Clique “Cut” pour insérer une barre, “Next” pour naviguer entre sections.</div>
                                 <div
                                     ref={keywordSelectionRef}
                                     onMouseUp={captureKeywordSelection}
-                                    className="flex-1 rounded-xl border border-slate-200 bg-slate-50 p-4 text-[13px] leading-6 text-slate-700 overflow-auto whitespace-pre-wrap select-text"
+                                    onClick={(e) => e.currentTarget.focus()}
+                                    contentEditable
+                                    suppressContentEditableWarning
+                                    onBeforeInput={(e) => e.preventDefault()}
+                                    onInput={(e) => e.preventDefault()}
+                                    tabIndex={0}
+                                    style={{ caretColor: '#0f172a' }}
+                                    className="flex-1 rounded-xl border border-slate-200 bg-slate-50 p-4 text-[13px] leading-6 text-slate-700 overflow-auto whitespace-pre-wrap select-text focus:outline-none focus:ring-2 focus:ring-blue-300"
                                 >
                                     {keywordMaterialText
-                                        ? highlightTextWithPink(keywordMaterialText, getCurrentResponseRanges(), getCurrentZoneRanges())
+                                        ? highlightTextWithPink(keywordMaterialText, getCurrentResponseRanges(), getCurrentZoneMarkers(), keywordActiveZoneIdx)
                                         : 'Aucun texte pour le moment.'}
                                 </div>
                                 <div className="mt-3 p-3 rounded-xl bg-pink-50 border border-pink-200 text-pink-700 text-[12px] font-bold min-h-[44px]">
@@ -1597,9 +1657,11 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                         style={activeTarget === 'response'
                                             ? { border: '2px solid #ec4899', background: '#fff', color: '#be185d' }
                                             : { border: '2px solid transparent' }}
+                                        onMouseDown={(e) => { captureKeywordSelection(); e.preventDefault(); }}
                                         onClick={() => {
                                             setActiveTarget('response');
                                             setEraseMode(false);
+                                            setKeywordActiveZoneIdx(null);
                                             applyCurrentSelectionForMode('response', false);
                                         }}
                                     >
@@ -1608,16 +1670,20 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                     <button
                                         type="button"
                                         className="v84-res-btn upload"
-                                        style={activeTarget === 'zone'
-                                            ? { border: '2px solid #6366f1', background: '#fff', color: '#4338ca' }
-                                            : { border: '2px solid transparent' }}
-                                        onClick={() => {
-                                            setActiveTarget('zone');
-                                            setEraseMode(false);
-                                            applyCurrentSelectionForMode('zone', false);
-                                        }}
+                                        style={{ border: '2px solid #dc2626', background: '#fff', color: '#dc2626' }}
+                                        onMouseDown={(e) => { captureKeywordSelection(); e.preventDefault(); }}
+                                        onClick={onCutAction}
                                     >
-                                        Zone
+                                        Cut
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="v84-res-btn upload"
+                                        style={{ border: '2px solid #111827', background: '#fff', color: '#111827' }}
+                                        onMouseDown={(e) => e.preventDefault()}
+                                        onClick={onNextAction}
+                                    >
+                                        Next
                                     </button>
                                     <button
                                         type="button"
@@ -1625,6 +1691,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                         style={eraseMode
                                             ? { border: '2px solid #3b82f6', background: '#fff', color: '#1d4ed8' }
                                             : { border: '2px solid transparent' }}
+                                        onMouseDown={(e) => { captureKeywordSelection(); e.preventDefault(); }}
                                         onClick={() => {
                                             const next = !eraseMode;
                                             setEraseMode(next);
@@ -1655,6 +1722,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                             setActiveTarget('response');
                                             setEraseMode(false);
                                             setKeywordSelectionSpan(null);
+                                            setKeywordActiveZoneIdx(null);
                                             setShowKeywordModal(false);
                                         }}
                                     >

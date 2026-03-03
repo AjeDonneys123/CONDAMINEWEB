@@ -17,6 +17,25 @@ const normalizeVideoUrl = (url = '') => {
     }
 };
 
+const sanitizeRanges = (ranges = [], max = 500) => (Array.isArray(ranges)
+    ? ranges
+        .map((r) => ({ start: Math.max(0, Number(r?.start || 0)), end: Math.max(0, Number(r?.end || 0)) }))
+        .filter((r) => r.end > r.start)
+        .slice(0, max)
+    : []);
+
+const sanitizeMarkers = (markers = [], textLength = 0, max = 500) => {
+    const limit = Math.max(0, Number(textLength || 0));
+    return [...new Set((Array.isArray(markers) ? markers : [])
+        .map((m) => Math.max(0, Math.floor(Number(m || 0))))
+        .filter((m) => Number.isFinite(m) && m > 0 && (!limit || m < limit)))]
+        .sort((a, b) => a - b)
+        .slice(0, max);
+};
+
+const markersFromLegacyRanges = (ranges = [], textLength = 0, max = 500) =>
+    sanitizeMarkers(sanitizeRanges(ranges, max).map((r) => r.end), textLength, max);
+
 const sanitizeSteps = (steps = []) => {
     if (!Array.isArray(steps)) return [];
     return steps
@@ -29,22 +48,17 @@ const sanitizeSteps = (steps = []) => {
                 type
             };
             if (type === 'sheet') {
+                const sheetText = String(step?.sheetText || '').slice(0, 60000);
+                const sheetZoneRanges = sanitizeRanges(step?.sheetZoneRanges);
                 return {
                     ...base,
                     sheetUrl: String(step?.sheetUrl || '').trim(),
-                    sheetText: String(step?.sheetText || '').slice(0, 60000),
-                    sheetPinkRanges: Array.isArray(step?.sheetPinkRanges)
-                        ? step.sheetPinkRanges
-                            .map((r) => ({ start: Math.max(0, Number(r?.start || 0)), end: Math.max(0, Number(r?.end || 0)) }))
-                            .filter((r) => r.end > r.start)
-                            .slice(0, 500)
-                        : [],
-                    sheetZoneRanges: Array.isArray(step?.sheetZoneRanges)
-                        ? step.sheetZoneRanges
-                            .map((r) => ({ start: Math.max(0, Number(r?.start || 0)), end: Math.max(0, Number(r?.end || 0)) }))
-                            .filter((r) => r.end > r.start)
-                            .slice(0, 500)
-                        : [],
+                    sheetText,
+                    sheetPinkRanges: sanitizeRanges(step?.sheetPinkRanges),
+                    sheetZoneRanges,
+                    sheetZoneMarkers: sanitizeMarkers(step?.sheetZoneMarkers, sheetText.length).length > 0
+                        ? sanitizeMarkers(step?.sheetZoneMarkers, sheetText.length)
+                        : markersFromLegacyRanges(sheetZoneRanges, sheetText.length),
                     sheetPinkHighlights: Array.isArray(step?.sheetPinkHighlights)
                         ? step.sheetPinkHighlights.map(k => String(k || '').trim().toLowerCase()).filter(Boolean).slice(0, 60)
                         : [],
@@ -61,23 +75,18 @@ const sanitizeSteps = (steps = []) => {
                 const startSec = Math.max(0, Number(step?.startSec || step?.videoStartSec || 0));
                 const endRaw = Number(step?.endSec || step?.videoEndSec || 0);
                 const endSec = endRaw > startSec ? endRaw : 0;
+                const videoTranscript = String(step?.videoTranscript || '').slice(0, 25000);
+                const videoZoneRanges = sanitizeRanges(step?.videoZoneRanges);
                 return {
                     ...base,
                     videoUrl: String(step?.videoUrl || '').trim(),
                     thumbnailUrl: String(step?.thumbnailUrl || '').trim(),
-                    videoTranscript: String(step?.videoTranscript || '').slice(0, 25000),
-                    videoPinkRanges: Array.isArray(step?.videoPinkRanges)
-                        ? step.videoPinkRanges
-                            .map((r) => ({ start: Math.max(0, Number(r?.start || 0)), end: Math.max(0, Number(r?.end || 0)) }))
-                            .filter((r) => r.end > r.start)
-                            .slice(0, 500)
-                        : [],
-                    videoZoneRanges: Array.isArray(step?.videoZoneRanges)
-                        ? step.videoZoneRanges
-                            .map((r) => ({ start: Math.max(0, Number(r?.start || 0)), end: Math.max(0, Number(r?.end || 0)) }))
-                            .filter((r) => r.end > r.start)
-                            .slice(0, 500)
-                        : [],
+                    videoTranscript,
+                    videoPinkRanges: sanitizeRanges(step?.videoPinkRanges),
+                    videoZoneRanges,
+                    videoZoneMarkers: sanitizeMarkers(step?.videoZoneMarkers, videoTranscript.length).length > 0
+                        ? sanitizeMarkers(step?.videoZoneMarkers, videoTranscript.length)
+                        : markersFromLegacyRanges(videoZoneRanges, videoTranscript.length),
                     videoPinkHighlights: Array.isArray(step?.videoPinkHighlights)
                         ? step.videoPinkHighlights.map(k => String(k || '').trim().toLowerCase()).filter(Boolean).slice(0, 60)
                         : [],
@@ -92,6 +101,8 @@ const sanitizeSteps = (steps = []) => {
                     mustWatchToEnd: step?.mustWatchToEnd !== false
                 };
             }
+            const materialText = String(step?.materialText || '').slice(0, 60000);
+            const questionZoneRanges = sanitizeRanges(step?.questionZoneRanges);
             return {
                 ...base,
                 difficulty: ['easy', 'medium', 'hard'].includes(String(step?.difficulty || '').toLowerCase())
@@ -100,19 +111,12 @@ const sanitizeSteps = (steps = []) => {
                 customQuestion: String(step?.customQuestion || '').trim(),
                 sourceSheetUrl: String(step?.sourceSheetUrl || '').trim(),
                 materialSource: String(step?.materialSource || '').trim().slice(0, 80),
-                materialText: String(step?.materialText || '').slice(0, 60000),
-                questionPinkRanges: Array.isArray(step?.questionPinkRanges)
-                    ? step.questionPinkRanges
-                        .map((r) => ({ start: Math.max(0, Number(r?.start || 0)), end: Math.max(0, Number(r?.end || 0)) }))
-                        .filter((r) => r.end > r.start)
-                        .slice(0, 500)
-                    : [],
-                questionZoneRanges: Array.isArray(step?.questionZoneRanges)
-                    ? step.questionZoneRanges
-                        .map((r) => ({ start: Math.max(0, Number(r?.start || 0)), end: Math.max(0, Number(r?.end || 0)) }))
-                        .filter((r) => r.end > r.start)
-                        .slice(0, 500)
-                    : [],
+                materialText,
+                questionPinkRanges: sanitizeRanges(step?.questionPinkRanges),
+                questionZoneRanges,
+                questionZoneMarkers: sanitizeMarkers(step?.questionZoneMarkers, materialText.length).length > 0
+                    ? sanitizeMarkers(step?.questionZoneMarkers, materialText.length)
+                    : markersFromLegacyRanges(questionZoneRanges, materialText.length),
                 sheetAnnotations: Array.isArray(step?.sheetAnnotations)
                     ? step.sheetAnnotations
                         .map((a) => ({

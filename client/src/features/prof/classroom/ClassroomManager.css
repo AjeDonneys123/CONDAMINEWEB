@@ -27,6 +27,39 @@
 .cm-btn.purple { background: #8b5cf6; color: white; }
 .cm-btn.slate { background: #f1f5f9; color: #64748b; }
 .cm-btn.slate:hover { background: #e2e8f0; }
+.plan-finder-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+.plan-finder-input {
+    flex: 1;
+    min-width: 180px;
+    padding: 10px 12px;
+    border: 2px solid #cbd5e1;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 800;
+    color: #0f172a;
+    background: #fff;
+    outline: none;
+}
+.plan-finder-input:focus {
+    border-color: #1d4ed8;
+    box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.15);
+}
+.plan-finder-count {
+    flex: 0 0 auto;
+    padding: 8px 10px;
+    border-radius: 999px;
+    background: #fee2e2;
+    border: 1px solid #fecaca;
+    color: #991b1b;
+    font-size: 0.7rem;
+    font-weight: 900;
+    text-transform: uppercase;
+}
 
 /* GRID CONTAINER */
 .grid-container { 
@@ -53,6 +86,11 @@
 .student-card-drag { background: white; border-radius: 12px; padding: 2px; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 2px solid #f1f5f9; cursor: grab; user-select: none; position: relative; height: 100%; width: 100%; transition: transform 0.1s; overflow: hidden; }
 .student-card-drag:active { cursor: grabbing; transform: scale(1.05); z-index: 10; }
 .student-card-drag.swap-source { border-color: #1d4ed8; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25); }
+.student-card-drag.finder-hit {
+    border: 3px solid #dc2626;
+    background: #fff1f2;
+    box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.25);
+}
 .student-card-drag.has-note:not(.punished) { background: #fef9c3; border-color: #facc15; }
 .student-card-drag.punished { border-color: #ef4444; background: #fef2f2; }
 
@@ -125,6 +163,21 @@
     .classroom-wrapper { padding: 0 !important; margin: 0 !important; height: 100%; min-height: auto; overflow: hidden; }
     .cm-header { padding: 5px; margin-bottom: 0; background: white; border-bottom: 1px solid #e2e8f0; justify-content: space-between; gap: 6px; }
     .cm-title, .cm-toolbar { display: none; }
+    .plan-finder-row {
+        padding: 6px;
+        margin-bottom: 0;
+        background: #fff;
+        border-bottom: 1px solid #e2e8f0;
+    }
+    .plan-finder-input {
+        padding: 9px 10px;
+        border-radius: 10px;
+        font-size: 0.72rem;
+    }
+    .plan-finder-count {
+        font-size: 0.62rem;
+        padding: 6px 8px;
+    }
     .view-switcher { margin: 0; width: 100%; }
     .cm-swap-btn { padding: 8px 10px; font-size: 0.62rem; }
     .grid-container { padding: 0 !important; margin: 0 !important; background: #e2e8f0; width: 100% !important; align-items: stretch; }
@@ -133,6 +186,11 @@
     .grid-cell-wrapper { width: 100% !important; height: auto !important; aspect-ratio: 0.7; min-width: 0; min-height: 0; border-bottom: 1px solid #cbd5e1; border-right: 1px solid #cbd5e1; }
     .grid-cell-wrapper.has-separator { border-right: 2px solid #1e293b; padding: 0; margin: 0; }
     .student-card-drag { padding: 4px 2px; border-radius: 0; border: none; justify-content: space-evenly; gap: 0px; }
+    .student-card-drag.finder-hit {
+        border: 2px solid #dc2626 !important;
+        box-shadow: inset 0 0 0 1px rgba(220, 38, 38, 0.35);
+        background: #ffe4e6;
+    }
     .sc-avatar { font-size: 0.7rem; margin: 0; opacity: 0.6; line-height: 1; }
     .sc-name { font-size: 0.6rem; font-weight: 950; margin: 0; max-width: 100%; line-height: 1; white-space: normal; color: #0f172a; overflow: visible; }
     .sc-counters { display: flex !important; font-size: 0.55rem; gap: 2px; margin-top: 1px; }

@@ -74,6 +74,27 @@
     border: none;
 }
 
+.learning-sheet-text {
+    padding: 12px;
+    white-space: pre-wrap;
+    line-height: 1.6;
+    font-size: 14px;
+    color: #0f172a;
+}
+
+.learning-segment {
+    display: inline;
+}
+
+.learning-zone-marker {
+    display: inline-block;
+    width: 0;
+    height: 1.1em;
+    border-left: 2px solid #111;
+    margin: 0 4px;
+    vertical-align: middle;
+}
+
 .learning-video {
     width: 100%;
     max-height: 460px;
@@ -182,4 +203,34 @@
 .learning-footer {
     display: flex;
     justify-content: flex-end;
+}
+
+.learning-oral-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.58);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 12px;
+    z-index: 1200;
+}
+
+.learning-oral-card {
+    width: min(760px, 96vw);
+    background: #fff;
+    border-radius: 16px;
+    padding: 14px;
+    border: 1px solid #cbd5e1;
+}
+
+.learning-oral-focus {
+    margin: 8px 0;
+    padding: 8px 10px;
+    border: 1px solid #fbcfe8;
+    background: #fdf2f8;
+    color: #9d174d;
+    border-radius: 10px;
+    font-weight: 700;
+    font-size: 13px;
 }

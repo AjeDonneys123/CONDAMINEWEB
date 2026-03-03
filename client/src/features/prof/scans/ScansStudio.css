@@ -80,7 +80,17 @@
     overflow-x: auto;
     max-width: 52%;
 }
-.ws-title { font-weight: 950; color: #0f172a; text-transform: uppercase; font-size: 1.4rem; margin: 0; }
+.ws-title {
+    font-weight: 950;
+    color: #0f172a;
+    text-transform: uppercase;
+    font-size: 1.15rem;
+    line-height: 1.1;
+    margin: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
 .ws-save-btn { background: #22c55e; color: white; padding: 15px 30px; border-radius: 18px; font-weight: 950; border: none; cursor: pointer; }
 .workspace-content { padding: 8px 10px 14px; }
 .ia-menu-panel {
@@ -129,6 +139,9 @@
 .ws-title-toggle:hover .ws-title,
 .ws-title-toggle:hover .ws-subtitle {
     color: #334155;
+}
+.scan-workspace-inline.view-scan .ws-title {
+    font-size: 1rem;
 }
 
 /* CAMERA */
@@ -494,17 +507,13 @@
         min-width: 70px;
     }
     .ws-title {
-        font-size: 0.95rem;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        font-size: 0.9rem;
+        line-height: 1.1;
     }
-    .ws-subtitle {
-        display: block;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+    .scan-workspace-inline.view-scan .ws-title {
+        font-size: 0.82rem;
     }
+    .ws-subtitle { display: block; }
     .ws-save-btn {
         flex: 0 0 auto;
         padding: 7px 9px;
@@ -532,7 +541,8 @@
     .session-collapse-btn { width: 26px; height: 26px; font-size: 16px; }
     .workspace-header { gap: 4px; padding: 6px 8px; }
     .workspace-actions .act-btn { font-size: 7px; padding: 5px 6px; }
-    .ws-title { font-size: 0.82rem; }
+    .ws-title { font-size: 0.8rem; }
+    .scan-workspace-inline.view-scan .ws-title { font-size: 0.74rem; }
     .ws-subtitle { font-size: 0.66rem; }
     .ws-save-btn { font-size: 8px; padding: 6px 7px; }
     .capture-thumb {

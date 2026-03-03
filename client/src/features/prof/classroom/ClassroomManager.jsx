@@ -13,6 +13,7 @@ export default function ClassroomManager({ globalClassId, user }) {
     // UI STATES
     const [viewMode, setViewMode] = useState('PLAN');
     const [searchTerm, setSearchTerm] = useState("");
+    const [planFinder, setPlanFinder] = useState("");
     
     const [showNoteInput, setShowNoteInput] = useState(false);
     const [isEditingNickname, setIsEditingNickname] = useState(false);
@@ -109,6 +110,18 @@ export default function ClassroomManager({ globalClassId, user }) {
     };
 
     const getDisplayName = (stu) => String(stu?.nickname || '').trim() || String(stu?.firstName || '');
+    const normalizeText = (val) => String(val || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim();
+    const isPlanFinderMatch = (stu) => {
+        const term = normalizeText(planFinder);
+        if (!term) return false;
+        const fullName = `${stu?.firstName || ''} ${stu?.lastName || ''} ${getDisplayName(stu)}`;
+        return normalizeText(fullName).includes(term);
+    };
+    const planFinderCount = students.filter(isPlanFinderMatch).length;
 
     const handleOpenStudent = (stu) => {
         if (isSwapMode) {
@@ -209,7 +222,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                 cells.push(
                     <div key={`${x}-${y}`} className={`grid-cell-wrapper ${isOver ? 'drag-over' : ''} ${hasSep ? 'has-separator' : ''}`} style={{ gridColumn: x + 1, gridRow: y + 1 }} onDragOver={(e) => handleDragOver(e, x, y)} onDrop={(e) => handleDrop(e, x, y)} onClick={() => !isSwapMode && !student && swapSource && moveStudentTo(swapSource._id, x, y) && setSwapSource(null)}>
                         {student ? (
-                            <div className={`student-card-drag ${draggingId === student._id ? 'dragging' : ''} ${getMyStats(student).crosses >= 3 ? 'punished' : ''} ${student.myNote ? 'has-note' : ''} ${isSwapMode && String(swapSource?._id) === String(student._id) ? 'swap-source' : ''}`} draggable="true" onDragStart={(e) => handleDragStart(e, student._id)} onClick={(e) => { e.stopPropagation(); handleOpenStudent(student); }}>
+                            <div className={`student-card-drag ${draggingId === student._id ? 'dragging' : ''} ${getMyStats(student).crosses >= 3 ? 'punished' : ''} ${student.myNote ? 'has-note' : ''} ${isSwapMode && String(swapSource?._id) === String(student._id) ? 'swap-source' : ''} ${isPlanFinderMatch(student) ? 'finder-hit' : ''}`} draggable="true" onDragStart={(e) => handleDragStart(e, student._id)} onClick={(e) => { e.stopPropagation(); handleOpenStudent(student); }}>
                                 {getMyStats(student).crosses > 0 && <div className="sc-badge">⏳ {getMyStats(student).weeksToRedemption}</div>}
                                 {student.myNote && <div className="sc-note-badge">N</div>}
                                 {student.punishmentStatus && student.punishmentStatus !== 'NONE' && (<div className={`sc-punishment-badge ${isPunishmentLate(student) ? 'late' : 'pending'}`}>P</div>)}
@@ -285,6 +298,17 @@ export default function ClassroomManager({ globalClassId, user }) {
             
             {viewMode === 'PLAN' ? (
                 <>
+                    <div className="plan-finder-row">
+                        <input
+                            className="plan-finder-input"
+                            placeholder="🔎 Trouver un élève dans le plan..."
+                            value={planFinder}
+                            onChange={(e) => setPlanFinder(e.target.value)}
+                        />
+                        <span className="plan-finder-count">
+                            {planFinder.trim() ? `${planFinderCount} trouvé(s)` : `${students.length} élèves`}
+                        </span>
+                    </div>
                     <div className="cm-toolbar hidden md:flex">
                         <button className="cm-btn purple" onClick={() => fileInputRef.current.click()}>🔮 IMPORT IA</button>
                         <div className="w-px h-6 bg-slate-200 mx-2"></div>
