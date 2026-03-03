@@ -677,7 +677,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             const inPink = pink.some((r) => start >= r.start && end <= r.end);
             const inZone = !!zone && start >= zone.start && end <= zone.end;
             if (!inPink && !inZone) {
-                out.push(<React.Fragment key={`txt_${start}`}>{chunk}</React.Fragment>);
+                out.push(<span key={`txt_${start}`}>{chunk}</span>);
             } else if (inPink && inZone) {
                 out.push(<mark key={`both_${start}`} className="bg-fuchsia-200 text-fuchsia-900 rounded px-[2px] border border-indigo-300">{chunk}</mark>);
             } else if (inPink) {
@@ -826,6 +826,29 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         const sourceLen = String(keywordMaterialText || '').length;
         const pos = pre.toString().length;
         return Math.max(0, Math.min(sourceLen, pos));
+    };
+    const removeMarkerAtCursor = () => {
+        const sourceLen = String(keywordMaterialText || '').length;
+        const pos = getLiveCursorPosInKeywordBox();
+        if (!Number.isFinite(pos)) return false;
+        const markers = normalizeMarkers(getCurrentZoneMarkers(), sourceLen);
+        if (markers.length === 0) return false;
+        let target = markers.find((m) => m === pos);
+        if (!Number.isFinite(target)) {
+            target = markers.find((m) => Math.abs(m - pos) <= 1);
+        }
+        if (!Number.isFinite(target)) return false;
+        const next = markers.filter((m) => m !== target);
+        applyRangesToStep({ zoneMarkers: next });
+        return true;
+    };
+    const handleKeywordEditorKeyDown = (e) => {
+        const key = String(e.key || '').toLowerCase();
+        if (key !== 'delete' && key !== 'backspace') return;
+        if (removeMarkerAtCursor()) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
     };
 
     const applyCurrentSelectionForMode = (target = activeTarget, remove = eraseMode) => {
@@ -1635,6 +1658,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                     ref={keywordSelectionRef}
                                     onMouseUp={captureKeywordSelection}
                                     onClick={(e) => e.currentTarget.focus()}
+                                    onKeyDown={handleKeywordEditorKeyDown}
                                     contentEditable
                                     suppressContentEditableWarning
                                     onBeforeInput={(e) => e.preventDefault()}
