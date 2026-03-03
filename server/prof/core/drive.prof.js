@@ -63,6 +63,27 @@ const ProfDrive = {
         }
     },
 
+    getFileResponse: async (fileId, range = '') => {
+        if (!oauth2Client) throw new Error("Drive non connecté");
+        try {
+            const drive = google.drive({ version: 'v3', auth: oauth2Client });
+            const opts = { responseType: 'stream', validateStatus: () => true };
+            if (range) opts.headers = { Range: range };
+            const res = await drive.files.get(
+                { fileId: fileId, alt: 'media' },
+                opts
+            );
+            return {
+                status: Number(res.status || 200),
+                headers: res.headers || {},
+                stream: res.data
+            };
+        } catch (e) {
+            console.error(`❌ Drive Stream Response Error [${fileId}]:`, e.message);
+            throw e;
+        }
+    },
+
     deleteFile: async (fileId) => {
         if (!oauth2Client) throw new Error("Drive non connecté");
         if (!fileId) throw new Error("fileId manquant");

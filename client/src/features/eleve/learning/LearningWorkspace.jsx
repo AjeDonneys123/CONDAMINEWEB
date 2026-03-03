@@ -56,6 +56,7 @@ export default function LearningWorkspace({ module, user, onQuit }) {
     const [gateHint, setGateHint] = useState('');
 
     const sheetRef = useRef(null);
+    const videoRef = useRef(null);
     const sheetStartedAt = useRef(Date.now());
     const speechRef = useRef(null);
     const currentStep = steps[stepIndex];
@@ -220,8 +221,50 @@ export default function LearningWorkspace({ module, user, onQuit }) {
 
     const progressPct = steps.length > 0 ? Math.round(((stepIndex + 1) / steps.length) * 100) : 0;
     const videoUrlResolved = currentStep?.type === 'video' ? resolveDriveAssetUrl(currentStep.videoUrl || '') : '';
+    const segmentStart = Math.max(0, Number(currentStep?.startSec || currentStep?.videoStartSec || 0));
+    const segmentEnd = Math.max(0, Number(currentStep?.endSec || currentStep?.videoEndSec || 0));
     const directVideo = isProbablyDirectVideo(videoUrlResolved);
-    const embedVideoUrl = toEmbedUrl(videoUrlResolved);
+    const withSegmentParams = (baseUrl) => {
+        if (!baseUrl) return '';
+        try {
+            const u = new URL(baseUrl, window.location.origin);
+            if (segmentStart > 0) u.searchParams.set('start', String(Math.floor(segmentStart)));
+            if (segmentEnd > 0 && segmentEnd > segmentStart) u.searchParams.set('end', String(Math.floor(segmentEnd)));
+            if (u.hostname.includes('youtube.com')) u.searchParams.set('rel', '0');
+            return u.toString();
+        } catch (_) {
+            return baseUrl;
+        }
+    };
+    const embedVideoUrl = withSegmentParams(toEmbedUrl(videoUrlResolved));
+
+    useEffect(() => {
+        if (currentStep?.type !== 'video') return;
+        const el = videoRef.current;
+        if (!el || !directVideo) return;
+        const onLoaded = () => {
+            if (segmentStart > 0) {
+                try { el.currentTime = segmentStart; } catch (_) {}
+            }
+        };
+        el.addEventListener('loadedmetadata', onLoaded);
+        return () => el.removeEventListener('loadedmetadata', onLoaded);
+    }, [currentStep, segmentStart, directVideo]);
+
+    useEffect(() => {
+        if (currentStep?.type !== 'video') return;
+        const el = videoRef.current;
+        if (!el || !directVideo) return;
+        const onTime = () => {
+            if (segmentEnd > 0 && el.currentTime >= segmentEnd) {
+                try { el.pause(); } catch (_) {}
+                setVideoEnded(true);
+                setVideoUnlocked(true);
+            }
+        };
+        el.addEventListener('timeupdate', onTime);
+        return () => el.removeEventListener('timeupdate', onTime);
+    }, [currentStep, segmentEnd, directVideo]);
 
     return (
         <div className="learning-wrap">
@@ -257,10 +300,16 @@ export default function LearningWorkspace({ module, user, onQuit }) {
                 {currentStep.type === 'video' && (
                     <>
                         <div className="learning-hint">Regarde la vidéo en entier pour débloquer l'étape suivante.</div>
+                        {(segmentStart > 0 || segmentEnd > 0) && (
+                            <div className="learning-meta">
+                                <span>Segment: {segmentStart}s {segmentEnd > 0 ? `→ ${segmentEnd}s` : '→ fin'}</span>
+                            </div>
+                        )}
                         {videoUrlResolved ? (
                             directVideo && !videoRenderError ? (
                             <video
                                 key={videoUrlResolved}
+                                ref={videoRef}
                                 src={videoUrlResolved}
                                 controls
                                 className="learning-video"

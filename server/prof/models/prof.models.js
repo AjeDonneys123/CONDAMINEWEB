@@ -147,6 +147,17 @@ const Models = {
         date: { type: Date, default: Date.now }
     }),
 
+    VideoSegment: getModel('VideoSegment', {
+        teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher', index: true },
+        originalUrl: { type: String, default: '' },
+        normalizedUrl: { type: String, index: true },
+        label: { type: String, default: '' },
+        transcript: { type: String, default: '' },
+        startSec: { type: Number, default: 0 },
+        endSec: { type: Number, default: 0 },
+        order: { type: Number, default: 1 }
+    }),
+
     ScanSession: getModel('ScanSession', {
         title: String, teacherId: String, chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter' },
         subjectUrls: [String], copyUrls: [String], corrections: Array,

@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import './GameStudio.css';
 import { api } from '../../../services/api';
 import StudioDistributionSidebar from '../components/StudioDistributionSidebar';
+import { applySegmentToUrl, normalizeVideoUrl } from '../../../utils/videoSegments';
 
 export default function GameStudio({ initialData, chapters, user, targetSection, targetLevel, onClose, allStudents: propStudents, allClasses: propClasses }) {
     
@@ -33,10 +34,13 @@ export default function GameStudio({ initialData, chapters, user, targetSection,
     const [aiTopic, setAiTopic] = useState('');
     const [aiCount, setAiCount] = useState(5);
     const [aiGenerating, setAiGenerating] = useState(false);
+    const [segmentCache, setSegmentCache] = useState({});
+    const [selectedSegmentBySlot, setSelectedSegmentBySlot] = useState({});
     
     const fileInputRef = useRef(null);
     const assetInputRef = useRef(null);
     const [uploadTarget, setUploadTarget] = useState(null); // -1 = Global, 0+ = Level Index
+    const teacherId = String(user?._id || user?.id || '').trim();
 
     // CHARGEMENT DE SECOURS SI PROPS MANQUANTES
     useEffect(() => {
@@ -189,8 +193,74 @@ export default function GameStudio({ initialData, chapters, user, targetSection,
 
     const handleUploadAsset = async (e) => { const file = e.target.files[0]; if (!file || uploadTarget === null) return; setLoading(true); const fd = new FormData(); fd.append('file', file); try { const res = await fetch('/api/games/upload-asset', { method: 'POST', body: fd }); const data = await res.json(); if (data.url) { setFormData(prev => { const next = { ...prev }; if (uploadTarget === -1) next.globalIntro = { ...next.globalIntro, sheetUrl: data.url }; else next.levels[uploadTarget].intro = { ...next.levels[uploadTarget].intro, sheetUrl: data.url }; return next; }); } } catch(err) { alert("Erreur upload"); } setLoading(false); e.target.value = null; };
     const handleRemoveAsset = (idx) => { setFormData(prev => { const next = { ...prev }; if (idx === -1) next.globalIntro.sheetUrl = ""; else next.levels[idx].intro.sheetUrl = ""; return next; }); };
-    const handleUpdateAssetVideo = (idx, url) => { setFormData(prev => { const next = { ...prev }; if (idx === -1) next.globalIntro.videoUrl = url; else next.levels[idx].intro.videoUrl = url; return next; }); };
+    const handleUpdateAssetVideo = (idx, url) => {
+        setFormData(prev => {
+            const next = { ...prev };
+            if (idx === -1) next.globalIntro.videoUrl = url;
+            else next.levels[idx].intro.videoUrl = url;
+            return next;
+        });
+        const slot = idx === -1 ? 'global' : `level_${idx}`;
+        setSelectedSegmentBySlot(prev => ({ ...prev, [slot]: '' }));
+    };
     const handleOpenSheet = (url) => { window.open(url, '_blank'); };
+
+    const fetchSegmentsForUrl = async (url = '') => {
+        const norm = normalizeVideoUrl(url || '');
+        if (!teacherId || !norm) return;
+        if (segmentCache[norm]) return;
+        try {
+            const res = await fetch(`/api/learning/video-segments?teacherId=${encodeURIComponent(teacherId)}&url=${encodeURIComponent(norm)}`);
+            const list = res.ok ? await res.json() : [];
+            setSegmentCache(prev => ({ ...prev, [norm]: Array.isArray(list) ? list : [] }));
+        } catch (_) {
+            setSegmentCache(prev => ({ ...prev, [norm]: [] }));
+        }
+    };
+
+    useEffect(() => {
+        const urls = [];
+        if (formData?.globalIntro?.videoUrl) urls.push(formData.globalIntro.videoUrl);
+        (formData?.levels || []).forEach((lvl) => {
+            if (lvl?.intro?.videoUrl) urls.push(lvl.intro.videoUrl);
+        });
+        const unique = [...new Set(urls.map((u) => normalizeVideoUrl(u)).filter(Boolean))];
+        unique.forEach((u) => fetchSegmentsForUrl(u));
+    }, [formData?.globalIntro?.videoUrl, formData?.levels, teacherId]);
+
+    const renderSegmentButtons = (url, idx) => {
+        const norm = normalizeVideoUrl(url || '');
+        const list = segmentCache[norm] || [];
+        if (!list.length) return null;
+        const slot = idx === -1 ? 'global' : `level_${idx}`;
+        const selectedId = selectedSegmentBySlot[slot] || '';
+        return (
+            <div className="mt-2 max-w-[340px] bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+                <div className="text-[9px] font-black uppercase text-slate-400 mb-1">Séquence vidéo</div>
+                <select
+                    className="w-full bg-transparent font-black text-[12px] text-slate-700 outline-none"
+                    value={selectedId}
+                    onChange={(e) => {
+                        const sid = String(e.target.value || '');
+                        const seg = list.find((s) => String(s._id || s.id || '') === sid);
+                        if (!seg) return;
+                        handleUpdateAssetVideo(idx, applySegmentToUrl(url, seg));
+                        setSelectedSegmentBySlot(prev => ({ ...prev, [slot]: sid }));
+                    }}
+                >
+                    <option value="">Choisir une séquence</option>
+                    {list.map((seg, i) => {
+                        const sid = String(seg._id || seg.id || '');
+                        return (
+                            <option key={sid || i} value={sid}>
+                                {seg.label || `Séquence ${i + 1}`}
+                            </option>
+                        );
+                    })}
+                </select>
+            </div>
+        );
+    };
     
     // --- LOGIQUE IA ---
     const handleGenerateAI = async (mode = 'manual') => {
@@ -334,7 +404,10 @@ export default function GameStudio({ initialData, chapters, user, targetSection,
                                 {formData.globalIntro.sheetUrl ? (
                                     <div className="v84-res-badge" onClick={() => handleOpenSheet(formData.globalIntro.sheetUrl)}>📄 FICHE PRÊTE <span className="v84-res-remove" onClick={(e) => { e.stopPropagation(); handleRemoveAsset(-1); }}>✕</span></div>
                                 ) : ( <button className="v84-res-btn upload" onClick={() => { setUploadTarget(-1); assetInputRef.current.click(); }}>📤 AJOUTER FICHE</button> )}
-                                <input className="v84-res-input" placeholder="Lien Vidéo..." value={formData.globalIntro.videoUrl} onChange={e => handleUpdateAssetVideo(-1, e.target.value)} />
+                                <div className="flex-1">
+                                    <input className="v84-res-input" placeholder="Lien Vidéo..." value={formData.globalIntro.videoUrl} onChange={e => handleUpdateAssetVideo(-1, e.target.value)} />
+                                    {renderSegmentButtons(formData.globalIntro.videoUrl, -1)}
+                                </div>
                             </div>
                         </div>
                     )}
@@ -345,7 +418,10 @@ export default function GameStudio({ initialData, chapters, user, targetSection,
                                 {currentLevel.intro?.sheetUrl ? (
                                     <div className="v84-res-badge" onClick={() => handleOpenSheet(currentLevel.intro.sheetUrl)}>📄 FICHE NIVEAU <span className="v84-res-remove" onClick={(e) => { e.stopPropagation(); handleRemoveAsset(activeLevelIdx); }}>✕</span></div>
                                 ) : ( <button className="v84-res-btn upload" onClick={() => { setUploadTarget(activeLevelIdx); assetInputRef.current.click(); }}>📤 FICHE NIVEAU</button> )}
-                                <input className="v84-res-input" placeholder="Vidéo..." value={currentLevel.intro?.videoUrl || ""} onChange={e => handleUpdateAssetVideo(activeLevelIdx, e.target.value)} />
+                                <div className="flex-1">
+                                    <input className="v84-res-input" placeholder="Vidéo..." value={currentLevel.intro?.videoUrl || ""} onChange={e => handleUpdateAssetVideo(activeLevelIdx, e.target.value)} />
+                                    {renderSegmentButtons(currentLevel.intro?.videoUrl || "", activeLevelIdx)}
+                                </div>
                             </div>
                         </div>
                     )}

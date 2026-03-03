@@ -37,9 +37,20 @@ app.get(['/api/proxy/:id', '/api/structure/proxy/:id', '/api/prof/structure/prox
         if (!fileId || fileId === 'undefined') {
             return res.status(404).json({ error: "Drive fileId missing" });
         }
-        const stream = await ProfDrive.getFileStream(fileId);
+        const range = String(req.headers.range || '').trim();
+        const upstream = await ProfDrive.getFileResponse(fileId, range);
+        const status = upstream.status >= 200 && upstream.status < 600 ? upstream.status : (range ? 206 : 200);
+
+        // Forward key streaming headers so HTML5 video can seek.
+        const h = upstream.headers || {};
+        if (h['content-type']) res.setHeader('Content-Type', h['content-type']);
+        if (h['content-length']) res.setHeader('Content-Length', h['content-length']);
+        if (h['content-range']) res.setHeader('Content-Range', h['content-range']);
+        if (h['accept-ranges']) res.setHeader('Accept-Ranges', h['accept-ranges']);
+        else res.setHeader('Accept-Ranges', 'bytes');
         res.setHeader('Access-Control-Allow-Origin', '*');
-        stream.pipe(res);
+        res.status(status);
+        upstream.stream.pipe(res);
     } catch (e) {
         const status = e?.response?.status || e?.code || null;
         console.error(`❌ [DRIVE PROXY] fileId=${req.params.id} status=${status || 'unknown'} msg=${e.message}`);
