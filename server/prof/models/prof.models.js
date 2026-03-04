@@ -159,6 +159,7 @@ const Models = {
         presentations: {
             type: [{
                 studentId: mongoose.Schema.Types.ObjectId,
+                presentationTitle: { type: String, default: '' },
                 canvasUrl: { type: String, default: '' },
                 slidesText: { type: String, default: '' },
                 recordingUrl: { type: String, default: '' },

@@ -125,11 +125,31 @@ router.get('/list/:studentId', async (req, res) => {
     }
 });
 
+router.get('/title-suggestions/:exposeId', async (req, res) => {
+    try {
+        const Expose = mongoose.model('Expose');
+        const exposeId = String(req.params.exposeId || '').trim();
+        const q = String(req.query?.q || '').trim().toLowerCase();
+        if (!exposeId || !mongoose.Types.ObjectId.isValid(exposeId)) return res.json([]);
+        const row = await Expose.findById(exposeId, 'presentations').lean();
+        if (!row) return res.json([]);
+        const titles = [...new Set((row.presentations || [])
+            .map((p) => String(p?.presentationTitle || '').trim())
+            .filter(Boolean))]
+            .filter((t) => !q || t.toLowerCase().includes(q))
+            .slice(0, 30);
+        res.json(titles);
+    } catch (e) {
+        res.status(500).json([]);
+    }
+});
+
 router.post('/submit', upload.single('audio'), async (req, res) => {
     try {
         const Expose = mongoose.model('Expose');
         const exposeId = String(req.body?.exposeId || '').trim();
         const studentId = String(req.body?.studentId || '').trim();
+        const presentationTitle = String(req.body?.presentationTitle || '').trim().slice(0, 140);
         const canvasUrl = String(req.body?.canvasUrl || '').trim();
         const slidesText = String(req.body?.slidesText || '').trim().slice(0, 400);
         const recordingDurationSec = Math.max(0, Number(req.body?.recordingDurationSec || 0));
@@ -159,6 +179,7 @@ router.post('/submit', upload.single('audio'), async (req, res) => {
         const previous = idx >= 0 ? entries[idx] : null;
         const nextEntry = {
             studentId,
+            presentationTitle: presentationTitle || String(previous?.presentationTitle || ''),
             canvasUrl: canvasUrl || String(previous?.canvasUrl || ''),
             slidesText: slidesText || String(previous?.slidesText || ''),
             recordingUrl: recordingUrl || String(previous?.recordingUrl || ''),

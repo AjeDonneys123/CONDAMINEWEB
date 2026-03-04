@@ -37,6 +37,8 @@ const toEmbeddableCanvasUrl = (raw = '') => {
 
 export default function ExposeWorkspace({ expose, user, onQuit }) {
     const existing = expose?.studentSubmission || {};
+    const [presentationTitle, setPresentationTitle] = useState(String(existing.presentationTitle || ''));
+    const [titleSuggestions, setTitleSuggestions] = useState([]);
     const [canvasUrl, setCanvasUrl] = useState(String(existing.canvasUrl || ''));
     const [slidesText, setSlidesText] = useState(String(existing.slidesText || ''));
     const [recordingDurationSec, setRecordingDurationSec] = useState(Number(existing.recordingDurationSec || 0));
@@ -45,6 +47,7 @@ export default function ExposeWorkspace({ expose, user, onQuit }) {
     const [recording, setRecording] = useState(false);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
+    const [presentationClosed, setPresentationClosed] = useState(Boolean(existing?.updatedAt));
 
     const mediaRecorderRef = useRef(null);
     const streamRef = useRef(null);
@@ -66,6 +69,22 @@ export default function ExposeWorkspace({ expose, user, onQuit }) {
     }, [audioBlob, audioUrl]);
 
     const iframeUrl = useMemo(() => toEmbeddableCanvasUrl(canvasUrl), [canvasUrl]);
+
+    useEffect(() => {
+        const exposeId = String(expose?._id || '').trim();
+        if (!exposeId) return;
+        const run = async () => {
+            try {
+                const q = encodeURIComponent(String(presentationTitle || '').trim());
+                const res = await fetch(`/api/eleve/exposes/title-suggestions/${encodeURIComponent(exposeId)}?q=${q}`);
+                const data = res.ok ? await res.json() : [];
+                setTitleSuggestions(Array.isArray(data) ? data : []);
+            } catch (_) {
+                setTitleSuggestions([]);
+            }
+        };
+        run();
+    }, [expose?._id, presentationTitle]);
 
     const startRecording = async () => {
         setError('');
@@ -124,6 +143,7 @@ export default function ExposeWorkspace({ expose, user, onQuit }) {
 
     const handleSave = async () => {
         setError('');
+        if (!presentationTitle.trim()) return setError('Titre de présentation requis.');
         if (!canvasUrl.trim()) return setError('Lien Canvas requis.');
         if (!slidesText.trim()) return setError('Indique les slides présentés.');
         setSaving(true);
@@ -131,6 +151,7 @@ export default function ExposeWorkspace({ expose, user, onQuit }) {
             const fd = new FormData();
             fd.append('exposeId', String(expose?._id || ''));
             fd.append('studentId', String(user?._id || user?.id || ''));
+            fd.append('presentationTitle', presentationTitle.trim());
             fd.append('canvasUrl', canvasUrl.trim());
             fd.append('slidesText', slidesText.trim());
             fd.append('recordingDurationSec', String(recordingDurationSec || 0));
@@ -140,6 +161,7 @@ export default function ExposeWorkspace({ expose, user, onQuit }) {
             if (!res.ok || !data?.ok) throw new Error(data?.error || 'Échec sauvegarde');
             if (data?.submission?.recordingUrl) setAudioUrl(data.submission.recordingUrl);
             if (data?.warning) setError(data.warning);
+            setPresentationClosed(true);
         } catch (e) {
             setError(e.message || 'Échec sauvegarde.');
         } finally {
@@ -159,6 +181,18 @@ export default function ExposeWorkspace({ expose, user, onQuit }) {
 
             <div className="expose-grid">
                 <div className="expose-left">
+                    <label>Titre de la présentation</label>
+                    <input
+                        value={presentationTitle}
+                        onChange={(e) => setPresentationTitle(e.target.value)}
+                        placeholder="Ex: Dubaï - démographie"
+                        list="expose-title-suggestions"
+                    />
+                    <datalist id="expose-title-suggestions">
+                        {titleSuggestions.map((t) => (
+                            <option key={t} value={t} />
+                        ))}
+                    </datalist>
                     <label>Lien Canvas</label>
                     <input
                         value={canvasUrl}
@@ -192,6 +226,20 @@ export default function ExposeWorkspace({ expose, user, onQuit }) {
                 </div>
 
                 <div className="expose-right">
+                    {presentationClosed ? (
+                        <div className="h-full min-h-[70vh] flex items-center justify-center p-6">
+                            <div className="w-full max-w-xl rounded-2xl border border-emerald-200 bg-emerald-50 p-6 text-center">
+                                <div className="text-lg font-black text-emerald-700 uppercase mb-2">Présentation enregistrée</div>
+                                <div className="text-sm font-bold text-slate-600 mb-5">
+                                    Tu peux la réouvrir ici pour modifier ton lien, tes slides ou ton audio.
+                                </div>
+                                <button className="learning-btn" onClick={() => setPresentationClosed(false)}>
+                                    Réouvrir et modifier
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <>
                     {iframeUrl && (
                         <div className="px-3 pt-3">
                             <a
@@ -213,6 +261,8 @@ export default function ExposeWorkspace({ expose, user, onQuit }) {
                         />
                     ) : (
                         <div className="learning-missing">Colle un lien Canvas pour ouvrir l'iframe.</div>
+                    )}
+                        </>
                     )}
                 </div>
             </div>
