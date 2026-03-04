@@ -111,3 +111,10 @@
   opacity: .5;
   cursor: not-allowed;
 }
+
+@media (max-width: 900px) {
+  .bug-fab,
+  .bug-modal-overlay {
+    display: none !important;
+  }
+}

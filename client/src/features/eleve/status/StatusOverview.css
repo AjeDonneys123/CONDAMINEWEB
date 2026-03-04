@@ -80,3 +80,29 @@
   font-weight: 800;
   color: #64748b;
 }
+
+@media (max-width: 700px) {
+  .status-page {
+    padding: 0 4px;
+  }
+
+  .status-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .status-card {
+    border-radius: 12px;
+    padding: 10px;
+  }
+
+  .status-title {
+    font-size: 12px;
+  }
+
+  .status-row .label,
+  .status-row .value,
+  .status-todo {
+    font-size: 10px;
+  }
+}

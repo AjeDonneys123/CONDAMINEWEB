@@ -20,11 +20,11 @@ export default function MistakesBook({ user }) {
   }, [user?._id, user?.id]);
 
   return (
-    <div className="bg-white p-8 rounded-[40px] shadow-sm animate-in">
-      <h2 className="text-2xl font-black mb-6">Mon Carnet d'Orthographe ✒️</h2>
+    <div className="bg-white p-4 md:p-8 rounded-[18px] md:rounded-[40px] shadow-sm animate-in">
+      <h2 className="text-lg md:text-2xl font-black mb-4 md:mb-6">Mon Carnet d'Orthographe ✒️</h2>
       <div className="space-y-3">
         {mistakes.map((m, i) => (
-            <div key={i} className="p-4 bg-slate-50 rounded-2xl flex gap-4">
+            <div key={i} className="p-3 md:p-4 bg-slate-50 rounded-xl md:rounded-2xl flex gap-3 md:gap-4 text-sm md:text-base">
                 <span className="text-red-500 line-through font-bold">{m.wrong}</span>
                 <span>➔</span>
                 <span className="text-green-600 font-black">{m.correct}</span>

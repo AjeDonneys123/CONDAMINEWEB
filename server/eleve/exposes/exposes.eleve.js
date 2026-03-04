@@ -8,6 +8,28 @@ const ProfDrive = require('../../prof/core/drive.prof');
 
 const upload = multer({ dest: path.join(process.cwd(), 'public', 'uploads', 'temp') });
 
+function normalizeCanvasKey(raw = '') {
+    const txt = String(raw || '').trim();
+    if (!txt) return '';
+    const normalized = txt
+        .replace(/^https?:\/\/canvas\.com/i, 'https://www.canva.com')
+        .replace(/^https?:\/\/www\.canvas\.com/i, 'https://www.canva.com');
+    try {
+        const u = new URL(normalized);
+        const host = String(u.hostname || '').toLowerCase();
+        if (!host.includes('canva.com')) return normalized.toLowerCase();
+        const parts = u.pathname.split('/').filter(Boolean);
+        if (parts[0] === 'design' && parts[1]) {
+            const id = parts[1];
+            const token = parts[2] || '';
+            return `canva:design:${id}:${token}`.toLowerCase();
+        }
+        return `canva:url:${u.origin}${u.pathname}`.toLowerCase();
+    } catch (_) {
+        return normalized.toLowerCase();
+    }
+}
+
 function addClassTarget(set, value) {
     const normalized = String(value || '')
         .normalize('NFD')
@@ -144,6 +166,30 @@ router.get('/title-suggestions/:exposeId', async (req, res) => {
     }
 });
 
+router.get('/canvas-title/:exposeId', async (req, res) => {
+    try {
+        const Expose = mongoose.model('Expose');
+        const exposeId = String(req.params.exposeId || '').trim();
+        const canvasUrl = String(req.query?.canvasUrl || '').trim();
+        if (!exposeId || !mongoose.Types.ObjectId.isValid(exposeId)) return res.json({ locked: false, title: '' });
+        if (!canvasUrl) return res.json({ locked: false, title: '' });
+
+        const row = await Expose.findById(exposeId, 'presentations').lean();
+        if (!row) return res.json({ locked: false, title: '' });
+
+        const key = normalizeCanvasKey(canvasUrl);
+        const linked = (row.presentations || []).find((p) => {
+            const pKey = normalizeCanvasKey(p?.canvasUrl || '');
+            return pKey && pKey === key && String(p?.presentationTitle || '').trim();
+        });
+
+        if (!linked) return res.json({ locked: false, title: '' });
+        return res.json({ locked: true, title: String(linked.presentationTitle || '').trim() });
+    } catch (e) {
+        res.status(500).json({ locked: false, title: '' });
+    }
+});
+
 router.post('/submit', upload.single('audio'), async (req, res) => {
     try {
         const Expose = mongoose.model('Expose');
@@ -158,6 +204,18 @@ router.post('/submit', upload.single('audio'), async (req, res) => {
 
         const expose = await Expose.findById(exposeId);
         if (!expose) return res.status(404).json({ error: 'Exposé introuvable' });
+
+        // Verrou serveur: un même lien Canva garde un titre unique pour tous.
+        const incomingCanvasKey = normalizeCanvasKey(canvasUrl);
+        let enforcedTitle = presentationTitle;
+        if (incomingCanvasKey) {
+            const existingLinked = (expose.presentations || []).find((p) => {
+                const pKey = normalizeCanvasKey(p?.canvasUrl || '');
+                const t = String(p?.presentationTitle || '').trim();
+                return pKey && pKey === incomingCanvasKey && t;
+            });
+            if (existingLinked) enforcedTitle = String(existingLinked.presentationTitle || '').trim();
+        }
 
         let recordingUrl = '';
         let uploadWarning = '';
@@ -179,7 +237,7 @@ router.post('/submit', upload.single('audio'), async (req, res) => {
         const previous = idx >= 0 ? entries[idx] : null;
         const nextEntry = {
             studentId,
-            presentationTitle: presentationTitle || String(previous?.presentationTitle || ''),
+            presentationTitle: enforcedTitle || String(previous?.presentationTitle || ''),
             canvasUrl: canvasUrl || String(previous?.canvasUrl || ''),
             slidesText: slidesText || String(previous?.slidesText || ''),
             recordingUrl: recordingUrl || String(previous?.recordingUrl || ''),

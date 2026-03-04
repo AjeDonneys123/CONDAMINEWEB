@@ -88,7 +88,7 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
             onTabChange={setTab}
             hidePunishmentAlert={showPunishmentSplash}
           />
-          <div className="mt-8">
+          <div className="eleve-main-content">
             {tab === 'status' && <StatusOverview user={freshUser} />}
             {tab === 'devoirs' && (
               <HomeworkList

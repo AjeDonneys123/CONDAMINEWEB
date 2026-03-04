@@ -84,3 +84,42 @@
         min-height: 55vh;
     }
 }
+
+@media (max-width: 680px) {
+    .expose-wrap {
+        gap: 10px;
+    }
+
+    .expose-top {
+        flex-wrap: wrap;
+        justify-content: flex-start;
+        gap: 8px;
+    }
+
+    .expose-title {
+        order: 3;
+        width: 100%;
+        text-align: left;
+        font-size: 16px;
+        line-height: 1.15;
+    }
+
+    .expose-left {
+        border-radius: 12px;
+        padding: 10px;
+    }
+
+    .expose-right {
+        min-height: 45vh;
+        border-radius: 12px;
+    }
+
+    .expose-iframe {
+        min-height: 45vh;
+    }
+
+    .expose-audio-box .learning-btn {
+        padding: 8px 10px;
+        font-size: 11px;
+    }
+}

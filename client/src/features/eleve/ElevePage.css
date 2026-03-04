@@ -1,5 +1,6 @@
 .eleve-page-wrapper { min-height: 100vh; background-color: #fdf2f8; transition: background-color 0.5s ease; }
 .eleve-page-container { max-width: 1100px; margin: 0 auto; padding: 2rem; }
+.eleve-main-content { margin-top: 2rem; min-width: 0; }
 .animate-in { animation: fadeIn 0.5s ease-out forwards; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
@@ -54,4 +55,40 @@
     font-weight: 900;
     text-transform: uppercase;
     cursor: pointer;
+}
+
+@media (max-width: 900px) {
+    .eleve-page-container {
+        padding: 1rem;
+    }
+
+    .eleve-main-content {
+        margin-top: 1rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .eleve-page-container {
+        padding: 0.65rem;
+    }
+
+    .punishment-splash {
+        border-radius: 16px;
+        padding: 12px;
+        gap: 8px;
+    }
+
+    .ps-title {
+        font-size: 0.9rem;
+    }
+
+    .ps-sub {
+        font-size: 0.72rem;
+    }
+
+    .ps-timer {
+        margin-left: 0;
+        font-size: 0.95rem;
+        padding: 4px 8px;
+    }
 }

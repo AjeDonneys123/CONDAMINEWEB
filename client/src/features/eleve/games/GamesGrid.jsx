@@ -67,14 +67,14 @@ export default function GamesGrid({ user }) {
 
   return (
     <div className="flex flex-col gap-4 animate-in">
-        <h2 className="text-xl font-black text-slate-800 uppercase px-4">Mes Jeux Assignés</h2>
+        <h2 className="text-base md:text-xl font-black text-slate-800 uppercase px-1 md:px-4">Mes Jeux Assignés</h2>
         <DashboardFolder items={activities} type="game" onSelect={handleSelectActivity} />
 
         {showSkinSelector && (
             <div className="fixed inset-0 z-[10000] bg-slate-900/90 backdrop-blur-md flex items-center justify-center p-6">
-                <div className="bg-white rounded-[40px] w-full max-w-4xl p-8 animate-in zoom-in">
+                <div className="bg-white rounded-[22px] md:rounded-[40px] w-full max-w-4xl p-4 md:p-8 animate-in zoom-in">
                     <div className="flex justify-between items-center mb-8">
-                        <h3 className="text-2xl font-black text-slate-800 uppercase text-center flex-1">Choisis ton univers 🎮</h3>
+                        <h3 className="text-lg md:text-2xl font-black text-slate-800 uppercase text-center flex-1">Choisis ton univers 🎮</h3>
                         <button onClick={() => setShowSkinSelector(false)} className="w-10 h-10 rounded-full bg-slate-100 font-black">✕</button>
                     </div>
 

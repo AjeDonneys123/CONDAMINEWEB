@@ -38,6 +38,7 @@ const toEmbeddableCanvasUrl = (raw = '') => {
 export default function ExposeWorkspace({ expose, user, onQuit }) {
     const existing = expose?.studentSubmission || {};
     const [presentationTitle, setPresentationTitle] = useState(String(existing.presentationTitle || ''));
+    const [titleLocked, setTitleLocked] = useState(false);
     const [titleSuggestions, setTitleSuggestions] = useState([]);
     const [canvasUrl, setCanvasUrl] = useState(String(existing.canvasUrl || ''));
     const [slidesText, setSlidesText] = useState(String(existing.slidesText || ''));
@@ -85,6 +86,32 @@ export default function ExposeWorkspace({ expose, user, onQuit }) {
         };
         run();
     }, [expose?._id, presentationTitle]);
+
+    useEffect(() => {
+        const exposeId = String(expose?._id || '').trim();
+        const canvas = String(canvasUrl || '').trim();
+        if (!exposeId || !canvas) {
+            setTitleLocked(false);
+            return;
+        }
+        const run = async () => {
+            try {
+                const res = await fetch(
+                    `/api/eleve/exposes/canvas-title/${encodeURIComponent(exposeId)}?canvasUrl=${encodeURIComponent(canvas)}`
+                );
+                const data = res.ok ? await res.json() : { locked: false, title: '' };
+                if (data?.locked && data?.title) {
+                    setPresentationTitle(String(data.title));
+                    setTitleLocked(true);
+                } else {
+                    setTitleLocked(false);
+                }
+            } catch (_) {
+                setTitleLocked(false);
+            }
+        };
+        run();
+    }, [expose?._id, canvasUrl]);
 
     const startRecording = async () => {
         setError('');
@@ -187,7 +214,13 @@ export default function ExposeWorkspace({ expose, user, onQuit }) {
                         onChange={(e) => setPresentationTitle(e.target.value)}
                         placeholder="Ex: Dubaï - démographie"
                         list="expose-title-suggestions"
+                        disabled={titleLocked}
                     />
+                    {titleLocked && (
+                        <div className="text-[11px] font-bold text-rose-600">
+                            Ce lien Canva est déjà associé à ce titre. Le titre est verrouillé.
+                        </div>
+                    )}
                     <datalist id="expose-title-suggestions">
                         {titleSuggestions.map((t) => (
                             <option key={t} value={t} />
