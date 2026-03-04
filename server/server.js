@@ -75,6 +75,7 @@ safeLoad('/api/admin', './prof/admin/admin.prof');
 safeLoad('/api/homework', './prof/homework/homework.prof');
 safeLoad('/api/games', './prof/games/games.prof');
 safeLoad('/api/learning', './prof/learning/learning.prof');
+safeLoad('/api/exposes', './prof/exposes/exposes.prof');
 safeLoad('/api/classroom', './prof/classroom/classroom.prof');
 safeLoad('/api/scans', './prof/scans/scans.prof');
 safeLoad('/api/structure', './prof/structure/structure.prof');
@@ -85,11 +86,20 @@ safeLoad('/api/eleve/homework', './eleve/homework/homework.eleve');
 safeLoad('/api/eleve/classroom', './eleve/classroom/classroom.eleve');
 safeLoad('/api/eleve/games', './eleve/games/games.eleve');
 safeLoad('/api/eleve/learning', './eleve/learning/learning.eleve');
+safeLoad('/api/eleve/exposes', './eleve/exposes/exposes.eleve');
 
-// 5. DEMARRAGE MONGOOSE
-mongoose.connect(process.env.MONGODB_URI)
-    .then(() => {
+// 5. DEMARRAGE SERVEUR + RECONNEXION MONGOOSE
+app.listen(port, '0.0.0.0', () => console.log(`🏁 PRET SUR LE PORT ${port}`));
+
+const connectMongoWithRetry = async (delayMs = 10000) => {
+    try {
+        await mongoose.connect(process.env.MONGODB_URI);
         console.log("📂 MongoDB Connecté.");
-        app.listen(port, '0.0.0.0', () => console.log(`🏁 PRET SUR LE PORT ${port}`));
-    })
-    .catch(err => console.error("❌ Erreur Connexion MongoDB:", err));
+    } catch (err) {
+        console.error("❌ Erreur Connexion MongoDB:", err);
+        console.log(`⏳ Nouvelle tentative MongoDB dans ${Math.floor(delayMs / 1000)}s...`);
+        setTimeout(() => connectMongoWithRetry(delayMs), delayMs);
+    }
+};
+
+connectMongoWithRetry();

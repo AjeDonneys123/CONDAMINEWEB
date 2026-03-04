@@ -87,6 +87,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     const [autoHighlighting, setAutoHighlighting] = useState(false);
     const [keywordSelectionSpan, setKeywordSelectionSpan] = useState(null);
     const [keywordActiveZoneIdx, setKeywordActiveZoneIdx] = useState(null);
+    const [zoneQuestionCount, setZoneQuestionCount] = useState(3);
     const videoEditorRef = useRef(null);
     const keywordSelectionRef = useRef(null);
     const teacherId = String(user?._id || user?.id || '').trim();
@@ -894,6 +895,68 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         if (zoneCount <= 0) return;
         setKeywordActiveZoneIdx((prev) => Number.isFinite(prev) ? ((prev + 1) % zoneCount) : 0);
     };
+    const getCurrentSectionQuestionsMap = () => {
+        if (!step) return {};
+        if (step.type === 'question') return (step.questionSectionQuestions && typeof step.questionSectionQuestions === 'object') ? step.questionSectionQuestions : {};
+        if (step.type === 'video') return (step.videoSectionQuestions && typeof step.videoSectionQuestions === 'object') ? step.videoSectionQuestions : {};
+        if (step.type === 'sheet') return (step.sheetSectionQuestions && typeof step.sheetSectionQuestions === 'object') ? step.sheetSectionQuestions : {};
+        return {};
+    };
+    const updateCurrentSectionQuestionsMap = (nextMap = {}) => {
+        if (!step) return;
+        if (step.type === 'question') {
+            updateStep(activeStep, { questionSectionQuestions: nextMap });
+            return;
+        }
+        if (step.type === 'video') {
+            updateStep(activeStep, { videoSectionQuestions: nextMap });
+            return;
+        }
+        if (step.type === 'sheet') {
+            updateStep(activeStep, { sheetSectionQuestions: nextMap });
+        }
+    };
+    const getActiveZoneQuestions = () => {
+        const idx = Number.isFinite(keywordActiveZoneIdx) ? keywordActiveZoneIdx : 0;
+        const map = getCurrentSectionQuestionsMap();
+        const rows = map[String(idx)];
+        return Array.isArray(rows) ? rows : [];
+    };
+    const generateQuestionsForActiveZone = async () => {
+        if (!step) return;
+        const source = String(keywordMaterialText || '').trim();
+        if (!source) return alert("Aucun texte source.");
+        const textLen = source.length;
+        const markers = normalizeMarkers(getCurrentZoneMarkers(), textLen);
+        const zoneIdx = Number.isFinite(keywordActiveZoneIdx) ? keywordActiveZoneIdx : 0;
+        const zone = getZoneBounds(zoneIdx, markers, textLen);
+        const sectionText = source.slice(zone.start, zone.end).trim();
+        if (!sectionText) return alert("Section vide.");
+        const pinkRanges = normalizeRanges(getCurrentResponseRanges(), textLen)
+            .filter((r) => r.end > zone.start && r.start < zone.end)
+            .map((r) => ({ start: Math.max(zone.start, r.start), end: Math.min(zone.end, r.end) }));
+        const answers = rangesToSnippets(source, pinkRanges);
+        const count = Math.max(1, Math.min(20, Number(zoneQuestionCount || 3)));
+        const topic = [
+            `Crée ${count} questions de compréhension pour cette section.`,
+            `SECTION: ${sectionText}`,
+            answers.length > 0 ? `RÉPONSES CIBLES (texte rose): ${answers.join(' | ')}` : 'RÉPONSES CIBLES: libre selon la section.'
+        ].join('\n');
+        setAiTesting(true);
+        try {
+            const fd = new FormData();
+            fd.append('topic', topic);
+            fd.append('count', String(count));
+            const res = await fetch('/api/games/generate-content', { method: 'POST', body: fd });
+            const rows = await res.json();
+            const clean = Array.isArray(rows) ? rows.slice(0, count) : [];
+            const next = { ...getCurrentSectionQuestionsMap(), [String(zoneIdx)]: clean };
+            updateCurrentSectionQuestionsMap(next);
+        } catch (_) {
+            alert("Erreur génération questions.");
+        }
+        setAiTesting(false);
+    };
 
     const addSelectedPinkKeyword = (forcedSnippet = '') => {
         if (!step) return;
@@ -1636,22 +1699,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                             </select>
                             <button type="button" className="v84-close-btn" onClick={() => { setActiveTarget('response'); setEraseMode(false); setKeywordSelectionSpan(null); setKeywordActiveZoneIdx(null); setShowKeywordModal(false); }}>✕</button>
                         </div>
-                        <div className="grid grid-cols-2 gap-4 p-4 min-h-0 flex-1">
-                            <div className="min-h-0 flex flex-col">
-                                <div className="text-[11px] font-black uppercase text-slate-400 mb-2">Texte source (vidéo ou fiche)</div>
-                                <textarea
-                                    rows={10}
-                                    className="v84-q-input flex-1"
-                                    value={keywordMaterialText}
-                                    onChange={(e) => setKeywordMaterialText(e.target.value)}
-                                    placeholder="Texte support de la question IA."
-                                />
-                                {step?.type === 'video' && !String(keywordMaterialText || '').trim() && (
-                                    <div className="mt-2 p-3 rounded-xl border border-amber-200 bg-amber-50 text-[12px] font-bold text-amber-700">
-                                        Aucun texte vidéo trouvé. Ouvre l’éditeur de séquences, ajoute une transcription au segment puis applique ce segment à l’étape.
-                                    </div>
-                                )}
-                            </div>
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 p-4 min-h-0 flex-1">
                             <div className="min-h-0 flex flex-col">
                                 <div className="text-[11px] font-black uppercase text-slate-400 mb-2">Sélectionne puis clique “Réponses”. Clique “Cut” pour insérer une barre, “Next” pour naviguer entre sections.</div>
                                 <div
@@ -1674,7 +1722,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                 <div className="mt-3 p-3 rounded-xl bg-pink-50 border border-pink-200 text-pink-700 text-[12px] font-bold min-h-[44px]">
                                     {keywordSelectedText || 'Sélection actuelle: vide'}
                                 </div>
-                                <div className="mt-3 flex items-center gap-2">
+                                <div className="mt-3 flex items-center gap-2 flex-wrap">
                                     <button
                                         type="button"
                                         className="v84-res-btn upload"
@@ -1752,6 +1800,42 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                     >
                                         Sauver texte
                                     </button>
+                                </div>
+                            </div>
+                            <div className="min-h-0 flex flex-col rounded-xl border border-slate-200 bg-white p-4">
+                                <div className="text-[11px] font-black uppercase text-slate-400 mb-2">Questions (section active)</div>
+                                <div className="flex items-center gap-2 mb-3">
+                                    <label className="text-[11px] font-black text-slate-500 uppercase">Nombre</label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max="20"
+                                        className="v84-ans-input !w-[90px]"
+                                        value={zoneQuestionCount}
+                                        onChange={(e) => setZoneQuestionCount(Math.max(1, Math.min(20, Number(e.target.value || 1))))}
+                                    />
+                                    <button
+                                        type="button"
+                                        className="v84-res-btn upload bg-indigo-600 text-white"
+                                        onClick={generateQuestionsForActiveZone}
+                                        disabled={aiTesting || !String(keywordMaterialText || '').trim()}
+                                    >
+                                        {aiTesting ? 'Génération...' : 'Générer questions'}
+                                    </button>
+                                </div>
+                                <div className="text-[11px] font-bold text-slate-500 mb-2">
+                                    Section courante: {Number.isFinite(keywordActiveZoneIdx) ? keywordActiveZoneIdx + 1 : 1}
+                                </div>
+                                <div className="flex-1 overflow-auto rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
+                                    {getActiveZoneQuestions().length === 0 ? (
+                                        <div className="text-[12px] font-bold text-slate-400">Aucune question générée pour cette section.</div>
+                                    ) : (
+                                        getActiveZoneQuestions().map((q, i) => (
+                                            <div key={i} className="text-[13px] font-bold text-slate-700">
+                                                {i + 1}. {q.q || q.question || 'Question'}
+                                            </div>
+                                        ))
+                                    )}
                                 </div>
                             </div>
                         </div>

@@ -147,6 +147,30 @@ const Models = {
         date: { type: Date, default: Date.now }
     }),
 
+    Expose: getModel('Expose', {
+        title: { type: String, default: "EXPOSÉ" },
+        subject: { type: String, default: "GÉNÉRAL" },
+        chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter' },
+        teacherId: mongoose.Schema.Types.ObjectId,
+        targetClassrooms: [String],
+        assignedStudents: [mongoose.Schema.Types.ObjectId],
+        isAllClass: { type: Boolean, default: true },
+        isEnabled: { type: Boolean, default: true },
+        presentations: {
+            type: [{
+                studentId: mongoose.Schema.Types.ObjectId,
+                canvasUrl: { type: String, default: '' },
+                slidesText: { type: String, default: '' },
+                recordingUrl: { type: String, default: '' },
+                recordingDurationSec: { type: Number, default: 0 },
+                createdAt: Date,
+                updatedAt: Date
+            }],
+            default: []
+        },
+        date: { type: Date, default: Date.now }
+    }),
+
     VideoSegment: getModel('VideoSegment', {
         teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher', index: true },
         originalUrl: { type: String, default: '' },

@@ -201,9 +201,11 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
     async function handleToggleActivityEnabled(e, item) {
         e.stopPropagation();
         if (!item?._id) return;
-        if (!['homework', 'game', 'learning'].includes(item.actType)) return;
+        if (!['homework', 'game', 'learning', 'expose'].includes(item.actType)) return;
         const nextValue = item.isEnabled === false;
-        const base = item.actType === 'homework' ? '/api/homework' : (item.actType === 'game' ? '/api/games' : '/api/learning');
+        const base = item.actType === 'homework'
+            ? '/api/homework'
+            : (item.actType === 'game' ? '/api/games' : (item.actType === 'learning' ? '/api/learning' : '/api/exposes'));
         const res = await fetch(`${base}/${item._id}/enabled`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
@@ -237,7 +239,7 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
 
         let isShared = false;
         if (type === 'chapter') isShared = !!item.sharedLevel;
-        else if (type === 'homework' || type === 'game' || type === 'learning' || type === 'scan') {
+        else if (type === 'homework' || type === 'game' || type === 'learning' || type === 'expose' || type === 'scan') {
             if (onDeleteItem) onDeleteItem(id, type);
             return;
         }
@@ -349,6 +351,7 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
                             <button onClick={() => onCreateActivity('homework', activeSection)} className="px-5 py-3 rounded-xl bg-orange-500 text-white text-[11px] font-black uppercase shadow-lg">+ Devoir</button>
                             <button onClick={() => onCreateActivity('game', activeSection)} className="px-5 py-3 rounded-xl bg-purple-600 text-white text-[11px] font-black uppercase shadow-lg">+ Jeu</button>
                             <button onClick={() => onCreateActivity('learning', activeSection)} className="px-5 py-3 rounded-xl bg-emerald-600 text-white text-[11px] font-black uppercase shadow-lg">+ Apprentissage</button>
+                            <button onClick={() => onCreateActivity('expose', activeSection)} className="px-5 py-3 rounded-xl bg-rose-600 text-white text-[11px] font-black uppercase shadow-lg">+ Exposé</button>
                             <button onClick={() => setShowChapterModal(true)} className="px-5 py-3 rounded-xl bg-slate-900 text-white text-[11px] font-black uppercase shadow-lg">+ Dossier</button>
                         </div>
                     )}
@@ -392,12 +395,12 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
                                         {chapItems.map(it => (
                                             <div key={it._id} className="bg-white p-3 rounded-2xl flex justify-between items-center shadow-sm border border-slate-100">
                                                 <div className="flex items-center gap-3">
-                                                    <span className="text-xl">{it.actType === 'game' ? '🎮' : (it.actType === 'scan' ? '📸' : (it.actType === 'learning' ? '🧠' : '📝'))}</span>
+                                                    <span className="text-xl">{it.actType === 'game' ? '🎮' : (it.actType === 'scan' ? '📸' : (it.actType === 'learning' ? '🧠' : (it.actType === 'expose' ? '🗣️' : '📝')))}</span>
                                                     <span className="font-black text-slate-700 text-xs uppercase">{it.title}</span>
                                                 </div>
                                                 <div className="flex gap-2">
                                                     {/* BOUTON DÉPLACEMENT (Pas encore implémenté côté serveur pour activité, placeholder) */}
-                                                    {(it.actType === 'homework' || it.actType === 'game' || it.actType === 'learning') && (
+                                                    {(it.actType === 'homework' || it.actType === 'game' || it.actType === 'learning' || it.actType === 'expose') && (
                                                         <button
                                                             onClick={(e) => handleToggleActivityEnabled(e, it)}
                                                             className={`px-3 py-1.5 rounded-lg text-[8px] font-black uppercase border ${

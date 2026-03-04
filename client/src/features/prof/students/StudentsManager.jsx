@@ -63,11 +63,12 @@ export default function StudentsManager({ globalClassId }) {
   const loadMatrix = async () => {
     setLoading(true);
     try {
-        const [sts, clsList, hws, gms, subs, progs, chapters] = await Promise.all([
+        const [sts, clsList, hws, gms, exs, subs, progs, chapters] = await Promise.all([
             fetch('/api/admin/students').then(r => r.json()),
             fetch('/api/admin/classrooms').then(r => r.json()),
             fetch('/api/homework/all').then(r => r.json()),
             fetch('/api/games/all').then(r => r.json()),
+            fetch('/api/exposes/all').then(r => r.ok ? r.json() : []),
             fetch('/api/homework/submissions').then(r => r.json()),
             fetch('/api/games/progress').then(r => r.json()),
             fetch('/api/structure/chapters').then(r => r.ok ? r.json() : [])
@@ -104,7 +105,8 @@ export default function StudentsManager({ globalClassId }) {
 
         const allActs = [
             ...hws.map(h => ({ ...h, type: 'homework', chapterIdStr: extractId(h.chapterId), label: '📝 ' + h.title })),
-            ...gms.map(g => ({ ...g, type: 'game', chapterIdStr: extractId(g.chapterId), label: '🎮 ' + g.title }))
+            ...gms.map(g => ({ ...g, type: 'game', chapterIdStr: extractId(g.chapterId), label: '🎮 ' + g.title })),
+            ...exs.map(e => ({ ...e, type: 'expose', chapterIdStr: extractId(e.chapterId), label: '🗣️ ' + e.title }))
         ];
         const classTargetKey = norm(currentClassName);
         const classStudentIds = new Set(myStudents.map((s) => extractId(s._id)));
@@ -142,6 +144,23 @@ export default function StudentsManager({ globalClassId }) {
             const sid = extractId(prog.studentId);
             const gid = extractId(prog.gameId);
             map[`${sid}_${gid}`] = { done: true, score: prog.lastScore ? `${prog.lastScore}pts` : 'JOUÉ' };
+        });
+        exs.forEach((expose) => {
+            const exposeId = extractId(expose._id);
+            (expose.presentations || []).forEach((p) => {
+                const sid = extractId(p.studentId);
+                if (!sid || !exposeId) return;
+                map[`${sid}_${exposeId}`] = {
+                    done: true,
+                    score: '🎤',
+                    presentation: {
+                        canvasUrl: p.canvasUrl || '',
+                        slidesText: p.slidesText || '',
+                        recordingUrl: p.recordingUrl || '',
+                        updatedAt: p.updatedAt || p.createdAt || null
+                    }
+                };
+            });
         });
         setTrackingData(map);
 
@@ -202,7 +221,8 @@ export default function StudentsManager({ globalClassId }) {
                   ...act,
                   isDone: !!status,
                   score: status ? status.score : null,
-                  antiCheat: status ? (status.antiCheat || {}) : {}
+                  antiCheat: status ? (status.antiCheat || {}) : {},
+                  presentation: status ? (status.presentation || null) : null
               });
           }
       });
@@ -279,6 +299,37 @@ export default function StudentsManager({ globalClassId }) {
                                         {w.isDone ? `✅ JOUÉ (${w.score})` : '⭕ PAS ENCORE JOUÉ'}
                                     </div>
                                 </div>
+                            </div>
+                        ))}
+
+                        <h4 className="text-xs font-black text-slate-400 uppercase mb-2 mt-4">🗣️ EXPOSÉS</h4>
+                        {workloadItems.filter(w => w.type === 'expose').map(w => (
+                            <div key={w._id} className={`p-4 rounded-xl border mb-2 ${w.isDone ? 'bg-rose-50 border-rose-200' : 'bg-white border-slate-200'}`}>
+                                <div className="font-bold text-slate-700">{w.title}</div>
+                                <div className="text-[9px] font-black text-slate-400 uppercase mb-2">{w.chapterLabel || chapterNameById[extractId(w.chapterId)] || ''}</div>
+                                <div className={`text-[10px] font-black uppercase mb-2 ${w.isDone ? 'text-rose-600' : 'text-red-400'}`}>
+                                    {w.isDone ? '✅ PRÉSENTATION ENREGISTRÉE' : '⭕ AUCUNE PRÉSENTATION'}
+                                </div>
+                                {w.presentation && (
+                                    <div className="space-y-2">
+                                        <div className="text-[11px] font-semibold text-slate-700">
+                                            Slides: {w.presentation.slidesText || 'non renseigné'}
+                                        </div>
+                                        {w.presentation.canvasUrl && (
+                                            <iframe
+                                                src={w.presentation.canvasUrl}
+                                                title={`canvas-${w._id}`}
+                                                className="w-full h-[260px] rounded-xl border border-slate-200 bg-white"
+                                            />
+                                        )}
+                                        {w.presentation.recordingUrl && (
+                                            <audio controls className="w-full">
+                                                <source src={w.presentation.recordingUrl} />
+                                                Votre navigateur ne supporte pas l'audio.
+                                            </audio>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         ))}
 
@@ -406,7 +457,7 @@ export default function StudentsManager({ globalClassId }) {
                                     return (
                                         <td key={act._id} className="p-2 text-center border-b">
                                             {status ? (
-                                                <button onClick={() => act.type === 'homework' && handleOpenCorrection(status.subId)} className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-black border shadow-sm ${act.type === 'homework' ? 'bg-green-100 text-green-700 border-green-200' : 'bg-purple-100 text-purple-700 border-purple-200'}`} title={act.type === 'homework' ? antiCheatTone(status.antiCheat).label : ''}>{status.score || 'OK'}</button>
+                                                <button onClick={() => act.type === 'homework' && handleOpenCorrection(status.subId)} className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-black border shadow-sm ${act.type === 'homework' ? 'bg-green-100 text-green-700 border-green-200' : (act.type === 'game' ? 'bg-purple-100 text-purple-700 border-purple-200' : 'bg-rose-100 text-rose-700 border-rose-200')}`} title={act.type === 'homework' ? antiCheatTone(status.antiCheat).label : ''}>{status.score || 'OK'}</button>
                                             ) : <div className="text-slate-200 text-xs">•</div>}
                                         </td>
                                     );

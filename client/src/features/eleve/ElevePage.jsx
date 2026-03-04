@@ -5,6 +5,7 @@ import HomeworkList from './homework/HomeworkList';
 import LearningList from './learning/LearningList';
 import MistakesBook from './mistakes/MistakesBook';
 import GamesGrid from './games/GamesGrid';
+import ExposeList from './exposes/ExposeList';
 import StatusOverview from './status/StatusOverview';
 import BugReportWidget from '../shared/BugReportWidget';
 import './ElevePage.css';
@@ -99,6 +100,7 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
             {tab === 'apprentissage' && <LearningList user={freshUser} />}
             {tab === 'francais' && <MistakesBook user={freshUser} />}
             {tab === 'jeux' && <GamesGrid user={freshUser} />}
+            {tab === 'exposes' && <ExposeList user={freshUser} />}
           </div>
         </div>
         <BugReportWidget user={freshUser} />
