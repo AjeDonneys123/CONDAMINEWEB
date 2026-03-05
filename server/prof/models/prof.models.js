@@ -78,6 +78,9 @@ const Models = {
         nickname: { type: String, default: '', trim: true },
         email: { type: String, lowercase: true, trim: true },
         parentEmail: { type: String, lowercase: true, trim: true },
+        birthDate: { type: String, default: '' },
+        dateOfBirth: { type: String, default: '' },
+        dob: { type: String, default: '' },
         classId: mongoose.Schema.Types.ObjectId,
         assignedGroups: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Classroom' }],
         behaviorRecords: [{

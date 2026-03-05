@@ -25,6 +25,9 @@ const StudentSchema = new mongoose.Schema({
     // Contacts
     email: { type: String, lowercase: true, trim: true },
     parentEmail: { type: String, lowercase: true, trim: true },
+    birthDate: { type: String, default: '' },
+    dateOfBirth: { type: String, default: '' },
+    dob: { type: String, default: '' },
 
     // Scolarité
     classId: { type: mongoose.Schema.Types.ObjectId, ref: 'Classroom' },

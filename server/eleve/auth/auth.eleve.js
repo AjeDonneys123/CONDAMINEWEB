@@ -159,10 +159,20 @@ router.post('/login', async (req, res) => {
             student.birthDate ||
             student.dateOfBirth ||
             student.dob ||
+            student.birthdate ||
+            student.date_naissance ||
             null;
         const expected = toBirthDateDisplay(storedRaw);
         if (!expected) {
-            return res.status(401).json({ ok: false, message: "Date de naissance élève non configurée. Contacte le professeur." });
+            student.birthDate = entered;
+            student.dateOfBirth = entered;
+            student.dob = entered;
+            student.markModified('birthDate');
+            student.markModified('dateOfBirth');
+            student.markModified('dob');
+            await student.save();
+            const plain = student.toObject();
+            return res.json({ ok: true, user: { ...plain, id: plain._id, role: 'student' } });
         }
         if (entered !== expected) {
             return res.status(401).json({ ok: false, message: "Date de naissance incorrecte." });
