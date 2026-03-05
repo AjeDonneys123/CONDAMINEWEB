@@ -483,6 +483,51 @@ router.get('/draft-doc/status', async (req, res) => {
     }
 });
 
+router.post('/draft-doc/sync', async (req, res) => {
+    try {
+        const Homework = mongoose.model('Homework');
+        const Student = mongoose.model('Student');
+        const HomeworkDraftDoc = mongoose.model('HomeworkDraftDoc');
+        const { homeworkId, levelIndex = 0, playerId, text = '' } = req.body || {};
+        const hid = String(homeworkId || '');
+        const sid = String(playerId || '');
+        const lIdx = Math.max(0, Number(levelIndex || 0));
+        if (!mongoose.Types.ObjectId.isValid(hid) || !mongoose.Types.ObjectId.isValid(sid)) {
+            return res.status(400).json({ error: 'IDs invalides' });
+        }
+        const draft = await ensureDraftDocRecord({
+            Homework,
+            Student,
+            HomeworkDraftDoc,
+            homeworkId: hid,
+            studentId: sid,
+            levelIndex: lIdx
+        });
+        const plainText = String(text || '').slice(0, 200000);
+        await ProfDrive.replaceGoogleDocContent(draft.docId, plainText);
+        let stats = {
+            wordCount: Number(draft.lastWordCount || 0),
+            revisionCount: Number(draft.lastRevisionCount || 0),
+            lastRevisionAt: draft.lastRevisionAt || null
+        };
+        try {
+            const latest = await ProfDrive.getGoogleDocStats(draft.docId);
+            stats = {
+                wordCount: Number(latest.wordCount || 0),
+                revisionCount: Number(latest.revisionCount || 0),
+                lastRevisionAt: latest.lastRevisionAt ? new Date(latest.lastRevisionAt) : null
+            };
+            draft.lastWordCount = stats.wordCount;
+            draft.lastRevisionCount = stats.revisionCount;
+            draft.lastRevisionAt = stats.lastRevisionAt;
+            await draft.save();
+        } catch (e) {}
+        return res.json({ ok: true, stats, draft: { docUrl: draft.docUrl, title: draft.title } });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 router.post('/anti-cheat/challenge', async (req, res) => {
     try {
         const {

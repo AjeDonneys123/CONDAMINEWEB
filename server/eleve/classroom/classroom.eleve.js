@@ -113,6 +113,13 @@ function applyCrossDecay(behaviorRecords = []) {
     return changed;
 }
 
+function normalizeSubjectName(v = '') {
+    const raw = String(v || 'GÉNÉRAL').trim().toUpperCase();
+    if (raw === 'SS') return 'HISTOIRE GÉOGRAPHIE';
+    if (raw === 'HG' || raw === 'HGEO' || raw === 'HIST GEO' || raw === 'HIST-GEO') return 'HISTOIRE GÉOGRAPHIE';
+    return raw || 'GÉNÉRAL';
+}
+
 router.get('/status/:studentId', async (req, res) => {
     const Student = mongoose.model('Student');
     const student = await Student.findById(req.params.studentId, 'behaviorRecords currentClass seatX seatY');
@@ -169,7 +176,7 @@ router.get('/status-summary/:studentId', async (req, res) => {
             : [];
         const subjectById = new Map(subjectRows.map(s => [String(s._id), (s.name || '').toUpperCase()]));
 
-        const normalizeSubject = (v) => (v || 'GÉNÉRAL').toString().trim().toUpperCase();
+        const normalizeSubject = (v) => normalizeSubjectName(v);
         const getTeacherSubjects = (teacher) => {
             const fromTaught = (teacher.taughtSubjects || [])
                 .map(s => subjectById.get(String(typeof s === 'object' ? s._id : s)))

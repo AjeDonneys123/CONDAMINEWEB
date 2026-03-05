@@ -80,6 +80,8 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
   const monitorActiveRef = useRef(false);
   const verifyOpenRef = useRef(false);
   const draftPollRef = useRef(null);
+  const draftSyncTimerRef = useRef(null);
+  const lastDraftSyncedRef = useRef('');
 
   const currentPage = homework.levels[pageIdx];
   const instrDocs = currentPage.instructionUrls || [];
@@ -218,6 +220,7 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
       title: '',
       stats: { wordCount: 0, revisionCount: 0, lastRevisionAt: null }
     }));
+    lastDraftSyncedRef.current = '';
     setPageElapsedMs(0);
   }, [pageIdx]);
 
@@ -336,6 +339,7 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
         try { monitorRecognitionRef.current.stop(); } catch (e) {}
       }
       if (draftPollRef.current) clearInterval(draftPollRef.current);
+      if (draftSyncTimerRef.current) clearTimeout(draftSyncTimerRef.current);
     };
   }, []);
 
@@ -392,18 +396,62 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
     }
   };
 
-  useEffect(() => {
-    if (!showDraft) {
-      if (draftPollRef.current) clearInterval(draftPollRef.current);
-      return;
+  const syncDraftToGoogleDoc = async (textValue = draftText) => {
+    if (!draftDoc?.docUrl) return;
+    const sid = user?._id || user?.id;
+    const payloadText = String(textValue || '');
+    if (payloadText === lastDraftSyncedRef.current) return;
+    try {
+      const res = await fetch('/api/eleve/homework/draft-doc/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          homeworkId: homework._id,
+          levelIndex: pageIdx,
+          playerId: sid,
+          text: payloadText
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.ok) throw new Error(data?.error || 'Sync brouillon impossible');
+      lastDraftSyncedRef.current = payloadText;
+      setDraftDoc((prev) => ({
+        ...prev,
+        connected: true,
+        error: '',
+        stats: {
+          wordCount: Number(data?.stats?.wordCount || prev?.stats?.wordCount || 0),
+          revisionCount: Number(data?.stats?.revisionCount || prev?.stats?.revisionCount || 0),
+          lastRevisionAt: data?.stats?.lastRevisionAt || prev?.stats?.lastRevisionAt || null
+        }
+      }));
+    } catch (e) {
+      setDraftDoc((prev) => ({ ...prev, connected: false, error: String(e.message || e) }));
     }
+  };
+
+  useEffect(() => {
+    const sid = user?._id || user?.id;
+    if (!homework?._id || !sid) return;
     initDraftDoc();
     if (draftPollRef.current) clearInterval(draftPollRef.current);
     draftPollRef.current = setInterval(fetchDraftDocStatus, 15000);
     return () => {
       if (draftPollRef.current) clearInterval(draftPollRef.current);
     };
-  }, [showDraft, pageIdx]);
+  }, [pageIdx, homework?._id, user?._id, user?.id]);
+
+  useEffect(() => {
+    if (!showDraft) return;
+    if (!draftDoc?.docUrl) return;
+    if (draftSyncTimerRef.current) clearTimeout(draftSyncTimerRef.current);
+    draftSyncTimerRef.current = setTimeout(() => {
+      syncDraftToGoogleDoc(draftText);
+    }, 1500);
+    return () => {
+      if (draftSyncTimerRef.current) clearTimeout(draftSyncTimerRef.current);
+    };
+  }, [draftText, showDraft, draftDoc.docUrl]);
 
   useEffect(() => {
     const onVisibility = () => {
@@ -962,6 +1010,7 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
       if(!answer.trim()) return; 
       setSubmitting(true); 
       try { 
+          try { await syncDraftToGoogleDoc(draftText); } catch (e) {}
           const thinking = computeThinkingRisk();
           const antiCheatPayload = antiCheat || buildAntiCheatPayload(thinking, { asked: false, mode: 'fallback' });
           const resp = await fetch('/api/eleve/homework/submit', { 
@@ -1182,14 +1231,7 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
                         </div>
                       </div>
                       {draftDoc.loading && <div className="v8-draft-loading">Création du brouillon Google...</div>}
-                      {!draftDoc.loading && draftDoc.docEmbedUrl && (
-                        <iframe
-                          src={draftDoc.docEmbedUrl}
-                          title="brouillon-google-doc"
-                          className="v8-draft-frame"
-                        />
-                      )}
-                      {!draftDoc.loading && !draftDoc.docEmbedUrl && (
+                      {!draftDoc.loading && (
                         <div className="v8-draft-fallback">
                           <textarea className="v8-draft-input" placeholder="Écris ton brouillon ici..." value={draftText} onChange={handleDraftChange} onPaste={handlePaste} />
                         </div>

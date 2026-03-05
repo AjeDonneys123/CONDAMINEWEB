@@ -63,7 +63,7 @@ export default function StudentsManager({ globalClassId }) {
   const loadMatrix = async () => {
     setLoading(true);
     try {
-        const [sts, clsList, hws, gms, exs, subs, progs, chapters] = await Promise.all([
+        const [sts, clsList, hws, gms, exs, subs, progs, chapters, draftDocs] = await Promise.all([
             fetch('/api/admin/students').then(r => r.json()),
             fetch('/api/admin/classrooms').then(r => r.json()),
             fetch('/api/homework/all').then(r => r.json()),
@@ -71,7 +71,8 @@ export default function StudentsManager({ globalClassId }) {
             fetch('/api/exposes/all').then(r => r.ok ? r.json() : []),
             fetch('/api/homework/submissions').then(r => r.json()),
             fetch('/api/games/progress').then(r => r.json()),
-            fetch('/api/structure/chapters').then(r => r.ok ? r.json() : [])
+            fetch('/api/structure/chapters').then(r => r.ok ? r.json() : []),
+            fetch('/api/homework/draft-docs').then(r => r.ok ? r.json() : [])
         ]);
 
         const currentClassObj = clsList.find(c => c._id === globalClassId);
@@ -139,6 +140,27 @@ export default function StudentsManager({ globalClassId }) {
             if (hid) map[`${sid}_${hid}`] = payload;
             if (hwTitle) map[`${sid}_TITLE_${norm(hwTitle)}`] = payload;
             if (hwTitle && sNameKey) map[`${sNameKey}_TITLE_${norm(hwTitle)}`] = payload;
+        });
+        const latestDraftByKey = new Map();
+        (draftDocs || []).forEach((d) => {
+            const sid = extractId(d.studentId);
+            const hid = extractId(d.homeworkId);
+            if (!sid || !hid) return;
+            const key = `${sid}_${hid}`;
+            const prev = latestDraftByKey.get(key);
+            const prevTs = new Date(prev?.updatedAt || prev?.lastRevisionAt || 0).getTime();
+            const nextTs = new Date(d?.updatedAt || d?.lastRevisionAt || 0).getTime();
+            if (!prev || nextTs >= prevTs) latestDraftByKey.set(key, d);
+        });
+        latestDraftByKey.forEach((d, key) => {
+            if (!map[key]) map[key] = {};
+            map[key].draftDoc = {
+                docUrl: d?.docUrl || '',
+                title: d?.title || '',
+                lastWordCount: Number(d?.lastWordCount || 0),
+                lastRevisionCount: Number(d?.lastRevisionCount || 0),
+                lastRevisionAt: d?.lastRevisionAt || null
+            };
         });
         progs.forEach(prog => {
             const sid = extractId(prog.studentId);
@@ -219,10 +241,11 @@ export default function StudentsManager({ globalClassId }) {
                   trackingData[`${studentNameKey}_TITLE_${norm(act.title)}`];
               workload.push({
                   ...act,
-                  isDone: !!status,
-                  score: status ? status.score : null,
+                  isDone: Boolean(status?.done),
+                  score: status?.score || null,
                   antiCheat: status ? (status.antiCheat || {}) : {},
-                  presentation: status ? (status.presentation || null) : null
+                  presentation: status ? (status.presentation || null) : null,
+                  draftDoc: status ? (status.draftDoc || null) : null
               });
           }
       });
@@ -282,6 +305,18 @@ export default function StudentsManager({ globalClassId }) {
                                     {w.isDone && (
                                         <div className={`inline-flex mt-2 px-2 py-1 rounded-full border text-[9px] font-black ${antiCheatTone(w.antiCheat).chip}`}>
                                             {antiCheatTone(w.antiCheat).label}
+                                        </div>
+                                    )}
+                                    {w.draftDoc?.docUrl && (
+                                        <div className="mt-2">
+                                            <a
+                                                href={w.draftDoc.docUrl}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="inline-flex items-center gap-1 px-2 py-1 rounded border border-indigo-200 bg-indigo-50 text-indigo-700 text-[10px] font-black"
+                                            >
+                                                📄 BROUILLON DOC
+                                            </a>
                                         </div>
                                     )}
                                 </div>
@@ -456,7 +491,7 @@ export default function StudentsManager({ globalClassId }) {
                                         trackingData[`${studentNameKey}_TITLE_${norm(act.title)}`];
                                     return (
                                         <td key={act._id} className="p-2 text-center border-b">
-                                            {status ? (
+                                            {status?.done ? (
                                                 <button onClick={() => act.type === 'homework' && handleOpenCorrection(status.subId)} className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-black border shadow-sm ${act.type === 'homework' ? 'bg-green-100 text-green-700 border-green-200' : (act.type === 'game' ? 'bg-purple-100 text-purple-700 border-purple-200' : 'bg-rose-100 text-rose-700 border-rose-200')}`} title={act.type === 'homework' ? antiCheatTone(status.antiCheat).label : ''}>{status.score || 'OK'}</button>
                                             ) : <div className="text-slate-200 text-xs">•</div>}
                                         </td>

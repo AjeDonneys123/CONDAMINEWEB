@@ -76,6 +76,13 @@ async function buildStudentClassTargets(student) {
     return [...targets];
 }
 
+function normalizeSubjectName(v = '') {
+    const raw = String(v || 'GÉNÉRAL').trim().toUpperCase();
+    if (raw === 'SS') return 'HISTOIRE GÉOGRAPHIE';
+    if (raw === 'HG' || raw === 'HGEO' || raw === 'HIST GEO' || raw === 'HIST-GEO') return 'HISTOIRE GÉOGRAPHIE';
+    return raw || 'GÉNÉRAL';
+}
+
 // 1. Liste des activités assignées (Filtrée et Sécurisée)
 router.get('/list/:studentId', async (req, res) => {
     try {
@@ -107,7 +114,7 @@ router.get('/list/:studentId', async (req, res) => {
             return matchesClassTargets(g.targetClassrooms, classTargetKeys);
         });
 
-        const normalizeSubject = (v) => (v || "GÉNÉRAL").toString().trim().toUpperCase();
+        const normalizeSubject = (v) => normalizeSubjectName(v);
 
         const chapterIds = [...new Set(games.map(g => g.chapterId ? String(g.chapterId) : null).filter(Boolean))];
         const chapters = chapterIds.length > 0

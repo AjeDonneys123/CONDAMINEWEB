@@ -205,6 +205,38 @@ const ProfDrive = {
             revisionCount: revisions.length,
             lastRevisionAt: revisions.length ? revisions[revisions.length - 1].modifiedTime : null
         };
+    },
+
+    replaceGoogleDocContent: async (docId, text = '') => {
+        if (!oauth2Client) throw new Error("Drive non connecté");
+        if (!docId) throw new Error("docId manquant");
+        const docs = google.docs({ version: 'v1', auth: oauth2Client });
+        const safeText = String(text || '');
+        const doc = await docs.documents.get({ documentId: docId });
+        const endIndex = Number(doc?.data?.body?.content?.[doc.data.body.content.length - 1]?.endIndex || 1);
+        const requests = [];
+        if (endIndex > 2) {
+            requests.push({
+                deleteContentRange: {
+                    range: { startIndex: 1, endIndex: endIndex - 1 }
+                }
+            });
+        }
+        if (safeText.length > 0) {
+            requests.push({
+                insertText: {
+                    location: { index: 1 },
+                    text: safeText
+                }
+            });
+        }
+        if (requests.length > 0) {
+            await docs.documents.batchUpdate({
+                documentId: docId,
+                requestBody: { requests }
+            });
+        }
+        return true;
     }
 };
 

@@ -40,6 +40,49 @@ const ZOMBIE_FALLBACK_CODE = `class MiniGame extends MiniGameBase {
     }
 }`;
 
+const DEFAULT_QUESTION = { q: "Prêt ?", options: ["OUI", "NON"], a: 0 };
+
+const normalizeQuestionItem = (item) => {
+    if (!item || typeof item !== 'object') return null;
+    const q = String(item.q || item.question || '').trim();
+    const rawOptions = Array.isArray(item.options) ? item.options : [];
+    const options = rawOptions
+        .map((o) => String(o || '').trim())
+        .filter(Boolean)
+        .slice(0, 4);
+    if (!q || options.length < 2) return null;
+    let a = Number.isFinite(Number(item.a)) ? Number(item.a) : 0;
+    if (a < 0 || a >= options.length) a = 0;
+    return { q, options, a };
+};
+
+const parseQuestions = (raw) => {
+    if (Array.isArray(raw)) return raw;
+    if (typeof raw === 'string') {
+        const txt = raw.trim();
+        if (!txt) return [];
+        try {
+            const parsed = JSON.parse(txt);
+            if (Array.isArray(parsed)) return parsed;
+            if (Array.isArray(parsed?.questions)) return parsed.questions;
+            return [];
+        } catch (e) {
+            return [];
+        }
+    }
+    if (raw && typeof raw === 'object' && Array.isArray(raw.questions)) return raw.questions;
+    return [];
+};
+
+const sanitizeQuestions = (raw) => {
+    const parsed = parseQuestions(raw);
+    const clean = parsed
+        .map(normalizeQuestionItem)
+        .filter(Boolean)
+        .slice(0, 24);
+    return clean.length > 0 ? clean : [DEFAULT_QUESTION];
+};
+
 export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, user }) {
     const [lives, setLives] = useState(4);
     const [questionStates, setQuestionStates] = useState([]); 
@@ -312,7 +355,7 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
             setGlobalIntroData(sourceGame?.globalIntro || {});
             setAllLevels(levelsData);
             if (levelsData[currentLevelIdx]) {
-                const qs = levelsData[currentLevelIdx].questions || [];
+                const qs = sanitizeQuestions(levelsData[currentLevelIdx].questions);
                 setLevelQuestions(qs);
                 const initialStates = new Array(qs.length).fill(0);
                 liveData.current.qStates = initialStates;
@@ -348,9 +391,10 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
 
     const handleAnswerClick = (val) => {
         if (feedback || showLevelIntro || showStageClear || showGameOver) return;
-        const currentQ = levelQuestions[currentQIndex];
-        const clean = (s) => String(s).toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-        let isCorrect = (typeof val === 'number') ? (currentQ.a === val) : (clean(val) === clean(currentQ.options[currentQ.a]));
+            const currentQ = levelQuestions[currentQIndex];
+            if (!currentQ || !Array.isArray(currentQ.options) || currentQ.options.length === 0) return;
+            const clean = (s) => String(s).toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            let isCorrect = (typeof val === 'number') ? (currentQ.a === val) : (clean(val) === clean(currentQ.options[currentQ.a]));
         setFeedback(isCorrect ? 'CORRECT' : 'WRONG');
         if (gameInstanceRef.current?.onResult) gameInstanceRef.current.onResult(isCorrect);
         setTimeout(() => { updateBarLogic(isCorrect); changeQuestionLogic(); }, 1200);

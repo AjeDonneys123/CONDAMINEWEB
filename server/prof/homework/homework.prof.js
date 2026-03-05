@@ -1,7 +1,7 @@
 // @signatures: ProfHomeworkRouter, listAll, create, delete, getOne
 const express = require('express');
 const router = express.Router();
-const { Homework, Submission, Student } = require('../models/prof.models');
+const { Homework, Submission, Student, HomeworkDraftDoc } = require('../models/prof.models');
 const ProfDrive = require('../core/drive.prof');
 const multer = require('multer');
 const fs = require('fs');
@@ -26,6 +26,18 @@ router.get('/submissions', async (req, res) => {
             .lean();
         res.json(subs);
     } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/draft-docs', async (req, res) => {
+    try {
+        const rows = await HomeworkDraftDoc.find(
+            {},
+            'studentId homeworkId levelIndex docUrl docId title lastWordCount lastRevisionCount lastRevisionAt updatedAt'
+        ).sort({ updatedAt: -1 }).lean();
+        res.json(rows);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 });
 
 router.get('/submission/:id', async (req, res) => {
