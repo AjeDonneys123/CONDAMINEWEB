@@ -10,6 +10,17 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
   const [isResizingSplit, setIsResizingSplit] = useState(false);
   const [answer, setAnswer] = useState('');
   const [draftText, setDraftText] = useState('');
+  const [draftDoc, setDraftDoc] = useState({
+    loading: false,
+    error: '',
+    connected: true,
+    docUrl: '',
+    docEmbedUrl: '',
+    slidesUrl: '',
+    slidesEmbedUrl: '',
+    title: '',
+    stats: { wordCount: 0, revisionCount: 0, lastRevisionAt: null }
+  });
   const [showDraft, setShowDraft] = useState(false);
   const [showQuestionModal, setShowQuestionModal] = useState(false);
   const [showResponseModal, setShowResponseModal] = useState(false);
@@ -68,6 +79,7 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
   const monitorRecognitionRef = useRef(null);
   const monitorActiveRef = useRef(false);
   const verifyOpenRef = useRef(false);
+  const draftPollRef = useRef(null);
 
   const currentPage = homework.levels[pageIdx];
   const instrDocs = currentPage.instructionUrls || [];
@@ -196,6 +208,16 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
       answer: { events: 0, pauses: 0, revisions: 0, bursts: 0, lastTs: Date.now(), lastLen: 0 },
       draft: { events: 0, pauses: 0, revisions: 0, bursts: 0, lastTs: Date.now(), lastLen: 0 }
     });
+    setDraftDoc((prev) => ({
+      ...prev,
+      error: '',
+      docUrl: '',
+      docEmbedUrl: '',
+      slidesUrl: '',
+      slidesEmbedUrl: '',
+      title: '',
+      stats: { wordCount: 0, revisionCount: 0, lastRevisionAt: null }
+    }));
     setPageElapsedMs(0);
   }, [pageIdx]);
 
@@ -313,8 +335,75 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
       if (monitorRecognitionRef.current) {
         try { monitorRecognitionRef.current.stop(); } catch (e) {}
       }
+      if (draftPollRef.current) clearInterval(draftPollRef.current);
     };
   }, []);
+
+  const fetchDraftDocStatus = async () => {
+    try {
+      const sid = user?._id || user?.id;
+      const res = await fetch(`/api/eleve/homework/draft-doc/status?homeworkId=${encodeURIComponent(homework._id)}&playerId=${encodeURIComponent(sid)}&levelIndex=${encodeURIComponent(pageIdx)}`);
+      const data = await res.json();
+      if (!res.ok || !data?.ok) throw new Error(data?.error || 'Brouillon indisponible');
+      setDraftDoc((prev) => ({
+        ...prev,
+        connected: data.connected !== false,
+        error: data.warning || '',
+        docUrl: data?.draft?.docUrl || prev.docUrl,
+        docEmbedUrl: data?.draft?.docEmbedUrl || prev.docEmbedUrl || prev.docUrl,
+        slidesUrl: data?.draft?.slidesUrl || prev.slidesUrl,
+        slidesEmbedUrl: data?.draft?.slidesEmbedUrl || prev.slidesEmbedUrl || prev.slidesUrl,
+        title: data?.draft?.title || prev.title,
+        stats: {
+          wordCount: Number(data?.stats?.wordCount || 0),
+          revisionCount: Number(data?.stats?.revisionCount || 0),
+          lastRevisionAt: data?.stats?.lastRevisionAt || null
+        }
+      }));
+    } catch (e) {
+      setDraftDoc((prev) => ({ ...prev, connected: false, error: String(e.message || e) }));
+    }
+  };
+
+  const initDraftDoc = async () => {
+    const sid = user?._id || user?.id;
+    setDraftDoc((prev) => ({ ...prev, loading: true, error: '' }));
+    try {
+      const res = await fetch('/api/eleve/homework/draft-doc/init', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ homeworkId: homework._id, levelIndex: pageIdx, playerId: sid })
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.ok) throw new Error(data?.error || 'Création brouillon impossible');
+      setDraftDoc((prev) => ({
+        ...prev,
+        loading: false,
+        connected: true,
+        docUrl: data?.draft?.docUrl || '',
+        docEmbedUrl: data?.draft?.docEmbedUrl || data?.draft?.docUrl || '',
+        slidesUrl: data?.draft?.slidesUrl || '',
+        slidesEmbedUrl: data?.draft?.slidesEmbedUrl || data?.draft?.slidesUrl || '',
+        title: data?.draft?.title || '',
+        error: ''
+      }));
+    } catch (e) {
+      setDraftDoc((prev) => ({ ...prev, loading: false, connected: false, error: String(e.message || e) }));
+    }
+  };
+
+  useEffect(() => {
+    if (!showDraft) {
+      if (draftPollRef.current) clearInterval(draftPollRef.current);
+      return;
+    }
+    initDraftDoc();
+    if (draftPollRef.current) clearInterval(draftPollRef.current);
+    draftPollRef.current = setInterval(fetchDraftDocStatus, 15000);
+    return () => {
+      if (draftPollRef.current) clearInterval(draftPollRef.current);
+    };
+  }, [showDraft, pageIdx]);
 
   useEffect(() => {
     const onVisibility = () => {
@@ -460,9 +549,16 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
     const minReadMs = Math.min(24000, docsCount * 3500);
     const elapsedToFirstWrite = firstWriteTs ? (firstWriteTs - sessionStartTs) : 0;
     const answerLen = answer.trim().length;
-    const draftLen = draftText.trim().length;
+    const externalDraftWords = Number(draftDoc?.stats?.wordCount || 0);
+    const externalDraftRevisions = Number(draftDoc?.stats?.revisionCount || 0);
+    const hasExternalDraftEvidence = externalDraftWords >= 10 || externalDraftRevisions >= 2;
+    const draftLen = Math.max(draftText.trim().length, externalDraftWords * 5);
     const a = writingTrace.answer;
-    const d = writingTrace.draft;
+    const d = {
+      ...writingTrace.draft,
+      events: Math.max(Number(writingTrace?.draft?.events || 0), externalDraftRevisions),
+      revisions: Math.max(Number(writingTrace?.draft?.revisions || 0), Math.max(0, externalDraftRevisions - 1))
+    };
     const requiresDraft = shouldRequireDraftForTask(currentPage?.instruction || '');
     let risk = 0;
     const reasons = [];
@@ -490,9 +586,9 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
     if (answerLen >= 160 && approxWpm >= 55 && a.revisions <= 1) { risk += 2; reasons.push("vitesse de rédaction anormalement élevée"); }
     if (answerLen >= 140 && a.events <= 4) { risk += 2; reasons.push("progression de frappe trop linéaire"); }
     if (requiresDraft && answerLen >= 110 && draftLen < 20) { risk += 2; reasons.push("brouillon insuffisant pour ce type d'exercice"); }
-    if (requiresDraft && draftLen >= 45 && d.events <= 2) { risk += 2; reasons.push("brouillon non progressif"); }
-    if (requiresDraft && d.events > 0 && d.pauses === 0 && draftLen >= 70) { risk += 1; reasons.push("brouillon écrit d'un seul trait"); }
-    if (requiresDraft && draftLen >= 90 && answerLen >= 90 && lexicalSimilarity > 0.9 && d.events <= 3) { risk += 2; reasons.push("brouillon trop lisse et trop proche de la copie finale"); }
+    if (requiresDraft && !hasExternalDraftEvidence && draftLen >= 45 && d.events <= 2) { risk += 2; reasons.push("brouillon non progressif"); }
+    if (requiresDraft && !hasExternalDraftEvidence && d.events > 0 && d.pauses === 0 && draftLen >= 70) { risk += 1; reasons.push("brouillon écrit d'un seul trait"); }
+    if (requiresDraft && !hasExternalDraftEvidence && draftLen >= 90 && answerLen >= 90 && lexicalSimilarity > 0.9 && d.events <= 3) { risk += 2; reasons.push("brouillon trop lisse et trop proche de la copie finale"); }
     if (!docConsult.allConsulted && docConsult.requiredDocs > 0) { risk += 2; reasons.push("documents requis non consultés"); }
     if (docConsult.spentDocsMs < docConsult.minDocsMs * 0.7) { risk += 2; reasons.push("temps de consultation des documents insuffisant"); }
     if (pageElapsed < minPageMs * 0.35 && answerLen >= 120) { risk += 2; reasons.push("temps total question trop court"); }
@@ -512,6 +608,7 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
       expectedElapsedToCurrent,
       actualGlobalElapsed,
       requiresDraft,
+      hasExternalDraftEvidence,
       answerLen,
       answerEvents: a.events,
       answerRevisions: a.revisions,
@@ -875,7 +972,11 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
                 homeworkId: homework._id,
                 levelIndex: pageIdx,
                 playerId: user._id || user.id,
-                antiCheat: antiCheatPayload
+                antiCheat: antiCheatPayload,
+                draftDocMeta: {
+                  wordCount: Number(draftDoc?.stats?.wordCount || 0),
+                  revisionCount: Number(draftDoc?.stats?.revisionCount || 0)
+                }
               }) 
           });
           const res = await resp.json();
@@ -1067,7 +1168,33 @@ export default function HomeworkWorkspace({ homework, user, onQuit }) {
                       <button onClick={() => setShowDraft(false)} onMouseDown={(e) => e.stopPropagation()}>✕</button>
                   </div>
                   <div className="v8-layer-body">
-                      <textarea className="v8-draft-input" placeholder="Écris ton brouillon ici..." value={draftText} onChange={handleDraftChange} onPaste={handlePaste} />
+                      <div className="v8-draft-doc-toolbar">
+                        <div className="v8-draft-doc-meta">
+                          <span className={`v8-dot ${draftDoc.connected ? 'ok' : 'ko'}`} />
+                          <span>{draftDoc.connected ? 'Google Docs connecté' : 'Google Docs indisponible'}</span>
+                          <span>• {Number(draftDoc?.stats?.wordCount || 0)} mots</span>
+                          <span>• {Number(draftDoc?.stats?.revisionCount || 0)} révisions</span>
+                        </div>
+                        <div className="v8-draft-doc-actions">
+                          {draftDoc.docUrl && <a className="btn-draft-open" href={draftDoc.docUrl} target="_blank" rel="noreferrer">Ouvrir Doc</a>}
+                          {draftDoc.slidesUrl && <a className="btn-draft-open" href={draftDoc.slidesUrl} target="_blank" rel="noreferrer">Ouvrir Slides</a>}
+                          <button className="btn-draft-open" onClick={fetchDraftDocStatus}>Rafraîchir</button>
+                        </div>
+                      </div>
+                      {draftDoc.loading && <div className="v8-draft-loading">Création du brouillon Google...</div>}
+                      {!draftDoc.loading && draftDoc.docEmbedUrl && (
+                        <iframe
+                          src={draftDoc.docEmbedUrl}
+                          title="brouillon-google-doc"
+                          className="v8-draft-frame"
+                        />
+                      )}
+                      {!draftDoc.loading && !draftDoc.docEmbedUrl && (
+                        <div className="v8-draft-fallback">
+                          <textarea className="v8-draft-input" placeholder="Écris ton brouillon ici..." value={draftText} onChange={handleDraftChange} onPaste={handlePaste} />
+                        </div>
+                      )}
+                      {draftDoc.error && <div className="v8-draft-error">{draftDoc.error}</div>}
                   </div>
                   <div className="v8-win-resize n" onMouseDown={(e) => startWindowResize(e, 'draft', 'n')} />
                   <div className="v8-win-resize s" onMouseDown={(e) => startWindowResize(e, 'draft', 's')} />

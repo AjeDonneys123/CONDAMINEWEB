@@ -36,6 +36,8 @@ const ProfDrive = {
             scope: [
                 'https://www.googleapis.com/auth/drive.file',
                 'https://www.googleapis.com/auth/drive.readonly',
+                'https://www.googleapis.com/auth/documents',
+                'https://www.googleapis.com/auth/presentations',
                 'https://www.googleapis.com/auth/gmail.send'
             ],
             prompt: 'consent'
@@ -116,6 +118,93 @@ const ProfDrive = {
         });
         await drive.permissions.create({ fileId: file.data.id, resource: { role: 'reader', type: 'anyone' } });
         return { id: file.data.id };
+    },
+
+    createGoogleDoc: async (title, parentFolderId = null) => {
+        if (!oauth2Client) throw new Error("Drive non connecté");
+        const docs = google.docs({ version: 'v1', auth: oauth2Client });
+        const drive = google.drive({ version: 'v3', auth: oauth2Client });
+        const created = await docs.documents.create({
+            requestBody: { title: String(title || 'Brouillon élève').slice(0, 180) }
+        });
+        const docId = String(created?.data?.documentId || '');
+        if (!docId) throw new Error("Création Google Doc échouée");
+
+        if (parentFolderId) {
+            const meta = await drive.files.get({ fileId: docId, fields: 'parents' });
+            const previousParents = (meta.data.parents || []).join(',');
+            await drive.files.update({
+                fileId: docId,
+                addParents: parentFolderId,
+                removeParents: previousParents || undefined,
+                fields: 'id, parents'
+            });
+        }
+        // Partage explicite pour éviter les 404 côté iframe élève.
+        await drive.permissions.create({
+            fileId: docId,
+            requestBody: { role: 'writer', type: 'anyone' }
+        });
+        return {
+            docId,
+            editUrl: `https://docs.google.com/document/d/${docId}/edit`,
+            embedUrl: `https://docs.google.com/document/d/${docId}/edit?embedded=true`
+        };
+    },
+
+    createGoogleSlides: async (title, parentFolderId = null) => {
+        if (!oauth2Client) throw new Error("Drive non connecté");
+        const slides = google.slides({ version: 'v1', auth: oauth2Client });
+        const drive = google.drive({ version: 'v3', auth: oauth2Client });
+        const created = await slides.presentations.create({
+            requestBody: { title: String(title || 'Support élève').slice(0, 180) }
+        });
+        const presentationId = String(created?.data?.presentationId || '');
+        if (!presentationId) throw new Error("Création Google Slides échouée");
+
+        if (parentFolderId) {
+            const meta = await drive.files.get({ fileId: presentationId, fields: 'parents' });
+            const previousParents = (meta.data.parents || []).join(',');
+            await drive.files.update({
+                fileId: presentationId,
+                addParents: parentFolderId,
+                removeParents: previousParents || undefined,
+                fields: 'id, parents'
+            });
+        }
+        // Partage explicite pour éviter les 404 côté iframe élève.
+        await drive.permissions.create({
+            fileId: presentationId,
+            requestBody: { role: 'writer', type: 'anyone' }
+        });
+        return {
+            presentationId,
+            editUrl: `https://docs.google.com/presentation/d/${presentationId}/edit`,
+            embedUrl: `https://docs.google.com/presentation/d/${presentationId}/embed`
+        };
+    },
+
+    getGoogleDocStats: async (docId) => {
+        if (!oauth2Client) throw new Error("Drive non connecté");
+        const docs = google.docs({ version: 'v1', auth: oauth2Client });
+        const drive = google.drive({ version: 'v3', auth: oauth2Client });
+        const [doc, revs] = await Promise.all([
+            docs.documents.get({ documentId: docId }),
+            drive.revisions.list({ fileId: docId, pageSize: 200, fields: 'revisions(id,modifiedTime,lastModifyingUser(displayName))' })
+        ]);
+        const body = doc?.data?.body?.content || [];
+        const text = body
+            .flatMap((block) => (block?.paragraph?.elements || []))
+            .map((el) => String(el?.textRun?.content || ''))
+            .join(' ');
+        const words = text.trim().split(/\s+/).filter(Boolean);
+        const revisions = Array.isArray(revs?.data?.revisions) ? revs.data.revisions : [];
+        return {
+            wordCount: words.length,
+            charCount: text.trim().length,
+            revisionCount: revisions.length,
+            lastRevisionAt: revisions.length ? revisions[revisions.length - 1].modifiedTime : null
+        };
     }
 };
 

@@ -210,6 +210,22 @@ const Models = {
         antiCheat: { type: Object, default: {} }
     }),
 
+    HomeworkDraftDoc: getModel('HomeworkDraftDoc', {
+        studentId: { type: mongoose.Schema.Types.ObjectId, index: true },
+        homeworkId: { type: mongoose.Schema.Types.ObjectId, index: true },
+        levelIndex: { type: Number, default: 0, index: true },
+        docId: { type: String, default: '' },
+        docUrl: { type: String, default: '' },
+        docEmbedUrl: { type: String, default: '' },
+        slidesId: { type: String, default: '' },
+        slidesUrl: { type: String, default: '' },
+        slidesEmbedUrl: { type: String, default: '' },
+        title: { type: String, default: '' },
+        lastWordCount: { type: Number, default: 0 },
+        lastRevisionCount: { type: Number, default: 0 },
+        lastRevisionAt: { type: Date, default: null }
+    }),
+
     GameProgress: getModel('GameProgress', {
         studentId: mongoose.Schema.Types.ObjectId, gameId: mongoose.Schema.Types.ObjectId,
         levelReached: { type: Number, default: 0 }, lastScore: { type: Number, default: 0 }

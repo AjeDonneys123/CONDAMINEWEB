@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 const EleveAI = require('../core/eleve.ai');
+const ProfDrive = require('../../prof/core/drive.prof');
 const MistakeService = require('../../services/mistake.service');
 const { sendLatePunishmentMail, resetLateMailState } = require('../../services/punishmentMailer');
 const crypto = require('crypto');
@@ -108,6 +109,75 @@ function sanitizeAntiCheat(payload = {}) {
 function normalizeClassName(v = '') {
     const raw = String(v || '').trim().toUpperCase();
     return { raw, clean: raw.replace(/\s+/g, '') };
+}
+
+const buildDraftTitle = ({ student = null, homework = null, levelIndex = 0 }) => {
+    const s = student ? `${student.firstName || ''} ${student.lastName || ''}`.trim() : 'Élève';
+    const hw = String(homework?.title || 'Devoir').trim();
+    return `${hw} - Brouillon ${s} - Q${Number(levelIndex || 0) + 1}`.slice(0, 170);
+};
+
+async function ensureDraftDocRecord({ Homework, Student, HomeworkDraftDoc, homeworkId, studentId, levelIndex }) {
+    const hid = String(homeworkId || '');
+    const sid = String(studentId || '');
+    const lIdx = Math.max(0, Number(levelIndex || 0));
+    let draft = await HomeworkDraftDoc.findOne({ homeworkId: hid, studentId: sid, levelIndex: lIdx });
+
+    if (draft) {
+        try {
+            if (draft.docId) await ProfDrive.getGoogleDocStats(draft.docId);
+            return draft;
+        } catch (e) {
+            // Doc cassé/introuvable: on le régénère.
+            const msg = String(e?.message || '');
+            if (!/404|File not found|notFound/i.test(msg)) throw e;
+        }
+    }
+
+    const [homework, student] = await Promise.all([
+        Homework.findById(hid, 'title'),
+        Student.findById(sid, 'firstName lastName')
+    ]);
+    if (!homework) throw new Error('Devoir introuvable');
+
+    const folderId = await ProfDrive.getOrCreateFolder('CONDA_HOMEWORK_DRAFTS');
+    const title = buildDraftTitle({ student, homework, levelIndex: lIdx });
+    const doc = await ProfDrive.createGoogleDoc(title, folderId);
+    let slides = null;
+    try {
+        slides = await ProfDrive.createGoogleSlides(`${title} - Slides`, folderId);
+    } catch (e) {
+        // Slides optionnel: ne pas bloquer le brouillon Google Docs.
+        slides = null;
+    }
+
+    if (draft) {
+        draft.title = title;
+        draft.docId = doc.docId;
+        draft.docUrl = doc.editUrl;
+        draft.docEmbedUrl = doc.embedUrl;
+        draft.slidesId = slides?.presentationId || '';
+        draft.slidesUrl = slides?.editUrl || '';
+        draft.slidesEmbedUrl = slides?.embedUrl || '';
+        draft.lastWordCount = 0;
+        draft.lastRevisionCount = 0;
+        draft.lastRevisionAt = null;
+        await draft.save();
+        return draft;
+    }
+
+    return await HomeworkDraftDoc.create({
+        homeworkId: hid,
+        studentId: sid,
+        levelIndex: lIdx,
+        title,
+        docId: doc.docId,
+        docUrl: doc.editUrl,
+        docEmbedUrl: doc.embedUrl,
+        slidesId: slides?.presentationId || '',
+        slidesUrl: slides?.editUrl || '',
+        slidesEmbedUrl: slides?.embedUrl || ''
+    });
 }
 
 function addClassTarget(set, value) {
@@ -313,6 +383,106 @@ router.get('/mistakes/:studentId', async (req, res) => {
     }
 });
 
+router.post('/draft-doc/init', async (req, res) => {
+    try {
+        const Homework = mongoose.model('Homework');
+        const Student = mongoose.model('Student');
+        const HomeworkDraftDoc = mongoose.model('HomeworkDraftDoc');
+        const { homeworkId, levelIndex = 0, playerId } = req.body || {};
+        const hid = String(homeworkId || '');
+        const sid = String(playerId || '');
+        const lIdx = Math.max(0, Number(levelIndex || 0));
+        if (!mongoose.Types.ObjectId.isValid(hid) || !mongoose.Types.ObjectId.isValid(sid)) {
+            return res.status(400).json({ error: 'IDs invalides' });
+        }
+        const draft = await ensureDraftDocRecord({
+            Homework,
+            Student,
+            HomeworkDraftDoc,
+            homeworkId: hid,
+            studentId: sid,
+            levelIndex: lIdx
+        });
+
+        return res.json({
+            ok: true,
+            draft: {
+                docId: draft.docId,
+                docUrl: draft.docUrl,
+                docEmbedUrl: draft.docEmbedUrl,
+                slidesId: draft.slidesId,
+                slidesUrl: draft.slidesUrl,
+                slidesEmbedUrl: draft.slidesEmbedUrl,
+                title: draft.title
+            }
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+router.get('/draft-doc/status', async (req, res) => {
+    try {
+        const Homework = mongoose.model('Homework');
+        const Student = mongoose.model('Student');
+        const HomeworkDraftDoc = mongoose.model('HomeworkDraftDoc');
+        const hid = String(req.query?.homeworkId || '');
+        const sid = String(req.query?.playerId || '');
+        const lIdx = Math.max(0, Number(req.query?.levelIndex || 0));
+        if (!mongoose.Types.ObjectId.isValid(hid) || !mongoose.Types.ObjectId.isValid(sid)) {
+            return res.status(400).json({ error: 'IDs invalides' });
+        }
+        const draft = await ensureDraftDocRecord({
+            Homework,
+            Student,
+            HomeworkDraftDoc,
+            homeworkId: hid,
+            studentId: sid,
+            levelIndex: lIdx
+        });
+
+        let stats = {
+            wordCount: Number(draft.lastWordCount || 0),
+            revisionCount: Number(draft.lastRevisionCount || 0),
+            lastRevisionAt: draft.lastRevisionAt || null
+        };
+        let connected = true;
+        let warning = '';
+        try {
+            const latest = await ProfDrive.getGoogleDocStats(draft.docId);
+            stats = {
+                wordCount: Number(latest.wordCount || 0),
+                revisionCount: Number(latest.revisionCount || 0),
+                lastRevisionAt: latest.lastRevisionAt ? new Date(latest.lastRevisionAt) : null
+            };
+            draft.lastWordCount = stats.wordCount;
+            draft.lastRevisionCount = stats.revisionCount;
+            draft.lastRevisionAt = stats.lastRevisionAt;
+            await draft.save();
+        } catch (err) {
+            warning = err.message || 'Drive indisponible';
+        }
+
+        res.json({
+            ok: true,
+            connected,
+            warning: warning || null,
+            draft: {
+                docId: draft.docId,
+                docUrl: draft.docUrl,
+                docEmbedUrl: draft.docEmbedUrl || draft.docUrl,
+                slidesId: draft.slidesId || '',
+                slidesUrl: draft.slidesUrl || '',
+                slidesEmbedUrl: draft.slidesEmbedUrl || draft.slidesUrl || '',
+                title: draft.title || ''
+            },
+            stats
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 router.post('/anti-cheat/challenge', async (req, res) => {
     try {
         const {
@@ -455,7 +625,7 @@ router.post('/anti-cheat/verify', async (req, res) => {
 });
 
 router.post('/submit', async (req, res) => {
-    const { userText, homeworkId, levelIndex, playerId, antiCheat } = req.body;
+    const { userText, homeworkId, levelIndex, playerId, antiCheat, draftDocMeta } = req.body;
     const Homework = mongoose.model('Homework');
     const Submission = mongoose.model('Submission');
     const Student = mongoose.model('Student');
@@ -473,6 +643,13 @@ router.post('/submit', async (req, res) => {
     const cleanFeedback = stripUnderlinedMarkup(analysis?.feedback_fond || '');
     
     const antiCheatSnapshot = sanitizeAntiCheat(antiCheat);
+    if (draftDocMeta && typeof draftDocMeta === 'object') {
+        antiCheatSnapshot.telemetry = {
+            ...(antiCheatSnapshot.telemetry || {}),
+            draftDocWordCount: Number(draftDocMeta.wordCount || 0),
+            draftDocRevisionCount: Number(draftDocMeta.revisionCount || 0)
+        };
+    }
     await Submission.create({ 
         studentId: playerId, homeworkId, levelIndex, 
         content: userText, feedback: cleanFeedback, grade: analysis.grade,
