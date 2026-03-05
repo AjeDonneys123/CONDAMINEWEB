@@ -138,6 +138,9 @@ router.get('/status-summary/:studentId', async (req, res) => {
         const Subject = mongoose.model('Subject');
         const Homework = mongoose.model('Homework');
         const GameLevel = mongoose.model('GameLevel');
+        const LearningModule = mongoose.model('LearningModule');
+        const Expose = mongoose.model('Expose');
+        const Lecture = mongoose.model('Lecture');
         const Chapter = mongoose.model('Chapter');
         const Submission = mongoose.model('Submission');
         const GameProgress = mongoose.model('GameProgress');
@@ -219,7 +222,8 @@ router.get('/status-summary/:studentId', async (req, res) => {
                     crosses: 0,
                     bonuses: 0,
                     homework: { total: 0, done: 0, todo: 0, todoTitles: [] },
-                    games: { total: 0, done: 0, started: 0, todo: 0, todoTitles: [] }
+                    games: { total: 0, done: 0, started: 0, todo: 0, todoTitles: [] },
+                    activities: { total: 0, done: 0, todo: 0, todoTitles: [], todoItems: [] }
                 });
             }
             return disciplineMap.get(subject);
@@ -270,9 +274,48 @@ router.get('/status-summary/:studentId', async (req, res) => {
             if (!game.isAllClass) return false;
             return matchesClassTargets(game.targetClassrooms, classTargetKeys);
         });
+        const rawLearningModules = await LearningModule.find({
+            isEnabled: { $ne: false },
+            $or: [
+                { isAllClass: true },
+                { assignedStudents: student._id }
+            ]
+        }, '_id title subject chapterId teacherId assignedStudents isAllClass targetClassrooms completions').lean();
+        const learningModules = rawLearningModules.filter((m) => {
+            const assigned = (m.assignedStudents || []).some(id => String(id) === String(student._id));
+            if (assigned) return true;
+            if (!m.isAllClass) return false;
+            return matchesClassTargets(m.targetClassrooms, classTargetKeys);
+        });
+        const rawExposes = await Expose.find({
+            isEnabled: { $ne: false },
+            $or: [
+                { isAllClass: true },
+                { assignedStudents: student._id }
+            ]
+        }, '_id title subject chapterId teacherId assignedStudents isAllClass targetClassrooms presentations').lean();
+        const exposes = rawExposes.filter((x) => {
+            const assigned = (x.assignedStudents || []).some(id => String(id) === String(student._id));
+            if (assigned) return true;
+            if (!x.isAllClass) return false;
+            return matchesClassTargets(x.targetClassrooms, classTargetKeys);
+        });
+        const rawLectures = await Lecture.find({
+            isEnabled: { $ne: false },
+            $or: [
+                { isAllClass: true },
+                { assignedStudents: student._id }
+            ]
+        }, '_id title subject chapterId teacherId assignedStudents isAllClass targetClassrooms submissions').lean();
+        const lectures = rawLectures.filter((x) => {
+            const assigned = (x.assignedStudents || []).some(id => String(id) === String(student._id));
+            if (assigned) return true;
+            if (!x.isAllClass) return false;
+            return matchesClassTargets(x.targetClassrooms, classTargetKeys);
+        });
 
         const chapterIds = [...new Set(
-            [...homeworks, ...games]
+            [...homeworks, ...games, ...learningModules, ...exposes, ...lectures]
                 .map(it => it.chapterId ? String(it.chapterId) : null)
                 .filter(Boolean)
         )];
@@ -307,10 +350,22 @@ router.get('/status-summary/:studentId', async (req, res) => {
             const entry = ensureDiscipline(subject);
             const done = submittedHomeworkIds.has(String(hw._id));
             entry.homework.total += 1;
+            entry.activities.total += 1;
             if (done) entry.homework.done += 1;
             else {
                 entry.homework.todo += 1;
                 entry.homework.todoTitles.push(hw.title || 'Devoir');
+            }
+            if (done) entry.activities.done += 1;
+            else {
+                entry.activities.todo += 1;
+                entry.activities.todoTitles.push(`📚 ${hw.title || 'Devoir'}`);
+                entry.activities.todoItems.push({
+                    id: String(hw._id),
+                    type: 'homework',
+                    title: hw.title || 'Devoir',
+                    label: `📚 ${hw.title || 'Devoir'}`
+                });
             }
         }
 
@@ -320,13 +375,84 @@ router.get('/status-summary/:studentId', async (req, res) => {
             const entry = ensureDiscipline(subject);
             const levelReached = progressByGameId.get(String(game._id));
             entry.games.total += 1;
+            entry.activities.total += 1;
             if (levelReached === undefined) {
                 entry.games.todo += 1;
                 entry.games.todoTitles.push(game.title || 'Jeu');
+                entry.activities.todo += 1;
+                entry.activities.todoTitles.push(`🎮 ${game.title || 'Jeu'}`);
+                entry.activities.todoItems.push({
+                    id: String(game._id),
+                    type: 'game',
+                    title: game.title || 'Jeu',
+                    label: `🎮 ${game.title || 'Jeu'}`
+                });
             } else if (levelReached >= 1) {
                 entry.games.done += 1;
+                entry.activities.done += 1;
             } else {
                 entry.games.started += 1;
+                entry.activities.done += 1;
+            }
+        }
+
+        for (const m of learningModules) {
+            const fallbackSubject = mapToParentDiscipline(m.subject || 'GÉNÉRAL');
+            const subject = resolveItemSubject(m) || fallbackSubject || 'GÉNÉRAL';
+            const entry = ensureDiscipline(subject);
+            const completion = (m.completions || []).find((c) => String(c.studentId) === String(student._id));
+            const done = Boolean(completion?.completedAt);
+            entry.activities.total += 1;
+            if (done) entry.activities.done += 1;
+            else {
+                entry.activities.todo += 1;
+                entry.activities.todoTitles.push(`🧠 ${m.title || 'Apprentissage'}`);
+                entry.activities.todoItems.push({
+                    id: String(m._id),
+                    type: 'learning',
+                    title: m.title || 'Apprentissage',
+                    label: `🧠 ${m.title || 'Apprentissage'}`
+                });
+            }
+        }
+
+        for (const ex of exposes) {
+            const fallbackSubject = mapToParentDiscipline(ex.subject || 'GÉNÉRAL');
+            const subject = resolveItemSubject(ex) || fallbackSubject || 'GÉNÉRAL';
+            const entry = ensureDiscipline(subject);
+            const submission = (ex.presentations || []).find((p) => String(p.studentId) === String(student._id));
+            const done = Boolean(submission?.updatedAt);
+            entry.activities.total += 1;
+            if (done) entry.activities.done += 1;
+            else {
+                entry.activities.todo += 1;
+                entry.activities.todoTitles.push(`🗣️ ${ex.title || 'Exposé'}`);
+                entry.activities.todoItems.push({
+                    id: String(ex._id),
+                    type: 'expose',
+                    title: ex.title || 'Exposé',
+                    label: `🗣️ ${ex.title || 'Exposé'}`
+                });
+            }
+        }
+
+        for (const lec of lectures) {
+            const fallbackSubject = mapToParentDiscipline(lec.subject || 'GÉNÉRAL');
+            const subject = resolveItemSubject(lec) || fallbackSubject || 'GÉNÉRAL';
+            const entry = ensureDiscipline(subject);
+            const submission = (lec.submissions || []).find((p) => String(p.studentId) === String(student._id));
+            const done = Boolean(submission?.completedAt);
+            entry.activities.total += 1;
+            if (done) entry.activities.done += 1;
+            else {
+                entry.activities.todo += 1;
+                entry.activities.todoTitles.push(`📖 ${lec.title || 'Lecture'}`);
+                entry.activities.todoItems.push({
+                    id: String(lec._id),
+                    type: 'lecture',
+                    title: lec.title || 'Lecture',
+                    label: `📖 ${lec.title || 'Lecture'}`
+                });
             }
         }
 

@@ -6,6 +6,28 @@ const { sendLatePunishmentMail, resetLateMailState } = require('../../services/p
 const CROSS_DECAY_MS = 14 * 24 * 60 * 60 * 1000;
 const PUNISHMENT_DUE_MS = 7 * 24 * 60 * 60 * 1000;
 
+function normalizeBirthDateInput(v = '') {
+    const m = String(v || '').trim().match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+    if (!m) return '';
+    const dd = String(Number(m[1])).padStart(2, '0');
+    const mm = String(Number(m[2])).padStart(2, '0');
+    const yyyy = m[3];
+    return `${dd}/${mm}/${yyyy}`;
+}
+
+function toBirthDateDisplay(v = null) {
+    if (!v) return '';
+    const asString = String(v).trim();
+    const normalizedText = normalizeBirthDateInput(asString);
+    if (normalizedText) return normalizedText;
+    const d = new Date(v);
+    if (Number.isNaN(d.getTime())) return '';
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
+}
+
 function normalizeClassName(v = '') {
     const raw = String(v || '').trim().toUpperCase();
     return { raw, clean: raw.replace(/\s+/g, '') };
@@ -126,9 +148,25 @@ function applyCrossDecay(behaviorRecords = []) {
  */
 
 router.post('/login', async (req, res) => {
-    const { studentId } = req.body;
+    const { studentId, password } = req.body || {};
     const student = await Student.findById(studentId).populate('assignedGroups', 'name type level');
     if (student) {
+        const entered = normalizeBirthDateInput(password || '');
+        if (!entered) {
+            return res.status(401).json({ ok: false, message: "Rentre ta date de naissance au format JJ/MM/AAAA." });
+        }
+        const storedRaw =
+            student.birthDate ||
+            student.dateOfBirth ||
+            student.dob ||
+            null;
+        const expected = toBirthDateDisplay(storedRaw);
+        if (!expected) {
+            return res.status(401).json({ ok: false, message: "Date de naissance élève non configurée. Contacte le professeur." });
+        }
+        if (entered !== expected) {
+            return res.status(401).json({ ok: false, message: "Date de naissance incorrecte." });
+        }
         if (applyCrossDecay(student.behaviorRecords || [])) {
             student.markModified('behaviorRecords');
         }

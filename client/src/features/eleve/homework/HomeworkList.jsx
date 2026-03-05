@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import HomeworkWorkspace from './HomeworkWorkspace';
 import DashboardFolder from '../components/DashboardFolder';
 
-export default function HomeworkList({ user, openPunishmentDirect = false, onPunishmentOpened }) {
+export default function HomeworkList({ user, openPunishmentDirect = false, onPunishmentOpened, openItemId = '', onOpenHandled }) {
   const [homeworks, setHomeworks] = useState([]);
   const [selectedHw, setSelectedHw] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -40,6 +40,15 @@ export default function HomeworkList({ user, openPunishmentDirect = false, onPun
     }
     if (onPunishmentOpened) onPunishmentOpened();
   }, [openPunishmentDirect, homeworks, selectedHw, onPunishmentOpened]);
+
+  useEffect(() => {
+    const targetId = String(openItemId || '').trim();
+    if (!targetId || selectedHw) return;
+    const target = (homeworks || []).find((h) => String(h?._id || '') === targetId);
+    if (!target) return;
+    setSelectedHw(target);
+    if (onOpenHandled) onOpenHandled();
+  }, [openItemId, homeworks, selectedHw, onOpenHandled]);
 
   if (selectedHw) return (
       <HomeworkWorkspace 

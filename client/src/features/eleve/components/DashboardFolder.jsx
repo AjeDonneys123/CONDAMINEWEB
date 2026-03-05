@@ -32,8 +32,8 @@ export default function DashboardFolder({ items, type, onSelect }) {
   if (sortedItems.length === 0) {
       const emptyTypeLabel = type === 'homework'
           ? 'devoir'
-          : (type === 'learning' ? 'module apprentissage' : (type === 'expose' ? 'exposé' : 'jeu'));
-      const emptyIcon = type === 'homework' ? '📚' : (type === 'learning' ? '🧠' : (type === 'expose' ? '🗣️' : '🎮'));
+          : (type === 'learning' ? 'module apprentissage' : (type === 'expose' ? 'exposé' : (type === 'lecture' ? 'lecture' : 'jeu')));
+      const emptyIcon = type === 'homework' ? '📚' : (type === 'learning' ? '🧠' : (type === 'expose' ? '🗣️' : (type === 'lecture' ? '📖' : '🎮')));
       return (
           <div className="empty-stream">
               <span className="empty-icon">{emptyIcon}</span>

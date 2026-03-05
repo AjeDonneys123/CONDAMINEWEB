@@ -9,7 +9,7 @@ import DashboardFolder from '../components/DashboardFolder';
  * - Fixed fallback levels check (length > 0).
  * - Correctly passing generatedCode for univers choice.
  */
-export default function GamesGrid({ user }) {
+export default function GamesGrid({ user, openItemId = '', onOpenHandled }) {
   const [activities, setActivities] = useState([]);
   const [skins, setSkins] = useState([]);
   const [selectedActivity, setSelectedActivity] = useState(null);
@@ -33,6 +33,16 @@ export default function GamesGrid({ user }) {
   };
 
   useEffect(() => { loadData(); }, [user]);
+
+  useEffect(() => {
+      const targetId = String(openItemId || '').trim();
+      if (!targetId || selectedActivity || showSkinSelector || playingGame) return;
+      const target = (activities || []).find((a) => String(a?._id || '') === targetId);
+      if (!target) return;
+      setSelectedActivity(target);
+      setShowSkinSelector(true);
+      if (onOpenHandled) onOpenHandled();
+  }, [openItemId, activities, selectedActivity, showSkinSelector, playingGame, onOpenHandled]);
 
   const handleSelectActivity = (act) => {
       setSelectedActivity(act);

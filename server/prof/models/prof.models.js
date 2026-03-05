@@ -131,6 +131,8 @@ const Models = {
         assignedStudents: [mongoose.Schema.Types.ObjectId],
         isAllClass: { type: Boolean, default: true },
         isEnabled: { type: Boolean, default: true },
+        presentationUrl: { type: String, default: '' },
+        presentationSlidesFocus: { type: String, default: '' },
         steps: {
             type: [Object],
             default: []
@@ -165,6 +167,47 @@ const Models = {
                 recordingUrl: { type: String, default: '' },
                 recordingDurationSec: { type: Number, default: 0 },
                 createdAt: Date,
+                updatedAt: Date
+            }],
+            default: []
+        },
+        date: { type: Date, default: Date.now }
+    }),
+
+    Lecture: getModel('Lecture', {
+        title: { type: String, default: "LECTURE" },
+        subject: { type: String, default: "GÉNÉRAL" },
+        chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter' },
+        teacherId: mongoose.Schema.Types.ObjectId,
+        targetClassrooms: [String],
+        assignedStudents: [mongoose.Schema.Types.ObjectId],
+        isAllClass: { type: Boolean, default: true },
+        isEnabled: { type: Boolean, default: true },
+        readingUrl: { type: String, default: '' },
+        maxScrollSpeed: { type: Number, default: 2600 },
+        readingWpm: { type: Number, default: 300 },
+        requiredSummaryMinLines: { type: Number, default: 5 },
+        requiredSummaryMaxLines: { type: Number, default: 10 },
+        submissions: {
+            type: [{
+                studentId: mongoose.Schema.Types.ObjectId,
+                scrollTop: { type: Number, default: 0 },
+                maxScrollTop: { type: Number, default: 0 },
+                scrollHeight: { type: Number, default: 0 },
+                clientHeight: { type: Number, default: 0 },
+                reachedEnd: { type: Boolean, default: false },
+                rhythmAlerts: { type: Number, default: 0 },
+                maxSpeedPxPerSec: { type: Number, default: 0 },
+                pasteBlockedCount: { type: Number, default: 0 },
+                readElapsedSec: { type: Number, default: 0 },
+                draftDocId: { type: String, default: '' },
+                draftDocUrl: { type: String, default: '' },
+                draftDocEmbedUrl: { type: String, default: '' },
+                draftDocRevisionCount: { type: Number, default: 0 },
+                draftDocRevisionAt: { type: Date, default: null },
+                summary: { type: String, default: '' },
+                summarySubmittedAt: Date,
+                completedAt: Date,
                 updatedAt: Date
             }],
             default: []

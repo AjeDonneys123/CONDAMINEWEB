@@ -68,6 +68,7 @@ const sanitizeSteps = (steps = []) => {
                     sheetKeywords: Array.isArray(step?.sheetKeywords)
                         ? step.sheetKeywords.map(k => String(k || '').trim().toLowerCase()).filter(Boolean).slice(0, 120)
                         : [],
+                    questionCount: Math.max(1, Math.min(20, Number(step?.questionCount || 3))),
                     minReadSeconds: Math.max(5, Math.min(600, Number(step?.minReadSeconds || 20)))
                 };
             }
@@ -96,6 +97,7 @@ const sanitizeSteps = (steps = []) => {
                     videoKeywords: Array.isArray(step?.videoKeywords)
                         ? step.videoKeywords.map(k => String(k || '').trim().toLowerCase()).filter(Boolean).slice(0, 120)
                         : [],
+                    questionCount: Math.max(1, Math.min(20, Number(step?.questionCount || 3))),
                     startSec,
                     endSec,
                     mustWatchToEnd: step?.mustWatchToEnd !== false
@@ -109,9 +111,24 @@ const sanitizeSteps = (steps = []) => {
                     ? String(step.difficulty).toLowerCase()
                     : 'easy',
                 customQuestion: String(step?.customQuestion || '').trim(),
+                sourceKind: ['sheet', 'video', 'slides'].includes(String(step?.sourceKind || '').toLowerCase())
+                    ? String(step.sourceKind).toLowerCase()
+                    : 'sheet',
                 sourceSheetUrl: String(step?.sourceSheetUrl || '').trim(),
+                sourceVideoRef: String(step?.sourceVideoRef || '').trim(),
+                sourceSlidesUrl: String(step?.sourceSlidesUrl || '').trim(),
                 materialSource: String(step?.materialSource || '').trim().slice(0, 80),
                 materialText,
+                questionCount: Math.max(1, Math.min(20, Number(step?.questionCount || 3))),
+                questionAnswerPairs: Array.isArray(step?.questionAnswerPairs)
+                    ? step.questionAnswerPairs
+                        .map((pair) => ({
+                            question: String(pair?.question || '').trim().slice(0, 500),
+                            answer: String(pair?.answer || '').trim().slice(0, 500)
+                        }))
+                        .filter((pair) => pair.question || pair.answer)
+                        .slice(0, 20)
+                    : [],
                 questionPinkRanges: sanitizeRanges(step?.questionPinkRanges),
                 questionZoneRanges,
                 questionZoneMarkers: sanitizeMarkers(step?.questionZoneMarkers, materialText.length).length > 0
@@ -230,7 +247,17 @@ router.post('/extract-sheet-text', async (req, res) => {
         if (!file.ok) return res.status(400).json({ error: file.error || 'Impossible de lire la fiche' });
 
         const maxBytes = 12 * 1024 * 1024;
-        const payload = file.buffer.length > maxBytes ? file.buffer.slice(0, maxBytes) : file.buffer;
+        if (file.buffer.length > maxBytes) {
+            return res.status(413).json({ error: `Fiche trop volumineuse (${Math.ceil(file.buffer.length / (1024 * 1024))} MB). Limite: 12 MB.` });
+        }
+        const payload = file.buffer;
+
+        const mime = String(file.mime || 'application/pdf').toLowerCase();
+        if (mime.startsWith('text/')) {
+            const text = payload.toString('utf8').trim();
+            if (!text) return res.status(422).json({ error: 'Fiche texte vide.' });
+            return res.json({ text: text.slice(0, 60000), mime });
+        }
 
         const promptParts = [
             { text: "Extrait le texte lisible de ce document pédagogique en français. Réponds uniquement avec le texte brut extrait, sans commentaire." },
@@ -238,8 +265,17 @@ router.post('/extract-sheet-text', async (req, res) => {
         ];
         const raw = await ProfAI.ask(promptParts, "Tu es un extracteur OCR strict. Renvoie uniquement le texte brut du document.");
         const text = String(raw || '').trim();
-        if (!text || text.startsWith('ERROR_')) {
-            return res.status(500).json({ error: "Échec extraction IA." });
+        if (!text) {
+            return res.status(500).json({ error: "Extraction vide." });
+        }
+        if (text.startsWith('ERROR_KEY')) {
+            return res.status(500).json({ error: "Clé IA manquante côté serveur (GEMINI_API_KEY)." });
+        }
+        if (text.startsWith('ERROR_API')) {
+            return res.status(502).json({ error: "Erreur API IA pendant l'extraction." });
+        }
+        if (text.startsWith('ERROR_AI_REACH')) {
+            return res.status(504).json({ error: "IA injoignable (timeout réseau)." });
         }
         return res.json({ text: text.slice(0, 60000), mime: file.mime || '' });
     } catch (e) {
@@ -261,6 +297,39 @@ const parseJsonArray = (raw = '') => {
         return [];
     }
 };
+const parseJsonObjects = (raw = '') => {
+    const text = String(raw || '').trim();
+    if (!text) return [];
+    const first = text.indexOf('[');
+    const last = text.lastIndexOf(']');
+    if (first === -1 || last === -1 || last <= first) return [];
+    try {
+        const parsed = JSON.parse(text.slice(first, last + 1));
+        return Array.isArray(parsed) ? parsed : [];
+    } catch (_) {
+        return [];
+    }
+};
+
+const parseSlideSelection = (raw = '') => {
+    const text = String(raw || '').trim();
+    if (!text) return [];
+    const out = new Set();
+    text.split(',').map((x) => x.trim()).filter(Boolean).forEach((part) => {
+        const m = part.match(/^(\d+)\s*-\s*(\d+)$/);
+        if (m) {
+            const a = Number(m[1]);
+            const b = Number(m[2]);
+            const start = Math.max(1, Math.min(a, b));
+            const end = Math.max(1, Math.max(a, b));
+            for (let i = start; i <= end && out.size < 300; i += 1) out.add(i);
+            return;
+        }
+        const n = Number(part);
+        if (Number.isInteger(n) && n > 0 && out.size < 300) out.add(n);
+    });
+    return [...out].sort((a, b) => a - b);
+};
 
 router.post('/auto-highlight', async (req, res) => {
     try {
@@ -277,6 +346,106 @@ router.post('/auto-highlight', async (req, res) => {
         const snippets = parseJsonArray(raw).slice(0, max);
         if (!snippets.length) return res.status(500).json({ error: 'Aucun passage généré' });
         res.json({ snippets });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+router.post('/generate-question-answers', async (req, res) => {
+    try {
+        const sourceText = String(req.body?.sourceText || '').trim();
+        const count = Math.max(1, Math.min(20, Number(req.body?.count || 3)));
+        if (!sourceText) return res.status(400).json({ error: 'sourceText requis' });
+        const clipped = sourceText.slice(0, 20000);
+        const prompt = [
+            { text: `Génère exactement ${count} questions de compréhension et leur réponse attendue.` },
+            { text: "Chaque réponse attendue doit être une formulation courte strictement présente dans le texte source (mot pour mot si possible)." },
+            { text: `Texte source:\n${clipped}` },
+            { text: 'Format JSON strict uniquement: [{"question":"...","answer":"..."}]' }
+        ];
+        const raw = await ProfAI.ask(prompt, "Tu es un générateur pédagogique strict. Réponds uniquement avec un JSON valide.");
+        const rows = parseJsonObjects(raw)
+            .map((r) => ({
+                question: String(r?.question || r?.q || '').trim(),
+                answer: String(r?.answer || r?.expectedAnswer || '').trim()
+            }))
+            .filter((r) => r.question && r.answer)
+            .slice(0, count);
+        if (!rows.length) return res.status(500).json({ error: 'Aucune question générée' });
+        return res.json({ pairs: rows });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+router.post('/generate-section-questions', async (req, res) => {
+    try {
+        const sectionText = String(req.body?.sectionText || '').trim();
+        const sourceAnswers = Array.isArray(req.body?.sourceAnswers)
+            ? req.body.sourceAnswers.map((x) => String(x || '').trim()).filter(Boolean)
+            : [];
+        const count = Math.max(1, Math.min(20, Number(req.body?.count || 3)));
+        if (!sectionText) return res.status(400).json({ error: 'sectionText requis' });
+
+        const prompt = [
+            { text: `Génère exactement ${count} questions de compréhension sur cette section.` },
+            { text: 'Pour chaque question, renvoie aussi une réponse attendue courte ET une liste expectedKeywords (1 à 6 mots-clés).' },
+            { text: 'Chaque mot-clé doit exister textuellement dans la section fournie.' },
+            { text: sourceAnswers.length ? `Réponses cibles (optionnel): ${sourceAnswers.join(' | ')}` : 'Réponses cibles: libre.' },
+            { text: `Section source:\n${sectionText.slice(0, 15000)}` },
+            { text: 'Format JSON strict: [{"question":"...","expectedAnswer":"...","expectedKeywords":["mot1","mot2"]}]' }
+        ];
+        const raw = await ProfAI.ask(prompt, "Tu es un générateur pédagogique strict. Réponds uniquement avec un JSON valide.");
+        const sourceLower = sectionText.toLowerCase();
+        const rows = parseJsonObjects(raw)
+            .map((r) => {
+                const question = String(r?.question || r?.q || '').trim();
+                const expectedAnswer = String(r?.expectedAnswer || r?.answer || '').trim();
+                const rawKeywords = Array.isArray(r?.expectedKeywords)
+                    ? r.expectedKeywords
+                    : Array.isArray(r?.keywords) ? r.keywords : [];
+                const expectedKeywords = rawKeywords
+                    .map((k) => String(k || '').trim())
+                    .filter(Boolean)
+                    .filter((k) => sourceLower.includes(k.toLowerCase()))
+                    .slice(0, 6);
+                return { question, expectedAnswer, expectedKeywords };
+            })
+            .filter((r) => r.question)
+            .map((r) => {
+                if (r.expectedKeywords.length > 0) return r;
+                const fallback = String(r.expectedAnswer || '')
+                    .split(/[^a-z0-9àâäéèêëîïôöùûüÿçœæ'-]+/i)
+                    .map((w) => w.trim())
+                    .filter((w) => w.length >= 3)
+                    .filter((w) => sourceLower.includes(w.toLowerCase()));
+                return { ...r, expectedKeywords: [...new Set(fallback)].slice(0, 6) };
+            })
+            .slice(0, count);
+        if (!rows.length) return res.status(500).json({ error: 'Aucune question générée' });
+        return res.json({ rows });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+router.post('/slides/extract-text', async (req, res) => {
+    try {
+        const presentationUrl = String(req.body?.presentationUrl || '').trim();
+        const slideSelection = String(req.body?.slideSelection || '').trim();
+        if (!presentationUrl) return res.status(400).json({ error: 'presentationUrl requis' });
+        const selectedSlides = parseSlideSelection(slideSelection);
+        const extracted = await ProfDrive.getGoogleSlidesText(presentationUrl, selectedSlides);
+        if (!extracted?.combinedText) {
+            return res.status(404).json({ error: 'Aucun texte lisible trouvé sur les slides ciblés.' });
+        }
+        res.json({
+            ok: true,
+            presentationId: extracted.presentationId,
+            title: extracted.title,
+            slides: extracted.slides,
+            combinedText: String(extracted.combinedText || '').slice(0, 60000)
+        });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
@@ -387,6 +556,8 @@ router.post('/', async (req, res) => {
         if (typeof data.isEnabled !== 'boolean') data.isEnabled = true;
         data.targetClassrooms = [...new Set((data.targetClassrooms || []).map(c => String(c || '').trim().toUpperCase()).filter(Boolean))];
         data.steps = sanitizeSteps(data.steps);
+        data.presentationUrl = String(data.presentationUrl || '').trim();
+        data.presentationSlidesFocus = String(data.presentationSlidesFocus || '').trim().slice(0, 200);
         if (!data.title) data.title = 'APPRENTISSAGE';
 
         const saved = data._id
@@ -414,6 +585,48 @@ router.patch('/:id/step-text', async (req, res) => {
         if (kind === 'video') target.videoTranscript = text;
         else if (kind === 'question') target.materialText = text;
         else target.sheetText = text;
+        steps[idx] = target;
+        row.steps = steps;
+        await row.save();
+        res.json({ ok: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+router.patch('/:id/step-data', async (req, res) => {
+    try {
+        const moduleId = String(req.params.id || '').trim();
+        const stepId = String(req.body?.stepId || '').trim();
+        const patch = req.body?.patch && typeof req.body.patch === 'object' ? req.body.patch : {};
+        if (!moduleId || !stepId) return res.status(400).json({ error: 'moduleId/stepId requis' });
+
+        const row = await LearningModule.findById(moduleId);
+        if (!row) return res.status(404).json({ error: 'Apprentissage introuvable' });
+        const steps = Array.isArray(row.steps) ? [...row.steps] : [];
+        const idx = steps.findIndex((s) => String(s?.id || '') === stepId);
+        if (idx < 0) return res.status(404).json({ error: 'Étape introuvable' });
+
+        const target = { ...(steps[idx] || {}) };
+        if (patch.materialText !== undefined) target.materialText = String(patch.materialText || '').slice(0, 60000);
+        if (patch.sheetText !== undefined) target.sheetText = String(patch.sheetText || '').slice(0, 60000);
+        if (patch.videoTranscript !== undefined) target.videoTranscript = String(patch.videoTranscript || '').slice(0, 60000);
+        if (patch.questionSectionQuestions && typeof patch.questionSectionQuestions === 'object') {
+            const cleanMap = {};
+            Object.keys(patch.questionSectionQuestions).forEach((k) => {
+                const rows = Array.isArray(patch.questionSectionQuestions[k]) ? patch.questionSectionQuestions[k] : [];
+                cleanMap[String(k)] = rows.slice(0, 30).map((q) => ({
+                    q: String(q?.q || q?.question || '').trim().slice(0, 500),
+                    question: String(q?.question || q?.q || '').trim().slice(0, 500),
+                    expectedAnswer: String(q?.expectedAnswer || '').trim().slice(0, 500),
+                    expectedKeywords: Array.isArray(q?.expectedKeywords)
+                        ? q.expectedKeywords.map((x) => String(x || '').trim()).filter(Boolean).slice(0, 20)
+                        : []
+                }));
+            });
+            target.questionSectionQuestions = cleanMap;
+        }
+
         steps[idx] = target;
         row.steps = steps;
         await row.save();

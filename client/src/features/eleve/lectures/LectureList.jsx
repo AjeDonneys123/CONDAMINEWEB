@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import DashboardFolder from '../components/DashboardFolder';
-import ExposeWorkspace from './ExposeWorkspace';
+import LectureWorkspace from './LectureWorkspace';
 
-export default function ExposeList({ user, openItemId = '', onOpenHandled }) {
-    const [exposes, setExposes] = useState([]);
+export default function LectureList({ user, openItemId = '', onOpenHandled }) {
+    const [lectures, setLectures] = useState([]);
     const [selected, setSelected] = useState(null);
     const [loading, setLoading] = useState(false);
 
@@ -11,15 +11,15 @@ export default function ExposeList({ user, openItemId = '', onOpenHandled }) {
         setLoading(true);
         try {
             const id = String(user._id || user.id);
-            const res = await fetch(`/api/eleve/exposes/list/${id}`);
+            const res = await fetch(`/api/eleve/lectures/list/${id}`);
             const rows = res.ok ? await res.json() : [];
-            setExposes((rows || []).map((x) => ({
+            setLectures((rows || []).map((x) => ({
                 ...x,
-                status: x.studentSubmission?.updatedAt ? 'done' : 'todo',
+                status: x.status || (x.studentSubmission?.completedAt ? 'done' : 'todo'),
                 subject: x.chapterSection || x.subject || 'GÉNÉRAL'
             })));
-        } catch (e) {
-            setExposes([]);
+        } catch (_) {
+            setLectures([]);
         }
         setLoading(false);
     };
@@ -29,16 +29,16 @@ export default function ExposeList({ user, openItemId = '', onOpenHandled }) {
     useEffect(() => {
         const targetId = String(openItemId || '').trim();
         if (!targetId || selected) return;
-        const target = (exposes || []).find((x) => String(x?._id || '') === targetId);
+        const target = (lectures || []).find((x) => String(x?._id || '') === targetId);
         if (!target) return;
         setSelected(target);
         if (onOpenHandled) onOpenHandled();
-    }, [openItemId, exposes, selected, onOpenHandled]);
+    }, [openItemId, lectures, selected, onOpenHandled]);
 
     if (selected) {
         return (
-            <ExposeWorkspace
-                expose={selected}
+            <LectureWorkspace
+                lecture={selected}
                 user={user}
                 onQuit={() => {
                     setSelected(null);
@@ -55,7 +55,7 @@ export default function ExposeList({ user, openItemId = '', onOpenHandled }) {
                     {loading ? '...' : '🔄 ACTUALISER'}
                 </button>
             </div>
-            <DashboardFolder items={exposes} type="expose" onSelect={setSelected} />
+            <DashboardFolder items={lectures} type="lecture" onSelect={setSelected} />
         </div>
     );
 }

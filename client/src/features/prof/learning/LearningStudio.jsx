@@ -12,6 +12,10 @@ const isProbablyDirectVideo = (url = '') => {
     if (/(\.mp4|\.webm|\.ogg|\.m3u8)(\?|#|$)/i.test(u)) return true;
     return false;
 };
+const isImageLike = (url = '') => {
+    const u = String(url || '').toLowerCase();
+    return /(\.png|\.jpg|\.jpeg|\.webp|\.gif|\.bmp|\.svg)(\?|#|$)/i.test(u);
+};
 const toEmbedUrl = (rawUrl = '') => {
     const url = String(rawUrl || '').trim();
     if (!url) return '';
@@ -21,16 +25,44 @@ const toEmbedUrl = (rawUrl = '') => {
     if (vimeo?.[1]) return `https://player.vimeo.com/video/${vimeo[1]}`;
     return url;
 };
+const QUESTION_DRAFT_FIELDS = [
+    'title',
+    'difficulty',
+    'customQuestion',
+    'sourceKind',
+    'sourceSheetUrl',
+    'sourceVideoRef',
+    'sourceSlidesUrl',
+    'materialSource',
+    'materialText',
+    'questionCount',
+    'questionAnswerPairs',
+    'questionSectionQuestions',
+    'keywords',
+    'minKeywordMatches',
+    'questionPinkRanges',
+    'questionZoneRanges',
+    'questionZoneMarkers',
+    'redHighlights',
+    'orangeHighlights',
+    'zoneHighlights',
+    'sheetAnnotations'
+];
 
 const emptyStep = (type = 'sheet') => {
-    if (type === 'video') return { id: uid(), type: 'video', title: 'Vidéo', videoUrl: '', thumbnailUrl: '', videoTranscript: '', startSec: 0, endSec: 0, mustWatchToEnd: true };
+    if (type === 'video') return { id: uid(), type: 'video', title: 'Vidéo', videoUrl: '', thumbnailUrl: '', videoTranscript: '', questionCount: 3, startSec: 0, endSec: 0, mustWatchToEnd: true };
     if (type === 'question') return {
         id: uid(),
         type: 'question',
         title: 'Question IA',
         difficulty: 'easy',
         customQuestion: '',
+        sourceKind: 'sheet',
         sourceSheetUrl: '',
+        sourceVideoRef: '',
+        sourceSlidesUrl: '',
+        questionCount: 3,
+        questionAnswerPairs: [],
         orangeHighlights: [],
         redHighlights: [],
         sheetAnnotations: [],
@@ -38,7 +70,7 @@ const emptyStep = (type = 'sheet') => {
         minKeywordMatches: 1,
         aiPreviewQuestions: []
     };
-    return { id: uid(), type: 'sheet', title: 'Fiche', sheetUrl: '', sheetText: '', minReadSeconds: 20 };
+    return { id: uid(), type: 'sheet', title: 'Fiche', sheetUrl: '', sheetText: '', questionCount: 3, minReadSeconds: 20 };
 };
 
 export default function LearningStudio({ initialData, chapters, user, targetSection, targetLevel, onClose, allStudents: propStudents, allClasses: propClasses }) {
@@ -47,6 +79,8 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         title: initialData?.title || 'APPRENTISSAGE',
         chapterId: initialData?.chapterId ? String(initialData.chapterId) : '',
         subject: initialData?.subject || targetSection || 'GÉNÉRAL',
+        presentationUrl: initialData?.presentationUrl || '',
+        presentationSlidesFocus: initialData?.presentationSlidesFocus || '',
         steps: Array.isArray(initialData?.steps) && initialData.steps.length > 0
             ? initialData.steps.map((s, i) => ({ id: s.id || `step_${i + 1}`, ...s }))
             : []
@@ -61,6 +95,8 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     const [loading, setLoading] = useState(false);
     const [showAnnotModal, setShowAnnotModal] = useState(false);
     const [showKeywordModal, setShowKeywordModal] = useState(false);
+    const [showQuestionSourceText, setShowQuestionSourceText] = useState(false);
+    const [loadingQuestionSourceText, setLoadingQuestionSourceText] = useState(false);
     const [extractingSheetText, setExtractingSheetText] = useState(false);
     const [savingSheetText, setSavingSheetText] = useState(false);
     const [annotColor, setAnnotColor] = useState('orange');
@@ -88,10 +124,27 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     const [keywordSelectionSpan, setKeywordSelectionSpan] = useState(null);
     const [keywordActiveZoneIdx, setKeywordActiveZoneIdx] = useState(null);
     const [zoneQuestionCount, setZoneQuestionCount] = useState(3);
+    const [dragStepIdx, setDragStepIdx] = useState(null);
+    const [pendingVideoEditorStepId, setPendingVideoEditorStepId] = useState('');
+    const [questionSourceNotice, setQuestionSourceNotice] = useState('');
+    const [zoneKeywordDrafts, setZoneKeywordDrafts] = useState({});
+    const [selectedZoneKeyword, setSelectedZoneKeyword] = useState(null); // { zoneIdx, rowIdx, keywordIdx }
+    const [synonymDraft, setSynonymDraft] = useState('');
+    const [savingStepData, setSavingStepData] = useState(false);
+    const [importingSheet, setImportingSheet] = useState(false);
     const videoEditorRef = useRef(null);
+    const sheetImportInputRef = useRef(null);
     const keywordSelectionRef = useRef(null);
+    const hydratedQuestionDraftsRef = useRef(new Set());
     const teacherId = String(user?._id || user?.id || '').trim();
     const step = formData.steps[activeStep] || null;
+    const questionDraftKey = useMemo(() => {
+        if (!step || step.type !== 'question' || !step.id) return '';
+        const scope = formData._id
+            ? `id_${String(formData._id)}`
+            : `new_${String(formData.chapterId || 'nochap')}_${String(formData.title || '').slice(0, 24)}`;
+        return `learning_qia_draft_v1_${scope}_${String(step.id)}`;
+    }, [formData._id, formData.chapterId, formData.title, step?.id, step?.type]);
 
     useEffect(() => {
         const init = async () => {
@@ -118,6 +171,52 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         setDistribution(dist);
         if (initialData.targetClassrooms.length > 0) setViewingClass(initialData.targetClassrooms[0]);
     }, [initialData]);
+
+    useEffect(() => {
+        if (!questionDraftKey || !step || step.type !== 'question') return;
+        if (hydratedQuestionDraftsRef.current.has(questionDraftKey)) return;
+        hydratedQuestionDraftsRef.current.add(questionDraftKey);
+        try {
+            const raw = localStorage.getItem(questionDraftKey);
+            if (!raw) return;
+            const parsed = JSON.parse(raw);
+            if (!parsed || typeof parsed !== 'object') return;
+            const patch = {};
+            QUESTION_DRAFT_FIELDS.forEach((k) => {
+                if (parsed[k] !== undefined) patch[k] = parsed[k];
+            });
+            if (Object.keys(patch).length > 0) updateStep(activeStep, patch);
+        } catch (_) {}
+    }, [questionDraftKey, step?.id, step?.type, activeStep]);
+
+    useEffect(() => {
+        if (!questionDraftKey || !step || step.type !== 'question') return;
+        try {
+            const snapshot = {};
+            QUESTION_DRAFT_FIELDS.forEach((k) => {
+                if (step[k] !== undefined) snapshot[k] = step[k];
+            });
+            localStorage.setItem(questionDraftKey, JSON.stringify(snapshot));
+        } catch (_) {}
+    }, [questionDraftKey, step]);
+
+    useEffect(() => {
+        if (!formData?._id || !step || step.type !== 'question' || !step.id) return;
+        const patch = {};
+        QUESTION_DRAFT_FIELDS.forEach((k) => {
+            if (step[k] !== undefined) patch[k] = step[k];
+        });
+        const timer = setTimeout(async () => {
+            try {
+                await fetch(`/api/learning/${encodeURIComponent(String(formData._id))}/step-data`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ stepId: String(step.id), patch })
+                });
+            } catch (_) {}
+        }, 900);
+        return () => clearTimeout(timer);
+    }, [formData?._id, step]);
 
     const availableChapters = useMemo(() => {
         const section = String(targetSection || 'GÉNÉRAL').toUpperCase();
@@ -164,6 +263,125 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         });
         return unique;
     };
+    const getCandidateVideos = () => {
+        const chapterId = String(formData.chapterId || '');
+        const all = [];
+        (formData.steps || []).forEach((s) => {
+            if (s.type === 'video' && s.videoUrl) all.push({ url: s.videoUrl, source: `Vidéo module: ${s.title || 'Sans titre'}` });
+        });
+        (allGames || [])
+            .filter(g => String(g.chapterId || '') === chapterId)
+            .forEach((g) => {
+                if (g?.globalIntro?.videoUrl) all.push({ url: g.globalIntro.videoUrl, source: `Jeu: ${g.title || 'Sans titre'} (intro)` });
+                (g?.levels || []).forEach((lvl, idx) => {
+                    if (lvl?.intro?.videoUrl) all.push({ url: lvl.intro.videoUrl, source: `Jeu: ${g.title || 'Sans titre'} (${lvl.name || `Niveau ${idx + 1}`})` });
+                });
+            });
+        const unique = [];
+        const seen = new Set();
+        all.forEach((x) => {
+            const key = String(x.url || '').trim();
+            if (!key || seen.has(key)) return;
+            seen.add(key);
+            unique.push(x);
+        });
+        return unique;
+    };
+
+    const getQuestionSources = () => {
+        const rows = [];
+        // Sources internes (étapes du module)
+        (formData.steps || []).forEach((s) => {
+            if (!s || s.id === step?.id) return;
+            if (s.type === 'sheet' && s.sheetUrl) {
+                rows.push({
+                    value: `sheet:${s.id}`,
+                    type: 'sheet',
+                    label: `Fiche (module): ${s.title || 'Sans titre'}`,
+                    url: s.sheetUrl,
+                    text: String(s.sheetText || '')
+                });
+            }
+            if (s.type === 'video' && s.videoUrl) {
+                rows.push({
+                    value: `video:${s.id}`,
+                    type: 'video',
+                    label: `Séquence vidéo (module): ${s.title || 'Sans titre'}`,
+                    url: s.videoUrl,
+                    text: String(s.videoTranscript || '')
+                });
+            }
+        });
+        // Sources externes (jeux du chapitre) - fiches seulement
+        getCandidateSheets().forEach((item) => {
+            rows.push({
+                value: `sheet-url:${encodeURIComponent(String(item.url || ''))}`,
+                type: 'sheet',
+                label: `Fiche (jeu): ${item.source || 'Sans titre'}`,
+                url: item.url,
+                text: ''
+            });
+        });
+        const seen = new Set();
+        return rows.filter((r) => {
+            const key = `${r.type}|${r.value}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+    };
+
+    const resolveQuestionSource = (sourceValue = '') => {
+        const raw = String(sourceValue || '').trim();
+        if (!raw) return null;
+        if (raw.startsWith('sheet-url:')) {
+            const url = decodeURIComponent(raw.slice('sheet-url:'.length));
+            return { type: 'sheet', url, text: '' };
+        }
+        if (raw.startsWith('sheet:')) {
+            const sid = raw.slice('sheet:'.length);
+            const s = (formData.steps || []).find((x) => String(x?.id || '') === sid && x.type === 'sheet');
+            if (!s) return null;
+            return { type: 'sheet', url: String(s.sheetUrl || ''), text: String(s.sheetText || '') };
+        }
+        if (raw.startsWith('video:')) {
+            const sid = raw.slice('video:'.length);
+            const s = (formData.steps || []).find((x) => String(x?.id || '') === sid && x.type === 'video');
+            if (!s) return null;
+            return {
+                type: 'video',
+                url: String(s.videoUrl || ''),
+                text: String(s.videoTranscript || ''),
+                startSec: Number(s.startSec || 0),
+                endSec: Number(s.endSec || 0)
+            };
+        }
+        // Compat legacy: URL brute de fiche
+        return { type: 'sheet', url: raw, text: '' };
+    };
+    const parseVideoStepId = (sourceValue = '') => {
+        const raw = String(sourceValue || '').trim();
+        if (!raw.startsWith('video:')) return '';
+        return raw.slice('video:'.length);
+    };
+    const getSelectedQuestionSource = (questionStep = null) => {
+        const q = questionStep || step;
+        if (!q || q.type !== 'question') return null;
+        const preferredKindRaw = String(q.sourceKind || 'sheet').toLowerCase();
+        const preferredKind = ['sheet', 'video', 'slides'].includes(preferredKindRaw) ? preferredKindRaw : 'sheet';
+        if (preferredKind === 'slides') {
+            const url = String(q.sourceSlidesUrl || '').trim();
+            return url ? { type: 'slides', url, text: '' } : null;
+        }
+        const preferredRaw = preferredKind === 'video'
+            ? String(q.sourceVideoRef || '').trim()
+            : String(q.sourceSheetUrl || '').trim();
+        if (preferredRaw) return resolveQuestionSource(preferredRaw);
+        const fallbackRaw = preferredKind === 'video'
+            ? String(q.sourceSheetUrl || '').trim()
+            : String(q.sourceVideoRef || '').trim();
+        return fallbackRaw ? resolveQuestionSource(fallbackRaw) : null;
+    };
 
     const getQuestionTextSources = () => {
         const rows = [{ id: 'manual', label: 'Texte manuel', text: '' }];
@@ -209,6 +427,41 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         const current = Array.isArray(step.sheetAnnotations) ? step.sheetAnnotations : [];
         const next = current.filter((_, i) => i !== idx);
         updateStep(activeStep, { sheetAnnotations: next, ...rebuildHighlightsFromAnnotations(next) });
+    };
+    const normalizeQuestionPairs = (rows = []) =>
+        (Array.isArray(rows) ? rows : [])
+            .map((r) => {
+                const question = String(r?.question || r?.q || '').trim();
+                const options = Array.isArray(r?.options) ? r.options.map((x) => String(x || '').trim()) : [];
+                const answerIdx = Number(r?.a);
+                const answerFromOptions = Number.isInteger(answerIdx) && answerIdx >= 0 && answerIdx < options.length
+                    ? options[answerIdx]
+                    : '';
+                const answer = String(r?.answer || r?.expectedAnswer || answerFromOptions || '').trim();
+                return { question, answer };
+            })
+            .filter((r) => r.question || r.answer)
+            .slice(0, 20);
+    const patchFromQuestionPairs = (pairs = []) => {
+        const clean = normalizeQuestionPairs(pairs);
+        const firstQuestion = String(clean[0]?.question || '').trim();
+        const answers = clean.map((p) => String(p.answer || '').trim()).filter(Boolean);
+        const keywordBag = answers
+            .join(' ')
+            .toLowerCase()
+            .split(/[^a-z0-9àâäéèêëîïôöùûüÿçœæ'-]+/i)
+            .map((w) => w.trim())
+            .filter((w) => w.length >= 3);
+        return {
+            questionAnswerPairs: clean,
+            customQuestion: firstQuestion || '',
+            redHighlights: answers.slice(0, 30),
+            keywords: [...new Set(keywordBag)].slice(0, 20)
+        };
+    };
+    const updateQuestionPairs = (pairs = []) => {
+        if (!step || step.type !== 'question') return;
+        updateStep(activeStep, patchFromQuestionPairs(pairs));
     };
 
     const handleAnnotMouseDown = (e) => {
@@ -257,6 +510,144 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             updateStep(activeStep, { aiPreviewQuestions: clean });
         } catch (e) {
             alert("Erreur génération questions test.");
+        }
+        setAiTesting(false);
+    };
+
+    const generateQuestionsFromCurrentResource = async () => {
+        if (!step || (step.type !== 'sheet' && step.type !== 'video')) return;
+        const count = Math.max(1, Math.min(20, Number(step.questionCount || 3)));
+        setAiTesting(true);
+        try {
+            let sourceText = '';
+            if (step.type === 'sheet') {
+                sourceText = String(step.sheetText || '').trim();
+                if (!sourceText) {
+                    const sheetUrl = String(step.sheetUrl || '').trim();
+                    if (!sheetUrl) throw new Error("Ajoute d'abord l'URL de la fiche.");
+                    const res = await fetch('/api/learning/extract-sheet-text', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ sheetUrl })
+                    });
+                    const data = await res.json();
+                    if (!res.ok || !data?.text) throw new Error(data?.error || 'Extraction fiche impossible');
+                    sourceText = String(data.text || '').trim();
+                    updateStep(activeStep, { sheetText: sourceText });
+                }
+            } else {
+                sourceText = String(step.videoTranscript || '').trim();
+                if (!sourceText) {
+                    sourceText = String(selectedSegmentTranscript || '').trim();
+                }
+                if (!sourceText) {
+                    throw new Error("Ajoute d'abord la transcription de la séquence vidéo dans l'éditeur.");
+                }
+            }
+
+            const topic = [
+                `Crée ${count} questions de compréhension pour des élèves.`,
+                `Ressource: ${step.type === 'sheet' ? 'fiche' : 'séquence vidéo'}`,
+                `Titre: ${String(step.title || 'Sans titre')}`,
+                `Texte source:`,
+                sourceText.slice(0, 20000)
+            ].join('\n');
+
+            const fd = new FormData();
+            fd.append('topic', topic);
+            fd.append('count', String(count));
+            const res = await fetch('/api/games/generate-content', { method: 'POST', body: fd });
+            const rows = await res.json();
+            const clean = Array.isArray(rows) ? rows.slice(0, count) : [];
+            const qStep = {
+                ...emptyStep('question'),
+                title: `Questions ${step.type === 'sheet' ? 'Fiche' : 'Vidéo'}`,
+                materialSource: step.type === 'sheet' ? `sheet:${step.id}` : `video:${step.id}`,
+                materialText: sourceText,
+                aiPreviewQuestions: clean
+            };
+            setFormData((prev) => {
+                const steps = [...(prev.steps || [])];
+                steps.splice(activeStep + 1, 0, qStep);
+                return { ...prev, steps };
+            });
+            setActiveStep(activeStep + 1);
+        } catch (e) {
+            alert(`Génération impossible: ${e.message}`);
+        }
+        setAiTesting(false);
+    };
+
+    const extractSlidesTextForQuestion = async () => {
+        if (!step || step.type !== 'question') return;
+        const presentationUrl = String(formData.presentationUrl || '').trim();
+        if (!presentationUrl) return alert("Ajoute d'abord l'URL de la présentation.");
+        setExtractingSheetText(true);
+        try {
+            const res = await fetch('/api/learning/slides/extract-text', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    presentationUrl,
+                    slideSelection: String(formData.presentationSlidesFocus || '').trim()
+                })
+            });
+            const data = await res.json();
+            if (!res.ok || !data?.combinedText) throw new Error(data?.error || 'Extraction slides impossible');
+            updateStep(activeStep, {
+                materialSource: 'slides',
+                materialText: String(data.combinedText || '')
+            });
+            setKeywordMaterialSource('manual');
+            setKeywordMaterialText(String(data.combinedText || ''));
+            setKeywordSelectedText('');
+            setKeywordSelectionSpan(null);
+            setActiveTarget('response');
+            setEraseMode(false);
+            setShowKeywordModal(true);
+        } catch (e) {
+            alert(`Extraction slides impossible: ${e.message}`);
+        }
+        setExtractingSheetText(false);
+    };
+
+    const generateQuestionsFromSlides = async () => {
+        if (!step || step.type !== 'question') return;
+        const presentationUrl = String(formData.presentationUrl || '').trim();
+        if (!presentationUrl) return alert("Ajoute d'abord l'URL de la présentation.");
+        setAiTesting(true);
+        try {
+            const extract = await fetch('/api/learning/slides/extract-text', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    presentationUrl,
+                    slideSelection: String(formData.presentationSlidesFocus || '').trim()
+                })
+            });
+            const extracted = await extract.json();
+            if (!extract.ok || !extracted?.combinedText) throw new Error(extracted?.error || 'Extraction slides impossible');
+            const count = Math.max(1, Math.min(20, Number(zoneQuestionCount || 4)));
+            const topic = [
+                `Crée ${count} questions de compréhension pour des élèves à partir de ces slides (trace écrite).`,
+                `Contexte: ${String(formData.title || 'Apprentissage')}`,
+                `Slides ciblées: ${String(formData.presentationSlidesFocus || 'toutes')}`,
+                `Texte source:`,
+                String(extracted.combinedText || '').slice(0, 20000)
+            ].join('\n');
+            const fd = new FormData();
+            fd.append('topic', topic);
+            fd.append('count', String(count));
+            const qRes = await fetch('/api/games/generate-content', { method: 'POST', body: fd });
+            const rows = await qRes.json();
+            const clean = Array.isArray(rows) ? rows.slice(0, count) : [];
+            updateStep(activeStep, {
+                aiPreviewQuestions: clean,
+                materialSource: 'slides',
+                materialText: String(extracted.combinedText || '')
+            });
+        } catch (e) {
+            alert(`Génération slides impossible: ${e.message}`);
         }
         setAiTesting(false);
     };
@@ -387,6 +778,24 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     };
     const selectedSegment = knownSegments.find((s) => String(s._id || s.id || '') === selectedSegmentId) || null;
     const questionTextSources = useMemo(() => getQuestionTextSources(), [formData.steps, step?.id]);
+    const questionSources = useMemo(() => getQuestionSources(), [formData.steps, allGames, formData.chapterId, step?.id]);
+    const videoSources = useMemo(() => getCandidateVideos(), [formData.steps, allGames, formData.chapterId]);
+    const sheetQuestionSources = useMemo(() => questionSources.filter((s) => s.type === 'sheet'), [questionSources]);
+    const videoQuestionSources = useMemo(() => questionSources.filter((s) => s.type === 'video'), [questionSources]);
+    const questionSectionsFromDb = useMemo(() => {
+        if (!step || step.type !== 'question') return [];
+        const map = (step.questionSectionQuestions && typeof step.questionSectionQuestions === 'object')
+            ? step.questionSectionQuestions
+            : {};
+        return Object.keys(map)
+            .map((k) => ({ idx: Number(k), rows: Array.isArray(map[k]) ? map[k] : [] }))
+            .filter((x) => Number.isFinite(x.idx) && x.rows.length > 0)
+            .sort((a, b) => a.idx - b.idx);
+    }, [step?.id, step?.questionSectionQuestions, step?.type]);
+    const selectedQuestionSource = useMemo(
+        () => getSelectedQuestionSource(step),
+        [step?.sourceKind, step?.sourceSheetUrl, step?.sourceVideoRef, step?.sourceSlidesUrl, formData.steps]
+    );
 
     const openKeywordModal = () => {
         if (!step) return;
@@ -432,31 +841,240 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         }
     };
 
-    const extractTextFromSheetForQuestion = async () => {
-        if (!step || step.type !== 'question') return;
-        const sheetUrl = String(step.sourceSheetUrl || '').trim();
-        if (!sheetUrl) return alert("Choisis d'abord une fiche source.");
-        setExtractingSheetText(true);
+    const loadQuestionSourceText = async ({ openKeyword = false, quietMissingVideoText = false } = {}) => {
+        if (!step || step.type !== 'question') return '';
+        const source = getSelectedQuestionSource(step);
+        if (!source?.url) {
+            alert("Choisis d'abord une source.");
+            return '';
+        }
+        if (source.type === 'slides') {
+            setLoadingQuestionSourceText(true);
+            try {
+                const res = await fetch('/api/learning/slides/extract-text', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ presentationUrl: source.url, slideSelection: '' })
+                });
+                const data = await res.json();
+                if (!res.ok || !data?.combinedText) throw new Error(data?.error || 'Extraction slides impossible');
+                const extracted = String(data.combinedText || '');
+                updateStep(activeStep, { materialSource: String(step.sourceSlidesUrl || ''), materialText: extracted });
+                if (openKeyword) {
+                    setKeywordMaterialSource(String(step.sourceSlidesUrl || 'manual'));
+                    setKeywordMaterialText(extracted);
+                    setKeywordSelectedText('');
+                    setKeywordSelectionSpan(null);
+                    setActiveTarget('response');
+                    setEraseMode(false);
+                    setShowKeywordModal(true);
+                } else {
+                    setShowQuestionSourceText(true);
+                }
+                return extracted;
+            } catch (e) {
+                alert(`Extraction Slides impossible: ${e.message}`);
+                return '';
+            } finally {
+                setLoadingQuestionSourceText(false);
+            }
+        }
+        if (source.type === 'video') {
+            let transcript = String(source.text || '').trim();
+            if (!transcript) {
+                try {
+                    const res = await fetch(`/api/learning/video-segments?teacherId=${encodeURIComponent(teacherId)}&url=${encodeURIComponent(String(source.url || ''))}`);
+                    const list = res.ok ? await res.json() : [];
+                    const rows = Array.isArray(list) ? list : [];
+                    const sameBounds = rows.find((seg) =>
+                        Number(seg?.startSec || 0) === Number(source.startSec || 0)
+                        && Number(seg?.endSec || 0) === Number(source.endSec || 0)
+                        && String(seg?.transcript || '').trim()
+                    );
+                    const withText = sameBounds || rows.find((seg) => String(seg?.transcript || '').trim());
+                    transcript = String(withText?.transcript || '').trim();
+                    if (transcript) {
+                        const sid = parseVideoStepId(step.sourceVideoRef || '');
+                        if (sid) {
+                            const idx = (formData.steps || []).findIndex((s) => String(s.id || '') === sid && s.type === 'video');
+                            if (idx >= 0) updateStep(idx, { videoTranscript: transcript });
+                        }
+                    }
+                } catch (_) {}
+            }
+            if (!transcript) {
+                if (!quietMissingVideoText) alert("La séquence vidéo n'a pas encore de transcription.");
+                return '';
+            }
+            updateStep(activeStep, { materialSource: String(step.sourceVideoRef || ''), materialText: transcript });
+            if (openKeyword) {
+                setKeywordMaterialSource(String(step.sourceVideoRef || `video:${step.id}`));
+                setKeywordMaterialText(transcript);
+                setKeywordSelectedText('');
+                setKeywordSelectionSpan(null);
+                setActiveTarget('response');
+                setEraseMode(false);
+                setShowKeywordModal(true);
+            } else {
+                setShowQuestionSourceText(true);
+            }
+            return transcript;
+        }
+        setLoadingQuestionSourceText(true);
         try {
+            const sourceRef = String(step.sourceSheetUrl || '').trim();
+            const cachedSourceRef = String(step.materialSource || '').trim();
+            const cachedText = String(step.materialText || '').trim();
+            if (cachedText && sourceRef && cachedSourceRef === sourceRef) {
+                if (openKeyword) {
+                    setKeywordMaterialSource(sourceRef);
+                    setKeywordMaterialText(cachedText);
+                    setKeywordSelectedText('');
+                    setKeywordSelectionSpan(null);
+                    setActiveTarget('response');
+                    setEraseMode(false);
+                    setShowKeywordModal(true);
+                } else {
+                    setShowQuestionSourceText(true);
+                }
+                return cachedText;
+            }
+            const localText = String(source.text || '').trim();
+            if (localText) {
+                updateStep(activeStep, { materialSource: String(step.sourceSheetUrl || ''), materialText: localText });
+                if (openKeyword) {
+                    setKeywordMaterialSource(String(step.sourceSheetUrl || `sheet:${step.id}`));
+                    setKeywordMaterialText(localText);
+                    setKeywordSelectedText('');
+                    setKeywordSelectionSpan(null);
+                    setActiveTarget('response');
+                    setEraseMode(false);
+                    setShowKeywordModal(true);
+                } else {
+                    setShowQuestionSourceText(true);
+                }
+                return localText;
+            }
             const res = await fetch('/api/learning/extract-sheet-text', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sheetUrl })
+                body: JSON.stringify({ sheetUrl: source.url })
             });
             const data = await res.json();
             if (!res.ok || !data?.text) throw new Error(data?.error || 'Extraction impossible');
-            updateStep(activeStep, { materialSource: `sheet:${step.id}`, materialText: data.text });
-            setKeywordMaterialSource(`sheet:${step.id}`);
-            setKeywordMaterialText(data.text);
-            setKeywordSelectedText('');
-            setKeywordSelectionSpan(null);
-            setActiveTarget('response');
-            setEraseMode(false);
-            setShowKeywordModal(true);
+            const extracted = String(data.text || '');
+            updateStep(activeStep, { materialSource: String(step.sourceSheetUrl || ''), materialText: extracted });
+            if (openKeyword) {
+                setKeywordMaterialSource(String(step.sourceSheetUrl || `sheet:${step.id}`));
+                setKeywordMaterialText(extracted);
+                setKeywordSelectedText('');
+                setKeywordSelectionSpan(null);
+                setActiveTarget('response');
+                setEraseMode(false);
+                setShowKeywordModal(true);
+            } else {
+                setShowQuestionSourceText(true);
+            }
+            return extracted;
         } catch (e) {
             alert(`Extraction fiche impossible: ${e.message}`);
+            return '';
+        } finally {
+            setLoadingQuestionSourceText(false);
         }
-        setExtractingSheetText(false);
+    };
+    const hydrateTranscriptForVideoSource = async (videoRef = '') => {
+        if (!step || step.type !== 'question') return '';
+        const ref = String(videoRef || step.sourceVideoRef || '').trim();
+        if (!ref) return '';
+        const source = resolveQuestionSource(ref);
+        if (!source || source.type !== 'video' || !source.url) return '';
+        let transcript = String(source.text || '').trim();
+        if (!transcript) {
+            try {
+                const res = await fetch(`/api/learning/video-segments?teacherId=${encodeURIComponent(teacherId)}&url=${encodeURIComponent(String(source.url || ''))}`);
+                const list = res.ok ? await res.json() : [];
+                const rows = Array.isArray(list) ? list : [];
+                const sameBounds = rows.find((seg) =>
+                    Number(seg?.startSec || 0) === Number(source.startSec || 0)
+                    && Number(seg?.endSec || 0) === Number(source.endSec || 0)
+                    && String(seg?.transcript || '').trim()
+                );
+                const withText = sameBounds || rows.find((seg) => String(seg?.transcript || '').trim());
+                transcript = String(withText?.transcript || '').trim();
+                if (transcript) {
+                    const sid = parseVideoStepId(ref);
+                    if (sid) {
+                        const idx = (formData.steps || []).findIndex((s) => String(s.id || '') === sid && s.type === 'video');
+                        if (idx >= 0) updateStep(idx, { videoTranscript: transcript });
+                    }
+                    updateStep(activeStep, { materialSource: ref, materialText: transcript });
+                }
+            } catch (_) {}
+        }
+        return transcript;
+    };
+
+    const openQuestionEditor = async () => {
+        if (!step || step.type !== 'question') return;
+        setQuestionSourceNotice('');
+        const source = getSelectedQuestionSource(step);
+        if (!source?.url) {
+            alert("Choisis d'abord une source.");
+            return;
+        }
+        if (source.type === 'video') {
+            const transcript = String(await hydrateTranscriptForVideoSource(step.sourceVideoRef || '') || '').trim();
+            if (!transcript) {
+                const sid = parseVideoStepId(step.sourceVideoRef || '');
+                if (sid) {
+                    const videoStep = (formData.steps || []).find((s) => String(s.id || '') === sid && s.type === 'video');
+                    const label = String(videoStep?.title || 'cette séquence');
+                    setQuestionSourceNotice(`Transcription manquante pour "${label}". Ouvre l'éditeur vidéo pour l'ajouter.`);
+                } else {
+                    setQuestionSourceNotice("Transcription vidéo manquante.");
+                }
+                return;
+            }
+        }
+        await loadQuestionSourceText({ openKeyword: true, quietMissingVideoText: true });
+    };
+    const openVideoEditorFromQuestionSource = () => {
+        if (!step || step.type !== 'question') return;
+        const sid = parseVideoStepId(step.sourceVideoRef || '');
+        if (!sid) return;
+        const idx = (formData.steps || []).findIndex((s) => String(s.id || '') === sid && s.type === 'video');
+        if (idx < 0) return;
+        setPendingVideoEditorStepId(sid);
+        setActiveStep(idx);
+    };
+
+    const extractTextFromSelectedSourceForQuestion = async () => {
+        await loadQuestionSourceText({ openKeyword: true });
+    };
+
+    const generateQuestionAnswerPairsFromSource = async () => {
+        if (!step || step.type !== 'question') return;
+        const wanted = Math.max(1, Math.min(20, Number(step.questionCount || 3)));
+        setAiTesting(true);
+        try {
+            let sourceText = String(step.materialText || '').trim();
+            if (!sourceText) sourceText = String(await loadQuestionSourceText({ openKeyword: false }) || '').trim();
+            if (!sourceText) throw new Error("Aucun texte source disponible.");
+            const res = await fetch('/api/learning/generate-question-answers', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sourceText, count: wanted })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data?.error || 'Génération impossible');
+            const pairs = normalizeQuestionPairs(data?.pairs || []);
+            if (!pairs.length) throw new Error('Aucune question générée');
+            updateStep(activeStep, patchFromQuestionPairs(pairs));
+        } catch (e) {
+            alert(`Génération impossible: ${e.message}`);
+        }
+        setAiTesting(false);
     };
 
     const extractTextForSheetStep = async () => {
@@ -922,6 +1540,157 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         const rows = map[String(idx)];
         return Array.isArray(rows) ? rows : [];
     };
+    const getZoneCount = () => {
+        const sourceLen = String(keywordMaterialText || '').length;
+        const markers = normalizeMarkers(getCurrentZoneMarkers(), sourceLen);
+        return Math.max(1, markers.length + 1);
+    };
+    const getZoneQuestions = (zoneIdx = 0) => {
+        const map = getCurrentSectionQuestionsMap();
+        const rows = map[String(zoneIdx)];
+        return Array.isArray(rows) ? rows : [];
+    };
+    const getTotalZoneQuestions = () => {
+        const map = getCurrentSectionQuestionsMap();
+        return Object.values(map).reduce((acc, rows) => {
+            if (!Array.isArray(rows)) return acc;
+            return acc + rows.length;
+        }, 0);
+    };
+    const updateZoneQuestion = (zoneIdx = 0, rowIdx = 0, patch = {}) => {
+        const map = getCurrentSectionQuestionsMap();
+        const rows = Array.isArray(map[String(zoneIdx)]) ? [...map[String(zoneIdx)]] : [];
+        if (!rows[rowIdx]) return;
+        rows[rowIdx] = { ...rows[rowIdx], ...patch };
+        updateCurrentSectionQuestionsMap({ ...map, [String(zoneIdx)]: rows });
+    };
+    const removeZoneKeyword = (zoneIdx = 0, rowIdx = 0, keywordIdx = 0) => {
+        const map = getCurrentSectionQuestionsMap();
+        const rows = Array.isArray(map[String(zoneIdx)]) ? [...map[String(zoneIdx)]] : [];
+        if (!rows[rowIdx]) return;
+        const kws = Array.isArray(rows[rowIdx].expectedKeywords) ? [...rows[rowIdx].expectedKeywords] : [];
+        kws.splice(keywordIdx, 1);
+        rows[rowIdx] = { ...rows[rowIdx], expectedKeywords: kws };
+        updateCurrentSectionQuestionsMap({ ...map, [String(zoneIdx)]: rows });
+        if (
+            selectedZoneKeyword
+            && Number(selectedZoneKeyword.zoneIdx) === Number(zoneIdx)
+            && Number(selectedZoneKeyword.rowIdx) === Number(rowIdx)
+            && Number(selectedZoneKeyword.keywordIdx) === Number(keywordIdx)
+        ) {
+            setSelectedZoneKeyword(null);
+            setSynonymDraft('');
+        }
+    };
+    const addZoneKeyword = (zoneIdx = 0, rowIdx = 0) => {
+        const key = `${zoneIdx}_${rowIdx}`;
+        const value = String(zoneKeywordDrafts[key] || '').trim();
+        if (!value) return;
+        const map = getCurrentSectionQuestionsMap();
+        const rows = Array.isArray(map[String(zoneIdx)]) ? [...map[String(zoneIdx)]] : [];
+        if (!rows[rowIdx]) return;
+        const kws = Array.isArray(rows[rowIdx].expectedKeywords) ? [...rows[rowIdx].expectedKeywords] : [];
+        if (!kws.includes(value)) kws.push(value);
+        rows[rowIdx] = { ...rows[rowIdx], expectedKeywords: kws };
+        updateCurrentSectionQuestionsMap({ ...map, [String(zoneIdx)]: rows });
+        setZoneKeywordDrafts((prev) => ({ ...prev, [key]: '' }));
+    };
+    const addZoneQuestion = (zoneIdx = 0) => {
+        const map = getCurrentSectionQuestionsMap();
+        const rows = Array.isArray(map[String(zoneIdx)]) ? [...map[String(zoneIdx)]] : [];
+        rows.push({ q: '', question: '', expectedAnswer: '', expectedKeywords: [] });
+        updateCurrentSectionQuestionsMap({ ...map, [String(zoneIdx)]: rows });
+    };
+    const removeZoneQuestion = (zoneIdx = 0, rowIdx = 0) => {
+        const map = getCurrentSectionQuestionsMap();
+        const rows = Array.isArray(map[String(zoneIdx)]) ? [...map[String(zoneIdx)]] : [];
+        if (!rows[rowIdx]) return;
+        rows.splice(rowIdx, 1);
+        updateCurrentSectionQuestionsMap({ ...map, [String(zoneIdx)]: rows });
+    };
+    const addSynonymToZoneKeyword = (zoneIdx = 0, rowIdx = 0, keywordIdx = 0, synonymRaw = '') => {
+        const synonym = String(synonymRaw || '').trim();
+        if (!synonym) return;
+        const map = getCurrentSectionQuestionsMap();
+        const rows = Array.isArray(map[String(zoneIdx)]) ? [...map[String(zoneIdx)]] : [];
+        if (!rows[rowIdx]) return;
+        const kws = Array.isArray(rows[rowIdx].expectedKeywords) ? [...rows[rowIdx].expectedKeywords] : [];
+        const current = String(kws[keywordIdx] || '').trim();
+        if (!current) return;
+        const parts = [...new Set(current.split('=').map((p) => String(p || '').trim()).filter(Boolean))];
+        if (!parts.includes(synonym)) parts.push(synonym);
+        kws[keywordIdx] = parts.join('=');
+        rows[rowIdx] = { ...rows[rowIdx], expectedKeywords: kws };
+        updateCurrentSectionQuestionsMap({ ...map, [String(zoneIdx)]: rows });
+        setSynonymDraft('');
+    };
+    const updateActiveZoneQuestion = (rowIdx, patch = {}) => {
+        const zoneIdx = Number.isFinite(keywordActiveZoneIdx) ? keywordActiveZoneIdx : 0;
+        updateZoneQuestion(zoneIdx, rowIdx, patch);
+    };
+    const removeActiveZoneKeyword = (rowIdx, keywordIdx) => {
+        const zoneIdx = Number.isFinite(keywordActiveZoneIdx) ? keywordActiveZoneIdx : 0;
+        removeZoneKeyword(zoneIdx, rowIdx, keywordIdx);
+    };
+    const addActiveZoneKeyword = (rowIdx) => {
+        const zoneIdx = Number.isFinite(keywordActiveZoneIdx) ? keywordActiveZoneIdx : 0;
+        addZoneKeyword(zoneIdx, rowIdx);
+    };
+    const addActiveZoneQuestion = () => {
+        const zoneIdx = Number.isFinite(keywordActiveZoneIdx) ? keywordActiveZoneIdx : 0;
+        addZoneQuestion(zoneIdx);
+    };
+    const removeActiveZoneQuestion = (rowIdx) => {
+        const zoneIdx = Number.isFinite(keywordActiveZoneIdx) ? keywordActiveZoneIdx : 0;
+        removeZoneQuestion(zoneIdx, rowIdx);
+    };
+    const saveCurrentStepDataNow = async () => {
+        if (!step) return;
+        if (!formData?._id) {
+            alert("Étape enregistrée localement. Elle sera sauvegardée lors de la publication.");
+            return;
+        }
+        setSavingStepData(true);
+        try {
+            const patch = {};
+            if (step.type === 'question') {
+                patch.materialText = String(step.materialText || '');
+                patch.questionSectionQuestions = step.questionSectionQuestions || {};
+            } else if (step.type === 'sheet') {
+                patch.sheetText = String(step.sheetText || '');
+            } else if (step.type === 'video') {
+                patch.videoTranscript = String(step.videoTranscript || '');
+            }
+            const res = await fetch(`/api/learning/${encodeURIComponent(String(formData._id))}/step-data`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ stepId: String(step.id || ''), patch })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data?.error || 'Erreur sauvegarde');
+            alert("Étape enregistrée.");
+        } catch (e) {
+            alert(`Sauvegarde impossible: ${e.message}`);
+        }
+        setSavingStepData(false);
+    };
+    const handleImportSheetFile = async (e) => {
+        const file = e?.target?.files?.[0];
+        if (!file || !step || step.type !== 'sheet') return;
+        setImportingSheet(true);
+        try {
+            const fd = new FormData();
+            fd.append('file', file);
+            const res = await fetch('/api/games/upload-asset', { method: 'POST', body: fd });
+            const data = await res.json();
+            if (!res.ok || !data?.url) throw new Error(data?.error || "Erreur import");
+            updateStep(activeStep, { sheetUrl: String(data.url || '') });
+        } catch (err) {
+            alert(`Import fiche impossible: ${err.message || 'Erreur réseau'}`);
+        }
+        setImportingSheet(false);
+        if (e?.target) e.target.value = null;
+    };
     const generateQuestionsForActiveZone = async () => {
         if (!step) return;
         const source = String(keywordMaterialText || '').trim();
@@ -937,20 +1706,35 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             .map((r) => ({ start: Math.max(zone.start, r.start), end: Math.min(zone.end, r.end) }));
         const answers = rangesToSnippets(source, pinkRanges);
         const count = Math.max(1, Math.min(20, Number(zoneQuestionCount || 3)));
+        const selectedOnly = answers.length > 0;
+        const promptText = selectedOnly ? answers.join('\n') : sectionText;
         const topic = [
-            `Crée ${count} questions de compréhension pour cette section.`,
-            `SECTION: ${sectionText}`,
-            answers.length > 0 ? `RÉPONSES CIBLES (texte rose): ${answers.join(' | ')}` : 'RÉPONSES CIBLES: libre selon la section.'
+            `Crée ${count} questions de compréhension.`,
+            selectedOnly
+                ? "IMPORTANT: utilise EXCLUSIVEMENT le contenu des réponses roses ci-dessous. N'utilise aucun autre passage."
+                : "Utilise le contenu de la section ci-dessous.",
+            `CONTENU SOURCE: ${promptText}`,
+            selectedOnly ? `RÉPONSES CIBLES (texte rose): ${answers.join(' | ')}` : 'RÉPONSES CIBLES: libre selon la section.'
         ].join('\n');
         setAiTesting(true);
         try {
-            const fd = new FormData();
-            fd.append('topic', topic);
-            fd.append('count', String(count));
-            const res = await fetch('/api/games/generate-content', { method: 'POST', body: fd });
-            const rows = await res.json();
-            const clean = Array.isArray(rows) ? rows.slice(0, count) : [];
-            const next = { ...getCurrentSectionQuestionsMap(), [String(zoneIdx)]: clean };
+            const res = await fetch('/api/learning/generate-section-questions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sectionText: promptText, sourceAnswers: answers, count, topic })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data?.error || 'Erreur génération');
+            const clean = Array.isArray(data?.rows) ? data.rows.slice(0, count) : [];
+            const forcedKeywords = [...new Set(answers.map((a) => String(a || '').replace(/\s+/g, ' ').trim()).filter(Boolean))];
+            const withForced = clean.map((row) => {
+                const base = Array.isArray(row?.expectedKeywords) ? row.expectedKeywords.map((k) => String(k || '').trim()).filter(Boolean) : [];
+                const merged = [...new Set([...base, ...forcedKeywords])].slice(0, 20);
+                return { ...row, expectedKeywords: merged };
+            });
+            const map = getCurrentSectionQuestionsMap();
+            const existing = Array.isArray(map[String(zoneIdx)]) ? map[String(zoneIdx)] : [];
+            const next = { ...map, [String(zoneIdx)]: [...existing, ...withForced] };
             updateCurrentSectionQuestionsMap(next);
         } catch (_) {
             alert("Erreur génération questions.");
@@ -983,6 +1767,11 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
 
     useEffect(() => {
         if (step?.type === 'video' && step?.videoUrl) {
+            setSelectedSegmentId('');
+            setSelectedSegmentLabel('');
+            setSelectedSegmentTranscript('');
+            setLastSavedSegmentLabel('');
+            setLastSavedSegmentTranscript('');
             refreshKnownSegments(step.videoUrl);
         } else {
             setKnownSegments([]);
@@ -1020,6 +1809,23 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         }, 700);
         return () => clearTimeout(t);
     }, [selectedSegmentId, selectedSegmentLabel, selectedSegmentTranscript, lastSavedSegmentLabel, lastSavedSegmentTranscript, teacherId]);
+    useEffect(() => {
+        setQuestionSourceNotice('');
+    }, [step?.id, step?.sourceSheetUrl, step?.sourceVideoRef, step?.sourceSlidesUrl, step?.sourceKind]);
+    useEffect(() => {
+        if (!step || step.type !== 'question') return;
+        if (String(step.sourceKind || '') !== 'video') return;
+        if (!String(step.sourceVideoRef || '').trim()) return;
+        hydrateTranscriptForVideoSource(step.sourceVideoRef);
+    }, [step?.id, step?.type, step?.sourceKind, step?.sourceVideoRef, teacherId]);
+
+    useEffect(() => {
+        if (!pendingVideoEditorStepId) return;
+        if (!step || step.type !== 'video') return;
+        if (String(step.id || '') !== String(pendingVideoEditorStepId)) return;
+        setPendingVideoEditorStepId('');
+        openVideoEditor();
+    }, [pendingVideoEditorStepId, step?.id, step?.type]);
 
     const addStep = (type) => {
         setFormData(prev => ({ ...prev, steps: [...(prev.steps || []), emptyStep(type)] }));
@@ -1035,6 +1841,20 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         next[to] = tmp;
         setFormData(prev => ({ ...prev, steps: next }));
         setActiveStep(to);
+    };
+
+    const moveStepTo = (fromIdx, toIdx) => {
+        if (!Number.isInteger(fromIdx) || !Number.isInteger(toIdx)) return;
+        if (fromIdx < 0 || toIdx < 0) return;
+        if (fromIdx >= formData.steps.length || toIdx >= formData.steps.length) return;
+        if (fromIdx === toIdx) return;
+        const next = [...formData.steps];
+        const [moved] = next.splice(fromIdx, 1);
+        next.splice(toIdx, 0, moved);
+        setFormData((prev) => ({ ...prev, steps: next }));
+        if (activeStep === fromIdx) setActiveStep(toIdx);
+        else if (fromIdx < activeStep && toIdx >= activeStep) setActiveStep(activeStep - 1);
+        else if (fromIdx > activeStep && toIdx <= activeStep) setActiveStep(activeStep + 1);
     };
 
     const removeStep = (idx) => {
@@ -1090,6 +1910,8 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                     title: formData.title.trim(),
                     subject: chapter?.section || formData.subject || targetSection || 'GÉNÉRAL',
                     chapterId,
+                    presentationUrl: String(formData.presentationUrl || '').trim(),
+                    presentationSlidesFocus: String(formData.presentationSlidesFocus || '').trim(),
                     teacherId: user.id || user._id,
                     targetClassrooms: grp.classrooms,
                     assignedStudents: grp.studentIds,
@@ -1135,6 +1957,20 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                 </div>
                 <button onClick={onClose} className="v84-close-btn">✕</button>
             </div>
+            <div className="px-6 py-3 border-b border-slate-100 bg-slate-50/60 grid grid-cols-1 md:grid-cols-[1fr_220px] gap-3">
+                <input
+                    className="v84-ans-input"
+                    value={formData.presentationUrl || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, presentationUrl: e.target.value }))}
+                    placeholder="URL Google Slides (trace écrite)"
+                />
+                <input
+                    className="v84-ans-input"
+                    value={formData.presentationSlidesFocus || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, presentationSlidesFocus: e.target.value }))}
+                    placeholder="Slides TE (ex: 8-12,15)"
+                />
+            </div>
 
             <div className="v84-game-body">
                 <div className="v84-q-list-sidebar custom-scrollbar">
@@ -1143,6 +1979,23 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                             key={s.id || idx}
                             className={`v84-level-header ${activeStep === idx ? 'active-lvl' : ''}`}
                             onClick={() => setActiveStep(idx)}
+                            draggable
+                            onDragStart={(e) => {
+                                setDragStepIdx(idx);
+                                e.dataTransfer.effectAllowed = 'move';
+                                e.dataTransfer.setData('text/plain', String(idx));
+                            }}
+                            onDragOver={(e) => {
+                                e.preventDefault();
+                                e.dataTransfer.dropEffect = 'move';
+                            }}
+                            onDrop={(e) => {
+                                e.preventDefault();
+                                const from = dragStepIdx ?? Number(e.dataTransfer.getData('text/plain'));
+                                moveStepTo(Number(from), idx);
+                                setDragStepIdx(null);
+                            }}
+                            onDragEnd={() => setDragStepIdx(null)}
                         >
                             {s.type === 'sheet' ? '📄' : s.type === 'video' ? '🎬' : '🎤'} {s.title || `Étape ${idx + 1}`}
                             <div className="flex ml-auto gap-1">
@@ -1176,13 +2029,63 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
 
                             {step.type === 'sheet' && (
                                 <>
-                                    <div className="hw-section-title mt-4">URL fiche</div>
-                                    <input
+                                    <div className="hw-section-title mt-4">Source fiche (menu)</div>
+                                    <select
                                         className="v84-ans-input"
-                                        value={step.sheetUrl || ''}
+                                        value={(() => {
+                                            const current = String(step.sheetUrl || '').trim();
+                                            const exists = getCandidateSheets().some((item) => String(item.url || '').trim() === current);
+                                            return exists ? current : '';
+                                        })()}
                                         onChange={(e) => updateStep(activeStep, { sheetUrl: e.target.value })}
-                                        placeholder="/api/structure/proxy/..."
+                                    >
+                                        <option value="">Choisir une fiche source</option>
+                                        {getCandidateSheets().map((item) => (
+                                            <option key={item.url} value={item.url}>{item.source} - {item.url.slice(0, 50)}...</option>
+                                        ))}
+                                    </select>
+                                    <div className="hw-section-title mt-4">URL fiche</div>
+                                    <div className="flex items-center gap-2">
+                                        <input
+                                            className="v84-ans-input"
+                                            value={step.sheetUrl || ''}
+                                            onChange={(e) => updateStep(activeStep, { sheetUrl: e.target.value })}
+                                            placeholder="/api/structure/proxy/..."
+                                        />
+                                        <button
+                                            type="button"
+                                            className="v84-res-btn upload whitespace-nowrap"
+                                            onClick={() => sheetImportInputRef.current?.click()}
+                                            disabled={importingSheet}
+                                        >
+                                            {importingSheet ? 'Import...' : 'Importer'}
+                                        </button>
+                                    </div>
+                                    <input
+                                        ref={sheetImportInputRef}
+                                        type="file"
+                                        accept=".pdf,.doc,.docx,.txt,.md,.rtf,.png,.jpg,.jpeg,.webp"
+                                        className="hidden"
+                                        onChange={handleImportSheetFile}
                                     />
+                                    <div className="hw-section-title mt-4">Aperçu fiche</div>
+                                    <div className="rounded-xl border border-slate-200 bg-slate-50 overflow-hidden h-[220px]">
+                                        {!String(step.sheetUrl || '').trim() ? (
+                                            <div className="h-full flex items-center justify-center text-slate-400 font-bold text-sm">Ajoute une URL de fiche pour voir l'aperçu.</div>
+                                        ) : isImageLike(resolveDriveAssetUrl(step.sheetUrl || '')) ? (
+                                            <img
+                                                src={resolveDriveAssetUrl(step.sheetUrl || '')}
+                                                alt="aperçu fiche"
+                                                className="w-full h-full object-contain bg-white"
+                                            />
+                                        ) : (
+                                            <iframe
+                                                title={`sheet-preview-${step.id}`}
+                                                src={resolveDriveAssetUrl(step.sheetUrl || '')}
+                                                className="w-full h-full bg-white"
+                                            />
+                                        )}
+                                    </div>
                                     <div className="hw-section-title mt-4">Lecture minimale (secondes)</div>
                                     <input
                                         type="number"
@@ -1192,29 +2095,10 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                         value={step.minReadSeconds || 20}
                                         onChange={(e) => updateStep(activeStep, { minReadSeconds: Number(e.target.value || 20) })}
                                     />
-                                    <div className="hw-section-title mt-4">Texte de la fiche (source IA)</div>
-                                    <textarea
-                                        rows={5}
-                                        className="v84-q-input"
-                                        value={step.sheetText || ''}
-                                        onChange={(e) => updateStep(activeStep, { sheetText: e.target.value })}
-                                        placeholder="Colle ici le texte/résumé de la fiche pour les futures questions IA."
-                                    />
                                     <div className="mt-2">
-                                        <button type="button" className="v84-res-btn upload" onClick={extractTextForSheetStep} disabled={extractingSheetText || !step.sheetUrl}>
-                                            {extractingSheetText ? 'Extraction...' : 'IA extraire texte de la fiche'}
-                                        </button>
                                         <button
                                             type="button"
-                                            className="v84-res-btn upload ml-2 bg-violet-600 text-white"
-                                            onClick={saveExtractedSheetText}
-                                            disabled={savingSheetText || !String(step.sheetText || '').trim()}
-                                        >
-                                            {savingSheetText ? 'Sauvegarde...' : 'Sauver texte extrait'}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            className="v84-res-btn upload ml-2 bg-pink-600 text-white border-pink-700"
+                                            className="v84-res-btn upload bg-pink-600 text-white border-pink-700"
                                             onClick={openKeywordModal}
                                         >
                                             Éditer texte / zones réponses
@@ -1225,12 +2109,91 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
 
                             {step.type === 'video' && (
                                 <>
+                                    <div className="hw-section-title mt-4">Source vidéo</div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                        <select
+                                            className="v84-ans-input"
+                                            value={(() => {
+                                                const current = String(step.videoUrl || '').trim();
+                                                const exists = videoSources.some((item) => String(item.url || '').trim() === current);
+                                                return exists ? current : '';
+                                            })()}
+                                            onChange={(e) => {
+                                                const url = String(e.target.value || '').trim();
+                                                updateStep(activeStep, {
+                                                    videoUrl: url,
+                                                    startSec: 0,
+                                                    endSec: 0,
+                                                    videoTranscript: ''
+                                                });
+                                                setSelectedSegmentId('');
+                                                setSelectedSegmentLabel('');
+                                                setSelectedSegmentTranscript('');
+                                                setLastSavedSegmentLabel('');
+                                                setLastSavedSegmentTranscript('');
+                                            }}
+                                        >
+                                            <option value="">Choisir une vidéo source</option>
+                                            {videoSources.map((item) => (
+                                                <option key={item.url} value={item.url}>{item.source}</option>
+                                            ))}
+                                        </select>
+                                        <select
+                                            className="v84-ans-input"
+                                            value={selectedSegmentId}
+                                            onChange={(e) => {
+                                                const sid = String(e.target.value || '');
+                                                if (!sid) {
+                                                    setSelectedSegmentId('');
+                                                    return;
+                                                }
+                                                const seg = knownSegments.find((s) => String(s._id || s.id || '') === sid);
+                                                if (seg) applyKnownSegment(seg);
+                                            }}
+                                            disabled={!String(step.videoUrl || '').trim()}
+                                        >
+                                            <option value="">Choisir une séquence vidéo</option>
+                                            {knownSegments.map((seg, i) => {
+                                                const sid = String(seg._id || seg.id || '');
+                                                const label = String(seg.label || `Séquence ${i + 1}`);
+                                                return <option key={sid || i} value={sid}>{label} ({seg.startSec}-{seg.endSec || 'fin'})</option>;
+                                            })}
+                                        </select>
+                                    </div>
                                     <div className="hw-section-title mt-4">URL vidéo</div>
                                     <input
                                         className="v84-ans-input"
                                         value={step.videoUrl || ''}
                                         onChange={(e) => updateStep(activeStep, { videoUrl: e.target.value })}
                                         placeholder="https://..."
+                                    />
+                                    <div className="hw-section-title mt-4">Aperçu vidéo / séquence</div>
+                                    <div className="rounded-xl border border-slate-200 bg-slate-50 overflow-hidden h-[220px]">
+                                        {!String(step.videoUrl || '').trim() ? (
+                                            <div className="h-full flex items-center justify-center text-slate-400 font-bold text-sm">Ajoute une URL vidéo pour voir l'aperçu.</div>
+                                        ) : isProbablyDirectVideo(resolveDriveAssetUrl(step.videoUrl || '')) ? (
+                                            <video
+                                                src={resolveDriveAssetUrl(step.videoUrl || '')}
+                                                controls
+                                                className="w-full h-full object-contain bg-black"
+                                            />
+                                        ) : (
+                                            <iframe
+                                                title={`video-preview-${step.id}`}
+                                                src={toEmbedUrl(resolveDriveAssetUrl(step.videoUrl || ''))}
+                                                className="w-full h-full bg-black"
+                                                allow="autoplay; encrypted-media; picture-in-picture"
+                                            />
+                                        )}
+                                    </div>
+                                    <div className="hw-section-title mt-4">Nombre de questions sur cette séquence</div>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max="20"
+                                        className="v84-ans-input"
+                                        value={Number(step.questionCount || 3)}
+                                        onChange={(e) => updateStep(activeStep, { questionCount: Math.max(1, Math.min(20, Number(e.target.value || 3))) })}
                                     />
                                     <div className="hw-section-title mt-4">Image preview (thumbnail)</div>
                                     <input
@@ -1272,139 +2235,245 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                         </button>
                                         <button
                                             type="button"
+                                            className="v84-res-btn upload bg-indigo-600 text-white border-indigo-700"
+                                            onClick={generateQuestionsFromCurrentResource}
+                                            disabled={aiTesting || !String(step.videoUrl || '').trim()}
+                                        >
+                                            {aiTesting ? 'Génération...' : 'Générer questions par IA'}
+                                        </button>
+                                        <button
+                                            type="button"
                                             className="v84-res-btn upload bg-pink-600 text-white border-pink-700"
                                             onClick={openKeywordModal}
                                         >
                                             Éditer texte / zones réponses
                                         </button>
-                                        {knownSegments.length > 0 && (
-                                            <div className="flex-1 max-w-[340px] bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
-                                                <div className="text-[9px] font-black uppercase text-slate-400 mb-1">Séquence enregistrée</div>
-                                                <select
-                                                    className="w-full bg-transparent font-black text-[12px] text-slate-700 outline-none"
-                                                    value={selectedSegmentId}
-                                                    onChange={(e) => {
-                                                        const sid = String(e.target.value || '');
-                                                        const seg = knownSegments.find((s) => String(s._id || s.id || '') === sid);
-                                                        if (seg) applyKnownSegment(seg);
-                                                    }}
-                                                >
-                                                    <option value="">Choisir une séquence</option>
-                                                    {knownSegments.map((seg, i) => {
-                                                        const sid = String(seg._id || seg.id || '');
-                                                        const label = String(seg.label || `Séquence ${i + 1}`);
-                                                        return <option key={sid || i} value={sid}>{label}</option>;
-                                                    })}
-                                                </select>
-                                            </div>
-                                        )}
                                     </div>
                                 </>
                             )}
 
                             {step.type === 'question' && (
                                 <>
-                                    <div className="hw-section-title mt-4">Difficulté</div>
-                                    <select
-                                        className="v84-ans-input"
-                                        value={step.difficulty || 'easy'}
-                                        onChange={(e) => updateStep(activeStep, { difficulty: e.target.value })}
-                                    >
-                                        <option value="easy">Très facile</option>
-                                        <option value="medium">Moyen</option>
-                                        <option value="hard">Difficile</option>
-                                    </select>
-                                    <div className="hw-section-title mt-4">Question personnalisée (optionnel)</div>
-                                    <textarea
-                                        rows={3}
-                                        className="v84-q-input"
-                                        value={step.customQuestion || ''}
-                                        onChange={(e) => updateStep(activeStep, { customQuestion: e.target.value })}
-                                        placeholder="Si vide, une question aléatoire sera générée."
-                                    />
-                                    <div className="hw-section-title mt-4">Fiche source de la question</div>
-                                    <div className="flex gap-2 items-center">
+                                    <div className="hw-section-title mt-4">Source</div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                                         <select
                                             className="v84-ans-input"
-                                            value={step.sourceSheetUrl || ''}
-                                            onChange={(e) => updateStep(activeStep, { sourceSheetUrl: e.target.value })}
+                                            value={String(step.sourceKind || 'sheet')}
+                                            onChange={(e) => {
+                                                const kind = String(e.target.value || 'sheet');
+                                                if (kind === 'video') {
+                                                    updateStep(activeStep, { sourceKind: 'video', sourceSheetUrl: '', sourceSlidesUrl: '' });
+                                                    return;
+                                                }
+                                                if (kind === 'slides') {
+                                                    updateStep(activeStep, { sourceKind: 'slides', sourceSheetUrl: '', sourceVideoRef: '' });
+                                                    return;
+                                                }
+                                                updateStep(activeStep, { sourceKind: 'sheet', sourceVideoRef: '', sourceSlidesUrl: '' });
+                                            }}
                                         >
-                                            <option value="">Choisir une fiche</option>
-                                            {getCandidateSheets().map((item) => (
-                                                <option key={item.url} value={item.url}>{item.source} - {item.url.slice(0, 40)}...</option>
-                                            ))}
+                                            <option value="sheet">Fiche</option>
+                                            <option value="video">Section vidéo</option>
+                                            <option value="slides">Lien Drive / Google Slides</option>
                                         </select>
-                                        <button
-                                            type="button"
-                                            className="v84-res-btn upload whitespace-nowrap"
-                                            onClick={() => setShowAnnotModal(true)}
-                                            disabled={!step.sourceSheetUrl}
-                                        >
-                                            Annoter la fiche
-                                        </button>
-                                        <button
-                                            type="button"
-                                            className="v84-res-btn upload whitespace-nowrap"
-                                            onClick={openKeywordModal}
-                                        >
-                                            Sélection mots-clés (rose)
-                                        </button>
-                                        <button
-                                            type="button"
-                                            className="v84-res-btn upload whitespace-nowrap bg-pink-600 text-white border-pink-700"
-                                            onClick={extractTextFromSheetForQuestion}
-                                            disabled={extractingSheetText || !step.sourceSheetUrl}
-                                        >
-                                            {extractingSheetText ? 'Extraction...' : 'Extraire texte et ouvrir div'}
-                                        </button>
-                                    </div>
-
-                                    <div className="hw-section-title mt-4">🟧 Surlignage ORANGE (points à questionner)</div>
-                                    <div className="flex flex-wrap gap-2 mt-2">
-                                        {(step.orangeHighlights || []).map((tag, i) => (
-                                            <span key={`${tag}_${i}`} className="px-3 py-1 rounded-full text-[11px] font-black bg-orange-100 text-orange-700 border border-orange-300">{tag}</span>
-                                        ))}
-                                    </div>
-
-                                    <div className="hw-section-title mt-4">🟥 Surlignage ROUGE (réponses attendues)</div>
-                                    <div className="flex flex-wrap gap-2 mt-2">
-                                        {(step.redHighlights || []).map((tag, i) => (
-                                            <span key={`${tag}_${i}`} className="px-3 py-1 rounded-full text-[11px] font-black bg-red-100 text-red-700 border border-red-300">{tag}</span>
-                                        ))}
-                                    </div>
-                                    <div className="mt-4 flex items-center gap-2">
-                                        <button type="button" className="v84-res-btn upload" onClick={generateTestQuestions} disabled={aiTesting || !step.sourceSheetUrl}>
-                                            {aiTesting ? 'Génération...' : 'Produire questions test'}
-                                        </button>
-                                        <span className="text-[11px] font-bold text-slate-400">pour vérifier la compréhension IA</span>
-                                    </div>
-                                    {(step.aiPreviewQuestions || []).length > 0 && (
-                                        <div className="mt-3 p-3 rounded-xl border border-indigo-100 bg-indigo-50/40">
-                                            <div className="text-[11px] font-black uppercase text-indigo-600 mb-2">Aperçu questions générées</div>
-                                            <div className="space-y-2">
-                                                {step.aiPreviewQuestions.map((q, idx) => (
-                                                    <div key={idx} className="text-[12px] font-bold text-slate-700">
-                                                        {idx + 1}. {q.q || q.question || 'Question'}
-                                                    </div>
+                                        {String(step.sourceKind || 'sheet') === 'video' ? (
+                                            <select
+                                                className="v84-ans-input"
+                                                value={step.sourceVideoRef || ''}
+                                                onChange={(e) => updateStep(activeStep, { sourceKind: 'video', sourceVideoRef: e.target.value, sourceSheetUrl: '', sourceSlidesUrl: '' })}
+                                            >
+                                                <option value="">Choisir une section vidéo</option>
+                                                {videoQuestionSources.map((item) => (
+                                                    <option key={item.value} value={item.value}>{item.label}</option>
                                                 ))}
-                                            </div>
+                                            </select>
+                                        ) : String(step.sourceKind || 'sheet') === 'slides' ? (
+                                            <input
+                                                className="v84-ans-input"
+                                                value={step.sourceSlidesUrl || ''}
+                                                onChange={(e) => updateStep(activeStep, { sourceKind: 'slides', sourceSlidesUrl: e.target.value, sourceSheetUrl: '', sourceVideoRef: '' })}
+                                                placeholder="Colle ici l'URL Google Slides"
+                                            />
+                                        ) : (
+                                            <select
+                                                className="v84-ans-input"
+                                                value={step.sourceSheetUrl || ''}
+                                                onChange={(e) => updateStep(activeStep, { sourceKind: 'sheet', sourceSheetUrl: e.target.value, sourceVideoRef: '', sourceSlidesUrl: '' })}
+                                            >
+                                                <option value="">Choisir une fiche source</option>
+                                                {sheetQuestionSources.map((item) => (
+                                                    <option key={item.value} value={item.value}>{item.label}</option>
+                                                ))}
+                                            </select>
+                                        )}
+                                    </div>
+                                    <div className="mt-3">
+                                        <div className="text-[11px] font-black uppercase text-slate-500 mb-2">Source affichée</div>
+                                        <div className="rounded-xl border border-slate-200 bg-slate-50 overflow-hidden h-[200px]">
+                                            {!selectedQuestionSource?.url ? (
+                                                <div className="h-full flex items-center justify-center text-slate-400 font-bold text-sm">
+                                                    Aucune source sélectionnée.
+                                                </div>
+                                            ) : selectedQuestionSource.type === 'video' ? (
+                                                isProbablyDirectVideo(resolveDriveAssetUrl(selectedQuestionSource.url || '')) ? (
+                                                    <video
+                                                        src={resolveDriveAssetUrl(selectedQuestionSource.url || '')}
+                                                        controls
+                                                        className="w-full h-full object-contain bg-black"
+                                                    />
+                                                ) : (
+                                                    <iframe
+                                                        title={`question-source-preview-${step.id}`}
+                                                        src={toEmbedUrl(resolveDriveAssetUrl(selectedQuestionSource.url || ''))}
+                                                        className="w-full h-full bg-black"
+                                                        allow="autoplay; encrypted-media; picture-in-picture"
+                                                    />
+                                                )
+                                            ) : isImageLike(resolveDriveAssetUrl(selectedQuestionSource.url || '')) ? (
+                                                <img
+                                                    src={resolveDriveAssetUrl(selectedQuestionSource.url || '')}
+                                                    alt="aperçu source question"
+                                                    className="w-full h-full object-contain bg-white"
+                                                />
+                                            ) : (
+                                                <iframe
+                                                    title={`question-source-preview-${step.id}`}
+                                                    src={resolveDriveAssetUrl(selectedQuestionSource.url || '')}
+                                                    className="w-full h-full bg-white"
+                                                />
+                                            )}
                                         </div>
+                                    </div>
+                                    <div className="mt-2">
+                                        <button
+                                            type="button"
+                                            className="v84-res-btn upload whitespace-nowrap"
+                                            onClick={openQuestionEditor}
+                                        >
+                                            Éditer
+                                        </button>
+                                        {!!questionSourceNotice && (
+                                            <div className="mt-2 text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1 inline-flex items-center gap-2">
+                                                <span>{questionSourceNotice}</span>
+                                                <button
+                                                    type="button"
+                                                    className="underline text-indigo-700"
+                                                    onClick={openVideoEditorFromQuestionSource}
+                                                >
+                                                    Ouvrir l'éditeur vidéo
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="hw-section-title mt-4">Questions / Réponses attendues</div>
+                                    {questionSectionsFromDb.length > 0 ? (
+                                        <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-3 max-h-[440px] overflow-auto">
+                                            {questionSectionsFromDb.map((section) => (
+                                                <div key={`sec_db_${section.idx}`} className="rounded-xl border border-indigo-100 bg-indigo-50/30 p-2">
+                                                    <div className="text-[11px] font-black uppercase text-indigo-700 mb-2">
+                                                        Section {section.idx + 1}
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        {section.rows.map((q, i) => (
+                                                            <div key={`db_q_${section.idx}_${i}`} className="rounded-lg border border-slate-200 bg-white p-2">
+                                                                <div className="text-[11px] font-black uppercase text-slate-400">Question</div>
+                                                                <div className="text-[13px] font-bold text-slate-700">{q?.question || q?.q || '—'}</div>
+                                                                <div className="text-[11px] font-black uppercase text-slate-400 mt-1">Réponse attendue</div>
+                                                                <div className="text-[12px] font-semibold text-slate-600">{q?.expectedAnswer || '—'}</div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                                                <div className="rounded-xl border border-slate-200 bg-white p-3">
+                                                    <div className="text-[11px] font-black uppercase text-slate-500 mb-2">Questions</div>
+                                                    <div className="space-y-2 max-h-[380px] overflow-auto pr-1">
+                                                        {(Array.isArray(step.questionAnswerPairs) ? step.questionAnswerPairs : []).map((pair, i) => (
+                                                            <textarea
+                                                                key={`q_${i}`}
+                                                                rows={2}
+                                                                className="v84-q-input"
+                                                                value={pair?.question || ''}
+                                                                onChange={(e) => {
+                                                                    const rows = [...(Array.isArray(step.questionAnswerPairs) ? step.questionAnswerPairs : [])];
+                                                                    rows[i] = { ...(rows[i] || {}), question: e.target.value };
+                                                                    updateQuestionPairs(rows);
+                                                                }}
+                                                                placeholder={`Question ${i + 1}`}
+                                                            />
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                                <div className="rounded-xl border border-slate-200 bg-white p-3">
+                                                    <div className="text-[11px] font-black uppercase text-slate-500 mb-2">Réponses attendues</div>
+                                                    <div className="space-y-2 max-h-[380px] overflow-auto pr-1">
+                                                        {(Array.isArray(step.questionAnswerPairs) ? step.questionAnswerPairs : []).map((pair, i) => (
+                                                            <div key={`a_wrap_${i}`} className="flex items-start gap-2">
+                                                                <textarea
+                                                                    rows={2}
+                                                                    className="v84-q-input"
+                                                                    value={pair?.answer || ''}
+                                                                    onChange={(e) => {
+                                                                        const rows = [...(Array.isArray(step.questionAnswerPairs) ? step.questionAnswerPairs : [])];
+                                                                        rows[i] = { ...(rows[i] || {}), answer: e.target.value };
+                                                                        updateQuestionPairs(rows);
+                                                                    }}
+                                                                    placeholder={`Réponse attendue ${i + 1}`}
+                                                                />
+                                                                <button
+                                                                    type="button"
+                                                                    className="v84-del-btn mt-1"
+                                                                    onClick={() => {
+                                                                        const rows = [...(Array.isArray(step.questionAnswerPairs) ? step.questionAnswerPairs : [])];
+                                                                        rows.splice(i, 1);
+                                                                        updateQuestionPairs(rows);
+                                                                    }}
+                                                                >
+                                                                    ✕
+                                                                </button>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="mt-3 flex items-center gap-2">
+                                                <button
+                                                    type="button"
+                                                    className="v84-res-btn upload"
+                                                    onClick={() => {
+                                                        const rows = [...(Array.isArray(step.questionAnswerPairs) ? step.questionAnswerPairs : [])];
+                                                        rows.push({ question: '', answer: '' });
+                                                        updateQuestionPairs(rows);
+                                                    }}
+                                                >
+                                                    + Ajouter ligne manuelle
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="v84-res-btn upload"
+                                                    onClick={() => updateStep(activeStep, { customQuestion: String((step.questionAnswerPairs || [])[0]?.question || '') })}
+                                                >
+                                                    Utiliser Q1 pour élève
+                                                </button>
+                                            </div>
+                                        </>
                                     )}
-                                    <div className="hw-section-title mt-4">Mots-clés attendus (virgules)</div>
+                                    <div className="hw-section-title mt-4">Mots-clés attendus</div>
                                     <input
                                         className="v84-ans-input"
-                                        value={Array.isArray(step.keywords) ? step.keywords.join(', ') : (step.keywords || '')}
-                                        onChange={(e) => updateStep(activeStep, { keywords: e.target.value.split(',').map(x => x.trim().toLowerCase()).filter(Boolean) })}
-                                        placeholder="ex: natalité, mortalité, santé"
-                                    />
-                                    <div className="hw-section-title mt-4">Nombre min de mots-clés</div>
-                                    <input
-                                        type="number"
-                                        min="1"
-                                        max="10"
-                                        className="v84-ans-input"
-                                        value={step.minKeywordMatches || 1}
-                                        onChange={(e) => updateStep(activeStep, { minKeywordMatches: Number(e.target.value || 1) })}
+                                        value={Array.isArray(step.keywords) ? step.keywords.join(', ') : String(step.keywords || '')}
+                                        onChange={(e) => updateStep(activeStep, {
+                                            keywords: e.target.value
+                                                .split(',')
+                                                .map((x) => x.trim().toLowerCase())
+                                                .filter(Boolean)
+                                                .slice(0, 30)
+                                        })}
+                                        placeholder="ex: pib, idh, inégalités"
                                     />
                                 </>
                             )}
@@ -1800,10 +2869,21 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                     >
                                         Sauver texte
                                     </button>
+                                    <button
+                                        type="button"
+                                        className="v84-res-btn upload bg-emerald-600 text-white border-emerald-700"
+                                        onClick={saveCurrentStepDataNow}
+                                        disabled={savingStepData}
+                                    >
+                                        {savingStepData ? 'Enregistrement...' : 'Enregistrer'}
+                                    </button>
                                 </div>
                             </div>
                             <div className="min-h-0 flex flex-col rounded-xl border border-slate-200 bg-white p-4">
-                                <div className="text-[11px] font-black uppercase text-slate-400 mb-2">Questions (section active)</div>
+                                <div className="text-[11px] font-black uppercase text-slate-400 mb-2">Questions par section (cuts)</div>
+                                <div className="text-[11px] font-black text-slate-600 mb-2 uppercase">
+                                    Total actuel: {getTotalZoneQuestions()}
+                                </div>
                                 <div className="flex items-center gap-2 mb-3">
                                     <label className="text-[11px] font-black text-slate-500 uppercase">Nombre</label>
                                     <input
@@ -1820,22 +2900,143 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                         onClick={generateQuestionsForActiveZone}
                                         disabled={aiTesting || !String(keywordMaterialText || '').trim()}
                                     >
-                                        {aiTesting ? 'Génération...' : 'Générer questions'}
+                                        {aiTesting ? 'Génération...' : 'Générer questions + mots-clés'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="v84-res-btn upload"
+                                        onClick={addActiveZoneQuestion}
+                                    >
+                                        + Question
                                     </button>
                                 </div>
                                 <div className="text-[11px] font-bold text-slate-500 mb-2">
                                     Section courante: {Number.isFinite(keywordActiveZoneIdx) ? keywordActiveZoneIdx + 1 : 1}
                                 </div>
                                 <div className="flex-1 overflow-auto rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
-                                    {getActiveZoneQuestions().length === 0 ? (
-                                        <div className="text-[12px] font-bold text-slate-400">Aucune question générée pour cette section.</div>
-                                    ) : (
-                                        getActiveZoneQuestions().map((q, i) => (
-                                            <div key={i} className="text-[13px] font-bold text-slate-700">
-                                                {i + 1}. {q.q || q.question || 'Question'}
+                                    {Array.from({ length: getZoneCount() }).map((_, sectionIdx) => {
+                                        const questions = getZoneQuestions(sectionIdx);
+                                        return (
+                                            <div
+                                                key={`section_${sectionIdx}`}
+                                                className={`rounded-xl border p-2 ${sectionIdx === (Number.isFinite(keywordActiveZoneIdx) ? keywordActiveZoneIdx : 0) ? 'border-indigo-300 bg-indigo-50/30' : 'border-slate-200 bg-white'}`}
+                                            >
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <div className="text-[11px] font-black uppercase text-slate-500">
+                                                        Section {sectionIdx + 1}
+                                                        {sectionIdx < getZoneCount() - 1 ? ` (Cut ${sectionIdx + 1})` : ' (Fin)'}
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        className="v84-res-btn upload"
+                                                        onClick={() => { setKeywordActiveZoneIdx(sectionIdx); addZoneQuestion(sectionIdx); }}
+                                                    >
+                                                        + Question
+                                                    </button>
+                                                </div>
+                                                {questions.length === 0 ? (
+                                                    <div className="text-[12px] font-bold text-slate-400 px-1 pb-1">Aucune question pour cette section.</div>
+                                                ) : questions.map((q, i) => (
+                                                    <div key={`${sectionIdx}_${i}`} className="text-[13px] font-bold text-slate-700 p-2 rounded-lg bg-white border border-slate-200 mb-2">
+                                                <div className="flex justify-between items-center mb-1">
+                                                    <div className="text-[11px] font-black uppercase text-slate-400">Question</div>
+                                                    <button
+                                                        type="button"
+                                                        className="px-2 py-0.5 rounded-md border border-red-300 bg-red-50 text-red-600 text-[11px] font-black"
+                                                        onClick={() => removeZoneQuestion(sectionIdx, i)}
+                                                        title="Supprimer question"
+                                                    >
+                                                        ✕
+                                                    </button>
+                                                </div>
+                                                <textarea
+                                                    rows={2}
+                                                    className="v84-q-input"
+                                                    value={String(q.q || q.question || '')}
+                                                    onChange={(e) => updateZoneQuestion(sectionIdx, i, { question: e.target.value, q: e.target.value })}
+                                                    placeholder={`Question ${i + 1}`}
+                                                />
+                                                <div className="text-[11px] font-black uppercase text-slate-400 mt-2 mb-1">Réponse attendue</div>
+                                                <textarea
+                                                    rows={2}
+                                                    className="v84-q-input"
+                                                    value={String(q.expectedAnswer || '')}
+                                                    onChange={(e) => updateZoneQuestion(sectionIdx, i, { expectedAnswer: e.target.value })}
+                                                    placeholder="Réponse attendue"
+                                                />
+                                                <div className="text-[11px] font-black uppercase text-slate-400 mt-2 mb-1">Mots-clés attendus</div>
+                                                <div className="flex flex-wrap gap-1">
+                                                    {(Array.isArray(q.expectedKeywords) ? q.expectedKeywords : []).map((kw, kwIdx) => (
+                                                        <span
+                                                            key={`${i}_${kwIdx}`}
+                                                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black border cursor-pointer ${selectedZoneKeyword
+                                                                && Number(selectedZoneKeyword.zoneIdx) === Number(sectionIdx)
+                                                                && Number(selectedZoneKeyword.rowIdx) === Number(i)
+                                                                && Number(selectedZoneKeyword.keywordIdx) === Number(kwIdx)
+                                                                ? 'bg-fuchsia-300 text-fuchsia-900 border-fuchsia-500'
+                                                                : 'bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200'}`}
+                                                            onClick={() => {
+                                                                setSelectedZoneKeyword({ zoneIdx: sectionIdx, rowIdx: i, keywordIdx: kwIdx });
+                                                                setSynonymDraft('');
+                                                            }}
+                                                            title="Cliquer pour sélectionner ce mot-clé"
+                                                        >
+                                                            {kw}
+                                                            <button
+                                                                type="button"
+                                                                className="text-fuchsia-700"
+                                                                onClick={(e) => { e.stopPropagation(); removeZoneKeyword(sectionIdx, i, kwIdx); }}
+                                                                title="Supprimer mot-clé"
+                                                            >
+                                                                ✕
+                                                            </button>
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                                {selectedZoneKeyword
+                                                    && Number(selectedZoneKeyword.zoneIdx) === Number(sectionIdx)
+                                                    && Number(selectedZoneKeyword.rowIdx) === Number(i)
+                                                    && Number.isFinite(Number(selectedZoneKeyword.keywordIdx)) && (
+                                                        <div className="mt-2 flex items-center gap-2">
+                                                            <input
+                                                                className="v84-ans-input"
+                                                                value={synonymDraft}
+                                                                onChange={(e) => setSynonymDraft(e.target.value)}
+                                                                placeholder="Nouveau synonyme"
+                                                            />
+                                                            <button
+                                                                type="button"
+                                                                className="v84-res-btn upload"
+                                                                onClick={() => addSynonymToZoneKeyword(sectionIdx, i, Number(selectedZoneKeyword.keywordIdx), synonymDraft)}
+                                                            >
+                                                                Ajouter synonyme
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                <div className="mt-2 flex items-center gap-2">
+                                                    <input
+                                                        className="v84-ans-input"
+                                                        value={zoneKeywordDrafts[`${sectionIdx}_${i}`] || ''}
+                                                        onChange={(e) => {
+                                                            const k = `${sectionIdx}_${i}`;
+                                                            const v = e.target.value;
+                                                            setZoneKeywordDrafts((prev) => ({ ...prev, [k]: v }));
+                                                        }}
+                                                        placeholder="Ajouter mot-clé"
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        className="v84-res-btn upload"
+                                                        onClick={() => addZoneKeyword(sectionIdx, i)}
+                                                    >
+                                                        +
+                                                    </button>
+                                                </div>
+                                                    </div>
+                                                ))}
                                             </div>
-                                        ))
-                                    )}
+                                        );
+                                    })}
                                 </div>
                             </div>
                         </div>

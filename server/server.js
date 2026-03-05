@@ -76,6 +76,7 @@ safeLoad('/api/homework', './prof/homework/homework.prof');
 safeLoad('/api/games', './prof/games/games.prof');
 safeLoad('/api/learning', './prof/learning/learning.prof');
 safeLoad('/api/exposes', './prof/exposes/exposes.prof');
+safeLoad('/api/lectures', './prof/lectures/lectures.prof');
 safeLoad('/api/classroom', './prof/classroom/classroom.prof');
 safeLoad('/api/scans', './prof/scans/scans.prof');
 safeLoad('/api/structure', './prof/structure/structure.prof');
@@ -87,6 +88,7 @@ safeLoad('/api/eleve/classroom', './eleve/classroom/classroom.eleve');
 safeLoad('/api/eleve/games', './eleve/games/games.eleve');
 safeLoad('/api/eleve/learning', './eleve/learning/learning.eleve');
 safeLoad('/api/eleve/exposes', './eleve/exposes/exposes.eleve');
+safeLoad('/api/eleve/lectures', './eleve/lectures/lectures.eleve');
 
 // 5. DEMARRAGE SERVEUR + RECONNEXION MONGOOSE
 app.listen(port, '0.0.0.0', () => console.log(`🏁 PRET SUR LE PORT ${port}`));

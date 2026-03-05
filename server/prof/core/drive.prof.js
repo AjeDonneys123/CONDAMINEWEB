@@ -237,6 +237,54 @@ const ProfDrive = {
             });
         }
         return true;
+    },
+
+    extractSlidesPresentationId: (rawUrl = '') => {
+        const raw = String(rawUrl || '').trim();
+        if (!raw) return '';
+        const idOnly = raw.match(/^[a-zA-Z0-9_-]{20,}$/);
+        if (idOnly?.[0]) return idOnly[0];
+        const m = raw.match(/\/presentation\/d\/([a-zA-Z0-9_-]+)/i) || raw.match(/\/design\/([a-zA-Z0-9_-]+)/i);
+        return m?.[1] ? m[1] : '';
+    },
+
+    getGoogleSlidesText: async (presentationRef, selectedSlideNumbers = []) => {
+        if (!oauth2Client) throw new Error("Drive non connecté");
+        const presentationId = ProfDrive.extractSlidesPresentationId(presentationRef);
+        if (!presentationId) throw new Error("ID présentation introuvable");
+        const slidesApi = google.slides({ version: 'v1', auth: oauth2Client });
+        const pres = await slidesApi.presentations.get({ presentationId });
+        const title = String(pres?.data?.title || '');
+        const allSlides = Array.isArray(pres?.data?.slides) ? pres.data.slides : [];
+        const wanted = new Set(
+            (Array.isArray(selectedSlideNumbers) ? selectedSlideNumbers : [])
+                .map((n) => Number(n))
+                .filter((n) => Number.isInteger(n) && n > 0)
+        );
+        const rows = [];
+        allSlides.forEach((slide, idx) => {
+            const slideNumber = idx + 1;
+            if (wanted.size > 0 && !wanted.has(slideNumber)) return;
+            const texts = [];
+            (slide?.pageElements || []).forEach((el) => {
+                const elements = el?.shape?.text?.textElements || [];
+                elements.forEach((te) => {
+                    const content = String(te?.textRun?.content || '').replace(/\s+/g, ' ').trim();
+                    if (content) texts.push(content);
+                });
+            });
+            rows.push({
+                slideNumber,
+                objectId: String(slide?.objectId || ''),
+                text: texts.join(' ').trim()
+            });
+        });
+        return {
+            presentationId,
+            title,
+            slides: rows,
+            combinedText: rows.map((r) => `Slide ${r.slideNumber}: ${r.text}`).join('\n').trim()
+        };
     }
 };
 

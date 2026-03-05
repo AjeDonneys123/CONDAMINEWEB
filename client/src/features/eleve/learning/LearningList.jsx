@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import DashboardFolder from '../components/DashboardFolder';
 import LearningWorkspace from './LearningWorkspace';
 
-export default function LearningList({ user }) {
+export default function LearningList({ user, openItemId = '', onOpenHandled }) {
     const [modules, setModules] = useState([]);
     const [selected, setSelected] = useState(null);
     const [loading, setLoading] = useState(false);
@@ -25,6 +25,15 @@ export default function LearningList({ user }) {
     };
 
     useEffect(() => { loadData(); }, [user]);
+
+    useEffect(() => {
+        const targetId = String(openItemId || '').trim();
+        if (!targetId || selected) return;
+        const target = (modules || []).find((m) => String(m?._id || '') === targetId);
+        if (!target) return;
+        setSelected(target);
+        if (onOpenHandled) onOpenHandled();
+    }, [openItemId, modules, selected, onOpenHandled]);
 
     if (selected) {
         return (

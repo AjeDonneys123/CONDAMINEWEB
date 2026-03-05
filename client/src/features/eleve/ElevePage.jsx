@@ -6,12 +6,14 @@ import LearningList from './learning/LearningList';
 import MistakesBook from './mistakes/MistakesBook';
 import GamesGrid from './games/GamesGrid';
 import ExposeList from './exposes/ExposeList';
+import LectureList from './lectures/LectureList';
 import StatusOverview from './status/StatusOverview';
 import BugReportWidget from '../shared/BugReportWidget';
 import './ElevePage.css';
 
 export default function ElevePage({ user, onLogout, onBackToProf }) {
   const [tab, setTab] = useState('status');
+  const [pendingActivity, setPendingActivity] = useState(null);
   const [freshUser, setFreshUser] = useState(user);
   const [showPunishmentSplash, setShowPunishmentSplash] = useState(false);
   const [openPunishmentDirect, setOpenPunishmentDirect] = useState(false);
@@ -58,6 +60,29 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
       return `${pad(hours)}:${pad(mins)}:${pad(secs)}`;
   })();
 
+  const openActivityFromStatus = (item) => {
+      const type = String(item?.type || '').toLowerCase();
+      const id = String(item?.id || '').trim();
+      if (!type || !id) return;
+      const tabMap = {
+          homework: 'devoirs',
+          game: 'jeux',
+          learning: 'apprentissage',
+          expose: 'exposes',
+          lecture: 'lectures'
+      };
+      const nextTab = tabMap[type];
+      if (!nextTab) return;
+      setPendingActivity({ type, id, title: String(item?.title || '') });
+      setTab(nextTab);
+  };
+
+  const clearPendingIfMatch = (type) => {
+      if (!pendingActivity) return;
+      if (String(pendingActivity.type || '') !== String(type || '')) return;
+      setPendingActivity(null);
+  };
+
   return (
     <div className="eleve-page-wrapper">
         <div className="eleve-page-container">
@@ -89,18 +114,45 @@ export default function ElevePage({ user, onLogout, onBackToProf }) {
             hidePunishmentAlert={showPunishmentSplash}
           />
           <div className="eleve-main-content">
-            {tab === 'status' && <StatusOverview user={freshUser} />}
+            {tab === 'status' && <StatusOverview user={freshUser} onOpenActivity={openActivityFromStatus} />}
             {tab === 'devoirs' && (
               <HomeworkList
                 user={freshUser}
                 openPunishmentDirect={openPunishmentDirect}
                 onPunishmentOpened={() => setOpenPunishmentDirect(false)}
+                openItemId={pendingActivity?.type === 'homework' ? pendingActivity?.id : ''}
+                onOpenHandled={() => clearPendingIfMatch('homework')}
               />
             )}
-            {tab === 'apprentissage' && <LearningList user={freshUser} />}
+            {tab === 'apprentissage' && (
+              <LearningList
+                user={freshUser}
+                openItemId={pendingActivity?.type === 'learning' ? pendingActivity?.id : ''}
+                onOpenHandled={() => clearPendingIfMatch('learning')}
+              />
+            )}
+            {tab === 'lectures' && (
+              <LectureList
+                user={freshUser}
+                openItemId={pendingActivity?.type === 'lecture' ? pendingActivity?.id : ''}
+                onOpenHandled={() => clearPendingIfMatch('lecture')}
+              />
+            )}
             {tab === 'francais' && <MistakesBook user={freshUser} />}
-            {tab === 'jeux' && <GamesGrid user={freshUser} />}
-            {tab === 'exposes' && <ExposeList user={freshUser} />}
+            {tab === 'jeux' && (
+              <GamesGrid
+                user={freshUser}
+                openItemId={pendingActivity?.type === 'game' ? pendingActivity?.id : ''}
+                onOpenHandled={() => clearPendingIfMatch('game')}
+              />
+            )}
+            {tab === 'exposes' && (
+              <ExposeList
+                user={freshUser}
+                openItemId={pendingActivity?.type === 'expose' ? pendingActivity?.id : ''}
+                onOpenHandled={() => clearPendingIfMatch('expose')}
+              />
+            )}
           </div>
         </div>
         <BugReportWidget user={freshUser} />

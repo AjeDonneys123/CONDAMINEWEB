@@ -79,7 +79,7 @@ export default function Login({ onLoginSuccess }) {
     const loginUrl = isTeacher ? '/api/auth/login' : '/api/eleve/auth/login';
     const body = isTeacher
       ? { firstName: selectedProfile.firstName, lastName: selectedProfile.lastName, password }
-      : { studentId: selectedProfile.id };
+      : { studentId: selectedProfile.id, password };
 
     try {
       const res = await fetch(loginUrl, {
@@ -101,9 +101,10 @@ export default function Login({ onLoginSuccess }) {
   };
 
   const isTeacherProfile = selectedProfile?.type === 'teacher';
+  const isStudentProfile = selectedProfile?.type === 'student';
   const hasTypedIdentity = clean(inputLast).length > 0 && clean(inputFirst).length > 0;
   const canSubmit = selectedProfile
-    ? (!isTeacherProfile || password.trim().length > 0)
+    ? (password.trim().length > 0)
     : hasTypedIdentity;
 
   return (
@@ -164,12 +165,12 @@ export default function Login({ onLoginSuccess }) {
             )}
           </div>
 
-          {isTeacherProfile && (
+          {(isTeacherProfile || isStudentProfile) && (
             <div className="relative">
               <input
                 type={showPassword ? "text" : "password"}
                 className="login-field"
-                placeholder="Mot de passe professeur"
+                placeholder={isStudentProfile ? "Rentre ta date de naissance ex: 05/03/2004" : "Mot de passe professeur"}
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 required

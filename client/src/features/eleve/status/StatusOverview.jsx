@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import './StatusOverview.css';
 
-export default function StatusOverview({ user }) {
+export default function StatusOverview({ user, onOpenActivity }) {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState({ disciplines: [] });
   const hasLoadedOnceRef = useRef(false);
@@ -60,24 +60,27 @@ export default function StatusOverview({ user }) {
             </div>
 
             <div className="status-row">
-              <span className="label">Devoirs</span>
+              <span className="label">Activités</span>
               <span className="value">
-                {d.homework?.done || 0}/{d.homework?.total || 0}
-              </span>
-              <span className="label">Jeux</span>
-              <span className="value">
-                {(d.games?.done || 0) + (d.games?.started || 0)}/{d.games?.total || 0}
+                {d.activities?.done || 0}/{d.activities?.total || 0}
               </span>
             </div>
 
-            {(d.homework?.todoTitles?.length > 0 || d.games?.todoTitles?.length > 0) && (
+            {(d.activities?.todoItems?.length > 0) && (
               <div className="status-todo">
-                {d.homework?.todoTitles?.length > 0 && (
-                  <div>📚 À faire: {d.homework.todoTitles.join(', ')}</div>
-                )}
-                {d.games?.todoTitles?.length > 0 && (
-                  <div>🎮 À lancer: {d.games.todoTitles.join(', ')}</div>
-                )}
+                <div className="mb-1">À faire:</div>
+                <div className="flex flex-wrap gap-2">
+                  {(d.activities.todoItems || []).map((it, idx) => (
+                    <button
+                      key={`${it.type}_${it.id}_${idx}`}
+                      type="button"
+                      className="px-2 py-1 rounded-lg bg-white border border-slate-200 text-[11px] font-black text-blue-700 hover:bg-blue-50"
+                      onClick={() => onOpenActivity && onOpenActivity(it)}
+                    >
+                      {it.label || it.title || 'Activité'}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </div>
