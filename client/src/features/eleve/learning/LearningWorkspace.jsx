@@ -666,34 +666,38 @@ export default function LearningWorkspace({ module, user, onQuit }) {
                         <div className="learning-progress-bar" style={{ width: `${progressPct}%` }} />
                     </div>
                     <div className="learning-step-title" style={{ color: '#b91c1c' }}>Réponse incorrecte</div>
-                    <div className="learning-hint" style={{ color: '#7f1d1d', fontWeight: 900 }}>
-                        Question:
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 12 }}>
+                        <div className="learning-hint" style={{ color: '#7f1d1d', fontWeight: 900, marginBottom: 0 }}>
+                            Question:
+                        </div>
+                        <div style={{ color: '#1e293b', fontSize: 22, fontWeight: 800, lineHeight: 1.25 }}>
+                            {generatedQuestion}
+                        </div>
                     </div>
-                    <div className="learning-question" style={{ marginBottom: 12 }}>{generatedQuestion}</div>
-                    <div className="learning-error" style={{ marginBottom: 10, borderColor: '#fecaca', color: '#b91c1c' }}>
+                    <div className="learning-error" style={{ marginBottom: 12, borderColor: '#fecaca', color: '#b91c1c', fontSize: 27, fontWeight: 900, lineHeight: 1.25 }}>
                         Ta réponse: {String(answerText || '').trim() || '—'}
                     </div>
                     {aiErrorPanel.expected ? (
-                        <div className="learning-hint" style={{ color: '#7f1d1d', marginBottom: 8 }}>
+                        <div className="learning-hint" style={{ color: '#7f1d1d', marginBottom: 10, fontSize: 27, fontWeight: 900, lineHeight: 1.25 }}>
                             Réponse attendue: {aiErrorPanel.expected}
                         </div>
                     ) : null}
                     {Array.isArray(aiErrorPanel.missingWords) && aiErrorPanel.missingWords.length > 0 ? (
                         <div>
-                            <div className="learning-hint" style={{ color: '#7f1d1d', fontWeight: 900 }}>Mots-clés manquants</div>
+                            <div className="learning-hint" style={{ color: '#7f1d1d', fontWeight: 900, fontSize: 27, lineHeight: 1.25 }}>Mots-clés manquants</div>
                             <div className="learning-actions" style={{ marginBottom: 0 }}>
                                 {aiErrorPanel.missingWords.map((w, i) => (
                                     <span
                                         key={`lock_missing_kw_${i}_${w}`}
                                         style={{
                                             display: 'inline-block',
-                                            padding: '6px 10px',
+                                            padding: '9px 14px',
                                             borderRadius: 999,
                                             background: '#fee2e2',
                                             border: '1px solid #ef4444',
                                             color: '#991b1b',
                                             fontWeight: 900,
-                                            fontSize: 12
+                                            fontSize: 22
                                         }}
                                     >
                                         {w}
