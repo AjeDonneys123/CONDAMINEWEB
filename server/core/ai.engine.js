@@ -44,7 +44,49 @@ const AIEngine = {
         }
     },
 
+    askLocal: async (prompt, systemInstruction = "") => {
+        const baseUrl = String(process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434').trim();
+        const model = String(process.env.OLLAMA_MODEL || 'qwen2.5:14b-instruct').trim();
+        if (!baseUrl || !model) return "";
+        const userText = Array.isArray(prompt)
+            ? prompt.map((p) => String(p?.text || '')).join('\n\n').trim()
+            : String(prompt || '').trim();
+        if (!userText) return "";
+        try {
+            const response = await fetch(`${baseUrl.replace(/\/$/, '')}/api/chat`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    model,
+                    stream: false,
+                    options: {
+                        temperature: 0.3,
+                        num_predict: 450
+                    },
+                    messages: [
+                        { role: 'system', content: String(systemInstruction || '') },
+                        { role: 'user', content: userText }
+                    ]
+                })
+            });
+            if (!response.ok) {
+                const errText = await response.text().catch(() => '');
+                throw new Error(`OLLAMA_HTTP_${response.status}: ${errText.slice(0, 300)}`);
+            }
+            const data = await response.json();
+            return String(data?.message?.content || '').trim();
+        } catch (e) {
+            console.error('AI Local Error:', e.message);
+            return "";
+        }
+    },
+
     ask: async (prompt, systemInstruction = "") => {
+        const preferLocal = String(process.env.AI_PROVIDER || 'local').toLowerCase() !== 'gemini';
+        if (preferLocal) {
+            const localText = await AIEngine.askLocal(prompt, systemInstruction);
+            if (localText) return localText;
+        }
         const apiKey = process.env.GEMINI_API_KEY;
         if (!apiKey) return "ERROR_KEY";
 

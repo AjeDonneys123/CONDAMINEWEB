@@ -145,7 +145,13 @@ const Models = {
                 studentId: mongoose.Schema.Types.ObjectId,
                 completedAt: Date,
                 currentStep: { type: Number, default: 0 },
-                lastUpdateAt: Date
+                lastUpdateAt: Date,
+                chatDocId: { type: String, default: '' },
+                chatDocUrl: { type: String, default: '' },
+                chatDocEmbedUrl: { type: String, default: '' },
+                chatDocRevisionCount: { type: Number, default: 0 },
+                chatDocRevisionAt: { type: Date, default: null },
+                chatLogText: { type: String, default: '' }
             }],
             default: []
         },

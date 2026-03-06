@@ -120,6 +120,75 @@ function extractQuestionItems(step = null, module = null) {
 
 function evaluateQuestionAnswer(step = null, questionItem = null, answerText = '') {
     const txt = normalize(answerText);
+    const textWords = txt.split(/[^a-z0-9'-]+/i).map((w) => w.trim()).filter(Boolean);
+
+    const simplifyWord = (w = '') => {
+        let out = String(w || '').trim();
+        if (out.length > 4) out = out.replace(/(e?s?)$/i, '');
+        if (out.length > 4) out = out.replace(/(x|s)$/i, '');
+        return out;
+    };
+
+    const levenshtein = (a = '', b = '') => {
+        const s = String(a || '');
+        const t = String(b || '');
+        const m = s.length;
+        const n = t.length;
+        if (!m) return n;
+        if (!n) return m;
+        const dp = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+        for (let i = 0; i <= m; i += 1) dp[i][0] = i;
+        for (let j = 0; j <= n; j += 1) dp[0][j] = j;
+        for (let i = 1; i <= m; i += 1) {
+            for (let j = 1; j <= n; j += 1) {
+                const cost = s[i - 1] === t[j - 1] ? 0 : 1;
+                dp[i][j] = Math.min(
+                    dp[i - 1][j] + 1,
+                    dp[i][j - 1] + 1,
+                    dp[i - 1][j - 1] + cost
+                );
+            }
+        }
+        return dp[m][n];
+    };
+
+    const keywordMatchesText = (keywordNorm = '') => {
+        const key = String(keywordNorm || '').trim();
+        if (!key) return false;
+        if (txt.includes(key)) return true;
+
+        const keySimple = key
+            .split(/[^a-z0-9'-]+/i)
+            .map((w) => simplifyWord(w))
+            .filter(Boolean)
+            .join(' ');
+        if (!keySimple) return false;
+
+        const textSimple = textWords.map((w) => simplifyWord(w)).filter(Boolean).join(' ');
+        if (textSimple.includes(keySimple)) return true;
+
+        const keyWords = keySimple.split(/\s+/).filter(Boolean);
+        if (keyWords.length === 1) {
+            const target = keyWords[0];
+            const maxTypos = target.length >= 8 ? 2 : 1;
+            return textWords.some((w) => {
+                const ws = simplifyWord(w);
+                if (!ws) return false;
+                if (ws === target) return true;
+                return levenshtein(ws, target) <= maxTypos;
+            });
+        }
+
+        const simpleWords = textWords.map((w) => simplifyWord(w)).filter(Boolean);
+        for (let i = 0; i <= simpleWords.length - keyWords.length; i += 1) {
+            const windowPhrase = simpleWords.slice(i, i + keyWords.length).join(' ');
+            if (windowPhrase === keySimple) return true;
+            const allowed = Math.max(1, Math.floor(keySimple.length * 0.12));
+            if (levenshtein(windowPhrase, keySimple) <= allowed) return true;
+        }
+        return false;
+    };
+
     const directKeys = Array.isArray(questionItem?.expectedKeywords)
         ? questionItem.expectedKeywords.map((k) => String(k || '').trim()).filter(Boolean)
         : [];
@@ -143,8 +212,8 @@ function evaluateQuestionAnswer(step = null, questionItem = null, answerText = '
         };
     }
 
-    const matched = keys.filter((k) => txt.includes(k.norm)).map((k) => k.raw);
-    const missing = keys.filter((k) => !txt.includes(k.norm)).map((k) => k.raw);
+    const matched = keys.filter((k) => keywordMatchesText(k.norm)).map((k) => k.raw);
+    const missing = keys.filter((k) => !keywordMatchesText(k.norm)).map((k) => k.raw);
     const required = Math.min(keys.length, minMatches);
     const ok = matched.length >= required;
     return {
@@ -215,12 +284,22 @@ export default function LearningWorkspace({ module, user, onQuit }) {
     const [activeOral, setActiveOral] = useState(null);
     const [oralAnswerText, setOralAnswerText] = useState('');
     const [oralError, setOralError] = useState('');
+    const [studyQuestion, setStudyQuestion] = useState('');
+    const [studyMode, setStudyMode] = useState('deep');
+    const [studyLoading, setStudyLoading] = useState(false);
+    const [studyError, setStudyError] = useState('');
+    const [studyAnswer, setStudyAnswer] = useState('');
+    const [studyChatOpen, setStudyChatOpen] = useState(false);
+    const [studyMicRecording, setStudyMicRecording] = useState(false);
+    const [studyMicEnabled, setStudyMicEnabled] = useState(false);
+    const [studyMicError, setStudyMicError] = useState('');
 
     const sheetRef = useRef(null);
     const videoRef = useRef(null);
     const sheetStartedAt = useRef(Date.now());
     const speechRef = useRef(null);
     const recognitionRef = useRef(null);
+    const studyRecognitionRef = useRef(null);
     const seenOralSeqRef = useRef(new Set());
     const sequenceNodeRefs = useRef({});
     const currentStep = steps[stepIndex];
@@ -268,6 +347,15 @@ export default function LearningWorkspace({ module, user, onQuit }) {
         setActiveOral(null);
         setOralAnswerText('');
         setOralError('');
+        setStudyQuestion('');
+        setStudyMode('deep');
+        setStudyLoading(false);
+        setStudyError('');
+        setStudyAnswer('');
+        setStudyChatOpen(false);
+        setStudyMicRecording(false);
+        setStudyMicEnabled(false);
+        setStudyMicError('');
         seenOralSeqRef.current = new Set();
         sequenceNodeRefs.current = {};
         if (speechRef.current) speechRef.current.cancel?.();
@@ -479,6 +567,121 @@ export default function LearningWorkspace({ module, user, onQuit }) {
         });
     };
 
+    const askStudyTutor = async () => {
+        const question = String(studyQuestion || '').trim();
+        if (!question) {
+            setStudyError('Écris une question.');
+            return;
+        }
+        if (!currentStep || !['sheet', 'video'].includes(String(currentStep.type || ''))) {
+            setStudyError("Le tuteur IA est disponible seulement sur fiche/vidéo.");
+            return;
+        }
+        setStudyLoading(true);
+        setStudyError('');
+        try {
+            const studentId = String(user?._id || user?.id || '');
+            const res = await fetch('/api/eleve/learning/sheet-chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    moduleId: String(module?._id || ''),
+                    studentId,
+                    stepId: String(currentStep?.id || ''),
+                    stepIndex: Number(stepIndex || 0),
+                    mode: String(studyMode || 'deep'),
+                    question
+                })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(String(data?.error || 'Erreur IA'));
+            const nextAnswer = String(data?.answer || '').trim();
+            setStudyAnswer(nextAnswer);
+        } catch (e) {
+            setStudyError(String(e?.message || 'Erreur IA'));
+        } finally {
+            setStudyLoading(false);
+        }
+    };
+
+    const startStudyMic = () => {
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SR) {
+            setStudyMicError("Reconnaissance vocale non disponible.");
+            return;
+        }
+        if (studyMicRecording || isAiSpeaking || !studyMicEnabled || !studyChatOpen) return;
+        setStudyMicError('');
+        const rec = new SR();
+        rec.lang = 'fr-FR';
+        rec.interimResults = true;
+        rec.continuous = true;
+        rec.onresult = (event) => {
+            const text = Array.from(event.results).map((r) => r[0]?.transcript || '').join(' ').trim();
+            setStudyQuestion(text);
+        };
+        rec.onerror = () => {
+            setStudyMicRecording(false);
+            setStudyMicError("Micro refusé ou indisponible.");
+        };
+        rec.onend = () => {
+            setStudyMicRecording(false);
+            if (studyMicEnabled && studyChatOpen && !isAiSpeaking) {
+                setTimeout(() => {
+                    startStudyMic();
+                }, 120);
+            }
+        };
+        rec.start();
+        studyRecognitionRef.current = rec;
+        setStudyMicRecording(true);
+    };
+
+    const stopStudyMic = () => {
+        try { studyRecognitionRef.current?.stop?.(); } catch (_) {}
+        setStudyMicRecording(false);
+    };
+
+    const toggleStudyMic = () => {
+        const next = !studyMicEnabled;
+        setStudyMicEnabled(next);
+        if (!next) {
+            stopStudyMic();
+            return;
+        }
+    };
+
+    useEffect(() => {
+        if (!studyChatOpen) {
+            stopStudyMic();
+            return;
+        }
+        if (!studyMicEnabled) {
+            stopStudyMic();
+            return;
+        }
+        if (isAiSpeaking) {
+            stopStudyMic();
+            return;
+        }
+        if (!studyMicRecording) startStudyMic();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [studyChatOpen, studyMicEnabled, isAiSpeaking]);
+
+    useEffect(() => {
+        if (!studyChatOpen) {
+            setStudyMicEnabled(false);
+            stopStudyMic();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [studyChatOpen]);
+
+    useEffect(() => {
+        return () => {
+            try { studyRecognitionRef.current?.stop?.(); } catch (_) {}
+        };
+    }, []);
+
     const handleValidate = async () => {
         if (!currentStep) return;
         if (currentStep.type === 'question' && pendingSheetReturn && Number.isInteger(pendingSheetReturn.stepIndex)) {
@@ -515,7 +718,7 @@ export default function LearningWorkspace({ module, user, onQuit }) {
                         .map((w) => String(w || '').trim())
                         .filter(Boolean);
                     const spokenList = missingWords
-                        .map((w, i) => `mot ${i + 1}: ${w}`)
+                        .map((w) => w)
                         .join(', ');
                     const expected = String(check.expectedAnswer || '').trim();
                     const aiMessage = expected
@@ -763,6 +966,9 @@ export default function LearningWorkspace({ module, user, onQuit }) {
                             <span>Scroll: {Math.round(sheetScrollRatio * 100)}%</span>
                             {activeOral && <span className="text-red-600">Question orale en attente</span>}
                         </div>
+                        <div className="learning-study-toggle-row">
+                            <button className="learning-btn ghost" onClick={() => setStudyChatOpen(true)}>❓ J’ai une question</button>
+                        </div>
                     </>
                 )}
 
@@ -809,6 +1015,9 @@ export default function LearningWorkspace({ module, user, onQuit }) {
                             <div className="learning-missing">Aucune vidéo configurée.</div>
                         )}
                         <div className="learning-meta">{videoUnlocked ? '✅ Vidéo terminée' : '⏳ En attente de fin vidéo'}</div>
+                        <div className="learning-study-toggle-row">
+                            <button className="learning-btn ghost" onClick={() => setStudyChatOpen(true)}>❓ J’ai une question</button>
+                        </div>
                     </>
                 )}
 
@@ -895,6 +1104,57 @@ export default function LearningWorkspace({ module, user, onQuit }) {
                         <div className="learning-actions">
                             <button className="learning-btn ghost" onClick={validateOralAnswer}>Valider réponse</button>
                         </div>
+                    </div>
+                </div>
+            )}
+            {studyChatOpen && currentStep && ['sheet', 'video'].includes(String(currentStep.type || '')) && (
+                <div className="learning-study-chat-overlay">
+                    <div className="learning-study-chat-panel">
+                        <div className="learning-study-chat-head">
+                            <div className="learning-study-title">💬 Chat IA ({currentStep.type === 'sheet' ? 'fiche' : 'vidéo'})</div>
+                            <button
+                                className="learning-btn ghost"
+                                onClick={() => {
+                                    setStudyChatOpen(false);
+                                    setStudyMicEnabled(false);
+                                    stopStudyMic();
+                                }}
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <div className="learning-study-row">
+                            <select
+                                className="learning-study-select"
+                                value={studyMode}
+                                onChange={(e) => setStudyMode(e.target.value)}
+                            >
+                                <option value="deep">Approfondir</option>
+                                <option value="strict">Strict cours</option>
+                            </select>
+                            <button className={`learning-btn ${studyMicEnabled ? '' : 'ghost'}`} onClick={toggleStudyMic}>
+                                {studyMicEnabled ? '🎙️ MICRO ON' : '🎙️ MICRO OFF'}
+                            </button>
+                            <button className="learning-btn ghost" onClick={() => speakAiText(studyAnswer)} disabled={!studyAnswer || isAiSpeaking}>
+                                ▶️ PLAY
+                            </button>
+                            <button className="learning-btn" disabled={studyLoading} onClick={askStudyTutor}>
+                                {studyLoading ? 'Réponse...' : 'Envoyer'}
+                            </button>
+                        </div>
+                        <textarea
+                            value={studyQuestion}
+                            onChange={(e) => setStudyQuestion(e.target.value)}
+                            className="learning-answer"
+                            placeholder="Pose ta question librement sur le cours."
+                        />
+                        {studyMicError && <div className="learning-error">{studyMicError}</div>}
+                        {studyError && <div className="learning-error">{studyError}</div>}
+                        {studyAnswer && (
+                            <div className="learning-study-answer">
+                                {studyAnswer}
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
