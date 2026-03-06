@@ -355,6 +355,36 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         });
     };
 
+    const getForcedQuestionSourceForIndex = (questionIndex, stepsInput = null) => {
+        const rows = Array.isArray(stepsInput) ? stepsInput : (formData.steps || []);
+        if (!Number.isInteger(questionIndex) || questionIndex < 0 || questionIndex >= rows.length) return null;
+        for (let i = questionIndex - 1; i >= 0; i -= 1) {
+            const candidate = rows[i];
+            if (!candidate) continue;
+            if (candidate.type === 'video') {
+                const sid = String(candidate.id || '').trim();
+                if (!sid) continue;
+                return {
+                    kind: 'video',
+                    value: `video:${sid}`,
+                    label: `Séquence vidéo (module): ${candidate.title || 'Sans titre'}`,
+                    stepId: sid
+                };
+            }
+            if (candidate.type === 'sheet') {
+                const sid = String(candidate.id || '').trim();
+                if (!sid) continue;
+                return {
+                    kind: 'sheet',
+                    value: `sheet:${sid}`,
+                    label: `Fiche (module): ${candidate.title || 'Sans titre'}`,
+                    stepId: sid
+                };
+            }
+        }
+        return null;
+    };
+
     const resolveQuestionSource = (sourceValue = '') => {
         const raw = String(sourceValue || '').trim();
         if (!raw) return null;
@@ -806,6 +836,10 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     const videoSources = useMemo(() => getCandidateVideos(), [formData.steps, allGames, formData.chapterId]);
     const sheetQuestionSources = useMemo(() => questionSources.filter((s) => s.type === 'sheet'), [questionSources]);
     const videoQuestionSources = useMemo(() => questionSources.filter((s) => s.type === 'video'), [questionSources]);
+    const forcedQuestionSource = useMemo(
+        () => (step?.type === 'question' ? getForcedQuestionSourceForIndex(activeStep) : null),
+        [formData.steps, activeStep, step?.id, step?.type]
+    );
     const questionSectionsFromDb = useMemo(() => {
         if (!step || step.type !== 'question') return [];
         const map = (step.questionSectionQuestions && typeof step.questionSectionQuestions === 'object')
@@ -816,10 +850,40 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             .filter((x) => Number.isFinite(x.idx) && x.rows.length > 0)
             .sort((a, b) => a.idx - b.idx);
     }, [step?.id, step?.questionSectionQuestions, step?.type]);
-    const selectedQuestionSource = useMemo(
-        () => getSelectedQuestionSource(step),
-        [step?.sourceKind, step?.sourceSheetUrl, step?.sourceVideoRef, step?.sourceSlidesUrl, formData.steps]
-    );
+    const selectedQuestionSource = useMemo(() => {
+        if (step?.type === 'question' && forcedQuestionSource?.value) {
+            return resolveQuestionSource(forcedQuestionSource.value) || getSelectedQuestionSource(step);
+        }
+        return getSelectedQuestionSource(step);
+    }, [step?.type, step?.sourceKind, step?.sourceSheetUrl, step?.sourceVideoRef, step?.sourceSlidesUrl, formData.steps, forcedQuestionSource?.value]);
+
+    useEffect(() => {
+        if (!step || step.type !== 'question') return;
+        if (!forcedQuestionSource) return;
+        if (forcedQuestionSource.kind === 'video') {
+            const same =
+                String(step.sourceKind || '') === 'video' &&
+                String(step.sourceVideoRef || '') === String(forcedQuestionSource.value);
+            if (same) return;
+            updateStep(activeStep, {
+                sourceKind: 'video',
+                sourceVideoRef: forcedQuestionSource.value,
+                sourceSheetUrl: '',
+                sourceSlidesUrl: ''
+            });
+            return;
+        }
+        const same =
+            String(step.sourceKind || '') === 'sheet' &&
+            String(step.sourceSheetUrl || '') === String(forcedQuestionSource.value);
+        if (same) return;
+        updateStep(activeStep, {
+            sourceKind: 'sheet',
+            sourceSheetUrl: forcedQuestionSource.value,
+            sourceVideoRef: '',
+            sourceSlidesUrl: ''
+        });
+    }, [step?.id, step?.type, step?.sourceKind, step?.sourceSheetUrl, step?.sourceVideoRef, forcedQuestionSource, activeStep]);
 
     const openKeywordModal = () => {
         if (!step) return;
@@ -2280,56 +2344,16 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                 <>
                                     <div className="hw-section-title mt-4">Source</div>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                        <select
+                                        <input
                                             className="v84-ans-input"
-                                            value={String(step.sourceKind || 'sheet')}
-                                            onChange={(e) => {
-                                                const kind = String(e.target.value || 'sheet');
-                                                if (kind === 'video') {
-                                                    updateStep(activeStep, { sourceKind: 'video', sourceSheetUrl: '', sourceSlidesUrl: '' });
-                                                    return;
-                                                }
-                                                if (kind === 'slides') {
-                                                    updateStep(activeStep, { sourceKind: 'slides', sourceSheetUrl: '', sourceVideoRef: '' });
-                                                    return;
-                                                }
-                                                updateStep(activeStep, { sourceKind: 'sheet', sourceVideoRef: '', sourceSlidesUrl: '' });
-                                            }}
-                                        >
-                                            <option value="sheet">Fiche</option>
-                                            <option value="video">Section vidéo</option>
-                                            <option value="slides">Lien Drive / Google Slides</option>
-                                        </select>
-                                        {String(step.sourceKind || 'sheet') === 'video' ? (
-                                            <select
-                                                className="v84-ans-input"
-                                                value={step.sourceVideoRef || ''}
-                                                onChange={(e) => updateStep(activeStep, { sourceKind: 'video', sourceVideoRef: e.target.value, sourceSheetUrl: '', sourceSlidesUrl: '' })}
-                                            >
-                                                <option value="">Choisir une section vidéo</option>
-                                                {videoQuestionSources.map((item) => (
-                                                    <option key={item.value} value={item.value}>{item.label}</option>
-                                                ))}
-                                            </select>
-                                        ) : String(step.sourceKind || 'sheet') === 'slides' ? (
-                                            <input
-                                                className="v84-ans-input"
-                                                value={step.sourceSlidesUrl || ''}
-                                                onChange={(e) => updateStep(activeStep, { sourceKind: 'slides', sourceSlidesUrl: e.target.value, sourceSheetUrl: '', sourceVideoRef: '' })}
-                                                placeholder="Colle ici l'URL Google Slides"
-                                            />
-                                        ) : (
-                                            <select
-                                                className="v84-ans-input"
-                                                value={step.sourceSheetUrl || ''}
-                                                onChange={(e) => updateStep(activeStep, { sourceKind: 'sheet', sourceSheetUrl: e.target.value, sourceVideoRef: '', sourceSlidesUrl: '' })}
-                                            >
-                                                <option value="">Choisir une fiche source</option>
-                                                {sheetQuestionSources.map((item) => (
-                                                    <option key={item.value} value={item.value}>{item.label}</option>
-                                                ))}
-                                            </select>
-                                        )}
+                                            value={forcedQuestionSource ? (forcedQuestionSource.kind === 'video' ? 'Section vidéo (étape précédente)' : 'Fiche (étape précédente)') : 'Aucune source précédente'}
+                                            readOnly
+                                        />
+                                        <input
+                                            className="v84-ans-input"
+                                            value={forcedQuestionSource ? forcedQuestionSource.label : 'Ajoute une fiche ou une vidéo juste avant cette Question IA'}
+                                            readOnly
+                                        />
                                     </div>
                                     <div className="mt-3">
                                         <div className="text-[11px] font-black uppercase text-slate-500 mb-2">Source affichée</div>

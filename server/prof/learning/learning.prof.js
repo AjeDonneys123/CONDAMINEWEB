@@ -204,7 +204,7 @@ const sanitizeSteps = (steps = []) => {
             };
         });
     const usedIds = new Set();
-    return sanitized.map((step, idx) => {
+    const ordered = sanitized.map((step, idx) => {
         const rawId = String(step?.id || `step_${idx + 1}`).trim() || `step_${idx + 1}`;
         let nextId = rawId;
         let suffix = 2;
@@ -217,6 +217,35 @@ const sanitizeSteps = (steps = []) => {
             ...step,
             id: nextId,
             order: idx
+        };
+    });
+    return ordered.map((step, idx) => {
+        if (step.type !== 'question') return step;
+        let previous = null;
+        for (let i = idx - 1; i >= 0; i -= 1) {
+            const candidate = ordered[i];
+            if (!candidate) continue;
+            if (candidate.type === 'sheet' || candidate.type === 'video') {
+                previous = candidate;
+                break;
+            }
+        }
+        if (!previous) return step;
+        if (previous.type === 'video') {
+            return {
+                ...step,
+                sourceKind: 'video',
+                sourceVideoRef: `video:${previous.id}`,
+                sourceSheetUrl: '',
+                sourceSlidesUrl: ''
+            };
+        }
+        return {
+            ...step,
+            sourceKind: 'sheet',
+            sourceSheetUrl: `sheet:${previous.id}`,
+            sourceVideoRef: '',
+            sourceSlidesUrl: ''
         };
     });
 };
