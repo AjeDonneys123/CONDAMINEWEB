@@ -38,7 +38,7 @@ const markersFromLegacyRanges = (ranges = [], textLength = 0, max = 500) =>
 
 const sanitizeSteps = (steps = []) => {
     if (!Array.isArray(steps)) return [];
-    return steps
+    const sanitized = steps
         .map((step, idx) => {
             const type = String(step?.type || '').toLowerCase();
             if (!['sheet', 'video', 'question'].includes(type)) return null;
@@ -203,6 +203,22 @@ const sanitizeSteps = (steps = []) => {
                 keywords: mergedKeywords.slice(0, 30)
             };
         });
+    const usedIds = new Set();
+    return sanitized.map((step, idx) => {
+        const rawId = String(step?.id || `step_${idx + 1}`).trim() || `step_${idx + 1}`;
+        let nextId = rawId;
+        let suffix = 2;
+        while (usedIds.has(nextId)) {
+            nextId = `${rawId}_${suffix}`;
+            suffix += 1;
+        }
+        usedIds.add(nextId);
+        return {
+            ...step,
+            id: nextId,
+            order: idx
+        };
+    });
 };
 
 const streamToBuffer = (stream) => new Promise((resolve, reject) => {

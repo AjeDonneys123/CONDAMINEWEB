@@ -73,6 +73,32 @@ const emptyStep = (type = 'sheet') => {
     return { id: uid(), type: 'sheet', title: 'Fiche', sheetUrl: '', sheetText: '', questionCount: 3, minReadSeconds: 20 };
 };
 
+const normalizeLoadedSteps = (rawSteps = []) => {
+    if (!Array.isArray(rawSteps)) return [];
+    const sorted = [...rawSteps].sort((a, b) => {
+        const ao = Number(a?.order);
+        const bo = Number(b?.order);
+        const aOk = Number.isFinite(ao);
+        const bOk = Number.isFinite(bo);
+        if (aOk && bOk) return ao - bo;
+        if (aOk) return -1;
+        if (bOk) return 1;
+        return 0;
+    });
+    const usedIds = new Set();
+    return sorted.map((s, i) => {
+        const rawId = String(s?.id || `step_${i + 1}`).trim() || `step_${i + 1}`;
+        let nextId = rawId;
+        let suffix = 2;
+        while (usedIds.has(nextId)) {
+            nextId = `${rawId}_${suffix}`;
+            suffix += 1;
+        }
+        usedIds.add(nextId);
+        return { ...s, id: nextId };
+    });
+};
+
 export default function LearningStudio({ initialData, chapters, user, targetSection, targetLevel, onClose, allStudents: propStudents, allClasses: propClasses }) {
     const [formData, setFormData] = useState(() => ({
         _id: initialData?._id,
@@ -81,9 +107,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         subject: initialData?.subject || targetSection || 'GÉNÉRAL',
         presentationUrl: initialData?.presentationUrl || '',
         presentationSlidesFocus: initialData?.presentationSlidesFocus || '',
-        steps: Array.isArray(initialData?.steps) && initialData.steps.length > 0
-            ? initialData.steps.map((s, i) => ({ id: s.id || `step_${i + 1}`, ...s }))
-            : []
+        steps: normalizeLoadedSteps(initialData?.steps)
     }));
     const [activeStep, setActiveStep] = useState(0);
     const [allStudents, setAllStudents] = useState(propStudents || []);

@@ -87,7 +87,19 @@ function isProbablyDirectVideo(url = '') {
 }
 
 export default function LearningWorkspace({ module, user, onQuit }) {
-    const steps = Array.isArray(module?.steps) ? module.steps : [];
+    const steps = useMemo(() => {
+        const raw = Array.isArray(module?.steps) ? module.steps : [];
+        return [...raw].sort((a, b) => {
+            const ao = Number(a?.order);
+            const bo = Number(b?.order);
+            const aOk = Number.isFinite(ao);
+            const bOk = Number.isFinite(bo);
+            if (aOk && bOk) return ao - bo;
+            if (aOk) return -1;
+            if (bOk) return 1;
+            return 0;
+        });
+    }, [module?.steps]);
     const initialStep = Math.max(0, Math.min(Number(module?.completion?.currentStep || 0), Math.max(0, steps.length - 1)));
     const [stepIndex, setStepIndex] = useState(initialStep);
     const [validated, setValidated] = useState(() => new Set(Array.from({ length: initialStep }, (_, i) => i)));
