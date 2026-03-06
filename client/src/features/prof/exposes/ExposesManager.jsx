@@ -112,6 +112,27 @@ export default function ExposesManager({ globalClass }) {
         return [...map.entries()].map(([presentationTitle, items]) => ({ presentationTitle, items }));
     }, [selected]);
 
+    const deletePresentationGroup = async (presentationTitle = '') => {
+        if (!selected?._id) return;
+        const title = String(presentationTitle || '').trim();
+        if (!title) return;
+        const ok = window.confirm(`Supprimer le groupe de présentation "${title}" ?`);
+        if (!ok) return;
+        try {
+            const res = await fetch(
+                `/api/exposes/${encodeURIComponent(String(selected._id))}/presentation-group?title=${encodeURIComponent(title)}`,
+                { method: 'DELETE' }
+            );
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err?.error || 'Suppression impossible');
+            }
+            await loadData();
+        } catch (e) {
+            alert(`Erreur suppression groupe: ${e.message}`);
+        }
+    };
+
     return (
         <div className="p-6 grid grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)] gap-4">
             <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3">
@@ -154,7 +175,17 @@ export default function ExposesManager({ globalClass }) {
                         <div className="space-y-4 max-h-[72vh] overflow-auto pr-1">
                             {grouped.map((g) => (
                                 <div key={g.presentationTitle} className="border border-rose-200 bg-rose-50 rounded-2xl p-3">
-                                    <div className="font-black text-rose-700 uppercase">{g.presentationTitle}</div>
+                                    <div className="flex items-center justify-between gap-2">
+                                        <div className="font-black text-rose-700 uppercase">{g.presentationTitle}</div>
+                                        <button
+                                            type="button"
+                                            onClick={() => deletePresentationGroup(g.presentationTitle)}
+                                            className="w-7 h-7 rounded-full border border-red-300 bg-white text-red-600 font-black leading-none hover:bg-red-50"
+                                            title={`Supprimer "${g.presentationTitle}"`}
+                                        >
+                                            ✕
+                                        </button>
+                                    </div>
                                     <div className="text-[11px] font-black text-slate-500 mb-2">
                                         {g.items.length} élève{g.items.length > 1 ? 's' : ''}
                                     </div>

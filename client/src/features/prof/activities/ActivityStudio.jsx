@@ -53,8 +53,23 @@ export default function ActivityStudio({ globalClass, globalClassId, globalLevel
 
     useEffect(() => { loadData(); }, [globalClass]);
 
-    const handleDeleteItem = async (id, type) => {
-        if (!confirm(`⚠️ Supprimer cet élément ?`)) return;
+    const handleDeleteItem = async (id, type, title = '') => {
+        const itemTypeLabel = type === 'expose'
+            ? 'cet exposé'
+            : type === 'learning'
+                ? 'cet apprentissage'
+                : type === 'lecture'
+                    ? 'cette lecture'
+                    : type === 'game'
+                        ? 'ce jeu'
+                        : type === 'homework'
+                            ? 'ce devoir'
+                            : 'cet élément';
+        const targetLabel = String(title || '').trim();
+        const message = targetLabel
+            ? `⚠️ Confirmer la suppression de ${itemTypeLabel} : "${targetLabel}" ?`
+            : `⚠️ Confirmer la suppression de ${itemTypeLabel} ?`;
+        if (!confirm(message)) return;
         
         let url;
         if (type === 'game') url = `/api/games/${id}`;

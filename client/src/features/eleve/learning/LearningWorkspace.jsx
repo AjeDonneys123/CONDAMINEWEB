@@ -67,6 +67,95 @@ function buildQuestion(step, module) {
     return `Donne une idée importante que tu viens d'apprendre dans "${chapter}"${keyHint}.`;
 }
 
+function extractQuestionItems(step = null, module = null) {
+    if (!step || step.type !== 'question') return [];
+    const out = [];
+    const map = step.questionSectionQuestions && typeof step.questionSectionQuestions === 'object'
+        ? step.questionSectionQuestions
+        : {};
+    const sectionKeys = Object.keys(map)
+        .map((k) => Number(k))
+        .filter((k) => Number.isFinite(k))
+        .sort((a, b) => a - b);
+    sectionKeys.forEach((sectionIdx) => {
+        const rows = Array.isArray(map[String(sectionIdx)]) ? map[String(sectionIdx)] : [];
+        rows.forEach((row, rowIdx) => {
+            const question = String(row?.question || row?.q || '').trim();
+            const expectedAnswer = String(row?.expectedAnswer || '').trim();
+            const expectedKeywords = Array.isArray(row?.expectedKeywords)
+                ? row.expectedKeywords.map((k) => String(k || '').trim()).filter(Boolean)
+                : [];
+            if (!question && !expectedAnswer && expectedKeywords.length === 0) return;
+            out.push({
+                id: `sec_${sectionIdx}_${rowIdx}`,
+                question,
+                expectedAnswer,
+                expectedKeywords
+            });
+        });
+    });
+    if (out.length > 0) return out;
+
+    const pairs = Array.isArray(step.questionAnswerPairs) ? step.questionAnswerPairs : [];
+    pairs.forEach((pair, idx) => {
+        const question = String(pair?.question || '').trim();
+        const expectedAnswer = String(pair?.answer || '').trim();
+        if (!question && !expectedAnswer) return;
+        out.push({
+            id: `pair_${idx}`,
+            question,
+            expectedAnswer,
+            expectedKeywords: []
+        });
+    });
+    if (out.length > 0) return out;
+
+    return [{
+        id: 'fallback_0',
+        question: String(step.customQuestion || '').trim() || buildQuestion(step, module),
+        expectedAnswer: '',
+        expectedKeywords: Array.isArray(step.keywords) ? step.keywords.map((k) => String(k || '').trim()).filter(Boolean) : []
+    }];
+}
+
+function evaluateQuestionAnswer(step = null, questionItem = null, answerText = '') {
+    const txt = normalize(answerText);
+    const directKeys = Array.isArray(questionItem?.expectedKeywords)
+        ? questionItem.expectedKeywords.map((k) => String(k || '').trim()).filter(Boolean)
+        : [];
+    const fallbackKeys = Array.isArray(step?.keywords)
+        ? step.keywords.map((k) => String(k || '').trim()).filter(Boolean)
+        : [];
+    const keys = (directKeys.length > 0 ? directKeys : fallbackKeys)
+        .map((k) => ({ raw: k, norm: normalize(k) }))
+        .filter((k) => k.norm.length > 0);
+    const expectedAnswer = String(questionItem?.expectedAnswer || '').trim();
+    const minMatches = Math.max(1, Number(step?.minKeywordMatches || 1));
+
+    if (keys.length === 0) {
+        const ok = txt.length >= 10;
+        return {
+            ok,
+            required: 0,
+            matched: [],
+            missing: [],
+            expectedAnswer
+        };
+    }
+
+    const matched = keys.filter((k) => txt.includes(k.norm)).map((k) => k.raw);
+    const missing = keys.filter((k) => !txt.includes(k.norm)).map((k) => k.raw);
+    const required = Math.min(keys.length, minMatches);
+    const ok = matched.length >= required;
+    return {
+        ok,
+        required,
+        matched,
+        missing,
+        expectedAnswer
+    };
+}
+
 function toEmbedUrl(rawUrl = '') {
     const url = String(rawUrl || '').trim();
     if (!url) return '';
@@ -87,6 +176,7 @@ function isProbablyDirectVideo(url = '') {
 }
 
 export default function LearningWorkspace({ module, user, onQuit }) {
+    const FORCED_SHEET_REVIEW_MS = 8000;
     const steps = useMemo(() => {
         const raw = Array.isArray(module?.steps) ? module.steps : [];
         return [...raw].sort((a, b) => {
@@ -111,9 +201,16 @@ export default function LearningWorkspace({ module, user, onQuit }) {
     const [videoManualDone, setVideoManualDone] = useState(false);
     const [answerText, setAnswerText] = useState('');
     const [recording, setRecording] = useState(false);
+    const [micMutedByUser, setMicMutedByUser] = useState(false);
+    const [isAiSpeaking, setIsAiSpeaking] = useState(false);
     const [recordError, setRecordError] = useState('');
     const [saving, setSaving] = useState(false);
     const [gateHint, setGateHint] = useState('');
+    const [questionCursor, setQuestionCursor] = useState(0);
+    const [questionFeedback, setQuestionFeedback] = useState(null);
+    const [aiErrorPanel, setAiErrorPanel] = useState(null); // { message, expected, missingWords[] }
+    const [forcedSheetReview, setForcedSheetReview] = useState(null); // { stepIndex, minMs }
+    const [pendingSheetReturn, setPendingSheetReturn] = useState(null); // { stepIndex, minMs }
     const [oralQueue, setOralQueue] = useState([]);
     const [activeOral, setActiveOral] = useState(null);
     const [oralAnswerText, setOralAnswerText] = useState('');
@@ -123,6 +220,7 @@ export default function LearningWorkspace({ module, user, onQuit }) {
     const videoRef = useRef(null);
     const sheetStartedAt = useRef(Date.now());
     const speechRef = useRef(null);
+    const recognitionRef = useRef(null);
     const seenOralSeqRef = useRef(new Set());
     const sequenceNodeRefs = useRef({});
     const currentStep = steps[stepIndex];
@@ -160,6 +258,12 @@ export default function LearningWorkspace({ module, user, onQuit }) {
         setVideoManualDone(false);
         setAnswerText('');
         setGateHint('');
+        setQuestionCursor(0);
+        setQuestionFeedback(null);
+        setAiErrorPanel(null);
+        setMicMutedByUser(false);
+        setIsAiSpeaking(false);
+        setPendingSheetReturn(null);
         setOralQueue([]);
         setActiveOral(null);
         setOralAnswerText('');
@@ -207,7 +311,13 @@ export default function LearningWorkspace({ module, user, onQuit }) {
         return () => clearInterval(timer);
     }, [currentStep, sheetSegments, activeOral]);
 
-    const generatedQuestion = useMemo(() => buildQuestion(currentStep, module), [currentStep, module]);
+    const questionItems = useMemo(() => extractQuestionItems(currentStep, module), [currentStep, module]);
+    const activeQuestionItem = questionItems[Math.min(questionCursor, Math.max(0, questionItems.length - 1))] || null;
+    const isCorrectionLock = currentStep?.type === 'question' && !!pendingSheetReturn;
+    const generatedQuestion = useMemo(() => {
+        if (currentStep?.type !== 'question') return buildQuestion(currentStep, module);
+        return String(activeQuestionItem?.question || '').trim() || buildQuestion(currentStep, module);
+    }, [currentStep, module, activeQuestionItem?.question]);
 
     useEffect(() => {
         if (activeOral || oralQueue.length === 0) return;
@@ -251,18 +361,22 @@ export default function LearningWorkspace({ module, user, onQuit }) {
     const canValidateCurrent = useMemo(() => {
         if (!currentStep) return false;
         if (currentStep.type === 'sheet') {
+            if (
+                forcedSheetReview &&
+                Number(forcedSheetReview.stepIndex) === Number(stepIndex) &&
+                Number(sheetReadMs || 0) < Number(forcedSheetReview.minMs || 0)
+            ) {
+                return false;
+            }
             return sheetScrollRatio >= 0.9 && !activeOral && oralQueue.length === 0;
         }
         if (currentStep.type === 'video') return videoUnlocked;
         if (currentStep.type === 'question') {
-            const keys = (currentStep.keywords || []).map(k => normalize(k)).filter(Boolean);
-            if (keys.length === 0) return normalize(answerText).length >= 10;
-            const txt = normalize(answerText);
-            const found = new Set(keys.filter(k => txt.includes(k)));
-            return found.size >= Number(currentStep.minKeywordMatches || 1);
+            const check = evaluateQuestionAnswer(currentStep, activeQuestionItem, answerText);
+            return check.ok;
         }
         return false;
-    }, [currentStep, sheetReadMs, sheetScrollRatio, videoUnlocked, answerText]);
+    }, [currentStep, sheetReadMs, sheetScrollRatio, videoUnlocked, answerText, activeQuestionItem]);
 
     useEffect(() => {
         if (currentStep?.type === 'video' && (videoEnded || videoManualDone)) {
@@ -271,36 +385,44 @@ export default function LearningWorkspace({ module, user, onQuit }) {
         }
     }, [currentStep, videoEnded, videoManualDone]);
 
-    const speakQuestion = () => {
+    const speakAiText = (text = '') => {
         if (!window.speechSynthesis) return;
-        const utter = new SpeechSynthesisUtterance(generatedQuestion);
+        const spoken = String(text || '').trim();
+        if (!spoken) return;
+        stopRecording();
+        const utter = new SpeechSynthesisUtterance(spoken);
         utter.lang = 'fr-FR';
         utter.rate = 0.95;
+        utter.onstart = () => setIsAiSpeaking(true);
+        utter.onend = () => setIsAiSpeaking(false);
+        utter.onerror = () => setIsAiSpeaking(false);
         window.speechSynthesis.cancel();
         window.speechSynthesis.speak(utter);
         speechRef.current = window.speechSynthesis;
     };
 
+    const speakQuestion = () => {
+        if (isCorrectionLock) return;
+        speakAiText(generatedQuestion);
+    };
+
     useEffect(() => {
         if (currentStep?.type !== 'question') return;
+        if (isCorrectionLock) return;
         // Laisse le DOM se stabiliser puis lance la lecture auto.
         const t = setTimeout(() => {
             speakQuestion();
         }, 250);
         return () => clearTimeout(t);
-    }, [currentStep?.type, generatedQuestion]);
+    }, [currentStep?.id, currentStep?.type, questionCursor, generatedQuestion, isCorrectionLock]);
 
-    const toggleRecording = () => {
+    const startRecording = () => {
         const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (!SR) {
             setRecordError("Reconnaissance vocale non disponible sur ce navigateur.");
             return;
         }
-        if (recording) {
-            try { speechRef.current?.stop?.(); } catch (_) {}
-            setRecording(false);
-            return;
-        }
+        if (recording || isAiSpeaking) return;
         setRecordError('');
         const rec = new SR();
         rec.lang = 'fr-FR';
@@ -316,9 +438,37 @@ export default function LearningWorkspace({ module, user, onQuit }) {
         };
         rec.onend = () => setRecording(false);
         rec.start();
-        speechRef.current = rec;
+        recognitionRef.current = rec;
         setRecording(true);
     };
+
+    const stopRecording = () => {
+        try { recognitionRef.current?.stop?.(); } catch (_) {}
+        setRecording(false);
+    };
+
+    const toggleRecording = () => {
+        if (isAiSpeaking && !recording) return;
+        if (recording) {
+            setMicMutedByUser(true);
+            stopRecording();
+            return;
+        }
+        setMicMutedByUser(false);
+        startRecording();
+    };
+
+    useEffect(() => {
+        if (currentStep?.type !== 'question') return;
+        if (isCorrectionLock) {
+            stopRecording();
+            return;
+        }
+        if (micMutedByUser) return;
+        if (isAiSpeaking) return;
+        const t = setTimeout(() => startRecording(), 200);
+        return () => clearTimeout(t);
+    }, [currentStep?.id, currentStep?.type, questionCursor, micMutedByUser, isAiSpeaking, recording, isCorrectionLock]);
 
     const saveProgress = async (payload) => {
         const studentId = String(user._id || user.id);
@@ -331,15 +481,78 @@ export default function LearningWorkspace({ module, user, onQuit }) {
 
     const handleValidate = async () => {
         if (!currentStep) return;
+        if (currentStep.type === 'question' && pendingSheetReturn && Number.isInteger(pendingSheetReturn.stepIndex)) {
+            setPendingSheetReturn(null);
+            setAiErrorPanel(null);
+            setForcedSheetReview({
+                stepIndex: pendingSheetReturn.stepIndex,
+                minMs: Number(pendingSheetReturn.minMs || FORCED_SHEET_REVIEW_MS)
+            });
+            setStepIndex(pendingSheetReturn.stepIndex);
+            setGateHint("Relis la fiche puis reviens répondre.");
+            return;
+        }
         if (!canValidateCurrent) {
             if (currentStep.type === 'sheet') {
-                setGateHint("Lis la fiche et scrolle jusqu'en bas.");
+                if (
+                    forcedSheetReview &&
+                    Number(forcedSheetReview.stepIndex) === Number(stepIndex) &&
+                    Number(sheetReadMs || 0) < Number(forcedSheetReview.minMs || 0)
+                ) {
+                    const leftSec = Math.max(1, Math.ceil((Number(forcedSheetReview.minMs || 0) - Number(sheetReadMs || 0)) / 1000));
+                    setGateHint(`Relis la fiche encore ${leftSec}s minimum puis valide.`);
+                } else {
+                    setGateHint("Lis la fiche et scrolle jusqu'en bas.");
+                }
             } else if (currentStep.type === 'video') {
                 setGateHint("Termine la vidéo (ou clique le bouton 'J'ai fini de regarder' si c'est un embed).");
             } else {
+                const check = evaluateQuestionAnswer(currentStep, activeQuestionItem, answerText);
+                setQuestionFeedback(check);
+                if (!check.ok && check.missing.length > 0) {
+                    stopRecording();
+                    const missingWords = check.missing
+                        .map((w) => String(w || '').trim())
+                        .filter(Boolean);
+                    const spokenList = missingWords
+                        .map((w, i) => `mot ${i + 1}: ${w}`)
+                        .join(', ');
+                    const expected = String(check.expectedAnswer || '').trim();
+                    const aiMessage = expected
+                        ? `Non. La réponse attendue était: ${expected}. Il te manque les mots clés suivants: ${spokenList}.`
+                        : `Non. Il te manque les mots clés suivants: ${spokenList}.`;
+                    setAiErrorPanel({
+                        message: aiMessage,
+                        expected,
+                        missingWords
+                    });
+                    speakAiText(aiMessage);
+                    const prevIdx = Math.max(0, stepIndex - 1);
+                    const prevStep = steps[prevIdx];
+                    if (prevStep && prevStep.type === 'sheet') {
+                        setPendingSheetReturn({ stepIndex: prevIdx, minMs: FORCED_SHEET_REVIEW_MS });
+                        setGateHint("Réponse incorrecte. Clique sur « Revenir à la fiche ».");
+                        return;
+                    }
+                }
                 setGateHint("Réponse insuffisante: ajoute les mots-clés attendus.");
             }
             return;
+        }
+        if (currentStep.type === 'sheet' && forcedSheetReview && Number(forcedSheetReview.stepIndex) === Number(stepIndex)) {
+            setForcedSheetReview(null);
+        }
+        if (currentStep.type === 'question') {
+            const check = evaluateQuestionAnswer(currentStep, activeQuestionItem, answerText);
+            setQuestionFeedback(check);
+            setAiErrorPanel(null);
+            if (questionCursor < questionItems.length - 1) {
+                stopRecording();
+                setGateHint('');
+                setQuestionCursor((prev) => prev + 1);
+                setAnswerText('');
+                return;
+            }
         }
         setGateHint('');
         const next = new Set([...validated, stepIndex]);
@@ -445,6 +658,60 @@ export default function LearningWorkspace({ module, user, onQuit }) {
         return out;
     };
 
+    if (isCorrectionLock && aiErrorPanel) {
+        return (
+            <div className="learning-wrap">
+                <div className="learning-card" style={{ borderColor: '#ef4444', background: '#fff5f5', minHeight: 'calc(100vh - 220px)' }}>
+                    <div className="learning-progress" style={{ marginBottom: 14 }}>
+                        <div className="learning-progress-bar" style={{ width: `${progressPct}%` }} />
+                    </div>
+                    <div className="learning-step-title" style={{ color: '#b91c1c' }}>Réponse incorrecte</div>
+                    <div className="learning-hint" style={{ color: '#7f1d1d', fontWeight: 900 }}>
+                        Question:
+                    </div>
+                    <div className="learning-question" style={{ marginBottom: 12 }}>{generatedQuestion}</div>
+                    <div className="learning-error" style={{ marginBottom: 10, borderColor: '#fecaca', color: '#b91c1c' }}>
+                        Ta réponse: {String(answerText || '').trim() || '—'}
+                    </div>
+                    {aiErrorPanel.expected ? (
+                        <div className="learning-hint" style={{ color: '#7f1d1d', marginBottom: 8 }}>
+                            Réponse attendue: {aiErrorPanel.expected}
+                        </div>
+                    ) : null}
+                    {Array.isArray(aiErrorPanel.missingWords) && aiErrorPanel.missingWords.length > 0 ? (
+                        <div>
+                            <div className="learning-hint" style={{ color: '#7f1d1d', fontWeight: 900 }}>Mots-clés manquants</div>
+                            <div className="learning-actions" style={{ marginBottom: 0 }}>
+                                {aiErrorPanel.missingWords.map((w, i) => (
+                                    <span
+                                        key={`lock_missing_kw_${i}_${w}`}
+                                        style={{
+                                            display: 'inline-block',
+                                            padding: '6px 10px',
+                                            borderRadius: 999,
+                                            background: '#fee2e2',
+                                            border: '1px solid #ef4444',
+                                            color: '#991b1b',
+                                            fontWeight: 900,
+                                            fontSize: 12
+                                        }}
+                                    >
+                                        {w}
+                                    </span>
+                                ))}
+                            </div>
+                        </div>
+                    ) : null}
+                    <div className="learning-actions" style={{ marginTop: 12, marginBottom: 0 }}>
+                        <button className="learning-btn" disabled={saving} onClick={handleValidate}>
+                            {saving ? 'Validation...' : 'Revenir à la fiche'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="learning-wrap">
             <div className="learning-top">
@@ -543,20 +810,39 @@ export default function LearningWorkspace({ module, user, onQuit }) {
 
                 {currentStep.type === 'question' && (
                     <>
-                        <div className="learning-question">{generatedQuestion}</div>
-                        <div className="learning-actions">
-                            <button className="learning-btn ghost" onClick={speakQuestion}>🔊 Lire la question</button>
-                            <button className={`learning-btn ${recording ? 'danger' : ''}`} onClick={toggleRecording}>
-                                {recording ? '⏹ Stop micro' : '🎙️ Répondre au micro'}
-                            </button>
-                        </div>
-                        {recordError && <div className="learning-error">{recordError}</div>}
-                        <textarea
-                            value={answerText}
-                            onChange={(e) => setAnswerText(e.target.value)}
-                            className="learning-answer"
-                            placeholder="Transcription / réponse élève..."
-                        />
+                        {!isCorrectionLock && questionItems.length > 1 && (
+                            <div className="learning-meta">
+                                <span>Question {Math.min(questionCursor + 1, questionItems.length)}/{questionItems.length}</span>
+                                <span>Étape composée</span>
+                            </div>
+                        )}
+                        {!isCorrectionLock && <div className="learning-question">{generatedQuestion}</div>}
+                        {!isCorrectionLock && (
+                            <>
+                                <div className="learning-actions">
+                                    <button className="learning-btn ghost" onClick={speakQuestion}>🔊 Lire la question</button>
+                                    <button className={`learning-btn ${recording ? 'danger' : ''}`} onClick={toggleRecording}>
+                                        {recording ? '🔇 Couper le micro' : '🎙️ Activer micro'}
+                                    </button>
+                                </div>
+                                {recordError && <div className="learning-error">{recordError}</div>}
+                                <textarea
+                                    value={answerText}
+                                    onChange={(e) => {
+                                        setAnswerText(e.target.value);
+                                        setQuestionFeedback(null);
+                                        setAiErrorPanel(null);
+                                    }}
+                                    className="learning-answer"
+                                    placeholder="Transcription / réponse élève..."
+                                />
+                            </>
+                        )}
+                        {isCorrectionLock && (
+                            <div className="learning-hint" style={{ color: '#b91c1c', fontWeight: 800 }}>
+                                Réponse incorrecte. Clique sur « Revenir à la fiche » pour relire avant de continuer.
+                            </div>
+                        )}
                     </>
                 )}
             </div>
@@ -575,7 +861,11 @@ export default function LearningWorkspace({ module, user, onQuit }) {
                     </button>
                 )}
                 <button className="learning-btn" disabled={saving} onClick={handleValidate}>
-                    {saving ? 'Validation...' : (stepIndex >= steps.length - 1 ? 'Valider le module' : 'Valider étape')}
+                    {saving
+                        ? 'Validation...'
+                        : (currentStep?.type === 'question' && pendingSheetReturn
+                            ? 'Revenir à la fiche'
+                            : (stepIndex >= steps.length - 1 ? 'Valider le module' : 'Valider étape'))}
                 </button>
             </div>
             {gateHint && <div className="learning-error">{gateHint}</div>}

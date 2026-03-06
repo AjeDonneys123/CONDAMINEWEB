@@ -265,7 +265,7 @@ export default function ProfStudioFolder({ items, chapters, studentsRef, classFi
         let isShared = false;
         if (type === 'chapter') isShared = !!item.sharedLevel;
         else if (type === 'homework' || type === 'game' || type === 'learning' || type === 'expose' || type === 'lecture' || type === 'scan') {
-            if (onDeleteItem) onDeleteItem(id, type);
+            if (onDeleteItem) onDeleteItem(id, type, name);
             return;
         }
 

@@ -129,6 +129,30 @@ const sanitizeSteps = (steps = []) => {
                         .filter((pair) => pair.question || pair.answer)
                         .slice(0, 20)
                     : [],
+                questionSectionQuestions: (() => {
+                    const raw = step?.questionSectionQuestions && typeof step.questionSectionQuestions === 'object'
+                        ? step.questionSectionQuestions
+                        : {};
+                    const clean = {};
+                    Object.keys(raw).forEach((k) => {
+                        const sectionIdx = Number(k);
+                        if (!Number.isFinite(sectionIdx) || sectionIdx < 0) return;
+                        const rows = Array.isArray(raw[k]) ? raw[k] : [];
+                        const mapped = rows
+                            .map((q) => ({
+                                q: String(q?.q || q?.question || '').trim().slice(0, 500),
+                                question: String(q?.question || q?.q || '').trim().slice(0, 500),
+                                expectedAnswer: String(q?.expectedAnswer || '').trim().slice(0, 500),
+                                expectedKeywords: Array.isArray(q?.expectedKeywords)
+                                    ? q.expectedKeywords.map((x) => String(x || '').trim()).filter(Boolean).slice(0, 30)
+                                    : []
+                            }))
+                            .filter((q) => q.q || q.question || q.expectedAnswer || (q.expectedKeywords || []).length > 0)
+                            .slice(0, 30);
+                        if (mapped.length > 0) clean[String(sectionIdx)] = mapped;
+                    });
+                    return clean;
+                })(),
                 questionPinkRanges: sanitizeRanges(step?.questionPinkRanges),
                 questionZoneRanges,
                 questionZoneMarkers: sanitizeMarkers(step?.questionZoneMarkers, materialText.length).length > 0

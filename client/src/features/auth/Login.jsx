@@ -170,7 +170,7 @@ export default function Login({ onLoginSuccess }) {
               <input
                 type={showPassword ? "text" : "password"}
                 className="login-field"
-                placeholder={isStudentProfile ? "Rentre ta date de naissance ex: 05/03/2004" : "Mot de passe professeur"}
+                placeholder={isStudentProfile ? "Date de naissance ex: 05/03/2004" : "Mot de passe professeur"}
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 required

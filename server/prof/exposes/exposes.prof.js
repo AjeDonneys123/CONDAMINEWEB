@@ -62,4 +62,25 @@ router.delete('/:id', async (req, res) => {
     }
 });
 
+router.delete('/:id/presentation-group', async (req, res) => {
+    try {
+        const exposeId = String(req.params.id || '').trim();
+        const title = String(req.query?.title || '').trim();
+        if (!exposeId) return res.status(400).json({ error: 'id requis' });
+        if (!title) return res.status(400).json({ error: 'title requis' });
+
+        const row = await Expose.findById(exposeId);
+        if (!row) return res.status(404).json({ error: 'Exposé introuvable' });
+
+        const before = Array.isArray(row.presentations) ? row.presentations.length : 0;
+        row.presentations = (row.presentations || []).filter((p) => String(p?.presentationTitle || '').trim() !== title);
+        const after = Array.isArray(row.presentations) ? row.presentations.length : 0;
+        await row.save();
+
+        res.json({ ok: true, removed: Math.max(0, before - after) });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 module.exports = router;

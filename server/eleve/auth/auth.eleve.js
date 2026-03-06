@@ -7,11 +7,31 @@ const CROSS_DECAY_MS = 14 * 24 * 60 * 60 * 1000;
 const PUNISHMENT_DUE_MS = 7 * 24 * 60 * 60 * 1000;
 
 function normalizeBirthDateInput(v = '') {
-    const m = String(v || '').trim().match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+    const raw = String(v || '').trim();
+    if (!raw) return '';
+
+    // Tolérant: on valide les chiffres, pas les séparateurs.
+    const digits = raw.replace(/\D/g, '');
+    if (digits.length === 8) {
+        if (digits === '00000000') return '00/00/0000';
+        const dd = digits.slice(0, 2);
+        const mm = digits.slice(2, 4);
+        const yyyy = digits.slice(4, 8);
+        const d = Number(dd);
+        const m = Number(mm);
+        if (d < 1 || d > 31 || m < 1 || m > 12) return '';
+        return `${dd}/${mm}/${yyyy}`;
+    }
+
+    const m = raw.match(/^(\d{1,2})[\/\-.\s]?(\d{1,2})[\/\-.\s]?(\d{4})$/);
     if (!m) return '';
     const dd = String(Number(m[1])).padStart(2, '0');
     const mm = String(Number(m[2])).padStart(2, '0');
     const yyyy = m[3];
+    if (dd === '00' && mm === '00' && yyyy === '0000') return '00/00/0000';
+    const d = Number(dd);
+    const mo = Number(mm);
+    if (d < 1 || d > 31 || mo < 1 || mo > 12) return '';
     return `${dd}/${mm}/${yyyy}`;
 }
 
@@ -153,7 +173,7 @@ router.post('/login', async (req, res) => {
     if (student) {
         const entered = normalizeBirthDateInput(password || '');
         if (!entered) {
-            return res.status(401).json({ ok: false, message: "Rentre ta date de naissance au format JJ/MM/AAAA." });
+            return res.status(401).json({ ok: false, message: "Rentre ta date de naissance (ex: 05/03/2004)." });
         }
         const storedRaw =
             student.birthDate ||
