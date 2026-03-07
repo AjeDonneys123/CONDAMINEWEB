@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { LearningModule, VideoSegment } = require('../models/prof.models');
+const { LearningModule, VideoSegment, VideoSource } = require('../models/prof.models');
 const fetch = require('node-fetch');
 const ProfAI = require('../core/prof.ai');
 const ProfDrive = require('../core/drive.prof');
@@ -15,6 +15,52 @@ const normalizeVideoUrl = (url = '') => {
     } catch (_) {
         return raw;
     }
+};
+
+const timelineSegmentCompare = (a, b) => {
+    const as = Math.max(0, Number(a?.startSec || 0));
+    const bs = Math.max(0, Number(b?.startSec || 0));
+    if (as !== bs) return as - bs;
+    const aeRaw = Math.max(0, Number(a?.endSec || 0));
+    const beRaw = Math.max(0, Number(b?.endSec || 0));
+    const ae = aeRaw > 0 ? aeRaw : Number.MAX_SAFE_INTEGER;
+    const be = beRaw > 0 ? beRaw : Number.MAX_SAFE_INTEGER;
+    if (ae !== be) return ae - be;
+    return String(a?._id || '').localeCompare(String(b?._id || ''));
+};
+
+const resequenceVideoSegments = async (teacherId = '', normalizedUrl = '') => {
+    if (!teacherId || !normalizedUrl) return;
+    const rows = await VideoSegment.find({ teacherId, normalizedUrl }).sort({ createdAt: 1 });
+    rows.sort(timelineSegmentCompare);
+    for (let i = 0; i < rows.length; i += 1) {
+        const wanted = i + 1;
+        if (Number(rows[i].order || 0) === wanted) continue;
+        rows[i].order = wanted;
+        await rows[i].save();
+    }
+};
+
+const pickBestSegmentSource = async (teacherId = '', excludeNormalizedUrl = '') => {
+    if (!teacherId) return null;
+    const rows = await VideoSegment.find({ teacherId }).lean();
+    if (!rows.length) return null;
+    const byUrl = new Map();
+    rows.forEach((r) => {
+        const key = String(r.normalizedUrl || '').trim();
+        if (!key || key === excludeNormalizedUrl) return;
+        if (!byUrl.has(key)) byUrl.set(key, []);
+        byUrl.get(key).push(r);
+    });
+    let best = null;
+    for (const [url, list] of byUrl.entries()) {
+        const count = list.length;
+        const latestTs = Math.max(...list.map((x) => new Date(x.updatedAt || x.createdAt || 0).getTime()));
+        if (!best || count > best.count || (count === best.count && latestTs > best.latestTs)) {
+            best = { url, list, count, latestTs };
+        }
+    }
+    return best;
 };
 
 const sanitizeRanges = (ranges = [], max = 500) => (Array.isArray(ranges)
@@ -36,6 +82,25 @@ const sanitizeMarkers = (markers = [], textLength = 0, max = 500) => {
 const markersFromLegacyRanges = (ranges = [], textLength = 0, max = 500) =>
     sanitizeMarkers(sanitizeRanges(ranges, max).map((r) => r.end), textLength, max);
 
+const sanitizeSections = (sections = []) => {
+    if (!Array.isArray(sections)) return [{ id: 'sec_1', name: 'Section 1', order: 0, visible: true }];
+    const used = new Set();
+    const out = [];
+    sections.forEach((s, idx) => {
+        const baseId = String(s?.id || `sec_${idx + 1}`).trim() || `sec_${idx + 1}`;
+        let id = baseId;
+        let n = 2;
+        while (used.has(id)) {
+            id = `${baseId}_${n}`;
+            n += 1;
+        }
+        used.add(id);
+        const name = String(s?.name || `Section ${idx + 1}`).trim().slice(0, 120) || `Section ${idx + 1}`;
+        out.push({ id, name, order: idx, visible: s?.visible !== false });
+    });
+    return out.length ? out : [{ id: 'sec_1', name: 'Section 1', order: 0, visible: true }];
+};
+
 const sanitizeSteps = (steps = []) => {
     if (!Array.isArray(steps)) return [];
     const sanitized = steps
@@ -45,7 +110,8 @@ const sanitizeSteps = (steps = []) => {
             const base = {
                 id: String(step?.id || `step_${idx + 1}`),
                 title: String(step?.title || '').trim().slice(0, 120),
-                type
+                type,
+                sectionId: String(step?.sectionId || '').trim().slice(0, 120)
             };
             if (type === 'sheet') {
                 const sheetText = String(step?.sheetText || '').slice(0, 60000);
@@ -81,6 +147,7 @@ const sanitizeSteps = (steps = []) => {
                 return {
                     ...base,
                     videoUrl: String(step?.videoUrl || '').trim(),
+                    videoSourceName: String(step?.videoSourceName || '').trim().slice(0, 120),
                     thumbnailUrl: String(step?.thumbnailUrl || '').trim(),
                     videoTranscript,
                     videoPinkRanges: sanitizeRanges(step?.videoPinkRanges),
@@ -535,10 +602,54 @@ router.get('/video-segments', async (req, res) => {
         const url = String(req.query.url || '').trim();
         const normalizedUrl = normalizeVideoUrl(url);
         if (!teacherId || !normalizedUrl) return res.json([]);
-        const list = await VideoSegment.find({ teacherId, normalizedUrl }).sort({ order: 1, createdAt: 1 }).lean();
+        const list = await VideoSegment.find({ teacherId, normalizedUrl }).lean();
+        list.sort(timelineSegmentCompare);
         res.json(list);
     } catch (e) {
         res.status(500).json([]);
+    }
+});
+
+router.get('/video-sources', async (req, res) => {
+    try {
+        const teacherId = String(req.query.teacherId || '').trim();
+        const chapterId = String(req.query.chapterId || '').trim();
+        if (!teacherId) return res.json([]);
+        const query = { teacherId };
+        if (chapterId) query.chapterId = chapterId;
+        const list = await VideoSource.find(query).sort({ updatedAt: -1, createdAt: -1 }).lean();
+        const unique = [];
+        const seen = new Set();
+        list.forEach((row) => {
+            const key = String(row.normalizedUrl || '').trim();
+            if (!key || seen.has(key)) return;
+            seen.add(key);
+            unique.push(row);
+        });
+        res.json(unique);
+    } catch (e) {
+        res.status(500).json([]);
+    }
+});
+
+router.post('/video-sources', async (req, res) => {
+    try {
+        const teacherId = String(req.body?.teacherId || '').trim();
+        const chapterId = String(req.body?.chapterId || '').trim();
+        const originalUrl = String(req.body?.url || '').trim();
+        const normalizedUrl = normalizeVideoUrl(originalUrl);
+        const name = String(req.body?.name || '').trim().slice(0, 120);
+        if (!teacherId || !chapterId || !normalizedUrl) {
+            return res.status(400).json({ error: 'teacherId/chapterId/url requis' });
+        }
+        const row = await VideoSource.findOneAndUpdate(
+            { teacherId, chapterId, normalizedUrl },
+            { $set: { originalUrl, name } },
+            { new: true, upsert: true, setDefaultsOnInsert: true }
+        ).lean();
+        res.json(row);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
     }
 });
 
@@ -564,9 +675,93 @@ router.post('/video-segments', async (req, res) => {
             endSec,
             order
         });
-        res.json(row);
+        await resequenceVideoSegments(teacherId, normalizedUrl);
+        const updated = await VideoSegment.findById(row._id).lean();
+        res.json(updated || row);
     } catch (e) {
         res.status(500).json({ error: e.message });
+    }
+});
+
+router.post('/video-segments/clone', async (req, res) => {
+    try {
+        const teacherId = String(req.body?.teacherId || '').trim();
+        const fromUrl = String(req.body?.fromUrl || '').trim();
+        const toUrl = String(req.body?.toUrl || '').trim();
+        const fromNorm = normalizeVideoUrl(fromUrl);
+        const toNorm = normalizeVideoUrl(toUrl);
+        if (!teacherId || !fromNorm || !toNorm) {
+            return res.status(400).json({ error: 'teacherId/fromUrl/toUrl requis' });
+        }
+        if (fromNorm === toNorm) return res.json({ ok: true, copied: 0 });
+
+        const sourceRows = await VideoSegment.find({ teacherId, normalizedUrl: fromNorm }).lean();
+        if (!sourceRows.length) return res.json({ ok: true, copied: 0 });
+
+        const targetRows = await VideoSegment.find({ teacherId, normalizedUrl: toNorm }).lean();
+        const targetKeys = new Set(targetRows.map((r) => `${Number(r.startSec || 0)}|${Number(r.endSec || 0)}|${String(r.label || '').trim()}`));
+
+        let copied = 0;
+        for (const src of sourceRows.sort(timelineSegmentCompare)) {
+            const key = `${Number(src.startSec || 0)}|${Number(src.endSec || 0)}|${String(src.label || '').trim()}`;
+            if (targetKeys.has(key)) continue;
+            await VideoSegment.create({
+                teacherId,
+                originalUrl: toUrl,
+                normalizedUrl: toNorm,
+                label: String(src.label || '').trim(),
+                transcript: String(src.transcript || '').slice(0, 25000),
+                startSec: Math.max(0, Number(src.startSec || 0)),
+                endSec: Math.max(0, Number(src.endSec || 0)),
+                order: 999999
+            });
+            targetKeys.add(key);
+            copied += 1;
+        }
+
+        await resequenceVideoSegments(teacherId, toNorm);
+        return res.json({ ok: true, copied });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+router.post('/video-segments/recover', async (req, res) => {
+    try {
+        const teacherId = String(req.body?.teacherId || '').trim();
+        const toUrl = String(req.body?.toUrl || '').trim();
+        const toNorm = normalizeVideoUrl(toUrl);
+        if (!teacherId || !toNorm) return res.status(400).json({ error: 'teacherId/toUrl requis' });
+
+        const existing = await VideoSegment.find({ teacherId, normalizedUrl: toNorm }).lean();
+        if (existing.length > 0) {
+            const list = [...existing].sort(timelineSegmentCompare);
+            return res.json({ ok: true, recovered: 0, fromUrl: null, list });
+        }
+
+        const best = await pickBestSegmentSource(teacherId, toNorm);
+        if (!best || !Array.isArray(best.list) || best.list.length === 0) {
+            return res.json({ ok: true, recovered: 0, fromUrl: null, list: [] });
+        }
+
+        for (const src of best.list.sort(timelineSegmentCompare)) {
+            await VideoSegment.create({
+                teacherId,
+                originalUrl: toUrl,
+                normalizedUrl: toNorm,
+                label: String(src.label || '').trim(),
+                transcript: String(src.transcript || '').slice(0, 25000),
+                startSec: Math.max(0, Number(src.startSec || 0)),
+                endSec: Math.max(0, Number(src.endSec || 0)),
+                order: 999999
+            });
+        }
+        await resequenceVideoSegments(teacherId, toNorm);
+        const restored = await VideoSegment.find({ teacherId, normalizedUrl: toNorm }).lean();
+        const list = [...restored].sort(timelineSegmentCompare);
+        return res.json({ ok: true, recovered: list.length, fromUrl: best.url, list });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
     }
 });
 
@@ -585,7 +780,9 @@ router.patch('/video-segments/:id', async (req, res) => {
         }
         const row = await VideoSegment.findOneAndUpdate({ _id: id, teacherId }, { $set: patch }, { new: true }).lean();
         if (!row) return res.status(404).json({ error: 'Segment introuvable' });
-        res.json(row);
+        await resequenceVideoSegments(teacherId, String(row.normalizedUrl || '').trim());
+        const updated = await VideoSegment.findById(id).lean();
+        res.json(updated || row);
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
@@ -597,11 +794,7 @@ router.delete('/video-segments/:id', async (req, res) => {
         const teacherId = String(req.query.teacherId || req.body?.teacherId || '').trim();
         const target = await VideoSegment.findOneAndDelete({ _id: id, teacherId }).lean();
         if (!target) return res.status(404).json({ error: 'Segment introuvable' });
-        const list = await VideoSegment.find({ teacherId, normalizedUrl: target.normalizedUrl }).sort({ order: 1, createdAt: 1 });
-        for (let i = 0; i < list.length; i += 1) {
-            list[i].order = i + 1;
-            await list[i].save();
-        }
+        await resequenceVideoSegments(teacherId, String(target.normalizedUrl || '').trim());
         res.json({ ok: true });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -624,6 +817,7 @@ router.post('/', async (req, res) => {
         if (!data._id || data._id === 'null') delete data._id;
         if (typeof data.isEnabled !== 'boolean') data.isEnabled = true;
         data.targetClassrooms = [...new Set((data.targetClassrooms || []).map(c => String(c || '').trim().toUpperCase()).filter(Boolean))];
+        data.sections = sanitizeSections(data.sections);
         data.steps = sanitizeSteps(data.steps);
         data.presentationUrl = String(data.presentationUrl || '').trim();
         data.presentationSlidesFocus = String(data.presentationSlidesFocus || '').trim().slice(0, 200);
@@ -680,6 +874,14 @@ router.patch('/:id/step-data', async (req, res) => {
         if (patch.materialText !== undefined) target.materialText = String(patch.materialText || '').slice(0, 60000);
         if (patch.sheetText !== undefined) target.sheetText = String(patch.sheetText || '').slice(0, 60000);
         if (patch.videoTranscript !== undefined) target.videoTranscript = String(patch.videoTranscript || '').slice(0, 60000);
+        if (patch.startSec !== undefined) {
+            target.startSec = Math.max(0, Number(patch.startSec || 0));
+        }
+        if (patch.endSec !== undefined) {
+            const endSecRaw = Math.max(0, Number(patch.endSec || 0));
+            const startSec = Math.max(0, Number(target.startSec || 0));
+            target.endSec = endSecRaw > 0 && endSecRaw <= startSec ? 0 : endSecRaw;
+        }
         if (patch.questionSectionQuestions && typeof patch.questionSectionQuestions === 'object') {
             const cleanMap = {};
             Object.keys(patch.questionSectionQuestions).forEach((k) => {

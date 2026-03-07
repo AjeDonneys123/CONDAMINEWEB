@@ -41,3 +41,18 @@ export function resolveDriveAssetUrl(url) {
     }
     return `/api/proxy/${id}`;
 }
+
+export function resolveDriveVideoUrl(url) {
+    if (!url || typeof url !== 'string') return "";
+    const raw = url.trim();
+    if (!raw) return "";
+    if (raw.startsWith('blob:') || raw.startsWith('data:')) return raw;
+    if (raw.startsWith('/api/proxy/')) return raw;
+
+    const id = extractDriveFileId(raw);
+    if (!id) return raw;
+
+    // For video playback, prefer direct Google file stream when possible.
+    // This avoids routing all bytes through the app proxy (can stutter on small servers).
+    return `https://drive.google.com/uc?export=download&id=${encodeURIComponent(id)}`;
+}

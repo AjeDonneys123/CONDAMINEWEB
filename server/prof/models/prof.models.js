@@ -136,6 +136,10 @@ const Models = {
         isEnabled: { type: Boolean, default: true },
         presentationUrl: { type: String, default: '' },
         presentationSlidesFocus: { type: String, default: '' },
+        sections: {
+            type: [Object],
+            default: []
+        },
         steps: {
             type: [Object],
             default: []
@@ -151,7 +155,8 @@ const Models = {
                 chatDocEmbedUrl: { type: String, default: '' },
                 chatDocRevisionCount: { type: Number, default: 0 },
                 chatDocRevisionAt: { type: Date, default: null },
-                chatLogText: { type: String, default: '' }
+                chatLogText: { type: String, default: '' },
+                sheetTimesMs: { type: Object, default: {} }
             }],
             default: []
         },
@@ -233,6 +238,14 @@ const Models = {
         startSec: { type: Number, default: 0 },
         endSec: { type: Number, default: 0 },
         order: { type: Number, default: 1 }
+    }),
+
+    VideoSource: getModel('VideoSource', {
+        teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher', index: true },
+        chapterId: { type: mongoose.Schema.Types.ObjectId, ref: 'Chapter', index: true },
+        originalUrl: { type: String, default: '' },
+        normalizedUrl: { type: String, index: true },
+        name: { type: String, default: '' }
     }),
 
     ScanSession: getModel('ScanSession', {

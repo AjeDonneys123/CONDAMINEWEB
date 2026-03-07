@@ -1,6 +1,7 @@
 // @signatures: ProfDrive, getAuthUrl, getFileStream, getOrCreateFolder, getTokenFromCode, init, uploadFile
 const { google } = require('googleapis');
 const fs = require('fs');
+const { maybeTranscodeUpload } = require('../../core/videoTranscode');
 
 console.log("☁️ [DRIVE-CORE] Initialisation...");
 
@@ -110,14 +111,23 @@ const ProfDrive = {
 
     uploadFile: async (fileName, localPath, parentFolderId) => {
         if (!oauth2Client) throw new Error("Drive non connecté");
+        const prepared = await maybeTranscodeUpload({ localPath, originalName: fileName });
+        const uploadPath = prepared.uploadPath || localPath;
+        const uploadName = prepared.uploadName || fileName;
         const drive = google.drive({ version: 'v3', auth: oauth2Client });
-        const file = await drive.files.create({
-            resource: { name: fileName, parents: [parentFolderId] },
-            media: { body: fs.createReadStream(localPath) },
-            fields: 'id'
-        });
-        await drive.permissions.create({ fileId: file.data.id, resource: { role: 'reader', type: 'anyone' } });
-        return { id: file.data.id };
+        try {
+            const file = await drive.files.create({
+                resource: { name: uploadName, parents: [parentFolderId] },
+                media: { body: fs.createReadStream(uploadPath) },
+                fields: 'id'
+            });
+            await drive.permissions.create({ fileId: file.data.id, resource: { role: 'reader', type: 'anyone' } });
+            return { id: file.data.id, transcoded: !!prepared.transcoded, name: uploadName };
+        } finally {
+            (prepared.cleanup || []).forEach((p) => {
+                try { if (p && fs.existsSync(p)) fs.unlinkSync(p); } catch (_) {}
+            });
+        }
     },
 
     createGoogleDoc: async (title, parentFolderId = null) => {

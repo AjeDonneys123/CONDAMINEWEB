@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './LearningWorkspace.css';
-import { resolveDriveAssetUrl } from '../../../utils/driveUrl';
+import { resolveDriveAssetUrl, resolveDriveVideoUrl } from '../../../utils/driveUrl';
 
 const normalize = (txt = '') =>
     String(txt || '')
@@ -196,8 +196,21 @@ function evaluateQuestionAnswer(step = null, questionItem = null, answerText = '
         ? step.keywords.map((k) => String(k || '').trim()).filter(Boolean)
         : [];
     const keys = (directKeys.length > 0 ? directKeys : fallbackKeys)
-        .map((k) => ({ raw: k, norm: normalize(k) }))
-        .filter((k) => k.norm.length > 0);
+        .map((k) => {
+            const raw = String(k || '').trim();
+            const variants = raw
+                .split('=')
+                .map((v) => String(v || '').trim())
+                .filter(Boolean);
+            const normalizedVariants = variants
+                .map((v) => normalize(v))
+                .filter(Boolean);
+            return {
+                raw,
+                variants: normalizedVariants.length > 0 ? normalizedVariants : [normalize(raw)].filter(Boolean)
+            };
+        })
+        .filter((k) => k.variants.length > 0);
     const expectedAnswer = String(questionItem?.expectedAnswer || '').trim();
     const minMatches = Math.max(1, Number(step?.minKeywordMatches || 1));
 
@@ -212,8 +225,9 @@ function evaluateQuestionAnswer(step = null, questionItem = null, answerText = '
         };
     }
 
-    const matched = keys.filter((k) => keywordMatchesText(k.norm)).map((k) => k.raw);
-    const missing = keys.filter((k) => !keywordMatchesText(k.norm)).map((k) => k.raw);
+    const isKeyMatched = (key) => Array.isArray(key?.variants) && key.variants.some((variant) => keywordMatchesText(variant));
+    const matched = keys.filter((k) => isKeyMatched(k)).map((k) => k.raw);
+    const missing = keys.filter((k) => !isKeyMatched(k)).map((k) => k.raw);
     const required = Math.min(keys.length, minMatches);
     const ok = matched.length >= required;
     return {
@@ -241,14 +255,32 @@ function isProbablyDirectVideo(url = '') {
     if (u.startsWith('blob:') || u.startsWith('data:')) return true;
     if (/(\.mp4|\.webm|\.ogg|\.m3u8)(\?|#|$)/i.test(u)) return true;
     if (u.includes('/api/proxy/')) return true;
+    if (u.includes('drive.google.com/uc')) return true;
+    if (u.includes('googleusercontent.com')) return true;
     return false;
 }
 
 export default function LearningWorkspace({ module, user, onQuit }) {
     const FORCED_SHEET_REVIEW_MS = 8000;
+    const visibleSectionIds = useMemo(() => {
+        const rows = Array.isArray(module?.sections) ? module.sections : [];
+        return new Set(
+            rows
+                .filter((s) => s?.visible !== false)
+                .map((s) => String(s?.id || '').trim())
+                .filter(Boolean)
+        );
+    }, [module?.sections]);
     const steps = useMemo(() => {
         const raw = Array.isArray(module?.steps) ? module.steps : [];
-        return [...raw].sort((a, b) => {
+        return [...raw]
+            .filter((s) => {
+                const sid = String(s?.sectionId || '').trim();
+                if (!sid) return true;
+                if (visibleSectionIds.size === 0) return true;
+                return visibleSectionIds.has(sid);
+            })
+            .sort((a, b) => {
             const ao = Number(a?.order);
             const bo = Number(b?.order);
             const aOk = Number.isFinite(ao);
@@ -258,7 +290,7 @@ export default function LearningWorkspace({ module, user, onQuit }) {
             if (bOk) return 1;
             return 0;
         });
-    }, [module?.steps]);
+    }, [module?.steps, visibleSectionIds]);
     const initialStep = Math.max(0, Math.min(Number(module?.completion?.currentStep || 0), Math.max(0, steps.length - 1)));
     const [stepIndex, setStepIndex] = useState(initialStep);
     const [validated, setValidated] = useState(() => new Set(Array.from({ length: initialStep }, (_, i) => i)));
@@ -268,6 +300,8 @@ export default function LearningWorkspace({ module, user, onQuit }) {
     const [videoUnlocked, setVideoUnlocked] = useState(false);
     const [videoRenderError, setVideoRenderError] = useState(false);
     const [videoManualDone, setVideoManualDone] = useState(false);
+    const [videoUseProxyFallback, setVideoUseProxyFallback] = useState(false);
+    const [videoCongratsShown, setVideoCongratsShown] = useState(false);
     const [answerText, setAnswerText] = useState('');
     const [recording, setRecording] = useState(false);
     const [micMutedByUser, setMicMutedByUser] = useState(false);
@@ -277,7 +311,10 @@ export default function LearningWorkspace({ module, user, onQuit }) {
     const [gateHint, setGateHint] = useState('');
     const [questionCursor, setQuestionCursor] = useState(0);
     const [questionFeedback, setQuestionFeedback] = useState(null);
+    const [questionSuccessFlash, setQuestionSuccessFlash] = useState(false);
     const [aiErrorPanel, setAiErrorPanel] = useState(null); // { message, expected, missingWords[] }
+    const [synonymChecking, setSynonymChecking] = useState(false);
+    const [synonymError, setSynonymError] = useState('');
     const [forcedSheetReview, setForcedSheetReview] = useState(null); // { stepIndex, minMs }
     const [pendingSheetReturn, setPendingSheetReturn] = useState(null); // { stepIndex, minMs }
     const [oralQueue, setOralQueue] = useState([]);
@@ -297,12 +334,14 @@ export default function LearningWorkspace({ module, user, onQuit }) {
     const sheetRef = useRef(null);
     const videoRef = useRef(null);
     const sheetStartedAt = useRef(Date.now());
+    const sheetTimesRef = useRef({});
     const speechRef = useRef(null);
     const recognitionRef = useRef(null);
     const studyRecognitionRef = useRef(null);
     const seenOralSeqRef = useRef(new Set());
     const sequenceNodeRefs = useRef({});
     const currentStep = steps[stepIndex];
+    const currentSheetKey = String(currentStep?.id || `step_${stepIndex}`);
     const sheetText = String(currentStep?.sheetText || '');
     const sheetPinkRanges = useMemo(() => normalizeRanges(currentStep?.sheetPinkRanges || [], sheetText.length), [currentStep?.sheetPinkRanges, sheetText.length]);
     const sheetZoneMarkers = useMemo(() => {
@@ -335,11 +374,16 @@ export default function LearningWorkspace({ module, user, onQuit }) {
         setVideoUnlocked(false);
         setVideoRenderError(false);
         setVideoManualDone(false);
+        setVideoUseProxyFallback(false);
+        setVideoCongratsShown(false);
         setAnswerText('');
         setGateHint('');
         setQuestionCursor(0);
         setQuestionFeedback(null);
+        setQuestionSuccessFlash(false);
         setAiErrorPanel(null);
+        setSynonymChecking(false);
+        setSynonymError('');
         setMicMutedByUser(false);
         setIsAiSpeaking(false);
         setPendingSheetReturn(null);
@@ -362,9 +406,20 @@ export default function LearningWorkspace({ module, user, onQuit }) {
     }, [stepIndex]);
 
     useEffect(() => {
+        return () => {
+            if (currentStep?.type !== 'sheet') return;
+            const elapsed = Math.max(0, Date.now() - Number(sheetStartedAt.current || Date.now()));
+            const prev = Math.max(0, Number(sheetTimesRef.current[currentSheetKey] || 0));
+            sheetTimesRef.current[currentSheetKey] = prev + elapsed;
+        };
+    }, [currentStep?.type, currentSheetKey]);
+
+    useEffect(() => {
         if (!currentStep || currentStep.type !== 'sheet') return;
+        const baseMs = Math.max(0, Number(sheetTimesRef.current[currentSheetKey] || 0));
+        sheetStartedAt.current = Date.now();
         const timer = setInterval(() => {
-            setSheetReadMs(Date.now() - sheetStartedAt.current);
+            setSheetReadMs(baseMs + (Date.now() - sheetStartedAt.current));
             const el = sheetRef.current;
             if (!el) return;
             const max = Math.max(1, el.scrollHeight - el.clientHeight);
@@ -397,7 +452,7 @@ export default function LearningWorkspace({ module, user, onQuit }) {
             }
         }, 250);
         return () => clearInterval(timer);
-    }, [currentStep, sheetSegments, activeOral]);
+    }, [currentStep, sheetSegments, activeOral, currentSheetKey]);
 
     const questionItems = useMemo(() => extractQuestionItems(currentStep, module), [currentStep, module]);
     const activeQuestionItem = questionItems[Math.min(questionCursor, Math.max(0, questionItems.length - 1))] || null;
@@ -470,8 +525,12 @@ export default function LearningWorkspace({ module, user, onQuit }) {
         if (currentStep?.type === 'video' && (videoEnded || videoManualDone)) {
             setVideoUnlocked(true);
             setGateHint('');
+            if (!videoCongratsShown) {
+                setVideoCongratsShown(true);
+                speakAiText('Bravo, séquence terminée.');
+            }
         }
-    }, [currentStep, videoEnded, videoManualDone]);
+    }, [currentStep, videoEnded, videoManualDone, videoCongratsShown]);
 
     const speakAiText = (text = '') => {
         if (!window.speechSynthesis) return;
@@ -560,11 +619,89 @@ export default function LearningWorkspace({ module, user, onQuit }) {
 
     const saveProgress = async (payload) => {
         const studentId = String(user._id || user.id);
+        const sheetTimesMs = { ...(sheetTimesRef.current || {}) };
+        if (currentStep?.type === 'sheet') {
+            const running = Math.max(0, Date.now() - Number(sheetStartedAt.current || Date.now()));
+            const base = Math.max(0, Number(sheetTimesMs[currentSheetKey] || 0));
+            sheetTimesMs[currentSheetKey] = Math.max(base, sheetReadMs, base + running);
+        }
         await fetch('/api/eleve/learning/progress', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ moduleId: module._id, studentId, ...payload })
+            body: JSON.stringify({ moduleId: module._id, studentId, sheetTimesMs, ...payload })
         });
+    };
+
+    const advanceAfterAcceptedQuestion = async () => {
+        setQuestionFeedback(null);
+        setAiErrorPanel(null);
+        setPendingSheetReturn(null);
+        setGateHint('');
+        if (questionCursor < questionItems.length - 1) {
+            stopRecording();
+            setQuestionSuccessFlash(true);
+            speakAiText('Bravo.');
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+            setQuestionSuccessFlash(false);
+            setQuestionCursor((prev) => prev + 1);
+            setAnswerText('');
+            return;
+        }
+
+        const next = new Set([...validated, stepIndex]);
+        setValidated(next);
+        const isLast = stepIndex >= steps.length - 1;
+        setSaving(true);
+        try {
+            if (isLast) {
+                await saveProgress({ currentStep: steps.length, completed: true });
+                speakAiText('Bravo, tu as terminé cette séquence.');
+                alert('Apprentissage validé ✅');
+                onQuit();
+                return;
+            }
+            const nextStep = stepIndex + 1;
+            await saveProgress({ currentStep: nextStep, completed: false });
+            setStepIndex(nextStep);
+        } catch (e) {
+            console.error("Learning progress save error", e);
+            setGateHint("Progression locale validée, mais la sauvegarde serveur a échoué.");
+            if (!isLast) setStepIndex(stepIndex + 1);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleSynonymValidation = async () => {
+        if (!currentStep || currentStep.type !== 'question' || !aiErrorPanel) return;
+        setSynonymChecking(true);
+        setSynonymError('');
+        try {
+            const studentId = String(user?._id || user?.id || '');
+            const res = await fetch('/api/eleve/learning/validate-synonym', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    moduleId: String(module?._id || ''),
+                    studentId,
+                    question: String(aiErrorPanel?.question || generatedQuestion || '').trim(),
+                    expectedAnswer: String(aiErrorPanel?.expected || '').trim(),
+                    studentAnswer: String(answerText || '').trim(),
+                    missingWords: Array.isArray(aiErrorPanel?.missingWords) ? aiErrorPanel.missingWords : []
+                })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(String(data?.error || 'Validation impossible'));
+            if (data?.accept) {
+                await advanceAfterAcceptedQuestion();
+                return;
+            }
+            setSynonymError(String(data?.reason || "L'IA confirme que la réponse reste insuffisante."));
+        } catch (e) {
+            setSynonymError(String(e?.message || 'Validation impossible'));
+        } finally {
+            setSynonymChecking(false);
+        }
     };
 
     const askStudyTutor = async () => {
@@ -710,7 +847,8 @@ export default function LearningWorkspace({ module, user, onQuit }) {
             } else if (currentStep.type === 'video') {
                 setGateHint("Termine la vidéo (ou clique le bouton 'J'ai fini de regarder' si c'est un embed).");
             } else {
-                const check = evaluateQuestionAnswer(currentStep, activeQuestionItem, answerText);
+                const activeItemNow = questionItems[Math.min(questionCursor, Math.max(0, questionItems.length - 1))] || null;
+                const check = evaluateQuestionAnswer(currentStep, activeItemNow, answerText);
                 setQuestionFeedback(check);
                 if (!check.ok && check.missing.length > 0) {
                     stopRecording();
@@ -725,6 +863,7 @@ export default function LearningWorkspace({ module, user, onQuit }) {
                         ? `Non. La réponse attendue était: ${expected}. Il te manque les mots clés suivants: ${spokenList}.`
                         : `Non. Il te manque les mots clés suivants: ${spokenList}.`;
                     setAiErrorPanel({
+                        question: String(activeItemNow?.question || generatedQuestion || '').trim(),
                         message: aiMessage,
                         expected,
                         missingWords
@@ -746,16 +885,12 @@ export default function LearningWorkspace({ module, user, onQuit }) {
             setForcedSheetReview(null);
         }
         if (currentStep.type === 'question') {
-            const check = evaluateQuestionAnswer(currentStep, activeQuestionItem, answerText);
+            const activeItemNow = questionItems[Math.min(questionCursor, Math.max(0, questionItems.length - 1))] || null;
+            const check = evaluateQuestionAnswer(currentStep, activeItemNow, answerText);
             setQuestionFeedback(check);
             setAiErrorPanel(null);
-            if (questionCursor < questionItems.length - 1) {
-                stopRecording();
-                setGateHint('');
-                setQuestionCursor((prev) => prev + 1);
-                setAnswerText('');
-                return;
-            }
+            await advanceAfterAcceptedQuestion();
+            return;
         }
         setGateHint('');
         const next = new Set([...validated, stepIndex]);
@@ -765,6 +900,7 @@ export default function LearningWorkspace({ module, user, onQuit }) {
         try {
             if (isLast) {
                 await saveProgress({ currentStep: steps.length, completed: true });
+                speakAiText('Bravo, tu as terminé cette séquence.');
                 alert('Apprentissage validé ✅');
                 onQuit();
                 return;
@@ -791,7 +927,15 @@ export default function LearningWorkspace({ module, user, onQuit }) {
     }
 
     const progressPct = steps.length > 0 ? Math.round(((stepIndex + 1) / steps.length) * 100) : 0;
-    const videoUrlResolved = currentStep?.type === 'video' ? resolveDriveAssetUrl(currentStep.videoUrl || '') : '';
+    const videoDirectUrl = currentStep?.type === 'video'
+        ? resolveDriveVideoUrl(currentStep.videoUrl || '')
+        : '';
+    const videoProxyUrl = currentStep?.type === 'video'
+        ? resolveDriveAssetUrl(currentStep.videoUrl || '')
+        : '';
+    const videoUrlResolved = currentStep?.type === 'video'
+        ? (videoUseProxyFallback ? (videoProxyUrl || videoDirectUrl) : (videoDirectUrl || videoProxyUrl))
+        : '';
     const segmentStart = Math.max(0, Number(currentStep?.startSec || currentStep?.videoStartSec || 0));
     const segmentEnd = Math.max(0, Number(currentStep?.endSec || currentStep?.videoEndSec || 0));
     const directVideo = isProbablyDirectVideo(videoUrlResolved);
@@ -813,29 +957,38 @@ export default function LearningWorkspace({ module, user, onQuit }) {
         if (currentStep?.type !== 'video') return;
         const el = videoRef.current;
         if (!el || !directVideo) return;
-        const onLoaded = () => {
-            if (segmentStart > 0) {
-                try { el.currentTime = segmentStart; } catch (_) {}
-            }
-        };
-        el.addEventListener('loadedmetadata', onLoaded);
-        return () => el.removeEventListener('loadedmetadata', onLoaded);
-    }, [currentStep, segmentStart, directVideo]);
 
-    useEffect(() => {
-        if (currentStep?.type !== 'video') return;
-        const el = videoRef.current;
-        if (!el || !directVideo) return;
-        const onTime = () => {
-            if (segmentEnd > 0 && el.currentTime >= segmentEnd) {
+        const EPS = 0.15;
+        const clampSegment = () => {
+            if (segmentStart > 0 && el.currentTime < (segmentStart - EPS)) {
+                try { el.currentTime = segmentStart; } catch (_) {}
+                return;
+            }
+            if (segmentEnd > 0 && segmentEnd > segmentStart && el.currentTime >= (segmentEnd - EPS)) {
                 try { el.pause(); } catch (_) {}
                 setVideoEnded(true);
                 setVideoUnlocked(true);
             }
         };
+
+        const onLoaded = () => {
+            if (segmentStart > 0) {
+                try { el.currentTime = segmentStart; } catch (_) {}
+            }
+            clampSegment();
+        };
+        const onSeeking = () => clampSegment();
+        const onTime = () => clampSegment();
+
+        el.addEventListener('loadedmetadata', onLoaded);
+        el.addEventListener('seeking', onSeeking);
         el.addEventListener('timeupdate', onTime);
-        return () => el.removeEventListener('timeupdate', onTime);
-    }, [currentStep, segmentEnd, directVideo]);
+        return () => {
+            el.removeEventListener('loadedmetadata', onLoaded);
+            el.removeEventListener('seeking', onSeeking);
+            el.removeEventListener('timeupdate', onTime);
+        };
+    }, [currentStep, segmentStart, segmentEnd, directVideo]);
 
     const renderSegmentWithPink = (segment) => {
         const source = String(segment?.text || '');
@@ -874,7 +1027,7 @@ export default function LearningWorkspace({ module, user, onQuit }) {
                             Question:
                         </div>
                         <div style={{ color: '#1e293b', fontSize: 22, fontWeight: 800, lineHeight: 1.25 }}>
-                            {generatedQuestion}
+                            {String(aiErrorPanel?.question || generatedQuestion || '').trim()}
                         </div>
                     </div>
                     <div className="learning-error" style={{ marginBottom: 12, borderColor: '#fecaca', color: '#b91c1c', fontSize: 27, fontWeight: 900, lineHeight: 1.25 }}>
@@ -910,10 +1063,14 @@ export default function LearningWorkspace({ module, user, onQuit }) {
                         </div>
                     ) : null}
                     <div className="learning-actions" style={{ marginTop: 12, marginBottom: 0 }}>
+                        <button className="learning-btn ghost" disabled={synonymChecking || saving} onClick={handleSynonymValidation}>
+                            {synonymChecking ? 'Vérification...' : "J'ai utilisé un synonyme"}
+                        </button>
                         <button className="learning-btn" disabled={saving} onClick={handleValidate}>
                             {saving ? 'Validation...' : 'Revenir à la fiche'}
                         </button>
                     </div>
+                    {synonymError && <div className="learning-error" style={{ marginTop: 8 }}>{synonymError}</div>}
                 </div>
             </div>
         );
@@ -983,16 +1140,50 @@ export default function LearningWorkspace({ module, user, onQuit }) {
                         {videoUrlResolved ? (
                             directVideo && !videoRenderError ? (
                             <video
-                                key={videoUrlResolved}
+                                key={`${videoUrlResolved}_${segmentStart}_${segmentEnd}`}
                                 ref={videoRef}
                                 src={videoUrlResolved}
                                 controls
                                 className="learning-video"
+                                onLoadedMetadata={() => {
+                                    const el = videoRef.current;
+                                    if (!el) return;
+                                    if (segmentStart > 0) {
+                                        try { el.currentTime = segmentStart; } catch (_) {}
+                                    }
+                                }}
+                                onSeeking={() => {
+                                    const el = videoRef.current;
+                                    if (!el) return;
+                                    if (segmentStart > 0 && el.currentTime < segmentStart - 0.15) {
+                                        try { el.currentTime = segmentStart; } catch (_) {}
+                                    }
+                                }}
+                                onTimeUpdate={() => {
+                                    const el = videoRef.current;
+                                    if (!el) return;
+                                    if (segmentStart > 0 && el.currentTime < segmentStart - 0.15) {
+                                        try { el.currentTime = segmentStart; } catch (_) {}
+                                        return;
+                                    }
+                                    if (segmentEnd > 0 && segmentEnd > segmentStart && el.currentTime >= segmentEnd - 0.15) {
+                                        try { el.pause(); } catch (_) {}
+                                        setVideoEnded(true);
+                                        setVideoUnlocked(true);
+                                    }
+                                }}
                                 onEnded={() => {
                                     setVideoEnded(true);
                                     setVideoUnlocked(true);
                                 }}
-                                onError={() => setVideoRenderError(true)}
+                                onError={() => {
+                                    if (!videoUseProxyFallback && videoProxyUrl && videoProxyUrl !== videoUrlResolved) {
+                                        setVideoUseProxyFallback(true);
+                                        setVideoRenderError(false);
+                                        return;
+                                    }
+                                    setVideoRenderError(true);
+                                }}
                             />
                             ) : (
                                 <div className="learning-video-embed-wrap">
@@ -1023,6 +1214,22 @@ export default function LearningWorkspace({ module, user, onQuit }) {
 
                 {currentStep.type === 'question' && (
                     <>
+                        {questionSuccessFlash && (
+                            <div
+                                style={{
+                                    marginBottom: 10,
+                                    padding: '8px 12px',
+                                    borderRadius: 10,
+                                    border: '1px solid #86efac',
+                                    background: '#f0fdf4',
+                                    color: '#166534',
+                                    fontWeight: 900,
+                                    fontSize: 14
+                                }}
+                            >
+                                ✅ Bravo
+                            </div>
+                        )}
                         {!isCorrectionLock && questionItems.length > 1 && (
                             <div className="learning-meta">
                                 <span>Question {Math.min(questionCursor + 1, questionItems.length)}/{questionItems.length}</span>

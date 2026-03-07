@@ -1,6 +1,7 @@
 const { google } = require('googleapis');
 const fs = require('fs');
 const path = require('path');
+const { maybeTranscodeUpload } = require('./videoTranscode');
 
 let oauth2Client = null;
 let driveInstance = null;
@@ -82,9 +83,13 @@ const DriveEngine = {
 
     uploadFile: async (fileName, localPath, parentFolderId) => {
         if (!driveInstance) throw new Error("Drive non connecté.");
+        let prepared = { uploadPath: localPath, uploadName: fileName, cleanup: [], transcoded: false };
         try {
-            const fileMetadata = { name: fileName, parents: [parentFolderId] };
-            const media = { body: fs.createReadStream(localPath) };
+            prepared = await maybeTranscodeUpload({ localPath, originalName: fileName });
+            const uploadPath = prepared.uploadPath || localPath;
+            const uploadName = prepared.uploadName || fileName;
+            const fileMetadata = { name: uploadName, parents: [parentFolderId] };
+            const media = { body: fs.createReadStream(uploadPath) };
             
             const file = await driveInstance.files.create({
                 resource: fileMetadata,
@@ -98,11 +103,15 @@ const DriveEngine = {
                 resource: { role: 'reader', type: 'anyone' }
             });
 
-            return { id: fileId, link: `https://drive.google.com/uc?export=view&id=${fileId}` };
+            return { id: fileId, link: `https://drive.google.com/uc?export=view&id=${fileId}`, transcoded: !!prepared.transcoded, name: uploadName };
 
         } catch (e) {
             console.error("❌ Drive Upload Fail:", e.message);
             throw e;
+        } finally {
+            (prepared.cleanup || []).forEach((p) => {
+                try { if (p && fs.existsSync(p)) fs.unlinkSync(p); } catch (_) {}
+            });
         }
     },
 

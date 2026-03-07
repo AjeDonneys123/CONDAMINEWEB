@@ -25,6 +25,27 @@ const toEmbedUrl = (rawUrl = '') => {
     if (vimeo?.[1]) return `https://player.vimeo.com/video/${vimeo[1]}`;
     return url;
 };
+const extractYoutubeId = (rawUrl = '') => {
+    const url = String(rawUrl || '').trim();
+    if (!url) return '';
+    const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&#?/]+)/i);
+    return yt?.[1] ? String(yt[1]).trim() : '';
+};
+const withSegmentParams = (rawUrl = '', startSec = 0, endSec = 0) => {
+    const base = String(rawUrl || '').trim();
+    if (!base) return '';
+    try {
+        const u = new URL(base, window.location.origin);
+        const start = Math.max(0, Number(startSec || 0));
+        const end = Math.max(0, Number(endSec || 0));
+        if (start > 0) u.searchParams.set('start', String(Math.floor(start)));
+        if (end > 0 && end > start) u.searchParams.set('end', String(Math.floor(end)));
+        if (u.hostname.includes('youtube.com')) u.searchParams.set('rel', '0');
+        return u.toString();
+    } catch (_) {
+        return base;
+    }
+};
 const QUESTION_DRAFT_FIELDS = [
     'title',
     'difficulty',
@@ -50,11 +71,11 @@ const QUESTION_DRAFT_FIELDS = [
 ];
 
 const emptyStep = (type = 'sheet') => {
-    if (type === 'video') return { id: uid(), type: 'video', title: 'Vidéo', videoUrl: '', thumbnailUrl: '', videoTranscript: '', questionCount: 3, startSec: 0, endSec: 0, mustWatchToEnd: true };
+    if (type === 'video') return { id: uid(), type: 'video', title: 'Vidéo', videoUrl: '', videoSourceName: '', thumbnailUrl: '', videoTranscript: '', questionCount: 3, startSec: 0, endSec: 0, mustWatchToEnd: true };
     if (type === 'question') return {
         id: uid(),
         type: 'question',
-        title: 'Question IA',
+        title: 'Questions IA',
         difficulty: 'easy',
         customQuestion: '',
         sourceKind: 'sheet',
@@ -99,15 +120,46 @@ const normalizeLoadedSteps = (rawSteps = []) => {
     });
 };
 
+const normalizeLoadedSections = (rawSections = []) => {
+    if (!Array.isArray(rawSections) || rawSections.length === 0) {
+        return [{ id: 'sec_1', name: 'Section 1', order: 0, visible: true }];
+    }
+    const used = new Set();
+    return rawSections.map((s, i) => {
+        const baseId = String(s?.id || `sec_${i + 1}`).trim() || `sec_${i + 1}`;
+        let id = baseId;
+        let n = 2;
+        while (used.has(id)) {
+            id = `${baseId}_${n}`;
+            n += 1;
+        }
+        used.add(id);
+        return {
+            id,
+            name: String(s?.name || `Section ${i + 1}`).trim() || `Section ${i + 1}`,
+            order: Number.isFinite(Number(s?.order)) ? Number(s.order) : i,
+            visible: s?.visible !== false
+        };
+    }).sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
+};
+
 export default function LearningStudio({ initialData, chapters, user, targetSection, targetLevel, onClose, allStudents: propStudents, allClasses: propClasses }) {
     const [formData, setFormData] = useState(() => ({
+        ...(() => {
+            const sections = normalizeLoadedSections(initialData?.sections);
+            const defaultSectionId = String(sections[0]?.id || 'sec_1');
+            const steps = normalizeLoadedSteps(initialData?.steps).map((s) => ({
+                ...s,
+                sectionId: String(s?.sectionId || defaultSectionId)
+            }));
+            return { sections, steps };
+        })(),
         _id: initialData?._id,
         title: initialData?.title || 'APPRENTISSAGE',
         chapterId: initialData?.chapterId ? String(initialData.chapterId) : '',
         subject: initialData?.subject || targetSection || 'GÉNÉRAL',
         presentationUrl: initialData?.presentationUrl || '',
-        presentationSlidesFocus: initialData?.presentationSlidesFocus || '',
-        steps: normalizeLoadedSteps(initialData?.steps)
+        presentationSlidesFocus: initialData?.presentationSlidesFocus || ''
     }));
     const [activeStep, setActiveStep] = useState(0);
     const [allStudents, setAllStudents] = useState(propStudents || []);
@@ -139,6 +191,13 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     const [lastSavedSegmentLabel, setLastSavedSegmentLabel] = useState('');
     const [lastSavedSegmentTranscript, setLastSavedSegmentTranscript] = useState('');
     const [previewSegmentMode, setPreviewSegmentMode] = useState(false);
+    const [editorEmbedReloadKey, setEditorEmbedReloadKey] = useState(0);
+    const [segmentPreviewRelSec, setSegmentPreviewRelSec] = useState(0);
+    const [embedPreviewSeekSec, setEmbedPreviewSeekSec] = useState(null);
+    const [editorPlaybackMode, setEditorPlaybackMode] = useState('video'); // video | segment
+    const [editorDurationSec, setEditorDurationSec] = useState(0);
+    const [editorCurrentAbsSec, setEditorCurrentAbsSec] = useState(0);
+    const [editorPlaying, setEditorPlaying] = useState(false);
     const [keywordMaterialSource, setKeywordMaterialSource] = useState('manual');
     const [keywordMaterialText, setKeywordMaterialText] = useState('');
     const [keywordSelectedText, setKeywordSelectedText] = useState('');
@@ -156,7 +215,18 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     const [synonymDraft, setSynonymDraft] = useState('');
     const [savingStepData, setSavingStepData] = useState(false);
     const [importingSheet, setImportingSheet] = useState(false);
+    const [sourcePickerKind, setSourcePickerKind] = useState(''); // '' | 'video' | 'sheet'
+    const [sourcePickerExistingUrl, setSourcePickerExistingUrl] = useState('');
+    const [sourcePickerCustomUrl, setSourcePickerCustomUrl] = useState('');
+    const [sourcePickerVideoName, setSourcePickerVideoName] = useState('');
+    const [savedVideoSources, setSavedVideoSources] = useState([]);
+    const [savingVideoSource, setSavingVideoSource] = useState(false);
     const videoEditorRef = useRef(null);
+    const youtubeEditorHostRef = useRef(null);
+    const youtubeEditorPlayerRef = useRef(null);
+    const youtubeTickRef = useRef(null);
+    const youtubeBoundsRef = useRef({ start: 0, end: 0 });
+    const videoPreviewRef = useRef(null);
     const sheetImportInputRef = useRef(null);
     const keywordSelectionRef = useRef(null);
     const hydratedQuestionDraftsRef = useRef(new Set());
@@ -254,6 +324,24 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         setFormData(prev => ({ ...prev, chapterId: String(first._id), subject: first.section || prev.subject }));
     }, [availableChapters, formData.chapterId]);
 
+    useEffect(() => {
+        const loadSavedVideoSources = async () => {
+            const chapterId = String(formData.chapterId || '').trim();
+            if (!teacherId || !chapterId) {
+                setSavedVideoSources([]);
+                return;
+            }
+            try {
+                const res = await fetch(`/api/learning/video-sources?teacherId=${encodeURIComponent(teacherId)}&chapterId=${encodeURIComponent(chapterId)}`);
+                const rows = res.ok ? await res.json() : [];
+                setSavedVideoSources(Array.isArray(rows) ? rows : []);
+            } catch (_) {
+                setSavedVideoSources([]);
+            }
+        };
+        loadSavedVideoSources();
+    }, [teacherId, formData.chapterId]);
+
     const updateStep = (idx, patch) => {
         setFormData(prev => {
             const steps = [...(prev.steps || [])];
@@ -261,6 +349,43 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             steps[idx] = { ...steps[idx], ...patch };
             return { ...prev, steps };
         });
+    };
+    const getDefaultSectionId = () => String(formData.sections?.[0]?.id || 'sec_1');
+    const stepBelongsToSection = (stepRow, sectionId) => {
+        const sid = String(stepRow?.sectionId || getDefaultSectionId());
+        return sid === String(sectionId || '');
+    };
+    const addSection = () => {
+        setFormData((prev) => {
+            const current = Array.isArray(prev.sections) && prev.sections.length
+                ? [...prev.sections]
+                : [{ id: 'sec_1', name: 'Section 1', order: 0, visible: true }];
+            const id = `sec_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+            const name = `Section ${current.length + 1}`;
+            current.push({ id, name, order: current.length, visible: true });
+            return { ...prev, sections: current };
+        });
+    };
+    const renameSection = (sectionId, name) => {
+        const nextName = String(name || '').trim();
+        if (!nextName) return;
+        setFormData((prev) => ({
+            ...prev,
+            sections: (prev.sections || []).map((s) => String(s.id) === String(sectionId) ? { ...s, name: nextName } : s)
+        }));
+    };
+    const assignStepToSection = (idx, sectionId) => {
+        updateStep(idx, { sectionId: String(sectionId || getDefaultSectionId()) });
+    };
+
+    const toggleSectionVisible = (sectionId) => {
+        setFormData((prev) => ({
+            ...prev,
+            sections: (prev.sections || []).map((s) => {
+                if (String(s.id) !== String(sectionId)) return s;
+                return { ...s, visible: s.visible === false };
+            })
+        }));
     };
 
     const getCandidateSheets = () => {
@@ -290,8 +415,17 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     const getCandidateVideos = () => {
         const chapterId = String(formData.chapterId || '');
         const all = [];
+        (savedVideoSources || []).forEach((s) => {
+            const url = String(s.originalUrl || '').trim();
+            if (!url) return;
+            const label = String(s.name || '').trim() || 'Sans nom';
+            all.push({ url, source: `Bibliothèque: ${label}` });
+        });
         (formData.steps || []).forEach((s) => {
-            if (s.type === 'video' && s.videoUrl) all.push({ url: s.videoUrl, source: `Vidéo module: ${s.title || 'Sans titre'}` });
+            if (s.type === 'video' && s.videoUrl) {
+                const label = String(s.videoSourceName || s.title || 'Sans titre').trim();
+                all.push({ url: s.videoUrl, source: `Vidéo module: ${label}` });
+            }
         });
         (allGames || [])
             .filter(g => String(g.chapterId || '') === chapterId)
@@ -715,8 +849,20 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         try {
             const res = await fetch(`/api/learning/video-segments?teacherId=${encodeURIComponent(teacherId)}&url=${encodeURIComponent(safeUrl)}`);
             const list = res.ok ? await res.json() : [];
-            setKnownSegments(Array.isArray(list) ? list : []);
-            return Array.isArray(list) ? list : [];
+            const rows = Array.isArray(list) ? list : [];
+            if (rows.length > 0) {
+                setKnownSegments(rows);
+                return rows;
+            }
+            const recoverRes = await fetch('/api/learning/video-segments/recover', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ teacherId, toUrl: safeUrl })
+            });
+            const recoverData = recoverRes.ok ? await recoverRes.json() : null;
+            const recovered = Array.isArray(recoverData?.list) ? recoverData.list : [];
+            setKnownSegments(recovered);
+            return recovered;
         } catch (_) {
             setKnownSegments([]);
             return [];
@@ -731,12 +877,24 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         setSelectedSegmentTranscript('');
         setSegmentRate(1);
         setPreviewSegmentMode(false);
+        setEditorEmbedReloadKey(0);
+        setSegmentPreviewRelSec(0);
+        setEmbedPreviewSeekSec(null);
+        setEditorPlaybackMode('video');
+        setEditorDurationSec(0);
+        setEditorCurrentAbsSec(0);
+        setEditorPlaying(false);
         refreshKnownSegments(step.videoUrl);
         setShowVideoEditor(true);
     };
 
     const markVideoTime = (kind) => {
-        const t = Math.max(0, Math.floor(Number(videoEditorRef.current?.currentTime || 0)));
+        let t = 0;
+        if (videoEditorRef.current) {
+            t = Math.max(0, Math.floor(Number(videoEditorRef.current.currentTime || 0)));
+        } else if (youtubeEditorPlayerRef.current?.getCurrentTime) {
+            try { t = Math.max(0, Math.floor(Number(youtubeEditorPlayerRef.current.getCurrentTime() || 0))); } catch (_) {}
+        }
         if (kind === 'start') setSegmentStart(t);
         else setSegmentEnd(t);
     };
@@ -773,12 +931,27 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
     };
 
     const previewSegment = () => {
-        if (!editorIsDirect || !videoEditorRef.current) return;
-        const el = videoEditorRef.current;
         const start = Math.max(0, Number(segmentStart || 0));
-        try { el.currentTime = start; } catch (_) {}
+        setSegmentPreviewRelSec(0);
+        setEditorPlaybackMode('segment');
+        if (editorIsDirect && videoEditorRef.current) {
+            const el = videoEditorRef.current;
+            try { el.currentTime = start; } catch (_) {}
+            setPreviewSegmentMode(true);
+            el.play().catch(() => {});
+            return;
+        }
+        // Embed player (YouTube/Vimeo): force a reload with start/end params.
         setPreviewSegmentMode(true);
-        el.play().catch(() => {});
+        setEmbedPreviewSeekSec(start);
+        if (youtubeEditorPlayerRef.current?.seekTo) {
+            try {
+                youtubeEditorPlayerRef.current.seekTo(start, true);
+                youtubeEditorPlayerRef.current.playVideo?.();
+            } catch (_) {}
+        } else {
+            setEditorEmbedReloadKey(Date.now());
+        }
     };
 
     const applyKnownSegment = (seg) => {
@@ -794,6 +967,9 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         setSelectedSegmentTranscript(transcript);
         setLastSavedSegmentLabel(label);
         setLastSavedSegmentTranscript(transcript);
+        setSegmentPreviewRelSec(0);
+        setEmbedPreviewSeekSec(null);
+        setEditorPlaybackMode('segment');
     };
     const removeKnownSegment = async (seg) => {
         if (!seg || !step?.videoUrl) return;
@@ -813,7 +989,10 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
 
     const saveSelectedSegmentLabel = async () => {
         if (!selectedSegmentId || !step?.videoUrl) return;
-        const label = String(selectedSegmentLabel || '').trim();
+        const fallbackLabel = selectedSegment
+            ? String(selectedSegment.label || `Séquence ${selectedSegment.startSec || 0}-${selectedSegment.endSec || 'fin'}`)
+            : '';
+        const label = String(selectedSegmentLabel || '').trim() || fallbackLabel;
         const res = await fetch(`/api/learning/video-segments/${encodeURIComponent(selectedSegmentId)}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
@@ -1748,6 +1927,8 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                 patch.sheetText = String(step.sheetText || '');
             } else if (step.type === 'video') {
                 patch.videoTranscript = String(step.videoTranscript || '');
+                patch.startSec = Math.max(0, Number(step.startSec || 0));
+                patch.endSec = Math.max(0, Number(step.endSec || 0));
             }
             const res = await fetch(`/api/learning/${encodeURIComponent(String(formData._id))}/step-data`, {
                 method: 'PATCH',
@@ -1915,9 +2096,116 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         openVideoEditor();
     }, [pendingVideoEditorStepId, step?.id, step?.type]);
 
-    const addStep = (type) => {
-        setFormData(prev => ({ ...prev, steps: [...(prev.steps || []), emptyStep(type)] }));
+    useEffect(() => {
+        if (!showVideoEditor) return;
+        if (!step || step.type !== 'video') return;
+        if (!String(step.videoUrl || '').trim()) return;
+        refreshKnownSegments(step.videoUrl);
+    }, [showVideoEditor, step?.id, step?.type, step?.videoUrl]);
+
+    const addStep = (type, sectionId = '', customPatch = {}) => {
+        const fallbackSection = String(sectionId || step?.sectionId || getDefaultSectionId());
+        setFormData(prev => ({
+            ...prev,
+            steps: [...(prev.steps || []), { ...emptyStep(type), sectionId: fallbackSection, ...customPatch }]
+        }));
         setActiveStep((formData.steps || []).length);
+    };
+
+    const openSourcePicker = (kind = '') => {
+        if (!['video', 'sheet'].includes(String(kind || ''))) return;
+        setSourcePickerKind(String(kind));
+        setSourcePickerExistingUrl('');
+        setSourcePickerCustomUrl('');
+        setSourcePickerVideoName('');
+    };
+    const closeSourcePicker = () => {
+        setSourcePickerKind('');
+        setSourcePickerExistingUrl('');
+        setSourcePickerCustomUrl('');
+        setSourcePickerVideoName('');
+    };
+    const applySourceToAllSteps = async () => {
+        const kind = String(sourcePickerKind || '');
+        if (!['video', 'sheet'].includes(kind)) return;
+        const url = String(sourcePickerCustomUrl || sourcePickerExistingUrl || '').trim();
+        if (!url) {
+            alert(kind === 'video' ? "Ajoute ou choisis une URL vidéo." : "Ajoute ou choisis une URL fiche.");
+            return;
+        }
+        const previousVideoUrls = kind === 'video'
+            ? [...new Set((formData.steps || [])
+                .filter((s) => s?.type === 'video')
+                .map((s) => String(s?.videoUrl || '').trim())
+                .filter(Boolean)
+                .filter((u) => u !== url))]
+            : [];
+        const videoName = String(sourcePickerVideoName || '').trim();
+
+        setFormData((prev) => {
+            const steps = Array.isArray(prev.steps) ? prev.steps : [];
+            const next = steps.map((s) => {
+                if (!s) return s;
+                if (kind === 'video' && s.type === 'video') {
+                    const patch = { videoUrl: url };
+                    if (videoName) patch.videoSourceName = videoName;
+                    return { ...s, ...patch };
+                }
+                if (kind === 'sheet' && s.type === 'sheet') return { ...s, sheetUrl: url };
+                return s;
+            });
+            return { ...prev, steps: next };
+        });
+        if (kind === 'video') {
+            for (const fromUrl of previousVideoUrls) {
+                try {
+                    await fetch('/api/learning/video-segments/clone', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ teacherId, fromUrl, toUrl: url })
+                    });
+                } catch (_) {}
+            }
+            if (step?.type === 'video') {
+                await refreshKnownSegments(url);
+            }
+        }
+        closeSourcePicker();
+    };
+
+    const saveVideoSourceToLibrary = async () => {
+        const url = String(sourcePickerCustomUrl || sourcePickerExistingUrl || '').trim();
+        const chapterId = String(formData.chapterId || '').trim();
+        const name = String(sourcePickerVideoName || '').trim();
+        if (!url) return alert("Ajoute une URL vidéo.");
+        if (!chapterId) return alert("Choisis d'abord un chapitre.");
+        if (!name) return alert("Ajoute un nom pour la vidéo.");
+        setSavingVideoSource(true);
+        try {
+            const res = await fetch('/api/learning/video-sources', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ teacherId, chapterId, url, name })
+            });
+            const row = res.ok ? await res.json() : null;
+            if (!res.ok || !row) throw new Error(row?.error || 'Erreur sauvegarde');
+            const next = {
+                _id: String(row._id || ''),
+                originalUrl: String(row.originalUrl || url),
+                normalizedUrl: String(row.normalizedUrl || ''),
+                name: String(row.name || name)
+            };
+            setSavedVideoSources((prev) => {
+                const map = new Map((prev || []).map((x) => [String(x.normalizedUrl || x.originalUrl || ''), x]));
+                map.set(String(next.normalizedUrl || next.originalUrl), next);
+                return Array.from(map.values());
+            });
+            alert("Vidéo sauvegardée dans la bibliothèque.");
+        } catch (e) {
+            alert(`Sauvegarde impossible: ${e.message}`);
+        } finally {
+            setSavingVideoSource(false);
+        }
     };
 
     const moveStep = (idx, dir) => {
@@ -1929,6 +2217,22 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         next[to] = tmp;
         setFormData(prev => ({ ...prev, steps: next }));
         setActiveStep(to);
+    };
+
+    const moveStepInSection = (idx, dir, sectionId) => {
+        const sid = String(sectionId || '');
+        const steps = Array.isArray(formData.steps) ? formData.steps : [];
+        const inSection = [];
+        steps.forEach((row, i) => {
+            const rowSid = String(row?.sectionId || getDefaultSectionId());
+            if (rowSid === sid) inSection.push(i);
+        });
+        const pos = inSection.indexOf(idx);
+        if (pos < 0) return;
+        const targetPos = pos + dir;
+        if (targetPos < 0 || targetPos >= inSection.length) return;
+        const to = inSection[targetPos];
+        moveStepTo(idx, to);
     };
 
     const moveStepTo = (fromIdx, toIdx) => {
@@ -1954,16 +2258,17 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
 
     const loadDefaultsFromGame = () => {
         const chapterId = String(formData.chapterId || '');
+        const sectionId = String(step?.sectionId || getDefaultSectionId());
         if (!chapterId) return;
         const sameChapter = (allGames || []).filter(g => String(g.chapterId || '') === chapterId);
         if (sameChapter.length === 0) return alert("Aucun jeu trouvé dans ce chapitre.");
         const game = sameChapter[0];
         const newSteps = [];
         if (game?.globalIntro?.sheetUrl) {
-            newSteps.push({ id: uid(), type: 'sheet', title: 'Fiche du chapitre', sheetUrl: game.globalIntro.sheetUrl, minReadSeconds: 25 });
+            newSteps.push({ id: uid(), type: 'sheet', sectionId, title: 'Fiche du chapitre', sheetUrl: game.globalIntro.sheetUrl, minReadSeconds: 25 });
         }
         if (game?.globalIntro?.videoUrl) {
-            newSteps.push({ id: uid(), type: 'video', title: 'Vidéo du chapitre', videoUrl: game.globalIntro.videoUrl, thumbnailUrl: '', mustWatchToEnd: true });
+            newSteps.push({ id: uid(), type: 'video', sectionId, title: 'Vidéo du chapitre', videoUrl: game.globalIntro.videoUrl, thumbnailUrl: '', mustWatchToEnd: true });
         }
         if (newSteps.length === 0) return alert("Le jeu du chapitre n'a pas encore de fiche/vidéo globale.");
         setFormData(prev => ({ ...prev, steps: [...(prev.steps || []), ...newSteps] }));
@@ -2005,6 +2310,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                     assignedStudents: grp.studentIds,
                     isAllClass: grp.isAllClass,
                     isEnabled: true,
+                    sections: formData.sections || [],
                     steps: formData.steps
                 };
                 await api.post('/learning', payload);
@@ -2018,12 +2324,134 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
 
     const editorVideoUrl = step?.type === 'video' ? resolveDriveAssetUrl(step.videoUrl || '') : '';
     const editorIsDirect = isProbablyDirectVideo(editorVideoUrl);
-    const editorEmbedUrl = toEmbedUrl(editorVideoUrl);
+    const editorYoutubeId = extractYoutubeId(step?.videoUrl || '');
+    const editorIsYoutube = !editorIsDirect && !!editorYoutubeId;
+    const segStartNum = Math.max(0, Number(segmentStart || 0));
+    const segEndNum = Math.max(0, Number(segmentEnd || 0));
+    const segHasEnd = segEndNum > segStartNum;
+    const segDuration = segHasEnd ? Math.max(1, Math.floor(segEndNum - segStartNum)) : 0;
+    const playbackStartSec = editorPlaybackMode === 'segment' ? segStartNum : 0;
+    const playbackEndSec = editorPlaybackMode === 'segment' && segHasEnd ? segEndNum : 0;
+    const playbackDurationSec = editorPlaybackMode === 'segment'
+        ? (segHasEnd ? segDuration : Math.max(1, Math.floor(Math.max(0, editorDurationSec - segStartNum))))
+        : Math.max(1, Math.floor(editorDurationSec || 0));
+    const playbackRelSec = Math.max(0, Math.min(playbackDurationSec, Math.floor(editorCurrentAbsSec - playbackStartSec)));
+    const embedStartForPreview = Number.isFinite(Number(embedPreviewSeekSec))
+        ? Math.max(segStartNum, Number(embedPreviewSeekSec || segStartNum))
+        : segStartNum;
+    const editorEmbedBaseUrl = withSegmentParams(toEmbedUrl(editorVideoUrl), embedStartForPreview, Number(segmentEnd || 0));
+    const editorEmbedUrl = (() => {
+        if (!editorEmbedBaseUrl) return '';
+        try {
+            const u = new URL(editorEmbedBaseUrl, window.location.origin);
+            if (previewSegmentMode) u.searchParams.set('autoplay', '1');
+            if (editorEmbedReloadKey) u.searchParams.set('_segReload', String(editorEmbedReloadKey));
+            return u.toString();
+        } catch (_) {
+            return editorEmbedBaseUrl;
+        }
+    })();
+
+    useEffect(() => {
+        youtubeBoundsRef.current = { start: playbackStartSec, end: playbackEndSec };
+    }, [playbackStartSec, playbackEndSec]);
+
+    useEffect(() => {
+        if (!showVideoEditor || !editorIsYoutube || !editorYoutubeId) return;
+        let alive = true;
+        const clearTick = () => {
+            if (youtubeTickRef.current) {
+                clearInterval(youtubeTickRef.current);
+                youtubeTickRef.current = null;
+            }
+        };
+        const syncCurrent = () => {
+            if (!youtubeEditorPlayerRef.current?.getCurrentTime) return;
+            try {
+                const now = Number(youtubeEditorPlayerRef.current.getCurrentTime() || 0);
+                setEditorCurrentAbsSec(Math.max(0, now));
+                const bounds = youtubeBoundsRef.current || { start: 0, end: 0 };
+                if (Number(bounds.end || 0) > 0 && now >= Number(bounds.end || 0) - 0.1) {
+                    try { youtubeEditorPlayerRef.current.seekTo(Number(bounds.end || 0), true); } catch (_) {}
+                    youtubeEditorPlayerRef.current.pauseVideo?.();
+                    setEditorPlaying(false);
+                    setPreviewSegmentMode(false);
+                }
+            } catch (_) {}
+        };
+        const onReady = () => {
+            if (!alive) return;
+            try {
+                const d = Number(youtubeEditorPlayerRef.current?.getDuration?.() || 0);
+                setEditorDurationSec(Math.max(0, d));
+                youtubeEditorPlayerRef.current?.seekTo?.(playbackStartSec, true);
+            } catch (_) {}
+        };
+        const onStateChange = (ev) => {
+            const state = Number(ev?.data);
+            const playing = state === 1;
+            setEditorPlaying(playing);
+            clearTick();
+            if (playing) youtubeTickRef.current = setInterval(syncCurrent, 180);
+        };
+        const boot = () => {
+            if (!alive || !youtubeEditorHostRef.current || !window.YT?.Player) return;
+            youtubeEditorPlayerRef.current?.destroy?.();
+            youtubeEditorPlayerRef.current = new window.YT.Player(youtubeEditorHostRef.current, {
+                videoId: editorYoutubeId,
+                playerVars: {
+                    controls: 0,
+                    rel: 0,
+                    modestbranding: 1,
+                    iv_load_policy: 3,
+                    playsinline: 1,
+                    start: Math.floor(playbackStartSec)
+                },
+                events: { onReady, onStateChange }
+            });
+        };
+        if (window.YT?.Player) {
+            boot();
+        } else {
+            const prev = window.onYouTubeIframeAPIReady;
+            window.onYouTubeIframeAPIReady = () => {
+                try { prev?.(); } catch (_) {}
+                boot();
+            };
+            if (!document.querySelector('script[data-yt-api="1"]')) {
+                const s = document.createElement('script');
+                s.src = 'https://www.youtube.com/iframe_api';
+                s.async = true;
+                s.setAttribute('data-yt-api', '1');
+                document.body.appendChild(s);
+            }
+        }
+        return () => {
+            alive = false;
+            clearTick();
+            try { youtubeEditorPlayerRef.current?.destroy?.(); } catch (_) {}
+            youtubeEditorPlayerRef.current = null;
+            setEditorPlaying(false);
+        };
+    }, [showVideoEditor, editorIsYoutube, editorYoutubeId, playbackStartSec, playbackEndSec]);
+
+    useEffect(() => {
+        if (!showVideoEditor || !editorIsYoutube || !youtubeEditorPlayerRef.current?.seekTo) return;
+        try {
+            youtubeEditorPlayerRef.current.pauseVideo?.();
+            youtubeEditorPlayerRef.current.seekTo(playbackStartSec, true);
+            setEditorCurrentAbsSec(playbackStartSec);
+            setSegmentPreviewRelSec(0);
+            setPreviewSegmentMode(false);
+        } catch (_) {}
+    }, [editorPlaybackMode, segmentStart, segmentEnd, showVideoEditor, editorIsYoutube]);
 
     return (
         <div className="v84-game-container">
             <div className="v84-game-header">
                 <div className="flex items-center gap-4">
+                    <button className="v84-res-btn upload" onClick={() => openSourcePicker('video')}>+ Ajouter vidéo</button>
+                    <button className="v84-res-btn upload" onClick={() => openSourcePicker('sheet')}>+ Ajouter fiche</button>
                     <input
                         className="v84-game-title-input"
                         value={formData.title}
@@ -2045,6 +2473,82 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                 </div>
                 <button onClick={onClose} className="v84-close-btn">✕</button>
             </div>
+
+            {sourcePickerKind && (
+                <div className="fixed inset-0 z-[50020] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="w-full max-w-2xl bg-white rounded-2xl border border-slate-200 shadow-xl p-5">
+                        <div className="flex items-center gap-2">
+                            <div className="text-[16px] font-black text-slate-800">
+                                {sourcePickerKind === 'video' ? 'Ajouter une vidéo source' : 'Ajouter une fiche source'}
+                            </div>
+                            <button className="v84-close-btn ml-auto" onClick={closeSourcePicker}>✕</button>
+                        </div>
+                        <div className="mt-4 text-[11px] font-black uppercase text-slate-500">
+                            Sources existantes
+                        </div>
+                        <select
+                            className="v84-ans-input mt-2"
+                            value={sourcePickerExistingUrl}
+                            onChange={(e) => {
+                                const val = String(e.target.value || '').trim();
+                                setSourcePickerExistingUrl(val);
+                                if (val) {
+                                    setSourcePickerCustomUrl(val);
+                                    const hit = (savedVideoSources || []).find((x) => String(x.originalUrl || '').trim() === val);
+                                    if (hit?.name) setSourcePickerVideoName(String(hit.name || '').trim());
+                                }
+                            }}
+                        >
+                            <option value="">{sourcePickerKind === 'video' ? 'Choisir une vidéo' : 'Choisir une fiche'}</option>
+                            {(sourcePickerKind === 'video' ? videoSources : getCandidateSheets()).map((item) => (
+                                <option key={`${item.url}`} value={item.url}>
+                                    {item.source}
+                                </option>
+                            ))}
+                        </select>
+                        <div className="mt-4 text-[11px] font-black uppercase text-slate-500">
+                            Nouvelle URL
+                        </div>
+                        <input
+                            className="v84-ans-input mt-2"
+                            value={sourcePickerCustomUrl}
+                            onChange={(e) => setSourcePickerCustomUrl(e.target.value)}
+                            placeholder={sourcePickerKind === 'video' ? 'https://youtube.com/... ou https://drive.google.com/...' : 'https://...'}
+                        />
+                        {sourcePickerKind === 'video' && (
+                            <>
+                                <div className="mt-4 text-[11px] font-black uppercase text-slate-500">
+                                    Nom de la vidéo (BDD)
+                                </div>
+                                <input
+                                    className="v84-ans-input mt-2"
+                                    value={sourcePickerVideoName}
+                                    onChange={(e) => setSourcePickerVideoName(e.target.value)}
+                                    placeholder="ex: Richesse et pauvreté - Leçon 4"
+                                />
+                            </>
+                        )}
+                        <div className="mt-4 text-[12px] font-bold text-slate-500">
+                            Cette source sera appliquée à toutes les étapes {sourcePickerKind === 'video' ? 'vidéo' : 'fiche'} du module.
+                        </div>
+                        <div className="mt-4 flex items-center gap-2">
+                            <button className="v84-res-btn upload" onClick={closeSourcePicker}>Annuler</button>
+                            {sourcePickerKind === 'video' && (
+                                <button
+                                    className="v84-res-btn upload bg-slate-700 text-white border-slate-800"
+                                    onClick={saveVideoSourceToLibrary}
+                                    disabled={savingVideoSource}
+                                >
+                                    {savingVideoSource ? 'Sauvegarde...' : 'Sauvegarder'}
+                                </button>
+                            )}
+                            <button className="v84-res-btn upload bg-violet-600 text-white border-violet-700" onClick={applySourceToAllSteps}>
+                                Appliquer à toutes les étapes
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
             <div className="px-6 py-3 border-b border-slate-100 bg-slate-50/60 grid grid-cols-1 md:grid-cols-[1fr_220px] gap-3">
                 <input
                     className="v84-ans-input"
@@ -2062,41 +2566,88 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
 
             <div className="v84-game-body">
                 <div className="v84-q-list-sidebar custom-scrollbar">
-                    {(formData.steps || []).map((s, idx) => (
-                        <div
-                            key={s.id || idx}
-                            className={`v84-level-header ${activeStep === idx ? 'active-lvl' : ''}`}
-                            onClick={() => setActiveStep(idx)}
-                            draggable
-                            onDragStart={(e) => {
-                                setDragStepIdx(idx);
-                                e.dataTransfer.effectAllowed = 'move';
-                                e.dataTransfer.setData('text/plain', String(idx));
-                            }}
-                            onDragOver={(e) => {
-                                e.preventDefault();
-                                e.dataTransfer.dropEffect = 'move';
-                            }}
-                            onDrop={(e) => {
-                                e.preventDefault();
-                                const from = dragStepIdx ?? Number(e.dataTransfer.getData('text/plain'));
-                                moveStepTo(Number(from), idx);
-                                setDragStepIdx(null);
-                            }}
-                            onDragEnd={() => setDragStepIdx(null)}
-                        >
-                            {s.type === 'sheet' ? '📄' : s.type === 'video' ? '🎬' : '🎤'} {s.title || `Étape ${idx + 1}`}
-                            <div className="flex ml-auto gap-1">
-                                <button className="v84-del-btn" onClick={(e) => { e.stopPropagation(); moveStep(idx, -1); }}>↑</button>
-                                <button className="v84-del-btn" onClick={(e) => { e.stopPropagation(); moveStep(idx, 1); }}>↓</button>
-                                <button className="v84-del-btn" onClick={(e) => { e.stopPropagation(); removeStep(idx); }}>✕</button>
+                    <div className="mb-3">
+                        <button className="v84-add-q-btn w-full" onClick={addSection}>+ SECTION</button>
+                    </div>
+                    <div className="max-h-[58vh] overflow-y-auto pr-1 custom-scrollbar">
+                        {(formData.sections || []).map((sec) => (
+                            <div
+                                key={sec.id}
+                                className="mb-3 rounded-xl border border-slate-200 bg-slate-50 p-2"
+                                onDragOver={(e) => {
+                                    e.preventDefault();
+                                    e.dataTransfer.dropEffect = 'move';
+                                }}
+                                onDrop={(e) => {
+                                    e.preventDefault();
+                                    const from = dragStepIdx ?? Number(e.dataTransfer.getData('text/plain'));
+                                    if (Number.isInteger(from) && from >= 0 && from < (formData.steps || []).length) {
+                                        assignStepToSection(from, sec.id);
+                                    }
+                                    setDragStepIdx(null);
+                                }}
+                            >
+                                <div className="mb-2">
+                                    <input
+                                        className="v84-ans-input !h-9 !text-[22px] !font-black uppercase mb-2 leading-none"
+                                        value={String(sec.name || '')}
+                                        onChange={(e) => renameSection(sec.id, e.target.value)}
+                                        placeholder="Nom section"
+                                    />
+                                    <button
+                                        className={`v84-add-q-btn w-full !py-1 !text-[11px] ${sec.visible === false ? '!bg-slate-200 !text-slate-700 !border-slate-300' : '!bg-emerald-100 !text-emerald-800 !border-emerald-300'}`}
+                                        onClick={() => toggleSectionVisible(sec.id)}
+                                        title="Rendre cette section visible/masquée côté élève"
+                                    >
+                                        {sec.visible === false ? 'Rendre visible' : 'Masquer cette section'}
+                                    </button>
+                                </div>
+                                {(formData.steps || []).map((s, idx) => {
+                                    if (!stepBelongsToSection(s, sec.id)) return null;
+                                    return (
+                                        <div
+                                            key={s.id || idx}
+                                            className={`v84-level-header ${activeStep === idx ? 'active-lvl' : ''}`}
+                                            onClick={() => setActiveStep(idx)}
+                                            draggable
+                                            onDragStart={(e) => {
+                                                setDragStepIdx(idx);
+                                                e.dataTransfer.effectAllowed = 'move';
+                                                e.dataTransfer.setData('text/plain', String(idx));
+                                            }}
+                                            onDragOver={(e) => {
+                                                e.preventDefault();
+                                                e.dataTransfer.dropEffect = 'move';
+                                            }}
+                                            onDrop={(e) => {
+                                                e.preventDefault();
+                                                const from = dragStepIdx ?? Number(e.dataTransfer.getData('text/plain'));
+                                                moveStepTo(Number(from), idx);
+                                                setDragStepIdx(null);
+                                            }}
+                                            onDragEnd={() => setDragStepIdx(null)}
+                                        >
+                                            {s.type === 'sheet' ? '📄' : s.type === 'video' ? '🎬' : '🎤'} {s.title || `Étape ${idx + 1}`}
+                                            <div className="flex ml-auto gap-1">
+                                                <button className="v84-del-btn" onClick={(e) => { e.stopPropagation(); moveStepInSection(idx, -1, sec.id); }}>↑</button>
+                                                <button className="v84-del-btn" onClick={(e) => { e.stopPropagation(); moveStepInSection(idx, 1, sec.id); }}>↓</button>
+                                                <button className="v84-del-btn" onClick={(e) => { e.stopPropagation(); removeStep(idx); }}>✕</button>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                                <div className="grid grid-cols-3 gap-1 mt-2">
+                                    <button className="v84-add-q-btn !py-1 !text-[11px]" onClick={() => addStep('sheet', sec.id)}>+ FICHE</button>
+                                    <button className="v84-add-q-btn !py-1 !text-[11px]" onClick={() => addStep('video', sec.id)}>+ VIDÉO</button>
+                                    <button className="v84-add-q-btn !py-1 !text-[11px]" onClick={() => addStep('question', sec.id)}>+ QUESTIONS IA</button>
+                                </div>
                             </div>
-                        </div>
-                    ))}
+                        ))}
+                    </div>
                     <div className="grid grid-cols-1 gap-2 mt-4">
-                        <button className="v84-add-q-btn" onClick={() => addStep('sheet')}>+ FICHE</button>
-                        <button className="v84-add-q-btn" onClick={() => addStep('video')}>+ VIDÉO</button>
-                        <button className="v84-add-q-btn" onClick={() => addStep('question')}>+ QUESTION IA</button>
+                        <div className="text-[11px] font-black uppercase text-slate-400 px-1">
+                            Crée les activités depuis une section.
+                        </div>
                     </div>
                 </div>
 
@@ -2114,6 +2665,16 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                 value={step.title || ''}
                                 onChange={(e) => updateStep(activeStep, { title: e.target.value })}
                             />
+                            <div className="hw-section-title mt-3">Section</div>
+                            <select
+                                className="v84-ans-input"
+                                value={String(step.sectionId || getDefaultSectionId())}
+                                onChange={(e) => updateStep(activeStep, { sectionId: String(e.target.value || getDefaultSectionId()) })}
+                            >
+                                {(formData.sections || []).map((sec) => (
+                                    <option key={sec.id} value={sec.id}>{sec.name}</option>
+                                ))}
+                            </select>
 
                             {step.type === 'sheet' && (
                                 <>
@@ -2261,18 +2822,54 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                             <div className="h-full flex items-center justify-center text-slate-400 font-bold text-sm">Ajoute une URL vidéo pour voir l'aperçu.</div>
                                         ) : isProbablyDirectVideo(resolveDriveAssetUrl(step.videoUrl || '')) ? (
                                             <video
+                                                key={`${resolveDriveAssetUrl(step.videoUrl || '')}_${Number(step.startSec || 0)}_${Number(step.endSec || 0)}`}
+                                                ref={videoPreviewRef}
                                                 src={resolveDriveAssetUrl(step.videoUrl || '')}
                                                 controls
                                                 className="w-full h-full object-contain bg-black"
+                                                onLoadedMetadata={(e) => {
+                                                    const el = e.currentTarget;
+                                                    const start = Math.max(0, Number(step.startSec || 0));
+                                                    if (start > 0) {
+                                                        try { el.currentTime = start; } catch (_) {}
+                                                    }
+                                                }}
+                                                onSeeking={(e) => {
+                                                    const el = e.currentTarget;
+                                                    const start = Math.max(0, Number(step.startSec || 0));
+                                                    const end = Math.max(0, Number(step.endSec || 0));
+                                                    if (start > 0 && el.currentTime < start - 0.15) {
+                                                        try { el.currentTime = start; } catch (_) {}
+                                                        return;
+                                                    }
+                                                    if (end > 0 && end > start && el.currentTime > end) {
+                                                        try { el.currentTime = Math.max(start, end - 0.1); } catch (_) {}
+                                                    }
+                                                }}
+                                                onTimeUpdate={(e) => {
+                                                    const el = e.currentTarget;
+                                                    const start = Math.max(0, Number(step.startSec || 0));
+                                                    const end = Math.max(0, Number(step.endSec || 0));
+                                                    if (start > 0 && el.currentTime < start - 0.15) {
+                                                        try { el.currentTime = start; } catch (_) {}
+                                                        return;
+                                                    }
+                                                    if (end > 0 && end > start && el.currentTime >= end - 0.15) {
+                                                        try { el.pause(); } catch (_) {}
+                                                    }
+                                                }}
                                             />
                                         ) : (
                                             <iframe
                                                 title={`video-preview-${step.id}`}
-                                                src={toEmbedUrl(resolveDriveAssetUrl(step.videoUrl || ''))}
+                                                src={withSegmentParams(toEmbedUrl(resolveDriveAssetUrl(step.videoUrl || '')), Number(step.startSec || 0), Number(step.endSec || 0))}
                                                 className="w-full h-full bg-black"
                                                 allow="autoplay; encrypted-media; picture-in-picture"
                                             />
                                         )}
+                                    </div>
+                                    <div className="mt-2 text-[12px] font-bold text-slate-500">
+                                        Segment actif: {Math.max(0, Number(step.startSec || 0))}s → {Math.max(0, Number(step.endSec || 0)) > 0 ? `${Math.max(0, Number(step.endSec || 0))}s` : 'fin'}
                                     </div>
                                     <div className="hw-section-title mt-4">Nombre de questions sur cette séquence</div>
                                     <input
@@ -2657,7 +3254,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                             </select>
                             <button className="v84-res-btn upload bg-violet-600 text-white" onClick={() => markVideoTime('start')} disabled={!editorIsDirect}>Marquer Début</button>
                             <button className="v84-res-btn upload bg-violet-600 text-white" onClick={() => markVideoTime('end')} disabled={!editorIsDirect}>Marquer Fin</button>
-                            <button className="v84-res-btn upload bg-violet-600 text-white" onClick={previewSegment} disabled={!editorIsDirect || (segmentEnd > 0 && segmentEnd <= segmentStart)}>
+                            <button className="v84-res-btn upload bg-violet-600 text-white" onClick={previewSegment} disabled={segmentEnd > 0 && segmentEnd <= segmentStart}>
                                 Prévisualiser segment
                             </button>
                             <input className="v84-ans-input max-w-[170px]" value={segmentStart} onChange={(e) => setSegmentStart(Math.max(0, Number(e.target.value || 0)))} />
@@ -2683,6 +3280,10 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                             onTimeUpdate={() => {
                                                 if (!videoEditorRef.current) return;
                                                 videoEditorRef.current.playbackRate = segmentRate;
+                                                if (previewSegmentMode && segHasEnd) {
+                                                    const rel = Math.max(0, Math.min(segDuration, videoEditorRef.current.currentTime - segStartNum));
+                                                    setSegmentPreviewRelSec(Math.floor(rel));
+                                                }
                                                 if (previewSegmentMode && segmentEnd > 0 && videoEditorRef.current.currentTime >= segmentEnd) {
                                                     videoEditorRef.current.pause();
                                                     setPreviewSegmentMode(false);
@@ -2690,8 +3291,55 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                             }}
                                             onPause={() => setPreviewSegmentMode(false)}
                                         />
+                                    ) : editorIsYoutube ? (
+                                        <div className="w-full h-full rounded-xl bg-black p-2 flex flex-col gap-2">
+                                            <div ref={youtubeEditorHostRef} className="w-full flex-1 rounded-lg overflow-hidden bg-black" />
+                                            <div className="rounded-lg bg-white/95 border border-slate-200 p-2">
+                                                <div className="flex items-center gap-2 mb-2">
+                                                    <button
+                                                        className="v84-res-btn upload bg-violet-600 text-white"
+                                                        onClick={() => {
+                                                            try {
+                                                                if (editorPlaying) {
+                                                                    youtubeEditorPlayerRef.current?.pauseVideo?.();
+                                                                } else {
+                                                                    if (playbackEndSec > 0 && editorCurrentAbsSec >= playbackEndSec - 0.1) {
+                                                                        youtubeEditorPlayerRef.current?.seekTo?.(playbackStartSec, true);
+                                                                    }
+                                                                    youtubeEditorPlayerRef.current?.playVideo?.();
+                                                                }
+                                                            } catch (_) {}
+                                                        }}
+                                                    >
+                                                        {editorPlaying ? 'Pause' : 'Play'}
+                                                    </button>
+                                                    <div className="text-[12px] font-black text-slate-600">
+                                                        {Math.floor(playbackStartSec + playbackRelSec)}s / {Math.floor(playbackEndSec || editorDurationSec || 0)}s
+                                                    </div>
+                                                    <div className="ml-auto text-[11px] font-black uppercase text-slate-500">
+                                                        {editorPlaybackMode === 'segment' ? 'Mode séquence' : 'Mode vidéo'}
+                                                    </div>
+                                                </div>
+                                                <input
+                                                    type="range"
+                                                    min={0}
+                                                    max={Math.max(1, playbackDurationSec)}
+                                                    step={1}
+                                                    value={Math.max(0, Math.min(playbackDurationSec, playbackRelSec))}
+                                                    onChange={(e) => {
+                                                        const rel = Math.max(0, Math.min(playbackDurationSec, Number(e.target.value || 0)));
+                                                        const abs = playbackStartSec + rel;
+                                                        setSegmentPreviewRelSec(rel);
+                                                        setEditorCurrentAbsSec(abs);
+                                                        try { youtubeEditorPlayerRef.current?.seekTo?.(abs, true); } catch (_) {}
+                                                    }}
+                                                    className="w-full"
+                                                />
+                                            </div>
+                                        </div>
                                     ) : (
                                         <iframe
+                                            key={`embed_${editorEmbedReloadKey}_${Number(segmentStart || 0)}_${Number(segmentEnd || 0)}`}
                                             title="video-segment-editor"
                                             src={editorEmbedUrl}
                                             className="w-full h-full rounded-xl bg-black border-0"
@@ -2702,6 +3350,39 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                 ) : (
                                     <div className="w-full h-full rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-400 font-black">
                                         URL vidéo invalide.
+                                    </div>
+                                )}
+                                {previewSegmentMode && segHasEnd && !editorIsYoutube && (
+                                    <div className="mt-2 p-2 rounded-xl bg-white border border-slate-200">
+                                        <div className="text-[11px] font-black uppercase text-slate-500 mb-1">Curseur segment</div>
+                                        <input
+                                            type="range"
+                                            min={0}
+                                            max={segDuration}
+                                            step={1}
+                                            value={Math.max(0, Math.min(segDuration, Number(segmentPreviewRelSec || 0)))}
+                                            onChange={(e) => {
+                                                const rel = Math.max(0, Math.min(segDuration, Number(e.target.value || 0)));
+                                                setSegmentPreviewRelSec(rel);
+                                                if (editorIsDirect && videoEditorRef.current) {
+                                                    try { videoEditorRef.current.currentTime = segStartNum + rel; } catch (_) {}
+                                                }
+                                            }}
+                                            onMouseUp={() => {
+                                                if (editorIsDirect) return;
+                                                setEmbedPreviewSeekSec(segStartNum + Math.max(0, Math.min(segDuration, Number(segmentPreviewRelSec || 0))));
+                                                setEditorEmbedReloadKey(Date.now());
+                                            }}
+                                            onTouchEnd={() => {
+                                                if (editorIsDirect) return;
+                                                setEmbedPreviewSeekSec(segStartNum + Math.max(0, Math.min(segDuration, Number(segmentPreviewRelSec || 0))));
+                                                setEditorEmbedReloadKey(Date.now());
+                                            }}
+                                            className="w-full"
+                                        />
+                                        <div className="text-[11px] font-bold text-slate-500 mt-1">
+                                            {Math.floor(segStartNum + Number(segmentPreviewRelSec || 0))}s / {Math.floor(segEndNum)}s
+                                        </div>
                                     </div>
                                 )}
                             </div>
@@ -2722,6 +3403,18 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
 
                                 <div className="text-[11px] font-black uppercase text-slate-400 mt-4 mb-2">Segments existants</div>
                                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                                    <div className="mb-2">
+                                        <button
+                                            className={`v84-res-btn upload ${editorPlaybackMode === 'video' ? 'bg-violet-600 text-white border-violet-700' : ''}`}
+                                            onClick={() => {
+                                                setEditorPlaybackMode('video');
+                                                setPreviewSegmentMode(false);
+                                                setSelectedSegmentId('');
+                                            }}
+                                        >
+                                            Vidéo
+                                        </button>
+                                    </div>
                                     <div className="text-[10px] font-black uppercase text-slate-400 mb-1">Section vidéo</div>
                                     <div className="flex items-center gap-2">
                                         <select

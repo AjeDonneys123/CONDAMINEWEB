@@ -136,6 +136,27 @@ const extractSheetTextFromUrl = async (sheetUrl = '') => {
     return extracted.slice(0, 60000);
 };
 
+const parseAiSynonymDecision = (raw = '') => {
+    const text = String(raw || '').trim();
+    if (!text) return { accept: false, reason: 'Réponse IA vide' };
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}');
+    if (start !== -1 && end !== -1 && end > start) {
+        try {
+            const obj = JSON.parse(text.slice(start, end + 1));
+            return {
+                accept: Boolean(obj?.accept === true || obj?.accepted === true),
+                reason: String(obj?.reason || obj?.comment || '').trim()
+            };
+        } catch (_) {}
+    }
+    const low = text.toLowerCase();
+    if (/(^|\b)(oui|yes|accept|valide|équivalent|equivalent)(\b|$)/.test(low)) {
+        return { accept: true, reason: text.slice(0, 300) };
+    }
+    return { accept: false, reason: text.slice(0, 300) };
+};
+
 router.get('/list/:studentId', async (req, res) => {
     try {
         const Student = mongoose.model('Student');
@@ -191,7 +212,7 @@ router.get('/list/:studentId', async (req, res) => {
 router.post('/progress', async (req, res) => {
     try {
         const LearningModule = mongoose.model('LearningModule');
-        const { moduleId, studentId, currentStep = 0, completed = false } = req.body || {};
+        const { moduleId, studentId, currentStep = 0, completed = false, sheetTimesMs = {} } = req.body || {};
         if (!moduleId || !studentId) return res.status(400).json({ error: 'moduleId et studentId requis' });
 
         const row = await LearningModule.findById(moduleId);
@@ -204,12 +225,26 @@ router.post('/progress', async (req, res) => {
         const patch = {
             studentId: studentId,
             currentStep: Number(currentStep || 0),
-            lastUpdateAt: now
+            lastUpdateAt: now,
+            sheetTimesMs: {}
         };
+        if (sheetTimesMs && typeof sheetTimesMs === 'object') {
+            Object.keys(sheetTimesMs).forEach((k) => {
+                const key = String(k || '').trim();
+                if (!key) return;
+                patch.sheetTimesMs[key] = Math.max(0, Number(sheetTimesMs[k] || 0));
+            });
+        }
         if (completed) patch.completedAt = now;
 
         if (idx >= 0) {
             const base = typeof next[idx]?.toObject === 'function' ? next[idx].toObject() : next[idx];
+            const prevTimes = base?.sheetTimesMs && typeof base.sheetTimesMs === 'object' ? base.sheetTimesMs : {};
+            const mergedTimes = { ...prevTimes };
+            Object.keys(patch.sheetTimesMs || {}).forEach((k) => {
+                mergedTimes[k] = Math.max(Number(prevTimes[k] || 0), Number(patch.sheetTimesMs[k] || 0));
+            });
+            patch.sheetTimesMs = mergedTimes;
             next[idx] = { ...base, ...patch };
         }
         else next.push(patch);
@@ -377,6 +412,60 @@ router.post('/sheet-chat', async (req, res) => {
             sourceType,
             chatDocUrl: String(patch?.chatDocUrl || ''),
             chatDocId: String(patch?.chatDocId || '')
+        });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+router.post('/validate-synonym', async (req, res) => {
+    try {
+        const LearningModule = mongoose.model('LearningModule');
+        const Student = mongoose.model('Student');
+        const {
+            moduleId,
+            studentId,
+            question = '',
+            expectedAnswer = '',
+            studentAnswer = '',
+            missingWords = []
+        } = req.body || {};
+
+        const q = String(question || '').trim();
+        const expected = String(expectedAnswer || '').trim();
+        const answer = String(studentAnswer || '').trim();
+        const miss = Array.isArray(missingWords) ? missingWords.map((x) => String(x || '').trim()).filter(Boolean) : [];
+        if (!moduleId || !studentId) return res.status(400).json({ error: 'moduleId et studentId requis' });
+        if (!q || !expected || !answer) return res.status(400).json({ error: 'question, expectedAnswer et studentAnswer requis' });
+
+        const student = await Student.findById(studentId).lean();
+        if (!student) return res.status(404).json({ error: 'Élève introuvable' });
+
+        const classTargets = await buildStudentClassTargets(student);
+        const classTargetKeys = new Set(classTargets.map(normalizeTargetKey).filter(Boolean));
+        const module = await LearningModule.findById(moduleId).lean();
+        if (!module || module.isEnabled === false) return res.status(404).json({ error: 'Module introuvable' });
+        const assigned = (module.assignedStudents || []).some((id) => String(id) === String(student._id));
+        const allowed = assigned || (module.isAllClass && matchesClassTargets(module.targetClassrooms || [], classTargetKeys));
+        if (!allowed) return res.status(403).json({ error: "Accès refusé à ce module" });
+
+        const prompt = [
+            "Tu vérifies une réponse d'élève.",
+            `Question: ${q}`,
+            `Réponse attendue (prof): ${expected}`,
+            `Réponse élève: ${answer}`,
+            miss.length ? `Mots-clés manquants détectés automatiquement: ${miss.join(', ')}` : '',
+            "",
+            "Décide si la réponse élève est sémantiquement correcte (synonyme, reformulation, paraphrase acceptable).",
+            "Réponds en JSON strict: {\"accept\": true|false, \"reason\": \"courte justification\"}"
+        ].filter(Boolean).join('\n');
+
+        const raw = await AIEngine.ask(prompt, "Tu es un correcteur pédagogique strict mais juste.");
+        const decision = parseAiSynonymDecision(raw);
+        return res.json({
+            ok: true,
+            accept: Boolean(decision.accept),
+            reason: String(decision.reason || '')
         });
     } catch (e) {
         return res.status(500).json({ error: e.message });
