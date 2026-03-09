@@ -1310,21 +1310,34 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         setPreviewSegmentMode(false);
         setSegmentEndFollowPlayhead(true);
     };
-    const resizeSegmentById = async ({ sid = '', startSec = 0, endSec = 0 }) => {
-        const targetId = String(sid || '').trim();
-        if (!targetId || !step?.videoUrl) return false;
-        const nextStart = Math.max(0, Math.floor(Number(startSec || 0)));
-        const nextEnd = Math.max(nextStart + 1, Math.floor(Number(endSec || 0)));
-        const res = await fetch(`/api/learning/video-segments/${encodeURIComponent(targetId)}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ teacherId, startSec: nextStart, endSec: nextEnd })
-        });
-        if (!res.ok) return false;
-        if (selectedSegmentId === targetId) {
-            setSegmentStart(nextStart);
-            setSegmentEnd(nextEnd);
-            updateStep(activeStep, { startSec: nextStart, endSec: nextEnd });
+    const resizeBoundarySegments = async ({ leftSid = '', rightSid = '', leftStartSec = 0, rightEndSec = 0, boundarySec = 0 }) => {
+        const lsid = String(leftSid || '').trim();
+        const rsid = String(rightSid || '').trim();
+        if (!lsid || !rsid || !step?.videoUrl) return false;
+        const leftStart = Math.max(0, Math.floor(Number(leftStartSec || 0)));
+        const rightEnd = Math.max(leftStart + 2, Math.floor(Number(rightEndSec || 0)));
+        const boundary = Math.max(leftStart + 1, Math.min(rightEnd - 1, Math.floor(Number(boundarySec || 0))));
+        const [leftRes, rightRes] = await Promise.all([
+            fetch(`/api/learning/video-segments/${encodeURIComponent(lsid)}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ teacherId, startSec: leftStart, endSec: boundary })
+            }),
+            fetch(`/api/learning/video-segments/${encodeURIComponent(rsid)}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ teacherId, startSec: boundary, endSec: rightEnd })
+            })
+        ]);
+        if (!leftRes.ok || !rightRes.ok) return false;
+        if (selectedSegmentId === lsid) {
+            setSegmentStart(leftStart);
+            setSegmentEnd(boundary);
+            updateStep(activeStep, { startSec: leftStart, endSec: boundary });
+        } else if (selectedSegmentId === rsid) {
+            setSegmentStart(boundary);
+            setSegmentEnd(rightEnd);
+            updateStep(activeStep, { startSec: boundary, endSec: rightEnd });
         }
         await refreshKnownSegments(step.videoUrl, step.id);
         return true;
@@ -1336,16 +1349,21 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         const ratio = rect.width > 0 ? (Number(clientX || 0) - rect.left) / rect.width : 0;
         return Math.max(0, Math.floor(Math.max(0, Math.min(1, ratio)) * Math.max(1, timelineDurationSec)));
     };
-    const startResizeSegment = (seg, maxEndSec, ev) => {
+    const startResizeSegment = (seg, nextSeg, ev) => {
         ev.preventDefault();
         ev.stopPropagation();
         const sid = String(seg?.sid || '').trim();
-        if (!sid) return;
+        const nextSid = String(nextSeg?.sid || '').trim();
+        if (!sid || !nextSid) return;
+        const nextEnd = Math.max(0, Number(nextSeg?.endSec || 0));
+        if (nextEnd <= 0) return;
         const minEnd = Math.max(1, Number(seg?.startSec || 0) + 1);
-        const maxEnd = Math.max(minEnd, Number(maxEndSec || timelineDurationSec));
+        const maxEnd = Math.max(minEnd, Math.floor(nextEnd) - 1);
         resizingSegmentRef.current = {
-            sid,
-            startSec: Math.max(0, Number(seg?.startSec || 0)),
+            leftSid: sid,
+            rightSid: nextSid,
+            leftStartSec: Math.max(0, Number(seg?.startSec || 0)),
+            rightEndSec: Math.floor(nextEnd),
             minEndSec: minEnd,
             maxEndSec: maxEnd
         };
@@ -1356,12 +1374,16 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             const clamped = Math.max(ctx.minEndSec, Math.min(ctx.maxEndSec, raw));
             setKnownSegments((prev) => (Array.isArray(prev) ? prev.map((row) => {
                 const rowId = String(row?._id || row?.id || '').trim();
-                if (rowId !== ctx.sid) return row;
-                return { ...row, endSec: clamped };
+                if (rowId === ctx.leftSid) return { ...row, endSec: clamped };
+                if (rowId === ctx.rightSid) return { ...row, startSec: clamped };
+                return row;
             }) : prev));
-            if (selectedSegmentId === ctx.sid) {
-                setSegmentStart(ctx.startSec);
+            if (selectedSegmentId === ctx.leftSid) {
+                setSegmentStart(ctx.leftStartSec);
                 setSegmentEnd(clamped);
+            } else if (selectedSegmentId === ctx.rightSid) {
+                setSegmentStart(clamped);
+                setSegmentEnd(ctx.rightEndSec);
             }
         };
         const onUp = async (e) => {
@@ -1372,7 +1394,13 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
             if (!ctx) return;
             const raw = secFromTimelineClientX(e.clientX);
             const clamped = Math.max(ctx.minEndSec, Math.min(ctx.maxEndSec, raw));
-            await resizeSegmentById({ sid: ctx.sid, startSec: ctx.startSec, endSec: clamped });
+            await resizeBoundarySegments({
+                leftSid: ctx.leftSid,
+                rightSid: ctx.rightSid,
+                leftStartSec: ctx.leftStartSec,
+                rightEndSec: ctx.rightEndSec,
+                boundarySec: clamped
+            });
         };
         window.addEventListener('mousemove', onMove);
         window.addEventListener('mouseup', onUp);
@@ -2048,7 +2076,11 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
         const byProxy = proxy || buildSlidesThumbnailProxyUrl(keywordSlidesPresentationId, objectId, slideNumber);
         const byPublicFromManifest = String(s?.thumbnailPublicUrl || '').trim();
         const byPublicExport = `https://docs.google.com/presentation/d/${encodeURIComponent(keywordSlidesPresentationId)}/export/png?pageid=${encodeURIComponent(objectId)}`;
-        const unique = [...new Set([byProxy, byPublicFromManifest, byPublicExport].filter(Boolean))];
+        const byPublicExportWithId = `https://docs.google.com/presentation/d/${encodeURIComponent(keywordSlidesPresentationId)}/export/png?id=${encodeURIComponent(keywordSlidesPresentationId)}&pageid=${encodeURIComponent(objectId)}`;
+        const bySlideIndexExport = slideNumber
+            ? `https://docs.google.com/presentation/d/${encodeURIComponent(keywordSlidesPresentationId)}/export/png?pageid=${encodeURIComponent(`p${slideNumber}`)}`
+            : '';
+        const unique = [...new Set([byProxy, byPublicFromManifest, byPublicExport, byPublicExportWithId, bySlideIndexExport].filter(Boolean))];
         const preferred = String(loadPreferredSlidesMap(keywordSlidesPresentationId)?.[objectId] || '').trim();
         if (!preferred) return unique;
         return [preferred, ...unique.filter((u) => u !== preferred)];
@@ -4323,9 +4355,7 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                                 const isActive = String(selectedSegmentId || '') === String(seg.sid || '');
                                                 const bg = isActive ? '#4f46e5' : (i % 2 === 0 ? '#93c5fd' : '#86efac');
                                                 const fg = isActive ? '#ffffff' : '#0f172a';
-                                                const nextStart = i < timelineSegments.length - 1
-                                                    ? Math.max(seg.startSec + 1, Number(timelineSegments[i + 1]?.startSec || timelineDurationSec))
-                                                    : timelineDurationSec;
+                                                const nextSeg = i < timelineSegments.length - 1 ? timelineSegments[i + 1] : null;
                                                 return (
                                                     <button
                                                         key={`zone_${seg.sid}`}
@@ -4344,11 +4374,13 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                                         }}
                                                     >
                                                         {seg.label}
-                                                        <span
-                                                            className="absolute right-0 top-0 h-full w-[7px] cursor-ew-resize border-l border-slate-900/40"
-                                                            onMouseDown={(e) => startResizeSegment(seg, nextStart, e)}
-                                                            title="Glisser pour modifier la fin"
-                                                        />
+                                                        {nextSeg && (
+                                                            <span
+                                                                className="absolute right-0 top-0 h-full w-[7px] cursor-ew-resize border-l border-slate-900/40"
+                                                                onMouseDown={(e) => startResizeSegment(seg, nextSeg, e)}
+                                                                title="Glisser pour déplacer la frontière"
+                                                            />
+                                                        )}
                                                     </button>
                                                 );
                                             })}

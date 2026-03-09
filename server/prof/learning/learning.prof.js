@@ -649,18 +649,44 @@ router.get('/slides/thumbnail', async (req, res) => {
         const pageObjectId = String(req.query.pageObjectId || '').trim();
         const slideNumber = Math.max(0, Number(req.query.slideNumber || 0));
         if (!presentationId) return res.status(400).send('Paramètres manquants');
-        const out = await ProfDrive.getGoogleSlideThumbnailBinary(presentationId, pageObjectId, slideNumber);
+        let out = null;
+        try {
+            out = await ProfDrive.getGoogleSlideThumbnailBinary(presentationId, pageObjectId, slideNumber);
+        } catch (inner) {
+            const canonicalPageId = slideNumber > 0 ? `p${slideNumber}` : '';
+            if (canonicalPageId && canonicalPageId !== pageObjectId) {
+                out = await ProfDrive.getGoogleSlideThumbnailBinary(presentationId, canonicalPageId, slideNumber);
+            } else {
+                throw inner;
+            }
+        }
         res.setHeader('Content-Type', out.contentType || 'image/png');
         res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=86400');
         return res.status(200).send(out.buffer);
     } catch (e) {
         const presentationId = String(req.query.presentationId || '').trim();
         const pageObjectId = String(req.query.pageObjectId || '').trim();
+        const slideNumber = Math.max(0, Number(req.query.slideNumber || 0));
         const status = Number(e?.response?.status || e?.status || 0);
         const msg = String(e?.message || '');
-        if (presentationId && pageObjectId) {
-            const publicUrl = `https://docs.google.com/presentation/d/${encodeURIComponent(presentationId)}/export/png?pageid=${encodeURIComponent(pageObjectId)}`;
-            return res.redirect(302, publicUrl);
+        if (presentationId && (pageObjectId || slideNumber > 0)) {
+            const fallbackPageId = pageObjectId || `p${slideNumber}`;
+            const publicCandidates = [
+                `https://docs.google.com/presentation/d/${encodeURIComponent(presentationId)}/export/png?pageid=${encodeURIComponent(fallbackPageId)}`,
+                `https://docs.google.com/presentation/d/${encodeURIComponent(presentationId)}/export/png?id=${encodeURIComponent(presentationId)}&pageid=${encodeURIComponent(fallbackPageId)}`
+            ];
+            for (const publicUrl of publicCandidates) {
+                try {
+                    const r = await fetch(publicUrl);
+                    if (!r.ok) continue;
+                    const buf = await r.buffer();
+                    const ct = String(r.headers.get('content-type') || '').toLowerCase();
+                    if (!ct.startsWith('image/')) continue;
+                    res.setHeader('Content-Type', ct || 'image/png');
+                    res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=86400');
+                    return res.status(200).send(buf);
+                } catch (_) {}
+            }
         }
         if (
             status === 404
