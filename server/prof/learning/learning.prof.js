@@ -29,9 +29,11 @@ const timelineSegmentCompare = (a, b) => {
     return String(a?._id || '').localeCompare(String(b?._id || ''));
 };
 
-const resequenceVideoSegments = async (teacherId = '', normalizedUrl = '') => {
+const resequenceVideoSegments = async (teacherId = '', normalizedUrl = '', stepId = '') => {
     if (!teacherId || !normalizedUrl) return;
-    const rows = await VideoSegment.find({ teacherId, normalizedUrl }).sort({ createdAt: 1 });
+    const query = { teacherId, normalizedUrl };
+    if (String(stepId || '').trim()) query.stepId = String(stepId).trim();
+    const rows = await VideoSegment.find(query).sort({ createdAt: 1 });
     rows.sort(timelineSegmentCompare);
     for (let i = 0; i < rows.length; i += 1) {
         const wanted = i + 1;
@@ -120,6 +122,33 @@ const sanitizeSteps = (steps = []) => {
                     ...base,
                     sheetUrl: String(step?.sheetUrl || '').trim(),
                     sheetText,
+                    sheetSlidesCondition: String(step?.sheetSlidesCondition || '').trim().slice(0, 200),
+                    sheetSlideSectionMap: (() => {
+                        const raw = step?.sheetSlideSectionMap && typeof step.sheetSlideSectionMap === 'object'
+                            ? step.sheetSlideSectionMap
+                            : {};
+                        const out = {};
+                        Object.keys(raw).slice(0, 300).forEach((k) => {
+                            const slideId = String(k || '').trim().slice(0, 120);
+                            const sectionId = String(raw[k] || '').trim().slice(0, 120);
+                            if (!slideId || !sectionId) return;
+                            out[slideId] = sectionId;
+                        });
+                        return out;
+                    })(),
+                    sheetSlideTextMap: (() => {
+                        const raw = step?.sheetSlideTextMap && typeof step.sheetSlideTextMap === 'object'
+                            ? step.sheetSlideTextMap
+                            : {};
+                        const out = {};
+                        Object.keys(raw).slice(0, 300).forEach((k) => {
+                            const slideId = String(k || '').trim().slice(0, 120);
+                            if (!slideId) return;
+                            out[slideId] = String(raw[k] || '').replace(/\r/g, '').slice(0, 60000);
+                        });
+                        return out;
+                    })(),
+                    sheetDocFilterCondition: String(step?.sheetDocFilterCondition || '').trim().slice(0, 200),
                     sheetPinkRanges: sanitizeRanges(step?.sheetPinkRanges),
                     sheetZoneRanges,
                     sheetZoneMarkers: sanitizeMarkers(step?.sheetZoneMarkers, sheetText.length).length > 0
@@ -587,6 +616,66 @@ router.post('/slides/extract-text', async (req, res) => {
     }
 });
 
+router.post('/slides/manifest', async (req, res) => {
+    try {
+        const presentationUrl = String(req.body?.presentationUrl || '').trim();
+        const slideSelection = String(req.body?.slideSelection || '').trim();
+        const filterCondition = String(req.body?.filterCondition || '').trim();
+        const includeThumbnails = req.body?.includeThumbnails !== false;
+        if (!presentationUrl) return res.status(400).json({ error: 'presentationUrl requis' });
+        const selectedSlides = parseSlideSelection(slideSelection);
+        const manifest = await ProfDrive.getGoogleSlidesManifest(presentationUrl, selectedSlides, filterCondition, includeThumbnails);
+        const presentationId = String(manifest.presentationId || '');
+        const slides = (Array.isArray(manifest.slides) ? manifest.slides : []).map((s) => ({
+            ...s,
+            thumbnailUrl: String(s?.thumbnailUrl || '').trim(),
+            thumbnailProxyUrl: `/api/learning/slides/thumbnail?presentationId=${encodeURIComponent(presentationId)}&pageObjectId=${encodeURIComponent(String(s?.objectId || ''))}&slideNumber=${encodeURIComponent(String(s?.slideNumber || ''))}`,
+            thumbnailPublicUrl: `https://docs.google.com/presentation/d/${encodeURIComponent(presentationId)}/export/png?pageid=${encodeURIComponent(String(s?.objectId || ''))}`
+        }));
+        res.json({
+            ok: true,
+            presentationId,
+            title: manifest.title,
+            slides
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+router.get('/slides/thumbnail', async (req, res) => {
+    try {
+        const presentationId = String(req.query.presentationId || '').trim();
+        const pageObjectId = String(req.query.pageObjectId || '').trim();
+        const slideNumber = Math.max(0, Number(req.query.slideNumber || 0));
+        if (!presentationId) return res.status(400).send('Paramètres manquants');
+        const out = await ProfDrive.getGoogleSlideThumbnailBinary(presentationId, pageObjectId, slideNumber);
+        res.setHeader('Content-Type', out.contentType || 'image/png');
+        res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=86400');
+        return res.status(200).send(out.buffer);
+    } catch (e) {
+        const presentationId = String(req.query.presentationId || '').trim();
+        const pageObjectId = String(req.query.pageObjectId || '').trim();
+        const status = Number(e?.response?.status || e?.status || 0);
+        const msg = String(e?.message || '');
+        if (presentationId && pageObjectId) {
+            const publicUrl = `https://docs.google.com/presentation/d/${encodeURIComponent(presentationId)}/export/png?pageid=${encodeURIComponent(pageObjectId)}`;
+            return res.redirect(302, publicUrl);
+        }
+        if (
+            status === 404
+            || /introuvable|not found|miniature indisponible|pageobjectid requis/i.test(msg)
+        ) {
+            return res.status(404).send('Miniature indisponible');
+        }
+        if (/drive non connecte|drive non connecté|credentials manquants|oauth|getaccesstoken/i.test(msg.toLowerCase())) {
+            return res.status(503).send('Service Google Slides indisponible');
+        }
+        console.error('[learning.prof][slides/thumbnail] unexpected error:', msg);
+        return res.status(500).send('Erreur serveur miniature');
+    }
+});
+
 router.get('/all', async (_req, res) => {
     try {
         const rows = await LearningModule.find({}).sort({ createdAt: -1 }).lean();
@@ -600,9 +689,12 @@ router.get('/video-segments', async (req, res) => {
     try {
         const teacherId = String(req.query.teacherId || '').trim();
         const url = String(req.query.url || '').trim();
+        const stepId = String(req.query.stepId || '').trim();
         const normalizedUrl = normalizeVideoUrl(url);
         if (!teacherId || !normalizedUrl) return res.json([]);
-        const list = await VideoSegment.find({ teacherId, normalizedUrl }).lean();
+        const query = { teacherId, normalizedUrl };
+        if (stepId) query.stepId = stepId;
+        const list = await VideoSegment.find(query).lean();
         list.sort(timelineSegmentCompare);
         res.json(list);
     } catch (e) {
@@ -656,6 +748,7 @@ router.post('/video-sources', async (req, res) => {
 router.post('/video-segments', async (req, res) => {
     try {
         const teacherId = String(req.body?.teacherId || '').trim();
+        const stepId = String(req.body?.stepId || '').trim();
         const originalUrl = String(req.body?.url || '').trim();
         const normalizedUrl = normalizeVideoUrl(originalUrl);
         const label = String(req.body?.label || '').trim();
@@ -664,9 +757,12 @@ router.post('/video-segments', async (req, res) => {
         const endSecRaw = Math.max(0, Number(req.body?.endSec || 0));
         const endSec = endSecRaw > startSec ? endSecRaw : 0;
         if (!teacherId || !normalizedUrl) return res.status(400).json({ error: 'teacherId/url requis' });
-        const order = await VideoSegment.countDocuments({ teacherId, normalizedUrl }) + 1;
+        const scope = { teacherId, normalizedUrl };
+        if (stepId) scope.stepId = stepId;
+        const order = await VideoSegment.countDocuments(scope) + 1;
         const row = await VideoSegment.create({
             teacherId,
+            stepId,
             originalUrl,
             normalizedUrl,
             label,
@@ -675,7 +771,7 @@ router.post('/video-segments', async (req, res) => {
             endSec,
             order
         });
-        await resequenceVideoSegments(teacherId, normalizedUrl);
+        await resequenceVideoSegments(teacherId, normalizedUrl, stepId);
         const updated = await VideoSegment.findById(row._id).lean();
         res.json(updated || row);
     } catch (e) {
@@ -780,7 +876,7 @@ router.patch('/video-segments/:id', async (req, res) => {
         }
         const row = await VideoSegment.findOneAndUpdate({ _id: id, teacherId }, { $set: patch }, { new: true }).lean();
         if (!row) return res.status(404).json({ error: 'Segment introuvable' });
-        await resequenceVideoSegments(teacherId, String(row.normalizedUrl || '').trim());
+        await resequenceVideoSegments(teacherId, String(row.normalizedUrl || '').trim(), String(row.stepId || '').trim());
         const updated = await VideoSegment.findById(id).lean();
         res.json(updated || row);
     } catch (e) {
@@ -794,10 +890,28 @@ router.delete('/video-segments/:id', async (req, res) => {
         const teacherId = String(req.query.teacherId || req.body?.teacherId || '').trim();
         const target = await VideoSegment.findOneAndDelete({ _id: id, teacherId }).lean();
         if (!target) return res.status(404).json({ error: 'Segment introuvable' });
-        await resequenceVideoSegments(teacherId, String(target.normalizedUrl || '').trim());
+        await resequenceVideoSegments(teacherId, String(target.normalizedUrl || '').trim(), String(target.stepId || '').trim());
         res.json({ ok: true });
     } catch (e) {
         res.status(500).json({ error: e.message });
+    }
+});
+
+router.delete('/video-segments-by-url', async (req, res) => {
+    try {
+        const teacherId = String(req.query.teacherId || req.body?.teacherId || '').trim();
+        const url = String(req.query.url || req.body?.url || '').trim();
+        const stepId = String(req.query.stepId || req.body?.stepId || '').trim();
+        const normalizedUrl = normalizeVideoUrl(url);
+        if (!teacherId || !normalizedUrl) {
+            return res.status(400).json({ error: 'teacherId/url requis' });
+        }
+        const query = { teacherId, normalizedUrl };
+        if (stepId) query.stepId = stepId;
+        const out = await VideoSegment.deleteMany(query);
+        return res.json({ ok: true, deleted: Number(out?.deletedCount || 0) });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
     }
 });
 
@@ -897,8 +1011,32 @@ router.patch('/:id/step-data', async (req, res) => {
             });
             target.questionSectionQuestions = cleanMap;
         }
+        if (patch.sheetSlideSectionMap && typeof patch.sheetSlideSectionMap === 'object') {
+            const raw = patch.sheetSlideSectionMap;
+            const clean = {};
+            Object.keys(raw).slice(0, 300).forEach((k) => {
+                const slideId = String(k || '').trim().slice(0, 120);
+                const sectionId = String(raw[k] || '').trim().slice(0, 120);
+                if (!slideId || !sectionId) return;
+                clean[slideId] = sectionId;
+            });
+            target.sheetSlideSectionMap = clean;
+        }
+        if (patch.sheetSlideTextMap && typeof patch.sheetSlideTextMap === 'object') {
+            const raw = patch.sheetSlideTextMap;
+            const clean = {};
+            Object.keys(raw).slice(0, 300).forEach((k) => {
+                const slideId = String(k || '').trim().slice(0, 120);
+                if (!slideId) return;
+                clean[slideId] = String(raw[k] || '').replace(/\r/g, '').slice(0, 60000);
+            });
+            target.sheetSlideTextMap = clean;
+        }
 
         steps[idx] = target;
+        if (Array.isArray(req.body?.sections)) {
+            row.sections = sanitizeSections(req.body.sections);
+        }
         row.steps = steps;
         await row.save();
         res.json({ ok: true });

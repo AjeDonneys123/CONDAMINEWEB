@@ -3,6 +3,7 @@ import Login from './features/auth/Login';
 import ProfPage from './features/prof/ProfPage';
 import ElevePage from './features/eleve/ElevePage';
 import SystemStatus from './features/prof/components/SystemStatus';
+import AutoConsoleBugReporter from './features/shared/AutoConsoleBugReporter';
 import './App.css';
 
 export default function App() {
@@ -85,6 +86,7 @@ export default function App() {
   return (
     <div className="app-wrapper">
       <SystemStatus />
+      <AutoConsoleBugReporter user={user} />
       
       {/* BANDEAU DE SÉCURITÉ V99 (Pousse le contenu vers le bas) */}
       {isTestAccount && (

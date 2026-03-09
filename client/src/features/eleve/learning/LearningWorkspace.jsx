@@ -56,6 +56,8 @@ const snippetKeywords = (snippets = []) =>
         .filter((w) => w.length >= 4))]
         .slice(0, 12);
 
+const isGoogleSlidesUrl = (url = '') => /docs\.google\.com\/presentation\/d\//i.test(String(url || '').trim());
+
 function buildQuestion(step, module) {
     if (step?.customQuestion) return step.customQuestion;
     const chapter = module?.chapterTitle || module?.title || 'ce chapitre';
@@ -330,6 +332,10 @@ export default function LearningWorkspace({ module, user, onQuit }) {
     const [studyMicRecording, setStudyMicRecording] = useState(false);
     const [studyMicEnabled, setStudyMicEnabled] = useState(false);
     const [studyMicError, setStudyMicError] = useState('');
+    const [sheetSlidesManifest, setSheetSlidesManifest] = useState([]);
+    const [sheetSlidesLoading, setSheetSlidesLoading] = useState(false);
+    const [sheetSlidesError, setSheetSlidesError] = useState('');
+    const [sheetSlidesIdx, setSheetSlidesIdx] = useState(0);
 
     const sheetRef = useRef(null);
     const videoRef = useRef(null);
@@ -400,6 +406,10 @@ export default function LearningWorkspace({ module, user, onQuit }) {
         setStudyMicRecording(false);
         setStudyMicEnabled(false);
         setStudyMicError('');
+        setSheetSlidesManifest([]);
+        setSheetSlidesLoading(false);
+        setSheetSlidesError('');
+        setSheetSlidesIdx(0);
         seenOralSeqRef.current = new Set();
         sequenceNodeRefs.current = {};
         if (speechRef.current) speechRef.current.cancel?.();
@@ -453,6 +463,46 @@ export default function LearningWorkspace({ module, user, onQuit }) {
         }, 250);
         return () => clearInterval(timer);
     }, [currentStep, sheetSegments, activeOral, currentSheetKey]);
+
+    useEffect(() => {
+        const url = String(currentStep?.sheetUrl || '').trim();
+        if (!currentStep || currentStep.type !== 'sheet' || !isGoogleSlidesUrl(url)) {
+            setSheetSlidesManifest([]);
+            setSheetSlidesLoading(false);
+            setSheetSlidesError('');
+            setSheetSlidesIdx(0);
+            return;
+        }
+        const ctrl = new AbortController();
+        (async () => {
+            try {
+                setSheetSlidesLoading(true);
+                setSheetSlidesError('');
+                const res = await fetch('/api/learning/slides/manifest', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        presentationUrl: url,
+                        slideSelection: String(module?.presentationSlidesFocus || '').trim(),
+                        filterCondition: String(currentStep?.sheetSlidesCondition || '').trim()
+                    }),
+                    signal: ctrl.signal
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(String(data?.error || 'Slides indisponibles'));
+                const rows = Array.isArray(data?.slides) ? data.slides : [];
+                setSheetSlidesManifest(rows);
+                setSheetSlidesIdx(0);
+            } catch (e) {
+                if (ctrl.signal.aborted) return;
+                setSheetSlidesManifest([]);
+                setSheetSlidesError(String(e?.message || 'Slides indisponibles'));
+            } finally {
+                if (!ctrl.signal.aborted) setSheetSlidesLoading(false);
+            }
+        })();
+        return () => ctrl.abort();
+    }, [currentStep?.id, currentStep?.type, currentStep?.sheetUrl, currentStep?.sheetSlidesCondition, module?.presentationSlidesFocus]);
 
     const questionItems = useMemo(() => extractQuestionItems(currentStep, module), [currentStep, module]);
     const activeQuestionItem = questionItems[Math.min(questionCursor, Math.max(0, questionItems.length - 1))] || null;
@@ -1115,6 +1165,54 @@ export default function LearningWorkspace({ module, user, onQuit }) {
                                         ))}
                                     </div>
                                 )
+                                : isGoogleSlidesUrl(currentStep.sheetUrl || '')
+                                    ? (
+                                        <div className="w-full h-full bg-white flex flex-col">
+                                            {sheetSlidesLoading ? (
+                                                <div className="h-full flex items-center justify-center text-slate-400 font-bold text-sm">Chargement des slides...</div>
+                                            ) : sheetSlidesError ? (
+                                                <div className="h-full flex items-center justify-center text-red-500 font-bold text-sm px-4 text-center">{sheetSlidesError}</div>
+                                            ) : sheetSlidesManifest.length === 0 ? (
+                                                <div className="h-full flex items-center justify-center text-slate-400 font-bold text-sm px-4 text-center">Aucune slide disponible.</div>
+                                            ) : (sheetSlidesManifest[sheetSlidesIdx]?.thumbnailUrl || sheetSlidesManifest[sheetSlidesIdx]?.thumbnailProxyUrl || sheetSlidesManifest[sheetSlidesIdx]?.thumbnailPublicUrl) ? (
+                                                <img
+                                                    src={String(
+                                                        sheetSlidesManifest[sheetSlidesIdx].thumbnailUrl
+                                                        || sheetSlidesManifest[sheetSlidesIdx].thumbnailProxyUrl
+                                                        || sheetSlidesManifest[sheetSlidesIdx].thumbnailPublicUrl
+                                                        || ''
+                                                    )}
+                                                    alt={`Slide ${sheetSlidesManifest[sheetSlidesIdx]?.slideNumber || ''}`}
+                                                    className="w-full h-full object-contain bg-white"
+                                                    onError={(e) => {
+                                                        const fallback = String(sheetSlidesManifest[sheetSlidesIdx]?.thumbnailProxyUrl || '');
+                                                        const publicFallback = String(sheetSlidesManifest[sheetSlidesIdx]?.thumbnailPublicUrl || '');
+                                                        if (fallback && e.currentTarget.src !== fallback) {
+                                                            e.currentTarget.src = fallback;
+                                                            return;
+                                                        }
+                                                        if (publicFallback && e.currentTarget.src !== publicFallback) {
+                                                            e.currentTarget.src = publicFallback;
+                                                        }
+                                                    }}
+                                                />
+                                            ) : (
+                                                <div className="h-full flex items-center justify-center text-slate-400 font-bold text-sm px-4 text-center">
+                                                    Miniature indisponible pour cette slide.
+                                                </div>
+                                            )}
+                                            <div className="px-2 py-1 border-t border-slate-200 flex items-center gap-2 text-[11px] font-bold">
+                                                <button className="learning-btn ghost" onClick={() => setSheetSlidesIdx((i) => Math.max(0, i - 1))} disabled={sheetSlidesIdx <= 0}>◀</button>
+                                                <input
+                                                    className="learning-input"
+                                                    value={String(currentStep?.sheetSlidesCondition || '')}
+                                                    readOnly
+                                                    placeholder="Sélecteur de texte"
+                                                />
+                                                <button className="learning-btn ghost" onClick={() => setSheetSlidesIdx((i) => Math.min(Math.max(0, sheetSlidesManifest.length - 1), i + 1))} disabled={sheetSlidesIdx >= Math.max(0, sheetSlidesManifest.length - 1)}>▶</button>
+                                            </div>
+                                        </div>
+                                    )
                                 : currentStep.sheetUrl
                                     ? <iframe src={currentStep.sheetUrl} title="fiche" className="learning-iframe" />
                                 : <div className="learning-missing">Aucune fiche configurée.</div>}

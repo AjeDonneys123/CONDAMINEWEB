@@ -1,6 +1,7 @@
 // @signatures: ProfDrive, getAuthUrl, getFileStream, getOrCreateFolder, getTokenFromCode, init, uploadFile
 const { google } = require('googleapis');
 const fs = require('fs');
+const fetch = require('node-fetch');
 const { maybeTranscodeUpload } = require('../../core/videoTranscode');
 
 console.log("☁️ [DRIVE-CORE] Initialisation...");
@@ -295,6 +296,149 @@ const ProfDrive = {
             slides: rows,
             combinedText: rows.map((r) => `Slide ${r.slideNumber}: ${r.text}`).join('\n').trim()
         };
+    },
+
+    getGoogleSlidesManifest: async (presentationRef, selectedSlideNumbers = [], filterCondition = '', includeThumbnails = true) => {
+        if (!oauth2Client) throw new Error("Drive non connecté");
+        const presentationId = ProfDrive.extractSlidesPresentationId(presentationRef);
+        if (!presentationId) throw new Error("ID présentation introuvable");
+        const slidesApi = google.slides({ version: 'v1', auth: oauth2Client });
+        const pres = await slidesApi.presentations.get({ presentationId });
+        const title = String(pres?.data?.title || '');
+        const allSlides = Array.isArray(pres?.data?.slides) ? pres.data.slides : [];
+        const wanted = new Set(
+            (Array.isArray(selectedSlideNumbers) ? selectedSlideNumbers : [])
+                .map((n) => Number(n))
+                .filter((n) => Number.isInteger(n) && n > 0)
+        );
+        const cond = String(filterCondition || '').trim().toLowerCase();
+        const colorAliases = {
+            red: ['red', 'rouge'],
+            green: ['green', 'vert', 'verte'],
+            blue: ['blue', 'bleu', 'bleue'],
+            yellow: ['yellow', 'jaune'],
+            orange: ['orange'],
+            purple: ['purple', 'violet', 'violette'],
+            black: ['black', 'noir', 'noire'],
+            white: ['white', 'blanc', 'blanche']
+        };
+        const normalizeColor = (raw = '') => {
+            const k = String(raw || '').trim().toLowerCase().replace(/^couleur\s*:\s*/, '').replace(/^color\s*:\s*/, '');
+            if (!k) return '';
+            const hit = Object.entries(colorAliases).find(([, labels]) => labels.includes(k));
+            return hit?.[0] || '';
+        };
+        const targetColor = normalizeColor(cond);
+        const detectColor = (rgb = {}) => {
+            const r = Number(rgb?.red || 0);
+            const g = Number(rgb?.green || 0);
+            const b = Number(rgb?.blue || 0);
+            const max = Math.max(r, g, b);
+            const min = Math.min(r, g, b);
+            if (max < 0.18) return 'black';
+            if (min > 0.82) return 'white';
+            if (r > 0.82 && g > 0.62 && b < 0.35) return 'orange';
+            if (r > 0.8 && g > 0.8 && b < 0.35) return 'yellow';
+            if (r > g + 0.15 && r > b + 0.15) return 'red';
+            if (g > r + 0.12 && g > b + 0.12) return 'green';
+            if (b > r + 0.12 && b > g + 0.12) return 'blue';
+            if (r > 0.45 && b > 0.45 && g < 0.45) return 'purple';
+            return '';
+        };
+        const rows = [];
+        for (let idx = 0; idx < allSlides.length; idx += 1) {
+            const slide = allSlides[idx];
+            const slideNumber = idx + 1;
+            if (wanted.size > 0 && !wanted.has(slideNumber)) continue;
+            const texts = [];
+            const colors = new Set();
+            (slide?.pageElements || []).forEach((el) => {
+                const elements = el?.shape?.text?.textElements || [];
+                elements.forEach((te) => {
+                    const content = String(te?.textRun?.content || '').replace(/\s+/g, ' ').trim();
+                    if (content) texts.push(content);
+                    const rgb = te?.textRun?.style?.foregroundColor?.opaqueColor?.rgbColor;
+                    const cname = detectColor(rgb);
+                    if (cname) colors.add(cname);
+                });
+            });
+            const text = texts.join(' ').trim();
+            if (targetColor) {
+                if (!colors.has(targetColor)) continue;
+            } else if (cond && !text.toLowerCase().includes(cond)) {
+                continue;
+            }
+            let thumbnailUrl = '';
+            if (includeThumbnails) {
+                try {
+                    const thumb = await slidesApi.presentations.pages.getThumbnail({
+                        presentationId,
+                        pageObjectId: String(slide?.objectId || ''),
+                        thumbnailProperties_mimeType: 'PNG',
+                        thumbnailProperties_thumbnailSize: 'LARGE'
+                    });
+                    thumbnailUrl = String(thumb?.data?.contentUrl || '').trim();
+                } catch (_) {}
+            }
+            rows.push({
+                slideNumber,
+                objectId: String(slide?.objectId || ''),
+                text,
+                colors: Array.from(colors),
+                thumbnailUrl
+            });
+        }
+        return {
+            presentationId,
+            title,
+            slides: rows
+        };
+    },
+
+    getGoogleSlideThumbnailUrl: async (presentationRef = '', pageObjectId = '', slideNumber = 0) => {
+        if (!oauth2Client) throw new Error("Drive non connecté");
+        const presentationId = ProfDrive.extractSlidesPresentationId(presentationRef);
+        if (!presentationId) throw new Error("ID présentation introuvable");
+        const slidesApi = google.slides({ version: 'v1', auth: oauth2Client });
+        let pageId = String(pageObjectId || '').trim();
+
+        const resolveFromIndex = async () => {
+            const idx = Math.max(1, Number(slideNumber || 0));
+            if (!Number.isInteger(idx) || idx <= 0) return '';
+            const pres = await slidesApi.presentations.get({ presentationId });
+            const slides = Array.isArray(pres?.data?.slides) ? pres.data.slides : [];
+            return String(slides[idx - 1]?.objectId || '').trim();
+        };
+
+        if (!pageId || pageId.length <= 2) {
+            pageId = await resolveFromIndex();
+        }
+        if (!pageId) throw new Error("pageObjectId requis");
+
+        const thumb = await slidesApi.presentations.pages.getThumbnail({
+            presentationId,
+            pageObjectId: pageId,
+            thumbnailProperties_mimeType: 'PNG',
+            thumbnailProperties_thumbnailSize: 'LARGE'
+        });
+        const contentUrl = String(thumb?.data?.contentUrl || '').trim();
+        if (!contentUrl) throw new Error("Miniature indisponible");
+        return { presentationId, pageObjectId: pageId, contentUrl };
+    },
+
+    getGoogleSlideThumbnailBinary: async (presentationRef = '', pageObjectId = '', slideNumber = 0) => {
+        const out = await ProfDrive.getGoogleSlideThumbnailUrl(presentationRef, pageObjectId, slideNumber);
+        const tokenObj = await oauth2Client.getAccessToken();
+        const token = typeof tokenObj === 'string' ? tokenObj : String(tokenObj?.token || '').trim();
+        const resp = await fetch(out.contentUrl, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+            timeout: 10000
+        });
+        if (!resp.ok) throw new Error(`Miniature HTTP ${resp.status}`);
+        const arr = await resp.arrayBuffer();
+        const buffer = Buffer.from(arr);
+        const contentType = String(resp.headers.get('content-type') || 'image/png');
+        return { presentationId: out.presentationId, pageObjectId: out.pageObjectId, buffer, contentType };
     }
 };
 

@@ -231,6 +231,7 @@ const Models = {
 
     VideoSegment: getModel('VideoSegment', {
         teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher', index: true },
+        stepId: { type: String, default: '', index: true },
         originalUrl: { type: String, default: '' },
         normalizedUrl: { type: String, index: true },
         label: { type: String, default: '' },

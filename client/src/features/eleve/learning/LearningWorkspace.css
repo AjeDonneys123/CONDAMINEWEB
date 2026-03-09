@@ -244,6 +244,18 @@
     background: #ef4444;
 }
 
+.learning-input {
+    flex: 1;
+    min-width: 0;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    padding: 8px 10px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #334155;
+    background: #fff;
+}
+
 .learning-answer {
     width: 100%;
     min-height: 120px;
