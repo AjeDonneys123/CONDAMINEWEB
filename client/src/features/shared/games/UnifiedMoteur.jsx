@@ -40,20 +40,56 @@ const ZOMBIE_FALLBACK_CODE = `class MiniGame extends MiniGameBase {
     }
 }`;
 
-const DEFAULT_QUESTION = { q: "Prêt ?", options: ["OUI", "NON"], a: 0 };
+const DEFAULT_QUESTION = { q: "Prêt ?", options: ["OUI", "NON"], optionsFull: ["OUI", "NON"], a: 0 };
+
+const toDisplayOption = (value = '') => String(value || '').replace(/\s+/g, ' ').trim();
+const formatOptionLabel = (value = '', maxPerLine = 14, maxLines = 3) => {
+    const src = String(value || '').replace(/\s+/g, ' ').trim();
+    if (!src) return '';
+    const words = src.split(' ');
+    const lines = [];
+    let line = '';
+    for (const w of words) {
+        const next = line ? `${line} ${w}` : w;
+        if (next.length <= maxPerLine) {
+            line = next;
+            continue;
+        }
+        if (line) lines.push(line);
+            line = w.length > maxPerLine ? w.slice(0, maxPerLine) : w;
+            if (lines.length >= maxLines - 1) break;
+        }
+        if (lines.length < maxLines && line) lines.push(line);
+    if (lines.length > maxLines) lines.length = maxLines;
+    return lines.join('\n');
+};
+const getAdaptiveOptionFontSize = (label = '', isMobile = false) => {
+    const len = String(label || '').trim().length;
+    if (isMobile) {
+        if (len > 42) return '0.56rem';
+        if (len > 32) return '0.62rem';
+        if (len > 22) return '0.7rem';
+        return '0.82rem';
+    }
+    if (len > 50) return '0.58rem';
+    if (len > 38) return '0.64rem';
+    if (len > 26) return '0.74rem';
+    return '0.9rem';
+};
 
 const normalizeQuestionItem = (item) => {
     if (!item || typeof item !== 'object') return null;
     const q = String(item.q || item.question || '').trim();
     const rawOptions = Array.isArray(item.options) ? item.options : [];
-    const options = rawOptions
+    const optionsFull = rawOptions
         .map((o) => String(o || '').trim())
         .filter(Boolean)
         .slice(0, 4);
-    if (!q || options.length < 2) return null;
+    const options = optionsFull.map((o) => toDisplayOption(o, 16));
+    if (!q || optionsFull.length < 2) return null;
     let a = Number.isFinite(Number(item.a)) ? Number(item.a) : 0;
-    if (a < 0 || a >= options.length) a = 0;
-    return { q, options, a };
+    if (a < 0 || a >= optionsFull.length) a = 0;
+    return { q, options, optionsFull, a };
 };
 
 const parseQuestions = (raw) => {
@@ -81,6 +117,104 @@ const sanitizeQuestions = (raw) => {
         .filter(Boolean)
         .slice(0, 24);
     return clean.length > 0 ? clean : [DEFAULT_QUESTION];
+};
+
+const parseCanvasFontPx = (font = '') => {
+    const m = String(font).match(/(\d+(?:\.\d+)?)px/);
+    return m ? Number(m[1]) : 16;
+};
+
+const normalizeTextKey = (value = '') =>
+    String(value || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]/g, '');
+
+const installCanvasTextSafety = (ctx, getCandidates) => {
+    if (!ctx || ctx.__textSafetyInstalled) return;
+    ctx.__textSafetyInstalled = true;
+    const originalFillText = ctx.fillText.bind(ctx);
+
+    const splitLongWord = (word, maxChars = 10) => {
+        if (!word || word.length <= maxChars) return [word];
+        const chunks = [];
+        for (let i = 0; i < word.length; i += maxChars) chunks.push(word.slice(i, i + maxChars));
+        return chunks;
+    };
+
+    const wrapLines = (text, maxWidth) => {
+        const normalized = String(text || '').replace(/\s+/g, ' ').trim();
+        if (!normalized) return [''];
+        const words = normalized.split(' ').flatMap((w) => splitLongWord(w, 10));
+        const lines = [];
+        let current = '';
+        words.forEach((w) => {
+            const candidate = current ? `${current} ${w}` : w;
+            if (ctx.measureText(candidate).width <= maxWidth || !current) {
+                current = candidate;
+            } else {
+                lines.push(current);
+                current = w;
+            }
+        });
+        if (current) lines.push(current);
+        return lines.slice(0, 4);
+    };
+
+    ctx.fillText = (text, x, y, maxWidth) => {
+        const rawInput = String(text ?? '');
+        let raw = rawInput;
+        if (/[.…]{3,}|…/.test(rawInput)) {
+            const candidates = typeof getCandidates === 'function' ? (getCandidates() || []) : [];
+            const prefix = normalizeTextKey(rawInput.replace(/[.…]+$/g, ''));
+            if (prefix && Array.isArray(candidates) && candidates.length > 0) {
+                const found = candidates.find((c) => normalizeTextKey(c).startsWith(prefix));
+                if (found) raw = String(found);
+            }
+        }
+        if (!raw) return;
+        if (typeof maxWidth === 'number' && Number.isFinite(maxWidth)) {
+            originalFillText(raw, x, y, maxWidth);
+            return;
+        }
+
+        const originalFont = ctx.font;
+        const originalAlign = ctx.textAlign;
+        const originalBaseline = ctx.textBaseline;
+
+        const canvasW = Number(ctx?.canvas?.width || 800);
+        const isLongSentence = raw.length >= 36 || raw.includes('?') || raw.split(' ').length >= 7;
+        const targetWidth = isLongSentence
+            ? Math.max(260, Math.floor(canvasW * 0.72))
+            : Math.max(130, Math.floor(canvasW * 0.2));
+        const minPx = 8;
+        let fontPx = parseCanvasFontPx(originalFont);
+        let lines = wrapLines(raw, targetWidth);
+        const maxLines = isLongSentence ? 4 : 3;
+        while (fontPx > minPx && (lines.length > maxLines || lines.some((l) => ctx.measureText(l).width > targetWidth))) {
+            fontPx -= 1;
+            ctx.font = String(originalFont).replace(/(\d+(?:\.\d+)?)px/, `${fontPx}px`);
+            lines = wrapLines(raw, targetWidth);
+        }
+        // Pour les phrases longues, on évite de descendre trop bas.
+        if (isLongSentence && fontPx < 14 && parseCanvasFontPx(originalFont) >= 18) {
+            fontPx = 14;
+            ctx.font = String(originalFont).replace(/(\d+(?:\.\d+)?)px/, `${fontPx}px`);
+            lines = wrapLines(raw, targetWidth);
+        }
+
+        const lineHeight = Math.max(10, Math.round(fontPx * 1.12));
+        ctx.textBaseline = 'middle';
+        if (!ctx.textAlign) ctx.textAlign = 'center';
+        lines.forEach((line, idx) => {
+            originalFillText(line, x, y + (idx * lineHeight), targetWidth);
+        });
+
+        ctx.font = originalFont;
+        ctx.textAlign = originalAlign;
+        ctx.textBaseline = originalBaseline;
+    };
 };
 
 export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, user }) {
@@ -394,7 +528,12 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
             const currentQ = levelQuestions[currentQIndex];
             if (!currentQ || !Array.isArray(currentQ.options) || currentQ.options.length === 0) return;
             const clean = (s) => String(s).toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-            let isCorrect = (typeof val === 'number') ? (currentQ.a === val) : (clean(val) === clean(currentQ.options[currentQ.a]));
+            const expectedText = String(
+                (Array.isArray(currentQ.optionsFull) ? currentQ.optionsFull[currentQ.a] : '')
+                || currentQ.options[currentQ.a]
+                || ''
+            );
+            let isCorrect = (typeof val === 'number') ? (currentQ.a === val) : (clean(val) === clean(expectedText));
         setFeedback(isCorrect ? 'CORRECT' : 'WRONG');
         if (gameInstanceRef.current?.onResult) gameInstanceRef.current.onResult(isCorrect);
         setTimeout(() => { updateBarLogic(isCorrect); changeQuestionLogic(); }, 1200);
@@ -446,8 +585,16 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
     useEffect(() => {
         if (!engineStarted || !canvasRef.current) return;
         try {
+            const canvasCtx = canvasRef.current.getContext('2d');
+            installCanvasTextSafety(canvasCtx, () => {
+                const q = levelQuestions?.[liveData.current.qIndex] || levelQuestions?.[0] || null;
+                const opts = Array.isArray(q?.optionsFull) && q.optionsFull.length > 0
+                    ? q.optionsFull
+                    : (Array.isArray(q?.options) ? q.options : []);
+                return opts.map((x) => String(x || '')).filter(Boolean);
+            });
             const MiniGameBase = createGameBase({ 
-                audioBuffers: audioBuffersRef.current, audioCtx: audioCtxRef.current, projectRef, sceneIdx: 0, imageAssets: imageAssetsRef.current, resolveUrl, canvas: canvasRef.current, ctx: canvasRef.current.getContext('2d'), 
+                audioBuffers: audioBuffersRef.current, audioCtx: audioCtxRef.current, projectRef, sceneIdx: 0, imageAssets: imageAssetsRef.current, resolveUrl, canvas: canvasRef.current, ctx: canvasCtx, 
                 playParallelSound: (url) => {
                     const b = audioBuffersRef.current.get(resolveUrl(url));
                     playBufferedSound(b);
@@ -661,7 +808,23 @@ export default function UnifiedMoteur({ gameData, onExit, isStudioTest = false, 
                                 </div>
                             ) : (
                                 <div className={"grid grid-cols-2 md:grid-cols-4 w-full max-w-5xl " + (isMobileViewport ? 'gap-2' : 'gap-4')}>
-                                    {levelQuestions[currentQIndex].options.map((o, i) => (<button key={i} onClick={() => handleAnswerClick(i)} className={"bg-indigo-600 text-white rounded-2xl font-black uppercase border-b-8 border-indigo-800 active:border-b-0 active:translate-y-2 " + (isMobileViewport ? 'py-3 text-base' : 'py-6 text-lg')}>{o}</button>))}
+                                    {levelQuestions[currentQIndex].options.map((o, i) => (
+                                        <button
+                                            key={i}
+                                            onClick={() => handleAnswerClick(i)}
+                                            className={
+                                                "bg-indigo-600 text-white rounded-2xl font-black uppercase border-b-8 border-indigo-800 active:border-b-0 active:translate-y-2 whitespace-normal break-words text-center leading-tight " +
+                                                (isMobileViewport ? 'py-3 text-sm px-2 min-h-[64px]' : 'py-4 text-base px-2 min-h-[84px]')
+                                            }
+                                        >
+                                            <span
+                                                className="block whitespace-pre-line"
+                                                style={{ fontSize: getAdaptiveOptionFontSize(o, isMobileViewport) }}
+                                            >
+                                                {formatOptionLabel(o, isMobileViewport ? 10 : 14, 3)}
+                                            </span>
+                                        </button>
+                                    ))}
                                 </div>
                             )}
                         </div>

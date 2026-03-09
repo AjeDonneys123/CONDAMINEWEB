@@ -46,10 +46,24 @@
 
 /* BANNER QUESTION */
 .s-question-banner {
-    position: absolute; top: 70px; width: 100%; text-align: center;
-    font-size: 1.3rem; font-weight: 900; color: #facc15;
-    text-shadow: 0 0 10px #facc15; z-index: 10;
-    padding: 0 20px;
+    position: absolute;
+    top: 70px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(88%, 860px);
+    text-align: center;
+    font-size: 1rem;
+    line-height: 1.2;
+    font-weight: 900;
+    color: #f8fafc;
+    text-shadow: none;
+    z-index: 10;
+    padding: 6px 12px;
+    border-radius: 10px;
+    background: rgba(2, 6, 23, 0.75);
+    border: 1px solid rgba(148, 163, 184, 0.45);
+    white-space: normal;
+    overflow-wrap: anywhere;
 }
 
 /* PLAY AREA */
@@ -71,10 +85,18 @@
     position: absolute; 
     background: #1e293b; border: 2px solid #ef4444; color: white;
     padding: 8px 12px; border-radius: 6px; 
-    font-size: 0.9rem; font-weight: bold;
+    font-size: 0.78rem; font-weight: bold;
     transform: translateX(-50%);
     box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
-    white-space: nowrap; z-index: 15;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    text-align: center;
+    line-height: 1.15;
+    width: clamp(130px, 30vw, 320px);
+    min-height: 56px;
+    overflow: visible;
+    z-index: 15;
 }
 /* Juste pour debug visuel (optionnel) */
 /* .s-correct-target { border-color: #22c55e; } */

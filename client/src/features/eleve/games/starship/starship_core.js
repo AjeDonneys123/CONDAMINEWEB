@@ -2,6 +2,62 @@
 import { GameProgression } from '../mainGames';
 
 export function initStarshipGame(root, api, onExit) {
+    const fitTextInBox = (el, {
+        maxFont = 22,
+        minFont = 10,
+        lineHeight = 1.12
+    } = {}) => {
+        if (!el) return;
+        let size = maxFont;
+        el.style.lineHeight = String(lineHeight);
+        el.style.fontSize = `${size}px`;
+        // Réduit progressivement tant que le contenu déborde.
+        while (size > minFont && (el.scrollWidth > el.clientWidth || el.scrollHeight > el.clientHeight)) {
+            size -= 1;
+            el.style.fontSize = `${size}px`;
+        }
+    };
+    const formatOptionLabel = (value = '', maxPerLine = 12, maxLines = 3) => {
+        const src = String(value || '').replace(/\s+/g, ' ').trim();
+        if (!src) return '';
+        const words = src.split(' ');
+        const lines = [];
+        let line = '';
+        for (const w of words) {
+            const next = line ? `${line} ${w}` : w;
+            if (next.length <= maxPerLine) {
+                line = next;
+                continue;
+            }
+            if (line) lines.push(line);
+            line = w.length > maxPerLine ? w.slice(0, maxPerLine) : w;
+            if (lines.length >= maxLines - 1) break;
+        }
+        if (lines.length < maxLines && line) lines.push(line);
+        if (lines.length > maxLines) lines.length = maxLines;
+        return lines.join('\n');
+    };
+    const formatQuestionLabel = (value = '', maxPerLine = 42, maxLines = 3) => {
+        const src = String(value || '').replace(/\s+/g, ' ').trim();
+        if (!src) return '';
+        const words = src.split(' ');
+        const lines = [];
+        let line = '';
+        for (const w of words) {
+            const next = line ? `${line} ${w}` : w;
+            if (next.length <= maxPerLine) {
+                line = next;
+                continue;
+            }
+            if (line) lines.push(line);
+            line = w.length > maxPerLine ? w.slice(0, maxPerLine) : w;
+            if (lines.length >= maxLines - 1) break;
+        }
+        if (lines.length < maxLines && line) lines.push(line);
+        if (lines.length > maxLines) lines.length = maxLines;
+        return lines.join('\n');
+    };
+
     let questionsList = api.level.questions || [{ q: "Erreur", options: ["Bug"], a: 0 }];
     const questionStates = questionsList.map(() => 0);
     
@@ -149,12 +205,15 @@ export function initStarshipGame(root, api, onExit) {
             const isCorrect = (rIdx === qData.a);
             const el = document.createElement('div');
             el.className = isCorrect ? 's-enemy s-correct-target' : 's-enemy';
-            el.innerText = opts[rIdx];
-            const startX = 10 + Math.random() * 80;
+            const fullLabel = String(opts[rIdx] || '');
+            el.innerText = formatOptionLabel(fullLabel, 10, 3);
+            el.title = fullLabel;
+            const startX = 12 + Math.random() * 76;
             el.style.left = startX + '%';
-            el.style.top = '-60px';
+            el.style.top = '110px';
             els.eLayer.appendChild(el);
-            enemies.push({ div: el, xPct: startX, y: -60, speed: 1.5 + (Math.random() * 1), isCorrect: isCorrect, type: 'invader' });
+            fitTextInBox(el, { maxFont: 18, minFont: 8, lineHeight: 1.1 });
+            enemies.push({ div: el, xPct: startX, y: 110, speed: 1.5 + (Math.random() * 1), isCorrect: isCorrect, type: 'invader' });
         }, 1500);
     };
 
@@ -184,7 +243,8 @@ export function initStarshipGame(root, api, onExit) {
         currentQ = questionsList[currentQIndex];
         const qData = currentQ;
         const score = questionStates[currentQIndex];
-        els.qText.innerText = qData.q;
+        els.qText.innerText = formatQuestionLabel(qData.q, 34, 3);
+        fitTextInBox(els.qText, { maxFont: 20, minFont: 10, lineHeight: 1.15 });
         renderBars();
         if (score >= 2) {
             els.bossUI.style.display = 'flex';

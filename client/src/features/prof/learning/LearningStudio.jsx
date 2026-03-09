@@ -4678,16 +4678,15 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                                 className="v84-ans-input !h-9 !text-[12px] !w-[180px]"
                                                 value={slideSectionNameDraft}
                                                 onChange={(e) => setSlideSectionNameDraft(e.target.value)}
+                                                onBlur={saveSlideSectionName}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        e.preventDefault();
+                                                        saveSlideSectionName();
+                                                    }
+                                                }}
                                                 placeholder="Nouveau"
                                             />
-                                            <button
-                                                type="button"
-                                                className="h-9 px-3 rounded-lg border border-emerald-400 text-emerald-700 bg-emerald-50 font-black text-[12px] disabled:opacity-50"
-                                                onClick={saveSlideSectionName}
-                                                disabled={!currentSlideSectionId}
-                                            >
-                                                Enregistrer
-                                            </button>
                                             <button
                                                 type="button"
                                                 className="h-9 px-3 rounded-lg border border-indigo-500 text-indigo-600 bg-indigo-50 font-black text-[12px]"
@@ -4791,14 +4790,6 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                         }}
                                     >
                                         Sauver texte
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className="v84-res-btn upload bg-emerald-600 text-white border-emerald-700"
-                                        onClick={saveCurrentStepDataNow}
-                                        disabled={savingStepData}
-                                    >
-                                        {savingStepData ? 'Enregistrement...' : 'Enregistrer'}
                                     </button>
                                 </div>
                             </div>
@@ -4960,6 +4951,17 @@ export default function LearningStudio({ initialData, chapters, user, targetSect
                                             </div>
                                         );
                                     })}
+                                </div>
+                                <div className="pt-3 flex justify-end">
+                                    <button
+                                        type="button"
+                                        className="v84-res-btn upload !bg-emerald-600 !text-white !border-emerald-700 hover:!bg-emerald-600"
+                                        style={{ backgroundColor: '#16a34a', color: '#fff', borderColor: '#15803d' }}
+                                        onClick={saveCurrentStepDataNow}
+                                        disabled={savingStepData}
+                                    >
+                                        {savingStepData ? 'Enregistrement...' : 'Enregistrer'}
+                                    </button>
                                 </div>
                             </div>
                         </div>
