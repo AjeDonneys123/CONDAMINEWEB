@@ -39,6 +39,17 @@ const formatMs = (ms = 0) => {
   const s = sec % 60;
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 };
+const gradeToNumber = (raw = '') => {
+  const txt = String(raw || '').trim().toUpperCase();
+  if (!txt) return 0;
+  const m = txt.match(/(\d+(?:[.,]\d+)?)/);
+  if (m) {
+    const n = Number(String(m[1]).replace(',', '.'));
+    if (Number.isFinite(n)) return Math.max(0, Math.min(20, n));
+  }
+  const map = { 'A+': 20, 'A': 18, 'A-': 16, 'B+': 15, 'B': 14, 'B-': 13, 'C+': 12, 'C': 11, 'C-': 10, 'D+': 8, 'D': 7, 'D-': 6, 'E': 4, 'F': 0 };
+  return map[txt] ?? 0;
+};
 
 export default function StudentsManager({ globalClassId }) {
   const [students, setStudents] = useState([]);
@@ -63,11 +74,12 @@ export default function StudentsManager({ globalClassId }) {
   const loadMatrix = async () => {
     setLoading(true);
     try {
-        const [sts, clsList, hws, gms, exs, subs, progs, chapters, draftDocs] = await Promise.all([
+        const [sts, clsList, hws, gms, lms, exs, subs, progs, chapters, draftDocs] = await Promise.all([
             fetch('/api/admin/students').then(r => r.json()),
             fetch('/api/admin/classrooms').then(r => r.json()),
             fetch('/api/homework/all').then(r => r.json()),
             fetch('/api/games/all').then(r => r.json()),
+            fetch('/api/learning/all').then(r => r.ok ? r.json() : []),
             fetch('/api/exposes/all').then(r => r.ok ? r.json() : []),
             fetch('/api/homework/submissions').then(r => r.json()),
             fetch('/api/games/progress').then(r => r.json()),
@@ -107,6 +119,7 @@ export default function StudentsManager({ globalClassId }) {
         const allActs = [
             ...hws.map(h => ({ ...h, type: 'homework', chapterIdStr: extractId(h.chapterId), label: '📝 ' + h.title })),
             ...gms.map(g => ({ ...g, type: 'game', chapterIdStr: extractId(g.chapterId), label: '🎮 ' + g.title })),
+            ...lms.map(m => ({ ...m, type: 'learning', chapterIdStr: extractId(m.chapterId), label: '📚 ' + m.title })),
             ...exs.map(e => ({ ...e, type: 'expose', chapterIdStr: extractId(e.chapterId), label: '🗣️ ' + e.title }))
         ];
         const classTargetKey = norm(currentClassName);
@@ -165,7 +178,19 @@ export default function StudentsManager({ globalClassId }) {
         progs.forEach(prog => {
             const sid = extractId(prog.studentId);
             const gid = extractId(prog.gameId);
-            map[`${sid}_${gid}`] = { done: true, score: prog.lastScore ? `${prog.lastScore}pts` : 'JOUÉ' };
+            map[`${sid}_${gid}`] = { done: true, score: prog.lastScore ? `${prog.lastScore}pts` : 'JOUÉ', levelReached: Number(prog.levelReached || 0) };
+        });
+        lms.forEach((lm) => {
+            const lmId = extractId(lm._id);
+            (lm.completions || []).forEach((c) => {
+                const sid = extractId(c.studentId);
+                if (!sid || !lmId) return;
+                map[`${sid}_${lmId}`] = {
+                    done: true,
+                    score: `STEP ${Number(c.currentStep || 0)}`,
+                    currentStep: Number(c.currentStep || 0)
+                };
+            });
         });
         exs.forEach((expose) => {
             const exposeId = extractId(expose._id);
@@ -256,6 +281,51 @@ export default function StudentsManager({ globalClassId }) {
   if (loading) return <div className="p-10 text-center text-indigo-500 font-black animate-pulse">CHARGEMENT DE LA MATRICE...</div>;
 
   const workloadItems = viewingStudent ? getStudentWorkload(viewingStudent._id) : [];
+  const getStudentRealizations = (student) => {
+      const sid = extractId(student?._id);
+      const studentNameKey = norm(`${student?.firstName || ''} ${student?.lastName || ''}`);
+      const classTargetKey = norm(className);
+      const homeworkValues = [];
+      let gameLevels = 0;
+      let learningSteps = 0;
+      let homeworkTotal = 0;
+      let gameTotal = 0;
+      let learningTotal = 0;
+      activities.forEach((act) => {
+          const assignedIds = (act.assignedStudents || []).map((id) => String(id));
+          const isAssignedDirect = assignedIds.includes(sid);
+          const targets = (act.targetClassrooms || (act.classroom ? [act.classroom] : [])).map(norm);
+          const isAssignedByClass = !!act.isAllClass && targets.includes(classTargetKey);
+          if (!(isAssignedDirect || isAssignedByClass)) return;
+          const status =
+              trackingData[`${sid}_${extractId(act._id)}`] ||
+              trackingData[`${sid}_TITLE_${norm(act.title)}`] ||
+              trackingData[`${studentNameKey}_TITLE_${norm(act.title)}`];
+          if (act.type === 'homework') {
+              homeworkTotal += 1;
+              homeworkValues.push(status?.done ? gradeToNumber(status?.score) : 0);
+          } else if (act.type === 'game') {
+              gameTotal += 1;
+              gameLevels += Math.max(0, Number(status?.levelReached || 0));
+          } else if (act.type === 'learning') {
+              learningTotal += 1;
+              learningSteps += Math.max(0, Number(status?.currentStep || 0));
+          }
+      });
+      const hwAvg = homeworkValues.length > 0
+        ? Math.round((homeworkValues.reduce((a, b) => a + b, 0) / homeworkValues.length) * 10) / 10
+        : 0;
+      return {
+        homework: hwAvg,
+        game: gameLevels,
+        learning: learningSteps,
+        totals: {
+          homework: homeworkTotal,
+          game: gameTotal,
+          learning: learningTotal
+        }
+      };
+  };
 
   return (
     <>
@@ -463,6 +533,7 @@ export default function StudentsManager({ globalClassId }) {
                         <tr>
                             <th className="p-4 text-[10px] font-black text-slate-400 uppercase text-left bg-slate-50 min-w-[200px] border-b border-r">Élève</th>
                             <th className="p-4 text-[10px] font-black text-slate-400 uppercase text-center bg-slate-50 border-b w-[100px]">Action</th>
+                            <th className="p-4 text-[10px] font-black text-slate-400 uppercase text-center bg-slate-50 border-b w-[130px]">Réalisations</th>
                             {activities.filter(a => !a.isPunishment).map(act => (
                                 <th key={act._id} className="p-4 text-[9px] font-black text-slate-600 uppercase text-center border-b min-w-[100px] max-w-[170px]" title={`${act.title} • ${act.chapterLabel || ''}`}>
                                     <div className="truncate">{act.label}</div>
@@ -474,12 +545,23 @@ export default function StudentsManager({ globalClassId }) {
                     <tbody>
                         {students.map(s => (
                             <tr key={s._id} className="hover:bg-blue-50/50 transition-colors group">
+                                {(() => {
+                                    const real = getStudentRealizations(s);
+                                    return (
+                                      <>
                                 <td className="p-4 text-xs font-bold text-slate-700 border-r border-b group-hover:text-indigo-700">
                                     {s.firstName} {s.lastName}
                                     {s.punishmentStatus !== 'NONE' && <span className="ml-2 text-[8px] bg-red-100 text-red-600 px-2 py-0.5 rounded font-black">PUNI</span>}
                                 </td>
                                 <td className="p-2 text-center border-b">
                                     <button onClick={() => setViewingStudent(s)} className="bg-slate-100 text-slate-500 px-3 py-1 rounded hover:bg-indigo-100 hover:text-indigo-600 text-[10px] font-black">📋 SUIVI</button>
+                                </td>
+                                <td className="p-2 text-center border-b">
+                                    <div className="inline-flex items-center gap-1">
+                                        {real.totals.homework > 0 && <span className="inline-flex items-center justify-center px-2 py-1 rounded-full text-[10px] font-black bg-red-100 text-red-700 border border-red-200">{real.homework}</span>}
+                                        {real.totals.game > 0 && <span className="inline-flex items-center justify-center px-2 py-1 rounded-full text-[10px] font-black bg-violet-100 text-violet-700 border border-violet-200">{real.game}</span>}
+                                        {real.totals.learning > 0 && <span className="inline-flex items-center justify-center px-2 py-1 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-700 border border-emerald-200">{real.learning}</span>}
+                                    </div>
                                 </td>
                                 {activities.filter(a => !a.isPunishment).map(act => {
                                     const studentNameKey = norm(`${s.firstName || ''} ${s.lastName || ''}`);
@@ -497,6 +579,9 @@ export default function StudentsManager({ globalClassId }) {
                                         </td>
                                     );
                                 })}
+                                      </>
+                                    );
+                                })()}
                             </tr>
                         ))}
                     </tbody>

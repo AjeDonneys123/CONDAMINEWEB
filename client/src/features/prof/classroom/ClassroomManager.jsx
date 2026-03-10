@@ -14,6 +14,8 @@ export default function ClassroomManager({ globalClassId, user }) {
     const [viewMode, setViewMode] = useState('PLAN');
     const [searchTerm, setSearchTerm] = useState("");
     const [planFinder, setPlanFinder] = useState("");
+    const [voiceSupported, setVoiceSupported] = useState(false);
+    const [voiceListening, setVoiceListening] = useState(false);
     
     const [showNoteInput, setShowNoteInput] = useState(false);
     const [isEditingNickname, setIsEditingNickname] = useState(false);
@@ -25,6 +27,10 @@ export default function ClassroomManager({ globalClassId, user }) {
     const [draggingId, setDraggingId] = useState(null);
     const [dragOverCell, setDragOverCell] = useState(null);
     const fileInputRef = useRef(null);
+    const speechRecognitionRef = useRef(null);
+    const keepListeningRef = useRef(false);
+    const currentViewModeRef = useRef('PLAN');
+    const lastVoiceValueRef = useRef({ PLAN: '', LIST: '' });
     
     const myId = user ? (user._id || user.id) : null;
     const isPunishmentLate = (student) => {
@@ -61,6 +67,92 @@ export default function ClassroomManager({ globalClassId, user }) {
     };
 
     useEffect(() => { loadData(); }, [globalClassId, myId]);
+
+    useEffect(() => {
+        currentViewModeRef.current = viewMode;
+    }, [viewMode]);
+
+    useEffect(() => {
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SR) {
+            setVoiceSupported(false);
+            return;
+        }
+        setVoiceSupported(true);
+        const recognition = new SR();
+        recognition.lang = 'fr-FR';
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.maxAlternatives = 1;
+
+        recognition.onresult = (event) => {
+            const transcript = Array.from(event.results || [])
+                .map((r) => String(r?.[0]?.transcript || ''))
+                .join(' ')
+                .trim();
+            if (!transcript) return;
+            if (currentViewModeRef.current === 'PLAN') {
+                setPlanFinder(transcript);
+                lastVoiceValueRef.current.PLAN = transcript;
+            } else {
+                setSearchTerm(transcript);
+                lastVoiceValueRef.current.LIST = transcript;
+            }
+        };
+
+        recognition.onerror = () => {
+            setVoiceListening(false);
+        };
+
+        recognition.onend = () => {
+            if (keepListeningRef.current) {
+                try {
+                    recognition.start();
+                    setVoiceListening(true);
+                } catch (_) {
+                    setVoiceListening(false);
+                }
+            } else {
+                setVoiceListening(false);
+            }
+        };
+
+        speechRecognitionRef.current = recognition;
+        return () => {
+            keepListeningRef.current = false;
+            try { recognition.onresult = null; recognition.onend = null; recognition.onerror = null; recognition.stop(); } catch (_) {}
+            speechRecognitionRef.current = null;
+        };
+    }, []);
+
+    const toggleVoiceFinder = () => {
+        if (!voiceSupported || !speechRecognitionRef.current) return;
+        if (voiceListening) {
+            keepListeningRef.current = false;
+            try { speechRecognitionRef.current.stop(); } catch (_) {}
+            if (currentViewModeRef.current === 'PLAN') {
+                setPlanFinder('');
+                lastVoiceValueRef.current.PLAN = '';
+            } else {
+                setSearchTerm('');
+                lastVoiceValueRef.current.LIST = '';
+            }
+            setVoiceListening(false);
+            return;
+        }
+        if (currentViewModeRef.current === 'PLAN') {
+            lastVoiceValueRef.current.PLAN = String(planFinder || '');
+        } else {
+            lastVoiceValueRef.current.LIST = String(searchTerm || '');
+        }
+        keepListeningRef.current = true;
+        try {
+            speechRecognitionRef.current.start();
+            setVoiceListening(true);
+        } catch (_) {
+            setVoiceListening(false);
+        }
+    };
 
     const toggleSeparator = async (colIndex) => { let newSeps = [...separators]; if (newSeps.includes(colIndex)) newSeps = newSeps.filter(s => s !== colIndex); else newSeps.push(colIndex); setSeparators(newSeps); try { await fetch('/api/classroom/layout', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ classId: globalClassId, separators: newSeps }) }); } catch(e){} };
     const changeGrid = async (dC, dR) => { 
@@ -110,6 +202,28 @@ export default function ClassroomManager({ globalClassId, user }) {
     };
 
     const getDisplayName = (stu) => String(stu?.nickname || '').trim() || String(stu?.firstName || '');
+    const getActivityStats = (stu) => {
+        const raw = stu?.activityStats || {};
+        const homework = Number(raw.homework || 0);
+        const game = Number(raw.game || 0);
+        const learning = Number(raw.learning || 0);
+        return {
+            homework: Number.isFinite(homework) ? homework : 0,
+            game: Number.isFinite(game) ? game : 0,
+            learning: Number.isFinite(learning) ? learning : 0
+        };
+    };
+    const getActivityTotals = (stu) => {
+        const raw = stu?.activityTotals || {};
+        const homework = Number(raw.homework || 0);
+        const game = Number(raw.game || 0);
+        const learning = Number(raw.learning || 0);
+        return {
+            homework: Number.isFinite(homework) ? homework : 0,
+            game: Number.isFinite(game) ? game : 0,
+            learning: Number.isFinite(learning) ? learning : 0
+        };
+    };
     const normalizeText = (val) => String(val || '')
         .toLowerCase()
         .normalize('NFD')
@@ -122,6 +236,7 @@ export default function ClassroomManager({ globalClassId, user }) {
         return normalizeText(fullName).includes(term);
     };
     const planFinderCount = students.filter(isPlanFinderMatch).length;
+    const selectedPlanStudents = students.filter(isPlanFinderMatch);
 
     const handleOpenStudent = (stu) => {
         if (isSwapMode) {
@@ -226,7 +341,11 @@ export default function ClassroomManager({ globalClassId, user }) {
                                 {getMyStats(student).crosses > 0 && <div className="sc-badge">⏳ {getMyStats(student).weeksToRedemption}</div>}
                                 {student.myNote && <div className="sc-note-badge">N</div>}
                                 {student.punishmentStatus && student.punishmentStatus !== 'NONE' && (<div className={`sc-punishment-badge ${isPunishmentLate(student) ? 'late' : 'pending'}`}>P</div>)}
-                                <div className="sc-indicators">{(student.indicators || []).map((ind, i) => (<div key={i} className={`indicator-dot indicator-${ind.type}-${ind.status}`} title={`${ind.type} : ${ind.status}`}></div>))}</div>
+                                <div className="sc-realizations">
+                                    {getActivityTotals(student).homework > 0 && <span className="sc-real-badge hw" title="Devoir">{getActivityStats(student).homework}</span>}
+                                    {getActivityTotals(student).game > 0 && <span className="sc-real-badge game" title="Jeu">{getActivityStats(student).game}</span>}
+                                    {getActivityTotals(student).learning > 0 && <span className="sc-real-badge learning" title="Apprentissage">{getActivityStats(student).learning}</span>}
+                                </div>
                                 <div className="sc-avatar">{student.gender === 'F' ? '👧' : '👦'}</div>
                                 <div className="sc-name">{getDisplayName(student)}<br/>{student.lastName.slice(0,1)}.</div>
                                 <div className="sc-counters"><span style={{color:'#ef4444'}}>❌{getMyStats(student).crosses}</span><span style={{color:'#10b981'}}>⭐{getMyStats(student).bonuses}</span></div>
@@ -258,10 +377,55 @@ export default function ClassroomManager({ globalClassId, user }) {
                 <input className="list-finder" placeholder="🔎 Chercher un élève..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                 {filtered.map(s => {
                     const stats = getMyStats(s);
+                    const aStats = getActivityStats(s);
+                    const aTotals = getActivityTotals(s);
                     return (
                         <div key={s._id} className={`student-list-row ${s.myNote ? 'has-note' : ''} ${isSwapMode && String(swapSource?._id) === String(s._id) ? 'swap-source' : ''}`}>
-                            <div className="list-info" onClick={() => handleOpenStudent(s)}><span className="list-name">{s.lastName} {getDisplayName(s)}</span><span className="list-stats">❌ {stats.crosses} | ⭐ {stats.bonuses} {s.punishmentStatus !== 'NONE' ? `| ${isPunishmentLate(s) ? '🚨 RETARD' : '⚠️ PUNI'}` : ''}</span></div>
+                            <div className="list-info" onClick={() => handleOpenStudent(s)}>
+                                <span className="list-name">{s.lastName} {getDisplayName(s)}</span>
+                                <span className="list-stats">❌ {stats.crosses} | ⭐ {stats.bonuses} {s.punishmentStatus !== 'NONE' ? `| ${isPunishmentLate(s) ? '🚨 RETARD' : '⚠️ PUNI'}` : ''}</span>
+                                <span className="list-realizations">
+                                    {aTotals.homework > 0 && <span className="sc-real-badge hw">{aStats.homework}</span>}
+                                    {aTotals.game > 0 && <span className="sc-real-badge game">{aStats.game}</span>}
+                                    {aTotals.learning > 0 && <span className="sc-real-badge learning">{aStats.learning}</span>}
+                                </span>
+                            </div>
                             <div className="list-actions"><button className="btn-list-action btn-x" onClick={() => addBehavior(s._id, 'CROSS')}>❌</button><button className="btn-list-action btn-v" onClick={() => addBehavior(s._id, 'BONUS')}>⭐</button><button className="btn-list-action btn-c" onClick={() => handleOpenStudent(s)}>📝</button></div>
+                        </div>
+                    );
+                })}
+            </div>
+        );
+    };
+
+    const renderPlanMatchesList = () => {
+        if (!planFinder.trim()) return null;
+        const filtered = [...selectedPlanStudents].sort((a, b) => String(a.lastName || '').localeCompare(String(b.lastName || '')));
+        if (filtered.length === 0) return null;
+        return (
+            <div className="plan-matches-list custom-scrollbar">
+                {filtered.map((s) => {
+                    const stats = getMyStats(s);
+                    const aStats = getActivityStats(s);
+                    const aTotals = getActivityTotals(s);
+                    return (
+                        <div key={s._id} className="plan-match-row">
+                            <div className="plan-match-info" onClick={() => handleOpenStudent(s)}>
+                                <span className="plan-match-name">{s.lastName} {getDisplayName(s)}</span>
+                                <span className="plan-match-stats">
+                                    ❌ {stats.crosses} | ⭐ {stats.bonuses}
+                                    <span className="plan-match-real">
+                                        {aTotals.homework > 0 && <span className="sc-real-badge hw">{aStats.homework}</span>}
+                                        {aTotals.game > 0 && <span className="sc-real-badge game">{aStats.game}</span>}
+                                        {aTotals.learning > 0 && <span className="sc-real-badge learning">{aStats.learning}</span>}
+                                    </span>
+                                </span>
+                            </div>
+                            <div className="plan-match-actions">
+                                <button className="btn-list-action btn-x" onClick={() => addBehavior(s._id, 'CROSS')}>❌</button>
+                                <button className="btn-list-action btn-v" onClick={() => addBehavior(s._id, 'BONUS')}>⭐</button>
+                                <button className="btn-list-action btn-c" onClick={() => handleOpenStudent(s)}>📝</button>
+                            </div>
                         </div>
                     );
                 })}
@@ -276,9 +440,19 @@ export default function ClassroomManager({ globalClassId, user }) {
             
             <div className="cm-header">
                 <h2 className="cm-title md:block hidden">{viewMode === 'PLAN' ? 'MODE PLAN' : 'MODE LISTE'}</h2>
-                <div className="view-switcher">
-                    <button className={`view-btn ${viewMode === 'PLAN' ? 'active' : ''}`} onClick={() => setViewMode('PLAN')}>📍 PLAN</button>
-                    <button className={`view-btn ${viewMode === 'LIST' ? 'active' : ''}`} onClick={() => setViewMode('LIST')}>📋 LISTE</button>
+                <div className="cm-header-center">
+                    <div className="view-switcher">
+                        <button className={`view-btn ${viewMode === 'PLAN' ? 'active' : ''}`} onClick={() => setViewMode('PLAN')}>📍 PLAN</button>
+                        <button className={`view-btn ${viewMode === 'LIST' ? 'active' : ''}`} onClick={() => setViewMode('LIST')}>📋 LISTE</button>
+                    </div>
+                    <button
+                        className={`voice-finder-btn ${voiceListening ? 'active' : ''}`}
+                        onClick={toggleVoiceFinder}
+                        disabled={!voiceSupported}
+                        title={voiceSupported ? 'Recherche vocale élève' : 'Reconnaissance vocale non disponible'}
+                    >
+                        {voiceListening ? '🎙️ ON' : '🎙️'}
+                    </button>
                 </div>
                 <button
                     className={`cm-swap-btn ${isSwapMode ? 'active' : ''}`}
@@ -309,6 +483,7 @@ export default function ClassroomManager({ globalClassId, user }) {
                             {planFinder.trim() ? `${planFinderCount} trouvé(s)` : `${students.length} élèves`}
                         </span>
                     </div>
+                    {renderPlanMatchesList()}
                     <div className="cm-toolbar hidden md:flex">
                         <button className="cm-btn purple" onClick={() => fileInputRef.current.click()}>🔮 IMPORT IA</button>
                         <div className="w-px h-6 bg-slate-200 mx-2"></div>

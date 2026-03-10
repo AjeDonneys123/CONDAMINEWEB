@@ -1,7 +1,7 @@
 // @signatures: ProfClassroomRouter, details, plan, move, behavior, layout, importPlan
 const express = require('express');
 const router = express.Router();
-const { Student, Classroom, Homework, GameLevel, Submission, GameProgress } = require('../models/prof.models');
+const { Student, Classroom, Homework, GameLevel, LearningModule, Submission, GameProgress } = require('../models/prof.models');
 const ClassroomExpert = require('../../domains/classroom/experts/classroom.expert'); // Indispensable pour l'IA
 const multer = require('multer');
 const path = require('path');
@@ -106,6 +106,24 @@ function applyCrossDecay(behaviorRecords = []) {
     return changed;
 }
 
+function gradeToNumber(raw = '') {
+    const txt = String(raw || '').trim().toUpperCase();
+    if (!txt) return 0;
+    const m = txt.match(/(\d+(?:[.,]\d+)?)/);
+    if (m) {
+        const n = Number(String(m[1]).replace(',', '.'));
+        if (Number.isFinite(n)) return Math.max(0, Math.min(20, n));
+    }
+    const map = {
+        'A+': 20, 'A': 18, 'A-': 16,
+        'B+': 15, 'B': 14, 'B-': 13,
+        'C+': 12, 'C': 11, 'C-': 10,
+        'D+': 8, 'D': 7, 'D-': 6,
+        'E': 4, 'F': 0
+    };
+    return map[txt] ?? 0;
+}
+
 /**
  * 🎓 BLOC PROF : LOGIQUE CLASSE (/api/classroom)
  * Version avec FIX 404 sur /import-plan
@@ -147,9 +165,10 @@ router.get('/plan/:classId', async (req, res) => {
         if (!clsObj) return res.status(404).json({ error: "Classe/Groupe introuvable" });
         const className = clsObj?.name;
 
-        const [hws, games, subs, progs] = await Promise.all([
+        const [hws, games, learnings, subs, progs] = await Promise.all([
             Homework.find({ targetClassrooms: className, isPunishment: false, isEnabled: { $ne: false } }).lean(),
             GameLevel.find({ targetClassrooms: className, isEnabled: { $ne: false } }).lean(),
+            LearningModule.find({ targetClassrooms: className, isEnabled: { $ne: false } }).lean(),
             Submission.find({}).lean(),
             GameProgress.find({}).lean()
         ]);
@@ -157,10 +176,19 @@ router.get('/plan/:classId', async (req, res) => {
         const studentsWithIndicators = students.map(s => {
             const indicators = [];
             const sId = String(s._id);
+            const hwNotes = [];
+            let gameLevelsValidated = 0;
+            let learningProgressValue = 0;
+            let homeworkAssigned = 0;
+            let gameAssigned = 0;
+            let learningAssigned = 0;
             hws.forEach(hw => {
                 const isAssigned = hw.isAllClass || (hw.assignedStudents || []).some(id => String(id) === sId);
                 if (isAssigned) {
+                    homeworkAssigned += 1;
                     const sub = subs.find(sub => String(sub.studentId) === sId && String(sub.homeworkId) === String(hw._id));
+                    const note = sub ? gradeToNumber(sub.grade) : 0;
+                    hwNotes.push(note);
                     if (!sub) indicators.push({ type: 'hw', status: 'todo' });
                     else indicators.push({ type: 'hw', status: 'grade-' + (sub.grade || "B").replace('+', 'plus') });
                 }
@@ -168,13 +196,40 @@ router.get('/plan/:classId', async (req, res) => {
             games.forEach(g => {
                 const isAssigned = g.isAllClass || (g.assignedStudents || []).some(id => String(id) === sId);
                 if (isAssigned) {
+                    gameAssigned += 1;
                     const prog = progs.find(p => String(p.studentId) === sId && String(p.gameId) === String(g._id));
+                    const levelReached = Number(prog?.levelReached || 0);
+                    gameLevelsValidated += Math.max(0, levelReached);
                     if (!prog) indicators.push({ type: 'game', status: 'todo' });
                     else if (prog.levelReached >= 1) indicators.push({ type: 'game', status: 'done' });
                     else indicators.push({ type: 'game', status: 'started' });
                 }
             });
-            return { ...s, indicators, myNote: (s.teacherNotes || []).find(n => n.teacherId && String(n.teacherId) === String(teacherId))?.text || "" };
+            learnings.forEach((m) => {
+                const isAssigned = m.isAllClass || (m.assignedStudents || []).some(id => String(id) === sId);
+                if (!isAssigned) return;
+                learningAssigned += 1;
+                const completion = (m.completions || []).find((c) => String(c?.studentId || '') === sId);
+                learningProgressValue += Math.max(0, Number(completion?.currentStep || 0));
+            });
+            const hwAvg = hwNotes.length > 0
+                ? Math.round((hwNotes.reduce((a, b) => a + b, 0) / hwNotes.length) * 10) / 10
+                : 0;
+            return {
+                ...s,
+                indicators,
+                activityStats: {
+                    homework: hwAvg,
+                    game: gameLevelsValidated,
+                    learning: learningProgressValue
+                },
+                activityTotals: {
+                    homework: homeworkAssigned,
+                    game: gameAssigned,
+                    learning: learningAssigned
+                },
+                myNote: (s.teacherNotes || []).find(n => n.teacherId && String(n.teacherId) === String(teacherId))?.text || ""
+            };
         });
         res.json(studentsWithIndicators);
     } catch (e) { res.status(500).json({ error: e.message }); }
