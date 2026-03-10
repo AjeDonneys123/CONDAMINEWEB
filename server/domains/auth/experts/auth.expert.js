@@ -10,10 +10,37 @@ const BCRYPT_HASH_RE = /^\$2[aby]\$/;
 const AuthExpert = {
     getLoginConfig: async () => ({ classrooms: await mongoose.model('Classroom').find({}).sort({name:1}).lean() }),
     
+    getAllProfilesForFinder: async () => {
+        const [students, teachers, admins] = await Promise.all([
+            mongoose.model('Student').find({}, 'firstName lastName currentClass').lean(),
+            mongoose.model('Teacher').find({}, 'firstName lastName').lean(),
+            mongoose.model('Admin').find({}, 'firstName lastName').lean()
+        ]);
+
+        const studentItems = (students || []).map(s => ({
+            id: s._id,
+            type: 'student',
+            firstName: s.firstName,
+            lastName: s.lastName,
+            className: s.currentClass || "SANS CLASSE"
+        }));
+
+        const teacherItems = [...(teachers || []), ...(admins || [])].map(t => ({
+            id: t._id,
+            type: 'teacher',
+            firstName: t.firstName,
+            lastName: t.lastName,
+            className: ''
+        }));
+
+        return [...studentItems, ...teacherItems];
+    },
+
     getAllStudentsForFinder: async () => {
         const students = await mongoose.model('Student').find({}, 'firstName lastName currentClass').lean();
         return students.map(s => ({
             id: s._id,
+            type: 'student',
             firstName: s.firstName,
             lastName: s.lastName,
             className: s.currentClass || "SANS CLASSE"

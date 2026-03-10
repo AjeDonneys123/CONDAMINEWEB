@@ -374,7 +374,18 @@ export default function ClassroomManager({ globalClassId, user }) {
         const filtered = students.filter(s => (s.firstName + ' ' + s.lastName).toLowerCase().includes(searchTerm.toLowerCase())).sort((a,b) => a.lastName.localeCompare(b.lastName));
         return (
             <div className="list-container custom-scrollbar">
-                <input className="list-finder" placeholder="🔎 Chercher un élève..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                <div className="list-finder-row">
+                    <input className="list-finder" placeholder="🔎 Chercher un élève..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                    {searchTerm.trim() && (
+                        <button
+                            className="finder-clear-btn"
+                            onClick={() => setSearchTerm('')}
+                            title="Effacer la recherche"
+                        >
+                            ✕
+                        </button>
+                    )}
+                </div>
                 {filtered.map(s => {
                     const stats = getMyStats(s);
                     const aStats = getActivityStats(s);
@@ -479,9 +490,20 @@ export default function ClassroomManager({ globalClassId, user }) {
                             value={planFinder}
                             onChange={(e) => setPlanFinder(e.target.value)}
                         />
-                        <span className="plan-finder-count">
-                            {planFinder.trim() ? `${planFinderCount} trouvé(s)` : `${students.length} élèves`}
-                        </span>
+                        <div className="plan-finder-count-wrap">
+                            <span className="plan-finder-count" title={planFinder.trim() ? 'Élèves trouvés' : 'Élèves'}>
+                                {planFinder.trim() ? planFinderCount : students.length}
+                            </span>
+                            {planFinder.trim() && (
+                                <button
+                                    className="finder-clear-btn"
+                                    onClick={() => setPlanFinder('')}
+                                    title="Effacer la recherche"
+                                >
+                                    ✕
+                                </button>
+                            )}
+                        </div>
                     </div>
                     {renderPlanMatchesList()}
                     <div className="cm-toolbar hidden md:flex">

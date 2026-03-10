@@ -57,6 +57,30 @@
     gap: 10px;
     margin-bottom: 10px;
 }
+.list-finder-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.finder-clear-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    border: 2px solid #cbd5e1;
+    background: #fff;
+    color: #64748b;
+    font-size: 0.9rem;
+    font-weight: 900;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+.finder-clear-btn:hover {
+    border-color: #fca5a5;
+    color: #dc2626;
+    background: #fff1f2;
+}
 .plan-finder-input {
     flex: 1;
     min-width: 180px;
@@ -83,6 +107,16 @@
     font-size: 0.7rem;
     font-weight: 900;
     text-transform: uppercase;
+}
+.plan-finder-count-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.plan-finder-count-wrap .finder-clear-btn {
+    width: 30px;
+    height: 30px;
+    border-radius: 999px;
 }
 .plan-matches-list {
     max-height: 150px;
@@ -271,6 +305,12 @@
     .plan-finder-count {
         font-size: 0.62rem;
         padding: 6px 8px;
+    }
+    .finder-clear-btn {
+        width: 30px;
+        height: 30px;
+        border-radius: 8px;
+        font-size: 0.78rem;
     }
     .plan-matches-list {
         margin: 6px;

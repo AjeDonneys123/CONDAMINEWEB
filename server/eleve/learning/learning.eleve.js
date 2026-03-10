@@ -347,10 +347,23 @@ router.post('/sheet-chat', async (req, res) => {
                 : "Consignes réponse: 6-10 lignes, en français simple, 1) réponse directe, 2) explication, 3) exemple concret, 4) lien avec le cours."
         ].join('\n');
 
-        const answer = await AIEngine.ask(prompt, systemInstruction);
-        const clean = String(answer || '').trim();
+        let answer = '';
+        try {
+            answer = await AIEngine.ask(prompt, systemInstruction);
+        } catch (_) {
+            answer = '';
+        }
+        let clean = String(answer || '').trim();
         if (!clean || clean === 'ERROR_KEY' || clean === '[]') {
-            return res.status(500).json({ error: "IA indisponible pour le moment." });
+            const fallbackLines = contextText
+                .split('\n')
+                .map((l) => String(l || '').trim())
+                .filter(Boolean)
+                .slice(0, 3);
+            const fallback = fallbackLines.join(' ').trim();
+            clean = fallback
+                ? `Le tuteur IA est temporairement indisponible. Je te donne un rappel du cours: ${fallback.slice(0, 900)}`
+                : "Le tuteur IA est temporairement indisponible. Réessaie dans quelques secondes.";
         }
 
         const sid = String(student._id);
@@ -358,7 +371,12 @@ router.post('/sheet-chat', async (req, res) => {
         const rows = Array.isArray(module.completions) ? [...module.completions] : [];
         const idx = rows.findIndex((c) => String(c?.studentId || '') === sid);
         const previous = idx >= 0 ? (typeof rows[idx]?.toObject === 'function' ? rows[idx].toObject() : rows[idx]) : null;
-        let chatMeta = await ensureLearningChatDoc({ moduleDoc: module, student, previous });
+        let chatMeta = previous || {};
+        try {
+            chatMeta = await ensureLearningChatDoc({ moduleDoc: module, student, previous });
+        } catch (_) {
+            chatMeta = previous || {};
+        }
         const oldLog = String(chatMeta?.chatLogText || previous?.chatLogText || '').trim();
         const lineHeader = `[${now.toISOString()}] ${sourceType === 'video' ? 'VIDÉO' : 'FICHE'} - ${String(targetStep?.title || '').trim() || 'Source'}`;
         const block = [
@@ -414,7 +432,11 @@ router.post('/sheet-chat', async (req, res) => {
             chatDocId: String(patch?.chatDocId || '')
         });
     } catch (e) {
-        return res.status(500).json({ error: e.message });
+        return res.status(200).json({
+            ok: false,
+            answer: "Le tuteur IA est temporairement indisponible. Réessaie dans quelques secondes.",
+            error: String(e?.message || 'Erreur interne')
+        });
     }
 });
 

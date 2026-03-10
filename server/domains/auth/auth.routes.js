@@ -16,7 +16,7 @@ router.get('/config', async (req, res) => {
 // 2. DONNÉES FINDER
 router.get('/finder-data', async (req, res) => {
     try {
-        const list = await AuthExpert.getAllStudentsForFinder();
+        const list = await AuthExpert.getAllProfilesForFinder();
         res.json(list);
     } catch (e) { res.status(500).json([]); }
 });

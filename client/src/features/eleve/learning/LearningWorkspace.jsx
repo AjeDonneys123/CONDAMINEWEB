@@ -617,6 +617,7 @@ export default function LearningWorkspace({ module, user, onQuit }) {
         const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (!SR) {
             setRecordError("Reconnaissance vocale non disponible sur ce navigateur.");
+            setMicMutedByUser(true);
             return;
         }
         if (recording || isAiSpeaking) return;
@@ -624,13 +625,14 @@ export default function LearningWorkspace({ module, user, onQuit }) {
         const rec = new SR();
         rec.lang = 'fr-FR';
         rec.interimResults = true;
-        rec.continuous = false;
+        rec.continuous = true;
         rec.onresult = (event) => {
             const text = Array.from(event.results).map(r => r[0]?.transcript || '').join(' ').trim();
             setAnswerText(text);
         };
         rec.onerror = () => {
             setRecording(false);
+            setMicMutedByUser(true);
             setRecordError("Micro refusé ou indisponible.");
         };
         rec.onend = () => setRecording(false);
@@ -645,13 +647,15 @@ export default function LearningWorkspace({ module, user, onQuit }) {
     };
 
     const toggleRecording = () => {
-        if (isAiSpeaking && !recording) return;
-        if (recording) {
+        const micEnabled = !micMutedByUser;
+        if (isAiSpeaking && !micEnabled) return;
+        if (micEnabled) {
             setMicMutedByUser(true);
             stopRecording();
             return;
         }
         setMicMutedByUser(false);
+        setRecordError('');
         startRecording();
     };
 
@@ -1339,8 +1343,8 @@ export default function LearningWorkspace({ module, user, onQuit }) {
                             <>
                                 <div className="learning-actions">
                                     <button className="learning-btn ghost" onClick={speakQuestion}>🔊 Lire la question</button>
-                                    <button className={`learning-btn ${recording ? 'danger' : ''}`} onClick={toggleRecording}>
-                                        {recording ? '🔇 Couper le micro' : '🎙️ Activer micro'}
+                                    <button className={`learning-btn ${!micMutedByUser ? 'danger' : ''}`} onClick={toggleRecording}>
+                                        {!micMutedByUser ? '🔇 Couper le micro' : '🎙️ Activer micro'}
                                     </button>
                                 </div>
                                 {recordError && <div className="learning-error">{recordError}</div>}

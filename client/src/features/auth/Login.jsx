@@ -102,9 +102,10 @@ export default function Login({ onLoginSuccess }) {
 
   const isTeacherProfile = selectedProfile?.type === 'teacher';
   const isStudentProfile = selectedProfile?.type === 'student';
+  const isTestStudentProfile = isStudentProfile && clean(selectedProfile?.lastName) === 'test';
   const hasTypedIdentity = clean(inputLast).length > 0 && clean(inputFirst).length > 0;
   const canSubmit = selectedProfile
-    ? (password.trim().length > 0)
+    ? (isTestStudentProfile || password.trim().length > 0)
     : hasTypedIdentity;
 
   return (
@@ -170,10 +171,12 @@ export default function Login({ onLoginSuccess }) {
               <input
                 type={showPassword ? "text" : "password"}
                 className="login-field"
-                placeholder={isStudentProfile ? "Date de naissance ex: 05/03/2004" : "Mot de passe professeur"}
+                placeholder={isStudentProfile
+                  ? (isTestStudentProfile ? "Aucun mot de passe requis (profil TEST)" : "Date de naissance ex: 05/03/2004")
+                  : "Mot de passe professeur"}
                 value={password}
                 onChange={e => setPassword(e.target.value)}
-                required
+                required={!isTestStudentProfile}
               />
               <button
                 type="button"
