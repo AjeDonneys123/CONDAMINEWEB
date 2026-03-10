@@ -2,6 +2,7 @@
 import { GameProgression } from '../mainGames';
 
 export function initStarshipGame(root, api, onExit) {
+    const STARSHIP_FALL_SPEED_MULTIPLIER = 0.5; // Demande UX: diviser par 2 la descente.
     const fitTextInBox = (el, {
         maxFont = 22,
         minFont = 10,
@@ -193,7 +194,7 @@ export function initStarshipGame(root, api, onExit) {
         boss.style.left = '50%';
         boss.style.top = '10%';
         els.eLayer.appendChild(boss);
-        enemies.push({ div: boss, xPct: 50, y: 50, speed: 0.2, isCorrect: true, type: 'boss' });
+        enemies.push({ div: boss, xPct: 50, y: 50, speed: 0.2 * STARSHIP_FALL_SPEED_MULTIPLIER, isCorrect: true, type: 'boss' });
     };
 
     const startInvaderPhase = () => {
@@ -213,7 +214,14 @@ export function initStarshipGame(root, api, onExit) {
             el.style.top = '110px';
             els.eLayer.appendChild(el);
             fitTextInBox(el, { maxFont: 18, minFont: 8, lineHeight: 1.1 });
-            enemies.push({ div: el, xPct: startX, y: 110, speed: 1.5 + (Math.random() * 1), isCorrect: isCorrect, type: 'invader' });
+            enemies.push({
+                div: el,
+                xPct: startX,
+                y: 110,
+                speed: (1.5 + (Math.random() * 1)) * STARSHIP_FALL_SPEED_MULTIPLIER,
+                isCorrect: isCorrect,
+                type: 'invader'
+            });
         }, 1500);
     };
 

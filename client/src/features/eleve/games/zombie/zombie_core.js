@@ -12,7 +12,7 @@ export function initZombieGame(root, api, onExit) {
     
     // Mouvement
     let zombiePos = 0; 
-    let baseSpeed = 0.035; // Vitesse de base
+    let baseSpeed = 0.0175; // Vitesse de base divisée par 2
     let zombieSpeed = baseSpeed; 
     let frameId;
     let isPaused = false; 

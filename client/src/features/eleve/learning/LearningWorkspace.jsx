@@ -582,17 +582,28 @@ export default function LearningWorkspace({ module, user, onQuit }) {
         }
     }, [currentStep, videoEnded, videoManualDone, videoCongratsShown]);
 
-    const speakAiText = (text = '') => {
+    const speakAiText = (text = '', options = {}) => {
         if (!window.speechSynthesis) return;
         const spoken = String(text || '').trim();
         if (!spoken) return;
+        const shouldResumeQuestionMic = options?.resumeQuestionMic === true;
         stopRecording();
         const utter = new SpeechSynthesisUtterance(spoken);
         utter.lang = 'fr-FR';
         utter.rate = 0.95;
         utter.onstart = () => setIsAiSpeaking(true);
-        utter.onend = () => setIsAiSpeaking(false);
-        utter.onerror = () => setIsAiSpeaking(false);
+        utter.onend = () => {
+            setIsAiSpeaking(false);
+            if (shouldResumeQuestionMic && !micMutedByUser && currentStep?.type === 'question' && !isCorrectionLock) {
+                setTimeout(() => startRecording(), 160);
+            }
+        };
+        utter.onerror = () => {
+            setIsAiSpeaking(false);
+            if (shouldResumeQuestionMic && !micMutedByUser && currentStep?.type === 'question' && !isCorrectionLock) {
+                setTimeout(() => startRecording(), 160);
+            }
+        };
         window.speechSynthesis.cancel();
         window.speechSynthesis.speak(utter);
         speechRef.current = window.speechSynthesis;
@@ -600,7 +611,7 @@ export default function LearningWorkspace({ module, user, onQuit }) {
 
     const speakQuestion = () => {
         if (isCorrectionLock) return;
-        speakAiText(generatedQuestion);
+        speakAiText(generatedQuestion, { resumeQuestionMic: true });
     };
 
     useEffect(() => {
