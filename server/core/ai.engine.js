@@ -1,5 +1,18 @@
 const fetch = require('node-fetch');
 
+const resolveGeminiApiKey = () => {
+    const candidates = [
+        process.env.GEMINI_API_KEY,
+        process.env.GOOGLE_API_KEY,
+        process.env.GOOGLE_AI_API_KEY
+    ];
+    for (const raw of candidates) {
+        const key = String(raw || '').trim();
+        if (key) return key;
+    }
+    return '';
+};
+
 const AIEngine = {
     normalizeKeys: (obj) => {
         if (typeof obj !== 'object' || obj === null) return obj;
@@ -82,30 +95,36 @@ const AIEngine = {
     },
 
     ask: async (prompt, systemInstruction = "") => {
-        const preferLocal = String(process.env.AI_PROVIDER || 'local').toLowerCase() !== 'gemini';
-        if (preferLocal) {
+        const provider = String(process.env.AI_PROVIDER || 'gemini').toLowerCase().trim();
+        const useLocalFirst = provider === 'local' || provider === 'ollama';
+        if (useLocalFirst) {
             const localText = await AIEngine.askLocal(prompt, systemInstruction);
             if (localText) return localText;
         }
-        const apiKey = process.env.GEMINI_API_KEY;
+        const apiKey = resolveGeminiApiKey();
         if (!apiKey) return "ERROR_KEY";
 
         const parts = Array.isArray(prompt) ? prompt : [{ text: prompt }];
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 35000);
         
         try {
             const response = await fetch(url, { 
                 method: 'POST', 
                 headers: { 'Content-Type': 'application/json' }, 
+                signal: controller.signal,
                 body: JSON.stringify({
                     contents: [{ role: "user", parts: parts }],
                     systemInstruction: { parts: [{ text: systemInstruction }] }
                 }) 
             });
+            clearTimeout(timeout);
             const data = await response.json();
             if (data.error) throw new Error(data.error.message);
             return data.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
         } catch (e) { 
+            clearTimeout(timeout);
             console.error("AI Core Error:", e.message);
             return "[]"; 
         }
