@@ -594,13 +594,22 @@ export default function LearningWorkspace({ module, user, onQuit }) {
         utter.onstart = () => setIsAiSpeaking(true);
         utter.onend = () => {
             setIsAiSpeaking(false);
-            if (shouldResumeQuestionMic && !micMutedByUser && currentStep?.type === 'question' && !isCorrectionLock) {
+            if (shouldResumeQuestionMic && currentStep?.type === 'question' && !isCorrectionLock) {
+                if (micMutedByUser) {
+                    setRecordError("Lecture terminée. Clique sur « Activer micro » pour reprendre.");
+                    return;
+                }
+                setRecordError('');
                 setTimeout(() => startRecording(), 160);
             }
         };
         utter.onerror = () => {
             setIsAiSpeaking(false);
-            if (shouldResumeQuestionMic && !micMutedByUser && currentStep?.type === 'question' && !isCorrectionLock) {
+            if (shouldResumeQuestionMic && currentStep?.type === 'question' && !isCorrectionLock) {
+                if (micMutedByUser) {
+                    setRecordError("Lecture terminée. Clique sur « Activer micro » pour reprendre.");
+                    return;
+                }
                 setTimeout(() => startRecording(), 160);
             }
         };

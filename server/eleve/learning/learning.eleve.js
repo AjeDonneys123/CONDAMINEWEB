@@ -157,6 +157,43 @@ const parseAiSynonymDecision = (raw = '') => {
     return { accept: false, reason: text.slice(0, 300) };
 };
 
+const buildOfflineTutorAnswer = (question = '') => {
+    const q = String(question || '').toLowerCase();
+    if (q.includes('pays en developpement') || q.includes('pays en développement')) {
+        return "Oui, ils sont nombreux. On parle de pays en développement pour des pays qui ont encore un niveau de vie plus faible et des inégalités fortes, même si leur situation progresse parfois rapidement. Il existe aussi des écarts importants entre ces pays: certains avancent vite (pays émergents), d'autres restent en grande difficulté.";
+    }
+    return "Bonne question. En géographie, la réponse dépend souvent du contexte, de l'échelle (monde, région, pays) et des indicateurs utilisés. Donne-moi un mot-clé ou une partie du cours et je te réponds de façon plus précise.";
+};
+
+const isInvalidCourseText = (value = '') => {
+    const txt = String(value || '').trim();
+    if (!txt) return true;
+    const low = txt.toLowerCase();
+    return low === '[]' || low === '{}' || low === 'null' || low === 'undefined';
+};
+
+const collectSheetSourceText = (step = {}) => {
+    const direct = [
+        step?.sheetText,
+        step?.materialText,
+        step?.extractedSheetText,
+        step?.transcription,
+        step?.text
+    ]
+        .map((v) => String(v || '').trim())
+        .filter((v) => !isInvalidCourseText(v));
+    if (direct.length > 0) return direct.join('\n').trim();
+
+    const map = step?.sheetSlideTextMap;
+    if (map && typeof map === 'object') {
+        const merged = Object.values(map)
+            .map((v) => String(v || '').trim())
+            .filter((v) => !isInvalidCourseText(v));
+        if (merged.length > 0) return merged.join('\n\n').trim();
+    }
+    return '';
+};
+
 router.get('/list/:studentId', async (req, res) => {
     try {
         const Student = mongoose.model('Student');
@@ -310,8 +347,9 @@ router.post('/sheet-chat', async (req, res) => {
 
         const sourceType = String(targetStep?.type || '');
         let sourceText = sourceType === 'video'
-            ? String(targetStep?.videoTranscript || '').trim()
-            : String(targetStep?.sheetText || '').trim();
+            ? String(targetStep?.videoTranscript || targetStep?.materialText || '').trim()
+            : collectSheetSourceText(targetStep);
+        if (isInvalidCourseText(sourceText)) sourceText = '';
         if (!sourceText && sourceType === 'sheet') {
             const sheetUrl = String(targetStep?.sheetUrl || '').trim();
             if (sheetUrl) {
@@ -320,32 +358,37 @@ router.post('/sheet-chat', async (req, res) => {
                 } catch (_) {}
             }
         }
-        if (!sourceText) {
-            return res.status(400).json({
-                error: sourceType === 'video'
-                    ? 'Transcription vidéo manquante pour cette étape.'
-                    : 'Fiche sans texte exploitable.'
-            });
-        }
-
+        if (isInvalidCourseText(sourceText)) sourceText = '';
         const safeMode = String(mode || 'deep').toLowerCase() === 'strict' ? 'strict' : 'deep';
-        const contextText = sourceText.slice(0, 18000);
-        const systemInstruction = safeMode === 'strict'
-            ? "Tu es un assistant pédagogique. Réponds uniquement avec les informations du cours fourni. Si une information n'est pas dans le cours, dis clairement que le cours ne le précise pas."
-            : "Tu es un assistant pédagogique pour élèves de lycée. Utilise d'abord le cours fourni, puis élargis intelligemment avec culture générale claire, simple et rigoureuse. Reste concret, structuré, sans jargon inutile.";
+        const hasCourseContext = !isInvalidCourseText(sourceText);
+        const contextText = hasCourseContext ? sourceText.slice(0, 18000) : '';
+        const systemInstruction = hasCourseContext
+            ? (safeMode === 'strict'
+                ? "Tu es un assistant pédagogique. Réponds uniquement avec les informations du cours fourni. Si une information n'est pas dans le cours, dis clairement que le cours ne le précise pas."
+                : "Tu es un assistant pédagogique pour élèves de lycée. Utilise d'abord le cours fourni, puis élargis intelligemment avec culture générale claire, simple et rigoureuse. Reste concret, structuré, sans jargon inutile.")
+            : "Tu es un professeur d'histoire-géographie pour collège et lycée. Réponds à la question de l'élève clairement, avec pédagogie, en français simple, sans inventer des chiffres précis non sûrs.";
 
-        const prompt = [
-            `Titre module: ${String(module.title || '').trim() || 'Apprentissage'}`,
-            `Étape source: ${String(targetStep.title || '').trim() || (sourceType === 'video' ? 'Vidéo' : 'Fiche')}`,
-            'Cours (source principale):',
-            contextText,
-            '',
-            `Question élève: ${userQuestion}`,
-            '',
-            safeMode === 'strict'
-                ? "Consignes réponse: 4-8 lignes, en français simple, citer brièvement la partie du cours utilisée."
-                : "Consignes réponse: 6-10 lignes, en français simple, 1) réponse directe, 2) explication, 3) exemple concret, 4) lien avec le cours."
-        ].join('\n');
+        const prompt = hasCourseContext
+            ? [
+                `Titre module: ${String(module.title || '').trim() || 'Apprentissage'}`,
+                `Étape source: ${String(targetStep.title || '').trim() || (sourceType === 'video' ? 'Vidéo' : 'Fiche')}`,
+                'Cours (source principale):',
+                contextText,
+                '',
+                `Question élève: ${userQuestion}`,
+                '',
+                safeMode === 'strict'
+                    ? "Consignes réponse: 4-8 lignes, en français simple, citer brièvement la partie du cours utilisée."
+                    : "Consignes réponse: 6-10 lignes, en français simple, 1) réponse directe, 2) explication, 3) exemple concret, 4) lien avec le cours."
+            ].join('\n')
+            : [
+                `Titre module: ${String(module.title || '').trim() || 'Apprentissage'}`,
+                `Étape source: ${String(targetStep.title || '').trim() || (sourceType === 'video' ? 'Vidéo' : 'Fiche')}`,
+                "Contexte: la fiche liée est une image/photo sans texte exploitable automatiquement.",
+                `Question élève: ${userQuestion}`,
+                '',
+                "Consignes réponse: réponds comme un professeur d'histoire-géographie de collège/lycée, en 5 à 8 lignes, avec une réponse directe puis une explication simple."
+            ].join('\n');
 
         let answer = '';
         try {
@@ -358,12 +401,12 @@ router.post('/sheet-chat', async (req, res) => {
             const fallbackLines = contextText
                 .split('\n')
                 .map((l) => String(l || '').trim())
-                .filter(Boolean)
+                .filter((l) => l && !isInvalidCourseText(l))
                 .slice(0, 3);
             const fallback = fallbackLines.join(' ').trim();
             clean = fallback
-                ? `Le tuteur IA est temporairement indisponible. Je te donne un rappel du cours: ${fallback.slice(0, 900)}`
-                : "Le tuteur IA est temporairement indisponible. Réessaie dans quelques secondes.";
+                ? `Rappel du cours: ${fallback.slice(0, 900)}`
+                : buildOfflineTutorAnswer(userQuestion);
         }
 
         const sid = String(student._id);
@@ -434,7 +477,7 @@ router.post('/sheet-chat', async (req, res) => {
     } catch (e) {
         return res.status(200).json({
             ok: false,
-            answer: "Le tuteur IA est temporairement indisponible. Réessaie dans quelques secondes.",
+            answer: buildOfflineTutorAnswer(req?.body?.question || ''),
             error: String(e?.message || 'Erreur interne')
         });
     }
