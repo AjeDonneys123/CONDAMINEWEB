@@ -1,6 +1,7 @@
 // @signatures: ProfClassroomRouter, details, plan, move, behavior, layout, importPlan
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const { Student, Classroom, Homework, GameLevel, LearningModule, Submission, GameProgress } = require('../models/prof.models');
 const ClassroomExpert = require('../../domains/classroom/experts/classroom.expert'); // Indispensable pour l'IA
 const multer = require('multer');
@@ -22,12 +23,47 @@ async function getStudentsForClassOrGroup(classId) {
     const clsObj = await Classroom.findById(classId).lean();
     if (!clsObj) return { clsObj: null, students: [] };
 
-    const query = clsObj.type === 'GROUP'
-        ? { assignedGroups: clsObj._id }
+    if (clsObj.type === 'GROUP') {
+        const students = await Student.find({ assignedGroups: clsObj._id }).lean();
+        return { clsObj, students };
+    }
+
+    const classNameRaw = String(clsObj?.name || '').trim();
+    const classNameClean = classNameRaw.toUpperCase().replace(/\s+/g, '');
+    const classNameRegex = classNameRaw
+        ? new RegExp(`^\\s*${classNameRaw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`, 'i')
+        : null;
+
+    const directQuery = classNameRegex
+        ? {
+            $or: [
+                { classId: clsObj._id },
+                { currentClass: classNameRaw },
+                { currentClass: classNameRegex },
+                { currentClass: classNameClean }
+            ]
+        }
         : { classId: clsObj._id };
 
-    const students = await Student.find(query).lean();
-    return { clsObj, students };
+    const directStudents = await Student.find(directQuery).lean();
+
+    const Enrollment = mongoose.models.Enrollment ? mongoose.model('Enrollment') : null;
+    const enrollments = Enrollment ? await Enrollment.find({ classId: clsObj._id }, 'studentId').lean() : [];
+    const enrollmentIds = enrollments
+        .map((e) => String(e?.studentId || ''))
+        .filter((id) => mongoose.Types.ObjectId.isValid(id))
+        .map((id) => new mongoose.Types.ObjectId(id));
+    const enrollmentStudents = enrollmentIds.length > 0
+        ? await Student.find({ _id: { $in: enrollmentIds } }).lean()
+        : [];
+
+    const byId = new Map();
+    [...directStudents, ...enrollmentStudents].forEach((s) => {
+        if (!s?._id) return;
+        byId.set(String(s._id), s);
+    });
+
+    return { clsObj, students: [...byId.values()] };
 }
 
 async function assignPunishmentTemplate(student, teacherId) {
