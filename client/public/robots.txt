@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://condaweb.vercel.app/sitemap.xml
